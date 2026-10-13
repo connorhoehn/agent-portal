@@ -27,6 +27,7 @@
 // that flow's own start function as the requester's freshly reloaded session
 // (lib/agent-loop `executePhase`), so its tenant guard and 403/404/429 are unchanged.
 
+import { ACCESS_THREAD_PREFIX } from '../lib/access/thread.js';
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type RequestHandler } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
@@ -168,6 +169,14 @@ const tenantAuthority: Authority = {
   session: sessionOf,
   async waiting(req, channel) {
     const session = sessionOf(req);
+    // The access tenant's request threads (`access:req:<id>`) carry no agent: the composer
+    // offers none there, so nothing can be waiting. Whoever the thread's read rule admits
+    // (lib/access/thread.ts, the `access-request` page resource) gets the honest empty list,
+    // anyone else the same 403 as every conversation — not a 400 for asking.
+    if (channel.startsWith(ACCESS_THREAD_PREFIX)) {
+      await assertChat(session, channel, 'subscribe');
+      return [];
+    }
     const flow = tenantFlow(conversationTenant(channel) as Exclude<AgentTenant, 'social'>);
     await assertChat(session, channel, 'subscribe');
     const runs = await flowRunStore.listWaiting(flow.spec.tenant, flow.spec.kind, channel);

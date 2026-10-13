@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-13T10:25:58.323Z",
-  "serverHandlerSha": "cd7fb50adacfa4da0d349c5f241d583209ee5455193610974650042d17e85d73",
+  "capturedAt": "2026-10-13T10:58:25.288Z",
+  "serverHandlerSha": "9adc5f7b0b01d58c2f0f2fd75a1f5c3ebffac8be19e19275fb35c519b098340b",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -135,6 +135,7 @@
         "items[].before": "string",
         "items[].id": "string",
         "items[].kind": "string",
+        "items[].policyId": "null",
         "items[].reason": "null|string",
         "items[].requestId": "string"
       },
@@ -183,6 +184,58 @@
           "sme"
         ],
         "items[].tenant": [
+          "assessment",
+          "orgiq",
+          "pipelines",
+          "social"
+        ]
+      }
+    },
+    "GET /api/access/configuration": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "durations": "object",
+        "durations.offered": "array",
+        "durations.offered[]": "string",
+        "durations.standingReasonMin": "number",
+        "items": "array",
+        "items[]": "object",
+        "items[].defaultDuration": "string",
+        "items[].id": "string",
+        "items[].kind": "string",
+        "items[].sensitive": "boolean",
+        "items[].stewardRule": "string",
+        "items[].tenant": "string",
+        "items[].title": "string",
+        "stewards": "array",
+        "stewards[]": "object",
+        "stewards[].role": "null|string",
+        "stewards[].rule": "string",
+        "stewards[].scope": "string",
+        "stewards[].tenant": "null|string"
+      },
+      "values": {
+        "items[].kind": [
+          "initiative-membership",
+          "tenant-role"
+        ],
+        "items[].tenant": [
+          "assessment",
+          "orgiq",
+          "pipelines",
+          "social"
+        ],
+        "stewards[].role": [
+          "access-admin",
+          "community-admin",
+          "hr-admin",
+          "pipeline-admin",
+          "program-lead"
+        ],
+        "stewards[].tenant": [
+          "access",
           "assessment",
           "orgiq",
           "pipelines",
@@ -259,6 +312,8 @@
         "beneficiary.personId": "string",
         "can": "object",
         "can.decide": "boolean",
+        "can.overrideSod": "boolean",
+        "can.revoke": "boolean",
         "can.viewAudit": "boolean",
         "can.withdraw": "boolean",
         "decidedAt": "null",
@@ -278,11 +333,13 @@
         "item.tenant": "string",
         "item.title": "string",
         "justification": "string",
+        "kind": "string",
         "provisionedAt": "null",
         "requester": "object",
         "requester.displayName": "string",
         "requester.id": "string",
         "requester.personId": "string",
+        "reviewId": "null",
         "revokedAt": "null",
         "sod": "object",
         "sod.conflicts": "array",
@@ -300,6 +357,7 @@
         "steps[].eligible[].displayName": "string",
         "steps[].eligible[].id": "string",
         "steps[].eligible[].personId": "string",
+        "steps[].escalated": "null|string",
         "steps[].kind": "string",
         "steps[].status": "string",
         "steps[].step": "number",
@@ -315,6 +373,9 @@
         ],
         "item.tenant": [
           "orgiq"
+        ],
+        "kind": [
+          "grant"
         ],
         "sod.verdict": [
           "clear"
@@ -338,10 +399,95 @@
       "shape": {
         "$": "object",
         "items": "array",
-        "limits": "array",
-        "limits[]": "string"
+        "items[]": "object",
+        "items[].can": "object",
+        "items[].can.decide": "boolean",
+        "items[].closedAt": "null",
+        "items[].id": "string",
+        "items[].openedAt": "string",
+        "items[].owner": "object",
+        "items[].owner.displayName": "string",
+        "items[].owner.id": "string",
+        "items[].owner.personId": "string",
+        "items[].progress": "object",
+        "items[].progress.decided": "number",
+        "items[].progress.kept": "number",
+        "items[].progress.revoked": "number",
+        "items[].progress.total": "number",
+        "items[].status": "string",
+        "items[].tenant": "string",
+        "items[].title": "string"
       },
-      "values": {}
+      "values": {
+        "items[].status": [
+          "open"
+        ],
+        "items[].tenant": [
+          "orgiq"
+        ]
+      }
+    },
+    "GET /api/access/reviews/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].can": "object",
+        "items[].can.decide": "boolean",
+        "items[].comment": "null|string",
+        "items[].decidedAt": "null|string",
+        "items[].decidedBy": "null|object",
+        "items[].decidedBy.displayName": "string",
+        "items[].decidedBy.id": "string",
+        "items[].decidedBy.personId": "string",
+        "items[].decision": "null|string",
+        "items[].id": "string",
+        "items[].reviewId": "string",
+        "items[].revocationRequestId": "null",
+        "items[].role": "string",
+        "items[].tenant": "string",
+        "items[].user": "object",
+        "items[].user.displayName": "string",
+        "items[].user.id": "string",
+        "items[].user.personId": "string",
+        "review": "object",
+        "review.can": "object",
+        "review.can.decide": "boolean",
+        "review.closedAt": "null",
+        "review.id": "string",
+        "review.openedAt": "string",
+        "review.owner": "object",
+        "review.owner.displayName": "string",
+        "review.owner.id": "string",
+        "review.owner.personId": "string",
+        "review.progress": "object",
+        "review.progress.decided": "number",
+        "review.progress.kept": "number",
+        "review.progress.revoked": "number",
+        "review.progress.total": "number",
+        "review.status": "string",
+        "review.tenant": "string",
+        "review.title": "string"
+      },
+      "values": {
+        "items[].decision": [
+          "keep"
+        ],
+        "items[].role": [
+          "sme"
+        ],
+        "items[].tenant": [
+          "orgiq"
+        ],
+        "review.status": [
+          "open"
+        ],
+        "review.tenant": [
+          "orgiq"
+        ]
+      }
     },
     "GET /api/access/summary": {
       "persona": "orgiq/admin",
@@ -6166,7 +6312,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -9959,7 +10105,8 @@
       "open": false,
       "values": [
         "ALLOW",
-        "approve"
+        "approve",
+        "keep"
       ]
     },
     "key": {
@@ -10000,6 +10147,7 @@
         "general",
         "github",
         "gotcha",
+        "grant",
         "hitl-decided",
         "hitl-expired",
         "in-review",
@@ -10083,19 +10231,24 @@
     "role": {
       "open": false,
       "values": [
+        "access-admin",
         "admin",
         "assessor",
         "author",
         "child",
+        "community-admin",
         "contributor",
         "decider",
+        "hr-admin",
         "lead-assessor",
         "member",
         "moderator",
         "operator",
         "org-leader",
         "owner",
+        "pipeline-admin",
         "primary",
+        "program-lead",
         "sme",
         "trigger"
       ]

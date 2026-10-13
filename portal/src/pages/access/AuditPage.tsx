@@ -1,7 +1,8 @@
 // /access/audit — the append-only trail (docs/access-tenant-design.md §4.4):
 // every request transition with its actor, before/after and reason, read from
-// GET /api/access/audit. The server decides the scope — a decider sees every
-// event, anyone else the events of their own requests — and this page says so.
+// GET /api/access/audit. The server decides the scope — an access admin sees
+// every event, anyone else the events of the requests they may open (the
+// record's read rule) — and this page says so in its visible description.
 
 import { CollectionToolbar, DataTable, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
@@ -10,8 +11,8 @@ import { CollectionCommandHost } from '../../components/collections/CollectionCo
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
-import { useCapabilities } from '../../lib/capabilities';
-import { ACCESS_API, EVENT_LABELS, filterEvents, requestHref, type AccessEvent, type AccessEventKind, type ItemsResponse } from '../../lib/accessRequests';
+import { useSession } from '../../lib/auth';
+import { ACCESS_API, auditScopeNotice, EVENT_LABELS, eventHref, filterEvents, type AccessEvent, type AccessEventKind, type ItemsResponse } from '../../lib/accessRequests';
 import { EVENT_COLUMNS, eventTitle } from './accessColumns';
 import { accessCollectionAdapter, resolveAccessTarget } from './accessCollectionCommands';
 import { ACCESS_SURFACES } from './accessSurfaces';
@@ -24,27 +25,27 @@ const KIND_OPTIONS = [
 
 export default function AuditPage() {
   const navigate = useNavigate();
-  const { can, ready } = useCapabilities();
+  const { session } = useSession();
   const [kind, setKind] = useState('');
   const [query, setQuery] = useState('');
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<AccessEvent>>(`${ACCESS_API}/audit`, 60_000);
   const all = data?.items ?? [];
   const rows = filterEvents(all, query, kind);
-  const decides = ready && can('DecideAccess');
+  const scope = auditScopeNotice(session?.role);
 
   const adapter = accessCollectionAdapter('audit', {
     setQuery, setFilter: setKind, refresh,
     open(target) {
       if (!data || error) throw new Error('Wait for the audit trail to load before opening an event.');
       const e = resolveAccessTarget(target, rows.map((row) => ({ ...row, title: eventTitle(row) })));
-      navigate(requestHref(e.requestId));
-      return `Opened ${e.requestId}, the request event ${e.id} belongs to. Nothing was changed.`;
+      navigate(eventHref(e));
+      return e.requestId ? `Opened ${e.requestId}, the request event ${e.id} belongs to. Nothing was changed.` : `Opened the policies; ${e.id} changed ${e.policyId ?? 'a policy'}. Nothing was changed.`;
     },
   });
 
   const page = ACCESS_SURFACES.audit;
   return (
-    <CollectionCommandPage data-testid="access-audit" title={page.title} description={page.description}>
+    <CollectionCommandPage data-testid="access-audit" title={page.title} description={`${page.description} ${scope}`}>
       <Stack gap="none" className="min-h-0 min-w-0 flex-1">
         <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
           <CollectionToolbar {...{
@@ -52,7 +53,7 @@ export default function AuditPage() {
             search: { value: query, onChange: setQuery, placeholder: 'Search events', 'aria-label': 'Search events' },
             filters: [{ id: 'kind', label: 'Event', value: kind, onChange: setKind, options: KIND_OPTIONS }],
             summary: data ? `${rows.length} of ${all.length} events` : undefined,
-            notices: [decides ? 'You see every event in the access workspace.' : 'You see the events of requests you made or benefit from.'],
+            notices: [scope],
             onRefresh: refresh, refreshing: isLoading,
           }} />
           {error ? (
@@ -65,7 +66,7 @@ export default function AuditPage() {
               keyField={(e) => e.id}
               loading={isLoading && !data}
               pageSize={25}
-              onRowClick={(e) => navigate(requestHref(e.requestId))}
+              onRowClick={(e) => navigate(eventHref(e))}
               emptyMessage={query.trim() || kind ? 'No event matches this search and kind.' : 'No access events have been recorded yet.'}
             />
           )}

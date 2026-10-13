@@ -2417,6 +2417,40 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     },
   },
 
+  // ── the access tenant's A2 writes (docs/access-tenant-goal.md §A2) ─────────
+  //
+  // Two of the four replay: the SoD override and opening a review campaign
+  // write only registered fixtures. The manual revoke and a review decision are
+  // deliberately NOT here: a revoke bumps the beneficiary's session_epoch
+  // (lib/access-provision.ts `revokeAccess`), which lives on the identity
+  // provider's seed mirror and is not a fixture reset restores — rule 5 — so
+  // they stay refused as unclassified.
+  {
+    route: 'POST /api/access/requests/:id/sod-override',
+    persona: 'orgiq/admin',
+    safe: 'Records an override on one registered `access.requests` row (sodOverriddenBy / sodOverrideReason and a `sod-override` event) and, when that row is approved, provisions it into the registered `identity.grant-writes` / `initiatives` fixtures; reset restores all of them. No seeded request carries a live block, so the 409 "no blocking conflict" is the usual shape captured.',
+    bodyFrom: 'routes/access.ts: `reason`, at least 20 characters; no other key.',
+    intercepts: ['aurora'],
+    alsoAccept: [403, 404, 409],
+    build: ok({ reason: 'wire capture: an SoD override smoke test' }),
+  },
+  {
+    route: 'PUT /api/access/configuration',
+    persona: 'orgiq/admin',
+    safe: 'An ECHO-BACK: an empty `items` list validates the body and answers the configuration without writing a row; a non-empty one would edit only the registered `access.catalog` fixture, which reset restores.',
+    bodyFrom: 'routes/access.ts: `items` — an array of `{ id, defaultDuration?, sensitive? }` naming catalog items; `durations` / `stewards` are refused as fixed.',
+    intercepts: ['aurora'],
+    build: ok({ items: [] }),
+  },
+  {
+    route: 'POST /api/access/reviews',
+    persona: 'orgiq/admin',
+    safe: 'Appends one open campaign and its items (one per standing grant the directory holds in the tenant) to the registered `access.reviews` / `access.review-items` fixtures; reset restores the seed. It reads the directory and writes no grant.',
+    bodyFrom: "routes/access.ts: `tenant` ∈ ACCESS_TENANTS and a `title` of 3–200 characters; no other key.",
+    intercepts: ['aurora'],
+    build: ok({ tenant: 'pipelines', title: 'wire capture: a review campaign smoke test' }),
+  },
+
   // ── the social tenant's context bindings (lane E) ─────────────────────────
   {
     route: 'PUT /api/social/bindings',

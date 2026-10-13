@@ -75,17 +75,51 @@ export function stepCandidates(kind: StepKind, item: AccessCatalogRow, beneficia
   }
 }
 
+/** Who may decide a step now, and — when the step's own candidates could not — why it escalated. */
+export interface Eligibility { people: Person[]; escalated: string | null }
+
+const STEP_NOUN: Readonly<Record<StepKind, string>> = { manager: 'manager', steward: 'steward', 'access-admin': 'access admin' };
+
 /**
- * Who may decide a step of this request now. Excludes the requester and the
- * beneficiary (A5) and anyone without a deciding role in `access`; an empty
- * manager/steward step escalates to the access-admin holders (same exclusions).
+ * Who may decide a step of this request now, resolved live. Excludes the
+ * requester and the beneficiary (A5) and anyone without a deciding role in
+ * `access`. A step whose own candidates leave nobody escalates (decided during
+ * A0) — at submit and on every later read, so a candidate who becomes
+ * ineligible (demoted, or the requester filing for a report) moves the step on:
+ *   1. to the access-admin holders, then
+ *   2. when every access admin is a party too, to the cross-tenant `admin`
+ *      holders standing in `access` — a step nobody may decide is a request
+ *      stuck forever.
+ * `escalated` names why, for the record page.
  */
+export function eligibility(
+  kind: StepKind, item: AccessCatalogRow, request: { requesterId: string; beneficiaryId: string }, dir: AccessDirectory,
+): Eligibility {
+  const beneficiary = dir.users.find((u) => u.id === request.beneficiaryId) ?? null;
+  const notParty = (u: DirectoryUser) => u.id !== request.requesterId && u.id !== request.beneficiaryId;
+  const raw = stepCandidates(kind, item, beneficiary, dir);
+  let who = raw.filter((u) => decidesInAccess(u) && notParty(u));
+  let escalated: string | null = null;
+  if (who.length === 0) {
+    const noun = STEP_NOUN[kind];
+    const why = raw.length === 0 ? `no ${noun} is on record`
+      : raw.every((u) => !notParty(u)) ? `the ${noun} is a party to this request`
+      : `the ${noun} holds no deciding role in Access`;
+    if (kind !== 'access-admin') {
+      who = accessAdmins(dir).filter(notParty);
+      escalated = `Escalated to the access admins: ${why}.`;
+    }
+    if (who.length === 0) {
+      who = dir.users.filter((u) => (u.grants['access'] ?? []).includes('admin') && notParty(u));
+      escalated = `Escalated to the platform admins: ${kind === 'access-admin' ? 'every access admin is a party to this request' : `${why}, and every access admin is a party to this request`}.`;
+    }
+  }
+  return { people: who.map(personOf).sort((a, b) => a.displayName.localeCompare(b.displayName)), escalated };
+}
+
+/** Who may decide a step of this request now (see `eligibility`). */
 export function eligibleDeciders(
   kind: StepKind, item: AccessCatalogRow, request: { requesterId: string; beneficiaryId: string }, dir: AccessDirectory,
 ): Person[] {
-  const beneficiary = dir.users.find((u) => u.id === request.beneficiaryId) ?? null;
-  const notParty = (u: DirectoryUser) => u.id !== request.requesterId && u.id !== request.beneficiaryId;
-  let who = stepCandidates(kind, item, beneficiary, dir).filter((u) => decidesInAccess(u) && notParty(u));
-  if (who.length === 0 && kind !== 'access-admin') who = accessAdmins(dir).filter(notParty);
-  return who.map(personOf).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  return eligibility(kind, item, request, dir).people;
 }

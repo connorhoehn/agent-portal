@@ -335,6 +335,8 @@ const PAGES: PageEntry[] = [
     keywords: ['policy', 'sod', 'separation of duties', 'conflict', 'rule'] },
   { label: 'Reviews',            hint: 'Access review campaigns',             path: '/access/reviews',                             tenant: 'access', group: 'Govern',
     keywords: ['review', 'certification', 'campaign', 'recertify'] },
+  { label: 'Open reviews',       hint: 'Campaigns still waiting on decisions', path: '/access/reviews?status=open',               tenant: 'access', group: 'Govern',
+    keywords: ['open', 'review', 'certify', 'keep', 'revoke', 'campaign'] },
   { label: 'Audit',              hint: 'Every request transition',            path: '/access/audit',                               tenant: 'access', group: 'Govern',
     keywords: ['audit', 'event', 'history', 'log', 'trail'] },
   { label: 'Configuration',      hint: 'Durations, stewards and sensitive items', path: '/access/configuration',                     tenant: 'access', group: 'System', roles: ['access-admin'],

@@ -76,6 +76,7 @@ const AccessRequestRecordPage = lazy(() => import('./pages/access/RequestRecordP
 const AccessApprovalsPage = lazy(() => import('./pages/access/ApprovalsPage'));
 const AccessPoliciesPage = lazy(() => import('./pages/access/PoliciesPage'));
 const AccessReviewsPage = lazy(() => import('./pages/access/ReviewsPage'));
+const AccessReviewRecordPage = lazy(() => import('./pages/access/ReviewRecordPage'));
 const AccessAuditPage = lazy(() => import('./pages/access/AuditPage'));
 const AccessConfigurationPage = lazy(() => import('./pages/access/ConfigurationPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -426,6 +427,7 @@ export function App() {
             } />
             <Route path="policies" element={<Page element={<AccessPoliciesPage />} />} />
             <Route path="reviews" element={<Page element={<AccessReviewsPage />} />} />
+            <Route path="reviews/:id" element={<Page element={<AccessReviewRecordPage />} />} />
             <Route path="audit" element={<Page element={<AccessAuditPage />} />} />
             <Route path="configuration" element={
               <RequireRole roles={['access-admin']} fallback={<HomeRedirect />}>

@@ -12,6 +12,10 @@ export type StepStatus = 'waiting' | 'current' | 'approved' | 'rejected' | 'info
 export type AccessTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines';
 export type SodSeverity = 'warn' | 'block';
 export type Decision = 'approve' | 'reject' | 'info';
+/** `grant` asks for access; `revocation` is a pre-approved request an access review created (lane A2). */
+export type RequestKind = 'grant' | 'revocation';
+export type ReviewStatus = 'open' | 'closed';
+export type ReviewDecision = 'keep' | 'revoke';
 export type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'caution' | 'accent';
 
 export interface SodConflict { policyId: string; reason: string; severity: SodSeverity }
@@ -42,10 +46,15 @@ export interface RequestStep {
   comment?: string | null;
   /** Who may decide it now, resolved live by the server: shown, never trusted. */
   eligible: AccessPerson[];
+  /** Why `eligible` is an escalation rather than the step's own candidates, else null. */
+  escalated?: string | null;
 }
 
 export interface AccessRequest {
   id: string;
+  kind: RequestKind;
+  /** The review campaign a revocation came from, else null. */
+  reviewId: string | null;
   requester: AccessPerson;
   beneficiary: AccessPerson;
   item: CatalogItem;
@@ -59,8 +68,52 @@ export interface AccessRequest {
   expiresAt?: string | null;
   revokedAt?: string | null;
   sod: { verdict: 'clear' | SodSeverity; conflicts: SodConflict[]; overriddenBy?: AccessPerson | null; overrideReason?: string | null };
-  can: { decide: boolean; withdraw: boolean; viewAudit: boolean };
+  can: {
+    decide: boolean; withdraw: boolean; viewAudit: boolean;
+    /** ProvisionAccess on an active grant (lane A2 manual revoke). */
+    revoke: boolean;
+    /** ManageAccessPolicy on a live, not-yet-overridden SoD block (decision A7). */
+    overrideSod: boolean;
+  };
   thread: string;
+}
+
+/** An access review campaign (docs/access-tenant-api.md §A2). */
+export interface AccessReview {
+  id: string;
+  tenant: AccessTenant;
+  title: string;
+  status: ReviewStatus;
+  owner: AccessPerson | null;
+  openedAt: string;
+  closedAt: string | null;
+  /** Counted by the server from the items the viewer may see. */
+  progress: { total: number; decided: number; kept: number; revoked: number };
+  can: { decide: boolean };
+}
+
+/** One standing (user, role) grant under review. */
+export interface AccessReviewItem {
+  id: string;
+  reviewId: string;
+  user: AccessPerson;
+  tenant: AccessTenant;
+  role: string;
+  decision: ReviewDecision | null;
+  decidedBy: AccessPerson | null;
+  decidedAt: string | null;
+  comment: string | null;
+  revocationRequestId: string | null;
+  can: { decide: boolean };
+}
+
+export interface ReviewRecord { review: AccessReview; items: AccessReviewItem[] }
+
+/** GET /api/access/configuration. */
+export interface AccessConfiguration {
+  durations: { offered: AccessDuration[]; standingReasonMin: number };
+  stewards: Array<{ scope: 'tenant-role' | 'initiative-membership' | 'sensitive'; tenant: string | null; rule: string; role: string | null }>;
+  items: Array<{ id: string; title: string; kind: AccessKind; tenant: AccessTenant; defaultDuration: AccessDuration; stewardRule: 'tenant-steward' | 'initiative-owner'; sensitive: boolean }>;
 }
 
 export interface AccessPolicy {
@@ -70,10 +123,11 @@ export interface AccessPolicy {
 }
 
 export type AccessEventKind = 'submitted' | 'step-approved' | 'step-rejected' | 'info-requested' | 'withdrawn'
-  | 'approved' | 'provisioned' | 'expired' | 'revoked' | 'sod-override' | 'policy-updated';
+  | 'approved' | 'provisioned' | 'expired' | 'revoked' | 'sod-override' | 'sod-blocked' | 'policy-updated';
 
 export interface AccessEvent {
-  id: string; at: string; requestId: string; actor: AccessPerson | null;
+  /** requestId is null for a policy change (`policy-updated`), which names `policyId`. */
+  id: string; at: string; requestId: string | null; policyId?: string | null; actor: AccessPerson | null;
   kind: AccessEventKind;
   before?: string | null; after?: string | null; reason?: string | null;
 }
@@ -101,6 +155,7 @@ export const EVENT_LABELS: Readonly<Record<AccessEventKind, string>> = {
   submitted: 'Submitted', 'step-approved': 'Step approved', 'step-rejected': 'Step rejected',
   'info-requested': 'Information requested', withdrawn: 'Withdrawn', approved: 'Approved',
   provisioned: 'Provisioned', expired: 'Expired', revoked: 'Revoked', 'sod-override': 'Policy override',
+  'sod-blocked': 'Blocked by policy',
   'policy-updated': 'Policy updated',
 };
 
@@ -167,7 +222,7 @@ export function filterPolicies(rows: readonly AccessPolicy[], query: string, sev
 
 export function filterEvents(rows: readonly AccessEvent[], query: string, kind: string): AccessEvent[] {
   return rows.filter((r) => (!kind || r.kind === kind)
-    && has(query, r.id, r.requestId, r.actor?.displayName ?? 'system', EVENT_LABELS[r.kind], r.reason, r.before, r.after));
+    && has(query, r.id, r.requestId, r.policyId, r.actor?.displayName ?? 'system', EVENT_LABELS[r.kind], r.reason, r.before, r.after));
 }
 
 /** A request's title for the table and `open <title>`: the item it asks for, for whom. */
@@ -190,11 +245,18 @@ export function chainSteps(steps: readonly RequestStep[]): Array<{ step: number;
   }));
 }
 
-/** Who may decide a step, for display (the server decides). */
-export function eligibleLabel(step: RequestStep): string {
+/** Who may decide a step, for display (the server decides). A closed request's undecided step claims no one. */
+export function eligibleLabel(step: RequestStep, status?: RequestStatus): string {
   if (step.decidedBy) return step.decidedBy.displayName;
-  if (!step.eligible.length) return 'No one is eligible yet';
+  if (status && !OPEN.has(status)) return '—';
+  if (step.status === 'skipped') return '—';
+  if (!step.eligible.length) return 'No one can decide this step';
   return step.eligible.map((p) => p.displayName).join(', ');
+}
+
+/** Where an audit event opens: its request, or the policies for a policy change. */
+export function eventHref(e: Pick<AccessEvent, 'requestId'>): string {
+  return e.requestId ? requestHref(e.requestId) : '/access/policies';
 }
 
 // ── The request wizard (who → what → why → how long) ───────────────────────
@@ -246,3 +308,83 @@ export function submitBody(draft: RequestDraft, selfId: string): { itemId: strin
 
 /** The detail route of one request. */
 export function requestHref(id: string): string { return `/access/requests/${encodeURIComponent(id)}`; }
+
+// ── Access reviews (lane A2) ────────────────────────────────────────────────
+
+/** The SoD override's minimum reason (routes/access.ts MIN_OVERRIDE_REASON). */
+export const OVERRIDE_REASON_MIN = 20;
+/** A review campaign's title bounds (routes/access.ts). */
+export const REVIEW_TITLE_MIN = 3;
+export const REVIEW_TITLE_MAX = 200;
+
+/** The record route of one review campaign. */
+export function reviewHref(id: string): string { return `/access/reviews/${encodeURIComponent(id)}`; }
+
+/** The Reviews toolbar's status filter (and its command phrases). */
+export function filterReviews(rows: readonly AccessReview[], query: string, status: string): AccessReview[] {
+  return rows.filter((r) => (!status || r.status === status)
+    && has(query, r.id, r.title, TENANT_LABELS[r.tenant], r.owner?.displayName));
+}
+
+/** "2 of 4 decided", for the campaign table and the record's progress bar. */
+export function reviewProgressLabel(p: AccessReview['progress']): string {
+  return `${p.decided} of ${p.total} decided`;
+}
+
+/** A review item's title for the table and `open <title>`: who holds what. */
+export function reviewItemTitle(i: AccessReviewItem): string {
+  return `${i.user.displayName} · ${i.role}`;
+}
+
+/** The record's decision filter: open (undecided), keep or revoke. */
+export function filterReviewItems(rows: readonly AccessReviewItem[], query: string, decision: string): AccessReviewItem[] {
+  return rows.filter((i) => (!decision || (decision === 'open' ? i.decision === null : i.decision === decision))
+    && has(query, i.id, i.user.displayName, i.role, i.comment, i.decidedBy?.displayName));
+}
+
+/** What blocks a review decision, or null when it may be sent: a revoke states its reason. */
+export function reviewDecisionProblem(decision: ReviewDecision, comment: string): string | null {
+  return decision === 'revoke' && !comment.trim() ? 'A revoke needs a comment: it becomes the revocation’s reason.' : null;
+}
+
+/** What blocks a new campaign, or null. */
+export function campaignProblem(tenant: string, title: string): string | null {
+  if (!tenant) return 'Choose the workspace whose standing grants to review.';
+  const n = title.trim().length;
+  if (n < REVIEW_TITLE_MIN) return `Give the campaign a title of at least ${REVIEW_TITLE_MIN} characters.`;
+  if (n > REVIEW_TITLE_MAX) return `Keep the title under ${REVIEW_TITLE_MAX} characters.`;
+  return null;
+}
+
+/** What blocks an SoD override, or null. */
+export function overrideProblem(reason: string): string | null {
+  const n = reason.trim().length;
+  return n >= OVERRIDE_REASON_MIN ? null : `Say why the conflict is acceptable in at least ${OVERRIDE_REASON_MIN} characters (${n} so far).`;
+}
+
+/** Whose events GET /api/access/audit returns to this role (routes/access.ts: the request read rule). */
+export function auditScopeNotice(role: string | null | undefined): string {
+  return role === 'access-admin' || role === 'admin'
+    ? 'You see every event in the access workspace.'
+    : 'You see the events of requests you may open: yours, your reports’, and those you decided or may decide.';
+}
+
+// ── Configuration (GET/PUT /api/access/configuration) ──────────────────────
+
+/** Unsaved per-item edits on the configuration page. */
+export type ConfigurationEdits = Record<string, { defaultDuration?: AccessDuration; sensitive?: boolean }>;
+
+/** The PUT body: only the items whose stored values differ from what was read. */
+export function configurationPatch(items: readonly AccessConfiguration['items'][number][], edits: ConfigurationEdits): { items: Array<{ id: string; defaultDuration?: AccessDuration; sensitive?: boolean }> } {
+  const out: Array<{ id: string; defaultDuration?: AccessDuration; sensitive?: boolean }> = [];
+  for (const i of items) {
+    const e = edits[i.id];
+    if (!e) continue;
+    const patch = {
+      ...(e.defaultDuration !== undefined && e.defaultDuration !== i.defaultDuration ? { defaultDuration: e.defaultDuration } : {}),
+      ...(e.sensitive !== undefined && e.sensitive !== i.sensitive ? { sensitive: e.sensitive } : {}),
+    };
+    if (Object.keys(patch).length) out.push({ id: i.id, ...patch });
+  }
+  return { items: out };
+}

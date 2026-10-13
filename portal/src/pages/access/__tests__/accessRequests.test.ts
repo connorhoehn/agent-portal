@@ -11,7 +11,7 @@ const item = (over: Partial<CatalogItem> = {}): CatalogItem => ({
 });
 const person = (id: string, displayName: string) => ({ id, displayName });
 const request = (over: Partial<AccessRequest> = {}): AccessRequest => ({
-  id: 'req-0001', requester: person('u-rhea', 'Rhea Castellanos'), beneficiary: person('u-rhea', 'Rhea Castellanos'), item: item(),
+  id: 'req-0001', kind: 'grant', reviewId: null, requester: person('u-rhea', 'Rhea Castellanos'), beneficiary: person('u-rhea', 'Rhea Castellanos'), item: item(),
   justification: 'Need to dispatch the auth migration agents', duration: '7d', status: 'pending',
   steps: [
     { step: 1, kind: 'manager', status: 'approved', decidedBy: person('u-omar', 'Omar Haddad'), eligible: [] },
@@ -19,7 +19,7 @@ const request = (over: Partial<AccessRequest> = {}): AccessRequest => ({
     { step: 3, kind: 'access-admin', status: 'waiting', eligible: [] },
   ],
   submittedAt: '2026-10-12T09:00:00.000Z', sod: { verdict: 'clear', conflicts: [] },
-  can: { decide: false, withdraw: true, viewAudit: true }, thread: 'access:req:req-0001', ...over,
+  can: { decide: false, withdraw: true, viewAudit: true, revoke: false, overrideSod: false }, thread: 'access:req:req-0001', ...over,
 });
 
 test('status filter buckets: open, approved, active, closed', () => {

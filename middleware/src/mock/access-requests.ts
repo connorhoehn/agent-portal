@@ -14,10 +14,14 @@
 // from these rows by the route at request time.
 
 import { clock, defineFixture } from './core/index.js';
-import type { AccessDuration, RequestStatus, SodVerdict, StepKind, StepStatus, AccessEventKind } from '../lib/access/types.js';
+import type { AccessDuration, RequestKind, RequestStatus, SodVerdict, StepKind, StepStatus, AccessEventKind } from '../lib/access/types.js';
 
 export interface AccessRequestRow {
   id: string;
+  /** `grant` (asked for) or `revocation` (created pre-approved by an access review, lane A2). */
+  kind: RequestKind;
+  /** The review campaign a revocation came from (access_reviews.id), else null. */
+  reviewId: string | null;
   requesterId: string;
   beneficiaryId: string;
   itemId: string;
@@ -50,7 +54,10 @@ export interface AccessStepRow {
 
 export interface AccessEventRow {
   id: string;
-  requestId: string;
+  /** The request the event belongs to; null for an event about a policy (lane A2). */
+  requestId: string | null;
+  /** The SoD policy a `policy-updated` event changed, else null. */
+  policyId: string | null;
   at: string;
   actorId: string | null;
   kind: AccessEventKind;
@@ -63,7 +70,7 @@ const req = (
   id: string, requesterId: string, itemId: string, justification: string, duration: AccessDuration, status: RequestStatus,
   submittedAt: string, decidedAt: string | null = null, provisionedAt: string | null = null,
 ): AccessRequestRow => ({
-  id, requesterId, beneficiaryId: requesterId, itemId, justification, duration, status,
+  id, kind: 'grant', reviewId: null, requesterId, beneficiaryId: requesterId, itemId, justification, duration, status,
   sodVerdict: 'clear', sodOverriddenBy: null, sodOverrideReason: null,
   submittedAt, decidedAt, provisionedAt, expiresAt: null, revokedAt: null, expiryWarnedAt: null,
 });
@@ -120,7 +127,7 @@ export const accessStepsFixture = defineFixture<AccessStepRow>({
 });
 
 const evt = (id: string, requestId: string, at: string, actorId: string | null, kind: AccessEventKind, beforeStatus: string | null, afterStatus: string | null, reason: string | null = null): AccessEventRow =>
-  ({ id, requestId, at, actorId, kind, beforeStatus, afterStatus, reason });
+  ({ id, requestId, policyId: null, at, actorId, kind, beforeStatus, afterStatus, reason });
 
 export const accessEventsFixture = defineFixture<AccessEventRow>({
   key: 'access.events',

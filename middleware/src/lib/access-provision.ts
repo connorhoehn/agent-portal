@@ -34,17 +34,29 @@
 // In-process calls on one request are serialized; across replicas the expiry
 // sweeper holds the fleet lock, and the compare-and-set decides any race left.
 //
+// Separation of duties at provisioning (decision A7, lane A2): the submit
+// pre-check read the beneficiary's grants as they stood then; a grant added
+// since (another request, an admin edit) can create a conflict the approvers
+// never saw. So provisionAccess re-evaluates the policies against the
+// beneficiary's CURRENT grants before it writes anything. A `block` refuses:
+// the request stays `approved`, a `sod-blocked` event is recorded and the
+// requester, the beneficiary and the access admins hear about it (once per
+// block, not per retry) — unless an access admin has recorded an override
+// (POST /api/access/requests/:id/sod-override), which re-runs this.
+//
 // Mock mode: every write lands in a registered fixture (identity.grant-writes,
 // initiatives, access.requests, access.events), so `POST /api/__mock/reset`
 // undoes a provisioning. Outside the mock providers/access.ts answers 503
 // until schema/access_schema.sql is applied (lane E).
 
 import { AppError } from './async-handler.js';
-import { bumpSessionEpoch, getUser, setGrants } from '../providers/identity.js';
+import { bumpSessionEpoch, getUser, listUsers, setGrants } from '../providers/identity.js';
 import { addContribution, removeContribution } from '../providers/projects.js';
-import { accessNow, casRequest, findRequest, listCatalog, type AccessCatalogRow, type AccessRequestRow } from '../providers/access.js';
+import { accessNow, casRequest, findRequest, listCatalog, listPolicies, type AccessCatalogRow, type AccessRequestRow } from '../providers/access.js';
+import { requestItem } from './access/items.js';
+import { sodConflicts, sodVerdict } from './access/sod.js';
 import { notifyAccessRequest } from './social-notify.js';
-import type { AccessDuration } from './access/types.js';
+import type { AccessDuration, SodConflict } from './access/types.js';
 import type { Grants } from './session.js';
 
 const HOUR = 3_600_000;
@@ -61,6 +73,11 @@ export function expiresAtFor(duration: AccessDuration, from: string): string | n
 
 export class ProvisionError extends AppError {
   constructor(message: string) { super(409, message); }
+}
+
+/** Provisioning refused because a blocking SoD policy now applies and no override is recorded. */
+export class SodBlockedError extends ProvisionError {
+  constructor(message: string, public readonly conflicts: SodConflict[]) { super(message); }
 }
 
 export interface ProvisionOutcome {
@@ -80,7 +97,7 @@ async function serialized<T>(requestId: string, fn: () => Promise<T>): Promise<T
 }
 
 function itemFor(request: AccessRequestRow): AccessCatalogRow {
-  const item = listCatalog().find((i) => i.id === request.itemId);
+  const item = requestItem(request, listCatalog());
   if (!item) throw new ProvisionError(`${request.itemId} is no longer in the catalog; ${request.id} cannot be provisioned or revoked`);
   return item;
 }
@@ -136,6 +153,7 @@ export async function provisionAccess(request: Pick<AccessRequestRow, 'id'>): Pr
     if (current.status !== 'approved' && current.status !== 'provisioned') {
       throw new ProvisionError(`${current.id} is ${current.status}; only an approved request is provisioned`);
     }
+    if (current.kind === 'revocation') throw new ProvisionError(`${current.id} is a revocation; it is never provisioned`);
     const item = itemFor(current);
     // Refuse what can never be written BEFORE claiming the row, so a request
     // that cannot be provisioned stays `approved` and says why.
@@ -144,6 +162,28 @@ export async function provisionAccess(request: Pick<AccessRequestRow, 'id'>): Pr
       throw new ProvisionError(`${beneficiary.displayName} has no linked person; an initiative membership needs one`);
     }
     const now = accessNow();
+    // SoD against the beneficiary's grants NOW (A7), not the submit-time snapshot.
+    if (current.status === 'approved' && !current.sodOverriddenBy) {
+      const conflicts = sodConflicts(item, beneficiary.grants, listPolicies());
+      if (sodVerdict(conflicts) === 'block') {
+        const blocking = conflicts.filter((c) => c.severity === 'block');
+        const why = blocking.map((c) => `${c.policyId}: ${c.reason}`).join(' ');
+        // Record the block once: a retry over the same block adds no event and rings no bell.
+        if (current.sodVerdict !== 'block') {
+          const marked = casRequest(current.id, { from: ['approved'] }, { sodVerdict: 'block' },
+            [{ kind: 'sod-blocked', before: 'approved', after: 'approved', reason: why }], null, now);
+          if (marked) {
+            const admins = (await listUsers({ authoritative: true }).catch(() => []))
+              .filter((u) => (u.grants['access'] ?? []).includes('access-admin')).map((u) => u.id);
+            await notifyAccessRequest({
+              kind: 'sod-blocked', requestId: current.id, itemTitle: item.title, requesterId: current.requesterId, beneficiaryId: current.beneficiaryId,
+              ...(await names(current, null)), actorId: null, approverIds: admins, comment: why,
+            });
+          }
+        }
+        throw new SodBlockedError(`Separation of duties blocks ${item.title} for ${beneficiary.displayName} now (${blocking.map((c) => c.policyId).join(', ')}); an access admin must record an override before it is provisioned`, conflicts);
+      }
+    }
     const expiresAt = expiresAtFor(current.duration, now);
     let claimed = current;
     if (current.status === 'approved') {

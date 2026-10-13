@@ -90,7 +90,7 @@ interface AccessEvent {
 | `GET /policies` | ViewAccess | `{ items: AccessPolicy[] }` |
 | `PUT /policies/:id` body `{ severity?, reason? }` | ManageAccessPolicy | `AccessPolicy` |
 | `GET /audit?requestId=&q=` | ViewAccess (own) / DecideAccess (all) | `{ items: AccessEvent[] }` |
-| `GET /reviews` | ViewAccess | `{ items: [] }` until A2 |
+| `GET /reviews` | ViewAccess | `{ items: AccessReview[] }` (lane A2, below) |
 
 Discussion thread per request: `access:req:<id>` (`AccessRequest.thread`). The
 gateway admits it (A1) to whoever passes `GET /requests/:id`'s read rule now,
@@ -105,3 +105,89 @@ beneficiary's `session_epoch`: the grant reaches their open cookie through the
 ≤120 s grants refresh. Revocation and expiry (`lib/access-expiry.ts`) remove
 it, bump the epoch (retiring every cookie they hold) and record
 `revoked`/`expired`; the bell warns the requester and beneficiary 24 h before.
+
+## Lane A2 — separation of duties at provisioning, manual revoke, reviews, configuration
+
+Additions to the A0/A1 shapes (all additive):
+
+```ts
+type RequestKind = 'grant' | 'revocation';
+// AccessEvent.kind gains 'sod-blocked'; AccessEvent.requestId is null for a
+// policy change ('policy-updated'), which names policyId instead.
+interface AccessEvent { /* … */ requestId: string | null; policyId: string | null }
+
+interface RequestStep {
+  /* … */
+  /** Why `eligible` is an escalation rather than the step's own candidates, else null. */
+  escalated: string | null;
+}
+
+interface AccessRequest {
+  /* … */
+  kind: RequestKind;                 // 'revocation': created pre-approved by an access review
+  reviewId: string | null;           // the campaign a revocation came from
+  can: { decide; withdraw; viewAudit;
+         revoke: boolean;            // ProvisionAccess, kind 'grant', status 'active'
+         overrideSod: boolean };     // ManageAccessPolicy, live verdict 'block', not overridden, not a party
+}
+
+interface AccessReview {
+  id: string;                        // 'rev-0001'
+  tenant: 'orgiq' | 'assessment' | 'social' | 'pipelines';
+  title: string;
+  status: 'open' | 'closed';
+  owner: Person | null;              // access_reviews.opened_by — decides its items with any access-admin
+  openedAt: string; closedAt: string | null;
+  progress: { total: number; decided: number; kept: number; revoked: number };  // over the items the viewer may see
+  can: { decide: boolean };
+}
+
+interface AccessReviewItem {
+  id: string;                        // 'ri-0001'
+  reviewId: string;
+  user: Person; tenant: AccessReview['tenant']; role: string;   // one standing (user, role) grant
+  decision: 'keep' | 'revoke' | null;
+  decidedBy: Person | null; decidedAt: string | null; comment: string | null;
+  revocationRequestId: string | null;  // the revocation a 'revoke' created
+  can: { decide: boolean };          // owner or access-admin, open campaign, undecided, never one's own grant
+}
+
+interface AccessConfiguration {
+  durations: { offered: Duration[]; standingReasonMin: number };          // fixed (A6)
+  stewards: Array<{ scope: 'tenant-role' | 'initiative-membership' | 'sensitive'; tenant: string | null; rule: string; role: string | null }>;  // fixed (A4)
+  items: Array<{ id; title; kind; tenant; defaultDuration: Duration; stewardRule; sensitive: boolean }>;
+}
+```
+
+| route | gate | response |
+|---|---|---|
+| `POST /requests/:id/sod-override` body `{ reason }` | ManageAccessPolicy | `AccessRequest`; 400 when `reason` < 20 chars or an unknown key; 403 on a request the actor submitted or benefits from; 404 outside the read rule; 409 when no blocking conflict applies now, it is already overridden, the request is not open/approved, or it is a revocation. Records `sodOverriddenBy`/`sodOverrideReason`, event `sod-override`; an `approved` request is provisioned at once |
+| `POST /requests/:id/revoke` body `{ reason }` | ProvisionAccess | `AccessRequest` (status `revoked`); 400 without a reason; 409 unless an active grant. Through `revokeAccess(request, reason, actor)`: role removed, the beneficiary's `session_epoch` bumped, event `revoked` |
+| `GET /reviews` | ViewAccess | `{ items: AccessReview[] }`, newest first |
+| `POST /reviews` body `{ tenant, title }` | ManageAccessPolicy | 201 `{ review, items }` — one item per (user, role) the directory holds in `tenant` now (`admin` excluded); 400 bad tenant / title (3–200); 409 when nobody holds a grant there |
+| `GET /reviews/:id` | ViewAccess | `{ review, items: AccessReviewItem[] }` — every item with DecideAccess, otherwise only the viewer's own; 404 unknown |
+| `POST /reviews/:id/items/:itemId/decide` body `{ decision: 'keep' \| 'revoke', comment? }` | DecideAccess + owner or access-admin | `{ review, item }`; 400 bad decision, or `revoke` without a comment; 403 not the owner/an access admin, or one's own grant; 409 decided already or campaign closed. `revoke` inserts a `kind: 'revocation'` request (requester = reviewer, one approved `access-admin` step, events `submitted`, `approved`), revokes it through `revokeAccess` with the reviewer as actor (status `active` → `revoked`), and revokes the active grant request that provisioned the same grant, if any; the campaign closes when every item is decided |
+| `GET /configuration` | ViewAccess | `AccessConfiguration` |
+| `PUT /configuration` body `{ items: [{ id, defaultDuration?, sensitive? }] }` | ManageAccessPolicy | `AccessConfiguration`; 400 on unknown keys, `durations`/`stewards` (fixed), an unknown item, a bad value, or a descriptive field changed — and then nothing is written |
+
+Separation of duties at provisioning (A7): `provisionAccess` re-evaluates the
+policies against the beneficiary's **current** grants before writing. A `block`
+without an override leaves the request `approved`, stores `sodVerdict: 'block'`,
+appends one `sod-blocked` event (system actor) and rings the requester, the
+beneficiary and the access admins once (`access-sod-blocked`); the submit
+pre-check (409) is unchanged.
+
+Eligibility (decided during A0, applied on every read): a step whose own
+candidates leave nobody — none on record, only a party, or nobody with a
+deciding role in Access — escalates to the access admins, and, when every
+access admin is a party, to the `admin` holders in `access`; `escalated` says
+why.
+
+Audit: `GET /audit` follows the request read rule for everyone below
+access-admin (who, with `admin`, reads every event); `policy-updated` events
+(`PUT /policies/:id`: severity before → after, the reason) are read by
+DecideAccess holders.
+
+The agent loop's `GET /api/conversations/agent/waiting?channel=access:req:<id>`
+answers `{ runs: [] }` to a reader of the request (request threads carry no
+agent) and 403 to anyone else.

@@ -365,7 +365,7 @@ export async function notifyPipelineRun(ev: PipelineRunEvent): Promise<string[]>
 
 /** What happened to an access request that someone should hear about. */
 export type AccessNotifyKind = 'submitted' | 'awaiting' | 'approved-step' | 'rejected' | 'info-requested' | 'withdrawn'
-  | 'provisioned' | 'provision-failed' | 'expiring' | 'expired' | 'revoked';
+  | 'provisioned' | 'provision-failed' | 'sod-blocked' | 'expiring' | 'expired' | 'revoked';
 
 export interface AccessRequestEvent {
   kind: AccessNotifyKind;
@@ -377,7 +377,8 @@ export interface AccessRequestEvent {
   /** The person who caused it; never notified about their own action. Null = the system. */
   actorId?: string | null;
   actorName?: string | null;
-  /** `submitted` / `awaiting`: who may decide the current step NOW (lib/access/chain.ts, resolved live). */
+  /** `submitted` / `awaiting`: who may decide the current step NOW (lib/access/chain.ts, resolved live).
+   * `sod-blocked`: the access admins, who alone may override — heard alongside the parties. */
   approverIds?: readonly string[];
   /** The step a decision was taken on. */
   step?: number | null;
@@ -401,7 +402,9 @@ export async function notifyAccessRequest(ev: AccessRequestEvent): Promise<strin
     if (!sink) return [];
     const forApprovers = ev.kind === 'submitted' || ev.kind === 'awaiting';
     const parties = [ev.requesterId, ev.beneficiaryId];
-    const recipients = (forApprovers ? [...(ev.approverIds ?? [])] : parties)
+    const pool = forApprovers ? [...(ev.approverIds ?? [])]
+      : ev.kind === 'sod-blocked' ? [...parties, ...(ev.approverIds ?? [])] : parties;
+    const recipients = [...new Set(pool)]
       .filter((u) => !!u && u !== ev.actorId && (!forApprovers || !parties.includes(u)));
     if (!recipients.length) return [];
     const who = ev.beneficiaryName || ev.beneficiaryId;
@@ -415,6 +418,7 @@ export async function notifyAccessRequest(ev: AccessRequestEvent): Promise<strin
       'info-requested': { type: 'system', title: `${by} asked for more information on ${ev.itemTitle}`, body: ev.comment ? snippet(ev.comment) : `Request ${ev.requestId}` },
       withdrawn: { type: 'system', title: `${ev.itemTitle} was withdrawn`, body: `Request ${ev.requestId} stopped; nothing was provisioned.` },
       provisioned: { type: 'system', title: `${ev.itemTitle} is active for ${who}`, body: `Your access is active${ev.expiresAt ? ` until ${ev.expiresAt}` : ' (standing)'}; open pages pick it up within two minutes.` },
+      'sod-blocked': { type: 'approval-requested', title: `${ev.itemTitle} for ${who} is blocked by a separation-of-duties policy`, body: ev.comment ? `Approved, not provisioned: ${snippet(ev.comment)} An access admin may record an override.` : `Request ${ev.requestId} is approved but blocked; an access admin may record an override.` },
       'provision-failed': { type: 'system', title: `${ev.itemTitle} was approved but not provisioned`, body: `Request ${ev.requestId} is approved; the grant write failed and an access admin must look at it.` },
       expiring: { type: 'system', title: `${ev.itemTitle} expires within a day`, body: ev.expiresAt ? `Request ${ev.requestId} lapses at ${ev.expiresAt}. Request it again if the work continues.` : `Request ${ev.requestId} lapses soon.` },
       expired: { type: 'system', title: `${ev.itemTitle} expired for ${who}`, body: `Request ${ev.requestId} reached its end; the access was removed.` },

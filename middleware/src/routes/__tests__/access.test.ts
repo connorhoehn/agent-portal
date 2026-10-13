@@ -126,7 +126,7 @@ describe('the tenant boundary and the Cedar gates', () => {
 
 describe('reads', () => {
   it('summary counts from rows, per actor', async () => {
-    expect((await get('/api/access/summary', 'u-rhea')).body).toEqual({ openRequests: 2, pendingForMe: 0, activeElevations: 0, policies: 4, reviews: 0 });
+    expect((await get('/api/access/summary', 'u-rhea')).body).toEqual({ openRequests: 2, pendingForMe: 0, activeElevations: 0, policies: 4, reviews: 1 });
     expect((await get('/api/access/summary', 'u-omar')).body).toMatchObject({ openRequests: 2, pendingForMe: 1 });
     expect((await get('/api/access/summary', 'u-priya')).body).toMatchObject({ pendingForMe: 1, activeElevations: 1 });
   });
@@ -169,16 +169,22 @@ describe('reads', () => {
     expect(ids(await get('/api/access/approvals', 'u-omar'))).toEqual(['req-0001']);
     expect(ids(await get('/api/access/approvals', 'u-priya'))).toEqual(['req-0002']);
   });
-  it('audit: own events with ViewAccess, every event with DecideAccess', async () => {
+  it('audit follows the request read rule; only an access admin reads every event', async () => {
     const own = (await get('/api/access/audit', 'u-rhea')).body as { items: AccessEvent[] };
     expect(new Set(own.items.map((e) => e.requestId))).toEqual(new Set(['req-0001', 'req-0002', 'req-0005', 'req-0006']));
-    const all = (await get('/api/access/audit', 'u-omar')).body as { items: AccessEvent[] };
-    expect(all.items).toHaveLength(accessEventsFixture.rows().length);
+    // Omar reads his own request and his report Rhea's — never Nora's req-0004, whose record he cannot open.
+    const omar = (await get('/api/access/audit', 'u-omar')).body as { items: AccessEvent[] };
+    expect(new Set(omar.items.map((e) => e.requestId))).toEqual(new Set(['req-0001', 'req-0002', 'req-0003', 'req-0005', 'req-0006']));
+    expect(ids(await get('/api/access/audit?requestId=req-0004', 'u-omar'))).toEqual([]);
+    expect((await get('/api/access/requests/req-0004', 'u-omar')).status).toBe(404);
     expect(ids(await get('/api/access/audit?requestId=req-0003', 'u-omar'))).toEqual(['evt-0004', 'evt-0005', 'evt-0006', 'evt-0007']);
+    const all = (await get('/api/access/audit', 'u-priya')).body as { items: AccessEvent[] };
+    expect(all.items).toHaveLength(accessEventsFixture.rows().length);
   });
   it('policies and reviews', async () => {
     expect(ids(await get('/api/access/policies', 'u-rhea'))).toEqual(['sod-001', 'sod-002', 'sod-003', 'sod-004']);
-    expect((await get('/api/access/reviews', 'u-rhea')).body).toMatchObject({ items: [] });
+    // Lane A2: the seeded campaign; a requester sees it, but none of its items (they are not hers).
+    expect((await get('/api/access/reviews', 'u-rhea')).body).toMatchObject({ items: [{ id: 'rev-0001', status: 'open', progress: { total: 0 }, can: { decide: false } }] });
   });
 });
 

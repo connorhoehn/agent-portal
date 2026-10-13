@@ -15,26 +15,38 @@
 // bump, `provisioned` → `active`); expiry is lib/access-expiry.ts; the bell
 // items go through lib/social-notify.ts `notifyAccessRequest`; the request's
 // thread `access:req:<id>` is admitted by the gateway under this file's read
-// rule (lib/access/thread.ts). Reviews are A2 (`GET /reviews` answers no rows).
+// rule (lib/access/thread.ts).
+//
+// Lane A2 (docs/access-tenant-goal.md §A2): separation of duties is evaluated
+// at submit (the 409 pre-check below) and again at provisioning against the
+// beneficiary's CURRENT grants (lib/access-provision.ts); a block there leaves
+// the request `approved` until an access admin records an override
+// (`POST /requests/:id/sod-override`, which re-runs the provisioning). An
+// access admin revokes an active grant by hand (`POST /requests/:id/revoke`).
+// Review campaigns (`/reviews*`) certify the standing grants of one tenant; a
+// `revoke` decision is a pre-approved revocation request (kind `revocation`)
+// revoked through lib/access-provision.ts `revokeAccess` with the reviewer as
+// the actor.
 
 import { Router, type Request } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { isAllowed, requireAction, resolveSession } from '../lib/authz.js';
-import { eligibleDeciders, personFor, planChain } from '../lib/access/chain.js';
+import { eligibility, eligibleDeciders, personFor, planChain, TENANT_STEWARD_ROLE } from '../lib/access/chain.js';
 import { sodConflicts, sodVerdict } from '../lib/access/sod.js';
 import { decide, isOpen, ELEVATED_STATUSES, submitRows, TransitionError, withdraw, currentStep } from '../lib/access/status.js';
 import { canFlags, decideRefusal, isParty, managesBeneficiary, mayRead, type AccessActor } from '../lib/access/rules.js';
+import { requestItem, roleItemId } from '../lib/access/items.js';
 import {
   ACCESS_TENANTS, DURATIONS, REQUEST_STATUSES, requestThread,
   type AccessDirectory, type AccessDuration, type AccessEvent, type AccessPolicy, type AccessRequest,
-  type CatalogItem, type Decision, type DirectoryUser,
+  type AccessReview, type AccessReviewItem, type AccessTenant, type CatalogItem, type Decision, type DirectoryUser,
 } from '../lib/access/types.js';
-import { provisionAccess } from '../lib/access-provision.js';
+import { provisionAccess, revokeAccess, SodBlockedError } from '../lib/access-provision.js';
 import { notifyAccessRequest, type AccessNotifyKind } from '../lib/social-notify.js';
 import {
-  accessNow, insertRequest, listCatalog, listEvents, listPolicies, listRequests, listSteps, loadDirectory,
-  nextRequestId, saveTransition, updatePolicy,
-  type AccessCatalogRow, type AccessPolicyRow, type AccessRequestRow, type AccessStepRow,
+  accessNow, casRequest, casReviewItem, closeReviewIfDecided, insertRequest, insertReview, listCatalog, listEvents,
+  listPolicies, listRequests, listReviewItems, listReviews, listSteps, loadDirectory, nextRequestId, saveTransition, updateCatalogItem, updatePolicy,
+  type AccessCatalogRow, type AccessPolicyRow, type AccessRequestRow, type AccessReviewItemRow, type AccessReviewRow, type AccessStepRow,
 } from '../providers/access.js';
 
 export const accessRouter = Router();
@@ -42,6 +54,9 @@ export const accessRouter = Router();
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 const MIN_JUSTIFICATION = 20;
+/** An SoD override's reason (decision A7): long enough to say why the conflict is acceptable. */
+const MIN_OVERRIDE_REASON = 20;
+const MAX_TITLE = 200;
 const MAX_TEXT = 2000;
 
 /** Refuse any body key outside `allowed` (docs/access-tenant-api.md: unknown keys are 400). */
@@ -62,11 +77,11 @@ async function context(req: Request): Promise<Ctx> {
   const session = resolveSession(req);
   if (!session) throw new AppError(401, 'Sign in first');
   const principal = { sub: session.sub, tenant: session.tenant, role: session.role };
-  const [dir, mayDecide, mayProvision] = await Promise.all([
-    loadDirectory(), isAllowed(principal, 'DecideAccess'), isAllowed(principal, 'ProvisionAccess'),
+  const [dir, mayDecide, mayProvision, mayManagePolicy] = await Promise.all([
+    loadDirectory(), isAllowed(principal, 'DecideAccess'), isAllowed(principal, 'ProvisionAccess'), isAllowed(principal, 'ManageAccessPolicy'),
   ]);
   const self = dir.users.find((u) => u.id === session.sub) ?? null;
-  return { dir, self, actor: { id: session.sub, personId: self?.personId ?? null, role: session.role, mayDecide, mayProvision } };
+  return { dir, self, actor: { id: session.sub, personId: self?.personId ?? null, role: session.role, mayDecide, mayProvision, mayManagePolicy } };
 }
 
 /** Does `who` hold the item now (a tenant role, or a contribution on the initiative)? */
@@ -102,38 +117,62 @@ function world(): World {
   return { catalog: new Map(listCatalog().map((i) => [i.id, i])), policies: listPolicies(), steps };
 }
 
+/** The item a request acts on: its catalog row, or a revocation's role descriptor (lib/access/items.ts). */
+const itemOf = (r: AccessRequestRow, w: World): AccessCatalogRow | undefined => requestItem(r, [...w.catalog.values()]);
+
+/** The live SoD verdict for a grant request against the beneficiary's CURRENT grants (A7). */
+function liveSod(r: AccessRequestRow, item: AccessCatalogRow, ctx: Ctx, w: World) {
+  const beneficiary = ctx.dir.users.find((u) => u.id === r.beneficiaryId) ?? null;
+  const conflicts = r.kind === 'revocation' ? [] : sodConflicts(item, beneficiary?.grants ?? {}, w.policies);
+  return { conflicts, verdict: sodVerdict(conflicts) };
+}
+
+/** May the actor record an SoD override on this request now? */
+const mayOverride = (r: AccessRequestRow, live: { verdict: string }, ctx: Ctx): boolean =>
+  !!ctx.actor.mayManagePolicy && r.kind === 'grant' && !r.sodOverriddenBy && live.verdict === 'block'
+  && !isParty(ctx.actor.id, r) && (isOpen(r.status) || r.status === 'approved');
+
 function present(r: AccessRequestRow, ctx: Ctx, w: World): AccessRequest {
   const steps = w.steps.get(r.id) ?? [];
-  const row = w.catalog.get(r.itemId);
+  const row = itemOf(r, w);
   const item = row ?? missingItem(r.itemId);
-  const beneficiary = ctx.dir.users.find((u) => u.id === r.beneficiaryId) ?? null;
-  const conflicts = sodConflicts(item, beneficiary?.grants ?? {}, w.policies);
+  const live = liveSod(r, item, ctx, w);
+  const conflicts = live.conflicts;
   return {
     id: r.id,
+    kind: r.kind,
+    reviewId: r.reviewId,
     requester: personFor(ctx.dir, r.requesterId)!,
     beneficiary: personFor(ctx.dir, r.beneficiaryId)!,
     item: catalogItem(item, ctx, w.policies),
     justification: r.justification,
     duration: r.duration,
     status: r.status,
-    steps: steps.map((s) => ({
-      step: s.step, kind: s.kind, status: s.status,
-      decidedBy: personFor(ctx.dir, s.decidedBy), decidedAt: s.decidedAt, comment: s.comment,
-      eligible: row && isOpen(r.status) && (s.status === 'current' || s.status === 'waiting' || s.status === 'info-requested')
-        ? eligibleDeciders(s.kind, row, r, ctx.dir) : [],
-    })),
+    steps: steps.map((s) => {
+      const live = row && isOpen(r.status) && (s.status === 'current' || s.status === 'waiting' || s.status === 'info-requested')
+        ? eligibility(s.kind, row, r, ctx.dir) : null;
+      return {
+        step: s.step, kind: s.kind, status: s.status,
+        decidedBy: personFor(ctx.dir, s.decidedBy), decidedAt: s.decidedAt, comment: s.comment,
+        eligible: live?.people ?? [], escalated: live?.escalated ?? null,
+      };
+    }),
     submittedAt: r.submittedAt,
     decidedAt: r.decidedAt, provisionedAt: r.provisionedAt, expiresAt: r.expiresAt, revokedAt: r.revokedAt,
     sod: {
       verdict: r.sodOverriddenBy ? r.sodVerdict : sodVerdict(conflicts), conflicts,
       overriddenBy: personFor(ctx.dir, r.sodOverriddenBy), overrideReason: r.sodOverrideReason,
     },
-    can: canFlags(ctx.actor, r, steps, row, ctx.dir),
+    can: {
+      ...canFlags(ctx.actor, r, steps, row, ctx.dir),
+      revoke: ctx.actor.mayProvision && r.kind === 'grant' && r.status === 'active',
+      overrideSod: mayOverride(r, live, ctx),
+    },
     thread: requestThread(r.id),
   };
 }
 
-const readable = (ctx: Ctx, w: World) => (r: AccessRequestRow) => mayRead(ctx.actor, r, w.steps.get(r.id) ?? [], w.catalog.get(r.itemId), ctx.dir);
+const readable = (ctx: Ctx, w: World) => (r: AccessRequestRow) => mayRead(ctx.actor, r, w.steps.get(r.id) ?? [], itemOf(r, w), ctx.dir);
 
 /** Requests whose current step the actor may decide now (never their own). */
 function approvalsFor(ctx: Ctx, w: World, requests: readonly AccessRequestRow[]): AccessRequestRow[] {
@@ -203,10 +242,10 @@ accessRouter.get('/summary', requireAction('ViewAccess'), asyncHandler(async (re
   res.json({
     openRequests: visible.filter((r) => isOpen(r.status)).length,
     pendingForMe: approvalsFor(ctx, w, requests).length,
-    activeElevations: visible.filter((r) => ELEVATED_STATUSES.has(r.status)).length,
+    activeElevations: visible.filter((r) => r.kind === 'grant' && ELEVATED_STATUSES.has(r.status)).length,
     policies: w.policies.length,
-    // Review campaigns are phase A2; there are no rows to count yet.
-    reviews: 0,
+    // Open review campaigns (lane A2), counted from the rows.
+    reviews: listReviews().filter((v) => v.status === 'open').length,
   });
 }));
 
@@ -278,22 +317,184 @@ accessRouter.get('/audit', requireAction('ViewAccess'), asyncHandler(async (req,
   const ctx = await context(req);
   const requestId = str(req.query['requestId']);
   const q = str(req.query['q'])?.toLowerCase();
-  // ViewAccess reads the events of one's own requests; DecideAccess reads all.
-  const own = new Set(listRequests().filter((r) => isParty(ctx.actor.id, r)).map((r) => r.id));
+  // The audit follows the request read rule (GET /requests/:id): an access
+  // admin (or the cross-tenant admin) reads every event; everyone else the
+  // events of requests they may read now — their own, their reports', the ones
+  // they decided or may decide. An approver no longer sees a row whose request
+  // would answer "not found".
+  const w = world();
+  const everything = ctx.actor.role === 'access-admin' || ctx.actor.role === 'admin';
+  const visible = new Set(listRequests().filter((r) => everything || readable(ctx, w)(r)).map((r) => r.id));
+  // Policy events (no request) are read by DecideAccess holders, who weigh SoD.
+  const seen = (e: { requestId: string | null }) => (e.requestId === null ? ctx.actor.mayDecide : visible.has(e.requestId));
   const items: AccessEvent[] = listEvents()
-    .filter((e) => (ctx.actor.mayDecide || own.has(e.requestId)) && (!requestId || e.requestId === requestId))
+    .filter((e) => seen(e) && (!requestId || e.requestId === requestId))
     .sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id))
-    .map((e) => ({ id: e.id, at: e.at, requestId: e.requestId, actor: personFor(ctx.dir, e.actorId), kind: e.kind, before: e.beforeStatus, after: e.afterStatus, reason: e.reason }))
-    .filter((e) => !q || [e.requestId, e.kind, e.reason ?? '', e.actor?.displayName ?? ''].some((s) => s.toLowerCase().includes(q)));
+    .map((e) => ({ id: e.id, at: e.at, requestId: e.requestId, policyId: e.policyId, actor: personFor(ctx.dir, e.actorId), kind: e.kind, before: e.beforeStatus, after: e.afterStatus, reason: e.reason }))
+    .filter((e) => !q || [e.requestId ?? '', e.policyId ?? '', e.kind, e.reason ?? '', e.actor?.displayName ?? ''].some((s) => s.toLowerCase().includes(q)));
   res.setHeader('Cache-Control', 'no-store');
   res.json({ items });
 }));
 
-accessRouter.get('/reviews', requireAction('ViewAccess'), (_req, res) => {
-  // Review campaigns are phase A2 (docs/access-tenant-goal.md §A2).
+// ─── access reviews (lane A2, decision A10) ─────────────────────────────────
+//
+// A campaign certifies the standing grants of one tenant: one item per
+// (user, role) the directory held there when it opened. Its owner (the access
+// admin who opened it) or any access admin decides each item keep / revoke;
+// nobody certifies their own access (A5). Everyone with ViewAccess sees the
+// campaigns; the items — who holds what — are read in full by DecideAccess and
+// otherwise only one's own.
+
+/** Owner or access admin: who decides a campaign's items. */
+const reviewsFor = (ctx: Ctx, review: AccessReviewRow): boolean =>
+  ctx.actor.mayDecide && (review.openedBy === ctx.actor.id || ctx.actor.role === 'access-admin' || ctx.actor.role === 'admin');
+
+const itemVisible = (ctx: Ctx) => (i: AccessReviewItemRow): boolean => ctx.actor.mayDecide || i.userId === ctx.actor.id;
+
+function presentReview(v: AccessReviewRow, items: readonly AccessReviewItemRow[], ctx: Ctx): AccessReview {
+  const seen = items.filter(itemVisible(ctx));
+  return {
+    id: v.id, tenant: v.tenant, title: v.title, status: v.status, owner: personFor(ctx.dir, v.openedBy),
+    openedAt: v.openedAt, closedAt: v.closedAt,
+    progress: {
+      total: seen.length,
+      decided: seen.filter((i) => i.decision !== null).length,
+      kept: seen.filter((i) => i.decision === 'keep').length,
+      revoked: seen.filter((i) => i.decision === 'revoke').length,
+    },
+    can: { decide: v.status === 'open' && reviewsFor(ctx, v) },
+  };
+}
+
+function presentReviewItem(i: AccessReviewItemRow, v: AccessReviewRow, ctx: Ctx): AccessReviewItem {
+  return {
+    id: i.id, reviewId: i.reviewId, user: personFor(ctx.dir, i.userId)!, tenant: i.tenant, role: i.role,
+    decision: i.decision, decidedBy: personFor(ctx.dir, i.decidedBy), decidedAt: i.decidedAt, comment: i.comment,
+    revocationRequestId: i.revocationRequestId,
+    can: { decide: v.status === 'open' && i.decision === null && i.userId !== ctx.actor.id && reviewsFor(ctx, v) },
+  };
+}
+
+const byUserThenRole = (ctx: Ctx) => (a: AccessReviewItemRow, b: AccessReviewItemRow): number =>
+  (personFor(ctx.dir, a.userId)?.displayName ?? a.userId).localeCompare(personFor(ctx.dir, b.userId)?.displayName ?? b.userId) || a.role.localeCompare(b.role);
+
+function loadReview(id: string): AccessReviewRow {
+  const v = listReviews().find((x) => x.id === id);
+  if (!v) throw new NotFoundError(`No review ${id}`);
+  return v;
+}
+
+accessRouter.get('/reviews', requireAction('ViewAccess'), asyncHandler(async (req, res) => {
+  const ctx = await context(req);
+  const items = listReviewItems();
+  const reviews = listReviews()
+    .sort((a, b) => b.openedAt.localeCompare(a.openedAt))
+    .map((v) => presentReview(v, items.filter((i) => i.reviewId === v.id), ctx));
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ items: [], limits: ['Access reviews arrive in phase A2; no campaign exists yet.'] });
-});
+  res.json({ items: reviews });
+}));
+
+accessRouter.get('/reviews/:id', requireAction('ViewAccess'), asyncHandler(async (req, res) => {
+  const ctx = await context(req);
+  const v = loadReview(String(req.params['id']));
+  const items = listReviewItems(v.id);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    review: presentReview(v, items, ctx),
+    items: items.filter(itemVisible(ctx)).sort(byUserThenRole(ctx)).map((i) => presentReviewItem(i, v, ctx)),
+  });
+}));
+
+accessRouter.post('/reviews', requireAction('ManageAccessPolicy'), asyncHandler(async (req, res) => {
+  const b = bodyOf(req, ['tenant', 'title']);
+  const tenant = str(b['tenant']);
+  if (!tenant || !(ACCESS_TENANTS as readonly string[]).includes(tenant)) throw new ValidationError(`tenant must be one of ${ACCESS_TENANTS.join(', ')}`);
+  const title = str(b['title']);
+  if (!title || title.length < 3) throw new ValidationError('title must be at least 3 characters');
+  if (title.length > MAX_TITLE) throw new ValidationError(`title must be at most ${MAX_TITLE} characters`);
+  const ctx = await context(req);
+  // The directory's standing grants in that tenant, now: one item per (user, role).
+  // The cross-tenant `admin` is provisioned by hand (design "Not decided here"), so it is not reviewed here.
+  const grants = ctx.dir.users.flatMap((u) => (u.grants[tenant] ?? []).filter((role) => role !== 'admin').map((role) => ({ userId: u.id, role })));
+  if (grants.length === 0) {
+    res.status(409).json({ error: `Nobody holds a standing grant in ${tenant}; there is nothing to review` });
+    return;
+  }
+  const now = accessNow();
+  const made = insertReview(
+    { tenant: tenant as AccessTenant, title, status: 'open', openedBy: ctx.actor.id, openedAt: now, closesAt: null, closedAt: null },
+    grants.map((g) => ({ userId: g.userId, tenant: tenant as AccessTenant, role: g.role, decision: null, decidedBy: null, decidedAt: null, comment: null, revocationRequestId: null })),
+  );
+  res.status(201).json({
+    review: presentReview(made.review, made.items, ctx),
+    items: made.items.sort(byUserThenRole(ctx)).map((i) => presentReviewItem(i, made.review, ctx)),
+  });
+}));
+
+/**
+ * A review's `revoke`: a pre-approved revocation request (kind `revocation`,
+ * the reviewer as requester and sole approver) for the (user, role), revoked
+ * through revokeAccess with the reviewer as actor. If the grant came from an
+ * active grant request, that request is revoked too, so each record says what
+ * happened to it.
+ */
+async function revokeByReview(v: AccessReviewRow, i: AccessReviewItemRow, comment: string, ctx: Ctx): Promise<string> {
+  const now = accessNow();
+  const reason = `Access review ${v.id} (${v.title}): ${comment}`;
+  const id = nextRequestId();
+  const itemId = roleItemId(i.tenant, i.role);
+  insertRequest({
+    id, kind: 'revocation', reviewId: v.id, requesterId: ctx.actor.id, beneficiaryId: i.userId, itemId,
+    justification: reason, duration: 'standing', status: 'active', sodVerdict: 'clear', sodOverriddenBy: null, sodOverrideReason: null,
+    submittedAt: now, decidedAt: now, provisionedAt: null, expiresAt: null, revokedAt: null, expiryWarnedAt: null,
+  }, [{ requestId: id, step: 1, kind: 'access-admin', status: 'approved', decidedBy: ctx.actor.id, decidedAt: now, comment }], [
+    { kind: 'submitted', before: 'draft', after: 'submitted', reason },
+    { kind: 'approved', before: 'submitted', after: 'active', reason: `Pre-approved by the reviewer of ${v.id}` },
+  ], ctx.actor.id);
+  await revokeAccess({ id }, reason, ctx.actor.id, { outcome: 'revoked' });
+  const original = listRequests().find((r) => r.kind === 'grant' && r.beneficiaryId === i.userId && r.itemId === itemId && ELEVATED_STATUSES.has(r.status));
+  if (original) await revokeAccess(original, `${reason} (revocation ${id})`, ctx.actor.id, { outcome: 'revoked' });
+  return id;
+}
+
+accessRouter.post('/reviews/:id/items/:itemId/decide', requireAction('DecideAccess'), asyncHandler(async (req, res) => {
+  const b = bodyOf(req, ['decision', 'comment']);
+  const decision = b['decision'];
+  if (decision !== 'keep' && decision !== 'revoke') throw new ValidationError('decision must be keep or revoke');
+  if (b['comment'] !== undefined && b['comment'] !== null && typeof b['comment'] !== 'string') throw new ValidationError('comment must be a string');
+  const comment = str(b['comment']) ?? null;
+  if (comment && comment.length > MAX_TEXT) throw new ValidationError(`comment must be at most ${MAX_TEXT} characters`);
+  if (decision === 'revoke' && !comment) throw new ValidationError('A revoke needs a comment: it is the revocation\'s reason');
+
+  const ctx = await context(req);
+  const v = loadReview(String(req.params['id']));
+  const i = listReviewItems(v.id).find((x) => x.id === req.params['itemId']);
+  if (!i || !itemVisible(ctx)(i)) throw new NotFoundError(`No item ${String(req.params['itemId'])} in ${v.id}`);
+  if (!reviewsFor(ctx, v)) { res.status(403).json({ error: `Only the owner of ${v.id} or an access admin decides its items` }); return; }
+  if (i.userId === ctx.actor.id) { res.status(403).json({ error: 'You cannot certify your own access' }); return; }
+  if (v.status !== 'open') { res.status(409).json({ error: `${v.id} is closed` }); return; }
+
+  const now = accessNow();
+  // Claim the item first, so a second reviewer's decision is the 409, not a second revocation.
+  const claimed = casReviewItem(i.id, { decided: null }, { decision, decidedBy: ctx.actor.id, decidedAt: now, comment });
+  if (!claimed) { res.status(409).json({ error: `${i.id} was already decided` }); return; }
+  if (decision === 'revoke') {
+    try {
+      const revocationId = await revokeByReview(v, claimed, comment!, ctx);
+      casReviewItem(i.id, { decided: 'revoke' }, { revocationRequestId: revocationId });
+    } catch (err) {
+      // The grant was not removed: hand the item back undecided rather than claim a revocation that did not happen.
+      casReviewItem(i.id, { decided: 'revoke' }, { decision: null, decidedBy: null, decidedAt: null, comment: null });
+      throw err;
+    }
+  }
+  const after = closeReviewIfDecided(v.id, now) ?? v;
+  const items = listReviewItems(v.id);
+  res.json({
+    review: presentReview(after, items, ctx),
+    item: presentReviewItem(items.find((x) => x.id === i.id)!, after, ctx),
+  });
+}));
 
 // ─── writes ─────────────────────────────────────────────────────────────────
 
@@ -408,13 +609,9 @@ accessRouter.post('/requests/:id/steps/:step/decide', requireAction('DecideAcces
   }
   if (after.status === 'approved') {
     // The last approval provisions (A1). A failed grant write leaves the
-    // request `approved` (honest: decided, not in effect) and tells the parties.
-    try {
-      await provisionAccess(after);
-    } catch (err) {
-      console.warn(`[access] provisioning ${after.id} failed: ${(err as Error).message}`);
-      await bell('provision-failed', after, ctx, { step: stepNo });
-    }
+    // request `approved` (honest: decided, not in effect) and tells the parties;
+    // an SoD block found now (A2) has already said so itself.
+    await provisionAfterDecision(after, ctx, stepNo);
   } else if (decision === 'approve') {
     await bell('approved-step', after, ctx, { step: stepNo, comment });
     await bellApprovers('awaiting', after, ctx);
@@ -422,6 +619,113 @@ accessRouter.post('/requests/:id/steps/:step/decide', requireAction('DecideAcces
     await bell(decision === 'reject' ? 'rejected' : 'info-requested', after, ctx, { step: stepNo, comment });
   }
   res.json(present(loadRequest(r.id), ctx, world()));
+}));
+
+/** Provision an approved request; a failure leaves it `approved` and rings the parties (an SoD block rings itself). */
+async function provisionAfterDecision(r: AccessRequestRow, ctx: Ctx, stepNo: number | null): Promise<void> {
+  try {
+    await provisionAccess(r);
+  } catch (err) {
+    if (err instanceof SodBlockedError) return;
+    console.warn(`[access] provisioning ${r.id} failed: ${(err as Error).message}`);
+    await bell('provision-failed', r, ctx, { step: stepNo });
+  }
+}
+
+accessRouter.post('/requests/:id/sod-override', requireAction('ManageAccessPolicy'), asyncHandler(async (req, res) => {
+  const b = bodyOf(req, ['reason']);
+  if (b['reason'] !== undefined && typeof b['reason'] !== 'string') throw new ValidationError('reason must be a string');
+  const reason = str(b['reason']) ?? '';
+  if (reason.length < MIN_OVERRIDE_REASON) throw new ValidationError(`reason must be at least ${MIN_OVERRIDE_REASON} characters`);
+  if (reason.length > MAX_TEXT) throw new ValidationError(`reason must be at most ${MAX_TEXT} characters`);
+  const ctx = await context(req);
+  const w = world();
+  const r = listRequests().find((x) => x.id === req.params['id']);
+  if (!r || !readable(ctx, w)(r)) throw new NotFoundError(`No request ${String(req.params['id'])}`);
+  if (isParty(ctx.actor.id, r)) { res.status(403).json({ error: 'You cannot override a policy on a request you submitted or benefit from' }); return; }
+  const item = itemOf(r, w);
+  if (r.kind !== 'grant' || !item) { res.status(409).json({ error: `${r.id} grants nothing; there is no policy to override` }); return; }
+  if (r.sodOverriddenBy) { res.status(409).json({ error: `${r.id} already carries an override` }); return; }
+  if (!isOpen(r.status) && r.status !== 'approved') { res.status(409).json({ error: `${r.id} is ${r.status}; only an open or approved request takes an override` }); return; }
+  const live = liveSod(r, item, ctx, w);
+  if (live.verdict !== 'block') { res.status(409).json({ error: `No blocking separation-of-duties conflict applies to ${r.id} now`, sod: live }); return; }
+  const now = accessNow();
+  const stored = casRequest(r.id, { from: [r.status] }, { sodVerdict: 'block', sodOverriddenBy: ctx.actor.id, sodOverrideReason: reason },
+    [{ kind: 'sod-override', before: r.status, after: r.status, reason }], ctx.actor.id, now);
+  if (!stored) { res.status(409).json({ error: `${r.id} changed while the override was recorded; reload it` }); return; }
+  // An approved request was waiting on this: provision it now.
+  if (stored.status === 'approved') await provisionAfterDecision(stored, ctx, null);
+  res.json(present(loadRequest(r.id), ctx, world()));
+}));
+
+accessRouter.post('/requests/:id/revoke', requireAction('ProvisionAccess'), asyncHandler(async (req, res) => {
+  const b = bodyOf(req, ['reason']);
+  if (b['reason'] !== undefined && typeof b['reason'] !== 'string') throw new ValidationError('reason must be a string');
+  const reason = str(b['reason']);
+  if (!reason) throw new ValidationError('reason is required: the beneficiary is told why their access ended');
+  if (reason.length > MAX_TEXT) throw new ValidationError(`reason must be at most ${MAX_TEXT} characters`);
+  const ctx = await context(req);
+  const w = world();
+  const r = listRequests().find((x) => x.id === req.params['id']);
+  if (!r || !readable(ctx, w)(r)) throw new NotFoundError(`No request ${String(req.params['id'])}`);
+  if (r.kind !== 'grant' || r.status !== 'active') { res.status(409).json({ error: `${r.id} is ${r.kind === 'grant' ? r.status : 'a revocation'}; only an active grant can be revoked` }); return; }
+  const out = await revokeAccess(r, reason, ctx.actor.id, { outcome: 'revoked' });
+  if (!out.changed) { res.status(409).json({ error: `${r.id} is no longer active` }); return; }
+  res.json(present(loadRequest(r.id), ctx, world()));
+}));
+
+// ─── configuration (docs/access-tenant-design.md A4, A6; §6) ─────────────────
+//
+// What /access/configuration shows: the durations a request may ask for, who
+// stewards each kind of item (resolved live at decision time, lib/access/chain.ts),
+// and each catalog item's default duration and sensitive flag. Only the last
+// two are stored settings (access_catalog_items.default_duration / .sensitive):
+// PUT edits those and refuses the rest — the durations and steward rules are
+// fixed by decisions A4 / A6 in code, not configuration.
+
+function configurationBody() {
+  return {
+    durations: { offered: [...DURATIONS], standingReasonMin: MIN_JUSTIFICATION },
+    stewards: [
+      ...ACCESS_TENANTS.map((tenant) => ({ scope: 'tenant-role' as const, tenant, rule: 'tenant-steward' as const, role: TENANT_STEWARD_ROLE[tenant]! })),
+      { scope: 'initiative-membership' as const, tenant: null, rule: 'initiative-owner' as const, role: null },
+      { scope: 'sensitive' as const, tenant: 'access', rule: 'access-admin' as const, role: 'access-admin' },
+    ],
+    items: listCatalog().map((i) => ({ id: i.id, title: i.title, kind: i.kind, tenant: i.tenant, defaultDuration: i.defaultDuration, stewardRule: i.stewardRule, sensitive: i.sensitive })),
+  };
+}
+
+accessRouter.get('/configuration', requireAction('ViewAccess'), (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(configurationBody());
+});
+
+accessRouter.put('/configuration', requireAction('ManageAccessPolicy'), asyncHandler(async (req, res) => {
+  const b = bodyOf(req, ['durations', 'stewards', 'items']);
+  if (b['durations'] !== undefined || b['stewards'] !== undefined) {
+    throw new ValidationError('durations and stewards are fixed by the design (decisions A4, A6); only items[].defaultDuration and items[].sensitive are editable');
+  }
+  if (!Array.isArray(b['items'])) throw new ValidationError('items must be an array of { id, defaultDuration?, sensitive? }');
+  const catalog = new Map(listCatalog().map((i) => [i.id, i]));
+  const patches: Array<{ id: string; defaultDuration?: AccessDuration; sensitive?: boolean }> = [];
+  for (const raw of b['items'] as unknown[]) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ValidationError('each item must be an object');
+    const it = raw as Record<string, unknown>;
+    const extra = Object.keys(it).filter((k) => !['id', 'defaultDuration', 'sensitive', 'title', 'kind', 'tenant', 'stewardRule'].includes(k));
+    if (extra.length) throw new ValidationError(`Unknown item field${extra.length > 1 ? 's' : ''}: ${extra.join(', ')}`);
+    const id = str(it['id']);
+    if (!id || !catalog.has(id)) throw new ValidationError(`Unknown catalog item: ${String(it['id'])}`);
+    const row = catalog.get(id)!;
+    // The descriptive fields may ride along (the GET shape echoed back) but never change here.
+    for (const k of ['title', 'kind', 'tenant', 'stewardRule'] as const) {
+      if (it[k] !== undefined && it[k] !== row[k]) throw new ValidationError(`${id}.${k} is not editable here`);
+    }
+    if (it['defaultDuration'] !== undefined && !(DURATIONS as readonly unknown[]).includes(it['defaultDuration'])) throw new ValidationError(`${id}.defaultDuration must be one of ${DURATIONS.join(', ')}`);
+    if (it['sensitive'] !== undefined && typeof it['sensitive'] !== 'boolean') throw new ValidationError(`${id}.sensitive must be a boolean`);
+    patches.push({ id, ...(it['defaultDuration'] !== undefined ? { defaultDuration: it['defaultDuration'] as AccessDuration } : {}), ...(it['sensitive'] !== undefined ? { sensitive: it['sensitive'] as boolean } : {}) });
+  }
+  for (const p of patches) updateCatalogItem(p.id, p);
+  res.json(configurationBody());
 }));
 
 accessRouter.put('/policies/:id', requireAction('ManageAccessPolicy'), asyncHandler(async (req, res) => {

@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-13T10:25:59.243Z",
-  "serverHandlerSha": "cd7fb50adacfa4da0d349c5f241d583209ee5455193610974650042d17e85d73",
+  "capturedAt": "2026-10-13T10:58:27.766Z",
+  "serverHandlerSha": "9adc5f7b0b01d58c2f0f2fd75a1f5c3ebffac8be19e19275fb35c519b098340b",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -809,6 +809,8 @@
         "beneficiary.personId": "null",
         "can": "object",
         "can.decide": "boolean",
+        "can.overrideSod": "boolean",
+        "can.revoke": "boolean",
         "can.viewAudit": "boolean",
         "can.withdraw": "boolean",
         "decidedAt": "null",
@@ -828,11 +830,13 @@
         "item.tenant": "string",
         "item.title": "string",
         "justification": "string",
+        "kind": "string",
         "provisionedAt": "null",
         "requester": "object",
         "requester.displayName": "string",
         "requester.id": "string",
         "requester.personId": "null",
+        "reviewId": "null",
         "revokedAt": "null",
         "sod": "object",
         "sod.conflicts": "array",
@@ -850,6 +854,7 @@
         "steps[].eligible[].displayName": "string",
         "steps[].eligible[].id": "string",
         "steps[].eligible[].personId": "string",
+        "steps[].escalated": "string",
         "steps[].kind": "string",
         "steps[].status": "string",
         "steps[].step": "number",
@@ -865,6 +870,9 @@
         ],
         "item.tenant": [
           "orgiq"
+        ],
+        "kind": [
+          "grant"
         ],
         "sod.verdict": [
           "clear"
@@ -883,6 +891,31 @@
         "duration",
         "itemId",
         "justification"
+      ]
+    },
+    "POST /api/access/requests/:id/revoke": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/access/requests/:id/sod-override": {
+      "persona": "orgiq/admin",
+      "status": 409,
+      "shape": {
+        "$": "object",
+        "error": "string",
+        "sod": "object",
+        "sod.conflicts": "array",
+        "sod.verdict": "string"
+      },
+      "values": {
+        "sod.verdict": [
+          "clear"
+        ]
+      },
+      "sent": [
+        "reason"
       ]
     },
     "POST /api/access/requests/:id/steps/:step/decide": {
@@ -906,6 +939,74 @@
       },
       "values": {},
       "sent": []
+    },
+    "POST /api/access/reviews": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].can": "object",
+        "items[].can.decide": "boolean",
+        "items[].comment": "null",
+        "items[].decidedAt": "null",
+        "items[].decidedBy": "null",
+        "items[].decision": "null",
+        "items[].id": "string",
+        "items[].reviewId": "string",
+        "items[].revocationRequestId": "null",
+        "items[].role": "string",
+        "items[].tenant": "string",
+        "items[].user": "object",
+        "items[].user.displayName": "string",
+        "items[].user.id": "string",
+        "items[].user.personId": "null",
+        "review": "object",
+        "review.can": "object",
+        "review.can.decide": "boolean",
+        "review.closedAt": "null",
+        "review.id": "string",
+        "review.openedAt": "string",
+        "review.owner": "object",
+        "review.owner.displayName": "string",
+        "review.owner.id": "string",
+        "review.owner.personId": "null",
+        "review.progress": "object",
+        "review.progress.decided": "number",
+        "review.progress.kept": "number",
+        "review.progress.revoked": "number",
+        "review.progress.total": "number",
+        "review.status": "string",
+        "review.tenant": "string",
+        "review.title": "string"
+      },
+      "values": {
+        "items[].role": [
+          "author",
+          "operator",
+          "pipeline-admin"
+        ],
+        "items[].tenant": [
+          "pipelines"
+        ],
+        "review.status": [
+          "open"
+        ],
+        "review.tenant": [
+          "pipelines"
+        ]
+      },
+      "sent": [
+        "tenant",
+        "title"
+      ]
+    },
+    "POST /api/access/reviews/:id/items/:itemId/decide": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/admin/kb-registry": {
       "refused": {
@@ -3673,6 +3774,61 @@
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
+    },
+    "PUT /api/access/configuration": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "durations": "object",
+        "durations.offered": "array",
+        "durations.offered[]": "string",
+        "durations.standingReasonMin": "number",
+        "items": "array",
+        "items[]": "object",
+        "items[].defaultDuration": "string",
+        "items[].id": "string",
+        "items[].kind": "string",
+        "items[].sensitive": "boolean",
+        "items[].stewardRule": "string",
+        "items[].tenant": "string",
+        "items[].title": "string",
+        "stewards": "array",
+        "stewards[]": "object",
+        "stewards[].role": "null|string",
+        "stewards[].rule": "string",
+        "stewards[].scope": "string",
+        "stewards[].tenant": "null|string"
+      },
+      "values": {
+        "items[].kind": [
+          "initiative-membership",
+          "tenant-role"
+        ],
+        "items[].tenant": [
+          "assessment",
+          "orgiq",
+          "pipelines",
+          "social"
+        ],
+        "stewards[].role": [
+          "access-admin",
+          "community-admin",
+          "hr-admin",
+          "pipeline-admin",
+          "program-lead"
+        ],
+        "stewards[].tenant": [
+          "access",
+          "assessment",
+          "orgiq",
+          "pipelines",
+          "social"
+        ]
+      },
+      "sent": [
+        "items"
+      ]
     },
     "PUT /api/access/policies/:id": {
       "persona": "orgiq/admin",

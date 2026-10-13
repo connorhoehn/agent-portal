@@ -56,11 +56,18 @@ CREATE TABLE IF NOT EXISTS access_catalog_items (
 );
 
 -- ── access_requests ──────────────────────────────────────────────────────────
+-- `kind` (lane A2): a `grant` asks for access and names a catalog item; a
+-- `revocation` is created pre-approved by an access review to take a standing
+-- grant away and names it as `role:<tenant>:<role>` — a grant that need not be
+-- requestable (orgiq `member`, …), which is why item_id carries no foreign key
+-- to the catalog. The route validates a grant's item against the catalog.
 CREATE TABLE IF NOT EXISTS access_requests (
   id                  TEXT PRIMARY KEY,
+  kind                TEXT NOT NULL DEFAULT 'grant' CHECK (kind IN ('grant', 'revocation')),
+  review_id           TEXT,
   requester_id        TEXT NOT NULL,
   beneficiary_id      TEXT NOT NULL,
-  item_id             TEXT NOT NULL REFERENCES access_catalog_items(id),
+  item_id             TEXT NOT NULL,
   justification       TEXT NOT NULL,
   duration            TEXT NOT NULL CHECK (duration IN ('8h', '24h', '7d', '30d', 'standing')),
   status              TEXT NOT NULL CHECK (status IN ('draft', 'submitted', 'pending', 'approved', 'provisioned',
@@ -78,6 +85,8 @@ CREATE TABLE IF NOT EXISTS access_requests (
   expiry_warned_at    TIMESTAMPTZ
 );
 ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS expiry_warned_at TIMESTAMPTZ;
+ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'grant';
+ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS review_id TEXT;
 CREATE INDEX IF NOT EXISTS access_requests_beneficiary_idx ON access_requests (beneficiary_id);
 CREATE INDEX IF NOT EXISTS access_requests_status_idx ON access_requests (status);
 CREATE INDEX IF NOT EXISTS access_requests_expires_idx ON access_requests (expires_at) WHERE expires_at IS NOT NULL;
@@ -113,20 +122,31 @@ CREATE TABLE IF NOT EXISTS access_policies (
 
 -- ── access_events ────────────────────────────────────────────────────────────
 -- The audit trail: append-only, one row per transition.
+-- request_id is NULL for an event about a policy (`policy-updated`, lane A2),
+-- which names policy_id instead; before/after_status then carry the severity.
 CREATE TABLE IF NOT EXISTS access_events (
   id            TEXT PRIMARY KEY,
-  request_id    TEXT NOT NULL REFERENCES access_requests(id) ON DELETE CASCADE,
+  request_id    TEXT REFERENCES access_requests(id) ON DELETE CASCADE,
+  policy_id     TEXT,
   at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   actor_id      TEXT,
   kind          TEXT NOT NULL CHECK (kind IN ('submitted', 'step-approved', 'step-rejected', 'info-requested', 'withdrawn',
-                  'approved', 'provisioned', 'expired', 'revoked', 'sod-override', 'policy-updated')),
+                  'approved', 'provisioned', 'expired', 'revoked', 'sod-override', 'sod-blocked', 'policy-updated')),
   before_status TEXT,
   after_status  TEXT,
-  reason        TEXT
+  reason        TEXT,
+  CHECK (request_id IS NOT NULL OR policy_id IS NOT NULL)
 );
+ALTER TABLE access_events ADD COLUMN IF NOT EXISTS policy_id TEXT;
+ALTER TABLE access_events ALTER COLUMN request_id DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS access_events_request_idx ON access_events (request_id, at);
 
 -- ── access_reviews / access_review_items (phase A2) ──────────────────────────
+-- A campaign certifies the standing grants (user_tenant_roles) of one tenant:
+-- one item per (user, role) the directory held there when it opened.
+-- `opened_by` is the campaign's owner, who decides its items with any
+-- access-admin. A `revoke` creates a pre-approved revocation request
+-- (access_requests.kind = 'revocation') named by `revocation_request_id`.
 CREATE TABLE IF NOT EXISTS access_reviews (
   id         TEXT PRIMARY KEY,
   tenant     TEXT NOT NULL,
@@ -139,6 +159,7 @@ CREATE TABLE IF NOT EXISTS access_reviews (
 );
 
 CREATE TABLE IF NOT EXISTS access_review_items (
+  id          TEXT NOT NULL UNIQUE,
   review_id   TEXT NOT NULL REFERENCES access_reviews(id) ON DELETE CASCADE,
   user_id     TEXT NOT NULL,
   tenant      TEXT NOT NULL,
@@ -147,6 +168,7 @@ CREATE TABLE IF NOT EXISTS access_review_items (
   decided_by  TEXT,
   decided_at  TIMESTAMPTZ,
   comment     TEXT,
+  revocation_request_id TEXT,
   PRIMARY KEY (review_id, user_id, tenant, role)
 );
 
@@ -242,3 +264,16 @@ INSERT INTO access_events (id, request_id, at, actor_id, kind, before_status, af
   ('evt-0014', 'req-0006', NOW() - INTERVAL '10 days', 'u-rhea', 'submitted', 'draft', 'submitted', NULL),
   ('evt-0015', 'req-0006', NOW() - INTERVAL '9 days', 'u-rhea', 'withdrawn', 'submitted', 'withdrawn', 'The channel moved to the platform team.')
 ON CONFLICT (id) DO NOTHING;
+
+-- ── Seed: one review campaign (lane A2) ─────────────────────────────────────
+-- rev-0001 certifies the four standing `sme` grants in Work: two kept, two open.
+INSERT INTO access_reviews (id, tenant, title, status, opened_by, opened_at, closes_at, closed_at) VALUES
+  ('rev-0001', 'orgiq', 'Q4 SME certification — Work', 'open', 'u-priya', NOW() - INTERVAL '5 days', NULL, NULL)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO access_review_items (id, review_id, user_id, tenant, role, decision, decided_by, decided_at, comment, revocation_request_id) VALUES
+  ('ri-0001', 'rev-0001', 'u-nora',  'orgiq', 'sme', 'keep', 'u-priya', NOW() - INTERVAL '2 days', 'Owns the Observability maintenance bots; still needs dispatch.', NULL),
+  ('ri-0002', 'rev-0001', 'u-eli',   'orgiq', 'sme', 'keep', 'u-priya', NOW() - INTERVAL '1 day', 'Active on two initiatives this sprint.', NULL),
+  ('ri-0003', 'rev-0001', 'u-layla', 'orgiq', 'sme', NULL, NULL, NULL, NULL, NULL),
+  ('ri-0004', 'rev-0001', 'u-caleb', 'orgiq', 'sme', NULL, NULL, NULL, NULL, NULL)
+ON CONFLICT (review_id, user_id, tenant, role) DO NOTHING;

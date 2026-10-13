@@ -15,6 +15,13 @@
 // ViewAccess, the same authority as reading. The page mounts the conversation
 // only once the record has loaded, so it never subscribes to a request the
 // server answered 404.
+//
+// Lane A2: when a blocking separation-of-duties conflict applies now and no
+// override is recorded, an access admin (`can.overrideSod`, ManageAccessPolicy,
+// never a party) records one with a reason of at least 20 characters — an
+// approved request then provisions. An active grant shows Revoke to whoever
+// holds ProvisionAccess (`can.revoke`). Both go through ConfirmDialog. A
+// revocation created by an access review says which campaign it came from.
 
 import { SidePane } from '@connorhoehnslalom/ui-components';
 import {
@@ -69,6 +76,8 @@ import {
   type Decision,
   type ItemsResponse,
   type RequestStep,
+  overrideProblem,
+  reviewHref,
 } from '../../lib/accessRequests';
 import { EVENT_COLUMNS } from './accessColumns';
 
@@ -77,11 +86,19 @@ export const THREAD_READ_ONLY = 'Your current role cannot post to request discus
 /** Said on the composer while the record (and so the thread) is still loading. */
 export const THREAD_LOADING = 'The discussion opens once the request has loaded.';
 
-const STEP_COLUMNS: DataTableColumn<RequestStep>[] = [
+const stepColumns = (status: AccessRequest['status']): DataTableColumn<RequestStep>[] => [
   { key: 'step', header: 'Step', numeric: true, width: '64px', render: (s) => s.step },
   { key: 'kind', header: 'Approver', render: (s) => STEP_KIND_LABELS[s.kind] ?? s.kind },
   { key: 'status', header: 'Status', width: '128px', render: (s) => <Chip tone={stepTone(s.status)} size="xs">{statusLabel(s.status)}</Chip> },
-  { key: 'who', header: 'Decided by / eligible', render: (s) => <T size="sm" title={eligibleLabel(s)} className="block max-w-[18rem] truncate">{eligibleLabel(s)}</T> },
+  {
+    key: 'who', header: 'Decided by / eligible',
+    render: (s) => (
+      <Inline gap="xs" align="center" wrap={false}>
+        <T size="sm" title={eligibleLabel(s, status)} className="block max-w-[16rem] truncate">{eligibleLabel(s, status)}</T>
+        {s.escalated && !s.decidedBy && <Chip tone="caution" size="xs" title={s.escalated}>escalated</Chip>}
+      </Inline>
+    ),
+  },
   { key: 'decidedAt', header: 'Decided', numeric: true, render: (s) => (s.decidedAt ? relativeTime(s.decidedAt) : '—') },
   { key: 'comment', header: 'Comment', render: (s) => (s.comment ? <T size="sm" tone="secondary" title={s.comment} className="block max-w-[20rem] truncate">{s.comment}</T> : <T size="xs" tone="tertiary">—</T>) },
 ];
@@ -104,7 +121,9 @@ function RequestRecord({ id }: { id: string }) {
   const { data: request, error, isLoading, refresh } = useFetch<AccessRequest>(id ? `${ACCESS_API}/requests/${encodeURIComponent(id)}` : null);
   const audit = useFetch<ItemsResponse<AccessEvent>>(request?.can.viewAudit ? `${ACCESS_API}/audit?requestId=${encodeURIComponent(id)}` : null);
   const [comment, setComment] = useState('');
-  const [pending, setPending] = useState<Decision | 'withdraw' | null>(null);
+  const [pending, setPending] = useState<Decision | 'withdraw' | 'override' | 'revoke' | null>(null);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [revokeReason, setRevokeReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -166,20 +185,34 @@ function RequestRecord({ id }: { id: string }) {
   const step = currentStep(request);
   const mayDecide = request.can.decide && !!step;
 
-  async function act(kind: Decision | 'withdraw') {
+  async function act(kind: Decision | 'withdraw' | 'override' | 'revoke') {
     setPending(null); setBusy(true); setWriteError(null); setNotice(null);
-    const res = kind === 'withdraw'
-      ? await writeJson<AccessRequest>(`${ACCESS_API}/requests/${encodeURIComponent(request!.id)}/withdraw`, 'POST')
-      : await writeJson<AccessRequest>(`${ACCESS_API}/requests/${encodeURIComponent(request!.id)}/steps/${step!.step}/decide`, 'POST',
-        { decision: kind, comment: comment.trim() });
+    const base = `${ACCESS_API}/requests/${encodeURIComponent(request!.id)}`;
+    const res = kind === 'withdraw' ? await writeJson<AccessRequest>(`${base}/withdraw`, 'POST')
+      : kind === 'override' ? await writeJson<AccessRequest>(`${base}/sod-override`, 'POST', { reason: overrideReason.trim() })
+      : kind === 'revoke' ? await writeJson<AccessRequest>(`${base}/revoke`, 'POST', { reason: revokeReason.trim() })
+      : await writeJson<AccessRequest>(`${base}/steps/${step!.step}/decide`, 'POST', { decision: kind, comment: comment.trim() });
     setBusy(false);
     if (!res.ok) { setWriteError(res.error ?? `The server refused (HTTP ${res.status}). Nothing changed.`); refresh(); return; }
-    setComment('');
-    setNotice(kind === 'withdraw' ? 'Request withdrawn.' : `Recorded: ${DECISION_COPY[kind].label.toLowerCase()} on step ${step!.step}.`);
+    if (kind === 'override') {
+      setOverrideReason('');
+      setNotice(res.data?.status === 'active' ? 'Override recorded; the request is provisioned.' : 'Override recorded.');
+    } else if (kind === 'revoke') {
+      setRevokeReason('');
+      setNotice('Access revoked. Every session the beneficiary holds is signed out at its next request.');
+    } else {
+      setComment('');
+      setNotice(kind === 'withdraw' ? 'Request withdrawn.' : `Recorded: ${DECISION_COPY[kind].label.toLowerCase()} on step ${step!.step}.`);
+    }
     refresh(); audit.refresh();
   }
 
-  const confirm = pending && pending !== 'withdraw' ? DECISION_COPY[pending] : null;
+  const confirm = pending === 'approve' || pending === 'reject' || pending === 'info' ? DECISION_COPY[pending] : null;
+  const overrideBlocked = overrideProblem(overrideReason);
+  const headerActions = [
+    request.can.revoke && <Button key="revoke" size="sm" variant="danger" disabled={busy} onClick={() => setPending('revoke')} data-testid="access-request-revoke">Revoke</Button>,
+    request.can.withdraw && <Button key="withdraw" size="sm" variant="secondary" disabled={busy} onClick={() => setPending('withdraw')} data-testid="access-request-withdraw">Withdraw</Button>,
+  ].filter(Boolean);
 
   return (
     <Stack gap="none" className="h-full min-h-0 min-w-0" data-testid="access-request-record">
@@ -187,28 +220,37 @@ function RequestRecord({ id }: { id: string }) {
         <PageHeader density="compact" title={requestTitle(request)} back={back}
           description={`${request.id} · requested by ${request.requester.displayName} ${relativeTime(request.submittedAt)}`}
           badge={<Chip tone={statusTone(request.status)} size="xs">{statusLabel(request.status)}</Chip>}
-          {...(request.can.withdraw ? {
-            actions: <Button size="sm" variant="secondary" disabled={busy} onClick={() => setPending('withdraw')} data-testid="access-request-withdraw">Withdraw</Button>,
-          } : {})} />
+          {...(headerActions.length ? { actions: <Inline gap="sm">{headerActions}</Inline> } : {})} />
         {writeError && <InlineAlert tone="error" onDismiss={() => setWriteError(null)}>{writeError}</InlineAlert>}
         {notice && <InlineAlert tone="success" onDismiss={() => setNotice(null)}>{notice}</InlineAlert>}
 
         <DetailSection first title="Request" data-testid="access-request-summary">
-          <KeyValue items={[
-            { label: 'For', value: request.beneficiary.displayName },
-            { label: 'Asked by', value: request.requester.displayName },
-            { label: 'Item', value: `${request.item.title} · ${KIND_LABELS[request.item.kind]} · ${TENANT_LABELS[request.item.tenant] ?? request.item.tenant}` },
-            { label: 'Duration', value: DURATION_LABELS[request.duration] ?? request.duration },
-            { label: 'Expires', value: request.expiresAt ? relativeTime(request.expiresAt) : request.duration === 'standing' ? 'Standing' : 'When provisioned', muted: !request.expiresAt },
-            { label: 'Why', value: request.justification },
+          {/* grid: 12px labels over 14px values (T size="sm"), the app's 12/14 scale. */}
+          <KeyValue layout="grid" items={[
+            { label: 'For', value: <T size="sm">{request.beneficiary.displayName}</T> },
+            { label: request.kind === 'revocation' ? 'Revoked by' : 'Asked by', value: <T size="sm">{request.requester.displayName}</T> },
+            { label: request.kind === 'revocation' ? 'Grant' : 'Item', value: <T size="sm">{`${request.item.title} · ${KIND_LABELS[request.item.kind]} · ${TENANT_LABELS[request.item.tenant] ?? request.item.tenant}`}</T> },
+            ...(request.kind === 'revocation' ? [{
+              label: 'From review',
+              value: request.reviewId
+                ? <Button size="sm" variant="link" onClick={() => navigate(reviewHref(request.reviewId!))} data-testid="access-request-review-link">{request.reviewId}</Button>
+                : <T size="sm" tone="tertiary">—</T>,
+            }] : [
+              { label: 'Duration', value: <T size="sm">{DURATION_LABELS[request.duration] ?? request.duration}</T> },
+              { label: 'Expires', value: <T size="sm" tone={request.expiresAt ? undefined : 'tertiary'}>{request.expiresAt ? relativeTime(request.expiresAt) : request.duration === 'standing' ? 'Standing' : 'When provisioned'}</T> },
+            ]),
+            { label: 'Why', value: <T size="sm">{request.justification}</T> },
           ]} />
         </DetailSection>
 
         <DetailSection title="Approval chain" hint={`${request.steps.length} steps`} data-testid="access-request-chain">
           <Stack gap="md">
-            <WorkflowStepper steps={chainSteps(request.steps)} aria-label={step ? `Waiting on step ${step.step} of ${request.steps.length}` : `Chain of ${request.steps.length} steps`} />
-            <DataTable data-testid="access-request-steps" data={request.steps} columns={STEP_COLUMNS} keyField={(s) => String(s.step)}
+            <WorkflowStepper size="compact" steps={chainSteps(request.steps)} aria-label={step ? `Waiting on step ${step.step} of ${request.steps.length}` : `Chain of ${request.steps.length} steps`} />
+            <DataTable data-testid="access-request-steps" data={request.steps} columns={stepColumns(request.status)} keyField={(s) => String(s.step)}
               emptyMessage="No approval steps were computed for this request." />
+            {request.steps.filter((s) => s.escalated && !s.decidedBy).map((s) => (
+              <T key={s.step} size="xs" tone="secondary" data-testid={`access-request-escalated-${s.step}`}>{`Step ${s.step} (${STEP_KIND_LABELS[s.kind]}): ${s.escalated}`}</T>
+            ))}
           </Stack>
         </DetailSection>
 
@@ -238,6 +280,22 @@ function RequestRecord({ id }: { id: string }) {
               {request.sod.overriddenBy && (
                 <T size="sm" tone="secondary">{`Overridden by ${request.sod.overriddenBy.displayName}: ${request.sod.overrideReason ?? 'no reason recorded'}`}</T>
               )}
+              {!request.sod.overriddenBy && request.sod.verdict === 'block' && !request.can.overrideSod && (
+                <T size="sm" tone="secondary">{request.status === 'approved'
+                  ? 'Approved, but not provisioned: an access admin must record an override before the grant is written.'
+                  : 'An access admin must record an override before this can be provisioned.'}</T>
+              )}
+              {request.can.overrideSod && (
+                <Stack gap="sm" data-testid="access-request-override">
+                  <FormField label="Override reason" hint={`Recorded on the request and in the audit trail. At least 20 characters.${request.status === 'approved' ? ' The request is provisioned once the override is recorded.' : ''}`}>
+                    {(wiring) => <Textarea {...wiring} rows={2} value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} data-testid="access-request-override-reason" />}
+                  </FormField>
+                  <Inline gap="sm" align="center">
+                    <Button size="sm" variant="secondary" disabled={busy || !!overrideBlocked} onClick={() => setPending('override')} data-testid="access-request-override-submit">Record override</Button>
+                    {overrideBlocked && overrideReason.trim() && <T size="xs" tone="secondary">{overrideBlocked}</T>}
+                  </Inline>
+                </Stack>
+              )}
             </Stack>
           )}
         </DetailSection>
@@ -265,9 +323,34 @@ function RequestRecord({ id }: { id: string }) {
         confirmLabel={confirm?.label}
         cancelLabel="Keep it"
         tone={confirm?.tone}
-        onConfirm={() => { if (pending && pending !== 'withdraw') void act(pending); }}
+        onConfirm={() => { if (confirm && pending) void act(pending); }}
         onCancel={() => setPending(null)}
       />
+      <ConfirmDialog
+        open={pending === 'override'}
+        title="Override the separation-of-duties block?"
+        body={`${request.beneficiary.displayName} will hold ${request.item.title} despite ${request.sod.conflicts.filter((c) => c.severity === 'block').map((c) => c.policyId).join(', ')}. Reason: “${overrideReason.trim()}”${request.status === 'approved' ? ' The grant is written as soon as the override is recorded.' : ''}`}
+        confirmLabel="Record override"
+        cancelLabel="Keep it blocked"
+        tone="caution"
+        onConfirm={() => void act('override')}
+        onCancel={() => setPending(null)}
+      />
+      <ConfirmDialog
+        open={pending === 'revoke'}
+        title="Revoke this access now?"
+        body={`${request.item.title} is removed from ${request.beneficiary.displayName} at once, and every session they hold is signed out at its next request.`}
+        confirmLabel="Revoke"
+        confirmDisabled={!revokeReason.trim()}
+        cancelLabel="Keep it"
+        tone="destructive"
+        onConfirm={() => void act('revoke')}
+        onCancel={() => setPending(null)}
+      >
+        <FormField label="Reason" hint="Sent to the beneficiary and the requester, and recorded in the audit trail." required>
+          {(wiring) => <Textarea {...wiring} rows={2} value={revokeReason} onChange={(e) => setRevokeReason(e.target.value)} data-testid="access-request-revoke-reason" />}
+        </FormField>
+      </ConfirmDialog>
       <ConfirmDialog
         open={pending === 'withdraw'}
         title="Withdraw this request?"

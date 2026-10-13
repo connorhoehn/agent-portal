@@ -10,7 +10,7 @@
 
 export type AccessSurfaceId =
   | 'catalog' | 'requests' | 'new-request' | 'request' | 'approvals'
-  | 'policies' | 'reviews' | 'audit' | 'configuration' | 'settings';
+  | 'policies' | 'reviews' | 'review' | 'audit' | 'configuration' | 'settings';
 
 export type AccessGroup = 'Request' | 'Approve' | 'Govern' | 'System';
 export type AccessPhase = 'A0' | 'A1' | 'A2';
@@ -68,21 +68,24 @@ export const ACCESS_SURFACES: Record<AccessSurfaceId, AccessSurface> = {
   reviews: {
     id: 'reviews', path: '/access/reviews', group: 'Govern', phase: 'A2', composer: 'required',
     title: 'Reviews',
-    description: 'Access review campaigns: periodic certification of standing grants.',
+    description: 'Access review campaigns: periodic certification of the standing grants in one workspace.',
     emptyTitle: 'No review campaigns yet',
-    emptyBody: 'A review asks a reviewer to keep or revoke each standing grant in one workspace.',
-    next: 'Lane A2 brings campaigns; a revoke decision becomes a pre-approved revocation request.',
+    emptyBody: 'A campaign asks its owner or an access admin to keep or revoke each standing grant in one workspace.',
+  },
+  review: {
+    id: 'review', path: '/access/reviews/:id', group: 'Govern', phase: 'A2', composer: 'required',
+    title: 'Review',
+    description: 'One campaign: each standing grant with its keep or revoke decision. A revoke becomes a pre-approved revocation request.',
   },
   audit: {
     id: 'audit', path: '/access/audit', group: 'Govern', phase: 'A0', composer: 'required',
     title: 'Audit',
-    description: 'Every request transition, with who acted and why. Approvers see every event; others their own.',
+    description: 'Every request transition, with who acted and why.',
   },
   configuration: {
     id: 'configuration', path: '/access/configuration', group: 'System', phase: 'A0', composer: 'exempt',
     title: 'Configuration',
     description: 'Default durations, who stewards each kind of item, and which items are sensitive.',
-    next: 'Read-only in A0: the values the catalog is seeded with. Editing arrives with the catalog writes.',
   },
   settings: {
     id: 'settings', path: '/access/settings', group: 'System', phase: 'A1', composer: 'exempt',

@@ -17,7 +17,11 @@ export type AccessSeverity = 'warn' | 'block';
 export type SodVerdict = 'clear' | 'warn' | 'block';
 export type Decision = 'approve' | 'reject' | 'info';
 export type AccessEventKind = 'submitted' | 'step-approved' | 'step-rejected' | 'info-requested' | 'withdrawn'
-  | 'approved' | 'provisioned' | 'expired' | 'revoked' | 'sod-override' | 'policy-updated';
+  | 'approved' | 'provisioned' | 'expired' | 'revoked' | 'sod-override' | 'sod-blocked' | 'policy-updated';
+/** A request asks for access (`grant`) or, from an access review, takes it away (`revocation`, lane A2). */
+export type RequestKind = 'grant' | 'revocation';
+export type ReviewStatus = 'open' | 'closed';
+export type ReviewDecision = 'keep' | 'revoke';
 
 export interface SodConflict { policyId: string; reason: string; severity: AccessSeverity }
 
@@ -47,10 +51,16 @@ export interface RequestStep {
   comment?: string | null;
   /** Who may decide it NOW, resolved live (never stored): shown, not trusted. */
   eligible: Person[];
+  /** Why `eligible` is not the step's own candidates (an escalation), else null. Open requests only. */
+  escalated: string | null;
 }
 
 export interface AccessRequest {
   id: string;
+  /** `revocation`: a pre-approved request an access review created to take a standing grant away (A10). */
+  kind: RequestKind;
+  /** The review campaign a revocation came from, else null. */
+  reviewId: string | null;
   requester: Person;
   beneficiary: Person;
   item: CatalogItem;
@@ -64,8 +74,44 @@ export interface AccessRequest {
   expiresAt?: string | null;
   revokedAt?: string | null;
   sod: { verdict: SodVerdict; conflicts: SodConflict[]; overriddenBy?: Person | null; overrideReason?: string | null };
-  can: { decide: boolean; withdraw: boolean; viewAudit: boolean };
+  can: {
+    decide: boolean; withdraw: boolean; viewAudit: boolean;
+    /** ProvisionAccess on an active grant request (lane A2 manual revoke). */
+    revoke: boolean;
+    /** ManageAccessPolicy on a request whose live SoD verdict is block and not yet overridden (A7). */
+    overrideSod: boolean;
+  };
   thread: string;
+}
+
+/** An access review campaign (docs/access-tenant-api.md §A2). */
+export interface AccessReview {
+  id: string;
+  tenant: AccessTenant;
+  title: string;
+  status: ReviewStatus;
+  owner: Person | null;
+  openedAt: string;
+  closedAt: string | null;
+  /** Counted from the item rows the actor may see, at request time. */
+  progress: { total: number; decided: number; kept: number; revoked: number };
+  can: { decide: boolean };
+}
+
+/** One standing grant under review: a (user, role) pair in the campaign's tenant. */
+export interface AccessReviewItem {
+  id: string;
+  reviewId: string;
+  user: Person;
+  tenant: AccessTenant;
+  role: string;
+  decision: ReviewDecision | null;
+  decidedBy: Person | null;
+  decidedAt: string | null;
+  comment: string | null;
+  /** The pre-approved revocation request a `revoke` created. */
+  revocationRequestId: string | null;
+  can: { decide: boolean };
 }
 
 export interface AccessPolicy {
@@ -75,7 +121,8 @@ export interface AccessPolicy {
 }
 
 export interface AccessEvent {
-  id: string; at: string; requestId: string; actor: Person | null;
+  /** requestId is null for an event about a policy (`policy-updated`, which names `policyId`). */
+  id: string; at: string; requestId: string | null; policyId: string | null; actor: Person | null;
   kind: AccessEventKind;
   before?: string | null; after?: string | null; reason?: string | null;
 }

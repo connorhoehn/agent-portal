@@ -95,7 +95,7 @@ const JUST = 'I am picking up the SSO cutover stories and need to dispatch agent
 beforeEach(() => {
   for (const f of [accessCatalogFixture, accessPoliciesFixture, accessPeopleFixture, accessRequestsFixture, accessStepsFixture, accessEventsFixture, identityGrantWritesFixture, initiatives]) f.reset();
   // Start with no open SME request for Rhea (the seed's req-0001 is one), so she files it here.
-  const drop = <T extends { requestId?: string; id?: string }>(rows: T[]) => {
+  const drop = <T extends { requestId?: string | null; id?: string }>(rows: T[]) => {
     for (let i = rows.length - 1; i >= 0; i--) if ((rows[i]!.requestId ?? rows[i]!.id) === 'req-0001') rows.splice(i, 1);
   };
   drop(accessRequestsFixture.rows()); drop(accessStepsFixture.rows()); drop(accessEventsFixture.rows());

@@ -135,6 +135,8 @@ export const PARAM_ROUTES: readonly ParamRoute[] = [
   { tenant: 'pipelines', pattern: '/pipelines/decks/:deckId', template: '/pipelines/decks/:id', resolve: { url: '/api/pipelines/decks', pick: first('decks') }, fallback: 'deck-missing' },
   // Access — the seeded request (middleware/src/mock/access-requests.ts, schema/access_schema.sql); a record (kindOf: param).
   { tenant: 'access', pattern: '/access/requests/:id', template: '/access/requests/:id', id: 'req-0001' },
+  // The seeded review campaign (middleware/src/mock/access-reviews.ts, schema/access_schema.sql); a collection record.
+  { tenant: 'access', pattern: '/access/reviews/:id', template: '/access/reviews/:id', id: 'rev-0001' },
 ];
 
 /**

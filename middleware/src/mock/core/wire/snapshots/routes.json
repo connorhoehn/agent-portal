@@ -23,62 +23,97 @@
     {
       "method": "GET",
       "path": "/api/access/approvals",
-      "source": "src/routes/access.ts:263"
+      "source": "src/routes/access.ts:302"
     },
     {
       "method": "GET",
       "path": "/api/access/audit",
-      "source": "src/routes/access.ts:277"
+      "source": "src/routes/access.ts:316"
     },
     {
       "method": "GET",
       "path": "/api/access/catalog",
-      "source": "src/routes/access.ts:213"
+      "source": "src/routes/access.ts:252"
+    },
+    {
+      "method": "GET",
+      "path": "/api/access/configuration",
+      "source": "src/routes/access.ts:698"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/access/configuration",
+      "source": "src/routes/access.ts:703"
     },
     {
       "method": "GET",
       "path": "/api/access/policies",
-      "source": "src/routes/access.ts:271"
+      "source": "src/routes/access.ts:310"
     },
     {
       "method": "PUT",
       "path": "/api/access/policies/:id",
-      "source": "src/routes/access.ts:427"
+      "source": "src/routes/access.ts:731"
     },
     {
       "method": "GET",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:229"
+      "source": "src/routes/access.ts:268"
     },
     {
       "method": "POST",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:300"
+      "source": "src/routes/access.ts:501"
     },
     {
       "method": "GET",
       "path": "/api/access/requests/:id",
-      "source": "src/routes/access.ts:253"
+      "source": "src/routes/access.ts:292"
+    },
+    {
+      "method": "POST",
+      "path": "/api/access/requests/:id/revoke",
+      "source": "src/routes/access.ts:661"
+    },
+    {
+      "method": "POST",
+      "path": "/api/access/requests/:id/sod-override",
+      "source": "src/routes/access.ts:635"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/steps/:step/decide",
-      "source": "src/routes/access.ts:379"
+      "source": "src/routes/access.ts:580"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/withdraw",
-      "source": "src/routes/access.ts:356"
+      "source": "src/routes/access.ts:557"
     },
     {
       "method": "GET",
       "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:292"
+      "source": "src/routes/access.ts:387"
+    },
+    {
+      "method": "POST",
+      "path": "/api/access/reviews",
+      "source": "src/routes/access.ts:408"
+    },
+    {
+      "method": "GET",
+      "path": "/api/access/reviews/:id",
+      "source": "src/routes/access.ts:397"
+    },
+    {
+      "method": "POST",
+      "path": "/api/access/reviews/:id/items/:itemId/decide",
+      "source": "src/routes/access.ts:460"
     },
     {
       "method": "GET",
       "path": "/api/access/summary",
-      "source": "src/routes/access.ts:197"
+      "source": "src/routes/access.ts:236"
     },
     {
       "method": "GET",
@@ -1068,72 +1103,72 @@
     {
       "method": "POST",
       "path": "/api/chat/commands/agent/run",
-      "source": "src/routes/agent-loop.ts:307"
+      "source": "src/routes/agent-loop.ts:316"
     },
     {
       "method": "POST",
       "path": "/api/chat/commands/agent/run",
+      "source": "src/routes/agent-loop.ts:326"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/commands/agent/runs/:id",
       "source": "src/routes/agent-loop.ts:317"
     },
     {
       "method": "GET",
       "path": "/api/chat/commands/agent/runs/:id",
-      "source": "src/routes/agent-loop.ts:308"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chat/commands/agent/runs/:id",
-      "source": "src/routes/agent-loop.ts:318"
+      "source": "src/routes/agent-loop.ts:327"
     },
     {
       "method": "POST",
       "path": "/api/chat/commands/agent/runs/:id/approval/approve",
-      "source": "src/routes/agent-loop.ts:312"
+      "source": "src/routes/agent-loop.ts:321"
     },
     {
       "method": "POST",
       "path": "/api/chat/commands/agent/runs/:id/approval/approve",
+      "source": "src/routes/agent-loop.ts:331"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/commands/agent/runs/:id/approval/reject",
       "source": "src/routes/agent-loop.ts:322"
     },
     {
       "method": "POST",
       "path": "/api/chat/commands/agent/runs/:id/approval/reject",
-      "source": "src/routes/agent-loop.ts:313"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chat/commands/agent/runs/:id/approval/reject",
-      "source": "src/routes/agent-loop.ts:323"
+      "source": "src/routes/agent-loop.ts:332"
     },
     {
       "method": "POST",
       "path": "/api/chat/commands/agent/runs/:id/approve",
-      "source": "src/routes/agent-loop.ts:309"
+      "source": "src/routes/agent-loop.ts:318"
     },
     {
       "method": "POST",
       "path": "/api/chat/commands/agent/runs/:id/approve",
+      "source": "src/routes/agent-loop.ts:328"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/commands/agent/runs/:id/discard",
       "source": "src/routes/agent-loop.ts:319"
     },
     {
       "method": "POST",
       "path": "/api/chat/commands/agent/runs/:id/discard",
-      "source": "src/routes/agent-loop.ts:310"
+      "source": "src/routes/agent-loop.ts:329"
     },
     {
-      "method": "POST",
-      "path": "/api/chat/commands/agent/runs/:id/discard",
+      "method": "GET",
+      "path": "/api/chat/commands/agent/waiting",
       "source": "src/routes/agent-loop.ts:320"
     },
     {
       "method": "GET",
       "path": "/api/chat/commands/agent/waiting",
-      "source": "src/routes/agent-loop.ts:311"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chat/commands/agent/waiting",
-      "source": "src/routes/agent-loop.ts:321"
+      "source": "src/routes/agent-loop.ts:330"
     },
     {
       "method": "POST",
@@ -1323,72 +1358,72 @@
     {
       "method": "POST",
       "path": "/api/conversations/agent/run",
-      "source": "src/routes/agent-loop.ts:307"
+      "source": "src/routes/agent-loop.ts:316"
     },
     {
       "method": "POST",
       "path": "/api/conversations/agent/run",
+      "source": "src/routes/agent-loop.ts:326"
+    },
+    {
+      "method": "GET",
+      "path": "/api/conversations/agent/runs/:id",
       "source": "src/routes/agent-loop.ts:317"
     },
     {
       "method": "GET",
       "path": "/api/conversations/agent/runs/:id",
-      "source": "src/routes/agent-loop.ts:308"
-    },
-    {
-      "method": "GET",
-      "path": "/api/conversations/agent/runs/:id",
-      "source": "src/routes/agent-loop.ts:318"
+      "source": "src/routes/agent-loop.ts:327"
     },
     {
       "method": "POST",
       "path": "/api/conversations/agent/runs/:id/approval/approve",
-      "source": "src/routes/agent-loop.ts:312"
+      "source": "src/routes/agent-loop.ts:321"
     },
     {
       "method": "POST",
       "path": "/api/conversations/agent/runs/:id/approval/approve",
+      "source": "src/routes/agent-loop.ts:331"
+    },
+    {
+      "method": "POST",
+      "path": "/api/conversations/agent/runs/:id/approval/reject",
       "source": "src/routes/agent-loop.ts:322"
     },
     {
       "method": "POST",
       "path": "/api/conversations/agent/runs/:id/approval/reject",
-      "source": "src/routes/agent-loop.ts:313"
-    },
-    {
-      "method": "POST",
-      "path": "/api/conversations/agent/runs/:id/approval/reject",
-      "source": "src/routes/agent-loop.ts:323"
+      "source": "src/routes/agent-loop.ts:332"
     },
     {
       "method": "POST",
       "path": "/api/conversations/agent/runs/:id/approve",
-      "source": "src/routes/agent-loop.ts:309"
+      "source": "src/routes/agent-loop.ts:318"
     },
     {
       "method": "POST",
       "path": "/api/conversations/agent/runs/:id/approve",
+      "source": "src/routes/agent-loop.ts:328"
+    },
+    {
+      "method": "POST",
+      "path": "/api/conversations/agent/runs/:id/discard",
       "source": "src/routes/agent-loop.ts:319"
     },
     {
       "method": "POST",
       "path": "/api/conversations/agent/runs/:id/discard",
-      "source": "src/routes/agent-loop.ts:310"
+      "source": "src/routes/agent-loop.ts:329"
     },
     {
-      "method": "POST",
-      "path": "/api/conversations/agent/runs/:id/discard",
+      "method": "GET",
+      "path": "/api/conversations/agent/waiting",
       "source": "src/routes/agent-loop.ts:320"
     },
     {
       "method": "GET",
       "path": "/api/conversations/agent/waiting",
-      "source": "src/routes/agent-loop.ts:311"
-    },
-    {
-      "method": "GET",
-      "path": "/api/conversations/agent/waiting",
-      "source": "src/routes/agent-loop.ts:321"
+      "source": "src/routes/agent-loop.ts:330"
     },
     {
       "method": "POST",

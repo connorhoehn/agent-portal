@@ -7,7 +7,7 @@
 import { collectionCommandAdapter, resolveCollectionTarget, type CollectionControls, type CollectionGrammar } from '../../components/collections/collectionCommands.ts';
 import type { CollectionCommandAdapter } from '../../components/collections/CollectionCommandHost.tsx';
 
-export type AccessCollection = 'catalog' | 'requests' | 'approvals' | 'policies' | 'reviews' | 'audit';
+export type AccessCollection = 'catalog' | 'requests' | 'approvals' | 'policies' | 'reviews' | 'review' | 'audit';
 
 /** Explicit phrase → the toolbar filter value it sets (never a mutation). */
 export const ACCESS_GRAMMARS: Readonly<Record<AccessCollection, CollectionGrammar>> = {
@@ -15,10 +15,11 @@ export const ACCESS_GRAMMARS: Readonly<Record<AccessCollection, CollectionGramma
   requests: { noun: 'requests', filters: { open: 'open', approved: 'approved', active: 'active', closed: 'closed' } },
   approvals: { noun: 'approvals' },
   policies: { noun: 'policies', filters: { blocking: 'block', warning: 'warn' } },
-  reviews: { noun: 'reviews' },
+  reviews: { noun: 'reviews', filters: { open: 'open', closed: 'closed' } },
+  review: { noun: 'review items', filters: { undecided: 'open', kept: 'keep', revoked: 'revoke' } },
   audit: {
     noun: 'events',
-    filters: { submitted: 'submitted', approved: 'approved', rejected: 'step-rejected', withdrawn: 'withdrawn', override: 'sod-override' },
+    filters: { submitted: 'submitted', approved: 'approved', rejected: 'step-rejected', withdrawn: 'withdrawn', override: 'sod-override', blocked: 'sod-blocked' },
   },
 };
 
@@ -28,7 +29,8 @@ export const ACCESS_SCOPE_NOTES: Readonly<Record<AccessCollection, string>> = {
   requests: 'Search and the status filter apply to the loaded requests. Open shows one exact request. Commands never withdraw, approve or reject anything.',
   approvals: 'Search applies to the requests waiting on you. Open shows one exact request; approve, reject and request information stay explicit controls on that page. This input records no decision.',
   policies: 'Search and the severity filter apply to the loaded policies. Open shows one policy. Commands never change a policy.',
-  reviews: 'Search applies to loaded review campaigns. Commands never start, decide or close a review.',
+  reviews: 'Search and the status filter apply to the loaded campaigns. Open shows one exact campaign. Commands never start, decide or close a review; New campaign is an explicit control.',
+  review: 'Search and the decision filter apply to this campaign’s loaded items. Open shows one exact item’s decision. Commands never keep or revoke anything; each decision is an explicit, confirmed control on its row.',
   audit: 'Search and the event filter apply to the loaded events. Open shows the request an exact event belongs to. The audit trail is append-only; commands change nothing.',
 };
 

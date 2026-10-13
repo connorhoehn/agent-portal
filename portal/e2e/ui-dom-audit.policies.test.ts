@@ -86,6 +86,16 @@ test('access policy: every list route and the request record require the compose
   assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path: '/access/requests/req-0001', kind: 'record' }, { recordDetail: true }), { mode: 'required' });
   assert.equal(tenantComposerPolicy({ tenant: 'access', path: '/access/requests/req-missing', kind: 'record' }, { missingRecord: true })?.mode, 'exempt');
 });
+test('access policy: a review campaign record requires the composer; only its 404 state is exempt (lane A2)', () => {
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path: '/access/reviews/rev-0001', kind: 'record', pattern: '/access/reviews/:id' }, {}), { mode: 'required' });
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path: '/access/reviews/rev-0001', kind: 'record' }, { recordDetail: true, table: true }), { mode: 'required' });
+  // Exemption evidence of another kind never excuses it.
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path: '/access/reviews/rev-0001', kind: 'record' }, { form: true, placeholder: true, settingsSurface: true }), { mode: 'required' });
+  const missing = tenantComposerPolicy({ tenant: 'access', path: '/access/reviews/rev-9999', kind: 'record' }, { missingRecord: true });
+  assert.equal(missing?.mode, 'exempt');
+  assert.match(missing && missing.mode === 'exempt' ? missing.reason : '', /404/);
+});
+
 test('access policy: the wizard, configuration and settings are exempt only on their own evidence', () => {
   const views = [
     ['/access/requests/new', { form: true }],

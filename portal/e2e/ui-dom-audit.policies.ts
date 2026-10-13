@@ -102,6 +102,10 @@ function accessComposerPolicy(pathname: string, view: TenantViewEvidence): Compo
   if (/^\/access\/requests\/(?!new$)[^/]+$/.test(pathname)) return view.missingRecord
     ? { mode: 'exempt', reason: 'The request endpoint returned 404 and its unavailable state is visible; there is no request thread to compose in.' }
     : { mode: 'required' };
+  // A review campaign (lane A2) is a collection record: its items table carries the shared command composer.
+  if (/^\/access\/reviews\/[^/]+$/.test(pathname)) return view.missingRecord
+    ? { mode: 'exempt', reason: 'The review endpoint returned 404 and its unavailable state is visible; there is no campaign whose items the composer could command.' }
+    : { mode: 'required' };
   if (ACCESS_COLLECTIONS.test(pathname) || view.collection || view.listRoute || view.composer) return { mode: 'required' };
   if (pathname === '/access/requests/new' && view.form) return { mode: 'exempt', reason: 'The request wizard is a single form (who, what, why, how long) with explicit inputs and a Submit action, rather than a searchable collection; the new request opens on its record, whose thread has the composer.' };
   if (pathname === '/access/configuration' && (view.settingsSurface || view.form)) return { mode: 'exempt', reason: 'A configuration surface of durations, steward rules and sensitive items with a Save action (read-only in lane A0), rather than a searchable collection.' };

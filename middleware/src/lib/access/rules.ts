@@ -25,6 +25,8 @@ export interface AccessActor {
   /** Cedar's answer for DecideAccess / ProvisionAccess on this session. */
   mayDecide: boolean;
   mayProvision: boolean;
+  /** Cedar's answer for ManageAccessPolicy (the SoD override, lane A2); absent = no. */
+  mayManagePolicy?: boolean;
 }
 
 export const isParty = (actorId: string, r: Pick<AccessRequestRow, 'requesterId' | 'beneficiaryId'>): boolean =>

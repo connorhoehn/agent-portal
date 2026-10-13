@@ -25,6 +25,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { FlushPage } from '../../components/shell/FlushPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -110,7 +111,7 @@ export default function RequestNewPage() {
     body = <LoadingState label="Loading the catalog…" />;
   } else if (step === 0) {
     body = (
-      <PageSection title="Who is it for?" description="Access is granted to the person named here; you cannot approve a request you made or benefit from.">
+      <PageSection size="sm" title="Who is it for?" description="Access is granted to the person named here; you cannot approve a request you made or benefit from.">
         <Stack gap="md">
           <RadioGroup<'self' | 'report'> name="access-who" value={beneficiaryId === selfId ? 'self' : 'report'}
             onChange={(v) => set({ beneficiaryId: v === 'self' ? selfId : (reports[0]?.id ?? '') })}
@@ -134,7 +135,7 @@ export default function RequestNewPage() {
     );
   } else if (step === 1) {
     body = (
-      <PageSection title="What do you need?" description="One catalog item per request. The approval chain depends on it.">
+      <PageSection size="sm" title="What do you need?" description="One catalog item per request. The approval chain depends on it.">
         <Stack gap="md">
           <FormField label="Catalog item">
             {({ id }) => <Select id={id} size="sm" className="w-full max-w-md" value={draft.itemId} placeholder="Choose an item"
@@ -168,7 +169,7 @@ export default function RequestNewPage() {
   } else if (step === 2) {
     const n = draft.justification.trim().length;
     body = (
-      <PageSection title="Why?" description="Approvers read this first. Say what the access is for and why now.">
+      <PageSection size="sm" title="Why?" description="Approvers read this first. Say what the access is for and why now.">
         <FormField label="Justification" hint={`${n} of at least ${JUSTIFICATION_MIN} characters`} required>
           {(wiring) => <Textarea {...wiring} rows={5} value={draft.justification} onChange={(e) => set({ justification: e.target.value })} data-testid="access-new-justification" />}
         </FormField>
@@ -176,7 +177,7 @@ export default function RequestNewPage() {
     );
   } else {
     body = (
-      <PageSection title="For how long?" description="Access ends on its own when the time is up. Standing access is the exception and needs a second reason.">
+      <PageSection size="sm" title="For how long?" description="Access ends on its own when the time is up. Standing access is the exception and needs a second reason.">
         <Stack gap="md">
           <RadioGroup<AccessDuration> name="access-duration" value={(draft.duration || item?.defaultDuration || '24h') as AccessDuration}
             onChange={(v) => set({ duration: v })} orientation="horizontal"
@@ -199,10 +200,12 @@ export default function RequestNewPage() {
   };
 
   return (
-    <Stack gap="md" className="min-w-0" data-testid="access-request-new">
+    // On the list pages' frame (FlushPage): the title at the page gutter, one h1;
+    // each step is a 14/600 h2 section (PageSection size="sm"), the stepper compact (12px).
+    <FlushPage data-testid="access-request-new">
       <PageHeader density="compact" title={page.title} description={page.description} back={back}
         badge={item ? <Chip tone="neutral" size="xs">{item.title}</Chip> : undefined} />
-      <WorkflowStepper steps={stepper} aria-label={`Step ${step + 1} of ${WIZARD_STEPS.length}`} data-testid="access-new-stepper" />
+      <WorkflowStepper size="compact" steps={stepper} aria-label={`Step ${step + 1} of ${WIZARD_STEPS.length}`} data-testid="access-new-stepper" />
       {body}
       {submitError && <InlineAlert tone="error" onDismiss={() => setSubmitError(null)}>{submitError}</InlineAlert>}
       {mayRequest && catalog.data && (
@@ -220,6 +223,6 @@ export default function RequestNewPage() {
           </Inline>
         </Inline>
       )}
-    </Stack>
+    </FlushPage>
   );
 }

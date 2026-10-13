@@ -20,11 +20,12 @@ import {
   accessEventsFixture, accessRequestsFixture, accessStepsFixture,
   type AccessEventRow, type AccessRequestRow, type AccessStepRow,
 } from '../mock/access-requests.js';
+import { accessReviewItemsFixture, accessReviewsFixture, type AccessReviewItemRow, type AccessReviewRow } from '../mock/access-reviews.js';
 import { findInitiative } from '../mock/initiatives.js';
 import { listUsers } from './identity.js';
 import type { AccessDirectory } from '../lib/access/types.js';
 
-export type { AccessCatalogRow, AccessPolicyRow, AccessEventRow, AccessRequestRow, AccessStepRow };
+export type { AccessCatalogRow, AccessPolicyRow, AccessEventRow, AccessRequestRow, AccessStepRow, AccessReviewRow, AccessReviewItemRow };
 
 export const ACCESS_STORE_UNAVAILABLE =
   'The access tenant\'s tables are not applied on this cluster (schema/access_schema.sql, docs/access-tenant-goal.md lane E); only dev:mock serves it today';
@@ -61,12 +62,68 @@ const nextId = (prefix: string, ids: readonly string[]): string => {
 
 export function nextRequestId(): string { store(); return nextId('req', accessRequestsFixture.rows().map((r) => r.id)); }
 
+// ── access reviews (lane A2) ────────────────────────────────────────────────
+
+export function listReviews(): AccessReviewRow[] { store(); return copy(accessReviewsFixture.rows()); }
+export function listReviewItems(reviewId?: string): AccessReviewItemRow[] {
+  store();
+  const rows = accessReviewItemsFixture.rows();
+  return copy(reviewId ? rows.filter((i) => i.reviewId === reviewId) : rows);
+}
+
+/** Insert a new campaign and its items (ids are assigned here), in one go. */
+export function insertReview(
+  review: Omit<AccessReviewRow, 'id'>,
+  items: ReadonlyArray<Omit<AccessReviewItemRow, 'id' | 'reviewId'>>,
+): { review: AccessReviewRow; items: AccessReviewItemRow[] } {
+  store();
+  const id = nextId('rev', accessReviewsFixture.rows().map((r) => r.id));
+  const stored: AccessReviewRow = { ...structuredClone(review), id };
+  accessReviewsFixture.rows().push(stored);
+  const all = accessReviewItemsFixture.rows();
+  const out: AccessReviewItemRow[] = [];
+  for (const i of items) {
+    const row: AccessReviewItemRow = { ...structuredClone(i), id: nextId('ri', all.map((r) => r.id)), reviewId: id };
+    all.push(row);
+    out.push(structuredClone(row));
+  }
+  return { review: structuredClone(stored), items: out };
+}
+
+/**
+ * Compare-and-set one review item: apply `patch` only while the stored item is
+ * still undecided (or, with `decided`, still carries that decision — the
+ * roll-back of a revocation that failed). Returns the stored row, or null when
+ * someone decided it first. On the cluster: `UPDATE access_review_items … WHERE
+ * id = :id AND decision IS NULL RETURNING *` (lane E).
+ */
+export function casReviewItem(id: string, when: { decided: AccessReviewItemRow['decision'] }, patch: Partial<Omit<AccessReviewItemRow, 'id' | 'reviewId'>>): AccessReviewItemRow | null {
+  store();
+  const row = accessReviewItemsFixture.rows().find((i) => i.id === id);
+  if (!row || row.decision !== when.decided) return null;
+  Object.assign(row, structuredClone(patch));
+  return structuredClone(row);
+}
+
+/** Close an open campaign once every item carries a decision; returns the stored row. */
+export function closeReviewIfDecided(id: string, at: string): AccessReviewRow | null {
+  store();
+  const row = accessReviewsFixture.rows().find((r) => r.id === id);
+  if (!row) return null;
+  const items = accessReviewItemsFixture.rows().filter((i) => i.reviewId === id);
+  if (row.status === 'open' && items.every((i) => i.decision !== null)) {
+    row.status = 'closed';
+    row.closedAt = at;
+  }
+  return structuredClone(row);
+}
+
 type EventDraft = { kind: AccessEventRow['kind']; before: string | null; after: string | null; reason: string | null };
 
 function appendEvents(requestId: string, actorId: string | null, events: readonly EventDraft[], at: string): void {
   const rows = accessEventsFixture.rows();
   for (const e of events) {
-    rows.push({ id: nextId('evt', rows.map((r) => r.id)), requestId, at, actorId, kind: e.kind, beforeStatus: e.before, afterStatus: e.after, reason: e.reason });
+    rows.push({ id: nextId('evt', rows.map((r) => r.id)), requestId, policyId: null, at, actorId, kind: e.kind, beforeStatus: e.before, afterStatus: e.after, reason: e.reason });
   }
 }
 
@@ -128,15 +185,35 @@ export function casRequest(
   return structuredClone(row);
 }
 
+/** Update one catalog item's default duration / sensitive flag (PUT /configuration); returns the stored row or null when unknown. */
+export function updateCatalogItem(id: string, patch: { defaultDuration?: AccessCatalogRow['defaultDuration']; sensitive?: boolean }): AccessCatalogRow | null {
+  store();
+  const row = accessCatalogFixture.rows().find((i) => i.id === id);
+  if (!row) return null;
+  if (patch.defaultDuration) row.defaultDuration = patch.defaultDuration;
+  if (patch.sensitive !== undefined) row.sensitive = patch.sensitive;
+  return structuredClone(row);
+}
+
 /** Update a policy's severity / reason; returns the stored row or null when unknown. */
 export function updatePolicy(id: string, patch: { severity?: AccessPolicyRow['severity']; reason?: string }, actorId: string): AccessPolicyRow | null {
   store();
   const row = accessPoliciesFixture.rows().find((p) => p.id === id);
   if (!row) return null;
+  const before = { severity: row.severity, reason: row.reason };
   if (patch.severity) row.severity = patch.severity;
   if (patch.reason !== undefined) row.reason = patch.reason;
   row.updatedAt = clock.nowIso();
   row.updatedBy = actorId;
+  // The audit trail (lane A2): one `policy-updated` event per save, with the
+  // severity before / after and the reason as it now reads (or what it replaced).
+  const events = accessEventsFixture.rows();
+  const reasonChanged = before.reason !== row.reason;
+  events.push({
+    id: nextId('evt', events.map((e) => e.id)), requestId: null, policyId: row.id, at: row.updatedAt, actorId, kind: 'policy-updated',
+    beforeStatus: before.severity, afterStatus: row.severity,
+    reason: reasonChanged ? `${row.title}: reason now “${row.reason}” (was “${before.reason}”)` : `${row.title}: reason unchanged`,
+  });
   return structuredClone(row);
 }
 
