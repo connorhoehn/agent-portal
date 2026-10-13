@@ -351,7 +351,7 @@ function InvocationsPage() {
                     {inv.promptSnippet}
                   </TableTd>
                   <TableTd
-                    className="text-xs max-w-[320px] text-[var(--color-text-secondary)]"
+                    className="max-w-[320px] truncate text-[var(--color-text-secondary)]"
                     title={inv.error ? `error: ${inv.error}` : inv.responseSnippet}
                   >
                     {inv.error ? (
@@ -422,7 +422,7 @@ function InvocationsPage() {
               {(bedrock?.entries ?? []).map((b) => (
                 <TableRow key={b.requestId}>
                   <TableTd
-                    className="text-xs whitespace-nowrap text-[var(--color-text-tertiary)]"
+                    className="whitespace-nowrap text-[var(--color-text-tertiary)]"
                     title={new Date(b.timestamp).toLocaleString()}
                   >
                     {relativeTime(b.timestamp)}

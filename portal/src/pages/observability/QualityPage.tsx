@@ -211,7 +211,7 @@ function QualityPage() {
   const renderFeedback = (invocationId: string) => {
     const currentLabel = feedback[invocationId];
     return noteFor === invocationId ? (
-                          <Inline as="div" align="center" gap="xs">
+                          <Inline as="div" align="center" gap="xs" wrap={false}>
                             <Input
                               autoFocus
                               value={noteText}
@@ -231,7 +231,7 @@ function QualityPage() {
                             </Button>
                           </Inline>
                         ) : !canLabel ? null : (
-                          <Inline as="div" gap="xs">
+                          <Inline as="div" gap="xs" wrap={false}>
                             <FeedbackBtn
                               label="good"
                               symbol="✓"
@@ -416,7 +416,7 @@ function QualityPage() {
                       </Chip>
                     </TableTd>
                     <TableTd
-                      className={`max-w-[480px] overflow-hidden text-ellipsis whitespace-nowrap ${r.invocationId ? 'cursor-pointer' : ''}`}
+                      className={`w-full max-w-0 ${r.invocationId ? 'cursor-pointer' : ''}`}
                       title={
                         r.invocationId
                           ? `${r.judgeRationale} — click to open invocation`
@@ -428,7 +428,7 @@ function QualityPage() {
                         }
                       }}
                     >
-                      {r.judgeRationale}
+                      <T className="block truncate">{r.judgeRationale}</T>
                     </TableTd>
                     <TableTd className="whitespace-nowrap">
                       <CostChip cost={r.totalCostUsd} />

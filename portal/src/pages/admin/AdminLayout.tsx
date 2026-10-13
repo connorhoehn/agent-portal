@@ -25,7 +25,13 @@ function AdminLayout() {
   const inAutomate = pathname.startsWith('/admin/bots') || pathname.startsWith('/admin/changes');
 
   if (inAutomate) {
-    return <BuildSectionLayout title={automate.title} items={automate.items} storageKey={automate.storageKey}><Outlet /></BuildSectionLayout>;
+    // The Bots and Changes lists are CollectionCommandPages: they own their
+    // reading gutters and dock the command composer across the whole content
+    // column (docs/layout-cascade.md), so they sit flush like IqLayout's run
+    // page. A bot or change detail keeps the section's gutter.
+    const collectionPage = /^\/admin\/(?:bots|changes)\/?$/.test(pathname);
+    return <BuildSectionLayout title={automate.title} items={automate.items} storageKey={automate.storageKey}
+      {...(collectionPage ? { contentPadding: 'none' as const } : {})}><Outlet /></BuildSectionLayout>;
   }
 
   return (

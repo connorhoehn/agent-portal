@@ -79,7 +79,7 @@ export function KBHealthBadge(): ReactElement | null {
       title={tooltip}
       className="p-0 border-0 whitespace-nowrap"
     >
-      <StatusPill tone={TONE[severity]} label={label} icon={SYMBOL[severity]} size="sm" />
+      <StatusPill tone={TONE[severity]} label={label} icon={SYMBOL[severity]} size="md" />
     </Button>
   );
 }

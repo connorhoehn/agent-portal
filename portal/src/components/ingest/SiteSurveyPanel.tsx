@@ -175,7 +175,6 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
               <Input
                 {...w}
                 size="sm"
-                mono
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void run(); }}

@@ -142,7 +142,6 @@ export default function ConfigurationPage() {
                         value={motion.accent}
                         onChange={(e) => updateMotion(i, { accent: e.target.value })}
                         disabled={!canManage}
-                        mono
                         prefix={
                           // `StatusDot` takes a `color`, so the swatch is a
                           // library component rather than a hand-rolled span

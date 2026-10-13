@@ -321,7 +321,7 @@ export default function BotDetailPage() {
   ];
 
   return (
-    <PageSection title={bot.name}>
+    <PageSection title={bot.name} data-testid="bot-detail-page">
       {/* ── Header: identity + state + controls ── */}
       <Card padding="sm" className="mb-4">
         <Inline gap="sm" wrap align="center" justify="between">
@@ -456,7 +456,7 @@ export default function BotDetailPage() {
                       <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
                     </TableTd>
                     <TableTd
-                      className="text-xs text-text-secondary whitespace-nowrap"
+                      className="text-text-secondary whitespace-nowrap"
                       title={dur.title}
                     >
                       {dur.text}

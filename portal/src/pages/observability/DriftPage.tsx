@@ -455,14 +455,14 @@ function DriftPage() {
                         {relativeTime(o.ts)}
                       </TableTd>
                       <TableTd
-                        className="text-xs max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
+                        className="max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
                         title={o.promptSnippet}
                         onClick={() => setExpanded(isOpen ? null : o.invocationId)}
                       >
                         {o.promptSnippet}
                       </TableTd>
                       <TableTd
-                        className="text-xs max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
+                        className="max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
                         title={o.responseSnippet}
                         onClick={() => setExpanded(isOpen ? null : o.invocationId)}
                       >

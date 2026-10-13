@@ -772,7 +772,6 @@ tbody tr:focus-within .row-reveal,
 [data-testid="work-item-header"] [role="tab"] {
   min-height: 36px;
   padding: 6px 10px;
-  font-size: 13px;
   line-height: 20px;
 }
 [data-testid="work-item-header"] [role="tab"]:first-child {

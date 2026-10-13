@@ -26,7 +26,7 @@ export function VersionSelect({
       onChange={e => onChange(e.target.value)}
       size="sm"
       aria-label="Prompt version"
-      className="min-w-[90px] font-mono font-semibold"
+      className="min-w-[90px] font-semibold"
     />
   );
 }

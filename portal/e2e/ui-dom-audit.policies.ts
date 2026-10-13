@@ -49,6 +49,8 @@ export interface TenantViewEvidence {
   charts?: boolean;
   /** The chat workspace rail is visible with no selected conversation. */
   chatDirectory?: boolean;
+  /** The document rail is visible with no document open (the library/directory view). */
+  documentDirectory?: boolean;
   /** Communication plane states, shared with the pipelines policy. */
   communicationOverview?: boolean;
   socialAccessRequired?: boolean;
@@ -60,6 +62,8 @@ export interface TenantViewEvidence {
   placeholder?: boolean;
   /** The Computer Lab workspace (boxes, panes, its own terminal input) is visible. */
   lab?: boolean;
+  /** A section landing (`[data-testid$="-landing"]`): links and summaries, no collection of its own. */
+  landing?: boolean;
   /** Deck route whose API answered 404 and whose load-error view is visible. */
   missingDeck?: boolean;
   /** Record/editor route whose record is missing: API 404 plus the visible unavailable state. */
@@ -108,12 +112,14 @@ export function tenantComposerPolicy(spec: TenantRouteSpec, view: TenantViewEvid
   if (view.sharedWorkView) return { mode: 'exempt', reason: 'The active shared-work view displays contextual work; its message composer is outside this view.' };
   if (view.placeholder) return { mode: 'exempt', reason: 'The surface is registered but not available yet; the page displays its registration state and exposes no data to search or command.' };
   if (view.settingsSurface) return { mode: 'exempt', reason: 'A configuration surface of explicit controls and a Save action, rather than a searchable collection.' };
+  if (view.landing && !view.table) return { mode: 'exempt', reason: 'A section landing of summaries and links; its collections live on the pages it links to.' };
   if (view.lab) return { mode: 'exempt', reason: 'The Computer Lab workspace has its own box selector, panes and terminal input; it is not a searchable collection.' };
   if (view.graph) return { mode: 'exempt', reason: 'The spatial canvas uses its own date, focus and node controls; collection commands belong to the list pages that feed it.' };
   if (view.charts && !view.listRail) return { mode: 'exempt', reason: 'A dashboard of charts and summary strips; its tables are supporting read-outs without search or filters, so there is no collection to command.' };
   if (view.listRail) return { mode: 'required' };
   // A page whose content is a table is a collection; a record's supporting tables are not.
   if (view.table && !record) return { mode: 'required' };
+  if (view.documentDirectory) return { mode: 'exempt', reason: 'The document rail has no open document; opening one shows its editor and composer. The directory itself is navigation, not a collection to command.' };
   if (view.chatDirectory) return { mode: 'exempt', reason: 'The conversation rail has no selected conversation. Selecting a channel, person, call, room or team opens its contextual composer.' };
   if (view.form) return { mode: 'exempt', reason: 'A single form with explicit inputs and a Save action, rather than a searchable collection.' };
   if (record && view.missingRecord) return { mode: 'exempt', reason: 'The record endpoint returned 404 and its unavailable state is visible; there is no record to discuss or command.' };

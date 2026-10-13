@@ -106,7 +106,7 @@ function fmtDelta(n: number | null): string {
 
 function StatusChip({ status }: { status: string }): React.ReactElement {
   return (
-    <Chip tone={STATUS_TONE[status] ?? 'neutral'} size="xs" uppercase>
+    <Chip tone={STATUS_TONE[status] ?? 'neutral'} size="md" uppercase>
       {STATUS_LABEL[status] ?? status}
     </Chip>
   );

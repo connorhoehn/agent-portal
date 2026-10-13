@@ -201,7 +201,6 @@ export function ConnectedSources() {
                 <Input
                   {...w}
                   type="password"
-                  mono
                   size="sm"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}

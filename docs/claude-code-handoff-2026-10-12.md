@@ -171,6 +171,44 @@ new dist. Keep sibling builds/pack/install under one owner; do not edit node_mod
   `validate-component-discipline.sh` (52 raw styled elements, 3 raw buttons
   in `portal/src`) and `validate-route-coverage.sh` (1 untested route).
 
+- **2026-10-12/13 (Claude Code, continued).** The Codex lane was resumed as
+  the user asked. Composer policy: `portal/e2e/ui-dom-audit.policies.ts`
+  `tenantComposerPolicy` classifies every orgiq/assessment/social route from
+  rendered evidence (list judge, collection toolbar, searchable table,
+  visible composer, charts, canvas, settings surface, placeholder, lab,
+  section landing, chat/document directory, observed 404, titled record),
+  `required` winning before any exemption; `AUDIT_ROUTE_ALIASES` in
+  `ui-dom-audit.routes.ts` are the only accepted redirects; per-tenant deck
+  APIs feed the missing-deck case. Unclassified went 102 → 0 on the resting
+  matrix. Composers: one grammar (`components/collections/collectionCommands.ts`)
+  and `CollectionCommandHost` on ~47 orgiq/assessment collection pages
+  (four lanes; every page's grammar + tests sit beside it; admin and
+  observability pages mount the host embedded in their section with the
+  `embedded` boundary marker; `StackedCatalogLayout` gained a `footer` slot for
+  record-view composers). Library: ui-components **2.441.0 → 2.441.2**
+  (TenantSwitcher, DeckReader/DeckPresentationDialog composites; rail
+  `data-ui-text` markers; lab pills, WorkItemMetaBar, StatStrip clickable
+  cards, ChoiceRow, Textarea default, SourceCard on the scale); the portal's
+  copies are deleted, the e2e fixture imports the library reader. Drift:
+  densitysize 224 → 0, raw elements/buttons 0, burn-down rows lowered.
+  Judges green: route-coverage, nav-parity, component-discipline,
+  honest-numbers, mock-floor (snapshots recaptured on a throwaway :3012 BFF;
+  three fixture/server disagreements repaired). Acceptance audit (light+dark,
+  1440+900, discovered states) runs per tenant/section because one Playwright
+  test caps at 30 min: orgiq `/iq` 536 cases / 622 findings, orgiq `/admin`
+  500 / 1,804, assessment 168 / 156, social 124 / 8 — the findings are now
+  library-owned families (Breadcrumbs sm, link Button size, GroupedList action,
+  MarkdownView buttons, SegmentedControl, lab chrome, StackedRail group count,
+  FileUploadDrop dashed → named dropzone variant) queued for 2.441.3, plus the
+  admin-lane fixes (12px cells, 63px quality rows at 900, admin composer
+  insets, knowledge badge, crawl inputs) awaiting re-measurement. Known
+  pre-existing: `e2e/deck-reader.spec.ts` "Stop Follow" hover flake and the
+  "real Work member" case expecting a work-item blocked reason the mock
+  presentation reply never contained; ui-components has 11 unit tests and two
+  lints red on its clean HEAD. New goal: the `access` tenant
+  (`docs/access-tenant-design.md`, `docs/access-tenant-goal.md`,
+  `scripts/validate-access-tenant.sh`, 98 red checks = backlog).
+
 ## Suggested continuation
 
 1. Continue from the user's next screenshot or requested tenant. Reproduce an
