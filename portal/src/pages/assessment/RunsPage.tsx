@@ -113,7 +113,6 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
         <DataTable<AgentCommand>
           data={commands}
           keyField={(cmd) => cmd.name}
-          size="sm"
           // The command registry is small today but not bounded by contract
           // — 15 keeps a growing registry a scan, not a scroll.
           pageSize={15}
@@ -274,7 +273,6 @@ export default function RunsPage() {
         <DataTable<RunRecord>
           data={runs}
           keyField={(r) => r.id}
-          size="sm"
           striped
           onRowClick={(r) => setDetailId(r.id)}
           loading={loading && !runsResp}

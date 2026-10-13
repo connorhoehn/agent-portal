@@ -123,6 +123,6 @@ test('document deletion, permission revocation and leaving during source I/O can
   jest.mocked(getKnowledgeDoc).mockResolvedValueOnce(null); expect((await ask(doc.input, doc.token)).status).toBe(403);
   jest.mocked(isAllowed).mockResolvedValue(false); expect((await ask(doc.input, doc.token)).status).toBe(403);
   jest.mocked(isAllowed).mockResolvedValue(true);
-  jest.mocked(getKnowledgeDoc).mockImplementation(async () => { sockets.delete('alice-socket'); return { id: doc.sourceId, title: 'deleted seat', classification: '', markdown: '', editable: false, path: '', updated_at: '' }; });
+  jest.mocked(getKnowledgeDoc).mockImplementation(async () => { sockets.delete('alice-socket'); return { id: doc.sourceId, title: 'deleted seat', classification: 'internal', markdown: '', editable: false, path: '', updated_at: '' }; });
   expect((await ask(doc.input, doc.token)).status).toBe(403);
 });

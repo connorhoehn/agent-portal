@@ -30,6 +30,8 @@ import { DetailSection,
   Textarea, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { promotionsCommandAdapter } from '../distillation/distillationCollectionCommands';
 import { SectionHeader } from '../../components/shell/SectionContent';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useUrlDraft } from '../distillation/useUrlDraft';
@@ -342,6 +344,14 @@ export default function PromotionsPage() {
     ...(moduleCtx ? [moduleCtx.scope.repoFacet] : []),
   ];
   const activeFilters = (filter === 'all' ? 0 : 1) + (repo ? 1 : 0);
+  // The candidate list's command composer, docked flush under the content
+  // column: the rail's search and status, refresh, and open-by-exact-ID.
+  const commands = promotionsCommandAdapter(candidates, {
+    setQuery,
+    setStatus: setFilterDraft,
+    refresh,
+    openCandidate,
+  });
   return (
     <ListRailLayout
       header={<SectionHeader breadcrumbs={trail} title="Asset promotions"
@@ -367,13 +377,14 @@ export default function PromotionsPage() {
         ),
         body: promotionsFailure ? <UnavailableNotice error={promotionsFailure} what="asset promotions" source={PROMOTIONS_SOURCE} onRetry={refresh} />
           : isLoading && !data ? <LoadingState label="Loading candidates…" />
-          : candidates.length === 0 ? <EmptyState size="sm" title="No candidates in this view" description={filter === 'dismissed' ? 'Dismissed candidates remain here with their observations and reasons.' : 'Candidates appear when observations form a reusable pattern.'} />
+          : candidates.length === 0 ? <EmptyState title="No candidates in this view" description={filter === 'dismissed' ? 'Dismissed candidates remain here with their observations and reasons.' : 'Candidates appear when observations form a reusable pattern.'} />
           : <GroupedList size="md" currentStyle="bar" groupHeading="label" groupCountAlign="end" hideEmptyGroups
               groups={(Object.keys(PROPOSED_LABEL) as Array<keyof typeof PROPOSED_LABEL>).map((kind) => ({ id: kind, title: PROPOSED_LABEL[kind], count: candidates.filter((c) => c.proposedKind === kind).length }))}
               rows={candidates.map((c) => ({ id: c.id, groupId: c.proposedKind, title: c.title,
                 subline: `${STATUS_LABEL[c.status]} · ${c.supportCount} observations` }))}
               currentId={openId} onOpenRow={(row) => openCandidate(row.id)} />,
       }}
+      footer={<CollectionCommandHost adapter={commands} />}
       data-testid="distillation-promotions"
     >
       {openId ? (
@@ -389,7 +400,7 @@ export default function PromotionsPage() {
         </Stack>
       ) : (
         <Stack gap="md" className={paneBody}>
-          <EmptyState size="sm" title="Review a proposed asset" description="Choose a candidate to inspect its observations, approval and dry-run result." />
+          <EmptyState title="Review a proposed asset" description="Choose a candidate to inspect its observations, approval and dry-run result." />
         </Stack>
       )}
     </ListRailLayout>

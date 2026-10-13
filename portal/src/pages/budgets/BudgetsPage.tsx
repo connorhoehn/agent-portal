@@ -11,9 +11,10 @@
 // you pick one: nine initiatives and four grants is a different afternoon from
 // nine and forty.
 
-import { useMemo } from 'react';
-import { NavLink, useSearchParams } from 'react-router';
+import { useMemo, useState } from 'react';
+import { NavLink, useNavigate, useSearchParams } from 'react-router';
 import {
+  CollectionToolbar,
   LoadingState,
   PageSection,
   Stack,
@@ -28,6 +29,8 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { InitiativesReport } from './InitiativesReport';
 import { SprintsReport } from './SprintsReport';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { initiativeBudgetsCommandAdapter, matchesBudget, matchesGrant, sprintEnvelopesCommandAdapter } from './budgetsCommands';
 import {
   maintenanceStats, maintenanceTitle, mergeInitiativesWithBudgets, remainingHint, remainingTitle, usd,
 } from './budgetsFormat';
@@ -70,6 +73,18 @@ export default function BudgetsPage() {
   const grants = useMemo(() => grantData?.grants ?? [], [grantData]);
   const summary = data?.summary;
 
+  // One controlled search shared by the toolbar and the composer; switching
+  // report clears it so a sprint query never silently narrows the ledger.
+  const [query, setQuery] = useState('');
+  const navigate = useNavigate();
+  const shownBudgets = budgets.filter((row) => matchesBudget(row, query));
+  const shownGrants = grants.filter((row) => matchesGrant(row, query));
+  const adapter = report === 'sprints'
+    ? sprintEnvelopesCommandAdapter({ setQuery, refresh: refreshGrants })
+    : initiativeBudgetsCommandAdapter({
+      setQuery, refresh, rows: shownBudgets, open: (id) => navigate(`/iq/projects/${id}`),
+    });
+
   const maint = summary
     ? maintenanceStats(summary.totalSpentThisPeriodUsd, summary.totalMaintenanceUsd)
     : null;
@@ -106,6 +121,7 @@ export default function BudgetsPage() {
         ? 'Budget envelopes granted to an SME for one sprint, and what the initiative actually spent inside that window.'
         : `Monthly agent-spend allocations per initiative, against actuals from bot and marketplace runs · ${MONTH_LABEL}`}
     >
+      <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
       {/* One line of stats at the app's body step, not four tall cards: these
           are the frame for the report below, not the content. The hints that
           used to sit under each card value are the clusters' tooltips. */}
@@ -113,7 +129,6 @@ export default function BudgetsPage() {
         <StatStrip
           aria-label="Budget rollup"
           variant="line"
-          size="sm"
           items={[
             { label: 'allocated', value: usd(summary.totalAllocatedUsd), title: `Allocated for ${MONTH_LABEL}` },
             {
@@ -137,9 +152,20 @@ export default function BudgetsPage() {
         />
       )}
 
-      <Stack gap="none" className="mt-3">
+      <CollectionToolbar
+        label={report === 'sprints' ? 'Sprint envelope filters' : 'Initiative budget filters'}
+        search={report === 'sprints'
+          ? { value: query, onChange: setQuery, placeholder: 'Search initiative, sprint or SME', 'aria-label': 'Search sprint envelopes' }
+          : { value: query, onChange: setQuery, placeholder: 'Search initiatives', 'aria-label': 'Search initiative budgets' }}
+        summary={report === 'sprints'
+          ? `${shownGrants.length} of ${grants.length} envelopes`
+          : `${shownBudgets.length} of ${budgets.length} initiatives`}
+        onRefresh={report === 'sprints' ? refreshGrants : refresh}
+      />
+
+      <Stack gap="none">
         {report === 'sprints' ? (
-          <SprintsReport grants={grants} error={grantError} hasData={grantData != null} canManage={canManage} refresh={refreshGrants} />
+          <SprintsReport grants={grants} error={grantError} hasData={grantData != null} canManage={canManage} refresh={refreshGrants} query={query} />
         ) : (
           <InitiativesReport
             budgets={budgets}
@@ -149,8 +175,11 @@ export default function BudgetsPage() {
             canManage={canManage}
             refresh={refresh}
             initiatives={initiativesData}
+            query={query}
           />
         )}
+      </Stack>
+      <CollectionCommandHost key={report} adapter={adapter} />
       </Stack>
     </PageSection>
   );
@@ -175,6 +204,7 @@ export default function BudgetsPage() {
               e.preventDefault();
               const next = new URLSearchParams(params);
               if (wantsSprints) next.set('report', 'sprints'); else next.delete('report');
+              if (wantsSprints !== (report === 'sprints')) setQuery('');
               setParams(next, { replace: true });
             }}
             className={isActive ? activeNavItemClassName : inactiveNavItemClassName}

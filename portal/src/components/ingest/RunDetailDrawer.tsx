@@ -116,7 +116,6 @@ export function RunDetailDrawer({
 
               <StatStrip
                 variant="line"
-                size="sm"
                 items={[
                   { label: 'pages', value: `${session.pages.length} / ${session.maxPages}` },
                   { label: 'duration', value: durationLabel(durationOf(session)) },

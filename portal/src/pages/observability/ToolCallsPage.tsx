@@ -74,6 +74,9 @@ import {
   type ToolLatencyRow,
   type ToolTimeseriesPoint,
 } from './toolCallsFormat';
+import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
+import { ObservabilityCommandSection } from './ObservabilityCommandSection';
+import { OBSERVABILITY_GRAMMARS } from './observabilityCommands';
 
 interface LatencyResponse { byTool: ToolLatencyRow[] }
 interface TimeseriesResponse { points: ToolTimeseriesPoint[]; bucketMin: number; windowHours: number }
@@ -108,7 +111,7 @@ function ToolCallsPage() {
       `/api/observability/tools/latency?windowHours=${win.hours}${agentParam}`,
       30_000,
     );
-  const { data: seriesData } = useFetch<TimeseriesResponse>(
+  const { data: seriesData, refresh: refreshSeries } = useFetch<TimeseriesResponse>(
     `/api/observability/tools/timeseries?windowHours=${win.hours}&bucketMin=${win.bucket}`,
     30_000,
   );
@@ -160,6 +163,18 @@ function ToolCallsPage() {
 
   const filtered = query.trim().length > 0 || failingOnly || agentId !== 'all';
 
+  const adapter = collectionCommandAdapter(OBSERVABILITY_GRAMMARS.tools, {
+    setQuery,
+    // "failing" is the Failing only chip; clearing also returns the agent
+    // selector to All agents so "reset filters" clears every filter shown.
+    setFilter: (value) => {
+      if (value === 'failing') { setFailingOnly(true); return; }
+      setFailingOnly(false); setAgentId('all');
+    },
+    refresh: () => { refreshLatency(); refreshSeries(); refreshErrors(); },
+    scopeNote: 'Search matches tool names in the rollup and the error tail; the filter is Failing only. Refresh rereads both. The window stays as selected, and nothing here calls a tool.',
+  });
+
   // One line, not a row of stat cards — the table has to start above the fold.
   // When the rollup is blind, the description must not quote numbers from it.
   const description = tableBlind
@@ -175,7 +190,6 @@ function ToolCallsPage() {
       description={description}
       actions={
         <SegmentedControl
-          size="sm"
           value={windowLabel}
           onChange={setWindowLabel}
           options={TOOL_WINDOWS.map((w) => ({ value: w.label, label: w.label }))}
@@ -195,6 +209,7 @@ function ToolCallsPage() {
           problem `firstDegraded` exists to avoid — the same sentence twice,
           200px apart. The description line carries the page-level half by
           refusing to quote totals it could not read. */}
+      <ObservabilityCommandSection adapter={adapter}>
       {tableBlind && visibleRows.length > 0 && (
         <UnavailableNotice
           error={tableBlind}
@@ -262,7 +277,7 @@ function ToolCallsPage() {
             ]}
           />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Tool</TableTh>
@@ -277,8 +292,8 @@ function ToolCallsPage() {
             <TableBody>
               {visibleRows.map((r) => (
                 <TableRow key={r.toolName}>
-                  <TableTd className="font-mono whitespace-nowrap">
-                    {r.toolName}
+                  <TableTd className="whitespace-nowrap">
+                    <T className="font-mono">{r.toolName}</T>
                   </TableTd>
                   <TableTd numeric>
                     {fmtInt(r.count)}
@@ -385,7 +400,7 @@ function ToolCallsPage() {
             onRetry={refreshErrors}
           />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -398,11 +413,11 @@ function ToolCallsPage() {
             <TableBody>
               {visibleErrors.map((e) => (
                 <TableRow key={e.toolCallId}>
-                  <TableTd className="font-mono whitespace-nowrap">{e.agentId || '—'}</TableTd>
+                  <TableTd className="whitespace-nowrap"><T className="font-mono">{e.agentId || '—'}</T></TableTd>
                   <TableTd className="whitespace-nowrap">
                     {fmtTs(e.ts)}
                   </TableTd>
-                  <TableTd className="font-mono whitespace-nowrap">{e.toolName}</TableTd>
+                  <TableTd className="whitespace-nowrap"><T className="font-mono">{e.toolName}</T></TableTd>
                   <TableTd
                     className="max-w-[360px] truncate"
                     title={e.errorMessage ?? 'errored with no message'}
@@ -423,6 +438,7 @@ function ToolCallsPage() {
           </Table>
         )}
       </Card>
+      </ObservabilityCommandSection>
     </PageSection>
   );
 }

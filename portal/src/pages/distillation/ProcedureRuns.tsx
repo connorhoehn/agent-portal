@@ -126,7 +126,6 @@ function RecordRunForm({ artifactId, steps, onRecorded }: {
     <DetailSection title="Record a run" hint="what happened when a session ran this">
       <Stack gap="sm">
         <SegmentedControl
-          size="sm"
           aria-label="Outcome"
           value={outcome}
           onChange={(v) => setOutcome(v as ApplicationOutcome)}

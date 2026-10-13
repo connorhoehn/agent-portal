@@ -80,7 +80,6 @@ export function QueuePulse({ summary, jobs, degraded }: {
           below is the page. */}
       <StatStrip
         variant="line"
-        size="sm"
         aria-label="Queue pulse"
         items={[
           {

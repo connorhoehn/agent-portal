@@ -13,12 +13,13 @@
 // there is no team discussing this change, only a decision to make about it.
 
 import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import {
   T,
   Button,
   Card,
   Chip,
+  CollectionToolbar,
   EmptyState,
   ErrorState,
   Inline,
@@ -26,7 +27,6 @@ import {
   Link as ExternalLink,
   LoadingState,
   MetaLine,
-  PageSection,
   SectionLabel,
   Stack,
   Tabs,
@@ -39,6 +39,9 @@ import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { STATUS_TONE, STATUS_LABEL } from './changesFormat';
 import { sendJson } from '../../lib/writeJson';
 import { PolicyEditor } from '../../components/sdlc/PolicyEditor';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { changesCommandAdapter, matchesChange } from './changesCommands';
 
 type Verdict = 'approve' | 'request_changes' | 'reject';
 interface Review {
@@ -129,27 +132,48 @@ export default function ChangesPage() {
   // A superseded change is not something the reviewer still needs to act on —
   // the action moved to the newer capture — so keep it out of the "needs you"
   // queue even while its row still reads needs_approval/changes_requested.
-  const needsYou = changes.filter(
+  const allNeedsYou = changes.filter(
     (c) => (c.status === 'needs_approval' || c.status === 'changes_requested') && !supersededIds.has(c.id),
   );
-  const rest = changes.filter((c) => !needsYou.includes(c));
+  // Search narrows the sections below; the tab count stays the whole queue.
+  const [query, setQuery] = useState('');
+  const navigate = useNavigate();
+  const shown = changes.filter((c) => matchesChange(c, query));
+  const needsYou = allNeedsYou.filter((c) => shown.includes(c));
+  const rest = shown.filter((c) => !needsYou.includes(c));
+  const adapter = changesCommandAdapter({
+    setQuery, refresh, rows: shown, open: (id) => navigate(`/admin/changes/${id}`),
+  });
 
   const tabItems = canManage
     ? [
-        { id: 'queue', label: `Review queue${needsYou.length ? ` (${needsYou.length})` : ''}` },
+        { id: 'queue', label: `Review queue${allNeedsYou.length ? ` (${allNeedsYou.length})` : ''}` },
         { id: 'policies', label: 'Policies' },
       ]
-    : [{ id: 'queue', label: `Review queue${needsYou.length ? ` (${needsYou.length})` : ''}` }];
+    : [{ id: 'queue', label: `Review queue${allNeedsYou.length ? ` (${allNeedsYou.length})` : ''}` }];
+
+  const onQueue = !(tab === 'policies' && canManage);
 
   return (
-    <PageSection
+    <CollectionCommandPage
+      data-testid="changes-page"
       title="Changes"
       description="Code agents wrote, and the decision each one is waiting on. Every agent change is reviewed and gated before it can ship."
     >
-      <Tabs items={tabItems} value={tab} onValueChange={(id) => setTab(id as 'queue' | 'policies')} size="sm" className="mb-4" />
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
+      <Tabs items={tabItems} value={tab} onValueChange={(id) => setTab(id as 'queue' | 'policies')} size="sm" />
 
-      {tab === 'policies' && canManage ? <PolicyEditor /> : (
+      {!onQueue ? <PolicyEditor /> : (
         <Stack gap="md">
+          <CollectionToolbar
+            label="Change filters"
+            search={{ value: query, onChange: setQuery, placeholder: 'Search title, codebase or initiative', 'aria-label': 'Search changes' }}
+            summary={data ? `${shown.length} of ${changes.length} changes` : undefined}
+            onRefresh={refresh}
+            refreshing={isLoading}
+          />
+
           {/* The list is stale, not gone — rows below are from the last good
               fetch, and the queue may have moved since. */}
           {error && changes.length > 0 && (
@@ -213,6 +237,10 @@ export default function ChangesPage() {
             />
           )}
 
+          {changes.length > 0 && shown.length === 0 && (
+            <EmptyState title="No change matches this search" description="Clear the search to see the whole review queue." />
+          )}
+
           {changes.length === 0 && isLoading && !error && (
             <LoadingState label="Loading the review queue…" />
           )}
@@ -231,7 +259,11 @@ export default function ChangesPage() {
           )}
         </Stack>
       )}
-    </PageSection>
+      </Stack>
+      {/* Policies is an editor, not a collection: the composer drives only the queue. */}
+      {onQueue && <CollectionCommandHost adapter={adapter} />}
+      </Stack>
+    </CollectionCommandPage>
   );
 }
 

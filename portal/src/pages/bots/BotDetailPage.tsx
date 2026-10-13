@@ -420,7 +420,7 @@ export default function BotDetailPage() {
           ) : runs.length === 0 ? (
             <MetaLine size="sm" tone="tertiary" items={['This bot has never fired. Use ▶ Run now, or wait for its trigger.']} />
           ) : (
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Trigger</TableTh>
@@ -650,7 +650,7 @@ export default function BotDetailPage() {
               </Inline>
             </Stack>
           ) : (
-            <Table size="sm">
+            <Table>
               <TableBody>
                 <TableRow>
                   <TableTd className="text-text-tertiary w-32">Model</TableTd>

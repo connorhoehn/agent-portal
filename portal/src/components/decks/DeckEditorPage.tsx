@@ -7,7 +7,7 @@
 import { useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { Banner, Button, DownloadIcon, DropdownMenu, EmptyState, ErrorState, HistoryIcon, Inline, LoadingState, T, VisuallyHidden, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
-import { canSaveDeck, EditorShell, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext } from '@connorhoehnslalom/ui-components/doc-editor';
+import { canSaveDeck, DeckPresentationDialog, DeckReader, EditorShell, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext } from '@connorhoehnslalom/ui-components/doc-editor';
 import { DeckConflictBanner } from './DeckConflictBanner';
 import { deckSaveState } from './deckDocumentModel';
 import { useDeckCollaboration } from './useDeckCollaboration';
@@ -20,8 +20,6 @@ import { useDeckDownload, useDeckSlideTitle } from './useDeckEditorHelpers';
 import type { DeckPreviewResult, DeckSpec } from './deckApi';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { HuddleComposerDock } from '../shell/HuddleComposerDock';
-import { DeckReader } from './DeckReader';
-import { DeckPresentationDialog } from './DeckPresentationDialog';
 import { useComposerFocus } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import './deckReviewLayout.css';
@@ -100,6 +98,8 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const [presentSlideId, setPresentSlideId] = useState<string | null>(null);
   const savingNow = useRef(false);
   const composerFocus = useComposerFocus();
+  // The library reader/presentation take the page's conversation as a callback; absent, their Chat & agent control is disabled.
+  const focusConversation = composerFocus.present ? () => composerFocus.request({ mode: 'agent' }) : undefined;
   const collab = useDeckCollaboration();
   const {
     deck, loadError, reload, revisionId, specRevisionId, setRevisionId, spec, setSpec, specError, conflict, setConflict,
@@ -225,7 +225,7 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     <>
       <DeckPresenceSource deckId={deckId} tenant={tenant} selectedSlideId={collab.selectedSlideId} slideTitle={slideTitle} editing={dirty} onChange={collab.setPresence} />
       {extras.assistant}
-      {cannotEdit ? <DeckReader compactReview={compactReview} fileActions={compactReview ? fileActions : null} spec={spec} preview={preview} previewCurrent={previewCurrent} onRequestPreview={request}
+      {cannotEdit ? <DeckReader onFocusConversation={focusConversation} compactReview={compactReview} fileActions={compactReview ? fileActions : null} spec={spec} preview={preview} previewCurrent={previewCurrent} onRequestPreview={request}
         slideViewers={collab.presence.slideViewers} selectSlideRequest={collab.selectSlideRequest}
         onSelectedSlideChange={collab.setSelectedSlideId} onNavigateSlide={collab.selectSlide} renderFrame={frame}
         footer={ctx => extras.footer ? extras.footer(ctx) : <HuddleComposerDock dock={call.block} page={huddlePage} />}
@@ -249,7 +249,7 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
         className="min-h-0 flex-1" data-testid={`${testIdPrefix}-editor`}
         {...(warnings.length > 0 ? { 'data-warnings': String(warnings.length) } : {})}
       />}
-      {!cannotEdit && <DeckPresentationDialog title={spec.title} slides={presentationSlides}
+      {!cannotEdit && <DeckPresentationDialog onFocusConversation={focusConversation} title={spec.title} slides={presentationSlides}
         open={presenting} onClose={() => setPresenting(false)} slideIndex={presentSlideIndex}
         loading={!previewCurrent && !presentationError} error={presentationError}
         {...(hasSources && presentationError ? { onRetry: () => request(spec) } : {})}

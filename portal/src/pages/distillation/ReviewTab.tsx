@@ -212,7 +212,9 @@ function Claim({
         </Disclosure>
         </Stack>
       </Stack>
-      <Stack gap="none" className="shrink-0 px-5 pb-4">
+      {/* Flush across the content column, as on a Knowledge record: the
+          composer carries its own 20px dock inset, so no wrapper padding. */}
+      <Stack gap="none" className="shrink-0">
         <RecordExplainComposer
           subject={{ kind: row.typeLabel.toLowerCase(), id: row.targetId, title: row.title }}
           referenceLabel="This review"
@@ -351,7 +353,6 @@ function KnowledgeReview() {
     <LoadingState label="Loading review queue…" />
   ) : rows.length === 0 ? (
     <EmptyState
-      size="sm"
       title={state.q ? 'No matches' : state.tab === 'pending' ? 'Nothing waiting' : 'Nothing reviewed yet'}
       description={state.q
         ? 'No sample in this list matches the search.'
@@ -444,7 +445,7 @@ function KnowledgeReview() {
             content: subject ? (
               <SourcesPanel subject={subject} view={state.sourceView} onViewChange={(v) => go({ sourceView: v })} onOpen={openHref} />
             ) : (
-              <EmptyState size="sm" title="No sources to show" description="The sampled record could not be loaded." />
+              <EmptyState title="No sources to show" description="The sampled record could not be loaded." />
             ),
           }]}
         />

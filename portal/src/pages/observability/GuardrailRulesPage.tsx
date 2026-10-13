@@ -23,7 +23,7 @@ import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
   Button, Card, CardHeader, Chip, DataTable, Inline, PageSection,
-  SegmentedControl, Table, TableHead, TableBody, TableRow, TableTh, TableTd,
+  SearchInput, SegmentedControl, Table, TableHead, TableBody, TableRow, TableTh, TableTd,
   type DataTableColumn, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -34,6 +34,9 @@ import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { RowEmpty } from './ReadState';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
 import { relativeTime } from '../../lib/relativeTime';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
+import { ObservabilityCommandSection } from './ObservabilityCommandSection';
+import { OBSERVABILITY_GRAMMARS, guardrailRuleTarget, matchesAny } from './observabilityCommands';
 
 // ── Types (mirrored from middleware/src/routes/guardrails-detail.ts) ───────
 
@@ -126,10 +129,16 @@ function GuardrailRulesPage() {
     `/api/observability/guardrails-detail/by-rule?windowHours=${win.hours}`,
     30_000,
   );
-  const rules = useMemo<ByRuleEntry[]>(() => data?.byRule ?? [], [data]);
+  const allRules = useMemo<ByRuleEntry[]>(() => data?.byRule ?? [], [data]);
   const totalFires = useMemo(
-    () => rules.reduce((acc, r) => acc + r.count, 0),
-    [rules],
+    () => allRules.reduce((acc, r) => acc + r.count, 0),
+    [allRules],
+  );
+  // Local search over whichever lens is showing.
+  const [query, setQuery] = useState('');
+  const rules = useMemo(
+    () => allRules.filter((r) => matchesAny(query, r.ruleName, r.ruleCategory)),
+    [allRules, query],
   );
 
   // ?lens=rule|person — in the URL, like every other lens in this app, so the
@@ -142,13 +151,17 @@ function GuardrailRulesPage() {
       : '',
     30_000,
   );
-  const actors = useMemo<ByActorEntry[]>(() => actorData?.actors ?? [], [actorData]);
+  const allActors = useMemo<ByActorEntry[]>(() => actorData?.actors ?? [], [actorData]);
+  const actors = useMemo(
+    () => allActors.filter((a) => matchesAny(query, a.userName, a.userId, a.topRule, a.topRuleCategory)),
+    [allActors, query],
+  );
 
   const [selectedRule, setSelectedRule] = useState<string | null>(null);
   const interventionsUrl = selectedRule
     ? `/api/observability/guardrails-detail/interventions?ruleName=${encodeURIComponent(selectedRule)}&limit=50`
     : '';
-  const { data: intData } = useFetch<InterventionsResponse>(interventionsUrl, 30_000);
+  const { data: intData, refresh: refreshInterventions } = useFetch<InterventionsResponse>(interventionsUrl, 30_000);
   const interventions = useMemo<GuardrailIntervention[]>(
     () => intData?.interventions ?? [],
     [intData],
@@ -161,6 +174,24 @@ function GuardrailRulesPage() {
   // The row count belongs to the interventions read alone — "0 rows" under
   // a rule that failed to load reads as a rule that never fired.
   const intBlind = readDegraded(intData);
+
+  const adapter = collectionCommandAdapter(OBSERVABILITY_GRAMMARS.guardrails, {
+    setQuery,
+    refresh: () => { refresh(); if (lens === 'person') refreshActors(); if (selectedRule) refreshInterventions(); },
+    scopeNote: 'Search matches rule names and categories, or people and their most-tripped rule, in the loaded window. Group by switches the lens. Open shows one exact rule\'s interventions. Nothing here edits a guardrail.',
+    open(target) {
+      if (lens !== 'rule') throw new Error('Open works on rules. Use "group by rule" first. No changes were made.');
+      if (!data) throw new Error('Wait for the rules to load before opening one.');
+      const { id } = resolveCollectionTarget(target, rules.map(guardrailRuleTarget));
+      setSelectedRule(id);
+      return `Showing interventions for ${id}.`;
+    },
+    extra(phrase) {
+      const next: Lens = phrase === 'group by person' ? 'person' : 'rule';
+      setLens(next); setSelectedRule(null);
+      return { message: next === 'person' ? 'Grouped by person. Search is unchanged.' : 'Grouped by rule. Search is unchanged.' };
+    },
+  });
 
   const actorColumns: DataTableColumn<ByActorEntry>[] = [
     {
@@ -269,12 +300,18 @@ function GuardrailRulesPage() {
     <PageSection
       title="Guardrail Rules"
       description={lens === 'person'
-        ? `${actors.length} ${actors.length === 1 ? 'person' : 'people'} tripped a guardrail · last ${win.label}`
-        : `${totalFires} intervention${totalFires === 1 ? '' : 's'} across ${rules.length} rule${rules.length === 1 ? '' : 's'} · last ${win.label}`}
+        ? `${allActors.length} ${allActors.length === 1 ? 'person' : 'people'} tripped a guardrail · last ${win.label}`
+        : `${totalFires} intervention${totalFires === 1 ? '' : 's'} across ${allRules.length} rule${allRules.length === 1 ? '' : 's'} · last ${win.label}`}
       actions={(
         <Inline align="center" gap="md">
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder={lens === 'person' ? 'Search people' : 'Search rules'}
+            aria-label="Search guardrails"
+            className="w-[200px]"
+          />
           <SegmentedControl
-            size="sm"
             aria-label="Group interventions by"
             value={lens}
             onChange={(v) => { setLens(v as Lens); setSelectedRule(null); }}
@@ -284,6 +321,7 @@ function GuardrailRulesPage() {
         </Inline>
       )}
     >
+      <ObservabilityCommandSection adapter={adapter}>
       {(error || guardrailsDegraded) && (
         <UnavailableNotice
           error={error ?? guardrailsDegraded ?? 'the guardrail query failed'}
@@ -296,7 +334,9 @@ function GuardrailRulesPage() {
 
       {lens === 'person' ? (
         <Card padding="md">
-          {actors.length === 0 ? (
+          {actors.length === 0 && allActors.length > 0 ? (
+            <RowEmpty text="No people match the current search." />
+          ) : actors.length === 0 ? (
             <SmartEmptyState
               title="Nobody has tripped a guardrail"
               detail="This lists the people whose requests a guardrail acted on. It stays empty while nothing is being blocked or anonymized — which on this page is the good outcome. Calls with no signed-in actor (a schedule, or one agent calling another) are left out rather than grouped under an invented user."
@@ -307,7 +347,6 @@ function GuardrailRulesPage() {
             />
           ) : (
             <DataTable<ByActorEntry>
-              size="sm"
               data={actors}
               keyField={(a) => a.userId}
               striped
@@ -317,7 +356,9 @@ function GuardrailRulesPage() {
         </Card>
       ) : (
       <Card padding="md">
-        {rules.length === 0 ? (
+        {rules.length === 0 && allRules.length > 0 ? (
+          <RowEmpty text="No rules match the current search." />
+        ) : rules.length === 0 ? (
           <SmartEmptyState
             title="No interventions yet"
             detail="Rules surface here as soon as Bedrock Guardrails fires a block or anonymize action."
@@ -334,7 +375,7 @@ function GuardrailRulesPage() {
             ]}
           />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Rule</TableTh>
@@ -355,7 +396,7 @@ function GuardrailRulesPage() {
                     onClick={() => setSelectedRule(focused ? null : r.ruleName)}
                     className={focused ? 'bg-surface-hover cursor-pointer' : 'cursor-pointer'}
                   >
-                    <TableTd className="font-mono">{r.ruleName}</TableTd>
+                    <TableTd><T className="font-mono">{r.ruleName}</T></TableTd>
                     <TableTd>
                       {r.ruleCategory ? (
                         <Chip tone={categoryTone(r.ruleCategory)} size="xs">
@@ -403,7 +444,7 @@ function GuardrailRulesPage() {
           {interventions.length === 0 ? (
             <RowEmpty text="No interventions captured for this rule yet." degraded={guardrailsDegraded} />
           ) : (
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Agent</TableTh>
@@ -450,6 +491,7 @@ function GuardrailRulesPage() {
           )}
         </Card>
       )}
+      </ObservabilityCommandSection>
     </PageSection>
   );
 }

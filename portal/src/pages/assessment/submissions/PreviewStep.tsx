@@ -98,7 +98,6 @@ export default function PreviewStep({ parse, onCommitted, onBack }: PreviewStepP
       <DataTable<ParsedRow>
         data={parse.rows}
         keyField={(row) => String(row.row_index)}
-        size="sm"
         striped
         emptyMessage="No data rows found in this file."
         // A bulk form export can carry far more rows than a screen — 25

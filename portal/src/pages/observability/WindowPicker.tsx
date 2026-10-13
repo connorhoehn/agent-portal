@@ -52,7 +52,6 @@ export function WindowPicker({
 }) {
   return (
     <SegmentedControl
-      size="sm"
       aria-label={label}
       value={String(value)}
       onChange={(v) => onChange(Number(v))}

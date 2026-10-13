@@ -7,7 +7,7 @@
 //   GET  /api/observability/approvals/stream            (SSE)
 //   POST /api/observability/approvals/:id/decision      { decision, note? }
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { relativeTime, absoluteTime } from '../../lib/relativeTime';
 import {
   Button,
@@ -18,6 +18,7 @@ import {
   Input,
   LiveRegion,
   PageSection,
+  SearchInput,
   StatusDot,
   Table,
   TableBody,
@@ -31,6 +32,10 @@ import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { streamStatusLabel } from '../../lib/streamStatus';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
+import { ObservabilityCommandSection } from './ObservabilityCommandSection';
+import { RowEmpty } from './ReadState';
+import { OBSERVABILITY_GRAMMARS, approvalTarget, matchesAny } from './observabilityCommands';
 
 interface Approval {
   approvalId: string;
@@ -86,6 +91,11 @@ function ApprovalQueuePage() {
   // a row the first request had already removed, silently no-op'ing against
   // a 404 with nothing on screen to say so.
   const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState('');
+  /** Bumped by the `refresh` command to reread the pending list. */
+  const [reloadKey, setReloadKey] = useState(0);
+  /** Ids whose decision POST is in flight, readable from the reread. */
+  const deciding = useRef(new Set<string>());
 
   // Initial fetch. A 404 genuinely means "no such endpoint yet" and is the one
   // status worth tolerating as empty; everything else is a failed read and has
@@ -105,7 +115,9 @@ function ApprovalQueuePage() {
         const json = (await res.json()) as { approvals?: Approval[] } | Approval[];
         const list = Array.isArray(json) ? json : (json.approvals ?? []);
         if (!cancelled) {
-          setItems(list);
+          // A reread must not resurrect a row whose decision is in flight
+          // (the optimistic remove already took it off the queue).
+          setItems(list.filter((a) => !deciding.current.has(a.approvalId)));
           setSeedError(null);
         }
       } catch (err) {
@@ -115,7 +127,7 @@ function ApprovalQueuePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   // SSE stream. Prepend approvals; drop on decision.
   useEffect(() => {
@@ -173,6 +185,7 @@ function ApprovalQueuePage() {
     const note = notes[id]?.trim() || undefined;
 
     setBusy((prev) => new Set(prev).add(id));
+    deciding.current.add(id);
     // Optimistic remove.
     setItems((prev) => prev.filter((p) => p.approvalId !== id));
     const tid = toastPending(
@@ -199,6 +212,7 @@ function ApprovalQueuePage() {
       toastSuccess(tid, decision === 'APPROVED' ? 'Approved' : 'Rejected');
     }
 
+    deciding.current.delete(id);
     setBusy((prev) => {
       const next = new Set(prev);
       next.delete(id);
@@ -208,11 +222,22 @@ function ApprovalQueuePage() {
 
   const sorted = useMemo(
     () =>
-      [...items].sort(
-        (a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime(),
-      ),
-    [items],
+      items
+        .filter((a) => matchesAny(query, a.approvalId, a.txId, a.agentId, a.reason))
+        .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()),
+    [items, query],
   );
+
+  const adapter = collectionCommandAdapter(OBSERVABILITY_GRAMMARS.approvals, {
+    setQuery,
+    refresh: () => setReloadKey((k) => k + 1),
+    scopeNote: 'Search matches the pending approvals\' agents, transaction IDs and reasons. Open shows one exact approval\'s payload. Approve and reject stay explicit, permission-checked buttons on the row; this input records no decision.',
+    open(target) {
+      const { id } = resolveCollectionTarget(target, sorted.map(approvalTarget));
+      setExpandedPayload((prev) => new Set(prev).add(id));
+      return `Showing the payload for ${id}. No decision was recorded.`;
+    },
+  });
 
   return (
     <PageSection
@@ -226,16 +251,26 @@ function ApprovalQueuePage() {
           />
           <T size="sm">{streamStatusLabel(streaming, connectedOnce)}</T>
           <T size="sm" className="text-text-tertiary">·</T>
-          <T size="sm"><T size="sm" weight="semibold">{sorted.length}</T>&nbsp;pending</T>
+          <T size="sm"><T size="sm" weight="semibold">{items.length}</T>&nbsp;pending</T>
           <LiveRegion
             politeness="polite"
-            message={`${sorted.length} approval${sorted.length === 1 ? '' : 's'} pending`}
+            message={`${items.length} approval${items.length === 1 ? '' : 's'} pending`}
+          />
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search approvals"
+            aria-label="Search approvals"
+            className="w-[200px]"
           />
         </Inline>
       }
     >
+      <ObservabilityCommandSection adapter={adapter}>
       <Card padding="md">
-        {sorted.length === 0 ? (
+        {sorted.length === 0 && items.length > 0 ? (
+          <RowEmpty text="No pending approvals match the current search." />
+        ) : sorted.length === 0 ? (
           <SmartEmptyState
             degraded={seedError}
             degradedWhat="the approval queue"
@@ -251,7 +286,7 @@ function ApprovalQueuePage() {
             ]}
           />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -275,8 +310,8 @@ function ApprovalQueuePage() {
                       <TableTd className="text-text-tertiary whitespace-nowrap" title={absoluteTime(a.requestedAt)}>
                         {relativeTime(a.requestedAt)}
                       </TableTd>
-                      <TableTd className="text-text-tertiary font-mono" title={a.txId}>
-                        {a.txId.length > 12 ? `${a.txId.slice(0, 12)}…` : a.txId}
+                      <TableTd className="text-text-tertiary" title={a.txId}>
+                        <T className="font-mono">{a.txId.length > 12 ? `${a.txId.slice(0, 12)}…` : a.txId}</T>
                       </TableTd>
                       <TableTd className="max-w-[320px] truncate" title={a.reason}>
                         {a.reason}
@@ -345,6 +380,7 @@ function ApprovalQueuePage() {
           </Table>
         )}
       </Card>
+      </ObservabilityCommandSection>
     </PageSection>
   );
 }

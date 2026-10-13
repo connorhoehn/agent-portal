@@ -19,7 +19,11 @@ jest.mock('../../lib/authz.js', () => ({
     mockGateActions.push(action);
     return (_req: unknown, _res: unknown, next: () => void) => next();
   },
+  resolveSession: jest.fn(),
 }));
+
+jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
+jest.mock('../../lib/initiative-comments.js', () => ({ postInitiativeWorkComment: jest.fn() }));
 
 jest.mock('../../providers/activity.js', () => ({
   getProjectActivitySeries: jest.fn(),
@@ -54,7 +58,13 @@ import {
   type WorkItem,
 } from '../../providers/work-items.js';
 import { getProjectActivitySeries } from '../../providers/activity.js';
+import { resolveSession } from '../../lib/authz.js';
+import { getUser } from '../../providers/identity.js';
+import { postInitiativeWorkComment } from '../../lib/initiative-comments.js';
 
+const resolveSessionMock = resolveSession as unknown as jest.Mock;
+const getUserMock = getUser as unknown as jest.Mock;
+const postCommentMock = postInitiativeWorkComment as unknown as jest.Mock;
 const seriesMock = getProjectActivitySeries as unknown as jest.Mock;
 const searchMock = searchWorkItems as unknown as jest.Mock;
 const treeMock = getProjectWorkTree as unknown as jest.Mock;
@@ -97,6 +107,7 @@ function buildApp() {
 beforeEach(() => {
   [searchMock, treeMock, activityMock, decisionsMock, personWorkMock, getMock,
     createMock, updateMock, openCrMock, cycleMock, projectExistsMock, personExistsMock, seriesMock,
+    resolveSessionMock, getUserMock, postCommentMock,
   ].forEach((m) => m.mockReset());
   projectExistsMock.mockResolvedValue(true);
   personExistsMock.mockResolvedValue(true);
@@ -501,5 +512,57 @@ describe('PATCH status transitions', () => {
     const res = await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'bogus' });
     expect(res.status).toBe(400);
     expect(getMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── Initiative discussion comments ───────────────────────────────────────────
+
+describe('POST /api/graph/projects/:id/discussion/comments', () => {
+  const URL = '/api/graph/projects/p-observability/discussion/comments';
+  const GOOD = { body: '  Collector rollout looks good  ', workItemId: 'wi-obs-e1-s1', clientDeliveryId: 'del_1-a' };
+  const USER = { id: 'u-rachel', displayName: 'Rachel Kowalski', personId: 'p-008' };
+
+  beforeEach(() => {
+    resolveSessionMock.mockReturnValue({ sub: 'u-rachel' });
+    getUserMock.mockResolvedValue(USER);
+  });
+
+  it('400s unknown keys', async () => {
+    const res = await request(buildApp()).post(URL).send({ ...GOOD, extra: 1 });
+    expect(res.status).toBe(400);
+    expect(postCommentMock).not.toHaveBeenCalled();
+  });
+
+  it('400s a bad clientDeliveryId', async () => {
+    const res = await request(buildApp()).post(URL).send({ ...GOOD, clientDeliveryId: 'has spaces!' });
+    expect(res.status).toBe(400);
+    expect(postCommentMock).not.toHaveBeenCalled();
+  });
+
+  it('401s without a session', async () => {
+    resolveSessionMock.mockReturnValue(null);
+    const res = await request(buildApp()).post(URL).send(GOOD);
+    expect(res.status).toBe(401);
+    expect(postCommentMock).not.toHaveBeenCalled();
+  });
+
+  it('401s when the session user no longer exists', async () => {
+    getUserMock.mockResolvedValue(null);
+    const res = await request(buildApp()).post(URL).send(GOOD);
+    expect(res.status).toBe(401);
+    expect(postCommentMock).not.toHaveBeenCalled();
+  });
+
+  it('201s with the provider message and passes the signed-in identity', async () => {
+    const message = { id: 'm-1', body: 'Collector rollout looks good' };
+    postCommentMock.mockResolvedValue(message);
+    const res = await request(buildApp()).post(URL).send(GOOD);
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(message);
+    expect(postCommentMock).toHaveBeenCalledWith({
+      projectId: 'p-observability', workItemId: 'wi-obs-e1-s1',
+      userId: 'u-rachel', displayName: 'Rachel Kowalski', personId: 'p-008',
+      body: 'Collector rollout looks good', deliveryId: 'del_1-a',
+    });
   });
 });

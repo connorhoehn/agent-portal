@@ -23,6 +23,7 @@ import {
   Card,
   CatalogGrid,
   Chip,
+  CollectionToolbar,
   ConfirmDialog,
   EmptyState,
   Inline,
@@ -30,7 +31,6 @@ import {
   Link as ExternalLink,
   MetaLine,
   Modal,
-  PageSection,
   SectionLabel,
   Select,
   Stack,
@@ -47,6 +47,9 @@ import { usd } from '../../lib/format';
 import { durationLabel, relativeTime } from '../../lib/relativeTime';
 import { ConnectionSetup } from '../../components/codebases/ConnectionSetup';
 import { RepoDiscovery } from '../../components/codebases/RepoDiscovery';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { codebasesCommandAdapter, matchesCodebase } from './agentProjectsCommands';
 
 
 interface Run {
@@ -110,7 +113,7 @@ export default function AgentProjectsPage() {
   // Deep links from the rest of the SDLC loop: /admin/projects?project=<id>
   // scrolls to that codebase, &run=<id> highlights the run that a change was
   // captured from — so "run 1a2b3c4d" on a change card lands on the evidence.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const focusProject = searchParams.get('project');
   const focusRun = searchParams.get('run');
   // The list API carries only each project's 5 newest runs; a linked run may
@@ -342,40 +345,56 @@ export default function AgentProjectsPage() {
     return acc;
   }, {});
 
+  const [query, setQuery] = useState('');
+  const shown = projects.filter((p) => matchesCodebase(p, query));
+  const adapter = codebasesCommandAdapter({
+    setQuery, refresh, rows: shown,
+    focus: (id) => {
+      const next = new URLSearchParams(searchParams);
+      next.set('project', id); next.delete('run');
+      setSearchParams(next);
+    },
+  });
+
   return (
-    <PageSection
+    <CollectionCommandPage
+      data-testid="agent-projects-page"
       title="Codebases"
       description="Repositories that agents work on, and the initiatives they deliver. What matters here is what the bots did — not the human collaboration furniture."
+      headerActions={
+        <Inline align="center" gap="sm" wrap>
+          {canDevbox && (
+            <>
+              <Button variant="primary" size="sm" onClick={() => setLinking((v) => !v)}>
+                {linking ? 'Cancel' : '+ Link a repository'}
+              </Button>
+              <Button
+                variant="secondary" size="sm"
+                disabled={githubConnections.length === 0}
+                title={githubConnections.length === 0
+                  ? 'Connect GitHub first — discovery browses what a credential can see.'
+                  : 'Browse repositories by connection and organization'}
+                onClick={() => setDiscovering(true)}
+              >
+                Discover
+              </Button>
+            </>
+          )}
+          <Button variant="secondary" size="sm" onClick={() => setShowConnections((v) => !v)}>
+            {showConnections ? 'Hide connections' : 'Connections'}
+          </Button>
+        </Inline>
+      }
     >
-      <Inline align="center" gap="sm" wrap className="mb-4">
-        {canDevbox && (
-          <>
-            <Button variant="primary" size="sm" onClick={() => setLinking((v) => !v)}>
-              {linking ? 'Cancel' : '+ Link a repository'}
-            </Button>
-            <Button
-              variant="secondary" size="sm"
-              disabled={githubConnections.length === 0}
-              title={githubConnections.length === 0
-                ? 'Connect GitHub first — discovery browses what a credential can see.'
-                : 'Browse repositories by connection and organization'}
-              onClick={() => setDiscovering(true)}
-            >
-              Discover
-            </Button>
-          </>
-        )}
-        <Button variant="secondary" size="sm" onClick={() => setShowConnections((v) => !v)}>
-          {showConnections ? 'Hide connections' : 'Connections'}
-        </Button>
-        {githubConnections.length === 0 && canIngest && (
-          <Inline align="center" gap="xs">
-            <T as="span" size="xs" tone="tertiary">No GitHub connection yet</T>
-            <Button variant="ghost" size="sm" onClick={() => setShowConnections(true)}>Add one here</Button>
-            <T as="span" size="xs" tone="tertiary">— Knowledge → Sources also manages these; ingest shares the vault.</T>
-          </Inline>
-        )}
-      </Inline>
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
+      {githubConnections.length === 0 && canIngest && (
+        <Inline align="center" gap="xs">
+          <T as="span" size="xs" tone="tertiary">No GitHub connection yet</T>
+          <Button variant="ghost" size="sm" onClick={() => setShowConnections(true)}>Add one here</Button>
+          <T as="span" size="xs" tone="tertiary">— Knowledge → Sources also manages these; ingest shares the vault.</T>
+        </Inline>
+      )}
 
       {showConnections && (
         <ConnectionSetup
@@ -385,7 +404,7 @@ export default function AgentProjectsPage() {
       )}
 
       {linking && (
-        <Card padding="md" className="mb-4">
+        <Card padding="md">
           <Stack gap="sm">
             <Inline gap="sm" align="end" wrap>
               <Stack as="label" gap="xs">
@@ -443,7 +462,15 @@ export default function AgentProjectsPage() {
           what="the codebase registry"
           source="Codebases are read from /api/agent-projects"
           onRetry={refresh}
-          className="mb-4"
+        />
+      )}
+
+      {!projectsFailure && projects.length > 0 && (
+        <CollectionToolbar
+          label="Codebase filters"
+          search={{ value: query, onChange: setQuery, placeholder: 'Search repository, initiative or owner', 'aria-label': 'Search codebases' }}
+          summary={`${shown.length} of ${projects.length} codebases`}
+          onRefresh={refresh}
         />
       )}
 
@@ -452,9 +479,11 @@ export default function AgentProjectsPage() {
           title="No codebases linked"
           body="Link a repository to clone it into a workspace and run agents against it. Public repositories need no credential."
         />
-      ) : projectsFailure ? null : (
+      ) : projectsFailure ? null : shown.length === 0 ? (
+        <EmptyState title="No codebase matches this search" body="Clear the search to see every linked codebase." />
+      ) : (
         <CatalogGrid columns={2}>
-          {projects.map((p) => {
+          {shown.map((p) => {
             const box = boxes.find((b) => b.sessionId === p.sessionId);
             const inWorkspace = Boolean(p.clonedAt && box);
             const focused = p.id === focusProject;
@@ -662,6 +691,9 @@ export default function AgentProjectsPage() {
         onConfirm={() => { if (confirmUnlink) void unlink(confirmUnlink); }}
         onCancel={() => setConfirmUnlink(null)}
       />
-    </PageSection>
+      </Stack>
+      <CollectionCommandHost adapter={adapter} />
+      </Stack>
+    </CollectionCommandPage>
   );
 }

@@ -22,6 +22,7 @@ import {
   LoadingState,
   PageSection,
   RedoIcon,
+  SearchInput,
   Stack,
   Toolbar,
   ToolbarGroup,
@@ -36,6 +37,9 @@ import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { writeJson } from '../../lib/writeJson';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
+import { FINDINGS_GRAMMAR, findingStatusValue } from './workCollectionCommands';
 import {
   filterFindings, promoteGrantBlock, sweepLabel, type FindingStatus, type ScopedSprintLike,
 } from './findingsFilter';
@@ -116,6 +120,28 @@ export default function FindingsPage() {
     next.delete(key);
     setSearchParams(next, { replace: true });
   };
+  // The findings search IS the `q` deep-link filter: the toolbar box, the
+  // removable chip and the composer read and write the same URL param.
+  const setFindingQuery = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value.trim()) next.set('q', value); else next.delete('q');
+    setSearchParams(next, { replace: true });
+  };
+  const findingsAdapter = collectionCommandAdapter(FINDINGS_GRAMMAR, {
+    setQuery: setFindingQuery,
+    // `reset` passes '': back to Open, and the sweep/search deep-link filters
+    // go with it (one URL write, so the two resets cannot race).
+    setFilter: (value) => {
+      setFindingStatus(findingStatusValue(value) as FindingStatus);
+      if (!value) {
+        const next = new URLSearchParams(searchParams);
+        next.delete('q'); next.delete('sweep');
+        setSearchParams(next, { replace: true });
+      }
+    },
+    refresh: refreshFindings, id: 'findings-commands',
+    scopeNote: 'Commands search the loaded sweep findings and pick a status; they never run sweeps, promote, analyse, dismiss or requeue, and the dead-letter table is unaffected.',
+  });
   const findings = useMemo(() => {
     const byStatus = filterFindings(findingsData?.findings ?? [], findingStatus);
     const q = qParam?.toLowerCase();
@@ -294,7 +320,6 @@ export default function FindingsPage() {
           data={deadLettered}
           columns={dlqColumns}
           keyField={(j) => j.id}
-          size="sm"
           onRowClick={(j) => navigate(`/iq/work/${j.id}`)}
           rowActions={canRequeue ? (j) => (
             <IconButton
@@ -311,154 +336,160 @@ export default function FindingsPage() {
         />
       </Stack>
 
-      {/* ── Sweep findings, grouped. The group header is the unit of
-             attention; the rows are the drill-in. ── */}
-      <Toolbar wrap aria-label="Finding filters">
-        <ToolbarGroup aria-label="Status">
-          <ToolbarLabel>Findings</ToolbarLabel>
-          {(['open', 'promoted', 'resolved', 'dismissed'] as const).map((st) => (
-            <FilterChip key={st} active={findingStatus === st} onClick={() => setFindingStatus(st)} size="sm">
-              {st}
-            </FilterChip>
-          ))}
-        </ToolbarGroup>
-        {(sweepParam || qParam || findingParam) && (
-          <ToolbarGroup aria-label="Deep-link filters">
-            {sweepParam && (
-              <FilterChip active size="sm" onClick={() => clearParam('sweep')}>
-                Sweep: {sweepLabel(sweepParam)} ×
+      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+        {/* ── Sweep findings, grouped. The group header is the unit of
+               attention; the rows are the drill-in. ── */}
+        <Toolbar wrap aria-label="Finding filters">
+          <ToolbarGroup aria-label="Status">
+            <ToolbarLabel>Findings</ToolbarLabel>
+            {(['open', 'promoted', 'resolved', 'dismissed'] as const).map((st) => (
+              <FilterChip key={st} active={findingStatus === st} onClick={() => setFindingStatus(st)} size="sm">
+                {st}
               </FilterChip>
-            )}
-            {qParam && (
-              <FilterChip active size="sm" onClick={() => clearParam('q')}>
-                “{qParam}” ×
-              </FilterChip>
-            )}
-            {findingParam && (
-              <FilterChip active size="sm" onClick={() => clearParam('finding')}>
-                Finding highlighted ×
-              </FilterChip>
-            )}
+            ))}
           </ToolbarGroup>
-        )}
-      </Toolbar>
-
-      {findingsFailure && (
-        <UnavailableNotice
-          error={findingsFailure}
-          what="findings"
-          source="Findings are read from Aurora"
-          onRetry={refreshFindings}
-          className="mb-4"
-        />
-      )}
-
-      {!findingsFailure && (
-      <Card padding="none" className="overflow-hidden">
-        {findingsLoadingFirst ? (
-          // Findings render as grouped, custom rows (CollapsibleSection +
-          // hand-rolled row markup below), not a DataTable — there's no
-          // `loading` prop to hand this to, so the frame (toolbar, Card)
-          // stays mounted and this is the narrowest honest stand-in.
-          <LoadingState label="Loading findings…" />
-        ) : findings.length === 0 ? (
-          <EmptyState
-            title="Nothing here"
-            description={findingStatus === 'open'
-              ? canManageFindings
-                ? 'Nothing open. Sweeps run every 6 hours, or run one now.'
-                : 'Nothing open. Sweeps run automatically every 6 hours.'
-              : findingStatus === 'resolved'
-                ? 'Nothing resolved yet. A finding resolves when a later sweep stops reproducing it.'
-                : `No ${findingStatus} findings.`}
-            {...(findingStatus === 'open' && canManageFindings
-              ? { actionLabel: 'Run sweeps now', onAction: () => void runSweeps() }
-              : {})}
-          />
-        ) : grouped.map(([sweep, items]) => {
-          const worst = items.some((f) => f.severity === 'critical') ? 'critical'
-            : items.some((f) => f.severity === 'warning') ? 'warning' : 'info';
-          return (
-            <CollapsibleSection
-              key={sweep}
-              className="rounded-none border-x-0 border-t-0 last:border-b-0"
-              defaultOpen={items.some((f) => f.id === findingParam)}
-              badge={<SeverityChip severity={worst} />}
-              title={
-                <Inline align="center" gap="sm">
-                  <T className="text-[12.5px] font-semibold text-text-primary">{sweepLabel(sweep)}</T>
-                  <T className="text-[11px] font-normal text-text-tertiary">
-                    {items.length} finding{items.length === 1 ? '' : 's'}
-                  </T>
-                </Inline>
-              }
-            >
-              {/* Bounded to ten per press so the cost of a click stays
-                  predictable; the toast says how many remain. */}
-              {canManageFindings && findingStatus === 'open' && items.some((f) => f.entityType === 'document') && (
-                <Stack gap="none" align="start" className="px-3.5 pt-2.5 pl-10">
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={(e) => { e.stopPropagation(); void analyzeBatch(sweep, items.length); }}
-                  >
-                    Find links in {Math.min(items.length, 10)} of these
-                  </Button>
-                </Stack>
+          <ToolbarGroup aria-label="Search">
+            <SearchInput size="sm" value={searchParams.get('q') ?? ''} onChange={setFindingQuery} placeholder="Search findings…" aria-label="Search findings" className="w-56 max-w-full" />
+          </ToolbarGroup>
+          {(sweepParam || qParam || findingParam) && (
+            <ToolbarGroup aria-label="Deep-link filters">
+              {sweepParam && (
+                <FilterChip active size="sm" onClick={() => clearParam('sweep')}>
+                  Sweep: {sweepLabel(sweepParam)} ×
+                </FilterChip>
               )}
+              {qParam && (
+                <FilterChip active size="sm" onClick={() => clearParam('q')}>
+                  “{qParam}” ×
+                </FilterChip>
+              )}
+              {findingParam && (
+                <FilterChip active size="sm" onClick={() => clearParam('finding')}>
+                  Finding highlighted ×
+                </FilterChip>
+              )}
+            </ToolbarGroup>
+          )}
+        </Toolbar>
 
-              {items.map((f) => (
-                <Inline
-                  key={f.id}
-                  id={`finding-${f.id}`}
-                  align="center"
-                  gap="sm"
-                  className={`px-3.5 py-2.5 pl-10 border-t border-border min-w-0 ${
-                    f.id === findingParam ? 'bg-primary/10 ring-1 ring-inset ring-primary' : 'bg-surface-hover/30'
-                  }`}
-                >
-                  <SeverityChip severity={f.severity} />
-                  <Stack gap="none" className="flex-1 min-w-0">
-                    <T className="text-[12.5px] text-text-primary truncate" title={f.title}>{f.title}</T>
-                    {f.detail && <T className="text-[11px] text-text-tertiary truncate" title={f.detail}>{f.detail}</T>}
+        {findingsFailure && (
+          <UnavailableNotice
+            error={findingsFailure}
+            what="findings"
+            source="Findings are read from Aurora"
+            onRetry={refreshFindings}
+            className="mb-4"
+          />
+        )}
+
+        {!findingsFailure && (
+        <Card padding="none" className="overflow-hidden">
+          {findingsLoadingFirst ? (
+            // Findings render as grouped, custom rows (CollapsibleSection +
+            // hand-rolled row markup below), not a DataTable — there's no
+            // `loading` prop to hand this to, so the frame (toolbar, Card)
+            // stays mounted and this is the narrowest honest stand-in.
+            <LoadingState label="Loading findings…" />
+          ) : findings.length === 0 ? (
+            <EmptyState
+              title="Nothing here"
+              description={findingStatus === 'open'
+                ? canManageFindings
+                  ? 'Nothing open. Sweeps run every 6 hours, or run one now.'
+                  : 'Nothing open. Sweeps run automatically every 6 hours.'
+                : findingStatus === 'resolved'
+                  ? 'Nothing resolved yet. A finding resolves when a later sweep stops reproducing it.'
+                  : `No ${findingStatus} findings.`}
+              {...(findingStatus === 'open' && canManageFindings
+                ? { actionLabel: 'Run sweeps now', onAction: () => void runSweeps() }
+                : {})}
+            />
+          ) : grouped.map(([sweep, items]) => {
+            const worst = items.some((f) => f.severity === 'critical') ? 'critical'
+              : items.some((f) => f.severity === 'warning') ? 'warning' : 'info';
+            return (
+              <CollapsibleSection
+                key={sweep}
+                className="rounded-none border-x-0 border-t-0 last:border-b-0"
+                defaultOpen={items.some((f) => f.id === findingParam)}
+                badge={<SeverityChip severity={worst} size="md" />}
+                title={
+                  <Inline align="center" gap="sm">
+                    <T size="sm" weight="semibold" tone="primary">{sweepLabel(sweep)}</T>
+                    <T size="xs" weight="normal" tone="tertiary">
+                      {items.length} finding{items.length === 1 ? '' : 's'}
+                    </T>
+                  </Inline>
+                }
+              >
+                {/* Bounded to ten per press so the cost of a click stays
+                    predictable; the toast says how many remain. */}
+                {canManageFindings && findingStatus === 'open' && items.some((f) => f.entityType === 'document') && (
+                  <Stack gap="none" align="start" className="px-3.5 pt-2.5 pl-10">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={(e) => { e.stopPropagation(); void analyzeBatch(sweep, items.length); }}
+                    >
+                      Find links in {Math.min(items.length, 10)} of these
+                    </Button>
                   </Stack>
-                  {f.jobId ? (
-                    <Link to={`/iq/work/${f.jobId}`} className="text-[11px] text-primary no-underline hover:underline shrink-0">
-                      see the work →
-                    </Link>
-                  ) : canManageFindings && findingStatus === 'open' ? (
-                    <Inline gap="xs" className="shrink-0">
-                      {f.entityType === 'document' && (
+                )}
+
+                {items.map((f) => (
+                  <Inline
+                    key={f.id}
+                    id={`finding-${f.id}`}
+                    align="center"
+                    gap="sm"
+                    className={`px-3.5 py-2.5 pl-10 border-t border-border min-w-0 ${
+                      f.id === findingParam ? 'bg-primary/10 ring-1 ring-inset ring-primary' : 'bg-surface-hover/30'
+                    }`}
+                  >
+                    <SeverityChip severity={f.severity} />
+                    <Stack gap="none" className="flex-1 min-w-0">
+                      <T className="text-[12.5px] text-text-primary truncate" title={f.title}>{f.title}</T>
+                      {f.detail && <T className="text-[11px] text-text-tertiary truncate" title={f.detail}>{f.detail}</T>}
+                    </Stack>
+                    {f.jobId ? (
+                      <Link to={`/iq/work/${f.jobId}`} className="text-[11px] text-primary no-underline hover:underline shrink-0">
+                        see the work →
+                      </Link>
+                    ) : canManageFindings && findingStatus === 'open' ? (
+                      <Inline gap="xs" className="shrink-0">
+                        {f.entityType === 'document' && (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => void analyze(f)}
+                            title="Read the document and propose the graph links it is missing"
+                          >
+                            Find the links
+                          </Button>
+                        )}
+                        <PromoteAction
+                          block={promoteGrantBlock(f, isSme, mySprints?.sprints ?? null)}
+                          onPromote={() => void promote(f)}
+                        />
                         <Button
                           size="sm"
-                          variant="primary"
-                          onClick={() => void analyze(f)}
-                          title="Read the document and propose the graph links it is missing"
+                          variant="danger"
+                          onClick={() => void dismiss(f)}
+                          title="Stop reporting this unless it changes"
                         >
-                          Find the links
+                          Dismiss
                         </Button>
-                      )}
-                      <PromoteAction
-                        block={promoteGrantBlock(f, isSme, mySprints?.sprints ?? null)}
-                        onPromote={() => void promote(f)}
-                      />
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        onClick={() => void dismiss(f)}
-                        title="Stop reporting this unless it changes"
-                      >
-                        Dismiss
-                      </Button>
-                    </Inline>
-                  ) : null}
-                </Inline>
-              ))}
-            </CollapsibleSection>
-          );
-        })}
-      </Card>
-      )}
+                      </Inline>
+                    ) : null}
+                  </Inline>
+                ))}
+              </CollapsibleSection>
+            );
+          })}
+        </Card>
+        )}
+        <CollectionCommandHost adapter={findingsAdapter} />
+      </Stack>
     </PageSection>
   );
 }

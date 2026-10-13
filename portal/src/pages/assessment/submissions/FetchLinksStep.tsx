@@ -99,7 +99,6 @@ export default function FetchLinksStep({ commit, onContinue, onBack, onCompletio
           <DataTable<CommitLink>
             data={result.links}
             keyField={(link) => `${result.envelope_id}::${link.url}`}
-            size="sm"
             emptyMessage="No evidence links on this submission."
             // One submission's evidence links — small today, bounded
             // regardless of how many a form ends up carrying.

@@ -304,7 +304,6 @@ function CalibrationPage() {
       {/* Header */}
       <StatStrip
         variant="line"
-        size="sm"
         aria-label="Calibration summary"
         items={[
           { label: `active case${cases.length === 1 ? '' : 's'}`, value: cases.length },
@@ -479,7 +478,7 @@ function CalibrationPage() {
         {worstResults.length === 0 ? (
           <RowEmpty text="No disagreements yet — run a calibration first." degraded={calibrationDegraded} />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -569,7 +568,7 @@ function CalibrationPage() {
             degraded={calibrationDegraded}
           />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>

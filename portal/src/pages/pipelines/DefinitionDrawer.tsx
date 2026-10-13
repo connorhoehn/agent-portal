@@ -156,7 +156,6 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
           <DetailSection title="Steps" hint={`${def.steps.length}`}>
             <DataTable
               frameless
-              size="sm"
               data={def.steps.map((s, i) => ({ ...s, n: i + 1 }))}
               columns={STEP_COLUMNS}
               keyField={(s) => s.id}
@@ -167,7 +166,6 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
             <DetailSection title="Dry-runs" hint={`${data.dryRuns.length}`} data-testid="pipelines-dry-runs">
               <DataTable
                 frameless
-                size="sm"
                 data={data.dryRuns}
                 columns={DRY_RUN_COLUMNS}
                 keyField={(r) => r.id}
@@ -179,7 +177,6 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
           <DetailSection title="Recent runs" hint={`${data?.runs.length ?? 0}`}>
             <DataTable
               frameless
-              size="sm"
               data={data?.runs ?? []}
               columns={RUN_COLUMNS}
               keyField={(r) => r.id}

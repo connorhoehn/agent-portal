@@ -98,7 +98,6 @@ export function TargetsTable({
 
   return (
     <DataTable
-      size="sm"
       data={targets}
       columns={columns}
       keyField={(t) => t.id}

@@ -31,7 +31,7 @@ export function PlaneGroupPane({ org, group: ref, base }: { org: PlaneOrg; group
     if (org.groupsLoading) return <CommunicationAccessState state="loading" title="Loading your discussion…" detail="Finding this group in your workspace." />;
     if (org.groupsError) return <CommunicationAccessState state="unavailable" title="Your groups could not be loaded"
       detail="The group list is unavailable. Try again to open this discussion." onRetry={org.refreshGroups} />;
-    return <EmptyState size="sm" align="start" testId="plane-group-missing" title="Not one of your groups"
+    return <EmptyState align="start" testId="plane-group-missing" title="Not one of your groups"
         description={`This plane lists your own ${GROUP_NOUN[org.tenant]}. Open the page itself to read its discussion.`}
         actionLabel="Open page" onAction={() => navigate(groupPageHref(ref))} />;
   }
@@ -62,7 +62,7 @@ export function PlaneGroupPane({ org, group: ref, base }: { org: PlaneOrg; group
       )}
       <ChannelThread key={groupDiscussionChannel(group)} channel={groupDiscussionChannel(group)} maySend={canPost} title={GROUP_DISCUSSION_LABEL[group.kind]}
         confirmHistory composer={{ answersFocus: true }}
-        emptyState={<EmptyState size="sm" align="start" testId="scope-discussion-empty"
+        emptyState={<EmptyState align="start" testId="scope-discussion-empty"
           title={canPost ? 'Start the conversation' : 'No messages yet'}
           description={canPost ? 'Use the composer below to discuss this group’s work.' : 'This group’s discussion has no messages yet.'} />}
         notices pins={{ canPin: canPost }} attachments={canPost} reactions placeholder={`Message the ${GROUP_DISCUSSION_LABEL[group.kind].toLowerCase()}…`}

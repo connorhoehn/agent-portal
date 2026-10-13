@@ -168,7 +168,6 @@ function ProjectsPage() {
               wraps between clusters, never inside one. */}
           <StatStrip
             variant="line"
-            size="sm"
             aria-label="Program rollup"
             items={[
               {
@@ -241,7 +240,6 @@ function MineEmpty({
     <Stack gap="none" className="pt-9">
       <EmptyState
         align="start"
-        size="sm"
         testId="mine-empty"
         title={copy.heading}
         description={<Lines lines={copy.lines} />}

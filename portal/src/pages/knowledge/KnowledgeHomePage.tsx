@@ -20,7 +20,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   Banner, Button, Chip, DataTable, Inline, InlineAlert, MetaLine, PageSection,
-  SearchInput, SegmentedControl, StatStrip, T, Toolbar,
+  SearchInput, SegmentedControl, Stack, StatStrip, T, Toolbar,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
@@ -32,6 +32,8 @@ import {
 } from '../../lib/toastStore';
 import { DocumentDropzone } from '../../components/knowledge/DocumentDropzone';
 import { ShareLinks } from '../../components/knowledge/ShareLinks';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { knowledgeRegistryAdapter } from './knowledgeCommands';
 import {
   DRIFT_LABEL, DRIFT_TONE, adoptableEntries, bytes, computeSyncGap, filterEntries,
   lastSyncLabel, summarizeEntries, when, type EntryStatusFilter, type Reconciled,
@@ -84,6 +86,10 @@ export default function KnowledgeHomePage() {
     () => filterEntries(entries, { search, status: statusFilter }),
     [entries, search, statusFilter],
   );
+
+  const commandAdapter = knowledgeRegistryAdapter({
+    setSearch, setStatus: setStatusFilter, refresh: refreshRec, rows: filtered, navigate: (path) => void navigate(path),
+  });
 
   const stored = storage?.totalObjects ?? 0;
   const {
@@ -220,6 +226,9 @@ export default function KnowledgeHomePage() {
       )}
 
       {/* ── One filter row, then the registry list — above the fold ──────── */}
+      {/* The registry list is this section's collection: its toolbar, table
+          and command composer share one boundary (docs/layout-cascade.md). */}
+      <Stack gap="none" className="mb-5 min-w-0" data-collection-command-boundary="embedded">
       <Toolbar
         className="mb-2 rounded-lg"
         end={(
@@ -243,11 +252,10 @@ export default function KnowledgeHomePage() {
              the way a hard pixel width can. */
           className="w-full max-w-xs"
         />
-        <SegmentedControl options={STATUS_OPTIONS} value={statusFilter} onChange={(v) => setStatusFilter(v as EntryStatusFilter)} size="sm" />
+        <SegmentedControl options={STATUS_OPTIONS} value={statusFilter} onChange={(v) => setStatusFilter(v as EntryStatusFilter)} />
       </Toolbar>
 
       <DataTable<Reconciled>
-        size="sm"
         data={filtered}
         columns={columns}
         keyField={(e) => e.id ?? e.slug ?? e.liveKbId ?? e.name}
@@ -339,14 +347,15 @@ export default function KnowledgeHomePage() {
           }
           return null;
         }}
-        className="mb-5"
+        className="mb-2"
       />
+      <CollectionCommandHost adapter={commandAdapter} />
+      </Stack>
 
       {/* ── Right now ────────────────────────────────────────────────────── */}
       <StatStrip
         aria-label="Knowledge, right now"
         variant="line"
-        size="sm"
         className="mb-5"
         items={[
           {
@@ -461,7 +470,6 @@ export default function KnowledgeHomePage() {
       <StatStrip
         aria-label="The pipeline"
         variant="line"
-        size="sm"
         className="mb-3"
         items={[
           {

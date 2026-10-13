@@ -49,7 +49,7 @@ export default function QueuesPage() {
     {data?.backend === 'memory' && <Banner variant="warning">These queues run inside the app process. Their messages do not survive a restart.</Banner>}
     {error && <UnavailableNotice error={error} what="queue metadata" source="Queue transport" onRetry={refresh} />}
     {data && !error && <>
-      <StatStrip variant="line" size="sm" items={[
+      <StatStrip variant="line" items={[
         { label: 'registered queues', value: rows.length }, { label: 'ready', value: count(queueTotal(work, 'ready')) },
         { label: 'in flight', value: count(queueTotal(work, 'inFlight')) }, { label: 'delayed', value: count(queueTotal(work, 'delayed')) },
         { label: 'dead-letter ready', value: count(queueTotal(dlqs, 'ready')) },

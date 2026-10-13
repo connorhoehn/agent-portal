@@ -2,12 +2,13 @@
 // threads — where the agents' ideation stands, which threads are waiting on a
 // human, what has been ratified into the knowledge base.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams, useParams } from 'react-router';
 import { StackedCatalogLayout } from '../../components/shell/StackedCatalogLayout';
 import DesignThreadPage from './DesignThreadPage';
 import {
   Chip,
+  CollectionToolbar,
   DataTable,
   EmptyState,
   LoadingState,
@@ -20,6 +21,9 @@ import { useUrlState } from '../../lib/useUrlState';
 import { relativeTime } from '../../lib/relativeTime';
 import { DESIGNS_SOURCE, STATUS_LABEL, STATUS_TONE, filterDesigns, reviewStateLine } from './designFormat';
 import type { DesignReview, DesignStatus } from './types';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
+import { DESIGN_GRAMMAR, matchesDesign } from './designCommands';
 
 const FILTERS: Array<{ value: string; label: string }> = [
   { value: 'all', label: 'All' },
@@ -34,7 +38,7 @@ export default function DesignsPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const initiative = searchParams.get('initiative') ?? '';
-  const [filter] = useUrlState<string>(
+  const [filter, setFilter] = useUrlState<string>(
     'status',
     (raw) => (raw && FILTERS.some((f) => f.value === raw) ? raw : 'all'),
     (v) => (v === 'all' ? null : v),
@@ -44,7 +48,22 @@ export default function DesignsPage() {
     `/api/designs${initiative ? `?initiative=${encodeURIComponent(initiative)}` : ''}`, 30_000);
   const designsFailure = error ?? degraded;
 
-  const reviews = useMemo(() => filterDesigns(data?.reviews ?? [], filter), [data, filter]);
+  // One search state for the toolbar box and the composer.
+  const [query, setQuery] = useState('');
+  const reviews = useMemo(
+    () => filterDesigns(data?.reviews ?? [], filter).filter((review) => matchesDesign(review, query)),
+    [data, filter, query],
+  );
+  const openDesign = (designId: string) => navigate(`/iq/designs/${encodeURIComponent(designId)}?${searchParams}`);
+  const adapter = collectionCommandAdapter(DESIGN_GRAMMAR, {
+    setQuery, setFilter: (value) => setFilter(value || 'all'), refresh, id: 'designs-commands',
+    scopeNote: 'Commands search the loaded design reviews, pick a Status view and open one design; they never answer, sign off or edit a design.',
+    open: (target) => {
+      const review = resolveCollectionTarget(target, reviews);
+      openDesign(review.id);
+      return `Opening ${review.title}.`;
+    },
+  });
 
   const columns: DataTableColumn<DesignReview>[] = [
     {
@@ -109,9 +128,18 @@ export default function DesignsPage() {
       rows={reviews.map((review) => ({ id: review.id, title: review.title, subline: STATUS_LABEL[review.status] }))}
       selectedId={id} selectedTitle={data?.reviews.find((review) => review.id === id)?.title}
       onSelect={(next) => navigate(`/iq/designs/${encodeURIComponent(next)}?${searchParams}`)}
-      railNotice={designsFailure ? <UnavailableNotice error={designsFailure} what="designs" source={DESIGNS_SOURCE} onRetry={refresh} /> : isLoading && !data ? <LoadingState label="Loading designs…" /> : reviews.length === 0 ? <EmptyState size="sm" title="No designs in this view" /> : undefined}
+      footer={id ? <CollectionCommandHost adapter={adapter} /> : undefined}
+      railNotice={designsFailure ? <UnavailableNotice error={designsFailure} what="designs" source={DESIGNS_SOURCE} onRetry={refresh} /> : isLoading && !data ? <LoadingState label="Loading designs…" /> : reviews.length === 0 ? <EmptyState title="No designs in this view" /> : undefined}
     >
-    {id ? <DesignThreadPage key={id} /> : designsFailure ? (
+    {id ? <DesignThreadPage key={id} /> : (
+      // The overview's PageSection is the composer boundary: this stack is
+      // its direct child, and the command input is its last row.
+      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+        <CollectionToolbar label="Design filters"
+          search={{ value: query, onChange: setQuery, placeholder: 'Search designs', 'aria-label': 'Search designs' }}
+          summary={data ? `${reviews.length} design${reviews.length === 1 ? '' : 's'}` : undefined}
+          onRefresh={refresh} refreshing={isLoading} />
+        {designsFailure ? (
         <UnavailableNotice
           error={designsFailure}
           what="designs"
@@ -123,10 +151,12 @@ export default function DesignsPage() {
       ) : reviews.length === 0 ? (
         <EmptyState
           title="No design reviews"
-          description={filter === 'all'
+          description={query.trim()
+            ? 'No loaded design matches this search.'
+            : filter === 'all'
             ? 'No initiative has opened a design thread yet.'
             : `Nothing ${STATUS_LABEL[filter as DesignStatus]?.toLowerCase() ?? filter} right now.`}
-          {...(filter === 'all' ? {
+          {...(filter === 'all' && !query.trim() ? {
             action: (
               <Link to="/iq/projects" className="text-[12px] font-semibold text-primary no-underline hover:underline">
                 Open Initiatives →
@@ -139,11 +169,14 @@ export default function DesignsPage() {
           data={reviews}
           columns={columns}
           keyField={(r) => r.id}
-          onRowClick={(r) => navigate(`/iq/designs/${r.id}?${searchParams}`)}
+          onRowClick={(r) => openDesign(r.id)}
           pageSize={25}
           emptyMessage="No design reviews"
         />
       )}
+        <CollectionCommandHost adapter={adapter} />
+      </Stack>
+    )}
     </StackedCatalogLayout>
   );
 }

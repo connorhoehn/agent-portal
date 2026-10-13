@@ -1,17 +1,27 @@
 // Configuration is a read-only settings preview until bundles are deployed
 // and reported by real sessions. The provider currently returns fixtures;
 // changing its "live" row does not install anything or restart a machine.
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Chip, CodeBlock, DataTable, Disclosure, EmptyState, Inline, InlineAlert, LoadingState, PageSection, Stack, Tabs, Text, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, CodeBlock, CollectionToolbar, DataTable, Disclosure, EmptyState, Inline, InlineAlert, LoadingState, PageSection, Stack, Tabs, Text, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useUrlState } from '../../lib/useUrlState';
+import { filterRows } from '../../hooks/useRowSearch';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { configurationCommandAdapter } from './localComputeCommands';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { HOOK_EVENT_LABEL, driftLine, versionLabel } from '../release/sessionFormat';
 import type { BundledSkill, SessionBundleDetail } from '../release/types';
 import type { LibraryResponse } from '../library/types';
 
 type ContentsView = 'skills' | 'hooks' | 'settings';
+
+const AVAILABILITY_OPTIONS = [
+  { value: '', label: 'Any availability' },
+  { value: 'current', label: 'Up to date' },
+  { value: 'stale', label: 'Update available' },
+  { value: 'missing', label: 'Not in library' },
+];
 
 /** Where each read comes from, as the clause UnavailableNotice joins to
  *  "…, so this is unknown rather than empty." — not a bare noun. */
@@ -44,13 +54,26 @@ function ToggleDisclosure({ summary, lead, verb, noun, bodyClassName, children }
   </Disclosure>;
 }
 
-export function ConfigurationContents({ bundle, library, view, onViewChange }: {
+export function ConfigurationContents({ bundle, library, view, onViewChange, onRefresh }: {
   bundle: SessionBundleDetail;
   library: LibraryResponse | null;
   view: ContentsView;
   onViewChange: (view: ContentsView) => void;
+  /** Re-read the bundle; given, the contents carry the skills command composer. */
+  onRefresh?: () => void;
 }) {
   const updates = bundle.skills.filter((skill) => skill.status === 'stale');
+  // The skills table's search and availability filter, shared by its toolbar
+  // and the command composer.
+  const [skillQuery, setSkillQuery] = useState('');
+  const [availability, setAvailability] = useState('');
+  const skills = useMemo(
+    () => filterRows(bundle.skills.filter((skill) => !availability || skill.status === availability), skillQuery, (skill) => `${skill.name} ${skill.id} ${skill.description}`),
+    [bundle.skills, availability, skillQuery],
+  );
+  const commands = onRefresh ? configurationCommandAdapter({
+    setQuery: setSkillQuery, setAvailability, refresh: onRefresh, showView: onViewChange,
+  }) : null;
   const columns: DataTableColumn<BundledSkill>[] = [
     { key: 'name', header: 'Skill', render: (skill) => <Stack gap="none" className="min-w-0"><Text as="div" className="text-[13px] font-medium">{skill.name}</Text><Text as="div" wrap className="text-xs text-text-secondary">{skill.description}</Text></Stack> },
     { key: 'version', header: 'In configuration', render: (skill) => <Text className="whitespace-nowrap font-mono text-xs">{versionLabel(skill.version)}</Text> },
@@ -96,13 +119,22 @@ export function ConfigurationContents({ bundle, library, view, onViewChange }: {
     </Stack>
     <Stack as="section" aria-label="Configuration contents" gap="sm" className="min-w-0">
       <Inline as="h2" className="text-sm font-semibold">Configuration contents</Inline>
+      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
       <Tabs aria-label="Configuration contents" value={view} onValueChange={(value) => onViewChange(value as ContentsView)} items={[
         { id: 'skills', label: `Skills · ${bundle.skills.length}` },
         { id: 'hooks', label: `Hooks · ${bundle.hooks.length}` },
         { id: 'settings', label: `Settings · ${Object.keys(bundle.settings).length}` },
       ]} />
       <Stack gap="none" className="min-w-0 overflow-x-auto py-3">
-        {view === 'skills' && <DataTable data={bundle.skills} columns={columns} keyField={(skill) => skill.id} frameless emptyMessage="No skills in this configuration" />}
+        {view === 'skills' && <Stack gap="sm" className="min-w-0">
+          <CollectionToolbar
+            label="Skill filters"
+            search={{ value: skillQuery, onChange: setSkillQuery, placeholder: 'Search skills', 'aria-label': 'Search skills' }}
+            filters={[{ id: 'availability', label: 'Availability', value: availability, onChange: setAvailability, options: AVAILABILITY_OPTIONS }]}
+            summary={`${skills.length} of ${bundle.skills.length} skills`}
+          />
+          <DataTable data={skills} columns={columns} keyField={(skill) => skill.id} frameless emptyMessage={bundle.skills.length > 0 ? 'No skill matches the search or availability' : 'No skills in this configuration'} />
+        </Stack>}
         {view === 'hooks' && (bundle.hooks.length ? <Stack gap="sm">{bundle.hooks.map((hook, index) => <ToggleDisclosure
           key={`${hook.event}-${index}`}
           summary={<Text className="font-medium">{HOOK_EVENT_LABEL[hook.event]}</Text>}
@@ -114,7 +146,7 @@ export function ConfigurationContents({ bundle, library, view, onViewChange }: {
             <Text as="p" wrap className="text-text-secondary">{hook.description}</Text>
             <CodeBlock code={hook.command} language="bash" theme="light" className="text-xs" />
           </Stack>
-        </ToggleDisclosure>)}</Stack> : <EmptyState size="sm" title="No hooks" />)}
+        </ToggleDisclosure>)}</Stack> : <EmptyState title="No hooks" />)}
         {view === 'settings' && (Object.keys(bundle.settings).length ? <Stack gap="sm">{Object.entries(bundle.settings).map(([key, value]) => <ToggleDisclosure
           key={key}
           summary={<Text wrap className="break-words font-mono text-xs">{key}</Text>}
@@ -122,7 +154,9 @@ export function ConfigurationContents({ bundle, library, view, onViewChange }: {
           noun="value"
         >
           <CodeBlock code={String(value)} language="text" theme="light" className="text-xs" />
-        </ToggleDisclosure>)}</Stack> : <EmptyState size="sm" title="No settings" />)}
+        </ToggleDisclosure>)}</Stack> : <EmptyState title="No settings" />)}
+      </Stack>
+      {commands && <CollectionCommandHost adapter={commands} />}
       </Stack>
     </Stack>
     <Text as="p" wrap className="border-t border-border pt-3 text-xs text-text-secondary">Version history and rollout results will appear when persistent configuration publishing, session version reporting, and rollout tracking are implemented. Until then, this page cannot apply updates or restart sessions.</Text>
@@ -140,10 +174,10 @@ export default function ConfigurationPage() {
   return <PageSection title="Session settings" description="Inspect bundled skills, hooks, and settings. Runtime configuration management is not available yet.">
     {failure ? <UnavailableNotice error={failure} what="configuration preview" source={BUNDLE_SOURCE} onRetry={refresh} />
       : isLoading && !data ? <LoadingState label="Loading settings…" />
-      : !data ? <EmptyState size="sm" title="No configuration preview" description="No session bundle has been published yet, so sessions run with the settings baked into their image." />
+      : !data ? <EmptyState title="No configuration preview" description="No session bundle has been published yet, so sessions run with the settings baked into their image." />
       : <>
         {(library.error ?? library.degraded) && <UnavailableNotice error={library.error ?? library.degraded ?? ''} what="library versions" source={LIBRARY_VERSIONS_SOURCE} onRetry={library.refresh} />}
-        <ConfigurationContents bundle={data} library={library.data ?? null} view={view} onViewChange={setView} />
+        <ConfigurationContents bundle={data} library={library.data ?? null} view={view} onViewChange={setView} onRefresh={refresh} />
       </>}
   </PageSection>;
 }

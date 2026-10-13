@@ -20,7 +20,11 @@ function IqLayout() {
   }
 
   if (pathname.startsWith('/iq/work') || pathname.startsWith('/iq/local-compute')) {
-    return <BuildSectionLayout title={spec.title} items={spec.items} storageKey={spec.storageKey}><Outlet /></BuildSectionLayout>;
+    // A run page docks its conversation composer across the whole content
+    // column (docs/layout-cascade.md), so it owns its own gutter.
+    const runPage = /^\/iq\/work\/(?!(?:queue|findings|changes)\/?$)[^/]+\/?$/.test(pathname);
+    return <BuildSectionLayout title={spec.title} items={spec.items} storageKey={spec.storageKey}
+      {...(runPage ? { contentPadding: 'none' as const } : {})}><Outlet /></BuildSectionLayout>;
   }
 
   if (pathname === '/iq/explore') {

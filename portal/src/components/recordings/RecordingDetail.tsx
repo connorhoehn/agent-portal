@@ -39,15 +39,15 @@ export function RecordingDetail({ id, lobby, client, subjectName }: { id: string
     {metadata.error ? <InlineAlert tone="warning">{metadata.error}</InlineAlert> : metadata.timedOut && !row ? <InlineAlert tone="info">The recording could not be checked yet. Refresh to try again.</InlineAlert> : !row ? <LoadingState label="Opening the recording…" /> : <>
       <T size="xs" tone="secondary" role="status">{summary.value?.status === 'unavailable' || summary.value?.status === 'stalled' ? 'Summary status unavailable · Refresh to check again' : recordingProcessingLabel(row)}</T>
       {(metadata.timedOut || transcript.timedOut || summary.timedOut) && <InlineAlert tone="info">Processing is taking longer than expected. Refresh to check again; saved artifacts remain available.</InlineAlert>}
-      <div className={showMediaFrame ? "grid min-w-0 items-start gap-4 @min-[680px]:grid-cols-[minmax(0,1fr)_216px]" : "grid min-w-0 gap-2"}>
+      <Stack gap={showMediaFrame ? 'lg' : 'sm'} className={showMediaFrame ? "grid min-w-0 items-start @min-[680px]:grid-cols-[minmax(0,1fr)_216px]" : "grid min-w-0"}>
         <Stack gap="sm" className="min-w-0">
-          {mediaError || playback.error || playback.timedOut ? <InlineAlert tone="warning">{playback.error ?? (playback.timedOut ? 'The saved video could not be checked yet. Refresh to try again.' : 'The saved video could not be played. Refresh to try again.')}</InlineAlert> : !playback.value ? <div className="aspect-video flex items-center justify-center rounded-lg border border-border bg-surface-muted"><LoadingState label="Opening saved video…" /></div>
-            : playback.value.mediaState === 'playable' && url ? <div key={url} role="region" aria-label="Recorded huddle" className="relative w-full max-w-[720px]" data-testid="initiative-recording-video">
+          {mediaError || playback.error || playback.timedOut ? <InlineAlert tone="warning">{playback.error ?? (playback.timedOut ? 'The saved video could not be checked yet. Refresh to try again.' : 'The saved video could not be played. Refresh to try again.')}</InlineAlert> : !playback.value ? <Stack gap="none" align="center" justify="center" className="aspect-video rounded-lg border border-border bg-surface-muted"><LoadingState label="Opening saved video…" /></Stack>
+            : playback.value.mediaState === 'playable' && url ? <Stack gap="none" key={url} role="region" aria-label="Recorded huddle" className="relative w-full max-w-[720px]" data-testid="initiative-recording-video">
               <RecordingPlayer playlistUrl={url} hideDownload className="aspect-video w-full [&>div:last-child]:opacity-100" onTimeUpdate={seconds => setCurrentTimeMs(seconds * 1000)} onError={() => setMediaError(true)} />
               <PlaybackReactionsLayer reactions={replay} currentTimeMs={currentTimeMs} />
-            </div> : <T size="sm" tone="secondary" wrap>{playback.value.mediaState === 'processing' ? 'Saving the video…' : 'There is no playable video for this recording.'}</T>}
+            </Stack> : <T size="sm" tone="secondary" wrap>{playback.value.mediaState === 'processing' ? 'Saving the video…' : 'There is no playable video for this recording.'}</T>}
         </Stack>
-        <div className={showMediaFrame ? "min-w-0 rounded-lg border border-border bg-surface-muted p-3 space-y-3" : "grid min-w-0 gap-3 rounded-lg border border-border bg-surface-muted p-3 @min-[680px]:grid-cols-2"} data-testid="initiative-recording-activity"><Stack gap="xs">
+        <Stack gap="md" className={showMediaFrame ? "min-w-0 rounded-lg border border-border bg-surface-muted p-3" : "grid min-w-0 rounded-lg border border-border bg-surface-muted p-3 @min-[680px]:grid-cols-2"} data-testid="initiative-recording-activity"><Stack gap="xs">
           <T size="xs" weight="semibold" tone="secondary">PARTICIPANTS</T><T size="xs" wrap>{(row.participants ?? []).map(person => person.displayName ?? nameOf(person.userId)).join(', ') || 'Participants unavailable'}</T></Stack>
           <Stack gap="xs" className={showMediaFrame ? "border-t border-border pt-3" : "@min-[680px]:border-l @min-[680px]:border-border @min-[680px]:pl-3"}><T size="xs" weight="semibold" tone="secondary">CALL ACTIVITY</T>
             <T size="xs" tone="secondary">Started · {absoluteTime(row.startedAt)}</T>
@@ -55,8 +55,8 @@ export function RecordingDetail({ id, lobby, client, subjectName }: { id: string
               : reactions.value.length === 0 ? <T size="xs" tone="secondary">No reactions recorded.</T> : reactions.value.map(event => <Inline key={event.reactionId} gap="sm" data-testid="initiative-recording-reaction"><span aria-hidden="true">{event.emoji}</span><T size="xs" wrap>{event.displayName ?? (event.userId ? nameOf(event.userId) : 'Participant')} reacted {event.emoji}</T></Inline>)}
             {row.endedAt && <T size="xs" tone="secondary">Ended · {absoluteTime(row.endedAt)}</T>}
           </Stack>
-        </div>
-      </div>
+        </Stack>
+      </Stack>
       <Stack gap="sm" data-testid="recording-transcript-attachment">
         <TranscriptPanel status={transcript.timedOut || transcript.error || transcriptStatus === 'failed' || transcriptStatus === 'stalled' || transcriptStatus === 'unavailable' ? 'failed' : transcript.loading ? 'processing' : transcriptStatus === 'ready' ? 'ready' : transcriptStatus === 'pending' ? 'pending' : transcriptStatus === 'processing' ? 'processing' : 'idle'}
           segments={transcript.value?.status === 'ready' ? transcript.value.segments : undefined} currentTimeMs={currentTimeMs}

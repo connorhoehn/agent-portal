@@ -147,7 +147,6 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
         data={entries}
         columns={columns}
         keyField={(s) => s.personId}
-        size="sm"
         onRowClick={(s) => onSelect(s.personId === selectedId ? null : s.personId)}
       />
     </Card>

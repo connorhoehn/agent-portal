@@ -28,6 +28,7 @@
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { matchesGrant } from './budgetsCommands';
 import {
   Button,
   Card,
@@ -53,6 +54,8 @@ export interface SprintsReportProps {
   /** ManageBudgets — the same gate Initiatives' allocation editor uses. */
   canManage: boolean;
   refresh?: () => void;
+  /** The page's controlled search; narrows the table, never the empty state. */
+  query?: string;
 }
 
 /** Points a ManageBudgets holder at where granting actually happens today.
@@ -109,7 +112,7 @@ const GRANT_COLUMNS: DataTableColumn<GrantRow>[] = [
   },
 ];
 
-export function SprintsReport({ grants, error, hasData, canManage, refresh }: SprintsReportProps) {
+export function SprintsReport({ grants: allGrants, error, hasData, canManage, refresh, query = '' }: SprintsReportProps) {
   const navigate = useNavigate();
   const [showAll, setShowAll] = useState(false);
 
@@ -124,7 +127,7 @@ export function SprintsReport({ grants, error, hasData, canManage, refresh }: Sp
     );
   }
 
-  if (hasData && grants.length === 0) {
+  if (hasData && allGrants.length === 0) {
     return (
       <EmptyState
         title="No sprint envelopes yet"
@@ -134,6 +137,7 @@ export function SprintsReport({ grants, error, hasData, canManage, refresh }: Sp
     );
   }
 
+  const grants = allGrants.filter((g) => matchesGrant(g, query));
   const active = grants.filter((g) => g.sprintStatus === 'active');
   const rest = grants.filter((g) => g.sprintStatus !== 'active');
   const shownRest = showAll ? rest : rest.slice(0, CLOSED_PREVIEW);
@@ -158,11 +162,11 @@ export function SprintsReport({ grants, error, hasData, canManage, refresh }: Sp
       />
       <DataTable
         data-testid="budgets-sprints-table"
-        size="sm"
         frameless
         data={ordered}
         columns={GRANT_COLUMNS}
         keyField={(g) => g.id}
+        emptyMessage="No sprint envelope matches this search."
       />
       {(hidden > 0 || showAll) && (
         <Stack gap="none" className="px-3 py-2 border-t border-border">

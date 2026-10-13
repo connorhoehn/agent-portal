@@ -199,7 +199,6 @@ export function InitiativeRail({
 
   return (
     <PageSection
-      size="sm"
       title="Agents"
       actions={view === 'bots' && canManageBots
         ? <Button variant="link" onClick={() => navigate('/admin/bots')}>New bot</Button>
@@ -209,10 +208,10 @@ export function InitiativeRail({
       <Stack gap="sm">
         {meta.some(Boolean) && <MetaLine size="sm" tone="secondary" items={meta} data-testid="initiative-agents-meta" />}
         <Inline gap="sm" wrap data-testid="initiative-agents-controls">
-          <SegmentedControl size="sm" aria-label="Runs, bots or compute" options={VIEW_OPTIONS}
+          <SegmentedControl aria-label="Runs, bots or compute" options={VIEW_OPTIONS}
             value={view} onChange={setView} data-testid="initiative-agents-view" />
           {view === 'runs' && (
-            <SegmentedControl size="sm" aria-label="Time window" options={RANGE_OPTIONS}
+            <SegmentedControl aria-label="Time window" options={RANGE_OPTIONS}
               value={String(days)} onChange={(v) => setDays(Number(v))} data-testid="initiative-agents-range" />
           )}
         </Inline>
@@ -238,7 +237,6 @@ export function InitiativeRail({
         {view === 'bots' && (
           <ActionRowList
             aria-label="Bots pointed at this initiative"
-            size="sm"
             columns={rosterDenied ? [] : BOT_COLUMNS}
             items={rosterDenied
               // The roster's configuration is not this role's to read; the

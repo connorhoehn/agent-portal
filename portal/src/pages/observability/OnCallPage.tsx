@@ -527,7 +527,6 @@ function HitlSlaBody({
         <StatStrip
           aria-label="Pending approvals"
           variant="line"
-          size="sm"
           items={[{ label: 'pending', value: hitl.pendingCount }]}
         />
         {oldestMin != null && oldestMin >= 5 && (
@@ -617,7 +616,8 @@ function EventRow({ event, onClick }: { event: RecentEvent; onClick: () => void 
       <T size="xs" className="text-text-tertiary font-mono whitespace-nowrap shrink-0">
         {relativeTime(event.ts)}
       </T>
-      {tone === 'danger' && <Chip tone="danger" size="xs">crit</Chip>}
+      {/* md: the row is a button; the xs chip's 10px label is off the control scale. */}
+      {tone === 'danger' && <Chip tone="danger" size="md">crit</Chip>}
     </Inline>
   );
 }

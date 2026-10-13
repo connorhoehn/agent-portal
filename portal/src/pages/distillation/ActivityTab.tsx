@@ -23,11 +23,13 @@ import {
   ListRailLayout,
 } from '@connorhoehnslalom/ui-components';
 import {
-  Banner, Button, EmptyState, FilterPopover, GroupedList, Inline, LoadingState, SegmentedControl, Stack,
+  Banner, Button, EmptyState, FilterPopover, GroupedList, Inline, LoadingState, SearchInput, SegmentedControl, Stack,
   StatCard, StatStrip, StatusPill, T, type StatStripItem,
 } from '@connorhoehnslalom/ui-components/shared';
 import { SECTION_CANVAS_FRAME, SectionContent, SectionHeader } from '../../components/shell/SectionContent';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { activityRunsCommandAdapter, runMatches } from './distillationCollectionCommands';
 import { useDistillationChannel } from '../../hooks/useDistillationChannel';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -119,7 +121,10 @@ export default function ActivityTab() {
   );
   const nowMs = Date.now();
   const visibleJobs = useMemo(() => filterRuns(jobs, state), [jobs, state.level, state.status, state.repo]); // eslint-disable-line react-hooks/exhaustive-deps
-  const rows = useMemo(() => runRows(visibleJobs, nowMs), [visibleJobs]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The runs rail's search: loaded rows only, shared by the rail's search
+  // box and its command composer.
+  const [runQuery, setRunQuery] = useState('');
+  const rows = useMemo(() => runRows(visibleJobs, nowMs).filter((r) => runMatches(r, runQuery)), [visibleJobs, runQuery]); // eslint-disable-line react-hooks/exhaustive-deps
   const selected = jobs.find((j) => j.id === state.run) ?? null;
   const rep = replicationLine(replication.data);
 
@@ -228,8 +233,16 @@ export default function ActivityTab() {
     ...(moduleCtx ? [moduleCtx.scope.repoFacet] : []),
   ];
   const runsHeader = (
+    <Stack gap="xs">
     <Inline gap="xs" align="center" justify="between" wrap={false}>
-      <T className="text-[12px] text-text-tertiary">{rows.length} of {jobs.length} runs{state.level || state.status || state.repo ? ' match the filters' : ''}</T>
+      <SearchInput
+        value={runQuery}
+        onChange={setRunQuery}
+        placeholder="Search runs"
+        aria-label="Search runs"
+        className="min-w-0 flex-1"
+        data-testid="activity-search"
+      />
       <FilterPopover
         trigger="icon"
         size="sm"
@@ -241,7 +254,15 @@ export default function ActivityTab() {
         <WorkListFilters facets={runFacets} data-testid="activity-filters" />
       </FilterPopover>
     </Inline>
+      <T size="xs" tone="tertiary">{rows.length} of {jobs.length} runs{state.level || state.status || state.repo || runQuery.trim() ? ' match the filters' : ''}</T>
+    </Stack>
   );
+  const runCommands = activityRunsCommandAdapter(rows, {
+    setQuery: setRunQuery,
+    setStatus: (status) => (status ? go({ status }) : go({ level: null, status: null })),
+    refresh: jobsFeed.refresh,
+    openRun: (run) => go({ run }),
+  });
   const runsList = jobsFeed.error ? (
     <Stack className="px-5 py-3">
       <UnavailableNotice error={jobsFeed.error} what="compaction history" source="Compaction jobs are read from Aurora" onRetry={jobsFeed.refresh} />
@@ -252,10 +273,9 @@ export default function ActivityTab() {
     <Stack className="px-5 py-3">
       <EmptyState
         align="start"
-        size="sm"
         title={jobs.length > 0 ? 'No runs match' : 'No compaction runs yet'}
         description={jobs.length > 0
-          ? 'Clear the filters to see every run.'
+          ? 'Clear the search and filters to see every run.'
           : 'A run merges run notes into patterns, or patterns into guides. The scheduler starts them; ManageBots can start one by hand.'}
       />
     </Stack>
@@ -274,7 +294,8 @@ export default function ActivityTab() {
         meta: <T size="xs" tone="tertiary" title={r.meta}>{r.meta}</T>,
         subline: r.subline,
         ariaLabel: [r.title, r.meta, r.subline].filter(Boolean).join(', '),
-        pill: <StatusPill tone={r.status.tone} label={r.status.label} {...(r.status.meta ? { meta: r.status.meta } : {})} size="sm" />,
+        // md: the row is a button, and the sm pill's 10px label is off the control scale (12/14).
+        pill: <StatusPill tone={r.status.tone} label={r.status.label} {...(r.status.meta ? { meta: r.status.meta } : {})} size="md" />,
       }))}
       currentId={state.run}
       onOpenRow={(row) => go({ run: row.id })}
@@ -316,7 +337,6 @@ export default function ActivityTab() {
     title: 'Compaction activity',
     badge: (
       <SegmentedControl
-        size="sm"
         aria-label="Activity view"
         value={state.view}
         onChange={(v) => go({ view: v === 'graph' ? 'graph' : 'runs' })}
@@ -353,6 +373,7 @@ export default function ActivityTab() {
           body: runsList,
           label: 'compaction runs',
         }}
+        footer={<CollectionCommandHost adapter={runCommands} />}
         data-testid="distillation-activity"
       >
         <Stack gap="md" className="px-6 pb-6">
@@ -360,7 +381,7 @@ export default function ActivityTab() {
           {selected ? (
             <RunInspector job={selected} onClose={() => go({ run: null })} onOpen={(href) => navigate(href)} />
           ) : (
-            <EmptyState size="sm" title="Pick a run" description="Choose a run from the list to see its inputs, outputs and log." />
+            <EmptyState title="Pick a run" description="Choose a run from the list to see its inputs, outputs and log." />
           )}
         </Stack>
       </ListRailLayout>

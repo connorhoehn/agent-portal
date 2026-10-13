@@ -96,14 +96,14 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
       <T size="xs" tone="secondary">{shown.length} {shown.length === 1 ? 'file' : 'files'}{query || kind !== 'all' ? ' matching this view' : ' in this initiative'}</T>
       {shown.length === 0 ? <Stack gap="xs" className="rounded-lg border border-dashed border-border p-6"><T size="sm" weight="semibold">{files.length ? 'No matching files' : 'No project files yet'}</T><T size="sm" tone="secondary" wrap>{files.length ? 'Try another search or file type.' : 'Linked work documents, saved project presentations, and recordings you participated in appear here.'}</T></Stack>
         : view === 'cards' ? <FileCards items={shown.map(row => ({ ...row, kindLabel: row.kind }))} onOpen={id => { const row = shown.find(file => file.id === id); if (row) open(row); }} testId="initiative-files-cards" itemTestId="initiative-file" />
-        : <div className="divide-y divide-border rounded-lg border border-border" data-testid="initiative-files-list">
+        : <Stack gap="none" className="divide-y divide-border rounded-lg border border-border" data-testid="initiative-files-list">
           {shown.map(row => <Button key={row.id} variant="ghost" className="!h-auto !w-full !justify-start !rounded-none !px-3 !py-3 text-left" onClick={() => open(row)} data-testid="initiative-file">
             <Inline gap="sm" align="start" wrap={false} className="min-w-0 w-full"><DocumentIcon size={20} className="shrink-0 text-primary" /><Stack gap="xs" className="min-w-0 text-left">
               <T size="xs" tone="secondary">{row.kind === 'presentation' ? 'PRESENTATION' : row.kind === 'recording' ? 'RECORDING' : 'DOCUMENT'}</T>
               <T size="sm" weight="semibold" wrap className="line-clamp-2 break-words">{row.title}</T><T size="xs" tone="secondary" wrap className="font-normal">{row.detail}</T>
             </Stack></Inline>
           </Button>)}
-        </div>}
+        </Stack>}
       {recordingRead.timedOut && <T size="xs" tone="secondary" role="status">Recording processing is taking longer than expected. Refresh to check again.</T>}
       {olderError && <T size="xs" tone="secondary" role="status">{olderError}</T>}
       {cursor && !recordingRead.error && <Inline><Button variant="secondary" size="sm" disabled={olderBusy} onClick={() => void older()}>Load older recordings</Button></Inline>}

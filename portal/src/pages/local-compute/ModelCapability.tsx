@@ -42,7 +42,7 @@ export function ModelChips({ models }: ModelChipsProps) {
     return <MetaLine size="xs" tone="tertiary" items={['none announced']} />;
   }
   return (
-    <Inline gap="xs" wrap>
+    <Inline gap="xs" wrap={false}>
       {caps.map((c) => (
         <Chip
           key={c.id}

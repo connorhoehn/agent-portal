@@ -9,7 +9,7 @@ export function DimensionRailControls({ dimensions, onlyClaims, onChange }: {
   dimensions: Dimension[]; onlyClaims: boolean; onChange: (value: boolean) => void;
 }) {
   const claims = dimensions.filter(dimension => dimensionRailGroup(dimension) === 'claims').length;
-  return <SegmentedControl size="sm" fullWidth tone="accent" aria-label="Filter dimensions"
+  return <SegmentedControl fullWidth tone="accent" aria-label="Filter dimensions"
     value={onlyClaims ? 'claims' : 'all'} onChange={value => onChange(value === 'claims')}
     options={[{ value: 'all', label: `All ${dimensions.length}` }, { value: 'claims', label: `Open claims ${claims}` }]}
     data-testid="dimension-rail-filter" />;

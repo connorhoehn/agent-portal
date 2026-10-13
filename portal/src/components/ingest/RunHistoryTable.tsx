@@ -27,12 +27,15 @@ export function RunHistoryTable({
   filter,
   onFilter,
   onOpen,
+  emptyMessage,
 }: {
   sessions: CrawlSession[];
   targets: CrawlTarget[];
   filter: Filter;
   onFilter: (f: Filter) => void;
   onOpen: (id: string) => void;
+  /** Shown when the filters leave no row (the page owns the "nothing yet" state). */
+  emptyMessage?: string;
 }) {
   const targetsById = new Map(targets.map(t => [t.id, t] as const));
   const filtered = filter === 'all' ? sessions : sessions.filter(s => s.status === filter);
@@ -115,10 +118,10 @@ export function RunHistoryTable({
       </Inline>
 
       <DataTable
-        size="sm"
         data={filtered}
         columns={columns}
         keyField={(s) => s.id}
+        {...(emptyMessage ? { emptyMessage } : {})}
         rowActions={(s) => (
           <Button variant="secondary" size="sm" onClick={() => onOpen(s.id)}>
             Open

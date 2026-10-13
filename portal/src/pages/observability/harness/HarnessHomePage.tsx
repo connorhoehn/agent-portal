@@ -458,7 +458,7 @@ function HarnessHomePage() {
             ]}
           />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Label</TableTh>

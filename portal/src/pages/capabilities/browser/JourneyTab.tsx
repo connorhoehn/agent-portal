@@ -187,7 +187,7 @@ export function JourneyTab() {
                   <T key="sid" className="font-mono">session {activeSessionId.slice(0, 12)}…</T>,
                 ]}
               />
-              <SegmentedControl options={VIEW_OPTIONS} value={view} onChange={setView} size="sm" />
+              <SegmentedControl options={VIEW_OPTIONS} value={view} onChange={setView} />
             </Inline>
 
             {error && <InlineAlert tone="error">{error}</InlineAlert>}

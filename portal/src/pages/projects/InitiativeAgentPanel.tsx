@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { useNavigate } from 'react-router';
 import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
-import { Button, Chip, Inline, InlineAlert, MessageBubble, Stack, StatusPill, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Chip, Inline, InlineAlert, MessageBubble, Stack, StatusDot, StatusPill, T } from '@connorhoehnslalom/ui-components/shared';
 import { Markdown } from '../../components/Markdown';
 import { agentInvokeFetch } from '../../components/chat/agentInvokeFetch';
 import { deriveSources, extractSources } from '../../components/chat/answerSources';
@@ -109,15 +109,16 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
       </Inline>
       {latest?.contextLabel && <T size="xs" tone="secondary" className="truncate" title={latest.contextLabel}>{latest.contextLabel}</T>}
       {isStreaming && <Inline align="center" justify="between" gap="sm" role="status" aria-live="polite">
-        <Inline gap="xs" align="center"><span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" /><T size="xs">{progressLabel}</T><T size="xs" tone="secondary">{elapsed}s</T></Inline>
+        <Inline gap="xs" align="center"><StatusDot color="var(--color-primary)" pulse size="xs" /><T size="xs">{progressLabel}</T><T size="xs" tone="secondary">{elapsed}s</T></Inline>
         <Button size="sm" variant="ghost" disabled={stopped} onClick={() => { setStopped(true); abort.current?.abort(); }}>Stop</Button>
       </Inline>}
-      {!!progress.length && <ol className="grid gap-1 mt-1" aria-label="Agent progress">
-        {progress.map((step, index) => <li key={`${step.name}:${index}`} className="flex items-center gap-2 text-xs text-text-secondary">
-          <span aria-hidden className={step.done ? 'text-success' : isStreaming && !stopped ? 'text-primary animate-pulse' : 'text-text-tertiary'}>{step.done ? '✓' : '•'}</span>
-          <span className="flex-1">{step.name}</span><span>{step.done ? 'Done' : isStreaming && !stopped ? 'In progress' : stopped ? 'Stopped' : 'Incomplete'}</span>
-        </li>)}
-      </ol>}
+      {!!progress.length && <Stack as="ol" gap="xs" className="mt-1" aria-label="Agent progress">
+        {progress.map((step, index) => <Inline as="li" key={`${step.name}:${index}`} gap="sm" align="center" wrap={false}>
+          <T size="xs" aria-hidden className={step.done ? 'text-success' : isStreaming && !stopped ? 'text-primary animate-pulse' : 'text-text-tertiary'}>{step.done ? '✓' : '•'}</T>
+          <T size="xs" tone="secondary" className="flex-1">{step.name}</T>
+          <T size="xs" tone="secondary">{step.done ? 'Done' : isStreaming && !stopped ? 'In progress' : stopped ? 'Stopped' : 'Incomplete'}</T>
+        </Inline>)}
+      </Stack>}
     </Stack>
     <Stack ref={transcriptRef} gap="md" className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
       onScroll={() => { const element = transcriptRef.current; if (element) followOutput.current = element.scrollHeight - element.scrollTop - element.clientHeight < 60; }}>
@@ -143,7 +144,7 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
           {!!evidence.length && <Inline gap="xs" wrap aria-label="Referenced records">
             {evidence.map(record => <Button key={`${record.type}:${record.id}`} size="sm" variant="secondary" className="max-w-full"
               onClick={() => record.type === 'work' && record.href.split('?')[0] === `/iq/projects/${projectId}` ? onOpenWorkItem(record.id) : navigate(record.href)}>
-              <span className="truncate">{record.title}</span>
+              <T className="block min-w-0 truncate">{record.title}</T>
             </Button>)}
           </Inline>}
           <SourceChips sources={answer.sources} provenance={answer.provenance} />

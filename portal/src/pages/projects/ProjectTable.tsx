@@ -141,7 +141,6 @@ export function ProjectTable({
       data={projects}
       columns={columns}
       keyField={(p) => p.id}
-      size="sm"
       onRowClick={onOpen}
       pageSize={25}
       emptyMessage="No initiatives"

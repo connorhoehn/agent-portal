@@ -235,7 +235,6 @@ export function ConnectedSources() {
 
       {sources.length === 0 ? (
         <EmptyState
-          size="sm"
           title="Nothing connected"
           body={'Crawl targets reach public pages and uploads need a manual export — this is how you '
             + 'reach Confluence, Jira or GitHub.'}

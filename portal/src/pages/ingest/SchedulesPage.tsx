@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Button, Card, CardHeader, Chip, ConfirmDialog, FormField, FormRow, Input, LoadingState,
+  Button, Card, CardHeader, Chip, CollectionToolbar, ConfirmDialog, FormField, FormRow, Input, LoadingState,
   PageSection, Select, Stack, Switch, Table, TableBody, TableHead, TableRow, TableTd,
   TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -11,6 +11,8 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { JOB_STATUS_TONE } from './ingestFormat';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { matchesSchedule, schedulesAdapter } from './ingestCommands';
 
 interface DataSource {
   id: string; name: string; status: string; description: string;
@@ -70,6 +72,9 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
   const schedules = data?.schedules ?? [];
   const [showForm, setShowForm] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const shown = schedules.filter(s => matchesSchedule(s, query));
+  const adapter = schedulesAdapter({ setQuery, refresh });
 
   async function onDelete(id: string) {
     const s = schedules.find(x => x.id === id);
@@ -92,6 +97,7 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
   }
 
   return (
+    <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
     <Card padding="md">
       <CardHeader
         title="KB Sync Schedules"
@@ -112,6 +118,11 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
           />
         )}
 
+        <CollectionToolbar label="Schedule filters"
+          search={{ value: query, onChange: setQuery, placeholder: 'Search schedules', 'aria-label': 'Search schedules' }}
+          summary={data ? `${shown.length} of ${schedules.length} schedules` : undefined}
+          onRefresh={refresh} refreshing={isLoading} />
+
         {failure && !data ? (
           <UnavailableNotice
             error={failure}
@@ -123,8 +134,10 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
           <LoadingState label="Loading schedules…" />
         ) : schedules.length === 0 && !showForm ? (
           <EmptyState title="No schedules configured" body={'Ingestion runs only on manual "Sync now" trigger.'} />
+        ) : schedules.length > 0 && shown.length === 0 ? (
+          <EmptyState title="No schedule matches this search" body="Clear the search to see every schedule." />
         ) : schedules.length > 0 ? (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Label</TableTh><TableTh>Cron</TableTh><TableTh>Data Source</TableTh>
@@ -133,10 +146,10 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {schedules.map(s => (
+              {shown.map(s => (
                 <TableRow key={s.id}>
                   <TableTd><T as="span" size="sm" weight="semibold">{s.label}</T></TableTd>
-                  <TableTd className="font-mono"><T as="span" size="xs" tone="secondary">{s.cronExpr}</T></TableTd>
+                  <TableTd><T className="font-mono" as="span" size="xs" tone="secondary">{s.cronExpr}</T></TableTd>
                   <TableTd><T as="span" size="xs">{s.dataSourceName}</T></TableTd>
                   <TableTd className="whitespace-nowrap"><T as="span" size="xs" tone="tertiary">
                     {s.lastRunAt ? new Date(s.lastRunAt).toLocaleString() : '—'}
@@ -183,6 +196,8 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
         body={`"${schedules.find(s => s.id === confirmDeleteId)?.label ?? ''}" will stop syncing on its own — the data source still syncs on manual "Sync now".`}
       />
     </Card>
+    <CollectionCommandHost adapter={adapter} />
+    </Stack>
   );
 }
 

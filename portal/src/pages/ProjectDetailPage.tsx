@@ -821,7 +821,6 @@ function ProjectDetailPage() {
     />
   ) : (
     <EmptyState
-      size="sm"
       title={workLoading ? 'Loading work…' : wantedItem ? 'Work item unavailable' : 'Select a work item'}
       body={workLoading ? undefined : wantedItem ? 'This item is not in the current work list. Choose another item from the rail.' : 'Choose an item from the Work list to see its brief, discussion, and activity.'}
     />

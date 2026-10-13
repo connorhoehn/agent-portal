@@ -120,7 +120,7 @@ export function useChatForward({ channel, userId, displayName, enabled = true }:
       <QuoteBlock quote={{ messageId: source.messageId, author: source.author, text: source.text || 'Attachment' }} data-testid="forward-message-preview" />
       <T className="text-[11px] text-text-tertiary" data-testid="forward-message-origin">It will be posted with a note that it came from {source.origin.label}.</T>
       {items.length === 0
-        ? <EmptyState icon={<ChatIcon size={24} />} title="Nowhere to send this" description="You can post in no other conversation right now." size="sm" testId="forward-message-empty" />
+        ? <EmptyState icon={<ChatIcon size={24} />} title="Nowhere to send this" description="You can post in no other conversation right now." testId="forward-message-empty" />
         : <>
             <SearchInput value={query} onChange={setQuery} placeholder="Find a conversation…" aria-label="Find a conversation to forward to" />
             <ConversationList items={visible} grouped onSelect={target => { void pick(target); }} emptyLabel="No conversation matches" data-testid="forward-message-list" />

@@ -136,7 +136,6 @@ function ExperimentCard({ exp, role }: { exp: ExperimentRef; role: 'a' | 'b' }):
           way every other score on the app does. */}
       <StatStrip
         variant="line"
-        size="sm"
         className="mt-2"
         aria-label={`Experiment v${exp.versionA} vs v${exp.versionB}`}
         items={[

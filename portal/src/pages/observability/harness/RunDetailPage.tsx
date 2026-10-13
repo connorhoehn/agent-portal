@@ -396,7 +396,7 @@ function RunDetailPage() {
             title="Regressions vs. previous run"
             subtitle={`${regressions.length} test${regressions.length === 1 ? '' : 's'} scored lower · sorted by |Δ|`}
           />
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Test</TableTh>
@@ -410,7 +410,7 @@ function RunDetailPage() {
             <TableBody>
               {regressions.map((r) => (
                 <TableRow key={r.testId}>
-                  <TableTd className="text-text-tertiary font-mono whitespace-nowrap">{r.testId}</TableTd>
+                  <TableTd className="text-text-tertiary whitespace-nowrap"><T className="font-mono">{r.testId}</T></TableTd>
                   <TableTd className="whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
                   <TableTd>
                     <Chip tone={judgeTone(r.prev)} size="xs">
@@ -461,7 +461,7 @@ function RunDetailPage() {
           sortedResults.length === 0 ? (
             <RowEmpty text="No results yet for this run." />
           ) : (
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Test</TableTh>
@@ -485,8 +485,8 @@ function RunDetailPage() {
                         onClick={() => setExpanded(isOpen ? null : r.testId)}
                         className="cursor-pointer"
                       >
-                        <TableTd className="text-text-tertiary font-mono whitespace-nowrap">
-                          {r.testId}
+                        <TableTd className="text-text-tertiary whitespace-nowrap">
+                          <T className="font-mono">{r.testId}</T>
                           {r.invocationId && (
                             <Link
                               to={`/admin/observability/invocations/${r.invocationId}`}

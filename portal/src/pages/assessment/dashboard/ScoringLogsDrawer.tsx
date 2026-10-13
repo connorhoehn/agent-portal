@@ -122,7 +122,6 @@ export function ScoringLogsDrawer({ open, onClose, teamId, dimensionTitle }: Sco
         <DataTable<ScoringLogSummary>
           data={list.logs}
           keyField={(l) => l.stamp}
-          size="sm"
           onRowClick={(l) => setSelectedStamp(l.stamp)}
           striped
           // A drawer's list of past scoring runs for one team — 10 keeps it

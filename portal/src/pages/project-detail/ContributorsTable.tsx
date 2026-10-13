@@ -81,7 +81,6 @@ export function ContributorsTable({
   return (
     <DataTable
       striped
-      size="sm"
       data={contributors}
       columns={columns}
       keyField={(c) => c.personId}

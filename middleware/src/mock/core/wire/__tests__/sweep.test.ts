@@ -27,7 +27,9 @@ describe('fixture / server agreement', () => {
     expect(corpus.fileCount).toBeGreaterThan(100);
     // A route file's own strings must be in it; a test file's must not.
     expect(corpus.strings.has('enterprise_context')).toBe(true);
-    expect(corpus.strings.has('enterprise')).toBe(false);
+    // 'enterprise' became a real server string on 2026-10-10 (assessment-document-context.ts);
+    // the test-only sentinel is a phrase only a test file spells.
+    expect(corpus.strings.has('deleted seat')).toBe(false);
   });
 
   it('finds fixture files in both packages', () => {

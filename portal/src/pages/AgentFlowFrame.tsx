@@ -42,7 +42,7 @@ export const CLUSTER_COLORS: Record<string, string> = {
 // waiting on a ResizeObserver that, for this fixed-position graph, never
 // flips `visibility` back from `hidden` (DEFECTS.md #6).
 export const NODE_WIDTH = 215;
-export const NODE_HEIGHT = 118;
+export const NODE_HEIGHT = 128;
 
 // Token-backed Tailwind classes standing in for the palettes above wherever
 // a color needs to land on a `border`/`background` — a class string is a
@@ -118,14 +118,16 @@ function AgentNodeComp({ id, data }: { id: string; data: unknown }) {
 
       <Inline align="center" gap="xs" className="mb-[5px]">
         <StatusDot color={statusColor} size="xs" />
-        <T className="flex-1 text-[13px] font-bold text-text-primary">{meta.display}</T>
+        <T size="sm" weight="bold" tone="primary" className="flex-1">{meta.display}</T>
         {/* Every agent today is in the one `orgiq` cluster (CLUSTER_COLORS
             has a single entry) — a fixed semantic tone reads the same as
             that cluster's indigo swatch without a computed `style` object. */}
-        <Chip size="xs" uppercase tone="accent">Work</Chip>
+        <Chip size="md" uppercase tone="accent">Work</Chip>
       </Inline>
 
-      <T className="mb-[9px] block text-[10px] leading-[1.35] text-text-tertiary">{meta.description}</T>
+      {/* The card is a button: its text stays on the control scale (12/14px),
+          so the description is the 12px step, clamped to two lines. */}
+      <T as="div" size="xs" tone="tertiary" title={meta.description} className="mb-2 line-clamp-2">{meta.description}</T>
 
       <Inline gap="xs">
         <MetricChip label="calls" value={fmtCount(summary?.invocationCount ?? 0)} />
@@ -140,8 +142,8 @@ function MetricChip({ label, value, accent }: { label: string; value: string; ac
   const accentClass = accent === 'danger' ? 'text-danger' : accent === 'warn' ? 'text-warning' : 'text-text-primary';
   return (
     <Card padding="none" className="flex-1 rounded border border-border bg-surface-inset px-1 py-[3px] text-center">
-      <T className="block text-[9px] leading-tight text-text-tertiary">{label}</T>
-      <T className={`block text-[11px] font-semibold leading-[1.3] ${accentClass}`}>{value}</T>
+      <T as="div" size="xs" tone="tertiary" className="justify-center">{label}</T>
+      <T as="div" size="xs" weight="semibold" className={`justify-center ${accentClass}`}>{value}</T>
     </Card>
   );
 }

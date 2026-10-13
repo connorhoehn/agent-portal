@@ -50,7 +50,7 @@ export function DocumentsTab({ kb }: { kb: KbRegistryEntry }) {
             {kb.bedrockKbId ? 'No documents ingested yet.' : 'KB not yet provisioned.'}
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Document</TableTh>

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Button, CollapsibleSection, EmptyState, ErrorState, LoadingState, PageSection, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, CollapsibleSection, EmptyState, ErrorState, LoadingState, PageSection, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { CollectionCommandHost } from '../components/collections/CollectionCommandHost';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../components/collections/collectionCommands';
+import { scoreTargets, scoresGrammar } from './scoresCommands';
 import { ScoreAnalysisPanel } from '../components/scores/ScoreAnalysisPanel';
 import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
@@ -145,6 +148,20 @@ function ScoresPage() {
 
   const compareDisabled = comparisonIds.size >= 4;
 
+  // The composer drives the toolbar's own state: search is the skill search
+  // (it re-ranks, as the Skill box does), the filter is the Department select,
+  // `open` is the row's detail card. Built before the early returns so the
+  // hook order never changes.
+  const adapter = useMemo(() => collectionCommandAdapter(scoresGrammar(departments), {
+    setQuery: setSkillFilter, setFilter: setDeptFilter, refresh, label: 'Leaderboard', id: 'scores-leaderboard-commands',
+    scopeNote: 'Commands rank by a skill, pick a department and open one person in the loaded leaderboard; they never change scores, weighting or comparisons.',
+    open: (target) => {
+      const person = resolveCollectionTarget(target, scoreTargets(filtered));
+      selectPerson(person.id);
+      return `Showing ${person.title}.`;
+    },
+  }), [departments, refresh, filtered, selectPerson]);
+
   const handleCompare = useCallback(() => {
     if (comparisonIds.size < 2) return;
     const ids = Array.from(comparisonIds).map(encodeURIComponent).join(',');
@@ -246,28 +263,34 @@ function ScoresPage() {
         Ranked by composite score (blended influence + expertise) across {departments.length} departments — search a skill to re-rank, or filter by department.
       </T>
 
-      <FilterBar
-        skillFilter={skillFilter}
-        onSkillChange={setSkillFilter}
-        weight={weight}
-        onWeightChange={handleWeightChange}
-        departments={departments}
-        deptFilter={deptFilter}
-        onDeptChange={setDeptFilter}
-      />
-
-      {leaderboard}
-
-      {detail && (
-        <PersonDetailCard
-          detail={detail}
-          compositeScore={selectedEntry?.composite ?? null}
-          influenceScore={selectedEntry?.influence ?? null}
-          deptColors={DEPT_COLORS}
-          onClose={() => selectPerson(null)}
-          onSelectConnection={selectPerson}
+      {/* The leaderboard's block owns its command input; this PageSection is
+          the composer boundary and the input is the block's last row. */}
+      <Stack gap="none" className="min-w-0" data-collection-command-boundary="embedded">
+        <FilterBar
+          skillFilter={skillFilter}
+          onSkillChange={setSkillFilter}
+          weight={weight}
+          onWeightChange={handleWeightChange}
+          departments={departments}
+          deptFilter={deptFilter}
+          onDeptChange={setDeptFilter}
         />
-      )}
+
+        {leaderboard}
+
+        {detail && (
+          <PersonDetailCard
+            detail={detail}
+            compositeScore={selectedEntry?.composite ?? null}
+            influenceScore={selectedEntry?.influence ?? null}
+            deptColors={DEPT_COLORS}
+            onClose={() => selectPerson(null)}
+            onSelectConnection={selectPerson}
+          />
+        )}
+
+        <CollectionCommandHost adapter={adapter} />
+      </Stack>
 
       <CollapsibleSection title="How scoring works" className="mt-4">
         <ScoreAnalysisPanel />

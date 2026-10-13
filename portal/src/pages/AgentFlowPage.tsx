@@ -358,7 +358,6 @@ function AgentFlowPage() {
           <Inline align="center" gap="xs">
             <T className="text-[11px] text-text-secondary">View</T>
             <SegmentedControl
-              size="sm"
               aria-label="Fleet view"
               value={view}
               onChange={setView}
@@ -373,7 +372,6 @@ function AgentFlowPage() {
           {/* One setting with three values, not three buttons — and the only
               place it lives now that the Architecture rail is gone. */}
           <SegmentedControl
-            size="sm"
             aria-label="Traffic window"
             value={windowLabel}
             onChange={setWindowLabel}

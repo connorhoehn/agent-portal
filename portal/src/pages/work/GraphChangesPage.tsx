@@ -13,8 +13,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
-  Button, Card, Chip, EmptyState, FilterChip, Inline, MetaLine, PageSection, Stack, Toolbar, ToolbarGroup,
+  Button, Card, Chip, EmptyState, FilterChip, Inline, MetaLine, PageSection, SearchInput, Stack, Toolbar, ToolbarGroup,
 } from '@connorhoehnslalom/ui-components/shared';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
+import { GRAPH_UPDATES_GRAMMAR, graphUpdatesFilterValue, matchesText } from './workCollectionCommands';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { absoluteTime } from '../../lib/relativeTime';
@@ -75,6 +78,8 @@ function describe(p: Proposal): string {
 
 export default function GraphChangesPage() {
   const [filter, setFilter] = useState<Filter>('all');
+  // One search state for the toolbar box and the composer.
+  const [query, setQuery] = useState('');
   // Retry/reject POST /api/work/proposals/:id/decide (ManageDevbox).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
@@ -104,12 +109,18 @@ export default function GraphChangesPage() {
   }
 
   const proposals = useMemo(() => {
-    const list = (data?.proposals ?? []).filter((p) => !jobFilter || p.jobId === jobFilter);
+    const list = (data?.proposals ?? []).filter((p) => (!jobFilter || p.jobId === jobFilter)
+      && matchesText([p.id, p.kind, KIND_LABELS[p.kind], describe(p), p.rationale, p.source, p.targetId, p.applyError], query));
     // Decided work first by recency; anything still undecided sorts by when it
     // was raised, so a pending row never hides below month-old history.
     return list.sort((a, b) =>
       (b.decidedAt ?? b.createdAt).localeCompare(a.decidedAt ?? a.createdAt));
-  }, [data, jobFilter]);
+  }, [data, jobFilter, query]);
+
+  const adapter = collectionCommandAdapter(GRAPH_UPDATES_GRAMMAR, {
+    setQuery, setFilter: (value) => setFilter(graphUpdatesFilterValue(value) as Filter), refresh, id: 'graph-updates-commands',
+    scopeNote: 'Commands search the loaded graph updates and pick a status; they never approve, retry or reject a proposal.',
+  });
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -141,92 +152,98 @@ export default function GraphChangesPage() {
         </Inline>
       )}
 
-      <Toolbar wrap aria-label="Change filters">
-        <ToolbarGroup aria-label="Status">
-          {(['all', 'applied', 'pending', 'rejected', 'failed'] as const).map((f) => (
-            <FilterChip key={f} active={filter === f} onClick={() => setFilter(f)} size="sm">
-              {f}{filter === 'all' && f !== 'all' && counts[f] ? ` (${counts[f]})` : ''}
-            </FilterChip>
-          ))}
-        </ToolbarGroup>
-      </Toolbar>
+      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+        <Toolbar wrap aria-label="Change filters">
+          <ToolbarGroup aria-label="Status">
+            {(['all', 'applied', 'pending', 'rejected', 'failed'] as const).map((f) => (
+              <FilterChip key={f} active={filter === f} onClick={() => setFilter(f)} size="sm">
+                {f}{filter === 'all' && f !== 'all' && counts[f] ? ` (${counts[f]})` : ''}
+              </FilterChip>
+            ))}
+          </ToolbarGroup>
+          <ToolbarGroup aria-label="Search">
+            <SearchInput size="sm" value={query} onChange={setQuery} placeholder="Search graph updates…" aria-label="Search graph updates" className="w-56 max-w-full" />
+          </ToolbarGroup>
+        </Toolbar>
 
-      {loadFailure && (
-        <UnavailableNotice
-          error={loadFailure}
-          what="the graph change history"
-          source="Proposals are read from Aurora"
-          onRetry={refresh}
-          className="mb-4"
-        />
-      )}
-
-      {!loadFailure && (
-      <Card padding="none" className="overflow-hidden">
-        {proposals.length === 0 ? (
-          <EmptyState
-            title="Nothing here"
-            description={filter === 'all'
-              ? 'No agent has proposed a graph change yet. Analyse a document finding in Work to produce some.'
-              : `No ${filter} changes.`}
+        {loadFailure && (
+          <UnavailableNotice
+            error={loadFailure}
+            what="the graph change history"
+            source="Proposals are read from Aurora"
+            onRetry={refresh}
+            className="mb-4"
           />
-        ) : proposals.map((p) => (
-          <Inline key={p.id} align="start" gap="md" className="px-3.5 py-3 border-b border-border last:border-b-0 min-w-0">
-            <Chip tone={PROPOSAL_STATUS_CHIP[p.status] ?? 'neutral'} size="xs" className="shrink-0">
-              {p.status}
-            </Chip>
+        )}
 
-            <Stack gap="xs" className="flex-1 min-w-0">
-              <Inline align="center" gap="sm" wrap>
-                <T className="text-[13px] font-semibold text-text-primary">
-                  {KIND_LABELS[p.kind] ?? p.kind}
-                </T>
-                <T className="text-[11.5px] text-text-secondary font-mono">{describe(p)}</T>
-              </Inline>
+        {!loadFailure && (
+        <Card padding="none" className="overflow-hidden">
+          {proposals.length === 0 ? (
+            <EmptyState
+              title="Nothing here"
+              description={query.trim() ? 'No loaded graph update matches this search.' : filter === 'all'
+                ? 'No agent has proposed a graph change yet. Analyse a document finding in Work to produce some.'
+                : `No ${filter} changes.`}
+            />
+          ) : proposals.map((p) => (
+            <Inline key={p.id} align="start" gap="md" className="px-3.5 py-3 border-b border-border last:border-b-0 min-w-0">
+              <Chip tone={PROPOSAL_STATUS_CHIP[p.status] ?? 'neutral'} size="xs" className="shrink-0">
+                {p.status}
+              </Chip>
 
-              {p.rationale && (
-                <T className="text-[12px] text-text-secondary leading-snug">{p.rationale}</T>
-              )}
-
-              {typeof p.evidence?.['quote'] === 'string' && (
-                <T wrap className="text-[12px] text-text-primary pl-2.5 border-l-2 border-primary/40 italic">
-                  “{String(p.evidence['quote'])}”
-                </T>
-              )}
-
-              {/* A failed apply is the most useful row on this page: it says
-                  the graph did NOT change and exactly why. */}
-              {p.applyError && (
-                <T className="text-[12px] text-danger">
-                  Did not apply — {p.applyError}
-                </T>
-              )}
-
-              {canManage && p.status === 'failed' && (
-                <Inline gap="sm">
-                  <Button size="sm" variant="secondary" onClick={() => void decide(p, 'approve')}>Retry</Button>
-                  <Button size="sm" variant="danger" onClick={() => void decide(p, 'reject')}>Reject it out</Button>
+              <Stack gap="xs" className="flex-1 min-w-0">
+                <Inline align="center" gap="sm" wrap>
+                  <T className="text-[13px] font-semibold text-text-primary">
+                    {KIND_LABELS[p.kind] ?? p.kind}
+                  </T>
+                  <T className="text-[11.5px] text-text-secondary font-mono">{describe(p)}</T>
                 </Inline>
-              )}
 
-              <MetaLine
-                items={[
-                  p.source,
-                  p.confidence != null ? `confidence ${(p.confidence * 100).toFixed(0)}%` : null,
-                  p.reviewer ? `decided by ${p.reviewer}` : 'undecided',
-                  absoluteTime(p.decidedAt ?? p.createdAt),
-                  p.jobId && (
-                    <Link to={`/iq/work/${p.jobId}`} className="text-primary no-underline hover:underline">
-                      from a job →
-                    </Link>
-                  ),
-                ]}
-              />
-            </Stack>
-          </Inline>
-        ))}
-      </Card>
-      )}
+                {p.rationale && (
+                  <T className="text-[12px] text-text-secondary leading-snug">{p.rationale}</T>
+                )}
+
+                {typeof p.evidence?.['quote'] === 'string' && (
+                  <T wrap className="text-[12px] text-text-primary pl-2.5 border-l-2 border-primary/40 italic">
+                    “{String(p.evidence['quote'])}”
+                  </T>
+                )}
+
+                {/* A failed apply is the most useful row on this page: it says
+                    the graph did NOT change and exactly why. */}
+                {p.applyError && (
+                  <T className="text-[12px] text-danger">
+                    Did not apply — {p.applyError}
+                  </T>
+                )}
+
+                {canManage && p.status === 'failed' && (
+                  <Inline gap="sm">
+                    <Button size="sm" variant="secondary" onClick={() => void decide(p, 'approve')}>Retry</Button>
+                    <Button size="sm" variant="danger" onClick={() => void decide(p, 'reject')}>Reject it out</Button>
+                  </Inline>
+                )}
+
+                <MetaLine
+                  items={[
+                    p.source,
+                    p.confidence != null ? `confidence ${(p.confidence * 100).toFixed(0)}%` : null,
+                    p.reviewer ? `decided by ${p.reviewer}` : 'undecided',
+                    absoluteTime(p.decidedAt ?? p.createdAt),
+                    p.jobId && (
+                      <Link to={`/iq/work/${p.jobId}`} className="text-primary no-underline hover:underline">
+                        from a job →
+                      </Link>
+                    ),
+                  ]}
+                />
+              </Stack>
+            </Inline>
+          ))}
+        </Card>
+        )}
+        <CollectionCommandHost adapter={adapter} />
+      </Stack>
     </PageSection>
   );
 }

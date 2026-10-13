@@ -45,7 +45,7 @@ export function ToolWaterfall({ toolCalls }: Props) {
   }, [calls]);
 
   if (calls.length === 0) {
-    return <EmptyState size="sm" title="No tool calls recorded for this invocation." />;
+    return <EmptyState title="No tool calls recorded for this invocation." />;
   }
   return <TraceTimeline trace={trace} title="Tool calls" legendKinds={['tool']} scaleToggle colorByStatus durationColumn
     errorText={(span) => String(span.attributes.errorMessage || 'errored')} />;

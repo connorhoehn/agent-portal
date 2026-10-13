@@ -390,7 +390,7 @@ function QualityPage() {
         {tableRows.length === 0 ? (
           <EmptyState text="No invocations to review yet." degraded={qualityDegraded} />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>When</TableTh>

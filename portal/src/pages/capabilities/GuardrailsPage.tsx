@@ -200,7 +200,6 @@ function GuardrailsPage() {
           <Stack gap="md" className="px-3.5 py-3">
             <StatStrip
               variant="line"
-              size="sm"
               items={[
                 { label: 'grounding threshold', value: `${(guardrail.groundingThreshold * 100).toFixed(0)}%` },
                 { label: 'relevance threshold', value: `${(guardrail.relevanceThreshold * 100).toFixed(0)}%` },
@@ -220,7 +219,7 @@ function GuardrailsPage() {
         {/* PII Filters */}
         <PageSection title="PII Filters" description="Per-entity action (BLOCK | ANONYMIZE | NONE) and on/off toggle.">
           <Card padding="md" data-testid="pii-filters-card">
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Type</TableTh>
@@ -336,7 +335,7 @@ function GuardrailsPage() {
               </Card>
             )}
 
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Topic</TableTh>

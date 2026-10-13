@@ -20,6 +20,7 @@ import {
   CodeBlock,
   Inline,
   PageSection,
+  SearchInput,
   SectionLabel,
   Select,
   Stack,
@@ -37,6 +38,9 @@ import { firstDegraded, readDegraded } from '../../lib/degraded';
 import { KeyValue } from '../../components/KeyValue';
 import { WindowPicker, useWindowUrlState } from './WindowPicker';
 import { relativeTime } from '../../lib/relativeTime';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
+import { ObservabilityCommandSection } from './ObservabilityCommandSection';
+import { OBSERVABILITY_GRAMMARS, matchesAny, memoryEventTarget } from './observabilityCommands';
 
 // ── Types (mirrored from middleware/src/routes/memory.ts) ──────────────────
 
@@ -151,13 +155,20 @@ function MemoryPage() {
     return u.toString();
   }, [agentFilter, kindFilter]);
 
-  const { data: eventsData } = useFetch<MemoryEventsResponse>(
+  const { data: eventsData, refresh: refreshEvents } = useFetch<MemoryEventsResponse>(
     `/api/observability/memory/events?${eventsParams}`,
     30_000,
   );
-  const events = useMemo<MemoryEvent[]>(() => eventsData?.events ?? [], [eventsData]);
+  const loadedEvents = useMemo<MemoryEvent[]>(() => eventsData?.events ?? [], [eventsData]);
+  // Search is local over the loaded feed; the agent and kind filters are
+  // query parameters on the read itself.
+  const [query, setQuery] = useState('');
+  const events = useMemo<MemoryEvent[]>(
+    () => loadedEvents.filter((e) => matchesAny(query, e.memoryEventId, e.agentId, e.sessionId, e.memoryId, e.queryText, e.invocationId)),
+    [loadedEvents, query],
+  );
 
-  const totalEvents = events.length;
+  const totalEvents = loadedEvents.length;
   const totalColdSessions = useMemo(
     () => stats.reduce((acc, s) => acc + s.coldSessions, 0),
     [stats],
@@ -175,6 +186,25 @@ function MemoryPage() {
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const adapter = collectionCommandAdapter(OBSERVABILITY_GRAMMARS.memory, {
+    setQuery,
+    // The kind filter is the one the grammar names; clearing it also returns
+    // the agent selector to all agents.
+    setFilter: (value) => {
+      setExpanded(null);
+      if (KIND_OPTIONS.includes(value) && value) { setKindFilter(value); return; }
+      setKindFilter(''); setAgentFilter('');
+    },
+    refresh: () => { refreshStats(); refreshEvents(); },
+    scopeNote: 'Search matches the loaded recent events; the filter is the event kind. Open expands one exact event ID, as clicking its row does. The window stays as selected, and nothing here writes to or expires memory.',
+    open(target) {
+      if (!eventsData) throw new Error('Wait for the recent events to load before opening one.');
+      const { id } = resolveCollectionTarget(target, events.map(memoryEventTarget));
+      setExpanded(id);
+      return `Showing event ${id}.`;
+    },
+  });
+
   return (
     <PageSection
       title="Memory"
@@ -185,6 +215,7 @@ function MemoryPage() {
       }
       actions={<WindowPicker options={WINDOW_OPTIONS} value={windowIdx} onChange={setWindowIdx} />}
     >
+      <ObservabilityCommandSection adapter={adapter}>
       {(statsError || memoryDegraded) && (
         <UnavailableNotice
           error={statsError ?? memoryDegraded ?? 'the memory query failed'}
@@ -213,7 +244,7 @@ function MemoryPage() {
             ]}
           />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -264,6 +295,13 @@ function MemoryPage() {
           subtitle="click a row to inspect retrieved summary + error detail"
           action={
             <Inline gap="xs">
+              <SearchInput
+                value={query}
+                onChange={(v) => { setQuery(v); setExpanded(null); }}
+                placeholder="Search events"
+                aria-label="Search memory events"
+                className="w-[180px]"
+              />
               <Select
                 aria-label="Filter by agent"
                 size="sm"
@@ -287,7 +325,7 @@ function MemoryPage() {
         {events.length === 0 ? (
           <EmptyState text="No matching memory events in this window." degraded={memoryDegraded} />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -346,6 +384,7 @@ function MemoryPage() {
           </Table>
         )}
       </Card>
+      </ObservabilityCommandSection>
     </PageSection>
   );
 }

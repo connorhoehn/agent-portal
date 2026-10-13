@@ -147,6 +147,28 @@ Space or the frame's Minimize fold it to a 44px strip with Restore
 (`shell.conversation-pane.folded`). On a canvas tab (initiative Activity) the
 docked composer takes its compact one-row form and the header folds.
 
+**Collection pages carry the shared command composer (2026-10-12).** Every
+list/table page in every tenant docks ONE `CollectionCommandHost`
+(`portal/src/components/collections/`) at the bottom of the column that owns
+the table: a page that *is* one collection converts to `CollectionCommandPage`
+(Pipelines Definitions is the precedent); a page whose table is one section
+among others mounts the host as that section's last row and marks the section
+`data-collection-command-boundary="embedded"`, which is the edge the DOM audit
+measures the composer against. The input speaks the one bounded grammar in
+`collectionCommands.ts` (search, at most one existing filter, reset, refresh,
+`open <exact ID or title>` over the rows currently shown, page-declared extra
+phrases with their own handlers) and drives the same controlled toolbar state;
+it never mutates a record, posts to a conversation or invokes an agent, and
+its help popover says so. The audit policy (`portal/e2e/ui-dom-audit.policies.ts`
+`tenantComposerPolicy`) requires the composer on list routes, searchable
+tables and any page with a visible composer, and exempts only on positive
+evidence: dashboards of charts, spatial canvases, configuration/settings
+surfaces, registration placeholders, the Computer Lab, chat directories with no
+selected conversation, observed-404 records, titled record details. A page
+without evidence stays visibly unclassified; never exempt a tenant wholesale.
+Documented route aliases (`AUDIT_ROUTE_ALIASES` in `ui-dom-audit.routes.ts`)
+are the only redirects the audit accepts.
+
 **The pane URL contract (`usePaneState`).** `?pane=<tab>` names a tab;
 `?pane=<tab>&paneRecord=<kind>:<id>` a record tab and its record; the resting
 tab is no params. Tabs are a registry `{id, label, remember?, recordKinds?}`.

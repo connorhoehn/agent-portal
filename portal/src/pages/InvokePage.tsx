@@ -846,7 +846,6 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
               lingering on the finished bubble. */}
           {isStreaming && steps.length > 0 && (
             <WorkflowStepper
-              size="sm"
               steps={steps.map((s, i) => ({
                 step: i + 1,
                 label: s.name,

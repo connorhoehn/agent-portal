@@ -22,6 +22,9 @@ import {
   TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { streamStatusLabel } from '../../lib/streamStatus';
+import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
+import { ObservabilityCommandSection } from './ObservabilityCommandSection';
+import { OBSERVABILITY_GRAMMARS } from './observabilityCommands';
 
 interface AuthzEvent {
   decision: 'ALLOW' | 'DENY';
@@ -50,6 +53,9 @@ function AuthzLogPage() {
   const [streaming, setStreaming] = useState(false);
   /** So the first wait is not reported as a reconnect. See lib/streamStatus. */
   const [connectedOnce, setConnectedOnce] = useState(false);
+  /** Bumped by the `refresh` command: reopen the stream, which replays the
+   *  server's recent buffer. */
+  const [streamKey, setStreamKey] = useState(0);
 
   // Open SSE on mount; reconnect on disconnect via the EventSource browser API.
   useEffect(() => {
@@ -70,7 +76,7 @@ function AuthzLogPage() {
       }
     };
     return () => es.close();
-  }, []);
+  }, [streamKey]);
 
   const filtered = useMemo(() => {
     return events.filter(e => {
@@ -81,6 +87,18 @@ function AuthzLogPage() {
       return true;
     });
   }, [events, decision, role, tenant, actionQ]);
+
+  const adapter = collectionCommandAdapter(OBSERVABILITY_GRAMMARS.authz, {
+    setQuery: setActionQ,
+    // The decision filter is the one the grammar names; clearing it clears
+    // the role and tenant selectors too, so "reset filters" means all of them.
+    setFilter: (value) => {
+      if (value === 'ALLOW' || value === 'DENY') { setDecision(value); return; }
+      setDecision(''); setRole(''); setTenant('');
+    },
+    refresh: () => { setEvents([]); setStreaming(false); setStreamKey(k => k + 1); },
+    scopeNote: 'Search matches action names in the buffered decisions; the filter narrows to allowed or denied. Refresh reconnects the live stream, which reloads the server\'s last 50 decisions. Nothing here grants or revokes access.',
+  });
 
   const allowCount = events.filter(e => e.decision === 'ALLOW').length;
   const denyCount = events.length - allowCount;
@@ -102,6 +120,7 @@ function AuthzLogPage() {
         </Inline>
       }
     >
+      <ObservabilityCommandSection adapter={adapter}>
       <Card padding="sm">
         <Inline gap="md" align="center" wrap>
           <FilterField label="Decision">
@@ -132,6 +151,7 @@ function AuthzLogPage() {
             <Input
               size="sm"
               type="text"
+              aria-label="Search actions"
               value={actionQ}
               onChange={e => setActionQ(e.target.value)}
               placeholder="search action…"
@@ -154,7 +174,7 @@ function AuthzLogPage() {
       </Card>
 
       <Card padding="md">
-        <Table size="sm">
+        <Table>
           <TableHead>
             <TableRow>
               <TableTh>Time</TableTh>
@@ -177,35 +197,40 @@ function AuthzLogPage() {
             )}
             {filtered.map((e, i) => (
               <TableRow key={i}>
+                {/* The cell stays system-ui (docs/layout-cascade.md "Tables");
+                    an identifier is mono inside it, a time is tabular. */}
                 <TableTd
-                  className="text-text-tertiary font-mono whitespace-nowrap"
+                  className="text-text-tertiary whitespace-nowrap"
                   title={new Date(e.ts).toLocaleString()}
                 >
-                  {new Date(e.ts).toLocaleTimeString()}
+                  <T tabular>{new Date(e.ts).toLocaleTimeString()}</T>
                 </TableTd>
                 <TableTd>
                   <Chip tone={e.decision === 'ALLOW' ? 'success' : 'danger'} size="xs">
                     {e.decision}
                   </Chip>
                 </TableTd>
-                <TableTd className="font-mono">
-                  {e.sub}
-                  {e.actor && (
-                    <T size="xs" title={`Masquerade — real identity: ${e.actor}`} className="ml-1.5 text-warning">
-                      via {e.actor}
-                    </T>
-                  )}
+                <TableTd>
+                  <Inline gap="xs" align="baseline" wrap={false}>
+                    <T className="font-mono">{e.sub}</T>
+                    {e.actor && (
+                      <T size="xs" title={`Masquerade — real identity: ${e.actor}`} className="text-warning">
+                        via {e.actor}
+                      </T>
+                    )}
+                  </Inline>
                 </TableTd>
-                <TableTd className="font-mono text-text-secondary">{e.tenant ?? ''}</TableTd>
-                <TableTd className="font-mono">{e.role}</TableTd>
+                <TableTd className="text-text-secondary"><T className="font-mono">{e.tenant ?? ''}</T></TableTd>
+                <TableTd><T className="font-mono">{e.role}</T></TableTd>
                 <TableTd>{e.action}</TableTd>
-                <TableTd className="font-mono text-text-secondary">{e.path ?? ''}</TableTd>
+                <TableTd className="text-text-secondary"><T className="font-mono">{e.path ?? ''}</T></TableTd>
                 <TableTd className="text-text-tertiary">{e.reason ?? ''}</TableTd>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </Card>
+      </ObservabilityCommandSection>
     </PageSection>
   );
 }

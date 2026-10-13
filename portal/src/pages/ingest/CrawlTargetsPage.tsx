@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import {
-  Button, Card, CardHeader, Chip, ConfirmDialog, EmptyState, Inline, InlineAlert, LoadingState,
+  Button, Card, CardHeader, Chip, CollectionToolbar, ConfirmDialog, EmptyState, Inline, InlineAlert, LoadingState,
   PageSection, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { crawlTargetsAdapter, matchesTarget } from './ingestCommands';
 import { useCapabilities } from '../../lib/capabilities';
 import { sendJson, writeJson } from '../../lib/writeJson';
 import { SiteSurveyPanel } from '../../components/ingest/SiteSurveyPanel';
@@ -53,6 +55,10 @@ function CrawlTargetsPage() {
   const [showNewTarget, setShowNewTarget] = useState(false);
   const [editTarget, setEditTarget] = useState<CrawlTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CrawlTarget | null>(null);
+
+  const [query, setQuery] = useState('');
+  const shownTargets = targets.filter(t => matchesTarget(t, query));
+  const adapter = crawlTargetsAdapter({ setQuery, refresh: refreshTargets });
 
   const activeCrawls = useMemo(() => crawls.filter(c => c.status === 'running'), [crawls]);
 
@@ -128,7 +134,7 @@ function CrawlTargetsPage() {
       title="Sources"
       description="What content gets pulled in. Each target is a site the crawler reads and turns into documents."
     >
-      <Stack gap="md">
+      <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
         {actionMessage && (
           <InlineAlert tone={actionMessage.tone === 'ok' ? 'success' : 'error'}>
             {actionMessage.text}
@@ -148,6 +154,12 @@ function CrawlTargetsPage() {
               </Button>
             </Inline>
           )}
+          <Stack gap="none" className="mb-3">
+            <CollectionToolbar label="Crawl target filters"
+              search={{ value: query, onChange: setQuery, placeholder: 'Search crawl targets', 'aria-label': 'Search crawl targets' }}
+              summary={targetsData ? `${shownTargets.length} of ${targets.length} targets` : undefined}
+              onRefresh={refreshTargets} refreshing={targetsLoading} />
+          </Stack>
           {targetsLoading && targets.length === 0 ? (
             <LoadingState label="Loading crawl targets…" />
           ) : targetsFailure && !targetsData ? (
@@ -159,9 +171,11 @@ function CrawlTargetsPage() {
             />
           ) : targets.length === 0 ? (
             <EmptyState title="No crawl targets yet" body="Define a target to start ingesting public web content with vision-LLM extraction." />
+          ) : shownTargets.length === 0 ? (
+            <EmptyState title="No crawl target matches this search" body="Clear the search to see every target." />
           ) : (
             <TargetsTable
-              targets={targets}
+              targets={shownTargets}
               busyId={targetBusy}
               readOnly={!canManage}
               onRun={runTarget}
@@ -188,6 +202,8 @@ function CrawlTargetsPage() {
             />
           </Card>
         )}
+
+        <CollectionCommandHost adapter={adapter} />
 
         {/* Right-side drawer for crawl run details (uses PageDetailModal internally) */}
         <RunDetailDrawer

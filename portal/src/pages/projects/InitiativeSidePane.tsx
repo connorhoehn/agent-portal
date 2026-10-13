@@ -237,7 +237,7 @@ function LogTab({ jobId }: { jobId: string }) {
               <T size="sm" wrap className="min-w-0 flex-1 whitespace-pre-wrap break-words">{line.text}</T>
             </Inline>)}
           </Stack>
-        : <EmptyState size="sm" title={job.status === 'queued' ? 'Waiting for a worker' : 'No activity recorded'}
+        : <EmptyState title={job.status === 'queued' ? 'Waiting for a worker' : 'No activity recorded'}
             body="The full page keeps the run's activity, outputs and changes." />}
     </Stack>
   );
@@ -250,7 +250,7 @@ function DecisionTab({ id, decisions, onOpenWorkItem, onOpenDecisions }: {
 }) {
   if (!decisions) return <LoadingState label="Loading decisions…" />;
   const decision = decisions.find((d) => d.id === id);
-  if (!decision) return <EmptyState size="sm" title="Decision unavailable" body="It is not among this initiative's decisions." />;
+  if (!decision) return <EmptyState title="Decision unavailable" body="It is not among this initiative's decisions." />;
   return (
     <Stack gap="sm" data-testid="initiative-decision">
       <Inline gap="sm" align="start" wrap={false}>

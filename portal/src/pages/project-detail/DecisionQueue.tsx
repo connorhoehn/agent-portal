@@ -63,7 +63,6 @@ export function DecisionQueue({ decisions, onOpen }: { decisions: ProjectDecisio
       data={decisions}
       columns={COLUMNS}
       keyField={(d) => d.id}
-      size="sm"
       onRowClick={onOpen ? (d) => onOpen(d.id) : undefined}
       rowActions={onOpen ? (d) => (
         <IconButton

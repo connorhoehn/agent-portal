@@ -527,7 +527,6 @@ export default function EvaluationsPage(): React.ReactElement {
         {/* Stat cards */}
         <StatStrip
           variant="line"
-          size="sm"
           items={statItems.map(s => ({
             label: s.label.toLowerCase(),
             value: lastJudgeScores ? `${(lastJudgeScores[s.key] * 100).toFixed(0)}` : '—',
@@ -538,7 +537,6 @@ export default function EvaluationsPage(): React.ReactElement {
         {/* Rolling means */}
         <StatStrip
           variant="line"
-          size="sm"
           items={[
             { label: 'rolling mean A', value: hasScoresA ? (rollingMeanA * 10).toFixed(2) : '—', tone: hasScoresA ? scoreStripTone(rollingMeanA) : 'default' },
             { label: 'rolling mean B', value: hasScoresB ? (rollingMeanB * 10).toFixed(2) : '—', tone: hasScoresB ? scoreStripTone(rollingMeanB) : 'default' },

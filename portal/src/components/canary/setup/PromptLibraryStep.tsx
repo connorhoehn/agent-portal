@@ -123,7 +123,7 @@ export function PromptLibraryStep({ onSelect, selected }: PromptLibraryStepProps
 
       {/* Empty state */}
       {!loading && !error && filtered.length === 0 && (
-        <EmptyState size="sm" className="mt-6" title="No prompts found in your Bedrock library" />
+        <EmptyState className="mt-6" title="No prompts found in your Bedrock library" />
       )}
 
       {/* Prompt list */}

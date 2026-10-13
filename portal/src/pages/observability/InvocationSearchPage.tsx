@@ -450,7 +450,7 @@ function InvocationSearchPage() {
             <T size="xs" as="div" className="text-text-tertiary mb-2">
               Showing {rows.length} of {totalCount}
             </T>
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Agent</TableTh>

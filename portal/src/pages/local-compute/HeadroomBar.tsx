@@ -5,7 +5,7 @@
 // machine has room for another job meant reading two numbers per row and doing
 // the division yourself. On a fleet table that is the whole job of the column.
 //
-// A thin bar under the figure answers it at a glance, and colours itself once
+// A thin bar beside the figure answers it at a glance, and colours itself once
 // the machine is genuinely under pressure.
 //
 // This is the library's ProgressBar. It was briefly a hand-rolled pair of
@@ -17,7 +17,7 @@
 // here would itself trip validate-component-discipline.sh, which greps the
 // file rather than its syntax tree — so this paragraph spells it out instead.)
 
-import { ProgressBar, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, ProgressBar, T } from '@connorhoehnslalom/ui-components/shared';
 
 /**
  * Where a reading stops being comfortable.
@@ -47,9 +47,11 @@ export interface HeadroomBarProps {
 
 export function HeadroomBar({ value, pct, detail, 'aria-label': ariaLabel }: HeadroomBarProps) {
   const clamped = pct == null ? null : Math.max(0, Math.min(100, pct));
+  // One line (docs/layout-cascade.md "Tables": 44px rows, the meter inline
+  // beside the value): the figure, then the bar; the denominator is the title.
   return (
-    <Stack gap="xs" className="min-w-[72px]">
-      <T className="text-[13px] tabular-nums">{value}</T>
+    <Inline gap="sm" align="center" wrap={false} className="min-w-[96px]" title={detail}>
+      <T size="sm" tabular>{value}</T>
       {clamped != null && (
         <ProgressBar
           value={clamped}
@@ -57,10 +59,10 @@ export function HeadroomBar({ value, pct, detail, 'aria-label': ariaLabel }: Hea
           size="sm"
           color={toneFor(clamped)}
           showRatio={false}
-          aria-label={ariaLabel}
+          aria-label={`${ariaLabel} (${detail})`}
+          className="w-12 shrink-0"
         />
       )}
-      <T className="text-[11px] text-text-tertiary">{detail}</T>
-    </Stack>
+    </Inline>
   );
 }

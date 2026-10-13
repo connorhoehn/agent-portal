@@ -175,7 +175,6 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
 
       <StatStrip
         variant="line"
-        size="sm"
         className="mb-4"
         items={[
           // An em dash, not a zero: "0 active sessions" and "we could not ask
@@ -302,7 +301,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
             calls the sandbox.
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Session</TableTh>
@@ -322,8 +321,8 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                 return (
                   <Fragment key={ev.id}>
                     <TableRow>
-                      <TableTd className="font-mono text-text-tertiary">
-                        {ev.sessionId ? (ev.sessionId.length > 18 ? ev.sessionId.slice(0, 14) + '…' : ev.sessionId) : '—'}
+                      <TableTd className="text-text-tertiary">
+                        <T className="font-mono">{ev.sessionId ? (ev.sessionId.length > 18 ? ev.sessionId.slice(0, 14) + '…' : ev.sessionId) : '—'}</T>
                       </TableTd>
                       <TableTd className="whitespace-nowrap text-text-tertiary">
                         {relativeTime(ev.startedAt)}
@@ -381,7 +380,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
             No agent-driven sandbox executions in the last 50 invocations.
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -403,8 +402,8 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                       <TableTd className="whitespace-nowrap text-text-tertiary">
                         {relativeTime(exec.timestamp)}
                       </TableTd>
-                      <TableTd className="font-mono text-text-tertiary">
-                        {exec.sessionId ? (exec.sessionId.length > 18 ? exec.sessionId.slice(0, 14) + '…' : exec.sessionId) : '—'}
+                      <TableTd className="text-text-tertiary">
+                        <T className="font-mono">{exec.sessionId ? (exec.sessionId.length > 18 ? exec.sessionId.slice(0, 14) + '…' : exec.sessionId) : '—'}</T>
                       </TableTd>
                       <TableTd className="text-text-tertiary">{exec.durationMs}ms</TableTd>
                       <TableTd>
@@ -464,7 +463,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
             No past sessions yet. Run code above or invoke the scoring agent to trigger one.
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -483,8 +482,8 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                     <TableTd className="whitespace-nowrap text-text-tertiary">
                       {new Date(s.startedAt).toLocaleString()}
                     </TableTd>
-                    <TableTd className="font-mono text-text-tertiary">
-                      {s.sessionId.length > 22 ? s.sessionId.slice(0, 16) + '…' : s.sessionId}
+                    <TableTd className="text-text-tertiary">
+                      <T className="font-mono">{s.sessionId.length > 22 ? s.sessionId.slice(0, 16) + '…' : s.sessionId}</T>
                     </TableTd>
                     <TableTd className="text-text-tertiary">
                       {dur > 0 ? `${(dur / 1000).toFixed(1)}s` : '—'}

@@ -64,7 +64,7 @@ export default function SharedWorkView({ channel, name, messages, plane, onOpenI
         <SectionLabel as="h2">Shared here</SectionLabel>
         {shared.error && <InlineAlert tone="warning">{shared.error}</InlineAlert>}
         {reply?.limits.map((limit) => <InlineAlert key={limit} tone="info">{limit}</InlineAlert>)}
-        <ActionRowList size="sm" items={rows} aria-label={`Shared in ${name}`}
+        <ActionRowList items={rows} aria-label={`Shared in ${name}`}
           emptyLabel={shared.isLoading && !shared.data ? 'Loading…' : 'Nothing has been shared in this conversation yet.'}
           onOpen={(row) => { const item = items.find((i) => i.key === row.id); if (item) onOpenItem({ item }); }}
           data-testid="social-shared-items" />

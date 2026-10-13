@@ -38,6 +38,9 @@ import {
 } from './libraryFormat';
 import type { AssetKind, AssetTier, LibraryAsset, LibraryResponse } from './types';
 import { knowledgeHref } from '../distillation/distillationRoutes';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
+import { LIBRARY_GRAMMAR, libraryTargets } from './libraryCommands';
 
 // Same cadence TiersPage.tsx set for this exact pattern.
 const SEARCH_DEBOUNCE_MS = 250;
@@ -91,56 +94,59 @@ export default function LibraryPage() {
   // /iq/library/:assetId — the trail reads the asset's name once the catalog
   // has it, not the shortened id.
   useCrumbLabel(routeAssetId, assets.find((a) => a.id === routeAssetId)?.name);
+  // The composer drives the same URL state as the filter row: search is `q`,
+  // the one filter is Kind, `open` is the row click. `reset` (kind '') clears
+  // search and Kind in ONE navigation so the two writes cannot race.
+  const commandKind = (value: string) => {
+    if (value) { setFilter('kind', value); return; }
+    cancelPending();
+    const next = new URLSearchParams(params);
+    next.delete('nav'); next.delete('kind'); next.delete('q');
+    navigate(`/iq/library?${next}`);
+  };
+  const adapter = collectionCommandAdapter(LIBRARY_GRAMMAR, {
+    setQuery: (value) => { cancelPending(); setQuery(value); }, setFilter: commandKind, refresh,
+    label: 'Agent library', id: 'agent-library-commands',
+    scopeNote: 'Commands search the library, pick a Kind and open one asset; Tier and Status stay in the filter row, and nothing edits, promotes or retires an asset.',
+    open: (target) => {
+      const asset = resolveCollectionTarget(target, libraryTargets(assets));
+      setOpenId(asset.id);
+      return `Opening ${asset.title}.`;
+    },
+  });
   const kindOptions = useMemo(() => facetOptions(data?.facets.kind ?? {}, KIND_ORDER), [data]);
 
   const columns: DataTableColumn<LibraryAsset>[] = [
     {
       key: 'name', header: 'Asset', width: '44%', sortable: true,
+      // One line (docs/layout-cascade.md "Tables"): the mark, the name and a
+      // draft chip. The description is the cell's title and the asset detail;
+      // the row itself is the control — DataTable rows with onRowClick are
+      // focusable and open on Enter/Space, so no text Button sits in the cell.
       render: (a) => (
-        <Stack gap="none" className="min-w-0">
-          <Inline gap="xs" wrap={false} className="items-center gap-2 min-w-0">
-            {/* A real Button, not just the row's onClick: DataTable's row-click
-                is a bare <tr onClick> with no tabIndex/keydown handling, so a
-                keyboard user tabbing through the filter bar would otherwise
-                skip straight past every row with no way to open one. This is
-                the row's one focusable, Enter/Space-activatable control; the
-                row click stays as a mouse convenience alongside it. */}
-            <FileKindMark kind={a.kind === 'skill' || a.kind === 'evaluator' ? 'workflow' : 'page'} size="md" variant="glyph" />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-w-0 truncate border-none bg-transparent p-0 text-[13px] text-text-primary hover:bg-transparent hover:underline"
-              title={a.name}
-              onClick={(e) => { e.stopPropagation(); setOpenId(a.id); }}
-            >
-              {a.name}
-            </Button>
-            {a.lifecycleStatus === 'draft' && <Chip tone="neutral" size="xs">draft</Chip>}
-          </Inline>
-          {/* Keep a compact preview; the full text is the title and the asset
-              detail. `T` lays out as a flex box, where text-overflow has no
-              effect — the text was cut mid-glyph with no ellipsis — so the
-              preview is made a block for `truncate` to apply. */}
-          <T as="div" className="block truncate text-[12px] text-text-tertiary" title={a.description}>{a.description}</T>
-        </Stack>
+        <Inline gap="sm" wrap={false} align="center" className="min-w-0" title={a.description ? `${a.name} — ${a.description}` : a.name}>
+          <FileKindMark kind={a.kind === 'skill' || a.kind === 'evaluator' ? 'workflow' : 'page'} size="md" variant="glyph" />
+          <T as="div" size="sm" tone="primary" className="block min-w-0 truncate">{a.name}</T>
+          {a.lifecycleStatus === 'draft' && <Chip tone="neutral" size="xs">draft</Chip>}
+        </Inline>
       ),
     },
     {
       key: 'kind', header: 'Kind', width: '12%', sortable: true,
-      render: (a) => <T className="text-[13px] text-text-secondary" title={KIND_HINT[a.kind]}>{KIND_LABEL[a.kind]}</T>,
+      render: (a) => <T size="sm" tone="secondary" title={KIND_HINT[a.kind]}>{KIND_LABEL[a.kind]}</T>,
     },
     {
       key: 'tier', header: 'Tier', width: '12%', sortable: true,
-      render: (a) => <T className="text-[13px] text-text-secondary" title={TIER_HINT[a.tier]}>{TIER_LABEL[a.tier]}</T>,
+      render: (a) => <T size="sm" tone="secondary" title={TIER_HINT[a.tier]}>{TIER_LABEL[a.tier]}</T>,
     },
     {
       key: 'contract', header: 'Inputs', width: '12%',
-      render: (a) => <T className="text-[13px] text-text-secondary whitespace-nowrap">{a.contract.variables.length ? `${a.contract.variables.length} variable${a.contract.variables.length === 1 ? '' : 's'}` : 'None'}</T>,
+      render: (a) => <T size="sm" tone="secondary" className="whitespace-nowrap">{a.contract.variables.length ? `${a.contract.variables.length} variable${a.contract.variables.length === 1 ? '' : 's'}` : 'None'}</T>,
     },
     {
       key: 'usedBy', header: 'Used by', width: '17%',
       render: (a) => (
-        <T as="div" title={a.usedBy.join(', ')} className={`block truncate text-[13px] ${a.usedBy.length === 0 ? 'text-text-tertiary' : 'text-text-secondary'}`}>
+        <T as="div" title={a.usedBy.join(', ')} size="sm" tone={a.usedBy.length === 0 ? 'tertiary' : 'secondary'} className="block truncate">
           {a.usedBy.length ? `${a.usedBy[0].replace(/^bot:/, '').replace('portal:studio', 'Studio').replace('portal:designs', 'Designs')}${a.usedBy.length > 1 ? ` +${a.usedBy.length - 1}` : ''}` : 'Not used yet'}
         </T>
       ),
@@ -163,11 +169,14 @@ export default function LibraryPage() {
       rows={assets.map((asset) => ({ id: asset.id, title: asset.name, subline: KIND_LABEL[asset.kind] }))}
       selectedId={openId} selectedTitle={assets.find((asset) => asset.id === openId)?.name}
       onSelect={setOpenId}
+      footer={openId ? <CollectionCommandHost adapter={adapter} /> : undefined}
       railHeader={<SearchInput value={searchText} onChange={onSearchChange} placeholder="Search assets…" aria-label="Search Agent library" className="w-full" />}
-      railNotice={libraryFailure ? <UnavailableNotice error={libraryFailure} what="library assets" source={LIBRARY_SOURCE} onRetry={refresh} /> : isLoading && !data ? <EmptyState size="sm" title="Loading assets…" /> : assets.length === 0 ? <EmptyState size="sm" title="No assets in this view" /> : undefined}
+      railNotice={libraryFailure ? <UnavailableNotice error={libraryFailure} what="library assets" source={LIBRARY_SOURCE} onRetry={refresh} /> : isLoading && !data ? <EmptyState title="Loading assets…" /> : assets.length === 0 ? <EmptyState title="No assets in this view" /> : undefined}
     >
     {openId ? <AssetDrawer key={openId} id={openId} onOpenAsset={setOpenId} onBack={() => setOpenId(null)} /> :
-    <Stack gap="none">
+    // The overview's PageSection is the composer boundary: this stack is its
+    // direct child, and the command input is its last row.
+    <Stack gap="none" className="min-w-0" data-collection-command-boundary="embedded">
 
       <Inline gap="sm" wrap align="center" className="border-t border-border py-4 mb-2" data-testid="library-filters">
         <SearchInput size="sm" value={searchText} onChange={onSearchChange} placeholder="Search assets…" aria-label="Search assets" className="w-64 max-w-full" />
@@ -221,6 +230,7 @@ export default function LibraryPage() {
         />
       )}
 
+      <CollectionCommandHost adapter={adapter} />
     </Stack>}
     </StackedCatalogLayout>
   );

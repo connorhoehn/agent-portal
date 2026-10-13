@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AccessNotice, formatEstimate, type RunEstimate } from '@connorhoehnslalom/ui-components';
-import { Button, FormField, Inline, NumberInput, Select, Stack, Textarea } from '@connorhoehnslalom/ui-components/shared';
+import { Button, FormField, FormRow, Inline, NumberInput, Select, Stack, T, Textarea } from '@connorhoehnslalom/ui-components/shared';
 import {
   storedEstimateFor,
   type EstimateProvenance,
@@ -177,7 +177,7 @@ function RunDraftForItem({
           placeholder="Describe the change and what done looks like…"
           disabled={!canDispatch} data-testid="run-draft-instruction" />}
       </FormField>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <FormRow>
         <FormField label="Codebase">
           {wiring => <Select {...wiring} size="sm" value={agentProjectId ?? ''}
             options={codebases.map(c => ({ value: c.id, label: c.repoFullName }))}
@@ -190,34 +190,36 @@ function RunDraftForItem({
             options={DEVBOX_MODELS.map(m => ({ value: m.id, label: m.label }))}
             onChange={event => setModel(event.target.value)} />}
         </FormField>
+      </FormRow>
+      <FormRow>
         <FormField label="Run cap" hint={capHint}>
           {wiring => <NumberInput {...wiring} size="sm" min={0} step={0.05} unit="USD"
             value={capUsd ?? undefined} placeholder="No cap" disabled={!canDispatch}
             onChange={setCapUsd} onClear={() => setCapUsd(null)}
             data-testid="run-draft-budget-input" />}
         </FormField>
-        <FormField label="Forecast" data-testid="run-draft-forecast" hint={est.estimate && <span className="text-text-tertiary">
+        <FormField label="Forecast" data-testid="run-draft-forecast" hint={est.estimate && <T tone="tertiary" wrap>
             {est.stored ? 'Recorded estimate · ' : ''}
             {est.estimate.basis === 'prior'
               ? 'Prior forecast · low confidence'
               : `${est.estimate.sampleCount} prior ${est.estimate.sampleCount === 1 ? 'run' : 'runs'}`}
-          </span>}>
+          </T>}>
           {wiring => <output id={wiring.id} aria-describedby={wiring['aria-describedby']} className="block py-1 text-sm text-text-primary">
             {est.error ? 'Forecast unavailable' : formatEstimate(cost)}{cost.kind === 'range' && duration.kind === 'range' ? ` · ${formatEstimate(duration)}` : ''}
           </output>}
         </FormField>
-      </div>
+      </FormRow>
       {!canDispatch && <AccessNotice tone="info" title="An SME or leader authorizes jobs"
         body="An SME needs a sprint grant here; a release manager can authorize directly." data-testid="run-draft-access" />}
       {canDispatch && showGrantCue && <AccessNotice tone="warning" title="Sprint access required"
         body="You have no active sprint grant on this initiative."
         action={{ label: 'Open sprints', href: '/iq/sprints' }} data-testid="run-draft-access" />}
-      {est.error && item.storyPoints != null && <p role="alert" className="text-xs text-danger">{est.error}</p>}
+      {est.error && item.storyPoints != null && <T as="p" size="xs" role="alert" wrap className="text-danger">{est.error}</T>}
       <Inline gap="sm" wrap className="justify-between border-t border-border pt-3">
-        <p className="text-xs text-text-tertiary">
+        <T as="p" size="xs" tone="tertiary" wrap>
           {run?.status === 'running' ? 'A job is running for this item. ' : ''}
           {canDispatch && blocked ? `${blocked}.` : 'Nothing starts until you authorize.'}
-        </p>
+        </T>
         <Inline gap="sm" wrap>
           <Button variant="secondary" size="sm" disabled={saving || !!saveBlocked} title={saveBlocked}
             onClick={() => { void save(); }} data-testid="run-draft-save">

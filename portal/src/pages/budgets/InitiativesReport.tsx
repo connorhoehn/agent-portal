@@ -4,6 +4,7 @@
 // the ManageBudgets capability, same engine as the API's own gate.
 
 import { useEffect, useRef, useState } from 'react';
+import { matchesBudget } from './budgetsCommands';
 import { Link } from 'react-router';
 import {
   Button,
@@ -260,10 +261,12 @@ export interface InitiativesReportProps {
    * click-triggered path, but it was still the same request twice).
    */
   initiatives: InitiativeOption[] | null;
+  /** The page's controlled search; narrows the table, never the empty state. */
+  query?: string;
 }
 
 export function InitiativesReport({
-  budgets, summary, error, hasData, canManage, refresh, initiatives,
+  budgets, summary, error, hasData, canManage, refresh, initiatives, query = '',
 }: InitiativesReportProps) {
   const [confirmDelete, setConfirmDelete] = useState<BudgetRow | null>(null);
   const [showFirstBudget, setShowFirstBudget] = useState(false);
@@ -422,8 +425,8 @@ export function InitiativesReport({
           cards above the table — three summary blocks before any row). */}
       <DataTable
         data-testid="budgets-initiatives-table"
-        size="sm"
-        data={budgets}
+        data={budgets.filter((row) => matchesBudget(row, query))}
+        emptyMessage="No initiative matches this search."
         columns={columns}
         keyField={(row) => row.orgProjectId}
         {...(canManage ? { rowActions: (row: BudgetRow) => row.allocatedUsd != null ? (

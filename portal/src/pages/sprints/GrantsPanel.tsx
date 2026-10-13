@@ -307,7 +307,7 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
       ) : grants.length === 0 ? (
         <InlinePlaceholder>No envelope is granted to this sprint yet.</InlinePlaceholder>
       ) : (
-        <Table size="sm">
+        <Table>
           <TableHead>
             <TableRow>
               <TableTh>Grantee</TableTh>

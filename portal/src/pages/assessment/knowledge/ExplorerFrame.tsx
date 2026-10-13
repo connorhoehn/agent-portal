@@ -84,10 +84,13 @@ export function ExplorerFrame({ rail, children, aside, paneHeader }: ExplorerFra
           onDividerActivate={toggleRail}
           className="flex-1"
           data-testid="knowledge-explorer"
-          secondary={<Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="knowledge-explorer-pane-column">
+          secondary={<Inline gap="none" align="stretch" wrap={false} className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+          {/* The context strip is a rail beside the content column, so the composer's
+              boundary (the pane column) excludes it instead of hiding a 48px gap. */}
+          <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="knowledge-explorer-pane-column">
           {paneHeader && <Stack gap="none" className="shrink-0 bg-surface" data-testid="knowledge-explorer-pane-header">{paneHeader}</Stack>}
-          <Inline gap="none" align="stretch" wrap={false} className="min-h-0 min-w-0 flex-1 overflow-hidden">
             <Stack gap="none" className="min-h-0 min-w-0 flex-1 overflow-y-auto" data-testid="knowledge-explorer-pane">{children}</Stack>
+          </Stack>
             {aside ? <ContextColumn state={state} onStateChange={setState}
             label="Document context" activeId={active} onActivate={(id) => open(id as PanelId)}
             panels={[
@@ -95,8 +98,7 @@ export function ExplorerFrame({ rail, children, aside, paneHeader }: ExplorerFra
               { id: 'chat', label: 'Chat', icon: <ChatIcon size={16} />, content: dock },
               { id: 'activity', label: 'Activity', icon: '◷', content: aside },
             ]} /> : null}
-          </Inline>
-          </Stack>}
+          </Inline>}
         />
       </Stack>
     </DocumentContext.Provider>

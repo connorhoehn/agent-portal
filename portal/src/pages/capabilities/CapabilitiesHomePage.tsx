@@ -18,9 +18,11 @@
 // fallback that failed soft — all traced back to it, each diagnosed on its
 // own. One line here would have replaced all three.
 
+import { useState } from 'react';
 import { Link } from 'react-router';
 import {
   Card,
+  CollectionToolbar,
   CardHeader,
   Chip,
   DataTable,
@@ -28,7 +30,6 @@ import {
   Inline,
   LoadingState,
   MetaLine,
-  PageSection,
   Stack,
   type DataTableColumn, T,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -36,6 +37,9 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession, type SessionRole } from '../../lib/auth';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { relativeTime } from '../../lib/relativeTime';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { capabilitiesAdapter, matchesCapability } from './capabilitiesCommands';
 
 /** Everything under `/admin/ingest` — including `/admin/ingest/crawl`, which
  *  "Surveying a site" and the footer's "Knowledge → Sources" point at — is
@@ -159,6 +163,9 @@ export default function CapabilitiesHomePage() {
     '/api/observability/capability-events?limit=100', 30_000,
   );
   const caps = data?.capabilities ?? [];
+  const [query, setQuery] = useState('');
+  const rows = caps.filter((c) => matchesCapability(c, query));
+  const adapter = capabilitiesAdapter({ setQuery, refresh });
   const problems = caps.filter((c) => c.state === 'missing' || c.state === 'unknown');
 
   const lastUse = (key: CapabilityStatus['key']): string | undefined => (events?.events ?? [])
@@ -246,10 +253,16 @@ export default function CapabilitiesHomePage() {
   ];
 
   return (
-    <PageSection
+    <CollectionCommandPage
       title="Capabilities"
       description="What the AgentCore platform provides, whether it is really there, and what in this app depends on it."
     >
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)] pb-[var(--ui-page-gutter)]">
+      <CollectionToolbar label="Capability filters"
+        search={{ value: query, onChange: setQuery, placeholder: 'Search capabilities', 'aria-label': 'Search capabilities' }}
+        summary={data ? `${rows.length} of ${caps.length} capabilities` : undefined}
+        onRefresh={refresh} refreshing={isLoading} />
       {error && (
         <UnavailableNotice
           error={error}
@@ -288,12 +301,13 @@ export default function CapabilitiesHomePage() {
         // above the fold, and the guardrails become what they are: one thing
         // configured three ways.
         <DataTable<CapabilityStatus>
-          data={caps}
+          data={rows}
           keyField={(c) => c.key}
-          size="sm"
           striped
           columns={columns}
-          emptyMessage="No capabilities reported. The reconcile endpoint returned an empty list, which means the account has none configured rather than that the check failed."
+          emptyMessage={caps.length > 0
+            ? 'No capability matches this search.'
+            : 'No capabilities reported. The reconcile endpoint returned an empty list, which means the account has none configured rather than that the check failed.'}
         />
       )}
 
@@ -307,6 +321,9 @@ export default function CapabilitiesHomePage() {
         )}
         , where a crawl can be scoped to what a survey found instead of started blind.
       </T>
-    </PageSection>
+      </Stack>
+      <CollectionCommandHost adapter={adapter} />
+      </Stack>
+    </CollectionCommandPage>
   );
 }

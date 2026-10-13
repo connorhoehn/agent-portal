@@ -55,7 +55,7 @@ export function CollectionCommandHost({ adapter, disabled = false }: { adapter: 
           aria-label={`Available ${adapter.label.toLowerCase()} commands`} className="max-w-md p-4">
           <Stack gap="sm"><T size="sm" weight="semibold">Table commands</T>
             <T size="xs" tone="secondary">Filter, search or refresh this table. Use the phrases below for available actions.</T>
-            <ul className="flex flex-col gap-1">{adapter.examples.map(example => <li key={example}><T size="sm">{example}</T></li>)}</ul>
+            <Stack as="ul" gap="xs">{adapter.examples.map(example => <li key={example}><T size="sm">{example}</T></li>)}</Stack>
             <T size="xs" tone="secondary">{adapter.scopeNote}</T>
           </Stack>
         </InlinePopover></>}

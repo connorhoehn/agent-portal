@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
-  Button, Card, CardHeader, Chip, Inline, InlineAlert, InlinePlaceholder, LoadingState,
+  Button, Card, CardHeader, Chip, CollectionToolbar, Inline, InlineAlert, InlinePlaceholder, LoadingState,
   PageSection, ProgressBar, Stack, StatStrip, Table, TableBody, TableHead, TableRow,
   TableTd, TableTh, T,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -10,6 +10,8 @@ import { useFetch } from '../../hooks/useFetch';
 import { EmptyState, StatusDot } from '../../components/ingest/ui';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { JOB_STATUS_TONE } from './ingestFormat';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { kbSyncAdapter, matchesDataSource, matchesJob } from './ingestCommands';
 
 interface DataSource {
   id: string; name: string; status: string; description: string;
@@ -84,6 +86,12 @@ function DataSourcesPage() {
     { tone: 'ok' | 'err' | 'busy'; text: string } | null
   >(null);
 
+  const [query, setQuery] = useState('');
+  const shownSources = sources.filter(ds => matchesDataSource(ds, query));
+  const shownJobs = jobs.filter(j => matchesJob(j, query));
+  const refreshAll = () => { refreshSources(); refreshJobs(); };
+  const adapter = kbSyncAdapter({ setQuery, refresh: refreshAll });
+
   const activeJob = jobs.find(j => ACTIVE_STATUSES.has(j.status)) ?? null;
 
   const { liveJob, streamDone } = useIngestionStream(
@@ -116,7 +124,11 @@ function DataSourcesPage() {
       title="KB sync"
       description="The data sources that carry storage into the knowledge base, and the jobs that ran."
     >
-      <Stack gap="md">
+      <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+        <CollectionToolbar label="KB sync filters"
+          search={{ value: query, onChange: setQuery, placeholder: 'Search data sources and jobs', 'aria-label': 'Search data sources and jobs' }}
+          summary={sourcesData || jobsData ? `${shownSources.length} of ${sources.length} sources · ${shownJobs.length} of ${jobs.length} jobs` : undefined}
+          onRefresh={refreshAll} refreshing={sourcesLoading || jobsLoading} />
         {actionMessage && (
           <InlineAlert
             tone={
@@ -148,8 +160,10 @@ function DataSourcesPage() {
             <LoadingState label="Loading data sources…" />
           ) : sources.length === 0 ? (
             <EmptyState title="No data sources" body="No data sources attached to this Knowledge Base." />
+          ) : shownSources.length === 0 ? (
+            <EmptyState title="No data source matches this search" body="Clear the search to see every data source." />
           ) : (
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Name</TableTh><TableTh>Type</TableTh>
@@ -157,7 +171,7 @@ function DataSourcesPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {sources.map(ds => (
+                {shownSources.map(ds => (
                   <TableRow key={ds.id}>
                     <TableTd>
                       <Inline gap="sm" align="center" wrap={false}>
@@ -166,8 +180,7 @@ function DataSourcesPage() {
                       </Inline>
                     </TableTd>
                     <TableTd><T as="span" size="xs" tone="secondary">{ds.type}</T></TableTd>
-                    <TableTd
-                      title={ds.sourceUri} className="max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap font-mono"><T as="span" size="xs" tone="secondary">
+                    <TableTd title={ds.sourceUri} className="max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap"><T className="font-mono" as="span" size="xs" tone="secondary">
                       {ds.sourceUri || '—'}
                     </T></TableTd>
                     <TableTd>
@@ -212,10 +225,13 @@ function DataSourcesPage() {
             <LoadingState label="Loading ingestion jobs…" />
           ) : jobs.length === 0 ? (
             <EmptyState title="No ingestion jobs yet" />
+          ) : shownJobs.length === 0 ? (
+            <EmptyState title="No ingestion job matches this search" />
           ) : (
-            <JobHistoryTable jobs={jobs} />
+            <JobHistoryTable jobs={shownJobs} />
           )}
         </Card>
+        <CollectionCommandHost adapter={adapter} />
       </Stack>
     </PageSection>
   );
@@ -255,7 +271,6 @@ function LiveJobMonitor({
 
         <StatStrip
           variant="line"
-          size="sm"
           aria-label="Job document counts"
           items={[
             { label: 'scanned', value: job.documentsScanned },
@@ -284,7 +299,7 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
   }
 
   return (
-    <Table size="sm">
+    <Table>
       <TableHead>
         <TableRow>
           <TableTh>Job</TableTh><TableTh>Started</TableTh><TableTh>Status</TableTh>
@@ -300,7 +315,7 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
         {jobs.map(j => (
           <Fragment key={j.jobId}>
             <TableRow>
-              <TableTd className="font-mono"><T as="span" size="xs" tone="tertiary">
+              <TableTd><T className="font-mono" as="span" size="xs" tone="tertiary">
                 {j.jobId.slice(0, 12)}…
               </T></TableTd>
               <TableTd className="whitespace-nowrap"><T as="span" size="xs" tone="tertiary">

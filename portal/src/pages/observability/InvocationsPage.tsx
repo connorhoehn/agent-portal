@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   CatalogGrid,
   Card,
@@ -13,6 +13,7 @@ import {
   LoadingState,
   MetaLine,
   PageSection,
+  SearchInput,
   SectionLabel,
   Select,
   Stack,
@@ -33,6 +34,9 @@ import {
   parseStatusFilter,
   type StatusFilter,
 } from './invocationsFilters';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
+import { ObservabilityCommandSection } from './ObservabilityCommandSection';
+import { OBSERVABILITY_GRAMMARS, invocationTarget, matchesAny } from './observabilityCommands';
 
 interface SandboxExecution {
   code: string;
@@ -103,7 +107,7 @@ function InvocationsPage() {
   // so there are no skeleton rows to reach for — see the shared list-page
   // loading pattern comment in QueuePage.tsx for the DataTable version.
   const recentLoadingFirst = recentLoading && !recent;
-  const { data: bedrock } = useFetch<{ entries: BedrockInvocation[] }>(
+  const { data: bedrock, refresh: refreshBedrock } = useFetch<{ entries: BedrockInvocation[] }>(
     '/api/observability/bedrock-invocations?limit=20&sinceMin=60',
     20000,
   );
@@ -189,8 +193,12 @@ function InvocationsPage() {
     [agentFilter, resolveAgentKey],
   );
 
+  // Local search over the loaded tail. Unlike the two filters it stays out of
+  // the URL: it narrows what is loaded, not which runs a link points at.
+  const [query, setQuery] = useState('');
   const filtered = useMemo(() => {
     return allInvocations.filter((inv) => {
+      if (!matchesAny(query, inv.id, inv.agentName, inv.agentId, inv.promptSnippet, inv.responseSnippet, inv.error)) return false;
       if (resolvedAgentFilter !== 'all' && resolveAgentKey(inv.agentId, inv.agentName) !== resolvedAgentFilter) {
         return false;
       }
@@ -199,12 +207,32 @@ function InvocationsPage() {
       if (statusFilter === 'error' && !inv.error) return false;
       return true;
     });
-  }, [allInvocations, resolvedAgentFilter, statusFilter, resolveAgentKey]);
+  }, [allInvocations, resolvedAgentFilter, statusFilter, resolveAgentKey, query]);
 
-  const filtersActive = resolvedAgentFilter !== 'all' || statusFilter !== 'all';
+  const filtersActive = resolvedAgentFilter !== 'all' || statusFilter !== 'all' || query.trim().length > 0;
   const clearFilters = useCallback(() => {
+    setQuery('');
     setSearchParams((prev) => applyFiltersToParams(prev, 'all', 'all'), { replace: true });
   }, [setSearchParams]);
+
+  const navigate = useNavigate();
+  const adapter = collectionCommandAdapter(OBSERVABILITY_GRAMMARS.runs, {
+    setQuery,
+    // The status filter is the one the grammar names; clearing it also
+    // returns the agent selector to All agents, as Clear filters does.
+    setFilter: (value) => {
+      if (value === 'ok' || value === 'blocked' || value === 'error') { setStatusFilter(value); return; }
+      setSearchParams((prev) => applyFiltersToParams(prev, 'all', 'all'), { replace: true });
+    },
+    refresh: () => { refreshRecent(); refreshBedrock(); },
+    scopeNote: 'Search matches the loaded live tail (agent, prompt, response, run ID); the filter is the run status. Open goes to one exact visible run ID. Nothing here re-runs or cancels an invocation.',
+    open(target) {
+      if (!recent) throw new Error('Wait for the run feed to load before opening a run.');
+      const { id } = resolveCollectionTarget(target, filtered.map(invocationTarget));
+      navigate(`/admin/observability/invocations/${encodeURIComponent(id)}`);
+      return `Opened run ${id}.`;
+    },
+  });
 
   const intervenedCount = filtered.filter((i) => i.guardrailIntervened).length;
   const errorCount = filtered.filter((i) => i.error).length;
@@ -225,6 +253,13 @@ function InvocationsPage() {
           >
             Search & triage →
           </Link>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search runs"
+            aria-label="Search runs"
+            className="w-[200px]"
+          />
           <Select
             aria-label="Filter by agent"
             value={resolvedAgentFilter}
@@ -251,6 +286,7 @@ function InvocationsPage() {
         </Inline>
       }
     >
+      <ObservabilityCommandSection adapter={adapter}>
       <Card padding="md">
         {recentLoadingFirst ? (
           <LoadingState label="Loading invocations…" />
@@ -275,7 +311,7 @@ function InvocationsPage() {
             />
           )
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 {/* No "Prompt ver." or "Cost" column here, on purpose.
@@ -371,7 +407,7 @@ function InvocationsPage() {
             No Bedrock calls in the last hour. Invoke an agent and wait ~30s.
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>When</TableTh>
@@ -392,8 +428,8 @@ function InvocationsPage() {
                     {relativeTime(b.timestamp)}
                   </TableTd>
                   <TableTd className="whitespace-nowrap">{b.agent}</TableTd>
-                  <TableTd className="font-mono text-[var(--color-text-tertiary)]">
-                    {b.operation}
+                  <TableTd className="text-[var(--color-text-tertiary)]">
+                    <T className="font-mono">{b.operation}</T>
                   </TableTd>
                   <TableTd className="max-w-[320px] truncate" title={b.promptSnippet}>
                     {b.promptSnippet}
@@ -424,6 +460,7 @@ function InvocationsPage() {
           </Table>
         )}
       </Card>
+      </ObservabilityCommandSection>
     </PageSection>
   );
 }

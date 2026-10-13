@@ -76,7 +76,7 @@ export function SharingGrants({ sharing, onChanged }: { sharing: SharingEnvelope
     <Stack gap="sm" data-testid="plane-sharing-grants">
       <SectionLabel as="h2">What you share</SectionLabel>
       {error && <InlineAlert tone="warning">{error}</InlineAlert>}
-      <ActionRowList size="sm" action="Stop" aria-label="What you share"
+      <ActionRowList action="Stop" aria-label="What you share"
         items={live.map((g) => ({
           id: g.id, title: `With ${audienceLabel(g, labelOf)}`,
           description: <MetaLine size="xs" tone="tertiary" items={[`${g.nodeIds.length} ${g.nodeIds.length === 1 ? 'item' : 'items'}`, g.state === 'paused' ? 'paused' : null, g.expiresAt ? `until ${new Date(g.expiresAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : null]} />,

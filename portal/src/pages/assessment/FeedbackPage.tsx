@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Chip,
+  CollectionToolbar,
   DataTable,
   DetailSection,
   Drawer,
@@ -18,9 +19,6 @@ import {
   ErrorState,
   Inline,
   MetaLine,
-  SearchInput,
-  PageHeader,
-  Select,
   Stack,
   StatStrip,
   T,
@@ -30,6 +28,9 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { Link } from 'react-router';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { feedbackCommandAdapter } from './assessmentCollectionCommands';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
@@ -258,56 +259,46 @@ export default function FeedbackPage() {
   const selected = rows.find((t) => t.task_id === selectedId) ?? tasks.find((t) => t.task_id === selectedId) ?? null;
   const teamOptions = [{ value: 'all', label: 'All teams' }, ...teamIds.map((id) => ({ value: id, label: nameById.get(id) ?? id }))];
 
+  const adapter = feedbackCommandAdapter(rows, {
+    setQuery: (value) => { cancelSearchPending(); setSearch(value); },
+    setStatus,
+    clearTeam: () => setTeam('all'),
+    refresh: load,
+    openQuestion: setSelectedId,
+  });
+
   return (
-    <Stack gap="md">
-      <PageHeader
-        title="Question queue"
-        description="Every question a team still owes the assessment. Answering closes the question; the evidence behind the answer is what moves verification."
+    <CollectionCommandPage
+      data-testid="assessment-feedback"
+      title="Question queue"
+      description="Every question a team still owes the assessment. Answering closes the question; the evidence behind the answer is what moves verification."
+    >
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)] pb-4">
+      <StatStrip
+        aria-label="Queue summary"
+        variant="line"
+        items={[
+          { label: openCount === 1 ? 'open question' : 'open questions', value: openCount, ...(openCount > 0 ? { tone: 'danger' as const } : {}) },
+          // Not folded into the count above and not hidden either: these are
+          // real open work, they are just yours rather than the team.
+          ...(openDecisions.length > 0
+            ? [{ label: 'waiting on you', value: openDecisions.length, tone: 'accent' as const }]
+            : []),
+          { label: 'showing', value: rows.length },
+        ]}
       />
-      <Inline align="center" gap="md" wrap>
-        <StatStrip
-          aria-label="Queue summary"
-          variant="line"
-          size="sm"
-          items={[
-            { label: openCount === 1 ? 'open question' : 'open questions', value: openCount, ...(openCount > 0 ? { tone: 'danger' as const } : {}) },
-            // Not folded into the count above and not hidden either: these are
-            // real open work, they are just yours rather than the team's.
-            ...(openDecisions.length > 0
-              ? [{ label: 'waiting on you', value: openDecisions.length, tone: 'accent' as const }]
-              : []),
-            { label: 'showing', value: rows.length },
-          ]}
-        />
-        <Select
-          size="sm"
-          className="w-40"
-          aria-label="Status"
-          value={status}
-          onChange={(e) => setStatus(e.target.value as HitlStatus | 'ALL')}
-          options={STATUS_OPTIONS}
-        />
-        <Select
-          size="sm"
-          className="w-56"
-          aria-label="Team"
-          value={team}
-          onChange={(e) => setTeam(e.target.value)}
-          options={teamOptions}
-        />
-        {(team !== 'all' || search) && (
-          <Button variant="ghost" size="sm" onClick={() => { setTeam('all'); cancelSearchPending(); setSearch(''); }}>Clear filters</Button>
-        )}
-        <SearchInput
-          size="sm"
-          className="ml-auto w-64 shrink-0"
-          value={searchText}
-          onChange={onSearchChange}
-          onClear={() => { cancelSearchPending(); setSearch(''); }}
-          aria-label="Search questions"
-          placeholder="Search questions, dimensions or teams…"
-        />
-      </Inline>
+      <CollectionToolbar
+        label="Question filters"
+        search={{ value: searchText, onChange: onSearchChange, placeholder: 'Search questions, dimensions or teams…', 'aria-label': 'Search questions' }}
+        filters={[
+          // OPEN is the queue's default, so it is the filter's "no restriction" value.
+          { id: 'status', label: 'Status', value: status, emptyValue: 'OPEN', onChange: (v) => setStatus((v || 'OPEN') as HitlStatus | 'ALL'), options: STATUS_OPTIONS },
+          { id: 'team', label: 'Team', value: team, emptyValue: 'all', onChange: (v) => setTeam(v || 'all'), options: teamOptions },
+        ]}
+        onRefresh={load}
+        refreshing={loading}
+      />
 
       {/* See the shared list-page loading pattern comment in QueuePage.tsx —
           the filter toolbar above stays mounted; only the table body needs
@@ -325,7 +316,6 @@ export default function FeedbackPage() {
         <DataTable<FeedbackTask>
           data={rows}
           keyField={(t) => t.task_id}
-          size="sm"
           onRowClick={(t) => setSelectedId(t.task_id)}
           striped
           loading={loading && !data}
@@ -353,7 +343,7 @@ export default function FeedbackPage() {
             { key: 'created_at', header: 'Raised', sortable: true, numeric: true, render: (t) => <T size="sm" className="justify-end" title={t.source ? `source: ${t.source}` : undefined}>{formatRelativeTime(t.created_at)}</T> },
             // Status earns its width only when the rows can disagree. Under
             // the default OPEN filter every row is open and the column just
-            // restated the filter, so it was removed — but under "All
+            // restated the filter, so it was removed — but under All
             // statuses" the rows genuinely differ and dropping it left no way
             // to tell an open question from an answered one. Conditional, not
             // deleted.
@@ -376,6 +366,9 @@ export default function FeedbackPage() {
         onClose={() => setSelectedId(null)}
         onChanged={load}
       />
-    </Stack>
+      </Stack>
+      <CollectionCommandHost adapter={adapter} />
+      </Stack>
+    </CollectionCommandPage>
   );
 }

@@ -18,6 +18,7 @@ import {
   PageSection,
   PlayCircleIcon,
   RedoIcon,
+  SearchInput,
   Stack,
   TaskComposer,
   Toolbar,
@@ -33,6 +34,9 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { sendJson, writeJson } from '../../lib/writeJson';
 import { AssignJobModal } from './AssignJobModal';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
+import { QUEUE_GRAMMAR, matchesJob, queueFilterValue } from './workCollectionCommands';
 import {
   ACTIVE_RUNS_URL, dispatchedRunDestination, dispatchedRunLabel, dispatchedRunsNoun, type DispatchedRun,
 } from './dispatchedRuns';
@@ -61,6 +65,8 @@ export default function QueuePage() {
   const [params, setParams] = useSearchParams();
   const filter = params.get('status') ?? 'all';
   const setFilter = (status: string) => { const next = new URLSearchParams(params); next.set('status', status); setParams(next); };
+  // The queue's search: one state for the toolbar box and the composer.
+  const [query, setQuery] = useState('');
   // "New run" opens the composer in a dialog over the table, keyed on
   // `?compose=1` so the Inbox's button, this page's own button and a pasted
   // link all land the same way. The composer used to sit under the full runs
@@ -122,9 +128,19 @@ export default function QueuePage() {
 
   const filtered = useMemo(() => {
     const spec = JOB_FILTERS.find((f) => f.value === filter);
-    if (!spec || spec.statuses.length === 0) return jobs;
-    return jobs.filter((j) => spec.statuses.includes(j.status));
-  }, [jobs, filter]);
+    const byState = !spec || spec.statuses.length === 0 ? jobs : jobs.filter((j) => spec.statuses.includes(j.status));
+    return byState.filter((j) => matchesJob(j, query));
+  }, [jobs, filter, query]);
+
+  const adapter = collectionCommandAdapter(QUEUE_GRAMMAR, {
+    setQuery, setFilter: (value) => setFilter(queueFilterValue(value)), refresh: refreshJobs, id: 'queue-runs-commands',
+    scopeNote: 'Commands search the loaded queue page, pick a State chip and open one run; they never queue, requeue, cancel or assign work.',
+    open: (target) => {
+      const job = resolveCollectionTarget(target, filtered);
+      navigate(`/iq/work/${job.id}`);
+      return `Opening ${job.title}.`;
+    },
+  });
 
   const countFor = (value: string): number => {
     const spec = JOB_FILTERS.find((f) => f.value === value)!;
@@ -330,81 +346,88 @@ export default function QueuePage() {
             data={dispatched}
             columns={dispatchedColumns}
             keyField={(r) => r.id}
-            size="sm"
             onRowClick={(r) => navigate(dispatchedRunDestination(r, canManage).path)}
             emptyMessage="Nothing dispatched is running"
           />
         </Stack>
       )}
 
-      {/* ── The queue itself ── */}
-      <Toolbar wrap aria-label="Job filters">
-        <ToolbarGroup aria-label="State">
-          <ToolbarLabel>State</ToolbarLabel>
-          {JOB_FILTERS.map((f) => (
-            <FilterChip key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)} size="sm">
-              {f.label}{countFor(f.value) > 0 ? ` ${countFor(f.value)}` : ''}
-            </FilterChip>
-          ))}
-        </ToolbarGroup>
-      </Toolbar>
+      {/* ── The queue itself, with its command input as the last row of
+             the block it drives (the PageSection is the composer boundary). ── */}
+      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+        <Toolbar wrap aria-label="Job filters">
+          <ToolbarGroup aria-label="State">
+            <ToolbarLabel>State</ToolbarLabel>
+            {JOB_FILTERS.map((f) => (
+              <FilterChip key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)} size="sm">
+                {f.label}{countFor(f.value) > 0 ? ` ${countFor(f.value)}` : ''}
+              </FilterChip>
+            ))}
+          </ToolbarGroup>
+          <ToolbarGroup aria-label="Search">
+            <SearchInput size="sm" value={query} onChange={setQuery} placeholder="Search runs…" aria-label="Search runs" className="w-56 max-w-full" />
+          </ToolbarGroup>
+        </Toolbar>
 
-      {jobsFailure && (
-        <UnavailableNotice
-          error={jobsFailure}
-          what="the job queue"
-          source="Jobs are read from Aurora"
-          onRetry={refreshJobs}
-          className="mb-4"
-        />
-      )}
+        {jobsFailure && (
+          <UnavailableNotice
+            error={jobsFailure}
+            what="the job queue"
+            source="Jobs are read from Aurora"
+            onRetry={refreshJobs}
+            className="mb-4"
+          />
+        )}
 
-      {!jobsFailure && (!jobsLoadingFirst && filtered.length === 0 ? (
-        <EmptyState
-          title={filter === 'failed' ? 'Nothing dead-lettered' : 'Nothing here'}
-          description={filter !== 'all'
-            ? `No ${JOB_FILTERS.find((f) => f.value === filter)?.label.toLowerCase()} jobs right now.`
-            // "Assign a work item below" / "write one from scratch" both
-            // point at sections gated on ManageDevbox (canManage) — naming
-            // them to a role without that capability was a dead reference
-            // (org-leader DEFECTS #5). Point everyone else at the two doors
-            // that actually put something on the queue for them instead.
-            : canManage
-              ? 'No jobs yet — assign a work item below, or write one from scratch with New run.'
-              : (
-                <>
-                  No jobs yet —{' '}
-                  <Link to="/iq/work/findings" className="text-primary no-underline hover:underline">
-                    promote a finding
-                  </Link>
-                  {' '}or{' '}
-                  <Link to="/iq/projects" className="text-primary no-underline hover:underline">
-                    dispatch work from an initiative
-                  </Link>.
-                </>
-              )}
-        />
-      ) : (
-        <DataTable<Job>
-          data={filtered}
-          columns={jobColumns}
-          keyField={(j) => j.id}
-          size="sm"
-          onRowClick={(j) => navigate(`/iq/work/${j.id}`)}
-          rowActions={(j) => ((j.status === 'failed' || j.status === 'cancelled') && canManage ? (
-            <IconButton
-              size="sm"
-              icon={<RedoIcon />}
-              aria-label={`Requeue ${j.title}`}
-              title="Requeue"
-              onClick={() => void requeue(j)}
-            />
-          ) : null)}
-          pageSize={25}
-          emptyMessage="No jobs"
-          loading={jobsLoadingFirst}
-        />
-      ))}
+        {!jobsFailure && (!jobsLoadingFirst && filtered.length === 0 ? (
+          <EmptyState
+            title={filter === 'failed' ? 'Nothing dead-lettered' : 'Nothing here'}
+            description={query.trim()
+              ? 'No loaded run matches this search. Clear the search to see the rest of the queue.'
+              : filter !== 'all'
+              ? `No ${JOB_FILTERS.find((f) => f.value === filter)?.label.toLowerCase()} jobs right now.`
+              // "Assign a work item below" / "write one from scratch" both
+              // point at sections gated on ManageDevbox (canManage) — naming
+              // them to a role without that capability was a dead reference
+              // (org-leader DEFECTS #5). Point everyone else at the two doors
+              // that actually put something on the queue for them instead.
+              : canManage
+                ? 'No jobs yet — assign a work item below, or write one from scratch with New run.'
+                : (
+                  <>
+                    No jobs yet —{' '}
+                    <Link to="/iq/work/findings" className="text-primary no-underline hover:underline">
+                      promote a finding
+                    </Link>
+                    {' '}or{' '}
+                    <Link to="/iq/projects" className="text-primary no-underline hover:underline">
+                      dispatch work from an initiative
+                    </Link>.
+                  </>
+                )}
+          />
+        ) : (
+          <DataTable<Job>
+            data={filtered}
+            columns={jobColumns}
+            keyField={(j) => j.id}
+            onRowClick={(j) => navigate(`/iq/work/${j.id}`)}
+            rowActions={(j) => ((j.status === 'failed' || j.status === 'cancelled') && canManage ? (
+              <IconButton
+                size="sm"
+                icon={<RedoIcon />}
+                aria-label={`Requeue ${j.title}`}
+                title="Requeue"
+                onClick={() => void requeue(j)}
+              />
+            ) : null)}
+            pageSize={25}
+            emptyMessage="No jobs"
+            loading={jobsLoadingFirst}
+          />
+        ))}
+        <CollectionCommandHost adapter={adapter} />
+      </Stack>
 
       {/* ── Ready to assign — the initiatives' open work, short form ── */}
       {canManage && (
@@ -432,7 +455,6 @@ export default function QueuePage() {
               data={suggestions ?? []}
               columns={suggestionColumns}
               keyField={(s) => s.id}
-              size="sm"
               onRowClick={(s) => setAssigning(s)}
               rowActions={(s) => (
                 <IconButton

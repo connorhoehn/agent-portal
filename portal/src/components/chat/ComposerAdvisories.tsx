@@ -15,12 +15,12 @@ export function ComposerAdvisories({ notices }: { notices: readonly ComposerAdvi
   if (!notices.length) return null;
   const content = <Stack gap="sm" className="min-w-0">
     <T size="xs" weight="semibold">Composer notices</T>
-    <ul className="m-0 list-none space-y-3 p-0">
+    <Stack as="ul" gap="md" className="m-0 list-none p-0">
       {notices.map(notice => <li key={notice.id}>
         <T as="div" size="xs" weight="semibold">{notice.title}</T>
         <T as="div" size="xs" tone="secondary" wrap>{notice.description}</T>
       </li>)}
-    </ul>
+    </Stack>
   </Stack>;
   return <>
     <Tooltip content={content} disabled={pinned} placement="top" className="w-72 p-3" data-testid="composer-notices-preview">

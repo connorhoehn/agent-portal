@@ -215,8 +215,7 @@ function LinksTab({ links }: { links: CrawlPage['discoveredLinks'] }) {
         {links.map((l, i) => (
           <TableRow key={i}>
             <TableTd><T as="span" size="xs">{l.label || <em className="text-text-tertiary">(unlabeled)</em>}</T></TableTd>
-            <TableTd
-              title={l.targetUrl ?? ''} className="font-mono max-w-[360px] overflow-hidden truncate whitespace-nowrap"><T as="span" size="xs" tone="secondary">
+            <TableTd title={l.targetUrl ?? ''} className="max-w-[360px] overflow-hidden truncate whitespace-nowrap"><T className="font-mono" as="span" size="xs" tone="secondary">
               {l.targetUrl ?? '—'}
             </T></TableTd>
             <TableTd>
@@ -224,7 +223,7 @@ function LinksTab({ links }: { links: CrawlPage['discoveredLinks'] }) {
                 ? <Chip tone="warning" size="xs">SPA</Chip>
                 : <Chip tone="neutral" size="xs">href</Chip>}
             </TableTd>
-            <TableTd className="text-right font-mono"><T as="span" size="xs" tone="tertiary">
+            <TableTd className="text-right"><T className="font-mono" as="span" size="xs" tone="tertiary">
               {l.clickX != null && l.clickY != null ? `(${l.clickX}, ${l.clickY})` : '—'}
             </T></TableTd>
           </TableRow>

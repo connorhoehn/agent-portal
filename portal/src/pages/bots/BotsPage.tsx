@@ -13,16 +13,14 @@ import {
   Banner,
   Button,
   Chip,
+  CollectionToolbar,
   DataTable,
   DotMeter,
   EmptyState,
   Inline,
-  Input,
   LoadingState,
   MetaLine,
-  PageSection,
   ProgressBar,
-  Select,
   Stack,
   StatStrip,
   T,
@@ -37,6 +35,9 @@ import { writeJson } from '../../lib/writeJson';
 import { botStatusChip } from '../../lib/statusTone';
 import { usd } from '../../lib/format';
 import { BotCreateWizard } from './BotCreateWizard';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { botsCommandAdapter } from './botsCommands';
 import { botIsPaused, botListLastRanText, botsRollup, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
 
 // ─── Types (the /api/bots contract) ──────────────────────────────────────────
@@ -192,7 +193,7 @@ export default function BotsPage() {
       // focusable, Enter/Space-activatable control; the row click stays as a
       // mouse convenience alongside it.
       render: (bot) => (
-        <Inline gap="xs" align="center">
+        <Inline gap="xs" align="center" wrap={false}>
           <Link
             to={`/admin/bots/${bot.id}`}
             onClick={(e) => e.stopPropagation()}
@@ -292,7 +293,9 @@ export default function BotsPage() {
         const busy = rowBusy[bot.id] ?? null;
         const paused = botIsPaused(bot);
         return (
-          <Inline gap="xs" align="center" className="justify-end">
+          // One line: Inline wraps by default, and two stacked 28px buttons
+          // made every row 63px (docs/layout-cascade.md "Tables", 44px rows).
+          <Inline gap="xs" align="center" justify="end" wrap={false}>
             <Button
               variant="ghost"
               size="sm"
@@ -317,21 +320,28 @@ export default function BotsPage() {
     } as DataTableColumn<Bot>] : []),
   ];
 
+  const adapter = botsCommandAdapter({
+    setQuery: setSearch, setStatus, refresh, rows: filtered,
+    open: (id) => navigate(`/admin/bots/${id}`),
+  });
+
   return (
-    <PageSection
+    <CollectionCommandPage
+      data-testid="bots-page"
       title="Bots"
       description="Standing missions: pick a template, write what the bot should do, point it at a codebase or an initiative, and govern what it ships."
-      actions={canManage ? (
+      headerActions={canManage ? (
         <Button variant="primary" size="sm" onClick={() => setWizardOpen(true)}>+ New bot</Button>
       ) : undefined}
     >
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
       {failure && (
         <UnavailableNotice
           error={failure}
           what="the bot roster"
           source="Bots are read from Aurora"
           onRetry={refresh}
-          className="mb-4"
         />
       )}
 
@@ -348,8 +358,6 @@ export default function BotsPage() {
           <StatStrip
             aria-label="Bot fleet summary"
             variant="line"
-            size="sm"
-            className="mb-3"
             items={[
               { label: 'enabled', value: rollup.enabled },
               { label: 'paused', value: rollup.paused },
@@ -367,51 +375,32 @@ export default function BotsPage() {
             ]}
           />
 
-          <Inline wrap align="center" gap="sm" className="mb-3">
-            <Input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, codebase or initiative…"
-              // A fixed width, not flex-1: the search box used to take the
-              // whole row and push the status select and the summary line
-              // onto rows of their own — three full-width rows where one
-              // filter row does.
-              className="w-[320px]"
-            />
-            <Select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as BotStatusFilter)}
-              options={STATUS_OPTIONS}
-              // Sized to its longest option; the library default is w-full,
-              // which took a whole row of its own beside the search box.
-              className="w-44"
-            />
-            {hasFilters && (
-              <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setStatus('all'); }}>
-                Clear filters
-              </Button>
-            )}
-            <MetaLine
-              size="xs" tone="tertiary"
-              className="ml-auto"
-              items={[botsSummaryLine(bots.length, filtered.length), 'every bot fires on a cron schedule', 'every change still passes review + policy gates']}
-            />
-          </Inline>
+          <CollectionToolbar
+            label="Bot filters"
+            search={{ value: search, onChange: setSearch, placeholder: 'Search by name, codebase or initiative…', 'aria-label': 'Search bots' }}
+            filters={[{ id: 'status', label: 'Status', value: status, emptyValue: 'all', onChange: (value) => setStatus(value as BotStatusFilter), options: STATUS_OPTIONS }]}
+            summary={botsSummaryLine(bots.length, filtered.length)}
+            notices={['Every bot fires on a cron schedule.', 'Every change still passes review and policy gates.']}
+            onRefresh={refresh}
+            refreshing={isLoading}
+          />
 
           <DataTable<Bot>
+            data-testid="bots-table"
             data={filtered}
             keyField={(b) => b.id}
             onRowClick={(b) => navigate(`/admin/bots/${b.id}`)}
-            size="sm"
             striped
-            emptyMessage={bots.length === 0 ? 'No bots yet.' : 'No bots match the current filters.'}
+            emptyMessage={hasFilters ? 'No bots match the current filters.' : 'No bots yet.'}
             columns={columns}
           />
         </>
       )}
 
       <BotCreateWizard open={wizardOpen} onClose={() => { setWizardOpen(false); refresh(); }} />
-    </PageSection>
+      </Stack>
+      <CollectionCommandHost adapter={adapter} />
+      </Stack>
+    </CollectionCommandPage>
   );
 }

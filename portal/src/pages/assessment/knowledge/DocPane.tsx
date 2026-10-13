@@ -24,7 +24,6 @@ export function FolderPane({ node, children, onSelectChild }: { node: KnowledgeN
           <DataTable<KnowledgeNode>
             data={children}
             keyField={(child) => child.id}
-            size="sm"
             onRowClick={(child) => onSelectChild(child.id)}
             pageSize={20}
             columns={[

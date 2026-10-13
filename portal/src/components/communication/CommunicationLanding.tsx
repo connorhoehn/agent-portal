@@ -87,24 +87,24 @@ function Overview({ org, channels, activePeople, active, liveLobbies, onSelectGr
       <T as="p" size="xs" tone="secondary" wrap data-testid="communication-overview-meta">
         You are not in a conversation yet. Join a channel, message someone who is here, or open one of your {noun}.
       </T>
-      <PageSection size="sm" title="Active now" count={activePeople.length} data-testid="communication-overview-active">
+      <PageSection title="Active now" count={activePeople.length} data-testid="communication-overview-active">
         <ActivePeopleGrid people={activePeople} maxVisible={12} emptyLabel="Nobody else is here right now."
           onSelectPerson={onMessage} onSelectSharedWork={onSharedWork} data-testid="communication-overview-active-grid" />
       </PageSection>
-      <PageSection size="sm" title={`Your ${noun}`} count={groupItems.length} data-testid="communication-overview-groups">
-        <ActionRowList size="sm" aria-label={`Your ${noun}`} items={groupItems} emptyLabel={<T size="xs" tone="tertiary">{groupsEmpty}</T>}
+      <PageSection title={`Your ${noun}`} count={groupItems.length} data-testid="communication-overview-groups">
+        <ActionRowList aria-label={`Your ${noun}`} items={groupItems} emptyLabel={<T size="xs" tone="tertiary">{groupsEmpty}</T>}
           onOpen={(row) => onSelectGroup(row.id)} data-testid="communication-overview-group-rows" />
       </PageSection>
-      <PageSection size="sm" title="Latest shared work" count={shared.length} data-testid="communication-overview-shared">
-        <ActionRowList size="sm" aria-label="Latest shared work" items={shared}
+      <PageSection title="Latest shared work" count={shared.length} data-testid="communication-overview-shared">
+        <ActionRowList aria-label="Latest shared work" items={shared}
           emptyLabel={<T size="xs" tone="tertiary">Nobody here is sharing work right now.</T>}
           onOpen={(row) => onSharedWork(row.id)} data-testid="communication-overview-shared-rows" />
       </PageSection>
-      <PageSection size="sm" title="Channels you can join" count={joinable.length} data-testid="communication-overview-channels"
+      <PageSection title="Channels you can join" count={joinable.length} data-testid="communication-overview-channels"
         {...(joinable[0] ? {
           actions: <Button variant="primary" size="sm" onClick={() => navigate(channelPath(joinable[0]!.slug))} data-testid="communication-join-channel">Join a channel</Button>,
         } : {})}>
-        <ActionRowList size="sm" aria-label="Channels you can join" action="Open"
+        <ActionRowList aria-label="Channels you can join" action="Open"
           items={joinable.map((c) => ({ id: c.slug, title: `#${c.slug}`, description: c.description ?? c.name, meta: `${c.memberCount} ${c.memberCount === 1 ? 'member' : 'members'}` }))}
           emptyLabel={<T size="xs" tone="tertiary">There are no other channels to join.</T>}
           onOpen={(row) => navigate(channelPath(row.id))} data-testid="communication-overview-channel-rows" />

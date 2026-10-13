@@ -75,7 +75,7 @@ export function InitiativeOverview({
           Overview reads like the tabs above it and the Distillation,
           Initiatives and scorecard surfaces — e2e/initiative-overview-type. */}
       <Inline gap="md" align="center" wrap>
-        <StatStrip variant="line" size="sm" items={model.stats.map(statItem)} aria-label="Initiative progress" data-testid="overview-stats" className="flex-1" />
+        <StatStrip variant="line" items={model.stats.map(statItem)} aria-label="Initiative progress" data-testid="overview-stats" className="flex-1" />
         {model.state === 'ready' && model.attention.length === 0 && (
           <T size="sm" tone="secondary" role="status" data-testid="overview-attention-clear">{ATTENTION_NONE}</T>
         )}
@@ -95,10 +95,9 @@ export function InitiativeOverview({
       {model.state === 'ready' && (
         <>
           {model.attention.length > 0 && <PageSection
-            size="sm"
             title="Needs attention"
             // The count is the rows below it, never a stored total. It reads
-            // as the mockup's pale-indigo pill (ui-components 2.396.0).
+            // as the pale-indigo pill of the mockup (ui-components 2.396.0).
             count={model.attention.length}
             countTone="primary"
             data-testid="overview-attention-section"
@@ -106,7 +105,6 @@ export function InitiativeOverview({
             {
               <ActionRowList
                 aria-label="Needs attention"
-                size="sm"
                 tone="warning"
                 accent="bar"
                 action="Open"
@@ -114,16 +112,16 @@ export function InitiativeOverview({
                 items={model.attention.map((a) => ({
                   id: a.id,
                   title: a.title,
-                  // The mockup's tag: pale red fill, soft red border, red text
-                  // (`outline="soft"` since ui-components 2.396.0) at the 12px
+                  // The tag of the mockup: pale red fill, soft red border, red text
+                  // (outline soft since ui-components 2.396.0) at the 12px
                   // tag step of the compact rows.
                   leading: <Inline gap="xs" align="center" wrap={false}>
                     {a.key && <Chip tone="neutral" size="sm" mono>{a.key}</Chip>}
                     <Chip tone="danger" size="md" outline="soft">Blocked</Chip>
                   </Inline>,
                   // The row truncates its description to one line, and a
-                  // blocked reason is a sentence ("Cannot be written until the
-                  // cu…" at 1440px): whole on hover.
+                  // blocked reason is a sentence (Cannot be written until the
+                  // cu... at 1440px): whole on hover.
                   ...(a.reason ? { description: <T title={a.reason}>{a.reason}</T> } : {}),
                   cells: cells(a.assigneeName, a.points),
                 }))}
@@ -134,11 +132,10 @@ export function InitiativeOverview({
           </PageSection>}
 
           <PageSection
-            size="sm"
             title="Up next"
             // The mockup puts 32px between the attention row and this heading
-            // where the other sections sit 24px apart (the library story's
-            // `mt-8` against `mt-6`); the stack's `xl` gap carries 24 of it.
+            // where the other sections sit 24px apart (the library story
+            // mt-8 against mt-6); the xl gap of the stack carries 24 of it.
             className={model.attention.length > 0 ? 'mt-2' : undefined}
             actions={model.viewAll ? (
               <Button variant="link" size="sm" onClick={() => onOpen(model.viewAll!.href)} data-testid="overview-view-all">
@@ -153,7 +150,6 @@ export function InitiativeOverview({
             <ActionRowList
               aria-label="Up next"
               className="work-overview-striped-rows"
-              size="sm"
               columns={COLUMNS}
               items={model.upNext.map((r) => ({ id: r.id, title: r.title, leading: r.key ? <Chip tone="neutral" size="sm" mono>{r.key}</Chip> : undefined, cells: cells(r.assigneeName, r.points) }))}
               onOpen={hrefOf(model.upNext)}

@@ -3,7 +3,7 @@ import '../../src/app.css';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { EditorShell, deckViewerToParticipant, type DeckSpec, type PresentationEditorFrame, type PresentationPreview } from '@connorhoehnslalom/ui-components/doc-editor';
-import { DeckReader } from '../../src/components/decks/DeckReader';
+import { DeckReader } from '@connorhoehnslalom/ui-components/doc-editor';
 import { ConversationComposer } from '../../src/lib/conversationComposer';
 import { useDeckCollaboration } from '../../src/components/decks/useDeckCollaboration';
 

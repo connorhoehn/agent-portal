@@ -84,7 +84,10 @@ test('openRevisionId prefers the active revision, falls back to the newest (firs
 });
 
 test('toEditorRevisions formats createdAt through the host formatter', () => {
-  assert.deepEqual(toEditorRevisions([{ id: 'a', label: 'v1', createdAt: 'T', producedBy: 'x' }], (s) => `<${s}>`), [{ id: 'a', label: 'v1', createdAt: '<T>' }]);
+  // Every other field passes through untouched (the return type is the
+  // revision minus its raw createdAt): the editor reads producedBy and the
+  // archived-version metadata from the same rows.
+  assert.deepEqual(toEditorRevisions([{ id: 'a', label: 'v1', createdAt: 'T', producedBy: 'x' }], (s) => `<${s}>`), [{ id: 'a', label: 'v1', createdAt: '<T>', producedBy: 'x' }]);
 });
 
 test('notes text does not change the render key, having notes does', () => {

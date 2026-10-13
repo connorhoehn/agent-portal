@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import {
   T,
-  Card, CardHeader, LoadingState, PageSection, StatStrip, Stack, Table, TableBody,
+  Card, CardHeader, CollectionToolbar, LoadingState, PageSection, StatStrip, Stack, Table, TableBody,
   TableHead, TableRow, TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -8,17 +9,27 @@ import { formatBytes } from '../../components/ingest/types';
 import type { StorageBreakdown } from '../../components/ingest/types';
 import { EmptyState } from '../../components/ingest/ui';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { matchesStorageKey, storageAdapter } from './ingestCommands';
 
 function StoragePage() {
   const { data: storage, isLoading, error, degraded, refresh } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
   const failure = error ?? degraded;
+  const [query, setQuery] = useState('');
+  const byType = (storage?.byType ?? []).filter(row => matchesStorageKey(row.extension, query));
+  const byPrefix = (storage?.byPrefix ?? []).filter(row => matchesStorageKey(row.prefix, query));
+  const adapter = storageAdapter({ setQuery, refresh });
 
   return (
     <PageSection
       title="Storage"
       description="Where ingested documents land in S3, and how much of it the knowledge base has chunked."
     >
-      <Stack gap="md">
+      <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+        <CollectionToolbar label="Storage filters"
+          search={{ value: query, onChange: setQuery, placeholder: 'Search file types and prefixes', 'aria-label': 'Search file types and prefixes' }}
+          summary={storage ? `${byType.length} of ${storage.byType.length} file types · ${byPrefix.length} of ${storage.byPrefix.length} prefixes` : undefined}
+          onRefresh={refresh} refreshing={isLoading} />
         {failure && (
           <UnavailableNotice
             error={failure}
@@ -34,7 +45,6 @@ function StoragePage() {
           <StatStrip
             aria-label="Storage totals"
             variant="line"
-            size="sm"
             items={[
               { label: 'S3 bucket', value: storage.bucket ?? '—' },
               { label: 'objects', value: storage.totalObjects.toLocaleString() },
@@ -57,8 +67,10 @@ function StoragePage() {
             <LoadingState label="Loading file types…" />
           ) : !storage || storage.byType.length === 0 ? (
             <EmptyState title="No S3 objects yet." />
+          ) : byType.length === 0 ? (
+            <EmptyState title="No file type matches this search." />
           ) : (
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Extension</TableTh>
@@ -68,9 +80,9 @@ function StoragePage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {storage.byType.map((row) => (
+                {byType.map((row) => (
                   <TableRow key={row.extension}>
-                    <TableTd className="font-mono"><T as="span" size="xs">
+                    <TableTd><T className="font-mono" as="span" size="xs">
                       {row.extension || '(none)'}
                     </T></TableTd>
                     <TableTd numeric><T as="span" size="xs">
@@ -98,8 +110,10 @@ function StoragePage() {
             <LoadingState label="Loading prefixes…" />
           ) : !storage || storage.byPrefix.length === 0 ? (
             <EmptyState title="No S3 objects yet." />
+          ) : byPrefix.length === 0 ? (
+            <EmptyState title="No prefix matches this search." />
           ) : (
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Prefix</TableTh>
@@ -109,10 +123,9 @@ function StoragePage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {storage.byPrefix.map((row) => (
+                {byPrefix.map((row) => (
                   <TableRow key={row.prefix}>
-                    <TableTd
-                      title={row.prefix} className="max-w-[480px] overflow-hidden text-ellipsis whitespace-nowrap font-mono"><T as="span" size="xs" tone="secondary">
+                    <TableTd title={row.prefix} className="max-w-[480px] overflow-hidden text-ellipsis whitespace-nowrap"><T className="font-mono" as="span" size="xs" tone="secondary">
                       {row.prefix}
                     </T></TableTd>
                     <TableTd numeric><T as="span" size="xs">
@@ -133,6 +146,7 @@ function StoragePage() {
           )}
         </Card>
 
+        <CollectionCommandHost adapter={adapter} />
       </Stack>
     </PageSection>
   );

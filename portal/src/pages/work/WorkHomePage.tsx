@@ -8,9 +8,12 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, ConsultCard, Inline, InlineAlert, PageSection, SectionLabel, Stack, StatStrip,
+  Button, Card, Chip, CollectionToolbar, ConsultCard, Inline, InlineAlert, PageSection, SectionLabel, Stack, StatStrip,
   ToolCallStrip, Toolbar, DataTable, Divider, PageHeader, Disclosure, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
+import { INBOX_RUNS_GRAMMAR, recentFinishedRuns } from './workCollectionCommands';
 import { useFetch } from '../../hooks/useFetch';
 import { useWorkEvents } from '../../hooks/useWorkEvents';
 import { useCapabilities } from '../../lib/capabilities';
@@ -58,6 +61,8 @@ export default function WorkHomePage() {
 
   const pendingConsults = consultData?.consults ?? [];
   const [answeringId, setAnsweringId] = useState<string | null>(null);
+  // Recent runs' search: one state for the toolbar box and the composer.
+  const [runQuery, setRunQuery] = useState('');
 
   const refreshAll = useCallback(() => {
     refreshSummary(); refreshJobs(); refreshProposals(); refreshConsults();
@@ -132,7 +137,17 @@ export default function WorkHomePage() {
   const needsReview = s?.jobs['awaiting_review'] ?? 0;
   const pendingProposals = s?.proposals['pending'] ?? 0;
 
-  const recent = jobs.filter((job) => job.finishedAt).sort((a, b) => b.finishedAt!.localeCompare(a.finishedAt!)).slice(0, 4);
+  const recent = recentFinishedRuns(jobs, runQuery);
+  const openRun = (id: string) => navigate(`/iq/work/${encodeURIComponent(id)}`);
+  const runsAdapter = collectionCommandAdapter(INBOX_RUNS_GRAMMAR, {
+    setQuery: setRunQuery, refresh: refreshJobs, label: 'Recent runs', id: 'inbox-recent-runs-commands',
+    scopeNote: 'Commands search the finished runs on the loaded queue page and open one run; they never accept, reject, requeue or start work.',
+    open: (target) => {
+      const run = resolveCollectionTarget(target, recent);
+      openRun(run.id);
+      return `Opening ${run.title}.`;
+    },
+  });
   const recentColumns: DataTableColumn<Job>[] = [
     { key: 'title', header: 'Run', render: (job) => <Link to={`/iq/work/${encodeURIComponent(job.id)}`} className="text-[13px] text-text-primary hover:text-primary hover:underline">{job.title}</Link> },
     { key: 'status', header: 'Result', render: (job) => <JobStatusPill status={job.status} /> },
@@ -145,7 +160,7 @@ export default function WorkHomePage() {
     <Stack gap="md" data-testid="automate-inbox">
       <PageHeader title="Inbox" description="Questions and approvals waiting for you."
         actions={canManage ? <Button size="sm" variant="primary" onClick={() => navigate('/iq/work/queue?compose=1')}>New run</Button> : undefined} />
-      <PageSection size="sm" title="Needs your attention">
+      <PageSection title="Needs your attention">
       {/* A failed load renders as zeros everywhere below — "0 workers, 0 needs
           you" reads exactly like a healthy, idle system. Say so plainly.
           `summaryFailure` (transport error OR the wire's `degraded` marker) —
@@ -295,12 +310,12 @@ export default function WorkHomePage() {
       {!summaryFailure && (needsReview === 0 && pendingProposals === 0) && pendingConsults.length > 0 && <T className="text-[13px] text-text-tertiary">✓ No pending approvals or proposed changes.</T>}
       </PageSection>
       <Divider spacing="none" />
-      <PageSection size="sm" title="Current queue"
+      <PageSection title="Current queue"
         description={dispatchedCount > 0
           ? `Queue jobs only — ${dispatchedRunsNoun(dispatchedCount)} from initiative work items ${dispatchedCount === 1 ? 'is' : 'are'} running outside the queue; Runs lists them.`
           : 'Queue jobs only — runs dispatched from initiative work items are listed on Runs when they are live.'}
         actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">View runs →</Link>}>
-        <StatStrip variant="line" size="sm" aria-label="Current queue" items={[
+        <StatStrip variant="line" aria-label="Current queue" items={[
           { label: 'Queued', value: summaryFailure || !s ? '—' : s.jobs.queued ?? 0 },
           { label: 'Running', value: summaryFailure || !s ? '—' : active },
           { label: 'Waiting for review', value: summaryFailure || !s ? '—' : needsReview },
@@ -308,8 +323,16 @@ export default function WorkHomePage() {
         ]} />
       </PageSection>
       <Divider spacing="none" />
-      <PageSection size="sm" title="Recent runs" actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">All runs →</Link>}>
-        {jobsError ? <InlineAlert tone="error">{jobsError}</InlineAlert> : <DataTable data={recent} columns={recentColumns} keyField={(job) => job.id} size="sm" onRowClick={(job) => navigate(`/iq/work/${encodeURIComponent(job.id)}`)} frameless loading={jobsLoading && !jobsData} emptyMessage="No completed runs yet" />}
+      <PageSection title="Recent runs" actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">All runs →</Link>}>
+        {/* The section that owns the table owns its command input: the
+            boundary is this section, so the composer spans it flush. */}
+        <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+          <CollectionToolbar label="Recent run filters"
+            search={{ value: runQuery, onChange: setRunQuery, placeholder: 'Search recent runs', 'aria-label': 'Search recent runs' }}
+            onRefresh={refreshJobs} refreshing={jobsLoading} />
+          {jobsError ? <InlineAlert tone="error">{jobsError}</InlineAlert> : <DataTable data={recent} columns={recentColumns} keyField={(job) => job.id} onRowClick={(job) => openRun(job.id)} frameless loading={jobsLoading && !jobsData} emptyMessage={runQuery.trim() ? 'No finished run matches this search' : 'No completed runs yet'} />}
+          <CollectionCommandHost adapter={runsAdapter} />
+        </Stack>
       </PageSection>
       <Link to="/iq/work/findings" className="text-[13px] text-primary hover:underline">{s && !summaryFailure ? `${s.findings.open} open findings` : 'View findings'} →</Link>
       <Disclosure summary="Queue operations" variant="plain" density="compact">

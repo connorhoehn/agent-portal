@@ -91,7 +91,8 @@ function audit() {
   }
   const collectionFiles = ['Definitions', 'Artifacts', 'Approvals', 'Runbooks', 'Sources', 'Queues', 'Runs'].map(name => `portal/src/pages/pipelines/${name}Page.tsx`);
   for (const file of collectionFiles) {
-    requireContract(/<CollectionPage[\s/>]/.test(read(file)), `${file}: collection layout belongs in CollectionPage.`);
+    // CollectionCommandPage is the app's adapter over CollectionPage (components/collections); it owns the same composition.
+    requireContract(/<Collection(?:Command)?Page[\s/>]/.test(read(file)), `${file}: collection layout belongs in CollectionPage.`);
     const drift = findings.filter(f => f.file === file && ['component-class-override', 'component-style-override'].includes(f.pattern));
     for (const finding of drift) failures.push(`${file}:${finding.line}: ${finding.detail}; use shared metrics or a library variant.`);
   }

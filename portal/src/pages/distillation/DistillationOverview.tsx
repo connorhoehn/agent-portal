@@ -33,7 +33,7 @@ function TierPreview({ view, repo, count, version }: { view: KnowledgeView; repo
       ) : feed.loading ? (
         <LoadingState label={`Loading ${VIEW_NOUN[view]}…`} />
       ) : rows.length === 0 ? (
-        <EmptyState size="sm" title={`No ${VIEW_NOUN[view]} yet`} description="This fills in as agent sessions run and their notes are compacted up the tiers." />
+        <EmptyState title={`No ${VIEW_NOUN[view]} yet`} description="This fills in as agent sessions run and their notes are compacted up the tiers." />
       ) : (
         <GroupedList
           size="md"
@@ -62,13 +62,17 @@ export function DistillationOverview({ repo, counts, pending, versions, canPlay 
   return (
     <Stack gap="lg" data-testid="distillation-overview">
       <DistillationDemoPanel canPlay={canPlay} onChanged={onDemoChanged ?? (() => {})} />
+      {/* The line strip (the house density draws it at the 14px body step):
+          its clusters are buttons, and the card variant's 10px labels / 17px
+          values are off the control scale. The hint rides in the title. */}
       <StatStrip
+        variant="line"
         aria-label="Distillation at a glance"
         items={[
-          { label: VIEW_LABEL.guides, value: stat(counts.guides), hint: 'reusable guides', onSelect: () => navigate(knowledgeHref({ view: 'guides', repo })) },
-          { label: VIEW_LABEL.patterns, value: stat(counts.patterns), hint: 'recurring across runs', onSelect: () => navigate(knowledgeHref({ view: 'patterns', repo })) },
-          { label: VIEW_LABEL.notes, value: stat(counts.notes), hint: 'raw observations', onSelect: () => navigate(knowledgeHref({ view: 'notes', repo })) },
-          { label: 'Waiting for review', value: stat(pending), hint: 'sampled claims', tone: pending ? 'accent' : 'default', onSelect: () => navigate(reviewHref({ repo })) },
+          { label: VIEW_LABEL.guides, value: stat(counts.guides), title: 'Reusable guides', onSelect: () => navigate(knowledgeHref({ view: 'guides', repo })) },
+          { label: VIEW_LABEL.patterns, value: stat(counts.patterns), title: 'Recurring across runs', onSelect: () => navigate(knowledgeHref({ view: 'patterns', repo })) },
+          { label: VIEW_LABEL.notes, value: stat(counts.notes), title: 'Raw observations', onSelect: () => navigate(knowledgeHref({ view: 'notes', repo })) },
+          { label: 'Waiting for review', value: stat(pending), title: 'Sampled claims', tone: pending ? 'accent' : 'default', onSelect: () => navigate(reviewHref({ repo })) },
         ]}
       />
       {VIEWS.map((view) => <TierPreview key={view} view={view} repo={repo} count={counts[view]} version={versions?.[view] ?? null} />)}

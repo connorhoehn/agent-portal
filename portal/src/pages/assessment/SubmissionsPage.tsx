@@ -13,6 +13,7 @@ import {
   Button,
   Checkbox,
   Chip,
+  CollectionToolbar,
   ConfirmDialog,
   DataTable,
   Drawer,
@@ -20,10 +21,8 @@ import {
   ErrorState,
   HistoryIcon,
   IconButton,
-  Inline,
   InlinePlaceholder,
   PageHeader,
-  SearchInput,
   Stack,
   StatStrip,
   StatusPill,
@@ -34,6 +33,9 @@ import {
   Wizard,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { submissionsCommandAdapter } from './assessmentCollectionCommands';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { useRowSearch } from '../../hooks/useRowSearch';
@@ -216,38 +218,36 @@ export default function SubmissionsPage() {
     );
   }
 
-  return (
-    <Stack gap="lg">
-      <PageHeader
-        title="Submissions"
-        description="One row per submission — the latest revision carries the status; earlier revisions are kept for history."
-        actions={canManage ? <Button size="sm" onClick={goToAdd}>Add submissions →</Button> : undefined}
-      />
+  const adapter = submissionsCommandAdapter({ setQuery: search.setQuery, refresh: load });
 
+  return (
+    <CollectionCommandPage
+      data-testid="assessment-submissions"
+      title="Submissions"
+      description="One row per submission — the latest revision carries the status; earlier revisions are kept for history."
+      headerActions={canManage ? <Button size="sm" onClick={goToAdd}>Add submissions →</Button> : undefined}
+    >
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)] pb-4">
       {groups.length > 0 && (
-        <Inline align="center" gap="md" wrap={false}>
-          <StatStrip
-            aria-label="Submission summary"
-            variant="line"
-            size="sm"
-            items={[
-              { label: summary.distinct_submissions === 1 ? 'submission' : 'submissions', value: summary.distinct_submissions },
-              { label: summary.teams === 1 ? 'team' : 'teams', value: summary.teams },
-              { label: 'unprocessed', value: summary.distinct_unprocessed, ...(summary.distinct_unprocessed > 0 ? { tone: 'accent' as const } : {}) },
-              { label: summary.links_pending_total === 1 ? 'link pending' : 'links pending', value: summary.links_pending_total },
-            ]}
-          />
-          <SearchInput
-            size="sm"
-            className="ml-auto w-64 shrink-0"
-            value={search.query}
-            onChange={search.setQuery}
-            onClear={() => search.setQuery('')}
-            placeholder="Search submissions"
-            aria-label="Search submissions"
-          />
-        </Inline>
+        <StatStrip
+          aria-label="Submission summary"
+          variant="line"
+          items={[
+            { label: summary.distinct_submissions === 1 ? 'submission' : 'submissions', value: summary.distinct_submissions },
+            { label: summary.teams === 1 ? 'team' : 'teams', value: summary.teams },
+            { label: 'unprocessed', value: summary.distinct_unprocessed, ...(summary.distinct_unprocessed > 0 ? { tone: 'accent' as const } : {}) },
+            { label: summary.links_pending_total === 1 ? 'link pending' : 'links pending', value: summary.links_pending_total },
+          ]}
+        />
       )}
+      <CollectionToolbar
+        label="Submission filters"
+        search={{ value: search.query, onChange: search.setQuery, placeholder: 'Search submissions', 'aria-label': 'Search submissions' }}
+        summary={data ? `${search.rows.length} of ${groups.length} submissions` : undefined}
+        onRefresh={load}
+        refreshing={loading}
+      />
 
       {canManage && selected.size > 0 && (
         <Toolbar
@@ -287,7 +287,6 @@ export default function SubmissionsPage() {
         <DataTable<SubmissionRevisionGroup>
           data={search.rows}
           keyField={(g) => g.key}
-          size="sm"
           striped
           loading={loading && !data}
           emptyMessage={`No submission matches “${search.query.trim()}”.`}
@@ -445,7 +444,6 @@ export default function SubmissionsPage() {
           <DataTable<{ envelope_id: string; ingested_at: string; current: boolean }>
             data={[historyGroup.current, ...historyGroup.superseded].map((rev, i) => ({ ...rev, current: i === 0 }))}
             keyField={(rev) => rev.envelope_id}
-            size="sm"
             // One submission's own revision history — short today, but a
             // drawer list shouldn't grow unbounded either.
             pageSize={10}
@@ -462,6 +460,9 @@ export default function SubmissionsPage() {
           />
         )}
       </Drawer>
-    </Stack>
+      </Stack>
+      <CollectionCommandHost adapter={adapter} />
+      </Stack>
+    </CollectionCommandPage>
   );
 }

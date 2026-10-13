@@ -336,7 +336,6 @@ export function EvidenceIntake({ teamId }: EvidenceIntakeProps) {
             data={items}
             columns={LEDGER_COLUMNS}
             keyField={(item) => item.provenance_id}
-            size="sm"
             loading={isLoading}
             emptyMessage="No evidence ingested yet. Add evidence above to start this team’s lineage ledger."
             frameless

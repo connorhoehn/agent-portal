@@ -73,7 +73,6 @@ export function SourcesPanel({
   return (
     <Stack gap="md" className="p-3" data-testid="distillation-sources">
       <SegmentedControl
-        size="sm"
         aria-label="Sources view"
         value={view}
         onChange={(v) => onViewChange(v === 'graph' ? 'graph' : 'list')}

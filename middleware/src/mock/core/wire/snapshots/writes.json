@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-08T19:18:11.644Z",
-  "serverHandlerSha": "6b7ab6b22b74ecfc5eb1280bdc72518db74b8f0d123c3b9ae0ec551ff358072a",
+  "capturedAt": "2026-10-13T03:12:11.690Z",
+  "serverHandlerSha": "9c8e8003dfd63c996af362eba366249d1f87e70f8a5e7a2f804d9afff9ac4e0c",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -512,6 +512,7 @@
         "estimatedByName": "null",
         "estimatedCostUsd": "number",
         "id": "string",
+        "key": "string",
         "labels": "array",
         "labels[]": "string",
         "nextStep": "null",
@@ -531,6 +532,9 @@
         "updatedAt": "string"
       },
       "values": {
+        "key": [
+          "ORG-LLM-10"
+        ],
         "status": [
           "done"
         ],
@@ -667,6 +671,7 @@
         "workItem.estimatedByName": "null",
         "workItem.estimatedCostUsd": "null",
         "workItem.id": "string",
+        "workItem.key": "string",
         "workItem.labels": "array",
         "workItem.nextStep": "null",
         "workItem.nextStepDetail": "null",
@@ -685,6 +690,9 @@
         "workItem.updatedAt": "string"
       },
       "values": {
+        "workItem.key": [
+          "ORG-ZT-1"
+        ],
         "workItem.status": [
           "in_progress"
         ],
@@ -2191,6 +2199,12 @@
         "sprintId"
       ]
     },
+    "POST /api/graph/projects/:id/discussion/comments": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/graph/work-items": {
       "persona": "orgiq/admin",
       "status": 201,
@@ -2215,6 +2229,7 @@
         "estimatedByName": "null",
         "estimatedCostUsd": "null",
         "id": "string",
+        "key": "string",
         "labels": "array",
         "nextStep": "null",
         "nextStepDetail": "null",
@@ -2233,6 +2248,9 @@
         "updatedAt": "string"
       },
       "values": {
+        "key": [
+          "ORG-OBS-15"
+        ],
         "status": [
           "open"
         ],
@@ -3025,6 +3043,12 @@
       },
       "values": {},
       "sent": []
+    },
+    "POST /api/realtime/call-seat": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/realtime/lobby-access": {
       "refused": {

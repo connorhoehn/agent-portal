@@ -40,7 +40,6 @@ export function StatCards({ peopleScoredLabel, avgComposite, topScore, departmen
     <StatStrip
       aria-label="Scoring summary"
       variant="line"
-      size="sm"
       items={[
         { label: 'people scored', value: peopleScoredLabel },
         { label: 'avg composite', value: String(avgComposite) },

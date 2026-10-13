@@ -104,7 +104,6 @@ export function SprintTable({ sprints, onSelect, emptyMessage = 'No sprints' }: 
           onClick={() => onSelect(s.id)}
         />
       )}
-      size="sm"
       pageSize={25}
       emptyMessage={emptyMessage}
     />

@@ -210,7 +210,7 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
       </Stack>
     </Inline>
     : readPending ? <LoadingState label="Loading discussion…" />
-    : noMessages && !connected ? <EmptyState size="sm" align="start" title="Discussion is offline"
+    : noMessages && !connected ? <EmptyState align="start" title="Discussion is offline"
         description="Reconnect to load messages and continue the conversation."
         {...(gateway?.reconnect ? { actionLabel: 'Reconnect', onAction: gateway.reconnect } : {})}
         testId={testId ? `${testId}-offline-empty` : 'discussion-offline-empty'} /> : null;

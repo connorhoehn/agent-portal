@@ -173,7 +173,6 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
         <ToolbarGroup aria-label="Scope">
           <ToolbarLabel>Show</ToolbarLabel>
           <SegmentedControl
-            size="sm"
             value={scope}
             onChange={(v) => setScope(v as 'mine' | 'all')}
             options={[
@@ -186,7 +185,6 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
       <ToolbarGroup divided={canRequestAll} aria-label="Window">
         <ToolbarLabel>Window</ToolbarLabel>
         <SegmentedControl
-          size="sm"
           value={activeOnly ? 'active' : 'any'}
           onChange={(v) => setActiveOnly(v === 'active')}
           options={[
@@ -224,7 +222,6 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
       <Inline align="center" gap="md" wrap>
       {!open && <StatStrip
         variant="line"
-        size="sm"
         aria-label="Sprint rollup"
         items={[
           {
@@ -246,9 +243,9 @@ export function SprintsLens({ view, lens }: { view: 'grid' | 'list'; lens: Sprin
             value: usd(totals.spend),
             ...(totals.granted > 0 && totals.spend > totals.granted ? { tone: 'danger' as const } : {}),
           },
-          // The reader's OWN envelope, last because it is personal rather than
+          // The OWN envelope of the reader, last because it is personal rather than
           // programme-wide — and in the strip rather than a card of its own so
-          // it costs the table no vertical space. `usd()` is not applied here:
+          // it costs the table no vertical space. usd() is not applied here:
           // the summary decides whether the value is money or a word, because
           // an unattributed burn has no number to print.
           ...(envelopes ? [{

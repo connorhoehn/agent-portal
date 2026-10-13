@@ -80,7 +80,7 @@ export function SessionsTab() {
           ) : open.length === 0 ? (
             <InlinePlaceholder align="center" size="sm">No open browser sessions.</InlinePlaceholder>
           ) : (
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Label</TableTh>
@@ -147,7 +147,7 @@ export function SessionsTab() {
               browse-the-web prompt.
             </InlinePlaceholder>
           ) : (
-            <Table size="sm">
+            <Table>
               <TableHead>
                 <TableRow>
                   <TableTh>Agent</TableTh>

@@ -17,7 +17,9 @@ export function DimensionRailBadges({ dimension }: { dimension: Dimension }) {
       <T as="span" size="xs" tone="secondary">Verified</T>
       <LevelBadge level={dimension.certification?.verified_level ?? dimension.current_level} size="xs" />
     </Inline>
-    {tracks.claimed && <Chip tone={tracks.claimOpen ? 'warning' : 'neutral'} size="xs"
+    {/* md: the rail row is a button, and the xs chip's 10px label is off the
+        control scale (12/14). */}
+    {tracks.claimed && <Chip tone={tracks.claimOpen ? 'warning' : 'neutral'} size="md"
       title={`Team claims Level ${tracks.claimed}${tracks.claimOpen ? '; evidence is requested above verification' : ''}`}>
       Claim L{tracks.claimed}
     </Chip>}

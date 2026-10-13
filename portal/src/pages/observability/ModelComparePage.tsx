@@ -31,6 +31,7 @@ import {
   Chip,
   Inline,
   PageSection,
+  SearchInput,
   Select,
   StatStrip, T,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -38,6 +39,9 @@ import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { readDegraded } from '../../lib/degraded';
 import { RowEmpty } from './ReadState';
+import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
+import { ObservabilityCommandSection } from './ObservabilityCommandSection';
+import { OBSERVABILITY_GRAMMARS, matchesAny } from './observabilityCommands';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -174,7 +178,7 @@ function extractAgentModel(run: TestRunLite | undefined | null): string | null {
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 function ModelComparePage() {
-  const { data: runsData } = useFetch<RunsResp>('/api/observability/harness/runs?limit=30', 30_000);
+  const { data: runsData, refresh: refreshRuns } = useFetch<RunsResp>('/api/observability/harness/runs?limit=30', 30_000);
   const runs = useMemo(() => runsData?.runs ?? [], [runsData]);
 
   // Default to the two most-recent runs so the page is interesting on first load.
@@ -190,7 +194,7 @@ function ModelComparePage() {
   const compareUrl = (runIdA && runIdB && runIdA !== runIdB)
     ? `/api/observability/harness/runs/${encodeURIComponent(runIdA)}/compare/${encodeURIComponent(runIdB)}`
     : '';
-  const { data: compare, isLoading, error } = useFetch<CompareResp>(compareUrl);
+  const { data: compare, isLoading, error, refresh: refreshCompare } = useFetch<CompareResp>(compareUrl);
 
   const { data: calData, refresh: refreshCal } = useFetch<CalibrationRunsResp>(
     '/api/observability/calibration/runs?limit=14',
@@ -220,8 +224,18 @@ function ModelComparePage() {
   const runA = compare?.runA;
   const runB = compare?.runB;
   const summary = compare?.summary;
-  const regressions = compare?.regressions ?? [];
-  const fixes = compare?.fixes ?? [];
+  // Local search over the compared tests; the run pickers stay as chosen.
+  const [query, setQuery] = useState('');
+  const matchesTest = (r: ComparedResult) => matchesAny(query, r.testId, r.agentId);
+  const regressions = (compare?.regressions ?? []).filter(matchesTest);
+  const fixes = (compare?.fixes ?? []).filter(matchesTest);
+  const searching = query.trim().length > 0;
+
+  const adapter = collectionCommandAdapter(OBSERVABILITY_GRAMMARS.modelCompare, {
+    setQuery,
+    refresh: () => { refreshRuns(); refreshCal(); if (compareUrl) refreshCompare(); },
+    scopeNote: 'Search matches test IDs and agents in the regressions and fixes of the two chosen runs. Refresh rereads the runs, the comparison and calibration. The run pickers stay as chosen, and nothing here starts a harness run.',
+  });
 
   const agentModelA = extractAgentModel(runA) ?? null;
   const agentModelB = extractAgentModel(runB) ?? null;
@@ -284,7 +298,17 @@ function ModelComparePage() {
     <PageSection
       title="Model Compare"
       description="Compare two harness runs side-by-side. Re-run the harness with --model amazon.nova-lite-v1:0 (sim mode) and amazon.nova-pro-v1:0 to populate runs."
+      actions={
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Search compared tests"
+          aria-label="Search compared tests"
+          className="w-[220px]"
+        />
+      }
     >
+      <ObservabilityCommandSection adapter={adapter}>
       {calDegraded && (
         <UnavailableNotice
           error={calDegraded}
@@ -370,7 +394,7 @@ function ModelComparePage() {
               title="Headline metrics"
               subtitle="green = B is better · red = B is worse · neutral = within band"
             />
-            <StatStrip variant="line" size="sm" aria-label="Headline metrics" items={headlineItems} />
+            <StatStrip variant="line" aria-label="Headline metrics" items={headlineItems} />
           </Card>
 
           {/* Regressions / Fixes */}
@@ -379,14 +403,14 @@ function ModelComparePage() {
             tone="danger"
             hint={`${regressions.length} test${regressions.length === 1 ? '' : 's'} scored lower under B · sorted by |Δ| desc`}
             results={regressions}
-            emptyText="No regressions — every common test held its score within ±0.05."
+            emptyText={searching ? 'No regressions match the current search.' : 'No regressions — every common test held its score within ±0.05.'}
           />
           <DeltaTable
             title="Fixes"
             tone="success"
             hint={`${fixes.length} test${fixes.length === 1 ? '' : 's'} improved under B · sorted by |Δ| desc`}
             results={fixes}
-            emptyText="No fixes — no common test improved by more than 0.05."
+            emptyText={searching ? 'No fixes match the current search.' : 'No fixes — no common test improved by more than 0.05.'}
           />
 
           <Card padding="md">
@@ -404,6 +428,7 @@ function ModelComparePage() {
           </Card>
         </>
       ) : null}
+      </ObservabilityCommandSection>
     </PageSection>
   );
 }
@@ -468,7 +493,7 @@ function DeltaTable({
       {results.length === 0 ? (
         <RowEmpty text={emptyText} />
       ) : (
-        <Table size="sm">
+        <Table>
           <TableHead>
             <TableRow>
               <TableTh>Test</TableTh>
@@ -489,7 +514,7 @@ function DeltaTable({
                 : tone;
               return (
                 <TableRow key={r.testId}>
-                  <TableTd className="font-mono max-w-[260px] truncate" title={r.testId}>{r.testId}</TableTd>
+                  <TableTd className="max-w-[260px]" title={r.testId}><T className="block truncate font-mono">{r.testId}</T></TableTd>
                   <TableTd className="whitespace-nowrap">{r.agentId || '—'}</TableTd>
                   <TableTd className="whitespace-nowrap">
                     <Inline gap="xs" align="center" wrap={false}>

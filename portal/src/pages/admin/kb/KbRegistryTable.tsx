@@ -46,7 +46,7 @@ export function KbRegistryTable({
   onRefresh: () => void;
 }) {
   return (
-    <Table size="sm">
+    <Table>
       <TableHead>
         <TableRow>
           {COLUMNS.map((c, i) => <TableTh key={c || `actions-${i}`} numeric={c === 'Documents'}>{c}</TableTh>)}

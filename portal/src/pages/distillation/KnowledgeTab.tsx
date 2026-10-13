@@ -31,6 +31,8 @@ import {
   Button, EmptyState, FilterPopover, GroupedList, Inline, LinkIcon, LiveRegion, LoadingState, SearchInput, Stack, StatusPill, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { knowledgeCommandAdapter } from './distillationCollectionCommands';
 import { useDistillationChannel } from '../../hooks/useDistillationChannel';
 import { useFetch } from '../../hooks/useFetch';
 import { SectionHeader } from '../../components/shell/SectionContent';
@@ -232,7 +234,6 @@ export default function KnowledgeTab() {
     <LoadingState label={`Loading ${VIEW_NOUN[state.view]}…`} />
   ) : rows.length === 0 ? (
     <EmptyState
-      size="sm"
       title={activeFilters > 0 || state.q ? 'No matches' : `No ${VIEW_NOUN[state.view]} yet`}
       description={clientFiltered && feed.hasMore
         ? `None of the ${feed.items.length} loaded rows match — load more to keep looking.`
@@ -305,7 +306,7 @@ export default function KnowledgeTab() {
             onOpen={openHref}
           />
         ) : (
-          <EmptyState size="sm" title="Choose an item to trace its sources" description="Pick a guide, pattern or run note from the list; its evidence opens here." />
+          <EmptyState title="Choose an item to trace its sources" description="Pick a guide, pattern or run note from the list; its evidence opens here." />
         ),
       }]}
     />
@@ -350,6 +351,18 @@ export default function KnowledgeTab() {
     );
   }
 
+  // With no record open, the explorer's command composer docks flush under
+  // the content column; an open record brings its own explain composer, so
+  // this one steps aside and only the record's composer shows.
+  const commands = knowledgeCommandAdapter(state.view, VIEW_NOUN[state.view], rows, {
+    setQuery,
+    setFilter: (value) => (value
+      ? go({ lifecycle: value, item: null })
+      : go({ repo: null, initiative: null, kind: null, lifecycle: null, item: null })),
+    refresh: feed.retry,
+    openItem: (id) => go({ item: id, tab: null, run: null }, { push: true }),
+  });
+
   const trail = state.item ? [...scope.breadcrumbs.slice(0, -1), {
     label: 'Knowledge',
     href: knowledgeHref({ ...state, item: null, tab: null, run: null, panel: null }),
@@ -375,6 +388,7 @@ export default function KnowledgeTab() {
         label: 'knowledge explorer',
       }}
       aside={aside}
+      {...(state.item ? {} : { footer: <CollectionCommandHost key={state.view} adapter={commands} /> })}
       data-testid="distillation-knowledge"
     >
       {pane}

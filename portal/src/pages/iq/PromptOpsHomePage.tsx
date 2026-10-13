@@ -146,7 +146,7 @@ export default function PromptOpsHomePage() {
         <Card padding="md">
           <Stack gap="sm">
             <CardHeader title="Deployed agents" meta={<Chip tone="success" size="xs">prompt resolved from library</Chip>} />
-            <StatStrip variant="line" size="sm" aria-label="Deployed runtimes" items={[{ label: 'runtimes', value: deployedRuntimes.length }, { label: 'healthy', value: healthy }]} />
+            <StatStrip variant="line" aria-label="Deployed runtimes" items={[{ label: 'runtimes', value: deployedRuntimes.length }, { label: 'healthy', value: healthy }]} />
             <Inline gap="xs" wrap>
               {deployedRuntimes.map((r) => {
                 const shortName = r.name.replace(/^orgiq_/, '');
@@ -178,7 +178,7 @@ export default function PromptOpsHomePage() {
         <Card padding="md">
           <Stack gap="sm">
             <CardHeader title="Canary prompts" meta={<Chip tone="success" size="xs">edits apply immediately</Chip>} />
-            <StatStrip variant="line" size="sm" aria-label="Live prompts" items={[{ label: 'live prompts', value: livePrompts.length, title: 'Invoked by ARN by the rollout surface' }]} />
+            <StatStrip variant="line" aria-label="Live prompts" items={[{ label: 'live prompts', value: livePrompts.length, title: 'Invoked by ARN by the rollout surface' }]} />
             <Stack gap="xs">
               {livePrompts.map((p) => (
                 <Inline key={p.id} gap="sm" align="center">
@@ -241,7 +241,7 @@ export default function PromptOpsHomePage() {
         <Card padding="md">
           <Stack gap="sm">
             <CardHeader title="Past experiments" />
-            <StatStrip variant="line" size="sm" aria-label="Past experiments" items={[{ label: 'completed rollouts', value: experimentsError ? '—' : pastCount, title: experimentsError ? 'unknown' : pastCount === 0 ? 'none completed yet' : 'completed rollouts' }]} />
+            <StatStrip variant="line" aria-label="Past experiments" items={[{ label: 'completed rollouts', value: experimentsError ? '—' : pastCount, title: experimentsError ? 'unknown' : pastCount === 0 ? 'none completed yet' : 'completed rollouts' }]} />
             {/* Experiment history lives in Aurora. A failed load used to render
                 a confident 0 and tell you to go run a canary, when the truth
                 was that we could not see the ones already there. */}

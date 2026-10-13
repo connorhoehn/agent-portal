@@ -101,7 +101,6 @@ export function ExceptionsModal({ open, onClose, teamId, dimensionTitle }: Excep
         <DataTable<TeamException>
           data={data.exceptions}
           keyField={(e) => `${e.dimension_id}:${e.approved_at || 'pending'}`}
-          size="sm"
           striped
           // A modal's list of one team's N/A exceptions — 10 keeps the modal
           // from growing past a comfortable dialog height.

@@ -324,7 +324,6 @@ function PolicyEditor({
 
       <Inline gap="sm" align="center">
         <SegmentedControl
-          size="sm"
           value={draft.mode}
           onChange={switchMode}
           options={[{ value: 'builder', label: 'Builder' }, { value: 'raw', label: 'Raw Cedar' }]}

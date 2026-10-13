@@ -50,3 +50,18 @@ test('only the documented tenant root alias is allowed, including its query', ()
   assert.equal(matchesAuditLocation('/pipelines?status=failed', '/pipelines/runs'), false);
   assert.equal(matchesAuditLocation('/pipelines/configuration', '/pipelines/runs'), false);
 });
+test('every documented alias is an App.tsx index/Navigate door and nothing else redirects', () => {
+  assert.equal(matchesAuditLocation('/iq', 'http://localhost/iq/work'), true);
+  assert.equal(matchesAuditLocation('/assessment', '/assessment/teams'), true);
+  assert.equal(matchesAuditLocation('/social', '/social/channels'), true);
+  assert.equal(matchesAuditLocation('/admin/identity', '/admin/identity/roles'), true);
+  assert.equal(matchesAuditLocation('/admin/observability', '/admin/observability/summary'), true);
+  assert.equal(matchesAuditLocation('/iq/scores/compare', '/iq/scores'), true);
+  assert.equal(matchesAuditLocation('/iq/decisions/d-aurora', '/iq/projects'), true);
+  // The alias target is exact: a door cannot certify a sibling page.
+  assert.equal(matchesAuditLocation('/iq', '/iq/projects'), false);
+  assert.equal(matchesAuditLocation('/admin/identity', '/admin/identity/users'), false);
+  // An undocumented redirect still fails readiness.
+  assert.equal(matchesAuditLocation('/iq/scores/cohorts', '/iq/scores'), false);
+  assert.equal(matchesAuditLocation('/assessment/teams', '/assessment/teams/TEAM-001'), false);
+});

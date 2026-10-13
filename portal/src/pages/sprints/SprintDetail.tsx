@@ -38,7 +38,6 @@ function SprintMoney({ s }: { s: Sprint }) {
       <StatStrip
         aria-label="Sprint money"
         variant="line"
-        size="sm"
         items={[
           { label: 'points', value: `${s.pointsDone} / ${s.pointsTotal}`, title: `${s.doneItemCount} of ${s.itemCount} items done` },
           { label: 'planned', value: usd(s.estimatedCostUsd), title: "Sum of the sprint's work-item dollar estimates" },

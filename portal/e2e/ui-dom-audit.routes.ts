@@ -19,11 +19,32 @@ export function selectAuditRoutes<T extends { path: string; pattern?: string }>(
   return parameterized ? [{ ...parameterized, path: requested.pathname + requested.search, auditPreservePath: true }] : [];
 }
 
+/**
+ * Documented route aliases: the only redirects the audit accepts. Each is an
+ * `index`/`Navigate` in App.tsx (or a page-level redirect with no selection),
+ * so the requested path is a door onto the target page, not a page of its own.
+ * Anything else that redirects fails readiness, because a redirect cannot
+ * certify the page that was asked for.
+ */
+export const AUDIT_ROUTE_ALIASES: ReadonlyArray<{ pattern: RegExp; target: string; why: string }> = [
+  { pattern: /^\/pipelines$/, target: '/pipelines/runs', why: 'tenant root opens Runs' },
+  { pattern: /^\/iq$/, target: '/iq/work', why: 'tenant root opens Work' },
+  { pattern: /^\/assessment$/, target: '/assessment/teams', why: 'tenant root opens Teams' },
+  { pattern: /^\/social$/, target: '/social/channels', why: 'tenant root opens Channels' },
+  { pattern: /^\/admin\/identity$/, target: '/admin/identity/roles', why: 'section index opens Roles' },
+  { pattern: /^\/admin\/observability$/, target: '/admin/observability/summary', why: 'section index opens Summary' },
+  { pattern: /^\/iq\/scores\/compare$/, target: '/iq/scores', why: 'a comparison with no selected people returns to Scores (ScoresComparePage)' },
+  { pattern: /^\/iq\/decisions\/[^/]+$/, target: '/iq/projects', why: 'decision pages are retired; App.tsx redirects them to Initiatives' },
+];
+export function auditAliasTarget(pathname: string): string {
+  return AUDIT_ROUTE_ALIASES.find(a => a.pattern.test(pathname))?.target ?? pathname;
+}
+
 /** Preserve the requested view/selection while allowing unrelated app-added parameters. */
 export function matchesAuditLocation(requestedPath: string, actualURL: string): boolean {
   const requested = new URL(requestedPath, 'http://audit.local');
   const actual = new URL(actualURL, 'http://audit.local');
-  const expectedPath = requested.pathname === '/pipelines' ? '/pipelines/runs' : requested.pathname;
+  const expectedPath = auditAliasTarget(requested.pathname);
   if (actual.pathname !== expectedPath) return false;
   return [...new Set(requested.searchParams.keys())].every(key => {
     const expected = requested.searchParams.getAll(key);

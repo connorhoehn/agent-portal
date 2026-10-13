@@ -508,7 +508,7 @@ function CostPage() {
               : 'No invocations with cost data in this window.'}
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -551,7 +551,6 @@ function CostPage() {
       {/* Headline figures — kept below the table they summarize. */}
       <StatStrip
         variant="line"
-        size="sm"
         aria-label="Cost headline figures"
         items={[
           {
@@ -603,7 +602,7 @@ function CostPage() {
               : 'No expensive invocations recorded in this window.'}
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -627,8 +626,8 @@ function CostPage() {
                   <TableTd className="whitespace-nowrap">
                     {r.ts ? (parsePgTimestamp(r.ts)?.toLocaleString() ?? r.ts) : '—'}
                   </TableTd>
-                  <TableTd className="whitespace-nowrap font-mono">
-                    {r.promptVersion ? `p:${r.promptVersion.slice(0, 8)}` : '—'}
+                  <TableTd className="whitespace-nowrap">
+                    <T className="font-mono">{r.promptVersion ? `p:${r.promptVersion.slice(0, 8)}` : '—'}</T>
                   </TableTd>
                   <TableTd
                     className={snippetCellCls}
@@ -664,7 +663,7 @@ function CostPage() {
               : 'No model attribution yet — older rows may pre-date model_id capture.'}
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Model</TableTh>
@@ -677,7 +676,7 @@ function CostPage() {
             <TableBody>
               {byModelRows.map((r) => (
                 <TableRow key={r.modelId}>
-                  <TableTd className="whitespace-nowrap font-mono">{r.modelId}</TableTd>
+                  <TableTd className="whitespace-nowrap"><T className="font-mono">{r.modelId}</T></TableTd>
                   <TableTd numeric>{fmtInt(r.invocations)}</TableTd>
                   <TableTd numeric>{fmtInt(r.inputTokens)}</TableTd>
                   <TableTd numeric>{fmtInt(r.outputTokens)}</TableTd>

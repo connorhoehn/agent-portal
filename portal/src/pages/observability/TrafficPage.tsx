@@ -313,7 +313,6 @@ function TrafficPage() {
 
       <StatStrip
         variant="line"
-        size="sm"
         aria-label="Traffic totals"
         items={[
           {
@@ -435,7 +434,7 @@ function TrafficPage() {
             degraded={trafficDegraded}
           />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>User</TableTh>
@@ -449,7 +448,7 @@ function TrafficPage() {
             <TableBody>
               {topUsers.map((u) => (
                 <TableRow key={u.userId}>
-                  <TableTd className="font-mono whitespace-nowrap">{u.userId}</TableTd>
+                  <TableTd className="whitespace-nowrap"><T className="font-mono">{u.userId}</T></TableTd>
                   <TableTd numeric>{fmtInt(u.invocations)}</TableTd>
                   <TableTd numeric>{fmtInt(u.uniqueAgents)}</TableTd>
                   <TableTd numeric>{fmtUsd(u.totalCostUsd, 4)}</TableTd>
@@ -491,7 +490,7 @@ function TrafficPage() {
         {perAgent.length === 0 ? (
           <RowEmpty text="No agents observed in this window." degraded={trafficDegraded} />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -515,7 +514,7 @@ function TrafficPage() {
             <TableBody>
               {perAgent.map((a) => (
                 <TableRow key={a.agentId}>
-                  <TableTd className="font-mono whitespace-nowrap">{a.agentId}</TableTd>
+                  <TableTd className="whitespace-nowrap"><T className="font-mono">{a.agentId}</T></TableTd>
                   <TableTd numeric>{fmtInt(a.invocations)}</TableTd>
                   <TableTd>
                     <Chip tone={rpsTone(a.rps)} size="xs">{fmtRps(a.rps)}</Chip>

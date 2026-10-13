@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-08T19:18:10.843Z",
-  "serverHandlerSha": "6b7ab6b22b74ecfc5eb1280bdc72518db74b8f0d123c3b9ae0ec551ff358072a",
+  "capturedAt": "2026-10-13T03:12:10.725Z",
+  "serverHandlerSha": "9c8e8003dfd63c996af362eba366249d1f87e70f8a5e7a2f804d9afff9ac4e0c",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -912,6 +912,33 @@
           "close_claim"
         ]
       }
+    },
+    "GET /api/assessment/recordings/records": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "edges": "array",
+        "records": "array"
+      },
+      "values": {}
+    },
+    "GET /api/assessment/recordings/search": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "counts": "object(dictionary)",
+        "edges": "array",
+        "partial": "array",
+        "partial[]": "string",
+        "query": "string",
+        "related": "array",
+        "results": "array",
+        "total": "number",
+        "totalIsLowerBound": "boolean"
+      },
+      "values": {}
     },
     "GET /api/assessment/rollup": {
       "persona": "orgiq/admin",
@@ -2338,6 +2365,7 @@
       "values": {
         "boxes[].status": [
           "idle",
+          "provisioning",
           "running",
           "waiting"
         ]
@@ -3377,7 +3405,7 @@
         "edges[].type": "string",
         "nodes": "array",
         "nodes[]": "object",
-        "nodes[].avatarUrl": "string",
+        "nodes[].avatarUrl": "null|string",
         "nodes[].department": "string",
         "nodes[].id": "string",
         "nodes[].influenceScore": "number",
@@ -3411,11 +3439,11 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "avatarUrl": "string",
+        "avatarUrl": "null",
         "connections": "array",
         "connections[]": "object",
         "connections[].otherPerson": "object",
-        "connections[].otherPerson.avatarUrl": "string",
+        "connections[].otherPerson.avatarUrl": "null",
         "connections[].otherPerson.id": "string",
         "connections[].otherPerson.name": "string",
         "connections[].otherPerson.title": "string",
@@ -3495,7 +3523,7 @@
         "people": "array",
         "peopleTotal": "number",
         "people[]": "object",
-        "people[].avatarUrl": "string",
+        "people[].avatarUrl": "null|string",
         "people[].department": "string",
         "people[].id": "string",
         "people[].influenceScore": "number",
@@ -3668,6 +3696,7 @@
         "$[].children[].estimatedByName": "null",
         "$[].children[].estimatedCostUsd": "number",
         "$[].children[].id": "string",
+        "$[].children[].key": "string",
         "$[].children[].labels": "array",
         "$[].children[].labels[]": "string",
         "$[].children[].nextStep": "null|string",
@@ -3698,6 +3727,7 @@
         "$[].estimatedByName": "null",
         "$[].estimatedCostUsd": "null",
         "$[].id": "string",
+        "$[].key": "string",
         "$[].labels": "array",
         "$[].labels[]": "string",
         "$[].nextStep": "null",
@@ -3717,6 +3747,19 @@
         "$[].updatedAt": "string"
       },
       "values": {
+        "$[].children[].key": [
+          "ORG-OBS-10",
+          "ORG-OBS-11",
+          "ORG-OBS-13",
+          "ORG-OBS-14",
+          "ORG-OBS-2",
+          "ORG-OBS-3",
+          "ORG-OBS-4",
+          "ORG-OBS-5",
+          "ORG-OBS-6",
+          "ORG-OBS-8",
+          "ORG-OBS-9"
+        ],
         "$[].children[].status": [
           "done",
           "in_progress",
@@ -3726,6 +3769,11 @@
         "$[].children[].type": [
           "bug",
           "story"
+        ],
+        "$[].key": [
+          "ORG-OBS-1",
+          "ORG-OBS-12",
+          "ORG-OBS-7"
         ],
         "$[].status": [
           "in_progress",
@@ -3749,7 +3797,7 @@
         "people": "array",
         "peopleTotal": "number",
         "people[]": "object",
-        "people[].avatarUrl": "string",
+        "people[].avatarUrl": "null|string",
         "people[].department": "string",
         "people[].id": "string",
         "people[].influenceScore": "number",
@@ -3797,6 +3845,7 @@
         "$[].estimatedByName": "null",
         "$[].estimatedCostUsd": "null|number",
         "$[].id": "string",
+        "$[].key": "string",
         "$[].labels": "array",
         "$[].labels[]": "string",
         "$[].nextStep": "null",
@@ -3816,6 +3865,58 @@
         "$[].updatedAt": "string"
       },
       "values": {
+        "$[].key": [
+          "ORG-AUTH-1",
+          "ORG-AUTH-2",
+          "ORG-AUTH-5",
+          "ORG-COST-2",
+          "ORG-COST-3",
+          "ORG-COST-6",
+          "ORG-DS-3",
+          "ORG-DS-4",
+          "ORG-DSAPI-1",
+          "ORG-DSAPI-2",
+          "ORG-DSAPI-4",
+          "ORG-FS-1",
+          "ORG-FS-3",
+          "ORG-INF-1",
+          "ORG-INF-2",
+          "ORG-INF-3",
+          "ORG-INF-4",
+          "ORG-LAKE-2",
+          "ORG-LAKE-3",
+          "ORG-LAKE-4",
+          "ORG-LLM-1",
+          "ORG-LLM-10",
+          "ORG-LLM-2",
+          "ORG-LLM-3",
+          "ORG-LLM-4",
+          "ORG-LLM-5",
+          "ORG-LLM-7",
+          "ORG-LLM-9",
+          "ORG-MOB-2",
+          "ORG-MOB-3",
+          "ORG-MOB-4",
+          "ORG-OBS-10",
+          "ORG-OBS-12",
+          "ORG-OBS-13",
+          "ORG-OBS-14",
+          "ORG-OBS-3",
+          "ORG-OBS-4",
+          "ORG-OBS-5",
+          "ORG-OBS-8",
+          "ORG-RAG-3",
+          "ORG-RAG-4",
+          "ORG-RTA-2",
+          "ORG-RTA-3",
+          "ORG-RTA-5",
+          "ORG-SOC2-2",
+          "ORG-SOC2-3",
+          "ORG-SOC2-4",
+          "ORG-ZT-1",
+          "ORG-ZT-2",
+          "ORG-ZT-4"
+        ],
         "$[].status": [
           "done",
           "in_progress",
@@ -6657,7 +6758,7 @@
         "me.userId": "string",
         "people": "array",
         "people[]": "object",
-        "people[].avatarUrl": "string",
+        "people[].avatarUrl": "null|string",
         "people[].displayName": "string",
         "people[].userId": "string",
         "tenant": "string"
@@ -6945,6 +7046,30 @@
         ],
         "definition.triggers[].type": [
           "manual"
+        ]
+      }
+    },
+    "GET /api/pipelines/queues": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "backend": "string",
+        "observedAt": "string",
+        "queues": "array",
+        "queues[]": "object",
+        "queues[].deadLetter": "boolean",
+        "queues[].maxReceives": "null|number",
+        "queues[].name": "string",
+        "queues[].purpose": "string",
+        "queues[].reason": "string",
+        "queues[].redriveTo": "null|string",
+        "queues[].snapshot": "null",
+        "queues[].state": "string"
+      },
+      "values": {
+        "queues[].state": [
+          "missing"
         ]
       }
     },
@@ -7939,23 +8064,19 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "counts": "object",
-        "counts.all": "number",
-        "counts.asset": "number",
-        "counts.decision": "number",
-        "counts.initiative": "number",
-        "counts.knowledge": "number",
-        "counts.person": "number",
-        "counts.work": "number",
+        "counts": "object(dictionary)",
         "edges": "array",
         "edges[]": "object",
         "edges[].id": "string",
         "edges[].label": "string",
         "edges[].source": "string",
         "edges[].target": "string",
+        "partial": "array",
+        "partial[]": "string",
         "query": "string",
         "related": "array",
         "related[]": "object|object(dictionary)",
+        "related[].avatarUrl": "string",
         "related[].description": "string",
         "related[].href": "string",
         "related[].id": "string",
@@ -8299,7 +8420,7 @@
       "shape": {
         "$": "array",
         "$[]": "object",
-        "$[].avatarUrl": "string",
+        "$[].avatarUrl": "null|string",
         "$[].displayName": "string",
         "$[].email": "string",
         "$[].id": "string",
@@ -8477,7 +8598,7 @@
         "peopleHasMore": "boolean",
         "peopleTotal": "number",
         "people[]": "object",
-        "people[].avatarUrl": "string",
+        "people[].avatarUrl": "null|string",
         "people[].displayName": "string",
         "people[].roles": "array",
         "people[].roles[]": "string",
@@ -8511,7 +8632,7 @@
         "$": "object",
         "people": "array",
         "people[]": "object",
-        "people[].avatarUrl": "string",
+        "people[].avatarUrl": "null|string",
         "people[].displayName": "string",
         "people[].roles": "array",
         "people[].roles[]": "string",
@@ -8628,7 +8749,7 @@
         "$": "object",
         "people": "array",
         "people[]": "object",
-        "people[].avatarUrl": "string",
+        "people[].avatarUrl": "null|string",
         "people[].displayName": "string",
         "people[].roles": "array",
         "people[].roles[]": "string",

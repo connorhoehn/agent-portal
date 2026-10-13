@@ -46,7 +46,7 @@ export function IngestionJobsTab({ kb }: { kb: KbRegistryEntry }) {
             {kb.bedrockKbId ? 'No ingestion jobs found.' : 'KB not yet provisioned — no ingestion jobs.'}
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Job</TableTh>

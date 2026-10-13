@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Card,
   InlinePlaceholder,
@@ -9,10 +9,15 @@ import {
   TableTh,
   TableTd,
   Chip,
-  PageSection, T,
+  Inline,
+  PageSection,
+  SearchInput, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { formatTokenCount } from '../../lib/format';
+import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
+import { ObservabilityCommandSection } from './ObservabilityCommandSection';
+import { OBSERVABILITY_GRAMMARS, matchesAny } from './observabilityCommands';
 
 interface Invocation {
   id: string;
@@ -42,11 +47,11 @@ interface AgentRow {
 }
 
 function AgentMetricsPage() {
-  const { data: recent } = useFetch<{ invocations: Invocation[] }>(
+  const { data: recent, refresh: refreshRecent } = useFetch<{ invocations: Invocation[] }>(
     '/api/observability/recent-invocations?limit=50',
     5000,
   );
-  const { data: bedrock } = useFetch<{ entries: BedrockInvocation[] }>(
+  const { data: bedrock, refresh: refreshBedrock } = useFetch<{ entries: BedrockInvocation[] }>(
     '/api/observability/bedrock-invocations?limit=100&sinceMin=60',
     20000,
   );
@@ -93,23 +98,43 @@ function AgentMetricsPage() {
     return Array.from(map.values()).sort((a, b) => b.invocations - a.invocations);
   }, [recent, bedrock]);
 
+  const [query, setQuery] = useState('');
+  const visible = rows.filter((r) => matchesAny(query, r.agentName));
+  const adapter = collectionCommandAdapter(OBSERVABILITY_GRAMMARS.agents, {
+    setQuery,
+    refresh: () => { refreshRecent(); refreshBedrock(); },
+    scopeNote: 'Search matches agent names in the metrics derived from recent invocations and the Bedrock log. Refresh rereads both. Nothing here invokes or changes an agent.',
+  });
+
   return (
     <PageSection
       title="Per-Agent Metrics"
       description="Derived from recent invocations (live) + Bedrock log (~30s lag, 60min window)"
       actions={
-        <T size="xs" className="text-[var(--color-text-tertiary)]">
-          {rows.length} agent{rows.length !== 1 ? 's' : ''}
-        </T>
+        <Inline gap="sm" align="center">
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search agents"
+            aria-label="Search agents"
+            className="w-[200px]"
+          />
+          <T size="xs" className="text-[var(--color-text-tertiary)]">
+            {query.trim() ? `${visible.length} of ${rows.length}` : rows.length} agent{rows.length !== 1 ? 's' : ''}
+          </T>
+        </Inline>
       }
     >
+      <ObservabilityCommandSection adapter={adapter}>
       <Card padding="md">
-        {rows.length === 0 ? (
+        {visible.length === 0 ? (
           <InlinePlaceholder align="center" className="text-xs p-6">
-            No agent activity in the recent window. Invoke an agent to populate this view.
+            {rows.length === 0
+              ? 'No agent activity in the recent window. Invoke an agent to populate this view.'
+              : 'No agents match the current search.'}
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -122,7 +147,7 @@ function AgentMetricsPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((r) => {
+              {visible.map((r) => {
                 const errRate = r.invocations === 0 ? 0 : r.errors / r.invocations;
                 const blockedRate = r.invocations === 0 ? 0 : r.blocked / r.invocations;
                 const healthy = errRate === 0 && blockedRate < 0.1;
@@ -174,6 +199,7 @@ function AgentMetricsPage() {
           </Table>
         )}
       </Card>
+      </ObservabilityCommandSection>
     </PageSection>
   );
 }

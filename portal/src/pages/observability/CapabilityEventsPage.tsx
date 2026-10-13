@@ -11,10 +11,16 @@ import {
   TableTh,
   TableTd,
   Chip,
+  Inline,
   PageSection,
+  SearchInput,
+  T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
+import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
+import { ObservabilityCommandSection } from './ObservabilityCommandSection';
+import { OBSERVABILITY_GRAMMARS, matchesAny } from './observabilityCommands';
 
 type CapabilityKind =
   | 'browser_navigate'
@@ -37,27 +43,42 @@ interface CapabilityEvent {
 type KindFilter = 'all' | 'browser' | 'code';
 
 function CapabilityEventsPage() {
-  const { data: capEvents } = useFetch<{ events: CapabilityEvent[] }>(
+  const { data: capEvents, refresh } = useFetch<{ events: CapabilityEvent[] }>(
     '/api/observability/capability-events?limit=50',
     5000,
   );
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
+  const [query, setQuery] = useState('');
 
   const events = capEvents?.events ?? [];
 
   const filtered = useMemo(() => {
     return events.filter((ev) => {
-      if (kindFilter === 'browser') return ev.kind.startsWith('browser');
-      if (kindFilter === 'code') return ev.kind === 'code_execute';
-      return true;
+      if (kindFilter === 'browser' && !ev.kind.startsWith('browser')) return false;
+      if (kindFilter === 'code' && ev.kind !== 'code_execute') return false;
+      return matchesAny(query, ev.sessionId, ev.kind, formatCapDetail(ev), ev.error);
     });
-  }, [events, kindFilter]);
+  }, [events, kindFilter, query]);
+
+  const adapter = collectionCommandAdapter(OBSERVABILITY_GRAMMARS.capabilityEvents, {
+    setQuery, refresh,
+    setFilter: (value) => setKindFilter(value === 'browser' || value === 'code' ? value : 'all'),
+    scopeNote: 'Search and the kind filter apply to the events this process holds in memory. Refresh rereads that feed. Nothing here launches a browser or runs code.',
+  });
 
   return (
     <PageSection
       title="Capability Events"
       description="Browser + code interpreter activity · live · 5s refresh"
       actions={
+        <Inline gap="sm" align="center">
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Search capability events"
+          aria-label="Search capability events"
+          className="w-[220px]"
+        />
         <Select
           aria-label="Filter by capability kind"
           size="sm"
@@ -69,8 +90,10 @@ function CapabilityEventsPage() {
             { value: 'code', label: 'Code execute' },
           ]}
         />
+        </Inline>
       }
     >
+      <ObservabilityCommandSection adapter={adapter}>
       <Card padding="md">
         {filtered.length === 0 ? (
           <InlinePlaceholder align="center" className="text-xs p-6">
@@ -84,10 +107,10 @@ function CapabilityEventsPage() {
                   Capabilities page
                 </Link>.
               </>
-            ) : 'No events match the current filter.'}
+            ) : 'No events match the current search or filter.'}
           </InlinePlaceholder>
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Session</TableTh>
@@ -103,8 +126,8 @@ function CapabilityEventsPage() {
                 const detailText = formatCapDetail(ev);
                 return (
                   <TableRow key={ev.id}>
-                    <TableTd className="font-mono text-[var(--color-text-tertiary)]">
-                      {ev.sessionId ? ev.sessionId.slice(0, 12) + '…' : '—'}
+                    <TableTd className="text-[var(--color-text-tertiary)]">
+                      <T className="font-mono">{ev.sessionId ? ev.sessionId.slice(0, 12) + '…' : '—'}</T>
                     </TableTd>
                     <TableTd className="text-[var(--color-text-tertiary)] whitespace-nowrap" title={new Date(ev.startedAt).toLocaleString()}>
                       {relativeTime(ev.startedAt)}
@@ -141,6 +164,7 @@ function CapabilityEventsPage() {
           </Table>
         )}
       </Card>
+      </ObservabilityCommandSection>
     </PageSection>
   );
 }

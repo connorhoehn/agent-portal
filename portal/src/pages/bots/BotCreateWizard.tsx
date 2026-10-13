@@ -34,6 +34,7 @@ import {
   Textarea,
   WorkflowStepper,
   type WorkflowStep,
+  T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { BOT_STARTERS, type BotStarter } from './botTemplates';
@@ -323,7 +324,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
       cardStyle={{ maxWidth: 560, width: '100%', background: 'var(--color-surface)' }}
       footer={footer}
     >
-      <WorkflowStepper steps={stepperSteps} size="sm" />
+      <WorkflowStepper steps={stepperSteps} />
 
       {createdBot ? (
         <Stack gap="sm" className="mt-3">
@@ -644,12 +645,12 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
             <>
               <Card padding="md">
                 <SectionLabel as="div" className="mb-2">{step1.name.trim() || 'Unnamed bot'}</SectionLabel>
-                <Table size="sm">
+                <Table>
                   <TableBody>
                     <TableRow><TableTd className="text-text-tertiary">Template</TableTd><TableTd>{step1.template ?? '—'}</TableTd></TableRow>
                     <TableRow>
                       <TableTd className="text-text-tertiary">Target</TableTd>
-                      <TableTd className={step2.targetKind === 'codebase' ? 'font-mono' : ''}>{targetLabel}</TableTd>
+                      <TableTd>{step2.targetKind === 'codebase' ? <T className="font-mono">{targetLabel}</T> : targetLabel}</TableTd>
                     </TableRow>
                     <TableRow><TableTd className="text-text-tertiary">Model</TableTd><TableTd>{modelLabel}</TableTd></TableRow>
                     <TableRow><TableTd className="text-text-tertiary">Trigger</TableTd><TableTd>{reviewTriggerText(step4)}</TableTd></TableRow>

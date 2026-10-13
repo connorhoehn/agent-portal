@@ -30,7 +30,6 @@ function DecksListPage() {
         <StatStrip
           aria-label="Deck summary"
           variant="line"
-          size="sm"
           items={[
             { label: decks.length === 1 ? 'deck' : 'decks', value: decks.length },
             { label: decks.length === 1 ? 'team' : 'teams', value: new Set(decks.map((d) => d.teamId)).size },
@@ -45,7 +44,6 @@ function DecksListPage() {
           loading={decks === null}
           emptyMessage="No review decks yet. Open a team's scorecard and choose Create review deck from its actions menu."
           keyField={(d) => d.id}
-          size="sm"
           striped
           pageSize={20}
           onRowClick={(d) => navigate(`/assessment/decks/${encodeURIComponent(d.id)}`)}

@@ -606,7 +606,7 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
   // are pinned above it (never scrolled under the tabs), the canvas takes the rest.
   return <Stack gap="none" className="flex-1 min-h-0 min-w-0 overflow-hidden px-6" data-testid="search-people-graph">
     <Inline gap="sm" align="center" className="py-2 shrink-0" data-testid="search-people-toolbar">
-      <SegmentedControl size="sm" aria-label="Organization graph layout" value={layout} onChange={value => onLayoutChange(value === 'radial' ? 'radial' : 'force')}
+      <SegmentedControl aria-label="Organization graph layout" value={layout} onChange={value => onLayoutChange(value === 'radial' ? 'radial' : 'force')}
         options={[{ value: 'force', label: 'Force' }, { value: 'radial', label: 'Radial' }]} />
       <GraphSearchBox people={data.nodes} onPickPerson={focusPerson} onPickSkill={(_skill, ids) => { setPeople(ids, null); }} placeholder="Find a person or skill…" />
       <RangeSliderFrame className="text-xs" label="Top-K" ariaLabel="Top K relationships per person" min={1} max={10} value={topK} onChange={setTopK} valueLabel={topK} />
@@ -622,7 +622,7 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
       <DepartmentChips departments={data.departments} people={data.nodes} activeDepartment={activeDepartment}
         onToggle={(name, memberIds) => { setActiveDepartment(name); setPeople(name ? memberIds : [], null); }} />
       {showInfluence && <FilterChip active={rareSkillsOpen} size="sm" onClick={() => setRareSkillsOpen(open => !open)}>⚠ Rare skills · org-wide</FilterChip>}
-      <SegmentedControl size="sm" aria-label="Relationship lens" value={lensTypes ? lens ?? '' : ''} onChange={value => onLensChange(value || null)}
+      <SegmentedControl aria-label="Relationship lens" value={lensTypes ? lens ?? '' : ''} onChange={value => onLensChange(value || null)}
         options={[{ value: '', label: 'All' }, { value: 'hierarchy', label: 'Hierarchy' }, { value: 'skills', label: 'Skills' }, { value: 'projects', label: 'Projects' }]} />
       <T className="ml-auto text-xs text-text-tertiary" data-testid="search-people-count"
         title={capped ? `${people.length} of ${total} people — capped for canvas performance, use search or a selection to narrow it instead` : undefined}>

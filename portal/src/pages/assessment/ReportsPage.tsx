@@ -12,6 +12,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Button,
   Chip,
+  CollectionToolbar,
   DataTable,
   EmptyState,
   ErrorState,
@@ -40,7 +41,10 @@ import { RECOMMENDATION_KIND_LABEL, type RecommendationsResponse, type Recommend
 import { useTeams } from './dashboard/useTeams';
 import { LevelBadge } from './dashboard/LevelBadge';
 import { useHeatmapIndex, type HeatmapDimension } from './useHeatmapIndex';
-import { highestVerifiedLevel, motionFor, type TeamSummary } from './types';
+import { MOTIONS, highestVerifiedLevel, motionFor, type Cohort, type TeamSummary } from './types';
+import { filterRows } from '../../hooks/useRowSearch';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { reportsCommandAdapter } from './assessmentCollectionCommands';
 
 const KIND_TONE: Record<SecondaryRecommendationKind, ChipTone> = {
   close_claim: 'warning',
@@ -57,7 +61,7 @@ function dimensionColumns(index: ReturnType<typeof useHeatmapIndex>['index']): H
 }
 
 function HeatmapCell({ dim }: { dim: HeatmapDimension | undefined }) {
-  if (!dim) return <TableTd className="px-1.5 text-center" data-verified="" data-claimed="">—</TableTd>;
+  if (!dim) return <TableTd className="text-center" data-verified="" data-claimed="">—</TableTd>;
   const cert = dim.certification;
   const verified = cert?.verified_level ?? dim.current_level;
   const claimed = cert?.claimed_level ?? null;
@@ -70,7 +74,7 @@ function HeatmapCell({ dim }: { dim: HeatmapDimension | undefined }) {
   ].filter(Boolean).join(' · ');
   return (
     <TableTd
-      className="px-1.5 text-center whitespace-nowrap"
+      className="text-center whitespace-nowrap"
       title={title}
       data-verified={dim.is_na ? 'na' : verified ?? ''}
       data-claimed={claimed ?? ''}
@@ -83,10 +87,10 @@ function HeatmapCell({ dim }: { dim: HeatmapDimension | undefined }) {
   );
 }
 
-function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSelectTeam: (id: string) => void }) {
+function MaturityHeatmap({ teams, onSelectTeam, filtered = false }: { teams: TeamSummary[]; onSelectTeam: (id: string) => void; filtered?: boolean }) {
   const { index, loading } = useHeatmapIndex();
   const columns = useMemo(() => dimensionColumns(index), [index]);
-  if (teams.length === 0) return <EmptyState title="No teams yet" />;
+  if (teams.length === 0) return <EmptyState title={filtered ? 'No team matches the search or motion' : 'No teams yet'} />;
   if (columns.length === 0) return loading ? <LoadingState label="Reading every team's scorecard…" /> : <EmptyState title="No dimensions scored yet" />;
   return (
     <Stack gap="sm">
@@ -103,18 +107,20 @@ function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSele
           clipped, which is the one thing a horizontal scroll must never do.
           Same `Card padding="none" overflow-x-auto` this tenant already uses
           for the equally wide scorecard grid (dashboard/TeamScorecard.tsx) and
-          the budgets report — the heatmap simply never got it. */}
+          the budgets report — the heatmap simply never got it. The cells keep
+          the table's own 12px inset (docs/layout-cascade.md "Tables"); the
+          grid scrolls inside this Card rather than squeezing the inset. */}
       <Card padding="none" className="overflow-x-auto">
-      <Table data-testid="maturity-heatmap" size="sm">
+      <Table data-testid="maturity-heatmap">
         <TableHead>
           <TableRow>
-            <TableTh scope="col" className="px-3 py-2">Team</TableTh>
+            <TableTh scope="col">Team</TableTh>
             {columns.map((d) => (
-              <TableTh key={d.id} scope="col" className="px-1.5 py-2 text-center" title={d.title} abbr={d.title}>
+              <TableTh key={d.id} scope="col" className="text-center" title={d.title} abbr={d.title}>
                 {d.id.padStart(2, '0')}
               </TableTh>
             ))}
-            <TableTh scope="col" className="px-3 py-2 text-right">Verified</TableTh>
+            <TableTh scope="col" className="text-right">Verified</TableTh>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -123,11 +129,11 @@ function MaturityHeatmap({ teams, onSelectTeam }: { teams: TeamSummary[]; onSele
             const top = highestVerifiedLevel(t.certification);
             return (
               <TableRow key={t.id} clickable onClick={() => onSelectTeam(t.id)}>
-                <TableTd className="px-3 whitespace-nowrap" title={`${t.id} · ${motionFor(t.cohort).title}`}>
+                <TableTd className="whitespace-nowrap" title={`${t.id} · ${motionFor(t.cohort).title}`}>
                   <T size="sm" weight="semibold">{t.name}</T>
                 </TableTd>
                 {columns.map((d) => <HeatmapCell key={d.id} dim={dims?.get(d.id)} />)}
-                <TableTd className="px-3 py-1 text-right whitespace-nowrap">
+                <TableTd className="text-right whitespace-nowrap">
                   <Inline gap="xs" align="center" justify="end" wrap={false}>
                     <LevelBadge level={top} size="xs" />
                     {(t.certification?.claims_open ?? 0) > 0 && (
@@ -167,7 +173,6 @@ function WhereToStart({ onSelectTeam, teamId }: { onSelectTeam: (id: string) => 
     <DataTable<RecommendationTeamGroup>
       data={groups}
       keyField={(g) => g.id}
-      size="sm"
       striped
       onRowClick={(g) => onSelectTeam(g.id)}
       // Every team with an open recommendation, program-wide — 20 is a
@@ -194,7 +199,7 @@ export default function ReportsPage() {
   const navigate = useNavigate();
   const { can, ready } = useCapabilities();
   const canPublish = ready && can('PublishReport');
-  const { teams } = useTeams();
+  const { teams, refresh: refreshTeams } = useTeams();
   const { data: rollup, isLoading: loading, error, degraded, refresh: refreshRollup } = useFetch<RollupResponse>('/api/assessment/rollup');
   const [publishing, setPublishing] = useState(false);
   const openTeam = (id: string) => navigate(`/assessment/teams/${encodeURIComponent(id)}`);
@@ -211,6 +216,21 @@ export default function ReportsPage() {
   const teamParam = searchParams.get('team');
   const scopedTeam = teamParam ? teams.find((t) => t.id === teamParam) : undefined;
   const isScoped = Boolean(teamParam && scopedTeam);
+
+  // The portfolio heatmap's search and motion: one controlled state shared by
+  // its toolbar and its command composer. Rows only — never the rollup.
+  const [heatmapQuery, setHeatmapQuery] = useState('');
+  const [heatmapMotion, setHeatmapMotion] = useState<Cohort | 'all'>('all');
+  const heatmapTeams = useMemo(
+    () => filterRows(teams.filter((t) => heatmapMotion === 'all' || t.cohort === heatmapMotion), heatmapQuery, (t) => `${t.name} ${t.id}`),
+    [teams, heatmapMotion, heatmapQuery],
+  );
+  const heatmapFiltered = heatmapQuery.trim() !== '' || heatmapMotion !== 'all';
+  const heatmapAdapter = reportsCommandAdapter({
+    setQuery: setHeatmapQuery,
+    setMotion: setHeatmapMotion,
+    refresh: () => { refreshTeams(); refreshRollup(); },
+  });
 
   async function publish() {
     setPublishing(true);
@@ -264,7 +284,6 @@ export default function ReportsPage() {
             <StatStrip
               aria-label="Portfolio summary"
               variant="line"
-              size="sm"
               items={[
                 { label: 'Teams', value: rollup.teams_total },
                 { label: 'Dimensions assessed', value: `${rollup.dimensions_assessed} / ${rollup.dimensions_applicable}`, hint: 'of applicable' },
@@ -277,7 +296,28 @@ export default function ReportsPage() {
             title={isScoped ? 'Certification' : 'Certification heatmap'}
             description={isScoped ? 'Columns are the rubric\'s seventeen dimensions.' : "Rows are teams, columns are the rubric's seventeen dimensions."}
           >
-            <MaturityHeatmap teams={isScoped ? [scopedTeam!] : teams} onSelectTeam={openTeam} />
+            {isScoped ? (
+              <MaturityHeatmap teams={[scopedTeam!]} onSelectTeam={openTeam} />
+            ) : (
+              // The heatmap is this page's collection: its toolbar and the
+              // command composer below it share one search/motion state, and
+              // the composer is measured against this section
+              // (data-collection-command-boundary, as on Assessment Runs).
+              <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded" data-testid="maturity-heatmap-collection">
+                <CollectionToolbar
+                  label="Heatmap filters"
+                  search={{ value: heatmapQuery, onChange: setHeatmapQuery, placeholder: 'Search teams', 'aria-label': 'Search heatmap teams' }}
+                  filters={[{
+                    id: 'motion', label: 'Assessment motion', value: heatmapMotion === 'all' ? '' : heatmapMotion,
+                    onChange: (v) => setHeatmapMotion(v ? v as Cohort : 'all'),
+                    options: [{ value: '', label: 'All motions' }, ...MOTIONS.map((m) => ({ value: m.cohort, label: m.title }))],
+                  }]}
+                  summary={`${heatmapTeams.length} of ${teams.length} teams`}
+                />
+                <MaturityHeatmap teams={heatmapTeams} onSelectTeam={openTeam} filtered={heatmapFiltered} />
+                <CollectionCommandHost adapter={heatmapAdapter} />
+              </Stack>
+            )}
           </PageSection>
           <PageSection title="Where to start" description="Each team's top-ranked entry, ranked by the server — never re-ordered here. Closing a claim asks for an artifact, advancing a practice is real work, answering a question unblocks assessment.">
             <WhereToStart onSelectTeam={openTeam} teamId={isScoped ? scopedTeam!.id : undefined} />
@@ -287,7 +327,6 @@ export default function ReportsPage() {
               <DataTable<[string, RollupResponse['by_cohort'][string]]>
                 data={Object.entries(rollup.by_cohort)}
                 keyField={([cohort]) => cohort}
-                size="sm"
                 striped
                 columns={[
                   { key: 'cohort', header: 'Cohort', render: ([cohort]) => cohort.replace('_', ' ') },

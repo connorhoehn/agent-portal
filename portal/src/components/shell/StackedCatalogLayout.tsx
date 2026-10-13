@@ -14,7 +14,7 @@ function groupsOf(rows: Array<{ subline?: string }>, fallback: string) {
  * section navigation, record list, then the selected record. */
 export function StackedCatalogLayout({
   title, group = 'Design', basePath, items, rows, selectedId, selectedTitle, listTitle,
-  onSelect, railHeader, railNotice, children, catalogOverview = false, overviewDescription, overviewActions,
+  onSelect, railHeader, railNotice, children, footer, catalogOverview = false, overviewDescription, overviewActions,
 }: {
   catalogOverview?: boolean;
   /** The overview's header blurb and actions: drawn by the layout's own
@@ -35,6 +35,10 @@ export function StackedCatalogLayout({
   railHeader?: ReactNode;
   railNotice?: ReactNode;
   children: ReactNode;
+  /** Docked flush under the record in the list-rail (record) view — the
+   *  content column's composer, passed to `ListRailLayout`'s `footer`. Not
+   *  drawn on the catalog overview, whose page embeds its own command host. */
+  footer?: ReactNode;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -84,6 +88,7 @@ export function StackedCatalogLayout({
         onOpenRow={(row) => onSelect(row.id)}
       />,
     }}
+    {...(footer != null ? { footer } : {})}
     data-testid="catalog-explorer"
   >
     <Stack gap="md" className="min-w-0 w-full overflow-x-auto px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)]">{children}</Stack>

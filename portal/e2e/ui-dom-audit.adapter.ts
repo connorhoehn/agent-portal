@@ -4,15 +4,16 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
 import { signIn } from './realSession';
-import { selectAuditRoutes, matchesAuditLocation } from './ui-dom-audit.routes';
-import { pipelineComposerPolicy } from './ui-dom-audit.policies';
+import { selectAuditRoutes, matchesAuditLocation, auditAliasTarget } from './ui-dom-audit.routes';
+import { pipelineComposerPolicy, tenantComposerPolicy } from './ui-dom-audit.policies';
 import { staticInventory, paramInventory, PARAM_ROUTES, OBSERVED_ROUTES, resolveParam, SWEEP_USER, sourceDigest, type InventoryRoute } from './route-inventory';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const selectors = {
   graphDetailLabels: '[data-ui-text="graph-detail"]', graphMetadataLabels: '[data-ui-text="graph-metadata"]', activePersonCaptions: '[data-ui-text="active-person-caption"]',
   codeLabels: 'button code, button .font-mono:not(kbd), [role="button"] code, [role="button"] .font-mono:not(kbd)',
-  railCaptionLabels: '[data-testid="social-chat-rail-scroll"] button[aria-expanded]:not([aria-haspopup]) > span, button[data-heading="label"][data-focus-key^="g:"] > span',
+  // Since ui-components 2.441.0 every rail caption/group heading emits data-ui-text="rail-caption" (the 11px rail profile).
+  railCaptionLabels: '[data-ui-text="rail-caption"], [data-testid="social-chat-rail-scroll"] button[aria-expanded]:not([aria-haspopup]) > span, button[data-heading="label"][data-focus-key^="g:"] > span',
   railItemLabels: '[data-ui-text="rail-item"]',
   conversationLabels: '[data-testid="conversation-row"] > span:nth-of-type(2) > span:first-child > span:first-child',
   conversationMetadata: '[data-testid="conversation-time"], [data-testid="conversation-mention"], [data-testid="conversation-unread"]',
@@ -39,6 +40,18 @@ const selectors = {
   rightPane: '[data-testid="page-conversation-pane"]',
   conversationState: '[data-composer-surface], [data-testid="social-channel-not-joined"], [data-testid="social-shared-work"]',
 };
+/** Each tenant's deck detail API, so a missing report is observed (404), never assumed. */
+const DECK_API: Record<string, (id: string) => string> = {
+  orgiq: id => `/api/initiative-decks/${id}`,
+  assessment: id => `/api/assessment/decks/${id}`,
+  pipelines: id => `/api/pipelines/decks/${id}`,
+  social: id => `/api/chat/decks/${id}`,
+};
+/** Where a seeded record route reads its record, so a 404 can be observed rather than assumed. */
+const RECORD_API: Record<string, (path: string) => string> = {
+  '/iq/work/:jobId': path => `/api/work/jobs/${path.split('/').pop()}`,
+  '/iq/library/:assetId': path => `/api/library/${path.split('/').pop()}`,
+};
 async function assertRoute(page: Page, spec: InventoryRoute) {
   // The tenant root intentionally opens Runs. Other redirects cannot certify the requested page.
   await expect.poll(() => matchesAuditLocation(spec.path, page.url()), { message: `Expected audit route and selected view: ${spec.path}` }).toBe(true);
@@ -53,7 +66,7 @@ async function ready(page: Page, spec: InventoryRoute & { required?: string[] })
   await expect(page.locator('[data-testid="datatable-loading-row"]')).toHaveCount(0);
   // Absence of a loading indicator can precede the lazy page mounting. Wait
   // for the actual configuration control before classifying its form policy.
-  if (new URL(spec.path, 'http://audit.local').pathname === '/pipelines/configuration') {
+  if (auditAliasTarget(new URL(spec.path, 'http://audit.local').pathname) === '/pipelines/configuration') {
     await expect(page.getByTestId('pipelines-default-approver')).toBeVisible();
   }
   await assertRoute(page, spec);
@@ -91,8 +104,13 @@ export default {
       if (!param) return spec;
       const path = await resolveParam(param, async url => { const response = await context.request.get(url); if (!response.ok()) throw new Error(`Route discovery ${url}: ${response.status()}`); return response.json(); });
       // Only an actual 404 can classify a missing report, never an arbitrary load failure.
-      const report = /^\/pipelines\/decks\/[^/]+$/.test(path) ? await context.request.get(`/api${path}`) : null;
-      return { ...spec, path, auditMissingDeck: report?.status() === 404 };
+      const deck = /^\/(?:pipelines|iq|assessment|social)\/decks\/([^/?]+)$/.exec(path);
+      const deckApi = deck && DECK_API[spec.tenant]?.(deck[1]);
+      const report = deckApi ? await context.request.get(deckApi) : null;
+      // A seeded "-missing" record is only classified missing when its API says 404.
+      const recordApi = /-missing(?:$|\?)/.test(path) ? RECORD_API[param.pattern]?.(path) : undefined;
+      const record = recordApi ? await context.request.get(recordApi) : null;
+      return { ...spec, path, auditMissingDeck: report?.status() === 404, auditMissingRecord: record?.status() === 404 };
     }));
   },
   async theme(page: Page, theme: string) {
@@ -100,7 +118,38 @@ export default {
     await page.evaluate(value => { localStorage.setItem('theme', value); document.documentElement.dataset.theme = value; }, theme);
   },
   ready,
-  async composerExpectation(page: Page, spec: InventoryRoute & { auditMissingDeck?: boolean; composerExpectation?: { mode: 'required' | 'exempt'; reason?: string } }) {
+  async composerExpectation(page: Page, spec: InventoryRoute & { auditMissingDeck?: boolean; auditMissingRecord?: boolean; composerExpectation?: { mode: 'required' | 'exempt'; reason?: string } }) {
+    if (spec.tenant !== 'pipelines') {
+      // Evidence is read after the network settles so a lazily filled table is not mistaken for an empty page.
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
+      const visible = async (selector: string) => (await page.locator(selector).count()) > 0 && await page.locator(selector).first().isVisible();
+      const composer = await visible(selectors.composers);
+      const table = await visible(selectors.tables);
+      const pathname = auditAliasTarget(new URL(spec.path, 'http://audit.local').pathname);
+      const controls = await visible('select, [role="switch"], input[type="checkbox"], input[type="radio"], [data-testid$="-save"], button[type="submit"]');
+      const policy = tenantComposerPolicy({ tenant: spec.tenant, path: auditAliasTarget(new URL(spec.path, 'http://audit.local').pathname) + new URL(spec.path, 'http://audit.local').search, kind: spec.kind, judges: spec.judges, pattern: spec.pattern }, {
+        collection: await visible(`${selectors.collections}, ${selectors.collectionToolbars}`),
+        table,
+        tableSearch: table && await visible('[data-toolbar-variant], input[type="search"], input[aria-label^="Search"], input[placeholder^="Search"]'),
+        listRail: await visible('[data-list-rail]'),
+        composer,
+        graph: await visible('[data-testid=work-activity-canvas], [data-testid=work-graph-canvas], [data-testid=work-graph-empty], .react-flow, [data-testid="explorer-layout"] canvas, [data-testid="explorer-layout"] svg'),
+        charts: await visible('.recharts-wrapper, .recharts-responsive-container'),
+        chatDirectory: !composer && await visible('[data-testid="social-chat-workspace"], [data-testid="social-chat-rail-scroll"], [data-testid="social-chat-rail"], [data-testid="communication-plane"]'),
+        communicationOverview: await visible('[data-testid="communication-overview"]'),
+        socialAccessRequired: await visible('[data-testid="communication-no-social"]'),
+        settingsSurface: !composer && (await visible('[data-testid$="configuration-page"], [data-testid$="-configuration"], [data-testid="settings-profile"]') || (/\/(?:configuration|settings)$/.test(pathname) && controls)),
+        form: !composer && !table && (controls || await visible('form')),
+        placeholder: await visible('[data-testid^="social-empty-"], [data-testid="pipelines-empty-settings"]'),
+        lab: await visible('[data-testid^="lab-"]'),
+        missingDeck: !!spec.auditMissingDeck && await page.getByText(/^Couldn't open the /).first().isVisible(),
+        missingRecord: !!spec.auditMissingRecord && await visible('[role="alert"], [data-testid$="-unavailable"], [data-testid$="-missing"], [data-testid="load-error"]'),
+        recordDetail: spec.kind === 'record' && await visible(`${selectors.sectionTitles}, h1, [data-testid="page-header"], ${selectors.rightPane}, [data-testid$="-pane-column"], [data-testid$="-record-page"]`),
+        channelNotJoined: await visible('[data-testid="social-channel-not-joined"]'),
+        sharedWorkView: await visible('[data-testid="social-shared-work"]'),
+      });
+      if (policy) return policy;
+    }
     if (spec.tenant === 'pipelines') {
       const policy = pipelineComposerPolicy(spec.path, {
         graph: await page.locator('[data-testid=work-activity-canvas], [data-testid=work-graph-canvas], [data-testid=work-graph-empty]').first().isVisible(),

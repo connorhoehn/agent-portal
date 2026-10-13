@@ -12,6 +12,7 @@ import {
   CodeBlock,
   ConfirmDialog,
   Card,
+  CollectionToolbar,
   DataTable,
   DetailSection,
   EmptyState,
@@ -40,6 +41,9 @@ import { CapabilityBrief, ModelChips } from './ModelCapability';
 import { NoSuggestions } from './SuggestedWork';
 import { HeadroomBar } from './HeadroomBar';
 import { useFetch } from '../../hooks/useFetch';
+import { filterRows } from '../../hooks/useRowSearch';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { localRunsCommandAdapter, machinesCommandAdapter } from './localComputeCommands';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
@@ -157,6 +161,17 @@ interface BotRow {
   repoFullName?: string | null;
 }
 
+const PRESENCE_OPTIONS = [
+  { value: '', label: 'Any presence' },
+  { value: 'connected', label: 'Connected' },
+  { value: 'stale', label: 'Stale' },
+  { value: 'offline', label: 'Offline' },
+];
+const RUN_STATUS_OPTIONS = [
+  { value: '', label: 'Any status' },
+  ...(['queued', 'claimed', 'running', 'awaiting_review', 'done', 'failed', 'cancelled'] as const).map((value) => ({ value, label: statusLabel(value) })),
+];
+
 /** How many rows the pick list shows — a hand, not a backlog. */
 const PICK_LIMIT = 8;
 
@@ -223,6 +238,27 @@ export default function LocalComputePage() {
   }, [nodes, selectedNodeId]);
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId]);
+
+  // The machines and runs tables' search and one filter each: controlled
+  // here so the toolbar and the command composer share one state.
+  const [machineQuery, setMachineQuery] = useState('');
+  const [machinePresence, setMachinePresence] = useState('');
+  const visibleNodes = useMemo(
+    () => filterRows(nodes.filter((n) => !machinePresence || n.presence.status === machinePresence), machineQuery, (n) => `${n.label} ${n.platform ?? ''} ${n.id}`),
+    [nodes, machinePresence, machineQuery],
+  );
+  const [runQuery, setRunQuery] = useState('');
+  const [runStatus, setRunStatus] = useState('');
+  const visibleRuns = useMemo(
+    () => filterRows(runs.filter((r) => !runStatus || r.status === runStatus), runQuery, (r) => `${r.title} ${r.kind} ${r.nodeLabel ?? ''} ${r.id}`),
+    [runs, runStatus, runQuery],
+  );
+  const machineCommands = machinesCommandAdapter(visibleNodes, {
+    setQuery: setMachineQuery, setPresence: setMachinePresence, refresh: () => { void refreshNodes(); }, selectMachine: setSelectedNodeId,
+  });
+  const runCommands = localRunsCommandAdapter(visibleRuns, {
+    setQuery: setRunQuery, setStatus: setRunStatus, refresh: () => { void refreshRuns(); }, openRun: setSelectedRunId,
+  });
 
   // "Switch it on before handing it work" has to be doable HERE: the paused
   // banner below used to point at a control that existed only on the wire
@@ -356,11 +392,8 @@ export default function LocalComputePage() {
     {
       key: 'label',
       header: 'Machine',
-      render: (n) => (
-        <Stack gap="none">
-          <EntityCell label={n.label} id={n.platform ?? undefined} />
-        </Stack>
-      ),
+      // One line: the platform is the title, not a second line under the name.
+      render: (n) => <T size="sm" weight="medium" title={n.platform ?? undefined} className="whitespace-nowrap">{n.label}</T>,
     },
     {
       key: 'models',
@@ -384,13 +417,11 @@ export default function LocalComputePage() {
       render: (n) => {
         const beat = elapsedLabel(n.presence.lastSeenAt, now);
         return (
-          <Stack gap="none">
-            <Inline gap="xs" align="center">
-              <PresenceDot state={presenceState(n.presence.status)} label={n.presence.status} />
-              {!n.acceptJobs && <Chip tone="neutral" size="xs">paused</Chip>}
-            </Inline>
+          <Inline gap="xs" align="center" wrap={false}>
+            <PresenceDot state={presenceState(n.presence.status)} label={n.presence.status} />
+            {!n.acceptJobs && <Chip tone="neutral" size="xs">paused</Chip>}
             <MetaLine size="xs" tone="tertiary" aria-live="polite" items={[beat ? `beat ${beat} ago` : 'never announced']} />
-          </Stack>
+          </Inline>
         );
       },
     },
@@ -438,7 +469,7 @@ export default function LocalComputePage() {
         const queued = mine.filter((r) => r.status === 'queued' || r.status === 'claimed').length;
         const failed = mine.filter((r) => r.status === 'failed' || r.status === 'cancelled').length;
         return (
-          <Inline gap="xs" align="center">
+          <Inline gap="xs" align="center" wrap={false}>
             {running > 0 && <Chip tone="accent" size="xs" dot="pulse">{running} running</Chip>}
             {queued > 0 && <Chip tone="neutral" size="xs">{queued} queued</Chip>}
             {failed > 0 && <Chip tone="danger" size="xs">{failed} failed</Chip>}
@@ -578,7 +609,19 @@ export default function LocalComputePage() {
   ];
 
   if (view === 'runs') return <PageSection title="Runs" description="Work handed to your paired machines.">
-    {runsFailure ? <UnavailableNotice error={runsFailure} what="run history" source="Runs on your machines are read from the job queue in Aurora" onRetry={refreshRuns} /> : <DataTable data={runs} keyField={(run) => run.id} columns={runColumns} frameless pageSize={20} onRowClick={(run) => setSelectedRunId(run.id)} emptyMessage="No runs yet" />}
+    {runsFailure ? <UnavailableNotice error={runsFailure} what="run history" source="Runs on your machines are read from the job queue in Aurora" onRetry={refreshRuns} /> : (
+      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+        <CollectionToolbar
+          label="Run filters"
+          search={{ value: runQuery, onChange: setRunQuery, placeholder: 'Search runs', 'aria-label': 'Search runs' }}
+          filters={[{ id: 'status', label: 'Status', value: runStatus, onChange: setRunStatus, options: RUN_STATUS_OPTIONS }]}
+          summary={runsData ? `${visibleRuns.length} of ${runs.length} runs` : undefined}
+          onRefresh={() => { void refreshRuns(); }}
+        />
+        <DataTable data={visibleRuns} keyField={(run) => run.id} columns={runColumns} frameless pageSize={20} onRowClick={(run) => setSelectedRunId(run.id)} emptyMessage={runs.length > 0 ? 'No run matches the search or status.' : 'No runs yet'} />
+        <CollectionCommandHost adapter={runCommands} />
+      </Stack>
+    )}
     {selectedRunId && <DetailSection title="Run log" actions={<Button size="sm" variant="ghost" onClick={() => setSelectedRunId(null)}>Close</Button>}><RunLog key={selectedRunId} jobId={selectedRunId} /></DetailSection>}
   </PageSection>;
 
@@ -622,10 +665,20 @@ export default function LocalComputePage() {
               <Button size="sm" variant="secondary" onClick={() => setPairOpen(true)}>Pair another</Button>
             ) : undefined}
           >
-            <Stack gap="sm">
+            {/* The machines are this page's collection: the toolbar, the
+                table and the command composer share one search/presence
+                state, measured against this section (as on Assessment Runs). */}
+            <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
               {acceptError && (
                 <Banner variant="error">{acceptError}</Banner>
               )}
+              <CollectionToolbar
+                label="Machine filters"
+                search={{ value: machineQuery, onChange: setMachineQuery, placeholder: 'Search machines', 'aria-label': 'Search machines' }}
+                filters={[{ id: 'presence', label: 'Presence', value: machinePresence, onChange: setMachinePresence, options: PRESENCE_OPTIONS }]}
+                summary={`${visibleNodes.length} of ${nodes.length} machines`}
+                onRefresh={() => { void refreshNodes(); }}
+              />
               {/* A real surface, not the page ground. Everything on this page
                   used to sit directly on `bg-bg`, with the table head painting
                   `bg-surface-panel` a couple of points away from it — four
@@ -633,14 +686,15 @@ export default function LocalComputePage() {
                   panel. A card gives the fleet an edge to sit inside. */}
               <Card>
                 <DataTable
-                  data={nodes}
+                  data={visibleNodes}
                   keyField={(n) => n.id}
                   columns={nodeColumns}
                   onRowClick={(n) => setSelectedNodeId(n.id)}
                   striped
-                  emptyMessage="No machines."
+                  emptyMessage={nodes.length > 0 ? 'No machine matches the search or presence.' : 'No machines.'}
                 />
               </Card>
+              <CollectionCommandHost adapter={machineCommands} />
             </Stack>
           </DetailSection>
 
@@ -718,7 +772,6 @@ export default function LocalComputePage() {
                   <Toolbar wrap>
                     <ToolbarLabel>Source</ToolbarLabel>
                     <SegmentedControl
-                      size="sm"
                       aria-label="Where the work comes from"
                       value={pick}
                       onChange={(v) => setPick(v as 'work' | 'bots')}
@@ -826,13 +879,13 @@ export default function LocalComputePage() {
                 columns={runColumns}
                 striped
                 // The console, from here too. Only the Queue table opened it,
-                // so a run's output became unreachable the moment the run
+                // so the output of a run became unreachable the moment the run
                 // ended: it left the queue for this table, and this table had
                 // no way in. The transcript is worth most AFTER the run, which
                 // is exactly when it could not be opened.
                 onRowClick={(r) => setSelectedRunId(r.id)}
                 // Full run history for this machine, across every session
-                // it's ever worked — 20 keeps a long-lived machine's ledger
+                // it has ever worked — 20 keeps a long-lived machine ledger
                 // a screenful instead of an ever-growing scroll.
                 pageSize={20}
                 emptyMessage="No runs yet."

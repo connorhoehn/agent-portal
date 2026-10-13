@@ -588,7 +588,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       return mentions.length
         ? <ChannelMentionsPanel className="min-h-0 flex-1" mentions={mentions} data-testid="social-mentions-pane"
           onJump={(channel, id) => { markRead(id); const s = slugFromChannel(channel); if (s) navigate(channelHref(s, base)); }} />
-        : <EmptyState size="sm" align="start" testId="social-mentions-empty" title="No mentions"
+        : <EmptyState align="start" testId="social-mentions-empty" title="No mentions"
           description="When someone writes @ and your name in a channel you are in, it lands here." />;
     }
     if (picking) {
@@ -606,14 +606,14 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       if (channelsFetch.error && !channelsFetch.data) return <ErrorState title="Channels could not be loaded" description={channelsFetch.error} actionLabel="Try again" onAction={channelsFetch.refresh} />;
       if (!slug) {
         return channels.length === 0
-          ? <EmptyState size="sm" testId="social-empty-channels" align="start" title="No channels yet"
+          ? <EmptyState testId="social-empty-channels" align="start" title="No channels yet"
             description={mayCreateChannel
               ? 'Channels are where a community talks in the open. None exist in this workspace yet — create the first one.'
               : 'Channels are where a community talks in the open. None exist in this workspace yet; a moderator can create one.'}
             {...(mayCreateChannel ? { action: <Button variant="primary" size="sm" onClick={(e) => { channelAnchor.current = e.currentTarget; setCreatingChannel(true); }} data-testid="social-empty-create-channel">Create a channel</Button> } : {})} />
-          : <EmptyState size="sm" align="start" title="Pick a channel" description="Choose a channel on the left to read it. Channels you have not joined show a Join button first." />;
+          : <EmptyState align="start" title="Pick a channel" description="Choose a channel on the left to read it. Channels you have not joined show a Join button first." />;
       }
-      if (!openChannel) return <EmptyState size="sm" align="start" testId="social-channel-missing" title={`#${slug} is not available`} description="This channel does not exist, or it is private and you are not a member." />;
+      if (!openChannel) return <EmptyState align="start" testId="social-channel-missing" title={`#${slug} is not available`} description="This channel does not exist, or it is private and you are not a member." />;
       if (openChannel.joined) {
         return <SocialConversation focusTarget key={openChannel.channel} channel={openChannel.channel} name={`#${openChannel.slug}`} maySend={mayPost}
           description={`${openChannel.memberCount} ${openChannel.memberCount === 1 ? 'member' : 'members'}${openChannel.description ? ` · ${openChannel.description}` : ''}`}
@@ -627,7 +627,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       return (
         <Stack gap="md" className="min-w-0 flex-1">
           <ChannelHeader name={`#${openChannel.slug}`} {...(openChannel.description ? { description: openChannel.description } : {})} memberCount={openChannel.memberCount} />
-          <EmptyState size="sm" align="start" testId="social-channel-not-joined" title={`You are not in #${openChannel.slug}`}
+          <EmptyState align="start" testId="social-channel-not-joined" title={`You are not in #${openChannel.slug}`}
             description="Join to read the conversation and post in it. Everyone in the channel will see you arrive."
             action={<Button variant="primary" size="sm" disabled={busy} onClick={() => void channelMembership('join', openChannel)} data-testid="social-join-channel">Join #{openChannel.slug}</Button>} />
         </Stack>
@@ -638,11 +638,11 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       if (dmsFetch.error && !dmsFetch.data) return <ErrorState title="Conversations could not be loaded" description={dmsFetch.error} actionLabel="Try again" onAction={dmsFetch.refresh} />;
       if (!lobby) {
         const any = conversations.length > 0;
-        return <EmptyState size="sm" align="start" testId="social-empty-dms" title={any ? 'Pick a conversation' : 'No direct messages yet'}
+        return <EmptyState align="start" testId="social-empty-dms" title={any ? 'Pick a conversation' : 'No direct messages yet'}
           description={any ? 'Choose a conversation on the left, or start a new one.' : 'A direct message is visible only to the people in it. You have not started one here.'}
           action={<Button variant="primary" size="sm" onClick={openNewDm} data-testid="social-empty-new-dm">New message</Button>} />;
       }
-      if (!mine) return <EmptyState size="sm" align="start" testId="social-dm-missing" title="This conversation is not yours" description="A direct message opens only for the people it names." />;
+      if (!mine) return <EmptyState align="start" testId="social-dm-missing" title="This conversation is not yours" description="A direct message opens only for the people it names." />;
       return <SocialConversation focusTarget key={lobby} channel={lobby} name={dmTitle(dmPeople)} userId={me} displayName={displayName} nameOf={nameOf} maySend={mayPost}
         {...(dmPeople.length === 1 && dmPeople[0]?.avatarUrl ? { avatarUrl: dmPeople[0].avatarUrl } : {})}
         online={dmPeople.some((p) => online.has(p.userId))}
@@ -700,13 +700,13 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     if (managing && detail.isLoading && !detail.data) return <LoadingState label="Loading team…" />;
     if (managing && detail.error) return <ErrorState title="This team could not be loaded" description={detail.error} actionLabel="Try again" onAction={detail.refresh} />;
     if (teams.length === 0) {
-      return <EmptyState size="sm" testId="social-empty-teams" align="start" title="You are not on a team yet"
+      return <EmptyState testId="social-empty-teams" align="start" title="You are not on a team yet"
         description={mayManageTeams
           ? 'A team groups people and their channels. Create one and add the people it is for.'
           : 'A team groups people and their channels. A moderator adds you to one.'}
         {...(mayManageTeams ? { action: <Button variant="primary" size="sm" onClick={(e) => { teamAnchor.current = e.currentTarget; setCreatingTeam(true); }} data-testid="social-empty-create-team">New team</Button> } : {})} />;
     }
-    return <EmptyState size="sm" align="start" title="Pick a channel" description="Choose a team's channel on the left to read it, or open a team's ⋯ menu to see who is on it." />;
+    return <EmptyState align="start" title="Pick a channel" description="Choose a team's channel on the left to read it, or open a team's ⋯ menu to see who is on it." />;
   }
 
   function alerts() {

@@ -184,7 +184,6 @@ export function TeamScorecard({ teamId, tab, onTabChange, revealDiscussion = fal
   const facts = (
     <StatStrip
       variant="line"
-      size="sm"
       aria-label="Assessment coverage"
       data-testid="scorecard-facts"
       items={scorecardFacts(team, activeStep?.label).map((fact): StatStripItem => ({
@@ -223,7 +222,7 @@ export function TeamScorecard({ teamId, tab, onTabChange, revealDiscussion = fal
                 {compact && facts}
                 <T size="sm" tone="primary" wrap>{certHeadline}</T>
                 {certSubline && <T size="xs" tone="secondary" wrap>{certSubline}</T>}
-                <WorkflowStepper steps={workflow_steps} size="sm" className="py-1" />
+                <WorkflowStepper steps={workflow_steps} className="py-1" />
                 <EvidenceCoverage dimensions={dimensions} />
               </Stack>
             }

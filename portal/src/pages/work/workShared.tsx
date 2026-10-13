@@ -200,8 +200,10 @@ export function JobStatusPill({ status }: { status: string }) {
 }
 
 /** Small severity pill shared by findings rows and sweep group headers. */
-export function SeverityChip({ severity }: { severity: string }) {
-  return <Chip tone={severityTone(severity)} size="xs" className="shrink-0">{severity}</Chip>;
+/** `md` where the chip sits inside a control (a section header button): the
+ *  xs chip's 10px label is off the control scale (12/14). */
+export function SeverityChip({ severity, size = 'xs' }: { severity: string; size?: 'xs' | 'md' }) {
+  return <Chip tone={severityTone(severity)} size={size} className="shrink-0">{severity}</Chip>;
 }
 
 /** The one link that leaves the loop's run surfaces: what reached the graph. */

@@ -394,7 +394,7 @@ export function WorkItemDetail({
               />
             )}
             {brief.showTable && (
-              <DetailSection variant="heading" size="sm" title={BRIEF_TITLE} description={BRIEF_BODY} data-testid="brief-table">
+              <DetailSection variant="heading" title={BRIEF_TITLE} description={BRIEF_BODY} data-testid="brief-table">
                 <KeyValue layout="row" divided labelWidth="w-72" items={briefItems} aria-label={BRIEF_TITLE} />
               </DetailSection>
             )}

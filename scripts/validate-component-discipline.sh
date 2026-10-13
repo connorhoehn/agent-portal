@@ -218,7 +218,9 @@ fi
 # a spec that POSTs /api/session/login itself, or declares its own
 # signIn/login function, has forked the session contract.
 section "e2e sign-in discipline (portal/e2e/realSession.ts)"
-local_login=$(grep -lE "api/session/login" portal/e2e/*.spec.ts 2>/dev/null)
+# Only a spec that itself POSTs/fetches/visits the login route forks the contract;
+# one that merely names the path while filtering observed requests does not.
+local_login=$(grep -lE "(post|fetch|goto|request)\(\s*[\x27\"\x60][^\x27\"\x60]*api/session/login" portal/e2e/*.spec.ts 2>/dev/null)
 local_fn=$(grep -lE "^(async )?function (signIn|signin|login|logIn|loginAs|signInAs)\b|^const (signIn|login|loginAs) *= *async" portal/e2e/*.spec.ts 2>/dev/null)
 [ -z "$local_login" ] && ok "no spec posts /api/session/login itself" || fail "specs sign in on their own (use e2e/realSession.ts):$(echo $local_login | sed 's#portal/e2e/##g')"
 [ -z "$local_fn" ] && ok "no spec declares its own signIn/login function" || fail "specs declare a local sign-in function (use e2e/realSession.ts):$(echo $local_fn | sed 's#portal/e2e/##g')"

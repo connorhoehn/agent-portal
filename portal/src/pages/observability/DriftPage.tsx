@@ -255,7 +255,7 @@ function DriftPage() {
             ]}
           />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -351,7 +351,7 @@ function DriftPage() {
         {templates.length === 0 ? (
           <RowEmpty text="No template groups have enough samples to compare yet." degraded={driftDegraded} />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Agent</TableTh>
@@ -377,8 +377,8 @@ function DriftPage() {
                     className={focused ? 'bg-[var(--color-surface-hover)]' : ''}
                   >
                     <TableTd className="whitespace-nowrap">{t.agentId}</TableTd>
-                    <TableTd className="font-mono whitespace-nowrap">
-                      {t.templateId}
+                    <TableTd className="whitespace-nowrap">
+                      <T className="font-mono">{t.templateId}</T>
                     </TableTd>
                     <TableTd numeric>{t.count}</TableTd>
                     <TableTd>
@@ -429,7 +429,7 @@ function DriftPage() {
         ) : outlierRows.length === 0 ? (
           <RowEmpty text="No outliers for this agent in the current window." degraded={driftDegraded} />
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Template</TableTh>
@@ -448,8 +448,8 @@ function DriftPage() {
                 return (
                   <Fragment key={o.invocationId}>
                     <TableRow>
-                      <TableTd className="font-mono whitespace-nowrap">
-                        {o.templateId ?? '(none)'}
+                      <TableTd className="whitespace-nowrap">
+                        <T className="font-mono">{o.templateId ?? '(none)'}</T>
                       </TableTd>
                       <TableTd className="whitespace-nowrap">
                         {relativeTime(o.ts)}

@@ -9,6 +9,7 @@ import {
   Card,
   Checkbox,
   Chip,
+  CollectionToolbar,
   ConfirmDialog,
   DataTable,
   Drawer,
@@ -28,6 +29,8 @@ import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { matchesUser, usersAdapter } from './identityCommands';
 import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
 import {
   describeGrantDiff,
@@ -99,6 +102,11 @@ function UsersPage() {
   /** Re-fire all three reads — the replacement for the old `load()`'s single
    *  Promise.all, used after a mutation and by the UnavailableNotice retry. */
   const load = () => { refreshTenants(); refreshRoles(); refreshUsers(); };
+
+  // The table's search, shared by the toolbar and the command composer.
+  const [query, setQuery] = useState('');
+  const shownUsers = useMemo(() => users.filter((u) => matchesUser(u, query)), [users, query]);
+  const adapter = usersAdapter({ setQuery, refresh: load });
 
   // Roles selectable for a tenant = that tenant's roles + cross-tenant roles.
   const rolesForTenant = useMemo(() => rolesForTenantMap(tenants, roles), [tenants, roles]);
@@ -217,7 +225,6 @@ function UsersPage() {
         <StatStrip
           aria-label="Tenants"
           variant="line"
-          size="sm"
           items={tenants.map(t => {
             const userCount = tenantUserCount(t.id, users);
             const tenantRoles = (rolesForTenant.get(t.id) ?? []).filter(r => r.tenant === t.id);
@@ -232,14 +239,17 @@ function UsersPage() {
       )}
 
       {(error ?? degraded) ? null : (
+        <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+        <CollectionToolbar label="User filters"
+          search={{ value: query, onChange: setQuery, placeholder: 'Search users…', 'aria-label': 'Search users' }}
+          summary={usersData ? `${shownUsers.length} of ${users.length} users` : undefined}
+          onRefresh={load} refreshing={usersLoading} />
         <DataTable
-          size="sm"
-          data={users}
+          data={shownUsers}
           keyField={u => u.id}
           columns={columns}
-          searchable
-          searchPlaceholder="Search users…"
           loading={loadingFirst}
+          emptyMessage={users.length > 0 ? 'No user matches this search.' : 'No users provisioned yet.'}
           rowActions={(u) => (
             <Inline gap="md" justify="end" wrap={false}>
               {/* Become this user. Deliberately here and not in the header
@@ -259,6 +269,8 @@ function UsersPage() {
             </Inline>
           )}
         />
+        <CollectionCommandHost adapter={adapter} />
+        </Stack>
       )}
 
       <Drawer

@@ -230,7 +230,7 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
     } else if (!sp.data) {
       body = <LoadingState label="Loading sprints…" />;
     } else if (sprints.length === 0) {
-      body = <Padded><EmptyState align="start" size="sm" title="No sprints here" description="Nothing matches this view's scope and window." /></Padded>;
+      body = <Padded><EmptyState align="start" title="No sprints here" description="Nothing matches this view's scope and window." /></Padded>;
       footer = '0 sprints';
     } else {
       const rows: GroupedListRow[] = sprints.map((s) => ({
@@ -291,7 +291,6 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
           <EmptyState
             align="start"
             title={RAIL_NO_MATCH.title}
-            size="sm"
             description={RAIL_NO_MATCH.body}
             actions={[{ label: 'Clear search and filters', variant: 'link', onClick: clearFilters }]}
           />

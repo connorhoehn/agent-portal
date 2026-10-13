@@ -25,9 +25,9 @@ export function CommunicationAccessState({ state, onRetry, onSignIn, busy = fals
   return <Card padding="md" className="communication-access-state" role="status" aria-live="polite"
     data-testid="communication-access-state" data-state={state}>
     <Inline gap="md" align="start" wrap={false}>
-      <span className="communication-access-icon" aria-hidden="true">
+      <Stack as="span" gap="none" align="center" justify="center" className="communication-access-icon" aria-hidden="true">
         {state === 'loading' ? <Spinner size="sm" decorative /> : <LockIcon size={18} />}
-      </span>
+      </Stack>
       <Stack gap="xs" className="min-w-0 flex-1">
         <h2><T as="span" size="sm" weight="semibold" wrap>{title ?? copy.title}</T></h2>
         <T size="sm" tone="secondary" wrap>{detail ?? copy.detail}</T>

@@ -210,7 +210,7 @@ export function useChatPins({ channel, chat, canPin, currentUser, testId = 'chat
     && older.messages.some(message => !chat.messages.some(row => row.id === message.id));
   const slot = useContext(ConversationViewsSlot);
   const switcher = (
-    <SegmentedControl iconOnly size="sm" tone="accent" aria-label="Conversation views" value={view} onChange={id => setView(id as ChatPinsView)}
+    <SegmentedControl iconOnly tone="accent" aria-label="Conversation views" value={view} onChange={id => setView(id as ChatPinsView)}
       data-testid={`${testId}-tabs`}
       options={[
         { value: 'chat', label: 'Chat', icon: <ChatIcon />, testId: `${testId}-tab-chat` },

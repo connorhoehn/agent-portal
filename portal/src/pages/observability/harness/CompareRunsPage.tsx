@@ -478,7 +478,7 @@ function ResultsTable({
   void runIdA; void runIdB;
 
   return (
-    <Table size="sm">
+    <Table>
       <TableHead>
         <TableRow>
           <TableTh>Test</TableTh>
@@ -505,7 +505,7 @@ function ResultsTable({
                 onClick={() => onToggleExpand(r.testId)}
                 className="cursor-pointer"
               >
-                <TableTd className="text-text-tertiary font-mono whitespace-nowrap">{r.testId}</TableTd>
+                <TableTd className="text-text-tertiary whitespace-nowrap"><T className="font-mono">{r.testId}</T></TableTd>
                 <TableTd className="whitespace-nowrap">{r.agentId || '—'}</TableTd>
                 <TableTd className="whitespace-nowrap">
                   <Chip tone={judgeTone(r.scoreA)} size="xs">{fmt(r.scoreA)}</Chip>

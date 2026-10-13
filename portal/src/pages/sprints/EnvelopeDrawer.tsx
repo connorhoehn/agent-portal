@@ -122,7 +122,6 @@ export function EnvelopeDrawer({ open, onClose, data }: {
             data={rows}
             columns={COLUMNS}
             keyField={(e) => e.grantId}
-            size="sm"
             pageSize={25}
             emptyMessage="No active sprint envelope"
           />

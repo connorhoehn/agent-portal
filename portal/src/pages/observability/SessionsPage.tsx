@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import {
   Button,
   Card,
@@ -18,6 +18,9 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { showingLabel } from '../../lib/format';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
+import { ObservabilityCommandSection } from './ObservabilityCommandSection';
+import { OBSERVABILITY_GRAMMARS, sessionTarget } from './observabilityCommands';
 
 // Hand-rolled `Table` (not `DataTable`), so there's no built-in pagination
 // lever — this page renders every session `/api/sessions` returns in one
@@ -67,6 +70,18 @@ function SessionsPage() {
   const visible = filtered.slice(0, limit);
   const hasMore = filtered.length > limit;
 
+  const navigate = useNavigate();
+  const adapter = collectionCommandAdapter(OBSERVABILITY_GRAMMARS.sessions, {
+    setQuery, refresh,
+    scopeNote: 'Search uses the loaded session titles, agents, actors and IDs. Open continues one exact visible session, as its Open link does. Nothing here deletes or edits a session.',
+    open(target) {
+      if (!data) throw new Error('Wait for the sessions to load before opening one.');
+      const { id } = resolveCollectionTarget(target, filtered.map(sessionTarget));
+      navigate(`/iq/invoke?session=${encodeURIComponent(id)}`);
+      return `Opened session ${id}.`;
+    },
+  });
+
   return (
     <PageSection
       title="Chat Sessions"
@@ -76,6 +91,7 @@ function SessionsPage() {
           <Input
             type="search"
             size="sm"
+            aria-label="Search sessions"
             placeholder="Filter by title, agent, session id…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -88,6 +104,7 @@ function SessionsPage() {
         </Inline>
       }
     >
+      <ObservabilityCommandSection adapter={adapter}>
       <Card padding="md">
         {filtered.length === 0 ? (
           unavailable ? (
@@ -117,7 +134,7 @@ function SessionsPage() {
             </InlinePlaceholder>
           )
         ) : (
-          <Table size="sm">
+          <Table>
             <TableHead>
               <TableRow>
                 <TableTh>Title</TableTh>
@@ -148,8 +165,8 @@ function SessionsPage() {
                       <T size="xs" className="text-[var(--color-text-tertiary)]">—</T>
                     )}
                   </TableTd>
-                  <TableTd className="text-[var(--color-text-tertiary)] font-mono">
-                    {s.actorId ?? '—'}
+                  <TableTd className="text-[var(--color-text-tertiary)]">
+                    <T className="font-mono">{s.actorId ?? '—'}</T>
                   </TableTd>
                   <TableTd className="text-[var(--color-text-tertiary)] whitespace-nowrap">
                     {new Date(s.createdAt).toLocaleString()}
@@ -158,11 +175,8 @@ function SessionsPage() {
                     {s.lastMessageAt ? new Date(s.lastMessageAt).toLocaleString() : '—'}
                   </TableTd>
                   <TableTd>{s.messageCount ?? '—'}</TableTd>
-                  <TableTd
-                    className="text-xs font-mono text-[var(--color-text-tertiary)]"
-                    title={s.sessionId}
-                  >
-                    {s.sessionId.slice(0, 12)}…
+                  <TableTd className="text-xs text-[var(--color-text-tertiary)]" title={s.sessionId}>
+                    <T className="font-mono">{s.sessionId.slice(0, 12)}…</T>
                   </TableTd>
                   <TableTd>
                     <Link
@@ -185,6 +199,7 @@ function SessionsPage() {
           </Inline>
         )}
       </Card>
+      </ObservabilityCommandSection>
     </PageSection>
   );
 }

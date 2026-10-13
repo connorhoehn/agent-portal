@@ -194,7 +194,7 @@ function SocialPlaneMount({ route, tenant, base, crumbs, pageCalls, pageMissed }
         onMessage={(userId) => { void startDm(userId); }} onSharedWork={(userId) => navigate(planeViewHref(base, { kind: 'person', userId }))} />
     ) : view?.kind === 'person' && view.userId !== me && peopleFetch.data && !peopleFetch.data.people.some((p) => p.userId === view.userId) ? (
       // An id the plane's directory does not know (D4): a not-found state, never a view titled with the raw id.
-      <EmptyState size="sm" align="start" testId="plane-person-missing" title="No such person here"
+      <EmptyState align="start" testId="plane-person-missing" title="No such person here"
         description="Nobody with that id is in your Social directory. Pick someone from Active now or a conversation." />
     ) : view?.kind === 'person' ? (
       <PersonSharedWork userId={view.userId} self={view.userId === me}
@@ -298,7 +298,7 @@ export default function CommunicationPlane({ route }: { route: SocialChatRoute }
           data-testid="social-chat-rail" />
         <SectionContent breadcrumbs={crumbs} title="Communication" body="fill" data-testid="communication-content">
           {onCalls ? pageCalls : (
-            <EmptyState size="sm" align="start" testId="communication-no-social"
+            <EmptyState align="start" testId="communication-no-social"
               title={disabled ? 'Social is turned off' : 'Ask an admin for Social access'}
               description={(
                 <Stack gap="xs">

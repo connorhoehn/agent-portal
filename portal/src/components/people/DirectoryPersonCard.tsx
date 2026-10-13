@@ -14,7 +14,7 @@ export function DirectoryPersonCard(props: PersonDetailCardProps) {
   const persona = person && portraits.personas.find(entry => entry.subjectId === person.id && entry.name === person.name);
   const profile = person ? demoPublicProfiles[person.id] : undefined;
   return <Stack gap="lg" className={className ?? 'p-4'} data-testid={testId ?? 'directory-person-card'}>
-    {loading ? <LoadingState label="Loading profile…" /> : error ? <InlineAlert tone="error">{error}</InlineAlert> : !person ? <EmptyState size="sm" title="Profile unavailable" /> : <>
+    {loading ? <LoadingState label="Loading profile…" /> : error ? <InlineAlert tone="error">{error}</InlineAlert> : !person ? <EmptyState title="Profile unavailable" /> : <>
       <Inline gap="md" align="start" justify="between">
         <Inline gap="sm" align="center">
           <Avatar name={person.name} {...(persona ? { src: persona.portraitUrl } : {})} size={44} />

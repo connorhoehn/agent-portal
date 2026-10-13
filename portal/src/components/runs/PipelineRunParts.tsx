@@ -115,8 +115,8 @@ export function PipelineRunSteps({ steps }: { steps: PipelineStep[] }) {
   if (steps.length === 0) return <MetaLine size="sm" tone="tertiary" items={['No steps recorded for this run.']} />;
   return (
     <Stack gap="sm">
-      <WorkflowStepper size="sm" steps={stepperSteps(steps)} data-testid="pipeline-stepper" />
-      <DataTable size="sm" data={steps} columns={STEP_COLUMNS} keyField={(s) => s.stepId} />
+      <WorkflowStepper steps={stepperSteps(steps)} data-testid="pipeline-stepper" />
+      <DataTable data={steps} columns={STEP_COLUMNS} keyField={(s) => s.stepId} />
     </Stack>
   );
 }
@@ -131,7 +131,6 @@ const ARTIFACT_COLUMNS: DataTableColumn<PipelineArtifact>[] = [
 export function PipelineRunArtifacts({ artifacts }: { artifacts: PipelineArtifact[] }) {
   return (
     <DataTable
-      size="sm"
       data={artifacts}
       columns={ARTIFACT_COLUMNS}
       keyField={(a) => a.id}

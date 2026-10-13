@@ -74,7 +74,7 @@ export function PersonSharedWork({ userId, name, self, online, onMessage, onOpen
         <Stack gap="sm">
           <SectionLabel as="h2">{self ? 'Your items' : 'Shared items'}</SectionLabel>
           {/* The canvas's nodes as a list: each opens in the far-right pane (yours with Share). */}
-          <ActionRowList size="sm" aria-label={self ? 'Your items' : 'Shared items'} action={self && onShareNode ? 'Share' : undefined}
+          <ActionRowList aria-label={self ? 'Your items' : 'Shared items'} action={self && onShareNode ? 'Share' : undefined}
             items={nodes.map((n) => ({ id: n.id, title: n.title,
               description: [n.kind, sharing?.provenance[n.id] ? PROVENANCE[sharing.provenance[n.id]!] : null].filter(Boolean).join(' · ') }))}
             onOpen={(row) => {

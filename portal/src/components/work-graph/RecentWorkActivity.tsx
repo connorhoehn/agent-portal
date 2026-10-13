@@ -26,7 +26,6 @@ export function RecentWorkActivity({ subject, limit = 5, onOpenActivity }: {
   const events = useMemo(() => recentWorkEvents(result.graph, limit), [result.graph, limit]);
   return (
     <PageSection
-      size="sm"
       title="Recent activity"
       actions={(
         <Button variant="link" size="sm" onClick={onOpenActivity} data-testid="overview-open-activity">
@@ -39,7 +38,6 @@ export function RecentWorkActivity({ subject, limit = 5, onOpenActivity }: {
       <ActionRowList
         aria-label="Recent activity"
         className="work-overview-striped-rows"
-        size="sm"
         columns={COLUMNS}
         items={events.map(e => ({
           id: e.id,

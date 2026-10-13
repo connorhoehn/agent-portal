@@ -9,24 +9,24 @@ import { useMemo, useState } from 'react';
 import {
   Button,
   Chip,
+  CollectionToolbar,
   DataTable,
   DotMeter,
   ErrorState,
   Inline,
   LoadingState,
   MetaLine,
-  PageHeader,
   PresenceAvatars,
-  SearchInput,
-  SegmentedControl,
   Tooltip,
-  Select,
   Stack,
   StatStrip,
   T,
   type ChipTone,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
+import { CollectionCommandHost } from '../../../components/collections/CollectionCommandHost';
+import { CollectionCommandPage } from '../../../components/collections/CollectionCommandPage';
+import { teamsCommandAdapter } from '../assessmentCollectionCommands';
 import { Can } from '../../../lib/capabilities';
 import {
   contributorAvatars,
@@ -95,6 +95,13 @@ export function AssessorDesk({
   const statuses = useMemo(() => statusOptions(inMotion), [inMotion]);
   const rows = useMemo(() => filterAndSortTeams(inMotion, { search, status }), [inMotion, search, status]);
   const summary = useMemo(() => deskSummary(rows), [rows]);
+  const adapter = teamsCommandAdapter(rows, {
+    setQuery: setSearch,
+    setMotion: onCohortChange,
+    clearStatus: () => setStatus(ALL),
+    refresh: onRetry,
+    openTeam: onSelectTeam,
+  });
   const hasFilters = search.trim() !== '' || status !== ALL;
 
   if (isLoading) return <LoadingState label="Loading the program…" />;
@@ -120,21 +127,25 @@ export function AssessorDesk({
     { label: 'questions open', value: dash(summary.questionsOpen), ...(!degraded && summary.questionsOpen > 0 ? { tone: 'danger' as const } : {}) },
   ];
 
-  return (
-    <Stack gap="md">
-      <PageHeader
-        title="Assessor's desk"
-        description="Every team in the program: what its certification says on both tracks, where it stands, and the one thing that moves it next."
-        actions={(
-          <Can do="ScoreAssessment">
-            <Button size="sm" onClick={onNewTeam}>+ New team</Button>
-          </Can>
-        )}
-      />
+  const motionOptions = [{ value: '', label: 'All motions' }, ...MOTIONS.map((m) => ({ value: m.cohort, label: m.title }))];
+  const statusFilterOptions = [{ value: '', label: 'All statuses' }, ...statuses.map((s) => ({ value: s, label: formatTeamStatus(s) }))];
 
+  return (
+    <CollectionCommandPage
+      data-testid="assessment-teams"
+      title="Assessor's desk"
+      description="Every team in the program: what its certification says on both tracks, where it stands, and the one thing that moves it next."
+      headerActions={(
+        <Can do="ScoreAssessment">
+          <Button size="sm" onClick={onNewTeam}>+ New team</Button>
+        </Can>
+      )}
+    >
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+      <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)] pb-4">
       {degraded ? (
         <>
-          <StatStrip aria-label="Program summary" variant="line" size="sm" items={stripItems} />
+          <StatStrip aria-label="Program summary" variant="line" items={stripItems} />
           <UnavailableNotice
             error={degraded}
             what="the team roster"
@@ -144,43 +155,21 @@ export function AssessorDesk({
         </>
       ) : (
         <>
-          <Inline wrap align="center" gap="md">
-            <StatStrip aria-label="Program summary" variant="line" size="sm" items={stripItems} />
-            <SegmentedControl
-              size="sm"
-              aria-label="Assessment motion"
-              value={cohort}
-              onChange={(v) => onCohortChange(v as Cohort | 'all')}
-              options={[{ label: 'All motions', value: ALL }, ...MOTIONS.map((m) => ({ label: m.title, value: m.cohort }))]}
-            />
-            <Select
-              size="sm"
-              className="w-44"
-              aria-label="Status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              options={[{ value: ALL, label: 'All statuses' }, ...statuses.map((s) => ({ value: s, label: formatTeamStatus(s) }))]}
-            />
-            {hasFilters && (
-              <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setStatus(ALL); }}>
-                Clear filters
-              </Button>
-            )}
-            <SearchInput
-              size="sm"
-              className="ml-auto w-64 shrink-0"
-              value={search}
-              onChange={setSearch}
-              onClear={() => setSearch('')}
-              placeholder="Search by team name or ID…"
-              aria-label="Search teams"
-            />
-          </Inline>
+          <StatStrip aria-label="Program summary" variant="line" items={stripItems} />
+          <CollectionToolbar
+            label="Team filters"
+            search={{ value: search, onChange: setSearch, placeholder: 'Search by team name or ID…', 'aria-label': 'Search teams' }}
+            filters={[
+              { id: 'motion', label: 'Assessment motion', value: cohort === ALL ? '' : cohort, onChange: (v) => onCohortChange(v ? v as Cohort : ALL), options: motionOptions },
+              { id: 'status', label: 'Status', value: status === ALL ? '' : status, onChange: (v) => setStatus(v || ALL), options: statusFilterOptions },
+            ]}
+            summary={`${rows.length} of ${teams.length} teams`}
+            onRefresh={onRetry}
+          />
 
           <DataTable<TeamSummary>
             data={rows}
             keyField={(t) => t.id}
-            size="sm"
             onRowClick={(t) => onSelectTeam(t.id)}
             striped
             // A full-page desk view over every team in the program — 20 is a
@@ -307,6 +296,9 @@ export function AssessorDesk({
           />
         </>
       )}
-    </Stack>
+      </Stack>
+      {!degraded && <CollectionCommandHost adapter={adapter} />}
+      </Stack>
+    </CollectionCommandPage>
   );
 }
