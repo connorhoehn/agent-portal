@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "6c5181eebac4441e32aba5c08c28bc89864cd2f46f91176732b6d46d55ee05ba",
-  "at": "2026-10-13T07:01:23.682Z"
+  "sourceDigest": "8f143fca6f9ec4b7eb04ab2a00f6b3e5aa4c198e87441a9f41be51444bc501c1",
+  "at": "2026-10-13T08:34:49.597Z"
  },
  "routes": {
   "/admin/bots": {
@@ -307,12 +307,10 @@
   },
   "/assessment/enterprise": {
    "value": {
-    "violations": [
-     "gutter"
-    ],
+    "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-13T06:07:43.473Z"
+   "changedAt": "2026-10-13T07:35:50.990Z"
   },
   "/assessment/feedback": {
    "value": {
@@ -323,12 +321,10 @@
   },
   "/assessment/prompts": {
    "value": {
-    "violations": [
-     "gutter"
-    ],
+    "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-13T06:07:43.473Z"
+   "changedAt": "2026-10-13T07:35:50.990Z"
   },
   "/assessment/reports": {
    "value": {
@@ -339,12 +335,10 @@
   },
   "/assessment/rules": {
    "value": {
-    "violations": [
-     "gutter"
-    ],
+    "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-13T06:07:43.473Z"
+   "changedAt": "2026-10-13T07:35:50.990Z"
   },
   "/assessment/runs": {
    "value": {
@@ -376,21 +370,17 @@
   },
   "/assessment/workspace": {
    "value": {
-    "violations": [
-     "gutter"
-    ],
+    "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-13T06:07:43.473Z"
+   "changedAt": "2026-10-13T07:35:50.990Z"
   },
   "/assessment/workspace?view=library": {
    "value": {
-    "violations": [
-     "gutter"
-    ],
+    "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-13T06:07:43.473Z"
+   "changedAt": "2026-10-13T07:35:50.990Z"
   },
   "/iq": {
    "value": {

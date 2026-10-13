@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "6c5181eebac4441e32aba5c08c28bc89864cd2f46f91176732b6d46d55ee05ba",
-  "at": "2026-10-13T07:08:26.576Z"
+  "sourceDigest": "8f143fca6f9ec4b7eb04ab2a00f6b3e5aa4c198e87441a9f41be51444bc501c1",
+  "at": "2026-10-13T07:42:56.165Z"
  },
  "routes": {
   "/admin/bots": {
@@ -847,23 +847,20 @@
    "value": {
     "title": "20/600",
     "offenders": [
-     "above-title content 26/600",
      "scale content 10/600",
      "scale content 13/400",
      "scale content 13/500",
      "scale content 15/400",
      "scale content 18/700",
-     "scale content 26/600",
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/400",
      "scale rail 13/500",
      "siblings content 10|18",
-     "siblings rail 11|16",
-     "title-scale content 26/600"
+     "siblings rail 11|16"
     ]
    },
-   "changedAt": "2026-10-08T09:34:19.909Z"
+   "changedAt": "2026-10-13T07:42:56.165Z"
   },
   "/iq/distillation/knowledge?nav=distillation": {
    "value": {
@@ -897,41 +894,35 @@
    "value": {
     "title": "20/600",
     "offenders": [
-     "above-title content 26/600",
      "scale content 10/600",
      "scale content 11/400",
      "scale content 15/400",
      "scale content 17/700",
-     "scale content 26/600",
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/400",
      "scale rail 13/500",
-     "siblings rail 11|16",
-     "title-scale content 26/600"
+     "siblings rail 11|16"
     ]
    },
-   "changedAt": "2026-10-13T07:08:26.576Z"
+   "changedAt": "2026-10-13T07:42:56.165Z"
   },
   "/iq/distillation/review?sample=": {
    "value": {
     "title": "20/600",
     "offenders": [
-     "above-title content 26/600",
      "scale content 10/600",
      "scale content 11/400",
      "scale content 15/400",
      "scale content 17/700",
-     "scale content 26/600",
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/400",
      "scale rail 13/500",
-     "siblings rail 11|16",
-     "title-scale content 26/600"
+     "siblings rail 11|16"
     ]
    },
-   "changedAt": "2026-10-13T07:08:26.576Z"
+   "changedAt": "2026-10-13T07:42:56.165Z"
   },
   "/iq/distillation/review?view=promotions": {
    "value": {
