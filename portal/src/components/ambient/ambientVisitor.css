@@ -1,20 +1,21 @@
 .ambient-visitor-boundary { position: fixed; overflow: hidden; pointer-events: none; z-index: 20; contain: layout paint; }
-.ambient-visitor-pose { position: absolute; pointer-events: none; visibility: hidden; bottom: 0; left: calc(-1 * var(--visitor-size)); width: var(--visitor-size); height: calc(var(--visitor-size) * .625); background: center / contain no-repeat; animation: ambient-visitor-travel var(--visitor-cycle) linear infinite, ambient-visitor-side var(--visitor-cycle) linear infinite; animation-delay: var(--visitor-delay); }
+.ambient-visitor-pose { position: absolute; pointer-events: none; visibility: hidden; bottom: 0; left: calc(-1 * var(--visitor-size)); width: var(--visitor-size); height: calc(var(--visitor-size) * .625); background: center / contain no-repeat; animation: ambient-visitor-travel var(--visitor-cycle) linear 1 both, ambient-visitor-side var(--visitor-cycle) linear 1 both; animation-delay: var(--visitor-delay); }
 .ambient-visitor-side { background-image: url("./mouse-side.svg"); }
 .ambient-visitor-front { background-image: url("./mouse-front.svg"); animation-name: ambient-visitor-travel, ambient-visitor-look; }
+/* A right-to-left visit mirrors the whole boundary (path and sprite). */
+.ambient-visitor-boundary[data-direction="rtl"] { transform: scaleX(-1); }
 @keyframes ambient-visitor-travel {
-  /* Hide the entire pose (including its lamp) before its staggered start and
-     while parked between visits. Entry and exit still clip at the bounds. */
-  0%, 6% { visibility: visible; }
-  6.01%, 100% { visibility: hidden; }
+  /* One visit: walk in, stop at --visitor-stop to look around, walk out. */
+  0%, 99.9% { visibility: visible; }
+  100% { visibility: hidden; }
   0% { left: calc(-1 * var(--visitor-size)); }
-  2.5%, 4% { left: calc(50% - var(--visitor-size) / 2); }
-  6%, 100% { left: 100%; }
-  0%, .6%, 1.2%, 1.8%, 2.5%, 4%, 4.6%, 5.2%, 6%, 100% { transform: translateY(0) rotate(0); }
-  .3%, .9%, 1.5%, 2.1%, 4.3%, 4.9%, 5.5% { transform: translateY(-2px) rotate(-3deg); }
+  38%, 62% { left: calc(var(--visitor-stop) - var(--visitor-size) / 2); }
+  100% { left: 100%; }
+  0%, 8%, 16%, 24%, 32%, 38%, 62%, 70%, 78%, 86%, 94%, 100% { transform: translateY(0) rotate(0); }
+  4%, 12%, 20%, 28%, 35%, 66%, 74%, 82%, 90%, 97% { transform: translateY(-2px) rotate(-3deg); }
 }
-@keyframes ambient-visitor-side { 0%, 2.5% { opacity: .9; } 2.7%, 3.8% { opacity: 0; } 4%, 100% { opacity: .9; } }
-@keyframes ambient-visitor-look { 0%, 2.5% { opacity: 0; } 2.7%, 3.8% { opacity: .9; } 4%, 100% { opacity: 0; } }
+@keyframes ambient-visitor-side { 0%, 40% { opacity: .9; } 42%, 58% { opacity: 0; } 60%, 100% { opacity: .9; } }
+@keyframes ambient-visitor-look { 0%, 40% { opacity: 0; } 42%, 58% { opacity: .9; } 60%, 100% { opacity: 0; } }
 html[data-shell-motion="off"] .ambient-visitor-boundary { display: none; }
 @media (prefers-reduced-motion: reduce) { .ambient-visitor-boundary { display: none; } }
 /* A warm headlamp in night themes; the beam shares the pose's direction,
