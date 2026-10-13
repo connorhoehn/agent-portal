@@ -1,5 +1,12 @@
 # aws-agentcore — agent context
 
+> **Latest handoff — October 12, 2026:** Read
+> [docs/claude-code-handoff-2026-10-12.md](docs/claude-code-handoff-2026-10-12.md)
+> first for current commits, shared UI 2.440.7, deterministic tenant audit work,
+> validation limits and continuation commands. The dated checkpoints below
+> describe earlier states; their unmerged-branch and local-blocker claims are
+> not the current repository state.
+
 Organizational Intelligence Platform (OrgIQ) accelerator. Multi-agent system
 on Amazon Bedrock AgentCore: ingests org docs → builds knowledge graph → scores
 expertise → serves conversational search. See CONSTITUTION.md for full spec.
