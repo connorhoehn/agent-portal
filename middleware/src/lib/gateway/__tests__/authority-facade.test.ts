@@ -46,6 +46,12 @@ const DIRECTORY: Record<string, Grants> = {
   pat: { pipelines: ['operator'] },
   root: { orgiq: ['admin'] },
   nobody: { orgiq: ['member'] },
+  // The access tenant (lane A1): a request thread admits its read rule's people.
+  rhea: { access: ['requester'] },
+  omar: { access: ['approver'] },
+  priya: { access: ['access-admin'] },
+  zed: { access: ['approver'] },
+  mixed: { orgiq: ['member'], access: ['requester'] },
 };
 /** Cedar, as the seed matrix would answer it: `admin` everything, otherwise the role's own actions. */
 const POLICY: Record<string, Record<string, string[]>> = {
@@ -53,7 +59,11 @@ const POLICY: Record<string, Record<string, string[]>> = {
   assessment: { assessor: ['ViewAssessment'] },
   pipelines: { operator: ['ViewPipelines'] },
   social: { participant: ['ViewSocial', 'PostMessage', 'StartCall'] },
+  access: { requester: ['ViewAccess', 'RequestAccess'], approver: ['ViewAccess', 'RequestAccess', 'DecideAccess'],
+    'access-admin': ['ViewAccess', 'RequestAccess', 'DecideAccess', 'ManageAccessCatalog', 'ManageAccessPolicy', 'ProvisionAccess'] },
 };
+/** Who the request's read rule admits now, per thread (lib/access/thread.ts, mocked through pageResourceVisible). */
+let threadReaders: Map<string, Set<string>>;
 const session = (sub: string, tenant: string, role?: string, act?: { sub: string; epoch?: number }): Session => ({
   sub, name: sub, tenant: tenant as Session['tenant'], role: (role ?? DIRECTORY[sub]![tenant]![0]) as Session['role'],
   epoch: 0, grants: structuredClone(DIRECTORY[sub]!), iat: 1_700_000_000,
@@ -78,7 +88,9 @@ beforeEach(() => {
     const allowed = POLICY[principal.tenant]?.[principal.role] ?? [];
     return allowed.includes('*') || allowed.includes(action);
   });
-  jest.mocked(pageResourceVisible).mockImplementation(async (_kind, bare) => visible.has(bare));
+  threadReaders = new Map([['access:req:req-0001', new Set(['rhea', 'omar', 'priya', 'mixed'])], ['access:req:req-0004', new Set(['priya'])]]);
+  jest.mocked(pageResourceVisible).mockImplementation(async (kind, bare, reader) =>
+    kind === 'access-request' ? !!reader && (threadReaders.get(bare)?.has(reader) ?? false) : visible.has(bare));
   backend = createMemorySocialChatBackend({ fixtures: false });
   setSocialChatBackend(backend);
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -125,6 +137,24 @@ const CHANNEL_ROWS: ChannelRow[] = [
   { name: 'the distillation feed: an admin reads it from anywhere', ctx: () => ctx('root', 'orgiq', 'admin'), kind: 'subscribe', channel: 'orgiq:distill:jobs', verdict: true },
   { name: 'a huddle chat name is never admitted by grant alone', ctx: () => ctx('alice', 'orgiq'), kind: 'subscribe', channel: 'orgiq:huddle:c1', verdict: false },
   { name: 'no context is refused', ctx: () => null, kind: 'subscribe', channel: 'orgiq:initiative:p-1', verdict: false },
+  // access:req:<id> — the request's read rule for THIS reader, now (lane A1).
+  { name: 'access: the requester reads her request thread', ctx: () => ctx('rhea', 'access'), kind: 'subscribe', channel: 'access:req:req-0001', verdict: true },
+  { name: 'access: the requester posts to it (ViewAccess is the write)', ctx: () => ctx('rhea', 'access'), kind: 'publish', channel: 'access:req:req-0001', verdict: true },
+  { name: 'access: the live approver reads it', ctx: () => ctx('omar', 'access'), kind: 'subscribe', channel: 'access:req:req-0001', verdict: true },
+  { name: 'access: an access-admin reads it', ctx: () => ctx('priya', 'access'), kind: 'subscribe', channel: 'access:req:req-0001', verdict: true },
+  { name: 'access: an approver outside the request\'s read rule is refused', ctx: () => ctx('zed', 'access'), kind: 'subscribe', channel: 'access:req:req-0001', verdict: false },
+  { name: 'access: the requester is refused someone else\'s request', ctx: () => ctx('rhea', 'access'), kind: 'subscribe', channel: 'access:req:req-0004', verdict: false },
+  { name: 'access: an approver who left the read rule (a decided chain) is refused now', ctx: () => ctx('omar', 'access'), kind: 'publish', channel: 'access:req:req-0001',
+    before: () => { threadReaders.get('access:req:req-0001')!.delete('omar'); }, verdict: false },
+  { name: 'access: a reader whose access grant was revoked is refused', ctx: () => ctx('rhea', 'access'), kind: 'subscribe', channel: 'access:req:req-0001',
+    before: () => { users.get('rhea')!.grants.access = []; }, verdict: false },
+  { name: 'access: an access grant held while standing in orgiq is not the active tenant', ctx: () => ctx('mixed', 'orgiq'), kind: 'subscribe', channel: 'access:req:req-0001', verdict: false },
+  { name: 'access: the same person standing in access reads it', ctx: () => ctx('mixed', 'access'), kind: 'subscribe', channel: 'access:req:req-0001', verdict: true },
+  { name: 'access: cross-tenant, an orgiq-only member is refused', ctx: () => ctx('alice', 'orgiq'), kind: 'subscribe', channel: 'access:req:req-0001', verdict: false },
+  { name: 'access: presence on the thread (ephemeral: the read authority)', ctx: () => ctx('omar', 'access'), kind: 'publish', channel: 'presence:access:req:req-0001', verdict: true },
+  { name: 'access: no cursor service on a request thread', ctx: () => ctx('rhea', 'access'), kind: 'publish', channel: 'cursor:access:req:req-0001', verdict: false },
+  { name: 'access: a name no family lists is refused', ctx: () => ctx('priya', 'access'), kind: 'subscribe', channel: 'access:lobby:x', verdict: false },
+  { name: 'access: a malformed request id is refused', ctx: () => ctx('priya', 'access'), kind: 'subscribe', channel: 'access:req:nope', verdict: false },
 ];
 
 describe('admitChannel: the verdict, and equality with the pre-split primitive + guard pair', () => {
@@ -307,6 +337,18 @@ describe('admitReader / admitPrincipal / producerChannelAllowed / holdsFamilyAut
     users.get('ava')!.grants.assessment = [];
     expect(await admitReader('ava', 'assessment:team:TEAM-1')).toBe(false);
     expect(await admitReader('alice', 'orgiq:nope:1')).toBe(false);
+  });
+
+  it('an access request thread\'s reader (cursors, unread, mentions) is the request\'s read rule for that id, now', async () => {
+    expect(await admitReader('rhea', 'access:req:req-0001')).toBe(true);
+    expect(await admitReader('omar', 'access:req:req-0001')).toBe(true);
+    expect(await admitReader('zed', 'access:req:req-0001')).toBe(false);
+    expect(await admitReader('rhea', 'access:req:req-0004')).toBe(false);
+    expect(await admitReader('alice', 'access:req:req-0001')).toBe(false);
+    threadReaders.get('access:req:req-0001')!.delete('omar');
+    expect(await admitReader('omar', 'access:req:req-0001')).toBe(false);
+    users.get('rhea')!.grants.access = [];
+    expect(await admitReader('rhea', 'access:req:req-0001')).toBe(false);
   });
 
   it('a principal is current until its epoch moves or its grant goes', async () => {

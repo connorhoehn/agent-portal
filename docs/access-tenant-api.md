@@ -86,11 +86,22 @@ interface AccessEvent {
 | `GET /requests/:id` | ViewAccess + read rule | `AccessRequest`; 404 outside the read rule |
 | `POST /requests/:id/withdraw` | requester or beneficiary | `AccessRequest` (status `withdrawn`); 409 if terminal |
 | `GET /approvals` | DecideAccess | `{ items: AccessRequest[] }` whose current step the actor may decide now |
-| `POST /requests/:id/steps/:step/decide` body `{ decision: 'approve'\|'reject'\|'info', comment }` | DecideAccess + row rules | `AccessRequest`; 403 `{ error: 'You cannot decide your own request' }` when actor is requester/beneficiary; 403 when not eligible; 409 when the step is already decided; last approval → status `approved` (A0 stops here) |
+| `POST /requests/:id/steps/:step/decide` body `{ decision: 'approve'\|'reject'\|'info', comment }` | DecideAccess + row rules | `AccessRequest`; 403 `{ error: 'You cannot decide your own request' }` when actor is requester/beneficiary; 403 when not eligible; 409 when the step is already decided; the last approval provisions (A1, `lib/access-provision.ts`): status `active` with `provisionedAt`/`expiresAt`, or `approved` if the grant write failed |
 | `GET /policies` | ViewAccess | `{ items: AccessPolicy[] }` |
 | `PUT /policies/:id` body `{ severity?, reason? }` | ManageAccessPolicy | `AccessPolicy` |
 | `GET /audit?requestId=&q=` | ViewAccess (own) / DecideAccess (all) | `{ items: AccessEvent[] }` |
 | `GET /reviews` | ViewAccess | `{ items: [] }` until A2 |
 
-Discussion thread per request: `access:req:<id>` (A1 wires the gateway family;
-A0 reserves the name in `AccessRequest.thread`).
+Discussion thread per request: `access:req:<id>` (`AccessRequest.thread`). The
+gateway admits it (A1) to whoever passes `GET /requests/:id`'s read rule now,
+standing in `access` with `ViewAccess`; posting needs the same
+(`middleware/src/lib/access/thread.ts`, family `access:req` in
+`lib/tenant-channels.ts`, reader cursors on).
+
+Provisioning (A1): a `tenant-role` merges the role into the beneficiary's
+grants (`setGrants`); an `initiative-membership` inserts a
+`project_contributions` row (role `contributor`). Either bumps the
+beneficiary's `session_epoch`, which retires every cookie they hold at its
+next read — the grant is carried by their next sign-in. Expiry
+(`lib/access-expiry.ts`) revokes the same way and records `expired`; the bell
+warns the requester and beneficiary 24 h before.

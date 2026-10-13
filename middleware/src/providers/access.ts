@@ -93,6 +93,41 @@ export function saveTransition(request: AccessRequestRow, steps: readonly Access
   appendEvents(request.id, actorId, events, at);
 }
 
+/** One request row by id (a copy), or null. */
+export function findRequest(id: string): AccessRequestRow | null {
+  store();
+  const row = accessRequestsFixture.rows().find((r) => r.id === id);
+  return row ? structuredClone(row) : null;
+}
+
+/**
+ * Compare-and-set one request row: apply `patch` only while the stored row is
+ * in one of `from` (and, with `warnedAtNull`, has not been warned yet), and
+ * append `events` in the same step. Returns the stored row, or null when the
+ * condition no longer holds — someone else moved it first. This is the claim
+ * provisioning, revocation and the expiry warning each take, so a second
+ * caller (another replica's sweep, a racing decision) does nothing twice.
+ * On the cluster it is one `UPDATE … WHERE id = :id AND status = ANY(:from)
+ * [AND expiry_warned_at IS NULL] RETURNING *` plus the event INSERTs in one
+ * transaction (lane E); offline the check and the write share one tick.
+ */
+export function casRequest(
+  id: string,
+  when: { from: readonly AccessRequestRow['status'][]; warnedAtNull?: boolean },
+  patch: Partial<Omit<AccessRequestRow, 'id'>>,
+  events: readonly EventDraft[],
+  actorId: string | null,
+  at: string,
+): AccessRequestRow | null {
+  store();
+  const row = accessRequestsFixture.rows().find((r) => r.id === id);
+  if (!row || !when.from.includes(row.status)) return null;
+  if (when.warnedAtNull && row.expiryWarnedAt !== null) return null;
+  Object.assign(row, structuredClone(patch));
+  appendEvents(id, actorId, events, at);
+  return structuredClone(row);
+}
+
 /** Update a policy's severity / reason; returns the stored row or null when unknown. */
 export function updatePolicy(id: string, patch: { severity?: AccessPolicyRow['severity']; reason?: string }, actorId: string): AccessPolicyRow | null {
   store();

@@ -28,3 +28,8 @@ test('a surface whose data is not here yet names the lane that brings it', () =>
   }
   assert.equal(ACCESS_SURFACES.reviews.phase, 'A2');
 });
+
+test('the request record carries its discussion (lane A1: the gateway admits access:req:<id>)', () => {
+  assert.equal(ACCESS_SURFACES.request.composer, 'required');
+  assert.match(ACCESS_SURFACES.request.description, /discussion/);
+});

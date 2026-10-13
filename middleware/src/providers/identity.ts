@@ -14,6 +14,7 @@ import {
 
 import { config } from '../config.js';
 import type { Grants } from '../lib/session.js';
+import { identityGrantWritesFixture } from '../mock/identity-grants.js';
 
 export interface TenantInfo {
   id: string;
@@ -119,6 +120,23 @@ const FALLBACK_USERS: UserInfo[] = [
     grants: { access: ['access-admin'] }, epoch: 0 },
 ];
 
+/**
+ * The offline directory as it stands now: the seed mirror with any grant
+ * writes applied (mock/identity-grants.ts, a registered fixture, so a reset
+ * restores the seed). With no write recorded this is FALLBACK_USERS itself —
+ * the same objects, so the in-place epoch bump below stays visible.
+ */
+function fallbackUsers(): UserInfo[] {
+  const writes = identityGrantWritesFixture.rows();
+  if (writes.length === 0) return FALLBACK_USERS;
+  const byUser = new Map(writes.map((w) => [w.userId, w.grants]));
+  return FALLBACK_USERS.map((u) => {
+    const grants = byUser.get(u.id);
+    return grants ? { ...u, grants: structuredClone(grants) } : u;
+  });
+}
+const fallbackUser = (id: string): UserInfo | null => fallbackUsers().find((u) => u.id === id) ?? null;
+
 // ── RDS Data API helpers (local to this module) ──────────────────────────────
 
 let _client: RDSDataClient | null = null;
@@ -188,15 +206,15 @@ export async function listTenants(): Promise<TenantInfo[]> {
 }
 
 export async function listUsers(options: { authoritative?: boolean } = {}): Promise<UserInfo[]> {
-  if (options.authoritative && config.mock?.aurora) return FALLBACK_USERS;
+  if (options.authoritative && config.mock?.aurora) return fallbackUsers();
   if (!auroraConfigured()) {
     if (options.authoritative) throw new Error('identity store unavailable');
-    return FALLBACK_USERS;
+    return fallbackUsers();
   }
   try {
     const users = await exec(
       `SELECT id, display_name, email, person_id, session_epoch FROM app_users ORDER BY display_name`);
-    if (users.length === 0) return options.authoritative ? [] : FALLBACK_USERS;
+    if (users.length === 0) return options.authoritative ? [] : fallbackUsers();
     const grants = groupGrants(await exec(
       // tenant_id, role tie-break granted_at so the ordering is total and
       // deterministic — seed rows share a granted_at timestamp, so ordering by
@@ -212,24 +230,24 @@ export async function listUsers(options: { authoritative?: boolean } = {}): Prom
     }));
   } catch (error) {
     if (options.authoritative) throw error;
-    return FALLBACK_USERS;
+    return fallbackUsers();
   }
 }
 
 export async function getUser(userId: string, options: { authoritative?: boolean } = {}): Promise<UserInfo | null> {
   // Realtime grants must not revive a deleted/revoked seed identity during a
   // database outage. Only an explicitly mocked deployment may use fixtures.
-  if (options.authoritative && config.mock?.aurora) return FALLBACK_USERS.find(u => u.id === userId) ?? null;
+  if (options.authoritative && config.mock?.aurora) return fallbackUser(userId);
   if (!auroraConfigured()) {
     if (options.authoritative && !config.mock?.aurora) throw new Error('identity store unavailable');
-    return FALLBACK_USERS.find(u => u.id === userId) ?? null;
+    return fallbackUser(userId);
   }
   try {
     const user = options.authoritative ? await queuedAuthoritativeUser(userId) : (await readCurrentUsers([userId])).get(userId) ?? null;
-    return user ?? (options.authoritative ? null : FALLBACK_USERS.find(u => u.id === userId) ?? null);
+    return user ?? (options.authoritative ? null : fallbackUser(userId));
   } catch (error) {
     if (options.authoritative) throw error;
-    return FALLBACK_USERS.find(u => u.id === userId) ?? null;
+    return fallbackUser(userId);
   }
 }
 
@@ -316,19 +334,19 @@ export async function getUserByEmail(email: string): Promise<UserInfo | null> {
   if (!email) return null;
   const needle = email.trim().toLowerCase();
   if (!auroraConfigured()) {
-    return FALLBACK_USERS.find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
+    return fallbackUsers().find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
   }
   try {
     const rows = await exec(
       `SELECT id, display_name, email, person_id, session_epoch FROM app_users WHERE lower(email) = :email`,
       [str('email', needle)]);
     if (rows.length === 0) {
-      return FALLBACK_USERS.find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
+      return fallbackUsers().find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
     }
     const [id, displayName, mail, personId, epoch] = rows[0]!;
     return hydrate(id as string, displayName as string, (mail as string | null) ?? null, (personId as string | null) ?? null, (epoch as number | null) ?? 0);
   } catch {
-    return FALLBACK_USERS.find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
+    return fallbackUsers().find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
   }
 }
 
@@ -358,7 +376,9 @@ export async function linkExternalSub(userId: string, sub: string): Promise<void
  * switch never hard-fails on the epoch write.
  */
 export async function bumpSessionEpoch(userId: string): Promise<number> {
-  if (!auroraConfigured()) {
+  // MOCK_AURORA's authoritative reads are the seed mirror (getUser/listUsers
+  // above), so its epoch is the one a live session is checked against.
+  if (!auroraConfigured() || config.mock?.aurora) {
     const u = FALLBACK_USERS.find(x => x.id === userId);
     const next = u ? (u.epoch = (u.epoch ?? 0) + 1) : 1;
     directoryChanged(userId);
@@ -412,8 +432,31 @@ export async function createUser(
     ]);
 }
 
-/** Replace a user's grants wholesale (the admin UI edits the full matrix). */
+/**
+ * Replace a user's grants wholesale (the admin UI edits the full matrix; the
+ * access tenant merges one role in or out, lib/access-provision.ts).
+ *
+ * Under MOCK_AURORA (whose authoritative reads are the seed mirror) the write lands in the registered
+ * `identity.grant-writes` fixture, which every fallback read above applies,
+ * so `POST /api/__mock/reset` restores the seed grants. Without MOCK_AURORA an
+ * unconfigured cluster still refuses: an unmocked process has no store to
+ * write and must not pretend to.
+ */
 export async function setGrants(userId: string, grants: Grants): Promise<void> {
+  if (config.mock?.aurora) {
+    if (!FALLBACK_USERS.some((u) => u.id === userId)) throw new Error(`No user ${userId} in the offline directory`);
+    const clean: Grants = {};
+    for (const [tenant, roles] of Object.entries(grants)) {
+      const unique = [...new Set(roles)];
+      if (unique.length) clean[tenant] = unique;
+    }
+    const rows = identityGrantWritesFixture.rows();
+    const at = rows.findIndex((r) => r.userId === userId);
+    const row = { userId, grants: clean };
+    if (at >= 0) rows[at] = row; else rows.push(row);
+    directoryChanged(userId);
+    return;
+  }
   if (!auroraConfigured()) throw new Error('Aurora not configured — cannot edit grants');
   await exec(`DELETE FROM user_tenant_roles WHERE user_id = :id`, [str('id', userId)]);
   for (const [tenant, roles] of Object.entries(grants)) {

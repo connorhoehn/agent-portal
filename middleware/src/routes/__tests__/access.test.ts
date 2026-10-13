@@ -8,6 +8,8 @@
 // The two row rules Cedar cannot see are pinned here:
 //   * nobody decides a request they submitted or benefit from — 403 naming it;
 //   * a step is decided once — a second decision is a 409.
+// Lane A1's end-to-end (provisioning, the epoch, the bell, the catalog) is
+// routes/__tests__/access-provision.test.ts.
 
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', auth: { policyStoreId: undefined, sessionSigningSecretArn: '', cognito: null }, cognito: { portalOrigin: '' }, mock: { aurora: true } },
@@ -45,6 +47,8 @@ import { accessCatalogFixture } from '../../mock/access-catalog.js';
 import { accessPoliciesFixture } from '../../mock/access-policies.js';
 import { accessPeopleFixture } from '../../mock/access-people.js';
 import { accessEventsFixture, accessRequestsFixture, accessStepsFixture } from '../../mock/access-requests.js';
+import { identityGrantWritesFixture } from '../../mock/identity-grants.js';
+import { initiatives } from '../../mock/initiatives.js';
 import type { AccessEvent, AccessPolicy, AccessRequest, CatalogItem } from '../../lib/access/types.js';
 import type { Session } from '../../lib/session.js';
 
@@ -86,7 +90,7 @@ const ids = (res: { body: unknown }) => (res.body as { items: Array<{ id: string
 const JUST = 'Need it for the SSO cutover stories this sprint.';
 
 beforeEach(() => {
-  for (const f of [accessCatalogFixture, accessPoliciesFixture, accessPeopleFixture, accessRequestsFixture, accessStepsFixture, accessEventsFixture]) f.reset();
+  for (const f of [accessCatalogFixture, accessPoliciesFixture, accessPeopleFixture, accessRequestsFixture, accessStepsFixture, accessEventsFixture, identityGrantWritesFixture, initiatives]) f.reset();
   users = structuredClone(BASE);
   jest.mocked(listUsers).mockImplementation(async () => structuredClone(users));
 });
@@ -236,14 +240,15 @@ describe('decide — the row rules', () => {
     expect(again.status).toBe(409);
     expect((await decide('req-0001', 1, 'u-omar', { decision: 'reject', comment: 'changed my mind' })).status).toBe(409);
   });
-  it('an approver not eligible for the step is refused; the last approval → approved (A0 stops there)', async () => {
+  it('an approver not eligible for the step is refused; the last approval provisions (A1: approved → active)', async () => {
     await decide('req-0001', 1, 'u-omar', { decision: 'approve' });
     expect((await decide('req-0001', 2, 'u-omar', { decision: 'approve' })).status).toBe(403);
     const done = await decide('req-0001', 2, 'u-priya', { decision: 'approve' });
     expect(done.status).toBe(200);
-    expect(asReq(done)).toMatchObject({ status: 'approved', provisionedAt: null, expiresAt: null });
+    expect(asReq(done)).toMatchObject({ status: 'active', provisionedAt: expect.any(String), expiresAt: expect.any(String) });
+    expect(Date.parse(asReq(done).expiresAt!) - Date.parse(asReq(done).provisionedAt!)).toBe(30 * 24 * 3_600_000);
     expect(asReq(done).decidedAt).toEqual(expect.any(String));
-    expect(accessEventsFixture.rows().filter((e) => e.requestId === 'req-0001').map((e) => e.kind)).toEqual(['submitted', 'step-approved', 'step-approved', 'approved']);
+    expect(accessEventsFixture.rows().filter((e) => e.requestId === 'req-0001').map((e) => e.kind)).toEqual(['submitted', 'step-approved', 'step-approved', 'approved', 'provisioned']);
     expect((await decide('req-0001', 2, 'u-priya', { decision: 'approve' })).status).toBe(409);
   });
   it('a waiting step is a 409; a missing step is a 409; an unreadable request is a 404', async () => {
@@ -262,7 +267,7 @@ describe('decide — the row rules', () => {
   it('info keeps the step open for a later decision', async () => {
     const info = await decide('req-0002', 2, 'u-priya', { decision: 'info', comment: 'Which two sprints?' });
     expect(asReq(info).steps[1]).toMatchObject({ status: 'info-requested', comment: 'Which two sprints?' });
-    expect(asReq(await decide('req-0002', 2, 'u-priya', { decision: 'approve' })).status).toBe('approved');
+    expect(asReq(await decide('req-0002', 2, 'u-priya', { decision: 'approve' })).status).toBe('active');
   });
   it('eligibility is live: a demoted approver can no longer decide', async () => {
     users.find((x) => x.id === 'u-omar')!.grants = {};

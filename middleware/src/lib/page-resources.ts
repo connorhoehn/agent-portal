@@ -9,22 +9,34 @@
 //                    (the pipelines tenant's unscoped view: every run)
 //   orgiq-initiative GET /api/graph/projects/:id   → providers/projects.ts
 //                    projectExists (the `projects` row, or the mock fixture)
+//   access-request   GET /api/access/requests/:id  → the request row AND its
+//                    read rule for `reader` (lib/access/thread.ts): a request
+//                    is a 404 outside its read rule, so existence is per reader.
+//                    Without a reader it is refused.
 
-export type PageResourceKind = 'assessment-team' | 'pipelines-run' | 'orgiq-initiative';
+export type PageResourceKind = 'assessment-team' | 'pipelines-run' | 'orgiq-initiative' | 'access-request';
 
 const PREFIX: Record<PageResourceKind, string> = {
   'assessment-team': 'assessment:team:',
   'pipelines-run': 'pipelines:run:',
   'orgiq-initiative': 'orgiq:initiative:',
+  'access-request': 'access:req:',
 };
 
-/** Unknown, malformed or unreadable (store error) is one refusal. */
-export async function pageResourceVisible(kind: PageResourceKind, bare: string): Promise<boolean> {
+/** Unknown, malformed or unreadable (store error) is one refusal. `reader`
+ * is the user the decision is for — required by a per-reader resource. */
+export async function pageResourceVisible(kind: PageResourceKind, bare: string, reader?: string): Promise<boolean> {
   const prefix = PREFIX[kind];
   if (!bare.startsWith(prefix)) return false;
   const id = bare.slice(prefix.length);
   if (!id) return false;
   try {
+    if (kind === 'access-request') {
+      if (!reader) return false;
+      const { requestIdOfThread, requestReadableBy } = await import('./access/thread.js');
+      const requestId = requestIdOfThread(bare);
+      return !!requestId && await requestReadableBy(requestId, reader);
+    }
     if (kind === 'assessment-team') {
       const { teamExists } = await import('../providers/assessment.js');
       return await teamExists(id);

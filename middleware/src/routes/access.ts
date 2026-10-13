@@ -10,8 +10,12 @@
 // Who may decide a step is resolved live from the directory on every read and
 // decision (lib/access/chain.ts), never read off the request.
 //
-// A0 stops at `approved`: provisioning, expiry, the bell and the request
-// thread are lane A1; reviews are A2 (`GET /reviews` answers no rows).
+// Lane A1 (docs/access-tenant-goal.md §A1): the last approval provisions
+// (lib/access-provision.ts — setGrants / the contribution writer, the epoch
+// bump, `provisioned` → `active`); expiry is lib/access-expiry.ts; the bell
+// items go through lib/social-notify.ts `notifyAccessRequest`; the request's
+// thread `access:req:<id>` is admitted by the gateway under this file's read
+// rule (lib/access/thread.ts). Reviews are A2 (`GET /reviews` answers no rows).
 
 import { Router, type Request } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
@@ -25,6 +29,8 @@ import {
   type AccessDirectory, type AccessDuration, type AccessEvent, type AccessPolicy, type AccessRequest,
   type CatalogItem, type Decision, type DirectoryUser,
 } from '../lib/access/types.js';
+import { provisionAccess } from '../lib/access-provision.js';
+import { notifyAccessRequest, type AccessNotifyKind } from '../lib/social-notify.js';
 import {
   accessNow, insertRequest, listCatalog, listEvents, listPolicies, listRequests, listSteps, loadDirectory,
   nextRequestId, saveTransition, updatePolicy,
@@ -157,6 +163,33 @@ function loadRequest(id: string): AccessRequestRow {
   const r = listRequests().find((x) => x.id === id);
   if (!r) throw new NotFoundError(`No request ${id}`);
   return r;
+}
+
+/**
+ * The bell for one transition (decision A8): the parties hear about decisions,
+ * and whoever may decide the request's current step NOW hears that it waits
+ * on them. Never fails the write it follows (notify() swallows its errors).
+ */
+async function bell(kind: AccessNotifyKind, r: AccessRequestRow, ctx: Ctx, extra: { step?: number | null; comment?: string | null } = {}): Promise<void> {
+  const row = listCatalog().find((i) => i.id === r.itemId);
+  const base = {
+    requestId: r.id, itemTitle: row?.title ?? r.itemId, requesterId: r.requesterId, beneficiaryId: r.beneficiaryId,
+    beneficiaryName: personFor(ctx.dir, r.beneficiaryId)?.displayName ?? null,
+    actorId: ctx.actor.id, actorName: ctx.self?.displayName ?? null, ...extra,
+  };
+  await notifyAccessRequest({ kind, ...base });
+}
+
+/** Tell whoever may decide the current step now (resolved live) that it waits on them. */
+async function bellApprovers(kind: 'submitted' | 'awaiting', r: AccessRequestRow, ctx: Ctx): Promise<void> {
+  const row = listCatalog().find((i) => i.id === r.itemId);
+  const cur = currentStep(listSteps(r.id));
+  if (!row || !cur) return;
+  const approverIds = eligibleDeciders(cur.kind, row, r, ctx.dir).map((p) => p.id);
+  await notifyAccessRequest({
+    kind, requestId: r.id, itemTitle: row.title, requesterId: r.requesterId, beneficiaryId: r.beneficiaryId,
+    beneficiaryName: personFor(ctx.dir, r.beneficiaryId)?.displayName ?? null, actorId: ctx.actor.id, approverIds, step: cur.step,
+  });
 }
 
 // ─── reads ──────────────────────────────────────────────────────────────────
@@ -315,6 +348,7 @@ accessRouter.post('/requests', requireAction('RequestAccess'), asyncHandler(asyn
     duration: duration as AccessDuration, sodVerdict: verdict, sodOverriddenBy: null, sodOverrideReason: null, submittedAt: now,
   }, planChain(item, beneficiary, ctx.dir));
   insertRequest(t.request, t.steps, t.events, ctx.actor.id);
+  await bellApprovers('submitted', t.request, ctx);
   const w = world();
   res.status(201).json(present(t.request, ctx, w));
 }));
@@ -338,6 +372,7 @@ accessRouter.post('/requests/:id/withdraw', requireAction('ViewAccess'), asyncHa
     if (err instanceof TransitionError) { res.status(409).json({ error: err.message }); return; }
     throw err;
   }
+  await bell('withdrawn', r, ctx, { comment: reason });
   res.json(present(loadRequest(r.id), ctx, world()));
 }));
 
@@ -362,12 +397,29 @@ accessRouter.post('/requests/:id/steps/:step/decide', requireAction('DecideAcces
   const refusal = decideRefusal(ctx.actor, r, steps, stepNo, item, ctx.dir);
   if (refusal) { res.status(refusal.status).json({ error: refusal.error }); return; }
   const now = accessNow();
+  let after: AccessRequestRow;
   try {
     const t = decide(r, steps, stepNo, decision as Decision, ctx.actor.id, comment, now);
     saveTransition(t.request, t.steps, t.events, ctx.actor.id, now);
+    after = t.request;
   } catch (err) {
     if (err instanceof TransitionError) { res.status(409).json({ error: err.message }); return; }
     throw err;
+  }
+  if (after.status === 'approved') {
+    // The last approval provisions (A1). A failed grant write leaves the
+    // request `approved` (honest: decided, not in effect) and tells the parties.
+    try {
+      await provisionAccess(after);
+    } catch (err) {
+      console.warn(`[access] provisioning ${after.id} failed: ${(err as Error).message}`);
+      await bell('provision-failed', after, ctx, { step: stepNo });
+    }
+  } else if (decision === 'approve') {
+    await bell('approved-step', after, ctx, { step: stepNo, comment });
+    await bellApprovers('awaiting', after, ctx);
+  } else {
+    await bell(decision === 'reject' ? 'rejected' : 'info-requested', after, ctx, { step: stepNo, comment });
   }
   res.json(present(loadRequest(r.id), ctx, world()));
 }));

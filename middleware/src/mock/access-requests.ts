@@ -32,6 +32,10 @@ export interface AccessRequestRow {
   provisionedAt: string | null;
   expiresAt: string | null;
   revokedAt: string | null;
+  /** When the 24-hour expiry warning went to the requester and beneficiary
+   * (lib/access-expiry.ts) — the once-only marker, so a second sweep or a
+   * second replica never sends it twice. */
+  expiryWarnedAt: string | null;
 }
 
 export interface AccessStepRow {
@@ -61,7 +65,7 @@ const req = (
 ): AccessRequestRow => ({
   id, requesterId, beneficiaryId: requesterId, itemId, justification, duration, status,
   sodVerdict: 'clear', sodOverriddenBy: null, sodOverrideReason: null,
-  submittedAt, decidedAt, provisionedAt, expiresAt: null, revokedAt: null,
+  submittedAt, decidedAt, provisionedAt, expiresAt: null, revokedAt: null, expiryWarnedAt: null,
 });
 
 export const accessRequestsFixture = defineFixture<AccessRequestRow>({

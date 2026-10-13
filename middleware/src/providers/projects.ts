@@ -892,3 +892,62 @@ export async function setContributionRole(
   }
   return { ok: true };
 }
+
+/** The project_contributions.role an access-tenant membership writes (lib/access-provision.ts). */
+export const ACCESS_CONTRIBUTION_ROLE = 'contributor';
+
+/**
+ * Attach `personId` to an initiative (a project_contributions row) — the
+ * writer the access tenant provisions an `initiative-membership` through
+ * (docs/access-tenant-design.md decision A2: no second store). Idempotent:
+ * `added` is false when the person already owns or contributes to it. Throws
+ * when the initiative does not exist.
+ *
+ * Offline the mock models every contribution as one SME list on the
+ * registered `initiatives` fixture (mock/initiatives.ts — the membership rule
+ * `listInitiativeMemberships` reads), so the person joins that list and a
+ * reset restores it; the cluster row carries ACCESS_CONTRIBUTION_ROLE.
+ */
+export async function addContribution(projectId: string, personId: string, role: string = ACCESS_CONTRIBUTION_ROLE): Promise<{ added: boolean }> {
+  if (config.mock.aurora) {
+    const p = findInitiative(projectId);
+    if (!p) throw new Error(`No initiative ${projectId}`);
+    if (p.owner === personId || p.smes.includes(personId)) return { added: false };
+    p.smes.push(personId);
+    return { added: true };
+  }
+  if (!await projectExists(projectId)) throw new Error(`No initiative ${projectId}`);
+  const rows = await exec(
+    `INSERT INTO project_contributions (person_id, project_id, role, weight)
+     VALUES (:person, :pid, :role, 1.0)
+     ON CONFLICT (person_id, project_id) DO NOTHING
+     RETURNING person_id`,
+    [strParam('person', personId), strParam('pid', projectId), strParam('role', role)],
+  );
+  return { added: rows.length > 0 };
+}
+
+/**
+ * The inverse: detach `personId` from an initiative they joined through the
+ * access tenant. Never removes the owner, and on the cluster only a row whose
+ * role is still ACCESS_CONTRIBUTION_ROLE — a contribution someone curated
+ * since (an SME role chip) is theirs, not the request's. `removed` is false
+ * when there was nothing to remove.
+ */
+export async function removeContribution(projectId: string, personId: string, role: string = ACCESS_CONTRIBUTION_ROLE): Promise<{ removed: boolean }> {
+  if (config.mock.aurora) {
+    const p = findInitiative(projectId);
+    if (!p || p.owner === personId) return { removed: false };
+    const at = p.smes.indexOf(personId);
+    if (at < 0) return { removed: false };
+    p.smes.splice(at, 1);
+    return { removed: true };
+  }
+  const rows = await exec(
+    `DELETE FROM project_contributions
+      WHERE project_id = :pid AND person_id = :person AND role = :role
+      RETURNING person_id`,
+    [strParam('pid', projectId), strParam('person', personId), strParam('role', role)],
+  );
+  return { removed: rows.length > 0 };
+}

@@ -57,6 +57,10 @@ export function conversationTenant(channel: string): Tenant {
   const family = summarizableFamily(channel);
   if (!family) throw new ValidationError('channel must name a tenant conversation (a discussion, document, run or huddle chat)');
   // summarizableFamily admits only partition tenants (never the social work-graph family).
+  // A partition with no summarize flow (the access tenant's request threads) is not one.
+  if (!Object.values(FLOWS).some(f => f.spec.tenant === family.tenant)) {
+    throw new ValidationError(`/summarize is not offered on ${family.tenant} conversations`);
+  }
   return family.tenant as Tenant;
 }
 

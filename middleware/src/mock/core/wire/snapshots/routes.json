@@ -23,62 +23,62 @@
     {
       "method": "GET",
       "path": "/api/access/approvals",
-      "source": "src/routes/access.ts:230"
+      "source": "src/routes/access.ts:263"
     },
     {
       "method": "GET",
       "path": "/api/access/audit",
-      "source": "src/routes/access.ts:244"
+      "source": "src/routes/access.ts:277"
     },
     {
       "method": "GET",
       "path": "/api/access/catalog",
-      "source": "src/routes/access.ts:180"
+      "source": "src/routes/access.ts:213"
     },
     {
       "method": "GET",
       "path": "/api/access/policies",
-      "source": "src/routes/access.ts:238"
+      "source": "src/routes/access.ts:271"
     },
     {
       "method": "PUT",
       "path": "/api/access/policies/:id",
-      "source": "src/routes/access.ts:375"
+      "source": "src/routes/access.ts:427"
     },
     {
       "method": "GET",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:196"
+      "source": "src/routes/access.ts:229"
     },
     {
       "method": "POST",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:267"
+      "source": "src/routes/access.ts:300"
     },
     {
       "method": "GET",
       "path": "/api/access/requests/:id",
-      "source": "src/routes/access.ts:220"
+      "source": "src/routes/access.ts:253"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/steps/:step/decide",
-      "source": "src/routes/access.ts:344"
+      "source": "src/routes/access.ts:379"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/withdraw",
-      "source": "src/routes/access.ts:322"
+      "source": "src/routes/access.ts:356"
     },
     {
       "method": "GET",
       "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:259"
+      "source": "src/routes/access.ts:292"
     },
     {
       "method": "GET",
       "path": "/api/access/summary",
-      "source": "src/routes/access.ts:164"
+      "source": "src/routes/access.ts:197"
     },
     {
       "method": "GET",
@@ -1453,17 +1453,17 @@
     {
       "method": "POST",
       "path": "/api/conversations/summarize/run",
-      "source": "src/routes/conversation-summarize.ts:96"
+      "source": "src/routes/conversation-summarize.ts:100"
     },
     {
       "method": "GET",
       "path": "/api/conversations/summarize/runs/:id",
-      "source": "src/routes/conversation-summarize.ts:122"
+      "source": "src/routes/conversation-summarize.ts:126"
     },
     {
       "method": "POST",
       "path": "/api/conversations/summarize/runs/:id/post",
-      "source": "src/routes/conversation-summarize.ts:126"
+      "source": "src/routes/conversation-summarize.ts:130"
     },
     {
       "method": "GET",
@@ -1943,7 +1943,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:173"
+      "source": "src/index.ts:174"
     },
     {
       "method": "GET",
@@ -3853,7 +3853,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:172"
+      "source": "src/index.ts:173"
     },
     {
       "method": "DELETE",

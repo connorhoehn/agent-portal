@@ -46,12 +46,10 @@
 // | pipelines:run:<id>            | /api/pipelines/runs/:id: tenant + ViewPipelines; as a call     | ViewPipelines              |
 // |                               |   lobby also the run existing now (lib/page-resources.ts)      |                            |
 // | pipelines:def:<id>            | /api/pipelines/definitions/:id: tenant + ViewPipelines         | ViewPipelines              |
-// | access:req:<id>               | /api/access/requests/:id: tenant + ViewAccess + the request's  | ViewAccess                 |
-// |                               |   read rule (requester, beneficiary, live approver,           |                            |
-// |                               |   access-admin). RESERVED in A0: `access` is not in            |                            |
-// |                               |   TENANT_PARTITIONS, so the shape guard still refuses every    |                            |
-// |                               |   name under it until lane A1 adds the row rule as a           |                            |
-// |                               |   channelResource (docs/access-tenant-goal.md §A1).            |                            |
+// | access:req:<id>               | /api/access/requests/:id: tenant + ViewAccess + the request's  | ViewAccess (+ the row rule)|
+// |                               |   read rule for THIS reader, now (requester, beneficiary,     |                            |
+// |                               |   manager, live approver / past decider, access-admin) — the  |                            |
+// |                               |   `access-request` channelResource (lib/access/thread.ts)     |                            |
 // | <tenant>:lobby                | /api/people/shared: a current grant in <tenant>                | presence only              |
 // | social|assessment:flowrun:<id>| the run's own REST read + requester (lib/flow-runs/channel.ts) | none (server emitEvent)    |
 // | social:deck:<id>            | /api/chat/decks/:id: owner or CURRENT member of the source chat | presence only              |
@@ -62,7 +60,7 @@
 //   durable row, not by this table)
 //
 // Read cursors (`cursors: true`: orgiq:initiative, orgiq:work, assessment:doc,
-// assessment:team, pipelines:run, access:req once admitted) are kept per CURRENT reader with no member
+// assessment:team, pipelines:run, access:req) are kept per CURRENT reader with no member
 // list: the chat `read`/`receipts` verbs ask the family's READ authority on every
 // frame (realtime-modules 0.115 cursorMode 'readers'; lib/page-thread-unread.ts).
 //
@@ -180,10 +178,13 @@ export const TENANT_CHANNEL_FAMILIES: readonly TenantChannelFamily[] = [
     read: tenantOnly('pipelines', 'ViewPipelines'), write: tenantOnly('pipelines', 'ViewPipelines') },
   { id: 'pipelines:def', tenant: 'pipelines', pattern: new RegExp(`^pipelines:def:${RID}$`), services: DISCUSSION, lobby: false,
     read: tenantOnly('pipelines', 'ViewPipelines'), write: tenantOnly('pipelines', 'ViewPipelines') },
-  // A request record's discussion (/access/requests/:id; AccessRequest.thread).
-  // Registered with reader cursors so the name and its authority are fixed in
-  // A0; admission stays closed (no `access` partition) until A1 adds the row rule.
+  // A request record's discussion (/access/requests/:id; AccessRequest.thread),
+  // with reader cursors. Admitted to who passes the request's REST read rule
+  // NOW (lib/access/thread.ts via the `access-request` channel resource:
+  // requester, beneficiary, the beneficiary's manager, live approvers and
+  // past deciders, access-admin) standing in `access` with ViewAccess.
   { id: 'access:req', tenant: 'access', pattern: /^access:req:req-[A-Za-z0-9-]{1,64}$/, services: DISCUSSION, lobby: false, cursors: true,
+    channelResource: 'access-request',
     read: tenantOnly('access', 'ViewAccess'), write: tenantOnly('access', 'ViewAccess') },
   ...(['orgiq', 'assessment', 'pipelines'] as const).map((tenant): TenantChannelFamily => ({
     id: `${tenant}:lobby`, tenant, pattern: new RegExp(`^${tenant}:lobby$`), services: PRESENCE, lobby: false,
@@ -191,7 +192,7 @@ export const TENANT_CHANNEL_FAMILIES: readonly TenantChannelFamily[] = [
   })),
 ];
 
-export const TENANT_PARTITIONS: ReadonlySet<string> = new Set(['orgiq', 'assessment', 'pipelines']);
+export const TENANT_PARTITIONS: ReadonlySet<string> = new Set(['orgiq', 'assessment', 'pipelines', 'access']);
 
 /** The presence channel the shell joins so people who share `tenant` see each other. */
 export const tenantLobbyChannel = (tenant: string): string => `${tenant}:lobby`;

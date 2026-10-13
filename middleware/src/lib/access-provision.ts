@@ -1,0 +1,202 @@
+// Provisioning and revocation for the access tenant (docs/access-tenant-design.md
+// decisions A2, A3, A6; docs/access-tenant-goal.md §A1).
+//
+// The last approval calls `provisionAccess`; expiry (lib/access-expiry.ts) and
+// any later revocation call `revokeAccess`. Both write ONLY the stores the rest
+// of the app already reads:
+//
+//   tenant-role             the beneficiary's grants, merged through
+//                           providers/identity.ts `setGrants` (user_tenant_roles)
+//   initiative-membership   a project_contributions row, through
+//                           providers/projects.ts `addContribution`
+//
+// then `bumpSessionEpoch(beneficiary)` (A3), an `access_events` row and the
+// request's own status. There is no second table of "effective access".
+//
+// What the epoch bump does, precisely: lib/session.ts's grants refresh and
+// lib/live-principal.ts both treat a cookie whose epoch is below the stored one
+// as retired. So every session the beneficiary holds is signed out at its next
+// strict read (immediately for /api/session/me, within GRANTS_REFRESH_S for
+// the rest), and the next sign-in carries the new grant. A grant does not
+// reach an open cookie in place; the bell item says so.
+//
+// Order and once-only:
+//   provision  claim approved → provisioned (a compare-and-set; the loser does
+//              nothing), write the grant (idempotent), bump, then
+//              provisioned → active with the `provisioned` event. A crash after
+//              the claim leaves `provisioned`, which a retry resumes.
+//   revoke     remove the grant (idempotent), bump, then claim
+//              active|provisioned → expired|revoked with its event. Removing
+//              first means a failed write never leaves a row that says
+//              "revoked" over a grant that is still held.
+// In-process calls on one request are serialized; across replicas the expiry
+// sweeper holds the fleet lock, and the compare-and-set decides any race left.
+//
+// Mock mode: every write lands in a registered fixture (identity.grant-writes,
+// initiatives, access.requests, access.events), so `POST /api/__mock/reset`
+// undoes a provisioning. Outside the mock providers/access.ts answers 503
+// until schema/access_schema.sql is applied (lane E).
+
+import { AppError } from './async-handler.js';
+import { bumpSessionEpoch, getUser, setGrants } from '../providers/identity.js';
+import { addContribution, removeContribution } from '../providers/projects.js';
+import { accessNow, casRequest, findRequest, listCatalog, type AccessCatalogRow, type AccessRequestRow } from '../providers/access.js';
+import { notifyAccessRequest } from './social-notify.js';
+import type { AccessDuration } from './access/types.js';
+import type { Grants } from './session.js';
+
+const HOUR = 3_600_000;
+/** How long each duration lasts once provisioned; `standing` has no end. */
+export const DURATION_MS: Readonly<Record<AccessDuration, number | null>> = {
+  '8h': 8 * HOUR, '24h': 24 * HOUR, '7d': 7 * 24 * HOUR, '30d': 30 * 24 * HOUR, standing: null,
+};
+
+/** When access provisioned at `from` for `duration` ends, or null for standing. */
+export function expiresAtFor(duration: AccessDuration, from: string): string | null {
+  const ms = DURATION_MS[duration];
+  return ms === null ? null : new Date(Date.parse(from) + ms).toISOString();
+}
+
+export class ProvisionError extends AppError {
+  constructor(message: string) { super(409, message); }
+}
+
+export interface ProvisionOutcome {
+  /** The stored request after the call. */
+  request: AccessRequestRow;
+  /** False when another caller already did it (idempotent re-provision / re-revoke). */
+  changed: boolean;
+}
+
+// ── in-process serialization per request ────────────────────────────────────
+const inFlight = new Map<string, Promise<unknown>>();
+async function serialized<T>(requestId: string, fn: () => Promise<T>): Promise<T> {
+  const prior = inFlight.get(requestId) ?? Promise.resolve();
+  const run = prior.catch(() => undefined).then(fn);
+  inFlight.set(requestId, run);
+  try { return await run; } finally { if (inFlight.get(requestId) === run) inFlight.delete(requestId); }
+}
+
+function itemFor(request: AccessRequestRow): AccessCatalogRow {
+  const item = listCatalog().find((i) => i.id === request.itemId);
+  if (!item) throw new ProvisionError(`${request.itemId} is no longer in the catalog; ${request.id} cannot be provisioned or revoked`);
+  return item;
+}
+
+async function beneficiaryOf(request: AccessRequestRow) {
+  const user = await getUser(request.beneficiaryId, { authoritative: true });
+  if (!user) throw new ProvisionError(`${request.beneficiaryId} is no longer in the directory`);
+  return user;
+}
+
+/** `grants` with `role` added to (or removed from) `tenant`; tenants left empty are dropped. */
+export function withRole(grants: Grants, tenant: string, role: string, present: boolean): Grants {
+  const next: Grants = structuredClone(grants);
+  const roles = new Set(next[tenant] ?? []);
+  if (present) roles.add(role); else roles.delete(role);
+  if (roles.size) next[tenant] = [...roles]; else delete next[tenant];
+  return next;
+}
+
+/** Write (or remove) the item for the beneficiary in the existing grant store. Idempotent. */
+async function applyGrant(request: AccessRequestRow, item: AccessCatalogRow, present: boolean): Promise<void> {
+  const user = await beneficiaryOf(request);
+  if (item.kind === 'tenant-role') {
+    if (!item.role) throw new ProvisionError(`${item.id} names no role`);
+    const holds = (user.grants[item.tenant] ?? []).includes(item.role);
+    if (holds !== present) await setGrants(user.id, withRole(user.grants, item.tenant, item.role, present));
+    return;
+  }
+  if (!item.projectId) throw new ProvisionError(`${item.id} names no initiative`);
+  if (!user.personId) throw new ProvisionError(`${user.displayName} has no linked person; an initiative membership needs one`);
+  if (present) await addContribution(item.projectId, user.personId);
+  else await removeContribution(item.projectId, user.personId);
+}
+
+async function names(request: AccessRequestRow, actorId: string | null) {
+  const [beneficiary, actor] = await Promise.all([
+    getUser(request.beneficiaryId).catch(() => null),
+    actorId ? getUser(actorId).catch(() => null) : Promise.resolve(null),
+  ]);
+  return { beneficiaryName: beneficiary?.displayName ?? request.beneficiaryId, actorName: actor?.displayName ?? actorId };
+}
+
+/**
+ * Provision an approved request: write the grant, bump the beneficiary's
+ * epoch, record `provisioned`, set provisionedAt / expiresAt and move it to
+ * `active`. Calling it again on an active request changes nothing.
+ */
+export async function provisionAccess(request: Pick<AccessRequestRow, 'id'>): Promise<ProvisionOutcome> {
+  return serialized(request.id, async () => {
+    const current = findRequest(request.id);
+    if (!current) throw new AppError(404, `No request ${request.id}`);
+    if (current.status === 'active') return { request: current, changed: false };
+    if (current.status !== 'approved' && current.status !== 'provisioned') {
+      throw new ProvisionError(`${current.id} is ${current.status}; only an approved request is provisioned`);
+    }
+    const item = itemFor(current);
+    // Refuse what can never be written BEFORE claiming the row, so a request
+    // that cannot be provisioned stays `approved` and says why.
+    const beneficiary = await beneficiaryOf(current);
+    if (item.kind === 'initiative-membership' && !beneficiary.personId) {
+      throw new ProvisionError(`${beneficiary.displayName} has no linked person; an initiative membership needs one`);
+    }
+    const now = accessNow();
+    const expiresAt = expiresAtFor(current.duration, now);
+    let claimed = current;
+    if (current.status === 'approved') {
+      const won = casRequest(current.id, { from: ['approved'] }, { status: 'provisioned', provisionedAt: now, expiresAt }, [], null, now);
+      if (!won) return { request: findRequest(current.id) ?? current, changed: false };
+      claimed = won;
+    }
+    try {
+      await applyGrant(claimed, item, true);
+      await bumpSessionEpoch(claimed.beneficiaryId);
+    } catch (err) {
+      // The grant write failed: hand the claim back, so the row says `approved`
+      // (decided, not in effect) rather than `provisioned` over nothing.
+      if (current.status === 'approved') casRequest(claimed.id, { from: ['provisioned'] }, { status: 'approved', provisionedAt: null, expiresAt: null }, [], null, now);
+      throw err;
+    }
+    const done = casRequest(claimed.id, { from: ['provisioned'] },
+      { status: 'active', provisionedAt: claimed.provisionedAt ?? now, expiresAt: claimed.expiresAt ?? expiresAt },
+      [{ kind: 'provisioned', before: 'approved', after: 'active', reason: claimed.expiresAt ? `Expires ${claimed.expiresAt}` : 'Standing' }], null, now);
+    if (!done) return { request: findRequest(claimed.id) ?? claimed, changed: false };
+    await notifyAccessRequest({
+      kind: 'provisioned', requestId: done.id, itemTitle: item.title, requesterId: done.requesterId, beneficiaryId: done.beneficiaryId,
+      ...(await names(done, null)), actorId: null, expiresAt: done.expiresAt,
+    });
+    return { request: done, changed: true };
+  });
+}
+
+export interface RevokeOptions {
+  /** `expired` for the sweeper (the default with no actor), `revoked` for a person's or policy's decision. */
+  outcome?: 'expired' | 'revoked';
+}
+
+/**
+ * The inverse of provisionAccess: remove the role / contribution, bump the
+ * beneficiary's epoch, record `expired` or `revoked` (actor null = the system)
+ * and stamp revokedAt. A request that is no longer active changes nothing.
+ */
+export async function revokeAccess(request: Pick<AccessRequestRow, 'id'>, reason: string | null, actorId: string | null, options: RevokeOptions = {}): Promise<ProvisionOutcome> {
+  const outcome = options.outcome ?? (actorId ? 'revoked' : 'expired');
+  return serialized(request.id, async () => {
+    const current = findRequest(request.id);
+    if (!current) throw new AppError(404, `No request ${request.id}`);
+    if (current.status !== 'active' && current.status !== 'provisioned') return { request: current, changed: false };
+    const item = itemFor(current);
+    await applyGrant(current, item, false);
+    await bumpSessionEpoch(current.beneficiaryId);
+    const now = accessNow();
+    const done = casRequest(current.id, { from: ['active', 'provisioned'] }, { status: outcome, revokedAt: now },
+      [{ kind: outcome, before: current.status, after: outcome, reason }], actorId, now);
+    if (!done) return { request: findRequest(current.id) ?? current, changed: false };
+    await notifyAccessRequest({
+      kind: outcome, requestId: done.id, itemTitle: item.title, requesterId: done.requesterId, beneficiaryId: done.beneficiaryId,
+      ...(await names(done, actorId)), actorId, comment: reason,
+    });
+    return { request: done, changed: true };
+  });
+}

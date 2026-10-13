@@ -361,6 +361,81 @@ export async function notifyPipelineRun(ev: PipelineRunEvent): Promise<string[]>
   }
 }
 
+// ── The access tenant (docs/access-tenant-design.md decision A8, §A1) ───────
+
+/** What happened to an access request that someone should hear about. */
+export type AccessNotifyKind = 'submitted' | 'awaiting' | 'approved-step' | 'rejected' | 'info-requested' | 'withdrawn'
+  | 'provisioned' | 'provision-failed' | 'expiring' | 'expired' | 'revoked';
+
+export interface AccessRequestEvent {
+  kind: AccessNotifyKind;
+  requestId: string;
+  itemTitle: string;
+  requesterId: string;
+  beneficiaryId: string;
+  beneficiaryName?: string | null;
+  /** The person who caused it; never notified about their own action. Null = the system. */
+  actorId?: string | null;
+  actorName?: string | null;
+  /** `submitted` / `awaiting`: who may decide the current step NOW (lib/access/chain.ts, resolved live). */
+  approverIds?: readonly string[];
+  /** The step a decision was taken on. */
+  step?: number | null;
+  comment?: string | null;
+  expiresAt?: string | null;
+}
+
+/** The record page for a request — inside `/access`, so the grant rule and hrefInsideTenant both hold. */
+export const accessRequestHref = (requestId: string): string => `/access/requests/${encodeURIComponent(requestId)}`;
+
+/**
+ * The bell for the access tenant. Approvers hear about a request that waits on
+ * them (on submit and when it reaches their step); the requester and the
+ * beneficiary hear about every decision, the provisioning, the 24-hour expiry
+ * warning, the expiry and a revocation. Every item lives in `access` (payload
+ * tenant, href `/access/requests/<id>`), so notify()'s grant rule drops anyone
+ * who no longer holds an access grant. Never rejects.
+ */
+export async function notifyAccessRequest(ev: AccessRequestEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const forApprovers = ev.kind === 'submitted' || ev.kind === 'awaiting';
+    const parties = [ev.requesterId, ev.beneficiaryId];
+    const recipients = (forApprovers ? [...(ev.approverIds ?? [])] : parties)
+      .filter((u) => !!u && u !== ev.actorId && (!forApprovers || !parties.includes(u)));
+    if (!recipients.length) return [];
+    const who = ev.beneficiaryName || ev.beneficiaryId;
+    const by = ev.actorName || ev.actorId || 'An approver';
+    const step = ev.step ? ` (step ${ev.step})` : '';
+    const copy: Record<AccessNotifyKind, { title: string; body: string; type: string }> = {
+      submitted: { type: 'approval-requested', title: `${ev.itemTitle} for ${who} needs your decision`, body: `Request ${ev.requestId} is waiting on you.` },
+      awaiting: { type: 'approval-requested', title: `${ev.itemTitle} for ${who} needs your decision`, body: `Request ${ev.requestId} reached a step you may decide.` },
+      'approved-step': { type: 'system', title: `${by} approved ${ev.itemTitle}${step}`, body: ev.comment ? snippet(ev.comment) : `Request ${ev.requestId} moved to its next approval.` },
+      rejected: { type: 'system', title: `${by} rejected ${ev.itemTitle}`, body: ev.comment ? snippet(ev.comment) : `Request ${ev.requestId} was rejected.` },
+      'info-requested': { type: 'system', title: `${by} asked for more information on ${ev.itemTitle}`, body: ev.comment ? snippet(ev.comment) : `Request ${ev.requestId}` },
+      withdrawn: { type: 'system', title: `${ev.itemTitle} was withdrawn`, body: `Request ${ev.requestId} stopped; nothing was provisioned.` },
+      provisioned: { type: 'system', title: `${ev.itemTitle} is active for ${who}`, body: `${ev.expiresAt ? `Expires ${ev.expiresAt}.` : 'Standing access.'} Open sessions sign out at their next request; sign in again to use it.` },
+      'provision-failed': { type: 'system', title: `${ev.itemTitle} was approved but not provisioned`, body: `Request ${ev.requestId} is approved; the grant write failed and an access admin must look at it.` },
+      expiring: { type: 'system', title: `${ev.itemTitle} expires within a day`, body: ev.expiresAt ? `Request ${ev.requestId} lapses at ${ev.expiresAt}. Request it again if the work continues.` : `Request ${ev.requestId} lapses soon.` },
+      expired: { type: 'system', title: `${ev.itemTitle} expired for ${who}`, body: `Request ${ev.requestId} reached its end; the access was removed.` },
+      revoked: { type: 'system', title: `${ev.itemTitle} was revoked for ${who}`, body: ev.comment ? snippet(ev.comment) : `Request ${ev.requestId} was revoked.` },
+    };
+    const c = copy[ev.kind];
+    return await notify(recipients, {
+      // The expiry warning is once per request; the inbox dedupes on this id too.
+      ...(ev.kind === 'expiring' ? { id: `access:expiring:${ev.requestId}` } : {}),
+      type: c.type,
+      title: c.title,
+      body: c.body,
+      payload: { tenant: 'access', kind: `access-${ev.kind}`, requestId: ev.requestId, actorId: ev.actorId ?? null },
+      action: { label: forApprovers ? 'Review the request' : 'Open the request', href: accessRequestHref(ev.requestId) },
+    });
+  } catch (err) {
+    console.warn(`[social-notify] access producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
 // ── Lobby / channel names ───────────────────────────────────────────────────
 
 /** `<tenant>:dm:<a>:<b>…` → { tenant, members }, or null for any other name. */
@@ -471,11 +546,13 @@ export async function notifyBudgetGranted(ev: BudgetGrantEvent): Promise<void> {
 // ── Mentions in tenant discussions (orgiq / pipelines / assessment) ─────────
 
 /** Where each discussion family's thread opens in the portal, or null when it cannot be named. */
-export async function tenantDiscussionLink(bare: string): Promise<{ tenant: 'orgiq' | 'assessment' | 'pipelines'; href: string; label: string; place: string } | null> {
-  const m = /^(orgiq:initiative|orgiq:work|pipelines:run|pipelines:def|assessment:doc|assessment:team):(\S+)$/.exec(bare);
+export async function tenantDiscussionLink(bare: string): Promise<{ tenant: 'orgiq' | 'assessment' | 'pipelines' | 'access'; href: string; label: string; place: string } | null> {
+  const m = /^(orgiq:initiative|orgiq:work|pipelines:run|pipelines:def|assessment:doc|assessment:team|access:req):(\S+)$/.exec(bare);
   if (!m) return null;
   const id = m[2]!;
   switch (m[1]) {
+    case 'access:req':
+      return { tenant: 'access', href: accessRequestHref(id), label: 'Open the request', place: 'a request discussion' };
     case 'orgiq:initiative':
       return { tenant: 'orgiq', href: `/iq/projects/${encodeURIComponent(id)}`, label: 'Open the discussion', place: 'an initiative discussion' };
     case 'orgiq:work': {
@@ -516,7 +593,7 @@ export async function currentlyReadsTenantChannel(userId: string, bare: string, 
     // The REST read's 404 half (a team that no longer exists), as the gateway asks it.
     if (family.channelResource) {
       const { pageResourceVisible } = await import('./page-resources.js');
-      if (!await pageResourceVisible(family.channelResource, bare)) return false;
+      if (!await pageResourceVisible(family.channelResource, bare, userId)) return false;
     }
     const { socialChat } = await import('./social-chat.js');
     const chat = socialChat(); await chat.ready;

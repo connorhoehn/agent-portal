@@ -224,7 +224,7 @@ export async function authorizeLiveGatewayChannel(args: LiveChannelAuthorization
       // REST route's own budget-tier rule (providers/initiative-decks.ts).
       if (family.id === 'orgiq:deck' && !await initiativeDeckVisible(base, principal.session)) return false;
       // A page resource (a team) is the REST read's 404 half, read now.
-      if (family.channelResource && !await pageResourceVisible(family.channelResource, base)) return false;
+      if (family.channelResource && !await pageResourceVisible(family.channelResource, base, principal.session.sub)) return false;
       // The policy/row I/O can outlive a revocation: reload once more and decide
       // the shape with only the grants that are current after it.
       principal = await getLivePrincipal(args.ctx);

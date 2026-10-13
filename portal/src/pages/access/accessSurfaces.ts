@@ -53,7 +53,7 @@ export const ACCESS_SURFACES: Record<AccessSurfaceId, AccessSurface> = {
   request: {
     id: 'request', path: '/access/requests/:id', group: 'Request', phase: 'A0', composer: 'required',
     title: 'Request',
-    description: 'One request: its approval chain, decisions, policy check and audit trail.',
+    description: 'One request: its approval chain, decisions, policy check, audit trail and its discussion with the approvers.',
   },
   approvals: {
     id: 'approvals', path: '/access/approvals', group: 'Approve', phase: 'A0', composer: 'required',

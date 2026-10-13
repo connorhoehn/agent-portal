@@ -7,11 +7,14 @@
 //
 // The conversation (decision A8) is the request's thread `access:req:<id>`,
 // shown in the shell's right pane with ONE composer docked at the bottom of the
-// content column — the initiative page's arrangement (docs/layout-cascade.md
-// "The pane and rail contracts"). The gateway family `access:req:` is lane A1's
-// (docs/access-tenant-goal.md §A1), so in A0 the pane says so and the composer
-// is mounted disabled with that reason: nothing here posts to a channel the
-// gateway would refuse.
+// content column — the team scorecard's arrangement (docs/layout-cascade.md
+// "The pane and rail contracts"). The gateway admits the thread to whoever
+// passes this record's read rule now (the requester, the beneficiary, the
+// beneficiary's manager, live approvers and past deciders, access admins —
+// middleware lib/access/thread.ts) standing in `access`, and posts under
+// ViewAccess, the same authority as reading. The page mounts the conversation
+// only once the record has loaded, so it never subscribes to a request the
+// server answered 404.
 
 import { SidePane } from '@connorhoehnslalom/ui-components';
 import {
@@ -36,12 +39,15 @@ import {
   WorkflowStepper,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { isNotFoundError, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { ConversationComposer } from '../../lib/conversationComposer';
+import { ConversationOwner, ConversationThread, type ConversationRuntime } from '../../components/chat/ConversationThread';
+import { OFFLINE_REASON } from '../../components/chat/chatConnection';
+import { useCapabilities } from '../../lib/capabilities';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
@@ -66,8 +72,10 @@ import {
 } from '../../lib/accessRequests';
 import { EVENT_COLUMNS } from './accessColumns';
 
-/** Why the composer is off in A0 — said on the composer and in the pane. */
-export const THREAD_PENDING = 'The request discussion opens in lane A1, when the gateway admits access:req: threads to the requester, the current approvers and access admins.';
+/** Why a reader cannot post: ViewAccess is the thread's write authority. */
+export const THREAD_READ_ONLY = 'Your current role cannot post to request discussions.';
+/** Said on the composer while the record (and so the thread) is still loading. */
+export const THREAD_LOADING = 'The discussion opens once the request has loaded.';
 
 const STEP_COLUMNS: DataTableColumn<RequestStep>[] = [
   { key: 'step', header: 'Step', numeric: true, width: '64px', render: (s) => s.step },
@@ -100,24 +108,43 @@ function RequestRecord({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { can } = useCapabilities();
+  const maySend = can('ViewAccess');
+  const [conversation, setConversationState] = useState<ConversationRuntime | null>(null);
+  const setConversation = useCallback((next: ConversationRuntime | null) => setConversationState(next), []);
   useCrumbLabel(id, request ? `${request.id} · ${request.item.title}` : null);
   const back = { label: 'Requests', to: '/access/requests', onClick: (e: { preventDefault: () => void }) => { e.preventDefault(); navigate('/access/requests'); } };
 
   const thread = request?.thread ?? `access:req:${id}`;
+  const title = request ? `${request.id} discussion` : 'Request discussion';
   const pane = (
     <SidePane title="Discussion" subtitle={thread} paneId="access-request" closeLabel="Collapse request discussion" data-testid="access-request-thread-pane">
-      <EmptyState testId="access-request-thread-pending" align="start"
-        title="The discussion is not open yet"
-        description="Each request carries one thread for the requester, the current approvers and access admins."
-        details={{ title: 'What comes next', body: THREAD_PENDING }} />
+      <Stack gap="none" className="min-h-0 flex-1" data-testid="access-request-thread">
+        {conversation ? (
+          <ConversationThread key={conversation.channel} conversation={conversation} title={title} input="below" notices
+            readOnlyReason={maySend ? null : THREAD_READ_ONLY} reactions={maySend}
+            emptyState={<EmptyState testId="access-request-thread-empty" align="start" title="No messages yet"
+              description="One thread per request, for the requester, the beneficiary, the approvers and access admins." />}
+            data-testid="access-request-thread-panel" />
+        ) : <LoadingState label="Loading discussion…" />}
+      </Stack>
     </SidePane>
   );
-  const composer = (
-    <ConversationComposer channel={null} context={{ kind: 'conversation', id: thread, title: request ? `${request.id} discussion` : 'Request discussion' }}
-      capabilities={{ maySend: false, readOnlyReason: THREAD_PENDING }} disabled persistDraft={false}
+  const composer = conversation ? (
+    <ConversationComposer channel={conversation.channel} chat={conversation.chat} context={{ kind: 'conversation', id: thread, title }}
+      capabilities={{ maySend, readOnlyReason: THREAD_READ_ONLY }}
+      offline={conversation.connected ? null : OFFLINE_REASON}
+      identity={{ userId: conversation.userId, displayName: conversation.displayName }} reply={conversation.quote}
       offModes={{ agent: 'Requests have no agent', terminal: 'Requests have no terminal' }}
       label="Request discussion" inputLabel="Message the request discussion" presentation="compact"
-      modePlaceholders={{ chat: 'The request discussion opens in lane A1' }}
+      modePlaceholders={{ chat: 'Message the request discussion…' }}
+      data-testid="access-request-composer-dock" composerTestId="access-request-composer" />
+  ) : (
+    <ConversationComposer channel={null} context={{ kind: 'conversation', id: thread, title }}
+      capabilities={{ maySend: false, readOnlyReason: THREAD_LOADING }} disabled persistDraft={false}
+      offModes={{ agent: 'Requests have no agent', terminal: 'Requests have no terminal' }}
+      label="Request discussion" inputLabel="Message the request discussion" presentation="compact"
+      modePlaceholders={{ chat: THREAD_LOADING }}
       data-testid="access-request-composer-dock" composerTestId="access-request-composer" />
   );
 
@@ -226,6 +253,8 @@ function RequestRecord({ id }: { id: string }) {
           </DetailSection>
         )}
       </Stack>
+      {/* The thread's ONE runtime, shared by the pane and the docked composer; mounted only for a loaded record. */}
+      <ConversationOwner key={request.thread} channel={request.thread} maySend={maySend} onChange={setConversation} />
       <Stack gap="none" className="shrink-0 min-w-0" data-testid="access-request-composer-column">{composer}</Stack>
       {pane}
 

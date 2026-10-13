@@ -2369,13 +2369,15 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   //
   // Each writes only the registered access fixtures (mock/access-requests.ts,
   // mock/access-policies.ts) through providers/access.ts, which answers 503
-  // outside MOCK_AURORA — no AWS, no model, no timer, and A0 provisions
-  // nothing. They replay as the orgiq admin persona: `admin` passes
-  // requireTenant('access') and every Cedar gate.
+  // outside MOCK_AURORA — no AWS, no model, no timer. Lane A1's provisioning
+  // (lib/access-provision.ts) runs only on a last approval, which this persona
+  // never makes, and writes only registered fixtures (identity.grant-writes,
+  // initiatives) when it does. They replay as the orgiq admin persona: `admin`
+  // passes requireTenant('access') and every Cedar gate.
   {
     route: 'POST /api/access/requests',
     persona: 'orgiq/admin',
-    safe: 'Appends one submitted request, its approval steps and a `submitted` event to the registered `access.requests` / `access.request-steps` / `access.events` fixtures; reset restores the seed. A0 stops at `approved`, so nothing reaches the grant store.',
+    safe: 'Appends one submitted request, its approval steps and a `submitted` event to the registered `access.requests` / `access.request-steps` / `access.events` fixtures; reset restores the seed. Submitting provisions nothing; the bell item it sends goes through notify(), a logged no-op without the gateway sink.',
     bodyFrom: 'routes/access.ts: `itemId` must name a catalog item (read off GET /api/access/catalog, never retyped), `justification` at least 20 characters, `duration` one of DURATIONS. A request the beneficiary already holds or has open is the 409 captured instead.',
     intercepts: ['aurora'],
     alsoAccept: [409],
@@ -2397,7 +2399,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'POST /api/access/requests/:id/steps/:step/decide',
     persona: 'orgiq/admin',
-    safe: 'Decides one step of a registered `access.requests` row (status, steps and events, all registered; reset restores them). The cross-tenant admin is never an eligible decider (lib/access/chain.ts), so the 403 refusal is the usual shape captured.',
+    safe: 'Decides one step of a registered `access.requests` row (status, steps and events, all registered; reset restores them). The cross-tenant admin is never an eligible decider (lib/access/chain.ts), so the 403 refusal is the usual shape captured; a last approval would provision into the registered `identity.grant-writes` / `initiatives` fixtures, which reset also restores.',
     bodyFrom: "routes/access.ts: `decision` ∈ {'approve','reject','info'}; `comment` optional for approve. `:step` is the request's current step, read off GET /api/access/requests/:id.",
     intercepts: ['aurora'],
     alsoAccept: [403, 404, 409],

@@ -72,8 +72,12 @@ CREATE TABLE IF NOT EXISTS access_requests (
   decided_at          TIMESTAMPTZ,
   provisioned_at      TIMESTAMPTZ,
   expires_at          TIMESTAMPTZ,
-  revoked_at          TIMESTAMPTZ
+  revoked_at          TIMESTAMPTZ,
+  -- When the 24-hour expiry warning was sent (lib/access-expiry.ts): the
+  -- once-only marker the sweeper claims with a conditional UPDATE.
+  expiry_warned_at    TIMESTAMPTZ
 );
+ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS expiry_warned_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS access_requests_beneficiary_idx ON access_requests (beneficiary_id);
 CREATE INDEX IF NOT EXISTS access_requests_status_idx ON access_requests (status);
 CREATE INDEX IF NOT EXISTS access_requests_expires_idx ON access_requests (expires_at) WHERE expires_at IS NOT NULL;

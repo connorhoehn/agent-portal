@@ -31,9 +31,9 @@ export interface Transition {
 }
 
 /** The rows a fresh submission writes: status `submitted`, step 1 current, the rest waiting. */
-export function submitRows(request: Omit<AccessRequestRow, 'status' | 'decidedAt' | 'provisionedAt' | 'expiresAt' | 'revokedAt'>, kinds: readonly StepKind[]): Transition {
+export function submitRows(request: Omit<AccessRequestRow, 'status' | 'decidedAt' | 'provisionedAt' | 'expiresAt' | 'revokedAt' | 'expiryWarnedAt'>, kinds: readonly StepKind[]): Transition {
   return {
-    request: { ...request, status: 'submitted', decidedAt: null, provisionedAt: null, expiresAt: null, revokedAt: null },
+    request: { ...request, status: 'submitted', decidedAt: null, provisionedAt: null, expiresAt: null, revokedAt: null, expiryWarnedAt: null },
     steps: kinds.map((kind, i) => ({ requestId: request.id, step: i + 1, kind, status: i === 0 ? 'current' : 'waiting', decidedBy: null, decidedAt: null, comment: null })),
     events: [{ kind: 'submitted', before: 'draft', after: 'submitted', reason: null }],
   };
