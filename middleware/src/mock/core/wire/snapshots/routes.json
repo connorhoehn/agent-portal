@@ -263,17 +263,17 @@
     {
       "method": "GET",
       "path": "/api/agents",
-      "source": "src/routes/agents.ts:44"
+      "source": "src/routes/agents.ts:47"
     },
     {
       "method": "POST",
       "path": "/api/agents/:agentId/invoke",
-      "source": "src/routes/agents.ts:223"
+      "source": "src/routes/agents.ts:241"
     },
     {
       "method": "GET",
       "path": "/api/agents/:agentId/metrics",
-      "source": "src/routes/agents.ts:49"
+      "source": "src/routes/agents.ts:52"
     },
     {
       "method": "GET",

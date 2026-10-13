@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-13T10:58:25.288Z",
-  "serverHandlerSha": "9adc5f7b0b01d58c2f0f2fd75a1f5c3ebffac8be19e19275fb35c519b098340b",
+  "capturedAt": "2026-10-13T14:00:21.005Z",
+  "serverHandlerSha": "b009993c1b2feb05c864ca60c1209449c3586964caf99c51fc610d33168f09ce",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -2757,7 +2757,6 @@
       "values": {
         "boxes[].status": [
           "idle",
-          "provisioning",
           "running",
           "waiting"
         ]
@@ -7495,14 +7494,19 @@
         "queues[].maxReceives": "null|number",
         "queues[].name": "string",
         "queues[].purpose": "string",
-        "queues[].reason": "string",
+        "queues[].reason": "null",
         "queues[].redriveTo": "null|string",
-        "queues[].snapshot": "null",
+        "queues[].snapshot": "object",
+        "queues[].snapshot.delayed": "number",
+        "queues[].snapshot.fifo": "boolean",
+        "queues[].snapshot.inFlight": "number",
+        "queues[].snapshot.ready": "number",
+        "queues[].snapshot.visibilityTimeoutSeconds": "number",
         "queues[].state": "string"
       },
       "values": {
         "queues[].state": [
-          "missing"
+          "available"
         ]
       }
     },
@@ -10299,6 +10303,7 @@
       "open": false,
       "values": [
         "active",
+        "available",
         "behind",
         "imported",
         "missing",

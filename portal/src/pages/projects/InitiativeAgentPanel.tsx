@@ -32,7 +32,9 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
   const navigate = useNavigate();
   const gate = useMemo(createTurnGate, []);
   const currentRequest = useRef<InitiativeAgentRequest | null>(null);
-  const requests = useRef(new Map<string, InitiativeAgentRequest>());
+  // Each prompt's requests in send order: the same question asked from two
+  // contexts keeps each turn's own context chip.
+  const requests = useRef(new Map<string, InitiativeAgentRequest[]>());
   const abort = useRef<AbortController | null>(null);
   const [latest, setLatest] = useState<InitiativeAgentRequest | null>(null);
   const [stopped, setStopped] = useState(false);
@@ -57,7 +59,7 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
     if (token === null) return 'An Agent run is already in progress. Wait for it to finish or stop it in the Agent pane.';
     const captured = { ...request, records: request.records.map(record => ({ ...record })) };
     currentRequest.current = captured;
-    requests.current.set(captured.prompt, captured);
+    requests.current.set(captured.prompt, [...(requests.current.get(captured.prompt) ?? []), captured]);
     abort.current = new AbortController();
     setLatest(captured);
     setStopped(false);
@@ -92,7 +94,7 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
   // ends. Named phases and attached-context reads are observed stream events.
   const progress = [
     ...turnTools.filter(tool => !steps.length || ['search_context', 'presentation_context'].includes(tool.name)).map(tool => ({
-      name: tool.name === 'presentation_context' ? 'Read selected presentation content' : tool.name === 'search_context' ? 'Read attached context' : friendlyToolName(tool.name),
+      name: tool.name === 'presentation_context' ? 'Read selected presentation content' : tool.name === 'search_context' ? 'Read attached context' : tool.name === 'local_answer' ? 'Read program data' : friendlyToolName(tool.name),
       done: tool.result !== undefined,
     })),
     ...steps.map(step => ({ name: stepLabel(step.name), done: step.status === 'done' })),
@@ -126,8 +128,10 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
         <T size="sm" weight="semibold">{emptyTitle}</T>
         <T size="sm" tone="secondary" wrap>Use Agent in the composer below. Progress, results, and sources appear here while you keep working.</T>
       </Stack>}
-      {displayMessages.map(message => {
-        const request = requests.current.get(message.content);
+      {(() => { const seen = new Map<string, number>(); return displayMessages.map(message => {
+        const nth = message.role === 'user' ? seen.get(message.content) ?? 0 : 0;
+        if (message.role === 'user') seen.set(message.content, nth + 1);
+        const request = message.role === 'user' ? requests.current.get(message.content)?.[nth] : undefined;
         if (message.role === 'user') return <Stack key={message.id} gap="xs" className="border-t border-border pt-3 first:border-t-0 first:pt-0">
           <T size="sm" weight="semibold" wrap>{request?.question ?? message.content}</T>
           {request?.contextLabel && <Chip size="sm" className="max-w-full truncate self-start" title={request.contextLabel}>{request.contextLabel}</Chip>}
@@ -149,10 +153,10 @@ export function InitiativeAgentPanel({ ref, projectId, onOpenWorkItem, assistant
           </Inline>}
           <SourceChips sources={answer.sources} provenance={answer.provenance} />
         </Stack>;
-      })}
+      }); })()}
       {isStreaming && <MessageBubble role="assistant" agentName={assistantTitle} streaming
         content={extractSources(streamingText).cleaned.replace(/<thinking>[\s\S]*?(<\/thinking>|$)/g, '')}
-        toolCalls={activeToolCalls.map(tool => ({ id: tool.id, name: tool.name === 'presentation_context' ? 'Read selected presentation content' : tool.name === 'search_context' ? 'Read attached context' : friendlyToolName(tool.name), done: tool.done }))}
+        toolCalls={activeToolCalls.map(tool => ({ id: tool.id, name: tool.name === 'presentation_context' ? 'Read selected presentation content' : tool.name === 'search_context' ? 'Read attached context' : tool.name === 'local_answer' ? 'Read program data' : friendlyToolName(tool.name), done: tool.done }))}
         renderMarkdown={content => <Markdown>{content}</Markdown>} />}
       {error && <InlineAlert tone="error">
         <Stack gap="sm"><T size="sm" weight="semibold">Agent task failed</T><T size="sm" wrap>{error}</T><Button size="sm" variant="secondary" disabled={isStreaming} onClick={() => { if (latest) submit(latest); }}>Retry this task</Button></Stack>

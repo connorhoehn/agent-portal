@@ -1,4 +1,5 @@
-import { composerAsk, type ComposerSubject } from '../project-detail/composerPrompts.ts';
+import { composerAsk, composerScope, type ComposerSubject } from '../project-detail/composerPrompts.ts';
+import { askScopeBody, type AskScope } from '../../lib/askScope.ts';
 import type { SearchRef } from '../search/searchTypes.ts';
 import type { DeckSpec } from '../../components/decks/deckApi.ts';
 
@@ -13,14 +14,19 @@ export interface InitiativeAgentRequest {
   contextLabel: string | null;
   records: SearchRef[];
   presentationContext?: PresentationQuestionContext;
+  /** The composer's context chip as a structured scope (asked advise-only);
+   *  the server answers within it and never reads it from the question text. */
+  scope?: AskScope;
 }
 
 /** A presentation's IDs are resolved by the server; an initiative cannot replace its scope. */
 export function initiativeAgentBody(message: string, request: InitiativeAgentRequest | null, sessionId?: string): {
   message: string; sessionId?: string; presentationContext?: PresentationQuestionContext; selection?: { records: SearchRef[] };
+  scope?: AskScope; stance?: 'advise';
 } {
   return { message: request?.presentationContext ? request.question : message,
     ...(sessionId ? { sessionId } : {}),
+    ...(request?.presentationContext ? {} : askScopeBody(request?.scope)),
     ...(request?.presentationContext ? { presentationContext: request.presentationContext }
       : request?.records.length ? { selection: { records: request.records } } : {}) };
 }
@@ -48,8 +54,9 @@ export function presentationReadReceipt(tools?: ReadonlyArray<{ name: string; re
 
 /** Capture the submitted context. Navigating to another leaf never retargets a run or its retry. */
 export function initiativeAgentRequest(text: string, subject: ComposerSubject, withContext = true): InitiativeAgentRequest | null {
-  const prompt = composerAsk(text, subject, withContext);
+  const prompt = composerAsk(text, subject);
   if (!prompt) return null;
+  const scope = composerScope(subject, withContext);
   const records: SearchRef[] = [];
   let contextLabel: string | null = null;
   if (withContext && subject.kind !== 'initiatives') {
@@ -60,5 +67,5 @@ export function initiativeAgentRequest(text: string, subject: ComposerSubject, w
       contextLabel += ` › ${subject.item.key ?? subject.item.title}`;
     }
   }
-  return { prompt, question: text.replace(/^\/agent\s+/, '').trim(), contextLabel, records };
+  return { prompt, question: text.replace(/^\/agent\s+/, '').trim(), contextLabel, records, ...(scope ? { scope } : {}) };
 }

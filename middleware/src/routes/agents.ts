@@ -15,6 +15,9 @@ import { parseSearchSelection, numberSearchRecords, searchContextMessage } from 
 import { openAgentRun, recordAgentRunEvent, closeAgentRun } from '../lib/agent-runs-live.js';
 import { parsePresentationContext, resolvePresentationContext, presentationQuestionMessage, type PresentationQuestionContext } from '../lib/presentation-context.js';
 import { AppError, ValidationError } from '../lib/async-handler.js';
+import { matchIntent, localAnswersEnabled } from '../lib/local-answers/match.js';
+import { parseAnswerScope, parseAnswerStance, scopeContextLine, type AnswerScope, type AnswerStance } from '../lib/local-answers/scope.js';
+import type { LocalAnswer } from '../lib/local-answers/intents.js';
 
 export const agentsRouter = Router();
 
@@ -220,8 +223,26 @@ async function requireAgentCapability(
 }
 
 const presentationContexts = new WeakMap<ExpressRequest, PresentationQuestionContext>();
+const askScopes = new WeakMap<ExpressRequest, { scope: AnswerScope | null; stance: AnswerStance | null }>();
+
+/**
+ * May this invoke be answered by the local data assistant (lib/local-answers)?
+ * Only a plain question to a READ agent (supervisor / search / advisor) from an
+ * orgiq session: never a write or devbox agent (those need their own
+ * capability and do work, not lookups), never an assessment agent, never a
+ * presentation question or a structured payload (a document command), and
+ * never with LOCAL_ANSWERS=false.
+ */
+export function localAnswerEligible(agentId: string, session: { tenant: string } | null | undefined, opts: { presentation: boolean; structured: boolean }): boolean {
+  return localAnswersEnabled() && !opts.presentation && !opts.structured && !!session && session.tenant === 'orgiq'
+    && agentTenant(agentId) !== 'assessment' && agentCapabilityGate(agentId) === null;
+}
+
 agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenant, requireAgentCapability, asyncHandler(async (req, _res, next) => {
   parseSearchSelection(req.body?.selection);
+  // The composer's context chip and the advise-only stance, as typed fields —
+  // validated here so a malformed one is a 400, not a mid-stream error.
+  askScopes.set(req, { scope: parseAnswerScope(req.body?.scope), stance: parseAnswerStance(req.body?.stance) });
   const presentation = parsePresentationContext(req.body?.presentationContext);
   if (presentation) {
     if (String(req.params['agentId'] ?? '') !== 'orgiq-supervisor') throw new AppError(403, 'Presentation questions require the Work supervisor');
@@ -255,12 +276,30 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   // access, not a second unrelated context read or replacement answer.
   const refs = presentation ? [] : parseSearchSelection(selection);
   const principal = resolveSession(req);
+  const { scope, stance } = askScopes.get(req) ?? { scope: null, stance: null };
+
+  // The local data assistant answers FIRST: a question about the program's own
+  // rows (budgets, blocked work, owners, sprints) is computed from the same
+  // providers the pages read, with no agent runtime involved. A question no
+  // intent matches falls through to the agent path below, unchanged.
+  if (principal && localAnswerEligible(agentId, principal, { presentation: !!presentation, structured: Object.keys(structuredInput).length > 0 })
+    && matchIntent(rawUserMessage, scope, true)) {
+    const { answerLocally } = await import('../lib/local-answers/index.js');
+    const local = await answerLocally({ question: rawUserMessage, scope, session: principal });
+    if (local) {
+      await streamLocalAnswer(stream, local, { question: rawUserMessage, scope, stance, sessionId: canonicalSessionId, actorId });
+      return;
+    }
+  }
   const { resolveSearchContext } = refs.length ? await import('../providers/search.js') : { resolveSearchContext: null };
   const context = refs.length && principal && resolveSearchContext
     ? await resolveSearchContext(principal, refs) : { records: [], edges: [] };
   const contextRecords = numberSearchRecords(context.records);
+  // The scope and stance reach an LLM as prose — rebuilt here from the typed
+  // fields, never typed into the user's question by the client.
+  const scopeLine = scopeContextLine(scope, stance);
   const userMessage = presentation ? presentationQuestionMessage(rawUserMessage, presentation)
-    : searchContextMessage(rawUserMessage, contextRecords, context.edges);
+    : searchContextMessage(scopeLine ? `${rawUserMessage}\n\n${scopeLine}` : rawUserMessage, contextRecords, context.edges);
 
   const startedAt = new Date();
   const agentName = await resolveAgentName(agentId);
@@ -516,7 +555,50 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   deriveRunId,
 }));
 
-const RESERVED_INVOKE_KEYS = new Set(['message', 'prompt', 'input_text', 'sessionId', 'userId', 'auth', 'history', 'presentationQuestion', 'presentationContext']);
+/**
+ * Stream a local answer in the AG-UI shape the Answer tab already renders: a
+ * STEP around the read, a `local_answer` tool call carrying the intent and the
+ * rows the figures came from, a `search_context` tool call carrying the cited
+ * records (the Answer's evidence list and Connections), then the prose. The
+ * turn is recorded to Memory like an agent turn so the conversation resumes
+ * with its evidence; no agent run or invocation is recorded, because no agent
+ * ran.
+ */
+async function streamLocalAnswer(stream: AgentStream, local: LocalAnswer, ctx: {
+  question: string; scope: AnswerScope | null; stance: AnswerStance | null; sessionId: string; actorId?: string | undefined;
+}): Promise<void> {
+  const step = `local data: ${local.intent}`;
+  stream.stepStarted(step);
+  const toolCalls: StoredToolCall[] = [];
+  const call = (name: string, args: string, result: string) => {
+    const id = randomUUID();
+    stream.toolCallStart(id, name);
+    stream.toolCallArgs(id, args);
+    stream.toolCallEnd(id);
+    stream.toolCallResult(randomUUID(), id, result);
+    toolCalls.push({ id, name, args, result });
+  };
+  call('local_answer', JSON.stringify({ intent: local.intent, scope: ctx.scope, stance: ctx.stance }),
+    JSON.stringify({ intent: local.intent, sources: local.sources, rows: local.rows }));
+  if (local.records.length) call('search_context', JSON.stringify({ records: local.records.map(r => ({ type: r.type, id: r.id })) }),
+    JSON.stringify({ records: local.records, edges: local.edges }));
+  stream.stepFinished(step);
+  const messageId = randomUUID();
+  stream.textMessageStart(messageId, 'assistant');
+  for (const part of local.text.split(/(?<=\n\n)/)) stream.textMessageContent(messageId, part);
+  stream.textMessageEnd(messageId);
+  void recordTurn({
+    sessionId: ctx.sessionId,
+    ...(ctx.actorId ? { actorId: ctx.actorId } : {}),
+    userMessage: ctx.question,
+    assistantMessage: local.text,
+    toolCalls,
+  });
+  maybeGenerateTitle(ctx.sessionId, ctx.question);
+  stream.runFinished();
+}
+
+const RESERVED_INVOKE_KEYS = new Set(['message', 'prompt', 'input_text', 'sessionId', 'userId', 'auth', 'history', 'presentationQuestion', 'presentationContext', 'scope', 'stance']);
 const MAX_STRUCTURED_INPUT_BYTES = 64 * 1024;
 /**
  * The invoke body's optional `payload` as the runtime's structured input: a

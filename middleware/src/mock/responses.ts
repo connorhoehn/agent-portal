@@ -129,13 +129,30 @@ export const chatResponses = defineFixture<MockResponse>({
  * The fall-through. Not a fixture row: it is not one of the answers, it is
  * what happens when none of them match, and a surface that counted the rows
  * would be wrong to include it.
+ *
+ * It used to open "I searched the knowledge base and graph…" over a seeded
+ * `search_knowledge_base` call whose result was the string "2 documents
+ * found" — so the Answer tab rendered a claim that a search ran beside a
+ * provenance line reading "knowledge base searched — no documents matched",
+ * and offered a menu of topics as if it had looked. Nothing was searched: this
+ * is the offline demo agent, and it matched no canned answer. So it runs no
+ * tool, says so, and names the question forms that DO get a real answer — the
+ * local data assistant's (lib/local-answers, docs/local-answers.md), which
+ * answers before this agent is ever asked, and the canned demo topics above.
  */
 const defaultResponse: MockResponse = {
   keywords: [],
-  toolCalls: [
-    { name: 'search_knowledge_base', args: '{"query": "user query"}', result: '2 documents found' },
-  ],
-  response: `I searched the knowledge base and graph for relevant information.\n\nBased on available data, I can help you explore:\n- **People & expertise** — "Who knows X best?"\n- **Decisions & context** — "What was decided about Y?"\n- **Team dynamics** — "Show collaboration patterns"\n- **Scores & rankings** — "Who are the top contributors?"\n\nCould you provide more specifics about what you're looking for? I can search across documents, the organizational graph, and historical decisions.`,
+  toolCalls: [],
+  response: `I can't answer that here. This is the offline demo agent (no AgentCore runtime is connected), it has no canned answer for this question, and nothing was searched — no knowledge base, no org graph.
+
+Questions about the program's own data are answered from the same rows the pages show, with or without an agent:
+- **Budgets** — "Which initiatives are over budget?", "How much did Inference Platform spend this month?"
+- **Status** — "Which initiatives are blocked?", "Which are critical?", "Which sprints are behind?"
+- **People** — "Who owns Auth Migration?", "Who's on RAG Knowledge Search?"
+- **Work** — "What's open on Observability Platform?", "What's blocked on SOC2 Compliance?"
+- **Sprints** — "How are the sprints going?"
+
+The demo agent also has canned answers about Kubernetes experts, the auth migration, teams, and the influence leaderboard.`,
 };
 
 export function selectMockResponse(message: string, structuredInput?: Record<string, unknown>): MockResponse {

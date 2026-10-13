@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback, type ReactNode } from 'react';
+import { askScopeBody, type AskScope } from '../lib/askScope';
 import { useSearchParams, useNavigate, useLocation, Link } from 'react-router';
 import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import type { Message as AgentMessage } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
@@ -192,11 +193,14 @@ export interface SearchConversationAPI {
   selectAgent: (id: string) => void;
 }
 
-function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], onSubmitted }: {
+function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], askScope = null, onSubmitted }: {
   renderWorkspace?: (api: SearchConversationAPI) => ReactNode;
   /** Search: the cited records drawn under an assistant message. */
   renderAnswerEvidence?: (toolCalls?: Array<{ name: string; result?: string }>) => ReactNode;
   contextRefs?: SearchRef[];
+  /** What the question is about (Search's `about=`, from a composer's context
+   *  chip): sent as the body's `scope` + advise-only `stance`, never as text. */
+  askScope?: AskScope | null;
   onSubmitted?: (query: string) => void;
 } = {}) {
   // Tenant-prefixed: the BFF gateway refuses any channel outside `<tenant>:` (2026-09-29).
@@ -269,6 +273,8 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
   const sentContextRef = useRef<SearchRef[] | null>(null);
   const contextRef = useRef(contextRefs);
   contextRef.current = contextRefs;
+  const askScopeRef = useRef(askScope);
+  askScopeRef.current = askScope;
   const {
     messages,
     isStreaming,
@@ -293,6 +299,7 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
     buildBody: (message, { sessionId: activeSessionId }) => ({
       message, ...(activeSessionId ? { sessionId: activeSessionId } : {}),
       ...((sentContextRef.current ?? contextRef.current).length ? { selection: { records: sentContextRef.current ?? contextRef.current } } : {}),
+      ...askScopeBody(askScopeRef.current),
     }),
     // Shared canonical fetcher (lib/chatSessions). keepThinking because this
     // page renders <thinking> blocks as collapsible ThinkingBlock sections.

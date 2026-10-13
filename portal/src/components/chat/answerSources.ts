@@ -230,6 +230,9 @@ const WEB_RE = /fetch_web|browse|web_page/i;
  * the retrieval branch, which chips the actual s3 URIs it cited.
  */
 const A2A_ORIGINS: Array<[RegExp, string, string]> = [
+  // The local data assistant (middleware lib/local-answers): an answer computed
+  // from the program's own rows, with no agent and no retrieval behind it.
+  [/^local_answer$/i, 'program data', 'Computed from the initiatives, budgets, work and sprint rows the pages read'],
   [/get_expertise_scores/i, 'expertise scores', 'Ranking computed over the org graph'],
   [/get_strategic_advice/i, 'advisory analysis', 'Derived from org graph structure, not a stored document'],
 ];

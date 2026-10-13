@@ -11,6 +11,10 @@
 // specialist" learns our topology; "read expertise scores" tells them where
 // the answer came from, which is the thing they asked.
 const FRIENDLY: Array<[RegExp, string]> = [
+  // The middleware's local data assistant (lib/local-answers): rows the
+  // program pages read — initiatives, budgets, work, sprints — not an agent.
+  [/^local_answer$/i, 'read program data'],
+  [/^search_context$/i, 'read cited records'],
   [/get_expertise_scores/i, 'read expertise scores'],
   [/get_strategic_advice/i, 'ran an advisory analysis'],
   [/search_organization/i, 'searched the org'],

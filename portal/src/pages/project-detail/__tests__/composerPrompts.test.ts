@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  askHref, commandIn, composerCommands, composerPageReference, composerSetup, itemPrefill, workflowMenu, workflowMenuRows, workflowPrompt,
+  askHref, commandIn, composerCommands, composerScope, composerPageReference, composerSetup, itemPrefill, workflowMenu, workflowMenuRows, workflowPrompt,
   type ComposerSubject,
 } from '../composerPrompts.ts';
 import { briefFacts } from '../briefModel.ts';
@@ -92,19 +92,32 @@ test('workflow prompts are built from the rows', () => {
   assert.match(workflowPrompt('prioritize', listSubject)!, /- Observability Platform \(in_progress, owner Nora DaSilva, 2 running\)/);
 });
 
-test('the Ask link carries the question and its context; empty text asks nothing', () => {
+test('the Ask link carries the question as typed and its context as a structured scope; empty text asks nothing', () => {
   const href = askHref('Why is this blocked?', itemSubject)!;
   assert.ok(href.startsWith('/iq/invoke?prompt='));
-  const prompt = new URLSearchParams(href.split('?')[1]).get('prompt')!;
-  assert.equal(prompt, 'Why is this blocked?\n\nAbout the work item "Stop duplicate alerts during a dependency outage" (wi-obs-e2-b4) on the initiative "Observability Platform" (p-observability). Advise only; do not change anything.');
+  const params = new URLSearchParams(href.split('?')[1]);
+  // The breadcrumb, title and transcript show the question — no glued framing.
+  assert.equal(params.get('prompt'), 'Why is this blocked?');
+  assert.equal(params.get('about'), 'work:wi-obs-e2-b4');
+  assert.equal(new URLSearchParams(askHref('what is over budget?', listSubject)!.split('?')[1]).get('about'), 'initiatives');
+  assert.equal(new URLSearchParams(askHref('status?', initiativeSubject)!.split('?')[1]).get('about'), 'initiative:p-observability');
   assert.equal(askHref('   ', itemSubject), null);
-  assert.equal(new URLSearchParams(askHref('hi', listSubject, false)!.split('?')[1]).get('prompt'), 'hi');
+  const bare = new URLSearchParams(askHref('hi', listSubject, false)!.split('?')[1]);
+  assert.equal(bare.get('prompt'), 'hi');
+  assert.equal(bare.get('about'), null); // context removed → no scope
+});
+
+test('composerScope mirrors the chip, and nothing when the context is removed', () => {
+  assert.deepEqual(composerScope(listSubject), { kind: 'initiatives' });
+  assert.deepEqual(composerScope(initiativeSubject), { kind: 'initiative', id: 'p-observability' });
+  assert.deepEqual(composerScope(itemSubject), { kind: 'work', id: 'wi-obs-e2-b4' });
+  assert.equal(composerScope(itemSubject, false), null);
 });
 
 test('a slash command expands to its workflow, and an inapplicable one asks nothing', () => {
   assert.equal(commandIn('/unblock please'), 'unblock');
   assert.equal(commandIn('/nope'), null);
   const prompt = new URLSearchParams(askHref('/unblock by Friday?', itemSubject)!.split('?')[1]).get('prompt')!;
-  assert.match(prompt, /^What does Eli need[\s\S]*\n\nby Friday\?\n\nAbout the work item/);
+  assert.match(prompt, /^What does Eli need[\s\S]*\n\nby Friday\?$/);
   assert.equal(askHref('/criteria', initiativeSubject), null);
 });

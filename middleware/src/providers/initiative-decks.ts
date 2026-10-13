@@ -38,7 +38,7 @@ import { INITIATIVE_STATUS_DECK_MODE } from '../lib/deck-shared/narrative-modes.
 import { str, maybe, iso, summaryOf, type DeckPreviewOut, type DeckRevisionSummary, type NarrativeOutcome, type Result } from '../lib/deck-shared/index.js';
 import { clip } from '../lib/deck-shared/plan.js';
 import { buildInitiativeDeckFacts, buildInitiativeDraftInput, type InitiativeDeckSource } from '../lib/initiative-deck/facts.js';
-import { isAllowed } from '../lib/authz.js';
+import { canReadBudgets } from '../lib/budget-read-tier.js';
 
 /** The agent that drafts this tenant's narrative slides. */
 const DRAFTER_AGENT_ID = 'orgiq-assessment-drafter';
@@ -100,15 +100,14 @@ export const initiativeDeckStore = createDeckStore<InitiativeDeckRow>({
 // ─── Visibility (the ONE rule: REST routes and the orgiq:deck presence channel) ─
 
 /** Roles that read the budgets surface outright (routes/budgets.ts readGate). */
-export const BUDGET_READ_ROLES: readonly string[] = ['org-leader', 'hr-admin', 'program-owner', 'admin'];
+export { BUDGET_READ_ROLES } from '../lib/budget-read-tier.js';
 
 /** The budgets read tier of `session`: those roles, else whoever holds ManageBudgets.
  * Asked per call (no cache): routes/initiative-decks.ts per request and
- * lib/live-principal.ts per presence subscribe/delivered frame. */
+ * lib/live-principal.ts per presence subscribe/delivered frame. One predicate
+ * (lib/budget-read-tier.ts) shared with the local data assistant. */
 export async function deckViewerFor(session: { sub: string; tenant: string; role: string } | null | undefined): Promise<DeckViewer> {
-  if (!session) return { canReadBudgets: false };
-  if (BUDGET_READ_ROLES.includes(session.role)) return { canReadBudgets: true };
-  return { canReadBudgets: await isAllowed({ sub: session.sub, tenant: session.tenant, role: session.role }, 'ManageBudgets') };
+  return { canReadBudgets: await canReadBudgets(session) };
 }
 
 /** May `viewer` see this deck at all? A budget deck is invisible below the tier. */

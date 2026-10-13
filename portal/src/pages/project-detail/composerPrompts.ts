@@ -12,6 +12,7 @@ import type { ProjectSummary } from '../projects/types';
 import type { BriefFacts } from './briefModel.ts';
 import type { FlatWorkItem } from './projectFormat.ts';
 import type { ProjectDetail } from './types';
+import { encodeAskScope, type AskScope } from '../../lib/askScope.ts';
 
 // ─── Subjects ────────────────────────────────────────────────────────────────
 
@@ -238,43 +239,47 @@ export function workflowPrompt(id: WorkflowId, s: ComposerSubject): string | nul
 
 // ─── The Ask link (D6) ───────────────────────────────────────────────────────
 
-/** The typed question plus where it was asked from, so the org agent has the
- *  context the chip showed. Advise only: nothing here changes data. */
-export function askPrompt(typed: string, s: ComposerSubject, withContext = true): string {
-  const q = typed.replace(/^\/agent\s+/, '').trim();
-  if (!withContext || !q) return q;
+/** The typed question, with any leading `/agent` dropped. Where it was asked
+ *  from travels separately, as `composerScope` — never glued onto the text,
+ *  which is what Search shows as the query, the title and the transcript. */
+export function askPrompt(typed: string): string {
+  return typed.replace(/^\/agent\s+/, '').trim();
+}
+
+/** What the composer's context chip was showing, as a structured scope; null
+ *  when the asker removed the context. Advise only is the stance of every
+ *  composer ask (lib/askScope.ts). */
+export function composerScope(s: ComposerSubject, withContext = true): AskScope | null {
+  if (!withContext) return null;
   switch (s.kind) {
-    case 'initiatives':
-      return `${q}\n\nAbout the organisation's initiatives. Advise only; do not change anything.`;
-    case 'initiative':
-      return `${q}\n\nAbout the initiative "${s.project.name}" (${s.project.id}). Advise only; do not change anything.`;
-    case 'item':
-      return `${q}\n\nAbout the work item "${s.item.title}" (${s.item.id}) on the initiative "${s.project.name}" (${s.project.id}). Advise only; do not change anything.`;
+    case 'initiatives': return { kind: 'initiatives' };
+    case 'initiative': return { kind: 'initiative', id: s.project.id };
+    case 'item': return { kind: 'work', id: s.item.id };
   }
 }
 
-/** `/iq/invoke?prompt=…` — the Ask page sends it once and strips the param. */
-export function invokeHref(prompt: string): string {
-  return `/iq/invoke?${new URLSearchParams({ prompt }).toString()}`;
+/** `/iq/invoke?prompt=…[&about=…]` — the Ask page sends it once and strips `prompt`; `about` stays as the conversation's scope. */
+export function invokeHref(prompt: string, scope: AskScope | null = null): string {
+  return `/iq/invoke?${new URLSearchParams({ prompt, ...(scope ? { about: encodeAskScope(scope) } : {}) }).toString()}`;
 }
 
 /** Composer text → a question, or null when there is nothing to ask. A
  *  leading "/workflow" expands to that workflow's prompt, then any text typed
  *  after the command is appended as the question. */
-export function composerAsk(text: string, s: ComposerSubject, withContext = true): string | null {
+export function composerAsk(text: string, s: ComposerSubject): string | null {
   const cmd = commandIn(text);
   if (cmd) {
     const built = workflowPrompt(cmd, s);
     if (!built) return null;
     const rest = text.trim().replace(/^\/\w+\s*/, '').trim();
-    return askPrompt(rest ? `${built}\n\n${rest}` : built, s, withContext);
+    return askPrompt(rest ? `${built}\n\n${rest}` : built);
   }
-  const prompt = askPrompt(text, s, withContext);
+  const prompt = askPrompt(text);
   return prompt || null;
 }
 
 /** Standalone Ask views can still use a deep link; initiative details run in their pane. */
 export function askHref(text: string, s: ComposerSubject, withContext = true): string | null {
-  const prompt = composerAsk(text, s, withContext);
-  return prompt ? invokeHref(prompt) : null;
+  const prompt = composerAsk(text, s);
+  return prompt ? invokeHref(prompt, composerScope(s, withContext)) : null;
 }

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { parseAskScope } from '../../lib/askScope';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   CanvasPaneLayout, CitedRecordList, ConnectionPathStrip, DepartmentChips, DepartmentInsightStrip, ExpandIcon, ExplorerLayout, GraphSearchBox,
@@ -63,6 +64,9 @@ function paneParams(state: PaneState): Record<string, string | null> {
 export default function SearchPage() {
   const [params, setParams] = useSearchParams();
   const refs = useMemo(()=>parseRecordKeys(params.get('context') ?? params.get('selection')), [params]);
+  // A composer's context chip arrives as `about=` (lib/askScope.ts): the
+  // conversation's scope, sent with every turn as data, never shown as text.
+  const about = useMemo(()=>parseAskScope(params.get('about')), [params]);
   // The composer issues queries (decision 9): a bare send becomes the new `q`
   // (nextQueryAfterSend); a send with context or a selection is a question
   // about it and leaves `q` alone. A send stays on the tab it came from
@@ -74,7 +78,7 @@ export default function SearchPage() {
     // With the conversation in the right pane the page keeps its tab (the graph stays).
     if(!previous.get('pane')) next.set('tab',nextTabAfterSend(previous.get('tab')));return next;
   }),[setParams]);
-  return <InvokePage contextRefs={refs} onSubmitted={submitted} renderWorkspace={api=><SearchWorkspace api={api} />}
+  return <InvokePage contextRefs={refs} askScope={about} onSubmitted={submitted} renderWorkspace={api=><SearchWorkspace api={api} />}
     renderAnswerEvidence={toolCalls=><AnswerEvidence toolCalls={toolCalls} />} />;
 }
 
