@@ -223,6 +223,27 @@ new dist. Keep sibling builds/pack/install under one owner; do not edit node_mod
   themselves are stale), the two pre-existing deck-reader cases, the `access`
   tenant build, and the ui-components unit/lint reds that predate this work.
 
+- **2026-10-13, layout cascade (Claude Code).** The journey measurement
+  (`scripts/journeys/measure.sh`) exposed a Codex-era regression: under the
+  shell's compact density every unsized `PageSection` rendered a 14px h2, so
+  46 routes had no page h1. ui-components **2.441.5** makes the heading level
+  come from `size` only (density tightens spacing); the subsection
+  `size="sm"` props the density pass had removed are restored and the
+  `densitysize` ratchet no longer counts PageSection. Also fixed: one trail
+  per column under section layouts (`SectionTrailContext`), Search/Invoke on
+  the shell trail (`ShellTrail`), the deck editor h1 inset, the distillation
+  record insets, the document rail's 220px default, every `!important` in
+  `app.css`. Library gaps queued and requested as 2.441.6: the `SplitPane`
+  divider owns 8px of layout (five assessment explorer routes measure the
+  trail 32px from the content edge) and `EditorShell` lacks a 14px title.
+  **Two decisions are the user's:** (1) `docs/layout-cascade.md` rule 8 says
+  the section rail never folds, but the 2026-10-10 huddles work folds both
+  rails while a discussion pane is open (`useDialogueRailFold`); four cascade
+  tests and the initiative gutter follow whichever wins. (2) `/social/dms`
+  deliberately hides Teams, Rooms and Channels (`social-navigation.spec.ts`
+  "DM route stays DM-only", commit a58b424e), which contradicts rail-parity
+  decision 6 ("one composition; the route only picks the pane").
+
 ## Suggested continuation
 
 1. Continue from the user's next screenshot or requested tenant. Reproduce an
