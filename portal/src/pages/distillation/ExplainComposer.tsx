@@ -15,6 +15,7 @@
 import { forwardRef, useMemo, useState, type ForwardedRef, type Ref } from 'react';
 import { useNavigate } from 'react-router';
 import type { RichChatComposerHandle } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { Stack } from '@connorhoehnslalom/ui-components/shared';
 import { ConversationComposer } from '../../lib/conversationComposer';
 import { explainPrompt } from './knowledgeModel';
 import { searchMigration } from '../search/searchModel';
@@ -55,7 +56,12 @@ function ExplainComposerInner<C extends string>(
     }],
   }], [subject.id, chosen.label, contextOptions, context, onContextChange]);
 
+  // The record pane's one inset (docs/layout-cascade.md rule 8): the shared
+  // composer surface (ComposerSurface) pads by --ui-content-gutter and centres
+  // its content at --ui-composer-max-width; in a record both follow
+  // EditorShell's 20px edge, so header, body and composer share one left edge.
   return (
+    <Stack gap="none" className="shrink-0 [--ui-content-gutter:1.25rem] [--ui-composer-max-width:none]">
     <ConversationComposer
       key={subject.id}
       channel={null}
@@ -88,6 +94,7 @@ function ExplainComposerInner<C extends string>(
         return true;
       }}
     />
+    </Stack>
   );
 }
 

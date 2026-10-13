@@ -31,6 +31,7 @@ import {
   Button, DetailSection, EmptyState, FilterPopover, FormField, GroupedList, Inline, LinkIcon, LiveRegion, LoadingState, SearchInput,
   Stack, StatStrip, StatusPill, T, Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
+import { EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { SectionHeader } from '../../components/shell/SectionContent';
 import { useDistillationChannel } from '../../hooks/useDistillationChannel';
@@ -88,7 +89,7 @@ function samplingItems(s: SamplingResponse) {
 }
 
 function Claim({
-  sample, row, all, canReview, sampling, onVerdict, onRetry, onOpen,
+  sample, row, all, canReview, sampling, onVerdict, onRetry, onOpen, sourceCount, onOpenSources,
 }: {
   sample: ReviewSampleWithTarget;
   row: ReviewQueueRow;
@@ -98,6 +99,8 @@ function Claim({
   onVerdict: (id: string, verdict: Verdict, note: string) => void;
   onRetry: () => void;
   onOpen: (href: string) => void;
+  sourceCount: number | null;
+  onOpenSources: () => void;
 }) {
   const [note, setNote] = useState('');
   const target = useFetch<Item>(row.resolved ? `/api/distillation/items/${encodeURIComponent(row.targetId)}` : null, 0);
@@ -116,11 +119,33 @@ function Claim({
       text: s.note ?? (s.verdict === 'agree' ? 'Agreed with no note.' : 'Disagreed with no note.'),
     }));
 
-  // The record's headline is the page title (SectionHeader, one h1); this is
-  // its body and the explain-only composer docked under it.
+  // The record on EditorShell, as on Knowledge (docs/layout-cascade.md rules 3
+  // and 8): its headline stays in the pane — the page title is the queue's
+  // name — and its header, body and docked composer share the shell's 20px
+  // record inset.
   return (
-    <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="review-claim">
-      <Stack gap="none" className="min-h-0 flex-1 overflow-auto">
+    <EditorShell
+      title={row.title}
+      titleSize="md"
+      statusPill={<StatusPill tone={VERDICT_PILL[sample.verdict].tone} label={VERDICT_PILL[sample.verdict].label} size="sm" />}
+      subtitle={[row.typeLabel, row.repo ? `From ${shortRepo(row.repo)}` : null, `Sampled ${relativeTime(row.sampledAt)}`].filter(Boolean).join(' · ')}
+      headActions={(
+        <Button size="sm" variant="secondary" onClick={onOpenSources} data-testid="review-sources-button">
+          Sources{sourceCount != null ? ` ${sourceCount}` : ''}
+        </Button>
+      )}
+      surface="plain"
+      label="Review claim"
+      className="min-h-0 min-w-0 flex-1"
+      data-testid="review-claim"
+      footer={(
+        <RecordExplainComposer
+          subject={{ kind: row.typeLabel.toLowerCase(), id: row.targetId, title: row.title }}
+          referenceLabel="This review"
+          placeholder="Show the evidence for this finding…"
+        />
+      )}
+    >
       <Stack gap="md" className="w-full max-w-3xl px-5 py-4">
         {!row.resolved ? (
           <AccessNotice
@@ -210,18 +235,8 @@ function Claim({
             <T className="text-[12px] text-text-tertiary">Sampling figures are not available right now.</T>
           )}
         </Disclosure>
-        </Stack>
       </Stack>
-      {/* Flush across the content column, as on a Knowledge record: the
-          composer carries its own 20px dock inset, so no wrapper padding. */}
-      <Stack gap="none" className="shrink-0">
-        <RecordExplainComposer
-          subject={{ kind: row.typeLabel.toLowerCase(), id: row.targetId, title: row.title }}
-          referenceLabel="This review"
-          placeholder="Show the evidence for this finding…"
-        />
-      </Stack>
-    </Stack>
+    </EditorShell>
   );
 }
 
@@ -400,22 +415,11 @@ function KnowledgeReview() {
   // column after it opens with the module trail and the queue's title
   // (docs/layout-cascade.md). No repository button in the header: the
   // repository is the rail's filter.
-  // With a sample open its target's title IS the page title (one h1, 20/600);
-  // the verdict, the kind line and Sources ride the title row.
+  // The page title is the queue's name; an open sample's headline, verdict,
+  // kind line and Sources ride its own record header in the pane (rule 3).
   const queueTitle = state.tab === 'pending' ? 'Knowledge pending' : 'Knowledge reviewed';
   const sourceCount = sources.data?.sources ? sources.data.sources.length : null;
-  const headerProps = selectedSample && selectedRow
-    ? {
-        title: selectedRow.title,
-        description: [selectedRow.typeLabel, selectedRow.repo ? `From ${shortRepo(selectedRow.repo)}` : null, `Sampled ${relativeTime(selectedRow.sampledAt)}`].filter(Boolean).join(' · '),
-        badge: <StatusPill tone={VERDICT_PILL[selectedSample.verdict].tone} label={VERDICT_PILL[selectedSample.verdict].label} size="sm" />,
-        actions: (
-          <Button size="sm" variant="secondary" onClick={() => go({ panel: 'sources' }, { push: true })}>
-            Sources{sourceCount != null ? ` ${sourceCount}` : ''}
-          </Button>
-        ),
-      }
-    : { title: queueTitle };
+  const headerProps = { title: queueTitle };
   const trail = moduleCtx?.scope.breadcrumbs ?? [{ label: 'Build' }, { label: 'Distillation' }, { label: 'Review' }];
   return (
     <ListRailLayout
@@ -462,6 +466,8 @@ function KnowledgeReview() {
           onVerdict={decide}
           onRetry={review.refresh}
           onOpen={openHref}
+          sourceCount={sourceCount}
+          onOpenSources={() => go({ panel: 'sources' }, { push: true })}
         />
       ) : (
         // With no sample open the pane says what to do; the queue's name is the

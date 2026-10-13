@@ -100,9 +100,11 @@ page_crumbs=$(grep -rlE "<Breadcrumbs\b|<ScopeHeader\b" portal/src/pages --inclu
 # one rule, the library rail model (ui-components railDepth / useRailFold /
 # SubNavLayout collapsed, tested there), declared and read by Layout.tsx; no
 # local copy of the rule, and no app.css reaching into the library's DOM
-# (audit J7: no !important, no test-id selectors for the fold).
+# (audit J7: no !important, no test-id selectors for the fold). The
+# SubNavLayout may read `dialogueRail`, the same fold forced shut while a
+# dialogue pane is open (useDialogueRailFold over primaryRail).
 LAYOUT=portal/src/components/shell/Layout.tsx
-{ has "railDepth" "$LAYOUT" && has "useRailFold" "$LAYOUT" && has "collapsed=\{primaryRail.folded\}" "$LAYOUT" && has "data-primary-rail" "$LAYOUT" \
+{ has "railDepth" "$LAYOUT" && has "useRailFold" "$LAYOUT" && { has "collapsed=\{primaryRail.folded\}" "$LAYOUT" || { has "collapsed=\{dialogueRail.folded\}" "$LAYOUT" && has "useDialogueRailFold\([^)]*primaryRail" "$LAYOUT"; }; } && has "data-primary-rail" "$LAYOUT" \
   && [ ! -f portal/src/components/shell/railCollapseModel.ts ] && [ ! -f portal/src/components/shell/useShellRails.ts ]; } \
   && ok "rail collapse priority is the library rail model, declared in Layout.tsx (railDepth → useRailFold → SubNavLayout collapsed)" \
   || fail "rail collapse rule: Layout.tsx must declare railDepth + useRailFold + SubNavLayout collapsed, with no local railCollapseModel/useShellRails"

@@ -47,6 +47,10 @@ interface Measure {
   landed: string;
   mainLeft: number; mainTop: number; mainHeight: number;
   rails: Array<{ left: number; right: number; label: string; list?: boolean }>;
+  // Folded rail strips inside <main> (the library WorkspaceRail marks a fold
+  // `data-collapsed="true"`, 36px): not navigation columns, but the content
+  // column starts after them.
+  strips: Array<{ left: number; right: number }>;
   listRail: { left: number; right: number; top: number; height: number; width: number; radius: number } | null;
   crumb: { left: number; top: number; bottom: number; text: string } | null;
   title: { left: number; top: number; hidden: boolean; text: string } | null;
@@ -68,6 +72,8 @@ async function measure(page: Page): Promise<Measure> {
     const byLeft = new Map<number, typeof cols[number]>();
     for (const c of cols) if (![...byLeft.keys()].some((x) => Math.abs(x - c.left) <= 2)) byLeft.set(c.left, c);
     const rails: Array<{ left: number; right: number; label: string; list?: boolean }> = [...byLeft.values()].sort((a, b) => a.left - b.left).map(({ left, right, label }) => ({ left, right, label }));
+    const strips = [...(main ?? document).querySelectorAll('nav[data-collapsed="true"]')].filter(visible).map((e) => e.getBoundingClientRect())
+      .filter((b) => b.width < 120 && b.top <= m.top + 4 && b.height >= m.height * 0.6).map((b) => ({ left: Math.round(b.left), right: Math.round(b.right) }));
     // The page's list rail (the library ListRailLayout): the Explorer rail inside
     // [data-list-rail]. It counts as the page's list, not a navigation
     // column, and must be flush.
@@ -104,7 +110,7 @@ async function measure(page: Page): Promise<Measure> {
     return {
       landed: location.pathname + location.search,
       mainLeft: Math.round(m.left), mainTop: Math.round(m.top), mainHeight: Math.round(m.height),
-      rails, listRail, crumb, title,
+      rails, strips, listRail, crumb, title,
       footers: document.querySelectorAll('[data-testid="shell-footer"]').length,
       scrollW: document.documentElement.scrollWidth, innerW: innerWidth,
     };
@@ -127,8 +133,8 @@ function judge(route: string, m: Measure, skip: Set<Invariant>): Violation[] {
     if (l.radius > 2) bad('list-rail', `list rail floats in a rounded box (radius ${l.radius}px)`);
     if (Math.abs(l.width - LIST_RAIL_WIDTH) > 2) bad('list-rail', `list rail ${l.width}px wide, the Initiatives rail is ${LIST_RAIL_WIDTH}`);
   }
-  // The content column's left edge: right of the last rail beside the trail.
-  const contentLeft = Math.max(m.mainLeft, ...m.rails.filter((r) => !m.crumb || r.left < m.crumb.left).map((r) => r.right));
+  // The content column's left edge: right of the last rail (or folded rail strip) beside the trail.
+  const contentLeft = Math.max(m.mainLeft, ...[...m.rails, ...m.strips].filter((r) => !m.crumb || r.left < m.crumb.left).map((r) => r.right));
   if (!m.crumb) {
     bad('crumbs-first', 'no breadcrumb trail');
   } else {

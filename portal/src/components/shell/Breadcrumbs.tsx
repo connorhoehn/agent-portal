@@ -9,7 +9,8 @@
 
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Breadcrumbs as UIBreadcrumbs } from '@connorhoehnslalom/ui-components/shared';
+import { ScopeHeader } from '@connorhoehnslalom/ui-components';
+import { Breadcrumbs as UIBreadcrumbs, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
 
 import { resolveBreadcrumbs } from './breadcrumbResolve';
 import { useCrumbLabels } from '../../lib/crumbLabels';
@@ -77,4 +78,32 @@ export function Breadcrumbs() {
       className="shell-breadcrumbs shrink-0 mb-4 pb-1.5 border-b border-border text-[11.5px] overflow-x-auto whitespace-nowrap"
     />
   );
+}
+
+/**
+ * The shell's trail as a flush page's first row (docs/layout-cascade.md): the
+ * route's own crumbs (`useShellBreadcrumbItems`), extended by the page's
+ * `tail` — a scope, a query, a selection, a session — never a trail the page
+ * spells itself. With a tail, the route's last crumb links back to the route.
+ * Drawn as the library trail band (`ScopeHeader variant="crumbs"`, the same
+ * band `SectionHeader` draws) at the 24px gutter.
+ */
+export function ShellTrail({ tail = [], 'data-testid': testId = 'shell-trail' }: { tail?: BreadcrumbItem[]; 'data-testid'?: string }) {
+  const base = useShellBreadcrumbItems();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const items = useMemo(() => {
+    if (!tail.length || !base.length) return [...base, ...tail];
+    const last = base[base.length - 1]!;
+    const linked = last.href ? last : {
+      ...last, href: pathname,
+      onClick: (e: React.MouseEvent) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+        void navigate(pathname);
+      },
+    };
+    return [...base.slice(0, -1), linked, ...tail];
+  }, [base, tail, pathname, navigate]);
+  return <ScopeHeader variant="crumbs" breadcrumbs={items} data-testid={testId} />;
 }

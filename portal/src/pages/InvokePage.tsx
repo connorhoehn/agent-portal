@@ -24,7 +24,8 @@ import {
   ThinkingBlock,
   WorkflowStepper, T,
 } from '@connorhoehnslalom/ui-components/shared';
-import { ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
+import { ViewportFillRegion } from '@connorhoehnslalom/ui-components';
+import { ShellTrail } from '../components/shell/Breadcrumbs';
 import { ChannelThread } from '../components/chat/ConversationThread';
 import { useSession } from '../lib/auth';
 import { useFetch } from '../hooks/useFetch';
@@ -967,8 +968,8 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], o
           }}
         >
           <Stack gap="none" className="h-full min-h-0 min-w-0">
-            <ScopeHeader variant="crumbs" breadcrumbs={[
-              { label: 'Engage' }, { label: 'Ask' },
+            {/* The shell's trail (Engage › Ask) as the column's first row, ending at the session. */}
+            <ShellTrail data-testid="ask-trail" tail={[
               { label: sessions.find(s => s.sessionId === sessionId)?.title || (sessionId ? 'Conversation' : 'New session') },
             ]} />
             <Inline gap="none" wrap={false} align="stretch" className="flex-1 min-h-0">

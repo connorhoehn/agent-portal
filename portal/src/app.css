@@ -708,16 +708,10 @@ tbody tr:focus-within .row-reveal,
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 20rem));
   gap: 12px;
 }
+/* The card itself is the library SelectableCard (padding md, bordered surface);
+   the grid wants one bounded height so titles clamp rather than ragged rows. */
 .file-card {
-  width: 100%;
-  white-space: normal;
-  height: 148px !important;
-  padding: 16px !important;
-  justify-content: flex-start !important;
-  align-items: flex-start !important;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-surface);
+  height: 148px;
   overflow: hidden;
 }
 [data-testid="initiative-work-rail"] [data-testid*="-row-"]:has([data-testid^="initiative-work-rail-tag-"]),
@@ -791,9 +785,15 @@ tbody tr:focus-within .row-reveal,
   align-items: center;
 }
 [data-testid="shell-call-media"][data-placement="composer"] [data-dock-item="true"] {
+  /* The tile's size is the library's inline width/height (CallDock tileSize
+     lg, 240 × 135, chosen inside CallMediaOutlet with no prop —
+     docs/ui-components-queue.md). max-* is not set inline, so it bounds the
+     tile at normal specificity. */
   flex: 0 0 170px;
-  width: 170px !important;
-  height: 96px !important;
+  width: 170px;
+  height: 96px;
+  max-width: 170px;
+  max-height: 96px;
   aspect-ratio: 16 / 9;
   border-radius: 10px;
   background: linear-gradient(135deg, #293341, #151c28);
@@ -822,9 +822,10 @@ tbody tr:focus-within .row-reveal,
 }
 [data-testid="shell-call-media"][data-placement="composer"] [data-dock-item="true"]:has([data-call-stream="screen"]) {
   flex-basis: 240px;
-  width: 240px !important;
+  width: 240px;
+  max-width: 240px;
 }
-[data-call-stream="screen"] video { object-fit: contain !important; }
+[data-call-stream="screen"] video { object-fit: contain; }
 [data-dock-item="true"]:has([data-call-stream="screen"]) > .absolute.inset-x-0 > svg:last-child { display: none; }
 [data-testid="brief-table"] [data-testid*="key-value"] { min-width: 0; }
 .shell-header { min-height: 44px; padding-block: 4px; }

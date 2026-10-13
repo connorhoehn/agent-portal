@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Button, CatalogGrid, DocumentIcon, Inline, ListIcon, SegmentedControl, SplitViewIcon, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { CatalogGrid, DocumentIcon, Inline, ListIcon, SegmentedControl, SelectableCard, SplitViewIcon, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 
 export type FileView = 'cards' | 'list';
 
@@ -26,7 +26,7 @@ export function FileCards({ items, onOpen, testId, itemTestId }: {
   // CatalogGrid (dense, 12px gap) owns the grid; `.file-card-grid` keeps the
   // bounded auto-fill tracks (15–20rem) that the fixed column counts lack.
   return <CatalogGrid dense className="file-card-grid" {...(testId ? { 'data-testid': testId } : {})}>
-    {items.map(item => <Button key={item.id} variant="ghost" className="file-card" onClick={() => onOpen(item.id)} data-testid={itemTestId}>
+    {items.map(item => <SelectableCard key={item.id} padding="md" aria-pressed={undefined} className="file-card" onSelect={() => onOpen(item.id)} data-testid={itemTestId}>
       <Inline gap="sm" align="start" wrap={false} className="min-w-0 w-full">
         <DocumentIcon size={20} className="shrink-0 text-primary" />
         <Stack gap="xs" className="min-w-0 text-left">
@@ -35,6 +35,6 @@ export function FileCards({ items, onOpen, testId, itemTestId }: {
           {item.detail && <T size="xs" tone="secondary" wrap className="font-normal line-clamp-2 break-words">{item.detail}</T>}
         </Stack>
       </Inline>
-    </Button>)}
+    </SelectableCard>)}
   </CatalogGrid>;
 }

@@ -9,7 +9,7 @@ import {
   type OrgGraphHandle, type RailNavListItem, type RecordGraphEdge, type RecordGraphRecord,
 } from '@connorhoehnslalom/ui-components';
 import {
-  Banner, Breadcrumbs, Button, ChatIcon, CloseIcon, DropdownMenu, EmptyState, FilterChip, GraphIcon, IconButton, Inline, Input, LoadingState,
+  Banner, Button, ChatIcon, CloseIcon, DropdownMenu, EmptyState, FilterChip, GraphIcon, IconButton, Inline, Input, LoadingState,
   SegmentedControl, Stack, T, Tooltip, useHeaderDensity, useRailFold,
 } from '@connorhoehnslalom/ui-components/shared';
 import InvokePage, { type SearchConversationAPI } from '../InvokePage';
@@ -21,6 +21,7 @@ import { publicSearchRecord, publicSearchResult } from './publicSearchRecord';
 import { useSearchPeoplePresentation } from './useSearchPeoplePresentation';
 import { useHuddleChat } from '../../components/shell/HuddleChat';
 import { useDialogueRailFold } from '../../components/shell/useDialogueRailFold';
+import { ShellTrail } from '../../components/shell/Breadcrumbs';
 import { SearchComposer } from './SearchComposer';
 import { connectionsView, focusedRecordEdges, focusedRecords, focusOrgPeople, orgFocusIds, withNameTooltips } from './connectionsModel';
 import { searchWorkflows } from './searchWorkflows';
@@ -241,24 +242,23 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   const scopeOptions=[{id:'',title:'Workspace'},...(scopes?.results??[]).map(r=>({id:r.id,title:r.title})),...(scope&&!scopes?.results.some(r=>r.id===scope)?[{id:scope,title:scopeName??scope}]:[])];
   const title=(query&&searchTitle(query))||(view==='org'&&tab==='connections'?'People & connections':'Search');
   const link=(label:string,href:string)=>({label,href,onClick:(event:MouseEvent)=>{if(!isPlainClick(event))return;event.preventDefault();navigate(href);}});
-  const crumbs=scope
-    ? [link('Initiatives','/iq/projects'),link(scopeName??scope,`/iq/projects/${encodeURIComponent(scope)}`)]
-    : title!=='Search' ? [link('Search','/iq/search')] : [];
-  // Decision 9 amendment: the one-row form only while it fits. A trail past
-  // Work › Search › title (a scope, or a selection explored on Connections or
-  // in the pane) takes its own row and reads whole — the library Breadcrumbs
-  // with no maxItems never collapses to "…" — and ends at the selection; the
-  // title, tabs and controls sit on the row below.
-  // A single named record is a place; "3 selected" is not, so it stays off the trail.
+  // The trail is the shell's (Engage › Search), the content column's first
+  // row, extended by this page's place: the scope, the query, and a single
+  // named selection explored on Connections or in the pane — it ends there,
+  // reads whole (no "…") and never carries the tabs; the title, tabs and
+  // controls sit on the row below. "3 selected" is not a place, so it stays off.
   const selectionCrumb=selected.length===1&&selectionLabel&&(tab==='connections'||paneHosted)?selectionLabel:null;
-  const longTrail=Boolean(scope||selectionCrumb);
   const queryHref=searchHref({selection:null,detail:null,pane:null,paneRecord:null,context:null});
-  const trail=[...crumbs,...(selectionCrumb?[link(title,queryHref),{label:selectionCrumb}]:[{label:title}])];
+  const trailTail=[
+    ...(scope?[link(scopeName??scope,`/iq/projects/${encodeURIComponent(scope)}`)]:[]),
+    ...(title!=='Search'?[selectionCrumb?link(title,queryHref):{label:title}]:[]),
+    ...(selectionCrumb?[{label:selectionCrumb}]:[]),
+  ];
   const searchControlProps:SearchControlsProps={scope,scopeName,scopeOptions,type,sort,onChange:update};
   const paneHeader=<Stack gap="none" className="shrink-0">
-    {longTrail&&<Breadcrumbs data-testid="search-trail" items={trail} separator="›" size="sm" className="px-6 pt-2" />}
+    <ShellTrail data-testid="search-trail" tail={trailTail} />
     <ScopeHeader variant="inline" {...headerDensity.headerProps} className="border-b border-border" data-testid="search-header"
-      {...(longTrail?{}:{breadcrumbs:crumbs})} title={selectionCrumb??title} titleHint={query||undefined}
+      title={selectionCrumb??title} titleHint={query||undefined}
       tabs={[{id:'results',...countedLabel('Results',data&&!error?data.counts.all:undefined,data?.totalIsLowerBound),...(data?.partial?.length?{dot:'warning' as const}:{})},{id:'answer',label:'Answer'},{id:'connections',label:'Connections'}]}
       activeTab={tab} onTabChange={value=>update({tab:value})}
       controls={<SearchControls {...searchControlProps} />} controlsMenu={searchControlsMenu(searchControlProps)}

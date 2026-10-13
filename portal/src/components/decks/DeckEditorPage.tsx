@@ -206,7 +206,8 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     <EditorShell
       title={deck.title}
       titleSize="md"
-      kind="presentation"
+      // No `kind` mark: its 40px glyph + 8px gap would push the h1 48px past
+      // EditorShell's 20px head inset, off the shell trail (docs/ui-components-queue.md).
       {...collab.shellProps}
       {...(cannotEdit ? { statusPill: <T as="span" size="xs" tone="secondary">View only</T> }
         : saveState ? { saveState: { ...saveState, detail: saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'All changes saved' } } : {})}

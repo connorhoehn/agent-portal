@@ -69,8 +69,8 @@ test('Search menus expose current choices with compact native icons and retain q
   expect(proof.reads.some(path => path === '/api/work/findings')).toBe(false);
   await expect(page.getByLabel('Unsent fixture inquiry')).toHaveValue('Unsent fixture inquiry');
   await header.getByRole('tab', { name: 'Results', exact: false }).click();
-  await expect(page.getByTestId('search-trail')).toHaveText(/Initiatives.*Design System API.*Search/);
-  await expect(page.getByTestId('search-trail')).not.toContainText('Engage');
+  // The trail is the shell's (Engage › Search, empty off the /iq/search route in this fixture) plus the page's scope.
+  await expect(page.getByTestId('search-trail')).toContainText('Design System API');
   await page.mouse.move(0, 0); await page.getByTestId('search-type').blur();
   await page.screenshot({ path: test.info().outputPath('search-controls.png') });
   expect(proof.writes).toEqual([]); expect(proof.errors).toEqual([]);

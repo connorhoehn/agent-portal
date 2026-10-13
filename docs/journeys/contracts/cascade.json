@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "95f885bbdd1322e19464db981b137478d9f6d4c0e9f92aae2fbc3bd85dc9efbf",
-  "at": "2026-10-08T12:06:20.039Z"
+  "sourceDigest": "6c5181eebac4441e32aba5c08c28bc89864cd2f46f91176732b6d46d55ee05ba",
+  "at": "2026-10-13T07:01:23.682Z"
  },
  "routes": {
   "/admin/bots": {
@@ -9,21 +9,21 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/bots/:id": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:28:38.865Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/budgets": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/capabilities": {
    "value": {
@@ -37,7 +37,7 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/devbox": {
    "value": {
@@ -51,210 +51,210 @@
     "violations": [],
     "lands": "/admin/identity/roles"
    },
-   "changedAt": "2026-10-08T09:28:38.865Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/identity/roles": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:28:38.865Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/identity/test": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/identity/users": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/ingest/crawl": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/ingest/history": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/ingest/schedules": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/ingest/sources": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/ingest/storage": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/knowledge": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability": {
    "value": {
     "violations": [],
     "lands": "/admin/observability/summary"
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/agents": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/approvals": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/authz": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/calibration": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/capability-events": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/cost": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/drift": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/guardrail-rules": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/harness": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/invocations": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/invocations/search": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/memory": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/model-compare": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/oncall": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/quality": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/sessions": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/summary": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/tools": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/observability/traffic": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/admin/projects": {
    "value": {
@@ -280,9 +280,9 @@
   "/assessment/communication": {
    "value": {
     "violations": [],
-    "lands": "/assessment/communication/channels/:slug"
+    "lands": null
    },
-   "changedAt": "2026-10-08T12:06:20.039Z"
+   "changedAt": "2026-10-13T06:07:43.473Z"
   },
   "/assessment/communication/channels/:slug": {
    "value": {
@@ -298,26 +298,21 @@
    },
    "changedAt": "2026-10-08T09:14:20.900Z"
   },
-  "/assessment/decks": {
-   "value": {
-    "violations": [],
-    "lands": null
-   },
-   "changedAt": "2026-10-08T09:14:20.900Z"
-  },
   "/assessment/decks/:deckId": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T07:01:23.682Z"
   },
   "/assessment/enterprise": {
    "value": {
-    "violations": [],
+    "violations": [
+     "gutter"
+    ],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:07:43.473Z"
   },
   "/assessment/feedback": {
    "value": {
@@ -328,10 +323,12 @@
   },
   "/assessment/prompts": {
    "value": {
-    "violations": [],
+    "violations": [
+     "gutter"
+    ],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:07:43.473Z"
   },
   "/assessment/reports": {
    "value": {
@@ -342,10 +339,12 @@
   },
   "/assessment/rules": {
    "value": {
-    "violations": [],
+    "violations": [
+     "gutter"
+    ],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:07:43.473Z"
   },
   "/assessment/runs": {
    "value": {
@@ -377,10 +376,21 @@
   },
   "/assessment/workspace": {
    "value": {
-    "violations": [],
+    "violations": [
+     "gutter"
+    ],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:07:43.473Z"
+  },
+  "/assessment/workspace?view=library": {
+   "value": {
+    "violations": [
+     "gutter"
+    ],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T06:07:43.473Z"
   },
   "/iq": {
    "value": {
@@ -408,7 +418,7 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/canary": {
    "value": {
@@ -420,9 +430,9 @@
   "/iq/communication": {
    "value": {
     "violations": [],
-    "lands": "/iq/communication/channels/:slug"
+    "lands": null
    },
-   "changedAt": "2026-10-08T12:06:20.039Z"
+   "changedAt": "2026-10-13T06:07:43.473Z"
   },
   "/iq/communication/channels/:slug": {
    "value": {
@@ -450,14 +460,14 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/designs?nav=section": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/designs/:id": {
    "value": {
@@ -541,7 +551,7 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/evaluations": {
    "value": {
@@ -562,14 +572,14 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/library?nav=section": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/library/:assetId": {
    "value": {
@@ -583,14 +593,14 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/local-compute/configuration": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/projects": {
    "value": {
@@ -611,23 +621,21 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T07:01:23.682Z"
   },
   "/iq/projects/:id?item=": {
    "value": {
-    "violations": [
-     "title"
-    ],
+    "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T07:01:23.682Z"
   },
   "/iq/prompt-ops": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/prompts": {
    "value": {
@@ -655,30 +663,28 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/scores/cohorts": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/scores/compare": {
    "value": {
     "violations": [],
     "lands": "/iq/scores"
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/search": {
    "value": {
-    "violations": [
-     "title"
-    ],
+    "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T07:01:23.682Z"
   },
   "/iq/work": {
    "value": {
@@ -699,21 +705,21 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/work/findings": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/iq/work/queue": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/pipelines": {
    "value": {
@@ -767,9 +773,9 @@
   "/pipelines/communication": {
    "value": {
     "violations": [],
-    "lands": "/pipelines/communication/channels/:slug"
+    "lands": null
    },
-   "changedAt": "2026-10-08T12:06:20.039Z"
+   "changedAt": "2026-10-13T06:07:43.473Z"
   },
   "/pipelines/communication/channels/:slug": {
    "value": {
@@ -798,6 +804,13 @@
     "lands": null
    },
    "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/pipelines/queues": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T06:07:43.473Z"
   },
   "/pipelines/runbooks": {
    "value": {
@@ -832,7 +845,7 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-10-13T06:28:29.676Z"
   },
   "/social": {
    "value": {

@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "95f885bbdd1322e19464db981b137478d9f6d4c0e9f92aae2fbc3bd85dc9efbf",
-  "at": "2026-10-08T12:17:03.056Z"
+  "sourceDigest": "6c5181eebac4441e32aba5c08c28bc89864cd2f46f91176732b6d46d55ee05ba",
+  "at": "2026-10-13T06:55:26.797Z"
  },
  "routes": {
   "/assessment/workspace": {
@@ -9,7 +9,7 @@
     "verdict": "MATCH",
     "problems": []
    },
-   "changedAt": "2026-10-08T09:08:08.563Z"
+   "changedAt": "2026-10-13T06:22:10.232Z"
   },
   "/iq/communication/calls": {
    "value": {
@@ -118,10 +118,12 @@
   },
   "/social/dms": {
    "value": {
-    "verdict": "MATCH",
-    "problems": []
+    "verdict": "DIFFERS",
+    "problems": [
+     "section captions missing: Teams, Rooms, Channels"
+    ]
    },
-   "changedAt": "2026-10-08T09:08:08.563Z"
+   "changedAt": "2026-10-13T06:01:27.202Z"
   },
   "/social/recordings": {
    "value": {
