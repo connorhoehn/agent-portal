@@ -144,11 +144,13 @@ non-root `bedrock_agentcore` (UID 1000), ports 8080/8000, `GET /ping`,
   `assessment` `assessor` / `lead-assessor` / `program-lead`;
   `social` `participant` / `moderator` / `community-admin`;
   `pipelines` `author` / `operator` / `pipeline-admin`; the fifth tenant
-  `access` (`requester` / `approver` / `access-admin`) is a goal set on
-  2026-10-12 and not yet registered (`docs/access-tenant-goal.md`). The non-orgiq routers
+  `access` (`requester` / `approver` / `access-admin`; cast u-rhea, u-omar,
+  u-priya; `/access/*`, `/api/access/*`, `docs/access-tenant-goal.md`,
+  registered 2026-10-13 at phase A0). The non-orgiq routers
   mount behind `requireTenant('assessment')`, `requireTenant('social')` and
-  `requireTenant('pipelines')`; the cookie-less demo identity holds no grant in
-  `social` or `pipelines`, so sign in as a seeded user for those.
+  `requireTenant('pipelines')` and `requireTenant('access')`; the cookie-less
+  demo identity holds no grant in `social`, `pipelines` or `access`, so sign in
+  as a seeded user for those.
 - Prefix `orgiq-` on AWS resources; stacks `OrgIQ-*`; agents `orgiq-<name>`;
   tenants in `middleware/src/lib/session.ts` `TENANTS`; portal trees `/iq` +
   `/admin`, `/assessment`, `/social`, `/pipelines`; API prefixes
@@ -241,7 +243,7 @@ take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
 | `ui-components-queue.md` | Missing composites; the component-discipline exemption ledger | `validate-component-discipline.sh` |
 | `social-tenant-design.md`, `social-tenant-goal.md`, `pipelines-tenant-goal.md` | Third and fourth tenants, the activity bell | `validate-social-tenant.sh`, `validate-pipelines-tenant.sh` |
 | `communication-plane-goal.md` | Social seen from the other tenants | `validate-communication-plane.sh` |
-| `access-tenant-design.md`, `access-tenant-goal.md` | The fifth tenant: access requests, approvals, provisioning (goal set 2026-10-12, unbuilt) | `validate-access-tenant.sh` |
+| `access-tenant-design.md`, `access-tenant-goal.md`, `access-tenant-api.md` | The fifth tenant: access requests, approvals, provisioning (A0 registered 2026-10-13; A1/A2/E in progress) | `validate-access-tenant.sh` |
 | `agent-eval-goal.md` | Golden sets + `golden_runner.py` | `validate-agent-eval.sh` |
 | `agentcore-preview-surface.md`, `agentcore-preview-plan.md` | Preview API research, callback runbook (§6a) | — |
 | `audit/2026-10-07-audit-plan.md` | Structural duplication audit and its "stop doing" list | — |
