@@ -179,7 +179,7 @@ function ReviewRecord({ id }: { id: string }) {
             onRowClick={(i) => { if (i.revocationRequestId) navigate(requestHref(i.revocationRequestId)); }}
             {...(anyDecidable ? {
               rowActions: (i: AccessReviewItem) => (i.can.decide ? (
-                <Inline gap="xs">
+                <Inline gap="xs" wrap={false}>
                   <Button size="sm" variant="secondary" disabled={busy} onClick={() => { setComment(''); setPending({ item: i, decision: 'keep' }); }} data-testid={`access-review-keep-${i.id}`}><CheckIcon />Keep</Button>
                   <Button size="sm" variant="danger" disabled={busy} onClick={() => { setComment(''); setPending({ item: i, decision: 'revoke' }); }} data-testid={`access-review-revoke-${i.id}`}><CloseIcon />Revoke</Button>
                 </Inline>

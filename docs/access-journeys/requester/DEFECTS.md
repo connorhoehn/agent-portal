@@ -1,9 +1,6 @@
-# requester walk defects, 2026-10-13 (not fixed; walk only)
+# requester walk defects, 2026-10-13 re-walk (07:04-07:10; not fixed, walk only)
 
-D1. Page title renders 14px/600, not the documented 20/600 (docs/layout-cascade.md, type-scale-sweep.spec.ts). Every access surface measured by h1 computed style at 1680x940 and 1680x1300; /pipelines/runs as u-ines is also 14px/600, so this is platform-wide (shell density), not access-specific. Affects layout/type of catalog, requests, new-request, request, policies, reviews, audit.
+No defect fails a surface. Everything from the first walk (14px titles, the agent-waiting 400, the Escape focus loss, 13px record text) no longer reproduces under ui-components 2.441.8.
 
-D2. Every readable request record (req-0001, 0002, 0005, 0008) logs a console error on arrival: GET /api/conversations/agent/waiting?channel=access%3Areq%3A<id> -> 400. RequestRecordPage.tsx / the discussion pane asks the agent-waiting endpoint for a channel it rejects.
-
-D3 (minor). Request record text sizes 13/400 (x12) and 11/400 (x3) are off the 12/14 scale; new-request has one 20/600 text node that is not the h1; new-request title is indented to left 264 where the list pages start at 224.
-
-D4 (minor). Escape on the catalog Filters popover returns focus to the page container, not the Filters button.
+Minor, still open, not verdict-changing:
+- new-request: the single "Who is it for?" radio label measures 13/500, between the 12 and 14 steps of the type scale (library RadioGroup option). The title row also starts at left 264 (a back link takes 224-264); the same on the review campaign record.

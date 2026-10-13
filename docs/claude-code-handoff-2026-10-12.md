@@ -258,6 +258,21 @@ new dist. Keep sibling builds/pack/install under one owner; do not edit node_mod
   typecheck + 1,834 unit tests green. Journey contracts re-measured; the
   journey logs themselves still need their walks.
 
+- **2026-10-13, the `access` tenant (Claude Code).** Built A0 → A2 in one
+  day on the goal/validator pattern: registration (21 points), additive
+  `schema/access_schema.sql` + mock mirror, `/api/access/*` with live
+  approver chains, SoD policies, provisioning through `setGrants`, expiry
+  sweeper, bell items, one thread per request, review campaigns, manual
+  revoke, configuration; nine portal pages on the house frame with the shared
+  composer. 31 journey logs walked twice and sealed; DOM audit green on the
+  tenant; gate record `docs/realtime-validation/2026-10-13/access-tenant.md`.
+  The UX audit skill is now a Claude Code skill (`.claude/skills/ui-dom-audit`
+  → ui-components); a 30-minute session loop re-runs the representative
+  cross-tenant sweep. ui-components reached **2.441.8** (compact PageHeader
+  keeps the 20/600 title; Escape returns focus to the Filters trigger).
+  Owed: Aurora application (user), native PostgreSQL contracts, the two layout
+  decisions above, the older tenants' journey re-walks.
+
 ## Suggested continuation
 
 1. Continue from the user's next screenshot or requested tenant. Reproduce an
