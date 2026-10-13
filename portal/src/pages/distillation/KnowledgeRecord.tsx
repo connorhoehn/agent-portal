@@ -325,9 +325,8 @@ export function KnowledgeRecord({
   };
 
   return (
-    <EditorShell
+    <EditorShell titleSize="sm" titleAs="h2"
       title={item.title}
-      titleSize="lg"
       statusPill={<StatusPill tone={status.tone} label={status.label} size="sm" />}
       subtitle={`${item.level === 'L0' ? 'Written' : 'Updated'} ${relativeTime(updated)}${item.level !== 'L2' && item.repo ? ` · ${shortRepo(item.repo)}` : ''}`}
       tabsTrailing={(

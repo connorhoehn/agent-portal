@@ -124,9 +124,8 @@ function Claim({
   // name — and its header, body and docked composer share the shell's 20px
   // record inset.
   return (
-    <EditorShell
+    <EditorShell titleSize="sm" titleAs="h2"
       title={row.title}
-      titleSize="md"
       statusPill={<StatusPill tone={VERDICT_PILL[sample.verdict].tone} label={VERDICT_PILL[sample.verdict].label} size="sm" />}
       subtitle={[row.typeLabel, row.repo ? `From ${shortRepo(row.repo)}` : null, `Sampled ${relativeTime(row.sampledAt)}`].filter(Boolean).join(' · ')}
       headActions={(
