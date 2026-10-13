@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "005692fc740a0786a4b21438362527b1369e37434ea48b439193d9cc62aabda6",
-  "at": "2026-10-13T19:45:51.637Z"
+  "sourceDigest": "1f2fe81f2e8dcfe2ef0f1a2c2a2dae3932f92c4dbe3fb0e2580b4d3dbaa37884",
+  "at": "2026-10-13T20:28:02.938Z"
  },
  "routes": {
   "/access": {
@@ -769,10 +769,12 @@
   },
   "/iq/scores/cohorts": {
    "value": {
-    "violations": [],
+    "violations": [
+     "title"
+    ],
     "lands": null
    },
-   "changedAt": "2026-10-13T06:28:29.676Z"
+   "changedAt": "2026-10-13T20:28:02.938Z"
   },
   "/iq/scores/compare": {
    "value": {

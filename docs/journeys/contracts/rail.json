@@ -1,15 +1,17 @@
 {
  "measured": {
-  "sourceDigest": "005692fc740a0786a4b21438362527b1369e37434ea48b439193d9cc62aabda6",
-  "at": "2026-10-13T19:39:26.366Z"
+  "sourceDigest": "1f2fe81f2e8dcfe2ef0f1a2c2a2dae3932f92c4dbe3fb0e2580b4d3dbaa37884",
+  "at": "2026-10-13T20:21:01.304Z"
  },
  "routes": {
   "/assessment/workspace": {
    "value": {
-    "verdict": "MATCH",
-    "problems": []
+    "verdict": "DIFFERS",
+    "problems": [
+     "no rail found on /iq/library"
+    ]
    },
-   "changedAt": "2026-10-13T06:22:10.232Z"
+   "changedAt": "2026-10-13T20:21:01.304Z"
   },
   "/iq/communication/calls": {
    "value": {
@@ -83,10 +85,12 @@
   },
   "/iq/distillation/review?tab=decided": {
    "value": {
-    "verdict": "MATCH",
-    "problems": []
+    "verdict": "DIFFERS",
+    "problems": [
+     "no <main>"
+    ]
    },
-   "changedAt": "2026-10-08T09:08:08.563Z"
+   "changedAt": "2026-10-13T20:21:01.304Z"
   },
   "/iq/distillation/review?view=promotions": {
    "value": {
