@@ -224,7 +224,7 @@ function RequestRecord({ id }: { id: string }) {
         {writeError && <InlineAlert tone="error" onDismiss={() => setWriteError(null)}>{writeError}</InlineAlert>}
         {notice && <InlineAlert tone="success" onDismiss={() => setNotice(null)}>{notice}</InlineAlert>}
 
-        <DetailSection first title="Request" data-testid="access-request-summary">
+        <DetailSection variant="heading" first title="Request" data-testid="access-request-summary">
           {/* grid: 12px labels over 14px values (T size="sm"), the app's 12/14 scale. */}
           <KeyValue layout="grid" items={[
             { label: 'For', value: <T size="sm">{request.beneficiary.displayName}</T> },
@@ -243,7 +243,7 @@ function RequestRecord({ id }: { id: string }) {
           ]} />
         </DetailSection>
 
-        <DetailSection title="Approval chain" hint={`${request.steps.length} steps`} data-testid="access-request-chain">
+        <DetailSection variant="heading" title="Approval chain" hint={`${request.steps.length} steps`} data-testid="access-request-chain">
           <Stack gap="md">
             <WorkflowStepper size="compact" steps={chainSteps(request.steps)} aria-label={step ? `Waiting on step ${step.step} of ${request.steps.length}` : `Chain of ${request.steps.length} steps`} />
             <DataTable data-testid="access-request-steps" data={request.steps} columns={stepColumns(request.status)} keyField={(s) => String(s.step)}
@@ -256,7 +256,7 @@ function RequestRecord({ id }: { id: string }) {
         </DetailSection>
 
         {mayDecide && (
-          <DetailSection title="Your decision" hint={`Step ${step!.step} · ${STEP_KIND_LABELS[step!.kind]}`} data-testid="access-request-decision">
+          <DetailSection variant="heading" title="Your decision" hint={`Step ${step!.step} · ${STEP_KIND_LABELS[step!.kind]}`} data-testid="access-request-decision">
             <Stack gap="sm">
               <FormField label="Comment" hint="Recorded on the step and in the audit trail. Required to reject or to ask for information.">
                 {(wiring) => <Textarea {...wiring} rows={3} value={comment} onChange={(e) => setComment(e.target.value)} data-testid="access-request-comment" />}
@@ -270,7 +270,7 @@ function RequestRecord({ id }: { id: string }) {
           </DetailSection>
         )}
 
-        <DetailSection title="Policy check" hint={request.sod.verdict} data-testid="access-request-sod">
+        <DetailSection variant="heading" title="Policy check" hint={request.sod.verdict} data-testid="access-request-sod">
           {request.sod.conflicts.length === 0 ? (
             <T size="sm" tone="secondary">No separation-of-duties conflict for {request.beneficiary.displayName}.</T>
           ) : (
@@ -302,7 +302,7 @@ function RequestRecord({ id }: { id: string }) {
         </DetailSection>
 
         {request.can.viewAudit && (
-          <DetailSection title="Audit" hint={audit.data ? `${audit.data.items.length} events` : undefined} data-testid="access-request-audit">
+          <DetailSection variant="heading" title="Audit" hint={audit.data ? `${audit.data.items.length} events` : undefined} data-testid="access-request-audit">
             {audit.error ? (
               <UnavailableNotice error={audit.error} what="this request's events" source="Events are read from access_events" onRetry={audit.refresh} />
             ) : (
