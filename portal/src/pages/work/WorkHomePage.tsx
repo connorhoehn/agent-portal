@@ -160,7 +160,7 @@ export default function WorkHomePage() {
     <Stack gap="md" data-testid="automate-inbox">
       <PageHeader title="Inbox" description="Questions and approvals waiting for you."
         actions={canManage ? <Button size="sm" variant="primary" onClick={() => navigate('/iq/work/queue?compose=1')}>New run</Button> : undefined} />
-      <PageSection title="Needs your attention">
+      <PageSection size="sm" title="Needs your attention">
       {/* A failed load renders as zeros everywhere below — "0 workers, 0 needs
           you" reads exactly like a healthy, idle system. Say so plainly.
           `summaryFailure` (transport error OR the wire's `degraded` marker) —
@@ -310,7 +310,7 @@ export default function WorkHomePage() {
       {!summaryFailure && (needsReview === 0 && pendingProposals === 0) && pendingConsults.length > 0 && <T className="text-[13px] text-text-tertiary">✓ No pending approvals or proposed changes.</T>}
       </PageSection>
       <Divider spacing="none" />
-      <PageSection title="Current queue"
+      <PageSection size="sm" title="Current queue"
         description={dispatchedCount > 0
           ? `Queue jobs only — ${dispatchedRunsNoun(dispatchedCount)} from initiative work items ${dispatchedCount === 1 ? 'is' : 'are'} running outside the queue; Runs lists them.`
           : 'Queue jobs only — runs dispatched from initiative work items are listed on Runs when they are live.'}
@@ -323,7 +323,7 @@ export default function WorkHomePage() {
         ]} />
       </PageSection>
       <Divider spacing="none" />
-      <PageSection title="Recent runs" actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">All runs →</Link>}>
+      <PageSection size="sm" title="Recent runs" actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">All runs →</Link>}>
         {/* The section that owns the table owns its command input: the
             boundary is this section, so the composer spans it flush. */}
         <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">

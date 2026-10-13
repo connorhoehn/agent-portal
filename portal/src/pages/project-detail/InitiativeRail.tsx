@@ -198,7 +198,7 @@ export function InitiativeRail({
   ];
 
   return (
-    <PageSection
+    <PageSection size="sm"
       title="Agents"
       actions={view === 'bots' && canManageBots
         ? <Button variant="link" onClick={() => navigate('/admin/bots')}>New bot</Button>

@@ -44,8 +44,9 @@ export function ExplorerFrame({ rail, children, aside, paneHeader }: ExplorerFra
   const [railWidth, setRailWidth] = useState(() => {
     try {
       const stored = Number(localStorage.getItem('assessment.documentRail.width'));
-      return Number.isFinite(stored) && stored >= 220 && stored <= 480 ? stored : 280;
-    } catch { return 280; }
+      // 220 is the app's concise rail width (/iq/library is the reference the rail judge compares against).
+      return Number.isFinite(stored) && stored >= 220 && stored <= 480 ? stored : 220;
+    } catch { return 220; }
   });
   useEffect(() => {
     const element = frameRef.current;

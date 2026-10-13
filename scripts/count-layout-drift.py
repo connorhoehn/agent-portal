@@ -49,6 +49,7 @@ Classes (each a ratchet in validate-component-discipline.sh):
   densitysize  an explicit `size="sm"` on a composite the compact density
                already draws at sm (StatStrip, PageSection, DetailSection,
                ActionRowList, Table, DataTable, EmptyState, ChatSidePanelFrame,
+               not PageSection — its size is the heading level,
                SegmentedControl, WorkflowStepper): the per-call restatement
                of the house density (audit 2026-10-07 H15/L1). Budget: zero.
 Tests, stories and node_modules are skipped.
@@ -202,7 +203,10 @@ CELLFN = re.compile(r'(?:\brender\s*:|\browActions\s*=\s*\{)\s*\(')
 BUTTON = re.compile(r'<Button(?=[\s/>])')
 
 
-DENSITY_COMPOSITES = {'StatStrip', 'PageSection', 'DetailSection', 'ActionRowList', 'Table', 'DataTable', 'EmptyState', 'ChatSidePanelFrame', 'SegmentedControl', 'WorkflowStepper'}
+# PageSection is deliberately NOT here: its size chooses the heading LEVEL (lg = the page's
+# h1, md/sm = an h2 subsection), so an explicit `size="sm"` is semantics, not a density
+# restatement. Density only tightens its spacing (ui-components 2.441.5).
+DENSITY_COMPOSITES = {'StatStrip', 'DetailSection', 'ActionRowList', 'Table', 'DataTable', 'EmptyState', 'ChatSidePanelFrame', 'SegmentedControl', 'WorkflowStepper'}
 
 hits = {k: [] for k in ('bar', 'bigtext', 'cardstat', 'stackedcell', 'glyphbutton', 'pxtype', 'cellbutton', 'lonesearch', 'tablesize', 'densitysize')}
 for f in sorted(root.rglob('*.tsx')):

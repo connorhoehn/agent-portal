@@ -9,6 +9,4 @@ export const LAYOUT_CASCADE_BASELINE: Record<string, Invariant[]> = {
   // The work item's title is EditorShell's (doc-editor), whose head is px-5:
   // 20px against the trail's 24px gutter (ui-components queue row,
   // 2026-10-07). Trail→title is 48px since the header band left that gap.
-  '/iq/projects/:id?item=': ['title'],
-  '/iq/search': ['title'],
 };

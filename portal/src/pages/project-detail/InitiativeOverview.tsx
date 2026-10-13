@@ -94,7 +94,7 @@ export function InitiativeOverview({
       )}
       {model.state === 'ready' && (
         <>
-          {model.attention.length > 0 && <PageSection
+          {model.attention.length > 0 && <PageSection size="sm"
             title="Needs attention"
             // The count is the rows below it, never a stored total. It reads
             // as the pale-indigo pill of the mockup (ui-components 2.396.0).

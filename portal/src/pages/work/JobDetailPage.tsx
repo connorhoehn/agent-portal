@@ -322,7 +322,7 @@ function JobDetailContent() {
   const activityUnavailable = !isLive && activity.length === 0 && job.status !== 'queued';
   const canOpenAutomation = BOTS_ROLES.includes(session?.role ?? '');
   const canOpenWorker = DEVBOX_ROLES.includes(session?.role ?? '');
-  const toolResults = tools.length > 0 ? <PageSection title="Recorded tool results">
+  const toolResults = tools.length > 0 ? <PageSection size="sm" title="Recorded tool results">
     <Stack gap="none" className="border-t border-border">
       {tools.map((tool, i) => <Inline key={`${i}-${tool.name}`} gap="md" className="border-b border-border py-2 text-[13px]">
         <T className={tool.done ? 'text-success' : 'text-text-tertiary'} aria-label={tool.done ? 'Completed' : 'Not completed'}>{tool.done ? '✓' : '○'}</T>
@@ -330,7 +330,7 @@ function JobDetailContent() {
       </Inline>)}
     </Stack>
   </PageSection> : null;
-  const unavailable = activityUnavailable ? <PageSection title="Activity unavailable">
+  const unavailable = activityUnavailable ? <PageSection size="sm" title="Activity unavailable">
     <T className="text-[13px] text-text-tertiary">This run predates activity recording, or its worker log has expired.</T>
   </PageSection> : null;
 
@@ -365,16 +365,16 @@ function JobDetailContent() {
         { id: 'outputs', label: 'Outputs' }, { id: 'changes', label: 'Changes', badge: proposalCount || undefined },
       ]} />
       {tab === 'summary' && <Stack gap="lg">
-        <PageSection title="Outcome">
+        <PageSection size="sm" title="Outcome">
           <T wrap className={`text-[14px] ${job.error ? 'text-danger' : 'text-text-primary'}`}>
             {job.error ?? job.result?.summary ?? (job.status === 'queued' ? 'Waiting for a worker.' : isLive ? 'This run is in progress.' : 'No outcome recorded.')}
           </T>
           {activityUnavailable && job.result && <T className="mt-1 text-[12px] text-text-tertiary">The recorded result is shown below. Detailed activity is unavailable for this run.</T>}
         </PageSection>
-        <PageSection title="Task"><T wrap className="text-[14px] text-text-secondary whitespace-pre-wrap">{prompt || 'No prompt recorded.'}</T></PageSection>
+        <PageSection size="sm" title="Task"><T wrap className="text-[14px] text-text-secondary whitespace-pre-wrap">{prompt || 'No prompt recorded.'}</T></PageSection>
         {toolResults}
         {unavailable}
-        <PageSection title="Timing">
+        <PageSection size="sm" title="Timing">
           <Stack gap="xs" className="max-w-lg">
             {([['Queued', job.createdAt], ['Claimed', job.claimedAt], ['Started', job.startedAt], ['Finished', job.finishedAt]] as const).filter(([, at]) => at).map(([label, at]) => <KeyValue key={label} layout="row" labelWidth="w-28" label={label} value={absoluteTime(at)} />)}
           </Stack>
@@ -401,7 +401,7 @@ function JobDetailContent() {
         </Stack>
       </Stack>}
       {tab === 'outputs' && <Stack gap="lg">
-        {job.result?.summary && <PageSection title="Recorded result"><T wrap className="text-[14px] whitespace-pre-wrap">{job.result.summary}</T></PageSection>}
+        {job.result?.summary && <PageSection size="sm" title="Recorded result"><T wrap className="text-[14px] whitespace-pre-wrap">{job.result.summary}</T></PageSection>}
         {toolResults}
         {!job.result?.summary && !tools.length && <EmptyState title="No outputs recorded" />}
       </Stack>}
