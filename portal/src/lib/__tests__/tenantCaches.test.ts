@@ -60,6 +60,8 @@ const DATA_KEYS = [
   'rmn:notifications:read',
   'chat.session.invoke',
   'chat.session.explore',
+  // The access tenant's prefix (docs/access-tenant-goal.md row 12).
+  'access.requestDraft',
 ];
 
 const PREF_KEYS = ['orgiq:preferences:v1', 'projects-view'];

@@ -106,8 +106,9 @@ need "409" middleware/src/routes/__tests__/access.test.ts "contract: a step is d
 exists portal/src/pages/access "pages/access/"
 exists portal/src/pages/access/accessSurfaces.ts "accessSurfaces.ts"
 need "/access/" portal/e2e/ui-dom-audit.policies.ts "DOM-audit policy classifies /access/* routes"
-for f in catalog requests approvals policies audit; do
-  if ls portal/src/pages/access/*.tsx >/dev/null 2>&1 && grep -lq "CollectionCommandHost" portal/src/pages/access/*${f^}*.tsx 2>/dev/null; then ok "page $f carries the shared composer"; else fail "page $f has no CollectionCommandHost (portal/src/pages/access/*${f^}*.tsx)"; fi
+for f in Catalog Requests Approvals Policies Audit; do
+  # bash 3.2 (macOS) has no ${f^}; the page files are named <Surface>Page.tsx
+  if ls portal/src/pages/access/*${f}*.tsx >/dev/null 2>&1 && grep -lq "CollectionCommandHost" portal/src/pages/access/*${f}*.tsx 2>/dev/null; then ok "page $f carries the shared composer"; else fail "page $f has no CollectionCommandHost (portal/src/pages/access/*${f}*.tsx)"; fi
 done
 
 section "A0 · journeys"

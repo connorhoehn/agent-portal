@@ -41,6 +41,11 @@ FILES = [
     'schema/flow_runs_schema.sql',
     'schema/social_deck_schema.sql',
     'schema/seed.sql',
+    # The access tenant (docs/access-tenant-design.md §3). After seed.sql: it
+    # adds people.manager_id and seeds the access cast's people rows beside
+    # the org graph's, then links app_users.person_id. IF NOT EXISTS / ON
+    # CONFLICT throughout. Not yet applied to Aurora (goal lane E).
+    'schema/access_schema.sql',
     # Sprints, budget grants, work-item cost estimates — the program tables the
     # curated seed writes into. load_schema.py also applies this; listing it
     # here means a seed-only run against an older database still works.

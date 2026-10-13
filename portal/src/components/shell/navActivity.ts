@@ -15,7 +15,7 @@ interface ActivityScope {
   /** The shell has already filtered these doors for the current actor. */
   visiblePaths: readonly string[];
 }
-const tenantPrefix: Readonly<Record<string, string>> = { orgiq: '/iq/', assessment: '/assessment/', social: '/social/', pipelines: '/pipelines/' };
+const tenantPrefix: Readonly<Record<string, string>> = { orgiq: '/iq/', assessment: '/assessment/', social: '/social/', pipelines: '/pipelines/', access: '/access/' };
 
 function localPath(href: unknown): string | null {
   if (typeof href !== 'string' || !href.startsWith('/') || href.startsWith('//') || /[\\\u0000-\u0020\u007f]/.test(href)) return null;

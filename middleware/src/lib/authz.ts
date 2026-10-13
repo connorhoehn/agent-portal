@@ -82,6 +82,14 @@ export const CAPABILITY_ACTIONS = [
   'ApproveStep',            // decide a step waiting on a person — operator and up
   'CancelRun',              // cancel a run — operator and up
   'ManagePipelineConfig',   // tenant configuration — pipeline-admin only
+  // Access tenant — routes/access.ts, seeds/roles/access/*.cedar
+  // (docs/access-tenant-goal.md §Cedar).
+  'ViewAccess',             // reads: catalog, requests, policies, audit
+  'RequestAccess',          // submit a request (for self; on behalf needs DecideAccess)
+  'DecideAccess',           // approve / reject a step — approver and up
+  'ManageAccessCatalog',    // edit what can be requested — access-admin only
+  'ManageAccessPolicy',     // SoD policies — access-admin only
+  'ProvisionAccess',        // manual revoke, SoD override — access-admin only
 ] as const;
 
 export type CapabilityAction = (typeof CAPABILITY_ACTIONS)[number];

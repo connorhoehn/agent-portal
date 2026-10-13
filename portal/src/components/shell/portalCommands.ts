@@ -20,7 +20,7 @@ import { useSession } from '../../lib/auth';
 import { openShell, useComputeOptional } from '@connorhoehnslalom/ui-components/compute';
 import { commandKeywords } from './commandKeywords';
 
-type PageTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'admin' | 'universal';
+type PageTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'admin' | 'universal';
 
 interface PageEntry {
   label: string;
@@ -81,6 +81,9 @@ export const GROUP_ORDER_BY_TENANT: Record<string, string[]> = {
   // docs/social-tenant-design.md §5.3 — what can run, what ran, who produced
   // it, then configuration.
   pipelines: ['Catalog', 'Runs', 'Sources', 'System'],
+  // docs/access-tenant-design.md §6 — ask for access, decide what waits on
+  // you, govern what was granted, then configuration.
+  access: ['Request', 'Approve', 'Govern', 'System'],
 };
 export function groupRank(tenant: string, group?: string): number {
   const order = GROUP_ORDER_BY_TENANT[tenant] ?? GROUP_ORDER_BY_TENANT['orgiq']!;
@@ -313,6 +316,30 @@ const PAGES: PageEntry[] = [
   { label: 'Configuration',      hint: 'Who approves a step by default',      path: '/pipelines/configuration',                    tenant: 'pipelines', group: 'System', roles: ['pipeline-admin'],
     keywords: ['configuration', 'approver', 'default', 'policy'] },
   { label: 'Pipeline settings',  hint: 'Your run notifications and views',    path: '/pipelines/settings',                         tenant: 'pipelines', group: 'System',
+    keywords: ['settings', 'preferences', 'notifications'] },
+  // Access tenant — its own map (Request / Approve / Govern / System),
+  // mirroring NAV_ITEMS in Layout.tsx. Request and Govern are readable by every
+  // access role (ViewAccess); Approvals is DecideAccess (approver,
+  // access-admin) and Configuration access-admin's, as the routes gate them.
+  { label: 'Catalog',            hint: 'What access can be requested',        path: '/access/catalog',                             tenant: 'access', group: 'Request',
+    keywords: ['catalog', 'entitlement', 'role', 'membership', 'request'] },
+  { label: 'Requests',           hint: 'Your access requests and their chains', path: '/access/requests',                          tenant: 'access', group: 'Request',
+    keywords: ['request', 'elevation', 'status', 'mine', 'reports'] },
+  { label: 'Open requests',      hint: 'Requests still waiting on an approver', path: '/access/requests?status=open',              tenant: 'access', group: 'Request',
+    keywords: ['open', 'pending', 'waiting', 'in progress', 'request'] },
+  { label: 'New request',        hint: 'Ask for a role or a membership',      path: '/access/requests/new',                        tenant: 'access', group: 'Request',
+    keywords: ['new', 'request', 'ask', 'elevate', 'grant', 'wizard'] },
+  { label: 'Approvals',          hint: 'Requests waiting on your decision',   path: '/access/approvals',                           tenant: 'access', group: 'Approve', roles: ['approver', 'access-admin'],
+    keywords: ['approval', 'approve', 'reject', 'inbox', 'decide', 'waiting'] },
+  { label: 'Policies',           hint: 'Separation-of-duties rules',          path: '/access/policies',                            tenant: 'access', group: 'Govern',
+    keywords: ['policy', 'sod', 'separation of duties', 'conflict', 'rule'] },
+  { label: 'Reviews',            hint: 'Access review campaigns',             path: '/access/reviews',                             tenant: 'access', group: 'Govern',
+    keywords: ['review', 'certification', 'campaign', 'recertify'] },
+  { label: 'Audit',              hint: 'Every request transition',            path: '/access/audit',                               tenant: 'access', group: 'Govern',
+    keywords: ['audit', 'event', 'history', 'log', 'trail'] },
+  { label: 'Configuration',      hint: 'Durations, stewards and sensitive items', path: '/access/configuration',                     tenant: 'access', group: 'System', roles: ['access-admin'],
+    keywords: ['configuration', 'duration', 'steward', 'sensitive'] },
+  { label: 'Access settings',    hint: 'Your request notifications and views', path: '/access/settings',                           tenant: 'access', group: 'System',
     keywords: ['settings', 'preferences', 'notifications'] },
 ];
 

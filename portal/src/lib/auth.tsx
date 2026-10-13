@@ -8,7 +8,7 @@ import { Button, Card, Inline, LoadingState, LockIcon, MetaLine, SectionLabel, S
 
 export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin';
 export type SessionRole = Role | 'admin';
-export type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines';
+export type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access';
 export type SessionStatus = 'loading' | 'ready' | 'invalid' | 'signed-out' | 'unavailable';
 
 /** tenant id → roles held there (from user_tenant_roles via the session cookie). */

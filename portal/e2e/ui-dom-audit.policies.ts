@@ -77,7 +77,7 @@ export interface TenantViewEvidence {
 
 export interface TenantRouteSpec { tenant: string; path: string; kind?: string; judges?: readonly string[]; pattern?: string }
 
-const TENANTS = new Set(['orgiq', 'assessment', 'social']);
+const TENANTS = new Set(['orgiq', 'assessment', 'social', 'access']);
 
 /** Reviewed collections that render an empty state in the seeded mock, so no table is visible to prove them. */
 const REVIEWED_COLLECTIONS = new Set(['/iq/work/changes', '/admin/changes', '/admin/projects', '/admin/observability/sessions', '/admin/observability/capability-events']);
@@ -86,6 +86,28 @@ const REVIEWED_LANDINGS: Record<string, string> = {
   '/iq/prompt-ops': 'Prompt Ops home: summary strips and links to Prompts, History, Diff and Evaluations; the collections live on those pages.',
   '/iq/scores/cohorts': 'Department cohort comparison cards computed server-side; there is no record list to search or filter.',
 };
+
+/**
+ * The access tenant (docs/access-tenant-design.md decision A9): every
+ * `/access/*` route is classified explicitly. A request record is required —
+ * its thread's composer docks in the content column — and so is every list
+ * page, by evidence first (the same order as the other tenants: a collection,
+ * a table or a visible composer is required before any exemption is read).
+ * The three exemptions each need their own positive evidence: the wizard's
+ * form, the configuration surface, the settings placeholder's testid. A route
+ * not named here stays unclassified.
+ */
+const ACCESS_COLLECTIONS = /^\/access\/(?:catalog|requests|approvals|policies|reviews|audit)$/;
+function accessComposerPolicy(pathname: string, view: TenantViewEvidence): ComposerPolicy | undefined {
+  if (/^\/access\/requests\/(?!new$)[^/]+$/.test(pathname)) return view.missingRecord
+    ? { mode: 'exempt', reason: 'The request endpoint returned 404 and its unavailable state is visible; there is no request thread to compose in.' }
+    : { mode: 'required' };
+  if (ACCESS_COLLECTIONS.test(pathname) || view.collection || view.listRoute || view.composer) return { mode: 'required' };
+  if (pathname === '/access/requests/new' && view.form) return { mode: 'exempt', reason: 'The request wizard is a single form (who, what, why, how long) with explicit inputs and a Submit action, rather than a searchable collection; the new request opens on its record, whose thread has the composer.' };
+  if (pathname === '/access/configuration' && (view.settingsSurface || view.form)) return { mode: 'exempt', reason: 'A configuration surface of durations, steward rules and sensitive items with a Save action (read-only in lane A0), rather than a searchable collection.' };
+  if (pathname === '/access/settings' && view.placeholder) return { mode: 'exempt', reason: 'The access preferences surface is registered but not available yet; the page displays its registration state (access-empty-settings) and exposes no data to search or command.' };
+  return undefined;
+}
 
 /**
  * The reviewed policy for the three non-pipelines tenants. Order matters: a
@@ -97,6 +119,7 @@ export function tenantComposerPolicy(spec: TenantRouteSpec, view: TenantViewEvid
   if (!TENANTS.has(spec.tenant)) return undefined;
   const pathname = new URL(spec.path, 'http://audit.local').pathname;
   const record = spec.kind === 'record' || spec.kind === 'editor';
+  if (spec.tenant === 'access') return accessComposerPolicy(pathname, view);
   if (view.listRoute || spec.judges?.includes('table') || view.collection) return { mode: 'required' };
   if (REVIEWED_COLLECTIONS.has(pathname)) return { mode: 'required' };
   if (view.tableSearch) return { mode: 'required' };

@@ -52,6 +52,7 @@ import { socialDeckRouter } from './routes/social-deck.js';
 import { callPagesRouter } from './routes/call-pages.js';
 import { callChatRouter } from './routes/call-chat.js';
 import { pipelinesRouter } from './routes/pipelines.js';
+import { accessRouter } from './routes/access.js';
 import { runsFacadeRouter } from './routes/runs.js';
 import { initiativeDecksRouter } from './routes/initiative-decks.js';
 import { ingestRouter } from './routes/ingest.js';
@@ -313,6 +314,9 @@ app.use('/api/calls', callPagesRouter);
 app.use('/api/calls', callChatRouter);
 app.use('/api/social', requireTenant('social'), socialRouter);
 app.use('/api/pipelines', requireTenant('pipelines'), pipelinesRouter);
+// The access tenant (docs/access-tenant-design.md): requests, approvals, SoD policies, audit.
+// At the mount — no machine callback of its own; every route adds its Cedar action.
+app.use('/api/access', requireTenant('access'), accessRouter);
 // The orgiq read of the pipelines run projection — only runs whose
 // context.tenant is 'orgiq' (docs/pipelines-tenant-goal.md §"The vertical
 // slice"). The bot detail page reads its runs here, never /api/pipelines/*.

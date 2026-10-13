@@ -22,10 +22,18 @@ export const PIPELINES_ENABLED =
   (import.meta as unknown as { env?: Record<string, string | undefined> })
     .env?.VITE_ENABLE_PIPELINES !== 'false';
 
+// ACCESS_ENABLED — the fifth tenant (access requests, approvals and governance;
+// see docs/access-tenant-design.md). ON by default; set VITE_ENABLE_ACCESS=false
+// to park its tile, rail and /access tree.
+export const ACCESS_ENABLED =
+  (import.meta as unknown as { env?: Record<string, string | undefined> })
+    .env?.VITE_ENABLE_ACCESS !== 'false';
+
 /** Whether a tenant's portal surfaces are switched on. orgiq always is. */
 export function tenantEnabled(tenant: string): boolean {
   if (tenant === 'assessment') return ASSESSMENT_ENABLED;
   if (tenant === 'social') return SOCIAL_ENABLED;
   if (tenant === 'pipelines') return PIPELINES_ENABLED;
+  if (tenant === 'access') return ACCESS_ENABLED;
   return true;
 }

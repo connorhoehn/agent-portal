@@ -142,6 +142,10 @@ export class AuthenticationStack extends cdk.Stack {
       { email: 'dara.whitfield@orgiq.example', name: 'Dara Whitfield' },
       // Pipelines author who also holds Social — the Communication-plane walker, outside the pure cast.
       { email: 'tomas.ferreira@orgiq.example', name: 'Tomás Ferreira' },
+      // Access tenant cast (docs/access-tenant-goal.md §Cast).
+      { email: 'rhea.castellanos@orgiq.example', name: 'Rhea Castellanos' },
+      { email: 'omar.haddad@orgiq.example', name: 'Omar Haddad' },
+      { email: 'priya.venkataraman@orgiq.example', name: 'Priya Venkataraman' },
     ];
     for (const u of seedUsers) {
       new cognito.CfnUserPoolUser(this, `SeedUser-${u.email.replace(/[^a-z0-9]/gi, '-')}`, {

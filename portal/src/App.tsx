@@ -4,7 +4,7 @@ import { Layout } from './components/shell/Layout';
 import { RequireRole, RequireTenant } from './lib/auth';
 import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
-import { ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED } from './lib/features';
+import { ACCESS_ENABLED, ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED } from './lib/features';
 import { CHOOSER, resolveHome } from './lib/tenantHome';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
 import { SharedNotificationsProvider } from './components/shell/SharedNotifications';
@@ -67,6 +67,17 @@ const PipelinesRunbooksPage = lazy(() => import('./pages/pipelines/RunbooksPage'
 const PipelinesApprovalsPage = lazy(() => import('./pages/pipelines/ApprovalsPage'));
 const PipelinesQueuesPage = lazy(() => import('./pages/pipelines/QueuesPage'));
 const PipelinesSourcesPage = lazy(() => import('./pages/pipelines/SourcesPage'));
+const AccessLayout = lazy(() => import('./pages/access/AccessLayout'));
+const AccessSurfacePage = lazy(() => import('./pages/access/AccessSurfacePage'));
+const AccessCatalogPage = lazy(() => import('./pages/access/CatalogPage'));
+const AccessRequestsPage = lazy(() => import('./pages/access/RequestsPage'));
+const AccessRequestNewPage = lazy(() => import('./pages/access/RequestNewPage'));
+const AccessRequestRecordPage = lazy(() => import('./pages/access/RequestRecordPage'));
+const AccessApprovalsPage = lazy(() => import('./pages/access/ApprovalsPage'));
+const AccessPoliciesPage = lazy(() => import('./pages/access/PoliciesPage'));
+const AccessReviewsPage = lazy(() => import('./pages/access/ReviewsPage'));
+const AccessAuditPage = lazy(() => import('./pages/access/AuditPage'));
+const AccessConfigurationPage = lazy(() => import('./pages/access/ConfigurationPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
 const KnowledgeLayout = lazy(() => import('./pages/knowledge/KnowledgeLayout'));
@@ -386,6 +397,45 @@ export function App() {
           </Route>
         ) : (
           <Route path="pipelines/*" element={<Navigate to="/" replace />} />
+        )}
+
+        {/* ── /access/* — the fifth tenant (docs/access-tenant-design.md).
+             Flag ON by default (ACCESS_ENABLED). Every list page is a
+             collection on the shared command composer from registration day
+             (decision A9); Approvals is DecideAccess's (approver,
+             access-admin) and Configuration access-admin's — rail, palette
+             and route agree. Settings is the registered placeholder. ── */}
+        {ACCESS_ENABLED ? (
+          <Route
+            path="access"
+            element={(
+              <RequireTenant tenant="access" fallback={<HomeRedirect />}>
+                <Page element={<AccessLayout />} />
+              </RequireTenant>
+            )}
+          >
+            <Route index element={<Navigate to="requests" replace />} />
+            <Route path="catalog" element={<Page element={<AccessCatalogPage />} />} />
+            <Route path="requests" element={<Page element={<AccessRequestsPage />} />} />
+            <Route path="requests/new" element={<Page element={<AccessRequestNewPage />} />} />
+            <Route path="requests/:id" element={<Page element={<AccessRequestRecordPage />} />} />
+            <Route path="approvals" element={
+              <RequireRole roles={['approver', 'access-admin']} fallback={<HomeRedirect />}>
+                <Page element={<AccessApprovalsPage />} />
+              </RequireRole>
+            } />
+            <Route path="policies" element={<Page element={<AccessPoliciesPage />} />} />
+            <Route path="reviews" element={<Page element={<AccessReviewsPage />} />} />
+            <Route path="audit" element={<Page element={<AccessAuditPage />} />} />
+            <Route path="configuration" element={
+              <RequireRole roles={['access-admin']} fallback={<HomeRedirect />}>
+                <Page element={<AccessConfigurationPage />} />
+              </RequireRole>
+            } />
+            <Route path="settings" element={<Page element={<AccessSurfacePage surface="settings" />} />} />
+          </Route>
+        ) : (
+          <Route path="access/*" element={<Navigate to="/" replace />} />
         )}
 
         {/* ── /iq/* — OrgIQ tenant pages. Guarded like the other two trees:

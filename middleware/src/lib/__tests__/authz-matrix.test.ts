@@ -238,6 +238,21 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     tenant: 'pipelines',
     granted: ['ViewPipelines', 'RunPipeline', 'ApproveStep', 'CancelRun', 'ManagePipelineConfig', 'ManageUsers'],
   },
+  // The access tenant (seeds/roles/access/, docs/access-tenant-goal.md
+  // §Cedar): a requester asks, an approver decides but never configures or
+  // writes a grant by hand, the access-admin configures and provisions.
+  'access/requester': {
+    tenant: 'access',
+    granted: ['ViewAccess', 'RequestAccess'],
+  },
+  'access/approver': {
+    tenant: 'access',
+    granted: ['ViewAccess', 'RequestAccess', 'DecideAccess'],
+  },
+  'access/access-admin': {
+    tenant: 'access',
+    granted: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'ManageAccessCatalog', 'ManageAccessPolicy', 'ProvisionAccess', 'ManageUsers'],
+  },
   '*/admin': {
     tenant: null,
     granted: ['*'], // cross-tenant blanket permit
@@ -245,7 +260,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
 };
 
 describe('seed Cedar role -> capability matrix', () => {
-  test('exactly the fifteen seed roles exist', () => {
+  test('exactly the eighteen seed roles exist', () => {
     expect(sorted([...roles.keys()])).toEqual(sorted(Object.keys(MATRIX)));
   });
 

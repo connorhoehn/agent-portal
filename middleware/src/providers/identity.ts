@@ -44,13 +44,14 @@ const FALLBACK_TENANTS: TenantInfo[] = [
   { id: 'assessment', displayName: 'Assessment', status: 'ACTIVE' },
   { id: 'social', displayName: 'Social', status: 'ACTIVE' },
   { id: 'pipelines', displayName: 'Pipelines', status: 'ACTIVE' },
+  { id: 'access', displayName: 'Access', status: 'ACTIVE' },
 ];
 
 // Mutable epoch: bumpSessionEpoch increments in place so dev:mock exercises the
 // same sign-out-others / switch-invalidation semantics as Aurora.
 const FALLBACK_USERS: UserInfo[] = [
   { id: 'u-operator', displayName: 'Platform Operator', email: 'operator@orgiq.example', personId: null,
-    grants: { orgiq: ['admin'], assessment: ['admin'], social: ['admin'], pipelines: ['admin'] }, epoch: 0 },
+    grants: { orgiq: ['admin'], assessment: ['admin'], social: ['admin'], pipelines: ['admin'], access: ['admin'] }, epoch: 0 },
   { id: 'u-theo', displayName: 'Theo Chang', email: 'theo.chang@orgiq.example', personId: 'p-001',
     grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
   { id: 'u-vera', displayName: 'Vera Green', email: 'vera.green@orgiq.example', personId: 'p-002',
@@ -107,6 +108,15 @@ const FALLBACK_USERS: UserInfo[] = [
   // three-person cast above, whose outbound isolation walks need no Social grant.
   { id: 'u-tomas', displayName: 'Tomás Ferreira', email: 'tomas.ferreira@orgiq.example', personId: null,
     grants: { pipelines: ['author'], social: ['participant'] }, epoch: 0 },
+  // Access tenant cast — see docs/access-tenant-goal.md §Cast. A grant only in
+  // access; the linked people rows (and u-omar as u-rhea's manager) come from
+  // schema/access_schema.sql, mirrored offline by mock/access-people.ts.
+  { id: 'u-rhea', displayName: 'Rhea Castellanos', email: 'rhea.castellanos@orgiq.example', personId: 'p-rhea',
+    grants: { access: ['requester'] }, epoch: 0 },
+  { id: 'u-omar', displayName: 'Omar Haddad', email: 'omar.haddad@orgiq.example', personId: 'p-omar',
+    grants: { access: ['approver'] }, epoch: 0 },
+  { id: 'u-priya', displayName: 'Priya Venkataraman', email: 'priya.venkataraman@orgiq.example', personId: 'p-priya',
+    grants: { access: ['access-admin'] }, epoch: 0 },
 ];
 
 // ── RDS Data API helpers (local to this module) ──────────────────────────────

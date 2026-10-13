@@ -31,6 +31,7 @@ export const AUDIT_ROUTE_ALIASES: ReadonlyArray<{ pattern: RegExp; target: strin
   { pattern: /^\/iq$/, target: '/iq/work', why: 'tenant root opens Work' },
   { pattern: /^\/assessment$/, target: '/assessment/teams', why: 'tenant root opens Teams' },
   { pattern: /^\/social$/, target: '/social/channels', why: 'tenant root opens Channels' },
+  { pattern: /^\/access$/, target: '/access/requests', why: 'tenant root opens Requests' },
   { pattern: /^\/admin\/identity$/, target: '/admin/identity/roles', why: 'section index opens Roles' },
   { pattern: /^\/admin\/observability$/, target: '/admin/observability/summary', why: 'section index opens Summary' },
   { pattern: /^\/iq\/scores\/compare$/, target: '/iq/scores', why: 'a comparison with no selected people returns to Scores (ScoresComparePage)' },

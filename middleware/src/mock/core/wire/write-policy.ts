@@ -2365,6 +2365,56 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     alsoAccept: [404, 409],
   },
 
+  // ── the access tenant's A0 writes (docs/access-tenant-goal.md §Routes) ────
+  //
+  // Each writes only the registered access fixtures (mock/access-requests.ts,
+  // mock/access-policies.ts) through providers/access.ts, which answers 503
+  // outside MOCK_AURORA — no AWS, no model, no timer, and A0 provisions
+  // nothing. They replay as the orgiq admin persona: `admin` passes
+  // requireTenant('access') and every Cedar gate.
+  {
+    route: 'POST /api/access/requests',
+    persona: 'orgiq/admin',
+    safe: 'Appends one submitted request, its approval steps and a `submitted` event to the registered `access.requests` / `access.request-steps` / `access.events` fixtures; reset restores the seed. A0 stops at `approved`, so nothing reaches the grant store.',
+    bodyFrom: 'routes/access.ts: `itemId` must name a catalog item (read off GET /api/access/catalog, never retyped), `justification` at least 20 characters, `duration` one of DURATIONS. A request the beneficiary already holds or has open is the 409 captured instead.',
+    intercepts: ['aurora'],
+    alsoAccept: [409],
+    build: async (ctx) => {
+      const itemId = await ctx.pick('/api/access/catalog', 'id');
+      return itemId === null ? unsynthesisable('GET /api/access/catalog listed no item to request')
+        : { itemId, justification: 'wire capture: an access request smoke test', duration: '7d' };
+    },
+  },
+  {
+    route: 'POST /api/access/requests/:id/withdraw',
+    persona: 'orgiq/admin',
+    safe: 'Moves one row of the registered `access.requests` fixture to `withdrawn`, skips its open steps and appends an event; reset restores them. Only a party may withdraw, so the persona usually gets the 403 (or the 409 on a closed request) — both real shapes.',
+    bodyFrom: 'routes/access.ts: an optional `reason` string; no other key.',
+    intercepts: ['aurora'],
+    alsoAccept: [403, 404, 409],
+    build: ok({}),
+  },
+  {
+    route: 'POST /api/access/requests/:id/steps/:step/decide',
+    persona: 'orgiq/admin',
+    safe: 'Decides one step of a registered `access.requests` row (status, steps and events, all registered; reset restores them). The cross-tenant admin is never an eligible decider (lib/access/chain.ts), so the 403 refusal is the usual shape captured.',
+    bodyFrom: "routes/access.ts: `decision` ∈ {'approve','reject','info'}; `comment` optional for approve. `:step` is the request's current step, read off GET /api/access/requests/:id.",
+    intercepts: ['aurora'],
+    alsoAccept: [403, 404, 409],
+    build: ok({ decision: 'approve' }),
+  },
+  {
+    route: 'PUT /api/access/policies/:id',
+    persona: 'orgiq/admin',
+    safe: 'An ECHO-BACK: the body is the severity GET /api/access/policies just returned for the first policy, so the registered `access.policies` fixture ends with the same rule and only `updatedAt`/`updatedBy` move — which reset puts back.',
+    bodyFrom: "routes/access.ts: `severity` ∈ {'warn','block'} and/or a non-empty `reason` — read off the GET, never retyped.",
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const severity = await ctx.pick('/api/access/policies', 'severity');
+      return severity === null ? unsynthesisable('GET /api/access/policies named no severity to echo back') : { severity };
+    },
+  },
+
   // ── the social tenant's context bindings (lane E) ─────────────────────────
   {
     route: 'PUT /api/social/bindings',

@@ -66,6 +66,7 @@ const TENANT_LABELS: Record<string, string> = {
   assessment: 'Assessment',
   social: 'Social',
   pipelines: 'Pipelines',
+  access: 'Access',
 };
 
 export function tenantLabel(tenant: string): string {
@@ -83,6 +84,7 @@ const TENANT_PATHS: Record<string, readonly string[]> = {
   assessment: ['/assessment/'],
   social: ['/social/'],
   pipelines: ['/pipelines/'],
+  access: ['/access/'],
 };
 
 export function hrefInsideTenant(tenant: string, href: string | undefined): boolean {

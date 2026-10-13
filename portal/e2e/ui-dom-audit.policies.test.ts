@@ -75,3 +75,32 @@ test('tenant policy: dashboards stay exempt unless their table is searchable; li
   assert.equal(tenantComposerPolicy({ tenant: 'orgiq', path: '/iq/prompt-ops', kind: 'page' }, {})?.mode, 'exempt');
   assert.equal(tenantComposerPolicy({ tenant: 'orgiq', path: '/iq/prompt-ops', kind: 'page' }, { table: true })?.mode, 'required');
 });
+
+test('access policy: every list route and the request record require the composer, even with no evidence', () => {
+  for (const path of ['/access/catalog', '/access/requests', '/access/approvals', '/access/policies', '/access/reviews', '/access/audit']) {
+    assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path, kind: 'list' }, {}), { mode: 'required' }, path);
+    // A list page cannot be exempted by form or placeholder evidence.
+    assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path, kind: 'list' }, { form: true, placeholder: true, settingsSurface: true }), { mode: 'required' }, path);
+  }
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path: '/access/requests/req-0001', kind: 'record', pattern: '/access/requests/:id' }, {}), { mode: 'required' });
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path: '/access/requests/req-0001', kind: 'record' }, { recordDetail: true }), { mode: 'required' });
+  assert.equal(tenantComposerPolicy({ tenant: 'access', path: '/access/requests/req-missing', kind: 'record' }, { missingRecord: true })?.mode, 'exempt');
+});
+test('access policy: the wizard, configuration and settings are exempt only on their own evidence', () => {
+  const views = [
+    ['/access/requests/new', { form: true }],
+    ['/access/configuration', { settingsSurface: true }],
+    ['/access/settings', { placeholder: true }],
+  ] as const;
+  for (const [path, evidence] of views) {
+    assert.equal(tenantComposerPolicy({ tenant: 'access', path, kind: 'page' }, {}), undefined, path);
+    const policy = tenantComposerPolicy({ tenant: 'access', path, kind: 'page' }, evidence);
+    assert.ok(policy && policy.mode === 'exempt' && policy.reason.trim().length > 40, path);
+    // A visible composer or collection outranks the exemption.
+    assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path, kind: 'page' }, { ...evidence, composer: true }), { mode: 'required' }, path);
+  }
+  // Evidence never travels to another route.
+  assert.equal(tenantComposerPolicy({ tenant: 'access', path: '/access/settings', kind: 'page' }, { form: true }), undefined);
+  assert.equal(tenantComposerPolicy({ tenant: 'access', path: '/access/requests/new', kind: 'page' }, { placeholder: true }), undefined);
+  assert.equal(tenantComposerPolicy({ tenant: 'access', path: '/access/unknown', kind: 'page' }, { form: true, placeholder: true, settingsSurface: true }), undefined);
+});

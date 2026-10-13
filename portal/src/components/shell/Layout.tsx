@@ -83,7 +83,7 @@ interface WorkSummary {
   findings: { open: number; critical: number; warning: number };
 }
 
-type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'admin';
+type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'admin';
 type NavItem = { path: string; label: string; requireRoles?: string[]; tenant: Tenant | 'universal'; group?: string };
 
 // The app is an SDLC agent platform first — agents that link codebases, run in
@@ -105,6 +105,7 @@ const PALETTE_PLACEHOLDER: Record<string, string> = {
   assessment: 'Jump to a page, find a team (TEAM-0NN) or a command…',
   social: 'Jump to a channel, a call, a room or a person…',
   pipelines: 'Jump to a run, a definition or an approval…',
+  access: 'Jump to a request (req-0001), the catalog or an approval…',
 };
 
 // ⌘I scopes the same ⌘K dialog down to just the Devbox group (see
@@ -211,6 +212,20 @@ const NAV_ITEMS: NavItem[] = [
   // separation-of-duties table, docs/pipelines-tenant-goal.md). `admin` is
   // listed because the tenant-nav filter has no admin bypass.
   { path: '/pipelines/configuration', label: 'Configuration', tenant: 'pipelines', group: 'System', requireRoles: ['pipeline-admin', 'admin'] },
+  // The access tenant's own map (docs/access-tenant-design.md §6): REQUEST
+  // (what can be asked for, what you asked for) → APPROVE (what waits on you)
+  // → GOVERN (the SoD rules, reviews, the audit trail) → SYSTEM. Every access
+  // role reads Request and Govern (ViewAccess). Approvals reads
+  // GET /api/access/approvals, gated DecideAccess (approver, access-admin);
+  // Configuration is access-admin's (ManageAccessCatalog). `admin` is listed
+  // because the tenant-nav filter has no admin bypass.
+  { path: '/access/catalog',       label: 'Catalog',       tenant: 'access', group: 'Request' },
+  { path: '/access/requests',      label: 'Requests',      tenant: 'access', group: 'Request' },
+  { path: '/access/approvals',     label: 'Approvals',     tenant: 'access', group: 'Approve', requireRoles: ['approver', 'access-admin', 'admin'] },
+  { path: '/access/policies',      label: 'Policies',      tenant: 'access', group: 'Govern' },
+  { path: '/access/reviews',       label: 'Reviews',       tenant: 'access', group: 'Govern' },
+  { path: '/access/audit',         label: 'Audit',         tenant: 'access', group: 'Govern' },
+  { path: '/access/configuration', label: 'Configuration', tenant: 'access', group: 'System', requireRoles: ['access-admin', 'admin'] },
   { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
 ];
 
@@ -263,6 +278,7 @@ const TENANT_LABELS: Record<Tenant, string> = {
   assessment: 'Assessment',
   social: 'Social',
   pipelines: 'Pipelines',
+  access: 'Access',
   admin: 'Admin',
 };
 
@@ -276,7 +292,7 @@ const TENANT_LABELS: Record<Tenant, string> = {
  * selection) is two more levels: the library pane host says so.
  */
 const SHELL_RAIL_DEPTH: RailDepthSpec = {
-  prefixes: ['iq', 'assessment', 'social', 'pipelines', 'admin'],
+  prefixes: ['iq', 'assessment', 'social', 'pipelines', 'access', 'admin'],
   drillParams: ['item', 'dimension', 'step', 'sample', 'run', 'candidate'],
   leafRoutes: [
     /^\/(iq|pipelines)\/runs\/[^/]+$/,

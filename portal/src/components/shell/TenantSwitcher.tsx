@@ -6,7 +6,7 @@ import { useSharedNotifications } from './SharedNotifications';
 import { useCallHost } from '../../lib/conversationCall';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
 
-const LABELS: Record<Tenant, string> = { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines' };
+const LABELS: Record<Tenant, string> = { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines', access: 'Access' };
 
 /** The shell's tenant switcher: the library draws it; this adapter supplies the
  * viewer's switchable tenants, their unread counts, live state and the switch. */

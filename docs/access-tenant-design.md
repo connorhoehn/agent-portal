@@ -35,6 +35,13 @@ authority; this tenant is the governed way of changing them.
 | A9 | Every list page ships with the shared collection command composer from registration day, and the DOM audit policy classifies every `/access/*` route explicitly. | The tenant is mostly interface; it must be born on the house layout, type scale and composer contract rather than retrofitted. |
 | A10 | Access reviews (periodic certification of standing grants) are phase A2, built on the same request/decision/provision model (a review decision that says "revoke" is a revocation request pre-approved by the reviewer). | Reviews reuse the workflow; shipping them first would duplicate it. |
 
+Decided during A0 (2026-10-13): a manager or steward step is decidable only by
+a person who also holds `approver` or `access-admin` in `access` (stewards of
+the other tenants hold no access grant, so a step with no eligible decider
+escalates to the access-admins); an `approver` may file on behalf of a direct
+report only, an `access-admin` for anyone; reject and request-info require a
+comment; an already-held item or a duplicate open request is a 409.
+
 Not decided here: whether `manager_id` is seeded from team leads or typed by hand in `/admin/identity/users` (the seed generator can do either); escalation timers; delegation while out of office; whether `admin` cross-tenant grants are requestable at all (default: no, they are provisioned by hand).
 
 ## 3. Model

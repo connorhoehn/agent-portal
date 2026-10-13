@@ -105,6 +105,7 @@
      use primary/warning. */
   --color-tenant-social: #7c3aed;
   --color-tenant-pipelines: #2f6b57;
+  --color-tenant-access: #a0522d;
 }
 
 :root {
@@ -144,6 +145,7 @@ body {
 html[data-theme="dark"] {
   --color-tenant-social: #a78bfa;
   --color-tenant-pipelines: #6fc2a3;
+  --color-tenant-access: #e0a07a;
   --color-brand: #8b91ff;
   --color-brand-hover: #a5aaff;
   --color-brand-ink: #c7d2fe;
@@ -461,6 +463,31 @@ html[data-theme="dark"] [data-tenant="pipelines"] {
   --color-primary: #6fc2a3;
   --color-primary-hover: #95d6bd;
   --color-primary-soft: #15332a;
+}
+/* The access tenant (docs/access-tenant-design.md): a sienna — the colour of a
+   seal on a signed form, warm where pipelines is cool and clear of orgiq's
+   indigo, social's violet and assessment's teal. Brand family only, like the
+   others (docs/branding.md "Adding a tenant"). White on #a0522d is 5.6:1. */
+[data-tenant="access"] {
+  --color-brand: #a0522d;            /* sienna */
+  --color-brand-hover: #84431f;
+  --color-brand-ink: #3b1a0a;
+  --color-brand-soft: #f6ebe4;
+  --background-image-brand-gradient: linear-gradient(90deg, #a0522d 0%, #c2703f 55%, #ddb08c 100%);
+  --color-primary: #a0522d;
+  --color-primary-hover: #84431f;
+  --color-primary-soft: #f6ebe4;
+}
+html[data-theme="dark"][data-tenant="access"],
+html[data-theme="dark"] [data-tenant="access"] {
+  --color-brand: #e0a07a;
+  --color-brand-hover: #ebbb9c;
+  --color-brand-ink: #f5dccb;
+  --color-brand-soft: #3a1f12;
+  --background-image-brand-gradient: linear-gradient(90deg, #e0a07a 0%, #e8b694 55%, #f1d2bb 100%);
+  --color-primary: #e0a07a;
+  --color-primary-hover: #ebbb9c;
+  --color-primary-soft: #3a1f12;
 }
 
 /* A code block's Copy button is absolutely positioned inside the block and

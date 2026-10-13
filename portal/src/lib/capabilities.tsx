@@ -59,7 +59,14 @@ export type Action =
   | 'RunPipeline'
   | 'ApproveStep'
   | 'CancelRun'
-  | 'ManagePipelineConfig';
+  | 'ManagePipelineConfig'
+  // Access tenant (docs/access-tenant-goal.md §Cedar) — in CAPABILITY_ACTIONS server-side
+  | 'ViewAccess'
+  | 'RequestAccess'
+  | 'DecideAccess'
+  | 'ManageAccessCatalog'
+  | 'ManageAccessPolicy'
+  | 'ProvisionAccess';
 
 interface CapabilitiesPayload {
   role: string;

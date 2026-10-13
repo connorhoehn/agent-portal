@@ -25,6 +25,10 @@ const ROLE_LABELS: Record<string, string> = {
   author: 'Author',
   operator: 'Operator',
   'pipeline-admin': 'Pipeline Admin',
+  // The access tenant's roles (docs/access-tenant-design.md §5).
+  requester: 'Requester',
+  approver: 'Approver',
+  'access-admin': 'Access Admin',
 };
 
 const ROLE_HINTS: Record<string, string> = {
@@ -43,9 +47,12 @@ const ROLE_HINTS: Record<string, string> = {
   author: 'Write, version and dry-run pipeline definitions.',
   operator: 'Run pipelines, approve steps, cancel runs.',
   'pipeline-admin': 'Operator plus configuration and users.',
+  requester: 'Request access for yourself.',
+  approver: 'Decide requests from reports and stewarded resources.',
+  'access-admin': 'Approver plus the catalog, policies and provisioning.',
 };
 
-const TENANT_LABELS: Record<string, string> = { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines' };
+const TENANT_LABELS: Record<string, string> = { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines', access: 'Access' };
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;

@@ -53,7 +53,8 @@ INSERT INTO tenants (id, display_name) VALUES
   ('orgiq', 'Work'),
   ('assessment', 'Assessment'),
   ('social', 'Social'),
-  ('pipelines', 'Pipelines')
+  ('pipelines', 'Pipelines'),
+  ('access', 'Access')
 ON CONFLICT (id) DO NOTHING;
 
 -- Existing tenants retain their ID while the product display name converges.
@@ -105,7 +106,17 @@ INSERT INTO app_users (id, display_name, email, person_id) VALUES
   -- pipelines (docs/communication-plane-goal.md) — a pipelines author who also
   -- holds Social, so that tenant's plane has a granted user while u-ines/u-kofi/
   -- u-dara keep their pipelines-only outbound isolation walks.
-  ('u-tomas',    'Tomás Ferreira',    'tomas.ferreira@orgiq.example', NULL)
+  ('u-tomas',    'Tomás Ferreira',    'tomas.ferreira@orgiq.example', NULL),
+  -- Access tenant cast (docs/access-tenant-goal.md §Cast): one per role,
+  -- holding a grant only in access. Their people rows (and Omar as Rhea's
+  -- manager through people.manager_id) are seeded by access_schema.sql, which
+  -- also re-links person_id when this file loaded before those rows existed.
+  ('u-rhea',     'Rhea Castellanos',  'rhea.castellanos@orgiq.example',
+     (SELECT id FROM people WHERE id = 'p-rhea')),
+  ('u-omar',     'Omar Haddad',       'omar.haddad@orgiq.example',
+     (SELECT id FROM people WHERE id = 'p-omar')),
+  ('u-priya',    'Priya Venkataraman', 'priya.venkataraman@orgiq.example',
+     (SELECT id FROM people WHERE id = 'p-priya'))
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
@@ -114,6 +125,7 @@ INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   ('u-operator', 'assessment', 'admin'),
   ('u-operator', 'social',   'admin'),
   ('u-operator', 'pipelines', 'admin'),
+  ('u-operator', 'access',   'admin'),
   -- OrgIQ-only users, one per role tier.
   ('u-theo',     'orgiq',    'member'),
   ('u-vera',     'orgiq',    'org-leader'),
@@ -176,5 +188,11 @@ INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   ('u-kofi',     'pipelines', 'operator'),
   ('u-dara',     'pipelines', 'pipeline-admin'),
   -- Communication-plane walker: pipelines author + social participant (above).
-  ('u-tomas',    'pipelines', 'author')
+  ('u-tomas',    'pipelines', 'author'),
+
+  -- Access tenant: requester / approver / access-admin. Nobody decides a
+  -- request they submitted or benefit from (a route rule, docs/access-tenant-goal.md).
+  ('u-rhea',     'access',   'requester'),
+  ('u-omar',     'access',   'approver'),
+  ('u-priya',    'access',   'access-admin')
 ON CONFLICT DO NOTHING;

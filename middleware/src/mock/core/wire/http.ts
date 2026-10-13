@@ -264,6 +264,10 @@ export const PARAM_SOURCES: Record<string, string> = {
   'dimensionId@/api/assessment/teams/:id/exceptions': '.#dimension_id',
   'envelope@/api/assessment/submissions/:team': '/api/assessment/submissions#envelope_id',
   'personId@/api/graph/projects/:id/contributors': '^#personId',
+  // The access tenant: the capture persona (orgiq admin) files no requests of
+  // its own, so `mine` is empty; `scope=all` lists every request it may read.
+  'id@/api/access/requests': '/api/access/requests?scope=all#id',
+  'id@/api/access/policies': '/api/access/policies#id',
 };
 
 /**
@@ -284,6 +288,14 @@ const objectRows = (body: Json | null): { [k: string]: Json }[] =>
     : [];
 
 export const PARAM_RESOLVERS: Record<string, ParamResolver> = {
+  // An access request's step is a NUMBER on the request record: the step
+  // awaiting a decision now, else the first one (the 409 is then the shape).
+  'step@/api/access/requests/:id/steps': async ({ values, read }) => {
+    const body = await read(`/api/access/requests/${encodeURIComponent(values['id'] ?? '')}`);
+    const steps = body !== null && typeof body === 'object' && !Array.isArray(body) ? objectRows((body as { [k: string]: Json })['steps'] ?? null) : [];
+    const open = steps.find((x) => x['status'] === 'current' || x['status'] === 'info-requested') ?? steps[0];
+    return typeof open?.['step'] === 'number' ? String(open['step']) : null;
+  },
   // A decision links only to work on its OWN initiative, and never away from
   // another item (`decideDecisionLink`). The first decision on the board would
   // usually belong to some other initiative and pin nothing but the 409, so

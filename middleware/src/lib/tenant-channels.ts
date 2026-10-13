@@ -46,6 +46,12 @@
 // | pipelines:run:<id>            | /api/pipelines/runs/:id: tenant + ViewPipelines; as a call     | ViewPipelines              |
 // |                               |   lobby also the run existing now (lib/page-resources.ts)      |                            |
 // | pipelines:def:<id>            | /api/pipelines/definitions/:id: tenant + ViewPipelines         | ViewPipelines              |
+// | access:req:<id>               | /api/access/requests/:id: tenant + ViewAccess + the request's  | ViewAccess                 |
+// |                               |   read rule (requester, beneficiary, live approver,           |                            |
+// |                               |   access-admin). RESERVED in A0: `access` is not in            |                            |
+// |                               |   TENANT_PARTITIONS, so the shape guard still refuses every    |                            |
+// |                               |   name under it until lane A1 adds the row rule as a           |                            |
+// |                               |   channelResource (docs/access-tenant-goal.md §A1).            |                            |
 // | <tenant>:lobby                | /api/people/shared: a current grant in <tenant>                | presence only              |
 // | social|assessment:flowrun:<id>| the run's own REST read + requester (lib/flow-runs/channel.ts) | none (server emitEvent)    |
 // | social:deck:<id>            | /api/chat/decks/:id: owner or CURRENT member of the source chat | presence only              |
@@ -56,7 +62,7 @@
 //   durable row, not by this table)
 //
 // Read cursors (`cursors: true`: orgiq:initiative, orgiq:work, assessment:doc,
-// assessment:team, pipelines:run) are kept per CURRENT reader with no member
+// assessment:team, pipelines:run, access:req once admitted) are kept per CURRENT reader with no member
 // list: the chat `read`/`receipts` verbs ask the family's READ authority on every
 // frame (realtime-modules 0.115 cursorMode 'readers'; lib/page-thread-unread.ts).
 //
@@ -68,7 +74,7 @@
 import type { PageResourceKind } from './page-resources.js';
 
 /** `social` appears ONLY for the `social:workgraph` family (it is not a partition tenant: TENANT_PARTITIONS stays three, and every other `social:` name keeps its own rules). */
-export type PartitionTenant = 'orgiq' | 'assessment' | 'pipelines' | 'social';
+export type PartitionTenant = 'orgiq' | 'assessment' | 'pipelines' | 'social' | 'access';
 export type ChannelService = 'chat' | 'presence' | 'typing' | 'cursor' | 'reactions' | 'activity' | 'pins';
 
 /** Who may act: the active (signed) session tenant must be `tenant` unless
@@ -174,6 +180,11 @@ export const TENANT_CHANNEL_FAMILIES: readonly TenantChannelFamily[] = [
     read: tenantOnly('pipelines', 'ViewPipelines'), write: tenantOnly('pipelines', 'ViewPipelines') },
   { id: 'pipelines:def', tenant: 'pipelines', pattern: new RegExp(`^pipelines:def:${RID}$`), services: DISCUSSION, lobby: false,
     read: tenantOnly('pipelines', 'ViewPipelines'), write: tenantOnly('pipelines', 'ViewPipelines') },
+  // A request record's discussion (/access/requests/:id; AccessRequest.thread).
+  // Registered with reader cursors so the name and its authority are fixed in
+  // A0; admission stays closed (no `access` partition) until A1 adds the row rule.
+  { id: 'access:req', tenant: 'access', pattern: /^access:req:req-[A-Za-z0-9-]{1,64}$/, services: DISCUSSION, lobby: false, cursors: true,
+    read: tenantOnly('access', 'ViewAccess'), write: tenantOnly('access', 'ViewAccess') },
   ...(['orgiq', 'assessment', 'pipelines'] as const).map((tenant): TenantChannelFamily => ({
     id: `${tenant}:lobby`, tenant, pattern: new RegExp(`^${tenant}:lobby$`), services: PRESENCE, lobby: false,
     read: { tenant, activeTenant: false, action: null }, write: null,

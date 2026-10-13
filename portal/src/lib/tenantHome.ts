@@ -31,6 +31,8 @@ export const TENANT_HOME: Record<string, string> = {
   social: '/social/channels',
   // The run ledger is the pipelines product's front door (design §5.3).
   pipelines: '/pipelines/runs',
+  // A person's own requests are the access product's front door (docs/access-tenant-design.md §6).
+  access: '/access/requests',
 };
 
 /** The workspace chooser. Where an identity goes when no single home fits. */

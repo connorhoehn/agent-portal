@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-13T03:12:10.725Z",
-  "serverHandlerSha": "9c8e8003dfd63c996af362eba366249d1f87e70f8a5e7a2f804d9afff9ac4e0c",
+  "capturedAt": "2026-10-13T09:31:34.956Z",
+  "serverHandlerSha": "e073745ac712ea9e537d11a99fe2d0a134fc0bbe031108615068ce9066b85652",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -109,6 +109,252 @@
           "default"
         ]
       }
+    },
+    "GET /api/access/approvals": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array"
+      },
+      "values": {}
+    },
+    "GET /api/access/audit": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].actor": "null|object",
+        "items[].actor.displayName": "string",
+        "items[].actor.id": "string",
+        "items[].actor.personId": "string",
+        "items[].after": "string",
+        "items[].at": "string",
+        "items[].before": "string",
+        "items[].id": "string",
+        "items[].kind": "string",
+        "items[].reason": "null|string",
+        "items[].requestId": "string"
+      },
+      "values": {
+        "items[].kind": [
+          "approved",
+          "provisioned",
+          "step-approved",
+          "step-rejected",
+          "submitted",
+          "withdrawn"
+        ]
+      }
+    },
+    "GET /api/access/catalog": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].defaultDuration": "string",
+        "items[].description": "string",
+        "items[].heldByActor": "boolean",
+        "items[].id": "string",
+        "items[].kind": "string",
+        "items[].projectId": "string",
+        "items[].role": "string",
+        "items[].sensitive": "boolean",
+        "items[].sodConflicts": "array",
+        "items[].stewardRule": "string",
+        "items[].tenant": "string",
+        "items[].title": "string"
+      },
+      "values": {
+        "items[].kind": [
+          "initiative-membership",
+          "tenant-role"
+        ],
+        "items[].role": [
+          "assessor",
+          "lead-assessor",
+          "moderator",
+          "operator",
+          "org-leader",
+          "sme"
+        ],
+        "items[].tenant": [
+          "assessment",
+          "orgiq",
+          "pipelines",
+          "social"
+        ]
+      }
+    },
+    "GET /api/access/policies": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].id": "string",
+        "items[].left": "object",
+        "items[].left.role": "string",
+        "items[].left.tenant": "string",
+        "items[].reason": "string",
+        "items[].right": "object",
+        "items[].right.role": "string",
+        "items[].right.tenant": "string",
+        "items[].severity": "string",
+        "items[].title": "string",
+        "items[].updatedAt": "string",
+        "items[].updatedBy": "null"
+      },
+      "values": {
+        "items[].left.role": [
+          "assessor",
+          "author",
+          "moderator",
+          "sme"
+        ],
+        "items[].left.tenant": [
+          "assessment",
+          "orgiq",
+          "pipelines",
+          "social"
+        ],
+        "items[].right.role": [
+          "lead-assessor",
+          "operator",
+          "org-leader"
+        ],
+        "items[].right.tenant": [
+          "assessment",
+          "orgiq",
+          "pipelines"
+        ],
+        "items[].severity": [
+          "block",
+          "warn"
+        ]
+      }
+    },
+    "GET /api/access/requests": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array"
+      },
+      "values": {}
+    },
+    "GET /api/access/requests/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "beneficiary": "object",
+        "beneficiary.displayName": "string",
+        "beneficiary.id": "string",
+        "beneficiary.personId": "string",
+        "can": "object",
+        "can.decide": "boolean",
+        "can.viewAudit": "boolean",
+        "can.withdraw": "boolean",
+        "decidedAt": "null",
+        "duration": "string",
+        "expiresAt": "null",
+        "id": "string",
+        "item": "object",
+        "item.defaultDuration": "string",
+        "item.description": "string",
+        "item.heldByActor": "boolean",
+        "item.id": "string",
+        "item.kind": "string",
+        "item.role": "string",
+        "item.sensitive": "boolean",
+        "item.sodConflicts": "array",
+        "item.stewardRule": "string",
+        "item.tenant": "string",
+        "item.title": "string",
+        "justification": "string",
+        "provisionedAt": "null",
+        "requester": "object",
+        "requester.displayName": "string",
+        "requester.id": "string",
+        "requester.personId": "string",
+        "revokedAt": "null",
+        "sod": "object",
+        "sod.conflicts": "array",
+        "sod.overriddenBy": "null",
+        "sod.overrideReason": "null",
+        "sod.verdict": "string",
+        "status": "string",
+        "steps": "array",
+        "steps[]": "object",
+        "steps[].comment": "null",
+        "steps[].decidedAt": "null",
+        "steps[].decidedBy": "null",
+        "steps[].eligible": "array",
+        "steps[].eligible[]": "object",
+        "steps[].eligible[].displayName": "string",
+        "steps[].eligible[].id": "string",
+        "steps[].eligible[].personId": "string",
+        "steps[].kind": "string",
+        "steps[].status": "string",
+        "steps[].step": "number",
+        "submittedAt": "string",
+        "thread": "string"
+      },
+      "values": {
+        "item.kind": [
+          "tenant-role"
+        ],
+        "item.role": [
+          "sme"
+        ],
+        "item.tenant": [
+          "orgiq"
+        ],
+        "sod.verdict": [
+          "clear"
+        ],
+        "status": [
+          "submitted"
+        ],
+        "steps[].kind": [
+          "manager",
+          "steward"
+        ],
+        "steps[].status": [
+          "current",
+          "waiting"
+        ]
+      }
+    },
+    "GET /api/access/reviews": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "limits": "array",
+        "limits[]": "string"
+      },
+      "values": {}
+    },
+    "GET /api/access/summary": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "activeElevations": "number",
+        "openRequests": "number",
+        "pendingForMe": "number",
+        "policies": "number",
+        "reviews": "number"
+      },
+      "values": {}
     },
     "GET /api/admin/kb-registry": {
       "persona": "orgiq/admin",
@@ -2365,7 +2611,6 @@
       "values": {
         "boxes[].status": [
           "idle",
-          "provisioning",
           "running",
           "waiting"
         ]
@@ -4033,6 +4278,7 @@
       },
       "values": {
         "$[].tenant": [
+          "access",
           "assessment",
           "orgiq",
           "pipelines",
@@ -4085,6 +4331,12 @@
         "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.DecideAccess": "object",
+        "schema.OrgIQ.actions.DecideAccess.appliesTo": "object",
+        "schema.OrgIQ.actions.DecideAccess.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.DecideAccess.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.DecideAccess.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.DecideAccess.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.DispatchAgentRun": "object",
         "schema.OrgIQ.actions.DispatchAgentRun.appliesTo": "object",
         "schema.OrgIQ.actions.DispatchAgentRun.appliesTo.principalTypes": "array",
@@ -4121,6 +4373,18 @@
         "schema.OrgIQ.actions.LabelFeedback.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.LabelFeedback.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.LabelFeedback.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageAccessCatalog": "object",
+        "schema.OrgIQ.actions.ManageAccessCatalog.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageAccessCatalog.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageAccessCatalog.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageAccessCatalog.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageAccessCatalog.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageAccessPolicy": "object",
+        "schema.OrgIQ.actions.ManageAccessPolicy.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageAccessPolicy.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageAccessPolicy.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageAccessPolicy.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageAccessPolicy.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.ManageAssessmentConfig": "object",
         "schema.OrgIQ.actions.ManageAssessmentConfig.appliesTo": "object",
         "schema.OrgIQ.actions.ManageAssessmentConfig.appliesTo.principalTypes": "array",
@@ -4229,12 +4493,24 @@
         "schema.OrgIQ.actions.PostMessage.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.PostMessage.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.PostMessage.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ProvisionAccess": "object",
+        "schema.OrgIQ.actions.ProvisionAccess.appliesTo": "object",
+        "schema.OrgIQ.actions.ProvisionAccess.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ProvisionAccess.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ProvisionAccess.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ProvisionAccess.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.PublishReport": "object",
         "schema.OrgIQ.actions.PublishReport.appliesTo": "object",
         "schema.OrgIQ.actions.PublishReport.appliesTo.principalTypes": "array",
         "schema.OrgIQ.actions.PublishReport.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.PublishReport.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.PublishReport.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.RequestAccess": "object",
+        "schema.OrgIQ.actions.RequestAccess.appliesTo": "object",
+        "schema.OrgIQ.actions.RequestAccess.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.RequestAccess.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.RequestAccess.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.RequestAccess.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.RunAssessmentAgent": "object",
         "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo": "object",
         "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo.principalTypes": "array",
@@ -4265,6 +4541,12 @@
         "schema.OrgIQ.actions.StartCall.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.StartCall.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.StartCall.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewAccess": "object",
+        "schema.OrgIQ.actions.ViewAccess.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewAccess.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewAccess.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewAccess.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewAccess.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.ViewAssessment": "object",
         "schema.OrgIQ.actions.ViewAssessment.appliesTo": "object",
         "schema.OrgIQ.actions.ViewAssessment.appliesTo.principalTypes": "array",
@@ -4349,6 +4631,8 @@
         "$[].email": "string",
         "$[].epoch": "number",
         "$[].grants": "object",
+        "$[].grants.access": "array",
+        "$[].grants.access[]": "string",
         "$[].grants.assessment": "array",
         "$[].grants.assessment[]": "string",
         "$[].grants.orgiq": "array",
@@ -5392,8 +5676,10 @@
       },
       "values": {
         "events[].action": [
+          "DecideAccess",
           "Login",
           "ManageIngest",
+          "ViewAccess",
           "ViewAssessment",
           "ViewIdentityAdmin",
           "ViewLeaderboard",
@@ -7062,14 +7348,19 @@
         "queues[].maxReceives": "null|number",
         "queues[].name": "string",
         "queues[].purpose": "string",
-        "queues[].reason": "string",
+        "queues[].reason": "null",
         "queues[].redriveTo": "null|string",
-        "queues[].snapshot": "null",
+        "queues[].snapshot": "object",
+        "queues[].snapshot.delayed": "number",
+        "queues[].snapshot.fifo": "boolean",
+        "queues[].snapshot.inFlight": "number",
+        "queues[].snapshot.ready": "number",
+        "queues[].snapshot.visibilityTimeoutSeconds": "number",
         "queues[].state": "string"
       },
       "values": {
         "queues[].state": [
-          "missing"
+          "available"
         ]
       }
     },
@@ -8305,12 +8596,15 @@
           "AuthorDefinition",
           "CancelRun",
           "ConnectLocalCompute",
+          "DecideAccess",
           "DispatchAgentRun",
           "EditGuardrail",
           "EditPolicy",
           "EditSchema",
           "EnterEnvironment",
           "LabelFeedback",
+          "ManageAccessCatalog",
+          "ManageAccessPolicy",
           "ManageAssessmentConfig",
           "ManageBots",
           "ManageBudgets",
@@ -8330,12 +8624,15 @@
           "ManageUsers",
           "Masquerade",
           "PostMessage",
+          "ProvisionAccess",
           "PublishReport",
+          "RequestAccess",
           "RunAssessmentAgent",
           "RunPipeline",
           "ScoreAssessment",
           "Search",
           "StartCall",
+          "ViewAccess",
           "ViewAssessment",
           "ViewIdentityAdmin",
           "ViewLeaderboard",
@@ -8362,6 +8659,8 @@
         "availableTenants": "array",
         "availableTenants[]": "string",
         "grants": "object",
+        "grants.access": "array",
+        "grants.access[]": "string",
         "grants.assessment": "array",
         "grants.assessment[]": "string",
         "grants.orgiq": "array",
@@ -8375,6 +8674,8 @@
         "role": "string",
         "sub": "string",
         "switchable": "object",
+        "switchable.access": "array",
+        "switchable.access[]": "string",
         "switchable.assessment": "array",
         "switchable.assessment[]": "string",
         "switchable.orgiq": "array",
@@ -8432,7 +8733,9 @@
       },
       "values": {
         "$[].tenants[].roles[]": [
+          "access-admin",
           "admin",
+          "approver",
           "assessor",
           "author",
           "community-admin",
@@ -8446,9 +8749,11 @@
           "pipeline-admin",
           "program-lead",
           "program-owner",
+          "requester",
           "sme"
         ],
         "$[].tenants[].tenant": [
+          "access",
           "assessment",
           "orgiq",
           "pipelines",
@@ -9574,8 +9879,10 @@
       "values": [
         "ANONYMIZE",
         "BLOCK",
+        "DecideAccess",
         "Login",
         "ManageIngest",
+        "ViewAccess",
         "ViewAssessment",
         "ViewIdentityAdmin",
         "ViewLeaderboard",
@@ -9599,12 +9906,15 @@
         "AuthorDefinition",
         "CancelRun",
         "ConnectLocalCompute",
+        "DecideAccess",
         "DispatchAgentRun",
         "EditGuardrail",
         "EditPolicy",
         "EditSchema",
         "EnterEnvironment",
         "LabelFeedback",
+        "ManageAccessCatalog",
+        "ManageAccessPolicy",
         "ManageAssessmentConfig",
         "ManageBots",
         "ManageBudgets",
@@ -9624,12 +9934,15 @@
         "ManageUsers",
         "Masquerade",
         "PostMessage",
+        "ProvisionAccess",
         "PublishReport",
+        "RequestAccess",
         "RunAssessmentAgent",
         "RunPipeline",
         "ScoreAssessment",
         "Search",
         "StartCall",
+        "ViewAccess",
         "ViewAssessment",
         "ViewIdentityAdmin",
         "ViewLeaderboard",
@@ -9665,6 +9978,7 @@
         "analysis",
         "answer",
         "application",
+        "approved",
         "artifact",
         "assessment-command",
         "blocked",
@@ -9693,12 +10007,14 @@
         "hitl-decided",
         "hitl-expired",
         "in-review",
+        "initiative-membership",
         "insight",
         "jira",
         "judge-spike",
         "lambda",
         "llm",
         "local",
+        "manager",
         "max_cost",
         "max_files",
         "ms_forms_export",
@@ -9707,6 +10023,7 @@
         "project",
         "prompt",
         "protected_paths",
+        "provisioned",
         "question",
         "require_review",
         "retrieval",
@@ -9714,12 +10031,18 @@
         "run",
         "runbook",
         "skill",
+        "step-approved",
+        "step-rejected",
+        "steward",
+        "submitted",
         "synced",
         "system",
         "task",
+        "tenant-role",
         "tool",
         "trace",
         "transcript",
+        "withdrawn",
         "worked",
         "write"
       ]
@@ -9765,10 +10088,15 @@
       "open": false,
       "values": [
         "admin",
+        "assessor",
+        "author",
         "child",
         "contributor",
         "decider",
+        "lead-assessor",
         "member",
+        "moderator",
+        "operator",
         "org-leader",
         "owner",
         "primary",
@@ -9779,7 +10107,9 @@
     "roles": {
       "open": false,
       "values": [
+        "access-admin",
         "admin",
+        "approver",
         "assessor",
         "author",
         "community-admin",
@@ -9793,6 +10123,7 @@
         "pipeline-admin",
         "program-lead",
         "program-owner",
+        "requester",
         "sme"
       ]
     },
@@ -9805,11 +10136,13 @@
     "severity": {
       "open": false,
       "values": [
+        "block",
         "critical",
         "info",
         "low",
         "medium",
         "ok",
+        "warn",
         "warning"
       ]
     },
@@ -9817,6 +10150,7 @@
       "open": false,
       "values": [
         "active",
+        "available",
         "behind",
         "imported",
         "missing",
@@ -9895,6 +10229,7 @@
         "stale",
         "stalled",
         "stopped",
+        "submitted",
         "succeeded",
         "superseded",
         "unproven",
@@ -9905,6 +10240,7 @@
     "tenant": {
       "open": false,
       "values": [
+        "access",
         "assessment",
         "orgiq",
         "pipelines",
@@ -9954,6 +10290,7 @@
         "agree",
         "approve",
         "calibrated",
+        "clear",
         "disagree",
         "pending"
       ]

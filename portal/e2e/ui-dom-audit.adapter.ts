@@ -141,7 +141,7 @@ export default {
         socialAccessRequired: await visible('[data-testid="communication-no-social"]'),
         settingsSurface: !composer && (await visible('[data-testid$="configuration-page"], [data-testid$="-configuration"], [data-testid="settings-profile"]') || (/\/(?:configuration|settings)$/.test(pathname) && controls)),
         form: !composer && !table && (controls || await visible('form')),
-        placeholder: await visible('[data-testid^="social-empty-"], [data-testid="pipelines-empty-settings"]'),
+        placeholder: await visible('[data-testid^="social-empty-"], [data-testid="pipelines-empty-settings"], [data-testid="access-empty-settings"]'),
         lab: await visible('[data-testid^="lab-"]'),
         landing: await visible('[data-testid$="-landing"]'),
         missingDeck: !!spec.auditMissingDeck && await page.getByText(/^Couldn't open the /).first().isVisible(),

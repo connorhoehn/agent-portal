@@ -28,8 +28,8 @@ import { SOCIAL_SURFACE_IDS } from '../src/pages/social/socialSurfaces.ts';
 import { PIPELINES_SURFACE_IDS } from '../src/pages/pipelines/pipelinesSurfaces.ts';
 import { REPO_ROOT, readRouteSources, type AppRoute } from './route-sources.ts';
 
-export type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines';
-export const TENANTS: readonly Tenant[] = ['orgiq', 'assessment', 'social', 'pipelines'];
+export type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access';
+export const TENANTS: readonly Tenant[] = ['orgiq', 'assessment', 'social', 'pipelines', 'access'];
 
 /** One sign-in per tenant: the seeded admin holds a grant in all four
  *  (middleware/src/providers/identity.ts), so every gated page renders. */
@@ -80,7 +80,7 @@ export const EXEMPT: ReadonlyArray<{ match: RegExp; invariants: Invariant[]; rea
 
 export function tenantOf(p: string): Tenant {
   return p.startsWith('/assessment') ? 'assessment' : p.startsWith('/social') ? 'social'
-    : p.startsWith('/pipelines') ? 'pipelines' : 'orgiq';
+    : p.startsWith('/pipelines') ? 'pipelines' : p.startsWith('/access') ? 'access' : 'orgiq';
 }
 
 export const LANDINGS: ReadonlyArray<[Tenant, string]> = [
@@ -92,12 +92,13 @@ export const LANDINGS: ReadonlyArray<[Tenant, string]> = [
   ['assessment', '/assessment'],
   ['social', '/social'],
   ['pipelines', '/pipelines'],
+  ['access', '/access'],
 ];
 
 /** Who opens each tenant's landings in section-landings.spec.ts (a role whose
  *  home is that tenant), and the landing whose list must show its first row
  *  above the fold. */
-export const LANDING_USERS: Readonly<Record<Tenant, string>> = { orgiq: 'u-mia', assessment: 'u-asha', social: 'u-sana', pipelines: 'u-ines' };
+export const LANDING_USERS: Readonly<Record<Tenant, string>> = { orgiq: 'u-mia', assessment: 'u-asha', social: 'u-sana', pipelines: 'u-ines', access: 'u-rhea' };
 export const LANDING_LIST = '/iq/projects?nav=section';
 
 export const first = (key: string, field = 'id') => (json: unknown): string | undefined => {
@@ -132,6 +133,8 @@ export const PARAM_ROUTES: readonly ParamRoute[] = [
   // Pipelines
   { tenant: 'pipelines', pattern: '/pipelines/runs/:id', template: '/pipelines/runs/:id', resolve: { url: '/api/pipelines/runs?limit=1', pick: first('runs') }, fallback: 'run-missing' },
   { tenant: 'pipelines', pattern: '/pipelines/decks/:deckId', template: '/pipelines/decks/:id', resolve: { url: '/api/pipelines/decks', pick: first('decks') }, fallback: 'deck-missing' },
+  // Access — the seeded request (middleware/src/mock/access-requests.ts, schema/access_schema.sql); a record (kindOf: param).
+  { tenant: 'access', pattern: '/access/requests/:id', template: '/access/requests/:id', id: 'req-0001' },
 ];
 
 /**
@@ -177,7 +180,7 @@ export const LIST_PAGES: readonly ListPage[] = [
  *  shared admin's session epoch under every other walker). Enterprise /
  *  Workspace / Prompts / Rules are document explorers and /iq/work/changes a
  *  feed of review cards — rule 1's non-tabular lists, not here. */
-export const TABLE_USERS: Readonly<Record<Tenant, string>> = { orgiq: 'u-operator', assessment: 'u-farah', pipelines: 'u-dara', social: 'u-theo' };
+export const TABLE_USERS: Readonly<Record<Tenant, string>> = { orgiq: 'u-operator', assessment: 'u-farah', pipelines: 'u-dara', social: 'u-theo', access: 'u-priya' };
 export const TABLE_ROUTES: ReadonlyArray<{ tenant: Tenant; path: string; stats?: boolean }> = [
   { tenant: 'social', path: '/social/contacts' },
   { tenant: 'assessment', path: '/assessment/teams', stats: true },
@@ -200,6 +203,11 @@ export const TABLE_ROUTES: ReadonlyArray<{ tenant: Tenant; path: string; stats?:
   { tenant: 'pipelines', path: '/pipelines/agents' },
   { tenant: 'pipelines', path: '/pipelines/commands' },
   { tenant: 'pipelines', path: '/pipelines/runbooks' },
+  // Access: the lists whose rows the access admin reads in full (her own Requests may be empty).
+  { tenant: 'access', path: '/access/catalog' },
+  { tenant: 'access', path: '/access/approvals' },
+  { tenant: 'access', path: '/access/policies' },
+  { tenant: 'access', path: '/access/audit' },
 ];
 
 /** The chat-rail frame measurements (docs/rail-parity-goal.md decision 6), each as its user.
@@ -334,7 +342,7 @@ export function exemptions(route: string): Set<Invariant> {
  */
 export function routeKey(url: string): string | null {
   const clean = url.trim().replace(/#.*$/, '').replace(/[…).,;]+$/, '');
-  if (!/^\/(iq|assessment|social|pipelines|admin|settings)(\/|\?|$)/.test(clean)) return null;
+  if (!/^\/(iq|assessment|social|pipelines|access|admin|settings)(\/|\?|$)/.test(clean)) return null;
   const u = new URL(clean, 'http://x');
   const pathname = u.pathname.replace(/\/+$/, '') || '/';
   const inv = staticInventory();
@@ -372,7 +380,7 @@ export function routeKey(url: string): string | null {
 
 /** Every URL-looking token in a piece of journey-log text (the fields are free text). */
 export function urlsOf(text: string): string[] {
-  return [...text.matchAll(/(?:^|[\s(,:→=`'"])(\/(?:iq|assessment|social|pipelines|admin|settings)(?:[/?][^\s,)`'"→]*)?)/g)].map((m) => m[1]!);
+  return [...text.matchAll(/(?:^|[\s(,:→=`'"])(\/(?:iq|assessment|social|pipelines|access|admin|settings)(?:[/?][^\s,)`'"→]*)?)/g)].map((m) => m[1]!);
 }
 
 // ── Spec coverage: which specs assert something about which route ─────────
@@ -387,8 +395,8 @@ export function specCoverage(): Record<string, string[]> {
   for (const f of fs.readdirSync(E2E).filter((n) => n.endsWith('.spec.ts') && !SWEEP_SPECS.includes(n)).sort()) {
     const src = fs.readFileSync(path.join(E2E, f), 'utf8');
     const urls = new Set<string>();
-    for (const m of src.matchAll(/(['"`])(\/(?:iq|assessment|social|pipelines|admin)(?:[/?][^'"`\s]*)?)\1/g)) urls.add(m[2]!);
-    for (const m of src.matchAll(/`(\/(?:iq|assessment|social|pipelines|admin)[^`]*)`/g)) urls.add(m[1]!.replace(/\$\{[^}]*\}/g, 'x'));
+    for (const m of src.matchAll(/(['"`])(\/(?:iq|assessment|social|pipelines|access|admin)(?:[/?][^'"`\s]*)?)\1/g)) urls.add(m[2]!);
+    for (const m of src.matchAll(/`(\/(?:iq|assessment|social|pipelines|access|admin)[^`]*)`/g)) urls.add(m[1]!.replace(/\$\{[^}]*\}/g, 'x'));
     for (const u of urls) {
       const k = routeKey(u);
       if (k) (out[k] ??= []).includes(f) || out[k]!.push(f);

@@ -32,6 +32,9 @@ const PRESENTATION: Record<string, { label: string; summary: string }> = {
   author: { label: 'Author', summary: 'Writes, versions and dry-runs pipeline definitions. Never approves a step of their own definition.' },
   operator: { label: 'Operator', summary: 'Runs pipelines, approves waiting steps and cancels runs. Never writes the definition they approve.' },
   'pipeline-admin': { label: 'Pipeline Admin', summary: 'An operator plus the pipelines tenant\'s configuration and users.' },
+  requester: { label: 'Requester', summary: 'Browses the access catalog and requests access for themselves. Never decides a request.' },
+  approver: { label: 'Approver', summary: 'A requester who also decides the approval steps they are eligible for — never their own request, never configuration or a hand-written grant.' },
+  'access-admin': { label: 'Access Admin', summary: 'An approver plus the access catalog, separation-of-duties policies, manual revoke and the tenant\'s users.' },
   admin: { label: 'Admin', summary: 'Cross-tenant platform operator. Full access; the only role that can masquerade.' },
 };
 

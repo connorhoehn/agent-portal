@@ -301,6 +301,12 @@ def main():
         # into any other table: the projection reads the run-shaped tables,
         # nothing here joins them, so it can load last.
         'pipeline_schema.sql',
+        # The access tenant's model (docs/access-tenant-design.md §3): catalog,
+        # requests, steps, SoD policies, events, reviews, plus the additive
+        # people.manager_id and the access cast's people rows. Needs people and
+        # app_users (orgiq_schema.sql, identity_schema.sql), so it loads late.
+        # NOT yet applied to Aurora — a user decision (goal lane E).
+        'access_schema.sql',
     ]
 
     # Track genuine failures — statements that erred for a non-transient reason

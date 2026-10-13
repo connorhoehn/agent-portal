@@ -51,6 +51,15 @@ const PIPELINES_LABELS: Record<string, string> = { queues: 'Queues',
   definitions: 'Definitions', runbooks: 'Runbooks', runs: 'Runs', approvals: 'Approvals', artifacts: 'Artifacts', decks: 'Run reports', activity: 'Work graph', communication: 'Communication',
   agents: 'Agents', bots: 'Bots', commands: 'Commands', configuration: 'Configuration', settings: 'Pipeline settings',
 };
+// The access tenant's rail (Layout.tsx NAV_ITEMS, docs/access-tenant-design.md §6).
+const ACCESS_GROUPS: Record<string, string> = {
+  catalog: 'Request', requests: 'Request', approvals: 'Approve',
+  policies: 'Govern', reviews: 'Govern', audit: 'Govern', configuration: 'System', settings: 'System',
+};
+const ACCESS_LABELS: Record<string, string> = {
+  catalog: 'Catalog', requests: 'Requests', approvals: 'Approvals', policies: 'Policies',
+  reviews: 'Reviews', audit: 'Audit', configuration: 'Configuration', settings: 'Access settings',
+};
 const ASSESSMENT_GROUPS: Record<string, string> = {
   teams: 'Assess', submissions: 'Assess', communication: 'Assess',
   reports: 'Analyze', decks: 'Analyze', activity: 'Analyze', feedback: 'Analyze',
@@ -225,6 +234,15 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
     // The Runs page sits under the Runs group; name the product instead of "Runs › Runs".
     const trail: Crumb[] = [{ label: group === label ? 'Pipelines' : group }];
     if (b && page === 'runs') return [...trail, { label, path: '/pipelines/runs' }, { label: `Run ${shortId(b)}`, id: b }];
+    return [...trail, { label }];
+  }
+
+  if (root === 'access') {
+    const page = a ?? 'requests';
+    const trail: Crumb[] = [{ label: ACCESS_GROUPS[page] ?? 'Access' }];
+    const label = ACCESS_LABELS[page] ?? page;
+    if (page === 'requests' && b === 'new') return [...trail, { label, path: '/access/requests' }, { label: 'New request' }];
+    if (page === 'requests' && b) return [...trail, { label, path: '/access/requests' }, { label: `Request ${b}`, id: b }];
     return [...trail, { label }];
   }
 

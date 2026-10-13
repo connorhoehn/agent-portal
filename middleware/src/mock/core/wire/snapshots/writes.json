@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-13T03:12:11.690Z",
-  "serverHandlerSha": "9c8e8003dfd63c996af362eba366249d1f87e70f8a5e7a2f804d9afff9ac4e0c",
+  "capturedAt": "2026-10-13T09:31:35.824Z",
+  "serverHandlerSha": "e073745ac712ea9e537d11a99fe2d0a134fc0bbe031108615068ce9066b85652",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -797,6 +797,115 @@
         "rule": "control-plane",
         "reason": "The capture's own tool. `POST /api/__mock/scenario` switches the world every later shape would be captured in, so the harness may not replay it. (`POST /api/__mock/reset` IS replayed — the sweep calls it between every write anyway, so its shape comes for free and costs nothing.)"
       }
+    },
+    "POST /api/access/requests": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "beneficiary": "object",
+        "beneficiary.displayName": "string",
+        "beneficiary.id": "string",
+        "beneficiary.personId": "null",
+        "can": "object",
+        "can.decide": "boolean",
+        "can.viewAudit": "boolean",
+        "can.withdraw": "boolean",
+        "decidedAt": "null",
+        "duration": "string",
+        "expiresAt": "null",
+        "id": "string",
+        "item": "object",
+        "item.defaultDuration": "string",
+        "item.description": "string",
+        "item.heldByActor": "boolean",
+        "item.id": "string",
+        "item.kind": "string",
+        "item.role": "string",
+        "item.sensitive": "boolean",
+        "item.sodConflicts": "array",
+        "item.stewardRule": "string",
+        "item.tenant": "string",
+        "item.title": "string",
+        "justification": "string",
+        "provisionedAt": "null",
+        "requester": "object",
+        "requester.displayName": "string",
+        "requester.id": "string",
+        "requester.personId": "null",
+        "revokedAt": "null",
+        "sod": "object",
+        "sod.conflicts": "array",
+        "sod.overriddenBy": "null",
+        "sod.overrideReason": "null",
+        "sod.verdict": "string",
+        "status": "string",
+        "steps": "array",
+        "steps[]": "object",
+        "steps[].comment": "null",
+        "steps[].decidedAt": "null",
+        "steps[].decidedBy": "null",
+        "steps[].eligible": "array",
+        "steps[].eligible[]": "object",
+        "steps[].eligible[].displayName": "string",
+        "steps[].eligible[].id": "string",
+        "steps[].eligible[].personId": "string",
+        "steps[].kind": "string",
+        "steps[].status": "string",
+        "steps[].step": "number",
+        "submittedAt": "string",
+        "thread": "string"
+      },
+      "values": {
+        "item.kind": [
+          "tenant-role"
+        ],
+        "item.role": [
+          "sme"
+        ],
+        "item.tenant": [
+          "orgiq"
+        ],
+        "sod.verdict": [
+          "clear"
+        ],
+        "status": [
+          "submitted"
+        ],
+        "steps[].kind": [
+          "steward"
+        ],
+        "steps[].status": [
+          "current"
+        ]
+      },
+      "sent": [
+        "duration",
+        "itemId",
+        "justification"
+      ]
+    },
+    "POST /api/access/requests/:id/steps/:step/decide": {
+      "persona": "orgiq/admin",
+      "status": 403,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": [
+        "decision"
+      ]
+    },
+    "POST /api/access/requests/:id/withdraw": {
+      "persona": "orgiq/admin",
+      "status": 403,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/admin/kb-registry": {
       "refused": {
@@ -3564,6 +3673,48 @@
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
+    },
+    "PUT /api/access/policies/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "id": "string",
+        "left": "object",
+        "left.role": "string",
+        "left.tenant": "string",
+        "reason": "string",
+        "right": "object",
+        "right.role": "string",
+        "right.tenant": "string",
+        "severity": "string",
+        "title": "string",
+        "updatedAt": "string",
+        "updatedBy": "object",
+        "updatedBy.displayName": "string",
+        "updatedBy.id": "string",
+        "updatedBy.personId": "null"
+      },
+      "values": {
+        "left.role": [
+          "sme"
+        ],
+        "left.tenant": [
+          "orgiq"
+        ],
+        "right.role": [
+          "org-leader"
+        ],
+        "right.tenant": [
+          "orgiq"
+        ],
+        "severity": [
+          "block"
+        ]
+      },
+      "sent": [
+        "severity"
+      ]
     },
     "PUT /api/assessment/configuration": {
       "persona": "assessment/admin",

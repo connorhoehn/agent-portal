@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { ChoiceList, ChoiceRow } from '@connorhoehnslalom/ui-components';
-import { BranchIcon, ChatIcon, ChecklistIcon, GraphIcon, T } from '@connorhoehnslalom/ui-components/shared';
+import { BranchIcon, ChatIcon, ChecklistIcon, GraphIcon, LockIcon, T } from '@connorhoehnslalom/ui-components/shared';
 import {
   Avatar,
   Button,
@@ -48,6 +48,7 @@ const TENANT_META: Record<Tenant, { label: string; blurb: string; accent: string
   assessment: { label: 'Assessment', blurb: 'Engineering-maturity cockpit — teams, evidence, certification', accent: 'var(--color-warning)' },
   social: { label: 'Social', blurb: 'Channels, direct messages, calls and rooms — the people you work with', accent: 'var(--color-tenant-social)' },
   pipelines: { label: 'Pipelines', blurb: 'Definitions, runs and approvals — what the fleet ran, and for whom', accent: 'var(--color-tenant-pipelines)' },
+  access: { label: 'Access', blurb: 'Request, approve and audit access — roles and memberships across every workspace', accent: 'var(--color-tenant-access)' },
 };
 
 const ROLE_META: Record<string, { label: string; hint: string }> = {
@@ -66,6 +67,9 @@ const ROLE_META: Record<string, { label: string; hint: string }> = {
   author: { label: 'Author', hint: 'Write, version and dry-run pipeline definitions' },
   operator: { label: 'Operator', hint: 'Run pipelines, approve waiting steps, cancel runs' },
   'pipeline-admin': { label: 'Pipeline Admin', hint: 'Operator plus the workspace configuration and users' },
+  requester: { label: 'Requester', hint: 'Request access for yourself and follow its approvals' },
+  approver: { label: 'Approver', hint: 'Decide requests from your reports and the resources you steward' },
+  'access-admin': { label: 'Access Admin', hint: 'Approver plus the catalog, separation-of-duties policies and provisioning' },
 };
 
 /**
@@ -108,6 +112,11 @@ const CURATED: Array<{ id: string; persona: string }> = [
   { id: 'u-dara', persona: 'Pipeline admin — an operator plus configuration and users' },
   // Also holds Social (the Communication-plane walker); outside the pure pipelines-only cast.
   { id: 'u-tomas', persona: 'Pipeline author with Social — writes definitions and joins the Communication plane' },
+  // Access tenant cast — one per role (docs/access-tenant-goal.md §Cast),
+  // each holding a grant only in access.
+  { id: 'u-rhea', persona: 'Requester — asks for roles and memberships, never decides them' },
+  { id: 'u-omar', persona: "Approver — Rhea's manager; decides requests, never configures or grants by hand" },
+  { id: 'u-priya', persona: 'Access admin — the catalog, separation-of-duties policies and provisioning' },
 ];
 
 function roleLabel(role: string): string { return ROLE_META[role]?.label ?? role; }
@@ -120,6 +129,7 @@ const TENANT_MARK_TINT: Record<Tenant, string> = {
   assessment: 'border-warning bg-warning/10 text-warning',
   social: 'border-tenant-social bg-tenant-social/10 text-tenant-social',
   pipelines: 'border-tenant-pipelines bg-tenant-pipelines/10 text-tenant-pipelines',
+  access: 'border-tenant-access bg-tenant-access/10 text-tenant-access',
 };
 
 /** Inline tenant mark — a tinted rounded badge with a per-tenant glyph. No
@@ -135,6 +145,7 @@ function TenantMark({ tenant }: { tenant: Tenant }) {
     tenant === 'assessment' ? <ChecklistIcon size={18} />
     : tenant === 'social' ? <ChatIcon size={18} />
     : tenant === 'pipelines' ? <BranchIcon size={18} />
+    : tenant === 'access' ? <LockIcon size={18} />
     : <GraphIcon size={18} />;
   return (
     <Inline
