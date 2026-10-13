@@ -244,6 +244,20 @@ new dist. Keep sibling builds/pack/install under one owner; do not edit node_mod
   "DM route stays DM-only", commit a58b424e), which contradicts rail-parity
   decision 6 ("one composition; the route only picks the pane").
 
+- **2026-10-13 final state.** ui-components **2.441.7** (2.441.6 made the
+  SplitPane divider own no layout width and gave EditorShell `titleSize="sm"`
+  + `titleAs`; 2.441.7 put the loaded deck editor's chrome on the control
+  scale once a saved deck existed in the shared mock). The audit contract's
+  composer inset now resolves `--ui-content-gutter` on the measured element
+  (self-test 41 mutations). Acceptance: orgiq `/iq` 536 and assessment 168
+  cases green on 2.441.7; orgiq `/admin` 500, social 124, pipelines 188 green
+  on 2.441.6 (2.441.7 touches only the deck editor those sections never load).
+  Layout cascade: 12 of 16 cascade tests pass; the four that fail are the
+  rail-collapse tests behind user decision (1); type-scale burn-down 590 under
+  its 599 ceiling; rail-parity red only on `/social/dms` (decision 2). Portal
+  typecheck + 1,834 unit tests green. Journey contracts re-measured; the
+  journey logs themselves still need their walks.
+
 ## Suggested continuation
 
 1. Continue from the user's next screenshot or requested tenant. Reproduce an

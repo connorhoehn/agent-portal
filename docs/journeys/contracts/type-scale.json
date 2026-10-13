@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "8f143fca6f9ec4b7eb04ab2a00f6b3e5aa4c198e87441a9f41be51444bc501c1",
-  "at": "2026-10-13T07:42:56.165Z"
+  "sourceDigest": "mixed:mixed:8f143fca6f9ec4b7eb04ab2a00f6b3e5aa4c198e87441a9f41be51444bc501c1:5e583a46b8e75d1b6129a0df84463dc07ee835e76302df15ec38076a2f527679:5e583a46b8e75d1b6129a0df84463dc07ee835e76302df15ec38076a2f527679",
+  "at": "2026-10-13T08:41:59.621Z"
  },
  "routes": {
   "/admin/bots": {
