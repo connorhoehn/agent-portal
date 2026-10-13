@@ -100,8 +100,8 @@ standing in `access` with `ViewAccess`; posting needs the same
 
 Provisioning (A1): a `tenant-role` merges the role into the beneficiary's
 grants (`setGrants`); an `initiative-membership` inserts a
-`project_contributions` row (role `contributor`). Either bumps the
-beneficiary's `session_epoch`, which retires every cookie they hold at its
-next read — the grant is carried by their next sign-in. Expiry
-(`lib/access-expiry.ts`) revokes the same way and records `expired`; the bell
-warns the requester and beneficiary 24 h before.
+`project_contributions` row (role `contributor`). Neither bumps the
+beneficiary's `session_epoch`: the grant reaches their open cookie through the
+≤120 s grants refresh. Revocation and expiry (`lib/access-expiry.ts`) remove
+it, bump the epoch (retiring every cookie they hold) and record
+`revoked`/`expired`; the bell warns the requester and beneficiary 24 h before.

@@ -161,17 +161,24 @@ rendered-contract change per `docs/journeys.md`.
 
 - The last approval calls `provisionAccess(request)` in
   `middleware/src/lib/access-provision.ts`: `setGrants` merge or a
-  `project_contributions` insert, `bumpSessionEpoch(beneficiary)`,
-  an `access_events` row, status `provisioned` then `active`.
-- `access-expiry.ts`: a sweeper over `expires_at` that revokes through the
-  same function, single-flight across replicas (`lib/replica-fleet.ts`), with
+  `project_contributions` insert, an `access_events` row, status
+  `provisioned` then `active`. It does **not** bump the session epoch: the
+  grant reaches the beneficiary's open cookie through the ≤120 s grants
+  refresh, without a sign-out (design A3).
+- `revokeAccess(request, reason, actor)` is the inverse: remove the role or
+  contribution, `bumpSessionEpoch(beneficiary)` (every cookie they hold is
+  retired at its next read), a `revoked`/`expired` event.
+- `access-expiry.ts`: a sweeper over `expires_at` that revokes through
+  `revokeAccess`, single-flight across replicas (`lib/replica-fleet.ts`), with
   a contract that two replicas revoke once.
 - Bell items via `notify()`: approvers on submit, requester + beneficiary on
   each decision, expiry warning 24 h before; every `href` inside `/access`.
 - Thread `access:req:<id>` admitted by the request's read rule; the record
   page shows it in the right pane with one composer.
 - Contracts: 2 route tests for the two row rules, provisioning on the memory
-  identity provider, the epoch bump observed through `GET /api/session/current`,
+  identity provider, the grant observed on the beneficiary's existing cookie
+  after the grants refresh (`GET /api/session/me`, no epoch bump), the epoch
+  bump observed on revocation,
   the sweeper's single-flight, and a browser journey "Rhea requests `sme` in
   orgiq, Omar approves, Priya sees the audit row, Rhea's next request shows
   `sme` as held".

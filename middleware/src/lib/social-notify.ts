@@ -414,7 +414,7 @@ export async function notifyAccessRequest(ev: AccessRequestEvent): Promise<strin
       rejected: { type: 'system', title: `${by} rejected ${ev.itemTitle}`, body: ev.comment ? snippet(ev.comment) : `Request ${ev.requestId} was rejected.` },
       'info-requested': { type: 'system', title: `${by} asked for more information on ${ev.itemTitle}`, body: ev.comment ? snippet(ev.comment) : `Request ${ev.requestId}` },
       withdrawn: { type: 'system', title: `${ev.itemTitle} was withdrawn`, body: `Request ${ev.requestId} stopped; nothing was provisioned.` },
-      provisioned: { type: 'system', title: `${ev.itemTitle} is active for ${who}`, body: `${ev.expiresAt ? `Expires ${ev.expiresAt}.` : 'Standing access.'} Open sessions sign out at their next request; sign in again to use it.` },
+      provisioned: { type: 'system', title: `${ev.itemTitle} is active for ${who}`, body: `Your access is active${ev.expiresAt ? ` until ${ev.expiresAt}` : ' (standing)'}; open pages pick it up within two minutes.` },
       'provision-failed': { type: 'system', title: `${ev.itemTitle} was approved but not provisioned`, body: `Request ${ev.requestId} is approved; the grant write failed and an access admin must look at it.` },
       expiring: { type: 'system', title: `${ev.itemTitle} expires within a day`, body: ev.expiresAt ? `Request ${ev.requestId} lapses at ${ev.expiresAt}. Request it again if the work continues.` : `Request ${ev.requestId} lapses soon.` },
       expired: { type: 'system', title: `${ev.itemTitle} expired for ${who}`, body: `Request ${ev.requestId} reached its end; the access was removed.` },

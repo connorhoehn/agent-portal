@@ -6,9 +6,10 @@
 // provisioning writes is the grant the next sign-in reads.
 //
 //   Rhea requests SME in Work → Omar approves the manager step → Priya the
-//   steward step → the request is active, Rhea's open cookie is retired by
-//   the epoch bump (A3), her next sign-in carries `sme`, the catalog shows
-//   the item as held, the audit has the rows, and the bell rang for each step.
+//   steward step → the request is active; Rhea's EXISTING cookie carries `sme`
+//   after the grants refresh with no sign-out (A3: provisioning does not bump
+//   the epoch), the catalog shows the item as held, the audit has the rows,
+//   and the bell rang for each step.
 
 jest.mock('../../config.js', () => ({
   config: {
@@ -110,7 +111,7 @@ beforeEach(() => {
 });
 afterEach(() => { setNotificationSink(null); jest.restoreAllMocks(); });
 
-it('Rhea requests SME in Work, Omar and Priya approve, and her next sign-in holds it', async () => {
+it('Rhea requests SME in Work, Omar and Priya approve, and her open cookie holds it after the grants refresh', async () => {
   const rhea = await signIn('u-rhea');
   const me0 = await request(app).get('/api/session/me').set('Cookie', rhea);
   expect(me0.body).toMatchObject({ sub: 'u-rhea', tenant: 'access', grants: { access: ['requester'] } });
@@ -143,26 +144,23 @@ it('Rhea requests SME in Work, Omar and Priya approve, and her next sign-in hold
   expect(Date.parse(done.expiresAt!) - Date.parse(done.provisionedAt!)).toBe(7 * 24 * 3_600_000);
   expect(bell).toEqual([{ userId: 'u-rhea', kind: 'access-provisioned', href: `/access/requests/${id}` }]);
 
-  // A3: the provisioning bumped her epoch, so the cookie she held is retired at its next read…
-  const stale = await request(app).get('/api/session/me').set('Cookie', rhea);
-  expect(stale.status).toBe(401);
-  expect(stale.body).toMatchObject({ code: 'SESSION_INVALID' });
-  // …and at the grants refresh too (the cookie is past GRANTS_REFRESH_S).
-  const later = Date.now() + 10 * 60_000;
-  jest.spyOn(Date, 'now').mockReturnValue(later);
-  const refreshed = await request(app).get('/api/access/summary').set('Cookie', rhea);
-  expect(refreshed.status).toBe(401);
+  // A3: provisioning does not bump her epoch. Her EXISTING cookie stays valid:
+  // a strict read sees the grant at once…
+  const now = await request(app).get('/api/session/me').set('Cookie', rhea);
+  expect(now.status).toBe(200);
+  expect(now.body.grants).toEqual({ access: ['requester'], orgiq: ['sme'] });
+  // …and the grants refresh (the cookie is past GRANTS_REFRESH_S) re-mints that
+  // same cookie carrying `sme` — no sign-out, no new sign-in.
+  jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 10 * 60_000);
+  const refreshed = await request(app).get('/api/access/catalog').set('Cookie', rhea);
   jest.mocked(Date.now).mockRestore();
-
-  // Her next sign-in carries the grant, merged beside the one she had.
-  const rhea2 = await signIn('u-rhea');
-  const me = await request(app).get('/api/session/me').set('Cookie', rhea2);
-  expect(me.status).toBe(200);
-  expect(me.body.grants).toEqual({ access: ['requester'], orgiq: ['sme'] });
-
-  // The catalog shows the item as held; asking again is the 409 for an already-held item.
-  const catalog = (await request(app).get('/api/access/catalog').set('Cookie', rhea2)).body as { items: CatalogItem[] };
-  expect(catalog.items.find((i) => i.id === 'role:orgiq:sme')).toMatchObject({ heldByActor: true });
+  expect(refreshed.status).toBe(200);
+  const reminted = cookieOf(refreshed);
+  const payload = JSON.parse(Buffer.from(reminted.slice('orgiq.session='.length).split('.')[0]!, 'base64url').toString('utf8')) as { sub: string; grants: Record<string, string[]>; tenant: string };
+  expect(payload).toMatchObject({ sub: 'u-rhea', tenant: 'access', grants: { access: ['requester'], orgiq: ['sme'] } });
+  // The catalog (read on that refreshed cookie) shows the item as held; asking again is the 409.
+  expect((refreshed.body as { items: CatalogItem[] }).items.find((i) => i.id === 'role:orgiq:sme')).toMatchObject({ heldByActor: true });
+  const rhea2 = reminted;
   expect((await request(app).post('/api/access/requests').set('Cookie', rhea2).send({ itemId: 'role:orgiq:sme', justification: JUST, duration: '7d' })).status).toBe(409);
 
   // The audit has every row, the provisioning attributed to the system.

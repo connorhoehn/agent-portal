@@ -10,19 +10,21 @@
 //   initiative-membership   a project_contributions row, through
 //                           providers/projects.ts `addContribution`
 //
-// then `bumpSessionEpoch(beneficiary)` (A3), an `access_events` row and the
-// request's own status. There is no second table of "effective access".
+// then an `access_events` row and the request's own status. There is no
+// second table of "effective access".
 //
-// What the epoch bump does, precisely: lib/session.ts's grants refresh and
-// lib/live-principal.ts both treat a cookie whose epoch is below the stored one
-// as retired. So every session the beneficiary holds is signed out at its next
-// strict read (immediately for /api/session/me, within GRANTS_REFRESH_S for
-// the rest), and the next sign-in carries the new grant. A grant does not
-// reach an open cookie in place; the bell item says so.
+// The session epoch (decision A3, as decided 2026-10-13):
+//   provision  does NOT bump. The granted role reaches the beneficiary's open
+//              cookie through lib/session.ts's grants refresh (≤ GRANTS_REFRESH_S)
+//              — and strict reads (lib/live-principal.ts, /api/session/me) see
+//              it at once — without signing them out.
+//   revoke     DOES bump (`bumpSessionEpoch`), so every cookie the beneficiary
+//              holds is retired at its next read: removal never waits on a
+//              refresh window and never survives in a copied cookie.
 //
 // Order and once-only:
 //   provision  claim approved → provisioned (a compare-and-set; the loser does
-//              nothing), write the grant (idempotent), bump, then
+//              nothing), write the grant (idempotent), then
 //              provisioned → active with the `provisioned` event. A crash after
 //              the claim leaves `provisioned`, which a retry resumes.
 //   revoke     remove the grant (idempotent), bump, then claim
@@ -122,8 +124,8 @@ async function names(request: AccessRequestRow, actorId: string | null) {
 }
 
 /**
- * Provision an approved request: write the grant, bump the beneficiary's
- * epoch, record `provisioned`, set provisionedAt / expiresAt and move it to
+ * Provision an approved request: write the grant (no epoch bump — it reaches
+ * open cookies at the grants refresh), record `provisioned`, set provisionedAt / expiresAt and move it to
  * `active`. Calling it again on an active request changes nothing.
  */
 export async function provisionAccess(request: Pick<AccessRequestRow, 'id'>): Promise<ProvisionOutcome> {
@@ -150,8 +152,8 @@ export async function provisionAccess(request: Pick<AccessRequestRow, 'id'>): Pr
       claimed = won;
     }
     try {
+      // No epoch bump here (A3): the grant reaches open cookies at the grants refresh.
       await applyGrant(claimed, item, true);
-      await bumpSessionEpoch(claimed.beneficiaryId);
     } catch (err) {
       // The grant write failed: hand the claim back, so the row says `approved`
       // (decided, not in effect) rather than `provisioned` over nothing.

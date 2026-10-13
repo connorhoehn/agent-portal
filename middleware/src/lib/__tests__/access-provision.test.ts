@@ -5,12 +5,13 @@
 // other route reads.
 //
 //   * a tenant-role request merges the role into the beneficiary's grants
-//     through setGrants (their other grants untouched), bumps their epoch
-//     (observed on the directory and on onDirectoryChange), records
+//     through setGrants (their other grants untouched), does NOT bump their
+//     epoch (A3: the grant reaches open cookies at the grants refresh; live
+//     readers still hear onDirectoryChange), records
 //     `provisioned`, and lands `active` with expiresAt from its duration;
 //   * an initiative membership inserts the contribution through the writer;
 //   * re-provisioning changes nothing (no second bump, event or bell item);
-//   * revoke is the inverse; a second revoke changes nothing;
+//   * revoke is the inverse AND bumps the epoch; a second revoke changes nothing;
 //   * a request that is not approved, or cannot be written, is refused before
 //     anything is claimed;
 //   * reset undoes every write.
@@ -51,7 +52,7 @@ beforeEach(() => {
 afterEach(() => { stopListening(); setNotificationSink(null); unfreezeClock(); jest.restoreAllMocks(); });
 
 describe('provisionAccess: a tenant role', () => {
-  it('merges the role through setGrants, bumps the epoch, records provisioned, lands active', async () => {
+  it('merges the role through setGrants without bumping the epoch, records provisioned, lands active', async () => {
     const before = structuredClone((await getUser('u-rhea'))!);
     expect(before.grants).toEqual({ access: ['requester'] });
     approve('req-0001');
@@ -65,9 +66,9 @@ describe('provisionAccess: a tenant role', () => {
     expect(after.grants).toEqual({ access: ['requester'], orgiq: ['sme'] });
     // The one store: the write is a grant row on the identity directory.
     expect(identityGrantWritesFixture.rows()).toEqual([{ userId: 'u-rhea', grants: { access: ['requester'], orgiq: ['sme'] } }]);
-    // A3: the epoch moved, and live readers heard about it.
-    expect(after.epoch).toBe(before.epoch + 1);
-    expect(changed).toEqual(['u-rhea', 'u-rhea']);
+    // A3: no epoch bump on a grant (her open cookie stays valid); live readers heard the grant write.
+    expect(after.epoch).toBe(before.epoch);
+    expect(changed).toEqual(['u-rhea']);
     expect(eventsOf('req-0001').map((e) => [e.kind, e.actorId, e.beforeStatus, e.afterStatus])).toEqual([
       ['submitted', 'u-rhea', 'draft', 'submitted'],
       ['provisioned', null, 'approved', 'active'],
@@ -79,7 +80,7 @@ describe('provisionAccess: a tenant role', () => {
       action: { href: '/access/requests/req-0001' } } });
   });
 
-  it('is idempotent: a second provision writes, bumps, records and rings nothing', async () => {
+  it('is idempotent: a second provision writes, records and rings nothing', async () => {
     approve('req-0001');
     await provisionAccess({ id: 'req-0001' });
     const epoch = (await getUser('u-rhea'))!.epoch;
@@ -97,7 +98,8 @@ describe('provisionAccess: a tenant role', () => {
     const epoch = (await getUser('u-rhea'))!.epoch;
     const [a, b] = await Promise.all([provisionAccess({ id: 'req-0001' }), provisionAccess({ id: 'req-0001' })]);
     expect([a.changed, b.changed].sort()).toEqual([false, true]);
-    expect((await getUser('u-rhea'))!.epoch).toBe(epoch + 1);
+    expect((await getUser('u-rhea'))!.epoch).toBe(epoch);
+    expect(identityGrantWritesFixture.rows()).toHaveLength(1);
     expect(eventsOf('req-0001').filter((e) => e.kind === 'provisioned')).toHaveLength(1);
   });
 
