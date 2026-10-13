@@ -11,7 +11,8 @@ import { staticInventory, paramInventory, PARAM_ROUTES, OBSERVED_ROUTES, resolve
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const selectors = {
   graphDetailLabels: '[data-ui-text="graph-detail"]', graphMetadataLabels: '[data-ui-text="graph-metadata"]', activePersonCaptions: '[data-ui-text="active-person-caption"]',
-  codeLabels: 'button code, button .font-mono:not(kbd), [role="button"] code, [role="button"] .font-mono:not(kbd)',
+  // Input mono emits data-ui-text="code" (ui-components 2.442.1): a URL/regex/cron value on the code profile.
+  codeLabels: 'button code, button .font-mono:not(kbd), [role="button"] code, [role="button"] .font-mono:not(kbd), input[data-ui-text="code"]',
   // Since ui-components 2.441.0 every rail caption/group heading emits data-ui-text="rail-caption" (the 11px rail profile).
   railCaptionLabels: '[data-ui-text="rail-caption"], [data-testid="social-chat-rail-scroll"] button[aria-expanded]:not([aria-haspopup]) > span, button[data-heading="label"][data-focus-key^="g:"] > span',
   railItemLabels: '[data-ui-text="rail-item"]',
@@ -31,6 +32,10 @@ const selectors = {
   toolbarControls: '[data-toolbar-variant="collection"] button:not([aria-label="Clear search"]), [data-toolbar-variant="collection"] input',
   collections: '[data-collection-page]', collectionToolbars: '[data-toolbar-variant="collection"]', sectionTitles: '[data-section-title]',
   tables: '[data-shell-nav] table:not([role="presentation"]):not(.ProseMirror table)',
+  // A collection's table: the library DataTable (data-collection-table) or any
+  // table a CollectionPage holds. Its body rows must open their record
+  // (row-activatable) unless the table declares static rows with a reason.
+  collectionTables: '[data-shell-nav] [data-collection-table] table, [data-shell-nav] [data-collection-page] table:not([role="presentation"]):not(.ProseMirror table)',
   composers: '[data-composer-surface]', nestedComposers: '[data-composer-surface] [data-composer-surface]',
   // Explicit content hosts, rather than the immediate padded parent: catches
   // an extra wrapper inset that otherwise makes a narrow shelf look correct.
@@ -40,6 +45,24 @@ const selectors = {
   rightPane: '[data-testid="page-conversation-pane"]',
   conversationState: '[data-composer-surface], [data-testid="social-channel-not-joined"], [data-testid="social-shared-work"]',
 };
+/** Body rows of a collection that has not declared its rows static (see `collectionTables`). */
+const collectionRows = ':is([data-shell-nav] [data-collection-table], [data-shell-nav] [data-collection-page]) table:not([role="presentation"]):not([data-collection-rows="static"] table) > tbody > tr:not(:has([colspan])):not([data-testid="datatable-loading-row"])';
+/** A record-detail action whose result belongs in the page (a tab, a section or the right pane), never a drawer/modal. */
+const RECORD_DETAIL_ACTION = /^(revision history|version history|history|revisions?|view history|view details|details)\b/i;
+/** Buttons that can be a record's detail action: in the page, not a navigation rail's disclosure heading. */
+const RECORD_ACTION_CANDIDATES = '[data-shell-nav] :is(button, [role="button"]):not([aria-expanded]):not(nav *):not([data-testid="subnav-group-header"])';
+/** Details buttons the `details-pane` state already opens into the right pane. */
+const DETAILS_PANE = /^(Initiative details|Open initiative details|Show details)$/;
+type Probes = { activateRow: (page: Page, o: { rows: string }) => Promise<unknown>; recordAction: (page: Page, o: { scope: string; name: RegExp; candidates?: string }) => Promise<unknown>; toggleSelection: (page: Page, o: { checkbox: string }) => Promise<unknown> };
+type AuditState = { name: string; enter: (p: Page, ctx: { probes: Probes }) => Promise<unknown>; required?: string[]; navigates?: boolean };
+/** The shell regions every page keeps, including the record a probe navigated to. */
+const SHELL_REQUIRED = ['$header', '$footer', '$shellColumns'];
+/** After a probe navigated or opened something, wait (bounded) for its loading rows to settle. */
+async function settled(page: Page) {
+  await expect(page.getByTestId('loading-state')).toHaveCount(0, { timeout: 15000 });
+  await expect(page.locator('[data-testid="datatable-loading-row"]')).toHaveCount(0, { timeout: 15000 });
+}
+
 /** Each tenant's deck detail API, so a missing report is observed (404), never assumed. */
 const DECK_API: Record<string, (id: string) => string> = {
   orgiq: id => `/api/initiative-decks/${id}`,
@@ -118,8 +141,14 @@ export default {
     await page.evaluate(value => { localStorage.setItem('theme', value); document.documentElement.dataset.theme = value; }, theme);
   },
   ready,
-  async composerExpectation(page: Page, spec: InventoryRoute & { auditMissingDeck?: boolean; auditMissingRecord?: boolean; composerExpectation?: { mode: 'required' | 'exempt'; reason?: string } }) {
-    if (spec.tenant !== 'pipelines') {
+  async composerExpectation(page: Page, listSpec: InventoryRoute & { navigatedFrom?: string; auditMissingDeck?: boolean; auditMissingRecord?: boolean; composerExpectation?: { mode: 'required' | 'exempt'; reason?: string } }) {
+    // A probe that opened a row's record is classified as that record: none of
+    // the list route's own declarations (its table judge, its pattern, its
+    // composer policy) describe the page it reached.
+    const spec = listSpec.navigatedFrom
+      ? { tenant: listSpec.tenant, path: listSpec.path, source: 'param' as const, kind: 'record' as const }
+      : listSpec;
+    if (spec.tenant !== 'pipelines' || listSpec.navigatedFrom) {
       // Evidence is read after the network settles so a lazily filled table is not mistaken for an empty page.
       await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
       const visible = async (selector: string) => (await page.locator(selector).count()) > 0 && await page.locator(selector).first().isVisible();
@@ -175,7 +204,7 @@ export default {
     return { conversation: await page.getByTestId('social-channel-not-joined').isVisible() ? 'join-required' : await page.getByTestId('social-shared-work').isVisible() ? 'shared-work' : await page.locator(selectors.composers).first().isVisible() ? 'composer' : 'not-present' };
   },
   async discoverStates(page: Page) {
-    const states: Array<{ name: string; enter: (p: Page) => Promise<void>; required?: string[] }> = [];
+    const states: AuditState[] = [];
     const group = page.getByTestId('subnav-group-header').first();
     if (await group.count() && await group.isVisible()) {
       for (const expanded of [false, true]) states.push({ name: `sidebar-${expanded ? 'expanded' : 'collapsed'}`, required: ['$railHeaders'], enter: async p => {
@@ -213,6 +242,30 @@ export default {
     } });
     const info = page.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ });
     if (await info.count() === 1 && await info.isVisible()) states.push({ name: 'details-pane', required: ['$rightPane'], enter: async p => { await p.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ }).click(); await expect(p.locator(selectors.rightPane)).toBeVisible(); } });
+    // Interaction probes (read-only: every non-GET request is blocked and reported).
+    // record-popout: activating a collection row must route the record into the
+    // page, never open a drawer or modal.
+    const row = page.locator(collectionRows).first();
+    if (await row.count() && await row.isVisible()) states.push({ name: 'row-activate', navigates: true, required: SHELL_REQUIRED, enter: async (p, { probes }) => {
+      const probe = await probes.activateRow(p, { rows: collectionRows });
+      await settled(p);
+      return probe;
+    } });
+    // record-popout: a record-detail action (revision history, details) belongs in the page too.
+    const detail = page.getByRole('button', { name: RECORD_DETAIL_ACTION }).and(page.locator(RECORD_ACTION_CANDIDATES));
+    const detailNames = (await detail.evaluateAll(els => els.filter(el => (el as HTMLElement).offsetParent !== null).map(el => el.getAttribute('aria-label') ?? (el.textContent ?? '').trim()))).filter(name => !DETAILS_PANE.test(name));
+    if (detailNames.length) {
+      const name = new RegExp(`^${detailNames[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+      states.push({ name: 'record-detail-action', navigates: true, required: SHELL_REQUIRED, enter: async (p, { probes }) => {
+        const probe = await probes.recordAction(p, { scope: '[data-shell-nav]', name, candidates: RECORD_ACTION_CANDIDATES });
+        await settled(p);
+        return probe;
+      } });
+    }
+    // selection-shift: ticking a row's checkbox must not move the table.
+    const checkbox = `${collectionRows} input[type="checkbox"]`;
+    const box = page.locator(checkbox).first();
+    if (await box.count() && await box.isVisible()) states.push({ name: 'row-select', enter: (p, { probes }) => probes.toggleSelection(p, { checkbox }) });
     return states;
   },
 };

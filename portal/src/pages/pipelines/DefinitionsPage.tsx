@@ -1,8 +1,10 @@
 // /pipelines/definitions — what can run (docs/social-tenant-design.md §5.3,
 // docs/pipelines-tenant-goal.md §P2). Every bot, assessment command, runbook
 // and agent is one definition, derived from what exists and read from
-// GET /api/pipelines/definitions; `?open=<id>` opens one in the drawer
-// (steps, triggers, source, recent runs, and Dry-run for a runbook).
+// GET /api/pipelines/definitions; a row opens the definition as a page,
+// `/pipelines/definitions/:definitionId` (`definitionHref`), the catalog as
+// the list rail beside it (steps, triggers, source, recent runs, and Dry-run
+// for a runbook). A legacy `?open=<id>` link redirects there.
 //
 // Table-first: one compact filter row, then the DataTable above the fold.
 
@@ -16,7 +18,9 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
+import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { pipelineCollectionAdapter } from './pipelineCollectionCommands';
@@ -26,6 +30,7 @@ import { useFetch } from '../../hooks/useFetch';
 import {
   DEFINITION_KIND_OPTIONS,
   approverSummary,
+  definitionHref,
   matchesDefinition,
   triggerSummary,
   type DefinitionsResponse,
@@ -33,7 +38,7 @@ import {
 } from '../../lib/pipelineDefinitions';
 import { kindLabel } from '../../lib/pipelineRuns';
 import { relativeTime } from '../../lib/relativeTime';
-import { DefinitionDrawer } from './DefinitionDrawer';
+import { DefinitionDiscussion, DefinitionRecord } from './DefinitionRecord';
 
 const COLUMNS: DataTableColumn<PipelineDefinition>[] = [
   {
@@ -62,8 +67,11 @@ const COLUMNS: DataTableColumn<PipelineDefinition>[] = [
 ];
 
 export default function DefinitionsPage() {
-  const [params, setParams] = useSearchParams();
-  const openId = params.get('open');
+  const [params] = useSearchParams();
+  const legacyOpen = params.get('open');
+  const { definitionId } = useParams<{ definitionId?: string }>();
+  const openId = definitionId ?? null;
+  const navigate = useNavigate();
   const [kind, setKind] = useState('');
   const [query, setQuery] = useState('');
   const { data, error, isLoading, refresh } = useFetch<DefinitionsResponse>(
@@ -74,11 +82,34 @@ export default function DefinitionsPage() {
   const adapter = pipelineCollectionAdapter('definitions', { setQuery, setFilter: setKind, refresh,
     scopeNote: 'Search uses the loaded definition catalog. Kind changes refetch the catalog; search, paging and sorting remain table controls. Commands do not run or change definitions.' });
 
-  const open = (id: string | null) => {
-    const next = new URLSearchParams(params);
-    if (id) next.set('open', id); else next.delete('open');
-    setParams(next, { replace: false });
-  };
+  const open = (id: string) => navigate(definitionHref(id));
+  useCrumbLabel(openId ?? undefined, all.find((d) => d.id === openId)?.title ?? null);
+
+  if (legacyOpen && !openId) return <Navigate to={definitionHref(legacyOpen)} replace />;
+  if (openId) {
+    const kinds = [...new Set(rows.map((d) => d.kind))];
+    return (
+      <CollectionRecordFrame
+        title="Definitions"
+        listTitle="Definitions"
+        listLabel="definitions"
+        {...(data ? { count: rows.length } : {})}
+        search={{ value: query, onChange: setQuery, placeholder: 'Find a definition' }}
+        groups={kinds.map((k) => ({ id: k, title: kindLabel(k), count: rows.filter((d) => d.kind === k).length }))}
+        rows={rows.map((d) => ({ id: d.id, groupId: d.kind, title: d.title, subline: `${d.enabled ? 'active' : d.orphaned ? 'orphaned' : 'inactive'} · ${d.runCount} runs` }))}
+        currentId={openId}
+        onOpen={open}
+        loading={isLoading && !data}
+        error={error}
+        onRetry={refresh}
+        footer={<CollectionCommandHost adapter={adapter} />}
+        data-testid="pipelines-definition-explorer"
+        conversation={<DefinitionDiscussion key={openId} id={openId} />}
+      >
+        <DefinitionRecord key={openId} id={openId} onChanged={refresh} />
+      </CollectionRecordFrame>
+    );
+  }
 
   return (
     <CollectionCommandPage data-testid="pipelines-definitions" title="Definitions" description="What can run: every bot, assessment command, runbook and agent, with its triggers, steps and runs.">
@@ -110,7 +141,6 @@ export default function DefinitionsPage() {
           emptyMessage={query.trim() || kind ? 'No definition matches this search and kind.' : 'No definitions — nothing is registered to run yet.'}
         />
       )}
-      <DefinitionDrawer id={openId} onClose={() => open(null)} onChanged={refresh} />
     </Stack>
       <CollectionCommandHost adapter={adapter} />
       </Stack>

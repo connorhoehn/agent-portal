@@ -1,3 +1,4 @@
+import { useUrlState } from '../../lib/useUrlState';
 import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
 import { Banner, BranchIcon, Chip, CollapsibleSection, CollectionToolbar, DataTable, IconButton, Inline, KeyValue, ListIcon, PageSection, Stack, StatStrip, T, Tooltip, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
@@ -24,7 +25,8 @@ export default function QueuesPage() {
   const { data, error, isLoading, refresh } = useFetch<PipelineQueuesResponse>('/api/pipelines/queues', 15_000);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('');
-  const [selected, setSelected] = useState<string | null>(null);
+  // The open queue is the URL (`?queue=<name>`): its read status renders under the table.
+  const [selected, setSelected] = useUrlState<string | null>('queue', (raw) => raw || null, (v) => v, { replace: false });
   const rows = data?.queues ?? [];
   const filtered = filterQueues(rows, query, filter);
   const adapter = pipelineCollectionAdapter('queues', { setQuery, setFilter, refresh,

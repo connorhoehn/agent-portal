@@ -52,7 +52,7 @@ test('each Sources page lists one definition kind, all four kinds are filterable
 test('triggers, links and sources read as words', () => {
   assert.equal(triggerSummary([{ type: 'schedule', detail: 'cron 0 3 * * *' }, { type: 'manual', detail: 'by hand' }]), 'Schedule · Manual');
   assert.equal(triggerSummary([]), 'none');
-  assert.equal(definitionHref('runbook:promo-a'), '/pipelines/definitions?open=runbook%3Apromo-a');
+  assert.equal(definitionHref('runbook:promo-a'), '/pipelines/definitions/runbook%3Apromo-a');
   assert.equal(approvalSourceLabel('lab_consults'), 'Agent question');
   assert.equal(brakesNote([]), '');
   assert.match(brakesNote(['run budget: none requested']), /^Brakes: run budget/);

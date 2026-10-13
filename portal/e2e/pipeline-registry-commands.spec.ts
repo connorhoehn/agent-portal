@@ -56,10 +56,10 @@ test('opening an approval command reviews one visible step without recording a d
   await command('search approvals for hidden');
   await command('open audit-review-fixture');
   await expect(page.getByTestId('collection-command-result')).toContainText('No matching record');
-  await expect(page.getByTestId('pipelines-approval-drawer')).not.toBeVisible();
+  await expect(page.getByTestId('pipelines-approval-record')).not.toBeVisible();
   await command('reset filters');
   await command('open audit-review-fixture');
-  await expect(page.getByTestId('pipelines-approval-drawer')).toBeVisible();
-  await expect(page.getByTestId('pipelines-approval-drawer')).toContainText('Review the isolated browser test fixture.');
+  await expect(page.getByTestId('pipelines-approval-record')).toBeVisible();
+  await expect(page.getByTestId('pipelines-approval-record')).toContainText('Review the isolated browser test fixture.');
   expect(decisions).toEqual([]);
 });

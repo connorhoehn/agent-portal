@@ -2,8 +2,14 @@
 // PUT /users/:id/grants. Grants are a tenant × role matrix; a user with no
 // grant in a tenant cannot switch into it (enforced server-side in the
 // session routes), so this page is where tenant isolation is administered.
+//
+// A row opens the user as a page, `/admin/identity/users/:userId` (the users as
+// the list rail beside it, docs/layout-cascade.md "Records open as pages"): the
+// facts, the person link and the grant matrix, each with an explicit Save; a
+// grant change still confirms. Creating a user or tenant stays a header form.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import {
   Button,
   Card,
@@ -12,11 +18,15 @@ import {
   CollectionToolbar,
   ConfirmDialog,
   DataTable,
+  DetailHeader,
+  DetailSection,
   Drawer,
   FormField,
   Inline,
   InlineAlert,
   Input,
+  KeyValue,
+  LoadingState,
   PageSection,
   SectionLabel,
   Stack,
@@ -31,7 +41,9 @@ import { toastError } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { matchesUser, usersAdapter } from './identityCommands';
-import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
+import { RecordNotFound, UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
+import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import {
   describeGrantDiff,
   grantChipLabels,
@@ -92,9 +104,10 @@ function UsersPage() {
   const error = mutationError ?? tenantsError ?? rolesError ?? usersError;
   const degraded = tenantsDegraded ?? rolesDegraded ?? usersDegraded;
 
-  const [grantsUser, setGrantsUser] = useState<UserInfo | null>(null); // user with the "Edit grants" drawer open
-  const [draftGrants, setDraftGrants] = useState<Record<string, string[]>>({});
-  const [confirmingGrants, setConfirmingGrants] = useState(false); // "Save grants" clicked, awaiting confirm
+  // The open user is the URL (`/admin/identity/users/:userId`).
+  const { userId: openId = null } = useParams<{ userId?: string }>();
+  const navigate = useNavigate();
+  const openUser = (id: string | null) => navigate(id ? `/admin/identity/users/${encodeURIComponent(id)}` : '/admin/identity/users');
   const [busy, setBusy] = useState(false);
   const [showNewUser, setShowNewUser] = useState(false);
   const [showNewTenant, setShowNewTenant] = useState(false);
@@ -117,23 +130,8 @@ function UsersPage() {
     try { await fn(); } catch (e) { setMutationError((e as Error).message); } finally { setBusy(false); }
   };
 
-  const openGrantsEditor = (u: UserInfo) => {
-    setGrantsUser(u);
-    setDraftGrants(JSON.parse(JSON.stringify(u.grants)) as Record<string, string[]>);
-  };
-
-  const toggleGrant = (tenant: string, role: string) => {
-    setDraftGrants(prev => toggleGrantSet(prev, tenant, role));
-  };
-
-  const grantDiff = grantsUser ? describeGrantDiff(grantsUser.grants, draftGrants) : { added: [], removed: [] };
-  const grantsDirty = grantDiff.added.length > 0 || grantDiff.removed.length > 0;
-
-  const saveGrants = () => run(async () => {
-    if (!grantsUser) return;
-    const userId = grantsUser.id;
-    await sendJson(`/api/identity/users/${userId}/grants`, 'PUT', { grants: draftGrants });
-    setGrantsUser(null);
+  const saveGrants = (userId: string, grants: Record<string, string[]>) => run(async () => {
+    await sendJson(`/api/identity/users/${userId}/grants`, 'PUT', { grants });
     load();
     // If we just edited the signed-in user, their session grants are stale
     // until the next login — refresh so the switcher reflects reality.
@@ -177,14 +175,7 @@ function UsersPage() {
     {
       key: 'persona',
       header: 'Persona',
-      render: (u) => (
-        <PersonaCell
-          user={u}
-          busy={busy}
-          canEdit={canManage}
-          onLink={(personId) => void linkPerson(u.id, personId)}
-        />
-      ),
+      render: (u) => <T as="span" size="sm" tone="secondary" className="font-mono">{u.personId ?? '—'}</T>,
     },
     {
       key: 'grants',
@@ -197,6 +188,59 @@ function UsersPage() {
       },
     },
   ];
+
+  const open = users.find((u) => u.id === openId) ?? null;
+  useCrumbLabel(openId ?? undefined, open?.displayName ?? null);
+  if (openId) {
+    return (
+      <CollectionRecordFrame
+        title="Users & Tenants"
+        listTitle="Users"
+        listLabel="users"
+        {...(usersData ? { count: shownUsers.length } : {})}
+        search={{ value: query, onChange: setQuery, placeholder: 'Find a user' }}
+        groups={[
+          { id: 'granted', title: 'With grants', count: shownUsers.filter((u) => grantChipLabels(u.grants).length > 0).length },
+          { id: 'none', title: 'No grants', count: shownUsers.filter((u) => grantChipLabels(u.grants).length === 0).length },
+        ]}
+        rows={shownUsers.map((u) => ({
+          id: u.id,
+          groupId: grantChipLabels(u.grants).length > 0 ? 'granted' : 'none',
+          title: u.displayName,
+          subline: u.email ?? u.id,
+        }))}
+        currentId={openId}
+        onOpen={openUser}
+        loading={loadingFirst}
+        error={error ?? degraded ?? null}
+        onRetry={load}
+        footer={<CollectionCommandHost adapter={adapter} />}
+        data-testid="identity-user-explorer"
+      >
+        {open ? (
+          <UserRecord
+            key={open.id}
+            user={open}
+            isSelf={session?.sub === open.id}
+            tenants={tenants}
+            rolesForTenant={rolesForTenant}
+            canManage={canManage}
+            busy={busy}
+            error={mutationError}
+            canSignInAs={canSignInAs && session?.sub !== open.id}
+            onSignIn={() => signInAs(open)}
+            onLinkPerson={(personId) => void linkPerson(open.id, personId)}
+            onSaveGrants={(grants) => void saveGrants(open.id, grants)}
+          />
+        ) : loadingFirst || !usersData ? (
+          <LoadingState label="Loading user…" />
+        ) : (
+          <RecordNotFound heading="User" title="User not found" body={`No provisioned user has the id "${openId}".`}
+            backLabel="Users & Tenants" onBack={() => openUser(null)} />
+        )}
+      </CollectionRecordFrame>
+    );
+  }
 
   return (
     <PageSection
@@ -250,6 +294,7 @@ function UsersPage() {
           columns={columns}
           loading={loadingFirst}
           emptyMessage={users.length > 0 ? 'No user matches this search.' : 'No users provisioned yet.'}
+          onRowClick={(u) => openUser(u.id)}
           rowActions={(u) => (
             <Inline gap="md" justify="end" wrap={false}>
               {/* Become this user. Deliberately here and not in the header
@@ -259,11 +304,6 @@ function UsersPage() {
               {canSignInAs && session?.sub !== u.id && (
                 <Button size="sm" variant="link" disabled={busy} onClick={() => signInAs(u)} title="Reload the app as this user (dev only)">
                   Sign in as
-                </Button>
-              )}
-              {canManage && (
-                <Button size="sm" variant="link" disabled={busy} onClick={() => openGrantsEditor(u)}>
-                  Edit grants
                 </Button>
               )}
             </Inline>
@@ -309,41 +349,112 @@ function UsersPage() {
         />
       </Drawer>
 
-      <Drawer
-        open={!!grantsUser}
-        onClose={() => setGrantsUser(null)}
-        title={grantsUser ? `Edit grants — ${grantsUser.displayName}` : 'Edit grants'}
-        footer={
-          <Inline gap="xs" justify="end">
-            <Button variant="secondary" onClick={() => setGrantsUser(null)} disabled={busy}>Cancel</Button>
-            <Button onClick={() => setConfirmingGrants(true)} disabled={busy || !grantsDirty}>Save grants</Button>
+    </PageSection>
+  );
+}
+
+function UserRecord({ user, isSelf, tenants, rolesForTenant, canManage, busy, error, canSignInAs, onSignIn, onLinkPerson, onSaveGrants }: {
+  user: UserInfo;
+  isSelf: boolean;
+  tenants: TenantInfo[];
+  rolesForTenant: Map<string, RoleInfo[]>;
+  canManage: boolean;
+  busy: boolean;
+  error: string | null;
+  canSignInAs: boolean;
+  onSignIn: () => void;
+  onLinkPerson: (personId: string | null) => void;
+  onSaveGrants: (grants: Record<string, string[]>) => void;
+}) {
+  const savedGrants = JSON.stringify(user.grants);
+  const [draftGrants, setDraftGrants] = useState<Record<string, string[]>>(() => JSON.parse(savedGrants) as Record<string, string[]>);
+  const [personDraft, setPersonDraft] = useState(user.personId ?? '');
+  const [confirmingGrants, setConfirmingGrants] = useState(false);
+  // The drafts follow the stored user after a save (or another admin's change).
+  useEffect(() => { setDraftGrants(JSON.parse(savedGrants) as Record<string, string[]>); }, [savedGrants]);
+  useEffect(() => { setPersonDraft(user.personId ?? ''); }, [user.personId]);
+
+  const grantDiff = describeGrantDiff(user.grants, draftGrants);
+  const grantsDirty = grantDiff.added.length > 0 || grantDiff.removed.length > 0;
+  const personDirty = (personDraft.trim() || null) !== user.personId;
+  const labels = grantChipLabels(user.grants);
+
+  return (
+    <Stack gap="md" data-testid="identity-user-record">
+      <DetailHeader
+        title={user.displayName}
+        badge={isSelf ? <Chip size="xs">you</Chip> : undefined}
+        description={user.id}
+        aside={canSignInAs ? (
+          <Inline justify="end">
+            {/* Become this user — a rare administrative act, hidden when a
+                real sign-in is required (the POST would 403 anyway). */}
+            <Button size="sm" variant="secondary" disabled={busy} onClick={onSignIn} title="Reload the app as this user (dev only)">
+              Sign in as
+            </Button>
           </Inline>
-        }
-      >
-        {grantsUser && (
-          <Inline gap="md" wrap align="start">
-            {tenants.map(t => (
-              <TenantGrantsCard
-                key={t.id}
-                tenant={t}
-                roles={rolesForTenant.get(t.id) ?? []}
-                checked={draftGrants[t.id] ?? []}
-                onToggle={(role) => toggleGrant(t.id, role)}
-              />
-            ))}
-          </Inline>
-        )}
-      </Drawer>
+        ) : undefined}
+      />
+      {error && <InlineAlert tone="error">{error}</InlineAlert>}
+      <KeyValue layout="row" items={[
+        { label: 'User id', value: <T as="span" size="sm" className="font-mono">{user.id}</T> },
+        { label: 'Email', value: user.email ?? '—' },
+        { label: 'Person', value: <T as="span" size="sm" className="font-mono">{user.personId ?? '—'}</T> },
+        { label: 'Grants', value: labels.length > 0
+          ? <Inline gap="xs" wrap>{labels.map((l) => <Chip key={l} size="xs">{l}</Chip>)}</Inline>
+          : <T as="span" size="sm" tone="tertiary">none</T> },
+      ]} />
+
+      {canManage && (
+        <DetailSection title="Person link" variant="heading"
+          description="Links this login to an org-graph person; leave blank to clear the link.">
+          <Stack gap="sm">
+            <FormField label="Person id" hint="e.g. p-012">
+              {(wiring) => <Input {...inputWiring(wiring)} value={personDraft} disabled={busy} onChange={(e) => setPersonDraft(e.target.value)} />}
+            </FormField>
+            <Inline gap="sm" justify="end">
+              <Button size="sm" variant="ghost" disabled={!personDirty} onClick={() => setPersonDraft(user.personId ?? '')}>Discard changes</Button>
+              <Button size="sm" disabled={busy || !personDirty} onClick={() => onLinkPerson(personDraft.trim() || null)} data-testid="identity-user-person-save">
+                Save link
+              </Button>
+            </Inline>
+          </Stack>
+        </DetailSection>
+      )}
+
+      {canManage && (
+        <DetailSection title="Grants" variant="heading"
+          description="A user with no grant in a tenant cannot switch into it. Takes effect immediately on save.">
+          <Stack gap="sm">
+            <Inline gap="md" wrap align="start">
+              {tenants.map((t) => (
+                <TenantGrantsCard
+                  key={t.id}
+                  tenant={t}
+                  roles={rolesForTenant.get(t.id) ?? []}
+                  checked={draftGrants[t.id] ?? []}
+                  onToggle={(role) => setDraftGrants((prev) => toggleGrantSet(prev, t.id, role))}
+                />
+              ))}
+            </Inline>
+            <Inline gap="sm" justify="end">
+              <Button size="sm" variant="ghost" disabled={!grantsDirty} onClick={() => setDraftGrants(JSON.parse(savedGrants) as Record<string, string[]>)}>Discard changes</Button>
+              <Button size="sm" disabled={busy || !grantsDirty} onClick={() => setConfirmingGrants(true)} data-testid="identity-user-grants-save">
+                Save grants
+              </Button>
+            </Inline>
+          </Stack>
+        </DetailSection>
+      )}
 
       {/* Grants gate what a user can reach — a save with no stated effect
-          is the wrong click-weight for a privilege change. Named here, not
-          just implied by the checkbox state the drawer already closed on. */}
+          is the wrong click-weight for a privilege change. */}
       <ConfirmDialog
         open={confirmingGrants}
-        onConfirm={() => { setConfirmingGrants(false); void saveGrants(); }}
+        onConfirm={() => { setConfirmingGrants(false); onSaveGrants(draftGrants); }}
         onCancel={() => setConfirmingGrants(false)}
         tone={grantDiff.removed.length > 0 ? 'destructive' : 'caution'}
-        title={grantsUser ? `Change access for ${grantsUser.displayName}?` : 'Change access?'}
+        title={`Change access for ${user.displayName}?`}
         body={
           [
             grantDiff.added.length > 0 ? `Grants: ${grantDiff.added.join(', ')}.` : null,
@@ -352,48 +463,7 @@ function UsersPage() {
           ].filter(Boolean).join(' ')
         }
       />
-    </PageSection>
-  );
-}
-
-function PersonaCell({ user, busy, canEdit, onLink }: {
-  user: UserInfo;
-  busy: boolean;
-  canEdit: boolean;
-  onLink: (personId: string | null) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(user.personId ?? '');
-
-  if (editing) {
-    return (
-      <Inline gap="xs" align="center">
-        <Input
-          placeholder="person id"
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          disabled={busy}
-          autoFocus
-          aria-label="Person id"
-        />
-        <Button size="sm" disabled={busy} onClick={() => { onLink(draft.trim() || null); setEditing(false); }}>
-          Save
-        </Button>
-        <Button size="sm" variant="secondary" disabled={busy} onClick={() => { setDraft(user.personId ?? ''); setEditing(false); }}>
-          Cancel
-        </Button>
-      </Inline>
-    );
-  }
-  return (
-    <Inline gap="sm" align="center" wrap={false}>
-      <T as="span" size="sm" tone="secondary" className="font-mono">{user.personId ?? '—'}</T>
-      {canEdit && (
-        <Button size="sm" variant="link" disabled={busy} onClick={() => { setDraft(user.personId ?? ''); setEditing(true); }}>
-          {user.personId ? 'Relink' : 'Link'}
-        </Button>
-      )}
-    </Inline>
+    </Stack>
   );
 }
 

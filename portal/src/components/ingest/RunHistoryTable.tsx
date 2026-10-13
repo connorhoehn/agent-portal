@@ -9,7 +9,6 @@ import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { CRAWL_STATUS_TONE, durationOf, formatCost } from './types';
 import type { CrawlSession, CrawlStatus, CrawlTarget } from './types';
-import { Button } from './ui';
 
 type Filter = 'all' | CrawlStatus;
 
@@ -108,7 +107,6 @@ export function RunHistoryTable({
             <FilterChip
               key={f.value}
               active={active}
-              size="sm"
               onClick={() => onFilter(f.value)}
             >
               {f.label}
@@ -122,11 +120,9 @@ export function RunHistoryTable({
         columns={columns}
         keyField={(s) => s.id}
         {...(emptyMessage ? { emptyMessage } : {})}
-        rowActions={(s) => (
-          <Button variant="secondary" size="sm" onClick={() => onOpen(s.id)}>
-            Open
-          </Button>
-        )}
+        // A row opens the run as a page (`/admin/ingest/history/:crawlId`).
+        onRowClick={(s) => onOpen(s.id)}
+        data-testid="ingest-runs-table"
       />
     </>
   );

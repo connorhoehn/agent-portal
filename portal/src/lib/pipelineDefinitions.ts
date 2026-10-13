@@ -141,9 +141,9 @@ export function promotionVerdict(state: Pick<RunbookState, 'promotionToSkill' | 
   return { tone: 'warning', label: 'Needs a completed dry-run', detail: state.promotionToSkill.reason };
 }
 
-/** A definition's page URL — the catalog with that definition opened. */
+/** A definition's page URL — the record beside the catalog's list rail. */
 export function definitionHref(id: string): string {
-  return `/pipelines/definitions?open=${encodeURIComponent(id)}`;
+  return `/pipelines/definitions/${encodeURIComponent(id)}`;
 }
 
 /** Whether a Dry-run button belongs on this definition. */

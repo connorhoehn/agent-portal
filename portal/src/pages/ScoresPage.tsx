@@ -15,6 +15,7 @@ import { Leaderboard } from '../components/scores/Leaderboard';
 import { PersonDetailCard } from '../components/scores/PersonDetailCard';
 import { LeaderboardAccessNeeded, isLeaderboardForbiddenError } from '../components/scores/LeaderboardAccessNeeded';
 import { showingLabel } from '../lib/format';
+import { useUrlState } from '../lib/useUrlState';
 
 function ScoresPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -38,7 +39,9 @@ function ScoresPage() {
     mayViewLeaderboard ? leaderboardUrl : null,
   );
   const [deptFilter, setDeptFilter] = useState<string>('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The selected person is the URL (`?person=<id>`): a row opens a record the
+  // reader can share and Back out of (the rendered-UI audit's record.popout rule).
+  const [selectedId, setSelectedId] = useUrlState<string | null>('person', (raw) => raw || null, (v) => v, { replace: false });
   const [comparisonIds, setComparisonIds] = useState<Set<string>>(new Set());
 
   const rawW = parseFloat(searchParams.get('w') ?? '');
@@ -57,7 +60,7 @@ function ScoresPage() {
       if (newWeight === 0.55) {
         setSearchParams((prev: URLSearchParams) => { prev.delete('w'); return prev; }, { replace: true });
       } else {
-        setSearchParams({ w: newWeight.toString() }, { replace: true });
+        setSearchParams((prev: URLSearchParams) => { prev.set('w', newWeight.toString()); return prev; }, { replace: true });
       }
     }, 300);
   }, [setSearchParams]);
@@ -101,7 +104,7 @@ function ScoresPage() {
       triggerIdRef.current = active instanceof HTMLElement && active.id ? active.id : null;
     }
     setSelectedId(id);
-  }, []);
+  }, [setSelectedId]);
   useEffect(() => {
     if (prevSelectedRef.current !== null && selectedId === null) {
       const id = triggerIdRef.current;
@@ -117,7 +120,7 @@ function ScoresPage() {
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedId]);
+  }, [selectedId, setSelectedId]);
 
   const reweighted = useMemo(
     () => (data ? computeReweighted(data.entries, weight) : []),

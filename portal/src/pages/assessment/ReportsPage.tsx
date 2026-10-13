@@ -328,6 +328,7 @@ export default function ReportsPage() {
                 data={Object.entries(rollup.by_cohort)}
                 keyField={([cohort]) => cohort}
                 striped
+                staticRows="Cohort totals are an aggregate; each team opens from the heatmap and Where to start above."
                 columns={[
                   { key: 'cohort', header: 'Cohort', render: ([cohort]) => cohort.replace('_', ' ') },
                   { key: 'teams', header: 'Teams', numeric: true, render: ([, c]) => c.teams },

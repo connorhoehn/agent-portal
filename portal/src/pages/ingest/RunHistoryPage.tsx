@@ -1,17 +1,29 @@
+// /admin/ingest/history — what each crawl run did. A row opens the run as a
+// page, `/admin/ingest/history/:crawlId` (`crawlRunHref`), the run list as the
+// flush list rail beside it (docs/layout-cascade.md, "Records open as pages;
+// selections stay put") — never a drawer.
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { Card, CollectionToolbar, PageSection, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
-import { crawlRunsAdapter, filterRuns } from './ingestCommands';
+import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
+import { crawlRunHref, crawlRunsAdapter, filterRuns, runTitle } from './ingestCommands';
 import { useFetch } from '../../hooks/useFetch';
+import { useCrumbLabel } from '../../lib/crumbLabels';
+import { relativeTime } from '../../lib/relativeTime';
 import type { CrawlSession, CrawlStatus, CrawlTarget } from '../../components/ingest/types';
 import { RunHistoryTable } from '../../components/ingest/RunHistoryTable';
-import { RunDetailDrawer } from '../../components/ingest/RunDetailDrawer';
+import { RunRecord } from '../../components/ingest/RunRecord';
 import { EmptyState } from '../../components/ingest/ui';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 
+const STATUS_ORDER: CrawlStatus[] = ['running', 'failed', 'completed', 'cancelled'];
+const STATUS_TITLE: Record<CrawlStatus, string> = { running: 'Running', failed: 'Failed', completed: 'Completed', cancelled: 'Cancelled' };
+
 function RunHistoryPage() {
   const navigate = useNavigate();
+  const { crawlId } = useParams<{ crawlId?: string }>();
+  const openId = crawlId ?? null;
   // Same URL + interval as IngestLayout's nav-badge poll and
   // CrawlTargetsPage — `share: true` collapses the three into one request.
   const { data: targetsData } = useFetch<{ targets: CrawlTarget[] }>(
@@ -36,8 +48,6 @@ function RunHistoryPage() {
 
   const [runFilter, setRunFilter] = useState<'all' | CrawlStatus>('all');
   const [query, setQuery] = useState('');
-  const [drawerCrawlId, setDrawerCrawlId] = useState<string | null>(null);
-  const [drawerInitial, setDrawerInitial] = useState<CrawlSession | null>(null);
 
   const historyCrawls = useMemo(
     () => [...crawls].sort((a, b) => +new Date(b.startedAt) - +new Date(a.startedAt)),
@@ -46,14 +56,45 @@ function RunHistoryPage() {
 
   const targetsById = useMemo(() => new Map(targets.map(t => [t.id, t] as const)), [targets]);
   const shownCrawls = filterRuns(historyCrawls, targetsById, runFilter, query);
+  const openCrawl = (id: string) => void navigate(crawlRunHref(id));
   const adapter = crawlRunsAdapter({
     setQuery, refresh: refreshCrawls, setStatus: setRunFilter, rows: () => shownCrawls, targetsById, openRun: openCrawl,
   });
 
-  function openCrawl(id: string) {
-    const initial = crawls.find(c => c.id === id) ?? null;
-    setDrawerInitial(initial);
-    setDrawerCrawlId(id);
+  const openRun = openId ? crawls.find(c => c.id === openId) ?? null : null;
+  const openTitle = openRun ? runTitle(openRun, targetsById) : null;
+  useCrumbLabel(openId ?? undefined, openTitle);
+
+  if (openId) {
+    return (
+      <CollectionRecordFrame
+        title="Crawl runs"
+        listTitle="Runs"
+        listLabel="crawl runs"
+        {...(crawlsData ? { count: shownCrawls.length } : {})}
+        search={{ value: query, onChange: setQuery, placeholder: 'Find a crawl run' }}
+        groups={STATUS_ORDER.map(st => ({ id: st, title: STATUS_TITLE[st], count: shownCrawls.filter(c => c.status === st).length }))}
+        rows={shownCrawls.map(c => ({
+          id: c.id, groupId: c.status, title: runTitle(c, targetsById),
+          subline: `${relativeTime(c.startedAt)} · ${c.pages.length} / ${c.maxPages} pages`,
+        }))}
+        currentId={openId}
+        onOpen={openCrawl}
+        loading={crawlsLoading && !crawlsData}
+        error={crawlsFailure && !crawlsData ? crawlsFailure : null}
+        onRetry={refreshCrawls}
+        footer={<CollectionCommandHost adapter={adapter} />}
+        data-testid="ingest-run-explorer"
+      >
+        <RunRecord
+          key={openId}
+          crawlId={openId}
+          title={openTitle}
+          initialSession={openRun}
+          onBack={() => void navigate('/admin/ingest/history')}
+        />
+      </CollectionRecordFrame>
+    );
   }
 
   return (
@@ -96,12 +137,6 @@ function RunHistoryPage() {
         </Card>
         <CollectionCommandHost adapter={adapter} />
       </Stack>
-
-      <RunDetailDrawer
-        crawlId={drawerCrawlId}
-        initialSession={drawerInitial}
-        onClose={() => { setDrawerCrawlId(null); setDrawerInitial(null); }}
-      />
     </PageSection>
   );
 }

@@ -2,15 +2,16 @@
 // A7, §4.4): two (workspace, role) pairs nobody may hold together, with the
 // severity a conflict carries at submit. Read by every access role
 // (GET /api/access/policies); an access admin (ManageAccessPolicy) edits the
-// severity and reason in the drawer (PUT /api/access/policies/:id). Others see
-// no edit control at all — absent, not disabled.
+// severity and reason on the policy's page, `/access/policies/:id` (the matrix
+// as the list rail beside it; PUT /api/access/policies/:id) — never a drawer.
+// Others see no edit control at all — absent, not disabled.
 
 import {
   Button,
   Chip,
   CollectionToolbar,
   DataTable,
-  Drawer,
+  DetailHeader,
   EditIcon,
   FormField,
   IconButton,
@@ -23,7 +24,12 @@ import {
   Tooltip,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
+import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
+import { RecordNotFound } from '../../components/UnavailableNotice';
+import { useCrumbLabel } from '../../lib/crumbLabels';
+import { LoadingState } from '@connorhoehnslalom/ui-components/shared';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -60,14 +66,19 @@ export default function PoliciesPage() {
   const mayEdit = ready && can('ManageAccessPolicy');
   const [severity, setSeverity] = useState('');
   const [query, setQuery] = useState('');
-  const [openId, setOpenId] = useState<string | null>(null);
+  // The open policy is the URL (`/access/policies/:id`).
+  const { id: openId = null } = useParams<{ id?: string }>();
+  const navigate = useNavigate();
+  const setOpenId = (id: string | null) => navigate(id ? `/access/policies/${encodeURIComponent(id)}` : '/access/policies');
   const [draft, setDraft] = useState<{ severity: SodSeverity; reason: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<AccessPolicy>>(`${ACCESS_API}/policies`, 60_000);
   const all = data?.items ?? [];
   const rows = filterPolicies(all, query, severity);
   const open = all.find((p) => p.id === openId) ?? null;
-  const show = (p: AccessPolicy) => { setOpenId(p.id); setDraft({ severity: p.severity, reason: p.reason }); };
+  const show = (p: AccessPolicy) => setOpenId(p.id);
+  // The draft follows the open policy (a reload, a rail click or a saved version).
+  useEffect(() => { setDraft(open ? { severity: open.severity, reason: open.reason } : null); }, [open?.id, open?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const adapter = accessCollectionAdapter('policies', {
     setQuery, setFilter: setSeverity, refresh,
@@ -85,12 +96,73 @@ export default function PoliciesPage() {
     const res = await writeJson<AccessPolicy>(`${ACCESS_API}/policies/${encodeURIComponent(open.id)}`, 'PUT',
       { severity: draft.severity, reason: draft.reason.trim() });
     setBusy(false);
-    if (res.ok) { toastSuccess(null, 'Policy saved', `${open.title} is now ${draft.severity === 'block' ? 'blocking' : 'a warning'}.`); setOpenId(null); refresh(); }
+    if (res.ok) { toastSuccess(null, 'Policy saved', `${open.title} is now ${draft.severity === 'block' ? 'blocking' : 'a warning'}.`); refresh(); }
     else toastError(null, 'Could not save the policy', res.error ?? undefined);
   }
   const changed = !!open && !!draft && (draft.severity !== open.severity || draft.reason.trim() !== open.reason);
 
   const page = ACCESS_SURFACES.policies;
+  useCrumbLabel(openId ?? undefined, open?.title ?? null);
+  if (openId) {
+    return (
+      <CollectionRecordFrame
+        title={page.title}
+        listTitle="Policies"
+        listLabel="policies"
+        {...(data ? { count: rows.length } : {})}
+        search={{ value: query, onChange: setQuery, placeholder: 'Find a policy' }}
+        groups={[{ id: 'block', title: 'Blocking', count: rows.filter((p) => p.severity === 'block').length }, { id: 'warn', title: 'Warning', count: rows.filter((p) => p.severity === 'warn').length }]}
+        rows={rows.map((p) => ({ id: p.id, groupId: p.severity, title: p.title, subline: `${pair(p.left)} ✕ ${pair(p.right)}` }))}
+        currentId={openId}
+        onOpen={setOpenId}
+        loading={isLoading && !data}
+        error={error}
+        onRetry={refresh}
+        footer={<CollectionCommandHost adapter={adapter} disabled={busy} />}
+        data-testid="access-policy-explorer"
+      >
+        {open && draft ? (
+          <Stack gap="md" data-testid="access-policy-record">
+            <DetailHeader title={open.title} badge={severityChip(open.severity)} description={open.id} />
+            <KeyValue layout="row" items={[
+              { label: 'Holding', value: pair(open.left) },
+              { label: 'Must not hold', value: pair(open.right) },
+              { label: 'Updated', value: `${relativeTime(open.updatedAt)}${open.updatedBy ? ` by ${open.updatedBy.displayName}` : ''}` },
+            ]} />
+            {mayEdit ? (
+              <>
+                <FormField label="Severity">
+                  {() => (
+                    <RadioGroup<SodSeverity> name="access-policy-severity" value={draft.severity} onChange={(v) => setDraft({ ...draft, severity: v })}
+                      orientation="horizontal"
+                      options={[
+                        { value: 'block', label: 'Blocking', description: 'Stops the request unless an access admin overrides it' },
+                        { value: 'warn', label: 'Warning', description: 'Shown to the requester and approvers; does not stop it' },
+                      ]} />
+                  )}
+                </FormField>
+                <FormField label="Why" hint="Shown to anyone whose request meets this conflict.">
+                  {(wiring) => <Textarea {...wiring} rows={3} value={draft.reason} onChange={(e) => setDraft({ ...draft, reason: e.target.value })} />}
+                </FormField>
+                <Inline gap="sm" justify="end">
+                  <Button size="sm" variant="ghost" disabled={!changed} onClick={() => setDraft({ severity: open.severity, reason: open.reason })}>Discard changes</Button>
+                  <Button size="sm" variant="primary" disabled={busy || !changed || !draft.reason.trim()} onClick={() => void save()} data-testid="access-policy-save">Save</Button>
+                </Inline>
+              </>
+            ) : (
+              <KeyValue layout="row" items={[{ label: 'Severity', value: severityChip(open.severity) }, { label: 'Why', value: open.reason }]} />
+            )}
+          </Stack>
+        ) : isLoading || !data ? (
+          <LoadingState label="Loading policy…" />
+        ) : (
+          <RecordNotFound heading="Policy" title="Policy not found" body={`No separation-of-duties policy has the id "${openId}".`}
+            backLabel={page.title} onBack={() => setOpenId(null)} />
+        )}
+      </CollectionRecordFrame>
+    );
+  }
+
   return (
     <CollectionCommandPage data-testid="access-policies" title={page.title} description={page.description}>
       <Stack gap="none" className="min-h-0 min-w-0 flex-1">
@@ -129,49 +201,6 @@ export default function PoliciesPage() {
         </Stack>
         <CollectionCommandHost adapter={adapter} disabled={busy} />
       </Stack>
-      <Drawer
-        open={open !== null}
-        onClose={() => setOpenId(null)}
-        title={open?.title ?? 'Policy'}
-        subtitle={open?.id}
-        width={520}
-        data-testid="access-policy-drawer"
-        footer={open && mayEdit ? (
-          <Inline gap="sm" justify="end">
-            <Button size="sm" variant="ghost" onClick={() => setOpenId(null)}>Cancel</Button>
-            <Button size="sm" variant="primary" disabled={busy || !changed || !draft?.reason.trim()} onClick={() => void save()} data-testid="access-policy-save">Save</Button>
-          </Inline>
-        ) : undefined}
-      >
-        {open && draft && (
-          <Stack gap="md">
-            <KeyValue layout="row" items={[
-              { label: 'Holding', value: pair(open.left) },
-              { label: 'Must not hold', value: pair(open.right) },
-              { label: 'Updated', value: `${relativeTime(open.updatedAt)}${open.updatedBy ? ` by ${open.updatedBy.displayName}` : ''}` },
-            ]} />
-            {mayEdit ? (
-              <>
-                <FormField label="Severity">
-                  {() => (
-                    <RadioGroup<SodSeverity> name="access-policy-severity" value={draft.severity} onChange={(v) => setDraft({ ...draft, severity: v })}
-                      orientation="horizontal"
-                      options={[
-                        { value: 'block', label: 'Blocking', description: 'Stops the request unless an access admin overrides it' },
-                        { value: 'warn', label: 'Warning', description: 'Shown to the requester and approvers; does not stop it' },
-                      ]} />
-                  )}
-                </FormField>
-                <FormField label="Why" hint="Shown to anyone whose request meets this conflict.">
-                  {(wiring) => <Textarea {...wiring} rows={3} value={draft.reason} onChange={(e) => setDraft({ ...draft, reason: e.target.value })} />}
-                </FormField>
-              </>
-            ) : (
-              <KeyValue layout="row" items={[{ label: 'Severity', value: severityChip(open.severity) }, { label: 'Why', value: open.reason }]} />
-            )}
-          </Stack>
-        )}
-      </Drawer>
     </CollectionCommandPage>
   );
 }

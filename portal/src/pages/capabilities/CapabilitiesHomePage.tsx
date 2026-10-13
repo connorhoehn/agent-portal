@@ -19,7 +19,7 @@
 // own. One line here would have replaced all three.
 
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import {
   Card,
   CollectionToolbar,
@@ -101,7 +101,8 @@ function GUARDRAIL_ROLE(role: string) {
 const ROLES: Record<CapabilityStatus['key'], {
   purpose: string;
   usedBy: { label: string; to: string; description: string } | null;
-  tools: { label: string; to: string } | null;
+  /** The capability's own page — where a row opens. */
+  tools: { label: string; to: string };
 }> = {
   browser: {
     purpose: 'Renders pages that plain HTTP cannot read — anything that only exists after JavaScript runs.',
@@ -115,7 +116,9 @@ const ROLES: Record<CapabilityStatus['key'], {
   browserProfile: {
     purpose: 'Persistent browser state — cookies and logins that outlive a single session.',
     usedBy: null,
-    tools: null,
+    // Every browser session is created with this profile when it is set, so
+    // the browser page is where its status and its effect are seen.
+    tools: { label: 'Browser sessions', to: '/admin/capabilities/browser' },
   },
   codeInterpreter: {
     purpose: 'Runs real computation on real data: fits, correlations, concentration measures.',
@@ -154,6 +157,7 @@ const OBSERVED_KEYS = new Set<CapabilityStatus['key']>(Object.values(EVENT_KIND_
 
 export default function CapabilitiesHomePage() {
   const { session } = useSession();
+  const navigate = useNavigate();
   const canOpenIngest = !!session && (session.role === 'admin' || INGEST_ROLES.includes(session.role));
 
   const { data, isLoading, error, refresh } = useFetch<{ capabilities: CapabilityStatus[] }>(
@@ -243,11 +247,11 @@ export default function CapabilitiesHomePage() {
       header: '',
       render: (c) => {
         const tools = ROLES[c.key].tools;
-        return tools ? (
+        return (
           <Link to={tools.to} className="text-xs whitespace-nowrap text-primary no-underline hover:underline">
             {tools.label} →
           </Link>
-        ) : null;
+        );
       },
     },
   ];
@@ -303,6 +307,9 @@ export default function CapabilitiesHomePage() {
         <DataTable<CapabilityStatus>
           data={rows}
           keyField={(c) => c.key}
+          // A row opens the capability's own page (its diagnostics); the
+          // "What uses it" link in the row still goes to the feature.
+          onRowClick={(c) => navigate(ROLES[c.key].tools.to)}
           striped
           columns={columns}
           emptyMessage={caps.length > 0

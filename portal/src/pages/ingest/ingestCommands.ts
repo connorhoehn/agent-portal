@@ -1,12 +1,17 @@
 // The bounded table commands for the Knowledge → ingest pages. Each page maps
 // the shared collection grammar onto the toolbar state it already has: search,
 // at most one existing filter, refresh, and (Runs only) opening one run's
-// drawer. Nothing here starts, cancels, syncs, edits or deletes anything.
+// record page. Nothing here starts, cancels, syncs, edits or deletes anything.
 import type { CollectionCommandAdapter } from '../../components/collections/CollectionCommandHost.tsx';
 import { collectionCommandAdapter, resolveCollectionTarget, type CollectionControls } from '../../components/collections/collectionCommands.ts';
 import type { CrawlSession, CrawlStatus, CrawlTarget } from '../../components/ingest/types.ts';
 
 type Base = Pick<CollectionControls, 'setQuery' | 'refresh'>;
+
+/** A crawl run's record page (docs/layout-cascade.md: records open as pages). */
+export function crawlRunHref(id: string): string { return `/admin/ingest/history/${encodeURIComponent(id)}`; }
+/** A crawl target's record page. */
+export function crawlTargetHref(id: string): string { return `/admin/ingest/crawl/${encodeURIComponent(id)}`; }
 
 function has(query: string, ...fields: Array<string | null | undefined>): boolean {
   const q = query.trim().toLowerCase();

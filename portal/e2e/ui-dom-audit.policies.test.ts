@@ -58,6 +58,8 @@ test('tenant policy: decks and communication follow the pipelines rules; pipelin
   assert.equal(tenantComposerPolicy({ tenant: 'assessment', path: '/assessment/communication', kind: 'chat' }, { communicationOverview: true })?.mode, 'exempt');
   assert.equal(tenantComposerPolicy({ tenant: 'assessment', path: '/assessment/communication', kind: 'chat' }, {}), undefined);
   assert.equal(tenantComposerPolicy({ tenant: 'pipelines', path: '/pipelines/runs', kind: 'list', judges: ['table'] }, {}), undefined);
+  // A pipelines record opened by a row probe (the list rail and its composer visible) is classified by evidence.
+  assert.equal(tenantComposerPolicy({ tenant: 'pipelines', path: '/pipelines/definitions/bot:x', kind: 'record' }, { listRail: true, composer: true })?.mode, 'required');
   for (const policy of [tenantComposerPolicy({ tenant: 'social', path: '/social/calls', kind: 'chat' }, { chatDirectory: true })]) {
     assert.ok(policy && policy.mode === 'exempt' && policy.reason.trim().length > 40);
   }

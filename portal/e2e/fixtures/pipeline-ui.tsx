@@ -21,9 +21,11 @@ const gateway = { connectionState: 'disconnected', sessionEpoch: 0, rest: null, 
 createRoot(document.getElementById('root')!).render(<BrowserRouter><SessionProvider><GatewayContext.Provider value={gateway}><DensityProvider density="compact">
   <main style={{ padding: 16, minWidth: 0 }} data-tenant="pipelines"><Routes>
     <Route path="/pipelines/definitions" element={<DefinitionsPage />} />
+    <Route path="/pipelines/definitions/:definitionId" element={<DefinitionsPage />} />
     <Route path="/pipelines/runs" element={<RunsPage />} />
     <Route path="/pipelines/runs/:id" element={<RunDetailPage />} />
     <Route path="/pipelines/approvals" element={<ApprovalsPage />} />
+    <Route path="/pipelines/approvals/:approvalId" element={<ApprovalsPage />} />
     <Route path="/pipelines/artifacts" element={<ArtifactsPage />} />
     <Route path="/pipelines/runbooks" element={<RunbooksPage />} />
     <Route path="/pipelines/queues" element={<QueuesPage />} />

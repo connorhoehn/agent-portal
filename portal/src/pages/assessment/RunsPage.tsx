@@ -1,5 +1,6 @@
-// Runs / Activity — the run ledger. A DataTable of every recorded run, a detail Drawer
-// with the progress/result envelope and a Stop action, a "Pipeline runs" section (the
+// Runs / Activity — the run ledger. A DataTable of every recorded run; a row opens the
+// run as a page (`/assessment/runs/:runId`, the ledger as the list rail beside it) with
+// the progress/result envelope and a Stop action, a "Pipeline runs" section (the
 // same runs in the pipelines ledger, via /api/assessment/pipeline-runs), and a "Run a command" panel that
 // lists the deployed Strands tools and collects each command
 // source before reserving a run (docs/assessment-tenant.md "Agentic support"). Launch responses are mapped per docs/agent-runs.md §1: 202 toasts
@@ -11,7 +12,7 @@ import {
   Chip,
   ConnectionPill,
   DataTable,
-  Drawer,
+  DetailHeader,
   EmptyState,
   ErrorState,
   Inline,
@@ -28,7 +29,11 @@ import {
   StatusPill,
   T,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useNavigate, useParams } from 'react-router';
 import { KeyValue } from '../../components/KeyValue';
+import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
+import { RecordNotFound } from '../../components/UnavailableNotice';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import { RunsLedger } from '../../components/runs/RunsLedger';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
@@ -113,6 +118,8 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
         <DataTable<AgentCommand>
           data={commands}
           keyField={(cmd) => cmd.name}
+          staticRows="A command is a verb, not a record: its row's Run action prepares it for the chosen team."
+
           // The command registry is small today but not bounded by contract
           // — 15 keeps a growing registry a scan, not a scroll.
           pageSize={15}
@@ -183,7 +190,11 @@ export default function RunsPage() {
   const { data: runsResp, isLoading: loading, error, degraded, refresh: load } = useFetch<RunsListResponse>('/api/assessment/runs');
   const [runs, setRuns] = useState<RunRecord[]>([]);
   useEffect(() => { if (runsResp) setRuns(runsResp.runs ?? []); }, [runsResp]);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // The open run is the URL (`/assessment/runs/:runId`).
+  const { runId } = useParams<{ runId?: string }>();
+  const navigate = useNavigate();
+  const detailId = runId ?? null;
+  const openRun = (id: string) => navigate(`/assessment/runs/${encodeURIComponent(id)}`);
   const [stopping, setStopping] = useState(false);
   const detail = runs.find((r) => r.id === detailId) ?? null;
 
@@ -219,6 +230,60 @@ export default function RunsPage() {
     } finally {
       setStopping(false);
     }
+  }
+
+  useCrumbLabel(detailId ?? undefined, detail ? `${detail.command} · ${detail.team_id ?? 'no team'}` : null);
+  if (detailId) {
+    const statuses = [...new Set(runs.map((r) => r.status))];
+    return (
+      <CollectionRecordFrame
+        title="Activity"
+        listTitle="Runs"
+        listLabel="runs"
+        {...(runsResp ? { count: runs.length } : {})}
+        groups={statuses.map((st) => ({ id: st, title: st, count: runs.filter((r) => r.status === st).length }))}
+        rows={runs.map((r) => ({ id: r.id, groupId: r.status, title: r.command, subline: `${r.team_id ?? 'no team'} · ${formatRelativeTime(r.started_at)}` }))}
+        currentId={detail?.id ?? null}
+        onOpen={openRun}
+        loading={loading && !runsResp}
+        error={error}
+        onRetry={load}
+        data-testid="assessment-run-explorer"
+      >
+        {detail ? (
+          <Stack gap="md" data-testid="assessment-run-record">
+            <DetailHeader
+              title={detail.command}
+              badge={<StatusPill state={RUN_STATUS_PILL_STATE[detail.status]} label={detail.status} size="sm" />}
+              description={detail.id}
+              {...(canStop && detail.status === 'running' ? {
+                aside: <Button variant="danger" size="sm" disabled={stopping} onClick={() => void stop(detail)}>{stopping ? 'Stopping…' : 'Stop'}</Button>,
+                asideWidth: 120,
+              } : {})}
+            />
+            <Stack gap="sm">
+              <KeyValue layout="row" label="Team" value={detail.team_id ?? '—'} mono />
+              <KeyValue layout="row" label="Started" value={formatRelativeTime(detail.started_at)} />
+              <KeyValue layout="row" label="Duration" value={formatDuration(detail.started_at, detail.finished_at)} mono />
+              {detail.progress?.phase && (
+                <KeyValue
+                  layout="row"
+                  label="Progress"
+                  value={`${detail.progress.phase}${detail.progress.detail ? ` — ${detail.progress.detail}` : ''}`}
+                />
+              )}
+              {detail.summary && <KeyValue layout="row" label="Summary" value={detail.summary} />}
+              {detail.error && <KeyValue layout="row" label="Error" value={detail.error} className="text-danger" />}
+            </Stack>
+          </Stack>
+        ) : loading || !runsResp ? (
+          <EmptyState title="Loading run…" />
+        ) : (
+          <RecordNotFound heading="Run" title="Run not found" body={`No run has the id "${detailId}".`}
+            backLabel="Activity" onBack={() => navigate('/assessment/runs')} />
+        )}
+      </CollectionRecordFrame>
+    );
   }
 
   return (
@@ -274,7 +339,7 @@ export default function RunsPage() {
           data={runs}
           keyField={(r) => r.id}
           striped
-          onRowClick={(r) => setDetailId(r.id)}
+          onRowClick={(r) => openRun(r.id)}
           loading={loading && !runsResp}
           // The full run ledger accumulates for the life of the program —
           // 20 is a full-page ledger's screenful.
@@ -315,32 +380,6 @@ export default function RunsPage() {
         <RunsLedger endpoint="/api/assessment/pipeline-runs" detailBase={null} pageSize={10} data-testid="assessment-pipeline-runs" />
       </PageSection>
 
-      <Drawer open={detail !== null} onClose={() => setDetailId(null)} title={detail?.command} subtitle={detail?.id}>
-        {detail && (
-          <Stack gap="sm" className="text-sm">
-            <StatusPill state={RUN_STATUS_PILL_STATE[detail.status]} label={detail.status} size="sm" />
-            <KeyValue layout="row" label="Team" value={detail.team_id ?? '—'} mono />
-            <KeyValue layout="row" label="Started" value={formatRelativeTime(detail.started_at)} />
-            <KeyValue layout="row" label="Duration" value={formatDuration(detail.started_at, detail.finished_at)} mono />
-            {detail.progress?.phase && (
-              <KeyValue
-                layout="row"
-                label="Progress"
-                value={`${detail.progress.phase}${detail.progress.detail ? ` — ${detail.progress.detail}` : ''}`}
-              />
-            )}
-            {detail.summary && <KeyValue layout="row" label="Summary" value={detail.summary} />}
-            {detail.error && (
-              <KeyValue layout="row" label="Error" value={detail.error} className="text-danger" />
-            )}
-            {canStop && detail.status === 'running' && (
-              <Button variant="danger" disabled={stopping} onClick={() => void stop(detail)}>
-                {stopping ? 'Stopping…' : 'Stop'}
-              </Button>
-            )}
-          </Stack>
-        )}
-      </Drawer>
     </Stack>
   );
 }

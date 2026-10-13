@@ -126,6 +126,8 @@ export const PARAM_ROUTES: readonly ParamRoute[] = [
   { tenant: 'orgiq', pattern: '/iq/distillation/activity?view=graph', template: '/iq/distillation/activity?view=:id', id: 'graph' },
   // Assessment
   { tenant: 'assessment', pattern: '/assessment/teams/:teamId', template: '/assessment/teams/:id', id: 'TEAM-001' },
+  // A submission record beside its list rail; the id is a group's original envelope (a revision's id opens its group too).
+  { tenant: 'assessment', pattern: '/assessment/submissions/:submissionId', template: '/assessment/submissions/:id', resolve: { url: '/api/assessment/submissions', pick: (json: unknown) => ((json as { envelopes?: Array<{ envelope_id?: string }> }).envelopes ?? []).find((e) => e.envelope_id && !/-r\d+$/.test(e.envelope_id))?.envelope_id }, fallback: 'submission-missing' },
   { tenant: 'assessment', pattern: '/assessment/decks/:deckId', template: '/assessment/decks/:id', resolve: { url: '/api/assessment/decks', pick: first('decks') }, fallback: 'deck-missing' },
   // Social
   { tenant: 'social', pattern: '/social/channels/:slug', template: '/social/channels/:id', id: 'general' },

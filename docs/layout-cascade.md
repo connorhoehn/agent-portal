@@ -189,6 +189,37 @@ matches, honest loading / failure / note), with `useRailSectionMemory`
 (`social.chatRail.folded` / `.layout`) — the Social workspace and the
 Communication plane's groups and org teams share it.
 
+## Records open as pages; selections stay put (2026-10-13)
+
+The user, on `/assessment/submissions`: rows did not open, "Revision history"
+opened a drawer, and ticking a row inserted a "2 selected" band that pushed
+the table down. The rules, for every tenant:
+
+- **A row opens its record as a page, by URL.** New record routes are path
+  params beside the list (`/assessment/submissions/:submissionId`,
+  `/assessment/feedback/:taskId`, `/assessment/runs/:runId`,
+  `/pipelines/definitions/:definitionId`, `/pipelines/approvals/:approvalId`,
+  `/access/policies/:id`) — the catalog-record pattern of `/iq/library/:assetId`
+  and `/iq/designs/:id`. The list becomes the flush list rail
+  (`components/collections/CollectionRecordFrame.tsx` over the library
+  `ListRailLayout`) and the record fills the content column; the record level is
+  deep (`SHELL_RAIL_DEPTH.leafRoutes`), so the primary rail folds. A record that
+  stays beside its list on the same page (Scores' person) keeps its selection
+  in the query (`?person=`).
+- **Record detail never pops out.** Revision history, details and history are
+  sections of the record (or a right-pane tab through the one pane model),
+  never a `Drawer`/`Modal`. Confirmations (`ConfirmDialog`) and anchored help
+  stay dialogs; a create form opened from a header action is not a record.
+- **Rows that open nothing say why.** `DataTable staticRows="<reason>"`.
+- **Selection replaces the toolbar row in place.** `CollectionToolbar
+  selection={{count, onClear, actions}}` (ui-components 2.442.0); a click on a
+  checkbox inside a clickable row only ticks it.
+
+The rendered-UI audit enforces all four (`record.popout`,
+`collection.row-activatable`, `collection.selection-shift`; the
+`row-activate`, `record-detail-action` and `row-select` states in
+`portal/e2e/ui-dom-audit.adapter.ts`).
+
 ## What changed (2026-10-07)
 
 - Distillation: Knowledge, Review, Asset promotions and Activity › Runs each

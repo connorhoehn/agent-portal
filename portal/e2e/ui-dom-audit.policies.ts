@@ -120,7 +120,9 @@ function accessComposerPolicy(pathname: string, view: TenantViewEvidence): Compo
  * that lost its composer. Anything without positive evidence stays unclassified.
  */
 export function tenantComposerPolicy(spec: TenantRouteSpec, view: TenantViewEvidence = {}): ComposerPolicy | undefined {
-  if (!TENANTS.has(spec.tenant)) return undefined;
+  // Pipelines routes keep their own reviewed policy (pipelineComposerPolicy);
+  // only a pipelines record a row probe reached is classified here, by evidence.
+  if (!TENANTS.has(spec.tenant) && !(spec.tenant === 'pipelines' && spec.kind === 'record')) return undefined;
   const pathname = new URL(spec.path, 'http://audit.local').pathname;
   const record = spec.kind === 'record' || spec.kind === 'editor';
   if (spec.tenant === 'access') return accessComposerPolicy(pathname, view);

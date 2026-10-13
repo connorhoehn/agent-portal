@@ -107,6 +107,8 @@ export default function CatalogPage() {
               keyField={(i) => i.id}
               loading={isLoading && !data}
               pageSize={25}
+              // A row opens a new request for the item (the form; nothing is submitted until Submit).
+              {...(mayRequest ? { onRowClick: startRequest } : { staticRows: 'Your role may read the catalog but not request from it; an item has no page of its own.' })}
               {...(mayRequest ? {
                 rowActions: (i: CatalogItem) => (
                   <Tooltip content={i.heldByActor ? 'You already hold this' : `Request ${i.title}`}>

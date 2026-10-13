@@ -116,7 +116,8 @@ export function PipelineRunSteps({ steps }: { steps: PipelineStep[] }) {
   return (
     <Stack gap="sm">
       <WorkflowStepper steps={stepperSteps(steps)} data-testid="pipeline-stepper" />
-      <DataTable data={steps} columns={STEP_COLUMNS} keyField={(s) => s.stepId} />
+      <DataTable data={steps} columns={STEP_COLUMNS} keyField={(s) => s.stepId}
+        staticRows="Steps are this run's timeline, read in place; the run itself is the record." />
     </Stack>
   );
 }
@@ -134,6 +135,7 @@ export function PipelineRunArtifacts({ artifacts }: { artifacts: PipelineArtifac
       data={artifacts}
       columns={ARTIFACT_COLUMNS}
       keyField={(a) => a.id}
+      staticRows="An artifact is listed with the run that produced it; the Artifacts catalog is where one opens."
       emptyMessage="This run recorded no artifact."
     />
   );

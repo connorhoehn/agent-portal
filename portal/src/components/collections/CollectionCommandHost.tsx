@@ -51,7 +51,7 @@ export function CollectionCommandHost({ adapter, disabled = false }: { adapter: 
       allowEmoji={false} persistDraft={false} onAgent={submit}
       modeRowEnd={<><Tooltip content="Supported table commands"><IconButton ref={helpRef} size="sm" aria-label={`Available ${adapter.label.toLowerCase()} commands`}
         icon={<InfoIcon size={14} />} aria-haspopup="dialog" aria-expanded={helpOpen} onClick={() => setHelpOpen(!helpOpen)} /></Tooltip>
-        <InlinePopover open={helpOpen} onClose={() => setHelpOpen(false)} trigger={helpRef}
+        <InlinePopover open={helpOpen} onClose={() => setHelpOpen(false)} trigger={helpRef} kind="command-help"
           aria-label={`Available ${adapter.label.toLowerCase()} commands`} className="max-w-md p-4">
           <Stack gap="sm"><T size="sm" weight="semibold">Table commands</T>
             <T size="xs" tone="secondary">Filter, search or refresh this table. Use the phrases below for available actions.</T>

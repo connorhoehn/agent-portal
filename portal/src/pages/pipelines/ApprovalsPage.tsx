@@ -5,7 +5,9 @@
 // role the step names — operator by default, design §8) post to
 // /approvals/:id/decide, which routes the decision to the gate's own path;
 // the tenant keeps no second approval store. Authors see the queue, not the
-// buttons — absent from the DOM, not disabled.
+// buttons — absent from the DOM, not disabled. A row opens the waiting step
+// as a page, `/pipelines/approvals/:approvalId`, the queue as the list rail
+// beside it — never a drawer.
 
 import {
   CollectionToolbar,
@@ -16,7 +18,7 @@ import {
   Chip,
   CloseIcon,
   DataTable,
-  Drawer,
+  DetailHeader,
   IconButton,
   Inline,
   InlineAlert,
@@ -29,7 +31,11 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
+import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
+import { RecordNotFound } from '../../components/UnavailableNotice';
+import { useCrumbLabel } from '../../lib/crumbLabels';
+import { LoadingState } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -73,7 +79,10 @@ function ApprovalsWorkspace() {
   const { session } = useSession();
   const { can, ready } = useCapabilities();
   const { data, error, isLoading, refresh } = useFetch<ApprovalsResponse>('/api/pipelines/approvals', 30_000);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // The open step is the URL (`/pipelines/approvals/:approvalId`).
+  const { approvalId } = useParams<{ approvalId?: string }>();
+  const openId = approvalId ?? null;
+  const setOpenId = (id: string | null) => navigate(id ? `/pipelines/approvals/${encodeURIComponent(id)}` : '/pipelines/approvals');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
@@ -86,7 +95,7 @@ function ApprovalsWorkspace() {
 
   const adapter = pipelineCollectionAdapter('approvals', {
     setQuery, refresh,
-    scopeNote: 'Search uses loaded waiting steps, questions, IDs and sources across table pages. Open shows one exact visible step for review. Approve and reject remain explicit permission-checked actions in its drawer; this input records no decision.',
+    scopeNote: 'Search uses loaded waiting steps, questions, IDs and sources across table pages. Open shows one exact visible step for review. Approve and reject remain explicit permission-checked actions on its page; this input records no decision.',
     open(target) {
       if (!data || isLoading || error) throw new Error('Wait for approvals to load successfully before opening a step.');
       const row = resolvePipelineCollectionTarget(target, rows);
@@ -106,6 +115,75 @@ function ApprovalsWorkspace() {
       toastSuccess(null, decision === 'approve' ? 'Approved' : 'Rejected', `Recorded through ${res.data.decidedThrough}.`);
       setOpenId(null); setNote(''); refresh();
     } else toastError(null, 'Could not record the decision', res.error ?? undefined);
+  }
+
+  useCrumbLabel(openId ?? undefined, open ? open.title : null);
+  if (openId) {
+    const sources = [...new Set(rows.map((a) => a.source))];
+    return (
+      <CollectionRecordFrame
+        title="Approvals"
+        listTitle="Waiting"
+        listLabel="approvals"
+        {...(data ? { count: rows.length } : {})}
+        search={{ value: query, onChange: setQuery, placeholder: 'Find a waiting step' }}
+        groups={sources.map((src) => ({ id: src, title: approvalSourceLabel(src), count: rows.filter((a) => a.source === src).length }))}
+        rows={rows.map((a) => ({ id: a.id, groupId: a.source, title: a.title, subline: `${a.stepId} · ${a.requestedAt ? relativeTime(a.requestedAt) : 'waiting'}` }))}
+        currentId={openId}
+        onOpen={(id) => { setNote(''); setOpenId(id); }}
+        loading={isLoading && !data}
+        error={error}
+        onRetry={refresh}
+        footer={<CollectionCommandHost adapter={adapter} disabled={busy} />}
+        data-testid="pipelines-approval-explorer"
+      >
+        {open ? (
+          <Stack gap="md" data-testid="pipelines-approval-record">
+            <DetailHeader title={open.title} description={`${approvalSourceLabel(open.source)} · ${open.id}`} />
+            <MetaLine size="sm" tone="secondary" items={[open.question]} />
+            {open.detail && <MetaLine size="xs" tone="secondary" items={[open.detail]} />}
+            <KeyValue
+              layout="row"
+              items={[
+                { label: 'Step', value: open.stepId, mono: true },
+                { label: 'Run', value: open.runId ?? 'No run is linked', mono: Boolean(open.runId), muted: !open.runId },
+                { label: 'Definition', value: open.definitionId ?? 'None known', mono: Boolean(open.definitionId), muted: !open.definitionId },
+                { label: 'Approved by', value: approverSummary(open.requiredRoles, open.rolesDefaulted) },
+                { label: 'Decided through', value: open.decidedThrough },
+                { label: 'Waiting since', value: open.requestedAt ? relativeTime(open.requestedAt) : '—' },
+              ]}
+            />
+            <Inline gap="sm" wrap>
+              {open.runId && <Tooltip content="Open run"><IconButton size="sm" aria-label="Open run" icon={<ListIcon />} onClick={() => navigate(runHref('/pipelines/runs', open.runId!))} /></Tooltip>}
+              {open.definitionId?.startsWith('bot:') || open.definitionId?.startsWith('runbook:') ? (
+                <Tooltip content="Open definition"><IconButton size="sm" aria-label="Open definition" icon={<BranchIcon />} onClick={() => navigate(definitionHref(open.definitionId!))} /></Tooltip>
+              ) : null}
+            </Inline>
+            {mayDecide ? (
+              <>
+                <Textarea aria-label="Decision note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="A note for the record (optional)" />
+                <Inline gap="sm" justify="end">
+                  <Button size="sm" variant="danger" disabled={busy} onClick={() => void decide('reject')} data-testid="pipelines-approval-reject"><CloseIcon />Reject</Button>
+                  <Button size="sm" variant="primary" disabled={busy} onClick={() => void decide('approve')} data-testid="pipelines-approval-approve"><CheckIcon />Approve</Button>
+                </Inline>
+              </>
+            ) : (
+              <InlineAlert tone="info">
+                {holdsApprove
+                  ? `This step is approved by ${approverSummary(open.requiredRoles, open.rolesDefaulted)}; your role cannot decide it.`
+                  : 'Only an operator or a pipeline admin decides a step. You can see what is waiting.'}
+              </InlineAlert>
+            )}
+          </Stack>
+        ) : isLoading || !data ? (
+          <LoadingState label="Loading the waiting step…" />
+        ) : (
+          <RecordNotFound heading="Approval" title="Nothing is waiting here"
+            body={`No waiting step has the id "${openId}" — it may already have been decided.`}
+            backLabel="Approvals" onBack={() => setOpenId(null)} />
+        )}
+      </CollectionRecordFrame>
+    );
   }
 
   return (
@@ -139,53 +217,6 @@ function ApprovalsWorkspace() {
       </Stack>
       <CollectionCommandHost adapter={adapter} disabled={busy} />
       </Stack>
-      <Drawer
-        open={open !== null}
-        onClose={() => setOpenId(null)}
-        title={open ? approvalSourceLabel(open.source) : 'Approval'}
-        subtitle={open?.id}
-        width={560}
-        data-testid="pipelines-approval-drawer"
-        footer={open && mayDecide ? (
-          <Inline gap="sm" justify="end">
-            <Button size="sm" variant="danger" disabled={busy} onClick={() => void decide('reject')} data-testid="pipelines-approval-reject"><CloseIcon />Reject</Button>
-            <Button size="sm" variant="primary" disabled={busy} onClick={() => void decide('approve')} data-testid="pipelines-approval-approve"><CheckIcon />Approve</Button>
-          </Inline>
-        ) : undefined}
-      >
-        {open && (
-          <Stack gap="md">
-            <MetaLine size="sm" tone="secondary" items={[open.question]} />
-            {open.detail && <MetaLine size="xs" tone="secondary" items={[open.detail]} />}
-            <KeyValue
-              layout="row"
-              items={[
-                { label: 'Step', value: open.stepId, mono: true },
-                { label: 'Run', value: open.runId ?? 'No run is linked', mono: Boolean(open.runId), muted: !open.runId },
-                { label: 'Definition', value: open.definitionId ?? 'None known', mono: Boolean(open.definitionId), muted: !open.definitionId },
-                { label: 'Approved by', value: approverSummary(open.requiredRoles, open.rolesDefaulted) },
-                { label: 'Decided through', value: open.decidedThrough },
-                { label: 'Waiting since', value: open.requestedAt ? relativeTime(open.requestedAt) : '—' },
-              ]}
-            />
-            <Inline gap="sm" wrap>
-              {open.runId && <Tooltip content="Open run"><IconButton size="sm" aria-label="Open run" icon={<ListIcon />} onClick={() => navigate(runHref('/pipelines/runs', open.runId!))} /></Tooltip>}
-              {open.definitionId?.startsWith('bot:') || open.definitionId?.startsWith('runbook:') ? (
-                <Tooltip content="Open definition"><IconButton size="sm" aria-label="Open definition" icon={<BranchIcon />} onClick={() => navigate(definitionHref(open.definitionId!))} /></Tooltip>
-              ) : null}
-            </Inline>
-            {mayDecide ? (
-              <Textarea aria-label="Decision note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="A note for the record (optional)" />
-            ) : (
-              <InlineAlert tone="info">
-                {holdsApprove
-                  ? `This step is approved by ${approverSummary(open.requiredRoles, open.rolesDefaulted)}; your role cannot decide it.`
-                  : 'Only an operator or a pipeline admin decides a step. You can see what is waiting.'}
-              </InlineAlert>
-            )}
-          </Stack>
-        )}
-      </Drawer>
     </CollectionCommandPage>
   );
 }

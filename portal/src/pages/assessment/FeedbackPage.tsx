@@ -1,8 +1,10 @@
 // Feedback — the question queue. Every question exists because a dimension's
 // claimed level reaches further than verification does, or the evidence left
 // something unclear (docs/assessment-tenant.md). One row per question, the
-// dimension by name, and a drawer that puts the question next to what it is
-// about: the two tracks, the evidence on file, and the answer.
+// dimension by name, and a row opens the question as a page
+// (`/assessment/feedback/:taskId`, the queue as the list rail beside it) that
+// puts the question next to what it is about: the two tracks, the evidence on
+// file, and the answer. Never a drawer (docs/layout-cascade.md rule 5).
 //
 // It used to be one ~200px card per question — the same boilerplate sentence
 // twenty-five times under "Dim 4" — with the answer form pushing everything
@@ -13,11 +15,12 @@ import {
   Chip,
   CollectionToolbar,
   DataTable,
+  DetailHeader,
   DetailSection,
-  Drawer,
   EmptyState,
   ErrorState,
   Inline,
+  LoadingState,
   MetaLine,
   Stack,
   StatStrip,
@@ -26,7 +29,10 @@ import {
   StatusPill,
   type StatusPillState,
 } from '@connorhoehnslalom/ui-components/shared';
-import { Link } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
+import { RecordNotFound } from '../../components/UnavailableNotice';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
@@ -79,9 +85,9 @@ function TwoTrack({ dim }: { dim: Dimension }) {
   );
 }
 
-function QuestionDrawer({
+function QuestionRecord({
   task, dim, teamName, onClose, onChanged,
-}: { task: FeedbackTask | null; dim: Dimension | undefined; teamName: string; onClose: () => void; onChanged: () => void }) {
+}: { task: FeedbackTask; dim: Dimension | undefined; teamName: string; onClose: () => void; onChanged: () => void }) {
   const { can, ready } = useCapabilities();
   const canScore = ready && can('ScoreAssessment');
   const [response, setResponse] = useState('');
@@ -89,7 +95,6 @@ function QuestionDrawer({
   useEffect(() => { setResponse(''); }, [task?.task_id]);
 
   async function act(action: 'resolve' | 'dismiss') {
-    if (!task) return;
     setBusy(true);
     try {
       await sendJson(feedbackActionPath(task, action), 'POST', action === 'resolve' ? { response } : undefined);
@@ -105,22 +110,12 @@ function QuestionDrawer({
 
   const evidence = dim?.evidence ?? [];
   return (
-    <Drawer
-      open={task !== null}
-      onClose={onClose}
-      title={task ? dimensionLabel(task, dim) : ''}
-      subtitle={task ? `${teamName}${task.team_id ? ` · ${task.team_id}` : ''}` : undefined}
-      width={560}
-      footer={task && task.status === 'OPEN' && canScore ? (
-        <Inline justify="between" gap="sm" align="center">
-          <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act('dismiss')}>Dismiss</Button>
-          <Button size="sm" disabled={busy || !response.trim()} onClick={() => void act('resolve')}>
-            {busy ? 'Recording…' : 'Record answer'}
-          </Button>
-        </Inline>
-      ) : undefined}
-    >
-      {task && (
+    <Stack gap="lg" data-testid="assessment-question-record">
+      <DetailHeader
+        title={dimensionLabel(task, dim)}
+        badge={<StatusPill size="sm" state={STATUS_PILL[task.status].state} label={STATUS_PILL[task.status].label} />}
+        description={`${teamName}${task.team_id ? ` · ${task.team_id}` : ''}`}
+      />
         <Stack gap="md">
           {dim && (
             <DetailSection first title="Where the dimension stands">
@@ -185,9 +180,16 @@ function QuestionDrawer({
               Add the evidence →
             </Link>
           )}
+          {task.status === 'OPEN' && canScore && (
+            <Inline justify="between" gap="sm" align="center">
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act('dismiss')}>Dismiss</Button>
+              <Button size="sm" disabled={busy || !response.trim()} onClick={() => void act('resolve')}>
+                {busy ? 'Recording…' : 'Record answer'}
+              </Button>
+            </Inline>
+          )}
         </Stack>
-      )}
-    </Drawer>
+    </Stack>
   );
 }
 
@@ -211,7 +213,13 @@ export default function FeedbackPage() {
   );
   const { searchText, onSearchChange, cancelPending: cancelSearchPending } =
     useDebouncedSearch(search, setSearch, 250);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The open question is the URL (`/assessment/feedback/:taskId`), the queue's filters ride along.
+  const { taskId } = useParams<{ taskId?: string }>();
+  const selectedId = taskId ?? null;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const openQuestion = (id: string) => navigate(`/assessment/feedback/${encodeURIComponent(id)}${location.search}`);
+  const closeQuestion = () => navigate(`/assessment/feedback${location.search}`);
 
   const feedbackUrl = useMemo(() => {
     const params = new URLSearchParams();
@@ -264,8 +272,40 @@ export default function FeedbackPage() {
     setStatus,
     clearTeam: () => setTeam('all'),
     refresh: load,
-    openQuestion: setSelectedId,
+    openQuestion,
   });
+
+  useCrumbLabel(selectedId ?? undefined, selected ? dimensionLabel(selected, dimOf(selected)) : null);
+  if (selectedId) {
+    return (
+      <CollectionRecordFrame
+        title="Question queue"
+        listTitle="Questions"
+        listLabel="questions"
+        {...(data ? { count: rows.length } : {})}
+        search={{ value: searchText, onChange: onSearchChange, placeholder: 'Find a question' }}
+        groups={[...new Set(rows.map((t) => teamNameOf(t)))].map((name) => ({ id: name, title: name, count: rows.filter((t) => teamNameOf(t) === name).length }))}
+        rows={rows.map((t) => ({ id: t.task_id, groupId: teamNameOf(t), title: dimensionLabel(t, dimOf(t)), subline: t.question }))}
+        currentId={selected?.task_id ?? null}
+        onOpen={openQuestion}
+        loading={loading && !data}
+        error={error}
+        onRetry={load}
+        footer={<CollectionCommandHost adapter={adapter} />}
+        data-testid="assessment-question-explorer"
+      >
+        {selected ? (
+          <QuestionRecord key={selected.task_id} task={selected} dim={dimOf(selected)} teamName={teamNameOf(selected)} onClose={closeQuestion} onChanged={load} />
+        ) : loading || !data ? (
+          <LoadingState label="Loading question…" />
+        ) : (
+          <RecordNotFound heading="Question" title="Question not found"
+            body={status === 'ALL' ? `No question has the id "${selectedId}".` : `No ${STATUS_OPTIONS.find((o) => o.value === status)?.label.toLowerCase()} question has the id "${selectedId}" — it may have been answered or dismissed.`}
+            backLabel="Question queue" onBack={closeQuestion} />
+        )}
+      </CollectionRecordFrame>
+    );
+  }
 
   return (
     <CollectionCommandPage
@@ -316,7 +356,7 @@ export default function FeedbackPage() {
         <DataTable<FeedbackTask>
           data={rows}
           keyField={(t) => t.task_id}
-          onRowClick={(t) => setSelectedId(t.task_id)}
+          onRowClick={(t) => openQuestion(t.task_id)}
           striped
           loading={loading && !data}
           // The full question queue across every team — 20 is a full-page
@@ -359,13 +399,6 @@ export default function FeedbackPage() {
         />
       )}
 
-      <QuestionDrawer
-        task={selected}
-        dim={selected ? dimOf(selected) : undefined}
-        teamName={selected ? teamNameOf(selected) : ''}
-        onClose={() => setSelectedId(null)}
-        onChanged={load}
-      />
       </Stack>
       <CollectionCommandHost adapter={adapter} />
       </Stack>

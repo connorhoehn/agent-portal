@@ -154,7 +154,9 @@ export function RunsLedger({ actions, endpoint, detailBase, showWorkspace = fals
           keyField={(r) => r.id}
           loading={isLoading && !data}
           pageSize={pageSize}
-          {...(detailBase ? { onRowClick: (r: PipelineRun) => navigate(runHref(detailBase, r.id)) } : {})}
+          {...(detailBase ? { onRowClick: (r: PipelineRun) => navigate(runHref(detailBase, r.id)) }
+            // No detail route in this tenant: say why the rows open nothing.
+            : { staticRows: 'These runs belong to the pipelines ledger; their detail opens in that tenant, not here.' })}
           emptyMessage={filtered ? 'No run matches these filters.' : 'No runs recorded yet.'}
         />
       )}

@@ -281,15 +281,19 @@ export function App() {
             <Route path="teams" element={<Page element={<AssessmentDashboardPage />} />} />
             <Route path="teams/:teamId" element={<Page element={<AssessmentDashboardPage />} />} />
             <Route path="submissions" element={<Page element={<AssessmentSubmissionsPage />} />} />
+            {/* A submission opens as a page beside its list rail (record + revision history). */}
+            <Route path="submissions/:submissionId" element={<Page element={<AssessmentSubmissionsPage />} />} />
             <Route path="decks" element={<Page element={<AssessmentDecksPage />} />} />
             <Route path="decks/:deckId" element={<Page element={<AssessmentDeckPage />} />} />
             <Route path="feedback" element={<Page element={<AssessmentFeedbackPage />} />} />
+            <Route path="feedback/:taskId" element={<Page element={<AssessmentFeedbackPage />} />} />
             <Route path="reports" element={<Page element={<AssessmentReportsPage />} />} />
             <Route path="enterprise" element={<Page element={<AssessmentEnterprisePage />} />} />
             <Route path="workspace" element={<Page element={<AssessmentWorkspacePage />} />} />
             <Route path="prompts" element={<Page element={<AssessmentPromptsPage />} />} />
             <Route path="rules" element={<Page element={<AssessmentRulesPage />} />} />
             <Route path="runs" element={<Page element={<AssessmentRunsPage />} />} />
+            <Route path="runs/:runId" element={<Page element={<AssessmentRunsPage />} />} />
             <Route path="activity" element={<Page element={<AssessmentActivityPage />} />} />
             {/* Communication: the Social plane embedded here (docs/social-tenant-design.md §4.6). Every assessment role opens it;
                 Social reads are gated on the caller's Social grant at the BFF, and the Calls shelf (GET /api/calls/tenant) on ViewAssessment.
@@ -332,6 +336,7 @@ export function App() {
             <Route path="calls" element={<Page element={<SocialCallsPage />} />} />
             <Route path="rooms" element={<Page element={<SocialRoomsPage />} />} />
             <Route path="contacts" element={<Page element={<SocialContactsPage />} />} />
+            <Route path="contacts/:userId" element={<Page element={<SocialContactsPage />} />} />
             <Route path="teams" element={<Page element={<SocialTeamsPage />} />} />
             <Route path="profile" element={<Page element={<SocialSurfacePage surface="profile" />} />} />
             <Route path="recordings" element={<Page element={<SocialRecordingsPage />} />} />
@@ -362,6 +367,7 @@ export function App() {
           >
             <Route index element={<Navigate to="runs" replace />} />
             <Route path="definitions" element={<Page element={<PipelinesDefinitionsPage />} />} />
+            <Route path="definitions/:definitionId" element={<Page element={<PipelinesDefinitionsPage />} />} />
             <Route path="queues" element={<Page element={<PipelinesQueuesPage />} />} />
             <Route path="runbooks" element={<Page element={<PipelinesRunbooksPage />} />} />
             <Route path="runs" element={<Page element={<PipelinesRunsPage />} />} />
@@ -383,6 +389,7 @@ export function App() {
             <Route path="calls" element={<Navigate to="/pipelines/communication/calls" replace />} />
             <Route path="decks/:deckId" element={<Page element={<PipelinesRunDeckPage />} />} />
             <Route path="approvals" element={<Page element={<PipelinesApprovalsPage />} />} />
+            <Route path="approvals/:approvalId" element={<Page element={<PipelinesApprovalsPage />} />} />
             <Route path="artifacts" element={<Page element={<PipelinesArtifactsPage />} />} />
             <Route path="agents" element={<Page element={<PipelinesSourcesPage source="agents" />} />} />
             <Route path="bots" element={<Page element={<PipelinesSourcesPage source="bots" />} />} />
@@ -426,6 +433,7 @@ export function App() {
               </RequireRole>
             } />
             <Route path="policies" element={<Page element={<AccessPoliciesPage />} />} />
+            <Route path="policies/:id" element={<Page element={<AccessPoliciesPage />} />} />
             <Route path="reviews" element={<Page element={<AccessReviewsPage />} />} />
             <Route path="reviews/:id" element={<Page element={<AccessReviewRecordPage />} />} />
             <Route path="audit" element={<Page element={<AccessAuditPage />} />} />
@@ -729,7 +737,9 @@ export function App() {
             <Route index element={<Navigate to="/admin/knowledge" replace />} />
             <Route path="summary" element={<Navigate to="/admin/knowledge" replace />} />
             <Route path="crawl" element={<Page element={<IngestCrawlPage />} />} />
+            <Route path="crawl/:targetId" element={<Page element={<IngestCrawlPage />} />} />
             <Route path="history" element={<Page element={<IngestHistoryPage />} />} />
+            <Route path="history/:crawlId" element={<Page element={<IngestHistoryPage />} />} />
             <Route path="sources" element={<Page element={<IngestSourcesPage />} />} />
             <Route path="storage" element={<Page element={<IngestStoragePage />} />} />
             <Route path="schedules" element={<Page element={<IngestSchedulesPage />} />} />
@@ -798,6 +808,7 @@ export function App() {
           }>
             <Route index element={<Navigate to="roles" replace />} />
             <Route path="users" element={<Page element={<IdentityUsersPage />} />} />
+            <Route path="users/:userId" element={<Page element={<IdentityUsersPage />} />} />
             <Route path="roles" element={<Page element={<IdentityRolesPage />} />} />
             <Route path="policies" element={<Page element={<IdentityPoliciesPage />} />} />
             <Route path="schema" element={<Page element={<IdentitySchemaPage />} />} />

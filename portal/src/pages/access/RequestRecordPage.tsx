@@ -247,6 +247,7 @@ function RequestRecord({ id }: { id: string }) {
           <Stack gap="md">
             <WorkflowStepper size="compact" steps={chainSteps(request.steps)} aria-label={step ? `Waiting on step ${step.step} of ${request.steps.length}` : `Chain of ${request.steps.length} steps`} />
             <DataTable data-testid="access-request-steps" data={request.steps} columns={stepColumns(request.status)} keyField={(s) => String(s.step)}
+              staticRows="The request's approval steps, read in place; each is decided on this record"
               emptyMessage="No approval steps were computed for this request." />
             {request.steps.filter((s) => s.escalated && !s.decidedBy).map((s) => (
               <T key={s.step} size="xs" tone="secondary" data-testid={`access-request-escalated-${s.step}`}>{`Step ${s.step} (${STEP_KIND_LABELS[s.kind]}): ${s.escalated}`}</T>
@@ -306,7 +307,8 @@ function RequestRecord({ id }: { id: string }) {
               <UnavailableNotice error={audit.error} what="this request's events" source="Events are read from access_events" onRetry={audit.refresh} />
             ) : (
               <DataTable data-testid="access-request-events" data={audit.data?.items ?? []} columns={EVENT_COLUMNS.filter((c) => c.key !== 'requestId')}
-                keyField={(e) => e.id} loading={audit.isLoading && !audit.data} emptyMessage="No events recorded for this request yet." />
+                keyField={(e) => e.id} loading={audit.isLoading && !audit.data}
+                staticRows="This request's audit events, read in place; the Audit page holds the full trail" emptyMessage="No events recorded for this request yet." />
             )}
           </DetailSection>
         )}

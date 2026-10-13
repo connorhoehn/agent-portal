@@ -77,7 +77,7 @@ test('search, keyboard pagination, folded back navigation and permission-sensiti
   await page.getByRole('textbox', { name: 'Search definitions' }).fill('readiness 01');
   await expect(page.getByTestId('pipelines-definitions-table').locator('tbody tr')).toHaveCount(1);
   await page.getByText('Release readiness 01', { exact: true }).click();
-  await expect(page.getByTestId('pipelines-definition-drawer')).toBeVisible();
+  await expect(page.getByTestId('pipelines-definition-record')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Dry-run', exact: true })).toBeVisible();
   await page.goto('/pipelines/runs/run-0');
   const header = page.getByTestId('page-header'); await expect(header).toBeVisible();
@@ -97,7 +97,7 @@ test('search, keyboard pagination, folded back navigation and permission-sensiti
 test('authors can inspect approvals but cannot approve or cancel', async ({ page }) => {
   const { errors, writes } = await prepare(page, 'light', 'author');
   await page.goto('/pipelines/approvals'); await page.getByText('Review release', { exact: true }).click();
-  await expect(page.getByTestId('pipelines-approval-drawer')).toBeVisible();
+  await expect(page.getByTestId('pipelines-approval-record')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Reject', exact: true })).toHaveCount(0);
   await page.goto('/pipelines/runs/run-0');

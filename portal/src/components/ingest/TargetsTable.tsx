@@ -8,25 +8,21 @@ import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { absoluteTime } from '../../lib/relativeTime';
 import { CRAWL_STATUS_TONE } from './types';
 import type { CrawlTarget } from './types';
-import { Button, Toggle } from './ui';
+import { Toggle } from './ui';
 
 export function TargetsTable({
   targets,
-  busyId,
   readOnly = false,
-  onRun,
-  onEdit,
-  onDelete,
+  onOpen,
   onToggle,
 }: {
   targets: CrawlTarget[];
-  busyId: string | null;
-  /** True when the session lacks ManageIngest — rows render without the
-      run/edit/delete/toggle affordances. */
+  /** True when the session lacks ManageIngest — the Enabled column is a
+      read-only chip instead of a switch. */
   readOnly?: boolean;
-  onRun: (t: CrawlTarget) => void;
-  onEdit: (t: CrawlTarget) => void;
-  onDelete: (t: CrawlTarget) => void;
+  /** A row opens the target as a page (`/admin/ingest/crawl/:targetId`), where
+      Run now, the edit form and Delete live. */
+  onOpen: (t: CrawlTarget) => void;
   onToggle: (t: CrawlTarget, enabled: boolean) => void;
 }) {
   const columns: DataTableColumn<CrawlTarget>[] = [
@@ -101,15 +97,9 @@ export function TargetsTable({
       data={targets}
       columns={columns}
       keyField={(t) => t.id}
-      rowActions={readOnly ? undefined : (t) => (
-        <Inline gap="xs" justify="end" wrap={false}>
-          <Button variant="secondary" size="sm" onClick={() => onRun(t)} disabled={busyId === t.id}>
-            {busyId === t.id ? 'Starting…' : 'Run now'}
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => onEdit(t)}>Edit</Button>
-          <Button variant="danger" size="sm" onClick={() => onDelete(t)}>Delete</Button>
-        </Inline>
-      )}
+      // The Enabled switch is interactive, so a click on it toggles without opening the row.
+      onRowClick={onOpen}
+      data-testid="ingest-targets-table"
     />
   );
 }

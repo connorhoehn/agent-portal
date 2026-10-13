@@ -7,10 +7,16 @@
 // roster here without taking another subscription, drawn with the library's
 // `PresenceAvatars`. From a person: Message opens (or reopens) your DM with
 // them; Call rings them into `social:dm:<ids>` through the shell's call host.
+// A row opens the person as a page, `/social/contacts/:userId`, the roster as
+// the list rail beside it (docs/layout-cascade.md "Records open as pages").
+// Opening writes nothing: Message and Call are explicit buttons on the record.
 
 import {
+  Button,
   CollectionToolbar,
+  DetailHeader,
   IconButton,
+  KeyValue,
   Tooltip,
   ChatIcon,
   PhoneIcon,
@@ -28,7 +34,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { useEmbeddedSocial } from '../../components/shell/EmbeddedSocial';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -39,6 +45,10 @@ import { contactRows, roleLabel, type ContactRow } from './socialPlatform';
 import { useSocialCall } from './useSocialCall';
 import { CollectionCommandHost, type CollectionCommandAdapter } from '../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
+import { PersonSharedWork } from '../../components/communication/PersonSharedWork';
+import { RecordNotFound } from '../../components/UnavailableNotice';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import { contactCommandExamples, filterContacts, parseContactCommand, resolveContactTarget, type ContactFilters, type ContactPresence } from './contactCommands';
 
 export default function ContactsPage() {
@@ -65,14 +75,20 @@ function ContactsWorkspace() {
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const messagePending = useRef(false);
-  const latest = useRef({ filtered, mayMessage, me, isLoading, error });
-  latest.current = { filtered, mayMessage, me, isLoading, error };
+  const latest = useRef({ filtered, rows, mayMessage, me, isLoading, error });
+  latest.current = { filtered, rows, mayMessage, me, isLoading, error };
+  // The open person is the URL (`/social/contacts/:userId`); opening one writes nothing.
+  const { userId: openId = null } = useParams<{ userId?: string }>();
+  const open = openId ? rows.find(r => r.userId === openId) ?? null : null;
+  const openRecord = (id: string | null) => navigate(id ? `/social/contacts/${encodeURIComponent(id)}` : '/social/contacts');
+  useCrumbLabel(openId ?? undefined, open ? open.displayName : null);
 
-  async function message(target: string): Promise<string> {
+  /** `fromRecord`: the record's explicit Message button, whose person need not match the table's filters. */
+  async function message(target: string, fromRecord = false): Promise<string> {
     const current = latest.current;
     if (messagePending.current) throw new Error('A conversation is already opening.');
     if (current.isLoading || current.error) throw new Error('Wait for the contact table to load successfully before choosing a person.');
-    const row = resolveContactTarget(target, current.filtered, current.me, current.mayMessage);
+    const row = resolveContactTarget(target, fromRecord ? current.rows : current.filtered, current.me, current.mayMessage);
     messagePending.current = true;
     setBusy(row.userId);
     setProblem(null);
@@ -111,6 +127,10 @@ function ContactsWorkspace() {
     },
   };
 
+  const presenceLabel = (r: ContactRow) => (r.online ? (r.idle ? 'Away' : 'Here now') : 'Offline');
+  const presenceTone = (r: ContactRow) => (r.online ? (r.idle ? 'warning' : 'success') : 'neutral') as 'warning' | 'success' | 'neutral';
+  const reportProblem = (error: unknown) => { if (alive.current) setProblem(error instanceof Error ? error.message : 'Could not open the conversation.'); };
+
   const columns: DataTableColumn<ContactRow>[] = [
     {
       key: 'displayName', header: 'Name', sortable: true,
@@ -125,9 +145,73 @@ function ContactsWorkspace() {
     {
       key: 'online', header: 'Status', width: '120px', sortable: true,
       compare: (a, b) => Number(a.online) - Number(b.online),
-      render: (r) => <Chip tone={r.online ? (r.idle ? 'warning' : 'success') : 'neutral'} size="xs" dot="static">{r.online ? (r.idle ? 'Away' : 'Here now') : 'Offline'}</Chip>,
+      render: (r) => <Chip tone={presenceTone(r)} size="xs" dot="static">{presenceLabel(r)}</Chip>,
     },
   ];
+
+  if (openId) {
+    const groups = (['Here now', 'Away', 'Offline'] as const).map(label => ({ id: label, title: label, count: filtered.filter(r => presenceLabel(r) === label).length }));
+    return (
+      <CollectionRecordFrame
+        title="Contacts"
+        listTitle="People"
+        listLabel="contacts"
+        {...(data ? { count: filtered.length } : {})}
+        search={{ value: filters.query, onChange: query => setFilters(current => ({ ...current, query })), placeholder: 'Find a person' }}
+        groups={groups}
+        rows={filtered.map(r => ({ id: r.userId, groupId: presenceLabel(r), title: `${r.displayName}${r.userId === me ? ' (you)' : ''}`, subline: r.roles.map(roleLabel).join(', ') || r.userId }))}
+        currentId={openId}
+        onOpen={id => openRecord(id)}
+        loading={isLoading && !data}
+        error={error && !data ? error : null}
+        onRetry={refresh}
+        footer={<CollectionCommandHost adapter={adapter} disabled={!!busy} />}
+        data-testid="social-contact-explorer"
+      >
+        {(problem || call.notice) && (
+          <InlineAlert tone="warning" onDismiss={() => { setProblem(null); call.clearNotice(); }}>{problem ?? call.notice}</InlineAlert>
+        )}
+        {open ? (
+          <Stack gap="md" data-testid="social-contact-record">
+            <Inline gap="md" align="center" wrap={false}>
+              <PresenceAvatars size={40} maxVisible={1} users={[{ id: open.userId, name: open.displayName, ...(open.avatarUrl ? { avatarUrl: open.avatarUrl } : {}), ...(open.online && !open.idle ? {} : { idle: true }) }]} />
+              <DetailHeader className="min-w-0 flex-1" title={`${open.displayName}${open.userId === me ? ' (you)' : ''}`}
+                badge={<Chip tone={presenceTone(open)} size="xs" dot="static">{presenceLabel(open)}</Chip>}
+                description={open.roles.length ? open.roles.map(roleLabel).join(', ') : 'No role in this workspace'} />
+            </Inline>
+            {open.userId !== me && (mayMessage || mayCall) && (
+              <Inline gap="sm" wrap>
+                {mayMessage && (
+                  <Button size="sm" variant="secondary" disabled={!!busy || isLoading || !!error} data-testid="social-contact-record-message"
+                    onClick={() => void message(open.userId, true).catch(reportProblem)}><ChatIcon />Message</Button>
+                )}
+                {mayCall && (
+                  <Tooltip content={call.unavailable ?? `Call ${open.displayName}`}>
+                    <Button size="sm" variant="secondary" disabled={!!call.unavailable} data-testid="social-contact-record-call"
+                      onClick={() => call.callPeople([{ userId: open.userId, displayName: open.displayName }])}><PhoneIcon />Call</Button>
+                  </Tooltip>
+                )}
+              </Inline>
+            )}
+            <KeyValue layout="row" items={[
+              { label: 'User ID', value: open.userId, mono: true },
+              { label: 'Role', value: open.roles.length ? open.roles.map(roleLabel).join(', ') : 'None', muted: !open.roles.length },
+              { label: 'Status', value: presenceLabel(open) },
+            ]} />
+            {/* The person's work as THIS viewer may see it: GET /api/social/plane/people/:userId/shared-work, filtered on the server. */}
+            <PersonSharedWork userId={open.userId} name={open.displayName} self={open.userId === me} online={open.online}
+              onOpenNode={(_node, href) => { if (href?.startsWith('/')) navigate(href); }} />
+          </Stack>
+        ) : isLoading || !data ? (
+          <LoadingState label="Loading the person…" />
+        ) : (
+          <RecordNotFound heading="Contact" title="Nobody here by that id"
+            body={`Nobody with the id "${openId}" holds a role in this workspace.`}
+            backLabel="Contacts" onBack={() => openRecord(null)} />
+        )}
+      </CollectionRecordFrame>
+    );
+  }
 
   return (
     <CollectionCommandPage data-testid="social-contacts-page" title="Contacts" description="The people in this workspace, and who is around right now.">
@@ -159,12 +243,13 @@ function ContactsWorkspace() {
             data={filtered}
             columns={columns}
             keyField={(r) => r.userId}
+            onRowClick={(r) => openRecord(r.userId)}
             emptyMessage="No person matches these filters."
             rowActions={(r) => r.userId === me ? null : (
               <Inline gap="xs">
                 {mayMessage && (
                   <Tooltip content={`Message ${r.displayName}`}><IconButton variant="ghost" size="sm" aria-label={`Message ${r.displayName}`} icon={<ChatIcon />}
-                    disabled={!!busy || isLoading || !!error} onClick={() => void message(r.userId).catch(error => { if (alive.current) setProblem(error instanceof Error ? error.message : 'Could not open the conversation.'); })}
+                    disabled={!!busy || isLoading || !!error} onClick={() => void message(r.userId).catch(reportProblem)}
                     data-testid="social-contact-message" /></Tooltip>
                 )}
                 {mayCall && (

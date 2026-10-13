@@ -1,4 +1,5 @@
-// One definition, opened (GET /api/pipelines/definitions/:id): its source,
+// One definition, opened as a page (`/pipelines/definitions/:definitionId`,
+// GET /api/pipelines/definitions/:id) beside the catalog's list rail: its source,
 // triggers, ordered steps and recent runs; for a runbook, its dry-runs and
 // what rule 1 says about promoting it. The Dry-run action is shown only to
 // RunPipeline holders, the approver editor only to AuthorDefinition holders
@@ -7,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { IconButton, Tooltip, PlayCircleIcon, CheckIcon,
-  Button, ConfirmDialog, DataTable, DetailSection, Drawer, EmptyState, Inline, InlineAlert, KeyValue, LoadingState,
+  Button, ConfirmDialog, DataTable, DetailHeader, DetailSection, EmptyState, Inline, InlineAlert, KeyValue, LoadingState,
   MetaLine, Select, Stack, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -26,6 +27,11 @@ import {
 import { useDryRun } from './useDryRun';
 import { PipelineDiscussion, PipelinePresence } from './PipelineRealtime';
 import { defChannel } from './pipelinesRealtime';
+
+/** The definition's discussion, at the record frame's full width (CollectionRecordFrame `conversation`). */
+export function DefinitionDiscussion({ id }: { id: string }) {
+  return <Stack gap="none" data-testid="pipelines-definition-discussion"><PipelineDiscussion channel={defChannel(id)} /></Stack>;
+}
 
 interface DefinitionDetail {
   definition: PipelineDefinition;
@@ -56,7 +62,7 @@ const DRY_RUN_COLUMNS: DataTableColumn<DryRunRecord>[] = [
   { key: 'startedAt', header: 'Started', numeric: true, render: (r) => relativeTime(r.startedAt) },
 ];
 
-export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null; onClose: () => void; onChanged: () => void }) {
+export function DefinitionRecord({ id, onChanged }: { id: string; onChanged: () => void }) {
   const navigate = useNavigate();
   const { can, ready } = useCapabilities();
   const { data, error, isLoading, refresh } = useFetch<DefinitionDetail>(
@@ -87,22 +93,22 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
   const notFound = error && /404|not found|No definition/i.test(error);
 
   return (
-    <Drawer
-      open={id !== null}
-      onClose={onClose}
-      title={def?.title ?? 'Definition'}
-      subtitle={def ? `${kindLabel(def.kind)} · ${def.id}` : id ?? undefined}
-      width={640}
-      data-testid="pipelines-definition-drawer"
-      actions={def ? (
-        <Inline gap="sm" align="center">
-          <PipelinePresence channel={defChannel(def.id)} />
-          {canRun && canDryRun(def) && (
-            <Tooltip content="Dry-run"><IconButton size="sm" aria-label="Dry-run" icon={<PlayCircleIcon />} disabled={dryRun.busy === def.id} onClick={() => dryRun.start(def.id, def.title)} data-testid="pipelines-dry-run" /></Tooltip>
-          )}
-        </Inline>
-      ) : undefined}
-    >
+    <Stack gap="md" data-testid="pipelines-definition-record">
+      <DetailHeader
+        title={def?.title ?? 'Definition'}
+        description={def ? `${kindLabel(def.kind)} · ${def.id}` : id}
+        {...(def ? {
+          aside: (
+            <Inline gap="sm" align="center" justify="end">
+              <PipelinePresence channel={defChannel(def.id)} />
+              {canRun && canDryRun(def) && (
+                <Tooltip content="Dry-run"><IconButton size="sm" aria-label="Dry-run" icon={<PlayCircleIcon />} disabled={dryRun.busy === def.id} onClick={() => dryRun.start(def.id, def.title)} data-testid="pipelines-dry-run" /></Tooltip>
+              )}
+            </Inline>
+          ),
+          asideWidth: 160,
+        } : {})}
+      />
       {notFound ? (
         <EmptyState align="start" title="Definition not found" description={`No definition with id ${id ?? ''} — its source may have been removed.`} />
       ) : error && !def ? (
@@ -159,6 +165,7 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
               data={def.steps.map((s, i) => ({ ...s, n: i + 1 }))}
               columns={STEP_COLUMNS}
               keyField={(s) => s.id}
+              staticRows="Steps are this definition's ordered recipe; a step runs only as part of a run, which opens from Recent runs."
               emptyMessage="This definition records no steps."
             />
           </DetailSection>
@@ -184,9 +191,6 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
               emptyMessage="No run of this definition is recorded."
             />
           </DetailSection>
-          <DetailSection title="Discussion" data-testid="pipelines-definition-discussion">
-            <PipelineDiscussion channel={defChannel(def.id)} />
-          </DetailSection>
         </Stack>
       )}
       <ConfirmDialog
@@ -198,6 +202,6 @@ export function DefinitionDrawer({ id, onClose, onChanged }: { id: string | null
         onConfirm={dryRun.confirmNow}
         onCancel={dryRun.dismiss}
       />
-    </Drawer>
+    </Stack>
   );
 }

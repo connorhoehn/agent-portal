@@ -133,7 +133,8 @@ export function ConfigurationContents({ bundle, library, view, onViewChange, onR
             filters={[{ id: 'availability', label: 'Availability', value: availability, onChange: setAvailability, options: AVAILABILITY_OPTIONS }]}
             summary={`${skills.length} of ${bundle.skills.length} skills`}
           />
-          <DataTable data={skills} columns={columns} keyField={(skill) => skill.id} frameless emptyMessage={bundle.skills.length > 0 ? 'No skill matches the search or availability' : 'No skills in this configuration'} />
+          <DataTable data={skills} columns={columns} keyField={(skill) => skill.id} frameless
+            staticRows="A skill is a capability this configuration ships to the worker; it has no page of its own." emptyMessage={bundle.skills.length > 0 ? 'No skill matches the search or availability' : 'No skills in this configuration'} />
         </Stack>}
         {view === 'hooks' && (bundle.hooks.length ? <Stack gap="sm">{bundle.hooks.map((hook, index) => <ToggleDisclosure
           key={`${hook.event}-${index}`}

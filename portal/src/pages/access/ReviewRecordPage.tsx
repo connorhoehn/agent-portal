@@ -31,6 +31,7 @@ import {
   T,
   Textarea,
   type DataTableColumn,
+  Link,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -139,9 +140,11 @@ function ReviewRecord({ id }: { id: string }) {
     { key: 'comment', header: 'Comment', render: (i) => (i.comment ? <T size="sm" tone="secondary" title={i.comment} className="block max-w-[20rem] truncate">{i.comment}</T> : <T size="xs" tone="tertiary">—</T>) },
     {
       key: 'revocation', header: 'Revocation', width: '112px',
-      // The id as text (one thing per cell, no buttons in cells); the row opens it.
+      // The revocation request as the cell's one link (an SPA navigation): an
+      // item is decided in its row, so only a revoked item has a page to open.
       render: (i) => (i.revocationRequestId
-        ? <T size="sm" tabular data-testid={`access-review-revocation-${i.id}`}>{i.revocationRequestId}</T>
+        ? <Link href={requestHref(i.revocationRequestId)} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(requestHref(i.revocationRequestId!)); }}
+            data-testid={`access-review-revocation-${i.id}`}><T size="sm" tabular>{i.revocationRequestId}</T></Link>
         : <T size="xs" tone="tertiary">—</T>),
     },
     { key: 'decidedAt', header: 'Decided', numeric: true, render: (i) => (i.decidedAt ? relativeTime(i.decidedAt) : '—') },
@@ -176,7 +179,8 @@ function ReviewRecord({ id }: { id: string }) {
             columns={columns}
             keyField={(i) => i.id}
             pageSize={50}
-            onRowClick={(i) => { if (i.revocationRequestId) navigate(requestHref(i.revocationRequestId)); }}
+            staticRows="An item is decided in its row (Keep or Revoke); a revoked item links its revocation request in the Revocation column."
+
             {...(anyDecidable ? {
               rowActions: (i: AccessReviewItem) => (i.can.decide ? (
                 <Inline gap="xs" wrap={false}>

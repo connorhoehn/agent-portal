@@ -100,7 +100,8 @@ export default function ConfigurationPage() {
         <>
           <PageSection title="What each role can do" data-testid="social-configuration-abilities">
             <Stack gap="sm">
-              <DataTable data={ACTIONS} columns={columns} keyField={(r) => r.action} data-testid="social-configuration-matrix" />
+              <DataTable data={ACTIONS} columns={columns} keyField={(r) => r.action} data-testid="social-configuration-matrix"
+                staticRows="A permission matrix: each row is an action and each cell is the decision; there is no record behind a row." />
               {!mayReadRoles && (
                 <InlineAlert tone="info" data-testid="social-configuration-own-column">
                   This is what your role may do. The other roles' permissions are shown to people who manage this workspace's users.

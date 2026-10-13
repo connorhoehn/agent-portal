@@ -1,4 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+// One crawled page of a run, shown inside the run's record (`?page=<idx>` on
+// `/admin/ingest/history/:crawlId`) — never a modal (docs/layout-cascade.md,
+// "Records open as pages; selections stay put").
+import { useEffect, useRef, useState } from 'react';
 import {
   T,
   Button,
@@ -10,7 +13,6 @@ import {
   Inline,
   LoadingState,
   MetaLine,
-  Modal,
   SectionLabel,
   Stack,
   Table,
@@ -33,7 +35,7 @@ interface PageDetailResponse {
   analysis: Record<string, unknown> | null;
 }
 
-export function PageDetailModal({
+export function PageDetail({
   crawlId,
   pageIdx,
   fallback,
@@ -75,8 +77,7 @@ export function PageDetailModal({
   ];
 
   return (
-    <Modal open={true} onClose={onClose} maxWidth={960}>
-      <Card padding="md" className="w-[min(960px,92vw)] max-h-[88vh] flex flex-col">
+    <Stack gap="none" className="min-w-0" data-testid="ingest-crawl-page-detail">
         <Inline align="start" justify="between" gap="md" className="mb-3">
           <Stack gap="none" className="min-w-0 flex-1">
             <Inline gap="sm" align="center" className="mb-1 min-w-0">
@@ -89,7 +90,7 @@ export function PageDetailModal({
               items={[<span key="u" title={page.url}>{page.url}</span>]}
             />
           </Stack>
-          <Button variant="secondary" onClick={onClose}>Close</Button>
+          <Button variant="secondary" size="sm" onClick={onClose}>Close</Button>
         </Inline>
 
         <Tabs
@@ -103,7 +104,7 @@ export function PageDetailModal({
           className="mb-3"
         />
 
-        <Stack gap="none" className="flex-1 overflow-auto min-h-0">
+        <Stack gap="none" className="min-w-0">
           {tab === 'screenshot' && (
             <ScreenshotTab crawlId={crawlId} pageIdx={pageIdx} hasScreenshot={!!page.s3ScreenshotKey} />
           )}
@@ -125,8 +126,7 @@ export function PageDetailModal({
           />
           <S3KeysList page={page} />
         </Stack>
-      </Card>
-    </Modal>
+    </Stack>
   );
 }
 

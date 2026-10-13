@@ -1,10 +1,21 @@
+// /admin/ingest/crawl — what content gets pulled in. A target row opens the
+// target as a page, `/admin/ingest/crawl/:targetId` (`crawlTargetHref`), the
+// targets as the flush list rail beside it, where its settings are edited in
+// place and Run now / Delete live (docs/layout-cascade.md, "Records open as
+// pages; selections stay put"). A crawl run opens its own page under
+// /admin/ingest/history — never a drawer. "New target" stays a dialog: it
+// creates, it does not open a record.
 import { useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import {
-  Button, Card, CardHeader, Chip, CollectionToolbar, ConfirmDialog, EmptyState, Inline, InlineAlert, LoadingState,
-  PageSection, Stack, T,
+  Button, Card, CardHeader, Chip, CollectionToolbar, EmptyState, Inline, InlineAlert, LoadingState,
+  PageSection, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
-import { crawlTargetsAdapter, matchesTarget } from './ingestCommands';
+import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
+import { RecordNotFound } from '../../components/UnavailableNotice';
+import { useCrumbLabel } from '../../lib/crumbLabels';
+import { crawlRunHref, crawlTargetHref, crawlTargetsAdapter, matchesTarget } from './ingestCommands';
 import { useCapabilities } from '../../lib/capabilities';
 import { sendJson, writeJson } from '../../lib/writeJson';
 import { SiteSurveyPanel } from '../../components/ingest/SiteSurveyPanel';
@@ -14,12 +25,15 @@ import type { CrawlSession, CrawlTarget } from '../../components/ingest/types';
 import { TargetsTable } from '../../components/ingest/TargetsTable';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { ActiveRunsStrip } from '../../components/ingest/ActiveRunsStrip';
-import { RunDetailDrawer } from '../../components/ingest/RunDetailDrawer';
+import { TargetRecord } from '../../components/ingest/TargetRecord';
 import { NewTargetModal } from '../../components/ingest/NewTargetModal';
 import type { TargetDraft } from '../../components/ingest/NewTargetModal';
 import { StatusDot } from '../../components/ingest/ui';
 
 function CrawlTargetsPage() {
+  const navigate = useNavigate();
+  const { targetId } = useParams<{ targetId?: string }>();
+  const openId = targetId ?? null;
   // Target CRUD, runs and cancels all ride /api/ingest (ManageIngest).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageIngest');
@@ -46,15 +60,9 @@ function CrawlTargetsPage() {
   // when the server actually answered.
   const targetsFailure = targetsError ?? targetsDegraded;
 
-  const [targetBusy, setTargetBusy] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
-  const [drawerCrawlId, setDrawerCrawlId] = useState<string | null>(null);
-  const [drawerInitial, setDrawerInitial] = useState<CrawlSession | null>(null);
-
   const [showNewTarget, setShowNewTarget] = useState(false);
-  const [editTarget, setEditTarget] = useState<CrawlTarget | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<CrawlTarget | null>(null);
 
   const [query, setQuery] = useState('');
   const shownTargets = targets.filter(t => matchesTarget(t, query));
@@ -62,46 +70,13 @@ function CrawlTargetsPage() {
 
   const activeCrawls = useMemo(() => crawls.filter(c => c.status === 'running'), [crawls]);
 
-  async function saveTarget(draft: TargetDraft) {
+  async function createTarget(draft: TargetDraft) {
     setActionMessage(null);
-    const url = editTarget
-      ? `/api/ingest/crawl-targets/${encodeURIComponent(editTarget.id)}`
-      : '/api/ingest/crawl-targets';
-    const method = editTarget ? 'PATCH' : 'POST';
-    await sendJson(url, method, draft);
-    setActionMessage({
-      tone: 'ok',
-      text: editTarget ? `Target "${draft.label}" updated` : `Target "${draft.label}" created`,
-    });
+    const res = await sendJson<{ target?: CrawlTarget }>('/api/ingest/crawl-targets', 'POST', draft);
+    setActionMessage({ tone: 'ok', text: `Target "${draft.label}" created` });
     setShowNewTarget(false);
-    setEditTarget(null);
     refreshTargets();
-  }
-
-  async function runTarget(t: CrawlTarget) {
-    setTargetBusy(t.id);
-    setActionMessage(null);
-    const res = await writeJson<{ session: CrawlSession }>(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}/run`, 'POST');
-    if (!res.ok || !res.data?.session) {
-      setActionMessage({ tone: 'err', text: res.error ?? 'Failed to start crawl' });
-    } else {
-      setActionMessage({ tone: 'ok', text: `Crawl started for "${t.label}"` });
-      refreshCrawls();
-      setDrawerCrawlId(res.data.session.id);
-      setDrawerInitial(res.data.session);
-    }
-    setTargetBusy(null);
-    refreshTargets();
-  }
-
-  async function runDeleteTarget(t: CrawlTarget) {
-    const res = await writeJson(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, 'DELETE');
-    if (!res.ok) {
-      setActionMessage({ tone: 'err', text: res.error ?? 'Failed to delete target' });
-      return;
-    }
-    setActionMessage({ tone: 'ok', text: `Target "${t.label}" deleted` });
-    refreshTargets();
+    if (res?.target?.id) void navigate(crawlTargetHref(res.target.id));
   }
 
   async function toggleTarget(t: CrawlTarget, enabled: boolean) {
@@ -123,10 +98,56 @@ function CrawlTargetsPage() {
     refreshCrawls();
   }
 
-  function openCrawl(id: string) {
-    const initial = crawls.find(c => c.id === id) ?? null;
-    setDrawerInitial(initial);
-    setDrawerCrawlId(id);
+  const openCrawl = (id: string) => void navigate(crawlRunHref(id));
+  const openTarget = (id: string) => void navigate(crawlTargetHref(id));
+
+  const openRecord = openId ? targets.find(t => t.id === openId) ?? null : null;
+  useCrumbLabel(openId ?? undefined, openRecord?.label ?? null);
+
+  if (openId) {
+    const runsOf = crawls
+      .filter(c => c.targetId === openId)
+      .sort((a, b) => +new Date(b.startedAt) - +new Date(a.startedAt));
+    return (
+      <CollectionRecordFrame
+        title="Sources"
+        listTitle="Crawl targets"
+        listLabel="crawl targets"
+        {...(targetsData ? { count: shownTargets.length } : {})}
+        search={{ value: query, onChange: setQuery, placeholder: 'Find a crawl target' }}
+        groups={[{ id: 'enabled', title: 'Enabled' }, { id: 'paused', title: 'Paused' }].map(g => ({
+          ...g, count: shownTargets.filter(t => (t.enabled ? 'enabled' : 'paused') === g.id).length,
+        }))}
+        rows={shownTargets.map(t => ({
+          id: t.id, groupId: t.enabled ? 'enabled' : 'paused', title: t.label,
+          subline: `${t.mode} · ${t.cronExpr ?? 'on-demand'}${t.lastStatus ? ` · last ${t.lastStatus}` : ''}`,
+        }))}
+        currentId={openId}
+        onOpen={openTarget}
+        loading={targetsLoading && !targetsData}
+        error={targetsFailure && !targetsData ? targetsFailure : null}
+        onRetry={refreshTargets}
+        footer={<CollectionCommandHost adapter={adapter} />}
+        data-testid="ingest-target-explorer"
+      >
+        {openRecord ? (
+          <TargetRecord
+            key={openRecord.id}
+            target={openRecord}
+            runs={runsOf}
+            canManage={canManage}
+            onChanged={() => { refreshTargets(); refreshCrawls(); }}
+            onDeleted={() => { refreshTargets(); void navigate('/admin/ingest/crawl'); }}
+          />
+        ) : !targetsData ? (
+          <LoadingState label="Loading crawl target…" />
+        ) : (
+          <RecordNotFound heading="Crawl target" title="Crawl target not found"
+            body={`No crawl target has the id "${openId}" — it may have been deleted.`}
+            backLabel="Sources" onBack={() => void navigate('/admin/ingest/crawl')} />
+        )}
+      </CollectionRecordFrame>
+    );
   }
 
   return (
@@ -176,11 +197,8 @@ function CrawlTargetsPage() {
           ) : (
             <TargetsTable
               targets={shownTargets}
-              busyId={targetBusy}
               readOnly={!canManage}
-              onRun={runTarget}
-              onEdit={(t) => setEditTarget(t)}
-              onDelete={(t) => setDeleteTarget(t)}
+              onOpen={(t) => openTarget(t.id)}
               onToggle={toggleTarget}
             />
           )}
@@ -205,36 +223,13 @@ function CrawlTargetsPage() {
 
         <CollectionCommandHost adapter={adapter} />
 
-        {/* Right-side drawer for crawl run details (uses PageDetailModal internally) */}
-        <RunDetailDrawer
-          crawlId={drawerCrawlId}
-          initialSession={drawerInitial}
-          onClose={() => { setDrawerCrawlId(null); setDrawerInitial(null); }}
-        />
-
-        {/* Target create/edit modal */}
-        {(showNewTarget || editTarget) && (
+        {/* Target create dialog — a header action's form, not a record */}
+        {showNewTarget && (
           <NewTargetModal
-            existing={editTarget}
-            onSave={saveTarget}
-            onCancel={() => { setShowNewTarget(false); setEditTarget(null); }}
+            onSave={createTarget}
+            onCancel={() => setShowNewTarget(false)}
           />
         )}
-
-        <ConfirmDialog
-          open={!!deleteTarget}
-          onConfirm={() => {
-            if (deleteTarget) {
-              const t = deleteTarget;
-              setDeleteTarget(null);
-              void runDeleteTarget(t);
-            }
-          }}
-          onCancel={() => setDeleteTarget(null)}
-          tone="destructive"
-          title={deleteTarget ? `Delete "${deleteTarget.label}"?` : 'Delete target?'}
-          body="Run history is preserved. This cannot be undone."
-        />
       </Stack>
     </PageSection>
   );

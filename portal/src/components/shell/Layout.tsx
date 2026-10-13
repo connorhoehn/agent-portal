@@ -299,6 +299,12 @@ const SHELL_RAIL_DEPTH: RailDepthSpec = {
     /^\/iq\/documents\/[^/]+$/,
     /^\/(iq|assessment|social|pipelines)\/decks\/[^/]+$/,
     /^\/iq\/(designs|library)\/[^/]+$/,
+    /^\/assessment\/(submissions|feedback|runs)\/[^/]+$/,
+    /^\/pipelines\/(definitions|approvals)\/[^/]+$/,
+    /^\/access\/policies\/[^/]+$/,
+    /^\/admin\/ingest\/(crawl|history)\/[^/]+$/,
+    /^\/admin\/identity\/users\/[^/]+$/,
+    /^\/social\/contacts\/[^/]+$/,
   ],
 };
 

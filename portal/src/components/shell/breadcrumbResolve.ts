@@ -171,7 +171,9 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       case 'ingest':
         return [
           { label: 'Operate' }, { label: 'Knowledge', path: '/admin/knowledge' }, { label: 'Pipeline' },
-          ...(b && INGEST_LABELS[b] ? [{ label: INGEST_LABELS[b]! }] : []),
+          ...(b && INGEST_LABELS[b]
+            ? (c ? [{ label: INGEST_LABELS[b]!, path: `/admin/ingest/${b}` }, { label: shortId(c), id: c }] : [{ label: INGEST_LABELS[b]! }])
+            : []),
         ];
       case 'observability': {
         if (!b) return [{ label: 'Operate' }, { label: 'Observability' }];
@@ -196,6 +198,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         return [{ label: 'Operate' }, { label: 'Capabilities', path: '/admin/capabilities' }, { label: CAPABILITY_LABELS[b] ?? b }];
       case 'identity':
         if (!b) return [{ label: 'System' }, { label: 'Identity' }];
+        if (b === 'users' && c) return [{ label: 'System' }, { label: 'Identity', path: '/admin/identity' }, { label: 'Users', path: '/admin/identity/users' }, { label: shortId(c), id: c }];
         return [{ label: 'System' }, { label: 'Identity', path: '/admin/identity' }, { label: IDENTITY_LABELS[b] ?? b }];
       default: return [];
     }
@@ -218,6 +221,11 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
     if (page === 'teams' && b) {
       return [{ label: group }, { label: pageLabel, path: '/assessment/teams' }, { label: b }];
     }
+    // A submission record: the page registers its team as the crumb's title.
+    // A record opened beside its list rail: the page registers its title as the crumb's label.
+    if ((page === 'submissions' || page === 'feedback' || page === 'runs') && b) {
+      return [{ label: group }, { label: pageLabel, path: `/assessment/${page}` }, { label: shortId(b), id: b }];
+    }
     return [{ label: group }, { label: pageLabel }];
   }
 
@@ -225,6 +233,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
   // the group the page sits under, then the page (Layout.tsx NAV_ITEMS).
   if (root === 'social') {
     const page = a ?? 'channels';
+    if (b && page === 'contacts') return [{ label: SOCIAL_GROUPS[page] ?? 'Social' }, { label: SOCIAL_LABELS[page] ?? page, path: '/social/contacts' }, { label: shortId(b), id: b }];
     return [{ label: SOCIAL_GROUPS[page] ?? 'Social' }, { label: SOCIAL_LABELS[page] ?? page }];
   }
   if (root === 'pipelines') {
@@ -234,6 +243,8 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
     // The Runs page sits under the Runs group; name the product instead of "Runs › Runs".
     const trail: Crumb[] = [{ label: group === label ? 'Pipelines' : group }];
     if (b && page === 'runs') return [...trail, { label, path: '/pipelines/runs' }, { label: `Run ${shortId(b)}`, id: b }];
+    // Any other collection's record, opened beside its list rail; the page registers its title.
+    if (b && (page === 'definitions' || page === 'approvals')) return [...trail, { label, path: `/pipelines/${page}` }, { label: shortId(b), id: b }];
     return [...trail, { label }];
   }
 
@@ -243,6 +254,8 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
     const label = ACCESS_LABELS[page] ?? page;
     if (page === 'requests' && b === 'new') return [...trail, { label, path: '/access/requests' }, { label: 'New request' }];
     if (page === 'requests' && b) return [...trail, { label, path: '/access/requests' }, { label: `Request ${b}`, id: b }];
+    // Any other collection's record beside its list rail; the page registers its title.
+    if (b && page === 'policies') return [...trail, { label, path: `/access/${page}` }, { label: shortId(b), id: b }];
     return [...trail, { label }];
   }
 
