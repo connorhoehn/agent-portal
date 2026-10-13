@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "e69ca5ec5cee50dd9a39976e312f74dfeca25e318b8a1a436926bafac1805979",
-  "at": "2026-10-13T18:42:45.215Z"
+  "sourceDigest": "005692fc740a0786a4b21438362527b1369e37434ea48b439193d9cc62aabda6",
+  "at": "2026-10-13T19:45:51.637Z"
  },
  "routes": {
   "/access": {
@@ -45,6 +45,13 @@
     "lands": null
    },
    "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/policies/:id": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T19:45:51.637Z"
   },
   "/access/requests": {
    "value": {

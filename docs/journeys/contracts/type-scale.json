@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "e69ca5ec5cee50dd9a39976e312f74dfeca25e318b8a1a436926bafac1805979",
-  "at": "2026-10-13T18:50:17.010Z"
+  "sourceDigest": "005692fc740a0786a4b21438362527b1369e37434ea48b439193d9cc62aabda6",
+  "at": "2026-10-13T19:53:31.863Z"
  },
  "routes": {
   "/access": {
@@ -45,6 +45,15 @@
     "offenders": []
    },
    "changedAt": "2026-10-13T12:08:14.363Z"
+  },
+  "/access/policies/:id": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "siblings rail 12|14"
+    ]
+   },
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/access/requests": {
    "value": {
@@ -664,10 +673,10 @@
      "scale rail 11/600",
      "scale rail 13/500",
      "siblings content 18|14|14",
-     "siblings rail 12|16"
+     "siblings rail 12|11"
     ]
    },
-   "changedAt": "2026-10-13T18:14:39.303Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/assessment/teams": {
    "value": {
@@ -688,11 +697,10 @@
      "scale content 11/700",
      "scale content 13/500",
      "scale content 16/400",
-     "scale content 18/700",
-     "siblings content 14|16"
+     "scale content 18/700"
     ]
    },
-   "changedAt": "2026-10-13T06:37:39.253Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/assessment/workspace": {
    "value": {
@@ -833,11 +841,10 @@
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/400",
-     "scale rail 13/500",
-     "siblings rail 11|16"
+     "scale rail 13/500"
     ]
    },
-   "changedAt": "2026-10-13T07:08:26.576Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/decks/:deckId": {
    "value": {
@@ -889,11 +896,10 @@
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/500",
-     "siblings rail 11|16",
      "title-scale content 20/600"
     ]
    },
-   "changedAt": "2026-10-13T06:37:39.253Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/diff": {
    "value": {
@@ -918,10 +924,10 @@
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/500",
-     "siblings rail 12|16"
+     "siblings rail 12|11"
     ]
    },
-   "changedAt": "2026-10-13T06:16:46.872Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/distillation/activity?view=graph": {
    "value": {
@@ -948,11 +954,10 @@
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/400",
-     "scale rail 13/500",
-     "siblings rail 11|16"
+     "scale rail 13/500"
     ]
    },
-   "changedAt": "2026-10-13T06:16:46.872Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/distillation/knowledge?item=": {
    "value": {
@@ -967,11 +972,10 @@
      "scale rail 11/600",
      "scale rail 13/400",
      "scale rail 13/500",
-     "siblings content 10|18",
-     "siblings rail 11|16"
+     "siblings content 10|18"
     ]
    },
-   "changedAt": "2026-10-13T07:42:56.165Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/distillation/knowledge?nav=distillation": {
    "value": {
@@ -982,10 +986,11 @@
      "scale content 13/500",
      "scale content 16/600",
      "scale rail 11/600",
-     "scale rail 13/500"
+     "scale rail 13/500",
+     "siblings content 16|11"
     ]
    },
-   "changedAt": "2026-10-13T06:16:46.872Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/distillation/knowledge?view=notes": {
    "value": {
@@ -995,11 +1000,10 @@
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/400",
-     "scale rail 13/500",
-     "siblings rail 11|16"
+     "scale rail 13/500"
     ]
    },
-   "changedAt": "2026-10-13T06:16:46.872Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/distillation/review": {
    "value": {
@@ -1012,11 +1016,10 @@
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/400",
-     "scale rail 13/500",
-     "siblings rail 11|16"
+     "scale rail 13/500"
     ]
    },
-   "changedAt": "2026-10-13T07:42:56.165Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/distillation/review?sample=": {
    "value": {
@@ -1029,11 +1032,10 @@
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/400",
-     "scale rail 13/500",
-     "siblings rail 11|16"
+     "scale rail 13/500"
     ]
    },
-   "changedAt": "2026-10-13T07:42:56.165Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/distillation/review?view=promotions": {
    "value": {
@@ -1041,11 +1043,10 @@
     "offenders": [
      "scale rail 11/500",
      "scale rail 11/600",
-     "scale rail 13/500",
-     "siblings rail 11|16"
+     "scale rail 13/500"
     ]
    },
-   "changedAt": "2026-10-08T12:12:22.405Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/documents/:documentId": {
    "value": {
@@ -1110,11 +1111,10 @@
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/500",
-     "siblings rail 11|16",
      "title-scale content 20/600"
     ]
    },
-   "changedAt": "2026-10-13T06:16:46.872Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/local-compute": {
    "value": {
@@ -1150,11 +1150,10 @@
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/400",
-     "scale rail 13/500",
-     "siblings rail 11|16"
+     "scale rail 13/500"
     ]
    },
-   "changedAt": "2026-10-13T06:16:46.872Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/projects?nav=section": {
    "value": {
@@ -1166,11 +1165,10 @@
      "scale rail 11/500",
      "scale rail 11/600",
      "scale rail 13/400",
-     "scale rail 13/500",
-     "siblings rail 11|16"
+     "scale rail 13/500"
     ]
    },
-   "changedAt": "2026-10-13T06:16:46.872Z"
+   "changedAt": "2026-10-13T19:53:31.863Z"
   },
   "/iq/projects/:id": {
    "value": {
