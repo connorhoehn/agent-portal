@@ -239,7 +239,10 @@ function RequestRecord({ id }: { id: string }) {
               { label: 'Duration', value: <T size="sm">{DURATION_LABELS[request.duration] ?? request.duration}</T> },
               { label: 'Expires', value: <T size="sm" tone={request.expiresAt ? undefined : 'tertiary'}>{request.expiresAt ? relativeTime(request.expiresAt) : request.duration === 'standing' ? 'Standing' : 'When provisioned'}</T> },
             ]),
-            { label: 'Why', value: <T size="sm">{request.justification}</T> },
+            // The justification is prose an approver reads first: it wraps
+            // inside its cell (KeyValue's value cell truncates by default,
+            // which cut it off mid-word at the Discussion pane's edge).
+            { label: 'Why', value: <T as="p" size="sm" wrap className="m-0 whitespace-normal break-words" data-testid="access-request-justification">{request.justification}</T> },
           ]} />
         </DetailSection>
 

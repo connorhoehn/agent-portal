@@ -14,10 +14,29 @@
 // the raw database row instead of "3h ago", and only ever in AWS: `dev:mock`
 // mints its fixtures through `mock/core/clock.ts`, which emits `…Z`.
 
-import { parsePgTimestamp } from './pgTimestamp.ts';
+import { parsePgTimestamp, parsePgTimestampAsUtc } from './pgTimestamp.ts';
 
 /**
- * "just now" · "12m ago" · "5h ago" · "3d ago" · "Aug 4, 2026".
+ * A server instant. A stamp with a clock time but no zone
+ * (`2026-09-08 08:19:23`, how the RDS Data API renders a TIMESTAMPTZ) means
+ * UTC here, never the browser's local zone: read as local it lands hours in
+ * the future west of Greenwich. While this formatter had no future branch
+ * that error hid as "just now"; with one it would read "in 3h".
+ */
+function parseInstant(iso: string): Date | null {
+  return /\d{2}:\d{2}/.test(iso) ? parsePgTimestampAsUtc(iso) : parsePgTimestamp(iso);
+}
+
+/**
+ * "just now" · "12m ago" · "5h ago" · "3d ago" · "Aug 4, 2026", and the same
+ * ladder forwards for a future instant: "in 12m" · "in 5h" · "in 3d" ·
+ * "Nov 12, 2026".
+ *
+ * The future branch exists because an active grant's "Expires" (the access
+ * request record) used to fall into the `mins < 2` bucket — any negative
+ * difference read "just now". Both directions share one cutover: under two
+ * minutes either way is "just now" (absorbs clock skew on a fresh write),
+ * and a week or more either way is a calendar date.
  *
  * Returns `''` for a null/undefined instant so callers can drop the whole line
  * rather than render an empty bullet, and echoes an unparseable string back
@@ -25,19 +44,21 @@ import { parsePgTimestamp } from './pgTimestamp.ts';
  */
 export function relativeTime(iso: string | null | undefined): string {
   if (!iso) return '';
-  const then = parsePgTimestamp(iso);
+  const then = parseInstant(iso);
   if (then === null) return iso;
 
   const diffMs = Date.now() - then.getTime();
-  const mins = Math.floor(diffMs / 60_000);
+  const future = diffMs < 0;
+  const mins = Math.floor(Math.abs(diffMs) / 60_000);
+  const say = (n: number, unit: string) => (future ? `in ${n}${unit}` : `${n}${unit} ago`);
   if (mins < 2) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return say(mins, 'm');
 
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return say(hrs, 'h');
 
   const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
+  if (days < 7) return say(days, 'd');
 
   return then.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
@@ -49,11 +70,13 @@ export function relativeTime(iso: string | null | undefined): string {
  */
 export function relativeTimeSeconds(iso: string | null | undefined): string {
   if (!iso) return '';
-  const then = parsePgTimestamp(iso);
+  const then = parseInstant(iso);
   if (then === null) return iso;
 
   const secs = Math.floor((Date.now() - then.getTime()) / 1000);
-  if (secs < 60) return `${secs}s ago`;
+  // A future instant (or one a few seconds ahead through clock skew) takes
+  // the minute ladder rather than printing "-5s ago".
+  if (secs >= 0 && secs < 60) return `${secs}s ago`;
   return relativeTime(iso);
 }
 

@@ -99,4 +99,6 @@ test('a step names who may decide only while the request is open; a policy event
   assert.equal(eligibleLabel({ ...step, eligible: [] }, 'pending'), 'No one can decide this step');
   assert.equal(eventHref({ requestId: 'req-0002' }), '/access/requests/req-0002');
   assert.equal(eventHref({ requestId: null }), '/access/policies');
+  // A policy-updated row opens that policy's record page, not the list.
+  assert.equal(eventHref({ requestId: null, policyId: 'sod-001' }), '/access/policies/sod-001');
 });

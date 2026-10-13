@@ -254,10 +254,15 @@ export function eligibleLabel(step: RequestStep, status?: RequestStatus): string
   return step.eligible.map((p) => p.displayName).join(', ');
 }
 
-/** Where an audit event opens: its request, or the policies for a policy change. */
-export function eventHref(e: Pick<AccessEvent, 'requestId'>): string {
-  return e.requestId ? requestHref(e.requestId) : '/access/policies';
+/** Where an audit event opens: its request, or the changed policy's own record
+ *  page (`policy-updated` names `policyId`); the policies list only when an
+ *  event names neither. */
+export function eventHref(e: Pick<AccessEvent, 'requestId' | 'policyId'>): string {
+  if (e.requestId) return requestHref(e.requestId);
+  return e.policyId ? policyHref(e.policyId) : '/access/policies';
 }
+
+export function policyHref(id: string): string { return `/access/policies/${encodeURIComponent(id)}`; }
 
 // ── The request wizard (who → what → why → how long) ───────────────────────
 

@@ -1,15 +1,17 @@
-# access-admin walk defects (re-walk 2026-10-13, u-priya, ui-components 2.441.8)
+# access-admin walk defects (re-walk 2026-10-13 14:52–15:01, u-priya, ui-components 2.442.2)
 
-Open: none that fails a log. Verified fixed since the first walk:
-- Request record no longer logs a 400 (`GET /api/conversations/agent/waiting` answers 200); 0 console errors on every record.
-- Policy Save writes a `policy-updated` audit event (actor, before/after severity, reason change) and the Audit page lists it.
-- Configuration has real GET/PUT routes; Save works for access-admin with a success toast; invalid input answers 400.
-- A step with no eligible decider shows an "escalated" chip and its reason (req-0007: platform admins; req-0002 step 2: access admins).
-- Reviews are a real collection: seeded rev-0001, New campaign (rev-0002 created), record with Keep/Revoke, a decided item (409 on replay).
-- Page titles measure 20/600 again.
+Open, failing a log:
+1. **Expiry in the future reads "just now"** (request.md). After req-0002 was approved and provisioned, the record's summary showed `Expires just now` while the API's `expiresAt` was 2026-11-12. `RequestRecordPage.tsx:240` renders it with `relativeTime`, which has no future branch (`portal/src/lib/relativeTime.ts`: a negative difference falls into `mins < 2`). Any active grant with a fixed duration shows it.
 
-Still true, not failing a log:
-1. The wizard's "Who" step cannot name an arbitrary person (only people who already have a request on file), while `POST /api/access/requests` lets an access admin file for anyone (201 for u-theo).
-2. The SoD override control could not be observed: a blocked request cannot be filed (409), so no record ever renders it. `POST .../sod-override` on a clear request answers 409 as designed. Revoke was observed (req-0004, req-0002 after approval) but not clicked.
-3. On a review record the composer phrase is `search review items for <name>`; `search items for <name>` searches the whole string literally.
-4. During the first pass of the audit surface the page read 20 events while the API read 15 moments later; the re-walk agreed (17 = 17). Probably another lane reset the mock mid-walk, not a page defect.
+Open, not failing a log:
+2. The policy record page (`/access/policies/sod-001`) renders the record's own title "Spend and allocate" at 18/400 and the list-rail rows at 13px, off the 20/14/12 scale. `/access/policies/:id` is not in `portal/e2e/route-inventory.ts`, so no sweep measures it.
+3. An audit `policy-updated` row opens `/access/policies` (the list), not the policy's own record page, now that one exists (`accessRequests.ts:259`).
+4. The review record's trail stops at "Govern › Reviews" and does not name the campaign; the request and policy records name theirs.
+5. The wizard's "Who" step still cannot name an arbitrary person (only reports with a request on file), while the API lets an access admin file for anyone (from the previous walk; not re-probed).
+6. The SoD override control is still unobservable: a blocked request cannot be filed, so no record renders it.
+
+Checked and fine this walk: policies open as a record page with Save there (no drawer); catalog rows open the wizard for the item; the wizard's radios are 14/500 labels with 12/400 descriptions; the request record's section headings are 14/600; Save on policies writes a `policy-updated` event; Configuration Save/restore; review Keep with a 409 on replay.
+
+Not exercised: the toolbar swapping its controls when rows are selected — none of the access tables offers row selection (0 row checkboxes on catalog, requests, policies, reviews, audit).
+
+Environment: another lane reset the mock at about 15:00:08 mid-walk (the audit page's first pass read 22 events while the API read 15); the logged audit pass was re-walked after it. My own reset: 15:01:13.

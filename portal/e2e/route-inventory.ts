@@ -139,6 +139,9 @@ export const PARAM_ROUTES: readonly ParamRoute[] = [
   { tenant: 'access', pattern: '/access/requests/:id', template: '/access/requests/:id', id: 'req-0001' },
   // The seeded review campaign (middleware/src/mock/access-reviews.ts, schema/access_schema.sql); a collection record.
   { tenant: 'access', pattern: '/access/reviews/:id', template: '/access/reviews/:id', id: 'rev-0001' },
+  // The seeded separation-of-duties policy (middleware/src/mock/access-policies.ts, schema/access_schema.sql);
+  // a collection record beside its list rail (CollectionRecordFrame), kindOf: param → record.
+  { tenant: 'access', pattern: '/access/policies/:id', template: '/access/policies/:id', id: 'sod-001' },
 ];
 
 /**

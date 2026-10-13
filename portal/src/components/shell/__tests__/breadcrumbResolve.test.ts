@@ -80,3 +80,14 @@ test('the four work-graph routes read "Work graph", never the raw slug', () => {
   ];
   for (const [path, labels] of cases) assert.deepEqual(resolveBreadcrumbs(path).map((c) => c.label), labels, path);
 });
+
+test('access records name their record after the list crumb (policies and review campaigns)', () => {
+  const review = resolveBreadcrumbs('/access/reviews/rev-0001');
+  assert.deepEqual(review.map((c) => c.label).slice(0, 2), ['Govern', 'Reviews']);
+  assert.equal(review[1]?.path, '/access/reviews');
+  assert.equal(review[2]?.id, 'rev-0001');
+  const policy = resolveBreadcrumbs('/access/policies/sod-001');
+  assert.equal(policy[1]?.path, '/access/policies');
+  assert.equal(policy[2]?.id, 'sod-001');
+  assert.equal(resolveBreadcrumbs('/access/reviews').length, 2);
+});

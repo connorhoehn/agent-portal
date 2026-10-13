@@ -11,7 +11,7 @@ import {
   Chip,
   CollectionToolbar,
   DataTable,
-  DetailHeader,
+  DetailSection,
   EditIcon,
   FormField,
   IconButton,
@@ -119,38 +119,51 @@ export default function PoliciesPage() {
         error={error}
         onRetry={refresh}
         footer={<CollectionCommandHost adapter={adapter} disabled={busy} />}
+        railType="app"
         data-testid="access-policy-explorer"
       >
         {open && draft ? (
+          // The record on the app's one scale (docs/layout-cascade.md rule 3):
+          // the page title stays the view's name ("Policies", 20/600, from the
+          // frame's SectionHeader); the policy's own headline is the first
+          // 14/600 section heading with its id as 12px meta, its facts 12px
+          // labels over 14px values — the request record's shape.
           <Stack gap="md" data-testid="access-policy-record">
-            <DetailHeader title={open.title} badge={severityChip(open.severity)} description={open.id} />
-            <KeyValue layout="row" items={[
-              { label: 'Holding', value: pair(open.left) },
-              { label: 'Must not hold', value: pair(open.right) },
-              { label: 'Updated', value: `${relativeTime(open.updatedAt)}${open.updatedBy ? ` by ${open.updatedBy.displayName}` : ''}` },
-            ]} />
-            {mayEdit ? (
-              <>
-                <FormField label="Severity">
-                  {() => (
-                    <RadioGroup<SodSeverity> name="access-policy-severity" value={draft.severity} onChange={(v) => setDraft({ ...draft, severity: v })}
-                      orientation="horizontal"
-                      options={[
-                        { value: 'block', label: 'Blocking', description: 'Stops the request unless an access admin overrides it' },
-                        { value: 'warn', label: 'Warning', description: 'Shown to the requester and approvers; does not stop it' },
-                      ]} />
-                  )}
-                </FormField>
-                <FormField label="Why" hint="Shown to anyone whose request meets this conflict.">
-                  {(wiring) => <Textarea {...wiring} rows={3} value={draft.reason} onChange={(e) => setDraft({ ...draft, reason: e.target.value })} />}
-                </FormField>
-                <Inline gap="sm" justify="end">
-                  <Button size="sm" variant="ghost" disabled={!changed} onClick={() => setDraft({ severity: open.severity, reason: open.reason })}>Discard changes</Button>
-                  <Button size="sm" variant="primary" disabled={busy || !changed || !draft.reason.trim()} onClick={() => void save()} data-testid="access-policy-save">Save</Button>
-                </Inline>
-              </>
-            ) : (
-              <KeyValue layout="row" items={[{ label: 'Severity', value: severityChip(open.severity) }, { label: 'Why', value: open.reason }]} />
+            <DetailSection variant="heading" first title={open.title} hint={severityChip(open.severity)} description={open.id} data-testid="access-policy-summary">
+              <KeyValue layout="grid" items={[
+                { label: 'Holding', value: <T size="sm">{pair(open.left)}</T> },
+                { label: 'Must not hold', value: <T size="sm">{pair(open.right)}</T> },
+                { label: 'Updated', value: <T size="sm">{`${relativeTime(open.updatedAt)}${open.updatedBy ? ` by ${open.updatedBy.displayName}` : ''}`}</T> },
+                ...(mayEdit ? [] : [
+                  { label: 'Severity', value: <T size="sm">{open.severity === 'block' ? 'Blocking: stops the request unless an access admin overrides it' : 'Warning: shown to the requester and approvers; does not stop it'}</T> },
+                  // Prose: it wraps rather than clipping at the column edge.
+                  { label: 'Why', value: <T as="p" size="sm" wrap className="m-0 whitespace-normal break-words">{open.reason}</T> },
+                ]),
+              ]} />
+            </DetailSection>
+            {mayEdit && (
+              <DetailSection variant="heading" title="Change this policy"
+                description="The reason (Why) is shown to anyone whose request meets this conflict." data-testid="access-policy-editor">
+                <Stack gap="md">
+                  <FormField label="Severity">
+                    {() => (
+                      <RadioGroup<SodSeverity> name="access-policy-severity" value={draft.severity} onChange={(v) => setDraft({ ...draft, severity: v })}
+                        orientation="horizontal"
+                        options={[
+                          { value: 'block', label: 'Blocking', description: 'Stops the request unless an access admin overrides it' },
+                          { value: 'warn', label: 'Warning', description: 'Shown to the requester and approvers; does not stop it' },
+                        ]} />
+                    )}
+                  </FormField>
+                  <FormField label="Why">
+                    {(wiring) => <Textarea {...wiring} rows={3} value={draft.reason} onChange={(e) => setDraft({ ...draft, reason: e.target.value })} />}
+                  </FormField>
+                  <Inline gap="sm" justify="end">
+                    <Button size="sm" variant="ghost" disabled={!changed} onClick={() => setDraft({ severity: open.severity, reason: open.reason })}>Discard changes</Button>
+                    <Button size="sm" variant="primary" disabled={busy || !changed || !draft.reason.trim()} onClick={() => void save()} data-testid="access-policy-save">Save</Button>
+                  </Inline>
+                </Stack>
+              </DetailSection>
             )}
           </Stack>
         ) : isLoading || !data ? (

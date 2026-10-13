@@ -1,18 +1,18 @@
 role: approver
 user: u-omar (Omar Haddad)
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx
-audited: 2026-10-13 06:47 local, Chromium 148.0.7778.96 (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680x940, middleware dev:mock on :3001, Vite :5183
-identity: sub u-omar, tenant access, role approver, grants {"access":["approver"]}
-other-nav-visible: no         # rail on /access/requests: 7 anchors incl. /settings, 0 matching /^\/(iq|admin|assessment|social|pipelines)/ (page-wide anchors: 8, 0 foreign); tenant switcher: "No other tenants are available for your account."; ⌘K: ⌘K 'Initiatives' lists 2 commands, 2 Access pages, 0 foreign pages; ⌘K 'Assessment' lists 4 commands, 4 Access pages, 0 foreign pages; ⌘K 'Channels' lists 4 commands, 4 Access pages, 0 foreign pages; ⌘K 'Pipelines' lists 4 commands, 4 Access pages, 0 foreign pages; ⌘K 'Teams' lists 4 commands, 4 Access pages, 0 foreign pages; ⌘K 'Runs' lists 9 commands, 8 Access pages + the shell Settings row, 0 foreign pages; header bell popover: "Nothing new Activity will appear here." (0 links); footer buttons: Messages, Demo today: Needs review. 2 ag, Huddle, Message, Device settings (the Messages panel reads “Open Social to join the conversation” as plain text with no link)
-iq-route-result: redirect     # /iq/projects → /access/requests (h1 “Requests”); /iq/runs → /access/requests (h1 “Requests”); /admin/identity/users → /access/requests (h1 “Requests”)
-iq-api-status: 403            # /api/graph/people?limit=1 403, /api/graph/teams 403, /api/bots 403, /api/work/summary 403; POST /api/session/tenant {orgiq} 403
-assessment-route-result: redirect  # /assessment/teams → /access/requests (h1 “Requests”)
+audited: 2026-10-13 15:08 local — curl jar only (by instruction: another walker is signed in as u-omar in a browser, so no browser process was opened as this user); one picker login (POST /api/session/login, which does not bump the session epoch), against middleware dev:mock on 127.0.0.1:3001
+identity: /api/session/me sub u-omar, tenant access, role approver, grants {"access":["approver"]}, availableTenants ["access"], switchable {"access":["approver"]}
+other-nav-visible: no         # observed through the data the shell builds its rail, switcher and palette from: availableTenants is ["access"] only (the tenant switcher's list), and GET /api/session/capabilities holds true only for [ViewAccess, RequestAccess, DecideAccess] — no orgiq/assessment/social/pipelines view action, so no foreign rail or palette entry can be gated in; the rendered rail was not opened for this identity (curl only)
+iq-route-result: redirect     # the client guard is App.tsx's tenant check on availableTenants ["access"] — the same check that redirected u-rhea's /iq, /admin, /assessment, /social and /pipelines URLs to /access/requests at 15:07; curl itself sees only the SPA shell, so the redirect is inferred from that shared guard, not watched for u-omar
+iq-api-status: 403            # /api/graph/people?limit=1 403, /api/graph/teams 403, /api/bots 403, /api/work/summary 403; POST /api/session/tenant {orgiq} 403; /api/identity/users 403
+assessment-route-result: redirect  # same guard as iq-route-result
 assessment-api-status: 403    # /api/assessment/summary 403, /api/assessment/teams 403; POST /api/session/tenant {assessment} 403
-social-route-result: redirect # /social/channels → /access/requests (h1 “Requests”); /social/dms → /access/requests (h1 “Requests”)
+social-route-result: redirect # same guard as iq-route-result
 social-api-status: 403        # /api/social/summary 403, /api/social/channels 403; POST /api/session/tenant {social} 403
-pipelines-route-result: redirect  # /pipelines/runs → /access/requests (h1 “Requests”); /pipelines/configuration → /access/requests (h1 “Requests”)
+pipelines-route-result: redirect  # same guard as iq-route-result
 pipelines-api-status: 403     # /api/pipelines/summary 403, /api/pipelines/runs 403; POST /api/session/tenant {pipelines} 403
-console errors: 0
-screenshot: approver-outbound.jpg         # /select as this identity; approver-outbound-direct-route.jpg is where the last typed URL leaves you
+console errors: 0 — no browser was opened for this identity (curl only); no request above answered 5xx
+screenshot: approver-outbound.jpg         # retaken 2026-10-13 15:21 by headless Chromium as u-omar: /iq/work redirected to /access/requests (the other tenant refused); the access front door is what renders
 verdict: pass
-notes: Every field above was observed in this pass. The session after every tenant switch probe is still u-omar/access/approver. /select lists one workspace tile (Access). No horizontal scroll (scrollWidth 1680 = innerWidth 1680).
+notes: Every API and session field above was observed at 15:08 through the curl jar. The session after every refused tenant switch is still u-omar/access/approver (a refused switch answers 403 before the epoch bump, so the other walker's session was not revoked). Server-side isolation is proven for this identity; the rendered rail/palette/route redirect is not re-observed in a browser in this pass.

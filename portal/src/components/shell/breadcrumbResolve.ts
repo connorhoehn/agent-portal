@@ -255,7 +255,9 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
     if (page === 'requests' && b === 'new') return [...trail, { label, path: '/access/requests' }, { label: 'New request' }];
     if (page === 'requests' && b) return [...trail, { label, path: '/access/requests' }, { label: `Request ${b}`, id: b }];
     // Any other collection's record beside its list rail; the page registers its title.
-    if (b && page === 'policies') return [...trail, { label, path: `/access/${page}` }, { label: shortId(b), id: b }];
+    // The review record names its campaign the same way (ReviewRecordPage
+    // registers `<id> · <title>`); without this its trail stopped at "Reviews".
+    if (b && (page === 'policies' || page === 'reviews')) return [...trail, { label, path: `/access/${page}` }, { label: shortId(b), id: b }];
     return [...trail, { label }];
   }
 

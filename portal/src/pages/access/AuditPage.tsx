@@ -39,7 +39,7 @@ export default function AuditPage() {
       if (!data || error) throw new Error('Wait for the audit trail to load before opening an event.');
       const e = resolveAccessTarget(target, rows.map((row) => ({ ...row, title: eventTitle(row) })));
       navigate(eventHref(e));
-      return e.requestId ? `Opened ${e.requestId}, the request event ${e.id} belongs to. Nothing was changed.` : `Opened the policies; ${e.id} changed ${e.policyId ?? 'a policy'}. Nothing was changed.`;
+      return e.requestId ? `Opened ${e.requestId}, the request event ${e.id} belongs to. Nothing was changed.` : e.policyId ? `Opened ${e.policyId}, the policy ${e.id} changed. Nothing was changed.` : `Opened the policies; ${e.id} names no policy. Nothing was changed.`;
     },
   });
 

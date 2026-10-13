@@ -98,6 +98,12 @@ test('access policy: a review campaign record requires the composer; only its 40
   assert.match(missing && missing.mode === 'exempt' ? missing.reason : '', /404/);
 });
 
+test('access policy: a policy record requires the composer (its list rail docks one); only its not-found state is exempt', () => {
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path: '/access/policies/sod-001', kind: 'record', pattern: '/access/policies/:id' }, {}), { mode: 'required' });
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path: '/access/policies/sod-001', kind: 'record' }, { form: true, placeholder: true, settingsSurface: true }), { mode: 'required' });
+  assert.equal(tenantComposerPolicy({ tenant: 'access', path: '/access/policies/sod-999', kind: 'record' }, { missingRecord: true })?.mode, 'exempt');
+});
+
 test('access policy: the wizard, configuration and settings are exempt only on their own evidence', () => {
   const views = [
     ['/access/requests/new', { form: true }],

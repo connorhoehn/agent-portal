@@ -43,18 +43,30 @@ export interface CollectionRecordFrameProps {
    *  column's full width (outside the record's reading gutter), so its
    *  composer reaches the column's edges like every other composer. */
   conversation?: ReactNode;
+  /**
+   * The list rail's type step. `rail` (default): the library rail profile
+   * (GroupedList `md`: 13/500 rows, 11px caps group labels, marked
+   * `data-ui-text="rail-item"`/`"rail-caption"`) — off the app scale until the
+   * library's rail `size="sm"` ships (docs/ui-components-queue.md, "Rail and
+   * tile type off the app scale"), so those routes carry type-scale burn-down
+   * rows. `app`: the library's own app-scale step (GroupedList `sm`: 14/500
+   * rows, 12px sublines, 14/600 group headings with a 12px count chip), for a
+   * record route that joins the sweep with no burn-down rows
+   * (`/access/policies/:id`). Moves to the default when the rail release lands.
+   */
+  railType?: 'rail' | 'app';
   'data-testid'?: string;
 }
 
 export function CollectionRecordFrame({
   title, description, listTitle, listLabel, count, search, groups, rows, currentId, onOpen,
-  loading = false, error = null, onRetry, footer, children, conversation, 'data-testid': testId,
+  loading = false, error = null, onRetry, footer, children, conversation, railType = 'rail', 'data-testid': testId,
 }: CollectionRecordFrameProps) {
   const trail = useShellBreadcrumbItems();
   const body = error ? <ErrorState title={`Couldn't load ${listLabel}`} description={error} {...(onRetry ? { actionLabel: 'Retry', onAction: onRetry } : {})} />
     : loading && rows.length === 0 ? <LoadingState label={`Loading ${listLabel}…`} />
     : rows.length === 0 ? <EmptyState title="Nothing matches" description={search?.value ? `Nothing matches “${search.value.trim()}”.` : `No ${listLabel} yet.`} />
-    : <GroupedList size="md" currentStyle="bar" groupHeading="label" groupCountAlign="end" hideEmptyGroups
+    : <GroupedList size={railType === 'app' ? 'sm' : 'md'} currentStyle="bar" groupHeading={railType === 'app' ? 'title' : 'label'} groupCountAlign="end" hideEmptyGroups
         groups={groups} rows={rows} currentId={currentId} onOpenRow={(row) => onOpen(row.id)} />;
   return (
     <ViewportFillRegion bottomGap={0} {...(testId ? { 'data-testid': testId } : {})}>

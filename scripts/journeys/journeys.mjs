@@ -39,6 +39,15 @@ const inv = await import(path.join(ROOT, 'portal/e2e/route-inventory.ts'));
 const SEALS = '.contract-sha';
 const SWEEPS = ['cascade', 'type-scale', 'rail'];
 
+/** Fields an isolation log must carry instead of the surface fields (the access protocol's isolation format). */
+const ISOLATION_FIELDS = {
+  'docs/access-journeys': {
+    // inbound: another tenant's role meets the access tenant
+    inbound: ['^role: *\\S', '^user: *\\S', '^audited: *\\S', '^verdict: *pass', '^console errors: *\\S', '^direct-route-result: *\\S', '^api-status: *\\S', '^write-status: *\\S', '^nothing-written: *\\S'],
+    // outbound: an access role meets each other tenant
+    outbound: ['^role: *\\S', '^user: *\\S', '^audited: *\\S', '^verdict: *pass', '^console errors: *\\S', '^other-nav-visible: *\\S', '^iq-api-status: *\\S', '^assessment-api-status: *\\S', '^social-api-status: *\\S', '^pipelines-api-status: *\\S'],
+  },
+};
 /** The fields a log must carry to be sealed, per family (each family's validator checks the same and more). */
 const FAMILIES = {
   'docs/orgiq-journeys': ['^verdict: *pass', '^console errors: *0', '^layout: *pass', '^keyboard: *pass', '^empty-state: *(pass|n/a)', '^role-gating: *\\S'],
@@ -229,7 +238,10 @@ function seal(dir) {
     // A walk that honestly FAILED is left unsealed (the validator keeps it red) without
     // blocking the directory's passing walks — a seal records walks, not verdicts.
     if (/^verdict: *fail/mi.test(text)) { skippedFail.push(f); continue; }
-    for (const re of FAMILIES[fam]) if (!new RegExp(re, 'mi').test(text)) refusals.push(`${f}: lacks ${re.replace(/^\^/, '')}`);
+    // Isolation logs prove a refusal, not a surface: they carry their own field set.
+    const iso = /\/isolation\//.test(f) && ISOLATION_FIELDS[fam];
+    const required = iso ? (/-outbound\.md$/.test(f) ? iso.outbound : iso.inbound) : FAMILIES[fam];
+    for (const re of required) if (!new RegExp(re, 'mi').test(text)) refusals.push(`${f}: lacks ${re.replace(/^\^/, '')}`);
     if (/\b(TODO|unverified|placeholder)\b/i.test(text)) refusals.push(`${f}: still says TODO/unverified/placeholder`);
     const shot = (field(text, 'screenshot') || field(text, 'screenshots')).split(/\s+/)[0].replace(/[,;]$/, '');
     const shotPath = shot ? path.join(ROOT, path.dirname(f), shot) : null;
