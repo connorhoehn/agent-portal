@@ -74,8 +74,9 @@ export function CollectionRecordFrame({
         <ListRailLayout
           header={<SectionHeader breadcrumbs={trail} title={title} {...(description ? { description } : {})} />}
           list={{
-            title: listTitle,
-            ...(count !== undefined ? { count } : {}),
+            // The app rail's 14/600 group headings already carry their counts; a 12px
+            // caption above them would be a second heading size in one rail.
+            ...(railType === 'app' ? {} : { title: listTitle, ...(count !== undefined ? { count } : {}) }),
             label: listLabel,
             ...(search ? { header: <SearchInput value={search.value} onChange={search.onChange} placeholder={search.placeholder} aria-label={search.placeholder} className="min-w-0 w-full" /> } : {}),
             body,

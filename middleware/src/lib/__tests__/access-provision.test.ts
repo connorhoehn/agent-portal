@@ -186,3 +186,11 @@ it('withRole adds and removes one role and drops an emptied tenant', () => {
   expect(withRole({ access: ['requester'], orgiq: ['sme'] }, 'orgiq', 'sme', false)).toEqual({ access: ['requester'] });
   expect(withRole({ orgiq: ['sme', 'member'] }, 'orgiq', 'sme', false)).toEqual({ orgiq: ['member'] });
 });
+
+describe('the provisioned audit reason reads as a date', () => {
+  it('formats an ISO expiry as a calendar date in UTC', async () => {
+    const { expiryLabel } = await import('../access-provision.js');
+    expect(expiryLabel('2026-11-12T19:58:07.706Z')).toBe('Nov 12, 2026');
+    expect(expiryLabel('not-a-date')).toBe('not-a-date');
+  });
+});

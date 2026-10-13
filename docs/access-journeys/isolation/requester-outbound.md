@@ -1,7 +1,7 @@
 role: requester
 user: u-rhea (Rhea Castellanos)
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx
-audited: 2026-10-13 15:06–15:07 local, Chromium (Playwright headless from portal/node_modules, a fresh context for this identity, not the shared Chrome tab), 1680x940, middleware dev:mock on :3001, Vite :5183, ui-components 2.442.2
+audited: 2026-10-13 16:03–16:04 local, Chromium (Playwright headless from portal/node_modules, a fresh context for this identity, not the shared Chrome tab), 1680x940, middleware dev:mock on :3001, Vite :5183, ui-components 2.442.3
 identity: sub u-rhea, tenant access, role requester, grants {"access":["requester"]}
 other-nav-visible: no         # rail on /access/requests: 6 anchors incl. /settings, 0 matching /^\/(iq|admin|assessment|social|pipelines)/ (page-wide anchors: 7, 0 foreign); tenant switcher: "No other tenants are available for your account."; ⌘K 'Initiatives' 3 rows, 'Assessment' 5, 'Channels' 4, 'Pipelines' 5, 'Teams' 5, 'Runs' 9 — every row an Access page or the shell Settings row (e.g. Runs: Requests, New request, Open requests, Catalog, Audit, Policies, Open reviews, Access settings, Settings), 0 foreign pages; header bell popover: "Nothing new Activity will appear here." (0 links)
 iq-route-result: redirect     # /iq/projects, /iq/runs, /admin/identity/users → /access/requests (h1 “Requests”)

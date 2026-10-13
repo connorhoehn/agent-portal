@@ -1,12 +1,7 @@
-# requester walk defects, 2026-10-13 re-walk (14:56–15:03; not fixed, walk only)
+# requester walk defects — re-walk 2026-10-13 15:54–15:59 (u-rhea, ui-components 2.442.3; not fixed, walk only)
 
-Fails a surface:
-- request (`RequestRecordPage.tsx`, the summary's description list): the "Why" value is `white-space: nowrap; text-overflow: clip` inside an `overflow: hidden` `<dd>` (scrollWidth 652 > clientWidth 560 at 1680px with the Discussion pane open). The justification — the first thing an approver reads — is cut mid-word ("…against the sp") with no ellipsis, wrap or tooltip. Seen on req-0001 and req-0008.
+Failing a log:
+- request.md — on a provisioned request (req-0002 after this walk's approvals) the Audit row "Provisioned" shows its reason as a raw machine timestamp, "Expires 2026-11-12T19:58:07.706Z". The server writes it that way (`middleware/src/lib/access-provision.ts:205`, `Expires ${expiresAt}`) and the record prints the reason verbatim, so it disagrees with the summary's "Expires Nov 12, 2026" two rows above.
+- policies.md — the policy record page's list rail has sibling headings at two sizes: its h2 "Policies 4" at 12/600 next to the group headings "Blocking" / "Warning" at h3 14/600. The type-scale sweep records it as `siblings rail 12|14` on /access/policies/:id and there is no burn-down row for it.
 
-Minor, still open, not verdict-changing:
-- policies record page (`/access/policies/:id`): the h1 stays "Policies" and the policy's own name sits one line lower as the DetailHeader at 18/400, so the page shows two titles; the description list below is 13/400 and the list rail 13/500 · 11/600 · 11/500 — the library's DetailHeader/list-rail sizes, between the 12 and 14 steps (existing burn-down classes). The record route is not in the sweep inventory, so no sweep measures it.
-- request record: the audit count pill reads "1 events".
-- composer filter notices name the internal value, not the label: catalog "Filter: orgiq." for the Work workspace, policies "Filter: block." for Blocking.
-- new-request and the review campaign record: the title row starts at left 264 because a back link takes 224–264.
-
-Fixed since the 07:04 walk: the wizard's radio labels are on the scale (14/500 options, 12/400 hint; were 13/500); the request record's section headings are 14/600; policies open as a record page instead of a drawer; catalog rows open the wizard.
+Fixed and verified this walk: the request's "Why" wraps (two lines, nothing clipped); an active grant's Expires reads an absolute date; the policy record page is 20/600 title, 14/600 record heading, 14/400 values, 12/400 labels (no 18/400 or 13px text).

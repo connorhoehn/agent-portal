@@ -59,6 +59,12 @@ import { notifyAccessRequest } from './social-notify.js';
 import type { AccessDuration, SodConflict } from './access/types.js';
 import type { Grants } from './session.js';
 
+/** An audit reason is read by people: a calendar date (UTC, the store's zone), never an ISO stamp. */
+export function expiryLabel(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
 const HOUR = 3_600_000;
 /** How long each duration lasts once provisioned; `standing` has no end. */
 export const DURATION_MS: Readonly<Record<AccessDuration, number | null>> = {
@@ -202,7 +208,7 @@ export async function provisionAccess(request: Pick<AccessRequestRow, 'id'>): Pr
     }
     const done = casRequest(claimed.id, { from: ['provisioned'] },
       { status: 'active', provisionedAt: claimed.provisionedAt ?? now, expiresAt: claimed.expiresAt ?? expiresAt },
-      [{ kind: 'provisioned', before: 'approved', after: 'active', reason: claimed.expiresAt ? `Expires ${claimed.expiresAt}` : 'Standing' }], null, now);
+      [{ kind: 'provisioned', before: 'approved', after: 'active', reason: claimed.expiresAt ? `Expires ${expiryLabel(claimed.expiresAt)}` : 'Standing' }], null, now);
     if (!done) return { request: findRequest(claimed.id) ?? claimed, changed: false };
     await notifyAccessRequest({
       kind: 'provisioned', requestId: done.id, itemTitle: item.title, requesterId: done.requesterId, beneficiaryId: done.beneficiaryId,
