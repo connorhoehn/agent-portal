@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "14ae593109b2a76862ddc01ab1216f2249e8c2059da75dc79a568413eadbf3da",
-  "at": "2026-10-13T12:08:14.363Z"
+  "sourceDigest": "e69ca5ec5cee50dd9a39976e312f74dfeca25e318b8a1a436926bafac1805979",
+  "at": "2026-10-13T18:50:17.010Z"
  },
  "routes": {
   "/access": {
@@ -63,22 +63,16 @@
   "/access/requests/:id": {
    "value": {
     "title": "20/600",
-    "offenders": [
-     "scale content 10/600",
-     "scale content 11/400"
-    ]
+    "offenders": []
    },
-   "changedAt": "2026-10-13T12:08:14.363Z"
+   "changedAt": "2026-10-13T18:50:17.010Z"
   },
   "/access/requests/new": {
    "value": {
     "title": "20/600",
-    "offenders": [
-     "scale content 11/400",
-     "scale content 13/500"
-    ]
+    "offenders": []
    },
-   "changedAt": "2026-10-13T12:08:14.363Z"
+   "changedAt": "2026-10-13T18:34:42.722Z"
   },
   "/access/reviews": {
    "value": {
@@ -660,6 +654,21 @@
    },
    "changedAt": "2026-10-13T12:08:14.363Z"
   },
+  "/assessment/submissions/:submissionId": {
+   "value": {
+    "title": "20/600",
+    "offenders": [
+     "scale content 13/400",
+     "scale content 18/400",
+     "scale rail 11/500",
+     "scale rail 11/600",
+     "scale rail 13/500",
+     "siblings content 18|14|14",
+     "siblings rail 12|16"
+    ]
+   },
+   "changedAt": "2026-10-13T18:14:39.303Z"
+  },
   "/assessment/teams": {
    "value": {
     "title": "20/600",
@@ -720,7 +729,7 @@
      "scale rail 13/500"
     ]
    },
-   "changedAt": "2026-10-13T07:08:26.576Z"
+   "changedAt": "2026-10-13T18:34:42.722Z"
   },
   "/iq/activity": {
    "value": {
@@ -1294,7 +1303,7 @@
      "scale rail 13/500"
     ]
    },
-   "changedAt": "2026-10-08T12:12:22.405Z"
+   "changedAt": "2026-10-13T18:34:42.722Z"
   },
   "/iq/work/:jobId": {
    "value": {
@@ -1516,11 +1525,10 @@
     "offenders": [
      "scale content 11/500",
      "scale content 11/700",
-     "scale content 13/400",
-     "scale content 13/500"
+     "scale content 13/400"
     ]
    },
-   "changedAt": "2026-10-13T07:08:26.576Z"
+   "changedAt": "2026-10-13T18:34:42.722Z"
   },
   "/social": {
    "value": {
