@@ -156,6 +156,21 @@ Use `tilt trigger portal` after changing the consumed UI bundle and verify actua
 browser styles/exports. A package version alone does not prove Vite serves the
 new dist. Keep sibling builds/pack/install under one owner; do not edit node_modules.
 
+## Continuation log
+
+- **2026-10-12 (Claude Code).** The full Pipeline matrix was rerun after the
+  Configuration readiness fix: 188 cases, 0 findings, 0 unclassified policies,
+  strict coverage, exit 0, measured on commit `e52d888d` with a clean tree
+  (`.scratch/ui-dom-audit-pipelines-full-20261012/`, local only). Item 4 below
+  is therefore closed; the original 187/188 report is preserved. `CLAUDE.md`
+  in this repo and in ui-components, platform-api and live-video-streaming was
+  trimmed to current guidance; the dated checkpoint prose moved to
+  `docs/history/claude-md-checkpoints-2026-10.md`. Pre-existing reds not
+  touched by this pass: the pipelines/social/communication validators fail on
+  re-staled journey logs (rendered contracts last measured 2026-10-08),
+  `validate-component-discipline.sh` (52 raw styled elements, 3 raw buttons
+  in `portal/src`) and `validate-route-coverage.sh` (1 untested route).
+
 ## Suggested continuation
 
 1. Continue from the user's next screenshot or requested tenant. Reproduce an
