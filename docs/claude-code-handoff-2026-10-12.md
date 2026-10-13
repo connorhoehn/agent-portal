@@ -208,6 +208,20 @@ new dist. Keep sibling builds/pack/install under one owner; do not edit node_mod
   lints red on its clean HEAD. New goal: the `access` tenant
   (`docs/access-tenant-design.md`, `docs/access-tenant-goal.md`,
   `scripts/validate-access-tenant.sh`, 98 red checks = backlog).
+- **2026-10-13 acceptance (Claude Code).** On ui-components **2.441.4** the
+  acceptance matrix is green in every section: orgiq `/iq` 536 cases, orgiq
+  `/admin` 500, assessment 168, social 124, pipelines 188 — 1,516 cases,
+  **0 findings, 0 unclassified**, strict coverage, light + dark, 1440 + 900,
+  discovered states (`.scratch/ui-dom-audit-final3-*-20261013/`, local only;
+  run per section because one Playwright test caps at 30 min). The library
+  chain 2.441.0 → 2.441.4 is committed and pushed in ui-components; the audit
+  skill's contract gained two fixture-proven exclusions (marked drop target,
+  xterm helper inside a marked terminal) and its self-test passes (38
+  mutations). Portal: typecheck, 1,834 unit tests, component-discipline,
+  route-coverage, nav-parity, honest-numbers and mock-floor all green. Still
+  owed: the journey re-walks (contracts re-measured 2026-10-13; the logs
+  themselves are stale), the two pre-existing deck-reader cases, the `access`
+  tenant build, and the ui-components unit/lint reds that predate this work.
 
 ## Suggested continuation
 
