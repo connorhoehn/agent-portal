@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "d3a9e527bbed8b96411cabe50902b65515b59362a3af013331f046f655c39d62",
-  "at": "2026-10-13T11:24:41.921Z"
+  "sourceDigest": "14ae593109b2a76862ddc01ab1216f2249e8c2059da75dc79a568413eadbf3da",
+  "at": "2026-10-13T12:30:36.760Z"
  },
  "routes": {
   "/assessment/workspace": {
@@ -34,12 +34,10 @@
   },
   "/iq/designs/:id": {
    "value": {
-    "verdict": "DIFFERS",
-    "problems": [
-     "no <main>"
-    ]
+    "verdict": "MATCH",
+    "problems": []
    },
-   "changedAt": "2026-10-13T11:24:41.921Z"
+   "changedAt": "2026-10-13T12:30:36.760Z"
   },
   "/iq/distillation/activity?view=runs": {
    "value": {
@@ -57,30 +55,24 @@
   },
   "/iq/distillation/knowledge?view=guides": {
    "value": {
-    "verdict": "DIFFERS",
-    "problems": [
-     "no list rail (nav[aria-label=\"Explorer\"]) on the page"
-    ]
+    "verdict": "MATCH",
+    "problems": []
    },
-   "changedAt": "2026-10-13T11:24:41.921Z"
+   "changedAt": "2026-10-13T12:30:36.760Z"
   },
   "/iq/distillation/knowledge?view=notes": {
    "value": {
-    "verdict": "DIFFERS",
-    "problems": [
-     "no list rail (nav[aria-label=\"Explorer\"]) on the page"
-    ]
+    "verdict": "MATCH",
+    "problems": []
    },
-   "changedAt": "2026-10-13T11:24:41.921Z"
+   "changedAt": "2026-10-13T12:30:36.760Z"
   },
   "/iq/distillation/knowledge?view=patterns": {
    "value": {
-    "verdict": "DIFFERS",
-    "problems": [
-     "no <main>"
-    ]
+    "verdict": "MATCH",
+    "problems": []
    },
-   "changedAt": "2026-10-13T11:24:41.921Z"
+   "changedAt": "2026-10-13T12:30:36.760Z"
   },
   "/iq/distillation/review?sample=rev-027&panel=sources&sourceView=graph": {
    "value": {

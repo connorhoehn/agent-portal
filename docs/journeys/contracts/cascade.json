@@ -1,9 +1,107 @@
 {
  "measured": {
-  "sourceDigest": "8f143fca6f9ec4b7eb04ab2a00f6b3e5aa4c198e87441a9f41be51444bc501c1",
-  "at": "2026-10-13T08:34:49.597Z"
+  "sourceDigest": "14ae593109b2a76862ddc01ab1216f2249e8c2059da75dc79a568413eadbf3da",
+  "at": "2026-10-13T12:38:16.878Z"
  },
  "routes": {
+  "/access": {
+   "value": {
+    "violations": [],
+    "lands": "/access/requests"
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/approvals": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/audit": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/catalog": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/configuration": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/policies": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/requests": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/requests?status=open": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/requests/:id": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/requests/new": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/reviews": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/reviews?status=open": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/reviews/:id": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
+  "/access/settings": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-13T12:38:16.878Z"
+  },
   "/admin/bots": {
    "value": {
     "violations": [],

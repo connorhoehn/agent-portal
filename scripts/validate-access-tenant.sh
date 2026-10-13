@@ -119,7 +119,11 @@ if [ -d docs/access-journeys ]; then
   done
   n=$(ls docs/access-journeys/isolation/*.md 2>/dev/null | wc -l | tr -d ' ')
   [ "$n" -ge 7 ] && ok "isolation: $n logs" || fail "isolation: $n of 7 logs (4 inbound + 3 outbound)"
-  if type jr_check_dir >/dev/null 2>&1; then jr_check_dir docs/access-journeys || fail "journey logs stale or unsealed"; fi
+  # The shared freshness rule (docs/journeys.md): a log is stale when a walked route's
+  # rendered contract changed since its seal, or it was never sealed.
+  JR_TOTAL=0
+  jr_freshness docs/access-journeys $(find docs/access-journeys -name '*.md' ! -name 'PROTOCOL.md' ! -name 'DEFECTS.md' 2>/dev/null | sort)
+  if [ "${JR_TOTAL:-0}" = 0 ]; then fail "no access journey logs to judge for freshness"; else jr_report; fi
 else fail "docs/access-journeys/ missing"; fi
 
 if judged A1; then
