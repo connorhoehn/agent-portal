@@ -137,3 +137,6 @@ describe('getProject agentSpendUsd/repoFullName — mock mode parity', () => {
     }
   });
 });
+
+// Module marker: keeps the file-level `send` mock out of the global script scope.
+export {};

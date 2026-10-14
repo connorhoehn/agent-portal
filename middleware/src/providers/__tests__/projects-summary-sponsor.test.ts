@@ -186,3 +186,6 @@ describe('getProject summary/sponsor — mock mode parity', () => {
     expect(await getProject('p-nope')).toBeNull();
   });
 });
+
+// Module marker: keeps the file-level `send` mock out of the global script scope.
+export {};

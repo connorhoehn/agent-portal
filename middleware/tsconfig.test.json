@@ -4,7 +4,12 @@
     "module": "CommonJS",
     "moduleResolution": "node",
     "outDir": "dist-test",
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "paths": {
+      "distributed-core/replication": ["./node_modules/distributed-core/dist/replication.d.ts"],
+      "distributed-core/persistence": ["./node_modules/distributed-core/dist/persistence/index.d.ts"],
+      "distributed-core/crdt-primitives": ["./node_modules/distributed-core/dist/crdt-primitives.d.ts"]
+    }
   },
   "include": ["src/**/*"]
 }
