@@ -143,7 +143,7 @@ export default function RequestNewPage() {
       description: 'Access is granted to the person named here. Nobody approves a request they made or benefit from.',
       content: (
         <FormField label="Person" required>
-          {(w) => <PersonPicker {...w} size="md" value={beneficiaryId} onChange={(v) => set({ beneficiaryId: v })} placeholder="Search people"
+          {(w) => <PersonPicker {...w} size="sm" value={beneficiaryId} onChange={(v) => set({ beneficiaryId: v })} placeholder="Search people"
             emptyMessage="Nobody you may request for matches"
             people={beneficiaries.map((p) => ({ id: p.id, name: p.displayName, ...(p.id === selfId ? { tag: 'You' } : {}) }))}
             data-testid="access-new-who" />}
@@ -155,7 +155,7 @@ export default function RequestNewPage() {
       description: 'One catalog item per request. The approval chain depends on it.',
       content: (
         <FormField label="Catalog item" hint="Search by name, workspace or what it opens." required>
-          {(w) => <Combobox {...w} size="md" value={draft.itemId} onChange={(v) => set({ itemId: v, duration: '' })} placeholder="Search the catalog"
+          {(w) => <Combobox {...w} size="sm" value={draft.itemId} onChange={(v) => set({ itemId: v, duration: '' })} placeholder="Search the catalog"
             maxOptions={50} emptyMessage="No catalog item matches"
             options={items.map((i) => ({
               value: i.id, label: i.title, meta: TENANT_LABELS[i.tenant] ?? i.tenant,

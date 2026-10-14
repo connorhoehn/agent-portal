@@ -121,7 +121,7 @@ function DelegationSettings() {
           ) : (
             <Stack gap="sm" className="max-w-xl" data-testid="access-delegation-form">
               <FormField label="Decides for you" hint="Approvers and access admins in Access." required>
-                {(w) => <PersonPicker {...w} size="md" people={(delegates.data?.items ?? []).map((p) => ({ id: p.id, name: p.displayName }))}
+                {(w) => <PersonPicker {...w} size="sm" people={(delegates.data?.items ?? []).map((p) => ({ id: p.id, name: p.displayName }))}
                   loading={!delegates.data && !delegates.error} value={draft.delegateId} onChange={(v) => set({ delegateId: v })}
                   emptyMessage="No other approver matches" data-testid="access-delegation-delegate" />}
               </FormField>

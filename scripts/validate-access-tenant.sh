@@ -190,25 +190,25 @@ if judged E; then
   F=middleware/src/lib/access/sql.ts
   exists $F "lib/access/sql.ts (the cluster statements)"
   for k in INSERT_REQUEST_SQL DECIDE_STEP_SQL PROVISION_CLAIM_SQL GRANT_ROLE_SQL END_GRANT_SQL WARN_EXPIRY_SQL ESCALATE_STEP_SQL END_DELEGATION_SQL; do need "export const $k" $F "statement $k"; done
-  T=middleware/src/lib/access/__tests__/access-postgres.test.ts
-  exists $T "native PostgreSQL contract suite"
-  for c in "twelve concurrent approvers" "nobody decides a request they submitted" "provisioning is idempotent" "expiry sweep is single-flight" "escalates once per level" "delete-and-reinsert does"; do needF "$c" $T "PG contract: $c"; done
+  PGT=middleware/src/lib/access/__tests__/access-postgres.test.ts
+  exists $PGT "native PostgreSQL contract suite"
+  for c in "twelve concurrent approvers" "nobody decides a request they submitted" "provisioning is idempotent" "expiry sweep is single-flight" "escalates once per level" "delete-and-reinsert does"; do needF "$c" $PGT "PG contract: $c"; done
   REC=$(ls -t docs/realtime-validation/*/access-postgres.md 2>/dev/null | head -1)
   if [ -n "$REC" ] && grep -qE "Tests: +[0-9]+ passed, [0-9]+ total" "$REC" && ! grep -qE "Tests: +[0-9]+ failed" "$REC"; then ok "PG contract record: $REC"; else fail "docs/realtime-validation/<date>/access-postgres.md missing or not all passing"; fi
-  if [ -n "$REC" ] && [ "$F" -nt "$REC" -o schema/access_schema.sql -nt "$REC" -o "$T" -nt "$REC" ] && [ "${ACCESS_PG_IGNORE_MTIME:-0}" != 1 ]; then
-    if git diff --quiet HEAD -- "$F" schema/access_schema.sql "$T" 2>/dev/null && git log -1 --format=%ct -- "$REC" >/dev/null 2>&1 && [ "$(git log -1 --format=%ct -- "$REC")" -ge "$(git log -1 --format=%ct -- "$F" schema/access_schema.sql "$T")" ]; then ok "PG contract record is as new as the statements it proves (git)"; else fail "PG contract record is older than lib/access/sql.ts, access_schema.sql or the suite — re-run it"; fi
+  if [ -n "$REC" ] && [ "$F" -nt "$REC" -o schema/access_schema.sql -nt "$REC" -o "$PGT" -nt "$REC" ] && [ "${ACCESS_PG_IGNORE_MTIME:-0}" != 1 ]; then
+    if git diff --quiet HEAD -- "$F" schema/access_schema.sql "$PGT" 2>/dev/null && git log -1 --format=%ct -- "$REC" >/dev/null 2>&1 && [ "$(git log -1 --format=%ct -- "$REC")" -ge "$(git log -1 --format=%ct -- "$F" schema/access_schema.sql "$PGT")" ]; then ok "PG contract record is as new as the statements it proves (git)"; else fail "PG contract record is older than lib/access/sql.ts, access_schema.sql or the suite — re-run it"; fi
   else ok "PG contract record is as new as the statements it proves"; fi
   # Run it live when the dedicated container is up (never another container; never Aurora).
   PGC=orgiq-access-postgres-acceptance
   DOCKER=${ORGIQ_DOCKER:-colima ssh -- sudo docker}
   if [ "$QUICK" -eq 0 ] && $DOCKER inspect --format '{{index .Config.Labels "orgiq.validation"}}' $PGC 2>/dev/null | grep -qx access-postgres; then
-    if (cd middleware && REAL_ACCESS_POSTGRES=1 ORGIQ_ACCESS_POSTGRES_CONTAINER=$PGC ORGIQ_DOCKER="$DOCKER" npx jest src/lib/access/__tests__/access-postgres.test.ts >/tmp/access-judge-pg.log 2>&1); then ok "native PostgreSQL contracts ($(grep -oE 'Tests: +[0-9]+ passed' /tmp/access-judge-pg.log))"; else fail "native PostgreSQL contracts red"; grep -E '✕' /tmp/access-judge-pg.log | head -5 | while IFS= read -r l; do note "$l"; done; fi
+    if (cd middleware && REAL_ACCESS_POSTGRES=1 ORGIQ_ACCESS_POSTGRES_CONTAINER=$PGC ORGIQ_DOCKER="$DOCKER" npx jest src/lib/access/__tests__/access-postgres.test.ts >/tmp/access-judge-pg.log 2>&1); then ok "native PostgreSQL contracts ($(grep -oE 'Tests:.*total' /tmp/access-judge-pg.log))"; else fail "native PostgreSQL contracts red"; grep -E '✕' /tmp/access-judge-pg.log | head -5 | while IFS= read -r l; do note "$l"; done; fi
   else note "dedicated container $PGC not running: judged on the record above"; fi
 fi
 
 if [ "$QUICK" -eq 0 ]; then
   section "contracts (access suites)"
-  if (cd middleware && npx jest src/routes/__tests__/access src/lib/access src/lib/__tests__/access- src/routes/__tests__/agent-loop-access >/tmp/access-judge-jest.log 2>&1); then ok "middleware access jest ($(grep -oE 'Tests: +[0-9]+ passed' /tmp/access-judge-jest.log | tail -1))"; else fail "middleware access jest red"; grep -E '^(FAIL|  ●)' /tmp/access-judge-jest.log | head -5 | while IFS= read -r l; do note "$l"; done; fi
+  if (cd middleware && npx jest src/routes/__tests__/access src/lib/access src/lib/__tests__/access- src/routes/__tests__/agent-loop-access >/tmp/access-judge-jest.log 2>&1); then ok "middleware access jest ($(grep -oE 'Tests:.*total' /tmp/access-judge-jest.log | tail -1))"; else fail "middleware access jest red"; grep -E '^(FAIL|  ●)' /tmp/access-judge-jest.log | head -5 | while IFS= read -r l; do note "$l"; done; fi
   if (cd portal && node --test src/pages/access/__tests__/*.test.ts e2e/ui-dom-audit.policies.test.ts >/tmp/access-judge-portal.log 2>&1); then ok "portal access node tests ($(grep -E '^ℹ pass' /tmp/access-judge-portal.log))"; else fail "portal access node tests red"; grep -E '^not ok|✖' /tmp/access-judge-portal.log | head -5 | while IFS= read -r l; do note "$l"; done; fi
   section "neighbour judges"
   for j in route-coverage nav-parity component-discipline honest-numbers; do
