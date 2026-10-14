@@ -517,7 +517,7 @@ export function DimensionMasterDetail({ dimensions, selectedId, onSelect, teamId
   return (
     <ExplorerLayout
       className="assessment-dimension-layout min-h-0 flex-1"
-      railWidth="md"
+      railWidth="ms"
       railTitle="Dimensions"
       railHeading="compact"
       railCount={filtered.length}
