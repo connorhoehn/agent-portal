@@ -17,7 +17,11 @@ jest.mock('aws-jwt-verify', () => ({
 }));
 jest.mock('../../providers/identity.js', () => ({
   listUsers: jest.fn(async () => []),
-  getUser: jest.fn(async () => null),
+  // /me re-reads the directory for a real user (364aa4f0), so u-nora must
+  // exist there with the grants her cookie carries. The demo persona never asks.
+  getUser: jest.fn(async (id: string) => id === 'u-nora'
+    ? { id, displayName: 'Nora', email: null, personId: null, grants: { orgiq: ['sme'] }, epoch: 0 }
+    : null),
   bumpSessionEpoch: jest.fn(async () => 1),
 }));
 

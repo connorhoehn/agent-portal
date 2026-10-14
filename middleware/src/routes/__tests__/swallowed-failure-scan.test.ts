@@ -68,10 +68,15 @@ const ROUTES_DIR = join(middlewareRoot(), 'src/routes');
  * A property name that states the response is not a normal answer.
  *
  * `degraded` is the precedent (cost.ts). `problem` and `error` are the two
- * other spellings already in the tree for the same idea. `note` is NOT here:
+ * other spellings already in the tree for the same idea. `partial` is the
+ * search contract's own spelling (providers/search.ts `SearchResponse.partial`:
+ * the sources that could not be read, which also sets `totalIsLowerBound`);
+ * GET /api/assessment/recordings/search answers a caught failure with
+ * `{ records: [], partial: ['Recordings unavailable'] }`, which is marked.
+ * `note` is NOT here:
  * it carries facts as often as failures, which is the ambiguity being removed.
  */
-const MARKERS = new Set(['degraded', 'problem', 'error']);
+const MARKERS = new Set(['degraded', 'problem', 'error', 'partial']);
 
 interface Swallow {
   /** `routes/<file>.ts:<line>` — the `res.json` inside the catch. */

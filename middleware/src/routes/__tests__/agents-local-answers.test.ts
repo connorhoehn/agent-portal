@@ -70,8 +70,15 @@ describe('routing order', () => {
     expect(openAgentRun).not.toHaveBeenCalled(); // no agent ran, so no agent run is recorded
     expect(mockStream.stepStarted).toHaveBeenCalledWith('local data: budget');
     expect(toolNames()).toEqual(['local_answer', 'search_context']);
-    const llm = (await listProjects({ limit: 200 })).find(p => p.id === 'p-llm-platform')!;
-    expect(text()).toContain(`$${llm.agentSpendUsd!.toFixed(2)} of $${llm.allocatedUsd!.toFixed(2)}`);
+    // The answer names the initiative with the highest spend/allocation share
+    // (nobody is over today), so derive it from the same rows rather than
+    // pinning an id: the seed's allocations move (LLM Application Platform is
+    // 4.28 of 85, 5%; RAG Knowledge Search is 0.36 of 5, 7%, and is the closest).
+    const rows = (await listProjects({ limit: 200 })).filter(p => p.allocatedUsd != null && p.allocatedUsd > 0);
+    expect(rows.some(p => (p.agentSpendUsd ?? 0) > p.allocatedUsd!)).toBe(false);
+    const closest = rows.sort((a, b) => (b.agentSpendUsd ?? 0) / b.allocatedUsd! - (a.agentSpendUsd ?? 0) / a.allocatedUsd!)[0]!;
+    expect(text()).toContain('No initiative is over its');
+    expect(text()).toContain(`$${closest.agentSpendUsd!.toFixed(2)} of $${closest.allocatedUsd!.toFixed(2)}`);
     const evidence = JSON.parse(mockStream.toolCallResult.mock.calls[1]![2]);
     expect(evidence.records[0]).toMatchObject({ type: 'initiative', n: 1, href: expect.stringMatching(/^\/iq\/projects\//) });
     expect(recordTurn).toHaveBeenCalledWith(expect.objectContaining({ userMessage: 'what project is over budget?',

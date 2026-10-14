@@ -162,7 +162,7 @@ describe('DMs', () => {
     const res = await request(sana()).get('/api/social/dms');
     expect(res.status).toBe(200);
     expect(res.body.conversations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ channel: 'social:dm:u-lena:u-sana', peers: [{ userId: 'u-lena', displayName: 'Lena Brandt', avatarUrl: '/avatars/u-lena.svg' }], lastMessagePreview: 'Thanks Lena, will do.', lastMessageUserId: 'u-sana' }),
+      expect.objectContaining({ channel: 'social:dm:u-lena:u-sana', peers: [{ userId: 'u-lena', displayName: 'Lena Brandt', avatarUrl: '/avatars/photos/u-lena.jpg' }], lastMessagePreview: 'Thanks Lena, will do.', lastMessageUserId: 'u-sana' }),
     ]));
     const miraDms = await request(mira()).get('/api/social/dms');
     expect(miraDms.body.conversations.map((c: { channel: string }) => c.channel)).toEqual(expect.arrayContaining(['social:dm:u-lena:u-mira']));
@@ -223,6 +223,6 @@ describe('GET /api/social/people', () => {
     const ids = res.body.people.map((p: { userId: string }) => p.userId);
     expect(ids).toEqual(expect.arrayContaining(['u-mira', 'u-lena', 'u-sana', 'u-operator', 'u-theo']));
     expect(ids).not.toContain('u-hr');
-    expect(res.body.people.find((p: { userId: string }) => p.userId === 'u-mira')).toEqual({ userId: 'u-mira', displayName: 'Mira Okafor', roles: ['community-admin'], avatarUrl: '/avatars/u-mira.svg' });
+    expect(res.body.people.find((p: { userId: string }) => p.userId === 'u-mira')).toEqual({ userId: 'u-mira', displayName: 'Mira Okafor', roles: ['community-admin'], avatarUrl: '/avatars/photos/u-mira.jpg' });
   });
 });

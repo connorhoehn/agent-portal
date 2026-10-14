@@ -321,7 +321,7 @@ describe('huddle chat (orgiq:huddle:<callId>)', () => {
     expect((await status(as('charlie'), late.body.runId)).body.result.messageCount).toBe(0);
   });
 
-  it('the run channel and post follow the participant authority; post needs PostMessage', async () => {
+  it('the run channel and post follow the participant authority (a seat, not Social PostMessage)', async () => {
     await say('bob', 'Ship it after lunch.', 'd-2');
     const started = await run(as('alice'), HUDDLE); await settle();
     const channel = flowRunChannel(started.body.runId)!;
@@ -329,15 +329,17 @@ describe('huddle chat (orgiq:huddle:<callId>)', () => {
       { guard: channelGuard, baseChannel: stripServicePrefix });
     expect(await sub('alice')).toBe(true);
     expect(await sub('bob')).toBe(false);
+    // 77942166: a seated huddle member chats under the stored lobby's read
+    // authority; Social PostMessage is not asked (currentCallChatGrant ignores
+    // the action). So a policy that grants only ViewSocial still lets the seat post.
     jest.mocked(isAllowed).mockImplementation(async (p, action) => action === 'ViewSocial' && p.role === 'participant');
-    expect((await post(as('alice'), started.body.runId)).status).toBe(403);
-    jest.mocked(isAllowed).mockImplementation(async (p, action) => (POLICY[p.role] ?? []).includes(action));
     const posted = await post(as('alice'), started.body.runId);
     expect(posted.status).toBe(200);
     expect(posted.body.channel).toBe(HUDDLE);
     // Leaving the call ends the requester's read of the record and of its channel.
     await observed.removeParticipant(CALL, 'a'); contexts.delete('a');
     expect((await status(as('alice'), started.body.runId)).status).toBe(403);
+    expect((await post(as('alice'), started.body.runId)).status).toBe(403);
     expect(await sub('alice')).toBe(false);
   });
 });
