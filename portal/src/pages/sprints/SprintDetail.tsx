@@ -83,10 +83,10 @@ export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, 
   const span = sprintWindow(s);
 
   const tabs = [
-    { id: 'work', label: 'Work', badge: <Chip tone="neutral" size="sm">{s.itemCount}</Chip> },
+    { id: 'work', label: 'Work', badge: s.itemCount },
     { id: 'money', label: 'Money' },
     ...(canManageBudgets
-      ? [{ id: 'grants', label: 'Envelopes', badge: <Chip tone="neutral" size="sm">{s.grantCount}</Chip> }]
+      ? [{ id: 'grants', label: 'Envelopes', badge: s.grantCount }]
       : []),
   ];
 
@@ -154,6 +154,7 @@ export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, 
           value={tab}
           onValueChange={setTab}
           variant="underline"
+          badgeStyle="plain"
           idPrefix="sprint-detail"
           aria-label="Sprint detail sections"
         />

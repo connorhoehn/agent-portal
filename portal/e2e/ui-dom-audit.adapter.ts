@@ -237,11 +237,16 @@ export default {
     } });
     // board.lane-surface / board.lane-columns: the Sprints lens with its first sprint's board open.
     if (pathname === '/iq/projects') states.push({ name: 'sprint-board', navigates: true, required: [...SHELL_REQUIRED, '$boardLanes'], enter: async p => {
-      const response = await p.request.get('/api/sprints?scope=mine&status=active');
-      if (!response.ok()) throw new Error(`Sprint discovery: ${response.status()}`);
-      const sprint = ((await response.json()) as { sprints?: { id: string }[] }).sprints?.[0];
-      if (!sprint) throw new Error('No active sprint for the sweep user; the board state cannot be exercised');
-      await p.goto(`/iq/projects?lens=sprints&sprint=${encodeURIComponent(sprint.id)}`);
+      // The user's own active sprint, else (a role that reads every sprint) any active one; the lens opens in the matching scope.
+      let found: { id: string; scope: string } | null = null;
+      for (const scope of ['mine', 'all']) {
+        const response = await p.request.get(`/api/sprints?scope=${scope}&status=active`);
+        if (!response.ok()) continue;
+        const sprint = ((await response.json()) as { sprints?: { id: string }[] }).sprints?.[0];
+        if (sprint) { found = { id: sprint.id, scope }; break; }
+      }
+      if (!found) throw new Error('No active sprint the sweep user can read; the board state cannot be exercised');
+      await p.goto(`/iq/projects?lens=sprints&sprintScope=${found.scope}&sprint=${encodeURIComponent(found.id)}`);
       await settled(p);
       await expect(p.locator(selectors.boardLanes).first()).toBeVisible({ timeout: 15000 });
     } });
