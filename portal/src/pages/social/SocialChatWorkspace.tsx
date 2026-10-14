@@ -1,9 +1,16 @@
 // The social tenant's chat workspace — ONE composition that /social/channels,
 // /social/dms, /social/teams, /social/rooms, /social/calls and
 // /social/recordings all render (docs/social-tenant-design.md §4.5;
-// docs/rail-parity-goal.md, "the chat-rail variant"). The route only decides
-// what the pane opens on: a channel, a DM, a team's channel or roster, a room,
-// the call log, the recordings. Contacts and Configuration stay pages.
+// docs/rail-parity-goal.md, "the chat-rail variant"). The route decides what
+// the pane opens on — a channel, a DM, a team's channel or roster, a room, the
+// call log, the recordings — AND which rail section shows: one section per
+// route (the user, 2026-10-13; `railSectionsFor` in socialChat.ts, the
+// library's `ConversationRail showSections`). Channels shows only Channels,
+// Direct messages only Direct messages, Teams only Teams, Rooms only Rooms;
+// Calls and Recordings are shelf destinations and show no section. The shelf
+// and Active now stay on every route. Contacts and Configuration stay pages.
+// Embedded, the Communication plane's home (`embedding.overview`) is the one
+// rail that keeps every section (and Arrange); its sub-routes follow the rule.
 //
 // It is the chat app's left sidebar, the way realtime-examples' MessagesPage
 // draws it, from the library's parts: `ConversationRail` flush against the
@@ -20,6 +27,8 @@
 //     ConversationRail has no rooms group); a row opens the room (RoomPane.tsx);
 //   - Direct messages, then Channels (`sectionOrder="dms-first"`), each with
 //     its + (New message; Create a channel for ManageChannels).
+//
+// Each section above appears only on its own route (see the head).
 //
 // An open conversation is SocialConversation (the library's conversation
 // surface: Chat | Documents | Pinned | Calls, `?view=` in the URL, the call
@@ -54,7 +63,7 @@ import { roomSummaryTargets } from './socialRoomSummary';
 import RoomPane from './RoomPane';
 import SocialRoomsSection, { RoomCreateDialog, useRoomsModel, type RoomsResponse } from './SocialRoomsSection';
 import {
-  CHANNEL_PREFIX, DM_PREFIX, activeNow, channelHref, channelRailItems, dmCandidates, dmHref, dmPeers, dmRailItems, dmTitle,
+  CHANNEL_PREFIX, DM_PREFIX, activeNow, railSectionsFor, channelHref, channelRailItems, dmCandidates, dmHref, dmPeers, dmRailItems, dmTitle,
   conversationRecordings, matchesRailFilter, mentionItems, privacyForApi, slugFromChannel, socialInbox, withPresence,
   type SocialActivePerson, type SocialChannel, type SocialDm, type SocialPeer, type SocialPerson,
 } from './socialChat';
@@ -132,6 +141,13 @@ export interface WorkspaceEmbedding {
    * "Pick a channel" placeholder (docs/layout-cascade.md rule 6).
    */
   landing?: (data: WorkspaceLandingData) => ReactNode;
+  /**
+   * The plane's home (`/<tenant>/communication`, no sub-route): the one rail
+   * that keeps every section — the host's org context, Teams, Rooms, Direct
+   * messages, Channels — in the reader's arrangeable order. Every sub-route
+   * shows one section, as in the Social tenant.
+   */
+  overview?: boolean;
 }
 
 /** What the workspace hands the host's landing: its own lists and Active now tiles, no second fetch. */
@@ -270,10 +286,14 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   // ── The rail's rows ───────────────────────────────────────────────────
   const [query, setQuery] = useState('');
   const rail = useRailSectionMemory(RAIL_MEMORY_KEY, { defaultFolded: DEFAULT_FOLDED, opened: route === 'teams' ? ['Teams'] : route === 'rooms' ? ['Rooms'] : [] });
+  // One section per route: the plane's home draws every section; a route only its own (`railSectionsFor`).
+  const allSections = !!embedding?.overview;
+  const showDms = allSections || route === 'dms';
+  const showChannels = allSections || route === 'channels';
   const rows = useMemo(() => withPresence([
-    ...dmRailItems(conversations, lobby, me, roster),
-    ...(route === 'dms' ? [] : channelRailItems(channels)),
-  ], online).filter((item) => matchesRailFilter(item, query)), [conversations, lobby, me, roster, channels, online, query, route]);
+    ...(showDms ? dmRailItems(conversations, lobby, me, roster) : []),
+    ...(showChannels ? channelRailItems(channels) : []),
+  ], online).filter((item) => matchesRailFilter(item, query)), [conversations, lobby, me, roster, channels, online, query, showDms, showChannels]);
   // Controlled: the tree mounts before the teams load, and an uncontrolled
   // tree takes its open set from the first render (none). Open unless folded.
   const tree = useMemo(() => teamTreeItems(teams).map((t) => ({ ...t, expanded: !rail.collapsedSections[`team:${t.teamId}`] })), [teams, rail.collapsedSections]);
@@ -482,15 +502,18 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
         { id: 'recordings', label: 'Recordings', icon: <PlayCircleIcon size={15} /> },
       ]}
       conversations={rows}
-      beforeList={((route !== 'dms' && channelsFetch.error) || dmsFetch.error) && <Stack gap="xs" className={RAIL_SECTION_CONTENT_INSET}>
-        <SocialReadStatus source="Direct messages" read={dmsFetch} retry={dmsFetch.refresh} testId="social-dms-read-status" />
-        {route !== 'dms' && <SocialReadStatus source="Channels" read={channelsFetch} retry={channelsFetch.refresh} testId="social-channels-read-status" />}
+      beforeList={((showChannels && channelsFetch.error) || (showDms && dmsFetch.error)) && <Stack gap="xs" className={RAIL_SECTION_CONTENT_INSET}>
+        {showDms && <SocialReadStatus source="Direct messages" read={dmsFetch} retry={dmsFetch.refresh} testId="social-dms-read-status" />}
+        {showChannels && <SocialReadStatus source="Channels" read={channelsFetch} retry={channelsFetch.refresh} testId="social-channels-read-status" />}
       </Stack>}
       sectionOrder="dms-first"
-      sections={route === 'dms' ? sections.filter(section => section.id === 'active-now') : sections}
+      sections={sections}
       {...rail.railProps}
-      sectionLayout={route === 'dms' ? ['dms', 'active-now'] : rail.railProps.sectionLayout ?? ['dms', ...sections.map(section => section.id), 'channels']}
-      {...(route === 'dms' ? { onSectionLayoutChange: undefined } : {})}
+      // A one-section view keeps the default order (Direct messages, Active now, the rest); the reader's
+      // arranged order (social.chatRail.layout) applies where Arrange is offered — the plane's home.
+      sectionLayout={(allSections ? rail.railProps.sectionLayout : null) ?? ['dms', ...sections.map(section => section.id), 'channels']}
+      // The library hides every other section, caption and row, and offers no Arrange on a one-section view.
+      showSections={allSections ? null : railSectionsFor(route)}
       maxVisible={8}
       selected={embedding?.pane ? null : selected}
       onSelect={(selection) => {
@@ -521,7 +544,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
           }],
         } : {}),
       }}
-      emptyLabel={conversationRailEmptyLabel(route === 'dms' ? [dmsFetch] : [dmsFetch, channelsFetch], query)}
+      emptyLabel={conversationRailEmptyLabel([...(showDms ? [dmsFetch] : []), ...(showChannels ? [channelsFetch] : [])], query)}
       data-testid="social-chat-rail"
     />
   );

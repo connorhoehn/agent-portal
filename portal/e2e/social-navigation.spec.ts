@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { ROUTE_RAIL_CAPTION, SOCIAL_SECTION_CAPTIONS, type SocialChatRouteId } from '../src/pages/social/socialChat';
 test.use({ baseURL: 'http://127.0.0.1:5183', viewport: { width: 1440, height: 900 } });
 async function fixture(page: Page, opts: { failedLists?: boolean; savedLayout?: boolean; path?: string } = {}) {
   const errors: string[] = [], mutations: string[] = [];
@@ -23,14 +24,18 @@ async function fixture(page: Page, opts: { failedLists?: boolean; savedLayout?: 
     if (path === '/api/social/teams') return json({ teams: [{ teamId: 'fixture-team', slug: 'team', name: 'Fixture Team', role: 'member', favorite: false, visibility: 'org', createdBy: 'fixture-reader', channels: [] }] });
     if (path === '/api/social/rooms') return json({ source: 'mock', rooms: [{ orgId: 'social', roomId: 'fixture-room', slug: 'lounge', name: 'Fixture Lounge', visibility: 'org', createdBy: 'fixture-reader', createdAt: '2026-10-10T12:00:00Z', state: 'active', lobbyName: 'social:room:lounge', settings: { audioOnly: false, recordingEnabled: false, softCap: 8 }, lastActiveAt: '2026-10-10T12:00:00Z' }], counts: { total: 1, open: 1, private: 0 } });
     if (path === '/api/social/calls') return json({ calls: [], counts: { total: 0, missed: 0 } });
-    if (path === '/api/social/recordings') return json({ recordings: [] });
+    if (path === '/api/social/recordings') return json({ source: 'mock', recordings: [], counts: { total: 0, ready: 0 } });
     return route.fulfill({ status: 503, json: { error: 'Unmocked social navigation API refused' } });
   });
   await page.route(url => url.pathname.startsWith('/social/'), route => {
     if (!route.request().isNavigationRequest()) return route.continue();
     return route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body><div id="root"></div><script type="module">import RefreshRuntime from "/@react-refresh"; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$=()=>{}; window.$RefreshSig$=()=>type=>type; window.__vite_plugin_react_preamble_installed__=true;</script><script type="module" src="/e2e/fixtures/social-navigation.tsx"></script></body></html>' });
   });
-  await page.goto(opts.path ?? '/social/dms'); await expect(page.getByTestId('social-chat-rail')).toContainText('Fixture Peer');
+  const path = opts.path ?? '/social/dms';
+  await page.goto(path);
+  // The DM row only exists on the DM route now (one section per route); elsewhere the rail itself is the ready signal.
+  if (path.startsWith('/social/dms')) await expect(page.getByTestId('social-chat-rail')).toContainText('Fixture Peer');
+  else await expect(page.getByTestId('social-chat-rail')).toBeVisible().catch((e) => { throw new Error(`${e}\npage errors: ${errors.join(' | ')}`); });
   return { errors, mutations };
 }
 test('DM route stays DM-only with DMs first and permanent Active now despite stored order/folds', async ({ page }) => {
@@ -44,12 +49,49 @@ test('DM route stays DM-only with DMs first and permanent Active now despite sto
   await expect(rail.getByTestId('social-channels-read-status')).toHaveCount(0); await expect(rail.getByTestId('social-teams-read-status')).toHaveCount(0); await expect(rail.getByTestId('social-rooms-read-status')).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath('social-dms-only.png') }); expect(setup.errors).toEqual([]); expect(setup.mutations).toEqual([]);
 });
-test('general workspace keeps Rooms folded by default but lets the reader explicitly expand it', async ({ page }) => {
-  const setup = await fixture(page); await page.getByRole('link', { name: 'Channels', exact: true }).first().click();
-  const rail = page.getByTestId('social-chat-rail'), rooms = rail.getByTestId('social-rooms-list'); await expect(rooms).toBeVisible();
-  await expect(rooms.getByRole('button', { name: /^Rooms/ })).toHaveAttribute('aria-expanded', 'false'); await expect(rooms.getByText('Fixture Lounge', { exact: true })).toHaveCount(0);
-  await rooms.getByRole('button', { name: /^Rooms/ }).click(); await expect(rooms.getByText('Fixture Lounge', { exact: true })).toBeVisible();
-  await expect(rail.getByRole('button', { name: /^Active now/ })).toHaveCount(0); expect(setup.errors).toEqual([]); expect(setup.mutations).toEqual([]);
+// One section per route (the user, 2026-10-13; docs/rail-parity-goal.md decision 6): every Social conversation
+// route draws the shelf, Active now and ONLY its own section caption. Calls and Recordings own no section.
+/** The rail's section captions as drawn (a heading whose whole text is the caption, an optional count after it). */
+async function railCaptions(rail: Locator): Promise<string[]> {
+  return rail.evaluate((el, captions) => {
+    const heads = [...el.querySelectorAll('h2, h3, [role="heading"], button, span')].map((e) => (e.textContent ?? '').trim().toLowerCase());
+    return captions.filter((c) => heads.some((h) => new RegExp(`^${c.toLowerCase()}\\s*\\d*$`).test(h)));
+  }, [...SOCIAL_SECTION_CAPTIONS]);
+}
+const ROUTES: SocialChatRouteId[] = ['channels', 'dms', 'teams', 'rooms', 'calls', 'recordings'];
+for (const route of ROUTES) {
+  test(`/social/${route} rail shows only its own section (${ROUTE_RAIL_CAPTION[route] ?? 'none — a shelf destination'})`, async ({ page }) => {
+    // A stored order and folds must not bring another section back.
+    const setup = await fixture(page, { path: `/social/${route}`, savedLayout: true }), rail = page.getByTestId('social-chat-rail');
+    const own = ROUTE_RAIL_CAPTION[route];
+    if (own) await expect.poll(() => railCaptions(rail), { timeout: 10_000 }).toEqual([own]);
+    else await expect.poll(() => railCaptions(rail), { timeout: 10_000 }).toEqual([]);
+    // Presence and the shelf stay on every route.
+    await expect(rail.locator('[data-rail-section="active-now"]')).toBeVisible();
+    for (const name of ['Activity', 'Mentions', 'Calls', 'Recordings']) await expect(rail.getByTestId('social-chat-rail-shelf').getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible();
+    // The only host section drawn is presence, plus the route's own Teams/Rooms section.
+    const hostSections = await rail.locator('[data-rail-section]').evaluateAll((els) => els.map((e) => e.getAttribute('data-rail-section')));
+    expect(hostSections.sort()).toEqual(['active-now', ...(route === 'teams' || route === 'rooms' ? [route] : [])].sort());
+    // Rows: DM rows only on DMs, channel rows only on Channels, a room only on Rooms, a team only on Teams.
+    await expect(rail.getByText('Fixture Peer', { exact: true })).toHaveCount(route === 'dms' ? 1 : 0);
+    await expect(rail.getByTestId('social-chat-rail-list-channels')).toHaveCount(route === 'channels' ? 1 : 0);
+    await expect(rail.getByTestId('social-chat-rail-list-dms')).toHaveCount(route === 'dms' ? 1 : 0);
+    await expect(rail.getByTestId('social-rooms-list')).toHaveCount(route === 'rooms' ? 1 : 0);
+    await expect(rail.getByTestId('social-team-tree')).toHaveCount(route === 'teams' ? 1 : 0);
+    // A one-section view has nothing to arrange.
+    await expect(rail.getByTestId('social-chat-rail-options')).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath(`social-${route}-one-section.png`) });
+    expect(setup.errors).toEqual([]); expect(setup.mutations).toEqual([]);
+  });
+}
+test('Rooms route opens its own section expanded; the primary nav moves between one-section routes', async ({ page }) => {
+  const setup = await fixture(page, { path: '/social/rooms' }), rail = page.getByTestId('social-chat-rail'), rooms = rail.getByTestId('social-rooms-list');
+  await expect(rooms.getByRole('button', { name: /^Rooms/ })).toHaveAttribute('aria-expanded', 'true');
+  await expect(rooms.getByText('Fixture Lounge', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Channels', exact: true }).first().click();
+  await expect.poll(() => railCaptions(rail), { timeout: 10_000 }).toEqual(['Channels']);
+  await expect(rail.getByTestId('social-rooms-list')).toHaveCount(0);
+  expect(setup.errors).toEqual([]); expect(setup.mutations).toEqual([]);
 });
 test('native primary nav activity follows actual inbox frames and read receipts without fabricated status', async ({ page }) => {
   const setup = await fixture(page), nav = page.locator('[data-shell-nav] nav').first();

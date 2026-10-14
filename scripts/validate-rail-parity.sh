@@ -43,9 +43,13 @@ if [ -f "$WS" ]; then
   has "data-shell-flush" "$WS" && ok "$WS: page root is data-shell-flush" || fail "$WS: no data-shell-flush (the shell keeps its 24px ring and crumbs)"
   has "<ConversationRail" "$WS" && ok "$WS composes the library's ConversationRail" || fail "$WS: no ConversationRail"
   has "PageHeader" "$WS" && fail "$WS: a PageHeader sits above the rail" || ok "$WS: no PageHeader above the rail"
-  for c in "sectionOrder=\"dms-first\"" "ActivePeopleGrid" "TeamChannelTree" "SocialRoomsSection" "shelf=\{"; do
+  for c in "sectionOrder=\"dms-first\"" "ActivePeopleGrid" "TeamChannelTree" "SocialRoomsSection" "shelf=\{" "showSections=\{" "railSectionsFor\(route\)"; do
     has "$c" "$WS" && ok "$WS: $c" || fail "$WS lacks $c"
   done
+  # One section per route (the user, 2026-10-13): the rule lives in socialChat.ts, the library hides the rest.
+  has "ROUTE_RAIL_SECTION" portal/src/pages/social/socialChat.ts && ok "socialChat.ts declares one rail section per route" || fail "socialChat.ts: no ROUTE_RAIL_SECTION (one section per route)"
+  has "route === 'dms' \? sections\.filter" "$WS" && fail "$WS: a route-specific section filter is back (use railSectionsFor + showSections)" || ok "$WS: no route-specific section filter"
+  has "One section per route" "$GOAL" && ok "$GOAL: decision 6 states one section per route" || fail "$GOAL: decision 6 does not state one section per route (2026-10-13)"
 else fail "$WS missing"; fi
 for pair in $SOCIAL_PAGES; do
   f="portal/src/pages/social/${pair#*:}.tsx"; r="${pair%%:*}"
@@ -96,8 +100,9 @@ CASCADE_PAGE_CRUMBS_BUDGET=4
 page_crumbs=$(grep -rlE "<Breadcrumbs\b|<ScopeHeader\b" portal/src/pages --include='*.tsx' | wc -l | tr -d ' ')
 [ "$page_crumbs" -le "$CASCADE_PAGE_CRUMBS_BUDGET" ] && ok "pages composing their own trail: $page_crumbs (budget $CASCADE_PAGE_CRUMBS_BUDGET)" \
   || { fail "pages composing their own trail: $page_crumbs > budget $CASCADE_PAGE_CRUMBS_BUDGET"; grep -rlE "<Breadcrumbs\b|<ScopeHeader\b" portal/src/pages --include='*.tsx' | sed 's/^/      /'; }
-# Rule 8: on a deep page the primary rail gives way, never the section rail —
-# one rule, the library rail model (ui-components railDepth / useRailFold /
+# Rule 8: on a deep page the primary rail gives way first; while a dialogue is
+# open both the primary rail and the page's own section/list rail fold (the
+# user, 2026-10-13; useDialogueRailFold) — one rule, the library rail model (ui-components railDepth / useRailFold /
 # SubNavLayout collapsed, tested there), declared and read by Layout.tsx; no
 # local copy of the rule, and no app.css reaching into the library's DOM
 # (audit J7: no !important, no test-id selectors for the fold). The
@@ -118,6 +123,9 @@ grep -qE 'data-primary-rail|shell-rail-toggle' portal/src/app.css && fail "porta
 pane_keys=$(grep -rnE "localStorage\.(get|set)Item\(['\"][^'\"]*\.pane\." portal/src --include='*.ts' --include='*.tsx' | wc -l | tr -d ' ')
 [ "$pane_keys" -eq 0 ] && ok "no page-local pane storage keys (*.pane.*)" || fail "page-local pane storage keys: $pane_keys (the library pane model remembers the pane)"
 has "paneFolded" portal/src/pages/projects/InitiativesExplorer.tsx && fail "InitiativesExplorer folds the section rail itself (paneFolded) — the shell folds the primary rail first" || ok "no page folds its section rail ahead of the primary rail"
+has "While a dialogue is open, both rails fold" "$CASCADE_DOC" && has "for this visit only" "$CASCADE_DOC" \
+  && ok "$CASCADE_DOC: rule 8 states the dialogue fold (both rails, this visit only, not stored)" \
+  || fail "$CASCADE_DOC: rule 8 does not state the decided dialogue fold (2026-10-13)"
 [ -f portal/e2e/route-inventory.ts ] && [ -f portal/e2e/layout-cascade.spec.ts ] && ok "route inventory + sweep spec present" || fail "portal/e2e/route-inventory.ts or layout-cascade.spec.ts missing"
 # One route inventory (audit 2026-10-07 T4): the sweeps and this judge's
 # measurement read portal/e2e/route-inventory.ts; no second list may appear.

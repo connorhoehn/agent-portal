@@ -35,5 +35,8 @@ createRoot(document.getElementById('root')!).render(<StrictMode><BrowserRouter><
     }} />} />
     <Route path="/social/channels/*" element={<SocialChatWorkspace route="channels" />} />
     <Route path="/social/rooms/*" element={<SocialChatWorkspace route="rooms" />} />
+    <Route path="/social/teams/*" element={<SocialChatWorkspace route="teams" />} />
+    <Route path="/social/calls/*" element={<SocialChatWorkspace route="calls" />} />
+    <Route path="/social/recordings/*" element={<SocialChatWorkspace route="recordings" />} />
   </Route></Routes>
 </SharedNotificationsProvider></GatewayContext.Provider></SessionProvider></BrowserRouter></StrictMode>);

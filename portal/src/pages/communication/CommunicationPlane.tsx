@@ -16,6 +16,12 @@
 // its tenant; the shell's one gateway socket, realtime token and call host
 // carry chat and calls, and the gateway's guards are unchanged.
 //
+// The rail per route (the user, 2026-10-13): the plane's home
+// (`/<tenant>/communication`) keeps every section — the org context, Teams,
+// Rooms, Direct messages, Channels — arrangeable; each sub-route
+// (`…/channels`, `…/dms`, `…/teams`, `…/rooms`, `…/calls`, `…/recordings`)
+// shows only its own section, the same rule as /social/* (one workspace).
+//
 // Layout (docs/layout-cascade.md): the primary rail, then the ConversationRail
 // as the page's one section rail, flush and full height, then the content
 // column whose first row is the trail (Work › Communication) and whose title
@@ -208,6 +214,9 @@ function SocialPlaneMount({ route, tenant, base, crumbs, pageCalls, pageMissed }
     <>
       <SocialChatWorkspace route={route} embedding={{
         breadcrumbs: crumbs, title: 'Communication', pageCalls, pageMissed,
+        // The plane's home keeps every section (org context, Teams, Rooms, DMs, Channels, arrangeable);
+        // its sub-routes show one section each, like the Social tenant (the user, 2026-10-13).
+        overview: location.pathname.replace(/\/+$/, '') === base,
         pane: pane && problem ? <Stack gap="sm" className="min-h-0 min-w-0 flex-1"><InlineAlert tone="error" onDismiss={() => setProblem(null)}>{problem}</InlineAlert>{pane}</Stack> : pane,
         footerConversation: footerGroup ? { channel: groupDiscussionChannel(footerGroup), title: footerGroup.name } : null,
         // The title row's actions at the app's body step: a small secondary button and an outline icon button, never link text.

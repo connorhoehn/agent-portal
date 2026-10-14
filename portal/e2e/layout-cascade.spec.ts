@@ -254,10 +254,25 @@ test('a loaded deck editor carries one trail, first, and one h1', async ({ page 
   expect(judge(m.landed, m, new Set()).map((v) => v.line)).toEqual([]);
 });
 
-// Rule 8: which rail gives way. Depth 1–2 keeps both rails open; from three
-// levels down the primary rail folds to its strip and the section rail stays
-// open (the library rail model: railDepth + useRailFold, declared in Layout.tsx).
+// Rule 8: which rail gives way. With no dialogue open: depth 1–2 keeps both
+// rails open; from three levels down the primary rail folds to its strip and
+// the section rail stays open (the library rail model: railDepth + useRailFold,
+// declared in Layout.tsx). With a dialogue open — the shell's right pane shown
+// (Discussion/Details, Ask about selection; minimized still counts) or a huddle
+// dialogue — the rails fold at ANY depth: the primary rail, and the page's own
+// section/list rail where the page folds it for dialogue (useDialogueRailFold:
+// the initiative work list, Search's rail). A rail's toggle reopens it for this
+// visit only; nothing about the dialogue fold is stored (the user, 2026-10-13).
 // DEPTH_PAIRS: the shallow/deep pairs live in the route inventory.
+
+/** The shell's right pane: open by default, remembered per device as `shell.conversation-pane.open`. */
+const PANE_OPEN_KEY = 'shell.conversation-pane.open';
+const paneShown = (page: Page) => page.getByTestId('page-conversation-pane').isVisible();
+/** Pages whose own section/list rail folds while a dialogue is open (callers of useDialogueRailFold besides the shell). */
+const DIALOGUE_FOLDS_SECTION = new Set(['initiative / work item']);
+async function setPaneOpen(page: Page, open: boolean) {
+  await page.evaluate(([key, value]) => { try { localStorage.setItem(key, value); } catch { /* */ } }, [PANE_OPEN_KEY, open ? '1' : '0'] as const);
+}
 
 async function railFrame(page: Page) {
   return page.evaluate(() => {
@@ -278,13 +293,31 @@ async function railFrame(page: Page) {
 for (const pair of DEPTH_PAIRS) {
   test(`rail collapse priority: ${pair.name}`, async ({ page }) => {
     await signIn(page, pair.tenant);
+    const deepPath = typeof pair.deep === 'string' ? pair.deep : await resolveParam(pair.deep, apiGet(page));
+
+    // 1. A dialogue open (the right pane is open by default): the primary rail folds at ANY depth,
+    //    and a page that folds its own section/list rail for dialogue folds that too.
+    for (const path of [pair.shallow, deepPath]) {
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
+      await settle(page);
+      if (!(await paneShown(page))) continue; // this page registers no pane: rule 8's depth rule below is the whole contract
+      const open = await railFrame(page);
+      expect(open.primaryState, `${path}: primary rail folds while the dialogue is open (depth ${open.depth})`).toBe('collapsed');
+      expect(open.primaryWidth, 'primary rail folds to its strip').toBeLessThanOrEqual(48);
+      if (DIALOGUE_FOLDS_SECTION.has(pair.name)) {
+        expect(open.sectionWidth ?? 0, `${path}: the page's section/list rail folds while the dialogue is open`).toBeLessThan(120);
+      }
+    }
+
+    // 2. No dialogue (the pane closed, remembered per device): depth decides, and the section rail never folds.
+    await setPaneOpen(page, false);
     await page.goto(pair.shallow, { waitUntil: 'domcontentloaded' });
     await settle(page);
+    expect(await paneShown(page), `${pair.shallow}: pane closed`).toBe(false);
     const shallow = await railFrame(page);
     expect(shallow.depth, `${pair.shallow} depth`).toBeLessThanOrEqual(2);
     expect(shallow.primaryState, `${pair.shallow}: primary rail open at depth ${shallow.depth}`).toBe('open');
     expect(shallow.primaryWidth).toBeGreaterThanOrEqual(180);
-    const deepPath = typeof pair.deep === 'string' ? pair.deep : await resolveParam(pair.deep, apiGet(page));
     await page.goto(deepPath, { waitUntil: 'domcontentloaded' });
     await settle(page);
     const deep = await railFrame(page);
@@ -293,6 +326,7 @@ for (const pair of DEPTH_PAIRS) {
     expect(deep.primaryWidth, 'primary rail folds to its strip').toBeLessThanOrEqual(48);
     expect(deep.sectionState, 'section rail stays open').toBe('open');
     if (deep.sectionWidth != null) expect(deep.sectionWidth, 'section rail is not a bare strip').toBeGreaterThanOrEqual(120);
+    if (DIALOGUE_FOLDS_SECTION.has(pair.name)) expect(deep.sectionWidth, `${deepPath}: the section/list rail is back once the dialogue closes`).not.toBeNull();
     // The trail is still the content column's first row.
     const m = await measure(page);
     if (!exemptions(deepPath).has('crumbs-first') && !(LAYOUT_CASCADE_BASELINE[pair.key ?? deepPath.split('?')[0]!]?.includes('crumbs-first'))) {
@@ -301,17 +335,49 @@ for (const pair of DEPTH_PAIRS) {
   });
 }
 
-test('rail collapse: the reader can re-expand the primary rail, remembered per device', async ({ page }) => {
+test('rail collapse: the reader can re-expand the primary rail — for this visit while a dialogue is open, remembered per device otherwise', async ({ page }) => {
   await signIn(page, 'orgiq');
-  await page.goto('/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4', { waitUntil: 'domcontentloaded' });
+  const workItem = '/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4';
+  await page.goto(workItem, { waitUntil: 'domcontentloaded' });
   await settle(page);
+  await page.evaluate(() => { try { localStorage.removeItem('shell.primary-rail.deep'); localStorage.removeItem('shell.primary-rail.shallow'); } catch { /* */ } });
+
+  // Dialogue open (the Discussion pane, open by default): the toggle reopens the rail for this visit only.
+  expect(await paneShown(page), 'the Discussion pane is open by default').toBe(true);
+  expect((await railFrame(page)).primaryState).toBe('collapsed');
   await page.getByTestId('shell-rail-toggle').click();
-  expect((await railFrame(page)).primaryState).toBe('open');
+  await expect.poll(async () => (await railFrame(page)).primaryState).toBe('open');
+  expect(await page.evaluate(() => localStorage.getItem('shell.primary-rail.deep')), 'the dialogue choice is not stored').toBeNull();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await settle(page);
+  expect((await railFrame(page)).primaryState, 'a reload with the dialogue still open folds the rail again').toBe('collapsed');
+
+  // No dialogue: the reader's toggle is remembered per device per depth band.
+  await setPaneOpen(page, false);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await settle(page);
+  expect(await paneShown(page)).toBe(false);
+  expect((await railFrame(page)).primaryState, 'deep and no dialogue: folded by depth').toBe('collapsed');
+  await page.getByTestId('shell-rail-toggle').click();
+  await expect.poll(async () => (await railFrame(page)).primaryState).toBe('open');
   await page.reload({ waitUntil: 'domcontentloaded' });
   await settle(page);
   expect((await railFrame(page)).primaryState, 'the choice survives a reload').toBe('open');
   await page.getByTestId('shell-rail-toggle').click();
-  expect((await railFrame(page)).primaryState).toBe('collapsed');
+  await expect.poll(async () => (await railFrame(page)).primaryState).toBe('collapsed');
+
+  // Reopening the dialogue folds the rail again, whatever the band remembers; closing it restores the remembered state.
+  await page.evaluate(() => { try { localStorage.setItem('shell.primary-rail.deep', 'open'); } catch { /* */ } });
+  await setPaneOpen(page, true);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await settle(page);
+  expect(await paneShown(page)).toBe(true);
+  expect((await railFrame(page)).primaryState, 'the dialogue folds the rail over a remembered "open"').toBe('collapsed');
+  await setPaneOpen(page, false);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await settle(page);
+  expect((await railFrame(page)).primaryState, 'with the dialogue closed the remembered "open" is back').toBe('open');
+
   // A narrow window folds the primary rail first; the section rail stays.
   await page.evaluate(() => { try { localStorage.removeItem('shell.primary-rail.shallow'); } catch { /* */ } });
   await page.setViewportSize({ width: 1100, height: 720 });
@@ -322,7 +388,7 @@ test('rail collapse: the reader can re-expand the primary rail, remembered per d
   expect(narrow.sectionState).toBe('open');
 });
 
-test('rail collapse: a legacy hand-set section fold never folds a deep page', async ({ page }) => {
+test('rail collapse: a legacy hand-set section fold never folds a deep page; only the dialogue does, and that fold is not stored', async ({ page }) => {
   await signIn(page, 'orgiq');
   // The device state in the user's screenshot: the work list folded by hand
   // under the legacy, depth-less key.
@@ -333,8 +399,23 @@ test('rail collapse: a legacy hand-set section fold never folds a deep page', as
       localStorage.removeItem('shell.primary-rail.deep');
     } catch { /* */ }
   });
-  await page.goto('/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4', { waitUntil: 'domcontentloaded' });
+  const workItem = '/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4';
+
+  // The Discussion pane open (default): both rails fold for the dialogue, and nothing is written for it.
+  await page.goto(workItem, { waitUntil: 'domcontentloaded' });
   await settle(page);
+  expect(await paneShown(page)).toBe(true);
+  const dialogue = await railFrame(page);
+  expect(dialogue.primaryState, 'primary rail folds while the dialogue is open').toBe('collapsed');
+  expect(dialogue.sectionWidth ?? 0, 'the work list folds while the dialogue is open').toBeLessThan(120);
+  expect(await page.evaluate(() => [localStorage.getItem('initiatives.rail-collapsed.deep'), localStorage.getItem('shell.primary-rail.deep')]),
+    'the dialogue fold is not remembered').toEqual([null, null]);
+
+  // The pane closed: the legacy key is ignored, the work list (section rail) is open at depth 3, the primary folded.
+  await setPaneOpen(page, false);
+  await page.goto(workItem, { waitUntil: 'domcontentloaded' });
+  await settle(page);
+  expect(await paneShown(page)).toBe(false);
   const deep = await railFrame(page);
   expect(deep.primaryState, 'primary rail folds at depth 3').toBe('collapsed');
   expect(deep.sectionWidth, 'the work list (section rail) is open despite the legacy key').not.toBeNull();

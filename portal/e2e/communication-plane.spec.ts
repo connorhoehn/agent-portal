@@ -13,6 +13,8 @@ import { openAs } from './realSession';
 //      full chat rail (Activity, Mentions, Calls, Recordings; Active now, Teams,
 //      Rooms, Direct messages, Channels); /iq/calls lands on its Calls
 //      destination, which lists the orgiq page huddles (/api/calls/tenant).
+//      The full rail is the plane's HOME; each sub-route shows Active now and
+//      only its own section (…/calls none) — one section per route, 2026-10-13.
 //   2. u-mira (Social, community-admin) creates a public channel; u-vera joins
 //      it FROM the orgiq plane and posts; u-mira sees her join and the post.
 //   3. An orgiq user with no Social grant (u-hr, hr-admin, no linked person) gets the library EmptyState
@@ -50,6 +52,20 @@ async function composerReady(page: Page) {
 }
 const message = (page: Page, text: string) => page.getByTestId('social-chat-panel').getByTestId('chat-message').filter({ hasText: text });
 
+// The plane's HOME (/<tenant>/communication, no sub-route) keeps every section; each sub-route shows only its own
+// (one section per route, the user 2026-10-13 — docs/social-tenant-design.md §4.5/§4.6).
+const SECTION_CAPTIONS = ['Teams', 'Rooms', 'Direct messages', 'Channels', 'My initiatives', 'My org teams', 'My teams', 'My pipelines'];
+/** On a sub-route: the shelf, Active now and only `own` (or no section at all on Calls/Recordings). */
+async function oneSectionRail(page: Page, own: string | null) {
+  const rail = page.getByTestId('social-chat-rail');
+  await expect(rail).toBeVisible({ timeout: 20_000 });
+  await expect(rail).toContainText('Active now', { timeout: 15_000 });
+  const shown = () => rail.evaluate((el, captions) => {
+    const heads = [...el.querySelectorAll('h2, h3, [role="heading"], button, span')].map((e) => (e.textContent ?? '').trim().toLowerCase());
+    return captions.filter((c) => heads.some((h) => new RegExp(`^${c.toLowerCase()}\\s*\\d*$`).test(h)));
+  }, SECTION_CAPTIONS);
+  await expect.poll(shown, { timeout: 15_000 }).toEqual(own ? [own] : []);
+}
 // The library draws a conversation section only when it has rows (u-asha has no DMs yet), as in the Social tenant.
 async function fullRail(page: Page, sections = ['Direct messages', 'Channels']) {
   const rail = page.getByTestId('social-chat-rail');
@@ -74,12 +90,8 @@ test('an org-leader finds Communication in rail, trail and palette — the full 
   await expect(nav.getByRole('link', { name: /^Calls$/ })).toHaveCount(0);
   const crumbs = page.getByTestId('section-crumbs');
   await expect(crumbs).toContainText('Work'); await expect(crumbs).toContainText('Communication');
-  await fullRail(page, ['My initiatives', 'My org teams', 'Direct messages', 'Channels']);
-  // The org context (docs/communication-plane-goal.md §1.3–1.4): her initiatives and her org teams, between Active now and Teams.
-  const sectionOrder = await page.getByTestId('social-chat-rail').evaluate((r) => ['Active now', 'My initiatives', 'My org teams', 'Teams']
-    .map((label) => [...r.querySelectorAll('button[aria-expanded]')].findIndex((b) => (b.textContent ?? '').trim().startsWith(label))));
-  expect(sectionOrder.every((i, n) => i >= 0 && (n === 0 || i > sectionOrder[n - 1]!)), `rail order ${sectionOrder}`).toBe(true);
-  await expect(page.getByTestId('plane-groups').getByTestId('conversation-row').filter({ hasText: 'Auth Migration' })).toContainText('#auth-migration', { timeout: 15_000 });
+  // …/calls is a shelf destination: Active now and no section (one section per route).
+  await oneSectionRail(page, null);
   // Calls: this tenant's page huddles (the former Calls page), then the Social call log.
   const calls = page.getByTestId('communication-calls');
   await expect(calls).toBeVisible();
@@ -99,6 +111,20 @@ test('an org-leader finds Communication in rail, trail and palette — the full 
   expect(Math.abs(frame.railTop - frame.mainTop)).toBeLessThanOrEqual(2);
   expect(Math.abs(frame.crumbLeft - frame.railRight - 24)).toBeLessThanOrEqual(2);
   expect(frame.crumbTop - frame.mainTop).toBeLessThanOrEqual(24);
+
+  // The plane's home keeps the full rail: the org context (docs/communication-plane-goal.md §1.3–1.4), her
+  // initiatives and her org teams between Active now and Teams, then Rooms, Direct messages, Channels.
+  await page.goto('/iq/communication');
+  await fullRail(page, ['My initiatives', 'My org teams', 'Direct messages', 'Channels']);
+  const sectionOrder = await page.getByTestId('social-chat-rail').evaluate((r) => ['Active now', 'My initiatives', 'My org teams', 'Teams']
+    .map((label) => [...r.querySelectorAll('button[aria-expanded]')].findIndex((b) => (b.textContent ?? '').trim().startsWith(label))));
+  expect(sectionOrder.every((i, n) => i >= 0 && (n === 0 || i > sectionOrder[n - 1]!)), `rail order ${sectionOrder}`).toBe(true);
+  await expect(page.getByTestId('plane-groups').getByTestId('conversation-row').filter({ hasText: 'Auth Migration' })).toContainText('#auth-migration', { timeout: 15_000 });
+  // Each sub-route: its own section only.
+  for (const [route, own] of [['channels', 'Channels'], ['dms', 'Direct messages'], ['teams', 'Teams'], ['rooms', 'Rooms'], ['recordings', null]] as const) {
+    await page.goto(`/iq/communication/${route}`);
+    await oneSectionRail(page, own);
+  }
 
   // Palette jump.
   await page.goto('/iq/search');
@@ -177,13 +203,17 @@ test('the assessment plane as u-asha, the pipelines plane as u-tomas (granted) a
   await expect(asha.page.locator('[data-shell-nav]').getByRole('link', { name: /^Communication/ })).toBeVisible();
   const crumbs = asha.page.getByTestId('section-crumbs');
   await expect(crumbs).toContainText('Assess'); await expect(crumbs).toContainText('Communication');
+  await oneSectionRail(asha.page, null);
+  // The plane's home: the full rail with the assessment groups section, which lists the teams the assessor is on
+  // (GET /api/me/groups?kind=assessment-team), not every team.
+  await asha.page.goto('/assessment/communication');
   await fullRail(asha.page, ['My teams', 'Channels']);
-  // The assessment groups section lists the teams the assessor is on (GET /api/me/groups?kind=assessment-team), not every team.
   await expect(asha.page.getByTestId('plane-groups-section').getByRole('button', { name: /^My teams/ })).toBeVisible();
   await expect(asha.page.getByTestId('plane-groups').locator('[data-testid="conversation-row"]').first()).toBeVisible({ timeout: 20_000 });
   await expect(asha.page.getByTestId('plane-org-teams-section')).toHaveCount(0);
   await asha.page.goto('/assessment/communication/channels');
   await expect(asha.page.getByTestId('social-chat-rail').locator('[data-testid="conversation-row"]').first()).toBeVisible({ timeout: 20_000 });
+  await oneSectionRail(asha.page, 'Channels');
   expect(asha.errors, 'assessment page errors').toEqual([]);
   await asha.context.close();
 

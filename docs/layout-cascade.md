@@ -75,8 +75,10 @@ the trail — and pane padding of 20px against the 24px everywhere else.
    overview with the section's lists and counts, or its first destination —
    never a bare "Explore …" / "Browse …" placeholder.
 7. **One shell footer, no horizontal page scroll** at 1680×940 and 1280×720.
-8. **On a deep page the primary rail gives way, never the section rail**
-   (2026-10-07, the user's screenshot of
+8. **On a deep page the primary rail gives way first; while a dialogue is
+   open, the primary rail and the page's own section/list rail both give
+   way** (decided by the user 2026-10-13; the dialogue half below). The depth
+   rule (2026-10-07, the user's screenshot of
    `/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4`, where
    the work list had folded to a bare ">" strip while the Org rail stayed
    wide). One rule, the library rail model (ui-components 2.438 `railDepth`
@@ -93,20 +95,46 @@ the trail — and pane padding of 20px against the 24px everywhere else.
    (Distillation's `?sample=` / `?item=` / `?run=`, a catalog
    `/iq/designs/:id` or `/iq/library/:id`) is the selection level, so it is
    deep: the primary rail folds and the section rail and list rail stay open.
-   The list rail (rule 5) is the page's list and stays open at every depth.
+   With no dialogue open, the list rail (rule 5) is the page's list and stays
+   open at every depth.
+
+   **While a dialogue is open, both rails fold** (the 2026-10-10 huddles
+   behaviour, made the rule by the user on 2026-10-13; `useDialogueRailFold`,
+   `portal/src/components/shell/useDialogueRailFold.ts`). A dialogue is open
+   when the shell's right pane is shown (`useSidePaneHost().shown`: an
+   initiative's or scorecard's Discussion/Details pane, Search's Ask about
+   selection; a pane minimized to its 44px strip still counts) or a huddle's
+   conversation dialogue is open (`ShellCallHost onDialogueChange`). Then, at
+   ANY depth: (a) the primary rail folds to its 44px strip (`Layout.tsx`), and
+   (b) the page's own section/list rail folds to its strip on the pages that
+   fold it for dialogue — today the initiative work list
+   (`InitiativesExplorer.tsx`) and Search's rail (`SearchPage.tsx`). A section
+   rail a page does not fold for dialogue (the tenant section rails drawn by
+   `SubNavLayout`, a `ListRailLayout` list rail) keeps the depth behaviour.
+   Each folded rail's own toggle reopens it **for this visit only**: the
+   choice is held in memory for the current path (moving between records by
+   query — `?item=` — keeps it; another path starts folded again) and is never
+   written to storage, so a reload with the dialogue still open folds the
+   rails again. When the dialogue closes, the choice is dropped and each rail
+   returns to its remembered, per-device state — the dialogue fold never
+   overwrites it. The pane's own open/closed state is remembered per device
+   (`shell.conversation-pane.open`, open by default), which is why the
+   initiative and scorecard pages open with both rails folded. The four
+   rail-collapse cases in `portal/e2e/layout-cascade.spec.ts` check both
+   halves: with the pane shown, and with `shell.conversation-pane.open=0`.
    Inside the record pane the record has one inset: its header, body sections
    and docked composer share EditorShell's 20px edge (the composer dock takes
    `[--dock-inset:1.25rem]`), and the record carries no breadcrumb of its own
    — the shell trail is the only trail. A window under 1180px folds the primary rail at
-   any depth, and only under 768px does the section rail fold — second. The
-   reader's own toggle wins, remembered per device per depth band
-   (`shell.primary-rail.shallow|deep`). The trail stays the content column's
+   any depth, and only under 768px does the section rail fold — second. With
+   no dialogue open, the reader's own toggle wins, remembered per device per
+   depth band (`shell.primary-rail.shallow|deep`). The trail stays the content column's
    first row either way. A section rail the reader can fold (the initiative
    work list, `initiatives.rail-collapsed`; the assessment document rail,
    `assessment.documentRail.collapsed`) remembers that fold per depth band
    through the library `useRailFold` (`<key>.shallow|deep` = `collapsed|open`;
    a band-less legacy value is ignored, so a fold set on a list page never
-   folds a deep page). The social chat rail folds sections inside the rail, not the
+   folds a deep page; only an open dialogue folds it there, without storing). The social chat rail folds sections inside the rail, not the
    rail, so it is unaffected. The shell exposes the result as
    `data-primary-rail`, `data-section-rail` and `data-drill-depth` on
    `[data-shell-nav]`. The strip is the library's `SubNavLayout collapsed`

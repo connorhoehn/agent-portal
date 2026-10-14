@@ -135,3 +135,19 @@ test('a conversation\'s Calls view lists the recordings from its own lobby, newe
   ], 'social:ch:general');
   assert.deepEqual(items.map((i) => `${i.recordingId}:${i.playable}:${i.participantCount}`), ['r3:false:1', 'r1:true:1']);
 });
+
+test('one section per route: each Social rail page shows Active now and only its own section', async () => {
+  const { railSectionsFor, ROUTE_RAIL_CAPTION, SOCIAL_SECTION_CAPTIONS } = await import('../socialChat.ts');
+  assert.deepEqual(railSectionsFor('channels'), ['active-now', 'channels']);
+  assert.deepEqual(railSectionsFor('dms'), ['active-now', 'dms']);
+  assert.deepEqual(railSectionsFor('teams'), ['active-now', 'teams']);
+  assert.deepEqual(railSectionsFor('rooms'), ['active-now', 'rooms']);
+  assert.deepEqual(railSectionsFor('calls'), ['active-now']);
+  assert.deepEqual(railSectionsFor('recordings'), ['active-now']);
+  for (const route of ['channels', 'dms', 'teams', 'rooms'] as const) {
+    const own = ROUTE_RAIL_CAPTION[route]!;
+    assert.ok((SOCIAL_SECTION_CAPTIONS as readonly string[]).includes(own), `${route} caption ${own} is a known section caption`);
+  }
+  assert.equal(ROUTE_RAIL_CAPTION.calls, null);
+  assert.equal(ROUTE_RAIL_CAPTION.recordings, null);
+});

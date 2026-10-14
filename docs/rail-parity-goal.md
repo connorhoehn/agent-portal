@@ -52,14 +52,29 @@ documents rails move onto the Org rail's family.
    workspace's six chat pages — `/social/channels`, `/social/dms`,
    `/social/teams`, `/social/rooms`, `/social/calls`, `/social/recordings` —
    are ONE composition (`portal/src/pages/social/SocialChatWorkspace.tsx`;
-   the route only picks what the pane opens on) and do **not** use
+   the route picks what the pane opens on and which rail section shows —
+   below) and do **not** use
    `StackedRail`. They draw the chat app's sidebar the way realtime-examples'
    `MessagesPage.tsx` does, from the library's `ConversationRail`: a shelf
    (Activity, Mentions, Calls, Recordings — destinations that are not
    conversations), Active now (`ActivePeopleGrid` over presence), Teams
    (`TeamChannelTree`), Rooms (the library's hook-bound rooms section —
    `ConversationRail` has no rooms group), then Direct messages and Channels
-   (`sectionOrder="dms-first"`, a + on each). Avatars, presence dots, `#`
+   (`sectionOrder="dms-first"`, a + on each). **One section per route** (the
+   user, 2026-10-13): each page draws the shelf, Active now and ONLY its own
+   section — `/social/channels` Channels, `/social/dms` Direct messages,
+   `/social/teams` Teams, `/social/rooms` Rooms; `/social/calls` and
+   `/social/recordings` are shelf destinations and draw no section. The rule
+   is data (`ROUTE_RAIL_SECTION` / `railSectionsFor` in
+   `pages/social/socialChat.ts`) and the library hides the rest
+   (`ConversationRail showSections`, ui-components 2.442.5); a one-section
+   view keeps the default order (Direct messages above Active now on
+   `/social/dms`, Active now above the section elsewhere), ignores a stored
+   section order, and offers no "Arrange sections". The Communication plane renders this same workspace: its
+   sub-routes (`/<tenant>/communication/channels|dms|teams|rooms|calls|recordings`)
+   follow the rule; its home (`/<tenant>/communication`, no sub-route) is the
+   one rail that keeps every section — the org context, Teams, Rooms, Direct
+   messages, Channels — arrangeable. Avatars, presence dots, `#`
    glyphs, previews and ages are the point of this rail, so the StackedRail
    rules — 36px rows, 13px/500 text, no leading icons, 220px — do not apply;
    its width is the library default (`WorkspaceRail` `md`, 300px). What does
@@ -67,11 +82,13 @@ documents rails move onto the Org rail's family.
    `data-shell-flush`, there is no `PageHeader` or shell breadcrumb row above
    the rail, the rail's left = the content column's left = 200 ± 2 (flush
    against the shell rail), its top = the content top ± 2, its height = the
-   content height ± 4, no card ring (radius ≤ 2), no horizontal scroll, and
-   the shelf (Activity / Mentions / Calls / Recordings) and the section
-   captions (ACTIVE NOW / TEAMS / ROOMS / DIRECT MESSAGES / CHANNELS) are
-   present. Contacts and Configuration stay ordinary pages (the 24px ring,
-   the crumbs), with no second rail.
+   content height ± 4, no card ring (radius ≤ 2), no horizontal scroll, the
+   shelf (Activity / Mentions / Calls / Recordings) is present, ACTIVE NOW
+   and the route's own caption (CHANNELS / DIRECT MESSAGES / TEAMS / ROOMS,
+   none on Calls and Recordings) are present (`missingCaptions`), and no
+   other section caption is (`forbiddenCaptions`; the plane's home expects
+   all five and forbids none). Contacts and Configuration stay ordinary pages
+   (the 24px ring, the crumbs), with no second rail.
 
 ## Definition of done
 
@@ -88,7 +105,8 @@ indentation; the earlier fixed-width measurement is historical for this rail.
 - realtime-examples `/documents` adopted: commit recorded here; when :15174
   answers, the same measurement passes against it.
 - The six social chat pages pass the chat-rail frame measurement
-  (`RAIL_PARITY_SUBJECT=… RAIL_PARITY_USER=u-mira`, decision 6).
+  (`RAIL_PARITY_SUBJECT=… RAIL_PARITY_USER=u-mira`, decision 6), including
+  one section caption per route.
 - The assessment-tenant and documents-parity validators stay green; the
   journey logs the rail change stales are re-sealed.
 

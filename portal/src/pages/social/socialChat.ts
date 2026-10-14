@@ -301,3 +301,37 @@ export function conversationRecordings(
       playable: r.stage === 'ready',
     }));
 }
+
+// ── One section per route (the user, 2026-10-13) ─────────────────────────────
+// docs/rail-parity-goal.md decision 6; docs/social-tenant-design.md §4.5. Every
+// Social rail page draws only its own conversation section under the shelf and
+// Active now: /social/channels → Channels, /social/dms → Direct messages,
+// /social/teams → Teams, /social/rooms → Rooms; /social/calls and
+// /social/recordings are shelf destinations with no section of their own, so
+// their rail holds the shelf and Active now only. The library's
+// `ConversationRail showSections` does the hiding; this is the data.
+
+/** The six routes the chat workspace renders. */
+export type SocialChatRouteId = 'channels' | 'dms' | 'teams' | 'rooms' | 'calls' | 'recordings';
+
+/** The rail section id each route owns (`dms`/`channels` are the library's own ids), or null for a shelf destination. */
+export const ROUTE_RAIL_SECTION: Readonly<Record<SocialChatRouteId, 'channels' | 'dms' | 'teams' | 'rooms' | null>> = {
+  channels: 'channels', dms: 'dms', teams: 'teams', rooms: 'rooms', calls: null, recordings: null,
+};
+
+/** The caption that section draws — what the rail-parity measure and the navigation spec look for. */
+export const ROUTE_RAIL_CAPTION: Readonly<Record<SocialChatRouteId, 'Channels' | 'Direct messages' | 'Teams' | 'Rooms' | null>> = {
+  channels: 'Channels', dms: 'Direct messages', teams: 'Teams', rooms: 'Rooms', calls: null, recordings: null,
+};
+
+/** Every conversation-section caption the Social rail can draw; on a route, all but its own are forbidden. */
+export const SOCIAL_SECTION_CAPTIONS = ['Teams', 'Rooms', 'Direct messages', 'Channels'] as const;
+
+/** Sections on every route: presence is not a destination, so it never gives way. */
+export const ALWAYS_SHOWN_RAIL_SECTIONS: readonly string[] = ['active-now'];
+
+/** The section ids `ConversationRail showSections` gets on a route: Active now, then the route's own section. */
+export function railSectionsFor(route: SocialChatRouteId): string[] {
+  const own = ROUTE_RAIL_SECTION[route];
+  return [...ALWAYS_SHOWN_RAIL_SECTIONS, ...(own ? [own] : [])];
+}

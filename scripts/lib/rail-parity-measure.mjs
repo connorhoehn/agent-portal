@@ -107,6 +107,15 @@ async function signIn(page, base, userId, tenant, role) {
 // left = 200 ± 2), starts at the content top (± 2, nothing above it — no page
 // header, no shell breadcrumb row), runs the content's full height (± 4), has
 // no card ring (radius ≤ 2), and carries the shelf and its section captions.
+// One section per route (the user, 2026-10-13): each page carries Active now
+// and ONLY its own section caption — /…/channels Channels, /…/dms Direct
+// messages, /…/teams Teams, /…/rooms Rooms, /…/calls and /…/recordings none
+// (shelf destinations). `missingCaptions` lists the route's expected captions
+// that are absent; `forbiddenCaptions` lists any OTHER section caption that is
+// present. The Communication plane's home (`/<tenant>/communication`, no
+// sub-route) is the one rail that keeps every section.
+// RAIL_PARITY_CAPTIONS overrides the captions expected on every route
+// (default "Active now").
 // ── The list-rail frame (docs/layout-cascade.md rule 5) ─────────────────────
 // RAIL_PARITY_LIST=<path>[,<path>…] [RAIL_PARITY_USER=u-vera]
 // [RAIL_PARITY_TENANT=orgiq]: a page's list is a flush list rail stacked
@@ -187,7 +196,19 @@ if (SUBJECTS.length) {
   const user = process.env.RAIL_PARITY_USER;
   if (!user) { console.log('RAIL_PARITY_SUBJECT needs RAIL_PARITY_USER'); process.exit(2); }
   const tenant = process.env.RAIL_PARITY_TENANT ?? 'social';
-  const CAPTIONS = (process.env.RAIL_PARITY_CAPTIONS ?? 'Active now,Teams,Rooms,Direct messages,Channels').split(',');
+  const ALWAYS = (process.env.RAIL_PARITY_CAPTIONS ?? 'Active now').split(',').map((v) => v.trim()).filter(Boolean);
+  // Mirrors portal/src/pages/social/socialChat.ts ROUTE_RAIL_CAPTION / SOCIAL_SECTION_CAPTIONS.
+  const SECTION_CAPTIONS = ['Teams', 'Rooms', 'Direct messages', 'Channels'];
+  const ROUTE_CAPTION = { channels: 'Channels', dms: 'Direct messages', teams: 'Teams', rooms: 'Rooms', calls: null, recordings: null };
+  const captionsFor = (path) => {
+    const pathname = new URL(path, 'http://x').pathname.replace(/\/+$/, '');
+    const m = pathname.match(/^\/(?:social|[a-z]+\/communication)(?:\/([a-z]+))?/);
+    if (!m) return { expected: [...ALWAYS, ...SECTION_CAPTIONS], forbidden: [] };
+    // The plane's home keeps every section; a route without a sub-route segment under /social is not a chat page.
+    if (!m[1]) return { expected: [...ALWAYS, ...SECTION_CAPTIONS], forbidden: [] };
+    const own = ROUTE_CAPTION[m[1]] ?? null;
+    return { expected: [...ALWAYS, ...(own ? [own] : [])], forbidden: SECTION_CAPTIONS.filter((c) => c !== own) };
+  };
   const SHELF = (process.env.RAIL_PARITY_SHELF ?? 'Activity,Mentions,Calls,Recordings').split(',');
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 1672, height: 941 } });
@@ -197,7 +218,8 @@ if (SUBJECTS.length) {
   let failed = 0;
   for (const path of SUBJECTS) {
     await page.goto(BASE + path); await page.waitForTimeout(3500);
-    const m = await page.evaluate(({ CAPTIONS, SHELF }) => {
+    const { expected: CAPTIONS, forbidden: FORBIDDEN } = captionsFor(path);
+    const m = await page.evaluate(({ CAPTIONS, FORBIDDEN, SHELF }) => {
       const main = document.querySelector('main');
       const rail = document.querySelector('nav[aria-label="Chat"]') ?? document.querySelector('[data-testid$="chat-rail"]');
       if (!main || !rail) return null;
@@ -208,15 +230,18 @@ if (SUBJECTS.length) {
       const text = (rail.textContent ?? '').toLowerCase();
       const heads = [...rail.querySelectorAll('h2, h3, [data-testid="conversation-section"], [role="heading"], button, span')]
         .map((e) => (e.textContent ?? '').trim().toLowerCase());
+      // A caption is a heading element whose whole text is the caption (an optional count after it), never a row's preview.
+      const isCaption = (c) => { const re = new RegExp(`^${c.toLowerCase()}\\s*\\d*$`); return heads.some((h) => re.test(h)); }; // captions are plain words
       return {
         railLeft: Math.round(r.left), railTop: Math.round(r.top), railWidth: Math.round(r.width), railHeight: Math.round(r.height),
         contentLeft: Math.round(content.left), contentTop: Math.round(content.top), contentHeight: Math.round(content.bottom - content.top),
         radius: parseFloat(rcs.borderTopLeftRadius) || 0, crumbs,
-        missingCaptions: CAPTIONS.filter((c) => !heads.some((h) => h.startsWith(c.toLowerCase()))),
+        missingCaptions: CAPTIONS.filter((c) => !isCaption(c)),
+        forbiddenCaptions: FORBIDDEN.filter((c) => isCaption(c)),
         missingShelf: SHELF.filter((c) => !text.includes(c.toLowerCase())),
         hScroll: document.documentElement.scrollWidth > innerWidth,
       };
-    }, { CAPTIONS, SHELF });
+    }, { CAPTIONS, FORBIDDEN, SHELF });
     console.log(`subject ${path} as ${user}:`, JSON.stringify(m));
     const problems = [];
     if (!m) problems.push('no chat rail (nav[aria-label=Chat]) or no <main>');
@@ -228,6 +253,7 @@ if (SUBJECTS.length) {
       if (m.crumbs) problems.push('the shell breadcrumb row is showing (the page root is not data-shell-flush)');
       if (m.radius > 2) problems.push(`the rail has card chrome (radius ${m.radius}px)`);
       if (m.missingCaptions.length) problems.push(`section captions missing: ${m.missingCaptions.join(', ')}`);
+      if (m.forbiddenCaptions.length) problems.push(`section captions present but forbidden on this route (one section per route): ${m.forbiddenCaptions.join(', ')}`);
       if (m.missingShelf.length) problems.push(`shelf destinations missing: ${m.missingShelf.join(', ')}`);
       if (m.hScroll) problems.push('horizontal page scroll');
     }

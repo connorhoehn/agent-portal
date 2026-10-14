@@ -289,6 +289,31 @@ the same forms family the assessment configuration page uses. Anything
 missing goes to `docs/ui-components-queue.md` as a row before a local
 composition.
 
+**One section per route (decision, 2026-10-13, the user).** The six chat
+pages share one `ConversationRail` (`SocialChatWorkspace.tsx`), and each
+draws the shelf (Activity, Mentions, Calls, Recordings), Active now and ONLY
+its own section:
+
+| Route | Rail sections drawn |
+|-------|---------------------|
+| `/social/channels` | Active now, Channels |
+| `/social/dms` | Active now, Direct messages |
+| `/social/teams` | Active now, Teams |
+| `/social/rooms` | Active now, Rooms |
+| `/social/calls` | Active now (Calls is a shelf destination) |
+| `/social/recordings` | Active now (Recordings is a shelf destination) |
+
+The table is `ROUTE_RAIL_SECTION` / `railSectionsFor` in
+`pages/social/socialChat.ts`; the library's `ConversationRail showSections`
+(ui-components 2.442.5) hides every other section, caption and row; a
+one-section view keeps the default order (on `/social/dms` the conversations
+sit above Active now), ignores a stored order and offers no "Arrange
+sections". Active now is presence,
+not a destination, so it stays on every route. Contacts, Profile,
+Configuration and Settings are not chat pages and keep their own layouts.
+Judged by `portal/e2e/social-navigation.spec.ts` (one case per route) and the
+rail-parity measure's `missingCaptions` / `forbiddenCaptions`.
+
 Pinning uses the installed `usePins`, `WrappedChatPanel` message actions and
 `WrappedConversationSurface` Pinned view. The same state feeds both views;
 peers refresh on the channel hint and after reconnecting. The original
@@ -404,7 +429,11 @@ and see the work they have shared (graphs) etc." Goal and judge:
   `GET /api/social/plane/active` with status, in-call, latest readable work
   and work-sharing state — never a second presence subscription); the
   host-tenant groups; **My org teams** (orgiq only); then Teams, Rooms,
-  Direct messages, Channels unchanged.
+  Direct messages, Channels unchanged. That full rail is the plane's **home**
+  (`/<tenant>/communication`, no sub-route; still arrangeable). Every
+  sub-route (`…/channels`, `/dms`, `/teams`, `/rooms`, `/calls`,
+  `/recordings`) follows Social's one-section-per-route rule (§4.5, decided
+  2026-10-13): Active now and its own section only, with no host groups.
 - **Host-tenant groups.** **My initiatives** (orgiq), **My teams**
   (assessment), **My pipelines** (pipelines): the groups the user belongs to
   in the tenant they stand in. Each row shows its bound Social channel
