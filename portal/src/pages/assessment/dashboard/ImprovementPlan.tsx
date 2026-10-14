@@ -116,13 +116,13 @@ function RecommendationCard({ rec, teamId }: { rec: Recommendation; teamId: stri
         <KindChip kind={rec.kind} />
       </Inline>
 
-      <Stack gap="none" className="mt-2.5 text-[15px] font-semibold leading-snug text-text-primary">{rec.headline}</Stack>
+      <Stack gap="none" className="mt-2.5 text-base font-semibold leading-snug text-text-primary">{rec.headline}</Stack>
 
       <Inline gap="sm" wrap align="center" className="mt-2.5">
         {cert && <LevelBadge level={cert.verified_level} size="xs" />}
         {statement && <MetaLine items={[statement]} size="xs" tone="secondary" />}
         {rec.team_flagged_priority && (
-          <strong className="text-[11px] font-semibold text-text-secondary">The team asked us to look at this one</strong>
+          <strong className="text-xs font-semibold text-text-secondary">The team asked us to look at this one</strong>
         )}
       </Inline>
 

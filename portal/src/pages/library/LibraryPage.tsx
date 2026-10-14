@@ -187,8 +187,8 @@ export default function LibraryPage() {
         <Select size="sm" className="w-auto min-w-28" aria-label="Asset kind" value={kind} onChange={(e) => setFilter('kind', e.target.value)} options={[{ value: 'all', label: 'Kind: All' }, ...KIND_ORDER.map((value) => ({ value, label: KIND_LABEL[value] }))]} />
         <Select size="sm" className="w-auto min-w-28" aria-label="Asset tier" value={tier} onChange={(e) => setFilter('tier', e.target.value)} options={[{ value: 'all', label: 'Tier: All' }, ...TIER_ORDER.map((value) => ({ value, label: TIER_LABEL[value] }))]} />
         <Select size="sm" className="w-auto min-w-28" aria-label="Asset status" value={status} onChange={(e) => setFilter('status', e.target.value)} options={[{ value: 'all', label: 'Status: All' }, ...[...new Set(['draft', 'published', 'retired', ...(data?.assets.map((a) => a.lifecycleStatus) ?? []), ...(status === 'all' ? [] : [status])])].map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) }))]} />
-        <T className="ml-auto text-[12px] text-text-tertiary">{data ? `${assets.length} assets` : 'Loading…'}</T>
-        <Link to="/iq/distillation/review?view=promotions" className="text-[13px] text-primary hover:underline">Review promotions ↗</Link>
+        <T size="xs" className="ml-auto text-text-tertiary">{data ? `${assets.length} assets` : 'Loading…'}</T>
+        <Link to="/iq/distillation/review?view=promotions" className="text-sm text-primary hover:underline">Review promotions ↗</Link>
       </Inline>
 
       {/* See the shared list-page loading pattern comment in QueuePage.tsx:
@@ -215,7 +215,7 @@ export default function LibraryPage() {
           title="Agent library has no assets yet"
           description="Reusable assets include manually authored prompts, system prompts, evaluators and skills, plus assets reviewed in Distillation."
           action={(
-            <Link to={knowledgeHref({ view: 'guides' })} className="text-[12px] font-semibold text-primary no-underline hover:underline">
+            <Link to={knowledgeHref({ view: 'guides' })} className="text-xs font-semibold text-primary no-underline hover:underline">
               Open Distillation → Knowledge →
             </Link>
           )}

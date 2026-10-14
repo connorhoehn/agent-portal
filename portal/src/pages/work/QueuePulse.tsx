@@ -140,7 +140,7 @@ export function QueuePulse({ summary, jobs, degraded }: {
           <Toolbar
             size="sm"
             end={canOpenBot ? (
-              <Link to="/admin/bots" className="text-[11px] text-primary no-underline hover:underline">
+              <Link to="/admin/bots" className="text-xs text-primary no-underline hover:underline">
                 Manage bots →
               </Link>
             ) : undefined}
@@ -152,11 +152,11 @@ export function QueuePulse({ summary, jobs, degraded }: {
             const paused = !bot.enabled || bot.pausedReason != null;
             const statusChip = botStatusChip(bot, isPulling);
             const name = canOpenBot ? (
-              <Link to={`/admin/bots/${bot.id}`} className="text-[12px] font-semibold text-text-primary no-underline hover:text-primary hover:underline truncate">
+              <Link to={`/admin/bots/${bot.id}`} className="text-xs font-semibold text-text-primary no-underline hover:text-primary hover:underline truncate">
                 {bot.name}
               </Link>
             ) : (
-              <T className="text-[12px] font-semibold text-text-primary truncate">{bot.name}</T>
+              <T size="xs" className="font-semibold text-text-primary truncate">{bot.name}</T>
             );
             return (
               <Inline key={bot.id} align="center" gap="sm" className="px-3.5 py-2 border-b border-border last:border-b-0 min-w-0">
@@ -166,15 +166,15 @@ export function QueuePulse({ summary, jobs, degraded }: {
                   <StatusDot size="xs" color={paused ? 'var(--color-warning)' : 'var(--color-state-idle)'} />
                 )}
                 {name}
-                <T className="text-[11px] text-text-tertiary truncate">
+                <T size="xs" className="text-text-tertiary truncate">
                   {bot.orgProjectName ?? bot.agentProjectRepo ?? ''}
                 </T>
                 <T className="flex-1" />
                 <Chip tone={statusChip.tone} size="xs" dot={isPulling ? 'pulse' : undefined} title={statusChip.title}>
                   {statusChip.label}
                 </Chip>
-                <T className="text-[11px] text-text-tertiary whitespace-nowrap">{cadence(bot)}</T>
-                <T className="text-[11px] text-text-tertiary whitespace-nowrap hidden md:inline">
+                <T size="xs" className="text-text-tertiary whitespace-nowrap">{cadence(bot)}</T>
+                <T size="xs" className="text-text-tertiary whitespace-nowrap hidden md:inline">
                   {lastRan(bot.lastRunAt)}
                 </T>
                 <DotMeter

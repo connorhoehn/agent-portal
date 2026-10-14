@@ -6,33 +6,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Banner,
-  Button,
-  Chip,
-  CodeBlock,
-  ConfirmDialog,
-  Card,
-  CollectionToolbar,
-  DataTable,
-  DetailSection,
-  EmptyState,
-  EntityCell,
-  Inline,
-  InlinePlaceholder,
-  MetaLine,
-  SegmentedControl,
-  useToastOptional,
-  PageSection,
-  Select,
-  Stack,
-  Switch,
-  PresenceDot,
-  Tabs,
-  Toolbar,
-  ToolbarLabel,
-  ToolbarSeparator,
-  T,
-  type DataTableColumn,
+  Banner, Button, Card, Chip, CloseIcon, CodeBlock, CollectionToolbar, ConfirmDialog, DataTable,
+  DetailSection, EmptyState, EntityCell, IconButton, Inline, InlinePlaceholder, MetaLine,
+  PageSection, PlayCircleIcon, PresenceDot, SegmentedControl, Select, SendIcon, Stack, Switch, T,
+  Tabs, Toolbar, ToolbarLabel, ToolbarSeparator, useToastOptional, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { LogStream, type LogLine } from '@connorhoehnslalom/ui-components/shared';
 import { Link as RouterLink, useSearchParams } from 'react-router';
@@ -517,16 +494,15 @@ export default function LocalComputePage() {
               sitting on every row at rest, the same treatment the other
               destructive row controls got. Its confirm dialog is unchanged. */}
           {canDispatch && (
-            <Button
-              variant="ghost"
+            <IconButton
               size="sm"
+              icon={<CloseIcon />}
               className="row-reveal"
               disabled={unpairBusy === n.id}
               onClick={(e) => { e.stopPropagation(); setUnpairTarget(n); }}
               aria-label={`Unpair ${n.label}`}
-            >
-              Unpair
-            </Button>
+              title="Unpair"
+            />
           )}
         </Inline>
       ),
@@ -545,21 +521,18 @@ export default function LocalComputePage() {
       render: (r) => {
         const origin = runOrigin(r);
         return (
-          <Stack gap="none">
-            <EntityCell label={r.title} href={`/iq/work/${encodeURIComponent(r.id)}`} />
+          <Inline gap="sm" wrap={false} className="min-w-0" title={r.result?.summary ? truncate(r.result.summary, 200) : undefined}>
+            <EntityCell label={r.title} href={`/iq/work/${encodeURIComponent(r.id)}`} className="min-w-0" />
             {origin && (
               <RouterLink
                 to={origin.href}
                 onClick={(e) => e.stopPropagation()}
-                className="text-[11px] text-primary no-underline hover:underline"
+                className="text-xs text-primary no-underline hover:underline"
               >
                 {origin.label} →
               </RouterLink>
             )}
-            {r.result?.summary && (
-              <MetaLine size="xs" tone="tertiary" items={[truncate(r.result.summary, 80)]} />
-            )}
-          </Stack>
+          </Inline>
         );
       },
     },
@@ -599,7 +572,7 @@ export default function LocalComputePage() {
           <RouterLink
             to={`/iq/work/${encodeURIComponent(r.id)}`}
             onClick={(e) => e.stopPropagation()}
-            className="text-[12px] font-medium text-primary no-underline hover:underline"
+            className="text-xs font-medium text-primary no-underline hover:underline"
           >
             Review →
           </RouterLink>
@@ -829,9 +802,7 @@ export default function LocalComputePage() {
                           { key: 'why', header: 'Why now', render: (r) => <MetaLine items={[r.reason]} /> },
                           { key: 'size', header: 'Size', render: (r) => [r.storyPoints != null ? `${r.storyPoints} pts` : null, r.estimatedCostUsd != null ? usd(r.estimatedCostUsd) : null].filter(Boolean).join(' · ') || '—' },
                           { key: 'send', header: '', render: (r) => (
-                            <Button size="sm" variant="secondary" disabled={!selectedNode.acceptJobs || sending === r.workItemId} onClick={(e) => { e.stopPropagation(); void send({ workItemId: r.workItemId }, r.title); }}>
-                              {sending === r.workItemId ? 'Sending…' : `Send to ${selectedNode.label}`}
-                            </Button>
+                            <IconButton size="sm" icon={<SendIcon />} disabled={!selectedNode.acceptJobs || sending === r.workItemId} onClick={(e) => { e.stopPropagation(); void send({ workItemId: r.workItemId }, r.title); }} aria-label={`Send ${r.title} to ${selectedNode.label}`} title={sending === r.workItemId ? 'Sending…' : `Send to ${selectedNode.label}`} />
                           ) },
                         ]}
                         data={pickWork}
@@ -849,9 +820,7 @@ export default function LocalComputePage() {
                           { key: 'model', header: 'Model', render: (b) => b.model },
                           { key: 'last', header: 'Last ran', render: (b) => (b.lastRunAt ? when(b.lastRunAt) : 'never') },
                           { key: 'send', header: '', render: (b) => (
-                            <Button size="sm" variant="secondary" disabled={!selectedNode.acceptJobs || sending === b.id} onClick={(e) => { e.stopPropagation(); void send({ botId: b.id }, b.name); }}>
-                              {sending === b.id ? 'Sending…' : `Run on ${selectedNode.label}`}
-                            </Button>
+                            <IconButton size="sm" icon={<PlayCircleIcon />} disabled={!selectedNode.acceptJobs || sending === b.id} onClick={(e) => { e.stopPropagation(); void send({ botId: b.id }, b.name); }} aria-label={`Run ${b.name} on ${selectedNode.label}`} title={sending === b.id ? 'Sending…' : `Run on ${selectedNode.label}`} />
                           ) },
                         ]}
                         data={pickBots}
@@ -900,7 +869,7 @@ export default function LocalComputePage() {
                     for. */}
                 <Card padding="sm">
                   <Stack gap="sm">
-                    <T className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
+                    <T size="xs" className="font-semibold uppercase tracking-wide text-text-tertiary">
                       What this machine can take on
                     </T>
                     <CapabilityBrief models={selectedNode.localModels} />

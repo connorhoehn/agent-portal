@@ -173,7 +173,7 @@ function EnvironmentRow({ env }: { env: Environment }) {
               <Stack gap="none">
                 <Link
                   to="/admin/devbox"
-                  className="text-primary no-underline hover:underline text-[11px]"
+                  className="text-primary no-underline hover:underline text-xs"
                   title="Open the Computer Lab — run the command from a microVM"
                 >
                   open a computer →
@@ -213,7 +213,7 @@ function EnvironmentRow({ env }: { env: Environment }) {
                       external
                       unstyled
                       href={r.htmlUrl}
-                      className="text-[11px] text-text-secondary no-underline hover:underline truncate"
+                      className="text-xs text-text-secondary no-underline hover:underline truncate"
                     >
                       {r.displayTitle ?? r.name ?? `run ${r.id}`}
                     </ExternalLink>

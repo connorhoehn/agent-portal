@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  Chip, Inline, MetaLine, Stack,
+  Chip, Inline, MetaLine, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCanaryStore } from './canaryStore.js';
 import { DecisionRow } from './DecisionRow.js';
@@ -48,15 +48,15 @@ export function DecisionHistoryPanel(): React.ReactElement {
         title={collapsed ? 'Expand decision history' : 'Collapse'}
       >
         {collapsed ? (
-          <Inline as="span" gap="none" className="text-[13px] text-text-tertiary" title="Decision history">⟩</Inline>
+          <T size="sm" tone="tertiary" title="Decision history">⟩</T>
         ) : (
           <>
-            <Inline as="span" gap="none" className="text-[12px] font-semibold text-text-primary">
+            <T size="xs" weight="semibold" tone="primary">
               Decision history
-            </Inline>
+            </T>
             <Inline gap="xs" wrap={false}>
               <Chip tone="neutral" size="xs">{ordered.length}</Chip>
-              <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">⟨</Inline>
+              <T size="xs" tone="tertiary">⟨</T>
             </Inline>
           </>
         )}

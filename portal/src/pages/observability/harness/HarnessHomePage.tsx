@@ -11,20 +11,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Button,
-  Card,
-  Chip,
-  Inline,
-  Input,
-  PageSection,
-  ProgressBar,
-  Stack,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd, T,
+  ArrowRightIcon, Button, Card, Chip, IconButton, Inline, Input, PageSection, ProgressBar, Stack,
+  T, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   BarChart,
@@ -515,13 +503,13 @@ function HarnessHomePage() {
                       </Chip>
                     </TableTd>
                     <TableTd>
-                      <Button
-                        variant="ghost"
+                      <IconButton
                         size="sm"
+                        icon={<ArrowRightIcon />}
+                        aria-label="View run"
+                        title="View run"
                         onClick={() => navigate(`/admin/observability/harness/runs/${r.runId}`)}
-                      >
-                        view
-                      </Button>
+                      />
                     </TableTd>
                   </TableRow>
                 );

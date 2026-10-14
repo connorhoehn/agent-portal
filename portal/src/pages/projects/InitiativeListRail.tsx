@@ -279,9 +279,9 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
       body = (
         <Padded>
           <Stack gap="xs" data-testid="initiative-rail-empty">
-            <T className="text-[13px] font-medium leading-5">{copy.title}</T>
-            <T wrap className="text-[13px] leading-5 text-text-secondary">{copy.body}</T>
-            {copy.action && <Button variant="link" size="sm" className="self-start px-0 text-left text-[13px] font-medium leading-5" onClick={() => setScope('all')}>{copy.action.label} →</Button>}
+            <T size="sm" className="font-medium leading-5">{copy.title}</T>
+            <T size="sm" wrap className="leading-5 text-text-secondary">{copy.body}</T>
+            {copy.action && <Button variant="link" size="sm" className="self-start px-0 text-left text-sm font-medium leading-5" onClick={() => setScope('all')}>{copy.action.label} →</Button>}
           </Stack>
         </Padded>
       );
@@ -337,7 +337,7 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
     } : {}),
     header,
     body,
-    ...(footer ? { footer: <T className="text-[13px] text-text-secondary" data-testid="initiative-rail-footer">{footer}</T> } : {}),
+    ...(footer ? { footer: <T size="sm" className="text-text-secondary" data-testid="initiative-rail-footer">{footer}</T> } : {}),
     label: lens === 'sprints' ? 'sprints' : 'initiatives',
   };
 

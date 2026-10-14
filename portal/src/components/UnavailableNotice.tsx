@@ -54,8 +54,8 @@ export function UnavailableNotice({
       data-testid={testId ?? 'unavailable-notice'}
       role="alert"
     >
-      <div className="text-[13px] font-semibold text-danger">Could not load {what}</div>
-      <div className="text-[12px] text-text-secondary mt-1 leading-snug">
+      <div className="text-sm font-semibold text-danger">Could not load {what}</div>
+      <div className="text-xs text-text-secondary mt-1 leading-snug">
         {/* Server error lines sometimes end in a period of their own
             ("…request is invalid."), and appending ours produced "invalid.. Score
             history lives in Aurora". Trim one before joining.

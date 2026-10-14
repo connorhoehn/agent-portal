@@ -108,7 +108,7 @@ export function VarCombobox({
               aria-selected={i === highlighted}
               onMouseDown={() => pick(item)}
               onMouseEnter={() => setHighlighted(i)}
-              className={`cursor-pointer select-none px-2.5 py-[7px] text-[12px] ${
+              className={`cursor-pointer select-none px-2.5 py-[7px] text-xs ${
                 i === highlighted ? 'bg-[var(--color-primary-soft)] text-[var(--color-optimize)]' : 'text-text-primary'
               }`}
             >

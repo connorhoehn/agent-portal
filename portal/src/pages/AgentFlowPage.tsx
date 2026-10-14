@@ -329,7 +329,7 @@ function AgentFlowPage() {
         />
       )}
       {topologyError && (
-        <InlineAlert tone="error" className="shrink-0 rounded-none border-b py-2 text-[12px]">
+        <InlineAlert tone="error" className="shrink-0 rounded-none border-b py-2 text-xs">
           Live metrics unavailable — {topologyError}. Showing the static architecture; the call/error overlay needs the observability permission (org-leader or HR Admin).
         </InlineAlert>
       )}
@@ -339,7 +339,7 @@ function AgentFlowPage() {
           {/* The library's tiles, frameless because the bar is the frame —
               this page used to draw its own label-over-value pairs. */}
           <StatStrip
-            frameless
+            variant="line"
             aria-label="Fleet summary"
             items={[
               { label: 'Online', value: online ?? '—', ...(online === null ? { hint: 'unknown' } : {}) },
@@ -349,14 +349,14 @@ function AgentFlowPage() {
             ]}
           />
           {topology?.generatedAt && (
-            <T className="text-[10.5px] text-text-tertiary">
+            <T size="xs" className="text-text-tertiary">
               Refreshed {relativeTime(topology.generatedAt)}
             </T>
           )}
         </Inline>
         <Inline align="center" gap="md">
           <Inline align="center" gap="xs">
-            <T className="text-[11px] text-text-secondary">View</T>
+            <T size="xs" className="text-text-secondary">View</T>
             <SegmentedControl
               aria-label="Fleet view"
               value={view}
@@ -368,7 +368,7 @@ function AgentFlowPage() {
             />
           </Inline>
           <Inline align="center" gap="xs">
-          <T className="text-[11px] text-text-secondary">Window</T>
+          <T size="xs" className="text-text-secondary">Window</T>
           {/* One setting with three values, not three buttons — and the only
               place it lives now that the Architecture rail is gone. */}
           <SegmentedControl
@@ -386,7 +386,7 @@ function AgentFlowPage() {
           silently — which is how three runtimes went missing — say what is
           not on it and offer the view that shows everything. */}
       {view === 'diagram' && offDiagram > 0 && (
-        <InlineAlert tone="info" className="shrink-0 rounded-none border-b py-2 text-[12px]">
+        <InlineAlert tone="info" className="shrink-0 rounded-none border-b py-2 text-xs">
           {offDiagram === 1 ? '1 agent is' : `${offDiagram} agents are`} not on this
           diagram — it is positioned by hand and has no place for
           {offDiagram === 1 ? ' it' : ' them'}. Switch to List to see the whole fleet.
@@ -453,12 +453,12 @@ function FleetList({
         <Stack gap="none">
           <Link
             to={`/iq/agents/${encodeURIComponent(r.id)}`}
-            className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary hover:underline"
+            className="text-sm font-semibold text-text-primary no-underline hover:text-primary hover:underline"
           >
             {r.name}
           </Link>
           <Inline gap="xs" align="center" wrap>
-            <T className="font-mono text-[10.5px] text-text-tertiary">{r.id}</T>
+            <T size="xs" className="font-mono text-text-tertiary">{r.id}</T>
             {!r.onDiagram && (
               <Chip size="xs" tone="neutral" title="This agent has no position on the architecture diagram">
                 not on diagram
@@ -478,14 +478,14 @@ function FleetList({
       key: 'model',
       header: 'Model',
       render: (r) => (
-        <T className="font-mono text-[11px] text-text-secondary">{r.model || '—'}</T>
+        <T size="xs" className="font-mono text-text-secondary">{r.model || '—'}</T>
       ),
     },
     {
       key: 'protocol',
       header: 'Protocol',
       render: (r) => (
-        <T className="text-[11px] text-text-secondary">{r.protocol ? r.protocol.toUpperCase() : '—'}</T>
+        <T size="xs" className="text-text-secondary">{r.protocol ? r.protocol.toUpperCase() : '—'}</T>
       ),
     },
     {
@@ -493,7 +493,7 @@ function FleetList({
       header: 'Calls',
       align: 'right',
       sortable: true,
-      render: (r) => <T className="tabular-nums text-[12px]">{fmtCount(r.invocationCount)}</T>,
+      render: (r) => <T size="xs" className="tabular-nums">{fmtCount(r.invocationCount)}</T>,
     },
     {
       key: 'errorCount',
@@ -501,7 +501,7 @@ function FleetList({
       align: 'right',
       sortable: true,
       render: (r) => (
-        <T className={`tabular-nums text-[12px] ${r.errorCount > 0 ? 'text-danger' : 'text-text-tertiary'}`}>
+        <T className={`tabular-nums text-xs ${r.errorCount > 0 ? 'text-danger' : 'text-text-tertiary'}`}>
           {fmtCount(r.errorCount)}
         </T>
       ),
@@ -510,27 +510,27 @@ function FleetList({
       key: 'p50Ms',
       header: 'p50',
       align: 'right',
-      render: (r) => <T className="tabular-nums text-[12px] text-text-secondary">{fmtMs(r.p50Ms)}</T>,
+      render: (r) => <T size="xs" className="tabular-nums text-text-secondary">{fmtMs(r.p50Ms)}</T>,
     },
     {
       key: 'p95Ms',
       header: 'p95',
       align: 'right',
-      render: (r) => <T className="tabular-nums text-[12px] text-text-secondary">{fmtMs(r.p95Ms)}</T>,
+      render: (r) => <T size="xs" className="tabular-nums text-text-secondary">{fmtMs(r.p95Ms)}</T>,
     },
     {
       key: 'tools',
       header: 'Tools',
       render: (r) => (
         r.tools.length === 0
-          ? <T className="text-[11px] text-text-tertiary">—</T>
+          ? <T size="xs" className="text-text-tertiary">—</T>
           : (
             <Inline wrap gap="xs">
               {r.tools.slice(0, 3).map((t) => (
                 <Chip key={t} size="xs" tone="neutral" mono>{t}</Chip>
               ))}
               {r.tools.length > 3 && (
-                <T className="text-[10.5px] text-text-tertiary">+{r.tools.length - 3}</T>
+                <T size="xs" className="text-text-tertiary">+{r.tools.length - 3}</T>
               )}
             </Inline>
           )
@@ -550,7 +550,7 @@ function FleetList({
           onChange={(e) => onQuery(e.currentTarget.value)}
           className="max-w-[320px]"
         />
-        <T className="text-[11px] text-text-tertiary">
+        <T size="xs" className="text-text-tertiary">
           {rows.length === total ? `${total} agents` : `${rows.length} of ${total} agents`}
         </T>
       </Inline>
@@ -600,7 +600,7 @@ function AgentDrawerBody({
         <Chip size="xs" uppercase tone="accent">Work</Chip>
       </Inline>
 
-      <T className="block text-[11.5px] leading-[1.45] text-text-secondary">
+      <T size="xs" className="block leading-[1.45] text-text-secondary">
         {meta.description}
       </T>
 
@@ -614,6 +614,7 @@ function AgentDrawerBody({
       <Stack gap="sm">
         <SectionLabel as="div">Metrics</SectionLabel>
         <StatStrip
+          variant="line"
           aria-label="Agent metrics"
           items={[
             { label: 'Calls', value: fmtCount(summary?.invocationCount ?? 0) },

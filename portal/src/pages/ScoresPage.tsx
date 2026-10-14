@@ -95,21 +95,21 @@ function ScoresPage() {
   //    requires here: at the moment `selectPerson` runs, the panel hasn't
   //    rendered/unmounted yet, so the *target* of a synchronous `.focus()`
   //    (the row on open, or nothing in particular on close) isn't the right
-  //    element yet either way. See `scoreRowButtonId` in Leaderboard.tsx.
-  const triggerIdRef = useRef<string | null>(null);
+  //    element yet either way. The row (a focusable <tr>) is the trigger.
+  const triggerRef = useRef<HTMLElement | null>(null);
   const prevSelectedRef = useRef<string | null>(null);
   const selectPerson = useCallback((id: string | null) => {
     if (id !== null) {
       const active = document.activeElement;
-      triggerIdRef.current = active instanceof HTMLElement && active.id ? active.id : null;
+      triggerRef.current = active instanceof HTMLElement ? active : null;
     }
     setSelectedId(id);
   }, [setSelectedId]);
   useEffect(() => {
     if (prevSelectedRef.current !== null && selectedId === null) {
-      const id = triggerIdRef.current;
-      if (id) document.getElementById(id)?.focus();
-      triggerIdRef.current = null;
+      const el = triggerRef.current;
+      if (el?.isConnected) el.focus();
+      triggerRef.current = null;
     }
     prevSelectedRef.current = selectedId;
   }, [selectedId]);

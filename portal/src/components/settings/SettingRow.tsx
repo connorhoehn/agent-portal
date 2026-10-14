@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 
 interface SettingRowProps {
   title: string;
@@ -15,13 +15,13 @@ export function SettingRow({ title, description, control }: SettingRowProps) {
           The <div> they came from had no display:flex, so a flex ROW would put
           them side by side. */}
       <Stack gap="none" className="flex-1 min-w-0">
-        <Inline as="span" gap="none" className="text-[14px] font-medium text-text-primary">
+        <T size="sm" weight="medium" tone="primary">
           {title}
-        </Inline>
+        </T>
         {description && (
-          <Inline as="span" gap="none" className="text-[12px] text-text-secondary mt-0.5">
+          <T size="xs" tone="secondary" className="mt-0.5">
             {description}
-          </Inline>
+          </T>
         )}
       </Stack>
       <Inline gap="none" className="shrink-0">{control}</Inline>

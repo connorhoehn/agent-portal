@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import {
   Button, Chip, FormField, Inline, InlineAlert, Input, SectionLabel,
-  SkeletonCard, Stack, Textarea,
+  SkeletonCard, Stack, Textarea, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptVersionDetail, saveDraft, publishVersion } from '../usePromptLibrary.js';
 
@@ -25,7 +25,7 @@ function TemplateHighlighted({ text }: { text: string }): React.ReactElement {
     // `as="pre"` keeps the whitespace semantics a template needs without a
     // styled raw <pre>. CodeBlock is the obvious alternative but it takes a
     // plain string — this renders {{variables}} as highlighted children.
-    <Stack as="pre" gap="none" className="m-0 p-3 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words text-text-primary">
+    <Stack as="pre" gap="none" className="m-0 p-3 text-xs font-mono leading-relaxed whitespace-pre-wrap break-words text-text-primary">
       {parts.map((part, i) => {
         if (/^{{[^}]+}}$/.test(part)) {
           return (
@@ -144,9 +144,9 @@ export function PromptEditorStep({
             {baselineText ? (
               <TemplateHighlighted text={baselineText} />
             ) : (
-              <Inline as="span" gap="none" className="p-3 text-[12px] font-mono text-text-tertiary italic">
+              <T size="xs" tone="tertiary" className="p-3 font-mono italic">
                 (no template text)
-              </Inline>
+              </T>
             )}
           </Stack>
           {/* Baseline inference info */}
@@ -172,7 +172,7 @@ export function PromptEditorStep({
             placeholder="Edit the prompt template here…"
             spellCheck={false}
             aria-label="Challenger prompt template"
-            className="flex-1 min-h-0 font-mono text-[12px] resize-none"
+            className="flex-1 min-h-0 font-mono text-xs resize-none"
           />
         </Stack>
       </Inline>

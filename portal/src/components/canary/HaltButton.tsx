@@ -63,7 +63,7 @@ export function HaltButton(): React.ReactElement {
       {confirming && (
         <Modal open={true} onClose={closeHaltConfirm} maxWidth={420}>
           <Stack gap="md" className="px-4.5 py-4">
-            <SectionLabel as="h3" className="text-[14px] font-semibold text-text-primary normal-case tracking-normal">
+            <SectionLabel as="h3" className="text-sm font-semibold text-text-primary normal-case tracking-normal">
               Halt canary?
             </SectionLabel>
             <MetaLine

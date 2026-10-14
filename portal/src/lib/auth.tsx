@@ -397,13 +397,13 @@ function SsoGate({ ssoEnabled, onSignIn }: { ssoEnabled: boolean; onSignIn: () =
       className="min-h-screen items-center p-6 bg-bg"
     >
       <Stack gap="none" className="max-w-[420px] text-center">
-        <SectionLabel className="text-[13px] tracking-[0.14em] text-primary mb-4">Work</SectionLabel>
-        <SectionLabel as="h1" className="text-[22px] font-bold text-text-primary normal-case tracking-normal mb-2">
+        <SectionLabel className="text-sm tracking-[0.14em] text-primary mb-4">Work</SectionLabel>
+        <SectionLabel as="h1" className="text-base font-semibold text-text-primary normal-case tracking-normal mb-2">
           Sign in required
         </SectionLabel>
         <MetaLine
           tone="secondary"
-          className="text-[14px] leading-relaxed mb-5"
+          className="text-sm leading-relaxed mb-5"
           items={[ssoEnabled
             ? 'This deployment uses enterprise sign-in. Continue with your identity provider.'
             : 'No session and no sign-in method is available. Contact an administrator.']}

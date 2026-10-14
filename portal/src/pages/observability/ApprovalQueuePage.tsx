@@ -9,24 +9,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { relativeTime, absoluteTime } from '../../lib/relativeTime';
-import {
-  Button,
-  Card,
-  Chip,
-  CodeBlock,
-  Inline,
-  Input,
-  LiveRegion,
-  PageSection,
-  SearchInput,
-  StatusDot,
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableTd,
-  TableTh, T,
-} from '@connorhoehnslalom/ui-components/shared';
+import { Card, CheckIcon, Chip, CloseIcon, CodeBlock, EyeIcon, EyeOffIcon, IconButton, Inline, Input, LiveRegion, PageSection, SearchInput, StatusDot, T, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehnslalom/ui-components/shared';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
@@ -317,17 +300,17 @@ function ApprovalQueuePage() {
                         {a.reason}
                       </TableTd>
                       <TableTd>
-                        <Button
-                          variant="secondary"
+                        <IconButton
                           size="sm"
+                          icon={open ? <EyeOffIcon /> : <EyeIcon />}
+                          aria-label={open ? 'Hide payload' : 'Show payload'}
+                          title={open ? 'Hide payload' : 'Show payload'}
                           onClick={() => togglePayload(a.approvalId)}
-                        >
-                          {open ? 'hide' : 'show'}
-                        </Button>
+                        />
                       </TableTd>
                       <TableTd>
-                        {canApprove ? (
-                          <Inline gap="xs" align="center" wrap={false}>
+                        <Inline gap="xs" align="center" wrap={false}>
+                          {canApprove && (
                             <Input
                               size="sm"
                               value={notes[a.approvalId] ?? ''}
@@ -337,33 +320,40 @@ function ApprovalQueuePage() {
                               placeholder="note (optional)"
                               className="w-[140px] shrink-0"
                             />
-                            <Button
+                          )}
+                          {canApprove && (
+                            <IconButton
                               variant="primary"
                               size="sm"
+                              icon={<CheckIcon />}
                               disabled={busy.has(a.approvalId)}
                               onClick={() => decide(a.approvalId, 'APPROVED')}
-                            >
-                              {busy.has(a.approvalId) ? 'Approving…' : 'Approve'}
-                            </Button>
-                            <Button
-                              variant="danger-solid"
+                              aria-label={`Approve ${a.agentId} request`}
+                              title={busy.has(a.approvalId) ? 'Approving…' : 'Approve'}
+                            />
+                          )}
+                          {canApprove && (
+                            <IconButton
+                              variant="danger"
                               size="sm"
+                              icon={<CloseIcon />}
                               disabled={busy.has(a.approvalId)}
                               onClick={() => decide(a.approvalId, 'REJECTED')}
-                            >
-                              {busy.has(a.approvalId) ? 'Rejecting…' : 'Reject'}
-                            </Button>
-                            {denied[a.approvalId] && (
-                              <Chip tone="danger" size="xs">
-                                Not authorized
-                              </Chip>
-                            )}
-                          </Inline>
-                        ) : (
-                          <T size="xs" className="text-text-tertiary italic">
-                            Viewing only — your role can&apos;t decide approvals
-                          </T>
-                        )}
+                              aria-label={`Reject ${a.agentId} request`}
+                              title={busy.has(a.approvalId) ? 'Rejecting…' : 'Reject'}
+                            />
+                          )}
+                          {canApprove && denied[a.approvalId] && (
+                            <Chip tone="danger" size="xs">
+                              Not authorized
+                            </Chip>
+                          )}
+                          {!canApprove && (
+                            <T size="xs" className="text-text-tertiary italic">
+                              Viewing only — your role can&apos;t decide approvals
+                            </T>
+                          )}
+                        </Inline>
                       </TableTd>
                     </TableRow>
                     {open && (

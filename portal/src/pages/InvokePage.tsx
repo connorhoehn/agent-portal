@@ -758,8 +758,8 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], a
                 />
               ) : (
                 <>
-                  <T className="text-[18px]">Ask {selectedAgent?.name ?? 'Agent'}</T>
-                  <T className="text-[13px]">
+                  <T size="base" weight="semibold">Ask {selectedAgent?.name ?? 'Agent'}</T>
+                  <T size="sm">
                     Ask the org anything — who can help, who knows what, what's been decided.
                   </T>
                 </>
@@ -953,14 +953,14 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], a
                 </Stack>
                 {sessionsUnavailable && (
                   <Stack gap="xs" role="status">
-                    <T className="text-xs text-text-secondary">{sessionsNeedAuth
+                    <T size="xs" className="text-text-secondary">{sessionsNeedAuth
                       ? 'Sign in to see your conversations.'
                       : 'Conversations unavailable.'}</T>
                     <Button size="sm" variant="secondary" onClick={() => refreshSessions()}>Retry</Button>
                   </Stack>
                 )}
                 {!sessionsUnavailable && sessions.length === 0 && (
-                  <T className="text-xs text-text-tertiary">
+                  <T size="xs" className="text-text-tertiary">
                     {sessionList?.memoryUnavailable
                       ? 'Session history is unavailable until memory is configured.'
                       : 'No sessions yet.'}
@@ -1020,7 +1020,7 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], a
             {mentionedPeople.length > 1 && (
               <Link
                 to={`/iq/explore?focus=${mentionedPeople.map((p) => encodeURIComponent(p.id)).join(',')}`}
-                className="text-[12px] font-semibold text-primary no-underline hover:underline self-start"
+                className="text-xs font-semibold text-primary no-underline hover:underline self-start"
               >
                 Show all {mentionedPeople.length} in Explore →
               </Link>

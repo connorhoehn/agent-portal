@@ -38,9 +38,9 @@ function NodeBody({ node, selected }: { node: CanvasNode; selected: boolean }) {
       <Stack gap="xs">
         <Inline gap="xs" align="center" wrap={false}>
           <FileKindMark kind={recordFileKind(node.kind)} size="sm" variant="glyph" />
-          <T className="text-[11px] text-text-tertiary">{node.data.subtitle}</T>
+          <T size="xs" className="text-text-tertiary">{node.data.subtitle}</T>
         </Inline>
-        <T className="line-clamp-3 text-[12px] font-medium text-text-primary" title={node.data.title} wrap>{node.data.title}</T>
+        <T size="xs" className="line-clamp-3 font-medium text-text-primary" title={node.data.title} wrap>{node.data.title}</T>
       </Stack>
     </Card>
   );
@@ -100,7 +100,7 @@ export function SourcesPanel({
       ) : (
         <Stack gap="xs">
           <Inline justify="between" align="center">
-            <T className="text-[11px] text-text-tertiary">
+            <T size="xs" className="text-text-tertiary">
               {lineage.isLoading && !lineage.data ? 'Tracing lineage…' : `${graph.nodes.length - 1} linked records`}
             </T>
             <Button size="sm" variant="ghost" onClick={() => setAsList((v) => !v)}>
@@ -121,7 +121,7 @@ export function SourcesPanel({
             caption="Evidence on the left, what it became on the right."
             renderNode={(node, { selected }) => <NodeBody node={node} selected={selected} />}
             renderListItem={(node) => (
-              <T className="text-[12px] text-text-primary">{node.data.subtitle} · {node.data.title}</T>
+              <T size="xs" className="text-text-primary">{node.data.subtitle} · {node.data.title}</T>
             )}
             onSelectNode={(id) => {
               const href = graph.nodes.find((n) => n.id === id)?.data.href;

@@ -166,14 +166,14 @@ function Legend() {
   return (
     <Card padding="none" className="rounded-md px-3 py-[9px] shadow-[0_2px_8px_rgba(15,23,42,0.05)]">
       <Stack gap="xs">
-        <T className="mb-[5px] block text-[10px] font-bold text-text-primary">Edges</T>
+        <T size="xs" className="mb-[5px] block font-bold text-text-primary">Edges</T>
         {LEGEND_ROWS.map(({ swatchClass, label }) => (
-          <Inline key={label} align="center" gap="xs" className="text-[10.5px]">
+          <Inline key={label} align="center" gap="xs" className="text-xs">
             <Inline as="span" className={`h-[2.5px] w-4 shrink-0 rounded ${swatchClass}`} />
             <T className="text-text-secondary">{label}</T>
           </Inline>
         ))}
-        <Inline align="center" gap="xs" className="text-[10.5px]">
+        <Inline align="center" gap="xs" className="text-xs">
           <Inline as="span" className="h-0 w-4 shrink-0 border-t-2 border-dashed border-text-tertiary" />
           <T className="text-text-secondary">cross-cluster</T>
         </Inline>

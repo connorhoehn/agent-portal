@@ -118,7 +118,7 @@ export function useChatForward({ channel, userId, displayName, enabled = true }:
     <PopoverForm open anchor={anchor} placement="bottom-end" title="Forward to" busy={pending} error={error} submitSlot={false}
       onSubmit={() => {}} onClose={close} width="lg" data-testid="forward-message">
       <QuoteBlock quote={{ messageId: source.messageId, author: source.author, text: source.text || 'Attachment' }} data-testid="forward-message-preview" />
-      <T className="text-[11px] text-text-tertiary" data-testid="forward-message-origin">It will be posted with a note that it came from {source.origin.label}.</T>
+      <T size="xs" className="text-text-tertiary" data-testid="forward-message-origin">It will be posted with a note that it came from {source.origin.label}.</T>
       {items.length === 0
         ? <EmptyState icon={<ChatIcon size={24} />} title="Nowhere to send this" description="You can post in no other conversation right now." testId="forward-message-empty" />
         : <>

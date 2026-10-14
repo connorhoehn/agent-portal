@@ -57,10 +57,10 @@ function ObservationRow({ o }: { o: PromotionCandidate['observations'][number] }
     <Stack gap="xs" id={`observation-${o.id}`} className="border-b border-border py-2 last:border-b-0">
       <Inline gap="xs" wrap={false}>
         <Chip tone="neutral" size="xs">{o.kind}</Chip>
-        <T className="min-w-0 truncate text-[12px] font-medium text-text-primary" title={o.title}>{o.title}</T>
+        <T size="xs" className="min-w-0 truncate font-medium text-text-primary" title={o.title}>{o.title}</T>
       </Inline>
-      <T as="div" className="mt-1 text-[11.5px] leading-relaxed text-text-secondary" wrap>{o.body}</T>
-      <T as="div" className="mt-1 text-[10.5px] text-text-tertiary">
+      <T size="xs" as="div" className="mt-1 leading-relaxed text-text-secondary" wrap>{o.body}</T>
+      <T size="xs" as="div" className="mt-1 text-text-tertiary">
         {o.repo ?? 'no repo'} · session {o.sessionId}
         {o.initiativeId && <> · <Link to={`/iq/projects/${encodeURIComponent(o.initiativeId)}`} className="text-primary hover:underline">Initiative</Link></>}
         {' · '}<TextLink href={`#observation-${o.id}`}>{o.id}</TextLink>
@@ -104,7 +104,7 @@ function CandidateDrawer({
           )}
           description={candidate.rationale}
         />
-        <T as="div" className="mt-1.5 text-[11px] text-text-tertiary">{supportLine(candidate)}</T>
+        <T size="xs" as="div" className="mt-1.5 text-text-tertiary">{supportLine(candidate)}</T>
       </Stack>
 
       {candidate.driftedFrom && (
@@ -116,11 +116,11 @@ function CandidateDrawer({
 
       <AssetRelationships kind="promotion" id={candidate.id} />
       <DetailSection first title="Review status">
-        <T className="text-[12px] text-text-secondary">
+        <T size="xs" className="text-text-secondary">
           Approval: {candidate.status === 'approved' || candidate.status === 'promoted' ? 'Recorded' : candidate.status === 'dismissed' ? 'Not available' : 'Not recorded'}
           {' · '}Dry run: {candidate.dryRunPassed === null ? 'Not recorded' : candidate.dryRunPassed ? 'Passed' : 'Failed'}
         </T>
-        <T className="text-[12px] text-text-tertiary">Publishing knowledge does not enable execution. Skill activation keeps its separate release requirements.</T>
+        <T size="xs" className="text-text-tertiary">Publishing knowledge does not enable execution. Skill activation keeps its separate release requirements.</T>
       </DetailSection>
       <DetailSection title="Contributing observations">
         <Stack gap="xs">
@@ -129,7 +129,7 @@ function CandidateDrawer({
       </DetailSection>
 
       <DetailSection title="Next step">
-        <T as="div" className="m-0 text-[12.5px] font-medium text-text-primary" wrap>{nextStep(candidate)}</T>
+        <T size="xs" as="div" className="m-0 font-medium text-text-primary" wrap>{nextStep(candidate)}</T>
 
         {actionError && (
           <InlineAlert tone="error" className="mt-3">{actionError}</InlineAlert>
@@ -156,7 +156,7 @@ function CandidateDrawer({
               )}
             </Inline>
           ) : (
-            <T as="div" className="mt-3 text-[11px] text-text-tertiary">
+            <T size="xs" as="div" className="mt-3 text-text-tertiary">
               Promoting or dismissing a candidate needs Manage bots.
             </T>
           )

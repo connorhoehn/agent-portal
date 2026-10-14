@@ -38,7 +38,7 @@ export function Thumbnail({
       <Inline
         gap="none"
         justify="center"
-        className={`${frameClass} items-center text-text-tertiary text-[10px]`}
+        className={`${frameClass} items-center text-text-tertiary text-xs`}
         style={{ width, height }}
         onClick={onClick}
       >

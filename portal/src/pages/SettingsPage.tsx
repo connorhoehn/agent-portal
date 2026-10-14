@@ -137,8 +137,8 @@ export function SettingsPage() {
               className="w-full [&>input]:w-full [&>input]:cursor-pointer [&>span]:hidden"
             />
             <Inline justify="between" className="mt-1">
-              <T className="text-[11px] font-medium text-primary">Influence {infPct}%</T>
-              <T className="text-[11px] font-medium text-success">Expertise {expPct}%</T>
+              <T size="xs" className="font-medium text-primary">Influence {infPct}%</T>
+              <T size="xs" className="font-medium text-success">Expertise {expPct}%</T>
             </Inline>
           </Stack>
         </Card>
@@ -170,7 +170,7 @@ export function SettingsPage() {
             title="This session"
             description="The session you're using right now — it stays signed in."
             control={
-              <T className="text-[13px] text-text-secondary font-mono">
+              <T size="sm" className="text-text-secondary font-mono">
                 {session ? `${session.tenant} · ${session.role}` : '—'}
               </T>
             }
@@ -181,7 +181,7 @@ export function SettingsPage() {
             description="Ends your sessions on other devices and browser tabs. They stop within about 2 minutes — sessions re-check every couple of minutes. This session is unaffected."
             control={
               masquerading ? (
-                <T className="text-[12px] text-text-tertiary whitespace-nowrap">
+                <T size="xs" className="text-text-tertiary whitespace-nowrap">
                   Stop masquerading first
                 </T>
               ) : (
@@ -198,12 +198,12 @@ export function SettingsPage() {
             }
           />
           {revokeState === 'success' && (
-            <T className="block text-[12px] text-success pt-1.5">
+            <T size="xs" className="block text-success pt-1.5">
               Your other sessions will end within ~2 minutes.
             </T>
           )}
           {revokeError && (
-            <T className="block text-[12px] text-danger pt-1.5">
+            <T size="xs" className="block text-danger pt-1.5">
               {revokeError}
             </T>
           )}
@@ -238,7 +238,7 @@ export function SettingsPage() {
           <SettingRow
             title="Region"
             control={
-              <T className="text-[13px] text-text-secondary font-mono">
+              <T size="sm" className="text-text-secondary font-mono">
                 {health?.region ?? '—'}
               </T>
             }
@@ -247,7 +247,7 @@ export function SettingsPage() {
           <SettingRow
             title="Service status"
             control={
-              <T className={`text-[13px] font-mono ${!health ? 'text-text-tertiary' : mocksActive.length === 0 ? 'text-success' : 'text-warning'}`}>
+              <T className={`text-sm font-mono ${!health ? 'text-text-tertiary' : mocksActive.length === 0 ? 'text-success' : 'text-warning'}`}>
                 {!health ? '…' : mocksActive.length === 0 ? `Live · ${health.status}` : health.status}
               </T>
             }
@@ -256,7 +256,7 @@ export function SettingsPage() {
           <SettingRow
             title="Mocks active"
             control={
-              <T className="text-[13px] text-text-secondary font-mono">
+              <T size="sm" className="text-text-secondary font-mono">
                 {!health ? '—' : mocksActive.length === 0 ? 'None' : mocksActive.join(', ')}
               </T>
             }
@@ -276,7 +276,7 @@ export function SettingsPage() {
           <SettingRow
             title="Endpoint"
             control={
-              <T className="text-[13px] text-text-secondary font-mono">{gateway.gatewayUrl}</T>
+              <T size="sm" className="text-text-secondary font-mono">{gateway.gatewayUrl}</T>
             }
           />
           {gateway.mode === 'bff-only' ? (
@@ -286,7 +286,7 @@ export function SettingsPage() {
                 title="Mode"
                 description="No standalone WebSocket gateway is configured or available at this endpoint. Live updates use server-sent events from the middleware."
                 control={
-                  <T className="text-[13px] text-text-secondary font-mono">BFF-only</T>
+                  <T size="sm" className="text-text-secondary font-mono">BFF-only</T>
                 }
               />
             </>
@@ -312,7 +312,7 @@ export function SettingsPage() {
                 title="Redis"
                 control={
                   <T
-                    className={`text-[13px] font-mono ${
+                    className={`text-sm font-mono ${
                       gateway.metrics
                         ? gateway.metrics.redis.status === 'connected'
                           ? 'text-success'
@@ -325,7 +325,7 @@ export function SettingsPage() {
                 }
               />
               {gateway.error && (
-                <T className="block text-[11px] text-text-tertiary pt-1.5">
+                <T size="xs" className="block text-text-tertiary pt-1.5">
                   {gateway.error}
                 </T>
               )}
@@ -346,7 +346,7 @@ export function SettingsPage() {
  */
 function GatewayValue({ gateway, value }: { gateway: { error: string | null }; value: string | null }) {
   return (
-    <T className="text-[13px] text-text-secondary font-mono">
+    <T size="sm" className="text-text-secondary font-mono">
       {gateway.error ? '—' : (value ?? '…')}
     </T>
   );

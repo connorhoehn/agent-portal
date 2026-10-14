@@ -324,14 +324,14 @@ function JobDetailContent() {
   const canOpenWorker = DEVBOX_ROLES.includes(session?.role ?? '');
   const toolResults = tools.length > 0 ? <PageSection size="sm" title="Recorded tool results">
     <Stack gap="none" className="border-t border-border">
-      {tools.map((tool, i) => <Inline key={`${i}-${tool.name}`} gap="md" className="border-b border-border py-2 text-[13px]">
+      {tools.map((tool, i) => <Inline key={`${i}-${tool.name}`} gap="md" className="border-b border-border py-2 text-sm">
         <T className={tool.done ? 'text-success' : 'text-text-tertiary'} aria-label={tool.done ? 'Completed' : 'Not completed'}>{tool.done ? '✓' : '○'}</T>
-        <T className="font-mono text-[12px]">{tool.name}</T>
+        <T size="xs" className="font-mono">{tool.name}</T>
       </Inline>)}
     </Stack>
   </PageSection> : null;
   const unavailable = activityUnavailable ? <PageSection size="sm" title="Activity unavailable">
-    <T className="text-[13px] text-text-tertiary">This run predates activity recording, or its worker log has expired.</T>
+    <T size="sm" className="text-text-tertiary">This run predates activity recording, or its worker log has expired.</T>
   </PageSection> : null;
 
   return (
@@ -366,12 +366,12 @@ function JobDetailContent() {
       ]} />
       {tab === 'summary' && <Stack gap="lg">
         <PageSection size="sm" title="Outcome">
-          <T wrap className={`text-[14px] ${job.error ? 'text-danger' : 'text-text-primary'}`}>
+          <T wrap className={`text-sm ${job.error ? 'text-danger' : 'text-text-primary'}`}>
             {job.error ?? job.result?.summary ?? (job.status === 'queued' ? 'Waiting for a worker.' : isLive ? 'This run is in progress.' : 'No outcome recorded.')}
           </T>
-          {activityUnavailable && job.result && <T className="mt-1 text-[12px] text-text-tertiary">The recorded result is shown below. Detailed activity is unavailable for this run.</T>}
+          {activityUnavailable && job.result && <T size="xs" className="mt-1 text-text-tertiary">The recorded result is shown below. Detailed activity is unavailable for this run.</T>}
         </PageSection>
-        <PageSection size="sm" title="Task"><T wrap className="text-[14px] text-text-secondary whitespace-pre-wrap">{prompt || 'No prompt recorded.'}</T></PageSection>
+        <PageSection size="sm" title="Task"><T size="sm" wrap className="text-text-secondary whitespace-pre-wrap">{prompt || 'No prompt recorded.'}</T></PageSection>
         {toolResults}
         {unavailable}
         <PageSection size="sm" title="Timing">
@@ -384,29 +384,29 @@ function JobDetailContent() {
             <KeyValue label="Run ID" value={job.id} /><KeyValue label="Kind" value={job.kind} />
             <KeyValue label="Priority" value={String(job.priority)} />
             <KeyValue label="Session" value={job.sessionId ?? '—'} />
-            {job.boxId && (canOpenWorker ? <Link to={`/admin/devbox?box=${encodeURIComponent(job.boxId)}`} className="text-primary text-[13px] hover:underline">Worker {job.boxId} ↗</Link> : <KeyValue label="Worker" value={job.boxId} />)}
-            {typeof job.payload.findingId === 'string' && <Link to="/iq/work/findings" className="text-primary text-[13px] hover:underline">Source finding: {job.payload.findingId}</Link>}
+            {job.boxId && (canOpenWorker ? <Link to={`/admin/devbox?box=${encodeURIComponent(job.boxId)}`} className="text-primary text-sm hover:underline">Worker {job.boxId} ↗</Link> : <KeyValue label="Worker" value={job.boxId} />)}
+            {typeof job.payload.findingId === 'string' && <Link to="/iq/work/findings" className="text-primary text-sm hover:underline">Source finding: {job.payload.findingId}</Link>}
           </Stack>
         </Disclosure>
       </Stack>}
       {tab === 'activity' && <Stack gap="sm">
-        {isLive && <T className="text-[13px] text-text-secondary">{tailState === 'unavailable' ? 'Worker log unavailable' : tailState === 'retrying' ? 'Reconnecting…' : 'Live activity'}</T>}
+        {isLive && <T size="sm" className="text-text-secondary">{tailState === 'unavailable' ? 'Worker log unavailable' : tailState === 'retrying' ? 'Reconnecting…' : 'Live activity'}</T>}
         {unavailable}
         <Stack ref={scrollRef} gap="none" className="max-h-[520px] overflow-auto">
           {activity.map((entry, i) => <Inline key={`${entry.ts}-${i}`} align="start" gap="sm" className="border-b border-border py-3">
             <Chip size="xs" tone={entry.t === 'error' ? 'danger' : 'neutral'}>{entry.name ?? entry.t}</Chip>
-            <T wrap className="min-w-0 text-[13px] whitespace-pre-wrap break-words">{entry.detail}</T>
+            <T size="sm" wrap className="min-w-0 whitespace-pre-wrap break-words">{entry.detail}</T>
           </Inline>)}
-          {!activity.length && !activityUnavailable && <T className="text-[13px] text-text-tertiary">{job.status === 'queued' ? 'Waiting for an idle worker.' : 'Waiting for the first output…'}</T>}
+          {!activity.length && !activityUnavailable && <T size="sm" className="text-text-tertiary">{job.status === 'queued' ? 'Waiting for an idle worker.' : 'Waiting for the first output…'}</T>}
         </Stack>
       </Stack>}
       {tab === 'outputs' && <Stack gap="lg">
-        {job.result?.summary && <PageSection size="sm" title="Recorded result"><T wrap className="text-[14px] whitespace-pre-wrap">{job.result.summary}</T></PageSection>}
+        {job.result?.summary && <PageSection size="sm" title="Recorded result"><T size="sm" wrap className="whitespace-pre-wrap">{job.result.summary}</T></PageSection>}
         {toolResults}
         {!job.result?.summary && !tools.length && <EmptyState title="No outputs recorded" />}
       </Stack>}
       {tab === 'changes' && <Stack gap="sm">
-        {proposalsError || proposalsDegraded ? <ErrorState title="Run changes unavailable" body={proposalsError || proposalsDegraded || 'Run changes are unavailable.'} actionLabel="Retry" onAction={refreshProposals} /> : proposalsLoading && !proposalsData ? <LoadingState /> : changes.length ? changes.map((change) => <Link key={change.id} to={`/iq/work/changes?job=${encodeURIComponent(job.id)}`} className="border-b border-border py-3 text-[13px] text-primary hover:underline">{change.kind} · {change.status}{change.rationale ? ` — ${change.rationale}` : ''}</Link>) : <EmptyState title="No graph changes recorded" />}
+        {proposalsError || proposalsDegraded ? <ErrorState title="Run changes unavailable" body={proposalsError || proposalsDegraded || 'Run changes are unavailable.'} actionLabel="Retry" onAction={refreshProposals} /> : proposalsLoading && !proposalsData ? <LoadingState /> : changes.length ? changes.map((change) => <Link key={change.id} to={`/iq/work/changes?job=${encodeURIComponent(job.id)}`} className="border-b border-border py-3 text-sm text-primary hover:underline">{change.kind} · {change.status}{change.rationale ? ` — ${change.rationale}` : ''}</Link>) : <EmptyState title="No graph changes recorded" />}
       </Stack>}
       </Stack>
       <JobConversation key={`${callScopeKey(session)}:${job.id}`} job={job} />

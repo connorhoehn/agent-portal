@@ -84,7 +84,7 @@ export function NewItemForm({
             options={PRIORITIES.map((p) => ({ value: p, label: p }))}
           />
           {type !== 'epic' && (
-            <Inline as="label" gap="xs" align="center" className="text-[12px] text-text-secondary">
+            <Inline as="label" gap="xs" align="center" className="text-xs text-text-secondary">
               pts
               <NumberInput
                 size="sm"

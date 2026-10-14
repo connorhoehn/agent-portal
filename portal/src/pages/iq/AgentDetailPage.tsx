@@ -76,7 +76,7 @@ export default function AgentDetailPage() {
       description="What this agent is running, how it has been behaving, and what its log says."
     >
       <Stack gap="none" className="mb-4">
-        <Link to="/iq/agents" className="text-[12px] text-primary no-underline hover:underline">
+        <Link to="/iq/agents" className="text-xs text-primary no-underline hover:underline">
           ← Architecture
         </Link>
       </Stack>
@@ -99,26 +99,27 @@ export default function AgentDetailPage() {
               <Inline justify="between" align="center" wrap>
                 <Inline gap="sm" align="center" wrap>
                   <Chip tone={STATUS_CHIP_TONE[rt.status] ?? 'neutral'} size="xs">{rt.status}</Chip>
-                  <T className="font-mono text-[12px] text-text-secondary">{rt.id}</T>
+                  <T size="xs" className="font-mono text-text-secondary">{rt.id}</T>
                   {rt.protocol && (
-                    <T className="text-[11px] text-text-tertiary">· {rt.protocol}</T>
+                    <T size="xs" className="text-text-tertiary">· {rt.protocol}</T>
                   )}
                 </Inline>
                 <Link
                   to={`/iq/invoke?agentId=${encodeURIComponent(rt.name)}`}
-                  className="rounded-md border border-border bg-surface px-2.5 py-1 text-[11px] text-text-secondary no-underline transition-colors hover:border-primary hover:text-primary"
+                  className="rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-text-secondary no-underline transition-colors hover:border-primary hover:text-primary"
                 >
                   Invoke →
                 </Link>
               </Inline>
               {rt.endpoint && (
-                <T className="break-all font-mono text-[11px] text-text-tertiary">{rt.endpoint}</T>
+                <T size="xs" className="break-all font-mono text-text-tertiary">{rt.endpoint}</T>
               )}
             </Stack>
           </Card>
 
           {/* ── Behaviour ───────────────────────────────────────────────── */}
           <StatStrip
+            variant="line"
             className="mb-4"
             aria-label="Agent behaviour"
             items={[
@@ -156,7 +157,7 @@ export default function AgentDetailPage() {
                     />
                   </CollapsibleSection>
                 )}
-                <T className="text-[11px] leading-snug text-text-tertiary" wrap>
+                <T size="xs" className="leading-snug text-text-tertiary" wrap>
                   Edit this in{' '}
                   <Link to="/iq/prompts" className="text-primary no-underline hover:underline">Prompts</Link>
                   {' '}— deployed agents pick up a change within about a minute, with no rebuild.
@@ -164,11 +165,11 @@ export default function AgentDetailPage() {
               </Stack>
             ) : (
               <Stack gap="xs" className="px-3.5 py-3">
-                <T className="text-[12px] font-semibold text-warning">Running its built-in fallback prompt</T>
-                <T className="text-[12px] leading-snug text-text-secondary" wrap>
+                <T size="xs" className="font-semibold text-warning">Running its built-in fallback prompt</T>
+                <T size="xs" className="leading-snug text-text-secondary" wrap>
                   {prompt?.problem ?? 'The managed prompt could not be read.'}
                 </T>
-                <T className="text-[11px] leading-snug text-text-tertiary" wrap>
+                <T size="xs" className="leading-snug text-text-tertiary" wrap>
                   The agent still works — it falls back to the literal compiled into its image so a Bedrock
                   outage cannot take the fleet down — but edits in Prompt Studio are not reaching it.
                 </T>
@@ -183,7 +184,7 @@ export default function AgentDetailPage() {
               title="Recent invocations"
               action={(
                 <Link to={`/admin/observability/invocations?agentId=${encodeURIComponent(rt.name)}`}
-                  className="text-[11px] text-primary no-underline hover:underline">
+                  className="text-xs text-primary no-underline hover:underline">
                   All invocations →
                 </Link>
               )}
@@ -257,7 +258,7 @@ export default function AgentDetailPage() {
                         size="sm"
                         aria-label={`hide ${telemetryCount} span exports`}
                       />
-                      <T className="text-[11px] text-text-tertiary">hide {telemetryCount} span exports</T>
+                      <T size="xs" className="text-text-tertiary">hide {telemetryCount} span exports</T>
                     </Inline>
                   )}
                   <Button size="sm" variant="ghost" onClick={refresh}>refresh</Button>

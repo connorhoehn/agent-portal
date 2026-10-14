@@ -75,8 +75,8 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
           <Card padding="none">
             {vars.map((v) => (
               <Inline key={v.name} gap="xs" wrap={false} className="items-start gap-2.5 border-b border-border px-3 py-2 last:border-b-0">
-                <T className="font-mono text-[12px] text-text-primary">{v.name}</T>
-                <T className="text-[11px] text-text-tertiary">{v.type}</T>
+                <T size="xs" className="font-mono text-text-primary">{v.name}</T>
+                <T size="xs" className="text-text-tertiary">{v.type}</T>
                 {v.required && <Chip tone="neutral" size="xs">required</Chip>}
                 <T className="flex-1" />
                 <Chip tone={SOURCE_TONE[v.source]} size="xs" title={SOURCE_HINT[v.source]}>
@@ -87,13 +87,13 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
           </Card>
         )}
         {fencedCount > 0 && (
-          <T as="p" className="mt-2 mb-0 text-[11px] leading-relaxed text-text-tertiary">
+          <T size="xs" as="p" className="mt-2 mb-0 leading-relaxed text-text-tertiary">
             Fenced values are wrapped in a labelled block and defanged before they reach the model,
             so they cannot share a channel with the instructions.
           </T>
         )}
         {a.contract?.guardrailId && (
-          <T as="div" className="mt-2 text-[11px] text-text-tertiary">Guardrail: {a.contract.guardrailId}</T>
+          <T size="xs" as="div" className="mt-2 text-text-tertiary">Guardrail: {a.contract.guardrailId}</T>
         )}
       </DetailSection>
 
@@ -107,11 +107,11 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
               <Card key={t.id} padding="none" className="px-3 py-2">
                 <Inline gap="xs" wrap={false}>
                   <Chip tone="neutral" size="xs">{t.kind}</Chip>
-                  <Link to={knowledgeItemHref(t.id, 'L0')} className="min-w-0 truncate text-[12px] text-primary hover:underline" title={t.title}>{t.title}</Link>
+                  <Link to={knowledgeItemHref(t.id, 'L0')} className="min-w-0 truncate text-xs text-primary hover:underline" title={t.title}>{t.title}</Link>
                   <T className="flex-1" />
-                  <T className="text-[10px] tabular-nums text-text-tertiary">{Math.round(t.weight * 100)}%</T>
+                  <T size="xs" className="tabular-nums text-text-tertiary">{Math.round(t.weight * 100)}%</T>
                 </Inline>
-                {t.repo && <T as="div" className="mt-0.5 font-mono text-[10px] text-text-tertiary">{t.repo}</T>}
+                {t.repo && <T size="xs" as="div" className="mt-0.5 font-mono text-text-tertiary">{t.repo}</T>}
               </Card>
             ))}
           </Stack>
@@ -134,13 +134,13 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
                 <T className={r.met ? 'text-success' : 'text-danger'} aria-hidden>
                   {r.met ? '✓' : '✕'}
                 </T>
-                <T className="text-[12px] text-text-primary">{r.label}</T>
-                {r.detail && <T className="text-[11px] text-text-tertiary">{r.detail}</T>}
+                <T size="xs" className="text-text-primary">{r.label}</T>
+                {r.detail && <T size="xs" className="text-text-tertiary">{r.detail}</T>}
               </Inline>
             ))}
           </Card>
           {a.designReviewId && (
-            <T as="div" className="mt-2 text-[11px] text-text-tertiary">
+            <T size="xs" as="div" className="mt-2 text-text-tertiary">
               Ratified by&nbsp;
               <Link to={`/iq/designs/${a.designReviewId}`} className="text-primary no-underline hover:underline">
                 {a.designReviewId}
@@ -160,7 +160,7 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
       <DetailSection title="Health & usage">
         <Stack gap="sm">
           <div>
-            <T as="div" className="mb-1 text-[11px] text-text-tertiary">
+            <T size="xs" as="div" className="mb-1 text-text-tertiary">
               Eval pass rate — {evalLabel(a.evalPassRate)}
             </T>
             {a.evalPassRate != null ? (
@@ -176,10 +176,10 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
               <InlinePlaceholder>Never evaluated — which blocks deploy above the sandbox tier.</InlinePlaceholder>
             )}
           </div>
-          <T as="div" className="text-[12px] text-text-secondary">Used by: {usageLine(a)}</T>
+          <T size="xs" as="div" className="text-text-secondary">Used by: {usageLine(a)}</T>
           {a.roles.length > 0 && (
             <Inline gap="xs" wrap>
-              <T className="text-[11px] text-text-tertiary">For:</T>
+              <T size="xs" className="text-text-tertiary">For:</T>
               {a.roles.map((r) => <Chip key={r} tone="info" size="xs">{r}</Chip>)}
             </Inline>
           )}

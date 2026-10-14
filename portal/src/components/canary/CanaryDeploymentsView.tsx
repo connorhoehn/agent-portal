@@ -59,9 +59,9 @@ export function CanaryDeploymentsView(): React.ReactElement {
         </Stack>
         <Inline gap="sm" align="center">
           {experimentState === 'running' && (
-            <Link to="/iq/canary" className="text-primary no-underline hover:underline text-[12px]">● Live view</Link>
+            <Link to="/iq/canary" className="text-primary no-underline hover:underline text-xs">● Live view</Link>
           )}
-          <Link to="/iq/canary" className="text-primary no-underline hover:underline text-[12px]">
+          <Link to="/iq/canary" className="text-primary no-underline hover:underline text-xs">
             {experimentState === 'setup' ? '+ New experiment' : 'View experiment'}
           </Link>
         </Inline>

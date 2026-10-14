@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import {
-  Button, Chip, ChoiceRow, EntityCell, Inline, MetaLine, Stack, TableRow, TableTd,
+  Button, Chip, ChevronIcon, ChoiceRow, EntityCell, IconButton, Inline, MetaLine, Stack, TableRow, TableTd, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { absoluteTime } from '../../lib/relativeTime';
 import type { ControllerAction, Decision } from './types.js';
@@ -99,21 +99,17 @@ function ListDecisionRow({ decision, index }: { decision: Decision; index: numbe
         </TableTd>
         <TableTd align="center"><DeltaCell delta={decision.deltaScore} /></TableTd>
         <TableTd className="max-w-0">
-          {hasReason
-            ? <MetaLine size="xs" className="truncate italic" items={[decision.reason]} />
-            : <MetaLine size="xs" items={['—']} />}
+          <MetaLine size="xs" className={hasReason ? 'truncate italic' : undefined} items={[hasReason ? decision.reason : '—']} />
         </TableTd>
         <TableTd align="center" className="w-7">
           {hasReason && (
-            <Button
-              variant="ghost"
+            <IconButton
               size="sm"
+              icon={<ChevronIcon dir={expanded ? 'up' : 'down'} />}
               aria-expanded={expanded}
               aria-label={expanded ? 'Collapse reason' : 'Expand reason'}
               onClick={() => setExpanded(v => !v)}
-            >
-              <span aria-hidden="true">{expanded ? '▲' : '▼'}</span>
-            </Button>
+            />
           )}
         </TableTd>
       </TableRow>
@@ -142,7 +138,7 @@ function NodeDecisionRow({ decision: d }: { decision: Decision }): React.ReactEl
           : 'text-text-tertiary';
   return (
     <Stack gap="none" className="gap-px py-1 border-t border-border">
-      <Inline gap="xs" wrap={false} className="text-[10.5px]">
+      <Inline gap="xs" wrap={false} className="text-xs">
         <Inline as="span" gap="none" className="text-text-tertiary font-mono">
           {absoluteTime(d.ts)}
         </Inline>
@@ -158,14 +154,9 @@ function NodeDecisionRow({ decision: d }: { decision: Decision }): React.ReactEl
           </Inline>
         )}
       </Inline>
-      <Inline
-        as="span"
-        gap="none"
-        title={d.reason}
-        className="text-[10px] text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap"
-      >
+      <T size="xs" tone="tertiary" className="overflow-hidden text-ellipsis whitespace-nowrap" title={d.reason}>
         {d.reason}
-      </Inline>
+      </T>
     </Stack>
   );
 }
@@ -190,14 +181,14 @@ function CardDecisionRow({ decision: d, index }: { decision: Decision; index: nu
       data-testid={`decision-row-${index}`}
     >
       <Stack gap="xs" className="w-full">
-        <Inline as="span" gap="none" className="text-[11.5px] text-text-secondary italic leading-snug">
+        <T size="xs" tone="secondary" className="italic leading-snug">
           {d.reason}
-        </Inline>
+        </T>
         {d.deltaScore !== undefined && (
-          <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary">
+          <T size="xs" tone="tertiary">
             Score delta (composite_b − composite_a):{' '}
             <b className="tabular-nums">{d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(4)}</b>
-          </Inline>
+          </T>
         )}
       </Stack>
     </ChoiceRow>

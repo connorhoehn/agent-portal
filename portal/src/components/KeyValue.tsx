@@ -41,14 +41,14 @@ export function KeyValue({
     return (
       <Inline gap="sm" align="baseline" wrap={false} className={className} data-testid={testId}>
         <SectionLabel className={`${labelWidth} shrink-0`}>{label}</SectionLabel>
-        <Inline as="span" gap="none" className={`min-w-0 flex-1 text-[12px] text-text-primary ${mono ? 'font-mono' : ''}`}>{body}</Inline>
+        <Inline as="span" gap="none" className={`min-w-0 flex-1 text-xs text-text-primary ${mono ? 'font-mono' : ''}`}>{body}</Inline>
       </Inline>
     );
   }
   return (
     <Stack gap="none" className={`min-w-0 ${className ?? ''}`} data-testid={testId}>
       <SectionLabel>{label}</SectionLabel>
-      <Inline as="span" gap="none" className={`mt-0.5 text-[12px] text-text-primary ${truncate ? 'truncate' : ''} ${mono ? 'font-mono' : ''}`} title={title}>
+      <Inline as="span" gap="none" className={`mt-0.5 text-xs text-text-primary ${truncate ? 'truncate' : ''} ${mono ? 'font-mono' : ''}`} title={title}>
         {body}
       </Inline>
     </Stack>

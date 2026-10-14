@@ -11,27 +11,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
-  Button,
-  Card,
-  Checkbox,
-  Chip,
-  CollectionToolbar,
-  ConfirmDialog,
-  DataTable,
-  DetailHeader,
-  DetailSection,
-  Drawer,
-  FormField,
-  Inline,
-  InlineAlert,
-  Input,
-  KeyValue,
-  LoadingState,
-  PageSection,
-  SectionLabel,
-  Stack,
-  StatStrip,
-  T,
+  Button, Card, Checkbox, Chip, CollectionToolbar, ConfirmDialog, DataTable, DetailHeader,
+  DetailSection, Drawer, FormField, IconButton, Inline, InlineAlert, Input, KeyValue, LoadingState,
+  PageSection, PersonIcon, SectionLabel, Stack, StatStrip, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
@@ -302,9 +284,14 @@ function UsersPage() {
                   over while working. Hidden when a real sign-in is required,
                   where the underlying POST would 403 anyway. */}
               {canSignInAs && session?.sub !== u.id && (
-                <Button size="sm" variant="link" disabled={busy} onClick={() => signInAs(u)} title="Reload the app as this user (dev only)">
-                  Sign in as
-                </Button>
+                <IconButton
+                  size="sm"
+                  icon={<PersonIcon />}
+                  disabled={busy}
+                  onClick={() => signInAs(u)}
+                  aria-label={`Sign in as ${u.displayName}`}
+                  title="Reload the app as this user (dev only)"
+                />
               )}
             </Inline>
           )}

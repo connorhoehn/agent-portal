@@ -1,28 +1,9 @@
 import { Fragment, useState } from 'react';
 import {
-  Button,
-  CardHeader,
-  Card,
-  CatalogGrid,
-  Chip,
-  CodeBlock,
-  CollapsibleSection,
-  Inline,
-  InlineAlert,
-  InlinePlaceholder,
-  LoadingState,
-  MetaLine,
-  PageSection,
-  SectionLabel,
-  Stack,
-  StatStrip,
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableTh,
-  TableTd,
-  Textarea, T,
+  Button, Card, CardHeader, CatalogGrid, Chip, CodeBlock, CollapsibleSection, EyeIcon, EyeOffIcon,
+  IconButton, Inline, InlineAlert, InlinePlaceholder, LoadingState, MetaLine, PageSection,
+  SectionLabel, Stack, StatStrip, T, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+  Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
@@ -333,9 +314,13 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                         <Chip tone={ev.ok ? 'success' : 'danger'} size="xs">{ev.ok ? 'ok' : 'error'}</Chip>
                       </TableTd>
                       <TableTd>
-                        <Button variant="ghost" size="sm" onClick={() => setExpandedEvent(isOpen ? null : ev.id)}>
-                          {isOpen ? 'Hide' : 'View'}
-                        </Button>
+                        <IconButton
+                          size="sm"
+                          icon={isOpen ? <EyeOffIcon /> : <EyeIcon />}
+                          aria-label={isOpen ? 'Hide event detail' : 'View event detail'}
+                          title={isOpen ? 'Hide' : 'View'}
+                          onClick={() => setExpandedEvent(isOpen ? null : ev.id)}
+                        />
                       </TableTd>
                     </TableRow>
                     {isOpen && (
@@ -410,9 +395,13 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                         <Chip tone={exec.error ? 'danger' : 'success'} size="xs">{exec.error ? 'error' : 'ok'}</Chip>
                       </TableTd>
                       <TableTd>
-                        <Button variant="ghost" size="sm" onClick={() => setExpandedExec(isOpen ? null : key)}>
-                          {isOpen ? 'Hide' : 'View'}
-                        </Button>
+                        <IconButton
+                          size="sm"
+                          icon={isOpen ? <EyeOffIcon /> : <EyeIcon />}
+                          aria-label={isOpen ? 'Hide execution detail' : 'View execution detail'}
+                          title={isOpen ? 'Hide' : 'View'}
+                          onClick={() => setExpandedExec(isOpen ? null : key)}
+                        />
                       </TableTd>
                     </TableRow>
                     {isOpen && (

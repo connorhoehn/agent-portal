@@ -66,7 +66,7 @@ export function AssignJobModal({ suggestion, onClose, onQueued }: {
         <Stack gap="xs">
           <Inline align="center" gap="sm" className="pb-2">
             <Chip tone={SUGGESTION_TONE[s.kind]} size="sm">{SUGGESTION_LABEL[s.kind]}</Chip>
-            <T className="text-[13.5px] font-semibold text-text-primary">{s.title}</T>
+            <T size="sm" className="font-semibold text-text-primary">{s.title}</T>
           </Inline>
           <KeyValue layout="row" labelWidth="w-[110px]" label="Initiative" value={s.initiativeName} />
           <KeyValue layout="row" labelWidth="w-[110px]" label="Why now" value={s.reason} />
@@ -95,12 +95,12 @@ export function AssignJobModal({ suggestion, onClose, onQueued }: {
               is the difference between confirming an action and confirming a
               title. */}
           <DetailSection title="The mission the agent gets" first>
-            <Card padding="sm" className="max-h-[180px] overflow-y-auto whitespace-pre-wrap bg-surface-hover/40 text-[12px] leading-relaxed text-text-secondary">
+            <Card padding="sm" className="max-h-[180px] overflow-y-auto whitespace-pre-wrap bg-surface-hover/40 text-xs leading-relaxed text-text-secondary">
               {s.prompt}
             </Card>
           </DetailSection>
           <Divider spacing="sm" />
-          <T className="text-[11px] text-text-tertiary">
+          <T size="xs" className="text-text-tertiary">
             Anything the agent produces still passes review before it ships.
           </T>
         </Stack>

@@ -296,12 +296,12 @@ export default function SelectContextPage() {
           right, exactly where an app's top nav puts them. */}
       <Band>
         <Inline wrap align="center" justify="between" gap="sm" className="py-2.5">
-          <T className="text-[13px] font-bold tracking-[0.14em] text-[var(--color-primary)] uppercase">
+          <T size="sm" className="font-bold tracking-[0.14em] text-[var(--color-primary)] uppercase">
             Work
           </T>
           <Inline align="center" gap="sm">
             <Avatar name={name} size={24} src={selfAvatar} />
-            <T className="text-[13px] font-semibold text-[var(--color-text-primary)]">{name}</T>
+            <T size="sm" className="font-semibold text-[var(--color-text-primary)]">{name}</T>
             <Button variant="ghost" size="sm" onClick={() => void logout()}>
               Sign out
             </Button>
@@ -332,7 +332,7 @@ export default function SelectContextPage() {
             }
           />
         </Stack>
-        {referenceReturn && <T className="text-sm text-text-secondary" wrap>Choose an Work workspace role to open the shared page.</T>}
+        {referenceReturn && <T size="sm" className="text-text-secondary" wrap>Choose an Work workspace role to open the shared page.</T>}
         {peopleEnabled ? (
           <Tabs
             className="-mb-px"
@@ -358,7 +358,7 @@ export default function SelectContextPage() {
         {/* The security story, said once, in prose — not a banner competing
             with the grid for the top of the page. */}
         {currentTenant && (
-          <T as="p" className="mb-5 max-w-2xl text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+          <T size="xs" as="p" className="mb-5 max-w-2xl leading-relaxed text-[var(--color-text-tertiary)]">
             Entering another workspace fully leaves this one — your session is re-scoped to
             that tenant and this tenant's cached data is cleared from the browser.
           </T>
@@ -374,7 +374,7 @@ export default function SelectContextPage() {
               aria-label="Filter accounts and roles"
               className="max-w-xs"
             />
-            <T className="text-xs text-[var(--color-text-tertiary)]">
+            <T size="xs" className="text-[var(--color-text-tertiary)]">
               {filtered.length} account{filtered.length === 1 ? '' : 's'} ·{' '}
               {filtered.reduce((n, a) => n + a.roles.length, 0)} role
               {filtered.reduce((n, a) => n + a.roles.length, 0) === 1 ? '' : 's'}
@@ -416,7 +416,7 @@ export default function SelectContextPage() {
                     <TenantMark tenant={tenant} />
                     <Stack gap="none" className="min-w-0 flex-1">
                       <Inline align="center" gap="xs">
-                        <T className="truncate text-sm font-bold text-[var(--color-text-primary)]">
+                        <T size="sm" className="truncate font-bold text-[var(--color-text-primary)]">
                           {tenantLabel(tenant)}
                         </T>
                         {isCurrentAccount && <Chip tone="info" size="xs" uppercase>current</Chip>}
@@ -427,7 +427,7 @@ export default function SelectContextPage() {
                     </Stack>
                   </Inline>
 
-                  <T as="p" className="px-4 pt-3 pb-1 text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+                  <T size="xs" as="p" className="px-4 pt-3 pb-1 leading-relaxed text-[var(--color-text-tertiary)]">
                     {TENANT_META[tenant]?.blurb}
                   </T>
 
@@ -539,7 +539,7 @@ function UserCard({
                   {portraitPersona && <T size="sm" wrap>{portraitPersona.biography}</T>}
                   {tenants.map(t => (
                     <Inline key={t.tenant} wrap align="center" gap="xs">
-                      <T className="text-[11px] font-semibold text-[var(--color-text-secondary)]">
+                      <T size="xs" className="font-semibold text-[var(--color-text-secondary)]">
                         {tenantLabel(t.tenant)}
                       </T>
                       {t.roles.map(r => (
@@ -550,14 +550,14 @@ function UserCard({
                 </Stack>
               }
             >
-              <T className="truncate text-sm font-bold text-[var(--color-text-primary)]">
+              <T size="sm" className="truncate font-bold text-[var(--color-text-primary)]">
                 {user.displayName}
               </T>
             </PersonHoverCard>
             {isCurrent && <Chip tone="info" size="xs" uppercase>you</Chip>}
           </Inline>
           {user.email && (
-            <T className="mt-0.5 block truncate text-[11px] text-[var(--color-text-tertiary)]">
+            <T size="xs" className="mt-0.5 block truncate text-[var(--color-text-tertiary)]">
               {user.email}
             </T>
           )}
@@ -565,7 +565,7 @@ function UserCard({
       </Inline>
 
       {persona && (
-        <T as="p" className="line-clamp-3 px-4 pt-2.5 text-xs leading-relaxed text-[var(--color-text-secondary)]" title={persona}>
+        <T size="xs" as="p" className="line-clamp-3 px-4 pt-2.5 leading-relaxed text-[var(--color-text-secondary)]" title={persona}>
           {persona}
         </T>
       )}

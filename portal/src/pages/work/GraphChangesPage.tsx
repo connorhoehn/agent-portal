@@ -132,14 +132,14 @@ export default function GraphChangesPage() {
   // queue, and two queues one word apart kept getting confused.
   return (
     <PageSection title="Graph updates">
-      <T as="div" wrap className="text-[13px] text-text-secondary mt-1 mb-5 max-w-3xl leading-relaxed">
+      <T size="sm" as="div" wrap className="text-text-secondary mt-1 mb-5 max-w-3xl leading-relaxed">
         Every change an agent proposed to the org graph and what you decided about it.
         Nothing here was written without an approval — this is the record that makes
         that checkable. Raise new ones from <Link to="/iq/work" className="text-primary no-underline hover:underline">Work</Link>.
       </T>
 
       {jobFilter && (
-        <Inline align="center" gap="sm" className="mb-3 text-[12px] text-text-secondary">
+        <Inline align="center" gap="sm" className="mb-3 text-xs text-text-secondary">
           <T>
             Showing proposals from job&nbsp;
             <Link to={`/iq/work/${jobFilter}`} className="text-primary no-underline hover:underline font-mono">
@@ -193,18 +193,18 @@ export default function GraphChangesPage() {
 
               <Stack gap="xs" className="flex-1 min-w-0">
                 <Inline align="center" gap="sm" wrap>
-                  <T className="text-[13px] font-semibold text-text-primary">
+                  <T size="sm" className="font-semibold text-text-primary">
                     {KIND_LABELS[p.kind] ?? p.kind}
                   </T>
-                  <T className="text-[11.5px] text-text-secondary font-mono">{describe(p)}</T>
+                  <T size="xs" className="text-text-secondary font-mono">{describe(p)}</T>
                 </Inline>
 
                 {p.rationale && (
-                  <T className="text-[12px] text-text-secondary leading-snug">{p.rationale}</T>
+                  <T size="xs" className="text-text-secondary leading-snug">{p.rationale}</T>
                 )}
 
                 {typeof p.evidence?.['quote'] === 'string' && (
-                  <T wrap className="text-[12px] text-text-primary pl-2.5 border-l-2 border-primary/40 italic">
+                  <T size="xs" wrap className="text-text-primary pl-2.5 border-l-2 border-primary/40 italic">
                     “{String(p.evidence['quote'])}”
                   </T>
                 )}
@@ -212,7 +212,7 @@ export default function GraphChangesPage() {
                 {/* A failed apply is the most useful row on this page: it says
                     the graph did NOT change and exactly why. */}
                 {p.applyError && (
-                  <T className="text-[12px] text-danger">
+                  <T size="xs" className="text-danger">
                     Did not apply — {p.applyError}
                   </T>
                 )}

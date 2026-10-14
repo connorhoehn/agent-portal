@@ -75,7 +75,7 @@ export function ConfigurationContents({ bundle, library, view, onViewChange, onR
     setQuery: setSkillQuery, setAvailability, refresh: onRefresh, showView: onViewChange,
   }) : null;
   const columns: DataTableColumn<BundledSkill>[] = [
-    { key: 'name', header: 'Skill', render: (skill) => <Stack gap="none" className="min-w-0"><Text as="div" className="text-[13px] font-medium">{skill.name}</Text><Text as="div" wrap className="text-xs text-text-secondary">{skill.description}</Text></Stack> },
+    { key: 'name', header: 'Skill', render: (skill) => <Inline gap="sm" wrap={false} className="min-w-0" title={skill.description}><Text className="text-sm font-medium">{skill.name}</Text><Text className="truncate text-xs text-text-secondary">{skill.description}</Text></Inline> },
     { key: 'version', header: 'In configuration', render: (skill) => <Text className="whitespace-nowrap font-mono text-xs">{versionLabel(skill.version)}</Text> },
     { key: 'library', header: 'Library version', render: (skill) => {
       const asset = library?.assets.find((asset) => asset.id === skill.id);
@@ -83,7 +83,7 @@ export function ConfigurationContents({ bundle, library, view, onViewChange, onR
     } },
     { key: 'status', header: 'Availability', render: (skill) => <Chip size="xs" tone={skill.status === 'stale' ? 'info' : 'neutral'}>{skill.status === 'stale' ? 'Update available' : skill.status === 'missing' ? 'Not in library' : 'Up to date'}</Chip> },
   ];
-  return <Stack gap="md" className="text-[13px]">
+  return <Stack gap="md" className="text-sm">
     <InlineAlert tone="info">
       Read-only preview using example bundle data. Installed configuration versions are not reported by machines or sessions yet. Publishing and rollout tracking are not connected.
     </InlineAlert>

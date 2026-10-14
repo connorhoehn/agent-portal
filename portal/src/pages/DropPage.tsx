@@ -209,10 +209,10 @@ export default function DropPage() {
                 title={STATE_LABEL[u.state]}
                 aria-label={STATE_LABEL[u.state]}
               />
-              <T className="text-[12px] text-text-primary truncate flex-1">{u.name}</T>
+              <T size="xs" className="text-text-primary truncate flex-1">{u.name}</T>
               {u.error
-                ? <T className="text-[11px] text-danger truncate max-w-[50%]" title={u.error}>{u.error}</T>
-                : <T className="text-[11px] text-text-tertiary shrink-0">{bytes(u.size)}</T>}
+                ? <T size="xs" className="text-danger truncate max-w-[50%]" title={u.error}>{u.error}</T>
+                : <T size="xs" className="text-text-tertiary shrink-0">{bytes(u.size)}</T>}
             </Inline>
           ))}
           {done > 0 && (

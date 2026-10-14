@@ -73,7 +73,7 @@ export function CapabilityBrief({ models }: CapabilityBriefProps) {
   const caps = capabilitiesFor(models);
   if (caps.length === 0) {
     return (
-      <T className="text-[13px] text-text-secondary">
+      <T size="sm" className="text-text-secondary">
         This machine has not announced any models yet, so there is nothing to
         say about what it can take on. It announces them when its worker starts.
       </T>
@@ -97,8 +97,8 @@ export function CapabilityBrief({ models }: CapabilityBriefProps) {
               <Chip tone={TIER_TONE[c.tier]} size="xs">{info.name}</Chip>
             </Stack>
             <Stack gap="none" className="min-w-0">
-              <T className="text-[13px] text-text-primary">{info.takesOn}</T>
-              <T className="font-mono text-[11px] text-text-tertiary">{models.join(', ')}</T>
+              <T size="sm" className="text-text-primary">{info.takesOn}</T>
+              <T size="xs" className="font-mono text-text-tertiary">{models.join(', ')}</T>
             </Stack>
           </Inline>
         );

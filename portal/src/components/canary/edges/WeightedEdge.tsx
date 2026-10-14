@@ -66,7 +66,7 @@ function WeightedEdgeImpl({
             from them. */}
         <Inline
           gap="none"
-          className="nodrag nopan absolute rounded-[10px] border border-border bg-surface px-1.5 py-px text-[10px] font-semibold tabular-nums text-text-secondary pointer-events-auto"
+          className="nodrag nopan absolute rounded-[10px] border border-border bg-surface px-1.5 py-px text-xs font-semibold tabular-nums text-text-secondary pointer-events-auto"
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY - 18}px)`,
           }}

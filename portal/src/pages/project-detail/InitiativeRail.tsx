@@ -21,19 +21,8 @@ import {
   type ActionRowColumn,
 } from '@connorhoehnslalom/ui-components';
 import {
-  Button,
-  Chip,
-  DataTable,
-  Inline,
-  InlineAlert,
-  Link as ExternalLink,
-  MetaLine,
-  PageSection,
-  SegmentedControl,
-  Stack,
-  StatusPill,
-  T,
-  type DataTableColumn,
+  Button, Chip, DataTable, Inline, InlineAlert, Link as ExternalLink, MetaLine, PageSection,
+  SegmentedControl, Stack, StatusPill, T, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -131,7 +120,7 @@ export function InitiativeRail({
       compare: (a, b) => a.workItemLabel.localeCompare(b.workItemLabel),
       // A run with no work item is a bot's standing mission: its bot leads.
       render: (r) => (
-        <Stack gap="none" className="whitespace-nowrap">
+        <Inline gap="sm" wrap={false} className="whitespace-nowrap">
           {r.workItemId
             ? <Link to={itemHref(r.workItemId)} className="text-primary no-underline hover:underline" data-testid="agents-run-item">
                 <T size="sm" weight="medium" tone="inherit">{r.workItemLabel}</T>
@@ -140,7 +129,7 @@ export function InitiativeRail({
           <T size="xs" tone="secondary" data-testid="agents-run-agent">
             {r.workItemId ? r.agent : `${r.workItemLabel} · ${r.run.trigger.replace(/_/g, ' ')}`}
           </T>
-        </Stack>
+        </Inline>
       ),
     },
     {

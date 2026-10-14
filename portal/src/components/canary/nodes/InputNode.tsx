@@ -38,7 +38,7 @@ function InputNodeImpl({ data }: NodeProps<InputNodeType>) {
               as="span"
               gap="none"
               title={r.text}
-              className="text-[11px] text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis font-mono"
+              className="text-xs text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis font-mono"
             >
               {truncate(r.text, 60)}
             </Inline>

@@ -66,7 +66,7 @@ export function usePeopleMessage(peopleIn: CallPerson[]): ReactNode {
       size="sm"
       variant="ghost"
       // The dock row's family: 28px, 12px/500, transparent — as Start call.
-      className="h-7 text-[12px] font-medium"
+      className="h-7 text-xs font-medium"
       data-testid="search-message"
       disabled={!availability.ok || busy}
       title={error ?? availability.reason}

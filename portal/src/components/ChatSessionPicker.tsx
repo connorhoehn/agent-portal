@@ -50,7 +50,7 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
         aria-expanded={open}
         aria-haspopup="true"
         title={unavailable ? 'Previous conversations could not be loaded' : 'Previous conversations'}
-        className="text-[11px] whitespace-nowrap"
+        className="text-xs whitespace-nowrap"
       >
         {unavailable ? 'History ⚠' : 'History ▾'}
       </Button>
@@ -61,7 +61,7 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
         >
           {unavailable && (
             // Stack: three stacked lines, from a block <div>.
-            <Stack gap="none" role="status" className="px-3 py-2 text-[11px] text-text-secondary">
+            <Stack gap="none" role="status" className="px-3 py-2 text-xs text-text-secondary">
               <Inline as="span" gap="none" className="font-semibold mb-0.5">Couldn’t load your conversations</Inline>
               <Inline as="span" gap="none" className="text-text-tertiary">
                 {needsAuth

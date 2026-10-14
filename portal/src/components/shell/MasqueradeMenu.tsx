@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import {
-  Button, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePopover, MetaLine, SectionLabel, Stack, StatusDot,
+  Button, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePopover, MetaLine, SectionLabel, Stack, StatusDot, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useSession, type SessionRole } from '../../lib/auth';
 import { CHOOSER } from '../../lib/tenantHome';
@@ -104,7 +104,7 @@ export function MasqueradeMenu() {
         <Inline as="span" gap="xs" align="center" wrap={false} className="whitespace-nowrap">
           <StatusDot aria-hidden color={roleColor(session.role)} size="sm" />
           <Inline as="span" gap="none" className="font-medium">{session.name}</Inline>
-          <Inline as="span" gap="none" data-ui-text="caption" className="text-text-tertiary text-[11px]">
+          <Inline as="span" gap="none" data-ui-text="caption" className="text-text-tertiary text-xs">
             · {roleLabel(session.role)}{session.masquerading ? ' · masquerade' : ''} <span aria-hidden="true">▾</span>
           </Inline>
         </Inline>
@@ -124,9 +124,9 @@ export function MasqueradeMenu() {
         <>
           {/* Current identity — always visible so "who/what am I now" is unambiguous. */}
           <Stack gap="none" className="px-2.5 pt-2 pb-2.5 border-b border-border mb-1">
-            <Inline as="div" gap="none" className="text-[13px] font-semibold">{session.name}</Inline>
+            <T size="sm" weight="semibold" as="div">{session.name}</T>
             <MetaLine size="xs" className="mb-2" items={[session.sub]} />
-            <Inline gap="xs" wrap={false} className="text-[12px]">
+            <Inline gap="xs" wrap={false} className="text-xs">
               <StatusDot aria-hidden color={roleColor(session.role)} size="xs" />
               <strong>{tenantLabel(session.tenant)}</strong>
               <Inline as="span" gap="none" className="text-text-tertiary">·</Inline>

@@ -43,17 +43,17 @@ function ShareDialog({ deckId, revisionId, fileName, fileUrl, onClose }: ShareTo
   const [confirming, setConfirming] = useState(false);
   return <Modal open onClose={onClose} maxWidth={520}>
     <Stack gap="md" className="px-4.5 py-4" data-testid="deck-share-dialog">
-      <SectionLabel as="h3" className="text-[14px] font-semibold text-text-primary normal-case tracking-normal">
+      <SectionLabel as="h3" className="text-sm font-semibold text-text-primary normal-case tracking-normal">
         {confirming ? 'Share a copy?' : 'Share presentation'}
       </SectionLabel>
       {confirming && chosen
         ? <ConfirmStep key={chosen.channel} destination={chosen} deckId={deckId} revisionId={revisionId} fileName={pptxName(fileName)} fileUrl={fileUrl ?? deckFileUrl(deckId, revisionId)}
           onBack={() => setConfirming(false)} onClose={onClose} />
         : <>
-          {fetched.isLoading && !fetched.data && <Inline gap="sm" align="center"><Spinner size="sm" /><T className="text-sm text-text-secondary">Loading your conversations…</T></Inline>}
+          {fetched.isLoading && !fetched.data && <Inline gap="sm" align="center"><Spinner size="sm" /><T size="sm" className="text-text-secondary">Loading your conversations…</T></Inline>}
           {fetched.error && <InlineAlert tone="error">Your Social conversations could not be loaded. {fetched.error}</InlineAlert>}
           {!fetched.isLoading && !fetched.error && destinations.length === 0
-            && <T className="text-sm text-text-secondary" wrap>You are not a member of any channel or direct message yet. Join a channel in Social first.</T>}
+            && <T size="sm" className="text-text-secondary" wrap>You are not a member of any channel or direct message yet. Join a channel in Social first.</T>}
           <Stack gap="xs" className="max-h-72 overflow-y-auto">
             {destinations.map(d => <ChoiceRow key={d.channel} title={d.label} description={d.detail} selected={chosen?.channel === d.channel}
               onSelect={() => setChosen(d)} data-testid={`deck-share-destination-${d.kind}`} />)}

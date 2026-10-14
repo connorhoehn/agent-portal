@@ -1,21 +1,8 @@
 import { useState } from 'react';
 import {
-  Button,
-  Card,
-  CardHeader,
-  Chip,
-  Inline,
-  InlinePlaceholder,
-  Input,
-  Link as ExternalLink,
-  MetaLine,
-  Stack,
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableTd,
-  TableTh, T,
+  Button, Card, CardHeader, Chip, CloseIcon, IconButton, Inline, InlinePlaceholder, Input,
+  Link as ExternalLink, MetaLine, Stack, T, Table, TableBody, TableHead, TableRow, TableTd,
+  TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
@@ -114,13 +101,13 @@ export function SessionsTab() {
                     </TableTd>
                     <TableTd>
                       {canManage && (
-                        <Button
-                          variant="secondary"
+                        <IconButton
                           size="sm"
+                          icon={<CloseIcon />}
+                          aria-label="Close session"
+                          title="Close session"
                           onClick={() => void handleClose(session.sessionId)}
-                        >
-                          Close
-                        </Button>
+                        />
                       )}
                     </TableTd>
                   </TableRow>

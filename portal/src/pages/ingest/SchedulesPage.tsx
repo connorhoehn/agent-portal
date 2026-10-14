@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
-  Button, Card, CardHeader, Chip, CollectionToolbar, ConfirmDialog, FormField, FormRow, Input, LoadingState,
-  PageSection, Select, Stack, Switch, Table, TableBody, TableHead, TableRow, TableTd,
-  TableTh, T,
+  Button, Card, CardHeader, Chip, CollectionToolbar, ConfirmDialog, FormField, FormRow, IconButton,
+  Input, LoadingState, PageSection, Select, Stack, Switch, T, Table, TableBody, TableHead,
+  TableRow, TableTd, TableTh, TrashIcon,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
@@ -172,9 +172,14 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
                   </TableTd>
                   <TableTd>
                     {canManage && (
-                      <Button variant="danger" size="sm" onClick={() => setConfirmDeleteId(s.id)}>
-                        Remove
-                      </Button>
+                      <IconButton
+                        variant="danger"
+                        size="sm"
+                        icon={<TrashIcon />}
+                        aria-label="Remove schedule"
+                        title="Remove schedule"
+                        onClick={() => setConfirmDeleteId(s.id)}
+                      />
                     )}
                   </TableTd>
                 </TableRow>

@@ -43,10 +43,10 @@ export function NoSuggestions({
   return (
     <Stack gap="md" className="py-6">
       <Stack gap="xs">
-        <T className="text-[14px] font-semibold text-text-primary">
+        <T size="sm" className="font-semibold text-text-primary">
           Nothing open on your initiatives right now
         </T>
-        <T className="text-[13px] text-text-secondary">
+        <T size="sm" className="text-text-secondary">
           Suggestions here come from work items on initiatives you own. When one
           is open and unassigned, it appears in this list ready to send to{' '}
           {machineLabel}.
@@ -56,12 +56,12 @@ export function NoSuggestions({
       {info && (
         <Stack gap="sm">
           <Inline gap="sm" align="center">
-            <T className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
+            <T size="xs" className="font-semibold uppercase tracking-wide text-text-tertiary">
               What {machineLabel} is suited to
             </T>
             <Chip tone="info" size="xs">{info.name}</Chip>
           </Inline>
-          <T className="text-[13px] text-text-secondary">{info.takesOn}</T>
+          <T size="sm" className="text-text-secondary">{info.takesOn}</T>
           {/* A Stack of Inlines rather than a raw <ul>. The library has no list
               primitive (queued), and these are short phrases rather than prose,
               so the bullet is a leading dot per row. */}
@@ -69,7 +69,7 @@ export function NoSuggestions({
             {ideas.map((idea) => (
               <Inline key={idea} gap="sm" align="start">
                 <T aria-hidden className="text-text-tertiary">·</T>
-                <T className="text-[13px] text-text-primary">{idea}</T>
+                <T size="sm" className="text-text-primary">{idea}</T>
               </Inline>
             ))}
           </Stack>
@@ -77,7 +77,7 @@ export function NoSuggestions({
       )}
 
       {!accepting && (
-        <T className="text-[13px] text-text-secondary">
+        <T size="sm" className="text-text-secondary">
           {machineLabel} is not accepting work at the moment, so nothing would
           start even if you sent it. The Accepting switch on its row turns that
           back on.
@@ -87,7 +87,7 @@ export function NoSuggestions({
       <Inline gap="sm" align="center" wrap>
         <RouterLink
           to="/iq/initiatives"
-          className="inline-flex items-center rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] font-medium text-text-primary no-underline hover:bg-surface-panel"
+          className="inline-flex items-center rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text-primary no-underline hover:bg-surface-panel"
         >
           Open initiatives
         </RouterLink>

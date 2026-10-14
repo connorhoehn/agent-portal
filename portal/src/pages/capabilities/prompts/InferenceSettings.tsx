@@ -51,7 +51,7 @@ export function InferenceSettings({
                 onChange={v => onChange({ temperature: String(v) })}
                 valueLabel={shownTemperature.toFixed(2)}
                 disabled={disabled}
-                className="w-full [&>input]:w-full [&>input]:accent-[var(--color-optimize)] [&>span]:min-w-8 [&>span]:text-[11px] [&>span]:font-semibold"
+                className="w-full [&>input]:w-full [&>input]:accent-[var(--color-optimize)] [&>span]:min-w-8 [&>span]:text-xs [&>span]:font-semibold"
               />
             )}
           </FormField>

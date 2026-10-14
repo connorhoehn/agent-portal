@@ -111,7 +111,7 @@ export function usePeopleCall({
       // The composer's dock family (2026-09-29): its own controls (Workflow ▾,
       // the mode pill) are 28px, 12px/500, transparent; a filled 26px
       // 12px/400 button beside them read as a different family.
-      className="h-7 text-[12px] font-medium"
+      className="h-7 text-xs font-medium"
       data-testid={startTestId}
       disabled={!ready.ok || inCall}
       title={!ready.ok ? ready.reason

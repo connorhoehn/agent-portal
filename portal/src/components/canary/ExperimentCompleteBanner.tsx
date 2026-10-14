@@ -2,7 +2,7 @@
 // Rendered by CanaryPage; reads controllerState from the canary store.
 
 import { useState } from 'react';
-import { Banner, Button, Inline, Spinner } from '@connorhoehnslalom/ui-components/shared';
+import { Banner, Button, Inline, Spinner, T } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useCanaryStore } from './canaryStore.js';
 import { resetCanaryExperiment } from './usePromptLibrary.js';
@@ -69,9 +69,9 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
     >
       <Inline gap="sm" wrap={false}>
         {pinError && (
-          <Inline as="span" gap="none" className="text-[11px] text-danger" title={pinError}>
+          <T size="xs" className="text-danger" title={pinError}>
             Error — see console
-          </Inline>
+          </T>
         )}
         {canManage && (
           <>

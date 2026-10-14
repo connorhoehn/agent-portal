@@ -34,7 +34,7 @@ export function personPath(personId: string): string {
 
 function InferredHoverDetail({ personId }: { personId: string }) {
   const { data, error } = useFetch<PersonDetail>(`/api/graph/people/${encodeURIComponent(personId)}`);
-  if (error) return <T className="text-[11px] text-text-tertiary">Couldn’t load details.</T>;
+  if (error) return <T size="xs" className="text-text-tertiary">Couldn’t load details.</T>;
   if (!data) return <LoadingState label="Loading…" spinnerSize="sm" />;
   const skills = data.skills.slice(0, 5);
   return (
@@ -44,7 +44,7 @@ function InferredHoverDetail({ personId }: { personId: string }) {
           {skills.map((s) => <Chip key={s} size="xs">{s}</Chip>)}
         </Inline>
       )}
-      <T className="text-[11px] text-text-tertiary">
+      <T size="xs" className="text-text-tertiary">
         Click the name to open {data.name.split(' ')[0]} in the graph.
       </T>
     </Stack>
@@ -57,9 +57,9 @@ function PersonIdentity({ name, title, department, avatarUrl }: { name: string; 
     <Inline gap="xs" align="center">
       <Avatar name={name} size={32} src={avatarUrl ?? undefined} />
       <Stack gap="none">
-        <T className="truncate text-sm font-semibold text-text-primary">{name}</T>
-        {title && <T className="truncate text-xs text-text-secondary">{title}</T>}
-        {department && <T className="truncate text-xs text-text-tertiary">{department}</T>}
+        <T size="sm" className="truncate font-semibold text-text-primary">{name}</T>
+        {title && <T size="xs" className="truncate text-text-secondary">{title}</T>}
+        {department && <T size="xs" className="truncate text-text-tertiary">{department}</T>}
       </Stack>
     </Inline>
   );

@@ -3,7 +3,7 @@
 // local update; toast on failure.
 
 import { useEffect, useRef, useState } from 'react';
-import { Inline, SectionLabel, Slider, useToast } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, SectionLabel, Slider, useToast, T } from '@connorhoehnslalom/ui-components/shared';
 import { setWeight, useCanaryStore } from './canaryStore.js';
 import { writeJson } from '../../lib/writeJson';
 
@@ -75,7 +75,7 @@ export function ManualWeightSlider(): React.ReactElement {
         className="w-[140px]"
         aria-label="Manual canary weight B"
       />
-      <Inline as="span" gap="none" className="text-[12px] tabular-nums text-text-primary font-semibold min-w-8 text-right">{local}%</Inline>
+      <T size="xs" weight="semibold" tone="primary" tabular className="min-w-8 text-right">{local}%</T>
     </Inline>
   );
 }

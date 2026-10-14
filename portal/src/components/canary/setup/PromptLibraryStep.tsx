@@ -4,7 +4,7 @@
 import { useState, useId } from 'react';
 import {
   Button, EmptyState, FormField, Inline, InlineAlert, Input,
-  MetaLine, SelectableCard, SkeletonCard, Stack,
+  MetaLine, SelectableCard, SkeletonCard, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList } from '../usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../types.js';
@@ -138,9 +138,9 @@ export function PromptLibraryStep({ onSelect, selected }: PromptLibraryStepProps
               onSelect={() => onSelect(entry)}
             >
               <Inline gap="sm" justify="between" align="baseline" wrap={false}>
-                <Inline as="span" gap="none" className="text-[13px] font-semibold text-text-primary flex-1 min-w-0 truncate">
+                <T size="sm" weight="semibold" tone="primary" className="flex-1 min-w-0 truncate">
                   {entry.name}
-                </Inline>
+                </T>
                 <MetaLine size="xs" items={[relativeTime(entry.updatedAt)]} />
               </Inline>
               {entry.description && (

@@ -182,7 +182,7 @@ export function ServesItem({ job }: { job: Job }) {
       to={`/iq/projects/${encodeURIComponent(s.initiativeId)}${s.workItemId ? `?${new URLSearchParams({ tab: 'work', item: s.workItemId })}` : ''}`}
       onClick={(e: React.MouseEvent) => e.stopPropagation()}
       title={`Serving “${s.itemTitle}” on ${s.initiativeName} — open ${s.workItemId ? 'the work item' : 'the initiative'}`}
-      className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-secondary shrink-0 max-w-[220px] truncate no-underline hover:text-primary"
+      className="text-xs px-1.5 py-0.5 rounded bg-surface-hover text-text-secondary shrink-0 max-w-[220px] truncate no-underline hover:text-primary"
     >
       ↳ {s.itemTitle} · {s.initiativeName}
     </Link>
@@ -209,7 +209,7 @@ export function SeverityChip({ severity, size = 'xs' }: { severity: string; size
 /** The one link that leaves the loop's run surfaces: what reached the graph. */
 export function GraphUpdatesLink() {
   return (
-    <Link to="/iq/work/changes" className="text-[12px] text-primary no-underline hover:underline">
+    <Link to="/iq/work/changes" className="text-xs text-primary no-underline hover:underline">
       Graph updates →
     </Link>
   );

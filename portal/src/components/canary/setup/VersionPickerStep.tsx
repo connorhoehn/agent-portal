@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import {
-  Button, Divider, Inline, InlineAlert, InlinePlaceholder, MetaLine, SectionLabel, SkeletonCard, Stack,
+  Button, Divider, Inline, InlineAlert, InlinePlaceholder, MetaLine, SectionLabel, SkeletonCard, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { usePromptVersions } from '../usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../types.js';
@@ -71,13 +71,13 @@ function VersionRow({ entry, selected, onSelect, radioName, side }: VersionRowPr
       />
       <Stack gap="none" className="flex-1 min-w-0">
         <Inline gap="xs" wrap={false}>
-          <Inline as="span" gap="none" className="text-[13px] font-semibold text-text-primary">
+          <T size="sm" weight="semibold" tone="primary">
             {versionLabel(entry.version)}
-          </Inline>
+          </T>
           {entry.isDraft && (
-            <Inline as="span" gap="none" className="text-[11px] text-text-tertiary italic">
+            <T size="xs" tone="tertiary" className="italic">
               (editable)
-            </Inline>
+            </T>
           )}
         </Inline>
         {entry.description && (

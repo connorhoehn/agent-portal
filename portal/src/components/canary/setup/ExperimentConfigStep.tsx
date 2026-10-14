@@ -3,7 +3,7 @@
 
 import { useState, useId } from 'react';
 import {
-  Button, Card, Inline, InlineAlert, MetaLine, SectionLabel, Slider, Stack,
+  Button, Card, Inline, InlineAlert, MetaLine, SectionLabel, Slider, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { startCanaryExperiment } from '../usePromptLibrary.js';
 
@@ -66,20 +66,20 @@ export function ExperimentConfigStep({
               <SectionLabel as="div" className="mb-1 text-[#3b82f6]">
                 Baseline A
               </SectionLabel>
-              <Inline as="div" gap="none" className="text-[13px] font-semibold text-text-primary truncate">
+              <T size="sm" weight="semibold" tone="primary" as="div" className="truncate">
                 {promptName}
-              </Inline>
+              </T>
               <MetaLine size="xs" tone="secondary" items={[versionLabel(subjectAVersion)]} />
-              <Inline as="div" gap="none" title={subjectAArn} className="text-[10px] font-mono text-text-tertiary truncate">
+              <T size="xs" tone="tertiary" as="div" className="font-mono truncate" title={subjectAArn}>
                 {truncateArn(subjectAArn)}
-              </Inline>
+              </T>
             </Stack>
 
             {/* VS divider */}
             <Inline gap="none" justify="center" className="px-4 self-stretch">
-              <Inline as="span" gap="none" className="text-[11px] font-bold text-text-tertiary self-center">
+              <T size="xs" weight="bold" tone="tertiary" className="self-center">
                 VS
-              </Inline>
+              </T>
             </Inline>
 
             {/* Challenger B */}
@@ -87,13 +87,13 @@ export function ExperimentConfigStep({
               <SectionLabel as="div" className="mb-1 text-[#a855f7]">
                 Challenger B
               </SectionLabel>
-              <Inline as="div" gap="none" className="text-[13px] font-semibold text-text-primary truncate">
+              <T size="sm" weight="semibold" tone="primary" as="div" className="truncate">
                 {promptName}
-              </Inline>
+              </T>
               <MetaLine size="xs" tone="secondary" items={[versionLabel(subjectBVersion)]} />
-              <Inline as="div" gap="none" title={subjectBArn} className="text-[10px] font-mono text-text-tertiary truncate">
+              <T size="xs" tone="tertiary" as="div" className="font-mono truncate" title={subjectBArn}>
                 {truncateArn(subjectBArn)}
-              </Inline>
+              </T>
             </Stack>
           </Inline>
         </Card>
@@ -106,9 +106,9 @@ export function ExperimentConfigStep({
           {/* A plain span, not a <label htmlFor>: Slider exposes no `id`, so
               there is nothing to point `for` at. Its `aria-label` carries the
               accessible name instead. Filed in ui-components-queue.md. */}
-          <Inline as="span" gap="none" className="text-[12px] text-text-secondary shrink-0">
+          <T size="xs" tone="secondary" className="shrink-0">
             Initial B traffic
-          </Inline>
+          </T>
           {/* Slider became reachable from /shared in 2.241.0 — before that it
               was root-barrel only, which is why this was a raw range input
               with a hand-set accentColor. */}
@@ -120,9 +120,9 @@ export function ExperimentConfigStep({
             aria-label="Initial challenger (B) traffic percentage"
             className="flex-1"
           />
-          <Inline as="span" gap="none" className="text-[13px] font-semibold tabular-nums text-text-primary w-10 text-right">
+          <T size="sm" weight="semibold" tone="primary" tabular className="w-10 text-right">
             {initialWeight}%
-          </Inline>
+          </T>
         </Inline>
         <MetaLine
           size="xs"

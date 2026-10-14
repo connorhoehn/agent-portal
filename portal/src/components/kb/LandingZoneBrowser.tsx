@@ -153,7 +153,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
     <Stack gap="md">
       {/* Header row */}
       <Inline gap="sm" justify="between" wrap>
-        <CodeBlock className="text-[12px]" code={`s3://<bucket>/${s3Prefix}`} />
+        <CodeBlock className="text-xs" code={`s3://<bucket>/${s3Prefix}`} />
 
         {canManage && (
           <Button

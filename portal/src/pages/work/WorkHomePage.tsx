@@ -91,7 +91,7 @@ export default function WorkHomePage() {
     },
   });
   const recentColumns: DataTableColumn<Job>[] = [
-    { key: 'title', header: 'Run', render: (job) => <Link to={`/iq/work/${encodeURIComponent(job.id)}`} className="text-[13px] text-text-primary hover:text-primary hover:underline">{job.title}</Link> },
+    { key: 'title', header: 'Run', render: (job) => <Link to={`/iq/work/${encodeURIComponent(job.id)}`} className="text-sm text-text-primary hover:text-primary hover:underline">{job.title}</Link> },
     { key: 'status', header: 'Result', render: (job) => <JobStatusPill status={job.status} /> },
     { key: 'finishedAt', header: 'Finished', numeric: true, render: (job) => relativeTime(job.finishedAt!) },
     { key: 'duration', header: 'Duration', numeric: true, render: (job) => durationLabel(job.result?.durationMs) },
@@ -122,13 +122,13 @@ export default function WorkHomePage() {
           answer, or one quiet line when nothing waits. A failed load says so
           plainly — "0 needs you" would read like a healthy, idle system. */}
       <PageSection size="sm" title="Needs your attention" data-testid="inbox-attention"
-        {...(waiting > 0 ? { count: waiting, actions: <T className="text-[12px] text-text-secondary">Answer in the composer below</T> } : {})}
+        {...(waiting > 0 ? { count: waiting, actions: <T size="xs" className="text-text-secondary">Answer in the composer below</T> } : {})}
         {...(!summaryFailure && waiting === 0 ? { empty: 'Nothing right now — questions and reviews appear in the composer.' } : {})}>
         {summaryFailure && (
           <Card padding="md" className="border-danger/40">
             <Stack gap="xs">
-              <T className="text-[13px] font-semibold text-danger">Could not reach the work queue</T>
-              <T wrap className="text-[12px] text-text-secondary leading-snug">
+              <T size="sm" className="font-semibold text-danger">Could not reach the work queue</T>
+              <T size="xs" wrap className="text-text-secondary leading-snug">
                 {summaryFailure}. The numbers below are not zero — they are unknown.
               </T>
             </Stack>
@@ -140,7 +140,7 @@ export default function WorkHomePage() {
         description={dispatchedCount > 0
           ? `Queue jobs only — ${dispatchedRunsNoun(dispatchedCount)} from initiative work items ${dispatchedCount === 1 ? 'is' : 'are'} running outside the queue; Runs lists them.`
           : 'Queue jobs only — runs dispatched from initiative work items are listed on Runs when they are live.'}
-        actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">View runs →</Link>}>
+        actions={<Link to="/iq/work/queue" className="text-sm text-primary hover:underline">View runs →</Link>}>
         <StatStrip variant="line" aria-label="Current queue" items={[
           { label: 'Queued', value: summaryFailure || !s ? '—' : s.jobs.queued ?? 0 },
           { label: 'Running', value: summaryFailure || !s ? '—' : active },
@@ -149,7 +149,7 @@ export default function WorkHomePage() {
         ]} />
       </PageSection>
       <Divider spacing="none" />
-      <PageSection size="sm" title="Recent runs" actions={<Link to="/iq/work/queue" className="text-[13px] text-primary hover:underline">All runs →</Link>}>
+      <PageSection size="sm" title="Recent runs" actions={<Link to="/iq/work/queue" className="text-sm text-primary hover:underline">All runs →</Link>}>
         {/* The section that owns the table owns its command input; the input
             docks at the bottom of the content column, spanning it, with the
             rest of the page above it (CollectionCommandHost → ColumnDock). */}
@@ -161,10 +161,10 @@ export default function WorkHomePage() {
           <CollectionCommandHost adapter={runsAdapter} prompts={prompts} />
         </Stack>
       </PageSection>
-      <Link to="/iq/work/findings" className="text-[13px] text-primary hover:underline">{s && !summaryFailure ? `${s.findings.open} open findings` : 'View findings'} →</Link>
+      <Link to="/iq/work/findings" className="text-sm text-primary hover:underline">{s && !summaryFailure ? `${s.findings.open} open findings` : 'View findings'} →</Link>
       <Disclosure summary="Queue operations" variant="plain" density="compact">
         <QueuePulse summary={s ? { jobs: s.jobs, busyBoxes: s.busyBoxes } : null} jobs={jobs} degraded={!!summaryFailure} />
-        {rediscovery && <T className="mt-3 text-[12px] text-text-tertiary">Rediscovery avoided {usd(rediscovery.usdAvoided)} · {rediscovery.shortCircuits} short-circuits · {rediscovery.windowDays}d</T>}
+        {rediscovery && <T size="xs" className="mt-3 text-text-tertiary">Rediscovery avoided {usd(rediscovery.usdAvoided)} · {rediscovery.shortCircuits} short-circuits · {rediscovery.windowDays}d</T>}
       </Disclosure>
     </Stack>
   );

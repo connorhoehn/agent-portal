@@ -186,7 +186,7 @@ export function useCanvasComments({ editor, ydoc, comments, canComment }: {
   const composer: ReactNode = <Modal open={!!draftAnchor} onClose={() => { if (!comments.pending) setDraftAnchor(null); }} title="Comment on selection">
     <Stack gap="sm" data-testid="canvas-comment-composer">
       {anchorError && <InlineAlert tone="error">{anchorError}</InlineAlert>}
-      <T className="text-[13px] text-text-secondary">{`“${draftAnchor?.quote ?? ''}”`}</T>
+      <T size="sm" className="text-text-secondary">{`“${draftAnchor?.quote ?? ''}”`}</T>
       <Textarea value={draft} onChange={event => setDraft(event.target.value)} rows={3} autoFocus aria-label="Comment" placeholder="Add a comment…"
         onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} />
       <Inline gap="sm" justify="end">

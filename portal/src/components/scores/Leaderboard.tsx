@@ -1,13 +1,7 @@
-import { Button, Card, Checkbox, Chip, DataTable, EntityCell, Inline, MetaLine, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Checkbox, Chip, DataTable, EntityCell, Inline, MetaLine, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { ScoreEntry } from './types';
 import { formatScore } from './scoresFormat';
-
-/** A stable id for a row's name button, independent of DOM node identity —
- * see ScoresPage.tsx's focus-restore effect (DEFECTS.md org-leader #12). */
-export function scoreRowButtonId(personId: string): string {
-  return `score-row-${personId}`;
-}
 
 interface Props {
   entries: ScoreEntry[];
@@ -36,25 +30,9 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
       key: 'name',
       header: 'Name',
       getFilterText: (s) => s.name,
-      render: (s) => {
-        const selected = s.personId === selectedId;
-        return (
-          // A real interactive element in the row, not just the row's own
-          // onClick — that left Tab landing on the compare checkbox with no
-          // way to open the row from the keyboard (DEFECTS.md #4).
-          // stopPropagation so a click here doesn't also fire the row's
-          // onRowClick with the same (idempotent but redundant) toggle.
-          <Button
-            id={scoreRowButtonId(s.personId)}
-            variant="ghost"
-            size="sm"
-            className={`!h-auto !justify-start !border-0 !bg-transparent !p-0 font-inherit text-inherit hover:!bg-transparent hover:underline focus-visible:underline ${selected ? '' : ''}`}
-            onClick={(e) => { e.stopPropagation(); onSelect(selected ? null : s.personId); }}
-          >
-            {s.name}
-          </Button>
-        );
-      },
+      // The row itself is the keyboard control (DataTable's onRowClick rows are
+      // focusable and activate on Enter/Space), so the name is plain text.
+      render: (s) => s.name,
     },
     {
       key: 'compare',

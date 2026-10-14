@@ -2,7 +2,7 @@
 // Manages state across all steps: library → versions → (editor?) → config.
 
 import { useState } from 'react';
-import { Button, Card, Inline, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Inline, SectionLabel, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import type { PromptLibraryEntry } from '../types.js';
 import { PromptLibraryStep } from './PromptLibraryStep.js';
 import { VersionPickerStep } from './VersionPickerStep.js';
@@ -79,7 +79,7 @@ function StepIndicator({ currentStep }: StepIndicatorProps): React.ReactElement 
                   <Inline
                     as="span"
                     gap="none"
-                    className={`text-[11px] font-bold ${active ? 'text-white' : 'text-text-tertiary'}`}
+                    className={`text-xs font-bold ${active ? 'text-white' : 'text-text-tertiary'}`}
                   >
                     {i + 1}
                   </Inline>
@@ -89,7 +89,7 @@ function StepIndicator({ currentStep }: StepIndicatorProps): React.ReactElement 
                 as="span"
                 gap="none"
                 className={[
-                  'text-[11px] whitespace-nowrap',
+                  'text-xs whitespace-nowrap',
                   active ? 'font-semibold text-primary'
                     : completed ? 'text-text-secondary' : 'text-text-tertiary',
                 ].join(' ')}
@@ -192,13 +192,13 @@ export function CanarySetupFlow({ onStarted }: CanarySetupFlowProps): React.Reac
       <Card padding="none" className="w-full max-w-[860px]">
         {/* Header */}
         <Stack gap="none" className="px-6 pt-6 pb-4 border-b border-border">
-          <SectionLabel as="h2" className="text-[18px] font-bold text-text-primary normal-case tracking-normal mb-1.5">
+          <SectionLabel as="h2" className="text-sm font-semibold text-text-primary normal-case tracking-normal mb-1.5">
             New canary experiment
           </SectionLabel>
-          <Inline as="span" gap="none" className="text-[13px] text-text-secondary leading-normal">
+          <T size="sm" tone="secondary" className="leading-normal">
             Compare two prompt versions head-to-head. The controller automatically adjusts
             traffic based on judge scores.
-          </Inline>
+          </T>
         </Stack>
 
         {/* Step indicator */}

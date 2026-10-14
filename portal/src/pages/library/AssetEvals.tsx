@@ -79,7 +79,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
           <Card padding="none">
             {cases.map((c) => (
               <Inline key={c.id} gap="xs" wrap={false} className="items-start gap-2.5 border-b border-border bg-surface px-3 py-2 last:border-b-0">
-                <T className="min-w-0 flex-1 truncate text-[12px] text-text-primary" title={c.name}>{c.name}</T>
+                <T size="xs" className="min-w-0 flex-1 truncate text-text-primary" title={c.name}>{c.name}</T>
                 <Chip tone="neutral" size="xs">{assertionSummary(c.assertions.length)}</Chip>
               </Inline>
             ))}
@@ -96,12 +96,12 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
               {busy ? 'Running…' : 'Run evals'}
             </Button>
           ) : (
-            <T className="text-[11px] text-text-tertiary">Running evals needs Manage bots.</T>
+            <T size="xs" className="text-text-tertiary">Running evals needs Manage bots.</T>
           )
         }
       >
         {runsError ? (
-          <T className="text-[12px] text-text-tertiary">{runsError}</T>
+          <T size="xs" className="text-text-tertiary">{runsError}</T>
         ) : runsLoading ? (
           <LoadingState label="Loading run history…" />
         ) : !latest ? (
@@ -109,7 +109,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
         ) : (
           <Stack gap="sm">
             <div>
-              <T as="div" className="mb-1 text-[11px] text-text-tertiary">
+              <T size="xs" as="div" className="mb-1 text-text-tertiary">
                 Pass rate — {formatPassRate(rate)} ({latest.passed}/{latest.total})
               </T>
               <ProgressBar
@@ -127,7 +127,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
                 return (
                   <Stack key={c.id} gap="none" className="border-b border-border bg-surface px-3 py-2 last:border-b-0">
                     <Inline gap="xs" wrap={false}>
-                      <T className="min-w-0 flex-1 truncate text-[12px] text-text-primary" title={c.name}>{c.name}</T>
+                      <T size="xs" className="min-w-0 flex-1 truncate text-text-primary" title={c.name}>{c.name}</T>
                       {result == null ? (
                         <Chip tone="neutral" size="xs">not run</Chip>
                       ) : result.passed ? (
@@ -139,7 +139,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
                     {result && !result.passed && result.failures.length > 0 && (
                       <Stack as="ul" gap="none" className="m-0 mt-1 list-none pl-0">
                         {result.failures.map((f, i) => (
-                          <T as="li" key={i} className="text-[11px] leading-relaxed text-text-tertiary">{f}</T>
+                          <T size="xs" as="li" key={i} className="leading-relaxed text-text-tertiary">{f}</T>
                         ))}
                       </Stack>
                     )}

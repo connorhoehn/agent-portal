@@ -20,7 +20,7 @@
 import { memo, useEffect, useState, useCallback } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { useNavigate } from 'react-router';
-import { Card, Chip, Inline, ProgressBar, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, Inline, ProgressBar, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import type { JudgeNodeData } from '../types.js';
 import { relativeTimeSeconds } from '../../../lib/relativeTime';
 
@@ -48,9 +48,9 @@ function Bar({ label, value, color }: BarProps) {
   const pct = judged ? Math.max(0, Math.min(100, value)) : 0;
   return (
     <Inline gap="xs" wrap={false}>
-      <Inline as="span" gap="none" className="w-16 text-[10px] text-text-tertiary shrink-0">
+      <T size="xs" tone="tertiary" className="w-16 shrink-0">
         {label}
-      </Inline>
+      </T>
       {judged ? (
         <>
           <ProgressBar value={pct} size="sm" color={color} aria-label={label} className="flex-1" />
@@ -58,7 +58,7 @@ function Bar({ label, value, color }: BarProps) {
             as="span"
             gap="none"
             justify="end"
-            className="w-[26px] text-[10px] tabular-nums text-text-secondary"
+            className="w-[26px] text-xs tabular-nums text-text-secondary"
           >
             {Math.round(pct)}
           </Inline>
@@ -68,15 +68,10 @@ function Bar({ label, value, color }: BarProps) {
         // The words are the affordance, and the dash in the value column keeps
         // the row aligned with its scored siblings.
         <>
-          <Inline
-            as="span"
-            gap="none"
-            className="flex-1 text-[10px] italic text-text-tertiary"
-            title={`The judge abstained on ${label} — it is not scored, not scored zero. The composite renormalises over the dimensions that were judged.`}
-          >
+          <T size="xs" tone="tertiary" className="flex-1 italic" title={`The judge abstained on ${label} — it is not scored, not scored zero. The composite renormalises over the dimensions that were judged.`}>
             not judged
-          </Inline>
-          <Inline as="span" gap="none" justify="end" className="w-[26px] text-[10px] text-text-tertiary">
+          </T>
+          <Inline as="span" gap="none" justify="end" className="w-[26px] text-xs text-text-tertiary">
             —
           </Inline>
         </>
@@ -143,18 +138,13 @@ function JudgeNodeImpl({ data }: NodeProps<JudgeNodeType>) {
       <Inline gap="sm" justify="between" wrap={false} className="mb-2">
         <Inline gap="xs" wrap={false} className="min-w-0">
           <Chip tone="info" size="xs">LLM-as-judge</Chip>
-          <Inline
-            as="span"
-            gap="none"
-            title={data.judgeVersion}
-            className="text-[10.5px] font-mono text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap"
-          >
+          <T size="xs" tone="tertiary" className="font-mono overflow-hidden text-ellipsis whitespace-nowrap" title={data.judgeVersion}>
             {data.judgeVersion}
-          </Inline>
+          </T>
         </Inline>
-        <Inline as="span" gap="none" className="text-[10px] text-text-tertiary">
+        <T size="xs" tone="tertiary">
           {formatRelative(data.lastJudgedAt)}
-        </Inline>
+        </T>
       </Inline>
 
       <Stack gap="xs">

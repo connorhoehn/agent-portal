@@ -271,8 +271,8 @@ function MineEmpty({
           </Inline>
         )}
       />
-      <Stack gap="sm" className="mt-5 border-t border-border pt-5 text-[13px] leading-5 text-text-secondary">
-        <SectionLabel as="h2" case="sentence" className="text-[14px] font-semibold">{copy.details.title}</SectionLabel>
+      <Stack gap="sm" className="mt-5 border-t border-border pt-5 text-sm leading-5 text-text-secondary">
+        <SectionLabel as="h2" case="sentence" className="text-sm font-semibold">{copy.details.title}</SectionLabel>
         <div><Lines lines={copy.details.lines} /></div>
         <Button size="sm" variant="ghost" className="self-start" onClick={onRefresh}>{copy.details.action.label}</Button>
       </Stack>

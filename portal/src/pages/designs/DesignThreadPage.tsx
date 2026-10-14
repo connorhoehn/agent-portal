@@ -184,7 +184,7 @@ export default function DesignThreadPage() {
     <PageSection
       title={thread.title}
       actions={
-        <Link to="/iq/designs" className="text-[12px] text-primary no-underline hover:underline">← All designs</Link>
+        <Link to="/iq/designs" className="text-xs text-primary no-underline hover:underline">← All designs</Link>
       }
     >
       <Stack gap="md">
@@ -208,10 +208,10 @@ export default function DesignThreadPage() {
           <Stack gap="md" className="lg:flex-row">
             <Stack gap="none" className="min-w-0 flex-[2]">
               <SectionLabel as="div" className="mb-1.5">Summary</SectionLabel>
-              <T as="div" className="m-0 text-[13px] leading-relaxed text-text-secondary" wrap>{thread.summary}</T>
+              <T size="sm" as="div" className="m-0 leading-relaxed text-text-secondary" wrap>{thread.summary}</T>
               <Inline align="start" gap="sm" className="mt-2.5">
-                <T className="text-[13px]" role="img" aria-label="next step">👉</T>
-                <T className="text-[12.5px] font-medium text-text-primary">{nextStep(thread, undefined, canSteer)}</T>
+                <T size="sm" role="img" aria-label="next step">👉</T>
+                <T size="xs" className="font-medium text-text-primary">{nextStep(thread, undefined, canSteer)}</T>
               </Inline>
             </Stack>
             <Stack gap="none" className="min-w-0 lg:hidden">
@@ -226,14 +226,14 @@ export default function DesignThreadPage() {
               <Stack gap="xs">
                 {thread.affected.map((a) => (
                   <Stack gap="none" key={a.orgProjectId} className="min-w-0">
-                    <Link to={`/iq/projects/${encodeURIComponent(a.orgProjectId)}`} className="text-[12.5px] font-medium text-primary no-underline hover:underline">
+                    <Link to={`/iq/projects/${encodeURIComponent(a.orgProjectId)}`} className="text-xs font-medium text-primary no-underline hover:underline">
                       {a.orgProjectName}
                     </Link>
-                    <T as="div" className="text-[11px] text-text-tertiary">{a.impact}</T>
+                    <T size="xs" as="div" className="text-text-tertiary">{a.impact}</T>
                   </Stack>
                 ))}
                 {thread.affected.length === 0 && (
-                  <T className="text-[12px] text-text-tertiary">only its home initiative</T>
+                  <T size="xs" className="text-text-tertiary">only its home initiative</T>
                 )}
               </Stack>
             </Stack>

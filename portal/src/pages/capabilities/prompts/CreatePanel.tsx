@@ -130,7 +130,7 @@ export function CreatePanel({
             spellCheck={false}
             disabled={saving}
             aria-label="Prompt template"
-            className="min-h-[200px] font-mono text-[12px] leading-relaxed"
+            className="min-h-[200px] font-mono text-xs leading-relaxed"
           />
         </Stack>
 

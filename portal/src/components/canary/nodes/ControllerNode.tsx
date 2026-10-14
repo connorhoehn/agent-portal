@@ -5,7 +5,7 @@
 import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import {
-  Card, Chip, EntityCell, Inline, InlineAlert, MetaLine, Stack,
+  Card, Chip, EntityCell, Inline, InlineAlert, MetaLine, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { DecisionRow } from '../DecisionRow.js';
 import type {
@@ -48,14 +48,9 @@ function ControllerNodeImpl({ data }: NodeProps<ControllerNodeType>) {
       </Inline>
 
       {data.executionArn && (
-        <Inline
-          as="span"
-          gap="none"
-          title={data.executionArn}
-          className="text-[10px] font-mono text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap mb-1"
-        >
+        <T size="xs" tone="tertiary" className="font-mono overflow-hidden text-ellipsis whitespace-nowrap mb-1" title={data.executionArn}>
           {data.executionArn}
-        </Inline>
+        </T>
       )}
 
       {/* These were hand-tinted boxes carrying their own bg/border/text triple.

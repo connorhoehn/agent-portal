@@ -38,14 +38,14 @@ export function DistillationProvenance({ libraryItemId }: { libraryItemId: strin
         <Inline gap="xs" wrap align="center">
           <Chip tone={ARTIFACT_TYPE_TONE[a.type]} size="xs">{ARTIFACT_TYPE_LABEL[a.type]}</Chip>
           <Chip tone={ARTIFACT_STATUS_TONE[a.status]} size="xs" dot="static">{ARTIFACT_STATUS_LABEL[a.status]}</Chip>
-          <T className="min-w-0 truncate text-[12px] font-medium text-text-primary" title={a.title}>{a.title}</T>
+          <T size="xs" className="min-w-0 truncate font-medium text-text-primary" title={a.title}>{a.title}</T>
         </Inline>
-        <T className="text-[11.5px] text-text-tertiary">
+        <T size="xs" className="text-text-tertiary">
           {a.cluster_ids.length} cluster{a.cluster_ids.length === 1 ? '' : 's'} · {data.lineage.nodes.length} lineage node{data.lineage.nodes.length === 1 ? '' : 's'}
         </T>
         <Link
           to={knowledgeHref({ item: a.id, panel: 'sources', sourceView: 'graph' })}
-          className="text-primary no-underline hover:underline text-[12px]"
+          className="text-primary no-underline hover:underline text-xs"
         >
           Open lineage →
         </Link>

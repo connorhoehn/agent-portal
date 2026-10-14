@@ -27,7 +27,7 @@ const KIND_MARK: Record<DiffLine['kind'], string> = { add: '+', remove: '−', s
 
 export function DiffFrame({ lines }: { lines: DiffLine[] }) {
   return (
-    <div className="h-full overflow-auto rounded-md border border-border font-mono text-[12px] leading-relaxed">
+    <div className="h-full overflow-auto rounded-md border border-border font-mono text-xs leading-relaxed">
       {lines.map((line, i) => (
         <div key={i} className={`flex gap-2 px-3 py-px ${KIND_ROW_CLASS[line.kind]}`}>
           <span aria-hidden className="w-3 shrink-0 select-none opacity-60">{KIND_MARK[line.kind]}</span>

@@ -63,12 +63,12 @@ function TechnicalDetailsBlock({ item, extra }: { item: Item; extra?: ReactNode 
 function WhenThisHelps({ item }: { item: GuideItem }) {
   const paragraphs = (item.when_this_helps ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
   if (paragraphs.length === 0) {
-    return item.summary ? <T className="text-[14px] leading-6 text-text-secondary" wrap>{item.summary}</T> : null;
+    return item.summary ? <T size="sm" className="leading-6 text-text-secondary" wrap>{item.summary}</T> : null;
   }
   return (
     <DetailSection first title="When this helps">
       <Stack gap="none" data-testid="record-when-this-helps">
-        {paragraphs.map((p) => <T key={p} className="text-[15px] leading-[21px] text-text-primary" wrap>{p}</T>)}
+        {paragraphs.map((p) => <T size="base" key={p} className="leading-[21px] text-text-primary" wrap>{p}</T>)}
       </Stack>
     </DetailSection>
   );
@@ -78,14 +78,14 @@ function UseItInYourWork({ onDraftPlan, onExplain }: { onDraftPlan: () => void; 
   return (
     <DetailSection title="Use it in your work">
       <Stack gap="sm">
-        <T className="text-[15px] leading-[21px] text-text-primary" wrap>
+        <T size="base" className="leading-[21px] text-text-primary" wrap>
           Tell the agent which project you’re working on. It can explain the approach or help draft a plan using this guide.
         </T>
         <Inline gap="sm" align="center">
           <Button variant="primary" onClick={onDraftPlan} data-testid="record-draft-plan">Draft a plan for my project</Button>
           <Button variant="secondary" onClick={onExplain} data-testid="record-explain-guide">Explain this guide</Button>
         </Inline>
-        <T className="text-[13px] text-text-tertiary" wrap>
+        <T size="sm" className="text-text-tertiary" wrap>
           Adds this guide to the conversation. You review the plan before doing the work.
         </T>
       </Stack>
@@ -201,7 +201,7 @@ function PatternContent({ item, onOpen }: { item: Extract<Item, { level: 'L1' }>
   return (
     <>
       <DetailSection first title="The claim">
-        <T className="text-[15px] leading-6 text-text-primary" wrap>{item.summary}</T>
+        <T size="base" className="leading-6 text-text-primary" wrap>{item.summary}</T>
       </DetailSection>
       <KeyValue
         layout="row"
@@ -242,7 +242,7 @@ function NoteContent({ item, onOpen }: { item: Observation & { level: 'L0' }; on
         ]}
       />
       <DetailSection title="What happened">
-        <T className="text-[14px] leading-6 text-text-primary" wrap>{item.body}</T>
+        <T size="sm" className="leading-6 text-text-primary" wrap>{item.body}</T>
       </DetailSection>
       <DetailSection
         title="From the same run"

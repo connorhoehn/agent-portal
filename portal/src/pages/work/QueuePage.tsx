@@ -200,7 +200,7 @@ export default function QueuePage() {
         <Link
           to={`/iq/work/${j.id}`}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
-          className="text-[12.5px] font-medium text-text-primary no-underline hover:text-primary truncate"
+          className="text-xs font-medium text-text-primary no-underline hover:text-primary truncate"
           title={j.error ? `${j.title} — ${j.error}` : j.title}
         >
           {j.title}
@@ -209,7 +209,7 @@ export default function QueuePage() {
     },
     {
       key: 'origin', header: 'Origin',
-      render: (j) => (j.botName ? <BotOrigin job={j} /> : <T className="text-[11px] text-text-tertiary">—</T>),
+      render: (j) => (j.botName ? <BotOrigin job={j} /> : <T size="xs" className="text-text-tertiary">—</T>),
     },
     {
       key: 'status', header: 'Status', sortable: true,
@@ -219,12 +219,12 @@ export default function QueuePage() {
       key: 'serves', header: 'Serves',
       render: (j) => serves(j)
         ? <ServesItem job={j} />
-        : <T className="text-[11px] text-text-tertiary">—</T>,
+        : <T size="xs" className="text-text-tertiary">—</T>,
     },
     {
       key: 'boxId', header: 'Worker',
       render: (j) => (
-        <T className="text-[11px] text-text-tertiary whitespace-nowrap">
+        <T size="xs" className="text-text-tertiary whitespace-nowrap">
           {j.boxId ?? `priority ${j.priority}`}
         </T>
       ),
@@ -253,7 +253,7 @@ export default function QueuePage() {
           <Link
             to={dest.path}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            className="text-[12.5px] font-medium text-text-primary no-underline hover:text-primary truncate"
+            className="text-xs font-medium text-text-primary no-underline hover:text-primary truncate"
             title={dispatchedRunLabel(r)}
           >
             {dispatchedRunLabel(r)}
@@ -285,12 +285,12 @@ export default function QueuePage() {
       // Row click opens the assign dialog; the Assign action in the row's
       // actions is its keyboard-reachable twin.
       render: (s) => (
-        <T className="text-[12.5px] font-medium text-text-primary truncate" title={s.title}>{s.title}</T>
+        <T size="xs" className="font-medium text-text-primary truncate" title={s.title}>{s.title}</T>
       ),
     },
     {
       key: 'reason', header: 'Reason',
-      render: (s) => <T className="text-[11px] text-text-tertiary truncate" title={s.reason}>{s.reason}</T>,
+      render: (s) => <T size="xs" className="text-text-tertiary truncate" title={s.reason}>{s.reason}</T>,
     },
     {
       key: 'initiativeName', header: 'Initiative', sortable: true,
@@ -299,7 +299,7 @@ export default function QueuePage() {
           to={`/iq/projects/${s.initiativeId}`}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           title={`Open ${s.initiativeName}`}
-          className="text-[12px] text-text-secondary whitespace-nowrap no-underline hover:text-primary hover:underline"
+          className="text-xs text-text-secondary whitespace-nowrap no-underline hover:text-primary hover:underline"
         >
           {s.initiativeName}
         </Link>
@@ -309,7 +309,7 @@ export default function QueuePage() {
       key: 'storyPoints', header: 'Est.', numeric: true, sortable: true,
       compare: (a, b) => (a.storyPoints ?? 0) - (b.storyPoints ?? 0),
       render: (s) => (
-        <T className="text-[12px] text-text-secondary tabular-nums whitespace-nowrap">
+        <T size="xs" className="text-text-secondary tabular-nums whitespace-nowrap">
           {s.storyPoints != null ? `${s.storyPoints} pts` : '—'}
           {s.estimatedCostUsd != null ? ` · ${money(s.estimatedCostUsd)}` : ''}
         </T>
@@ -337,8 +337,8 @@ export default function QueuePage() {
       {dispatched.length > 0 && (
         <Stack gap="xs" className="mb-4" data-testid="dispatched-runs">
           <Inline align="baseline" gap="sm">
-            <T className="text-[13px] font-semibold text-text-primary">Running now outside the queue</T>
-            <T className="text-[11px] text-text-tertiary">
+            <T size="sm" className="font-semibold text-text-primary">Running now outside the queue</T>
+            <T size="xs" className="text-text-tertiary">
               {dispatchedRunsNoun(dispatched.length)} from initiative work items — they run on a computer directly, so the job counts below leave them out
             </T>
           </Inline>
@@ -433,20 +433,20 @@ export default function QueuePage() {
       {canManage && (
         <Stack gap="sm" align="start" className="mt-6">
           <Inline align="baseline" gap="sm">
-            <T className="text-[13px] font-semibold text-text-primary">Ready to assign</T>
-            <T className="text-[11px] text-text-tertiary">
+            <T size="sm" className="font-semibold text-text-primary">Ready to assign</T>
+            <T size="xs" className="text-text-tertiary">
               open work from your initiatives — click a row to queue it for an agent
             </T>
           </Inline>
           {suggestionsError ? (
             <Card padding="md" className="w-full">
-              <T className="text-[12px] text-text-tertiary">
+              <T size="xs" className="text-text-tertiary">
                 Could not read your work items — New run still works.
               </T>
             </Card>
           ) : !suggestionsLoadingFirst && suggestions != null && suggestions.length === 0 ? (
             <Card padding="md" className="w-full">
-              <T className="text-[12px] text-text-tertiary">
+              <T size="xs" className="text-text-tertiary">
                 Nothing blocked, in review, or waiting to start on your initiatives.
               </T>
             </Card>

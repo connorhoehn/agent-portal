@@ -7,13 +7,8 @@ import { Link, useNavigate, useSearchParams, useParams } from 'react-router';
 import { StackedCatalogLayout } from '../../components/shell/StackedCatalogLayout';
 import DesignThreadPage from './DesignThreadPage';
 import {
-  Chip,
-  CollectionToolbar,
-  DataTable,
-  EmptyState,
-  LoadingState,
-  Stack,
-  type DataTableColumn, T,
+  Chip, CollectionToolbar, DataTable, EmptyState, Inline, LoadingState, Stack, T,
+  type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -69,24 +64,24 @@ export default function DesignsPage() {
     {
       key: 'title', header: 'Design', sortable: true,
       render: (r) => (
-        <Stack gap="none" className="min-w-0">
+        <Inline gap="sm" wrap={false} className="min-w-0">
           {/* A real Link, not just the row's onClick: DataTable's row-click is
               a bare <tr onClick> with no keyboard access, so this is the one
               focusable, Enter-activatable control in the row. */}
           <Link
             to={`/iq/designs/${r.id}?${searchParams}`}
             onClick={(e) => e.stopPropagation()}
-            className="block text-[13px] font-semibold text-text-primary no-underline hover:underline truncate"
+            className="text-sm font-semibold text-text-primary no-underline hover:underline truncate"
           >
             {r.title}
           </Link>
-          <T className="block text-[11px] text-text-tertiary truncate">{reviewStateLine(r)}</T>
-        </Stack>
+          <T size="xs" tone="tertiary" className="truncate">{reviewStateLine(r)}</T>
+        </Inline>
       ),
     },
     {
       key: 'orgProjectName', header: 'Initiative', sortable: true,
-      render: (r) => <T className="text-[12px] text-text-secondary whitespace-nowrap">{r.orgProjectName}</T>,
+      render: (r) => <T size="xs" className="text-text-secondary whitespace-nowrap">{r.orgProjectName}</T>,
     },
     {
       key: 'status', header: 'Status', sortable: true,
@@ -99,19 +94,19 @@ export default function DesignsPage() {
     {
       key: 'dependsOn', header: 'Gated by', align: 'right',
       render: (r) => r.dependsOn.length > 0
-        ? <T className="text-[11px] text-text-tertiary whitespace-nowrap">{r.dependsOn.length} design{r.dependsOn.length === 1 ? '' : 's'}</T>
-        : <T className="text-[11px] text-text-tertiary">—</T>,
+        ? <T size="xs" className="text-text-tertiary whitespace-nowrap">{r.dependsOn.length} design{r.dependsOn.length === 1 ? '' : 's'}</T>
+        : <T size="xs" className="text-text-tertiary">—</T>,
     },
     {
       key: 'kbSynced', header: 'KB', align: 'right',
       render: (r) => r.kbSynced
         ? <Chip tone="success" size="xs">logged</Chip>
-        : <T className="text-[11px] text-text-tertiary">—</T>,
+        : <T size="xs" className="text-text-tertiary">—</T>,
     },
     {
       key: 'updatedAt', header: 'Updated', align: 'right', sortable: true,
       compare: (a, b) => a.updatedAt.localeCompare(b.updatedAt),
-      render: (r) => <T className="text-[11px] text-text-tertiary whitespace-nowrap">{relativeTime(r.updatedAt)}</T>,
+      render: (r) => <T size="xs" className="text-text-tertiary whitespace-nowrap">{relativeTime(r.updatedAt)}</T>,
     },
   ];
 
@@ -158,7 +153,7 @@ export default function DesignsPage() {
             : `Nothing ${STATUS_LABEL[filter as DesignStatus]?.toLowerCase() ?? filter} right now.`}
           {...(filter === 'all' && !query.trim() ? {
             action: (
-              <Link to="/iq/projects" className="text-[12px] font-semibold text-primary no-underline hover:underline">
+              <Link to="/iq/projects" className="text-xs font-semibold text-primary no-underline hover:underline">
                 Open Initiatives →
               </Link>
             ),

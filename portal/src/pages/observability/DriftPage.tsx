@@ -15,21 +15,8 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { relativeTime } from '../../lib/relativeTime';
 import { useNavigate } from 'react-router';
 import {
-  Button,
-  Card,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd,
-  Chip,
-  CodeBlock,
-  Inline,
-  PageSection,
-  Select,
-  Stack,
-  useToast, T,
+  ArrowRightIcon, Button, Card, Chip, CodeBlock, IconButton, Inline, PageSection, Select, Stack, T,
+  Table, TableBody, TableHead, TableRow, TableTd, TableTh, useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   LineChart,
@@ -479,16 +466,16 @@ function DriftPage() {
                       </TableTd>
                       <TableTd className="whitespace-nowrap text-right">
                         {o.invocationId ? (
-                          <Button
-                            variant="ghost"
+                          <IconButton
                             size="sm"
+                            icon={<ArrowRightIcon />}
+                            aria-label="Open invocation"
+                            title="Open invocation"
                             onClick={(e) => {
                               e.stopPropagation();
                               navigate(`/admin/observability/invocations/${o.invocationId}`);
                             }}
-                          >
-                            Open
-                          </Button>
+                          />
                         ) : null}
                       </TableTd>
                     </TableRow>

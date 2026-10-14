@@ -215,13 +215,13 @@ export default function KnowledgeTab() {
         >
           <Stack gap="sm">
             <WorkListFilters facets={filterFacets} data-testid="knowledge-filters" />
-            <T className="text-[11px] text-text-tertiary">
+            <T size="xs" className="text-text-tertiary">
               Repository and initiative filter on the server; {state.view === 'guides' ? 'type and lifecycle apply' : 'kind applies'} to the loaded rows.
             </T>
           </Stack>
         </FilterPopover>
       </Inline>
-      <T className="text-[12px] text-text-tertiary">{searchScopeNote(state.view, state.repo)}</T>
+      <T size="xs" className="text-text-tertiary">{searchScopeNote(state.view, state.repo)}</T>
       <LiveRegion message={arrivals} data-testid="knowledge-arrivals" />
     </Stack>
   );
@@ -270,7 +270,7 @@ export default function KnowledgeTab() {
 
   const railFooter = feed.loading || feed.error ? undefined : (
     <Inline gap="sm" align="center" justify="between">
-      <T className="text-[13px] text-text-secondary" data-testid="knowledge-loaded">
+      <T size="sm" className="text-text-secondary" data-testid="knowledge-loaded">
         {loadedLabel(state.view, feed.items.length, rows.length, feed.total, feed.hasMore, clientFiltered)}
       </T>
       {feed.hasMore && (

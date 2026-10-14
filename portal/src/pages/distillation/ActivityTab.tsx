@@ -24,7 +24,7 @@ import {
 } from '@connorhoehnslalom/ui-components';
 import {
   Banner, Button, EmptyState, FilterPopover, GroupedList, Inline, LoadingState, SearchInput, SegmentedControl, Stack,
-  StatCard, StatStrip, StatusPill, T, type StatStripItem,
+  Card, StatStrip, StatusPill, T, type StatStripItem,
 } from '@connorhoehnslalom/ui-components/shared';
 import { SECTION_CANVAS_FRAME, SectionContent, SectionHeader } from '../../components/shell/SectionContent';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -59,19 +59,17 @@ const STATUS_FILTERS = [
 function TierNode({ node, selected }: { node: TierCanvasNode; selected: boolean }) {
   const d = node.data;
   return (
-    // The count is a stat, so it is the library StatCard's value (branding:
+    // The count is a stat, so it is a Card value (branding:
     // pages must not size their own numbers/titles); the ring marks selection.
     <Stack gap="xs" className={selected ? 'h-full rounded-lg ring-2 ring-primary' : 'h-full'}>
-      <StatCard
-        label={`${d.level ?? 'Publish'} · ${d.title}`}
-        value={d.value == null ? '—' : d.value}
-        hint={(
-          <Stack gap="xs">
-            {d.status && <StatusPill tone={d.status.tone === 'danger' ? 'error' : d.status.tone === 'warning' ? 'warning' : d.status.tone === 'info' ? 'info' : 'neutral'} label={d.status.label} size="sm" />}
-            <T className="text-[12px] text-primary">{node.kind === 'library' ? 'Open Agent library →' : `Browse ${d.title.toLowerCase()} →`}</T>
-          </Stack>
-        )}
-      />
+      <Card padding="sm" className="h-full">
+        <Stack gap="xs">
+          <T size="xs" tone="tertiary">{`${d.level ?? 'Publish'} · ${d.title}`}</T>
+          <T size="base" weight="semibold" tone="primary" tabular>{d.value == null ? '—' : d.value}</T>
+          {d.status && <StatusPill tone={d.status.tone === 'danger' ? 'error' : d.status.tone === 'warning' ? 'warning' : d.status.tone === 'info' ? 'info' : 'neutral'} label={d.status.label} size="sm" />}
+          <T size="xs" className="text-primary">{node.kind === 'library' ? 'Open Agent library →' : `Browse ${d.title.toLowerCase()} →`}</T>
+        </Stack>
+      </Card>
     </Stack>
   );
 }
@@ -153,10 +151,10 @@ export default function ActivityTab() {
   }, [busy, jobsFeed, go]);
 
   const stripItems: StatStripItem[] = flow.items.map((i) => ({
-    label: i.level ? `${i.level} ${i.label}` : i.label,
+    // the line variant draws no status row: the worded state follows the label
+    label: [i.level ? `${i.level} ${i.label}` : i.label, i.status?.label].filter(Boolean).join(' · '),
     value: i.value == null ? '—' : i.value,
-    status: i.status ? { label: i.status.label, tone: i.status.tone } : null,
-    title: i.reason ?? i.ariaLabel,
+    title: [i.reason ?? i.ariaLabel, i.status?.label].filter(Boolean).join(' — '),
     onSelect: () => navigate(i.href),
   }));
 
@@ -212,7 +210,7 @@ export default function ActivityTab() {
       {levels.error ? (
         <UnavailableNotice error={levels.error} what="tier health" source="Tier counts are read from Aurora" onRetry={levels.refresh} />
       ) : (
-        <StatStrip items={stripItems} connectors={flow.connectors.map((c) => ({ label: c.label, tone: c.tone }))} aria-label="Tier flow" data-testid="tier-flow" />
+        <StatStrip variant="line" items={stripItems} aria-label="Tier flow" data-testid="tier-flow" />
       )}
     </Stack>
   );
@@ -319,7 +317,7 @@ export default function ActivityTab() {
       caption="Run notes → patterns → reusable guides. Open a tier to browse it; select an edge to inspect its run."
       renderNode={(node, { selected: sel }) => <TierNode node={node} selected={sel} />}
       renderListItem={(node) => (
-        <T className="text-[13px] text-text-primary">
+        <T size="sm" className="text-text-primary">
           {node.data.level ? `${node.data.level} ` : ''}{node.data.title}: {node.data.value ?? 'unknown'}{node.data.status ? ` · ${node.data.status.label}` : ''}
         </T>
       )}

@@ -93,11 +93,11 @@ export function RenameNodeDialog({ node, onClose, onSubmit }: RenameNodeDialogPr
         {/* The id is a path other rows, versions, the comment channel and any
             shared URL all reference, so a rename changes the display title
             only. Saying so here stops it reading as a broken half-rename. */}
-        <T className="text-[11px] text-text-tertiary">
+        <T size="xs" className="text-text-tertiary">
           The document’s address does not change, so existing links keep working.
         </T>
         {error && (
-          <T role="alert" className="text-[12px] text-danger">{error}</T>
+          <T size="xs" role="alert" className="text-danger">{error}</T>
         )}
       </Stack>
     </Modal>

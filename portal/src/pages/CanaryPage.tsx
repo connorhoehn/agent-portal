@@ -20,20 +20,9 @@ import {
 import type { Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  Button,
-  Card,
-  Chip,
-  ConfirmDialog,
-  DataTable,
-  EmptyState,
-  Inline,
-  LoadingState,
-  Select,
-  Stack,
-  StatusPill,
-  Switch,
-  ThinkingDots,
-  Toolbar, T, VisuallyHidden,
+  Button, Card, Chip, ConfirmDialog, DataTable, EmptyState, IconButton, Inline, LoadingState,
+  PlayCircleIcon, RepeatIcon, Select, Stack, StatusPill, Switch, T, ThinkingDots, Toolbar,
+  VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { nodeTypes, edgeTypes } from '../components/canary/index.js';
@@ -264,12 +253,12 @@ function ScenarioPanel({ open }: { open: boolean }): React.ReactElement | null {
               </>
             )}
             {anyRunning && (
-              <T className="text-[11px] italic text-text-tertiary">Running…</T>
+              <T size="xs" className="italic text-text-tertiary">Running…</T>
             )}
           </Inline>
         }
       >
-        <Inline as="label" gap="xs" align="center" className="text-[11px] text-text-secondary">
+        <Inline as="label" gap="xs" align="center" className="text-xs text-text-secondary">
           Scenarios:
           <Select
             value={String(count)}
@@ -295,7 +284,7 @@ function ScenarioPanel({ open }: { open: boolean }): React.ReactElement | null {
           <DataTable<ScenarioRowWithScore>
             data={rows.map((row) => ({ ...row, score: row.requestId ? judgeScores[row.requestId] : undefined }))}
             keyField={(row) => row.key}
-            className="text-[12px]"
+            className="text-xs"
             columns={scenarioColumns(runRow, resetRow)}
           />
         </Stack>
@@ -316,12 +305,12 @@ function scenarioColumns(onRun: (key: string) => void, onReset: (key: string) =>
       width: '180px',
       getFilterText: (row) => row.personName,
       render: (row) => (
-        <Stack gap="none">
-          <T className="font-medium leading-[1.3] text-text-primary">{row.personName}</T>
+        <Inline gap="xs" wrap={false} className="min-w-0" title={row.personMeta ?? undefined}>
+          <T weight="medium" tone="primary" className="truncate">{row.personName}</T>
           {row.personMeta && (
-            <T className="mt-px text-[10px] text-text-tertiary">{row.personMeta}</T>
+            <T size="xs" tone="tertiary" className="truncate">{row.personMeta}</T>
           )}
-        </Stack>
+        </Inline>
       ),
     },
     {
@@ -349,7 +338,7 @@ function scenarioColumns(onRun: (key: string) => void, onReset: (key: string) =>
       align: 'center',
       className: 'tabular-nums',
       render: (row) => row.score !== undefined ? (
-        <T className={`text-[12px] font-semibold ${row.score >= 0.7 ? 'text-success' : row.score >= 0.4 ? 'text-warning' : 'text-danger'}`}>
+        <T className={`text-xs font-semibold ${row.score >= 0.7 ? 'text-success' : row.score >= 0.4 ? 'text-warning' : 'text-danger'}`}>
           {row.score.toFixed(2)}
         </T>
       ) : row.phase === 'running' ? (
@@ -371,13 +360,13 @@ function scenarioColumns(onRun: (key: string) => void, onReset: (key: string) =>
       render: (row) => (
         <>
           {row.phase === 'idle' && (
-            <Button variant="secondary" size="sm" onClick={() => onRun(row.key)}>Run</Button>
+            <IconButton size="sm" icon={<PlayCircleIcon />} aria-label={`Run ${row.personName}`} title="Run" onClick={() => onRun(row.key)} />
           )}
           {row.phase === 'running' && (
-            <T className="text-[10px] text-text-tertiary">Running</T>
+            <T size="xs" className="text-text-tertiary">Running</T>
           )}
           {(row.phase === 'done' || row.phase === 'error') && (
-            <Button variant="ghost" size="sm" onClick={() => onReset(row.key)}>Reset</Button>
+            <IconButton size="sm" icon={<RepeatIcon />} aria-label={`Reset ${row.personName}`} title="Reset" onClick={() => onReset(row.key)} />
           )}
         </>
       ),
@@ -391,7 +380,7 @@ function ScenarioStatus({ phase, hasScore, errorMsg }: { phase: RowPhase; hasSco
     <Stack gap="none" align="start">
       <StatusPill state="error" label="error" size="sm" />
       {errorMsg && (
-        <T className="mt-0.5 max-w-[200px] text-[10px] leading-[1.4] text-danger/80" wrap>
+        <T size="xs" className="mt-0.5 max-w-[200px] leading-[1.4] text-danger/80" wrap>
           {errorMsg}
         </T>
       )}
@@ -497,8 +486,8 @@ function CanaryWorkspace(): React.ReactElement {
       <Stack gap="none" className="h-full min-h-0 w-full">
         <Toolbar aria-label="Canary setup">
           <Inline gap="sm" align="baseline">
-            <T className="text-sm font-bold text-text-primary">Canary</T>
-            <T className="text-xs text-text-tertiary">Configure a new experiment</T>
+            <T size="sm" className="font-bold text-text-primary">Canary</T>
+            <T size="xs" className="text-text-tertiary">Configure a new experiment</T>
           </Inline>
         </Toolbar>
         <Stack align="center" justify="center" className="min-h-0 flex-1 bg-bg p-6">
@@ -507,7 +496,7 @@ function CanaryWorkspace(): React.ReactElement {
               <CanarySetupFlow onStarted={() => { /* store handles state transition */ }} />
             </React.Suspense>
           ) : (
-            <Inline as="p" gap="none" className="m-0 max-w-[380px] text-center text-[13px] leading-relaxed text-text-tertiary">
+            <Inline as="p" gap="none" className="m-0 max-w-[380px] text-center text-sm leading-relaxed text-text-tertiary">
               No experiment is running. Viewing only — your role can&apos;t start a canary experiment.
             </Inline>
           )}
@@ -559,10 +548,10 @@ function CanaryWorkspace(): React.ReactElement {
             {!lastJudgedAt && !scenariosOpen && (
               <Stack align="center" justify="center" className="pointer-events-none absolute inset-0 z-10">
                 <Card padding="md" className="pointer-events-auto max-w-[380px] text-center shadow-lg">
-                  <T className="text-sm font-bold text-text-primary">
+                  <T size="sm" className="font-bold text-text-primary">
                     Experiment is live — no traffic yet
                   </T>
-                  <Inline as="p" gap="none" className="mt-2 mb-0 text-[12.5px] leading-relaxed text-text-secondary">
+                  <Inline as="p" gap="none" className="mt-2 mb-0 text-xs leading-relaxed text-text-secondary">
                     The router splits traffic A/B and the judge scores every answer,
                     but nothing flows until you send requests. Generate test scenarios from your
                     org graph and run them to see scores and controller decisions appear.
@@ -636,7 +625,7 @@ function CanaryToolbar({
                 {debug && <ManualWeightSlider />}
                 <Inline gap="xs" align="center">
                   <Switch checked={debug} onChange={onDebugChange} aria-label="Debug" size="sm" />
-                  <T className="text-[11px] text-text-secondary">Debug</T>
+                  <T size="xs" className="text-text-secondary">Debug</T>
                 </Inline>
                 <Button
                   variant="secondary"
@@ -661,7 +650,7 @@ function CanaryToolbar({
       >
         <Inline gap="md" align="center">
           <StatusPill state={halted ? 'error' : 'success'} label={halted ? 'Halted' : 'Active'} size="sm" />
-          <T className="text-[11px] text-text-tertiary">
+          <T size="xs" className="text-text-tertiary">
             {lastJudgedAt ? `Last judged ${relativeTime(lastJudgedAt)}` : 'Awaiting first judgement…'}
           </T>
         </Inline>

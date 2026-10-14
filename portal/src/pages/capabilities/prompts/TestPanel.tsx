@@ -138,7 +138,7 @@ export function TestPanel({
  *  are three different things to debug. */
 function OutputBox({ output, running, error }: { output: string; running: boolean; error: string | null }) {
   return (
-    <Card padding="sm" className="min-h-[140px] overflow-y-auto whitespace-pre-wrap break-words bg-surface-panel font-mono text-[13px] leading-[1.7] text-text-primary">
+    <Card padding="sm" className="min-h-[140px] overflow-y-auto whitespace-pre-wrap break-words bg-surface-panel font-mono text-sm leading-[1.7] text-text-primary">
       {error && <T className="text-danger">{error}</T>}
       {!error && !output && !running && (
         <T className="italic text-text-tertiary">Response will appear here…</T>

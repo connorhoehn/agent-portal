@@ -69,18 +69,18 @@ export function RediscoveryPanel({ problem, repo, initiativeId, workItemId, onUs
 
   return (
     <Card padding="md" className="mb-3 border-primary/30 bg-primary/5">
-      <T as="div" className="text-[12.5px] font-semibold text-text-primary mb-2">Someone already hit this</T>
+      <T size="xs" as="div" className="font-semibold text-text-primary mb-2">Someone already hit this</T>
       <Stack gap="sm">
         {shown.map((m) => (
           <Card key={m.experienceId} padding="sm">
             <Inline gap="xs" align="center" wrap>
               <Chip tone={VERDICT_TONE[m.verdict]} size="sm">{VERDICT_LABEL[m.verdict]}</Chip>
               {m.crossProject && <Chip tone="info" size="sm">cross-project</Chip>}
-              <T className="text-[12.5px] font-semibold text-text-primary">{m.title}</T>
+              <T size="xs" className="font-semibold text-text-primary">{m.title}</T>
             </Inline>
-            <T as="div" className="text-[11px] text-text-tertiary mt-1">{provenanceLine(m)}</T>
-            <T as="div" wrap className="text-[12px] text-text-secondary mt-1.5 leading-snug line-clamp-3">{m.body}</T>
-            <T as="div" className="text-[11px] text-text-tertiary mt-1 italic">{m.why}</T>
+            <T size="xs" as="div" className="text-text-tertiary mt-1">{provenanceLine(m)}</T>
+            <T size="xs" as="div" wrap className="text-text-secondary mt-1.5 leading-snug line-clamp-3">{m.body}</T>
+            <T size="xs" as="div" className="text-text-tertiary mt-1 italic">{m.why}</T>
             <Inline gap="sm" className="mt-2">
               <Button
                 variant="secondary" size="sm"
@@ -101,7 +101,7 @@ export function RediscoveryPanel({ problem, repo, initiativeId, workItemId, onUs
           </Card>
         ))}
       </Stack>
-      {savings && <T as="div" className="text-[11px] text-text-tertiary mt-2">{savings}</T>}
+      {savings && <T size="xs" as="div" className="text-text-tertiary mt-2">{savings}</T>}
     </Card>
   );
 }

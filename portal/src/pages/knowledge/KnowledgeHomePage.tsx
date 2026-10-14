@@ -19,8 +19,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Banner, Button, Chip, DataTable, Inline, InlineAlert, MetaLine, PageSection,
-  SearchInput, SegmentedControl, Stack, StatStrip, T, Toolbar,
+  ArrowRightIcon, Banner, Button, Chip, DataTable, IconButton, Inline, InlineAlert, LinkIcon,
+  MetaLine, PageSection, RepeatIcon, SearchInput, SegmentedControl, Stack, StatStrip, T, Toolbar,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
@@ -274,12 +274,13 @@ export default function KnowledgeHomePage() {
           // demonstrably exists is not.
           if (e.drift === 'unprovisioned' && e.id) {
             return (
-              <Button
-                variant="secondary" size="sm"
+              <IconButton
+                size="sm"
+                icon={<ArrowRightIcon />}
                 onClick={() => navigate(`/admin/knowledge/registry/${e.id}`)}
-              >
-                set it up →
-              </Button>
+                aria-label={`Set up ${e.id}`}
+                title="Set it up"
+              />
             );
           }
           if (e.drift === 'unregistered' && e.liveKbId && adopters.length > 0) {
@@ -289,14 +290,15 @@ export default function KnowledgeHomePage() {
             return (
               <Inline gap="xs" wrap={false}>
                 {adopters.map((target) => (
-                  <Button
+                  <IconButton
                     key={target.slug}
-                    variant="secondary" size="sm"
+                    size="sm"
+                    icon={<LinkIcon />}
                     disabled={busy === target.slug}
                     onClick={() => void adopt(target.slug as string, e.liveKbId as string)}
-                  >
-                    {busy === target.slug ? 'repointing…' : `point "${target.slug}" here`}
-                  </Button>
+                    aria-label={`Point "${target.slug}" at this knowledge base`}
+                    title={busy === target.slug ? 'Repointing…' : `Point "${target.slug}" here`}
+                  />
                 ))}
               </Inline>
             );
@@ -331,13 +333,14 @@ export default function KnowledgeHomePage() {
               const slug = e.slug;
               const liveKbId = e.liveKbId;
               return (
-                <Button
-                  variant="secondary" size="sm"
+                <IconButton
+                  size="sm"
+                  icon={<RepeatIcon />}
                   disabled={busy === slug}
                   onClick={() => void adopt(slug, liveKbId)}
-                >
-                  {busy === slug ? 'refreshing…' : 'refresh status from account'}
-                </Button>
+                  aria-label={`Refresh ${slug} status from account`}
+                  title={busy === slug ? 'Refreshing…' : 'Refresh status from account'}
+                />
               );
             }
             return actionHint(

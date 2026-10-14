@@ -1,9 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import {
-  Button, Card, CardHeader, Chip, CollectionToolbar, Inline, InlineAlert, InlinePlaceholder, LoadingState,
-  PageSection, ProgressBar, Stack, StatStrip, Table, TableBody, TableHead, TableRow,
-  TableTd, TableTh, T,
-} from '@connorhoehnslalom/ui-components/shared';
+import { Card, CardHeader, ChevronIcon, Chip, CollectionToolbar, IconButton, Inline, InlineAlert, InlinePlaceholder, LoadingState, PageSection, ProgressBar, RepeatIcon, Stack, StatStrip, T, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { writeJson } from '../../lib/writeJson';
 import { useFetch } from '../../hooks/useFetch';
@@ -188,14 +184,15 @@ function DataSourcesPage() {
                     </TableTd>
                     <TableTd>
                       {canManage && (
-                        <Button
+                        <IconButton
                           variant="primary"
                           size="sm"
+                          icon={<RepeatIcon />}
                           onClick={() => triggerSync(ds.id)}
                           disabled={triggering === ds.id || !!activeJob}
-                        >
-                          {triggering === ds.id ? 'Syncing…' : activeJob ? 'In Progress' : 'Sync now'}
-                        </Button>
+                          aria-label={triggering === ds.id ? 'Syncing' : activeJob ? 'Sync in progress' : 'Sync now'}
+                          title={triggering === ds.id ? 'Syncing…' : activeJob ? 'In progress' : 'Sync now'}
+                        />
                       )}
                     </TableTd>
                   </TableRow>
@@ -337,9 +334,13 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
               <TableTd numeric><T as="span" size="xs" tone="secondary">{j.documentsDeleted}</T></TableTd>
               <TableTd>
                 {j.status === 'FAILED' && (
-                  <Button variant="ghost" size="sm" onClick={() => loadDetails(j.jobId, j.dataSourceId)}>
-                    {expanded === j.jobId ? 'hide' : 'details'}
-                  </Button>
+                  <IconButton
+                    size="sm"
+                    icon={<ChevronIcon dir={expanded === j.jobId ? 'up' : 'down'} />}
+                    aria-label={expanded === j.jobId ? 'Hide failure details' : 'Show failure details'}
+                    title={expanded === j.jobId ? 'Hide details' : 'Details'}
+                    onClick={() => loadDetails(j.jobId, j.dataSourceId)}
+                  />
                 )}
               </TableTd>
             </TableRow>

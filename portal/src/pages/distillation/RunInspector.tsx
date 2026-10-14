@@ -84,7 +84,7 @@ export function RunInspector({ job, onClose, onOpen }: {
       <DetailHeader
         title={transformationLabel(job.level)}
         badge={<StatusPill tone={status.tone} label={status.label} {...(status.meta ? { meta: status.meta } : {})} size="sm" />}
-        meta={<T className="text-[12px] text-text-tertiary">Started {relativeTime(job.startedAt)}{job.repo ? ` · ${job.repo}` : ''}</T>}
+        meta={<T size="xs" className="text-text-tertiary">Started {relativeTime(job.startedAt)}{job.repo ? ` · ${job.repo}` : ''}</T>}
         aside={<IconButton aria-label="Close run" size="sm" variant="ghost" icon={<CloseIcon size={16} />} onClick={onClose} />}
         // The aside is only the close button; its default width squeezed the
         // title into ~70px ("Run / notes → / Patterns").
@@ -96,7 +96,7 @@ export function RunInspector({ job, onClose, onOpen }: {
       {/* heading variant, like the Produced list beside it — the mockup draws
           "What changed" and "Produced" as the same heading. */}
       <DetailSection title="What changed" variant="heading">
-        <T className="text-[13px] text-text-secondary" wrap>{whatChanged(job)}</T>
+        <T size="sm" className="text-text-secondary" wrap>{whatChanged(job)}</T>
       </DetailSection>
       {/* LinkedItemsSection draws its own heading (default "Dependencies &
           decisions"), so it IS the Produced section rather than sitting inside

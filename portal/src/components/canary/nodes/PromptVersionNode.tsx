@@ -4,7 +4,7 @@
 import { memo, useState } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import {
-  Button, Card, Chip, CodeBlock, Inline, SectionLabel,
+  Button, Card, Chip, CodeBlock, Inline, SectionLabel, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { PromptVersionNodeData } from '../types.js';
 
@@ -28,24 +28,14 @@ function PromptVersionNodeImpl({ data }: NodeProps<PromptVersionNodeType>) {
       <Inline gap="sm" justify="between" wrap={false} className="mb-1.5">
         <Inline gap="xs" wrap={false} className="min-w-0">
           <Chip tone={SIDE_TONE[data.side]} size="xs">{sideLabel}</Chip>
-          <Inline
-            as="span"
-            gap="none"
-            title={data.versionLabel}
-            className="text-[11px] font-mono text-text-secondary overflow-hidden text-ellipsis whitespace-nowrap"
-          >
+          <T size="xs" tone="secondary" className="font-mono overflow-hidden text-ellipsis whitespace-nowrap" title={data.versionLabel}>
             {data.versionLabel}
-          </Inline>
+          </T>
         </Inline>
         {data.rollingScore !== undefined && (
-          <Inline
-            as="span"
-            gap="none"
-            title="Rolling score"
-            className="text-[11px] tabular-nums text-text-primary font-semibold"
-          >
+          <T size="xs" weight="semibold" tone="primary" tabular title="Rolling score">
             {data.rollingScore.toFixed(2)}
-          </Inline>
+          </T>
         )}
       </Inline>
 
@@ -66,22 +56,17 @@ function PromptVersionNodeImpl({ data }: NodeProps<PromptVersionNodeType>) {
       {expanded && data.templateText && (
         // `nowheel` lets the block scroll instead of zooming the canvas.
         <CodeBlock
-          className="prompt-template nowheel text-[10.5px] whitespace-pre-wrap break-words max-h-[200px] overflow-y-auto"
+          className="prompt-template nowheel text-xs whitespace-pre-wrap break-words max-h-[200px] overflow-y-auto"
           code={data.templateText}
         />
       )}
 
       {data.versionArn && (
         <Inline gap="none" align="baseline" wrap={false} className="gap-[5px] mt-1.5">
-          <SectionLabel className="text-[9px] shrink-0">ARN</SectionLabel>
-          <Inline
-            as="span"
-            gap="none"
-            title={data.versionArn}
-            className="text-[9px] font-mono text-text-secondary overflow-hidden text-ellipsis whitespace-nowrap min-w-0"
-          >
+          <SectionLabel className="text-xs shrink-0">ARN</SectionLabel>
+          <T size="xs" tone="secondary" className="font-mono overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={data.versionArn}>
             {data.versionArn.length > 35 ? `…${data.versionArn.slice(-35)}` : data.versionArn}
-          </Inline>
+          </T>
         </Inline>
       )}
 

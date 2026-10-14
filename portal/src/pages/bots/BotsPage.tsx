@@ -10,20 +10,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Banner,
-  Button,
-  Chip,
-  CollectionToolbar,
-  DataTable,
-  DotMeter,
-  EmptyState,
-  Inline,
-  LoadingState,
-  MetaLine,
-  ProgressBar,
-  Stack,
-  StatStrip,
-  T,
+  Banner, Button, Chip, CollectionToolbar, DataTable, DotMeter, EmptyState, IconButton, Inline,
+  LoadingState, MetaLine, PauseCircleIcon, PlayCircleIcon, ProgressBar, RepeatIcon, Stack, StatStrip, T,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -296,24 +284,22 @@ export default function BotsPage() {
           // One line: Inline wraps by default, and two stacked 28px buttons
           // made every row 63px (docs/layout-cascade.md "Tables", 44px rows).
           <Inline gap="xs" align="center" justify="end" wrap={false}>
-            <Button
-              variant="ghost"
+            <IconButton
               size="sm"
+              icon={<PlayCircleIcon />}
               disabled={busy === 'run'}
               onClick={(e) => { e.stopPropagation(); void runBotNow(bot); }}
               aria-label={`Run ${bot.name} now`}
-            >
-              {busy === 'run' ? 'Starting…' : '▶ Run now'}
-            </Button>
-            <Button
-              variant="ghost"
+              title={busy === 'run' ? 'Starting…' : 'Run now'}
+            />
+            <IconButton
               size="sm"
+              icon={paused ? <RepeatIcon /> : <PauseCircleIcon />}
               disabled={busy === 'pause' || busy === 'resume'}
               onClick={(e) => { e.stopPropagation(); void togglePause(bot); }}
               aria-label={`${paused ? 'Resume' : 'Pause'} ${bot.name}`}
-            >
-              {busy === 'pause' || busy === 'resume' ? '…' : paused ? 'Resume' : 'Pause'}
-            </Button>
+              title={busy === 'pause' || busy === 'resume' ? '…' : paused ? 'Resume' : 'Pause'}
+            />
           </Inline>
         );
       },

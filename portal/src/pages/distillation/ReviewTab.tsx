@@ -81,8 +81,8 @@ function useProposedGuide(row: ReviewQueueRow | null, kind: string | null): stri
 
 function samplingItems(s: SamplingResponse) {
   return [
-    { label: 'Sampled', value: `${s.l1SampleRatePct}%`, hint: 'of new patterns' },
-    { label: 'Reviewed', value: String(s.reviewedLast30d), hint: 'last 30 days' },
+    { label: 'Sampled', value: `${s.l1SampleRatePct}%`, title: 'of new patterns' },
+    { label: 'Reviewed', value: String(s.reviewedLast30d), title: 'last 30 days' },
     { label: 'Agreement', value: `${s.agreementRatePct}%` },
     { label: 'Waiting', value: String(s.queueDepth) },
   ];
@@ -159,9 +159,9 @@ function Claim({
               {target.error ? (
                 <UnavailableNotice error={target.error} what="the sampled claim" source="Distillation items are read from Aurora" onRetry={target.refresh} />
               ) : claim == null ? (
-                <T className="text-[13px] text-text-tertiary">Loading the claim…</T>
+                <T size="sm" className="text-text-tertiary">Loading the claim…</T>
               ) : (
-                <T className="text-[15px] leading-6 text-text-primary" wrap data-testid="review-claim-text">{claim}</T>
+                <T size="base" className="leading-6 text-text-primary" wrap data-testid="review-claim-text">{claim}</T>
               )}
               {guideHref && (
                 <Button size="sm" variant="link" className="self-start px-0" onClick={() => onOpen(guideHref)}>
@@ -197,7 +197,7 @@ function Claim({
                 ✕ Disagree
               </Button>
             </Inline>
-            <T className="text-[12px] text-text-tertiary">This records your review; it does not publish the guide.</T>
+            <T size="xs" className="text-text-tertiary">This records your review; it does not publish the guide.</T>
           </Stack>
         ) : (
           <AccessNotice
@@ -210,7 +210,7 @@ function Claim({
 
         {!pending && (
           <DetailSection title="This review">
-            <T className="text-[13px] text-text-secondary" wrap>
+            <T size="sm" className="text-text-secondary" wrap>
               {VERDICT_PILL[sample.verdict].label}{sample.reviewer ? ` by ${sample.reviewer}` : ''}{sample.reviewed_at ? ` · ${relativeTime(sample.reviewed_at)}` : ''}
               {sample.note ? ` — “${sample.note}”` : ''}
             </T>
@@ -225,13 +225,13 @@ function Claim({
         <Disclosure summary="Sampling details" variant="plain" density="compact">
           {sampling ? (
             <Stack gap="sm">
-              <StatStrip frameless items={samplingItems(sampling)} aria-label="Sampling" />
-              <T className="text-[12px] text-text-secondary" wrap>
+              <StatStrip variant="line" items={samplingItems(sampling)} aria-label="Sampling" />
+              <T size="xs" className="text-text-secondary" wrap>
                 {SAMPLING_LABEL[sampling.verdict.verdict]} — {sampling.verdict.reason}
               </T>
             </Stack>
           ) : (
-            <T className="text-[12px] text-text-tertiary">Sampling figures are not available right now.</T>
+            <T size="xs" className="text-text-tertiary">Sampling figures are not available right now.</T>
           )}
         </Disclosure>
       </Stack>
@@ -353,7 +353,7 @@ function KnowledgeReview() {
           </FilterPopover>
         )}
       </Inline>
-      <T className="text-[12px] text-text-tertiary">Check findings against their sources.</T>
+      <T size="xs" className="text-text-tertiary">Check findings against their sources.</T>
       <LiveRegion message={arrivals} data-testid="review-arrivals" />
     </Stack>
   );
@@ -405,7 +405,7 @@ function KnowledgeReview() {
   );
 
   const railFooter = (
-    <T className="text-[13px] text-text-secondary" data-testid="review-rail-footer">
+    <T size="sm" className="text-text-secondary" data-testid="review-rail-footer">
       {counts.pending} pending{unresolved > 0 ? ` · ${unresolved} could not be loaded` : ''}
     </T>
   );

@@ -47,7 +47,7 @@ export function ContributorsTable({
             title={c.title}
             avatarUrl={c.avatarUrl}
             avatarSize={24}
-            className="text-[13px] font-medium text-text-primary"
+            className="text-sm font-medium text-text-primary"
           />
         </span>
       ),

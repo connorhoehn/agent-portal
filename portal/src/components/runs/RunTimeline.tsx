@@ -335,7 +335,7 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
             <MetaLine key={item.id} size="xs" className={`py-1 ${mono}`} items={[`── ${item.text}`]} />
           );
           if (item.kind === 'text') return (
-            <Stack key={item.id} gap="none" className="py-1.5 text-[13px] text-text-primary [&_pre]:overflow-x-auto [&_pre]:text-[12px] [&_code]:text-[12px] [&_h1]:text-[15px] [&_h2]:text-[14px] [&_h3]:text-[13.5px]">
+            <Stack key={item.id} gap="none" className="py-1.5 text-sm text-text-primary [&_pre]:overflow-x-auto [&_pre]:text-xs [&_code]:text-xs [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm">
               <Markdown>{item.text}</Markdown>
             </Stack>
           );

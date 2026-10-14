@@ -280,7 +280,7 @@ export default function FindingsPage() {
         <Link
           to={`/iq/work/${j.id}`}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
-          className="text-[12.5px] font-medium text-text-primary no-underline hover:text-primary truncate"
+          className="text-xs font-medium text-text-primary no-underline hover:text-primary truncate"
           title={j.error ? `${j.title} — ${j.error}` : j.title}
         >
           {j.title}
@@ -289,7 +289,7 @@ export default function FindingsPage() {
     },
     {
       key: 'origin', header: 'Origin',
-      render: (j) => (j.botName ? <BotOrigin job={j} /> : <T className="text-[11px] text-text-tertiary">—</T>),
+      render: (j) => (j.botName ? <BotOrigin job={j} /> : <T size="xs" className="text-text-tertiary">—</T>),
     },
     {
       key: 'attempts', header: 'Attempts', numeric: true,
@@ -312,8 +312,8 @@ export default function FindingsPage() {
       {/* ── Dead-letter queue first: failed work is the lane a person has to
              clear, and it has exactly one verb. ── */}
       <Inline align="baseline" gap="sm" className="mb-2">
-        <T className="text-[13px] font-semibold text-text-primary">Dead-letter queue</T>
-        <T className="text-[11px] text-text-tertiary">jobs that failed or were cancelled — requeue puts a clone back on the queue</T>
+        <T size="sm" className="font-semibold text-text-primary">Dead-letter queue</T>
+        <T size="xs" className="text-text-tertiary">jobs that failed or were cancelled — requeue puts a clone back on the queue</T>
       </Inline>
       <Stack gap="none" className="mb-6">
         <DataTable<Job>
@@ -448,11 +448,11 @@ export default function FindingsPage() {
                   >
                     <SeverityChip severity={f.severity} />
                     <Stack gap="none" className="flex-1 min-w-0">
-                      <T className="text-[12.5px] text-text-primary truncate" title={f.title}>{f.title}</T>
-                      {f.detail && <T className="text-[11px] text-text-tertiary truncate" title={f.detail}>{f.detail}</T>}
+                      <T size="xs" className="text-text-primary truncate" title={f.title}>{f.title}</T>
+                      {f.detail && <T size="xs" className="text-text-tertiary truncate" title={f.detail}>{f.detail}</T>}
                     </Stack>
                     {f.jobId ? (
-                      <Link to={`/iq/work/${f.jobId}`} className="text-[11px] text-primary no-underline hover:underline shrink-0">
+                      <Link to={`/iq/work/${f.jobId}`} className="text-xs text-primary no-underline hover:underline shrink-0">
                         see the work →
                       </Link>
                     ) : canManageFindings && findingStatus === 'open' ? (
@@ -507,8 +507,8 @@ function PromoteAction({ block, onPromote }: {
   const where = block.initiativeName ?? "this finding's initiative";
   return (
     <>
-      <T className="text-[11px] text-warning whitespace-nowrap">Sprint access required</T>
-      <Link to="/iq/sprints" className="text-[11px] text-primary no-underline hover:underline whitespace-nowrap">Open sprints</Link>
+      <T size="xs" className="text-warning whitespace-nowrap">Sprint access required</T>
+      <Link to="/iq/sprints" className="text-xs text-primary no-underline hover:underline whitespace-nowrap">Open sprints</Link>
       <Button
         size="sm"
         variant="secondary"
