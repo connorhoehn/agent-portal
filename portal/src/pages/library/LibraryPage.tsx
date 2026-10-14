@@ -133,15 +133,19 @@ export default function LibraryPage() {
     },
     {
       key: 'kind', header: 'Kind', width: '12%', sortable: true,
-      render: (a) => <T size="sm" tone="secondary" title={KIND_HINT[a.kind]}>{KIND_LABEL[a.kind]}</T>,
+      // Narrow columns at 900px: one line, cut with an ellipsis (the hint is the title).
+      render: (a) => <T as="div" size="sm" tone="secondary" className="block truncate" title={`${KIND_LABEL[a.kind]} — ${KIND_HINT[a.kind]}`}>{KIND_LABEL[a.kind]}</T>,
     },
     {
       key: 'tier', header: 'Tier', width: '12%', sortable: true,
-      render: (a) => <T size="sm" tone="secondary" title={TIER_HINT[a.tier]}>{TIER_LABEL[a.tier]}</T>,
+      render: (a) => <T as="div" size="sm" tone="secondary" className="block truncate" title={`${TIER_LABEL[a.tier]} — ${TIER_HINT[a.tier]}`}>{TIER_LABEL[a.tier]}</T>,
     },
     {
       key: 'contract', header: 'Inputs', width: '12%',
-      render: (a) => <T size="sm" tone="secondary" className="whitespace-nowrap">{a.contract.variables.length ? `${a.contract.variables.length} variable${a.contract.variables.length === 1 ? '' : 's'}` : 'None'}</T>,
+      render: (a) => {
+        const inputs = a.contract.variables.length ? `${a.contract.variables.length} variable${a.contract.variables.length === 1 ? '' : 's'}` : 'None';
+        return <T as="div" size="sm" tone="secondary" className="block truncate" title={inputs}>{inputs}</T>;
+      },
     },
     {
       key: 'usedBy', header: 'Used by', width: '17%',

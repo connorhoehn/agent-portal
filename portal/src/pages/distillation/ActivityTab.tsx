@@ -306,7 +306,10 @@ export default function ActivityTab() {
   const graphView = (
     <TypedNodeCanvas<TierCanvasNode>
       aria-label="Tier graph: run notes, patterns, guides and the Library"
-      className="h-full min-h-[360px]"
+      // The canvas fills its frame and no more: the frame (SECTION_CANVAS_FRAME)
+      // clips, so a 360px floor under the health line and the stacked tier
+      // flow at 900px pushed the zoom controls out of its bottom edge.
+      className="h-full min-h-0"
       nodes={canvasNodes}
       edges={canvasEdges}
       selectedId={selectedEdge}
