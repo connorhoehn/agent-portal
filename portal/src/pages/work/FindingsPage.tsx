@@ -336,7 +336,7 @@ export default function FindingsPage() {
         />
       </Stack>
 
-      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+      <Stack gap="sm" className="min-w-0">
         {/* ── Sweep findings, grouped. The group header is the unit of
                attention; the rows are the drill-in. ── */}
         <Toolbar wrap aria-label="Finding filters">

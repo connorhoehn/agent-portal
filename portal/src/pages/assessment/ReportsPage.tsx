@@ -300,10 +300,9 @@ export default function ReportsPage() {
               <MaturityHeatmap teams={[scopedTeam!]} onSelectTeam={openTeam} />
             ) : (
               // The heatmap is this page's collection: its toolbar and the
-              // command composer below it share one search/motion state, and
-              // the composer is measured against this section
-              // (data-collection-command-boundary, as on Assessment Runs).
-              <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded" data-testid="maturity-heatmap-collection">
+              // command composer share one search/motion state; the composer
+              // docks at the bottom of the content column (ColumnDock).
+              <Stack gap="sm" className="min-w-0" data-testid="maturity-heatmap-collection">
                 <CollectionToolbar
                   label="Heatmap filters"
                   search={{ value: heatmapQuery, onChange: setHeatmapQuery, placeholder: 'Search teams', 'aria-label': 'Search heatmap teams' }}

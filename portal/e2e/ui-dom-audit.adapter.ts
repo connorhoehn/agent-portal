@@ -50,7 +50,13 @@ const selectors = {
   // an extra wrapper inset that otherwise makes a narrow shelf look correct.
   // Embedded ledgers use their PageSection; full-page ledgers use the actual
   // content column. Never use the ledger/command host as its own boundary.
-  composerBoundary: 'section:has(> [data-collection-command-boundary="embedded"]), [data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-section-content], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
+  // Since ui-components 2.448.0 a section's command composer docks at the bottom of the content
+  // column (DockedColumn + ColumnDock), so an embedded section is no longer a boundary.
+  composerBoundary: '[data-docked-column], [data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-section-content], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
+  // composer.last: the column a composer must be the last content of (the same hosts), and the dock
+  // that holds it (content inside the dock — a call strip — is the dock's, not "below the composer").
+  composerColumns: '[data-docked-column], [data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-section-content], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
+  composerDocks: '[data-column-dock], [data-floating-composer-dock]',
   rightPane: '[data-testid="page-conversation-pane"]',
   // The content column (the trail's parent: SectionContent, or a ListRailLayout header's column) and its
   // reading edge (the trail band, padded by the page gutter): content.gutter, header-alignment, single-title.
@@ -63,6 +69,11 @@ const selectors = {
   conversationState: '[data-composer-surface], [data-testid="social-channel-not-joined"], [data-testid="social-shared-work"]',
   // popover.fit: an open InlinePopover panel; board.lane-*: CatalogGrid variant="lanes" and its BoardColumn lanes (ui-components 2.443.1).
   popovers: '[data-ui-dialog="popover"]', boards: '[data-ui-board]', boardLanes: '[data-ui-board-lane]',
+  // panel.inset / panel.empty-height: every anchored panel (popover, dialog, drawer) and the library
+  // EmptyState's semantic marker (ui-components 2.448.0).
+  panels: '[role="dialog"], [role="alertdialog"], dialog[open], [data-ui-dialog]', emptyStates: '[data-ui-empty]',
+  // section.empty-row: page sections (PageSection's data-ui-section, ui-components 2.449.0).
+  sections: '[data-shell-nav] [data-ui-section]',
 };
 /** Body rows of a collection that has not declared its rows static (see `collectionTables`). */
 const collectionRows = ':is([data-shell-nav] [data-collection-table], [data-shell-nav] [data-collection-page]) table:not([role="presentation"]):not([data-collection-rows="static"] table) > tbody > tr:not(:has([colspan])):not([data-testid="datatable-loading-row"])';
@@ -77,7 +88,7 @@ const CONVERSATION_VIEW_TABS = '[role="tablist"][aria-label="Views of this conve
 type Probes = { activateRow: (page: Page, o: { rows: string }) => Promise<unknown>; recordAction: (page: Page, o: { scope: string; name: RegExp; candidates?: string }) => Promise<unknown>; toggleSelection: (page: Page, o: { checkbox: string }) => Promise<unknown> };
 /** The footer's NotificationBell (shell chrome, the same on every route — so it is opened on one list route per tenant). */
 const FOOTER_BELL = '[data-testid="shell-footer"] [data-notification-bell] button[aria-haspopup="dialog"]';
-const BELL_STATE_ROUTES = /^\/(iq\/projects|assessment\/runs|pipelines\/runs|social\/contacts)$/;
+const BELL_STATE_ROUTES = /^\/(iq\/projects|assessment\/runs|pipelines\/runs|social\/contacts|access\/requests)$/;
 type AuditState = { name: string; enter: (p: Page, ctx: { probes: Probes }) => Promise<unknown>; required?: string[]; navigates?: boolean; composerExpectation?: { mode: 'exempt'; reason: string } };
 /** The shell regions every page keeps, including the record a probe navigated to. */
 const SHELL_REQUIRED = ['$header', '$footer', '$shellColumns'];
@@ -231,9 +242,15 @@ export default {
     const states: AuditState[] = [];
     const pathname = spec ? new URL(spec.path, 'http://audit.local').pathname : '';
     // popover.fit: the footer bell's panel (a 99+ feed once grew past the window, over its own trigger).
-    if (BELL_STATE_ROUTES.test(pathname) && await page.locator(FOOTER_BELL).count() === 1) states.push({ name: 'notification-bell-open', enter: async p => {
+    // panel.inset / panel.empty-height: the same panel with an EMPTY Unread tab. Read-only: the sweep
+    // user (SWEEP_USER, seeded with no inbox items — middleware/src/mock/notifications.ts) opens it; no
+    // item is marked read and no scenario is switched to empty it.
+    if (BELL_STATE_ROUTES.test(pathname) && await page.locator(FOOTER_BELL).count() === 1) states.push({ name: 'notification-bell-open', required: ['$emptyStates'], enter: async p => {
       await p.locator(FOOTER_BELL).click();
-      await expect(p.locator(selectors.popovers).last()).toBeVisible();
+      const panel = p.locator(selectors.popovers).last();
+      await expect(panel).toBeVisible();
+      await expect(panel.getByRole('tab', { name: /^Unread/ })).toHaveAttribute('aria-selected', 'true');
+      await expect(panel.locator(selectors.emptyStates)).toBeVisible();
     } });
     // board.lane-surface / board.lane-columns: the Sprints lens with its first sprint's board open.
     if (pathname === '/iq/projects') states.push({ name: 'sprint-board', navigates: true, required: [...SHELL_REQUIRED, '$boardLanes'], enter: async p => {

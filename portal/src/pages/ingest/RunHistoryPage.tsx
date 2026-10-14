@@ -102,7 +102,7 @@ function RunHistoryPage() {
       title="Crawl runs"
       description="What each crawl run actually did — pages fetched, documents produced, and where it stopped. Refreshes every 10s."
     >
-      <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+      <Stack gap="md" className="min-w-0">
         <CollectionToolbar label="Crawl run filters"
           search={{ value: query, onChange: setQuery, placeholder: 'Search crawl runs', 'aria-label': 'Search crawl runs' }}
           summary={crawlsData ? `${shownCrawls.length} of ${historyCrawls.length} runs` : undefined}

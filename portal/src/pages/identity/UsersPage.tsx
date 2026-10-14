@@ -283,7 +283,7 @@ function UsersPage() {
       )}
 
       {(error ?? degraded) ? null : (
-        <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+        <Stack gap="md" className="min-w-0">
         <CollectionToolbar label="User filters"
           search={{ value: query, onChange: setQuery, placeholder: 'Search users…', 'aria-label': 'Search users' }}
           summary={usersData ? `${shownUsers.length} of ${users.length} users` : undefined}

@@ -132,9 +132,9 @@ export default function DesignsPage() {
       railNotice={designsFailure ? <UnavailableNotice error={designsFailure} what="designs" source={DESIGNS_SOURCE} onRetry={refresh} /> : isLoading && !data ? <LoadingState label="Loading designs…" /> : reviews.length === 0 ? <EmptyState title="No designs in this view" /> : undefined}
     >
     {id ? <DesignThreadPage key={id} /> : (
-      // The overview's PageSection is the composer boundary: this stack is
-      // its direct child, and the command input is its last row.
-      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+      // The overview owns the table's command input; the input docks at the
+      // bottom of the content column (CollectionCommandHost → ColumnDock).
+      <Stack gap="sm" className="min-w-0">
         <CollectionToolbar label="Design filters"
           search={{ value: query, onChange: setQuery, placeholder: 'Search designs', 'aria-label': 'Search designs' }}
           summary={data ? `${reviews.length} design${reviews.length === 1 ? '' : 's'}` : undefined}

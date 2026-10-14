@@ -121,7 +121,7 @@ export default function BudgetsPage() {
         ? 'Budget envelopes granted to an SME for one sprint, and what the initiative actually spent inside that window.'
         : `Monthly agent-spend allocations per initiative, against actuals from bot and marketplace runs · ${MONTH_LABEL}`}
     >
-      <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+      <Stack gap="md" className="min-w-0">
       {/* One line of stats at the app's body step, not four tall cards: these
           are the frame for the report below, not the content. The hints that
           used to sit under each card value are the clusters' tooltips. */}

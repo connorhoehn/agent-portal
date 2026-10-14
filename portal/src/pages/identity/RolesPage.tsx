@@ -81,7 +81,7 @@ function RolesPage() {
       title="Roles"
       description="Cedar policies enforced by Verified Permissions on every middleware request."
     >
-      <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+      <Stack gap="md" className="min-w-0">
       <CollectionToolbar label="Permission matrix filters"
         search={{ value: query, onChange: setQuery, placeholder: 'Search actions', 'aria-label': 'Search actions' }}
         summary={`${shownActions.length} of ${actions.length} actions`}

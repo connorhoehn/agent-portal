@@ -266,9 +266,9 @@ function ScoresPage() {
         Ranked by composite score (blended influence + expertise) across {departments.length} departments — search a skill to re-rank, or filter by department.
       </T>
 
-      {/* The leaderboard's block owns its command input; this PageSection is
-          the composer boundary and the input is the block's last row. */}
-      <Stack gap="none" className="min-w-0" data-collection-command-boundary="embedded">
+      {/* The leaderboard's block owns its command input, which docks at the
+          bottom of the content column (CollectionCommandHost → ColumnDock). */}
+      <Stack gap="none" className="min-w-0">
         <FilterBar
           skillFilter={skillFilter}
           onSkillChange={setSkillFilter}

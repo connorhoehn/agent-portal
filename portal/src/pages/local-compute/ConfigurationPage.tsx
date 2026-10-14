@@ -119,7 +119,7 @@ export function ConfigurationContents({ bundle, library, view, onViewChange, onR
     </Stack>
     <Stack as="section" aria-label="Configuration contents" gap="sm" className="min-w-0">
       <Inline as="h2" className="text-sm font-semibold">Configuration contents</Inline>
-      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+      <Stack gap="sm" className="min-w-0">
       <Tabs aria-label="Configuration contents" value={view} onValueChange={(value) => onViewChange(value as ContentsView)} items={[
         { id: 'skills', label: `Skills · ${bundle.skills.length}` },
         { id: 'hooks', label: `Hooks · ${bundle.hooks.length}` },

@@ -25,7 +25,7 @@ function StoragePage() {
       title="Storage"
       description="Where ingested documents land in S3, and how much of it the knowledge base has chunked."
     >
-      <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+      <Stack gap="md" className="min-w-0">
         <CollectionToolbar label="Storage filters"
           search={{ value: query, onChange: setQuery, placeholder: 'Search file types and prefixes', 'aria-label': 'Search file types and prefixes' }}
           summary={storage ? `${byType.length} of ${storage.byType.length} file types · ${byPrefix.length} of ${storage.byPrefix.length} prefixes` : undefined}

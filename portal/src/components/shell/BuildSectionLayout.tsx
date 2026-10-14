@@ -1,4 +1,4 @@
-import { ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
+import { DockedColumn, ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
 import { Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 import type { ComponentProps, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -58,7 +58,12 @@ export function BuildSectionLayout({
         })}>
         <Stack gap="none" className="h-full min-h-0 min-w-0">
           <ScopeHeader variant="crumbs" breadcrumbs={suppliedBreadcrumbs ?? breadcrumbs} />
-          <Stack gap="none" className={contentPadding === 'none' ? 'min-h-0 min-w-0 flex-1 overflow-hidden' : `min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)] ${UNDER_CRUMBS_BAND}`} data-testid="build-section-content"><SectionTrailContext.Provider value={true}>{children}</SectionTrailContext.Provider></Stack>
+          {/* The content column: a scrolling body over the column's dock, where a
+              section's command composer docks (ColumnDock) at the bottom, spanning
+              the column, with nothing below it (docs/layout-cascade.md). */}
+          <DockedColumn body={contentPadding === 'none' ? 'fill' : 'scroll'}
+            bodyClassName={contentPadding === 'none' ? 'flex flex-col' : `flex flex-col px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)] ${UNDER_CRUMBS_BAND}`}
+            bodyProps={{ 'data-testid': 'build-section-content' }}><SectionTrailContext.Provider value={true}>{children}</SectionTrailContext.Provider></DockedColumn>
         </Stack>
       </SubNavLayout>
     </Stack>

@@ -227,8 +227,9 @@ export default function KnowledgeHomePage() {
 
       {/* ── One filter row, then the registry list — above the fold ──────── */}
       {/* The registry list is this section's collection: its toolbar, table
-          and command composer share one boundary (docs/layout-cascade.md). */}
-      <Stack gap="none" className="mb-5 min-w-0" data-collection-command-boundary="embedded">
+          and command composer share one state; the composer docks at the
+          column's bottom (docs/layout-cascade.md). */}
+      <Stack gap="none" className="mb-5 min-w-0">
       <Toolbar
         className="mb-2 rounded-lg"
         end={(

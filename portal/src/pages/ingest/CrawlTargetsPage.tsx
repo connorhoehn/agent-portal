@@ -155,7 +155,7 @@ function CrawlTargetsPage() {
       title="Sources"
       description="What content gets pulled in. Each target is a site the crawler reads and turns into documents."
     >
-      <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+      <Stack gap="md" className="min-w-0">
         {actionMessage && (
           <InlineAlert tone={actionMessage.tone === 'ok' ? 'success' : 'error'}>
             {actionMessage.text}

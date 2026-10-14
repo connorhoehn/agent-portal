@@ -124,7 +124,7 @@ function DataSourcesPage() {
       title="KB sync"
       description="The data sources that carry storage into the knowledge base, and the jobs that ran."
     >
-      <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+      <Stack gap="md" className="min-w-0">
         <CollectionToolbar label="KB sync filters"
           search={{ value: query, onChange: setQuery, placeholder: 'Search data sources and jobs', 'aria-label': 'Search data sources and jobs' }}
           summary={sourcesData || jobsData ? `${shownSources.length} of ${sources.length} sources · ${shownJobs.length} of ${jobs.length} jobs` : undefined}

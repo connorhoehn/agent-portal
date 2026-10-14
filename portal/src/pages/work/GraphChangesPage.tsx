@@ -152,7 +152,7 @@ export default function GraphChangesPage() {
         </Inline>
       )}
 
-      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+      <Stack gap="sm" className="min-w-0">
         <Toolbar wrap aria-label="Change filters">
           <ToolbarGroup aria-label="Status">
             {(['all', 'applied', 'pending', 'rejected', 'failed'] as const).map((f) => (

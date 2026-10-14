@@ -9,7 +9,7 @@
 // Initiatives list draws (264px, caption title + count chip, search header,
 // grouped rows, footer) — and `SectionHeader` as its `header`, so the content
 // column (trail first, then the title, then the record) starts after it.
-import { ScopeHeader } from '@connorhoehnslalom/ui-components';
+import { DockedColumn, ScopeHeader } from '@connorhoehnslalom/ui-components';
 import { PageHeader, Stack, type Density } from '@connorhoehnslalom/ui-components/shared';
 import type { ComponentProps, ReactNode } from 'react';
 import { UNDER_CRUMBS_BAND, UNDER_CRUMBS_BAND_WITH_CONTROLS } from './headerRhythm';
@@ -81,13 +81,15 @@ export function SectionContent({
   return (
     <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-section-content data-testid={testId}>
       <SectionHeader {...header} />
-      <Stack
-        gap="md"
-        className={`min-h-0 min-w-0 flex-1 ${body === 'scroll' ? 'overflow-auto ' : ''}${header.inset === 'conversation' ? '' : 'px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)]'}`}
-        data-section-body
+      {/* The body scrolls over the column's dock: a section's command composer
+          (ColumnDock) docks at the column's bottom, spanning it. */}
+      <DockedColumn
+        body={body === 'scroll' ? 'scroll' : 'fill'}
+        bodyClassName={`flex flex-col gap-3 ${header.inset === 'conversation' ? '' : 'px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)]'}`}
+        bodyProps={{ 'data-section-body': '' }}
       >
         {children}
-      </Stack>
+      </DockedColumn>
     </Stack>
   );
 }

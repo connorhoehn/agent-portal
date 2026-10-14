@@ -177,12 +177,18 @@ docked composer takes its compact one-row form and the header folds.
 
 **Collection pages carry the shared command composer (2026-10-12).** Every
 list/table page in every tenant docks ONE `CollectionCommandHost`
-(`portal/src/components/collections/`) at the bottom of the column that owns
-the table: a page that *is* one collection converts to `CollectionCommandPage`
+(`portal/src/components/collections/`) at the bottom of the content column:
+a page that *is* one collection converts to `CollectionCommandPage`
 (Pipelines Definitions is the precedent); a page whose table is one section
-among others mounts the host as that section's last row and marks the section
-`data-collection-command-boundary="embedded"`, which is the edge the DOM audit
-measures the composer against. The input speaks the one bounded grammar in
+among others mounts the host inside that section, and the host docks itself
+(ui-components 2.448.0 `ColumnDock`) into the content column's dock
+(`DockedColumn`, which `BuildSectionLayout` and `SectionContent` draw): the
+composer spans the column at its bottom, every other block of the page —
+trailing links, disclosures — sits above it in the scrolling body, and it
+still drives its section's table. Nothing is laid out below a page's composer
+and no section draws it on its own inset band (the embedded-section boundary
+of 2026-10-12 is retired; the DOM audit's `composer.last` judges both, and
+measures the composer against the column). The input speaks the one bounded grammar in
 `collectionCommands.ts` (search, at most one existing filter, reset, refresh,
 `open <exact ID or title>` over the rows currently shown, page-declared extra
 phrases with their own handlers) and drives the same controlled toolbar state;

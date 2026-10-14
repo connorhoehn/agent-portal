@@ -25,7 +25,7 @@ import {
   useViewportWidth,
   type RailDepthSpec,
 } from '@connorhoehnslalom/ui-components/shared';
-import { SidePaneProvider, useSidePaneHost } from '@connorhoehnslalom/ui-components';
+import { DockedColumn, SidePaneProvider, useSidePaneHost } from '@connorhoehnslalom/ui-components';
 import { useDialogueRailFold } from './useDialogueRailFold';
 import { ConversationInputProvider } from '@connorhoehnslalom/ui-components/social/rich-composer';
 
@@ -618,9 +618,11 @@ function ShellLayout() {
               <Stack gap="none" className="flex-1 min-h-0">
                 <HuddleChatSplit>
                   <Stack gap="none" className="h-full min-h-0">
-                    <Stack id="main-content" tabIndex={-1} gap="none" className="min-h-0 flex-1 overflow-auto outline-none">
+                    {/* The page column: it scrolls over its own dock, where a page's command
+                        composer docks (ColumnDock) when no section layout draws a nearer one. */}
+                    <DockedColumn bodyClassName="flex flex-col outline-none" bodyProps={{ id: 'main-content', tabIndex: -1 }}>
                       <Outlet />
-                    </Stack>
+                    </DockedColumn>
                     {/* The call bar and tiles for a call no on-screen composer carries, docked under the page. */}
                     <CallBlock placement="block" />
                   </Stack>

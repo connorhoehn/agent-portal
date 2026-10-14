@@ -1,4 +1,4 @@
-import { ListRailLayout, ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
+import { DockedColumn, ListRailLayout, ScopeHeader, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
 import { GroupedList, PageSection, Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
@@ -37,7 +37,7 @@ export function StackedCatalogLayout({
   children: ReactNode;
   /** Docked flush under the record in the list-rail (record) view — the
    *  content column's composer, passed to `ListRailLayout`'s `footer`. Not
-   *  drawn on the catalog overview, whose page embeds its own command host. */
+   *  drawn on the catalog overview, whose command host docks at that column's bottom. */
   footer?: ReactNode;
 }) {
   const location = useLocation();
@@ -62,13 +62,14 @@ export function StackedCatalogLayout({
   ];
   const content = catalogOverview && !selectedId ? <Stack gap="none" className="h-full min-h-0">
     <ScopeHeader variant="crumbs" breadcrumbs={[{ label: group }, { label: title }]} />
-    <Stack gap="none" className={`min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)] ${UNDER_CRUMBS_BAND}`} data-testid="catalog-overview">
+    {/* The overview's command host docks at the column's bottom (ColumnDock). */}
+    <DockedColumn bodyClassName={`flex flex-col px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)] ${UNDER_CRUMBS_BAND}`} bodyProps={{ 'data-testid': 'catalog-overview' }}>
       <PageSection title={title}
         {...(overviewDescription ? { description: overviewDescription } : {})}
         {...(overviewActions ? { actions: overviewActions } : {})}>
         {children}
       </PageSection>
-    </Stack>
+    </DockedColumn>
   </Stack> : <ListRailLayout
     header={<SectionHeader breadcrumbs={breadcrumbs} title={title} />}
     // The record list is a flush list rail beside the section rail, the

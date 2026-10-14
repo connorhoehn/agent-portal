@@ -2,7 +2,9 @@
 // It never invents a chat channel, invokes an unrelated agent or executes a
 // proposed mutation before the user confirms that specific operation.
 import { useRef, useState } from 'react';
+import { ColumnDock } from '@connorhoehnslalom/ui-components';
 import { ConfirmDialog, IconButton, InlinePopover, InfoIcon, Stack, T, Tooltip } from '@connorhoehnslalom/ui-components/shared';
+import type { ComposerPrompt } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { ConversationComposer } from '../../lib/conversationComposer';
 
 export interface CollectionCommandResult {
@@ -19,8 +21,21 @@ export interface CollectionCommandAdapter {
 }
 
 /** A page with no declared adapter must omit the host and document why in its
- * route audit contract. Merely rendering an input is not supported coverage. */
-export function CollectionCommandHost({ adapter, disabled = false }: { adapter: CollectionCommandAdapter; disabled?: boolean }) {
+ * route audit contract. Merely rendering an input is not supported coverage.
+ *
+ * The host docks itself (`ColumnDock`, ui-components 2.448.0): wherever the
+ * section that owns the table mounts it, the composer renders at the bottom of
+ * the content column (`DockedColumn` — BuildSectionLayout, SectionContent),
+ * spanning it, with every other block of the page above it. It still drives
+ * that section's table: the portal keeps it in the section's React tree. In a
+ * host with no dock it renders in place (docs/layout-cascade.md). */
+export function CollectionCommandHost({ adapter, disabled = false, prompts }: {
+  adapter: CollectionCommandAdapter;
+  disabled?: boolean;
+  /** Items on the page that wait on a person (agent questions, work to review), as the composer's
+   *  prompt deck — answered here, paged with the keyboard, instead of a block above the composer. */
+  prompts?: readonly ComposerPrompt[];
+}) {
   const [notice, setNotice] = useState<{ text: string; tone: 'info' | 'danger' } | null>(null);
   const [pending, setPending] = useState<CollectionCommandResult['confirmation']>();
   const [busy, setBusy] = useState(false);
@@ -40,7 +55,7 @@ export function CollectionCommandHost({ adapter, disabled = false }: { adapter: 
       return false;
     } finally { locked.current = false; setBusy(false); }
   };
-  return <Stack gap="none" className="shrink-0 min-w-0" data-testid="collection-command-host" data-collection-command={adapter.id}>
+  return <ColumnDock><Stack gap="none" className="shrink-0 min-w-0" data-testid="collection-command-host" data-collection-command={adapter.id}>
     <ConversationComposer channel={null} context={{ kind: 'document', id: adapter.id, title: adapter.label }}
       capabilities={{ maySend: false, agent: { allowed: true } }} defaultMode="agent" mode="agent"
       offModes={{ chat: 'This input controls the table; it does not post to a conversation', terminal: 'This table has no terminal' }}
@@ -49,6 +64,7 @@ export function CollectionCommandHost({ adapter, disabled = false }: { adapter: 
       modePlaceholders={{ agent: adapter.placeholder }}
       submitLabel={{ agent: 'Apply' }} answersFocus disabled={disabled || busy || !!pending}
       allowEmoji={false} persistDraft={false} onAgent={submit}
+      {...(prompts?.length ? { prompts } : {})}
       modeRowEnd={<><Tooltip content="Supported table commands"><IconButton ref={helpRef} size="sm" aria-label={`Available ${adapter.label.toLowerCase()} commands`}
         icon={<InfoIcon size={14} />} aria-haspopup="dialog" aria-expanded={helpOpen} onClick={() => setHelpOpen(!helpOpen)} /></Tooltip>
         <InlinePopover open={helpOpen} onClose={() => setHelpOpen(false)} trigger={helpRef} kind="command-help"
@@ -70,5 +86,5 @@ export function CollectionCommandHost({ adapter, disabled = false }: { adapter: 
           text: error instanceof Error ? error.message : 'The operation failed.', tone: 'danger',
         })).finally(() => { locked.current = false; setBusy(false); });
       }} />
-  </Stack>;
+  </Stack></ColumnDock>;
 }

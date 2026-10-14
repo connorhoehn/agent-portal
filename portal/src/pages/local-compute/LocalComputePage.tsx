@@ -610,7 +610,7 @@ export default function LocalComputePage() {
 
   if (view === 'runs') return <PageSection title="Runs" description="Work handed to your paired machines.">
     {runsFailure ? <UnavailableNotice error={runsFailure} what="run history" source="Runs on your machines are read from the job queue in Aurora" onRetry={refreshRuns} /> : (
-      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+      <Stack gap="sm" className="min-w-0">
         <CollectionToolbar
           label="Run filters"
           search={{ value: runQuery, onChange: setRunQuery, placeholder: 'Search runs', 'aria-label': 'Search runs' }}
@@ -667,8 +667,8 @@ export default function LocalComputePage() {
           >
             {/* The machines are this page's collection: the toolbar, the
                 table and the command composer share one search/presence
-                state, measured against this section (as on Assessment Runs). */}
-            <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+                state; the composer docks at the column's bottom (ColumnDock). */}
+            <Stack gap="sm" className="min-w-0">
               {acceptError && (
                 <Banner variant="error">{acceptError}</Banner>
               )}

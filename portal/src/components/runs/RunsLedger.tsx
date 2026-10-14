@@ -129,7 +129,7 @@ export function RunsLedger({ actions, endpoint, detailBase, showWorkspace = fals
   };
 
   return (
-    <Stack gap="none" className={fill ? 'min-w-0 min-h-0 flex-1' : 'min-w-0'} data-collection-command-boundary={fill ? undefined : 'embedded'}>
+    <Stack gap="none" className={fill ? 'min-w-0 min-h-0 flex-1' : 'min-w-0'}>
       <Stack gap="none" className={`min-w-0 gap-[var(--ui-section-gap)] ${fill ? 'min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]' : ''}`}>
       <CollectionToolbar label="Run filters" filters={[
         { id: 'status', label: 'Status', value: status, onChange: value => setFilter('status', value), options: STATUS_FILTER_OPTIONS },

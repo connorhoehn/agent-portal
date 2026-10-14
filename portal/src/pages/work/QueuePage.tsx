@@ -352,9 +352,9 @@ export default function QueuePage() {
         </Stack>
       )}
 
-      {/* ── The queue itself, with its command input as the last row of
-             the block it drives (the PageSection is the composer boundary). ── */}
-      <Stack gap="sm" className="min-w-0" data-collection-command-boundary="embedded">
+      {/* ── The queue itself; its command input docks at the bottom of the
+             content column and drives this block (ColumnDock). ── */}
+      <Stack gap="sm" className="min-w-0">
         <Toolbar wrap aria-label="Job filters">
           <ToolbarGroup aria-label="State">
             <ToolbarLabel>State</ToolbarLabel>

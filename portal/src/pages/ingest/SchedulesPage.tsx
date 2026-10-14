@@ -97,7 +97,7 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
   }
 
   return (
-    <Stack gap="md" className="min-w-0" data-collection-command-boundary="embedded">
+    <Stack gap="md" className="min-w-0">
     <Card padding="md">
       <CardHeader
         title="KB Sync Schedules"

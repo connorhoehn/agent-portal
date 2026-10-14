@@ -178,9 +178,9 @@ export default function LibraryPage() {
       railNotice={libraryFailure ? <UnavailableNotice error={libraryFailure} what="library assets" source={LIBRARY_SOURCE} onRetry={refresh} /> : isLoading && !data ? <EmptyState title="Loading assets…" /> : assets.length === 0 ? <EmptyState title="No assets in this view" /> : undefined}
     >
     {openId ? <AssetDrawer key={openId} id={openId} onOpenAsset={setOpenId} onBack={() => setOpenId(null)} /> :
-    // The overview's PageSection is the composer boundary: this stack is its
-    // direct child, and the command input is its last row.
-    <Stack gap="none" className="min-w-0" data-collection-command-boundary="embedded">
+    // The overview owns the table's command input; the input docks at the
+    // bottom of the content column (CollectionCommandHost → ColumnDock).
+    <Stack gap="none" className="min-w-0">
 
       <Inline gap="sm" wrap align="center" className="border-t border-border py-4 mb-2" data-testid="library-filters">
         <SearchInput size="sm" value={searchText} onChange={onSearchChange} placeholder="Search assets…" aria-label="Search assets" className="w-64 max-w-full" />

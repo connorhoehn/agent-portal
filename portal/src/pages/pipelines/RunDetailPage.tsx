@@ -152,11 +152,6 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
           <PipelineRunArtifacts artifacts={artifacts} />
         </DetailSection>
         {cancelable && <RunReportDecks runId={run.id} runTitle={run.context.title} />}
-        {realtime && (
-          <DetailSection title="Discussion" data-testid="pipeline-run-discussion">
-            <PipelineDiscussion channel={runChannel(run.id)} focusTarget />
-          </DetailSection>
-        )}
         {realtime && live && <PipelineRunLive key={run.id} runId={run.id} pipelineId={run.definitionId ?? ''} recordedStatus={run.status} onMoved={refresh} />}
         {realtime && live ? (
           <ChannelActivity channel={runChannel(run.id)} title="Events" recorded={recorded} visibleCount={8} data-testid="pipeline-events" />
@@ -171,6 +166,13 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
               maxHeightClass="max-h-[360px]"
               emptyHint="Event-catalog frames (pipeline:run:*, pipeline:step:*) stream here as the run moves."
             />
+          </DetailSection>
+        )}
+        {/* The discussion is the page's last section: its composer is the column's
+            last content, with nothing laid out below it (docs/layout-cascade.md). */}
+        {realtime && (
+          <DetailSection title="Discussion" data-testid="pipeline-run-discussion">
+            <PipelineDiscussion channel={runChannel(run.id)} focusTarget />
           </DetailSection>
         )}
         </Stack>
