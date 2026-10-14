@@ -120,6 +120,7 @@ import { startCanaryDecisionsPoller } from './lib/canary-decisions-poller.js';
 import { startPrWatchPoller } from './lib/pr-watch-poller.js';
 import { startRetentionSweep } from './lib/retention-sweep.js';
 import { startAccessExpirySweeper } from './lib/access-expiry.js';
+import { startAccessEscalationSweeper } from './lib/access-escalation.js';
 import { startLocalController } from './lib/canary-local-controller.js';
 import { startComputeWorkGraphProducer } from './work-graph/compute-emitter.js';
 import { internalWorkGraphComputeRouter } from './routes/internal-work-graph-compute.js';
@@ -536,6 +537,9 @@ startLocalController();
 // Access tenant: revoke elevations past expiresAt and send the 24-hour warning,
 // single-flight across replicas (lib/access-expiry.ts; ACCESS_EXPIRY_SWEEP_MS).
 startAccessExpirySweeper();
+// Access escalation timers (2026-10-14): a step past its SLA reaches the next
+// tier of deciders, single-flight across replicas (lib/access-escalation.ts).
+startAccessEscalationSweeper();
 
 // Agentic loop background workers.
 // The dispatcher hands queued jobs to idle devbox boxes; the sweep scheduler

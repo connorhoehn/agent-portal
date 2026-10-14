@@ -4,7 +4,7 @@
 // approve / reject / request information are explicit controls with a comment
 // and a confirmation. Bulk decisions are deliberately absent.
 
-import { CollectionToolbar, DataTable, Stack, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { CollectionToolbar, DataTable, Stack, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
@@ -26,12 +26,20 @@ import { accessCollectionAdapter, resolveAccessTarget } from './accessCollection
 import { ACCESS_SURFACES } from './accessSurfaces';
 import { REQUEST_COLUMNS } from './accessColumns';
 
-const COLUMNS: DataTableColumn<AccessRequest>[] = [
+/** The step the viewer may decide; a delegate's row names whom they decide it for (2026-10-14). */
+function yourStep(r: AccessRequest, viewerId: string | undefined): string {
+  const s = currentStep(r);
+  if (!s) return '—';
+  const forWhom = s.eligible.find((p) => p.id === viewerId)?.onBehalfOf;
+  return `${s.step} · ${STEP_KIND_LABELS[s.kind] ?? s.kind}${forWhom ? ` · for ${forWhom.displayName}` : ''}`;
+}
+
+const columnsFor = (viewerId: string | undefined): DataTableColumn<AccessRequest>[] => [
   ...REQUEST_COLUMNS.filter((c) => c.key !== 'waiting' && c.key !== 'status'),
   { key: 'requester', header: 'Asked by', render: (r) => r.requester.displayName },
   {
-    key: 'step', header: 'Your step', width: '128px',
-    render: (r) => { const s = currentStep(r); return s ? `${s.step} · ${STEP_KIND_LABELS[s.kind] ?? s.kind}` : '—'; },
+    key: 'step', header: 'Your step',
+    render: (r) => { const label = yourStep(r, viewerId); return <T size="sm" title={label} className="block max-w-[14rem] truncate">{label}</T>; },
   },
 ];
 
@@ -42,6 +50,8 @@ export default function ApprovalsPage() {
 
 function ApprovalsWorkspace() {
   const navigate = useNavigate();
+  const { session } = useSession();
+  const COLUMNS = columnsFor(session?.sub);
   const [query, setQuery] = useState('');
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<AccessRequest>>(`${ACCESS_API}/approvals`, 30_000);
   const all = data?.items ?? [];

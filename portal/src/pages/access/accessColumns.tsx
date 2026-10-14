@@ -37,12 +37,12 @@ export const REQUEST_COLUMNS: DataTableColumn<AccessRequest>[] = [
 ];
 
 const change = (e: AccessEvent) => (e.before || e.after ? `${e.before ?? '—'} → ${e.after ?? '—'}` : '—');
-export const eventTitle = (e: AccessEvent) => `${EVENT_LABELS[e.kind] ?? e.kind} ${e.requestId ?? e.policyId ?? ''}`.trim();
+export const eventTitle = (e: AccessEvent) => `${EVENT_LABELS[e.kind] ?? e.kind} ${e.requestId ?? e.policyId ?? e.delegationId ?? ''}`.trim();
 
 export const EVENT_COLUMNS: DataTableColumn<AccessEvent>[] = [
   { key: 'at', header: 'When', numeric: true, sortable: true, compare: (a, b) => a.at.localeCompare(b.at), render: (e) => <T size="sm" title={e.at} className="justify-end">{relativeTime(e.at)}</T> },
-  { key: 'kind', header: 'Event', width: '160px', render: (e) => <Chip tone={e.kind === 'step-rejected' ? 'danger' : e.kind === 'sod-override' ? 'caution' : 'neutral'} size="xs">{EVENT_LABELS[e.kind] ?? e.kind}</Chip> },
-  { key: 'requestId', header: 'Request', width: '112px', render: (e) => <T size="sm" tabular>{e.requestId ?? e.policyId ?? '—'}</T> },
+  { key: 'kind', header: 'Event', width: '160px', render: (e) => <Chip tone={e.kind === 'step-rejected' ? 'danger' : e.kind === 'sod-override' || e.kind === 'escalated' ? 'caution' : 'neutral'} size="xs">{EVENT_LABELS[e.kind] ?? e.kind}</Chip> },
+  { key: 'requestId', header: 'Request', width: '112px', render: (e) => <T size="sm" tabular>{e.requestId ?? e.policyId ?? e.delegationId ?? '—'}</T> },
   { key: 'actor', header: 'Actor', render: (e) => e.actor?.displayName ?? <T size="sm" tone="tertiary">system</T> },
   { key: 'change', header: 'Change', render: change },
   { key: 'reason', header: 'Reason', render: (e) => (e.reason ? <T size="sm" tone="secondary" title={e.reason} className="block max-w-[24rem] truncate">{e.reason}</T> : <T size="xs" tone="tertiary">—</T>) },

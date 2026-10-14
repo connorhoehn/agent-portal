@@ -5,7 +5,7 @@
 // page whose data is not here yet — what it will hold. Pure data, no React, so
 // `__tests__/accessSurfaces.test.ts` runs under plain `node --test` and the
 // route inventory can import it. Every list page is a collection on the house
-// frame from registration day (decision A9); `settings` is the one registered
+// frame from registration day (decision A9); `settings` (delegation since 2026-10-14) was the one registered
 // placeholder.
 
 export type AccessSurfaceId =
@@ -13,7 +13,8 @@ export type AccessSurfaceId =
   | 'policies' | 'reviews' | 'review' | 'audit' | 'configuration' | 'settings';
 
 export type AccessGroup = 'Request' | 'Approve' | 'Govern' | 'System';
-export type AccessPhase = 'A0' | 'A1' | 'A2';
+/** A3: escalation timers and delegation (2026-10-14). */
+export type AccessPhase = 'A0' | 'A1' | 'A2' | 'A3';
 
 export interface AccessSurface {
   id: AccessSurfaceId;
@@ -88,12 +89,9 @@ export const ACCESS_SURFACES: Record<AccessSurfaceId, AccessSurface> = {
     description: 'Default durations, who stewards each kind of item, and which items are sensitive.',
   },
   settings: {
-    id: 'settings', path: '/access/settings', group: 'System', phase: 'A1', composer: 'exempt',
+    id: 'settings', path: '/access/settings', group: 'System', phase: 'A3', composer: 'exempt',
     title: 'Access settings',
-    description: 'Your own request notifications and default views.',
-    emptyTitle: 'No preferences to set yet',
-    emptyBody: 'Request and decision notifications arrive with the activity bell; your defaults will be kept here.',
-    next: 'Lane A1 brings bell items for submissions, decisions and expiry warnings you can tune.',
+    description: 'Delegate your approval decisions while you are away, and see the delegations you are part of.',
   },
 };
 

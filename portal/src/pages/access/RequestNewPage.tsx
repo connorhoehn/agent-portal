@@ -2,8 +2,9 @@
 // one page on the library's FormWizard: what (a searchable catalog picker,
 // preselected from `?item=`), why (≥20 characters), how long (the item's
 // default selected; standing asks for its own reason, A6) and — only when the
-// actor may file for someone else — who (an approver's direct reports, an
-// access admin's whole directory: GET /api/access/beneficiaries).
+// actor may file for someone else — who, chosen with the library's PersonPicker
+// (an approver's direct reports; for an access admin every person in the
+// directory, granted or not: GET /api/access/beneficiaries).
 //
 // Beside the form, a live summary from POST /api/access/requests/preview — the
 // same chain resolution and SoD pre-check a submit runs, written nowhere:
@@ -21,6 +22,7 @@ import {
   Link,
   LoadingState,
   PageHeader,
+  PersonPicker,
   RadioGroup,
   Stack,
   T,
@@ -141,9 +143,9 @@ export default function RequestNewPage() {
       description: 'Access is granted to the person named here. Nobody approves a request they made or benefit from.',
       content: (
         <FormField label="Person" required>
-          {(w) => <Combobox {...w} size="md" value={beneficiaryId} onChange={(v) => set({ beneficiaryId: v })} placeholder="Search people"
-            maxOptions={50} emptyMessage="Nobody you may request for matches"
-            options={beneficiaries.map((p) => ({ value: p.id, label: p.displayName, ...(p.id === selfId ? { meta: 'You' } : {}) }))}
+          {(w) => <PersonPicker {...w} size="md" value={beneficiaryId} onChange={(v) => set({ beneficiaryId: v })} placeholder="Search people"
+            emptyMessage="Nobody you may request for matches"
+            people={beneficiaries.map((p) => ({ id: p.id, name: p.displayName, ...(p.id === selfId ? { tag: 'You' } : {}) }))}
             data-testid="access-new-who" />}
         </FormField>
       ),

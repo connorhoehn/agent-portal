@@ -108,7 +108,7 @@ test('access policy: the wizard, configuration and settings are exempt only on t
   const views = [
     ['/access/requests/new', { form: true }],
     ['/access/configuration', { settingsSurface: true }],
-    ['/access/settings', { placeholder: true }],
+    ['/access/settings', { settingsSurface: true }],
   ] as const;
   for (const [path, evidence] of views) {
     assert.equal(tenantComposerPolicy({ tenant: 'access', path, kind: 'page' }, {}), undefined, path);

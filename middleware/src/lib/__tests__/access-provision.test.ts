@@ -194,3 +194,14 @@ describe('the provisioned audit reason reads as a date', () => {
     expect(expiryLabel('not-a-date')).toBe('not-a-date');
   });
 });
+
+describe('two requests for one beneficiary provisioned at once (lane A, 2026-10-14)', () => {
+  it('keeps both grants: the merge is serialized per beneficiary, not only per request', async () => {
+    approve('req-0001');
+    // A second approved request for Rhea: budget visibility in Work.
+    accessRequestsFixture.rows().push({ ...structuredClone(row('req-0001')), id: 'req-0099', itemId: 'capability:orgiq:budgets-read', duration: '30d' });
+    const [a, b] = await Promise.all([provisionAccess({ id: 'req-0001' }), provisionAccess({ id: 'req-0099' })]);
+    expect([a.changed, b.changed]).toEqual([true, true]);
+    expect((await getUser('u-rhea'))!.grants['orgiq']?.sort()).toEqual(['budgets-reader', 'sme']);
+  });
+});

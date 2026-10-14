@@ -21,8 +21,21 @@
 // the access-admin holders — a step nobody may decide is a request stuck
 // forever, and "who escalates" is the access-admin's job. That escalation is a
 // decision recorded here, not in the design doc (see the A0 report).
+//
+// Escalation timers (2026-10-14, lib/access-escalation.ts): a step left
+// undecided past its SLA moves up a tier — level 1 adds the access admins,
+// level 2 the `admin` holders standing in `access` (an access-admin step's
+// first tier is already the access admins, so its level 1 adds the admins).
+// A timer escalation ADDS deciders; the step's own keep their right.
+//
+// Delegation (2026-10-14): an approver may hand their decisions to another
+// approver for a window. A delegate in force is eligible for exactly the steps
+// their delegator is eligible for now, with three limits that keep separation
+// of duties: never a request they submitted or benefit from (A5), never an
+// access-admin step unless they hold access-admin themselves, and never
+// through a second delegation (a delegate's delegate decides nothing here).
 
-import type { AccessDirectory, DirectoryUser, Person, StepKind } from './types.js';
+import type { AccessDirectory, DirectoryUser, EligiblePerson, Person, StepKind } from './types.js';
 import type { AccessCatalogRow } from '../../mock/access-catalog.js';
 
 /** The role whose holders steward a tenant's roles (design decision A4). */
@@ -83,8 +96,20 @@ export function stepCandidates(kind: StepKind, item: AccessCatalogRow, beneficia
   }
 }
 
-/** Who may decide a step now, and — when the step's own candidates could not — why it escalated. */
-export interface Eligibility { people: Person[]; escalated: string | null }
+/** Who may decide a step now, and — when the step's own candidates could not, or a timer moved it — why it escalated. */
+export interface Eligibility { people: EligiblePerson[]; escalated: string | null }
+
+/** The highest timer escalation level (lib/access-escalation.ts). */
+export const MAX_ESCALATION_LEVEL = 2;
+
+const adminHolders = (dir: AccessDirectory): DirectoryUser[] => dir.users.filter((u) => (u.grants['access'] ?? []).includes('admin'));
+
+/** The tier a timer escalation to `level` adds for a step of `kind`, with its noun. */
+function timerTier(kind: StepKind, level: number, dir: AccessDirectory): { users: DirectoryUser[]; noun: string } | null {
+  if (level <= 0) return null;
+  if (kind !== 'access-admin' && level === 1) return { users: accessAdmins(dir), noun: 'the access admins' };
+  return { users: adminHolders(dir), noun: 'the platform admins' };
+}
 
 const STEP_NOUN: Readonly<Record<StepKind, string>> = { manager: 'manager', steward: 'steward', 'access-admin': 'access admin' };
 
@@ -102,6 +127,7 @@ const STEP_NOUN: Readonly<Record<StepKind, string>> = { manager: 'manager', stew
  */
 export function eligibility(
   kind: StepKind, item: AccessCatalogRow, request: { requesterId: string; beneficiaryId: string }, dir: AccessDirectory,
+  level = 0,
 ): Eligibility {
   const beneficiary = dir.users.find((u) => u.id === request.beneficiaryId) ?? null;
   const notParty = (u: DirectoryUser) => u.id !== request.requesterId && u.id !== request.beneficiaryId;
@@ -122,12 +148,55 @@ export function eligibility(
       escalated = `Escalated to the platform admins: ${kind === 'access-admin' ? 'every access admin is a party to this request' : `${why}, and every access admin is a party to this request`}.`;
     }
   }
-  return { people: who.map(personOf).sort((a, b) => a.displayName.localeCompare(b.displayName)), escalated };
+  // Timer escalations (lib/access-escalation.ts) add each tier up to `level`.
+  for (let n = 1; n <= Math.min(level, MAX_ESCALATION_LEVEL); n++) {
+    const tier = timerTier(kind, n, dir);
+    if (!tier) continue;
+    const added = tier.users.filter((u) => notParty(u) && !who.some((w) => w.id === u.id));
+    if (added.length === 0) continue;
+    who = [...who, ...added];
+    escalated = `No decision in time: escalated to ${tier.noun}.`;
+  }
+  const people: EligiblePerson[] = who.map(personOf);
+  // Delegates in force decide for their delegator (never transitively).
+  for (const d of dir.activeDelegations ?? []) {
+    if (!who.some((w) => w.id === d.delegatorId)) continue;
+    const delegate = dir.users.find((u) => u.id === d.delegateId);
+    if (!delegate || !notParty(delegate) || !decidesInAccess(delegate)) continue;
+    if (kind === 'access-admin' && !(delegate.grants['access'] ?? []).includes(ACCESS_ADMIN_ROLE)) continue;
+    if (people.some((p) => p.id === delegate.id)) continue;
+    const delegator = who.find((w) => w.id === d.delegatorId)!;
+    people.push({ ...personOf(delegate), onBehalfOf: personOf(delegator) });
+  }
+  return { people: people.sort((a, b) => a.displayName.localeCompare(b.displayName)), escalated };
+}
+
+/**
+ * The level a timer escalation of an undecided step at `level` moves to: the
+ * next one that adds somebody who may not decide it yet, or null when no tier
+ * above adds anyone (the step stays where it is — escalating to nobody new is
+ * not an escalation).
+ */
+export function nextEscalationLevel(
+  kind: StepKind, item: AccessCatalogRow, request: { requesterId: string; beneficiaryId: string }, dir: AccessDirectory, level: number,
+): number | null {
+  const now = new Set(eligibility(kind, item, request, dir, level).people.filter((p) => !p.onBehalfOf).map((p) => p.id));
+  for (let n = level + 1; n <= MAX_ESCALATION_LEVEL; n++) {
+    if (eligibility(kind, item, request, dir, n).people.some((p) => !p.onBehalfOf && !now.has(p.id))) return n;
+  }
+  return null;
+}
+
+/** The delegation a decider acts under on this step now, or null when they may decide it in their own right. */
+export function decidingOnBehalfOf(
+  actorId: string, kind: StepKind, item: AccessCatalogRow, request: { requesterId: string; beneficiaryId: string }, dir: AccessDirectory, level = 0,
+): Person | null {
+  return eligibility(kind, item, request, dir, level).people.find((p) => p.id === actorId)?.onBehalfOf ?? null;
 }
 
 /** Who may decide a step of this request now (see `eligibility`). */
 export function eligibleDeciders(
-  kind: StepKind, item: AccessCatalogRow, request: { requesterId: string; beneficiaryId: string }, dir: AccessDirectory,
-): Person[] {
-  return eligibility(kind, item, request, dir).people;
+  kind: StepKind, item: AccessCatalogRow, request: { requesterId: string; beneficiaryId: string }, dir: AccessDirectory, level = 0,
+): EligiblePerson[] {
+  return eligibility(kind, item, request, dir, level).people;
 }

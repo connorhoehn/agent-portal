@@ -126,8 +126,24 @@ export function withRole(grants: Grants, tenant: string, role: string, present: 
   return next;
 }
 
-/** Write (or remove) the item for the beneficiary in the existing grant store. Idempotent. */
+/**
+ * Write (or remove) the item for the beneficiary in the existing grant store. Idempotent.
+ *
+ * Serialized per BENEFICIARY, not per request: the merge reads the user's
+ * grants and writes the whole set back (`setGrants`), so two different
+ * requests provisioning the same person at once (SME and budget visibility,
+ * say) would each write a set missing the other's role — a lost update the
+ * per-request lock above cannot see (2026-10-14, lane A). On the cluster the
+ * single-role statements in lib/access/sql.ts (`GRANT_ROLE_SQL` /
+ * `REVOKE_ROLE_SQL`) remove the read-modify-write altogether; the native
+ * PostgreSQL contract shows setGrants' delete-and-reinsert losing a grant
+ * under the same race.
+ */
 async function applyGrant(request: AccessRequestRow, item: AccessCatalogRow, present: boolean): Promise<void> {
+  return serialized(`beneficiary:${request.beneficiaryId}`, () => applyGrantNow(request, item, present));
+}
+
+async function applyGrantNow(request: AccessRequestRow, item: AccessCatalogRow, present: boolean): Promise<void> {
   const user = await beneficiaryOf(request);
   // A capability (orgiq `budgets-reader`) is a grant entry like a role: same store, same merge.
   if (item.kind === 'tenant-role' || item.kind === 'capability') {

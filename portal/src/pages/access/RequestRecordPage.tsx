@@ -67,6 +67,7 @@ import {
   chainSteps,
   currentStep,
   eligibleLabel,
+  escalationLabel,
   requestTitle,
   statusLabel,
   statusTone,
@@ -118,6 +119,7 @@ export default function RequestRecordPage() {
 
 function RequestRecord({ id }: { id: string }) {
   const navigate = useNavigate();
+  const { session } = useSession();
   const { data: request, error, isLoading, refresh } = useFetch<AccessRequest>(id ? `${ACCESS_API}/requests/${encodeURIComponent(id)}` : null);
   const audit = useFetch<ItemsResponse<AccessEvent>>(request?.can.viewAudit ? `${ACCESS_API}/audit?requestId=${encodeURIComponent(id)}` : null);
   const [comment, setComment] = useState('');
@@ -184,6 +186,8 @@ function RequestRecord({ id }: { id: string }) {
 
   const step = currentStep(request);
   const mayDecide = request.can.decide && !!step;
+  // A delegate decides for their delegator (2026-10-14): the hint says for whom.
+  const onBehalfOf = step?.eligible.find((p) => p.id === session?.sub)?.onBehalfOf ?? null;
 
   async function act(kind: Decision | 'withdraw' | 'override' | 'revoke') {
     setPending(null); setBusy(true); setWriteError(null); setNotice(null);
@@ -255,11 +259,15 @@ function RequestRecord({ id }: { id: string }) {
             {request.steps.filter((s) => s.escalated && !s.decidedBy).map((s) => (
               <T key={s.step} size="xs" tone="secondary" data-testid={`access-request-escalated-${s.step}`}>{`Step ${s.step} (${STEP_KIND_LABELS[s.kind]}): ${s.escalated}`}</T>
             ))}
+            {step && escalationLabel(step) && (
+              // The escalation timer (2026-10-14): where the waiting step stands and when it moves to the next tier.
+              <T size="xs" tone="secondary" data-testid="access-request-escalation-timer">{`Step ${step.step} (${STEP_KIND_LABELS[step.kind]}): ${escalationLabel(step)}`}</T>
+            )}
           </Stack>
         </DetailSection>
 
         {mayDecide && (
-          <DetailSection variant="heading" title="Your decision" hint={`Step ${step!.step} · ${STEP_KIND_LABELS[step!.kind]}`} data-testid="access-request-decision">
+          <DetailSection variant="heading" title="Your decision" hint={`Step ${step!.step} · ${STEP_KIND_LABELS[step!.kind]}${onBehalfOf ? ` · for ${onBehalfOf.displayName}` : ''}`} data-testid="access-request-decision">
             <Stack gap="sm">
               <FormField label="Comment" hint="Recorded on the step and in the audit trail. Required to reject or to ask for information.">
                 {(wiring) => <Textarea {...wiring} rows={3} value={comment} onChange={(e) => setComment(e.target.value)} data-testid="access-request-comment" />}

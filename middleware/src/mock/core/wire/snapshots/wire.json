@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-14T02:40:14.338Z",
-  "serverHandlerSha": "0f26c1853c87948366e870511afbd15ad6a0bf0c54fe00c28341791ec5d790d9",
+  "capturedAt": "2026-10-14T23:18:56.407Z",
+  "serverHandlerSha": "22d399385c3222c70ad3dc1f42dfa9ef16d3588bd731f2b2ba0081129345515a",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -8,6 +8,15 @@
     "anonymous"
   ],
   "routes": {
+    "GET /api/__mock/identity/clones": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "clones": "array"
+      },
+      "values": {}
+    },
     "GET /api/__mock/scenarios": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -28,11 +37,24 @@
       },
       "values": {}
     },
+    "GET /api/__mock/scope": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "scopes": "array"
+      },
+      "values": {}
+    },
+    "GET /api/__mock/scope/:id": {
+      "skipped": "no value found for :id under /api/__mock/scope (orgiq/admin); no value found for :id under /api/__mock/scope (assessment/admin); no value found for :id under /api/__mock/scope (anonymous)"
+    },
     "GET /api/__mock/state": {
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
         "$": "object",
+        "clones": "number",
         "demo": "object",
         "demo.agents": "array",
         "demo.agents[]": "object",
@@ -93,7 +115,8 @@
         "fixtures[].scenario": "string",
         "handlerSha": "string",
         "registryLoaded": "boolean",
-        "scenario": "string"
+        "scenario": "string",
+        "scopes": "number"
       },
       "values": {
         "demo.phase": [
@@ -139,18 +162,20 @@
         "items[].actor.displayName": "string",
         "items[].actor.id": "string",
         "items[].actor.personId": "string",
-        "items[].after": "string",
+        "items[].after": "null|string",
         "items[].at": "string",
-        "items[].before": "string",
+        "items[].before": "null|string",
+        "items[].delegationId": "null|string",
         "items[].id": "string",
         "items[].kind": "string",
         "items[].policyId": "null",
         "items[].reason": "null|string",
-        "items[].requestId": "string"
+        "items[].requestId": "null|string"
       },
       "values": {
         "items[].kind": [
           "approved",
+          "delegated",
           "provisioned",
           "step-approved",
           "step-rejected",
@@ -220,10 +245,16 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "delegation": "object",
+        "delegation.maxDays": "number",
         "durations": "object",
         "durations.offered": "array",
         "durations.offered[]": "string",
         "durations.standingReasonMin": "number",
+        "escalation": "object",
+        "escalation.stepSlaHours": "number",
+        "escalation.tiers": "array",
+        "escalation.tiers[]": "string",
         "items": "array",
         "items[]": "object",
         "items[].defaultDuration": "string",
@@ -266,6 +297,51 @@
           "orgiq",
           "pipelines",
           "social"
+        ]
+      }
+    },
+    "GET /api/access/delegates": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].displayName": "string",
+        "items[].id": "string",
+        "items[].personId": "string"
+      },
+      "values": {}
+    },
+    "GET /api/access/delegations": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].can": "object",
+        "items[].can.end": "boolean",
+        "items[].createdAt": "string",
+        "items[].delegate": "object",
+        "items[].delegate.displayName": "string",
+        "items[].delegate.id": "string",
+        "items[].delegate.personId": "string",
+        "items[].delegator": "object",
+        "items[].delegator.displayName": "string",
+        "items[].delegator.id": "string",
+        "items[].delegator.personId": "string",
+        "items[].endedAt": "null",
+        "items[].endedBy": "null",
+        "items[].endsAt": "string",
+        "items[].id": "string",
+        "items[].reason": "string",
+        "items[].startsAt": "string",
+        "items[].state": "string"
+      },
+      "values": {
+        "items[].state": [
+          "ended"
         ]
       }
     },
@@ -376,14 +452,19 @@
         "steps": "array",
         "steps[]": "object",
         "steps[].comment": "null",
+        "steps[].currentSince": "null|string",
         "steps[].decidedAt": "null",
         "steps[].decidedBy": "null",
+        "steps[].decidedOnBehalfOf": "null",
         "steps[].eligible": "array",
         "steps[].eligible[]": "object",
         "steps[].eligible[].displayName": "string",
         "steps[].eligible[].id": "string",
         "steps[].eligible[].personId": "string",
         "steps[].escalated": "null|string",
+        "steps[].escalatedAt": "null",
+        "steps[].escalatesAt": "null|string",
+        "steps[].escalationLevel": "number",
         "steps[].kind": "string",
         "steps[].status": "string",
         "steps[].step": "number",
@@ -10168,6 +10249,7 @@
         "confluence",
         "convention",
         "decision",
+        "delegated",
         "deploy",
         "devbox:task",
         "document",
@@ -10335,6 +10417,7 @@
         "active",
         "available",
         "behind",
+        "ended",
         "imported",
         "missing",
         "ok",

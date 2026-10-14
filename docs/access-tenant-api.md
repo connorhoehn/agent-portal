@@ -266,3 +266,70 @@ budgetAccess: { visible: false; reason: string; requestItemId: 'capability:orgiq
 A tier holder's payload is unchanged (no `budgetAccess` key). A locked budget
 answer from the local assistant carries the same item as
 `action: { kind: 'request-access', itemId, label, href }` (`docs/local-answers.md`).
+
+## Escalation timers and delegation (lane A3, 2026-10-14)
+
+All additive. `RequestStep` gains the escalation clock and the delegate's provenance;
+`eligible` entries may name whom a delegate decides for.
+
+```ts
+interface EligiblePerson extends Person { onBehalfOf?: Person | null }   // set only for a delegate in force
+
+interface RequestStep {
+  /* … */
+  eligible: EligiblePerson[];
+  currentSince: string | null;     // when it became the step awaiting a decision (the clock)
+  escalationLevel: 0 | 1 | 2;      // 1: + the access admins; 2: + the admin holders in `access`
+  escalatedAt: string | null;
+  escalatesAt: string | null;      // next escalation if still undecided (current steps of open grant requests)
+  decidedOnBehalfOf: Person | null; // the delegator, when a delegate decided it
+}
+
+// AccessEvent.kind gains 'escalated' | 'delegated' | 'delegation-ended';
+// AccessEvent gains delegationId (a delegation's events carry no request).
+
+interface AccessDelegation {
+  id: string;                      // 'dlg-0001'
+  delegator: Person; delegate: Person;
+  startsAt: string; endsAt: string; reason: string; createdAt: string;
+  endedAt: string | null; endedBy: Person | null;
+  state: 'scheduled' | 'active' | 'ended';   // the window against the clock, minus an early end
+  can: { end: boolean };          // DecideAccess, not ended, delegator or access admin / admin
+}
+
+// GET /configuration gains (read-only; PUT refuses both keys):
+//   escalation: { stepSlaHours: number; tiers: ['access-admins', 'platform-admins'] }
+//   delegation: { maxDays: 30 }
+```
+
+| route | gate | response |
+|---|---|---|
+| `GET /delegations` | ViewAccess | `{ items: AccessDelegation[] }` — the ones the viewer delegated or received; access admins and `admin` read all; newest window first |
+| `GET /delegates` | DecideAccess | `{ items: Person[] }` — every directory user holding `approver` or `access-admin` in `access`, except the viewer (the delegation form's PersonPicker) |
+| `POST /delegations` body `{ delegateId, endsAt, startsAt?, reason }` | DecideAccess | 201 `AccessDelegation`; `startsAt` defaults to now. 400: unknown key, a non-string, no delegate / end, a malformed or inverted window, a window already over or longer than 30 days, a reason under 10 characters, an unknown delegate. 403: oneself. 409: a delegate with no deciding role; an overlapping delegation of one's own that has not ended; a delegate delegating during the window (no chains); a delegate who submitted or benefits from an open request waiting on the delegator now. Event `delegated`; bell to the delegate |
+| `POST /delegations/:id/end` body `{ reason? }` | DecideAccess | `AccessDelegation` (state `ended`); 404 outside the read rule; 403 for the delegate; 409 once ended. Event `delegation-ended`; bell to the other party |
+
+Escalation (`lib/access-escalation.ts`): every `ACCESS_ESCALATION_SWEEP_MS`
+(60 s) a step `current` for longer than `ACCESS_ESCALATION_SLA_MS` (48 h)
+since `currentSince` or `escalatedAt` moves to the next level that reaches
+somebody new — single-flight across replicas under the fleet lock
+`access-escalation-sweep`, one claim per (step, level), an `escalated` event
+("Step 1 (manager) waited 2 days without a decision: escalated to the access
+admins. Now also: …") and an `access-escalated` bell item to the people it newly
+reaches. Info-requested steps wait on the requester and never escalate.
+
+Delegation in the resolver (`lib/access/chain.ts`): a delegate in force is
+added to a step's `eligible` (with `onBehalfOf`) when their delegator is
+eligible there in their own right, the delegate holds a deciding role, is not
+a party, and — for an `access-admin` step — holds access-admin. A delegate's
+decision stores `delegated_from` on the step and appends "decided on behalf of
+<delegator>" to the event's reason. The approvals inbox, the record's `can`,
+the read rule and the bell all read the same resolver.
+
+The request form's "Who" (`/access/requests/new`) and the delegation form
+(`/access/settings`) choose people with the library's `PersonPicker`
+(ui-components 2.452.0). `GET /beneficiaries` for an access admin now lists
+every person in the directory, granted or not.
+
+Cluster statements for all of the above: `middleware/src/lib/access/sql.ts`,
+proven on native PostgreSQL 16 (`docs/access-tenant-goal.md` §E).

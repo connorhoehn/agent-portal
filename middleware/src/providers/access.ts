@@ -21,11 +21,13 @@ import {
   type AccessEventRow, type AccessRequestRow, type AccessStepRow,
 } from '../mock/access-requests.js';
 import { accessReviewItemsFixture, accessReviewsFixture, type AccessReviewItemRow, type AccessReviewRow } from '../mock/access-reviews.js';
+import { accessDelegationsFixture, type AccessDelegationRow } from '../mock/access-delegations.js';
+import { delegationState } from '../lib/access/delegation.js';
 import { findInitiative } from '../mock/initiatives.js';
 import { listUsers } from './identity.js';
 import type { AccessDirectory } from '../lib/access/types.js';
 
-export type { AccessCatalogRow, AccessPolicyRow, AccessEventRow, AccessRequestRow, AccessStepRow, AccessReviewRow, AccessReviewItemRow };
+export type { AccessCatalogRow, AccessPolicyRow, AccessEventRow, AccessRequestRow, AccessStepRow, AccessReviewRow, AccessReviewItemRow, AccessDelegationRow };
 
 export const ACCESS_STORE_UNAVAILABLE =
   'The access tenant\'s tables are not applied on this cluster (schema/access_schema.sql, docs/access-tenant-goal.md lane E); only dev:mock serves it today';
@@ -123,8 +125,62 @@ type EventDraft = { kind: AccessEventRow['kind']; before: string | null; after: 
 function appendEvents(requestId: string, actorId: string | null, events: readonly EventDraft[], at: string): void {
   const rows = accessEventsFixture.rows();
   for (const e of events) {
-    rows.push({ id: nextId('evt', rows.map((r) => r.id)), requestId, policyId: null, at, actorId, kind: e.kind, beforeStatus: e.before, afterStatus: e.after, reason: e.reason });
+    rows.push({ id: nextId('evt', rows.map((r) => r.id)), requestId, policyId: null, delegationId: null, at, actorId, kind: e.kind, beforeStatus: e.before, afterStatus: e.after, reason: e.reason });
   }
+}
+
+/**
+ * Compare-and-set one step row: apply `patch` only while the stored step is
+ * still in one of `when.status` at `when.escalationLevel`, and append `events`
+ * to its request in the same step. Returns the stored row, or null when the
+ * condition no longer holds (decided meanwhile, or another sweep escalated it
+ * first). The escalation timer's claim (lib/access-escalation.ts); on the
+ * cluster `ESCALATE_STEP_SQL` in lib/access/sql.ts.
+ */
+export function casStep(
+  requestId: string, step: number,
+  when: { status: readonly AccessStepRow['status'][]; escalationLevel: number },
+  patch: Partial<Pick<AccessStepRow, 'escalationLevel' | 'escalatedAt'>>,
+  events: readonly EventDraft[], actorId: string | null, at: string,
+): AccessStepRow | null {
+  store();
+  const row = accessStepsFixture.rows().find((s) => s.requestId === requestId && s.step === step);
+  if (!row || !when.status.includes(row.status) || row.escalationLevel !== when.escalationLevel) return null;
+  const request = accessRequestsFixture.rows().find((r) => r.id === requestId);
+  if (!request || !['draft', 'submitted', 'pending'].includes(request.status)) return null;
+  Object.assign(row, structuredClone(patch));
+  appendEvents(requestId, actorId, events, at);
+  return structuredClone(row);
+}
+
+// ── delegations (2026-10-14) ────────────────────────────────────────────────
+
+export function listDelegations(): AccessDelegationRow[] { store(); return copy(accessDelegationsFixture.rows()); }
+
+function appendDelegationEvent(delegationId: string, actorId: string, kind: 'delegated' | 'delegation-ended', reason: string, at: string): void {
+  const rows = accessEventsFixture.rows();
+  rows.push({ id: nextId('evt', rows.map((r) => r.id)), requestId: null, policyId: null, delegationId, at, actorId, kind, beforeStatus: null, afterStatus: null, reason });
+}
+
+/** Insert a delegation (its id assigned here) and its `delegated` event, in one go. */
+export function insertDelegation(row: Omit<AccessDelegationRow, 'id'>, reason: string): AccessDelegationRow {
+  store();
+  const rows = accessDelegationsFixture.rows();
+  const stored: AccessDelegationRow = { ...structuredClone(row), id: nextId('dlg', rows.map((r) => r.id)) };
+  rows.push(stored);
+  appendDelegationEvent(stored.id, stored.delegatorId, 'delegated', reason, stored.createdAt);
+  return structuredClone(stored);
+}
+
+/** End a delegation early: only while it has not ended (endedAt null and the window still open). Returns the stored row or null. */
+export function endDelegation(id: string, actorId: string, reason: string, at: string): AccessDelegationRow | null {
+  store();
+  const row = accessDelegationsFixture.rows().find((d) => d.id === id);
+  if (!row || delegationState(row, at) === 'ended') return null;
+  row.endedAt = at;
+  row.endedBy = actorId;
+  appendDelegationEvent(row.id, actorId, 'delegation-ended', reason, at);
+  return structuredClone(row);
 }
 
 /** Insert a submitted request with its steps and events, in one go. */
@@ -210,7 +266,7 @@ export function updatePolicy(id: string, patch: { severity?: AccessPolicyRow['se
   const events = accessEventsFixture.rows();
   const reasonChanged = before.reason !== row.reason;
   events.push({
-    id: nextId('evt', events.map((e) => e.id)), requestId: null, policyId: row.id, at: row.updatedAt, actorId, kind: 'policy-updated',
+    id: nextId('evt', events.map((e) => e.id)), requestId: null, policyId: row.id, delegationId: null, at: row.updatedAt, actorId, kind: 'policy-updated',
     beforeStatus: before.severity, afterStatus: row.severity,
     reason: reasonChanged ? `${row.title}: reason now “${row.reason}” (was “${before.reason}”)` : `${row.title}: reason unchanged`,
   });
@@ -228,8 +284,12 @@ export async function loadDirectory(): Promise<AccessDirectory> {
     id: u.id, displayName: u.displayName, personId: u.personId ?? null, grants: structuredClone(u.grants),
   }));
   const managers = new Map(accessPeopleFixture.rows().map((p) => [p.id, p.managerId]));
+  const now = clock.nowIso();
   return {
     users,
+    // Delegations in force now (lib/access/chain.ts adds their delegates live).
+    activeDelegations: accessDelegationsFixture.rows().filter((d) => delegationState(d, now) === 'active')
+      .map((d) => ({ id: d.id, delegatorId: d.delegatorId, delegateId: d.delegateId })),
     managerOf: (personId) => (personId ? managers.get(personId) ?? null : null),
     initiative: (projectId) => {
       const p = findInitiative(projectId);

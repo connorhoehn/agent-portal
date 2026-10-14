@@ -174,7 +174,9 @@ describe('reads', () => {
     expect(new Set(own.items.map((e) => e.requestId))).toEqual(new Set(['req-0001', 'req-0002', 'req-0005', 'req-0006']));
     // Omar reads his own request and his report Rhea's — never Nora's req-0004, whose record he cannot open.
     const omar = (await get('/api/access/audit', 'u-omar')).body as { items: AccessEvent[] };
-    expect(new Set(omar.items.map((e) => e.requestId))).toEqual(new Set(['req-0001', 'req-0002', 'req-0003', 'req-0005', 'req-0006']));
+    expect(new Set(omar.items.filter((e) => e.requestId).map((e) => e.requestId))).toEqual(new Set(['req-0001', 'req-0002', 'req-0003', 'req-0005', 'req-0006']));
+    // …and the event of the delegation he made (dlg-0001, 2026-10-14) — no request, his own delegation.
+    expect(omar.items.filter((e) => !e.requestId).map((e) => [e.id, e.delegationId])).toEqual([['evt-0016', 'dlg-0001']]);
     expect(ids(await get('/api/access/audit?requestId=req-0004', 'u-omar'))).toEqual([]);
     expect((await get('/api/access/requests/req-0004', 'u-omar')).status).toBe(404);
     expect(ids(await get('/api/access/audit?requestId=req-0003', 'u-omar'))).toEqual(['evt-0004', 'evt-0005', 'evt-0006', 'evt-0007']);

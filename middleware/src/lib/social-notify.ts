@@ -365,7 +365,9 @@ export async function notifyPipelineRun(ev: PipelineRunEvent): Promise<string[]>
 
 /** What happened to an access request that someone should hear about. */
 export type AccessNotifyKind = 'submitted' | 'awaiting' | 'approved-step' | 'rejected' | 'info-requested' | 'withdrawn'
-  | 'provisioned' | 'provision-failed' | 'sod-blocked' | 'expiring' | 'expired' | 'revoked';
+  | 'provisioned' | 'provision-failed' | 'sod-blocked' | 'expiring' | 'expired' | 'revoked'
+  // A step's SLA ran out and it reached a new tier of deciders (lib/access-escalation.ts, 2026-10-14).
+  | 'escalated';
 
 export interface AccessRequestEvent {
   kind: AccessNotifyKind;
@@ -384,6 +386,8 @@ export interface AccessRequestEvent {
   step?: number | null;
   comment?: string | null;
   expiresAt?: string | null;
+  /** `escalated`: the level the step reached (the bell dedupes per request, step and level). */
+  escalationLevel?: number | null;
 }
 
 /** The record page for a request — inside `/access`, so the grant rule and hrefInsideTenant both hold. */
@@ -400,7 +404,7 @@ export const accessRequestHref = (requestId: string): string => `/access/request
 export async function notifyAccessRequest(ev: AccessRequestEvent): Promise<string[]> {
   try {
     if (!sink) return [];
-    const forApprovers = ev.kind === 'submitted' || ev.kind === 'awaiting';
+    const forApprovers = ev.kind === 'submitted' || ev.kind === 'awaiting' || ev.kind === 'escalated';
     const parties = [ev.requesterId, ev.beneficiaryId];
     const pool = forApprovers ? [...(ev.approverIds ?? [])]
       : ev.kind === 'sod-blocked' ? [...parties, ...(ev.approverIds ?? [])] : parties;
@@ -423,11 +427,13 @@ export async function notifyAccessRequest(ev: AccessRequestEvent): Promise<strin
       expiring: { type: 'system', title: `${ev.itemTitle} expires within a day`, body: ev.expiresAt ? `Request ${ev.requestId} lapses at ${ev.expiresAt}. Request it again if the work continues.` : `Request ${ev.requestId} lapses soon.` },
       expired: { type: 'system', title: `${ev.itemTitle} expired for ${who}`, body: `Request ${ev.requestId} reached its end; the access was removed.` },
       revoked: { type: 'system', title: `${ev.itemTitle} was revoked for ${who}`, body: ev.comment ? snippet(ev.comment) : `Request ${ev.requestId} was revoked.` },
+      escalated: { type: 'approval-requested', title: `${ev.itemTitle} for ${who} escalated to you`, body: `Request ${ev.requestId}${step} waited past its time limit without a decision; you may decide it now.` },
     };
     const c = copy[ev.kind];
     return await notify(recipients, {
       // The expiry warning is once per request; the inbox dedupes on this id too.
       ...(ev.kind === 'expiring' ? { id: `access:expiring:${ev.requestId}` } : {}),
+      ...(ev.kind === 'escalated' ? { id: `access:escalated:${ev.requestId}:${ev.step ?? 0}:${ev.escalationLevel ?? 0}` } : {}),
       type: c.type,
       title: c.title,
       body: c.body,
@@ -436,6 +442,36 @@ export async function notifyAccessRequest(ev: AccessRequestEvent): Promise<strin
     });
   } catch (err) {
     console.warn(`[social-notify] access producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+/**
+ * The bell for a delegation (2026-10-14): the delegate hears that they decide
+ * for the delegator during the window, and hears again when it ends early.
+ * Lives in `access` (href the inbox); never rejects.
+ */
+export async function notifyAccessDelegation(ev: {
+  kind: 'delegated' | 'delegation-ended'; delegationId: string; delegatorId: string; delegatorName: string;
+  delegateId: string; endsAt: string; actorId: string;
+}): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const recipients = [ev.delegateId, ev.delegatorId].filter((u) => u !== ev.actorId);
+    if (!recipients.length) return [];
+    const until = ev.endsAt.slice(0, 10);
+    return await notify(recipients, {
+      id: `access:${ev.kind}:${ev.delegationId}`,
+      type: 'system',
+      title: ev.kind === 'delegated' ? `${ev.delegatorName} handed you their access decisions until ${until}` : `${ev.delegatorName}'s delegation ended`,
+      body: ev.kind === 'delegated'
+        ? 'Their steps appear in your Approvals inbox, marked "on behalf of". You never decide a request you submitted or benefit from.'
+        : `Delegation ${ev.delegationId} ended early; their steps left your inbox.`,
+      payload: { tenant: 'access', kind: `access-${ev.kind}`, delegationId: ev.delegationId, actorId: ev.actorId },
+      action: { label: 'Open Approvals', href: '/access/approvals' },
+    });
+  } catch (err) {
+    console.warn(`[social-notify] access delegation producer failed: ${(err as Error).message}`);
     return [];
   }
 }

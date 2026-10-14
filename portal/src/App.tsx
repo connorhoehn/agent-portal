@@ -68,7 +68,7 @@ const PipelinesApprovalsPage = lazy(() => import('./pages/pipelines/ApprovalsPag
 const PipelinesQueuesPage = lazy(() => import('./pages/pipelines/QueuesPage'));
 const PipelinesSourcesPage = lazy(() => import('./pages/pipelines/SourcesPage'));
 const AccessLayout = lazy(() => import('./pages/access/AccessLayout'));
-const AccessSurfacePage = lazy(() => import('./pages/access/AccessSurfacePage'));
+const AccessSettingsPage = lazy(() => import('./pages/access/SettingsPage'));
 const AccessCatalogPage = lazy(() => import('./pages/access/CatalogPage'));
 const AccessRequestsPage = lazy(() => import('./pages/access/RequestsPage'));
 const AccessRequestNewPage = lazy(() => import('./pages/access/RequestNewPage'));
@@ -442,7 +442,7 @@ export function App() {
                 <Page element={<AccessConfigurationPage />} />
               </RequireRole>
             } />
-            <Route path="settings" element={<Page element={<AccessSurfacePage surface="settings" />} />} />
+            <Route path="settings" element={<Page element={<AccessSettingsPage />} />} />
           </Route>
         ) : (
           <Route path="access/*" element={<Navigate to="/" replace />} />

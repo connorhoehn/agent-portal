@@ -2,23 +2,58 @@
   "routes": [
     {
       "method": "POST",
+      "path": "/api/__mock/identity/clone",
+      "source": "src/routes/mock-control.ts:753"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/__mock/identity/clone/:id",
+      "source": "src/routes/mock-control.ts:772"
+    },
+    {
+      "method": "GET",
+      "path": "/api/__mock/identity/clones",
+      "source": "src/routes/mock-control.ts:768"
+    },
+    {
+      "method": "POST",
       "path": "/api/__mock/reset",
-      "source": "src/routes/mock-control.ts:458"
+      "source": "src/routes/mock-control.ts:486"
     },
     {
       "method": "POST",
       "path": "/api/__mock/scenario",
-      "source": "src/routes/mock-control.ts:366"
+      "source": "src/routes/mock-control.ts:390"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scenarios",
-      "source": "src/routes/mock-control.ts:344"
+      "source": "src/routes/mock-control.ts:368"
+    },
+    {
+      "method": "GET",
+      "path": "/api/__mock/scope",
+      "source": "src/routes/mock-control.ts:729"
+    },
+    {
+      "method": "POST",
+      "path": "/api/__mock/scope",
+      "source": "src/routes/mock-control.ts:665"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/__mock/scope/:id",
+      "source": "src/routes/mock-control.ts:739"
+    },
+    {
+      "method": "GET",
+      "path": "/api/__mock/scope/:id",
+      "source": "src/routes/mock-control.ts:733"
     },
     {
       "method": "GET",
       "path": "/api/__mock/state",
-      "source": "src/routes/mock-control.ts:501"
+      "source": "src/routes/mock-control.ts:533"
     },
     {
       "method": "GET",
@@ -33,107 +68,127 @@
     {
       "method": "GET",
       "path": "/api/access/approvals",
-      "source": "src/routes/access.ts:302"
+      "source": "src/routes/access.ts:314"
     },
     {
       "method": "GET",
       "path": "/api/access/audit",
-      "source": "src/routes/access.ts:316"
+      "source": "src/routes/access.ts:328"
     },
     {
       "method": "GET",
       "path": "/api/access/beneficiaries",
-      "source": "src/routes/access.ts:633"
+      "source": "src/routes/access.ts:656"
     },
     {
       "method": "GET",
       "path": "/api/access/catalog",
-      "source": "src/routes/access.ts:252"
+      "source": "src/routes/access.ts:264"
     },
     {
       "method": "GET",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:797"
+      "source": "src/routes/access.ts:922"
     },
     {
       "method": "PUT",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:802"
+      "source": "src/routes/access.ts:927"
+    },
+    {
+      "method": "GET",
+      "path": "/api/access/delegates",
+      "source": "src/routes/access.ts:838"
+    },
+    {
+      "method": "GET",
+      "path": "/api/access/delegations",
+      "source": "src/routes/access.ts:825"
+    },
+    {
+      "method": "POST",
+      "path": "/api/access/delegations",
+      "source": "src/routes/access.ts:848"
+    },
+    {
+      "method": "POST",
+      "path": "/api/access/delegations/:id/end",
+      "source": "src/routes/access.ts:879"
     },
     {
       "method": "GET",
       "path": "/api/access/policies",
-      "source": "src/routes/access.ts:310"
+      "source": "src/routes/access.ts:322"
     },
     {
       "method": "PUT",
       "path": "/api/access/policies/:id",
-      "source": "src/routes/access.ts:830"
+      "source": "src/routes/access.ts:955"
     },
     {
       "method": "GET",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:268"
+      "source": "src/routes/access.ts:280"
     },
     {
       "method": "POST",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:648"
+      "source": "src/routes/access.ts:671"
     },
     {
       "method": "GET",
       "path": "/api/access/requests/:id",
-      "source": "src/routes/access.ts:292"
+      "source": "src/routes/access.ts:304"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/revoke",
-      "source": "src/routes/access.ts:759"
+      "source": "src/routes/access.ts:788"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/sod-override",
-      "source": "src/routes/access.ts:733"
+      "source": "src/routes/access.ts:762"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/steps/:step/decide",
-      "source": "src/routes/access.ts:678"
+      "source": "src/routes/access.ts:701"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/withdraw",
-      "source": "src/routes/access.ts:655"
+      "source": "src/routes/access.ts:678"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/preview",
-      "source": "src/routes/access.ts:592"
+      "source": "src/routes/access.ts:613"
     },
     {
       "method": "GET",
-      "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:387"
-    },
-    {
-      "method": "POST",
       "path": "/api/access/reviews",
       "source": "src/routes/access.ts:408"
     },
     {
+      "method": "POST",
+      "path": "/api/access/reviews",
+      "source": "src/routes/access.ts:429"
+    },
+    {
       "method": "GET",
       "path": "/api/access/reviews/:id",
-      "source": "src/routes/access.ts:397"
+      "source": "src/routes/access.ts:418"
     },
     {
       "method": "POST",
       "path": "/api/access/reviews/:id/items/:itemId/decide",
-      "source": "src/routes/access.ts:460"
+      "source": "src/routes/access.ts:481"
     },
     {
       "method": "GET",
       "path": "/api/access/summary",
-      "source": "src/routes/access.ts:236"
+      "source": "src/routes/access.ts:248"
     },
     {
       "method": "GET",
@@ -1998,7 +2053,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:175"
+      "source": "src/index.ts:176"
     },
     {
       "method": "GET",
@@ -3908,7 +3963,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:174"
+      "source": "src/index.ts:175"
     },
     {
       "method": "DELETE",

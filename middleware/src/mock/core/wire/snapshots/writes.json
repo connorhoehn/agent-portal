@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-14T02:40:16.391Z",
-  "serverHandlerSha": "0f26c1853c87948366e870511afbd15ad6a0bf0c54fe00c28341791ec5d790d9",
+  "capturedAt": "2026-10-14T23:18:59.407Z",
+  "serverHandlerSha": "22d399385c3222c70ad3dc1f42dfa9ef16d3588bd731f2b2ba0081129345515a",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -10,6 +10,18 @@
     "guardrails"
   ],
   "routes": {
+    "DELETE /api/__mock/identity/clone/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
+    "DELETE /api/__mock/scope/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
     "DELETE /api/admin/kb-registry/:id": {
       "refused": {
         "rule": "destructive",
@@ -704,11 +716,18 @@
         "workItemId"
       ]
     },
+    "POST /api/__mock/identity/clone": {
+      "refused": {
+        "rule": "control-plane",
+        "reason": "The capture's own tool. `POST /api/__mock/scenario` switches the world every later shape would be captured in, so the harness may not replay it. (`POST /api/__mock/reset` IS replayed — the sweep calls it between every write anyway, so its shape comes for free and costs nothing.) `POST /api/__mock/scope` sets a scope cookie on the caller, which would move every later request of the sweep into that scope; `POST /api/__mock/identity/clone` mints a user the sweep would then have to sign in as to learn anything. Both shapes are pinned by routes/__tests__/mock-scope.test.ts instead."
+      }
+    },
     "POST /api/__mock/reset": {
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
         "$": "object",
+        "clones": "number",
         "demo": "object",
         "demo.agents": "array",
         "demo.agents[]": "object",
@@ -771,7 +790,8 @@
         "reset": "object",
         "reset.fixture": "null",
         "reset.scenario": "string",
-        "scenario": "string"
+        "scenario": "string",
+        "scopes": "number"
       },
       "values": {
         "demo.phase": [
@@ -795,7 +815,13 @@
     "POST /api/__mock/scenario": {
       "refused": {
         "rule": "control-plane",
-        "reason": "The capture's own tool. `POST /api/__mock/scenario` switches the world every later shape would be captured in, so the harness may not replay it. (`POST /api/__mock/reset` IS replayed — the sweep calls it between every write anyway, so its shape comes for free and costs nothing.)"
+        "reason": "The capture's own tool. `POST /api/__mock/scenario` switches the world every later shape would be captured in, so the harness may not replay it. (`POST /api/__mock/reset` IS replayed — the sweep calls it between every write anyway, so its shape comes for free and costs nothing.) `POST /api/__mock/scope` sets a scope cookie on the caller, which would move every later request of the sweep into that scope; `POST /api/__mock/identity/clone` mints a user the sweep would then have to sign in as to learn anything. Both shapes are pinned by routes/__tests__/mock-scope.test.ts instead."
+      }
+    },
+    "POST /api/__mock/scope": {
+      "refused": {
+        "rule": "control-plane",
+        "reason": "The capture's own tool. `POST /api/__mock/scenario` switches the world every later shape would be captured in, so the harness may not replay it. (`POST /api/__mock/reset` IS replayed — the sweep calls it between every write anyway, so its shape comes for free and costs nothing.) `POST /api/__mock/scope` sets a scope cookie on the caller, which would move every later request of the sweep into that scope; `POST /api/__mock/identity/clone` mints a user the sweep would then have to sign in as to learn anything. Both shapes are pinned by routes/__tests__/mock-scope.test.ts instead."
       }
     },
     "POST /api/access-requests/quick": {
@@ -847,14 +873,19 @@
         "steps": "array",
         "steps[]": "object",
         "steps[].comment": "null",
+        "steps[].currentSince": "string",
         "steps[].decidedAt": "null",
         "steps[].decidedBy": "null",
+        "steps[].decidedOnBehalfOf": "null",
         "steps[].eligible": "array",
         "steps[].eligible[]": "object",
         "steps[].eligible[].displayName": "string",
         "steps[].eligible[].id": "string",
         "steps[].eligible[].personId": "string",
         "steps[].escalated": "string",
+        "steps[].escalatedAt": "null",
+        "steps[].escalatesAt": "string",
+        "steps[].escalationLevel": "number",
         "steps[].kind": "string",
         "steps[].status": "string",
         "steps[].step": "number",
@@ -892,6 +923,18 @@
         "itemId",
         "justification"
       ]
+    },
+    "POST /api/access/delegations": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/access/delegations/:id/end": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/access/requests": {
       "persona": "orgiq/admin",
@@ -942,14 +985,19 @@
         "steps": "array",
         "steps[]": "object",
         "steps[].comment": "null",
+        "steps[].currentSince": "string",
         "steps[].decidedAt": "null",
         "steps[].decidedBy": "null",
+        "steps[].decidedOnBehalfOf": "null",
         "steps[].eligible": "array",
         "steps[].eligible[]": "object",
         "steps[].eligible[].displayName": "string",
         "steps[].eligible[].id": "string",
         "steps[].eligible[].personId": "string",
         "steps[].escalated": "string",
+        "steps[].escalatedAt": "null",
+        "steps[].escalatesAt": "string",
+        "steps[].escalationLevel": "number",
         "steps[].kind": "string",
         "steps[].status": "string",
         "steps[].step": "number",
@@ -3935,10 +3983,16 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "delegation": "object",
+        "delegation.maxDays": "number",
         "durations": "object",
         "durations.offered": "array",
         "durations.offered[]": "string",
         "durations.standingReasonMin": "number",
+        "escalation": "object",
+        "escalation.stepSlaHours": "number",
+        "escalation.tiers": "array",
+        "escalation.tiers[]": "string",
         "items": "array",
         "items[]": "object",
         "items[].defaultDuration": "string",

@@ -37,6 +37,8 @@ export interface CatalogItem {
 }
 
 export interface AccessPerson { id: string; displayName: string; personId?: string | null }
+/** A decider; `onBehalfOf` when only a delegation in force makes them one (2026-10-14). */
+export interface EligiblePerson extends AccessPerson { onBehalfOf?: AccessPerson | null }
 
 export interface RequestStep {
   step: number;
@@ -46,9 +48,16 @@ export interface RequestStep {
   decidedAt?: string | null;
   comment?: string | null;
   /** Who may decide it now, resolved live by the server: shown, never trusted. */
-  eligible: AccessPerson[];
+  eligible: EligiblePerson[];
   /** Why `eligible` is an escalation rather than the step's own candidates, else null. */
   escalated?: string | null;
+  /** Escalation timers (2026-10-14): the step's clock, its level and when it escalates next. */
+  currentSince?: string | null;
+  escalationLevel?: 0 | 1 | 2;
+  escalatedAt?: string | null;
+  escalatesAt?: string | null;
+  /** The approver a delegate decided it for. */
+  decidedOnBehalfOf?: AccessPerson | null;
 }
 
 export interface AccessRequest {
@@ -115,6 +124,24 @@ export interface AccessConfiguration {
   durations: { offered: AccessDuration[]; standingReasonMin: number };
   stewards: Array<{ scope: 'tenant-role' | 'initiative-membership' | 'capability' | 'sensitive'; tenant: string | null; rule: string; role: string | null }>;
   items: Array<{ id: string; title: string; kind: AccessKind; tenant: AccessTenant; defaultDuration: AccessDuration; stewardRule: CatalogItem['stewardRule']; sensitive: boolean }>;
+  /** Fixed by the deployment (2026-10-14): how long a step waits before it escalates, and to whom. */
+  escalation?: { stepSlaHours: number; tiers: ReadonlyArray<'access-admins' | 'platform-admins'> };
+  delegation?: { maxDays: number };
+}
+
+/** GET /api/access/delegations (2026-10-14). */
+export interface AccessDelegation {
+  id: string;
+  delegator: AccessPerson;
+  delegate: AccessPerson;
+  startsAt: string;
+  endsAt: string;
+  reason: string;
+  createdAt: string;
+  endedAt: string | null;
+  endedBy: AccessPerson | null;
+  state: 'scheduled' | 'active' | 'ended';
+  can: { end: boolean };
 }
 
 export interface AccessPolicy {
@@ -124,11 +151,12 @@ export interface AccessPolicy {
 }
 
 export type AccessEventKind = 'submitted' | 'step-approved' | 'step-rejected' | 'info-requested' | 'withdrawn'
-  | 'approved' | 'provisioned' | 'expired' | 'revoked' | 'sod-override' | 'sod-blocked' | 'policy-updated';
+  | 'approved' | 'provisioned' | 'expired' | 'revoked' | 'sod-override' | 'sod-blocked' | 'policy-updated'
+  | 'escalated' | 'delegated' | 'delegation-ended';
 
 export interface AccessEvent {
   /** requestId is null for a policy change (`policy-updated`), which names `policyId`. */
-  id: string; at: string; requestId: string | null; policyId?: string | null; actor: AccessPerson | null;
+  id: string; at: string; requestId: string | null; policyId?: string | null; delegationId?: string | null; actor: AccessPerson | null;
   kind: AccessEventKind;
   before?: string | null; after?: string | null; reason?: string | null;
 }
@@ -162,6 +190,7 @@ export const EVENT_LABELS: Readonly<Record<AccessEventKind, string>> = {
   provisioned: 'Provisioned', expired: 'Expired', revoked: 'Revoked', 'sod-override': 'Policy override',
   'sod-blocked': 'Blocked by policy',
   'policy-updated': 'Policy updated',
+  escalated: 'Escalated', delegated: 'Delegated', 'delegation-ended': 'Delegation ended',
 };
 
 const STATUS_TONE: Readonly<Record<RequestStatus, Tone>> = {
@@ -251,18 +280,44 @@ export function chainSteps(steps: readonly RequestStep[]): Array<{ step: number;
 
 /** Who may decide a step, for display (the server decides). A closed request's undecided step claims no one. */
 export function eligibleLabel(step: RequestStep, status?: RequestStatus): string {
-  if (step.decidedBy) return step.decidedBy.displayName;
+  if (step.decidedBy) return decidedByLabel(step) ?? step.decidedBy.displayName;
   if (status && !OPEN.has(status)) return '—';
   if (step.status === 'skipped') return '—';
   if (!step.eligible.length) return 'No one can decide this step';
-  return step.eligible.map((p) => p.displayName).join(', ');
+  return step.eligible.map((p) => (p.onBehalfOf ? `${p.displayName} (for ${p.onBehalfOf.displayName})` : p.displayName)).join(', ');
+}
+
+/** Who decided a step, naming the approver a delegate acted for. */
+export function decidedByLabel(step: Pick<RequestStep, 'decidedBy' | 'decidedOnBehalfOf'>): string | null {
+  if (!step.decidedBy) return null;
+  return step.decidedOnBehalfOf ? `${step.decidedBy.displayName}, on behalf of ${step.decidedOnBehalfOf.displayName}` : step.decidedBy.displayName;
+}
+
+/** The escalation line for a step that waits on a person: where it stands and when it moves next, or null. */
+export function escalationLabel(step: Pick<RequestStep, 'escalationLevel' | 'escalatesAt' | 'status'>, now: number = Date.now()): string | null {
+  const level = step.escalationLevel ?? 0;
+  const tier = level >= 2 ? 'the platform admins' : 'the access admins';
+  const reached = level > 0 ? `Escalated to ${tier}.` : null;
+  if (!step.escalatesAt || (step.status !== 'current')) return reached;
+  const next = level === 0 ? 'the access admins' : 'the platform admins';
+  const ms = Date.parse(step.escalatesAt) - now;
+  const when = ms <= 0 ? 'at the next sweep' : `in ${relativeSpan(ms)}`;
+  return `${reached ? `${reached} ` : ''}Escalates to ${next} ${when} if undecided.`;
+}
+
+function relativeSpan(ms: number): string {
+  const h = ms / 3_600_000;
+  if (h < 1) return `${Math.max(1, Math.round(ms / 60_000))} min`;
+  if (h < 48) return `${Math.round(h)} h`;
+  return `${Math.round(h / 24)} days`;
 }
 
 /** Where an audit event opens: its request, or the changed policy's own record
  *  page (`policy-updated` names `policyId`); the policies list only when an
  *  event names neither. */
-export function eventHref(e: Pick<AccessEvent, 'requestId' | 'policyId'>): string {
+export function eventHref(e: Pick<AccessEvent, 'requestId' | 'policyId'> & { delegationId?: string | null }): string {
   if (e.requestId) return requestHref(e.requestId);
+  if (e.delegationId) return DELEGATIONS_HREF;
   return e.policyId ? policyHref(e.policyId) : '/access/policies';
 }
 
@@ -428,4 +483,42 @@ export function configurationPatch(items: readonly AccessConfiguration['items'][
     if (Object.keys(patch).length) out.push({ id: i.id, ...patch });
   }
   return { items: out };
+}
+
+// ── Delegation (2026-10-14, /access/settings) ────────────────────────────────
+
+/** Where an approver's delegations live. */
+export const DELEGATIONS_HREF = '/access/settings';
+export const DELEGATION_REASON_MIN = 10;
+/** The windows the delegation form offers, starting now (the server caps a window at 30 days). */
+export const DELEGATION_WINDOWS: ReadonlyArray<{ value: string; label: string; hours: number }> = [
+  { value: '1d', label: '1 day', hours: 24 },
+  { value: '3d', label: '3 days', hours: 72 },
+  { value: '7d', label: '1 week', hours: 168 },
+  { value: '14d', label: '2 weeks', hours: 336 },
+];
+
+export interface DelegationDraft { delegateId: string; window: string; reason: string }
+export const EMPTY_DELEGATION: DelegationDraft = { delegateId: '', window: '3d', reason: '' };
+
+/** What is wrong with a delegation draft before it is sent, else null. */
+export function delegationProblem(d: DelegationDraft): string | null {
+  if (!d.delegateId) return 'Choose who decides for you.';
+  if (!DELEGATION_WINDOWS.some((w) => w.value === d.window)) return 'Choose how long.';
+  if (d.reason.trim().length < DELEGATION_REASON_MIN) return `Say why in at least ${DELEGATION_REASON_MIN} characters.`;
+  return null;
+}
+
+/** POST /api/access/delegations body for a draft, starting at `now`. */
+export function delegationBody(d: DelegationDraft, now: number = Date.now()): { delegateId: string; startsAt: string; endsAt: string; reason: string } {
+  const hours = DELEGATION_WINDOWS.find((w) => w.value === d.window)?.hours ?? 72;
+  return { delegateId: d.delegateId, startsAt: new Date(now).toISOString(), endsAt: new Date(now + hours * 3_600_000).toISOString(), reason: d.reason.trim() };
+}
+
+export const DELEGATION_STATE_TONE: Readonly<Record<AccessDelegation['state'], Tone>> = { scheduled: 'info', active: 'success', ended: 'neutral' };
+
+/** "Oct 14 – Oct 17" in the viewer's zone. */
+export function delegationWindowLabel(d: Pick<AccessDelegation, 'startsAt' | 'endsAt' | 'endedAt'>, locale?: string): string {
+  const f = (iso: string) => new Date(iso).toLocaleDateString(locale ?? 'en-US', { month: 'short', day: 'numeric' });
+  return `${f(d.startsAt)} – ${f(d.endedAt ?? d.endsAt)}${d.endedAt ? ' (ended early)' : ''}`;
 }

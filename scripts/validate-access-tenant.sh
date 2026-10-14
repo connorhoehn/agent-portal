@@ -5,7 +5,8 @@
 #
 #   ./scripts/validate-access-tenant.sh --quick          # static checks only
 #   ./scripts/validate-access-tenant.sh --phase A0       # A0 incl. routes, pages, journeys
-#   ./scripts/validate-access-tenant.sh                  # everything through E
+#   ./scripts/validate-access-tenant.sh --phase A3       # + escalation timers and delegation
+#   ./scripts/validate-access-tenant.sh                  # everything through E (native PostgreSQL contracts)
 set -u
 cd "$(dirname "$0")/.."
 source scripts/lib/judges.sh 2>/dev/null || true
@@ -17,10 +18,10 @@ for arg in "$@"; do
     --quick) QUICK=1 ;;
     --phase) ;;
     --phase=*) PHASE="${arg#--phase=}" ;;
-    A0|A1|A2|E) PHASE="$arg" ;;
+    A0|A1|A2|A3|E) PHASE="$arg" ;;
   esac
 done
-phase_rank() { case "$1" in A0) echo 0;; A1) echo 1;; A2) echo 2;; E) echo 3;; *) echo -1;; esac; }
+phase_rank() { case "$1" in A0) echo 0;; A1) echo 1;; A2) echo 2;; A3) echo 3;; E) echo 4;; *) echo -1;; esac; }
 PR=$(phase_rank "$PHASE")
 judged() { [ "$(phase_rank "$1")" -le "$PR" ]; }
 
@@ -143,12 +144,72 @@ if judged A2; then
   need "access_reviews" schema/access_schema.sql "reviews table"
   need "'/reviews/:id'" middleware/src/routes/access.ts "review routes"
 fi
+if judged A3; then
+  section "A3 · escalation timers and delegation (2026-10-14)"
+  S=schema/access_schema.sql
+  need "CREATE TABLE IF NOT EXISTS access_delegations" $S "model: table access_delegations"
+  need "access_delegations_not_self" $S "model: a delegation is never to oneself (CHECK)"
+  for c in current_since escalation_level escalated_at delegated_from; do need "ADD COLUMN IF NOT EXISTS $c" $S "model: access_request_steps.$c is additive"; done
+  need "'escalated', 'delegated', 'delegation-ended'" $S "model: event kinds escalated / delegated / delegation-ended"
+  need "CREATE TRIGGER access_step_decision_guard" $S "model: the table refuses self-decision and re-decision (trigger)"
+  need "access_requests_one_open_idx" $S "model: one open request per beneficiary and item (partial unique index)"
+  F=middleware/src/lib/access-escalation.ts
+  exists $F "lib/access-escalation.ts"
+  need "ACCESS_ESCALATION_SLA_MS" $F "escalation SLA is configured (ACCESS_ESCALATION_SLA_MS)"
+  need "replicaFleet|withLock" $F "escalation timer is single-flight across replicas"
+  need "casStep" $F "escalation claims the step once per level"
+  need "kind: 'escalated'" $F "escalation records an event and rings the bell"
+  need "startAccessEscalationSweeper\\(\\)" middleware/src/index.ts "index.ts starts the escalation timer"
+  need "escalated:" middleware/src/lib/social-notify.ts "bell copy for an escalation"
+  need "notifyAccessDelegation" middleware/src/lib/social-notify.ts "bell item for a delegation"
+  F=middleware/src/lib/access/delegation.ts
+  exists $F "lib/access/delegation.ts"
+  need "to yourself" $F "delegation: never to oneself"
+  need "no deciding role" $F "delegation: only to an eligible approver"
+  need "never passed on" $F "delegation: no chains"
+  need "is a party to" $F "delegation: never to the requester of a request waiting on the delegator"
+  need "onBehalfOf" middleware/src/lib/access/chain.ts "resolver: delegates decide on behalf of their delegator"
+  need "kind === 'access-admin' && !" middleware/src/lib/access/chain.ts "resolver: an access-admin step only to an access-admin delegate (SoD)"
+  for p in "/delegations" "/delegations/:id/end" "/delegates"; do need "'$p'" middleware/src/routes/access.ts "route $p"; done
+  exists middleware/src/mock/access-delegations.ts "mock fixture access-delegations"
+  need "access delegations" middleware/src/mock/core/parity/entities.ts "parity entity covers access delegations"
+  exists middleware/src/routes/__tests__/access-escalation-delegation.test.ts "route contracts: escalation + delegation"
+  exists middleware/src/lib/__tests__/access-escalation.test.ts "lib contracts: escalation timer"
+  exists middleware/src/lib/access/__tests__/delegation.test.ts "lib contracts: delegation rules + resolver"
+  need "two replicas escalate a step once" middleware/src/routes/__tests__/access-escalation-delegation.test.ts "contract: escalation single-flight across replicas"
+  need "PersonPicker" portal/src/pages/access/RequestNewPage.tsx "wizard picks the person with the library PersonPicker"
+  need "PersonPicker" portal/src/pages/access/SettingsPage.tsx "delegation picks the delegate with the library PersonPicker"
+  if grep -lE "<select|<input" portal/src/pages/access/*.tsx >/dev/null 2>&1; then fail "a native <select>/<input> in portal/src/pages/access: $(grep -lE '<select|<input' portal/src/pages/access/*.tsx | tr '\n' ' ')"; else ok "no native select/input in the access pages"; fi
+  need "PersonPicker" portal/node_modules/@connorhoehnslalom/ui-components/dist/shared.d.ts "installed ui-components dist exports PersonPicker"
+  exists portal/src/pages/access/__tests__/accessDelegation.test.ts "portal contracts: escalation lines + delegation form"
+fi
 if judged E; then
   section "E · evidence"
   ls docs/realtime-validation/*/access-tenant.md >/dev/null 2>&1 && ok "gate record exists" || fail "docs/realtime-validation/<date>/access-tenant.md missing"
+  # Native PostgreSQL contracts (2026-10-14): the cluster statements over the unmodified schema file.
+  F=middleware/src/lib/access/sql.ts
+  exists $F "lib/access/sql.ts (the cluster statements)"
+  for k in INSERT_REQUEST_SQL DECIDE_STEP_SQL PROVISION_CLAIM_SQL GRANT_ROLE_SQL END_GRANT_SQL WARN_EXPIRY_SQL ESCALATE_STEP_SQL END_DELEGATION_SQL; do need "export const $k" $F "statement $k"; done
+  T=middleware/src/lib/access/__tests__/access-postgres.test.ts
+  exists $T "native PostgreSQL contract suite"
+  for c in "twelve concurrent approvers" "nobody decides a request they submitted" "provisioning is idempotent" "expiry sweep is single-flight" "escalates once per level" "delete-and-reinsert does"; do needF "$c" $T "PG contract: $c"; done
+  REC=$(ls -t docs/realtime-validation/*/access-postgres.md 2>/dev/null | head -1)
+  if [ -n "$REC" ] && grep -qE "Tests: +[0-9]+ passed, [0-9]+ total" "$REC" && ! grep -qE "Tests: +[0-9]+ failed" "$REC"; then ok "PG contract record: $REC"; else fail "docs/realtime-validation/<date>/access-postgres.md missing or not all passing"; fi
+  if [ -n "$REC" ] && [ "$F" -nt "$REC" -o schema/access_schema.sql -nt "$REC" -o "$T" -nt "$REC" ] && [ "${ACCESS_PG_IGNORE_MTIME:-0}" != 1 ]; then
+    if git diff --quiet HEAD -- "$F" schema/access_schema.sql "$T" 2>/dev/null && git log -1 --format=%ct -- "$REC" >/dev/null 2>&1 && [ "$(git log -1 --format=%ct -- "$REC")" -ge "$(git log -1 --format=%ct -- "$F" schema/access_schema.sql "$T")" ]; then ok "PG contract record is as new as the statements it proves (git)"; else fail "PG contract record is older than lib/access/sql.ts, access_schema.sql or the suite — re-run it"; fi
+  else ok "PG contract record is as new as the statements it proves"; fi
+  # Run it live when the dedicated container is up (never another container; never Aurora).
+  PGC=orgiq-access-postgres-acceptance
+  DOCKER=${ORGIQ_DOCKER:-colima ssh -- sudo docker}
+  if [ "$QUICK" -eq 0 ] && $DOCKER inspect --format '{{index .Config.Labels "orgiq.validation"}}' $PGC 2>/dev/null | grep -qx access-postgres; then
+    if (cd middleware && REAL_ACCESS_POSTGRES=1 ORGIQ_ACCESS_POSTGRES_CONTAINER=$PGC ORGIQ_DOCKER="$DOCKER" npx jest src/lib/access/__tests__/access-postgres.test.ts >/tmp/access-judge-pg.log 2>&1); then ok "native PostgreSQL contracts ($(grep -oE 'Tests: +[0-9]+ passed' /tmp/access-judge-pg.log))"; else fail "native PostgreSQL contracts red"; grep -E '✕' /tmp/access-judge-pg.log | head -5 | while IFS= read -r l; do note "$l"; done; fi
+  else note "dedicated container $PGC not running: judged on the record above"; fi
 fi
 
 if [ "$QUICK" -eq 0 ]; then
+  section "contracts (access suites)"
+  if (cd middleware && npx jest src/routes/__tests__/access src/lib/access src/lib/__tests__/access- src/routes/__tests__/agent-loop-access >/tmp/access-judge-jest.log 2>&1); then ok "middleware access jest ($(grep -oE 'Tests: +[0-9]+ passed' /tmp/access-judge-jest.log | tail -1))"; else fail "middleware access jest red"; grep -E '^(FAIL|  ●)' /tmp/access-judge-jest.log | head -5 | while IFS= read -r l; do note "$l"; done; fi
+  if (cd portal && node --test src/pages/access/__tests__/*.test.ts e2e/ui-dom-audit.policies.test.ts >/tmp/access-judge-portal.log 2>&1); then ok "portal access node tests ($(grep -E '^ℹ pass' /tmp/access-judge-portal.log))"; else fail "portal access node tests red"; grep -E '^not ok|✖' /tmp/access-judge-portal.log | head -5 | while IFS= read -r l; do note "$l"; done; fi
   section "neighbour judges"
   for j in route-coverage nav-parity component-discipline honest-numbers; do
     if ./scripts/validate-$j.sh --quick >/tmp/access-judge-$j.log 2>&1 || ./scripts/validate-$j.sh >/tmp/access-judge-$j.log 2>&1; then ok "validate-$j.sh"; else fail "validate-$j.sh red"; grep -E '✗' /tmp/access-judge-$j.log | head -5 | while IFS= read -r l; do note "$l"; done; fi

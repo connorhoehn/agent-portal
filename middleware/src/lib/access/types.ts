@@ -20,7 +20,9 @@ export type AccessSeverity = 'warn' | 'block';
 export type SodVerdict = 'clear' | 'warn' | 'block';
 export type Decision = 'approve' | 'reject' | 'info';
 export type AccessEventKind = 'submitted' | 'step-approved' | 'step-rejected' | 'info-requested' | 'withdrawn'
-  | 'approved' | 'provisioned' | 'expired' | 'revoked' | 'sod-override' | 'sod-blocked' | 'policy-updated';
+  | 'approved' | 'provisioned' | 'expired' | 'revoked' | 'sod-override' | 'sod-blocked' | 'policy-updated'
+  // Escalation timers and delegation (2026-10-14).
+  | 'escalated' | 'delegated' | 'delegation-ended';
 /** A request asks for access (`grant`) or, from an access review, takes it away (`revocation`, lane A2). */
 export type RequestKind = 'grant' | 'revocation';
 export type ReviewStatus = 'open' | 'closed';
@@ -45,6 +47,12 @@ export interface CatalogItem {
 
 export interface Person { id: string; displayName: string; personId?: string | null }
 
+/** A person who may decide a step now; `onBehalfOf` when only a delegation makes them eligible (2026-10-14). */
+export interface EligiblePerson extends Person { onBehalfOf?: Person | null }
+
+/** How far a step has escalated: 0 its own deciders, 1 + the next tier, 2 + the tier after (lib/access/chain.ts). */
+export type EscalationLevel = 0 | 1 | 2;
+
 export interface RequestStep {
   step: number;
   kind: StepKind;
@@ -53,9 +61,18 @@ export interface RequestStep {
   decidedAt?: string | null;
   comment?: string | null;
   /** Who may decide it NOW, resolved live (never stored): shown, not trusted. */
-  eligible: Person[];
+  eligible: EligiblePerson[];
   /** Why `eligible` is not the step's own candidates (an escalation), else null. Open requests only. */
   escalated: string | null;
+  /** When it became the step awaiting a decision (the escalation clock), else null. */
+  currentSince: string | null;
+  /** Timer escalations so far (lib/access-escalation.ts) and when the last one happened. */
+  escalationLevel: EscalationLevel;
+  escalatedAt: string | null;
+  /** When it escalates next if still undecided (current steps below the top tier), else null. */
+  escalatesAt: string | null;
+  /** The approver a delegate decided it for, else null. */
+  decidedOnBehalfOf: Person | null;
 }
 
 export interface AccessRequest {
@@ -124,8 +141,8 @@ export interface AccessPolicy {
 }
 
 export interface AccessEvent {
-  /** requestId is null for an event about a policy (`policy-updated`, which names `policyId`). */
-  id: string; at: string; requestId: string | null; policyId: string | null; actor: Person | null;
+  /** requestId is null for an event about a policy (`policy-updated`, which names `policyId`) or a delegation (`delegationId`). */
+  id: string; at: string; requestId: string | null; policyId: string | null; delegationId: string | null; actor: Person | null;
   kind: AccessEventKind;
   before?: string | null; after?: string | null; reason?: string | null;
 }
@@ -150,6 +167,24 @@ export interface AccessDirectory {
   managerOf(personId: string | null | undefined): string | null;
   /** The initiative's owner person and every contributing person, or null when unknown. */
   initiative(projectId: string): { ownerPersonId: string | null; memberPersonIds: readonly string[] } | null;
+  /** Delegations in force now (window open, not ended), resolved when the directory is built. Absent = none. */
+  activeDelegations?: ReadonlyArray<{ id: string; delegatorId: string; delegateId: string }>;
+}
+
+/** A delegation of one approver's decisions to another for a window (2026-10-14). */
+export interface AccessDelegation {
+  id: string;                        // 'dlg-0001'
+  delegator: Person;
+  delegate: Person;
+  startsAt: string;
+  endsAt: string;
+  reason: string;
+  createdAt: string;
+  endedAt: string | null;
+  endedBy: Person | null;
+  /** 'scheduled' (starts later), 'active' (in force now), 'ended' (window passed or ended early). */
+  state: 'scheduled' | 'active' | 'ended';
+  can: { end: boolean };
 }
 
 /** The thread every request carries (decision A8; A1 admits it on the gateway). */
@@ -165,7 +200,7 @@ export interface AccessRequestPreview {
   item: CatalogItem;
   beneficiary: Person;
   /** The chain planChain would write, each step's eligible deciders resolved live now. */
-  steps: Array<{ step: number; kind: StepKind; eligible: Person[]; escalated: string | null }>;
+  steps: Array<{ step: number; kind: StepKind; eligible: EligiblePerson[]; escalated: string | null }>;
   sod: { verdict: SodVerdict; conflicts: SodConflict[] };
   /** The body's duration, else the item's default. */
   duration: AccessDuration;

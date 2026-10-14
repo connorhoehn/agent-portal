@@ -20,12 +20,10 @@ test('composer policy: lists and the record require it; only the form, configura
   }
 });
 
-test('a surface whose data is not here yet names the lane that brings it', () => {
-  for (const id of ['settings'] as const) {
-    const s = ACCESS_SURFACES[id];
-    assert.ok(s.emptyTitle && s.emptyBody && s.next, id);
-    assert.match(s.next!, new RegExp(`Lane ${s.phase}`));
-  }
+test('no surface is a placeholder any more; settings holds delegation (lane A3, 2026-10-14)', () => {
+  for (const s of Object.values(ACCESS_SURFACES)) assert.equal(s.next, undefined, s.id);
+  assert.equal(ACCESS_SURFACES.settings.phase, 'A3');
+  assert.match(ACCESS_SURFACES.settings.description, /Delegate your approval decisions/);
   // Lane A2 brought the campaigns: Reviews has data now, and says what an empty list means instead of naming a lane.
   assert.equal(ACCESS_SURFACES.reviews.phase, 'A2');
   assert.equal(ACCESS_SURFACES.reviews.next, undefined);

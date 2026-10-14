@@ -45,7 +45,7 @@ export function mayRead(actor: AccessActor, r: AccessRequestRow, steps: readonly
   if (managesBeneficiary(actor, r, dir)) return true;
   if (steps.some((s) => s.decidedBy === actor.id)) return true;
   if (!item || !isOpen(r.status)) return false;
-  return steps.some((s) => !stepDecided(s) && eligibleDeciders(s.kind, item, r, dir).some((p) => p.id === actor.id));
+  return steps.some((s) => !stepDecided(s) && eligibleDeciders(s.kind, item, r, dir, s.escalationLevel).some((p) => p.id === actor.id));
 }
 
 /** Why the actor may not decide step `stepNo` now, or null when they may (the 409 cases are status.ts's). */
@@ -59,7 +59,7 @@ export function decideRefusal(actor: AccessActor, r: AccessRequestRow, steps: re
   const step = steps.find((s) => s.step === stepNo);
   // A decided / missing / not-yet-current step is a 409 the status machine names.
   if (!step || stepDecided(step) || currentStep(steps)?.step !== stepNo || !isOpen(r.status)) return null;
-  if (!eligibleDeciders(step.kind, item, r, dir).some((p) => p.id === actor.id)) {
+  if (!eligibleDeciders(step.kind, item, r, dir, step.escalationLevel).some((p) => p.id === actor.id)) {
     return { status: 403, error: `You are not eligible to decide step ${stepNo} (${step.kind}) of ${r.id}` };
   }
   return null;
@@ -70,6 +70,6 @@ export function canFlags(actor: AccessActor, r: AccessRequestRow, steps: readonl
   const party = isParty(actor.id, r);
   const cur = currentStep(steps);
   const decide = !party && actor.mayDecide && isOpen(r.status) && !!cur && !!item
-    && eligibleDeciders(cur.kind, item, r, dir).some((p) => p.id === actor.id);
+    && eligibleDeciders(cur.kind, item, r, dir, cur.escalationLevel).some((p) => p.id === actor.id);
   return { decide, withdraw: party && isOpen(r.status), viewAudit: party || actor.mayDecide };
 }

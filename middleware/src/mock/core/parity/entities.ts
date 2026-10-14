@@ -995,6 +995,25 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       { seed: 'decided_by', mock: (s: { decidedBy: string | null }) => s.decidedBy },
       { seed: 'decided_at', mock: (s: { decidedAt: string | null }) => s.decidedAt, equals: setExactlyWhenTheSeedSetsIt },
       { seed: 'comment', mock: (s: { comment: string | null }) => s.comment },
+      { seed: 'current_since', mock: (s: { currentSince: string | null }) => s.currentSince, equals: setExactlyWhenTheSeedSetsIt },
+    ],
+  },
+  {
+    name: 'access delegations',
+    describes: 'Approvers handing their decisions to another approver for a window (2026-10-14).',
+    lesson: 'access A3: a delegation in force offline but not on the cluster puts a step in an inbox it never reaches.',
+    sqlFile: 'access_schema.sql',
+    sqlTable: 'access_delegations',
+    seedId: 'id',
+    coverage: 'complete',
+    mockRows: async () => (await import('../../access-delegations.js')).accessDelegationsFixture.rows(),
+    mockId: (d: { id: string }) => d.id,
+    fields: [
+      { seed: 'delegator_id', mock: (d: { delegatorId: string }) => d.delegatorId },
+      { seed: 'delegate_id', mock: (d: { delegateId: string }) => d.delegateId },
+      { seed: 'reason', mock: (d: { reason: string }) => d.reason },
+      { seed: 'ended_at', mock: (d: { endedAt: string | null }) => d.endedAt, equals: setExactlyWhenTheSeedSetsIt },
+      { seed: 'ended_by', mock: (d: { endedBy: string | null }) => d.endedBy },
     ],
   },
   {
@@ -1008,6 +1027,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
     mockId: (e: { id: string }) => e.id,
     fields: [
       { seed: 'request_id', mock: (e: { requestId: string | null }) => e.requestId },
+      { seed: 'delegation_id', mock: (e: { delegationId: string | null }) => e.delegationId },
       { seed: 'actor_id', mock: (e: { actorId: string | null }) => e.actorId },
       { seed: 'kind', mock: (e: { kind: string }) => e.kind },
       { seed: 'before_status', mock: (e: { beforeStatus: string | null }) => e.beforeStatus },

@@ -17,6 +17,13 @@
 // thread `access:req:<id>` is admitted by the gateway under this file's read
 // rule (lib/access/thread.ts).
 //
+// Escalation timers and delegation (2026-10-14, docs/access-tenant-api.md
+// § "Escalation timers and delegation"): a step past its SLA escalates
+// (lib/access-escalation.ts) and every read resolves deciders at the step's
+// level; an approver hands their decisions to another approver for a window
+// (`/delegations`, lib/access/delegation.ts) and a delegate's decision records
+// whom it was made for.
+//
 // Lane A2 (docs/access-tenant-goal.md §A2): separation of duties is evaluated
 // at submit (the 409 pre-check below) and again at provisioning against the
 // beneficiary's CURRENT grants (lib/access-provision.ts); a block there leaves
@@ -31,22 +38,24 @@
 import { Router, type Request } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { isAllowed, requireAction, resolveSession } from '../lib/authz.js';
-import { BUDGET_OWNER_ROLE, eligibility, eligibleDeciders, personFor, planChain, TENANT_STEWARD_ROLE } from '../lib/access/chain.js';
+import { ACCESS_DECIDER_ROLES, BUDGET_OWNER_ROLE, decidingOnBehalfOf, eligibility, eligibleDeciders, personFor, planChain, TENANT_STEWARD_ROLE } from '../lib/access/chain.js';
+import { delegationRefusal, delegationState, MAX_DELEGATION_DAYS } from '../lib/access/delegation.js';
+import { escalatesAt, escalationSlaMs } from '../lib/access-escalation.js';
 import { sodConflicts, sodVerdict } from '../lib/access/sod.js';
 import { decide, isOpen, ELEVATED_STATUSES, submitRows, TransitionError, withdraw, currentStep } from '../lib/access/status.js';
 import { canFlags, decideRefusal, isParty, managesBeneficiary, mayRead, type AccessActor } from '../lib/access/rules.js';
 import { grantItemId, requestItem } from '../lib/access/items.js';
 import {
   ACCESS_KINDS, ACCESS_TENANTS, DURATIONS, REQUEST_STATUSES, requestThread,
-  type AccessDirectory, type AccessDuration, type AccessEvent, type AccessRequestPreview, type Person, type AccessPolicy, type AccessRequest,
+  type AccessDelegation, type AccessDirectory, type AccessDuration, type AccessEvent, type AccessRequestPreview, type Person, type AccessPolicy, type AccessRequest,
   type AccessReview, type AccessReviewItem, type AccessTenant, type CatalogItem, type Decision, type DirectoryUser,
 } from '../lib/access/types.js';
 import { expiresAtFor, provisionAccess, revokeAccess, SodBlockedError } from '../lib/access-provision.js';
-import { notifyAccessRequest, type AccessNotifyKind } from '../lib/social-notify.js';
+import { notifyAccessDelegation, notifyAccessRequest, type AccessNotifyKind } from '../lib/social-notify.js';
 import {
-  accessNow, casRequest, casReviewItem, closeReviewIfDecided, insertRequest, insertReview, listCatalog, listEvents,
+  accessNow, casRequest, casReviewItem, closeReviewIfDecided, endDelegation, insertDelegation, insertRequest, insertReview, listCatalog, listDelegations, listEvents,
   listPolicies, listRequests, listReviewItems, listReviews, listSteps, loadDirectory, nextRequestId, saveTransition, updateCatalogItem, updatePolicy,
-  type AccessCatalogRow, type AccessPolicyRow, type AccessRequestRow, type AccessReviewItemRow, type AccessReviewRow, type AccessStepRow,
+  type AccessCatalogRow, type AccessDelegationRow, type AccessPolicyRow, type AccessRequestRow, type AccessReviewItemRow, type AccessReviewRow, type AccessStepRow,
 } from '../providers/access.js';
 
 export const accessRouter = Router();
@@ -150,11 +159,14 @@ function present(r: AccessRequestRow, ctx: Ctx, w: World): AccessRequest {
     status: r.status,
     steps: steps.map((s) => {
       const live = row && isOpen(r.status) && (s.status === 'current' || s.status === 'waiting' || s.status === 'info-requested')
-        ? eligibility(s.kind, row, r, ctx.dir) : null;
+        ? eligibility(s.kind, row, r, ctx.dir, s.escalationLevel) : null;
       return {
         step: s.step, kind: s.kind, status: s.status,
         decidedBy: personFor(ctx.dir, s.decidedBy), decidedAt: s.decidedAt, comment: s.comment,
         eligible: live?.people ?? [], escalated: live?.escalated ?? null,
+        currentSince: s.currentSince, escalationLevel: s.escalationLevel, escalatedAt: s.escalatedAt,
+        escalatesAt: isOpen(r.status) && r.kind === 'grant' ? escalatesAt(s) : null,
+        decidedOnBehalfOf: personFor(ctx.dir, s.delegatedFrom),
       };
     }),
     submittedAt: r.submittedAt,
@@ -181,7 +193,7 @@ function approvalsFor(ctx: Ctx, w: World, requests: readonly AccessRequestRow[])
     if (!isOpen(r.status) || isParty(ctx.actor.id, r)) return false;
     const cur = currentStep(w.steps.get(r.id) ?? []);
     const item = w.catalog.get(r.itemId);
-    return !!cur && !!item && eligibleDeciders(cur.kind, item, r, ctx.dir).some((p) => p.id === ctx.actor.id);
+    return !!cur && !!item && eligibleDeciders(cur.kind, item, r, ctx.dir, cur.escalationLevel).some((p) => p.id === ctx.actor.id);
   });
 }
 
@@ -224,7 +236,7 @@ async function bellApprovers(kind: 'submitted' | 'awaiting', r: AccessRequestRow
   const row = listCatalog().find((i) => i.id === r.itemId);
   const cur = currentStep(listSteps(r.id));
   if (!row || !cur) return;
-  const approverIds = eligibleDeciders(cur.kind, row, r, ctx.dir).map((p) => p.id);
+  const approverIds = eligibleDeciders(cur.kind, row, r, ctx.dir, cur.escalationLevel).map((p) => p.id);
   await notifyAccessRequest({
     kind, requestId: r.id, itemTitle: row.title, requesterId: r.requesterId, beneficiaryId: r.beneficiaryId,
     beneficiaryName: personFor(ctx.dir, r.beneficiaryId)?.displayName ?? null, actorId: ctx.actor.id, approverIds, step: cur.step,
@@ -326,12 +338,21 @@ accessRouter.get('/audit', requireAction('ViewAccess'), asyncHandler(async (req,
   const everything = ctx.actor.role === 'access-admin' || ctx.actor.role === 'admin';
   const visible = new Set(listRequests().filter((r) => everything || readable(ctx, w)(r)).map((r) => r.id));
   // Policy events (no request) are read by DecideAccess holders, who weigh SoD.
-  const seen = (e: { requestId: string | null }) => (e.requestId === null ? ctx.actor.mayDecide : visible.has(e.requestId));
+  // Delegation events are read by the delegator, the delegate and the access
+  // admins (and `admin`), like the delegation itself (GET /delegations).
+  const delegations = new Map(listDelegations().map((d) => [d.id, d]));
+  const seen = (e: { requestId: string | null; delegationId: string | null }) => {
+    if (e.delegationId !== null) {
+      const d = delegations.get(e.delegationId);
+      return everything || (!!d && (d.delegatorId === ctx.actor.id || d.delegateId === ctx.actor.id));
+    }
+    return e.requestId === null ? ctx.actor.mayDecide : visible.has(e.requestId);
+  };
   const items: AccessEvent[] = listEvents()
     .filter((e) => seen(e) && (!requestId || e.requestId === requestId))
     .sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id))
-    .map((e) => ({ id: e.id, at: e.at, requestId: e.requestId, policyId: e.policyId, actor: personFor(ctx.dir, e.actorId), kind: e.kind, before: e.beforeStatus, after: e.afterStatus, reason: e.reason }))
-    .filter((e) => !q || [e.requestId ?? '', e.policyId ?? '', e.kind, e.reason ?? '', e.actor?.displayName ?? ''].some((s) => s.toLowerCase().includes(q)));
+    .map((e) => ({ id: e.id, at: e.at, requestId: e.requestId, policyId: e.policyId, delegationId: e.delegationId, actor: personFor(ctx.dir, e.actorId), kind: e.kind, before: e.beforeStatus, after: e.afterStatus, reason: e.reason }))
+    .filter((e) => !q || [e.requestId ?? '', e.policyId ?? '', e.delegationId ?? '', e.kind, e.reason ?? '', e.actor?.displayName ?? ''].some((s) => s.toLowerCase().includes(q)));
   res.setHeader('Cache-Control', 'no-store');
   res.json({ items });
 }));
@@ -447,7 +468,7 @@ async function revokeByReview(v: AccessReviewRow, i: AccessReviewItemRow, commen
     id, kind: 'revocation', reviewId: v.id, requesterId: ctx.actor.id, beneficiaryId: i.userId, itemId,
     justification: reason, duration: 'standing', status: 'active', sodVerdict: 'clear', sodOverriddenBy: null, sodOverrideReason: null,
     submittedAt: now, decidedAt: now, provisionedAt: null, expiresAt: null, revokedAt: null, expiryWarnedAt: null,
-  }, [{ requestId: id, step: 1, kind: 'access-admin', status: 'approved', decidedBy: ctx.actor.id, decidedAt: now, comment }], [
+  }, [{ requestId: id, step: 1, kind: 'access-admin', status: 'approved', decidedBy: ctx.actor.id, decidedAt: now, comment, currentSince: now, escalationLevel: 0, escalatedAt: null, delegatedFrom: null }], [
     { kind: 'submitted', before: 'draft', after: 'submitted', reason },
     { kind: 'approved', before: 'submitted', after: 'active', reason: `Pre-approved by the reviewer of ${v.id}` },
   ], ctx.actor.id);
@@ -626,16 +647,18 @@ accessRouter.post('/requests/preview', requireAction('RequestAccess'), asyncHand
   res.json(body);
 }));
 
-// Whom the actor may file for (the request page's "Who"): self first; an
-// approver (DecideAccess) adds their direct reports through people.manager_id;
-// an access admin (DecideAccess + ProvisionAccess) adds everyone the directory
-// holds with any grant. The submit enforces the same rule (`assessSubmission`).
+// Whom the actor may file for (the request page's "Who", the library's
+// PersonPicker): self first; an approver (DecideAccess) adds their direct
+// reports through people.manager_id; an access admin (DecideAccess +
+// ProvisionAccess) adds every person in the directory — granted or not, since
+// a first grant is exactly what someone with none may need. The submit
+// enforces the same rule (`assessSubmission`).
 accessRouter.get('/beneficiaries', requireAction('RequestAccess'), asyncHandler(async (req, res) => {
   const ctx = await context(req);
   const self = personFor(ctx.dir, ctx.actor.id)!;
   let others: DirectoryUser[] = [];
   if (ctx.actor.mayDecide && ctx.actor.mayProvision) {
-    others = ctx.dir.users.filter((u) => Object.values(u.grants).some((roles) => roles.length > 0));
+    others = [...ctx.dir.users];
   } else if (ctx.actor.mayDecide && ctx.actor.personId) {
     others = ctx.dir.users.filter((u) => !!u.personId && ctx.dir.managerOf(u.personId) === ctx.actor.personId);
   }
@@ -696,10 +719,16 @@ accessRouter.post('/requests/:id/steps/:step/decide', requireAction('DecideAcces
   const refusal = decideRefusal(ctx.actor, r, steps, stepNo, item, ctx.dir);
   if (refusal) { res.status(refusal.status).json({ error: refusal.error }); return; }
   const now = accessNow();
+  // A delegate decides for their delegator: the step and the event say so.
+  const decidedStep = steps.find((s) => s.step === stepNo);
+  const onBehalfOf = decidedStep ? decidingOnBehalfOf(ctx.actor.id, decidedStep.kind, item, r, ctx.dir, decidedStep.escalationLevel) : null;
   let after: AccessRequestRow;
   try {
-    const t = decide(r, steps, stepNo, decision as Decision, ctx.actor.id, comment, now);
-    saveTransition(t.request, t.steps, t.events, ctx.actor.id, now);
+    const t = decide(r, steps, stepNo, decision as Decision, ctx.actor.id, comment, now, onBehalfOf?.id ?? null);
+    const events = onBehalfOf
+      ? t.events.map((e, i) => (i === 0 ? { ...e, reason: `${e.reason ? `${e.reason} — ` : ''}decided on behalf of ${onBehalfOf.displayName}` } : e))
+      : t.events;
+    saveTransition(t.request, t.steps, events, ctx.actor.id, now);
     after = t.request;
   } catch (err) {
     if (err instanceof TransitionError) { res.status(409).json({ error: err.message }); return; }
@@ -772,6 +801,99 @@ accessRouter.post('/requests/:id/revoke', requireAction('ProvisionAccess'), asyn
   res.json(present(loadRequest(r.id), ctx, world()));
 }));
 
+// ─── delegation (2026-10-14, lib/access/delegation.ts) ──────────────────────
+//
+// An approver out of office hands their decisions to another approver for a
+// window. The delegate's right is resolved live with every decider
+// (lib/access/chain.ts): exactly the steps the delegator may decide now, never
+// a request the delegate is a party to, never an access-admin step unless the
+// delegate is an access admin, never passed on. Everyone in `access` reads the
+// delegations they are part of; access admins (and `admin`) read all.
+
+const isAdminRole = (ctx: Ctx): boolean => ctx.actor.role === 'access-admin' || ctx.actor.role === 'admin';
+
+function presentDelegation(d: AccessDelegationRow, ctx: Ctx, now: string): AccessDelegation {
+  const state = delegationState(d, now);
+  return {
+    id: d.id, delegator: personFor(ctx.dir, d.delegatorId)!, delegate: personFor(ctx.dir, d.delegateId)!,
+    startsAt: d.startsAt, endsAt: d.endsAt, reason: d.reason, createdAt: d.createdAt,
+    endedAt: d.endedAt, endedBy: personFor(ctx.dir, d.endedBy), state,
+    can: { end: state !== 'ended' && ctx.actor.mayDecide && (d.delegatorId === ctx.actor.id || isAdminRole(ctx)) },
+  };
+}
+
+accessRouter.get('/delegations', requireAction('ViewAccess'), asyncHandler(async (req, res) => {
+  const ctx = await context(req);
+  const now = accessNow();
+  const items = listDelegations()
+    .filter((d) => isAdminRole(ctx) || d.delegatorId === ctx.actor.id || d.delegateId === ctx.actor.id)
+    .sort((a, b) => b.startsAt.localeCompare(a.startsAt) || b.id.localeCompare(a.id))
+    .map((d) => presentDelegation(d, ctx, now));
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ items });
+}));
+
+// Whom the actor may delegate to (the delegation form's person picker): every
+// directory user holding a deciding role in Access, except the actor.
+accessRouter.get('/delegates', requireAction('DecideAccess'), asyncHandler(async (req, res) => {
+  const ctx = await context(req);
+  const items: Person[] = ctx.dir.users
+    .filter((u) => u.id !== ctx.actor.id && (u.grants['access'] ?? []).some((r) => ACCESS_DECIDER_ROLES.has(r)))
+    .map((u) => personFor(ctx.dir, u.id)!)
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ items });
+}));
+
+accessRouter.post('/delegations', requireAction('DecideAccess'), asyncHandler(async (req, res) => {
+  const b = bodyOf(req, ['delegateId', 'startsAt', 'endsAt', 'reason']);
+  for (const k of ['delegateId', 'startsAt', 'endsAt', 'reason'] as const) {
+    if (b[k] !== undefined && typeof b[k] !== 'string') throw new ValidationError(`${k} must be a string`);
+  }
+  const delegateId = str(b['delegateId']);
+  const endsAt = str(b['endsAt']);
+  const reason = str(b['reason']) ?? '';
+  if (!delegateId) throw new ValidationError('delegateId is required');
+  if (!endsAt) throw new ValidationError('endsAt is required');
+  if (reason.length > MAX_TEXT) throw new ValidationError(`reason must be at most ${MAX_TEXT} characters`);
+  const ctx = await context(req);
+  const now = accessNow();
+  const startsAt = str(b['startsAt']) ?? now;
+  const w = world();
+  // Open requests whose current step waits on the delegator now (the "no delegation to the requester" rule).
+  const waiting = approvalsFor(ctx, w, listRequests()).map((r) => ({ id: r.id, requesterId: r.requesterId, beneficiaryId: r.beneficiaryId }));
+  const refusal = delegationRefusal(ctx.actor.id, { delegateId, startsAt, endsAt, reason }, ctx.dir, listDelegations(), waiting, now);
+  if (refusal?.status === 400) throw new ValidationError(refusal.error);
+  if (refusal) { res.status(refusal.status).json({ error: refusal.error }); return; }
+  const norm = (iso: string) => new Date(Date.parse(iso)).toISOString();
+  const delegator = personFor(ctx.dir, ctx.actor.id)!;
+  const delegate = personFor(ctx.dir, delegateId)!;
+  const stored = insertDelegation(
+    { delegatorId: ctx.actor.id, delegateId, startsAt: norm(startsAt), endsAt: norm(endsAt), reason, createdAt: now, endedAt: null, endedBy: null },
+    `${delegator.displayName} → ${delegate.displayName}: ${reason}`,
+  );
+  await notifyAccessDelegation({ kind: 'delegated', delegationId: stored.id, delegatorId: stored.delegatorId, delegatorName: delegator.displayName, delegateId, endsAt: stored.endsAt, actorId: ctx.actor.id });
+  res.status(201).json(presentDelegation(stored, ctx, now));
+}));
+
+accessRouter.post('/delegations/:id/end', requireAction('DecideAccess'), asyncHandler(async (req, res) => {
+  const b = bodyOf(req, ['reason']);
+  if (b['reason'] !== undefined && typeof b['reason'] !== 'string') throw new ValidationError('reason must be a string');
+  const reason = str(b['reason']) ?? 'Ended early';
+  if (reason.length > MAX_TEXT) throw new ValidationError(`reason must be at most ${MAX_TEXT} characters`);
+  const ctx = await context(req);
+  const d = listDelegations().find((x) => x.id === req.params['id']);
+  // Outside the read rule a delegation does not exist (no existence oracle).
+  if (!d || !(isAdminRole(ctx) || d.delegatorId === ctx.actor.id || d.delegateId === ctx.actor.id)) throw new NotFoundError(`No delegation ${String(req.params['id'])}`);
+  if (d.delegatorId !== ctx.actor.id && !isAdminRole(ctx)) { res.status(403).json({ error: 'Only the delegator or an access admin ends a delegation' }); return; }
+  const now = accessNow();
+  const ended = endDelegation(d.id, ctx.actor.id, reason, now);
+  if (!ended) { res.status(409).json({ error: `${d.id} has already ended` }); return; }
+  const delegator = personFor(ctx.dir, ended.delegatorId)!;
+  await notifyAccessDelegation({ kind: 'delegation-ended', delegationId: ended.id, delegatorId: ended.delegatorId, delegatorName: delegator.displayName, delegateId: ended.delegateId, endsAt: ended.endsAt, actorId: ctx.actor.id });
+  res.json(presentDelegation(ended, ctx, now));
+}));
+
 // ─── configuration (docs/access-tenant-design.md A4, A6; §6) ─────────────────
 //
 // What /access/configuration shows: the durations a request may ask for, who
@@ -791,6 +913,9 @@ function configurationBody() {
       { scope: 'sensitive' as const, tenant: 'access', rule: 'access-admin' as const, role: 'access-admin' },
     ],
     items: listCatalog().map((i) => ({ id: i.id, title: i.title, kind: i.kind, tenant: i.tenant, defaultDuration: i.defaultDuration, stewardRule: i.stewardRule, sensitive: i.sensitive })),
+    // Fixed by deployment (ACCESS_ESCALATION_SLA_MS) and the design, shown read-only (2026-10-14).
+    escalation: { stepSlaHours: Math.round((escalationSlaMs() / 3_600_000) * 100) / 100, tiers: ['access-admins', 'platform-admins'] as const },
+    delegation: { maxDays: MAX_DELEGATION_DAYS },
   };
 }
 
@@ -800,9 +925,9 @@ accessRouter.get('/configuration', requireAction('ViewAccess'), (_req, res) => {
 });
 
 accessRouter.put('/configuration', requireAction('ManageAccessPolicy'), asyncHandler(async (req, res) => {
-  const b = bodyOf(req, ['durations', 'stewards', 'items']);
-  if (b['durations'] !== undefined || b['stewards'] !== undefined) {
-    throw new ValidationError('durations and stewards are fixed by the design (decisions A4, A6); only items[].defaultDuration and items[].sensitive are editable');
+  const b = bodyOf(req, ['durations', 'stewards', 'items', 'escalation', 'delegation']);
+  if (b['durations'] !== undefined || b['stewards'] !== undefined || b['escalation'] !== undefined || b['delegation'] !== undefined) {
+    throw new ValidationError('durations, stewards, escalation and delegation are fixed by the design and the deployment (decisions A4, A6; ACCESS_ESCALATION_SLA_MS); only items[].defaultDuration and items[].sensitive are editable');
   }
   if (!Array.isArray(b['items'])) throw new ValidationError('items must be an array of { id, defaultDuration?, sensitive? }');
   const catalog = new Map(listCatalog().map((i) => [i.id, i]));

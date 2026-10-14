@@ -78,7 +78,22 @@ request the upgrade from where they are.
   who hit it and were left alone. Access reviews list `budgets-reader` like any
   grant, so the capability is certified and revocable.
 
-Not decided here: whether `manager_id` is seeded from team leads or typed by hand in `/admin/identity/users` (the seed generator can do either); escalation timers; delegation while out of office; whether `admin` cross-tenant grants are requestable at all (default: no, they are provisioned by hand).
+Decided during lane A3 (2026-10-14): **escalation timers** — a step waiting
+longer than `ACCESS_ESCALATION_SLA_MS` (default 48 h) adds the next tier of
+deciders (the access admins, then the `admin` holders), recorded as an
+`escalated` event and a bell item, single-flight across replicas like the
+expiry sweeper; the step's own deciders keep their right, so an escalation
+never takes a decision away from the accountable person. **Delegation** — an
+approver hands their decisions to another approver for a window (≤30 days);
+the delegate inherits only what the delegator may decide now, never a request
+they are a party to, never an access-admin step without holding access-admin
+(SoD), never transitively; the decision is recorded "on behalf of". **The
+cluster's grant writes** — provisioning on Aurora must write one role
+(`GRANT_ROLE_SQL`), not `setGrants`' delete-and-reinsert, which the native
+PostgreSQL contract shows losing a concurrent grant; offline the merge is
+serialized per beneficiary.
+
+Not decided here: whether `manager_id` is seeded from team leads or typed by hand in `/admin/identity/users` (the seed generator can do either); whether `admin` cross-tenant grants are requestable at all (default: no, they are provisioned by hand); whether the SLA should vary per item or step kind (one deployment-wide value today).
 
 ## 3. Model
 
@@ -90,7 +105,8 @@ Additive schema, `schema/access_schema.sql`, registered in both loaders and **no
 | `access_requests` | `id`, `requester_id`, `beneficiary_id`, `item_id`, `justification`, `duration`, `status`, `submitted_at`, `decided_at`, `provisioned_at`, `expires_at`, `revoked_at` |
 | `access_request_steps` | the approval chain computed at submit: `step` (1..n), `kind` (`manager`, `steward`, `access-admin`), `status`, `decided_by`, `decided_at`, `comment` — the *resolver* for who may decide a step runs live (A4); the row records who did |
 | `access_policies` | SoD rules: two `(tenant, role)` pairs that must not be held together, `severity`, `reason` |
-| `access_events` | the audit trail: every transition with actor, before/after and reason; append-only |
+| `access_events` | the audit trail: every transition with actor, before/after and reason; append-only (`delegation_id` for a delegation's events, A3) |
+| `access_delegations` | lane A3: `delegator_id`, `delegate_id`, `starts_at`, `ends_at`, `reason`, `ended_at`, `ended_by`; never to oneself (CHECK) |
 | `access_reviews`, `access_review_items` | phase A2 campaigns and their per-grant decisions |
 | `people.manager_id` | additive `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, nullable, references `people(id)` |
 
@@ -128,7 +144,7 @@ Rail groups Request / Approve / Govern / System; front door `/access/requests`.
 | `/access/reviews` | campaigns (A2; honest empty state until then) | required |
 | `/access/audit` | events | required |
 | `/access/configuration` | durations, steward rules, sensitive items | exempt: configuration form |
-| `/access/settings` | registered placeholder | exempt: placeholder |
+| `/access/settings` | delegation (lane A3) | exempt: settings surface |
 
 Everything is drawn from `@connorhoehnslalom/ui-components`: `CollectionCommandPage` + `CollectionToolbar` + `DataTable` for every table, `WorkflowStepper` and the forms primitives for the wizard, `ConfirmDialog` for decisions, the shared conversation composer for the thread. Nothing hand-rolled; a missing primitive goes to the library first.
 
@@ -146,4 +162,5 @@ Everything is drawn from `@connorhoehnslalom/ui-components`: `CollectionCommandP
 | **A0** registration + model + mock + routes + pages | the 21 registration points, the cast, `access_schema.sql` + mock fixtures, `/api/access/{summary,catalog,requests,approvals,policies,audit}` reads and the submit/decide/withdraw writes on the mock, every page honest and on the composer contract, DOM-audit policy for `/access/*`, journey logs per role × surface | `validate-access-tenant.sh --phase A0` |
 | **A1** provisioning + expiry + notifications + thread | `setGrants` merge with epoch bump, the expiry sweeper, bell items, `access:req:<id>` thread, the self-approval and once-only contracts | `--phase A1` |
 | **A2** policies + reviews | SoD evaluation at submit/provision with override, review campaigns on the same model | `--phase A2` |
-| **E** evidence | Aurora application of the additive schema (user decision), native PostgreSQL contracts for the request/step tables, Cognito seed users | `--phase E` |
+| **A3** timers + delegation | escalation timers, delegation, the admin's person picker (2026-10-14) | `--phase A3` |
+| **E** evidence | Aurora application of the additive schema (user decision), native PostgreSQL contracts for the request/step tables (done 2026-10-14), Cognito seed users | `--phase E` |

@@ -110,6 +110,15 @@ export default function ConfigurationPage() {
           <PageSection size="sm" title="Stewards" description="Who approves after the manager, resolved from the directory at decision time. Fixed by the design (A4).">
             <KeyValue layout="grid" items={data.stewards.map((s) => { const l = stewardLine(s); return { label: l.label, value: <T size="sm">{l.value}</T> }; })} />
           </PageSection>
+          {data.escalation && (
+            <PageSection size="sm" title="Escalation and delegation" description="A step nobody decides in time reaches the next tier of deciders; its own deciders keep the right. Approvers hand their decisions on while away under Settings. Fixed by the deployment (ACCESS_ESCALATION_SLA_MS).">
+              <KeyValue layout="grid" data-testid="access-configuration-escalation" items={[
+                { label: 'Time limit', value: <T size="sm">{`${data.escalation.stepSlaHours} hours per step, counted from when it starts waiting`}</T> },
+                { label: 'Then', value: <T size="sm">{`The access admins, then after another ${data.escalation.stepSlaHours} hours the platform admins (an access-admin step goes straight to the platform admins)`}</T> },
+                ...(data.delegation ? [{ label: 'Delegation', value: <T size="sm">{`Up to ${data.delegation.maxDays} days, to another approver; never on their own requests, and an access-admin step only to an access admin`}</T> }] : []),
+              ]} />
+            </PageSection>
+          )}
           <PageSection size="sm" title="Catalog items"
             description={mayEdit ? 'Each item’s default duration and whether it is sensitive (adds an access-admin step). Saved changes apply to requests submitted afterwards.' : 'Each item’s default duration and whether it is sensitive. Only an access admin changes them.'}>
             <DataTable data-testid="access-config-items" data={items} columns={columns} keyField={(i) => i.id} emptyMessage="The catalog offers no items."

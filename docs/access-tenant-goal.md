@@ -11,11 +11,13 @@ one run shows the whole backlog. Nothing here is built as of 2026-10-12.
 ```bash
 ./scripts/validate-access-tenant.sh --quick            # static registration, Cedar, policy, docs
 ./scripts/validate-access-tenant.sh --phase A0         # + routes, mock parity, pages, journeys for A0
+./scripts/validate-access-tenant.sh --phase A3         # + escalation timers and delegation
 ./scripts/validate-access-tenant.sh                    # everything through E
 ```
 
-`--quick` skips jest, the portal build and the browser. Phases nest: `A1`
-includes `A0`, `A2` includes `A1`, `E` includes all.
+`--quick` skips jest, the portal node tests and the browser. Phases nest: `A1`
+includes `A0`, `A2` includes `A1`, `A3` includes `A2`, `E` includes all. The
+full run also runs the access jest suites and the portal access node tests.
 
 ## Cast (decided here)
 
@@ -136,7 +138,7 @@ type scale. `accessSurfaces.ts` names each page and the lane that fills it.
 | `/access/reviews` | honest empty state until A2 | required |
 | `/access/audit` | events | required |
 | `/access/configuration` | durations, steward rules, sensitive flags | exempt: configuration |
-| `/access/settings` | registered placeholder | exempt: placeholder |
+| `/access/settings` | delegation (lane A3): the delegate picker, a window and a reason, over the delegations the viewer is part of | exempt: settings surface |
 
 The judge runs the DOM audit on `--tenant access --all --strict-coverage` and
 requires zero findings and zero unclassified.
@@ -191,10 +193,57 @@ rendered-contract change per `docs/journeys.md`.
   item decided keep/revoke; revoke → a pre-approved revocation request through
   A1's path.
 
+## A3 — escalation timers, delegation, the admin's person picker (2026-10-14)
+
+- **Escalation timers** (`middleware/src/lib/access-escalation.ts`): a step
+  left `current` longer than `ACCESS_ESCALATION_SLA_MS` (default 48 h, shown
+  read-only on `/access/configuration`) escalates: level 1 adds the access
+  admins, level 2 the `admin` holders in `access` (an access-admin step goes
+  straight to the admins); a level that adds nobody new is skipped. The step's
+  own deciders keep their right. Each escalation is one claim on the step
+  (`casStep` / `ESCALATE_STEP_SQL`), an `escalated` event and a bell item to
+  the people it newly reaches. Single-flight across replicas under the fleet
+  lock `access-escalation-sweep`, exactly like the expiry sweeper. Steps carry
+  `current_since`, `escalation_level`, `escalated_at` (additive columns).
+- **Delegation** (`lib/access/delegation.ts`, `/api/access/delegations`,
+  `/access/settings`): an approver hands their decisions to another approver
+  for a window of at most 30 days. Refused: oneself (403), a delegate with no
+  deciding role, an overlapping window of one's own, a delegate who is
+  delegating during the window (no chains), a delegate who is a party to a
+  request waiting on the delegator (409). Resolved live (A4): a delegate in force
+  decides exactly the steps their delegator may decide now, never a request
+  they are a party to, an access-admin step only if they hold access-admin,
+  never through a second delegation; the step records `delegated_from` and the
+  event says "decided on behalf of". Ending is the delegator's or an access
+  admin's, once. Events `delegated` / `delegation-ended` name the delegation.
+- **The admin's person picker**: the request form's "Who" is the library's
+  `PersonPicker` (ui-components 2.452.0); an access admin may pick any person in
+  the directory (`GET /beneficiaries`), an approver their direct reports. The
+  delegation form picks the delegate with the same composite. No native select.
+- Contracts: `routes/__tests__/access-escalation-delegation.test.ts` (both
+  replicas escalate once; escalated and delegated deciders decide; every
+  refusal), `lib/__tests__/access-escalation.test.ts`,
+  `lib/access/__tests__/delegation.test.ts`, the mock lost-update contract in
+  `lib/__tests__/access-provision.test.ts`; portal
+  `pages/access/__tests__/accessDelegation.test.ts`.
+
 ## E — evidence
 
-- The additive schema applied to Aurora (user decision) and the native
-  PostgreSQL contracts for the request/step tables.
+- The additive schema applied to Aurora (user decision).
+- Native PostgreSQL 16 contracts (`middleware/src/lib/access/__tests__/access-postgres.test.ts`,
+  dedicated container `orgiq-access-postgres-acceptance`, label
+  `orgiq.validation=access-postgres`, network none) over the unmodified
+  `access_schema.sql` and the cluster statements in `lib/access/sql.ts`:
+  reapplication and the upgrade of a pre-A3 cluster's event checks; racing
+  submits file once; twelve concurrent approvers decide a step once; no
+  self-approval through the statement or any other writer (trigger);
+  provisioning idempotent under eight racing provisioners and resumable after a
+  crash; single-role grant writes keep a concurrent grant where `setGrants`'
+  delete-and-reinsert loses it; the expiry sweep single-flight under six racing
+  sweepers and a person's revoke; escalation once per level; delegations.
+  Record: `docs/realtime-validation/<date>/access-postgres.md`. The judge
+  runs the suite when the container is up and otherwise judges the record,
+  which must be newer than the statements it proves.
 - Cognito `seedUsers` carry the cast.
 - `docs/realtime-validation/<date>/access-tenant.md` records the gate.
 

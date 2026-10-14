@@ -114,7 +114,7 @@ function accessComposerPolicy(pathname: string, view: TenantViewEvidence): Compo
   if (ACCESS_COLLECTIONS.test(pathname) || view.collection || view.listRoute || view.composer) return { mode: 'required' };
   if (pathname === '/access/requests/new' && view.form) return { mode: 'exempt', reason: 'The request wizard is a single form (who, what, why, how long) with explicit inputs and a Submit action, rather than a searchable collection; the new request opens on its record, whose thread has the composer.' };
   if (pathname === '/access/configuration' && (view.settingsSurface || view.form)) return { mode: 'exempt', reason: 'A configuration surface of durations, steward rules and sensitive items with a Save action (read-only in lane A0), rather than a searchable collection.' };
-  if (pathname === '/access/settings' && view.placeholder) return { mode: 'exempt', reason: 'The access preferences surface is registered but not available yet; the page displays its registration state (access-empty-settings) and exposes no data to search or command.' };
+  if (pathname === '/access/settings' && view.settingsSurface) return { mode: 'exempt', reason: 'A settings surface (2026-10-14): the delegation form (a person picker, a window and a reason with a Delegate action) over the short list of delegations the viewer is part of, each ended from its row; nothing to search or command.' };
   return undefined;
 }
 

@@ -92,6 +92,10 @@ ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS review_id TEXT;
 CREATE INDEX IF NOT EXISTS access_requests_beneficiary_idx ON access_requests (beneficiary_id);
 CREATE INDEX IF NOT EXISTS access_requests_status_idx ON access_requests (status);
 CREATE INDEX IF NOT EXISTS access_requests_expires_idx ON access_requests (expires_at) WHERE expires_at IS NOT NULL;
+-- One open grant request per (beneficiary, item): the duplicate refusal the
+-- submit makes (409) held by the table, so two racing submits file once.
+CREATE UNIQUE INDEX IF NOT EXISTS access_requests_one_open_idx ON access_requests (beneficiary_id, item_id)
+  WHERE kind = 'grant' AND status IN ('draft', 'submitted', 'pending');
 
 -- ── access_request_steps ─────────────────────────────────────────────────────
 -- The chain computed at submit. `decided_by` records who did decide; the set
@@ -104,8 +108,50 @@ CREATE TABLE IF NOT EXISTS access_request_steps (
   decided_by  TEXT,
   decided_at  TIMESTAMPTZ,
   comment     TEXT,
+  -- Escalation timers (2026-10-14, lib/access-escalation.ts): when the step
+  -- became the one awaiting a decision, how far it has escalated (0 = its own
+  -- deciders, 1 = + the next tier, 2 = + the tier after) and when it last did.
+  current_since    TIMESTAMPTZ,
+  escalation_level INTEGER NOT NULL DEFAULT 0 CHECK (escalation_level BETWEEN 0 AND 2),
+  escalated_at     TIMESTAMPTZ,
+  -- Delegation (2026-10-14): the approver a delegate decided this step for, else NULL.
+  delegated_from   TEXT,
   PRIMARY KEY (request_id, step)
 );
+ALTER TABLE access_request_steps ADD COLUMN IF NOT EXISTS current_since TIMESTAMPTZ;
+ALTER TABLE access_request_steps ADD COLUMN IF NOT EXISTS escalation_level INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE access_request_steps ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ;
+ALTER TABLE access_request_steps ADD COLUMN IF NOT EXISTS delegated_from TEXT;
+ALTER TABLE access_request_steps DROP CONSTRAINT IF EXISTS access_request_steps_escalation_level_check;
+ALTER TABLE access_request_steps ADD CONSTRAINT access_request_steps_escalation_level_check CHECK (escalation_level BETWEEN 0 AND 2);
+CREATE INDEX IF NOT EXISTS access_request_steps_open_idx ON access_request_steps (current_since) WHERE status IN ('current', 'info-requested');
+
+-- Two row rules the route also enforces (decision A5), held by the table so no
+-- writer can skip them: nobody decides a step of a request they submitted or
+-- benefit from, and a decided step (approved / rejected / skipped) never
+-- changes again. The decide statement (middleware/src/lib/access/sql.ts) checks
+-- both in its WHERE; this trigger refuses any other path.
+CREATE OR REPLACE FUNCTION access_step_decision_guard() RETURNS trigger AS $$
+DECLARE
+  req RECORD;
+BEGIN
+  IF OLD.status IN ('approved', 'rejected', 'skipped') AND (NEW.status IS DISTINCT FROM OLD.status
+      OR NEW.decided_by IS DISTINCT FROM OLD.decided_by OR NEW.decided_at IS DISTINCT FROM OLD.decided_at) THEN
+    RAISE EXCEPTION 'access: step % of % was already decided', OLD.step, OLD.request_id USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.decided_by IS NOT NULL AND NEW.decided_by IS DISTINCT FROM OLD.decided_by THEN
+    SELECT requester_id, beneficiary_id INTO req FROM access_requests WHERE id = NEW.request_id;
+    IF NEW.decided_by = req.requester_id OR NEW.decided_by = req.beneficiary_id THEN
+      RAISE EXCEPTION 'access: % cannot decide request % they submitted or benefit from', NEW.decided_by, NEW.request_id USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS access_step_decision_guard ON access_request_steps;
+CREATE TRIGGER access_step_decision_guard BEFORE UPDATE ON access_request_steps
+FOR EACH ROW EXECUTE FUNCTION access_step_decision_guard();
 
 -- ── access_policies ──────────────────────────────────────────────────────────
 -- Separation-of-duties rules: two (tenant, role) pairs not to be held together.
@@ -132,16 +178,52 @@ CREATE TABLE IF NOT EXISTS access_events (
   policy_id     TEXT,
   at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   actor_id      TEXT,
-  kind          TEXT NOT NULL CHECK (kind IN ('submitted', 'step-approved', 'step-rejected', 'info-requested', 'withdrawn',
-                  'approved', 'provisioned', 'expired', 'revoked', 'sod-override', 'sod-blocked', 'policy-updated')),
+  -- `delegation_id` (2026-10-14) names the delegation a `delegated` /
+  -- `delegation-ended` event is about; such an event carries no request.
+  delegation_id TEXT,
+  kind          TEXT NOT NULL CONSTRAINT access_events_kind_check CHECK (kind IN ('submitted', 'step-approved', 'step-rejected', 'info-requested', 'withdrawn',
+                  'approved', 'provisioned', 'expired', 'revoked', 'sod-override', 'sod-blocked', 'policy-updated',
+                  'escalated', 'delegated', 'delegation-ended')),
   before_status TEXT,
   after_status  TEXT,
   reason        TEXT,
-  CHECK (request_id IS NOT NULL OR policy_id IS NOT NULL)
+  CONSTRAINT access_events_target_check CHECK (request_id IS NOT NULL OR policy_id IS NOT NULL OR delegation_id IS NOT NULL)
 );
 ALTER TABLE access_events ADD COLUMN IF NOT EXISTS policy_id TEXT;
+ALTER TABLE access_events ADD COLUMN IF NOT EXISTS delegation_id TEXT;
 ALTER TABLE access_events ALTER COLUMN request_id DROP NOT NULL;
+-- Clusters created before 2026-10-14 carry the old unnamed target check and the
+-- old kind list; replace both by name (a re-run drops and re-adds the same rule).
+ALTER TABLE access_events DROP CONSTRAINT IF EXISTS access_events_check;
+ALTER TABLE access_events DROP CONSTRAINT IF EXISTS access_events_target_check;
+ALTER TABLE access_events ADD CONSTRAINT access_events_target_check CHECK (request_id IS NOT NULL OR policy_id IS NOT NULL OR delegation_id IS NOT NULL);
+ALTER TABLE access_events DROP CONSTRAINT IF EXISTS access_events_kind_check;
+ALTER TABLE access_events ADD CONSTRAINT access_events_kind_check CHECK (kind IN ('submitted', 'step-approved', 'step-rejected', 'info-requested', 'withdrawn',
+  'approved', 'provisioned', 'expired', 'revoked', 'sod-override', 'sod-blocked', 'policy-updated',
+  'escalated', 'delegated', 'delegation-ended'));
 CREATE INDEX IF NOT EXISTS access_events_request_idx ON access_events (request_id, at);
+
+-- ── access_delegations (2026-10-14) ──────────────────────────────────────────
+-- An approver hands their decisions to another eligible approver for a window
+-- (out of office). Resolved live like every decider (A4): a delegate decides
+-- the steps their delegator may decide now, never a request they are a party
+-- to, never an access-admin step unless they hold access-admin themselves, and
+-- never through a second delegation. `ended_at` closes it early.
+CREATE TABLE IF NOT EXISTS access_delegations (
+  id           TEXT PRIMARY KEY,
+  delegator_id TEXT NOT NULL,
+  delegate_id  TEXT NOT NULL,
+  starts_at    TIMESTAMPTZ NOT NULL,
+  ends_at      TIMESTAMPTZ NOT NULL,
+  reason       TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ended_at     TIMESTAMPTZ,
+  ended_by     TEXT,
+  CONSTRAINT access_delegations_not_self CHECK (delegator_id <> delegate_id),
+  CONSTRAINT access_delegations_window CHECK (ends_at > starts_at)
+);
+CREATE INDEX IF NOT EXISTS access_delegations_delegator_idx ON access_delegations (delegator_id, ends_at);
+CREATE INDEX IF NOT EXISTS access_delegations_delegate_idx ON access_delegations (delegate_id, ends_at);
 
 -- ── access_reviews / access_review_items (phase A2) ──────────────────────────
 -- A campaign certifies the standing grants (user_tenant_roles) of one tenant:
@@ -236,19 +318,19 @@ INSERT INTO access_requests (id, requester_id, beneficiary_id, item_id, justific
      NOW() - INTERVAL '10 days', NULL, NULL, NULL, NULL)
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO access_request_steps (request_id, step, kind, status, decided_by, decided_at, comment) VALUES
-  ('req-0001', 1, 'manager', 'current', NULL, NULL, NULL),
-  ('req-0001', 2, 'steward', 'waiting', NULL, NULL, NULL),
-  ('req-0002', 1, 'manager', 'approved', 'u-omar', NOW() - INTERVAL '1 day', 'Agreed with Vera; two sprints.'),
-  ('req-0002', 2, 'steward', 'current', NULL, NULL, NULL),
-  ('req-0003', 1, 'manager', 'approved', 'u-priya', NOW() - INTERVAL '4 days', 'Covers the rotation.'),
-  ('req-0003', 2, 'steward', 'approved', 'u-priya', NOW() - INTERVAL '3 days', 'Seven days, then it lapses.'),
-  ('req-0004', 1, 'steward', 'approved', 'u-priya', NOW() - INTERVAL '39 days', 'Owns the maintenance bots.'),
-  ('req-0005', 1, 'manager', 'rejected', 'u-omar', NOW() - INTERVAL '5 days', 'The review does not need leaderboard access; I will share the export.'),
-  ('req-0005', 2, 'steward', 'skipped', NULL, NULL, NULL),
-  ('req-0005', 3, 'access-admin', 'skipped', NULL, NULL, NULL),
-  ('req-0006', 1, 'manager', 'skipped', NULL, NULL, NULL),
-  ('req-0006', 2, 'steward', 'skipped', NULL, NULL, NULL)
+INSERT INTO access_request_steps (request_id, step, kind, status, decided_by, decided_at, comment, current_since) VALUES
+  ('req-0001', 1, 'manager', 'current', NULL, NULL, NULL, NOW() - INTERVAL '3 hours'),
+  ('req-0001', 2, 'steward', 'waiting', NULL, NULL, NULL, NULL),
+  ('req-0002', 1, 'manager', 'approved', 'u-omar', NOW() - INTERVAL '1 day', 'Agreed with Vera; two sprints.', NOW() - INTERVAL '2 days'),
+  ('req-0002', 2, 'steward', 'current', NULL, NULL, NULL, NOW() - INTERVAL '1 day'),
+  ('req-0003', 1, 'manager', 'approved', 'u-priya', NOW() - INTERVAL '4 days', 'Covers the rotation.', NOW() - INTERVAL '4 days'),
+  ('req-0003', 2, 'steward', 'approved', 'u-priya', NOW() - INTERVAL '3 days', 'Seven days, then it lapses.', NOW() - INTERVAL '4 days'),
+  ('req-0004', 1, 'steward', 'approved', 'u-priya', NOW() - INTERVAL '39 days', 'Owns the maintenance bots.', NOW() - INTERVAL '40 days'),
+  ('req-0005', 1, 'manager', 'rejected', 'u-omar', NOW() - INTERVAL '5 days', 'The review does not need leaderboard access; I will share the export.', NOW() - INTERVAL '6 days'),
+  ('req-0005', 2, 'steward', 'skipped', NULL, NULL, NULL, NULL),
+  ('req-0005', 3, 'access-admin', 'skipped', NULL, NULL, NULL, NULL),
+  ('req-0006', 1, 'manager', 'skipped', NULL, NULL, NULL, NOW() - INTERVAL '10 days'),
+  ('req-0006', 2, 'steward', 'skipped', NULL, NULL, NULL, NULL)
 ON CONFLICT (request_id, step) DO NOTHING;
 
 INSERT INTO access_events (id, request_id, at, actor_id, kind, before_status, after_status, reason) VALUES
@@ -281,3 +363,15 @@ INSERT INTO access_review_items (id, review_id, user_id, tenant, role, decision,
   ('ri-0003', 'rev-0001', 'u-layla', 'orgiq', 'sme', NULL, NULL, NULL, NULL, NULL),
   ('ri-0004', 'rev-0001', 'u-caleb', 'orgiq', 'sme', NULL, NULL, NULL, NULL, NULL)
 ON CONFLICT (review_id, user_id, tenant, role) DO NOTHING;
+
+-- ── Seed: one delegation (2026-10-14) ───────────────────────────────────────
+-- dlg-0001: Omar handed his decisions to Priya for three days of travel; it ended.
+INSERT INTO access_delegations (id, delegator_id, delegate_id, starts_at, ends_at, reason, created_at, ended_at, ended_by) VALUES
+  ('dlg-0001', 'u-omar', 'u-priya', NOW() - INTERVAL '14 days', NOW() - INTERVAL '11 days',
+     'Travelling to the identity governance summit; Priya covers my approvals.', NOW() - INTERVAL '15 days', NULL, NULL)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO access_events (id, request_id, delegation_id, at, actor_id, kind, before_status, after_status, reason) VALUES
+  ('evt-0016', NULL, 'dlg-0001', NOW() - INTERVAL '15 days', 'u-omar', 'delegated', NULL, NULL,
+     'Omar Haddad → Priya Venkataraman: Travelling to the identity governance summit; Priya covers my approvals.')
+ON CONFLICT (id) DO NOTHING;

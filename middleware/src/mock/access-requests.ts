@@ -14,7 +14,7 @@
 // from these rows by the route at request time.
 
 import { clock, defineFixture } from './core/index.js';
-import type { AccessDuration, RequestKind, RequestStatus, SodVerdict, StepKind, StepStatus, AccessEventKind } from '../lib/access/types.js';
+import type { AccessDuration, EscalationLevel, RequestKind, RequestStatus, SodVerdict, StepKind, StepStatus, AccessEventKind } from '../lib/access/types.js';
 
 export interface AccessRequestRow {
   id: string;
@@ -50,6 +50,13 @@ export interface AccessStepRow {
   decidedBy: string | null;
   decidedAt: string | null;
   comment: string | null;
+  /** When it became the step awaiting a decision (access_request_steps.current_since), else null. */
+  currentSince: string | null;
+  /** Timer escalations so far, 0..2 (lib/access-escalation.ts), and when the last one happened. */
+  escalationLevel: EscalationLevel;
+  escalatedAt: string | null;
+  /** The approver a delegate decided this step for (access_request_steps.delegated_from), else null. */
+  delegatedFrom: string | null;
 }
 
 export interface AccessEventRow {
@@ -58,6 +65,8 @@ export interface AccessEventRow {
   requestId: string | null;
   /** The SoD policy a `policy-updated` event changed, else null. */
   policyId: string | null;
+  /** The delegation a `delegated` / `delegation-ended` event is about, else null. */
+  delegationId: string | null;
   at: string;
   actorId: string | null;
   kind: AccessEventKind;
@@ -102,32 +111,33 @@ export const accessRequestsFixture = defineFixture<AccessRequestRow>({
   },
 });
 
-const step = (requestId: string, n: number, kind: StepKind, status: StepStatus, decidedBy: string | null = null, decidedAt: string | null = null, comment: string | null = null): AccessStepRow =>
-  ({ requestId, step: n, kind, status, decidedBy, decidedAt, comment });
+const step = (requestId: string, n: number, kind: StepKind, status: StepStatus, currentSince: string | null,
+  decidedBy: string | null = null, decidedAt: string | null = null, comment: string | null = null): AccessStepRow =>
+  ({ requestId, step: n, kind, status, decidedBy, decidedAt, comment, currentSince, escalationLevel: 0, escalatedAt: null, delegatedFrom: null });
 
 export const accessStepsFixture = defineFixture<AccessStepRow>({
   key: 'access.request-steps',
   scenarios: {
     default: () => [
-      step('req-0001', 1, 'manager', 'current'),
-      step('req-0001', 2, 'steward', 'waiting'),
-      step('req-0002', 1, 'manager', 'approved', 'u-omar', clock.daysAgo(1), 'Agreed with Vera; two sprints.'),
-      step('req-0002', 2, 'steward', 'current'),
-      step('req-0003', 1, 'manager', 'approved', 'u-priya', clock.daysAgo(4), 'Covers the rotation.'),
-      step('req-0003', 2, 'steward', 'approved', 'u-priya', clock.daysAgo(3), 'Seven days, then it lapses.'),
-      step('req-0004', 1, 'steward', 'approved', 'u-priya', clock.daysAgo(39), 'Owns the maintenance bots.'),
-      step('req-0005', 1, 'manager', 'rejected', 'u-omar', clock.daysAgo(5), 'The review does not need leaderboard access; I will share the export.'),
-      step('req-0005', 2, 'steward', 'skipped'),
-      step('req-0005', 3, 'access-admin', 'skipped'),
-      step('req-0006', 1, 'manager', 'skipped'),
-      step('req-0006', 2, 'steward', 'skipped'),
+      step('req-0001', 1, 'manager', 'current', clock.hoursAgo(3)),
+      step('req-0001', 2, 'steward', 'waiting', null),
+      step('req-0002', 1, 'manager', 'approved', clock.daysAgo(2), 'u-omar', clock.daysAgo(1), 'Agreed with Vera; two sprints.'),
+      step('req-0002', 2, 'steward', 'current', clock.daysAgo(1)),
+      step('req-0003', 1, 'manager', 'approved', clock.daysAgo(4), 'u-priya', clock.daysAgo(4), 'Covers the rotation.'),
+      step('req-0003', 2, 'steward', 'approved', clock.daysAgo(4), 'u-priya', clock.daysAgo(3), 'Seven days, then it lapses.'),
+      step('req-0004', 1, 'steward', 'approved', clock.daysAgo(40), 'u-priya', clock.daysAgo(39), 'Owns the maintenance bots.'),
+      step('req-0005', 1, 'manager', 'rejected', clock.daysAgo(6), 'u-omar', clock.daysAgo(5), 'The review does not need leaderboard access; I will share the export.'),
+      step('req-0005', 2, 'steward', 'skipped', null),
+      step('req-0005', 3, 'access-admin', 'skipped', null),
+      step('req-0006', 1, 'manager', 'skipped', clock.daysAgo(10)),
+      step('req-0006', 2, 'steward', 'skipped', null),
     ],
     empty: () => [],
   },
 });
 
 const evt = (id: string, requestId: string, at: string, actorId: string | null, kind: AccessEventKind, beforeStatus: string | null, afterStatus: string | null, reason: string | null = null): AccessEventRow =>
-  ({ id, requestId, policyId: null, at, actorId, kind, beforeStatus, afterStatus, reason });
+  ({ id, requestId, policyId: null, delegationId: null, at, actorId, kind, beforeStatus, afterStatus, reason });
 
 export const accessEventsFixture = defineFixture<AccessEventRow>({
   key: 'access.events',
@@ -148,6 +158,9 @@ export const accessEventsFixture = defineFixture<AccessEventRow>({
       evt('evt-0013', 'req-0005', clock.daysAgo(5), 'u-omar', 'step-rejected', 'submitted', 'rejected', 'The review does not need leaderboard access; I will share the export.'),
       evt('evt-0014', 'req-0006', clock.daysAgo(10), 'u-rhea', 'submitted', 'draft', 'submitted'),
       evt('evt-0015', 'req-0006', clock.daysAgo(9), 'u-rhea', 'withdrawn', 'submitted', 'withdrawn', 'The channel moved to the platform team.'),
+      // dlg-0001 (mock/access-delegations.ts): Omar handed his decisions to Priya for three days of travel.
+      { id: 'evt-0016', requestId: null, policyId: null, delegationId: 'dlg-0001', at: clock.daysAgo(15), actorId: 'u-omar', kind: 'delegated', beforeStatus: null, afterStatus: null,
+        reason: 'Omar Haddad → Priya Venkataraman: Travelling to the identity governance summit; Priya covers my approvals.' },
     ],
     empty: () => [],
   },

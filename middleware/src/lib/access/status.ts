@@ -34,7 +34,11 @@ export interface Transition {
 export function submitRows(request: Omit<AccessRequestRow, 'kind' | 'reviewId' | 'status' | 'decidedAt' | 'provisionedAt' | 'expiresAt' | 'revokedAt' | 'expiryWarnedAt'>, kinds: readonly StepKind[]): Transition {
   return {
     request: { kind: 'grant', reviewId: null, ...request, status: 'submitted', decidedAt: null, provisionedAt: null, expiresAt: null, revokedAt: null, expiryWarnedAt: null },
-    steps: kinds.map((kind, i) => ({ requestId: request.id, step: i + 1, kind, status: i === 0 ? 'current' : 'waiting', decidedBy: null, decidedAt: null, comment: null })),
+    steps: kinds.map((kind, i) => ({
+      requestId: request.id, step: i + 1, kind, status: i === 0 ? 'current' : 'waiting', decidedBy: null, decidedAt: null, comment: null,
+      // The escalation clock starts when a step becomes the one awaiting a decision.
+      currentSince: i === 0 ? request.submittedAt : null, escalationLevel: 0, escalatedAt: null, delegatedFrom: null,
+    })),
     events: [{ kind: 'submitted', before: 'draft', after: 'submitted', reason: null }],
   };
 }
@@ -47,9 +51,11 @@ export class TransitionError extends Error {
  * Apply a decision on step `stepNo` by `actorId`. Throws TransitionError(409)
  * when the request is not open, the step was already decided, or it is not
  * the step awaiting a decision. Authority (who may decide) is NOT checked
- * here — lib/access/rules.ts decides that before calling.
+ * here — lib/access/rules.ts decides that before calling. `onBehalfOf` names
+ * the delegator when the actor decides as their delegate (recorded on the step
+ * and in the event's reason by the caller).
  */
-export function decide(request: AccessRequestRow, steps: readonly AccessStepRow[], stepNo: number, decision: Decision, actorId: string, comment: string | null, now: string): Transition {
+export function decide(request: AccessRequestRow, steps: readonly AccessStepRow[], stepNo: number, decision: Decision, actorId: string, comment: string | null, now: string, onBehalfOf: string | null = null): Transition {
   const ordered = [...steps].sort((a, b) => a.step - b.step).map((s) => ({ ...s }));
   const target = ordered.find((s) => s.step === stepNo);
   if (!target) throw new TransitionError(409, `Request ${request.id} has no step ${stepNo}`);
@@ -63,6 +69,7 @@ export function decide(request: AccessRequestRow, steps: readonly AccessStepRow[
   target.decidedBy = actorId;
   target.decidedAt = now;
   target.comment = comment;
+  target.delegatedFrom = onBehalfOf;
 
   if (decision === 'info') {
     target.status = 'info-requested';
@@ -79,6 +86,7 @@ export function decide(request: AccessRequestRow, steps: readonly AccessStepRow[
     const following = ordered.find((s) => s.step > stepNo && s.status === 'waiting');
     if (following) {
       following.status = 'current';
+      following.currentSince = now;
       next.status = 'pending';
       events.push({ kind: 'step-approved', before, after: next.status, reason: comment });
     } else {
