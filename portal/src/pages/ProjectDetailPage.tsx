@@ -698,6 +698,7 @@ function ProjectDetailPage() {
       onComment={() => { thread.refreshComments(); setDetailTab('history'); }}
       chatUnavailableReason={!canDispatch ? 'You can read messages. Your current role cannot post to this discussion.'
         : !initiativeThread ? 'The initiative discussion is still loading.' : undefined}
+      chatPending={!capsReady || (canDispatch && !initiativeThread)}
     />
   );
 

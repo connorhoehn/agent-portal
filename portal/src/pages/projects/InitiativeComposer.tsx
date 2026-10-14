@@ -65,6 +65,8 @@ export interface InitiativeComposerProps {
   conversation?: ConversationRuntime | null;
   /** Why the Discussion cannot take a message (a reader). */
   chatUnavailableReason?: string;
+  /** Whether this reader may post is not known yet (capabilities or the thread still loading): Chat stays off, quietly. */
+  chatPending?: boolean;
   /** The call bar and tiles, flush on the composer's top edge (`useCallBlock`). */
   dock?: ReactNode;
   defaultMode?: 'agent' | 'chat';
@@ -89,7 +91,7 @@ export function InitiativeComposer(props: InitiativeComposerProps) {
 function destinationStorage(): Storage | null { try { return typeof window === 'undefined' ? null : window.localStorage; } catch { return null; } }
 
 function DockedComposer({
-  subject, setup, conversation, chatUnavailableReason, dock, defaultMode = 'agent', expanded, onComment, onAsk, prompts, presentation = 'compact', 'data-testid': testId = 'initiative-composer',
+  subject, setup, conversation, chatUnavailableReason, chatPending = false, dock, defaultMode = 'agent', expanded, onComment, onAsk, prompts, presentation = 'compact', 'data-testid': testId = 'initiative-composer',
 }: Omit<InitiativeComposerProps, 'setup'> & { setup: ComposerSetup }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -326,7 +328,7 @@ function DockedComposer({
       channel={conversation?.channel ?? null}
       chat={conversation?.chat ?? null}
       context={{ kind: 'initiative', id: setup.draftKey, title: '', reference: selectedRetiredDraft ? null : { id: reference.id, label: reference.label, page: reference.page } }}
-      capabilities={{ maySend: !!conversation?.maySend, ...(chatUnavailableReason ? { readOnlyReason: chatUnavailableReason } : {}),
+      capabilities={{ maySend: !!conversation?.maySend, ...(chatUnavailableReason ? { readOnlyReason: chatUnavailableReason } : {}), pending: chatPending,
         // A vanished recipient must not turn an unfinished private draft into an Agent request.
         agent: { allowed: !(mode === 'chat' && unresolvedDestination), reason: 'Choose a current destination before changing this draft’s mode.' },
         mayAttach: !!conversation?.maySend || !!social?.canMessagePeople }}
