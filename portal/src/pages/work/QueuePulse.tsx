@@ -8,7 +8,7 @@
 
 import { Link } from 'react-router';
 import {
-  Card, Chip, DotMeter, Inline, MetaLine, SectionLabel, Stack, StatStrip, StatusDot, Toolbar,
+  Card, Chip, DotMeter, Inline, LoadingState, MetaLine, SectionLabel, Stack, StatStrip, StatusDot, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
@@ -59,7 +59,10 @@ export function QueuePulse({ summary, jobs, degraded }: {
   // of the three the reader is looking at.
   const { can, ready } = useCapabilities();
   const mayReadBots = ready && can('ManageBots');
-  const { data, error, degraded: botsDegraded } = useFetch<{ bots: PulseBot[] }>(mayReadBots ? '/api/bots' : null, 15_000);
+  const { data, isLoading: botsLoading, error, degraded: botsDegraded } = useFetch<{ bots: PulseBot[] }>(mayReadBots ? '/api/bots' : null, 15_000);
+  // Until the first roster read answers, the panel does not know who pulls
+  // from the queue: say so, rather than drawing an empty roster and a 0.
+  const rosterPending = !ready || (mayReadBots && botsLoading && !data);
   const botsFailure = error ?? botsDegraded;
   const bots = botsFailure ? [] : data?.bots ?? [];
 
@@ -108,8 +111,9 @@ export function QueuePulse({ summary, jobs, degraded }: {
           },
           {
             label: 'Bots on this queue',
-            value: !mayReadBots || botsFailure ? '—' : roster.length,
+            value: !mayReadBots || botsFailure || rosterPending ? '—' : roster.length,
             hint: !ready ? 'checking roster access'
+              : rosterPending ? 'reading the roster'
               : !mayReadBots ? 'roster not visible to this role'
               : botsDegraded
               ? `roster unreadable — ${botsDegraded}`
@@ -130,7 +134,8 @@ export function QueuePulse({ summary, jobs, degraded }: {
         ]}
       />
 
-      {roster.length > 0 && (
+      {rosterPending && <LoadingState label="Reading the bot roster…" />}
+      {!rosterPending && roster.length > 0 && (
         <Card padding="none" className="mt-3 overflow-hidden">
           <Toolbar
             size="sm"

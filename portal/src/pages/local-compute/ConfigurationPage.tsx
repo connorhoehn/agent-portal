@@ -174,7 +174,10 @@ export default function ConfigurationPage() {
   // is only ever a real failure to read.
   return <PageSection title="Session settings" description="Inspect bundled skills, hooks, and settings. Runtime configuration management is not available yet.">
     {failure ? <UnavailableNotice error={failure} what="configuration preview" source={BUNDLE_SOURCE} onRetry={refresh} />
-      : isLoading && !data ? <LoadingState label="Loading settings…" />
+      // The library read decides each skill's "Library version" and its link,
+      // so the contents wait for its first answer instead of claiming
+      // "version unavailable" for a read that is still in flight.
+      : (isLoading && !data) || (library.isLoading && !library.data) ? <LoadingState label="Loading settings…" />
       : !data ? <EmptyState title="No configuration preview" description="No session bundle has been published yet, so sessions run with the settings baked into their image." />
       : <>
         {(library.error ?? library.degraded) && <UnavailableNotice error={library.error ?? library.degraded ?? ''} what="library versions" source={LIBRARY_VERSIONS_SOURCE} onRetry={library.refresh} />}

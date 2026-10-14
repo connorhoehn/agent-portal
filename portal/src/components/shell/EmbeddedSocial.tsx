@@ -267,7 +267,8 @@ function SocialEntryRow({ social }: { social: EmbeddedSocialContextValue }) {
         <PresenceAvatars size={20} maxVisible={4} users={social.presencePeople} />
       </Inline>}
       <PresenceDot state={social.onlineCount > 0 ? 'online' : 'offline'} pulse={false} size="sm" />
-      <T size="xs" tone="secondary" className="whitespace-nowrap" data-testid="shell-social-online">{social.onlineCount} online</T>
+      {/* Tabular digits: a live count changing (7 → 8 online) must not shift the footer controls after it. */}
+      <T size="xs" tone="secondary" tabular className="whitespace-nowrap" data-testid="shell-social-online">{social.onlineCount} online</T>
     </Inline>
     <Inline gap="none" align="center" className="border-l border-border pl-2">
       <WrappedNotificationBell notifications={activity} placement="bottom-start" size="sm" label="Social activity"

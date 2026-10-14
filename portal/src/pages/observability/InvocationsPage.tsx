@@ -265,6 +265,9 @@ function InvocationsPage() {
             value={resolvedAgentFilter}
             onChange={(e) => setAgentFilter(e.target.value)}
             size="sm"
+            // A toolbar select is sized to its options, like ToolCallsPage's —
+            // the Select's default is a form field's full width.
+            className="w-[160px]"
             options={[
               { value: 'all', label: 'All agents' },
               ...agentOptions.map((o) => ({ value: o.id, label: o.label })),
@@ -275,6 +278,7 @@ function InvocationsPage() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
             size="sm"
+            className="w-[140px]"
             options={[
               { value: 'all', label: 'All statuses' },
               { value: 'ok', label: 'OK' },

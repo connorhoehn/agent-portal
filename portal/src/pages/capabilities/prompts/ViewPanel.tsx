@@ -90,7 +90,7 @@ export function ViewPanel({
             />
           }
           aside={
-            <Inline gap="sm" justify="end" wrap={false}>
+            <Inline gap="sm" justify="end">
               <VersionSelect promptId={selection.promptId} value={selection.version} onChange={onVersionChange} />
               {canManage && (
                 <>
