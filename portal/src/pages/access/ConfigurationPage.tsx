@@ -31,7 +31,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { ACCESS_API, DURATION_LABELS, KIND_LABELS, TENANT_LABELS, configurationPatch, type AccessConfiguration, type AccessDuration, type AccessTenant, type ConfigurationEdits as Edits } from '../../lib/accessRequests';
+import { ACCESS_API, DURATION_LABELS, KIND_LABELS, STEWARD_LABELS, TENANT_LABELS, configurationPatch, type AccessConfiguration, type AccessDuration, type AccessTenant, type ConfigurationEdits as Edits } from '../../lib/accessRequests';
 import { ACCESS_SURFACES } from './accessSurfaces';
 
 type ConfigItem = AccessConfiguration['items'][number];
@@ -39,6 +39,10 @@ type ConfigItem = AccessConfiguration['items'][number];
 function stewardLine(s: AccessConfiguration['stewards'][number]): { label: string; value: string } {
   if (s.scope === 'initiative-membership') return { label: 'Initiatives', value: 'The initiative’s owner' };
   if (s.scope === 'sensitive') return { label: 'Sensitive items', value: 'An access admin, as a final step' };
+  if (s.scope === 'capability') {
+    const tenant = TENANT_LABELS[s.tenant as AccessTenant] ?? s.tenant ?? '';
+    return { label: `${tenant} capabilities`, value: `The budget owner: holders of ${s.role} in ${tenant}` };
+  }
   const tenant = TENANT_LABELS[s.tenant as AccessTenant] ?? s.tenant ?? '';
   return { label: `${tenant} roles`, value: `Holders of ${s.role} in ${tenant}` };
 }
@@ -67,7 +71,7 @@ export default function ConfigurationPage() {
     { key: 'title', header: 'Item', render: (i) => <T size="sm" title={i.title} className="block max-w-[18rem] truncate">{i.title}</T> },
     { key: 'kind', header: 'Kind', render: (i) => KIND_LABELS[i.kind] },
     { key: 'tenant', header: 'Workspace', width: '120px', render: (i) => TENANT_LABELS[i.tenant] ?? i.tenant },
-    { key: 'steward', header: 'Steward', render: (i) => (i.stewardRule === 'initiative-owner' ? 'Initiative owner' : 'Workspace steward') },
+    { key: 'steward', header: 'Steward', render: (i) => STEWARD_LABELS[i.stewardRule].replace(/^the /, '').replace(/^./, (c) => c.toUpperCase()) },
     {
       key: 'defaultDuration', header: 'Default duration', width: '168px',
       render: (i) => mayEdit

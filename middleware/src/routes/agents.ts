@@ -579,7 +579,7 @@ async function streamLocalAnswer(stream: AgentStream, local: LocalAnswer, ctx: {
     toolCalls.push({ id, name, args, result });
   };
   call('local_answer', JSON.stringify({ intent: local.intent, scope: ctx.scope, stance: ctx.stance }),
-    JSON.stringify({ intent: local.intent, sources: local.sources, rows: local.rows }));
+    JSON.stringify({ intent: local.intent, sources: local.sources, rows: local.rows, ...(local.action ? { action: local.action } : {}) }));
   if (local.records.length) call('search_context', JSON.stringify({ records: local.records.map(r => ({ type: r.type, id: r.id })) }),
     JSON.stringify({ records: local.records, edges: local.edges }));
   stream.stepFinished(step);

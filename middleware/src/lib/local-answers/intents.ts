@@ -5,7 +5,8 @@
 //
 // Every number in an answer is computed here, from those rows, at request
 // time. Money appears only when `viewer.canReadBudgets` (the budgets read tier,
-// lib/budget-read-tier.ts); below it an answer says why it has no figures.
+// lib/budget-read-tier.ts); below it an answer says the figures are locked and
+// offers the quick request for the tier (`action`), never a bare refusal.
 
 import type { ProjectSummary } from '../../providers/projects.js';
 import type { WorkItem } from '../../providers/work-items.js';
@@ -13,6 +14,7 @@ import type { SprintRow } from '../../providers/sprints.js';
 import type { Maintenance30d } from '../../providers/budgets.js';
 import type { LocalIntent, IntentMatch } from './match.js';
 import { usd, pct, sumUsd, monthLabel, monthName, plural, listing } from './format.js';
+import { BUDGET_READ_ITEM_ID } from '../budget-read-tier.js';
 
 export interface LocalViewer { canReadBudgets: boolean; role: string }
 
@@ -33,7 +35,12 @@ export interface LocalAnswer {
   rows: Array<Record<string, unknown>>;
   /** Which rows were read, in words, for the STEP/tool-call trail. */
   sources: string[];
+  /** Something the reader can do about the answer — today only the budgets
+   *  tier's quick request (POST /api/access-requests/quick) on a locked answer. */
+  action?: LocalAction;
 }
+
+export interface LocalAction { kind: 'request-access'; itemId: string; label: string; href: string }
 
 export type Contributor = { name: string; role: string | null };
 
@@ -118,9 +125,18 @@ export function sprintBehind(s: SprintRow, asOf: Date): boolean {
   return elapsed != null && s.pointsDone / s.pointsTotal < elapsed - BEHIND_SLACK;
 }
 
+/** Where a reader below the tier asks for it, from where they are (the Initiatives page opens the quick request). */
+export const BUDGET_REQUEST_HREF = '/iq/projects?request=budget-access';
+
 const noFigures = (viewer: LocalViewer): string =>
-  `I can't show budget figures to your role. Spend, allocations and maintenance floors are visible to the budgets read tier — org-leader, hr-admin and program-owner, or anyone holding ManageBudgets — and you are signed in as ${viewer.role}. ` +
-  'You can still ask which initiatives are blocked, critical or behind, who owns an initiative, or what is open on it.';
+  `The budget figures are locked for you. Spend, allocations and maintenance floors are visible to the budgets read tier — org-leader, hr-admin and program-owner, anyone holding ManageBudgets, or anyone granted budget visibility through Access — and you are signed in as ${viewer.role}. ` +
+  `[Request budget access](${BUDGET_REQUEST_HREF}): it goes to an approver as an ordinary access request, and once it is granted the figures appear here without signing out.\n\n` +
+  'Meanwhile you can still ask which initiatives are blocked, critical or behind, who owns an initiative, or what is open on it.';
+
+/** The quick request a locked answer offers (the same one the Initiatives page's locked cells offer). */
+const requestBudgetAccess = (): LocalAction => ({
+  kind: 'request-access', itemId: BUDGET_READ_ITEM_ID, label: 'Request budget access', href: BUDGET_REQUEST_HREF,
+});
 
 const capNote = (input: IntentInput): string =>
   input.initiativesCapped ? ` (read from the first ${input.initiatives.length} initiatives; more exist)` : '';
@@ -133,7 +149,7 @@ export function budgetAnswer(input: IntentInput): LocalAnswer {
   const sources = ['initiatives (spend month-to-date, allocation)', 'maintenance floor (cron runs, last 30 days)'];
   if (!viewer.canReadBudgets) {
     input.focus.forEach(p => c.initiative(p));
-    return { intent: 'budget', text: noFigures(viewer), records: c.records, edges: [], rows: [], sources: [] };
+    return { intent: 'budget', text: noFigures(viewer), records: c.records, edges: [], rows: [], sources: [], action: requestBudgetAccess() };
   }
   const month = monthName(asOf);
   const set = input.focus.length ? input.focus : input.initiatives;
@@ -207,7 +223,7 @@ export function spendAnswer(input: IntentInput): LocalAnswer {
   const c = new Citations();
   if (!viewer.canReadBudgets) {
     input.focus.forEach(p => c.initiative(p));
-    return { intent: 'spend', text: noFigures(viewer), records: c.records, edges: [], rows: [], sources: [] };
+    return { intent: 'spend', text: noFigures(viewer), records: c.records, edges: [], rows: [], sources: [], action: requestBudgetAccess() };
   }
   const set = input.focus.length ? input.focus : input.initiatives;
   const rows = set.map(p => ({ initiativeId: p.id, name: p.name, spendMtdUsd: p.agentSpendUsd ?? 0, allocatedUsd: p.allocatedUsd }));

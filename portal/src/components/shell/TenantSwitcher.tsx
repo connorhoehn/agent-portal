@@ -5,6 +5,7 @@ import { tenantEnabled } from '../../lib/features';
 import { useSharedNotifications } from './SharedNotifications';
 import { useCallHost } from '../../lib/conversationCall';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
+import { roleGrants } from '../../lib/capabilityGrants';
 
 const LABELS: Record<Tenant, string> = { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines', access: 'Access' };
 
@@ -25,7 +26,7 @@ export function TenantSwitcher({ label, healthy }: { label: string; healthy: boo
     .filter(t => t !== session?.tenant && tenantEnabled(t) && sessionStatus === 'ready' && (session?.switchable[t]?.length ?? 0) > 0)
     .map(tenant => ({
       id: tenant, label: LABELS[tenant], initials: LABELS[tenant].slice(0, 2),
-      unread: session?.grants[tenant]?.length ? inbox.notifications.filter(n => !n.read && n.payload?.tenant === tenant).length : 0,
+      unread: roleGrants(session?.grants, tenant).length ? inbox.notifications.filter(n => !n.read && n.payload?.tenant === tenant).length : 0,
     }));
   return <TenantSwitcherControl label={label} healthy={healthy} motion={motion} destinations={destinations}
     onSelect={id => enterContext(id as Tenant)} live={connectionState === 'connected'}

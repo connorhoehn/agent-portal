@@ -7,6 +7,9 @@
 //
 //   tenant-role             the beneficiary's grants, merged through
 //                           providers/identity.ts `setGrants` (user_tenant_roles)
+//   capability              the same grants merge — a grant entry that is not a
+//                           role (lib/session.ts CAPABILITY_GRANTS), e.g. orgiq
+//                           `budgets-reader` for budget visibility
 //   initiative-membership   a project_contributions row, through
 //                           providers/projects.ts `addContribution`
 //
@@ -126,8 +129,9 @@ export function withRole(grants: Grants, tenant: string, role: string, present: 
 /** Write (or remove) the item for the beneficiary in the existing grant store. Idempotent. */
 async function applyGrant(request: AccessRequestRow, item: AccessCatalogRow, present: boolean): Promise<void> {
   const user = await beneficiaryOf(request);
-  if (item.kind === 'tenant-role') {
-    if (!item.role) throw new ProvisionError(`${item.id} names no role`);
+  // A capability (orgiq `budgets-reader`) is a grant entry like a role: same store, same merge.
+  if (item.kind === 'tenant-role' || item.kind === 'capability') {
+    if (!item.role) throw new ProvisionError(`${item.id} names no ${item.kind === 'capability' ? 'capability' : 'role'}`);
     const holds = (user.grants[item.tenant] ?? []).includes(item.role);
     if (holds !== present) await setGrants(user.id, withRole(user.grants, item.tenant, item.role, present));
     return;

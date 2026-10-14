@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-13T14:00:21.937Z",
-  "serverHandlerSha": "b009993c1b2feb05c864ca60c1209449c3586964caf99c51fc610d33168f09ce",
+  "capturedAt": "2026-10-14T02:27:09.970Z",
+  "serverHandlerSha": "0b144e4f66ca7edabe5bbe79e875ac1d1edfe0584072b626b109215c87297c1d",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -797,6 +797,101 @@
         "rule": "control-plane",
         "reason": "The capture's own tool. `POST /api/__mock/scenario` switches the world every later shape would be captured in, so the harness may not replay it. (`POST /api/__mock/reset` IS replayed — the sweep calls it between every write anyway, so its shape comes for free and costs nothing.)"
       }
+    },
+    "POST /api/access-requests/quick": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "beneficiary": "object",
+        "beneficiary.displayName": "string",
+        "beneficiary.id": "string",
+        "beneficiary.personId": "null",
+        "can": "object",
+        "can.decide": "boolean",
+        "can.overrideSod": "boolean",
+        "can.revoke": "boolean",
+        "can.viewAudit": "boolean",
+        "can.withdraw": "boolean",
+        "decidedAt": "null",
+        "duration": "string",
+        "expiresAt": "null",
+        "id": "string",
+        "item": "object",
+        "item.defaultDuration": "string",
+        "item.description": "string",
+        "item.heldByActor": "boolean",
+        "item.id": "string",
+        "item.kind": "string",
+        "item.role": "string",
+        "item.sensitive": "boolean",
+        "item.sodConflicts": "array",
+        "item.stewardRule": "string",
+        "item.tenant": "string",
+        "item.title": "string",
+        "justification": "string",
+        "kind": "string",
+        "provisionedAt": "null",
+        "requester": "object",
+        "requester.displayName": "string",
+        "requester.id": "string",
+        "requester.personId": "null",
+        "reviewId": "null",
+        "revokedAt": "null",
+        "sod": "object",
+        "sod.conflicts": "array",
+        "sod.overriddenBy": "null",
+        "sod.overrideReason": "null",
+        "sod.verdict": "string",
+        "status": "string",
+        "steps": "array",
+        "steps[]": "object",
+        "steps[].comment": "null",
+        "steps[].decidedAt": "null",
+        "steps[].decidedBy": "null",
+        "steps[].eligible": "array",
+        "steps[].eligible[]": "object",
+        "steps[].eligible[].displayName": "string",
+        "steps[].eligible[].id": "string",
+        "steps[].eligible[].personId": "string",
+        "steps[].escalated": "string",
+        "steps[].kind": "string",
+        "steps[].status": "string",
+        "steps[].step": "number",
+        "submittedAt": "string",
+        "thread": "string"
+      },
+      "values": {
+        "item.kind": [
+          "capability"
+        ],
+        "item.role": [
+          "budgets-reader"
+        ],
+        "item.tenant": [
+          "orgiq"
+        ],
+        "kind": [
+          "grant"
+        ],
+        "sod.verdict": [
+          "clear"
+        ],
+        "status": [
+          "submitted"
+        ],
+        "steps[].kind": [
+          "steward"
+        ],
+        "steps[].status": [
+          "current"
+        ]
+      },
+      "sent": [
+        "duration",
+        "itemId",
+        "justification"
+      ]
     },
     "POST /api/access/requests": {
       "persona": "orgiq/admin",
@@ -3802,6 +3897,7 @@
       },
       "values": {
         "items[].kind": [
+          "capability",
           "initiative-membership",
           "tenant-role"
         ],
@@ -3815,6 +3911,7 @@
           "access-admin",
           "community-admin",
           "hr-admin",
+          "org-leader",
           "pipeline-admin",
           "program-lead"
         ],

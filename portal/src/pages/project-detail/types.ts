@@ -130,6 +130,8 @@ export interface ProjectDetail {
   /** This month's allocation (initiative_budgets) the MTD spend reads
       against. Null when no allocation exists. */
   allocatedUsd?: number | null;
+  /** Present only below the budgets read tier: the dollar fields were withheld (projects/types.ts BudgetAccessLocked). */
+  budgetAccess?: import('../projects/types').BudgetAccessLocked;
   contributors: ProjectContributor[];
 }
 

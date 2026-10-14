@@ -42,7 +42,7 @@ UPDATE app_users SET person_id = 'p-priya' WHERE id = 'u-priya' AND person_id IS
 -- (design: "provisioned by hand").
 CREATE TABLE IF NOT EXISTS access_catalog_items (
   id               TEXT PRIMARY KEY,
-  kind             TEXT NOT NULL CHECK (kind IN ('tenant-role', 'initiative-membership')),
+  kind             TEXT NOT NULL CHECK (kind IN ('tenant-role', 'initiative-membership', 'capability')),
   tenant           TEXT NOT NULL,
   role             TEXT,
   project_id       TEXT,
@@ -50,9 +50,11 @@ CREATE TABLE IF NOT EXISTS access_catalog_items (
   description      TEXT NOT NULL,
   sensitive        BOOLEAN NOT NULL DEFAULT FALSE,
   default_duration TEXT NOT NULL CHECK (default_duration IN ('8h', '24h', '7d', '30d', 'standing')),
-  steward_rule     TEXT NOT NULL CHECK (steward_rule IN ('tenant-steward', 'initiative-owner')),
+  steward_rule     TEXT NOT NULL CHECK (steward_rule IN ('tenant-steward', 'initiative-owner', 'budget-owner')),
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CHECK ((kind = 'tenant-role' AND role IS NOT NULL) OR (kind = 'initiative-membership' AND project_id IS NOT NULL))
+  -- `capability` (2026-10-13): a grant entry that is not a role, held in user_tenant_roles
+  -- like one (orgiq `budgets-reader`, the budgets read tier); `role` names the entry.
+  CHECK ((kind IN ('tenant-role', 'capability') AND role IS NOT NULL) OR (kind = 'initiative-membership' AND project_id IS NOT NULL))
 );
 
 -- ── access_requests ──────────────────────────────────────────────────────────
@@ -172,7 +174,7 @@ CREATE TABLE IF NOT EXISTS access_review_items (
   PRIMARY KEY (review_id, user_id, tenant, role)
 );
 
--- ── Seed: catalog (8 items) ──────────────────────────────────────────────────
+-- ── Seed: catalog (9 items) ──────────────────────────────────────────────────
 INSERT INTO access_catalog_items (id, kind, tenant, role, project_id, title, description, sensitive, default_duration, steward_rule) VALUES
   ('role:orgiq:sme', 'tenant-role', 'orgiq', 'sme', NULL, 'SME in Work',
      'Dispatch agent work against a granted sprint envelope on the initiatives you contribute to.', FALSE, '30d', 'tenant-steward'),
@@ -186,6 +188,8 @@ INSERT INTO access_catalog_items (id, kind, tenant, role, project_id, title, des
      'Manage channels, teams and recordings.', FALSE, '30d', 'tenant-steward'),
   ('role:pipelines:operator', 'tenant-role', 'pipelines', 'operator', NULL, 'Operator in Pipelines',
      'Run pipelines, approve steps waiting on a person and cancel runs.', FALSE, '7d', 'tenant-steward'),
+  ('capability:orgiq:budgets-read', 'capability', 'orgiq', 'budgets-reader', NULL, 'Budget visibility in Work',
+     'See month-to-date spend and allocations on the Initiatives table, the detail header and budget answers. Grants no role and no budget authority.', FALSE, '30d', 'budget-owner'),
   ('initiative:p-auth-migration', 'initiative-membership', 'orgiq', NULL, 'p-auth-migration', 'Member of Auth Migration',
      'Contribute to the Auth Migration initiative: its board, discussion and dispatched work.', FALSE, '30d', 'initiative-owner'),
   ('initiative:p-observability', 'initiative-membership', 'orgiq', NULL, 'p-observability', 'Member of Observability Platform',

@@ -139,8 +139,33 @@ export function switchableGrants(sub: string, current: Grants): Grants {
   return sub === DEMO_SUB ? permissiveGrants() : current;
 }
 
+/**
+ * Capability grants: entries in a tenant's grant list that are NOT roles. They
+ * live in the one grant store (user_tenant_roles, decision A2 of
+ * docs/access-tenant-design.md) so the access tenant provisions and revokes
+ * them like any grant and the ≤120 s grants refresh carries them to an open
+ * cookie — but nobody acts AS one: they are never a session's role, never a
+ * landing role, never a tenant on their own (rolesForTenant filters them out).
+ * Each is recognised by exactly one predicate:
+ *   orgiq `budgets-reader`  the budgets read tier (lib/budget-read-tier.ts) —
+ *                           sees spend and allocation, and nothing else.
+ */
+export const CAPABILITY_GRANTS: Readonly<Partial<Record<Tenant, readonly string[]>>> = {
+  orgiq: ['budgets-reader'],
+};
+
+export function isCapabilityGrant(tenant: string, entry: string): boolean {
+  return (CAPABILITY_GRANTS[tenant as Tenant] ?? []).includes(entry);
+}
+
+/** Does `grants` hold the capability `entry` in `tenant`? */
+export function holdsCapability(grants: Grants | null | undefined, tenant: string, entry: string): boolean {
+  return isCapabilityGrant(tenant, entry) && (grants?.[tenant] ?? []).includes(entry);
+}
+
+/** The ROLES held in a tenant — capability grants are not roles and are left out. */
 export function rolesForTenant(grants: Grants, tenant: string): string[] {
-  return grants[tenant] ?? [];
+  return (grants[tenant] ?? []).filter((r) => !isCapabilityGrant(tenant, r));
 }
 
 export function hasGrant(grants: Grants, tenant: string, role: string): boolean {

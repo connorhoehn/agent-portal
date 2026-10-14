@@ -2388,6 +2388,18 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     },
   },
   {
+    // The in-tenant quick request (routes/access-requests-quick.ts): the same
+    // submit path as POST /api/access/requests, for the caller only, limited to
+    // the caller's current tenant's items — so the Work budget-visibility item.
+    route: 'POST /api/access-requests/quick',
+    persona: 'orgiq/admin',
+    safe: 'Appends one submitted request (the operator for budget visibility in Work), its approval step and a `submitted` event to the registered `access.requests` / `access.request-steps` / `access.events` fixtures; reset restores the seed. It never decides or provisions; the bell item goes through notify(), a logged no-op without the gateway sink.',
+    bodyFrom: 'routes/access-requests-quick.ts: `itemId` must name a catalog item of the caller\'s current tenant (the orgiq persona: `capability:orgiq:budgets-read`, read off the route\'s own GET /api/access-requests/mine query), `justification` at least 20 characters, `duration` one of DURATIONS. An open duplicate is the 409 captured instead.',
+    intercepts: ['aurora'],
+    alsoAccept: [409],
+    build: async () => ({ itemId: 'capability:orgiq:budgets-read', justification: 'wire capture: a budget visibility request smoke test', duration: '30d' }),
+  },
+  {
     route: 'POST /api/access/requests/:id/withdraw',
     persona: 'orgiq/admin',
     safe: 'Moves one row of the registered `access.requests` fixture to `withdrawn`, skips its open steps and appends an event; reset restores them. Only a party may withdraw, so the persona usually gets the 403 (or the 409 on a closed request) — both real shapes.',

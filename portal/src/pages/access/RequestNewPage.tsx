@@ -38,6 +38,7 @@ import {
   EMPTY_DRAFT,
   JUSTIFICATION_MIN,
   KIND_LABELS,
+  STEWARD_LABELS,
   TENANT_LABELS,
   WIZARD_STEPS,
   draftProblem,
@@ -148,7 +149,7 @@ export default function RequestNewPage() {
                 { label: 'Kind', value: KIND_LABELS[item.kind] },
                 { label: 'Workspace', value: TENANT_LABELS[item.tenant] ?? item.tenant },
                 { label: 'About', value: item.description },
-                { label: 'Approved by', value: `Manager, then ${item.stewardRule === 'initiative-owner' ? 'the initiative owner' : 'the workspace steward'}${item.sensitive ? ', then an access admin' : ''}` },
+                { label: 'Approved by', value: `Manager, then ${STEWARD_LABELS[item.stewardRule]}${item.sensitive ? ', then an access admin' : ''}` },
               ]} />
               <Stack gap="sm" data-testid="access-new-policy-check">
                 <T size="sm" weight="semibold">Policy pre-check</T>

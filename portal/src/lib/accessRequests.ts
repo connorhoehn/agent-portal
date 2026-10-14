@@ -3,7 +3,8 @@
 // against; docs/access-tenant-design.md §3–§6 the model). No React here, so
 // `pages/access/__tests__/*.test.ts` run it under plain `node --test`.
 
-export type AccessKind = 'tenant-role' | 'initiative-membership';
+/** `capability`: a grant entry that is not a role (budget visibility in Work). */
+export type AccessKind = 'tenant-role' | 'initiative-membership' | 'capability';
 export type AccessDuration = '8h' | '24h' | '7d' | '30d' | 'standing';
 export type RequestStatus = 'draft' | 'submitted' | 'pending' | 'approved' | 'provisioned' | 'active'
   | 'expired' | 'revoked' | 'rejected' | 'withdrawn';
@@ -30,7 +31,7 @@ export interface CatalogItem {
   description: string;
   sensitive: boolean;
   defaultDuration: AccessDuration;
-  stewardRule: 'tenant-steward' | 'initiative-owner';
+  stewardRule: 'tenant-steward' | 'initiative-owner' | 'budget-owner';
   heldByActor: boolean;
   sodConflicts: SodConflict[];
 }
@@ -112,8 +113,8 @@ export interface ReviewRecord { review: AccessReview; items: AccessReviewItem[] 
 /** GET /api/access/configuration. */
 export interface AccessConfiguration {
   durations: { offered: AccessDuration[]; standingReasonMin: number };
-  stewards: Array<{ scope: 'tenant-role' | 'initiative-membership' | 'sensitive'; tenant: string | null; rule: string; role: string | null }>;
-  items: Array<{ id: string; title: string; kind: AccessKind; tenant: AccessTenant; defaultDuration: AccessDuration; stewardRule: 'tenant-steward' | 'initiative-owner'; sensitive: boolean }>;
+  stewards: Array<{ scope: 'tenant-role' | 'initiative-membership' | 'capability' | 'sensitive'; tenant: string | null; rule: string; role: string | null }>;
+  items: Array<{ id: string; title: string; kind: AccessKind; tenant: AccessTenant; defaultDuration: AccessDuration; stewardRule: CatalogItem['stewardRule']; sensitive: boolean }>;
 }
 
 export interface AccessPolicy {
@@ -142,10 +143,14 @@ export const TENANT_LABELS: Readonly<Record<AccessTenant, string>> = {
   orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines',
 };
 export const KIND_LABELS: Readonly<Record<AccessKind, string>> = {
-  'tenant-role': 'Workspace role', 'initiative-membership': 'Initiative membership',
+  'tenant-role': 'Workspace role', 'initiative-membership': 'Initiative membership', capability: 'Capability',
 };
 export const DURATION_LABELS: Readonly<Record<AccessDuration, string>> = {
   '8h': '8 hours', '24h': '24 hours', '7d': '7 days', '30d': '30 days', standing: 'Standing',
+};
+/** Who approves an item after the manager, in words (the request wizard, the configuration table). */
+export const STEWARD_LABELS: Readonly<Record<CatalogItem['stewardRule'], string>> = {
+  'tenant-steward': 'the workspace steward', 'initiative-owner': 'the initiative owner', 'budget-owner': 'the budget owner',
 };
 export const DURATIONS: readonly AccessDuration[] = ['8h', '24h', '7d', '30d', 'standing'];
 export const STEP_KIND_LABELS: Readonly<Record<StepKind, string>> = {
@@ -200,9 +205,8 @@ const has = (q: string, ...values: Array<string | null | undefined>) => {
 };
 
 export function catalogLabel(item: Pick<CatalogItem, 'kind' | 'tenant' | 'role' | 'projectId'>): string {
-  return item.kind === 'tenant-role'
-    ? `${item.role ?? 'role'} in ${TENANT_LABELS[item.tenant] ?? item.tenant}`
-    : `member of ${item.projectId ?? 'an initiative'}`;
+  if (item.kind === 'initiative-membership') return `member of ${item.projectId ?? 'an initiative'}`;
+  return `${item.role ?? (item.kind === 'capability' ? 'capability' : 'role')} in ${TENANT_LABELS[item.tenant] ?? item.tenant}`;
 }
 
 export function filterCatalog(rows: readonly CatalogItem[], query: string, tenant: string): CatalogItem[] {

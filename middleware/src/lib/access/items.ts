@@ -19,6 +19,16 @@ const TENANT_TITLES: Readonly<Record<AccessTenant, string>> = {
 /** The id a standing (tenant, role) grant is named by. */
 export const roleItemId = (tenant: string, role: string): string => `role:${tenant}:${role}`;
 
+/**
+ * The id a standing (tenant, entry) grant is named by in a review: the catalog
+ * item that provisions it when there is one (a capability grant such as orgiq
+ * `budgets-reader` is requested as `capability:orgiq:budgets-read`), else the
+ * role id.
+ */
+export function grantItemId(tenant: string, entry: string, catalog: readonly AccessCatalogRow[]): string {
+  return catalog.find((i) => i.kind !== 'initiative-membership' && i.tenant === tenant && i.role === entry)?.id ?? roleItemId(tenant, entry);
+}
+
 /** `role:<tenant>:<role>` → a role descriptor, or null when the id has another shape. */
 export function roleItem(id: string, catalog: readonly AccessCatalogRow[] = []): AccessCatalogRow | null {
   const known = catalog.find((i) => i.id === id);

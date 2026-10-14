@@ -124,5 +124,10 @@ describe('authority', () => {
     expect(text()).not.toMatch(/\$\d/);
     expect(text()).toContain('budgets read tier');
     expect(JSON.parse(mockStream.toolCallResult.mock.calls[0]![2]).rows).toEqual([]);
+    // Locked, not refused: the answer offers the tier's quick request, from where they are.
+    expect(text()).toContain('locked');
+    expect(text()).toContain('[Request budget access](/iq/projects?request=budget-access)');
+    expect(JSON.parse(mockStream.toolCallResult.mock.calls[0]![2]).action)
+      .toEqual({ kind: 'request-access', itemId: 'capability:orgiq:budgets-read', label: 'Request budget access', href: '/iq/projects?request=budget-access' });
   });
 });

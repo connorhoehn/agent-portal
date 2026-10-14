@@ -10,7 +10,8 @@
 //   - initiatives, work items, contributors: open to the orgiq tenant, as the
 //     Initiatives page and /api/graph/* already are;
 //   - money (spend, allocation, maintenance floor, envelopes): the budgets read
-//     tier only (lib/budget-read-tier.ts) — never widened here;
+//     tier only (lib/budget-read-tier.ts) — never widened here; below it the
+//     answer says the figures are locked and offers the tier's quick request;
 //   - sprints: the whole board for that tier, the caller's own otherwise —
 //     the same split GET /api/sprints makes.
 
@@ -36,7 +37,8 @@ const INITIATIVES_WINDOW = 200;
 export async function answerLocally(input: {
   question: string;
   scope: AnswerScope | null;
-  session: Pick<Session, 'sub' | 'tenant' | 'role'>;
+  /** `grants` carries a capability grant the tier recognises (orgiq `budgets-reader`). */
+  session: Pick<Session, 'sub' | 'tenant' | 'role'> & { grants?: Session['grants'] };
   /** Injected for tests; the request time otherwise. */
   asOf?: Date;
 }): Promise<LocalAnswer | null> {

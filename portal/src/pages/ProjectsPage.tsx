@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { UNDER_CRUMBS_BAND } from '../components/shell/headerRhythm';
 import {
@@ -19,6 +19,8 @@ import { useInitiativeListRail } from './projects/InitiativeListRail';
 import { InitiativeComposer } from './projects/InitiativeComposer';
 import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
 import { ProjectTable } from './projects/ProjectTable';
+import { BudgetAccessRequest, LockedFigure } from './projects/BudgetAccess';
+import { REQUEST_PARAM, REQUEST_PARAM_VALUE, budgetLock } from './projects/budgetAccessModel';
 import { SprintsLens, useSprintsLens } from './projects/SprintsLens';
 import { MINE_DESCRIPTION, MINE_TITLE, buildMine, type MineEmptyCopy } from './projects/mineModel';
 import {
@@ -57,7 +59,7 @@ function Lines({ lines }: { lines: string[] }) {
 
 function ProjectsPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { can: canDo, ready: capsReady } = useCapabilities();
   const canIngest = capsReady && canDo('ManageIngest');
 
@@ -94,13 +96,26 @@ function ProjectsPage() {
     [rows, list.statusFilter, list.query, list.sort],
   );
   const totals = useMemo(() => programTotals(rows ?? []), [rows]);
+  // Below the budgets read tier the server withholds spend and allocation
+  // (budgetAccess on each row): the strip and the Spend column show a lock and
+  // the header carries the one quick request for the tier. A locked budget
+  // answer links here with ?request=budget-access, which opens the form.
+  const lock = budgetLock(rows);
+  const wantsRequest = searchParams.get(REQUEST_PARAM) === REQUEST_PARAM_VALUE;
+  const dropRequestParam = () => {
+    if (!wantsRequest) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete(REQUEST_PARAM);
+    setSearchParams(next, { replace: true });
+  };
   const openProject = (p: ProjectSummary) => navigate(initiativeHref(p.id, searchParams, scope));
   const refreshAll = () => { list.list.refresh(); person.refresh(); personDetail.refresh(); };
 
-  const header = (title: string, description: string) => (
+  const header = (title: string, description: string, actions?: ReactNode) => (
     <PageHeader
       title={title}
       description={description}
+      {...(actions ? { actions } : {})}
       className={`border-b border-border px-6 pb-3 ${UNDER_CRUMBS_BAND}`}
       data-testid="initiatives-pane-header"
     />
@@ -146,7 +161,8 @@ function ProjectsPage() {
     } else if (mine.state === 'has-rows') body = table;
     else body = <MineEmpty copy={mine.copy} onEveryone={() => setScope('all')} onProfile={() => navigate(mine.copy.secondary.href)} onRefresh={refreshAll} />;
   } else {
-    paneHeader = header(EVERYONE_TITLE, EVERYONE_DESCRIPTION);
+    paneHeader = header(EVERYONE_TITLE, EVERYONE_DESCRIPTION,
+      lock ? <BudgetAccessRequest lock={lock} autoOpen={wantsRequest} onClosed={dropRequestParam} /> : undefined);
     if (rows == null) body = list.list.error ? failure : <LoadingState label="Loading initiatives…" />;
     else if (rows.length === 0) {
       body = (
@@ -194,7 +210,12 @@ function ProjectsPage() {
                 label: totals.pointsTotal > 0 ? `delivered · ${totals.pointsDone}/${totals.pointsTotal} pts` : 'delivered · nothing estimated',
                 value: velocityPct != null ? `${velocityPct}%` : '—',
               },
-              {
+              lock ? {
+                // Withheld by the server below the budgets read tier: no sum of absent figures.
+                label: `spent in ${SPEND_MONTH.split(' ')[0]} · budget figures locked`,
+                value: <LockedFigure lock={lock} testId="spend-strip-locked" />,
+                title: lock.reason,
+              } : {
                 label: `spent in ${SPEND_MONTH.split(' ')[0]}${totals.allocatedUsd > 0 ? ` of ${usd(totals.allocatedUsd)} allocated` : ' · no allocations'}`,
                 value: usd(totals.spendUsd),
                 ...(totals.allocatedUsd > 0 && totals.spendUsd > totals.allocatedUsd ? { tone: 'danger' as const } : {}),

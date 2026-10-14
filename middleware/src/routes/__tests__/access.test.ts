@@ -134,7 +134,7 @@ describe('reads', () => {
     users.find((x) => x.id === 'u-rhea')!.grants = { access: ['requester'], orgiq: ['sme'] };
     const res = await get('/api/access/catalog', 'u-rhea');
     const items = (res.body as { items: CatalogItem[] }).items;
-    expect(items).toHaveLength(8);
+    expect(items).toHaveLength(9);
     expect(items.find((i) => i.id === 'role:orgiq:sme')).toMatchObject({ heldByActor: true, sodConflicts: [] });
     expect(items.find((i) => i.id === 'role:orgiq:org-leader')?.sodConflicts).toEqual([expect.objectContaining({ policyId: 'sod-001', severity: 'block' })]);
     expect(ids(await get('/api/access/catalog?kind=initiative-membership', 'u-rhea'))).toEqual(['initiative:p-auth-migration', 'initiative:p-observability']);

@@ -33,6 +33,14 @@ jest.mock('../../providers/projects.js', () => ({
 }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 
+// The budgets read tier (lib/budget-read-tier.ts) decides whether the dollar
+// fields ship; these suites read as a tier holder unless a case says otherwise.
+const mockCanReadBudgets = jest.fn(async () => true);
+jest.mock('../../lib/budget-read-tier.js', () => ({
+  ...jest.requireActual('../../lib/budget-read-tier.js'),
+  canReadBudgets: () => mockCanReadBudgets(),
+}));
+
 import express from 'express';
 import request from '../../test-support/http.js';
 import { projectsRouter } from '../projects.js';
@@ -124,6 +132,29 @@ describe('GET /api/graph/projects', () => {
     expect(res.status).toBe(200);
     expect((listMock.mock.calls[0]![0] as { status?: string }).status).toBe('active');
     expect(res.body[0].id).toBe('p-observability');
+  });
+});
+
+describe('the budgets read tier (lib/budget-read-tier.ts)', () => {
+  const row = { id: 'p-observability', name: 'Observability', status: 'active', agentSpendUsd: 1.73, allocatedUsd: 95 };
+  afterEach(() => mockCanReadBudgets.mockResolvedValue(true));
+
+  it('a tier holder gets the list and the detail unchanged', async () => {
+    listMock.mockResolvedValue([row]);
+    getMock.mockResolvedValue({ ...row, contributors: [] });
+    expect((await request(buildApp()).get('/api/graph/projects')).body).toEqual([row]);
+    expect((await request(buildApp()).get('/api/graph/projects/p-observability')).body).toEqual({ ...row, contributors: [] });
+  });
+
+  it('below the tier the dollar fields are withheld and budgetAccess says why and what to request', async () => {
+    mockCanReadBudgets.mockResolvedValue(false);
+    listMock.mockResolvedValue([row]);
+    getMock.mockResolvedValue({ ...row, contributors: [] });
+    const locked = { visible: false, reason: expect.stringContaining('budgets read tier'), requestItemId: 'capability:orgiq:budgets-read' };
+    const list = await request(buildApp()).get('/api/graph/projects');
+    expect(list.body).toEqual([{ id: 'p-observability', name: 'Observability', status: 'active', budgetAccess: locked }]);
+    const detail = await request(buildApp()).get('/api/graph/projects/p-observability');
+    expect(detail.body).toEqual({ id: 'p-observability', name: 'Observability', status: 'active', contributors: [], budgetAccess: locked });
   });
 });
 

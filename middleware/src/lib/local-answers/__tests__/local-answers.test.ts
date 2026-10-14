@@ -116,6 +116,7 @@ describe('budget — the budgets read tier sees the table\'s own figures', () =>
     expect(a.rows).toEqual([]);
     expect(a.text).toContain('budgets read tier');
     expect(a.text).toContain('signed in as member');
+    expect(a.action).toMatchObject({ kind: 'request-access', itemId: 'capability:orgiq:budgets-read' });
     const spend = (await ask('how much did Inference Platform spend this month?', member))!;
     expect(spend.text).not.toMatch(/\$\d/);
   });

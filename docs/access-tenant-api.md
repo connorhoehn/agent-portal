@@ -191,3 +191,51 @@ DecideAccess holders.
 The agent loop's `GET /api/conversations/agent/waiting?channel=access:req:<id>`
 answers `{ runs: [] }` to a reader of the request (request threads carry no
 agent) and 403 to anyone else.
+
+## Quick request — `/api/access-requests` (decided 2026-10-13)
+
+The in-tenant door to the same workflow: a reader who meets a locked figure
+asks for the access that opens it **from where they are**, without switching to
+Access. Mounted in `index.ts` as `app.use('/api/access-requests',
+accessQuickRouter)` (`middleware/src/routes/access-requests-quick.ts`) behind a
+**session floor only** — not `requireTenant('access')`, not `RequestAccess`.
+It files through `routes/access.ts` `fileRequest`, the one submit path
+`POST /api/access/requests` also uses, so the chain, the SoD pre-check, the
+duplicate / already-held refusals, the rows, the events and the approvers' bell
+items are identical. It never decides, withdraws or provisions.
+
+| route | response |
+|---|---|
+| `POST /quick` body `{ itemId, justification, duration }` | 201 `AccessRequest` — the caller is requester **and** beneficiary. 400 on an unknown key (`beneficiaryId` included), an unknown item, `justification` < 20 characters, a bad `duration`; 403 when the item's `tenant` is not the caller's CURRENT tenant, or the session has no directory account (the cookie-less demo persona); 409 `{ error, requestId }` when an open request for the item already exists; 409 when the caller holds it; 409 `{ error, sod }` on a blocking SoD conflict |
+| `GET /mine?itemId=` | `{ items: AccessRequest[] }` — the caller's own requests (requester or beneficiary) for that item, newest first, any status. 400 without `itemId` or with another parameter; 400 for an unknown item; 403 for another tenant's item |
+
+The one item the portal asks for today is budget visibility in Work:
+
+```ts
+// CatalogItem additions
+type AccessKind = 'tenant-role' | 'initiative-membership' | 'capability';
+type StewardRule = 'tenant-steward' | 'initiative-owner' | 'budget-owner';
+
+{ id: 'capability:orgiq:budgets-read', kind: 'capability', tenant: 'orgiq',
+  role: 'budgets-reader',            // the grant entry provisioned (not a role)
+  title: 'Budget visibility in Work', sensitive: false, defaultDuration: '30d',
+  stewardRule: 'budget-owner' }      // manager, then the orgiq org-leaders
+```
+
+A `capability` item provisions like a `tenant-role` (the entry merges into the
+beneficiary's grants through `setGrants`; revocation and expiry remove it and
+bump the epoch) and carries no SoD. `GET /configuration`'s `stewards` gains
+`{ scope: 'capability', tenant: 'orgiq', rule: 'budget-owner', role: 'org-leader' }`.
+
+Where the lock comes from — `GET /api/graph/projects` and
+`GET /api/graph/projects/:id` below the budgets read tier
+(`middleware/src/lib/budget-read-tier.ts`) omit `agentSpendUsd` and
+`allocatedUsd` and add, per row:
+
+```ts
+budgetAccess: { visible: false; reason: string; requestItemId: 'capability:orgiq:budgets-read' }
+```
+
+A tier holder's payload is unchanged (no `budgetAccess` key). A locked budget
+answer from the local assistant carries the same item as
+`action: { kind: 'request-access', itemId, label, href }` (`docs/local-answers.md`).

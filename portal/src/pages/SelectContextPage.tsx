@@ -42,6 +42,7 @@ import { tenantEnabled } from '../lib/features';
 import { orgiqReferenceReturnHref } from '../lib/dmPageReferences';
 import { markContextChosen } from '../lib/contextChoice';
 import demoPortraits from '../lib/demoPortraits.json';
+import { roleGrants } from '../lib/capabilityGrants';
 
 const TENANT_META: Record<Tenant, { label: string; blurb: string; accent: string }> = {
   orgiq: { label: 'Work', blurb: 'Initiatives, people, decisions, and the work you do together', accent: 'var(--color-primary)' },
@@ -191,8 +192,8 @@ export default function SelectContextPage() {
     const grants = session?.switchable ?? session?.grants ?? {};
     return (Object.keys(grants) as Tenant[])
       .filter(t => tenantEnabled(t))
-      .filter(t => (grants[t] ?? []).length > 0)
-      .map(t => ({ tenant: t, roles: [...(grants[t] ?? [])].sort() }));
+      .filter(t => roleGrants(grants, t).length > 0)
+      .map(t => ({ tenant: t, roles: roleGrants(grants, t).sort() }));
   }, [session?.switchable, session?.grants]);
 
   const roleCount = accounts.reduce((n, a) => n + a.roles.length, 0);

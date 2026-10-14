@@ -40,6 +40,16 @@ export const accessCatalogFixture = defineFixture<AccessCatalogRow>({
       role('assessment', 'lead-assessor', 'Lead assessor in Assessment', 'Approve N/A exceptions and publish team reports.', true, '7d'),
       role('social', 'moderator', 'Moderator in Social', 'Manage channels, teams and recordings.', false, '30d'),
       role('pipelines', 'operator', 'Operator in Pipelines', 'Run pipelines, approve steps waiting on a person and cancel runs.', false, '7d'),
+      // Budget visibility (decided 2026-10-13): the narrowest grant that opens the
+      // budgets read tier — the orgiq capability grant `budgets-reader`
+      // (lib/session.ts CAPABILITY_GRANTS), recognised only by
+      // lib/budget-read-tier.ts. Stewarded by the orgiq budget owner (org-leader).
+      {
+        id: 'capability:orgiq:budgets-read', kind: 'capability', tenant: 'orgiq', role: 'budgets-reader', projectId: null,
+        title: 'Budget visibility in Work',
+        description: 'See month-to-date spend and allocations on the Initiatives table, the detail header and budget answers. Grants no role and no budget authority.',
+        sensitive: false, defaultDuration: '30d', stewardRule: 'budget-owner',
+      },
       initiative('p-auth-migration', 'Member of Auth Migration', 'Contribute to the Auth Migration initiative: its board, discussion and dispatched work.'),
       initiative('p-observability', 'Member of Observability Platform', 'Contribute to the Observability Platform initiative: its board, discussion and dispatched work.'),
     ],

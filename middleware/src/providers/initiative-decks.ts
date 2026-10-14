@@ -106,7 +106,7 @@ export { BUDGET_READ_ROLES } from '../lib/budget-read-tier.js';
  * Asked per call (no cache): routes/initiative-decks.ts per request and
  * lib/live-principal.ts per presence subscribe/delivered frame. One predicate
  * (lib/budget-read-tier.ts) shared with the local data assistant. */
-export async function deckViewerFor(session: { sub: string; tenant: string; role: string } | null | undefined): Promise<DeckViewer> {
+export async function deckViewerFor(session: { sub: string; tenant: string; role: string; grants?: Record<string, string[]> | null } | null | undefined): Promise<DeckViewer> {
   return { canReadBudgets: await canReadBudgets(session) };
 }
 

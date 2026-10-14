@@ -31,13 +31,13 @@
 import { Router, type Request } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { isAllowed, requireAction, resolveSession } from '../lib/authz.js';
-import { eligibility, eligibleDeciders, personFor, planChain, TENANT_STEWARD_ROLE } from '../lib/access/chain.js';
+import { BUDGET_OWNER_ROLE, eligibility, eligibleDeciders, personFor, planChain, TENANT_STEWARD_ROLE } from '../lib/access/chain.js';
 import { sodConflicts, sodVerdict } from '../lib/access/sod.js';
 import { decide, isOpen, ELEVATED_STATUSES, submitRows, TransitionError, withdraw, currentStep } from '../lib/access/status.js';
 import { canFlags, decideRefusal, isParty, managesBeneficiary, mayRead, type AccessActor } from '../lib/access/rules.js';
-import { requestItem, roleItemId } from '../lib/access/items.js';
+import { grantItemId, requestItem } from '../lib/access/items.js';
 import {
-  ACCESS_TENANTS, DURATIONS, REQUEST_STATUSES, requestThread,
+  ACCESS_KINDS, ACCESS_TENANTS, DURATIONS, REQUEST_STATUSES, requestThread,
   type AccessDirectory, type AccessDuration, type AccessEvent, type AccessPolicy, type AccessRequest,
   type AccessReview, type AccessReviewItem, type AccessTenant, type CatalogItem, type Decision, type DirectoryUser,
 } from '../lib/access/types.js';
@@ -60,7 +60,7 @@ const MAX_TITLE = 200;
 const MAX_TEXT = 2000;
 
 /** Refuse any body key outside `allowed` (docs/access-tenant-api.md: unknown keys are 400). */
-function bodyOf(req: Request, allowed: readonly string[]): Record<string, unknown> {
+export function bodyOf(req: Request, allowed: readonly string[]): Record<string, unknown> {
   const body = req.body;
   if (body !== undefined && (body === null || typeof body !== 'object' || Array.isArray(body))) throw new ValidationError('Body must be a JSON object');
   const b = (body ?? {}) as Record<string, unknown>;
@@ -71,9 +71,9 @@ function bodyOf(req: Request, allowed: readonly string[]): Record<string, unknow
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 
-interface Ctx { actor: AccessActor; dir: AccessDirectory; self: DirectoryUser | null }
+export interface Ctx { actor: AccessActor; dir: AccessDirectory; self: DirectoryUser | null }
 
-async function context(req: Request): Promise<Ctx> {
+export async function context(req: Request): Promise<Ctx> {
   const session = resolveSession(req);
   if (!session) throw new AppError(401, 'Sign in first');
   const principal = { sub: session.sub, tenant: session.tenant, role: session.role };
@@ -87,7 +87,7 @@ async function context(req: Request): Promise<Ctx> {
 /** Does `who` hold the item now (a tenant role, or a contribution on the initiative)? */
 function holdsItem(item: AccessCatalogRow, who: DirectoryUser | null, dir: AccessDirectory): boolean {
   if (!who) return false;
-  if (item.kind === 'tenant-role') return !!item.role && (who.grants[item.tenant] ?? []).includes(item.role);
+  if (item.kind === 'tenant-role' || item.kind === 'capability') return !!item.role && (who.grants[item.tenant] ?? []).includes(item.role);
   const members = item.projectId ? dir.initiative(item.projectId)?.memberPersonIds ?? [] : [];
   return !!who.personId && members.includes(who.personId);
 }
@@ -255,7 +255,7 @@ accessRouter.get('/catalog', requireAction('ViewAccess'), asyncHandler(async (re
   const kind = str(req.query['kind']);
   const tenant = str(req.query['tenant']);
   const q = str(req.query['q'])?.toLowerCase();
-  if (kind && kind !== 'tenant-role' && kind !== 'initiative-membership') throw new ValidationError(`Unknown kind: ${kind}`);
+  if (kind && !(ACCESS_KINDS as readonly string[]).includes(kind)) throw new ValidationError(`Unknown kind: ${kind}`);
   if (tenant && !(ACCESS_TENANTS as readonly string[]).includes(tenant)) throw new ValidationError(`Unknown tenant: ${tenant}`);
   const items = listCatalog()
     .filter((i) => (!kind || i.kind === kind) && (!tenant || i.tenant === tenant)
@@ -442,7 +442,7 @@ async function revokeByReview(v: AccessReviewRow, i: AccessReviewItemRow, commen
   const now = accessNow();
   const reason = `Access review ${v.id} (${v.title}): ${comment}`;
   const id = nextRequestId();
-  const itemId = roleItemId(i.tenant, i.role);
+  const itemId = grantItemId(i.tenant, i.role, listCatalog());
   insertRequest({
     id, kind: 'revocation', reviewId: v.id, requesterId: ctx.actor.id, beneficiaryId: i.userId, itemId,
     justification: reason, duration: 'standing', status: 'active', sodVerdict: 'clear', sodOverriddenBy: null, sodOverrideReason: null,
@@ -498,8 +498,11 @@ accessRouter.post('/reviews/:id/items/:itemId/decide', requireAction('DecideAcce
 
 // ─── writes ─────────────────────────────────────────────────────────────────
 
-accessRouter.post('/requests', requireAction('RequestAccess'), asyncHandler(async (req, res) => {
-  const b = bodyOf(req, ['itemId', 'justification', 'duration', 'beneficiaryId']);
+/** A submission's fields, validated (unknown keys are refused by the caller's bodyOf). */
+export interface Submission { itemId: string; justification: string; duration: AccessDuration; beneficiaryId?: string }
+
+/** Validate a submission body's values: 400 on a missing item, a short justification or a bad duration. */
+export function parseSubmission(b: Record<string, unknown>): Submission {
   const itemId = str(b['itemId']);
   const justification = typeof b['justification'] === 'string' ? b['justification'].trim() : '';
   const duration = b['duration'];
@@ -508,50 +511,63 @@ accessRouter.post('/requests', requireAction('RequestAccess'), asyncHandler(asyn
   if (justification.length > MAX_TEXT) throw new ValidationError(`justification must be at most ${MAX_TEXT} characters`);
   if (typeof duration !== 'string' || !(DURATIONS as readonly string[]).includes(duration)) throw new ValidationError(`duration must be one of ${DURATIONS.join(', ')}`);
   if (b['beneficiaryId'] !== undefined && typeof b['beneficiaryId'] !== 'string') throw new ValidationError('beneficiaryId must be a string');
+  const beneficiaryId = str(b['beneficiaryId']);
+  return { itemId, justification, duration: duration as AccessDuration, ...(beneficiaryId ? { beneficiaryId } : {}) };
+}
 
-  const ctx = await context(req);
-  const item = listCatalog().find((i) => i.id === itemId);
-  if (!item) throw new ValidationError(`Unknown catalog item: ${itemId}`);
-  const beneficiaryId = str(b['beneficiaryId']) ?? ctx.actor.id;
+/** The outcome of filing: 201 with the request, or a refusal with its status and body. */
+export type FileOutcome = { status: 201; body: AccessRequest } | { status: 400 | 403 | 409; body: Record<string, unknown> };
+
+/**
+ * File one request: the ONE submit path. `POST /api/access/requests` and the
+ * in-tenant quick request (routes/access-requests-quick.ts) both come here, so
+ * both compute the same chain (planChain), run the same SoD pre-check, refuse
+ * the same duplicates and held items, write the same rows and events and ring
+ * the same approvers. It submits; it never decides or provisions.
+ */
+export async function fileRequest(ctx: Ctx, sub: Submission): Promise<FileOutcome> {
+  const item = listCatalog().find((i) => i.id === sub.itemId);
+  if (!item) return { status: 400, body: { error: `Unknown catalog item: ${sub.itemId}` } };
+  const beneficiaryId = sub.beneficiaryId ?? ctx.actor.id;
   const beneficiary = ctx.dir.users.find((u) => u.id === beneficiaryId) ?? null;
-  if (!beneficiary) throw new ValidationError(`Unknown beneficiary: ${beneficiaryId}`);
+  if (!beneficiary) return { status: 400, body: { error: `Unknown beneficiary: ${beneficiaryId}` } };
   if (beneficiaryId !== ctx.actor.id) {
-    if (!ctx.actor.mayDecide) {
-      res.status(403).json({ error: 'Requesting on behalf of someone else needs DecideAccess', action: 'DecideAccess' });
-      return;
-    }
+    if (!ctx.actor.mayDecide) return { status: 403, body: { error: 'Requesting on behalf of someone else needs DecideAccess', action: 'DecideAccess' } };
     // An approver files for a report; an access-admin for anyone.
     if (!ctx.actor.mayProvision && !managesBeneficiary(ctx.actor, { beneficiaryId }, ctx.dir)) {
-      res.status(403).json({ error: `${beneficiary.displayName} is not one of your reports` });
-      return;
+      return { status: 403, body: { error: `${beneficiary.displayName} is not one of your reports` } };
     }
   }
-  if (holdsItem(item, beneficiary, ctx.dir)) {
-    res.status(409).json({ error: `${beneficiary.displayName} already holds ${item.title}` });
-    return;
-  }
-  const requests = listRequests();
-  const duplicate = requests.find((r) => r.beneficiaryId === beneficiaryId && r.itemId === item.id && isOpen(r.status));
-  if (duplicate) {
-    res.status(409).json({ error: `${duplicate.id} already asks for ${item.title} and is still open`, requestId: duplicate.id });
-    return;
-  }
-  const policies = listPolicies();
-  const conflicts = sodConflicts(item, beneficiary.grants, policies);
+  if (holdsItem(item, beneficiary, ctx.dir)) return { status: 409, body: { error: `${beneficiary.displayName} already holds ${item.title}` } };
+  const duplicate = listRequests().find((r) => r.beneficiaryId === beneficiaryId && r.itemId === item.id && isOpen(r.status));
+  if (duplicate) return { status: 409, body: { error: `${duplicate.id} already asks for ${item.title} and is still open`, requestId: duplicate.id } };
+  const conflicts = sodConflicts(item, beneficiary.grants, listPolicies());
   const verdict = sodVerdict(conflicts);
-  if (verdict === 'block') {
-    res.status(409).json({ error: `Separation of duties blocks ${item.title} for ${beneficiary.displayName}`, sod: { verdict, conflicts } });
-    return;
-  }
+  if (verdict === 'block') return { status: 409, body: { error: `Separation of duties blocks ${item.title} for ${beneficiary.displayName}`, sod: { verdict, conflicts } } };
   const now = accessNow();
   const t = submitRows({
-    id: nextRequestId(), requesterId: ctx.actor.id, beneficiaryId, itemId: item.id, justification,
-    duration: duration as AccessDuration, sodVerdict: verdict, sodOverriddenBy: null, sodOverrideReason: null, submittedAt: now,
+    id: nextRequestId(), requesterId: ctx.actor.id, beneficiaryId, itemId: item.id, justification: sub.justification,
+    duration: sub.duration, sodVerdict: verdict, sodOverriddenBy: null, sodOverrideReason: null, submittedAt: now,
   }, planChain(item, beneficiary, ctx.dir));
   insertRequest(t.request, t.steps, t.events, ctx.actor.id);
   await bellApprovers('submitted', t.request, ctx);
+  return { status: 201, body: present(t.request, ctx, world()) };
+}
+
+/** The actor's own requests (requester or beneficiary) for `itemId`, newest first — the quick request's status read. */
+export function ownRequestsFor(ctx: Ctx, itemId: string): AccessRequest[] {
   const w = world();
-  res.status(201).json(present(t.request, ctx, w));
+  return listRequests()
+    .filter((r) => r.itemId === itemId && isParty(ctx.actor.id, r))
+    .sort(newestFirst)
+    .map((r) => present(r, ctx, w));
+}
+
+accessRouter.post('/requests', requireAction('RequestAccess'), asyncHandler(async (req, res) => {
+  const sub = parseSubmission(bodyOf(req, ['itemId', 'justification', 'duration', 'beneficiaryId']));
+  const out = await fileRequest(await context(req), sub);
+  if (out.status === 400) throw new ValidationError(String(out.body['error']));
+  res.status(out.status).json(out.body);
 }));
 
 accessRouter.post('/requests/:id/withdraw', requireAction('ViewAccess'), asyncHandler(async (req, res) => {
@@ -689,6 +705,7 @@ function configurationBody() {
     stewards: [
       ...ACCESS_TENANTS.map((tenant) => ({ scope: 'tenant-role' as const, tenant, rule: 'tenant-steward' as const, role: TENANT_STEWARD_ROLE[tenant]! })),
       { scope: 'initiative-membership' as const, tenant: null, rule: 'initiative-owner' as const, role: null },
+      { scope: 'capability' as const, tenant: BUDGET_OWNER_ROLE.tenant, rule: 'budget-owner' as const, role: BUDGET_OWNER_ROLE.role },
       { scope: 'sensitive' as const, tenant: 'access', rule: 'access-admin' as const, role: 'access-admin' },
     ],
     items: listCatalog().map((i) => ({ id: i.id, title: i.title, kind: i.kind, tenant: i.tenant, defaultDuration: i.defaultDuration, stewardRule: i.stewardRule, sensitive: i.sensitive })),

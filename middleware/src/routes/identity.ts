@@ -30,7 +30,7 @@ import { listTenants, listUsers, getUser, createTenant, createUser, setGrants } 
 // executor other routes already use (see providers/aurora.ts, imported the
 // same way by providers/sprints.ts) and keeps the write local to this file.
 import { exec } from '../providers/aurora.js';
-import type { Grants } from '../lib/session.js';
+import { isCapabilityGrant, type Grants } from '../lib/session.js';
 
 export const identityRouter = Router();
 
@@ -160,7 +160,10 @@ identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandl
   const known = new Map(roleRegistry().map(r => [`${r.tenant ?? '*'}/${r.id}`, r]));
   for (const [tenant, roles] of Object.entries(grants)) {
     for (const role of roles) {
-      if (!known.has(`${tenant}/${role}`) && !known.has(`*/${role}`)) {
+      // A capability grant (lib/session.ts CAPABILITY_GRANTS, e.g. orgiq
+      // `budgets-reader`) is not a role but rides the same grant list, so an
+      // edit that keeps it must not 400.
+      if (!known.has(`${tenant}/${role}`) && !known.has(`*/${role}`) && !isCapabilityGrant(tenant, role)) {
         res.status(400).json({ error: `unknown role '${role}' for tenant '${tenant}'` });
         return;
       }

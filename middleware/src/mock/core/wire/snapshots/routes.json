@@ -22,6 +22,16 @@
     },
     {
       "method": "GET",
+      "path": "/api/access-requests/mine",
+      "source": "src/routes/access-requests-quick.ts:68"
+    },
+    {
+      "method": "POST",
+      "path": "/api/access-requests/quick",
+      "source": "src/routes/access-requests-quick.ts:58"
+    },
+    {
+      "method": "GET",
       "path": "/api/access/approvals",
       "source": "src/routes/access.ts:302"
     },
@@ -38,12 +48,12 @@
     {
       "method": "GET",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:698"
+      "source": "src/routes/access.ts:715"
     },
     {
       "method": "PUT",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:703"
+      "source": "src/routes/access.ts:720"
     },
     {
       "method": "GET",
@@ -53,7 +63,7 @@
     {
       "method": "PUT",
       "path": "/api/access/policies/:id",
-      "source": "src/routes/access.ts:731"
+      "source": "src/routes/access.ts:748"
     },
     {
       "method": "GET",
@@ -63,7 +73,7 @@
     {
       "method": "POST",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:501"
+      "source": "src/routes/access.ts:566"
     },
     {
       "method": "GET",
@@ -73,22 +83,22 @@
     {
       "method": "POST",
       "path": "/api/access/requests/:id/revoke",
-      "source": "src/routes/access.ts:661"
+      "source": "src/routes/access.ts:677"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/sod-override",
-      "source": "src/routes/access.ts:635"
+      "source": "src/routes/access.ts:651"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/steps/:step/decide",
-      "source": "src/routes/access.ts:580"
+      "source": "src/routes/access.ts:596"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/withdraw",
-      "source": "src/routes/access.ts:557"
+      "source": "src/routes/access.ts:573"
     },
     {
       "method": "GET",
@@ -1843,7 +1853,7 @@
     {
       "method": "GET",
       "path": "/api/graph/projects",
-      "source": "src/routes/projects.ts:34"
+      "source": "src/routes/projects.ts:40"
     },
     {
       "method": "GET",
@@ -1853,12 +1863,12 @@
     {
       "method": "GET",
       "path": "/api/graph/projects/:id",
-      "source": "src/routes/projects.ts:59"
+      "source": "src/routes/projects.ts:66"
     },
     {
       "method": "PATCH",
       "path": "/api/graph/projects/:id",
-      "source": "src/routes/projects.ts:82"
+      "source": "src/routes/projects.ts:90"
     },
     {
       "method": "GET",
@@ -1873,7 +1883,7 @@
     {
       "method": "PATCH",
       "path": "/api/graph/projects/:id/contributors/:personId",
-      "source": "src/routes/projects.ts:102"
+      "source": "src/routes/projects.ts:110"
     },
     {
       "method": "GET",
@@ -1978,32 +1988,32 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:174"
+      "source": "src/index.ts:175"
     },
     {
       "method": "GET",
       "path": "/api/identity/policies",
-      "source": "src/routes/identity.ts:294"
+      "source": "src/routes/identity.ts:297"
     },
     {
       "method": "POST",
       "path": "/api/identity/policies",
-      "source": "src/routes/identity.ts:313"
+      "source": "src/routes/identity.ts:316"
     },
     {
       "method": "DELETE",
       "path": "/api/identity/policies/:id",
-      "source": "src/routes/identity.ts:355"
+      "source": "src/routes/identity.ts:358"
     },
     {
       "method": "PUT",
       "path": "/api/identity/policies/:id",
-      "source": "src/routes/identity.ts:333"
+      "source": "src/routes/identity.ts:336"
     },
     {
       "method": "POST",
       "path": "/api/identity/policies/test",
-      "source": "src/routes/identity.ts:249"
+      "source": "src/routes/identity.ts:252"
     },
     {
       "method": "GET",
@@ -2013,12 +2023,12 @@
     {
       "method": "GET",
       "path": "/api/identity/schema",
-      "source": "src/routes/identity.ts:378"
+      "source": "src/routes/identity.ts:381"
     },
     {
       "method": "PUT",
       "path": "/api/identity/schema",
-      "source": "src/routes/identity.ts:387"
+      "source": "src/routes/identity.ts:390"
     },
     {
       "method": "GET",
@@ -2048,7 +2058,7 @@
     {
       "method": "PUT",
       "path": "/api/identity/users/:id/person",
-      "source": "src/routes/identity.ts:197"
+      "source": "src/routes/identity.ts:200"
     },
     {
       "method": "POST",
@@ -3888,7 +3898,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:173"
+      "source": "src/index.ts:174"
     },
     {
       "method": "DELETE",

@@ -4,7 +4,9 @@
 export const ACCESS_TENANTS = ['orgiq', 'assessment', 'social', 'pipelines'] as const;
 export type AccessTenant = typeof ACCESS_TENANTS[number];
 
-export type AccessKind = 'tenant-role' | 'initiative-membership';
+/** `capability`: a grant entry that is not a role (lib/session.ts CAPABILITY_GRANTS), e.g. orgiq budget visibility. */
+export type AccessKind = 'tenant-role' | 'initiative-membership' | 'capability';
+export const ACCESS_KINDS: readonly AccessKind[] = ['tenant-role', 'initiative-membership', 'capability'];
 export const DURATIONS = ['8h', '24h', '7d', '30d', 'standing'] as const;
 export type AccessDuration = typeof DURATIONS[number];
 export const REQUEST_STATUSES = ['draft', 'submitted', 'pending', 'approved', 'provisioned', 'active',
@@ -12,7 +14,8 @@ export const REQUEST_STATUSES = ['draft', 'submitted', 'pending', 'approved', 'p
 export type RequestStatus = typeof REQUEST_STATUSES[number];
 export type StepKind = 'manager' | 'steward' | 'access-admin';
 export type StepStatus = 'waiting' | 'current' | 'approved' | 'rejected' | 'info-requested' | 'skipped';
-export type StewardRule = 'tenant-steward' | 'initiative-owner';
+/** `budget-owner`: the orgiq budget owner — `org-leader`, the holder of ManageBudgets (budget visibility, 2026-10-13). */
+export type StewardRule = 'tenant-steward' | 'initiative-owner' | 'budget-owner';
 export type AccessSeverity = 'warn' | 'block';
 export type SodVerdict = 'clear' | 'warn' | 'block';
 export type Decision = 'approve' | 'reject' | 'info';

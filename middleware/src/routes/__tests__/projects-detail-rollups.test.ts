@@ -26,6 +26,14 @@ jest.mock('../../lib/authz.js', () => ({
   resolveSession: () => null,
 }));
 
+// The budgets read tier (lib/budget-read-tier.ts) decides whether the dollar
+// fields ship; these suites read as a tier holder unless a case says otherwise.
+const mockCanReadBudgets = jest.fn(async () => true);
+jest.mock('../../lib/budget-read-tier.js', () => ({
+  ...jest.requireActual('../../lib/budget-read-tier.js'),
+  canReadBudgets: () => mockCanReadBudgets(),
+}));
+
 import express from 'express';
 import request from '../../test-support/http.js';
 

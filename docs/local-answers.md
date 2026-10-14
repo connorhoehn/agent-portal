@@ -37,7 +37,8 @@ Agent pane already render:
 
 1. `STEP_STARTED` / `STEP_FINISHED` named `local data: <intent>`;
 2. a `local_answer` tool call — args `{intent, scope, stance}`, result
-   `{intent, sources, rows}`: the structured rows every figure was computed from;
+   `{intent, sources, rows, action?}`: the structured rows every figure was
+   computed from, and — on a locked budget answer — the quick request it offers;
 3. a `search_context` tool call — the cited records (`initiative` / `work`,
    numbered `n`, with `href`s), which become the Answer's evidence list and
    Connections; the prose cites them as `[n]`;
@@ -105,20 +106,32 @@ The composer's context chip reaches the server as data, not prose:
 The assistant never widens what a caller can read:
 
 - **Money** — spend, allocation, maintenance floor, sprint envelopes — only for
-  the budgets read tier: org-leader, hr-admin, program-owner, admin, or anyone
-  Cedar grants `ManageBudgets` (`lib/budget-read-tier.ts`, the same predicate
-  the initiative status decks use). Below it, a money question gets an answer
-  with no dollar figures and no rows that says why and what can be asked instead.
+  the budgets read tier: org-leader, hr-admin, program-owner, admin, anyone
+  Cedar grants `ManageBudgets`, or anyone holding the orgiq capability grant
+  `budgets-reader` (`lib/budget-read-tier.ts`, the same predicate the
+  initiative status decks and `GET /api/graph/projects` use). Below it, a
+  money question gets an answer with no dollar figures and no rows that says
+  the figures are **locked**, names the tier, and offers the quick request:
+  a markdown link `[Request budget access](/iq/projects?request=budget-access)`
+  in the prose (the Initiatives page opens its request form on that query) and
+  `action: { kind: 'request-access', itemId: 'capability:orgiq:budgets-read',
+  label, href }` on the answer and in the `local_answer` tool result. The
+  request is the ordinary access request `POST /api/access-requests/quick`
+  files (`docs/access-tenant-api.md` "Quick request"); once it is provisioned
+  the grants refresh carries it to the open cookie and the next budget question
+  is answered with figures — no sign-out. (Decided 2026-10-13; this replaced
+  the bare refusal.)
 - **Sprints** — the whole board for the tier, the caller's own sprints
   otherwise (stewarded, granted, or with their work) — the split
   `GET /api/sprints` makes.
 - **Initiatives, work items, contributors** — open to the orgiq tenant, as the
   Initiatives page and `/api/graph/*` are.
 
-⚠️ Known gap, not changed here: `GET /api/graph/projects` (the Initiatives
-table) returns `agentSpendUsd` and `allocatedUsd` to every orgiq session,
-including members, so the table shows figures the assistant withholds. Whether
-to redact those columns below the tier is an open decision.
+The Initiatives table agrees (closed 2026-10-13): `GET /api/graph/projects`
+and `GET /api/graph/projects/:id` withhold `agentSpendUsd` / `allocatedUsd`
+below the same tier and carry `budgetAccess: { visible: false, reason,
+requestItemId }` instead, so the table, the detail header and the assistant
+cannot disagree about who sees a dollar.
 
 ## The dev:mock agent's fall-through
 
@@ -136,7 +149,10 @@ lists the question forms the local assistant answers.
 - `middleware/src/routes/__tests__/agents-local-answers.test.ts` — routing
   order (local first, fall-through with rebuilt prose, `LOCAL_ANSWERS=false`,
   write/assessment agents and other tenants excluded, 400 on a bad scope) and
-  the member answer without figures.
+  the member answer without figures, locked, offering the quick request.
+- `middleware/src/routes/__tests__/access-requests-quick.test.ts` — the
+  member's locked rows, the quick request, an access admin's approval and the
+  figures on the same cookie after the grants refresh.
 - `portal/src/lib/__tests__/askScope.test.ts`,
   `portal/src/pages/project-detail/__tests__/composerPrompts.test.ts`,
   `portal/src/pages/projects/__tests__/initiativeAgentRequest.test.ts`,

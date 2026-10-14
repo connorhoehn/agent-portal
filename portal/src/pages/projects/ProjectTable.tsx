@@ -9,6 +9,7 @@ import {
 import { Link } from 'react-router';
 import { relativeTime } from '../../lib/relativeTime';
 import { ProjectStatusChip } from './ProjectStatusChip';
+import { LockedFigure } from './BudgetAccess';
 import {
   PRIORITY_TONE,
   SPEND_TITLE,
@@ -121,6 +122,8 @@ export function ProjectTable({
       key: 'agentSpendUsd', header: 'Spend (MTD)', numeric: true, sortable: true,
       compare: (a, b) => (a.agentSpendUsd ?? 0) - (b.agentSpendUsd ?? 0),
       render: (p) => {
+        // Below the budgets read tier the server withheld the figures: a lock, never a zero.
+        if (p.budgetAccess) return <LockedFigure lock={p.budgetAccess} testId="spend-locked" />;
         const spend = p.agentSpendUsd ?? 0;
         if (spend <= 0) return <T className="text-[12px] text-text-tertiary">—</T>;
         const burn = allocationFraction(p);

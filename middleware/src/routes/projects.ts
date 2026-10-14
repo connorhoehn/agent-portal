@@ -1,7 +1,12 @@
 // Initiatives — /api/graph/projects (mounted under requireTenant('orgiq') in
 // index.ts: initiative data is orgiq-tenant data).
 //
-// Reads are open to the tenant like the rest of the graph surface. The two
+// Reads are open to the tenant like the rest of the graph surface — except the
+// money: below the budgets read tier (lib/budget-read-tier.ts) both reads drop
+// `agentSpendUsd` / `allocatedUsd` and carry `budgetAccess: { visible: false,
+// reason, requestItemId }` instead, so the portal renders a locked cell and a
+// request for the tier rather than a number (decided 2026-10-13). A tier
+// holder's payload is unchanged. The two
 // governance writes — who runs an initiative (projects.owner_id) and what role
 // a contributor holds (project_contributions.role) — are gated on
 // DispatchAgentRun: naming an owner or an SME is deciding who may direct
@@ -16,6 +21,7 @@ import {
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
 import { mineViewer } from '../lib/mine.js';
+import { canReadBudgets, withholdBudget } from '../lib/budget-read-tier.js';
 
 export const projectsRouter = Router();
 
@@ -52,7 +58,8 @@ projectsRouter.get('/', asyncHandler(async (req, res) => {
     mineOnly: scope === 'mine',
     personId,
   });
-  res.json(projects);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await canReadBudgets(resolveSession(req)) ? projects : projects.map(withholdBudget));
 }));
 
 // GET /api/graph/projects/:id
@@ -67,7 +74,8 @@ projectsRouter.get('/:id', asyncHandler(async (req, res) => {
     res.status(404).json({ error: 'Project not found' });
     return;
   }
-  res.json(project);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await canReadBudgets(resolveSession(req)) ? project : withholdBudget(project));
 }));
 
 /** The provider names each refusal's HTTP meaning; the route just relays it. */

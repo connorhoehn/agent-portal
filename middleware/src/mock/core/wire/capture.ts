@@ -41,6 +41,7 @@ import { describe, fieldName, sortShape, type ShapeResult } from './shape.js';
 const QUERY_HINTS: Record<string, string> = {
   // A page huddle's call history (routes/page-calls.ts): the seeded initiative lobby's rows.
   'GET /api/calls': 'lobby=orgiq%3Ainitiative%3Ap-auth-migration',
+  'GET /api/access-requests/mine': 'itemId=capability%3Aorgiq%3Abudgets-read',
   'GET /api/assessment/knowledge/doc': 'id=ec%3Astandards%2Fci-cd-standards.md',
   'GET /api/assessment/knowledge/doc/versions': 'id=ec%3Astandards%2Fci-cd-standards.md',
   'GET /api/assessment/knowledge/doc/proposals': 'id=ec%3Astandards%2Fci-cd-standards.md',

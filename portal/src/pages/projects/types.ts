@@ -31,7 +31,15 @@ export interface ProjectSummary {
   allocatedUsd?: number | null;
   /** `owner/repo` (Mission-2). Rendered as a GitHub link, no capability gate. */
   repoFullName?: string | null;
+  /** Present only below the budgets read tier: the server withheld the dollar
+      fields (agentSpendUsd / allocatedUsd are absent) and says why and which
+      access catalog item opens them. The page renders a locked cell — never a
+      zero — and offers the request (BudgetAccessRequest). */
+  budgetAccess?: BudgetAccessLocked;
 }
+
+/** The server's stand-in for withheld money (middleware lib/budget-read-tier.ts). */
+export interface BudgetAccessLocked { visible: false; reason: string; requestItemId: string }
 
 /**
  * GET /api/session/person (M3): whether the signed-in account is connected to

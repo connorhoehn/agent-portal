@@ -42,6 +42,42 @@ escalates to the access-admins); an `approver` may file on behalf of a direct
 report only, an `access-admin` for anyone; reject and request-info require a
 comment; an already-held item or a duplicate open request is a 409.
 
+Decided during the budget-tier lane (2026-10-13), from the user's direction
+"budget figures are a tier": members still see the budget columns, locked, and
+request the upgrade from where they are.
+
+- **Provisioning: a capability grant, not a role.** The catalog item
+  `capability:orgiq:budgets-read` (new kind `capability`) provisions the orgiq
+  grant entry `budgets-reader` into `user_tenant_roles` through the same
+  `setGrants` merge (A2: one grant store). `lib/budget-read-tier.ts`
+  `canReadBudgets` recognises it (orgiq sessions only) alongside the roles and
+  `ManageBudgets`. Nothing else does: it is in no Cedar file, carries no action,
+  and `lib/session.ts` `rolesForTenant` filters it out, so it is never an active
+  role, a landing role, a role-picker entry or a tenant on its own
+  (`CAPABILITY_GRANTS`). Granting `program-owner` was the alternative and was
+  rejected as too wide — it carries `ManageBudgets` (allocating money), sprint
+  stewardship and bot management — and, because the tier keys on the ACTIVE
+  role, a member would have had to switch role (an epoch bump) to see a figure.
+  The capability holds whatever role the reader is acting as, and reaches their
+  open cookie through the grants refresh (A3).
+- **Steward rule `budget-owner`:** after the manager step, the orgiq budget
+  owner — `org-leader` holders, who allocate the money the figures reveal. The
+  A0 rule still applies: a steward without a deciding role in Access escalates
+  to the access admins (today's seed: every org leader does, so the step
+  escalates to Priya).
+- **The quick request** (`POST /api/access-requests/quick`,
+  `GET /api/access-requests/mine`, `docs/access-tenant-api.md`) is a session
+  floor, not `requireTenant('access')`: it files the ordinary request through
+  the one submit path for the caller only, limited to the caller's current
+  tenant's items, and never decides or provisions.
+- **Where figures are withheld:** `GET /api/graph/projects` and
+  `GET /api/graph/projects/:id` (the only routes that hand spend/allocation to
+  every orgiq reader). `/api/budgets`, `/api/sprints?scope=all`, the work
+  graph's envelopes and the status decks were already gated on the tier; the
+  dispatch gates' 409 bodies (`routes/bots.ts`) name a budget to the dispatcher
+  who hit it and were left alone. Access reviews list `budgets-reader` like any
+  grant, so the capability is certified and revocable.
+
 Not decided here: whether `manager_id` is seeded from team leads or typed by hand in `/admin/identity/users` (the seed generator can do either); escalation timers; delegation while out of office; whether `admin` cross-tenant grants are requestable at all (default: no, they are provisioned by hand).
 
 ## 3. Model
@@ -50,7 +86,7 @@ Additive schema, `schema/access_schema.sql`, registered in both loaders and **no
 
 | table | holds |
 |---|---|
-| `access_catalog_items` | what can be requested: `kind` (`tenant-role`, `initiative-membership`), `tenant`, `role` or `project_id`, `sensitive` flag, `default_duration`, `steward_rule` |
+| `access_catalog_items` | what can be requested: `kind` (`tenant-role`, `initiative-membership`, `capability` — 2026-10-13), `tenant`, `role` or `project_id`, `sensitive` flag, `default_duration`, `steward_rule` |
 | `access_requests` | `id`, `requester_id`, `beneficiary_id`, `item_id`, `justification`, `duration`, `status`, `submitted_at`, `decided_at`, `provisioned_at`, `expires_at`, `revoked_at` |
 | `access_request_steps` | the approval chain computed at submit: `step` (1..n), `kind` (`manager`, `steward`, `access-admin`), `status`, `decided_by`, `decided_at`, `comment` — the *resolver* for who may decide a step runs live (A4); the row records who did |
 | `access_policies` | SoD rules: two `(tenant, role)` pairs that must not be held together, `severity`, `reason` |

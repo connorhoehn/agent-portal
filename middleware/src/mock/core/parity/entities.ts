@@ -932,7 +932,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
   // the decision columns are compared for presence where they can be.
   {
     name: 'access catalog',
-    describes: 'What the access tenant offers to request — six tenant roles and two initiative memberships.',
+    describes: 'What the access tenant offers to request — six tenant roles, one capability (budget visibility in Work) and two initiative memberships.',
     lesson: 'access A0: a catalog item the mock invents can be requested offline and never on a real cluster.',
     sqlFile: 'access_schema.sql',
     sqlTable: 'access_catalog_items',

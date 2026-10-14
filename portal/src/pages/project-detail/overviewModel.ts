@@ -81,7 +81,8 @@ export function overviewStats(project: ProjectDetail, tree: WorkItemTree[] | nul
   return [
     pointsStat(tree),
     agentsStat(project.activeAgentRuns),
-    spendStat(project.agentSpendUsd, project.allocatedUsd),
+    // Below the budgets read tier the server withheld the figures (budgetAccess): say so, never '—' or $0.
+    project.budgetAccess ? { id: 'spend', value: 'Locked', label: 'spent · budget figures locked', muted: true } : spendStat(project.agentSpendUsd, project.allocatedUsd),
   ];
 }
 

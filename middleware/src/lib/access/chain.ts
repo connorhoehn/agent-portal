@@ -7,7 +7,9 @@
 //   steward       a tenant role: the tenant's steward role holders
 //                 (orgiq hr-admin, assessment program-lead, social
 //                 community-admin, pipelines pipeline-admin); an initiative:
-//                 its owner (projects.owner_id / project_contributions 'owner')
+//                 its owner (projects.owner_id / project_contributions 'owner');
+//                 budget visibility (`budget-owner`): the orgiq budget owner,
+//                 `org-leader` — the role that allocates the money it reveals
 //   access-admin  the access tenant's access-admin holders (sensitive items)
 //
 // Two live rules sit on top of the raw candidates:
@@ -30,6 +32,9 @@ export const TENANT_STEWARD_ROLE: Readonly<Record<string, string>> = {
   social: 'community-admin',
   pipelines: 'pipeline-admin',
 };
+
+/** The role whose holders steward a `budget-owner` item: orgiq's ManageBudgets holder that allocates (seeds/roles/orgiq/org-leader.cedar). */
+export const BUDGET_OWNER_ROLE = { tenant: 'orgiq', role: 'org-leader' } as const;
 
 /** Roles in `access` that carry DecideAccess (seeds/roles/access/*.cedar). */
 export const ACCESS_DECIDER_ROLES: ReadonlySet<string> = new Set(['approver', 'access-admin']);
@@ -63,6 +68,9 @@ export function stepCandidates(kind: StepKind, item: AccessCatalogRow, beneficia
       return manager ? dir.users.filter((u) => u.personId === manager) : [];
     }
     case 'steward': {
+      if (item.stewardRule === 'budget-owner') {
+        return dir.users.filter((u) => (u.grants[BUDGET_OWNER_ROLE.tenant] ?? []).includes(BUDGET_OWNER_ROLE.role));
+      }
       if (item.stewardRule === 'initiative-owner') {
         const owner = item.projectId ? dir.initiative(item.projectId)?.ownerPersonId ?? null : null;
         return owner ? dir.users.filter((u) => u.personId === owner) : [];
