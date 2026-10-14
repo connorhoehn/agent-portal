@@ -1,6 +1,7 @@
 import { loginAs } from './realSession';
 import { test, expect } from './cdpTest';
 import { writeFile } from 'node:fs/promises';
+import { chooseOption, optionValues } from './selectOption';
 
 test.use({ baseURL: process.env.PARITY_BASE_URL ?? 'http://127.0.0.1:5261' });
 const URL = '/iq/projects/p-auth-migration?tab=work&item=wi-auth-e2-b3';
@@ -96,11 +97,10 @@ test('changing initiative from focused Work drops the old item and keeps canonic
     await loginAs(context, 'u-rachel', baseURL);
     await page.goto(URL);
     const select = page.getByTestId('focused-work-navigation').getByRole('combobox', { name: 'Initiative', exact: true });
-    await expect.poll(() => select.locator('option').count()).toBeGreaterThan(1);
-    const next = await select.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value)
-      .find(value => value !== 'p-auth-migration'));
+    await expect.poll(async () => (await optionValues(select)).length).toBeGreaterThan(1);
+    const next = (await optionValues(select)).find(value => value !== 'p-auth-migration');
     expect(next).toBeTruthy();
-    await select.selectOption(next!);
+    await chooseOption(select, next!);
     await expect(page).toHaveURL(new RegExp(`/iq/projects/${next}\\?.*tab=work`));
     await expect(page).not.toHaveURL(/item=/);
     await expect(page.getByTestId('initiative-work-list')).toBeVisible();

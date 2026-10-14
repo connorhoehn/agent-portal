@@ -1,6 +1,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { workDayWindow } from '@connorhoehnslalom/realtime-modules/work-graph';
 import { loginAs } from './realSession';
+import { chooseOption } from './selectOption';
 
 // The orgiq activity/work graph (docs/activity-graph-migration.md): the
 // initiative overview's Activity section is realtime-modules' useWorkGraph into
@@ -168,7 +169,7 @@ test('the person selector narrows the workspace graph to one person’s day', as
 
     const region = rachel.page.getByTestId('iq-activity');
     await expect(region.getByRole('region', { name: 'Shared work graph' }).or(region.locator('section[aria-label="Shared work graph"]')).first()).toBeVisible({ timeout: 20_000 });
-    await region.getByTestId('iq-activity-person').selectOption(person.id);
+    await chooseOption(region.getByTestId('iq-activity-person'), person.id);
     await expect(rachel.page).toHaveURL(new RegExp(`person=${person.id}`));
     await expect(region.getByText(mine[0]!.title, { exact: true }).first()).toBeVisible({ timeout: 20_000 });
     for (const other of others.filter(o => !mine.some(m => m.title === o.title)).slice(0, 3)) await expect(region.getByText(other.title, { exact: true })).toHaveCount(0);

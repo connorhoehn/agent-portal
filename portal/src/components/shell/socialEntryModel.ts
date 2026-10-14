@@ -37,3 +37,15 @@ export function socialEntryTarget(input: SocialEntryInput): SocialEntryTarget {
 /** The "↗" door to the Social tenant itself: only with a grant, and never from inside Social. */
 export const showSocialTenantDoor = (tenant: string | null | undefined, hasSocialGrant: boolean): boolean =>
   hasSocialGrant && tenant !== 'social';
+
+/**
+ * The footer bell's "See all activity": the Social workspace's own Activity
+ * view (the same inbox, full height), opened by `?shelf=activity` — in the
+ * Social tenant, or the Communication plane elsewhere. Null without a Social
+ * grant or a plane in this tenant, where there is no such page to open.
+ */
+export function socialActivityPath(tenant: string | null | undefined, hasSocialGrant: boolean): string | null {
+  if (!hasSocialGrant) return null;
+  const base = tenant === 'social' ? '/social' : communicationPath(tenant);
+  return base ? `${base}/channels?shelf=activity` : null;
+}

@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { openAs } from './realSession';
+import { chooseOption } from './selectOption';
 
 // Slice 7 (docs/agentic-flows-migration.md): a recorded call's transcript as the
 // source of `/summarize` and `/deck` in the call's direct message, through the
@@ -132,7 +133,7 @@ test('Recordings pane: a room call\'s summary is a private card in the pane; Pos
     await expect(message(lena.page, 'Highlights')).toHaveCount(0);
     await card.getByTestId('social-summary-post').click();
     await expect(card).toContainText('Choose where to post');
-    await sana.page.getByTestId('social-room-summary-target').selectOption({ label: '# General' });
+    await chooseOption(sana.page.getByTestId('social-room-summary-target'), { label: '# General' });
     await card.getByTestId('social-summary-post').click();
     await expect(sana.page.getByTestId('social-summary-card')).toHaveCount(0, { timeout: 15_000 });
     await expect(message(lena.page, 'Highlights')).toHaveCount(1, { timeout: 10_000 });

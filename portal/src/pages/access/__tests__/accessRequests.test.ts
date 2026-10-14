@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  EMPTY_DRAFT, JUSTIFICATION_MIN, chainSteps, currentStep, draftProblem, filterCatalog, filterRequests, matchesStatusFilter,
+  EMPTY_DRAFT, JUSTIFICATION_MIN, chainSteps, currentStep, expiryDateLabel, filterCatalog, previewStepLabel, sectionProblems, untilLabel, filterRequests, matchesStatusFilter,
   requestHref, requestTitle, submitBody, type AccessRequest, type CatalogItem, type RequestStatus,
 } from '../../../lib/accessRequests.ts';
 
@@ -59,18 +59,28 @@ test('titles name the beneficiary only when it is someone else', () => {
   assert.equal(requestHref('req 1'), '/access/requests/req%201');
 });
 
-test('wizard: each step names what blocks it; a blocking SoD conflict stops step two', () => {
+test('request form: each section names what blocks it; the visible default duration counts; SoD is the server preview\'s', () => {
   const draft = { ...EMPTY_DRAFT };
-  assert.match(draftProblem(0, draft, null)!, /who/);
-  assert.equal(draftProblem(0, { ...draft, beneficiaryId: 'u-rhea' }, null), null);
-  assert.match(draftProblem(1, draft, null)!, /catalog/);
-  assert.match(draftProblem(1, draft, item({ sodConflicts: [{ policyId: 'sod-1', reason: 'x', severity: 'block' }] }))!, /separation-of-duties/);
-  assert.equal(draftProblem(1, draft, item({ sodConflicts: [{ policyId: 'sod-1', reason: 'x', severity: 'warn' }] })), null);
-  assert.match(draftProblem(2, { ...draft, justification: 'too short' }, item())!, new RegExp(String(JUSTIFICATION_MIN)));
-  assert.equal(draftProblem(2, { ...draft, justification: 'x'.repeat(JUSTIFICATION_MIN) }, item()), null);
-  assert.match(draftProblem(3, draft, item())!, /how long/);
-  assert.match(draftProblem(3, { ...draft, duration: 'standing' }, item())!, /Standing/);
-  assert.equal(draftProblem(3, { ...draft, duration: 'standing', standingReason: 'y'.repeat(JUSTIFICATION_MIN) }, item()), null);
+  const none = sectionProblems(draft, null);
+  assert.match(none.who!, /who/);
+  assert.match(none.what!, /catalog/);
+  assert.match(none.howLong!, /how long/);
+  assert.equal(sectionProblems({ ...draft, beneficiaryId: 'u-rhea' }, null).who, null);
+  // A blocking conflict on the actor's own catalog row does not block the section: the preview decides for the beneficiary.
+  assert.equal(sectionProblems(draft, item({ sodConflicts: [{ policyId: 'sod-1', reason: 'x', severity: 'block' }] })).what, null);
+  assert.match(sectionProblems({ ...draft, justification: 'too short' }, item()).why!, new RegExp(String(JUSTIFICATION_MIN)));
+  assert.equal(sectionProblems({ ...draft, justification: 'x'.repeat(JUSTIFICATION_MIN) }, item()).why, null);
+  assert.equal(sectionProblems(draft, item()).howLong, null, 'the item default is a choice');
+  assert.match(sectionProblems({ ...draft, duration: 'standing' }, item())!.howLong!, /Standing/);
+  assert.equal(sectionProblems({ ...draft, duration: 'standing', standingReason: 'y'.repeat(JUSTIFICATION_MIN) }, item()).howLong, null);
+});
+
+test('summary: the chain names who decides, and "until" is a concrete date or standing', () => {
+  assert.equal(previewStepLabel({ step: 1, kind: 'manager', eligible: [{ id: 'u-omar', displayName: 'Omar Haddad' }], escalated: null }), 'Omar Haddad');
+  assert.equal(previewStepLabel({ step: 2, kind: 'steward', eligible: [], escalated: null }), 'No one can decide this step');
+  assert.match(expiryDateLabel('2026-10-20T12:00:00.000Z', 'en-US'), /Oct 20, 2026/);
+  assert.match(untilLabel('7d', '2026-10-20T12:00:00.000Z'), /2026 — 7 days from approval/);
+  assert.equal(untilLabel('standing', null), 'No end date — standing access');
 });
 
 test('submit body carries only the route\'s keys, and a beneficiary only on behalf of someone else', () => {

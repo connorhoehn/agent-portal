@@ -88,7 +88,7 @@ function Overview({ org, channels, activePeople, active, liveLobbies, onSelectGr
         You are not in a conversation yet. Join a channel, message someone who is here, or open one of your {noun}.
       </T>
       <PageSection size="sm" title="Active now" count={activePeople.length} data-testid="communication-overview-active">
-        <ActivePeopleGrid people={activePeople} maxVisible={12} emptyLabel="Nobody else is here right now."
+        <ActivePeopleGrid people={activePeople} maxVisible={12} columns="fit" emptyLabel="Nobody else is here right now."
           onSelectPerson={onMessage} onSelectSharedWork={onSharedWork} data-testid="communication-overview-active-grid" />
       </PageSection>
       <PageSection size="sm" title={`Your ${noun}`} count={groupItems.length} data-testid="communication-overview-groups">

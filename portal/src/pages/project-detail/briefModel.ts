@@ -151,33 +151,6 @@ export function buildBrief(input: BriefInputs): BriefModel {
   return { rows, showTable: !rows.every((r) => r.filled) };
 }
 
-// ─── Run setup ───────────────────────────────────────────────────────────────
-
-export const RUN_SETUP_TITLE = 'Run setup';
-
-export interface RunSetupInputs {
-  /** DispatchAgentRun from /api/session/capabilities. */
-  canDispatch: boolean;
-  /** The session is an sme — the only role grant-scoped dispatch restricts. */
-  isSme: boolean;
-  /** hasActiveGrantOnInitiative over /api/sprints?scope=mine; null while unread. */
-  hasGrant: boolean | null;
-  model?: string | null;
-  repo?: string | null;
-  capUsd?: number | null;
-}
-
-/** The collapsed Run setup's one-line hint. */
-export function runSetupHint(i: RunSetupInputs): string {
-  if (!i.canDispatch) return 'SME or release manager required to dispatch';
-  if (i.isSme && i.hasGrant === false) return 'Needs an active sprint grant on this initiative';
-  const parts: string[] = [];
-  if (i.model) parts.push(i.model);
-  if (i.repo) parts.push(i.repo);
-  if (i.capUsd != null) parts.push(`cap $${i.capUsd.toFixed(2)}`);
-  return parts.length > 0 ? parts.join(' · ') : 'Ready to dispatch';
-}
-
 // ─── Prompt facts ────────────────────────────────────────────────────────────
 
 /** What the composer's item prefill needs to know about the brief. `null`

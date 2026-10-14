@@ -17,7 +17,6 @@ import {
   DetailHeader,
   InlineAlert,
   MetaLine,
-  ProgressBar,
   Stack,
   StatStrip,
   TabPanel,
@@ -25,7 +24,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { SprintBoard } from './SprintBoard';
 import { GrantsPanel } from './GrantsPanel';
-import { dateRange, isOverEnvelope, STATUS_TONE, timeLeftLabel, usd, windowProgress } from './sprintFormat';
+import { dateRange, isOverEnvelope, sprintWindow, STATUS_TONE, timeLeftLabel, usd } from './sprintFormat';
 import type { Sprint } from './types';
 
 function SprintMoney({ s }: { s: Sprint }) {
@@ -81,7 +80,7 @@ export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, 
   // Losing ManageBudgets while the Envelopes tab is open would otherwise leave
   // the detail showing tabs with nothing under them.
   const tab = selectedTab === 'grants' && !canManageBudgets ? 'work' : selectedTab;
-  const progress = windowProgress(s);
+  const span = sprintWindow(s);
 
   const tabs = [
     { id: 'work', label: 'Work', badge: <Chip tone="neutral" size="sm">{s.itemCount}</Chip> },
@@ -112,36 +111,42 @@ export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, 
               ]}
             />
           }
+          // One compact readout in the header row, drawn with the same
+          // line-stat primitive as the page rollup and the initiative
+          // overview ("5 / 16 points delivered" + its bar), so the two
+          // figures align as text with a thin fill under each — not two
+          // grey progress tracks stacked in a box of their own. The window
+          // is end-date inclusive (sprintWindow): on its last day a sprint
+          // reads "Day 15 of 15", never 100% elapsed.
           aside={
-            <>
-              {progress !== null ? (
-                <ProgressBar
-                  value={Math.round(progress * 100)}
-                  max={100}
-                  showRatio={false}
-                  label="Elapsed"
-                  size="sm"
+            // One strip per figure, stacked: each reads as one aligned row,
+            // with no line-wrap separator left dangling between them.
+            <Stack gap="xs" aria-label="Sprint progress">
+              <StatStrip
+                variant="line"
+                aria-label="Points done"
+                items={[{
+                  label: 'points done',
+                  value: `${s.pointsDone} / ${s.pointsTotal}`,
+                  title: `${s.doneItemCount} of ${s.itemCount} items done`,
+                  progress: s.pointsTotal > 0 ? { value: s.pointsDone, max: s.pointsTotal } : null,
+                }]}
+              />
+              {span && s.status === 'active' ? (
+                <StatStrip
+                  variant="line"
+                  aria-label="Sprint window"
+                  items={[{
+                    label: `of ${span.days} days`,
+                    value: `Day ${span.day}`,
+                    title: `${Math.round(span.progress * 100)}% of the window elapsed`,
+                    progress: { value: span.progress, max: 1 },
+                  }]}
                 />
               ) : null}
-              {/* `max` is clamped to 1 so the bar's width math cannot divide by
-                  zero — which means the clamp is a GEOMETRY fact, not a fact
-                  about the sprint, and it must not reach the reader.
-                  `showRatio` defaults to true and renders "{value}/{max}"
-                  (checked against the installed dist), so an unpointed sprint
-                  rendered "0/1": a denominator no one estimated, sitting a few
-                  lines from the Money tab's StatCard which correctly reads
-                  "0 / 0" for the same sprint. Same shape as SprintCard.tsx,
-                  which already turns the ratio off and writes the true one into
-                  `label`; the Elapsed bar directly above does too. */}
-              <ProgressBar
-                value={s.pointsDone}
-                max={Math.max(s.pointsTotal, 1)}
-                showRatio={false}
-                label={`Points done ${s.pointsDone}/${s.pointsTotal}`}
-                size="sm"
-              />
-            </>
+            </Stack>
           }
+          asideWidth={320}
         />
 
         <Tabs

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { chooseOption } from './selectOption';
 
 test('legacy promotion deep links land in Review with read-only controls for members', async ({ page }) => {
   await page.goto('/iq/library');
@@ -13,7 +14,7 @@ test('legacy promotion deep links land in Review with read-only controls for mem
   await expect(page.getByText('Promoting or dismissing a candidate needs Manage bots.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Approve + record a passing dry run', exact: true })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Promotions', exact: true })).toHaveCount(0);
-  await page.getByLabel('Promotion status').selectOption('dismissed');
+  await chooseOption(page.getByLabel('Promotion status'), 'dismissed');
   await expect(page.getByText('No candidates in this view')).toBeVisible();
 });
 

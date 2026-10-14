@@ -346,7 +346,7 @@ function SocialConversationInner({
       {pinState.fetchedShown && <InlineAlert tone="info">Showing the pinned message alongside the latest conversation. Messages between them are not loaded.</InlineAlert>}
       <WrappedConversationSurface
         className="min-h-0 min-w-0 flex-1"
-        headerClassName="px-4 py-2"
+        headerClassName="px-[var(--ui-content-gutter,1rem)] py-2"
         name={name}
         {...(description ? { description } : {})}
         {...(online !== undefined ? { online } : {})}

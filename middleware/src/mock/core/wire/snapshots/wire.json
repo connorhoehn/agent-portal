@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-14T02:27:09.117Z",
-  "serverHandlerSha": "0b144e4f66ca7edabe5bbe79e875ac1d1edfe0584072b626b109215c87297c1d",
+  "capturedAt": "2026-10-14T02:40:14.338Z",
+  "serverHandlerSha": "0f26c1853c87948366e870511afbd15ad6a0bf0c54fe00c28341791ec5d790d9",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -158,6 +158,19 @@
           "withdrawn"
         ]
       }
+    },
+    "GET /api/access/beneficiaries": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].displayName": "string",
+        "items[].id": "string",
+        "items[].personId": "null|string"
+      },
+      "values": {}
     },
     "GET /api/access/catalog": {
       "persona": "orgiq/admin",
@@ -5838,6 +5851,7 @@
           "DecideAccess",
           "Login",
           "ManageIngest",
+          "RequestAccess",
           "ViewAccess",
           "ViewAssessment",
           "ViewIdentityAdmin",
@@ -10041,6 +10055,7 @@
         "DecideAccess",
         "Login",
         "ManageIngest",
+        "RequestAccess",
         "ViewAccess",
         "ViewAssessment",
         "ViewIdentityAdmin",

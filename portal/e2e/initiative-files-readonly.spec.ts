@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { test, expect } from './cdpTest';
 import { signIn } from './realSession';
+import { chooseOption } from './selectOption';
 test.use({ baseURL: 'http://localhost:5183', viewport: { width: 1440, height: 1000 } });
 test('project files show the saved presentation with bounded cards and a unified toolbar', async ({ page }) => {
   const principal = await signIn(page, 'u-nora', { expectTenant: 'orgiq', expectRole: 'sme' });
@@ -18,7 +19,7 @@ test('project files show the saved presentation with bounded cards and a unified
   expect(cards.length).toBeGreaterThan(0); expect(cards.every(card => card.width <= 322 && card.height <= 150)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('files-cards-wide.png') });
   await files.getByRole('radio', { name: 'List', exact: true }).click(); await expect(files.getByTestId('initiative-files-list')).toBeVisible();
-  await files.getByLabel('File type').selectOption('presentation'); await expect(files.getByTestId('initiative-file')).toHaveCount(1);
+  await chooseOption(files.getByLabel('File type'), 'presentation'); await expect(files.getByTestId('initiative-file')).toHaveCount(1);
   await files.getByLabel('Search project files').fill('no matching fixture text'); await expect(files.getByText('No matching files', { exact: true })).toBeVisible();
   await files.getByLabel('Search project files').fill(''); await files.getByRole('radio', { name: 'Cards', exact: true }).click();
   await page.setViewportSize({ width: 1024, height: 768 }); await expect(saved).toBeVisible();
@@ -42,6 +43,6 @@ test('one unavailable work-item document source preserves other linked project d
   await expect(files.getByText('Some documents could not be read.', { exact: false })).toBeVisible();
   await expect(files.getByTestId('initiative-file').filter({ hasText: 'Linked project brief' })).toHaveCount(1);
   await expect(files.getByTestId('initiative-file').filter({ hasText: 'Observability review' })).toHaveCount(1);
-  await files.getByLabel('File type').selectOption('document');
+  await chooseOption(files.getByLabel('File type'), 'document');
   await expect(files.getByTestId('initiative-file')).toHaveCount(1);
 });

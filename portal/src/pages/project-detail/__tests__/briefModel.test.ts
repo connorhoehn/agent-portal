@@ -1,12 +1,12 @@
 // Run with:  cd portal && node --test 'src/pages/project-detail/__tests__/*.test.ts'
 //
 // The Brief tab: three rows derived from reads, each read's pending/failed
-// state kept distinct from "nothing written", and the Run setup hint.
+// state kept distinct from "nothing written".
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { briefFacts, buildBrief, itemFlags, nextStepCallout, priorityTag, runSetupHint } from '../briefModel.ts';
+import { briefFacts, buildBrief, itemFlags, nextStepCallout, priorityTag } from '../briefModel.ts';
 import { workRows } from '../workListModel.ts';
 import type { Criterion, ThreadComment } from '../useWorkItemThread.ts';
 import type { ProjectDecision } from '../types.ts';
@@ -72,13 +72,6 @@ test('the next-step callout comes from the row, and hides without one', () => {
     actionLabel: 'Open discussion',
   });
   assert.equal(nextStepCallout({ nextStep: '  ', nextStepDetail: 'x' }), null);
-});
-
-test('run setup hint: no dispatch, sme without grant, then the run facts', () => {
-  assert.equal(runSetupHint({ canDispatch: false, isSme: false, hasGrant: null }), 'SME or release manager required to dispatch');
-  assert.equal(runSetupHint({ canDispatch: true, isSme: true, hasGrant: false }), 'Needs an active sprint grant on this initiative');
-  assert.equal(runSetupHint({ canDispatch: true, isSme: true, hasGrant: null, model: 'Haiku 4.5', repo: 'org/obs', capUsd: 5 }), 'Haiku 4.5 · org/obs · cap $5.00');
-  assert.equal(runSetupHint({ canDispatch: true, isSme: false, hasGrant: null }), 'Ready to dispatch');
 });
 
 test('brief facts: unknown criteria stay unknown', () => {

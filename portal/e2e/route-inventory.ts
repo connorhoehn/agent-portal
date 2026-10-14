@@ -158,6 +158,10 @@ export const OBSERVED_ROUTES: readonly ParamRoute[] = [
   { tenant: 'orgiq', pattern: '/admin/identity/roles', template: '/admin/identity/:id', id: 'roles' },
   { tenant: 'orgiq', pattern: '/admin/bots/:id', template: '/admin/bots/:id', id: '32970d0a-e28e-5100-8fb0-a5cbb87dac99' },
   { tenant: 'social', pattern: '/social/dms/:lobby', template: '/social/dms/:id', id: 'social:dm:u-operator:u-sana' },
+  // The same seeded DM on each tenant's Communication plane: the conversation is the page's one header.
+  { tenant: 'orgiq', pattern: '/iq/communication/dms/:lobby', template: '/iq/communication/dms/:id', id: 'social:dm:u-operator:u-sana' },
+  { tenant: 'assessment', pattern: '/assessment/communication/dms/:lobby', template: '/assessment/communication/dms/:id', id: 'social:dm:u-operator:u-sana' },
+  { tenant: 'pipelines', pattern: '/pipelines/communication/dms/:lobby', template: '/pipelines/communication/dms/:id', id: 'social:dm:u-operator:u-sana' },
 ];
 
 // ── Scenario lists (each was a private list in a spec or a validator) ──────

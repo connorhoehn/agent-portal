@@ -192,6 +192,33 @@ The agent loop's `GET /api/conversations/agent/waiting?channel=access:req:<id>`
 answers `{ runs: [] }` to a reader of the request (request threads carry no
 agent) and 403 to anyone else.
 
+## Request page — preview and beneficiaries (2026-10-13)
+
+`/access/requests/new` is one page with a live summary beside the form; two
+reads feed it. Both sit on `accessRouter` behind `requireTenant('access')`.
+
+| route | gate | response |
+|---|---|---|
+| `POST /requests/preview` body `{ itemId, beneficiaryId?, duration? }` | RequestAccess | 200 `AccessRequestPreview` (below), written nowhere. 400 on an unknown key, no/unknown `itemId`, a bad `duration`, an unknown beneficiary or a non-string `beneficiaryId`; 403 when the actor may not file for `beneficiaryId` (the submit's own on-behalf rule). Already held, a duplicate open request and an SoD block are **200** with `refusal` set, so the page shows them before anyone submits |
+| `GET /beneficiaries` | RequestAccess | `{ items: Person[] }` the actor may file for: self first; an approver (DecideAccess) adds their direct reports through `people.manager_id`; an access admin (DecideAccess + ProvisionAccess) adds everyone the directory holds with any grant, sorted by name |
+
+The preview runs `assessSubmission` (`routes/access.ts`), the same checks in
+the same order as `POST /requests`, so the page and the submit cannot
+disagree; the chain is `planChain` with each step's deciders resolved live
+(`eligibility`) as if the actor filed it now.
+
+```ts
+interface AccessRequestPreview {          // middleware/src/lib/access/types.ts
+  item: CatalogItem;                      // heldByActor / sodConflicts are the ACTOR's (the catalog view)
+  beneficiary: Person;
+  steps: Array<{ step: number; kind: StepKind; eligible: Person[]; escalated: string | null }>;
+  sod: { verdict: 'clear' | 'warn' | 'block'; conflicts: SodConflict[] };   // the BENEFICIARY's current grants
+  duration: Duration;                     // the body's, else the item's default
+  expiresIfProvisionedNow: string | null; // expiry counts from provisioning; null for standing
+  refusal: null | { status: 400 | 403 | 409; error: string; requestId?: string };  // requestId: the open duplicate
+}
+```
+
 ## Quick request — `/api/access-requests` (decided 2026-10-13)
 
 The in-tenant door to the same workflow: a reader who meets a locked figure

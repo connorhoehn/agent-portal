@@ -3,6 +3,7 @@ import { seedPreJoin } from './preJoin';
 import { type Browser, type BrowserContext, type Page, type WebSocketRoute } from '@playwright/test';
 import { test, expect } from './cdpTest';
 import { chooseComposerMode } from './conversationViews';
+import { chooseOption, optionValues } from './selectOption';
 
 test.use({ viewport: { width: 1440, height: 900 },
   ...(process.env.PARITY_BASE_URL ? { baseURL: process.env.PARITY_BASE_URL } : {}) });
@@ -156,9 +157,8 @@ async function workComposer(page: Page) {
   const composer = page.getByTestId('initiative-composer');
   await chooseComposerMode(page, composer, 'Agent', 'Chat');
   const target = composer.getByRole('combobox', { name: 'Chat recipient' });
-  await expect(target).toHaveValue('discussion');
-  const huddleTargets = await target.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value)
-    .filter(value => value.startsWith('huddle:')));
+  await expect(target).toHaveAttribute('data-value', 'discussion');
+  const huddleTargets = (await optionValues(target)).filter(value => value.startsWith('huddle:'));
   expect(huddleTargets).toHaveLength(1);
   return { composer, target, huddleTarget: huddleTargets[0]!, input: composer.getByTestId('rich-chat-composer-input'),
     send: composer.getByTestId('rich-chat-composer-send') };
@@ -296,7 +296,7 @@ test('explicit To keeps Discussion separate from the huddle and removing draft c
     await expect(editor.input).toHaveText('');
     await expect(rachel.page.getByTestId('page-conversation-pane').getByTestId('chat-message').filter({ hasText: discussionText })).toHaveCount(1, { timeout: 15_000 });
     expect(JSON.stringify(await history(vera.page, callId))).not.toContain(discussionText);
-    await editor.target.selectOption(editor.huddleTarget); await editor.input.fill(huddleText);
+    await chooseOption(editor.target, editor.huddleTarget); await editor.input.fill(huddleText);
     // On the work item the huddle is the shell's right pane: the composer hands
     // its draft and page reference to the pane, whose Send persists it.
     await editor.send.click();
@@ -328,7 +328,7 @@ for (const switchTarget of [false, true]) {
     try {
       await connect(rachel.page, vera.page);
       const editor = await workComposer(rachel.page), callId = editor.huddleTarget.slice('huddle:'.length);
-      await editor.target.selectOption(editor.huddleTarget);
+      await chooseOption(editor.target, editor.huddleTarget);
       const submitted = `Persist before ack ${Date.now()}`, newerDraft = `Next draft ${Date.now()}`;
       // The gateway persists and acknowledges normally. Only delivery of that
       // actual acknowledgement to this page is held, to exercise draft ownership.
@@ -347,14 +347,14 @@ for (const switchTarget of [false, true]) {
       // sending state and refuses a second send of the same draft.
       await expect(sendButton(rachel.page)).toHaveText('Sending…');
       await sendButton(rachel.page).click({ force: true }); expect(sends(rachel)).toHaveLength(before + 1);
-      if (switchTarget) await editor.target.selectOption('discussion');
+      if (switchTarget) await chooseOption(editor.target, 'discussion');
       release();
       await expect(sendButton(rachel.page)).toHaveText('Send');
       await expect(draft(rachel.page)).toHaveText('');
       expect(sends(rachel)).toHaveLength(before + 1);
-      if (switchTarget) await expect(editor.target).toHaveValue('discussion');
+      if (switchTarget) await expect(editor.target).toHaveAttribute('data-value', 'discussion');
       await editor.input.fill(newerDraft);
-      if (switchTarget) await expect(editor.target).toHaveValue('discussion');
+      if (switchTarget) await expect(editor.target).toHaveAttribute('data-value', 'discussion');
       expect(JSON.stringify(await history(vera.page, callId))).not.toContain(newerDraft);
       const comments = await rachel.page.request.get('/api/graph/work-items/wi-auth-e2-b3/comments'); expect(comments.status()).toBe(200);
       expect(JSON.stringify(await comments.json())).not.toContain(newerDraft);
@@ -387,10 +387,10 @@ test('an explicitly selected huddle that ends retains its draft instead of retar
   const rachel = await person(browser, baseURL, 'u-rachel'), vera = await person(browser, baseURL, 'u-vera');
   try {
     await connect(rachel.page, vera.page); const editor = await workComposer(rachel.page);
-    await editor.target.selectOption(editor.huddleTarget); await editor.input.fill('Draft for the selected huddle only');
+    await chooseOption(editor.target, editor.huddleTarget); await editor.input.fill('Draft for the selected huddle only');
     await leave(rachel.page);
     await expect(editor.composer.getByTestId('initiative-composer-recipient-unavailable')).toHaveText('This huddle has ended. Choose a current destination.');
-    await expect(editor.target).toHaveValue(editor.huddleTarget);
+    await expect(editor.target).toHaveAttribute('data-value', editor.huddleTarget);
     await expect(editor.input).toHaveText('Draft for the selected huddle only'); await expect(editor.send).toBeDisabled();
     expect(rachel.errors).toEqual([]); expect(vera.errors).toEqual([]);
   } finally { await leave(rachel.page); await Promise.all([rachel.context.close(), vera.context.close()]); }

@@ -2388,6 +2388,19 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     },
   },
   {
+    // The request page's summary (routes/access.ts `assessSubmission`): the
+    // submit's own checks and chain, with nothing written.
+    route: 'POST /api/access/requests/preview',
+    persona: 'orgiq/admin',
+    safe: 'A READ over POST: runs the submit\'s checks (`assessSubmission`) and the chain resolver over the registered access fixtures and the directory, and writes nothing — no request, step, event or bell item — so there is nothing for reset to undo.',
+    bodyFrom: 'routes/access.ts: `itemId` must name a catalog item (read off GET /api/access/catalog, never retyped); `duration` optional, one of DURATIONS. A held or duplicate item rides in `refusal`, not a status.',
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const itemId = await ctx.pick('/api/access/catalog', 'id');
+      return itemId === null ? unsynthesisable('GET /api/access/catalog listed no item to preview') : { itemId, duration: '7d' };
+    },
+  },
+  {
     // The in-tenant quick request (routes/access-requests-quick.ts): the same
     // submit path as POST /api/access/requests, for the caller only, limited to
     // the caller's current tenant's items — so the Work budget-visibility item.

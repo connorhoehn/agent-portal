@@ -1,29 +1,33 @@
-// /access/requests/new — the request wizard (docs/access-tenant-design.md §4.1):
-// who (yourself, or a report when you hold DecideAccess) → what (a catalog
-// item, with the separation-of-duties pre-check the server computed for it) →
-// why (a justification of at least 20 characters) → how long (time-bound by
-// default; standing needs its own reason, A6). Submit posts
-// POST /api/access/requests and opens the new record, where the computed
-// approval chain is shown. `?item=<id>` (the catalog's Request) preselects.
+// /access/requests/new — the request form (docs/access-tenant-design.md §4.1),
+// one page on the library's FormWizard: what (a searchable catalog picker,
+// preselected from `?item=`), why (≥20 characters), how long (the item's
+// default selected; standing asks for its own reason, A6) and — only when the
+// actor may file for someone else — who (an approver's direct reports, an
+// access admin's whole directory: GET /api/access/beneficiaries).
+//
+// Beside the form, a live summary from POST /api/access/requests/preview — the
+// same chain resolution and SoD pre-check a submit runs, written nowhere:
+// what you'll get, who approves it (step by step, by name), until when (the
+// concrete date), and the separation-of-duties result. Submit lives with the
+// summary; a duplicate or a blocking policy shows there before and after the
+// POST. Success opens the new record, where the chain continues live.
 
 import {
-  Button,
-  Chip,
   FormField,
-  Inline,
+  FormWizard,
+  Combobox,
   InlineAlert,
   KeyValue,
+  Link,
   LoadingState,
   PageHeader,
-  PageSection,
   RadioGroup,
-  Select,
   Stack,
   T,
   Textarea,
-  WorkflowStepper,
+  type FormWizardSection,
 } from '@connorhoehnslalom/ui-components/shared';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { FlushPage } from '../../components/shell/FlushPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -38,26 +42,52 @@ import {
   EMPTY_DRAFT,
   JUSTIFICATION_MIN,
   KIND_LABELS,
-  STEWARD_LABELS,
+  STEP_KIND_LABELS,
   TENANT_LABELS,
-  WIZARD_STEPS,
-  draftProblem,
+  previewStepLabel,
   requestHref,
+  sectionProblems,
   submitBody,
+  expiryDateLabel,
+  untilLabel,
   type AccessDuration,
   type AccessPerson,
   type AccessRequest,
+  type AccessRequestPreview,
   type CatalogItem,
   type ItemsResponse,
   type RequestDraft,
 } from '../../lib/accessRequests';
 import { ACCESS_SURFACES } from './accessSurfaces';
 
-/** People the actor has requested on behalf of before: the reports the server already knows (A0 has no directory picker). */
-function reportsOf(rows: readonly AccessRequest[], selfId: string): AccessPerson[] {
-  const seen = new Map<string, AccessPerson>();
-  for (const r of rows) if (r.beneficiary.id !== selfId) seen.set(r.beneficiary.id, r.beneficiary);
-  return [...seen.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
+/** A link that opens in-app (plain clicks) and still works as a real href. */
+function RequestLink({ id, children }: { id: string; children: ReactNode }) {
+  const navigate = useNavigate();
+  return (
+    <Link href={requestHref(id)} data-testid="access-new-existing"
+      onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(requestHref(id)); }}>
+      {children}
+    </Link>
+  );
+}
+
+/** The preview for the current choice, refreshed as it changes; stale answers are dropped. */
+function usePreview(itemId: string, beneficiaryId: string, duration: AccessDuration | '', enabled: boolean) {
+  const [state, setState] = useState<{ key: string; data: AccessRequestPreview | null; error: string | null } | null>(null);
+  const key = `${itemId}|${beneficiaryId}|${duration}`;
+  useEffect(() => {
+    if (!enabled || !itemId || !beneficiaryId) return undefined;
+    let live = true;
+    void writeJson<AccessRequestPreview>(`${ACCESS_API}/requests/preview`, 'POST', {
+      itemId, beneficiaryId, ...(duration ? { duration } : {}),
+    }).then((res) => {
+      if (!live) return;
+      setState({ key, data: res.ok ? res.data : null, error: res.ok ? null : (res.error ?? `HTTP ${res.status}`) });
+    });
+    return () => { live = false; };
+  }, [key, itemId, beneficiaryId, duration, enabled]);
+  const current = state?.key === key ? state : null;
+  return { preview: current?.data ?? null, error: current?.error ?? null, loading: enabled && !!itemId && !!beneficiaryId && !current };
 }
 
 export default function RequestNewPage() {
@@ -66,164 +96,166 @@ export default function RequestNewPage() {
   const { session } = useSession();
   const { can, ready } = useCapabilities();
   const selfId = session?.sub ?? '';
-  const decides = ready && can('DecideAccess');
   const mayRequest = ready && can('RequestAccess');
   const catalog = useFetch<ItemsResponse<CatalogItem>>(`${ACCESS_API}/catalog`);
-  const reportsRead = useFetch<ItemsResponse<AccessRequest>>(decides ? `${ACCESS_API}/requests?scope=reports` : null);
-  const reports = useMemo(() => reportsOf(reportsRead.data?.items ?? [], selfId), [reportsRead.data, selfId]);
+  const people = useFetch<ItemsResponse<AccessPerson>>(mayRequest ? `${ACCESS_API}/beneficiaries` : null);
+  const beneficiaries = people.data?.items ?? [];
 
-  const preselected = params.get('item') ?? '';
-  const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<RequestDraft>(() => ({ ...EMPTY_DRAFT, beneficiaryId: selfId, itemId: preselected }));
+  const [draft, setDraft] = useState<RequestDraft>(() => ({ ...EMPTY_DRAFT, itemId: params.get('item') ?? '' }));
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<ReactNode>(null);
   const set = (patch: Partial<RequestDraft>) => { setDraft((d) => ({ ...d, ...patch })); setSubmitError(null); };
 
-  const items = catalog.data?.items ?? [];
+  const items = useMemo(() => catalog.data?.items ?? [], [catalog.data]);
   const item = items.find((i) => i.id === draft.itemId) ?? null;
-  // The beneficiary defaults to the signed-in user once the session lands.
+  // The beneficiary defaults to the signed-in user; the visible duration default counts as the choice.
   const beneficiaryId = draft.beneficiaryId || selfId;
-  const effective = { ...draft, beneficiaryId };
-  const problem = draftProblem(step, effective, item);
-  const last = step === WIZARD_STEPS.length - 1;
-  const back = { label: 'Requests', to: '/access/requests', onClick: (e: { preventDefault: () => void }) => { e.preventDefault(); navigate('/access/requests'); } };
+  const duration: AccessDuration | '' = draft.duration || item?.defaultDuration || '';
+  const effective: RequestDraft = { ...draft, beneficiaryId, duration };
+  const problems = sectionProblems(effective, item);
+  const { preview, error: previewError, loading: previewLoading } = usePreview(item?.id ?? '', beneficiaryId, duration, mayRequest);
+  const blocked = !!preview?.refusal || preview?.sod.verdict === 'block';
 
   async function submit() {
-    for (let s = 0; s < WIZARD_STEPS.length; s++) {
-      const p = draftProblem(s, effective, item);
-      if (p) { setStep(s); setSubmitError(p); return; }
-    }
     setSubmitting(true);
-    const res = await writeJson<AccessRequest>(`${ACCESS_API}/requests`, 'POST', submitBody(effective, selfId));
+    const res = await writeJson<AccessRequest & { requestId?: string; sod?: AccessRequestPreview['sod'] }>(`${ACCESS_API}/requests`, 'POST', submitBody(effective, selfId));
     setSubmitting(false);
     if (res.ok && res.data) { navigate(requestHref(res.data.id)); return; }
-    setSubmitError(res.error ?? `The request was not submitted (HTTP ${res.status}).`);
+    const existing = res.data?.requestId;
+    const sod = res.data?.sod?.conflicts ?? [];
+    setSubmitError(
+      <Stack gap="xs">
+        <span>{res.error ?? `The request was not submitted (HTTP ${res.status}).`}</span>
+        {existing && <RequestLink id={existing}>Open {existing}</RequestLink>}
+        {sod.map((c) => <span key={c.policyId}>{`${c.policyId}: ${c.reason}`}</span>)}
+      </Stack>,
+    );
   }
 
   const page = ACCESS_SURFACES['new-request'];
-  const stepper = WIZARD_STEPS.map((label, i) => ({ step: i + 1, label, done: i < step, active: i === step }));
+  const back = { label: 'Requests', to: '/access/requests', onClick: (e: { preventDefault: () => void }) => { e.preventDefault(); navigate('/access/requests'); } };
 
-  let body;
-  if (!mayRequest && ready) {
-    body = <InlineAlert tone="info">Your role cannot request access. A requester, approver or access admin can.</InlineAlert>;
-  } else if (catalog.error) {
-    body = <UnavailableNotice error={catalog.error} what="the access catalog" source="The wizard reads what can be requested from access_catalog_items" onRetry={catalog.refresh} />;
-  } else if (!catalog.data) {
-    body = <LoadingState label="Loading the catalog…" />;
-  } else if (step === 0) {
-    body = (
-      <PageSection size="sm" title="Who is it for?" description="Access is granted to the person named here; you cannot approve a request you made or benefit from.">
-        <Stack gap="md">
-          <RadioGroup<'self' | 'report'> name="access-who" value={beneficiaryId === selfId ? 'self' : 'report'}
-            onChange={(v) => set({ beneficiaryId: v === 'self' ? selfId : (reports[0]?.id ?? '') })}
-            options={[
-              { value: 'self', label: `Myself (${session?.name ?? selfId})` },
-              ...(decides ? [{ value: 'report' as const, label: 'Someone who reports to me', description: 'Approvers may request on behalf of a report.' }] : []),
-            ]} data-testid="access-new-who" />
-          {decides && beneficiaryId !== selfId && (
-            reports.length ? (
-              <FormField label="Report">
-                {({ id }) => <Select id={id} size="sm" className="w-full max-w-72" value={beneficiaryId}
-                  onChange={(e) => set({ beneficiaryId: e.target.value })}
-                  options={reports.map((p) => ({ value: p.id, label: p.displayName }))} data-testid="access-new-report" />}
-              </FormField>
-            ) : (
-              <InlineAlert tone="info">None of your reports has a request yet, so none can be chosen here. The directory picker arrives with lane A1.</InlineAlert>
-            )
-          )}
-        </Stack>
-      </PageSection>
-    );
-  } else if (step === 1) {
-    body = (
-      <PageSection size="sm" title="What do you need?" description="One catalog item per request. The approval chain depends on it.">
-        <Stack gap="md">
-          <FormField label="Catalog item">
-            {({ id }) => <Select id={id} size="sm" className="w-full max-w-md" value={draft.itemId} placeholder="Choose an item"
-              onChange={(e) => set({ itemId: e.target.value, duration: '' })}
-              options={items.map((i) => ({ value: i.id, label: `${i.title}${i.heldByActor ? ' (you hold this)' : ''}` }))} data-testid="access-new-item" />}
-          </FormField>
-          {item && (
-            <>
-              <KeyValue items={[
-                { label: 'Kind', value: KIND_LABELS[item.kind] },
-                { label: 'Workspace', value: TENANT_LABELS[item.tenant] ?? item.tenant },
-                { label: 'About', value: item.description },
-                { label: 'Approved by', value: `Manager, then ${STEWARD_LABELS[item.stewardRule]}${item.sensitive ? ', then an access admin' : ''}` },
-              ]} />
-              <Stack gap="sm" data-testid="access-new-policy-check">
-                <T size="sm" weight="semibold">Policy pre-check</T>
-                {item.sodConflicts.length === 0 ? (
-                  <InlineAlert tone="success">No separation-of-duties conflict with the access you hold now.</InlineAlert>
-                ) : item.sodConflicts.map((c) => (
-                  <InlineAlert key={c.policyId} tone={c.severity === 'block' ? 'error' : 'warning'}>
-                    {`${c.severity === 'block' ? 'Blocked' : 'Warning'} (${c.policyId}): ${c.reason}`}
-                  </InlineAlert>
-                ))}
-                {item.heldByActor && <InlineAlert tone="info">You already hold this. A request for someone else is still possible.</InlineAlert>}
-              </Stack>
-            </>
-          )}
-        </Stack>
-      </PageSection>
-    );
-  } else if (step === 2) {
-    const n = draft.justification.trim().length;
-    body = (
-      <PageSection size="sm" title="Why?" description="Approvers read this first. Say what the access is for and why now.">
-        <FormField label="Justification" hint={`${n} of at least ${JUSTIFICATION_MIN} characters`} required>
-          {(wiring) => <Textarea {...wiring} rows={5} value={draft.justification} onChange={(e) => set({ justification: e.target.value })} data-testid="access-new-justification" />}
+  const sections: FormWizardSection[] = [
+    {
+      key: 'who', title: 'Who is it for?', label: 'Who', hidden: beneficiaries.length < 2, error: problems.who,
+      description: 'Access is granted to the person named here. Nobody approves a request they made or benefit from.',
+      content: (
+        <FormField label="Person" required>
+          {(w) => <Combobox {...w} size="md" value={beneficiaryId} onChange={(v) => set({ beneficiaryId: v })} placeholder="Search people"
+            maxOptions={50} emptyMessage="Nobody you may request for matches"
+            options={beneficiaries.map((p) => ({ value: p.id, label: p.displayName, ...(p.id === selfId ? { meta: 'You' } : {}) }))}
+            data-testid="access-new-who" />}
         </FormField>
-      </PageSection>
-    );
-  } else {
-    body = (
-      <PageSection size="sm" title="For how long?" description="Access ends on its own when the time is up. Standing access is the exception and needs a second reason.">
-        <Stack gap="md">
-          <RadioGroup<AccessDuration> name="access-duration" value={(draft.duration || item?.defaultDuration || '24h') as AccessDuration}
+      ),
+    },
+    {
+      key: 'what', title: 'What do you need?', label: 'What', error: problems.what,
+      description: 'One catalog item per request. The approval chain depends on it.',
+      content: (
+        <FormField label="Catalog item" hint="Search by name, workspace or what it opens." required>
+          {(w) => <Combobox {...w} size="md" value={draft.itemId} onChange={(v) => set({ itemId: v, duration: '' })} placeholder="Search the catalog"
+            maxOptions={50} emptyMessage="No catalog item matches"
+            options={items.map((i) => ({
+              value: i.id, label: i.title, meta: TENANT_LABELS[i.tenant] ?? i.tenant,
+              description: `${KIND_LABELS[i.kind]} · ${i.description}${i.heldByActor ? ' · You hold this' : ''}`,
+            }))}
+            data-testid="access-new-item" />}
+        </FormField>
+      ),
+    },
+    {
+      key: 'why', title: 'Why?', label: 'Why', error: problems.why,
+      description: 'Approvers read this first. Say what the access is for and why now.',
+      content: (
+        <FormField label="Justification" hint={`${draft.justification.trim().length} of at least ${JUSTIFICATION_MIN} characters`} required>
+          {(w) => <Textarea {...w} rows={4} value={draft.justification} onChange={(e) => set({ justification: e.target.value })} data-testid="access-new-justification" />}
+        </FormField>
+      ),
+    },
+    {
+      key: 'how-long', title: 'For how long?', label: 'How long', error: problems.howLong,
+      description: 'Access ends on its own when the time is up. Standing access is the exception and needs a second reason.',
+      content: (
+        <>
+          <RadioGroup<AccessDuration> name="access-duration" aria-label="Duration" value={(duration || '24h') as AccessDuration}
             onChange={(v) => set({ duration: v })} orientation="horizontal"
             options={DURATIONS.map((d) => ({ value: d, label: DURATION_LABELS[d], ...(d === item?.defaultDuration ? { description: 'This item’s default' } : {}) }))}
             data-testid="access-new-duration" />
-          {(draft.duration || item?.defaultDuration) === 'standing' && (
-            <FormField label="Why standing access?" hint={`At least ${JUSTIFICATION_MIN} characters`} required>
-              {(wiring) => <Textarea {...wiring} rows={3} value={draft.standingReason} onChange={(e) => set({ standingReason: e.target.value })} data-testid="access-new-standing-reason" />}
+          {duration === 'standing' && (
+            <FormField label="Why standing access?" hint={`${draft.standingReason.trim().length} of at least ${JUSTIFICATION_MIN} characters`} required>
+              {(w) => <Textarea {...w} rows={3} value={draft.standingReason} onChange={(e) => set({ standingReason: e.target.value })} data-testid="access-new-standing-reason" />}
             </FormField>
           )}
-        </Stack>
-      </PageSection>
+        </>
+      ),
+    },
+  ];
+
+  const beneficiaryName = beneficiaryId === selfId ? `${session?.name ?? selfId} (you)`
+    : beneficiaries.find((p) => p.id === beneficiaryId)?.displayName ?? beneficiaryId;
+  const summary = !item ? (
+    <T size="sm" tone="secondary" data-testid="access-new-summary-empty">Choose a catalog item to see who approves it, until when, and the policy check.</T>
+  ) : (
+    <>
+      <KeyValue layout="row" labelWidth="w-24" data-testid="access-new-summary-facts" items={[
+        { label: 'You get', value: item.title },
+        { label: 'Workspace', value: `${TENANT_LABELS[item.tenant] ?? item.tenant} · ${KIND_LABELS[item.kind]}` },
+        { label: 'For', value: beneficiaryName },
+        { label: 'Until', muted: !preview, value: !preview ? '…' : preview.duration === 'standing' || !preview.expiresIfProvisionedNow ? untilLabel(preview.duration, null) : (
+          <Stack gap="none"><span>{expiryDateLabel(preview.expiresIfProvisionedNow)}</span><T size="xs" tone="secondary">{`${DURATION_LABELS[preview.duration]} from approval`}</T></Stack>
+        ) },
+      ]} />
+      {previewLoading && !preview && <LoadingState label="Resolving the approval chain…" />}
+      {previewError && <InlineAlert tone="error">{`The approval chain could not be previewed: ${previewError}`}</InlineAlert>}
+      {preview && (
+        <>
+          <KeyValue layout="row" labelWidth="w-24" aria-label="Who approves" data-testid="access-new-chain" items={preview.steps.map((s) => ({
+            label: `${s.step}. ${STEP_KIND_LABELS[s.kind]}`,
+            value: s.escalated ? <Stack gap="none"><span>{previewStepLabel(s)}</span><T size="xs" tone="secondary">{s.escalated}</T></Stack> : previewStepLabel(s),
+          }))} />
+          <Stack gap="xs" data-testid="access-new-policy-check">
+            {preview.sod.verdict === 'clear' ? (
+              <InlineAlert tone="success">No separation-of-duties conflict with the access {beneficiaryId === selfId ? 'you hold' : 'they hold'} now.</InlineAlert>
+            ) : preview.sod.conflicts.map((c) => (
+              <InlineAlert key={c.policyId} tone={c.severity === 'block' ? 'error' : 'warning'}>
+                {`${c.severity === 'block' ? 'Blocked' : 'Warning'} (${c.policyId}): ${c.reason}`}
+              </InlineAlert>
+            ))}
+            {preview.refusal && preview.sod.verdict !== 'block' && (
+              <InlineAlert tone={preview.refusal.requestId ? 'info' : 'error'} data-testid="access-new-refusal">
+                <Stack gap="xs">
+                  <span>{preview.refusal.error}</span>
+                  {preview.refusal.requestId && <RequestLink id={preview.refusal.requestId}>Open {preview.refusal.requestId}</RequestLink>}
+                </Stack>
+              </InlineAlert>
+            )}
+          </Stack>
+        </>
+      )}
+    </>
+  );
+
+  let body: ReactNode;
+  if (!mayRequest && ready) {
+    body = <InlineAlert tone="info">Your role cannot request access. A requester, approver or access admin can.</InlineAlert>;
+  } else if (catalog.error) {
+    body = <UnavailableNotice error={catalog.error} what="the access catalog" source="The form reads what can be requested from access_catalog_items" onRetry={catalog.refresh} />;
+  } else if (!catalog.data || !ready) {
+    body = <LoadingState label="Loading the catalog…" />;
+  } else {
+    body = (
+      <FormWizard sections={sections} summary={summary} summaryTitle="Your request" aria-label="New access request"
+        onSubmit={submit} submitLabel="Submit request" submitting={submitting} submitDisabled={blocked}
+        submitError={submitError} onDismissError={() => setSubmitError(null)} data-testid="access-new" />
     );
   }
 
-  // A visible default counts as the choice: the duration step reads it into the draft before advancing.
-  const advance = () => {
-    if (step === 2 && !draft.duration && item) set({ duration: item.defaultDuration });
-    setStep(step + 1);
-  };
-
   return (
-    // On the list pages' frame (FlushPage): the title at the page gutter, one h1;
-    // each step is a 14/600 h2 section (PageSection size="sm"), the stepper compact (12px).
+    // The list pages' frame (FlushPage): the title at the page gutter, one h1; each
+    // section a 14/600 heading with a 12/400 description (FormWizard).
     <FlushPage data-testid="access-request-new">
-      <PageHeader density="compact" title={page.title} description={page.description} back={back}
-        badge={item ? <Chip tone="neutral" size="xs">{item.title}</Chip> : undefined} />
-      <WorkflowStepper size="compact" steps={stepper} aria-label={`Step ${step + 1} of ${WIZARD_STEPS.length}`} data-testid="access-new-stepper" />
+      <PageHeader density="compact" title={page.title} description={page.description} back={back} />
       {body}
-      {submitError && <InlineAlert tone="error" onDismiss={() => setSubmitError(null)}>{submitError}</InlineAlert>}
-      {mayRequest && catalog.data && (
-        <Inline gap="sm" justify="between" align="center">
-          <Button size="sm" variant="ghost" disabled={step === 0 || submitting} onClick={() => setStep(step - 1)} data-testid="access-new-back">Back</Button>
-          <Inline gap="sm" align="center">
-            {problem && <T size="xs" tone="secondary">{problem}</T>}
-            {last ? (
-              <Button size="sm" variant="primary" disabled={!!problem || submitting} onClick={() => void submit()} data-testid="access-new-submit">
-                {submitting ? 'Submitting…' : 'Submit request'}
-              </Button>
-            ) : (
-              <Button size="sm" variant="primary" disabled={!!problem} onClick={advance} data-testid="access-new-next">Next</Button>
-            )}
-          </Inline>
-        </Inline>
-      )}
     </FlushPage>
   );
 }

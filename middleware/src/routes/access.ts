@@ -38,10 +38,10 @@ import { canFlags, decideRefusal, isParty, managesBeneficiary, mayRead, type Acc
 import { grantItemId, requestItem } from '../lib/access/items.js';
 import {
   ACCESS_KINDS, ACCESS_TENANTS, DURATIONS, REQUEST_STATUSES, requestThread,
-  type AccessDirectory, type AccessDuration, type AccessEvent, type AccessPolicy, type AccessRequest,
+  type AccessDirectory, type AccessDuration, type AccessEvent, type AccessRequestPreview, type Person, type AccessPolicy, type AccessRequest,
   type AccessReview, type AccessReviewItem, type AccessTenant, type CatalogItem, type Decision, type DirectoryUser,
 } from '../lib/access/types.js';
-import { provisionAccess, revokeAccess, SodBlockedError } from '../lib/access-provision.js';
+import { expiresAtFor, provisionAccess, revokeAccess, SodBlockedError } from '../lib/access-provision.js';
 import { notifyAccessRequest, type AccessNotifyKind } from '../lib/social-notify.js';
 import {
   accessNow, casRequest, casReviewItem, closeReviewIfDecided, insertRequest, insertReview, listCatalog, listEvents,
@@ -518,6 +518,40 @@ export function parseSubmission(b: Record<string, unknown>): Submission {
 /** The outcome of filing: 201 with the request, or a refusal with its status and body. */
 export type FileOutcome = { status: 201; body: AccessRequest } | { status: 400 | 403 | 409; body: Record<string, unknown> };
 
+/** What filing would meet, before anything is written: the item, the beneficiary, the chain kinds, the SoD verdict and the first refusal. */
+export type Assessment =
+  | { refusal: { status: 400 | 403 | 409; body: Record<string, unknown> }; item?: AccessCatalogRow; beneficiary?: DirectoryUser; conflicts?: undefined; verdict?: undefined; kinds?: undefined }
+  | { refusal: null; item: AccessCatalogRow; beneficiary: DirectoryUser; conflicts: ReturnType<typeof sodConflicts>; verdict: ReturnType<typeof sodVerdict>; kinds: ReturnType<typeof planChain> };
+
+/**
+ * The pre-write checks of `fileRequest`, in its order: unknown item 400,
+ * unknown beneficiary 400, on-behalf 403s, already held 409, a duplicate open
+ * request 409 `{ error, requestId }`, a blocking SoD conflict 409
+ * `{ error, sod }`. Writes nothing; `POST /requests/preview` reads it too, so
+ * the page's preview and the submit cannot disagree.
+ */
+export function assessSubmission(ctx: Ctx, sub: Pick<Submission, 'itemId' | 'beneficiaryId'>): Assessment {
+  const item = listCatalog().find((i) => i.id === sub.itemId);
+  if (!item) return { refusal: { status: 400, body: { error: `Unknown catalog item: ${sub.itemId}` } } };
+  const beneficiaryId = sub.beneficiaryId ?? ctx.actor.id;
+  const beneficiary = ctx.dir.users.find((u) => u.id === beneficiaryId) ?? null;
+  if (!beneficiary) return { refusal: { status: 400, body: { error: `Unknown beneficiary: ${beneficiaryId}` } }, item };
+  if (beneficiaryId !== ctx.actor.id) {
+    if (!ctx.actor.mayDecide) return { refusal: { status: 403, body: { error: 'Requesting on behalf of someone else needs DecideAccess', action: 'DecideAccess' } }, item, beneficiary };
+    // An approver files for a report; an access-admin for anyone.
+    if (!ctx.actor.mayProvision && !managesBeneficiary(ctx.actor, { beneficiaryId }, ctx.dir)) {
+      return { refusal: { status: 403, body: { error: `${beneficiary.displayName} is not one of your reports` } }, item, beneficiary };
+    }
+  }
+  if (holdsItem(item, beneficiary, ctx.dir)) return { refusal: { status: 409, body: { error: `${beneficiary.displayName} already holds ${item.title}` } }, item, beneficiary };
+  const duplicate = listRequests().find((r) => r.beneficiaryId === beneficiaryId && r.itemId === item.id && isOpen(r.status));
+  if (duplicate) return { refusal: { status: 409, body: { error: `${duplicate.id} already asks for ${item.title} and is still open`, requestId: duplicate.id } }, item, beneficiary };
+  const conflicts = sodConflicts(item, beneficiary.grants, listPolicies());
+  const verdict = sodVerdict(conflicts);
+  if (verdict === 'block') return { refusal: { status: 409, body: { error: `Separation of duties blocks ${item.title} for ${beneficiary.displayName}`, sod: { verdict, conflicts } } }, item, beneficiary };
+  return { refusal: null, item, beneficiary, conflicts, verdict, kinds: planChain(item, beneficiary, ctx.dir) };
+}
+
 /**
  * File one request: the ONE submit path. `POST /api/access/requests` and the
  * in-tenant quick request (routes/access-requests-quick.ts) both come here, so
@@ -526,29 +560,15 @@ export type FileOutcome = { status: 201; body: AccessRequest } | { status: 400 |
  * the same approvers. It submits; it never decides or provisions.
  */
 export async function fileRequest(ctx: Ctx, sub: Submission): Promise<FileOutcome> {
-  const item = listCatalog().find((i) => i.id === sub.itemId);
-  if (!item) return { status: 400, body: { error: `Unknown catalog item: ${sub.itemId}` } };
-  const beneficiaryId = sub.beneficiaryId ?? ctx.actor.id;
-  const beneficiary = ctx.dir.users.find((u) => u.id === beneficiaryId) ?? null;
-  if (!beneficiary) return { status: 400, body: { error: `Unknown beneficiary: ${beneficiaryId}` } };
-  if (beneficiaryId !== ctx.actor.id) {
-    if (!ctx.actor.mayDecide) return { status: 403, body: { error: 'Requesting on behalf of someone else needs DecideAccess', action: 'DecideAccess' } };
-    // An approver files for a report; an access-admin for anyone.
-    if (!ctx.actor.mayProvision && !managesBeneficiary(ctx.actor, { beneficiaryId }, ctx.dir)) {
-      return { status: 403, body: { error: `${beneficiary.displayName} is not one of your reports` } };
-    }
-  }
-  if (holdsItem(item, beneficiary, ctx.dir)) return { status: 409, body: { error: `${beneficiary.displayName} already holds ${item.title}` } };
-  const duplicate = listRequests().find((r) => r.beneficiaryId === beneficiaryId && r.itemId === item.id && isOpen(r.status));
-  if (duplicate) return { status: 409, body: { error: `${duplicate.id} already asks for ${item.title} and is still open`, requestId: duplicate.id } };
-  const conflicts = sodConflicts(item, beneficiary.grants, listPolicies());
-  const verdict = sodVerdict(conflicts);
-  if (verdict === 'block') return { status: 409, body: { error: `Separation of duties blocks ${item.title} for ${beneficiary.displayName}`, sod: { verdict, conflicts } } };
+  const a = assessSubmission(ctx, sub);
+  if (a.refusal) return a.refusal;
+  const { item, beneficiary, verdict } = a;
+  const beneficiaryId = beneficiary.id;
   const now = accessNow();
   const t = submitRows({
     id: nextRequestId(), requesterId: ctx.actor.id, beneficiaryId, itemId: item.id, justification: sub.justification,
     duration: sub.duration, sodVerdict: verdict, sodOverriddenBy: null, sodOverrideReason: null, submittedAt: now,
-  }, planChain(item, beneficiary, ctx.dir));
+  }, a.kinds);
   insertRequest(t.request, t.steps, t.events, ctx.actor.id);
   await bellApprovers('submitted', t.request, ctx);
   return { status: 201, body: present(t.request, ctx, world()) };
@@ -562,6 +582,68 @@ export function ownRequestsFor(ctx: Ctx, itemId: string): AccessRequest[] {
     .sort(newestFirst)
     .map((r) => present(r, ctx, w));
 }
+
+// The request page's summary (docs/access-tenant-api.md "Request page"): the
+// chain, the SoD verdict against the beneficiary and the expiry the submit
+// would produce, through the submit's own checks (`assessSubmission`), with
+// nothing written. Filing for someone the actor may not file for is the
+// submit's 403; the other refusals ride in `refusal` so the page can show
+// them inline before the person submits.
+accessRouter.post('/requests/preview', requireAction('RequestAccess'), asyncHandler(async (req, res) => {
+  const b = bodyOf(req, ['itemId', 'beneficiaryId', 'duration']);
+  const itemId = str(b['itemId']);
+  if (!itemId) throw new ValidationError('itemId is required');
+  if (b['beneficiaryId'] !== undefined && typeof b['beneficiaryId'] !== 'string') throw new ValidationError('beneficiaryId must be a string');
+  const duration = b['duration'];
+  if (duration !== undefined && (typeof duration !== 'string' || !(DURATIONS as readonly string[]).includes(duration))) {
+    throw new ValidationError(`duration must be one of ${DURATIONS.join(', ')}`);
+  }
+  const beneficiaryId = str(b['beneficiaryId']);
+  const ctx = await context(req);
+  const a = assessSubmission(ctx, { itemId, ...(beneficiaryId ? { beneficiaryId } : {}) });
+  if (a.refusal?.status === 400) throw new ValidationError(String(a.refusal.body['error']));
+  if (a.refusal?.status === 403) { res.status(403).json(a.refusal.body); return; }
+  const item = a.item!;
+  const beneficiary = a.beneficiary!;
+  const conflicts = a.conflicts ?? sodConflicts(item, beneficiary.grants, listPolicies());
+  const chosen = (duration as AccessDuration | undefined) ?? item.defaultDuration;
+  const parties = { requesterId: ctx.actor.id, beneficiaryId: beneficiary.id };
+  const body: AccessRequestPreview = {
+    item: catalogItem(item, ctx, listPolicies()),
+    beneficiary: personFor(ctx.dir, beneficiary.id)!,
+    steps: planChain(item, beneficiary, ctx.dir).map((kind, i) => {
+      const e = eligibility(kind, item, parties, ctx.dir);
+      return { step: i + 1, kind, eligible: e.people, escalated: e.escalated };
+    }),
+    sod: { verdict: sodVerdict(conflicts), conflicts },
+    duration: chosen,
+    expiresIfProvisionedNow: expiresAtFor(chosen, accessNow()),
+    refusal: a.refusal ? {
+      status: a.refusal.status, error: String(a.refusal.body['error']),
+      ...(typeof a.refusal.body['requestId'] === 'string' ? { requestId: a.refusal.body['requestId'] } : {}),
+    } : null,
+  };
+  res.json(body);
+}));
+
+// Whom the actor may file for (the request page's "Who"): self first; an
+// approver (DecideAccess) adds their direct reports through people.manager_id;
+// an access admin (DecideAccess + ProvisionAccess) adds everyone the directory
+// holds with any grant. The submit enforces the same rule (`assessSubmission`).
+accessRouter.get('/beneficiaries', requireAction('RequestAccess'), asyncHandler(async (req, res) => {
+  const ctx = await context(req);
+  const self = personFor(ctx.dir, ctx.actor.id)!;
+  let others: DirectoryUser[] = [];
+  if (ctx.actor.mayDecide && ctx.actor.mayProvision) {
+    others = ctx.dir.users.filter((u) => Object.values(u.grants).some((roles) => roles.length > 0));
+  } else if (ctx.actor.mayDecide && ctx.actor.personId) {
+    others = ctx.dir.users.filter((u) => !!u.personId && ctx.dir.managerOf(u.personId) === ctx.actor.personId);
+  }
+  const rest: Person[] = others.filter((u) => u.id !== ctx.actor.id)
+    .map((u) => personFor(ctx.dir, u.id)!)
+    .sort((x, y) => x.displayName.localeCompare(y.displayName));
+  res.json({ items: [self, ...rest] });
+}));
 
 accessRouter.post('/requests', requireAction('RequestAccess'), asyncHandler(async (req, res) => {
   const sub = parseSubmission(bodyOf(req, ['itemId', 'justification', 'duration', 'beneficiaryId']));

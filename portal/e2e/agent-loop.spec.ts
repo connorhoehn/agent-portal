@@ -101,7 +101,7 @@ test('/agent in an orgiq initiative Discussion: plan, Approve, summary and diagr
     // The page's one composer is docked in the content column (2.438.3): Chat → the Discussion, whose `/agent` it runs.
     const composer = nora.page.getByTestId('initiative-workspace').getByTestId('initiative-composer');
     await chooseComposerMode(nora.page, composer, 'Agent', 'Chat');
-    await expect(composer.getByRole('combobox', { name: 'Chat recipient' })).toHaveValue('discussion');
+    await expect(composer.getByRole('combobox', { name: 'Chat recipient' })).toHaveAttribute('data-value', 'discussion');
     await composer.getByTestId('rich-chat-composer-input').click();
     await nora.page.keyboard.press('ControlOrMeta+a'); await nora.page.keyboard.press('Backspace');
     await nora.page.keyboard.type('/agent wrap up this discussion'); await nora.page.keyboard.press('Enter');

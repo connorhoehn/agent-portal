@@ -14,7 +14,7 @@ import {
   DataTable,
   Drawer,
   FormField,
-  Inline,
+  FormWizard,
   Input,
   PlusIcon,
   ProgressBar,
@@ -36,7 +36,7 @@ import { writeJson } from '../../lib/writeJson';
 import {
   ACCESS_API,
   TENANT_LABELS,
-  campaignProblem,
+  campaignTitleProblem,
   filterReviews,
   reviewHref,
   reviewProgressLabel,
@@ -88,7 +88,6 @@ export default function ReviewsPage() {
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<AccessReview>>(`${ACCESS_API}/reviews`, 120_000);
   const all = data?.items ?? [];
   const rows = filterReviews(all, query, status);
-  const problem = campaignProblem(draft.tenant, draft.title);
 
   const adapter = accessCollectionAdapter('reviews', {
     setQuery, setFilter: setStatus, refresh,
@@ -153,23 +152,37 @@ export default function ReviewsPage() {
         subtitle="One item per standing grant the workspace holds now"
         width={480}
         data-testid="access-review-drawer"
-        footer={(
-          <Inline gap="sm" justify="end">
-            <Button size="sm" variant="ghost" onClick={() => setDrawer(false)}>Cancel</Button>
-            <Button size="sm" variant="primary" disabled={busy || !!problem} onClick={() => void create()} data-testid="access-review-create">Open campaign</Button>
-          </Inline>
-        )}
       >
-        <Stack gap="md">
-          <FormField label="Workspace" hint="Every (person, role) grant held there now becomes an item. Cross-tenant admin grants are not reviewed here.">
-            {({ id }) => <Select id={id} size="sm" className="w-full max-w-56" value={draft.tenant} placeholder="Choose a workspace"
-              onChange={(e) => setDraft({ ...draft, tenant: e.target.value })} options={TENANT_OPTIONS} data-testid="access-review-tenant" />}
-          </FormField>
-          <FormField label="Title" hint="Shown to reviewers and in every revocation it creates.">
-            {(wiring) => <Input {...wiring} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} data-testid="access-review-title" />}
-          </FormField>
-          {problem && (draft.tenant || draft.title) && <T size="xs" tone="secondary">{problem}</T>}
-        </Stack>
+        <FormWizard
+          aria-label="New review campaign"
+          data-testid="access-review"
+          onSubmit={create}
+          submitLabel="Open campaign"
+          submittingLabel="Opening…"
+          submitting={busy}
+          secondaryActions={<Button type="button" size="sm" variant="ghost" onClick={() => setDrawer(false)}>Cancel</Button>}
+          sections={[
+            {
+              key: 'workspace', title: 'Which workspace?', error: draft.tenant ? null : 'Choose the workspace whose standing grants to review.',
+              description: 'Every (person, role) grant held there now becomes an item. Cross-tenant admin grants are not reviewed here.',
+              content: (
+                <FormField label="Workspace" required>
+                  {(wiring) => <Select {...wiring} value={draft.tenant} placeholder="Choose a workspace"
+                    onChange={(e) => setDraft({ ...draft, tenant: e.target.value })} options={TENANT_OPTIONS} data-testid="access-review-tenant" />}
+                </FormField>
+              ),
+            },
+            {
+              key: 'title', title: 'What is it called?', error: campaignTitleProblem(draft.title),
+              description: 'Shown to reviewers and in every revocation it creates.',
+              content: (
+                <FormField label="Title" required>
+                  {(wiring) => <Input {...wiring} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} data-testid="access-review-title" />}
+                </FormField>
+              ),
+            },
+          ]}
+        />
       </Drawer>
     </CollectionCommandPage>
   );

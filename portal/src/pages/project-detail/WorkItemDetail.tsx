@@ -5,8 +5,9 @@
 //   Brief       Why this matters, the amber Next step, "Complete the brief"
 //               (a ruled three-row table built by `briefModel`: criteria,
 //               dependencies and decisions, planning notes — each with its
-//               action), the full section for whatever is already written,
-//               and the collapsed Run setup holding the run draft.
+//               action), and the full section for whatever is already written.
+//               Prepare job is not here: the job is derived from the item and
+//               asked about in the docked composer (usePrepareJobDeck).
 //   Docs        the item's linked documents and files.
 //   Activity    the item's history (itemActivity) — status changes, runs,
 //               estimates, comments — from data already recorded.
@@ -14,11 +15,10 @@
 // The composer is not here: it docks under the whole pane (the page's
 // InitiativeComposer), so the Overview and the item share one slot.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   ChecklistSection,
   DetailSection,
-  Disclosure,
   KeyValue,
   LinkedItemsSection,
   OutcomeSection,
@@ -85,7 +85,6 @@ const PR_STATUS: Record<string, { label: string; tone: 'info' | 'neutral' | 'suc
 const modelLabel = (id: string) => DEVBOX_MODELS.find((m) => m.id === id)?.label ?? id;
 
 export type DetailTab = 'brief' | 'docs' | 'history';
-export interface PrepareJobRequest { itemId: string; revision: number }
 
 /** How a thread read reads when it has nothing to show. */
 function threadEmpty(loading: boolean, error: string | null, what: string, empty: string): string {
@@ -142,8 +141,6 @@ export interface WorkItemDetailProps {
   onAddNote: () => void;
   /** Reveal the persistent initiative dialogue, available to readers too. */
   onOpenDiscussion: () => void;
-  /** The collapsed Run setup: its hint and the run draft inside it. */
-  runSetup: { hint: string; body: ReactNode };
   /** The live gateway discussion for this item, shown under the stored comments. */
   discussion?: ReactNode;
   /**
@@ -156,8 +153,6 @@ export interface WorkItemDetailProps {
   /** Right of the title row — the initiative's actions (presence, search,
    *  call, repository, ⋯), so nothing stacks between the trail and the title. */
   headActions?: ReactNode;
-  /** An explicit action from the existing header menu, scoped to its work item. */
-  prepareJobRequest?: PrepareJobRequest | null;
 }
 
 export function WorkItemDetail({
@@ -176,33 +171,14 @@ export function WorkItemDetail({
   onAddContext,
   onAddNote,
   onOpenDiscussion,
-  runSetup,
   discussion,
   liveNotes = null,
   headActions,
-  prepareJobRequest,
 }: WorkItemDetailProps) {
   const readOnly = canEdit ? undefined : 'Your role cannot edit work items';
   // An editor with no criteria yet can also write them by hand; the list
   // opens under the table once asked for. Keyed by item so it never carries.
   const [writingCriteriaFor, setWritingCriteriaFor] = useState<string | null>(null);
-  const [runSetupFor, setRunSetupFor] = useState<string | null>(null);
-  const [focusRunSetup, setFocusRunSetup] = useState(false);
-  const runSetupElement = useRef<HTMLDivElement>(null);
-  const handledPrepareRequest = useRef<PrepareJobRequest | null>(null);
-  useEffect(() => {
-    if (!prepareJobRequest || prepareJobRequest.itemId !== item.id || handledPrepareRequest.current === prepareJobRequest) return;
-    handledPrepareRequest.current = prepareJobRequest;
-    setRunSetupFor(item.id);
-    setFocusRunSetup(true);
-    onTabChange('brief');
-  }, [prepareJobRequest, item.id, onTabChange]);
-  useEffect(() => {
-    if (!focusRunSetup || tab !== 'brief' || runSetupFor !== item.id) return;
-    runSetupElement.current?.scrollIntoView({ block: 'nearest' });
-    runSetupElement.current?.querySelector<HTMLElement>('summary')?.focus({ preventScroll: true });
-    setFocusRunSetup(false);
-  }, [focusRunSetup, tab, runSetupFor, item.id]);
   const people = useMemo<WorkPerson[]>(
     () => contributors.map((c) => ({ id: c.personId, name: c.name, ...(c.avatarUrl ? { avatarUrl: c.avatarUrl } : {}) })),
     [contributors],
@@ -409,15 +385,6 @@ export function WorkItemDetail({
             error={thread.commentsError ? `The item's history could not be read: ${thread.commentsError}` : null}
           />
         )}
-        {/* Keep this item's unsent plan across Brief/Docs/Activity switches.
-            RunDraft's item key still starts a new plan for a different item. */}
-        <div ref={runSetupElement} hidden={tab !== 'brief'}>
-          <Disclosure variant="plain" size="md" summary="Prepare job" hint={runSetup.hint}
-            open={runSetupFor === item.id} onToggle={open => setRunSetupFor(open ? item.id : null)}
-            data-testid="run-setup">
-            {runSetup.body}
-          </Disclosure>
-        </div>
       </Stack>
     </Stack>
   );

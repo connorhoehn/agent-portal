@@ -35,7 +35,7 @@ async function react(page: Page, text: string) {
 async function sayOnItem(page: Page, text: string) {
   const dock = pageComposer(page);
   await chooseComposerMode(page, dock, 'Agent', 'Chat');
-  await expect(dock.getByRole('combobox', { name: 'Chat recipient' })).toHaveValue('discussion');
+  await expect(dock.getByRole('combobox', { name: 'Chat recipient' })).toHaveAttribute('data-value', 'discussion');
   const input = dock.getByTestId('rich-chat-composer-input');
   await input.click();
   await page.keyboard.press('ControlOrMeta+a'); await page.keyboard.press('Backspace');

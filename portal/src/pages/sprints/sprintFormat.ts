@@ -38,27 +38,69 @@ export function daysUntil(iso: string | null): number | null {
   return Math.round((end - todayUtc) / DAY_MS);
 }
 
-/** How far through its own window a sprint is, 0–1. */
-export function windowProgress(s: Sprint): number | null {
-  if (!s.startsOn || !s.endsOn) return null;
-  const start = new Date(`${s.startsOn}T00:00:00Z`).getTime();
-  const end = new Date(`${s.endsOn}T00:00:00Z`).getTime();
-  if (!(end > start)) return null;
-  return Math.min(1, Math.max(0, (Date.now() - start) / (end - start)));
+/**
+ * A sprint's window, in whole UTC days, INCLUSIVE of its end date: a sprint
+ * that runs 30 Sep → 14 Oct is worked on the 14th too, so it closes at the
+ * end of that day (midnight starting the 15th), not at its start. Reading the
+ * end date as an instant made an active sprint on its last day show "Elapsed
+ * 100%" beside "0 days left" — finished by the arithmetic while the team was
+ * still working it. Every window figure on the sprint views comes from here.
+ *
+ * - `days`: the window's length (a one-day sprint has 1).
+ * - `day`: which day of the window today is, 1-based and clamped to [0, days]
+ *   (0 before it starts).
+ * - `daysLeft`: whole days still to work, today included (1 on the last day,
+ *   0 the day after; negative once it is further past).
+ * - `progress`: the elapsed fraction of the window, 0–1, by the clock.
+ */
+export interface SprintWindow { days: number; day: number; daysLeft: number; progress: number }
+
+function utcDay(iso: string | null): number | null {
+  if (!iso) return null;
+  const t = new Date(`${iso}T00:00:00Z`).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+function startOfUtcDay(now: number): number {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+export function sprintWindow(s: Pick<Sprint, 'startsOn' | 'endsOn'>, now: number = Date.now()): SprintWindow | null {
+  const start = utcDay(s.startsOn), end = utcDay(s.endsOn);
+  if (start === null || end === null || end < start) return null;
+  const close = end + DAY_MS; // exclusive: the end date is a working day
+  const days = Math.round((close - start) / DAY_MS);
+  const today = startOfUtcDay(now);
+  const day = Math.min(days, Math.max(0, Math.round((today - start) / DAY_MS) + 1));
+  return {
+    days,
+    day,
+    daysLeft: Math.round((close - today) / DAY_MS),
+    progress: Math.min(1, Math.max(0, (now - start) / (close - start))),
+  };
+}
+
+/** How far through its own window a sprint is, 0–1 (end date inclusive). */
+export function windowProgress(s: Sprint, now: number = Date.now()): number | null {
+  return sprintWindow(s, now)?.progress ?? null;
 }
 
 export function dateRange(s: Sprint): string {
   return `${shortDate(s.startsOn)} → ${shortDate(s.endsOn)}`;
 }
 
-/** "3 days left" / "2 days over", or null when there is no end date. `unit`
- *  picks the card's terse form (`d`) or the detail's long form. */
-export function timeLeftLabel(iso: string | null, unit: 'short' | 'long' = 'long'): string | null {
-  const left = daysUntil(iso);
-  if (left === null) return null;
-  const n = Math.abs(left);
+/** "3 days left" / "last day" / "2 days over" for a window ending on `iso`
+ *  (inclusive — the end date is a working day), or null when there is no end
+ *  date. `unit` picks the card's terse form (`d`) or the detail's long form. */
+export function timeLeftLabel(iso: string | null, unit: 'short' | 'long' = 'long', now: number = Date.now()): string | null {
+  const end = utcDay(iso);
+  if (end === null) return null;
+  const left = Math.round((end + DAY_MS - startOfUtcDay(now)) / DAY_MS);
+  if (left === 1) return 'last day';
+  const n = left > 0 ? left : 1 - left;
   const noun = unit === 'short' ? 'd' : n === 1 ? ' day' : ' days';
-  return left >= 0 ? `${n}${noun} left` : `${n}${noun} over`;
+  return left > 0 ? `${n}${noun} left` : `${n}${noun} over`;
 }
 
 // ─── Tones ───────────────────────────────────────────────────────────────────
@@ -190,6 +232,47 @@ export function bucketByColumn(items: WorkItem[]): BoardColumn[] {
 }
 
 /** Flatten /api/graph/projects/:id/work into a flat list. */
+// ─── Board quick filters ─────────────────────────────────────────────────────
+
+/** The board's quick filters (Jira's "Only my issues", "Recently updated"):
+ *  toggled independently, combined with AND, kept in the URL as `?quick=`. */
+export type QuickFilter = 'mine' | 'recent';
+export const QUICK_FILTERS: { id: QuickFilter; label: string; title: string }[] = [
+  { id: 'mine', label: 'Only my issues', title: 'Only work assigned to you' },
+  { id: 'recent', label: 'Recently updated', title: 'Changed in the last 7 days' },
+];
+const RECENT_MS = 7 * DAY_MS;
+
+/** `?quick=mine,recent` → the known ids, in a stable order; unknown ids dropped. */
+export function parseQuickFilters(raw: string | null): QuickFilter[] {
+  const wanted = new Set((raw ?? '').split(',').map((v) => v.trim()));
+  return QUICK_FILTERS.map((f) => f.id).filter((id) => wanted.has(id));
+}
+
+/** The URL value, or null (no param) when nothing is on. */
+export function serializeQuickFilters(active: readonly QuickFilter[]): string | null {
+  return active.length ? parseQuickFilters(active.join(',')).join(',') : null;
+}
+
+export function applyQuickFilters(
+  items: WorkItem[],
+  active: readonly QuickFilter[],
+  opts: { personId: string | null; now?: number },
+): WorkItem[] {
+  const now = opts.now ?? Date.now();
+  return items.filter((i) => {
+    // "Mine" with no linked person matches nothing rather than everything:
+    // the filter cannot be resolved, and showing the whole board would claim
+    // it was.
+    if (active.includes('mine') && (!opts.personId || i.assigneeId !== opts.personId)) return false;
+    if (active.includes('recent')) {
+      const t = i.updatedAt ? Date.parse(i.updatedAt) : NaN;
+      if (!Number.isFinite(t) || now - t > RECENT_MS) return false;
+    }
+    return true;
+  });
+}
+
 export function flattenTree(nodes: WorkTreeNode[]): WorkTreeNode[] {
   const out: WorkTreeNode[] = [];
   const walk = (n: WorkTreeNode) => { out.push(n); (n.children ?? []).forEach(walk); };

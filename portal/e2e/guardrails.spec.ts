@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { chooseOption, selectedValue } from './selectOption';
 
 const SHOT_DIR = 'e2e-shots';
 
@@ -66,13 +67,13 @@ test.describe('guardrails page', () => {
     const firstSelect = page.locator('[data-testid^="pii-action-"]').first();
     await expect(firstSelect).toBeVisible({ timeout: 10_000 });
     // Cycle through known PII actions until we land on one that isn't already selected.
-    const current = await firstSelect.inputValue();
+    const current = await selectedValue(firstSelect);
     const target = current === 'BLOCK' ? 'ANONYMIZE' : 'BLOCK';
-    await firstSelect.selectOption(target);
+    await chooseOption(firstSelect, target);
     await page.waitForTimeout(1_000);
     // Re-read — the server may either accept the change or reject it; either way
     // the select should report a valid value.
-    const after = await firstSelect.inputValue();
+    const after = await selectedValue(firstSelect);
     expect(['BLOCK', 'ANONYMIZE', 'NONE']).toContain(after);
     await page.screenshot({ path: `${SHOT_DIR}/guardrails-02-pii-action.png`, fullPage: true });
   });

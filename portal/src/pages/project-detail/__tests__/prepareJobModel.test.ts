@@ -1,0 +1,203 @@
+// Run with:  cd portal && node --test 'src/pages/project-detail/__tests__/prepareJobModel.test.ts'
+//
+// Prepare job with no form: the job derived from the item, the header card,
+// the dispatch body (unchanged contract), the 409/403/429 readings and the
+// prompts the composer deck shows — answered here by calling onAnswer.
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+import { DEFAULT_DEVBOX_MODEL, DEVBOX_MODELS } from '../../../lib/devboxModels.ts';
+import type { EnvelopesResponse } from '../../../lib/envelopeFormat.ts';
+import {
+  READ_ONLY_REASON,
+  deriveCodebase,
+  deriveInstruction,
+  deriveJob,
+  dispatchBlockedReason,
+  dispatchBody,
+  envelopeLabel,
+  jobFields,
+  prepareJobPrompts,
+  readDispatchResponse,
+  type ForecastRead,
+  type PrepareJobActions,
+  type PrepareJobView,
+  type PrepareStep,
+} from '../prepareJobModel.ts';
+import type { FlatWorkItem } from '../projectFormat.ts';
+import { node } from './obsFixture.ts';
+
+const item: FlatWorkItem = {
+  ...node({ id: 'wi-obs-e2-b4', key: 'OBS-14', type: 'bug', title: 'Stop duplicate alerts during a dependency outage', storyPoints: 3,
+    summary: 'One page per outage, not one per dependent service', description: 'On-call was paged 40 times for one outage',
+    nextStep: 'Confirm the dependency map with Eli Garcia', nextStepDetail: 'The grouping depends on it.' }),
+  epicId: 'wi-obs-e2', epicTitle: 'SLOs and error budgets',
+};
+const codebases = [
+  { id: 'cb-alerts', repoFullName: 'orgiq/observability-alerts', orgProjectId: 'p-observability' },
+  { id: 'cb-obs', repoFullName: 'orgiq/observability', orgProjectId: 'p-observability' },
+];
+const estimate = { basis: 'model' as const, sampleCount: 4, costUsdP25: 0.4, costUsdP75: 1.1, minutesP25: 6, minutesP75: 14, points: 3, scaled: true };
+const live: ForecastRead = { estimate, stored: false, loading: false, error: null };
+
+test('the job derives from the item with no input', () => {
+  const instruction = deriveInstruction(item);
+  assert.match(instruction, /^Stop duplicate alerts during a dependency outage\. One page per outage, not one per dependent service\./);
+  assert.match(instruction, /Why: On-call was paged 40 times for one outage\./);
+  assert.match(instruction, /Start with: Confirm the dependency map with Eli Garcia\. The grouping depends on it\./);
+  assert.match(instruction, /Done when the change is in a pull request/);
+  assert.equal(deriveInstruction({ title: 'Fix it.', summary: null, description: null, nextStep: null, nextStepDetail: null }),
+    'Fix it. Done when the change is in a pull request with passing checks and the acceptance criteria are met.');
+  // Codebase: the only one, else the initiative's linked repo, else asked at dispatch.
+  assert.equal(deriveCodebase([codebases[0]!], null), 'cb-alerts');
+  assert.equal(deriveCodebase(codebases, 'ORGIQ/observability'), 'cb-obs');
+  assert.equal(deriveCodebase(codebases, null), null);
+  // Model: the recorded estimate's model when it is a real one, else the default; no cap.
+  assert.deepEqual(deriveJob({ item, codebases, linkedRepo: 'orgiq/observability' }),
+    { model: DEFAULT_DEVBOX_MODEL, agentProjectId: 'cb-obs', capUsd: null, instruction });
+  assert.equal(deriveJob({ item: { ...item, estimateModel: DEVBOX_MODELS[1]!.id }, codebases }).model, DEVBOX_MODELS[1]!.id);
+  assert.equal(deriveJob({ item: { ...item, estimateModel: 'retired-model' }, codebases }).model, DEFAULT_DEVBOX_MODEL);
+});
+
+test('dispatch is blocked with its reason', () => {
+  assert.equal(dispatchBlockedReason(item, false), 'Your role cannot dispatch agents');
+  assert.equal(dispatchBlockedReason({ ...item, storyPoints: null }, true), 'Size this item first');
+  assert.equal(dispatchBlockedReason({ ...item, status: 'in_progress' }, true), 'Only work that is up next can be dispatched');
+  assert.equal(dispatchBlockedReason(item, true), null);
+});
+
+test('the header card: item, codebase, model, cap, forecast, envelope', () => {
+  const job = { model: DEFAULT_DEVBOX_MODEL, agentProjectId: 'cb-obs', capUsd: 0.5, instruction: 'x' };
+  const fields = jobFields({ item, job, codebases, forecast: live, envelope: { value: '$28.00 left of $30.00', tone: 'success' }, canDispatch: true });
+  assert.deepEqual(fields.map((f) => [f.label, f.value]), [
+    ['Item', 'OBS-14'], ['Codebase', 'orgiq/observability'], ['Model', 'Haiku'], ['Run cap', '$0.50'],
+    ['Forecast', '$0.40–$1.10 · 6–14 min'], ['Envelope', '$28.00 left of $30.00'],
+  ]);
+  assert.equal(fields.find((f) => f.label === 'Run cap')!.tone, 'warning', 'a cap under the forecast is flagged');
+  const reader = jobFields({ item, job: { ...job, agentProjectId: null, capUsd: null }, codebases: [], forecast: { estimate: null, stored: false, loading: false, error: null }, envelope: null, canDispatch: false });
+  assert.deepEqual(reader.map((f) => f.value), ['OBS-14', 'Not shown to your role', 'Haiku', 'No cap', 'Needs dispatch rights']);
+});
+
+test('envelope label: unread, unresolved, no grant (sme), fits, over', () => {
+  const row = { grantId: 'g', orgProjectId: 'p-observability', orgProjectName: null, sprintId: null, sprintName: null, sprintStatus: null,
+    startsOn: null, endsOn: null, allocatedUsd: 30, spentUsd: 29.5, remainingUsd: 0.5, attributionAvailable: true };
+  const data = (envelopes: typeof row[], resolved = true): EnvelopesResponse => ({ personId: 'p-1', resolved, attributionAvailable: true, envelopes });
+  assert.deepEqual(envelopeLabel(null, 'p-observability', 'sme', null), { value: '…' });
+  assert.deepEqual(envelopeLabel(data([], false), 'p-observability', 'sme', null), { value: 'Unknown', tone: 'warning' });
+  assert.deepEqual(envelopeLabel(data([]), 'p-observability', 'sme', null), { value: 'No sprint grant here', tone: 'danger' });
+  assert.deepEqual(envelopeLabel(data([]), 'p-observability', 'org-leader', null), { value: 'Not braked by an envelope' });
+  assert.deepEqual(envelopeLabel(data([row]), 'p-observability', 'sme', estimate), { value: '$0.50 left of $30.00', tone: 'warning' });
+  assert.deepEqual(envelopeLabel(data([{ ...row, remainingUsd: 20, spentUsd: 10 }]), 'p-observability', 'sme', estimate), { value: '$20.00 left of $30.00', tone: 'success' });
+});
+
+test('the dispatch body is the drawer contract: only confirmed flags, no blank instruction', () => {
+  const job = { model: 'm', agentProjectId: null, capUsd: null, instruction: '  ' };
+  assert.deepEqual(dispatchBody('wi', job, {}), { workItemId: 'wi', model: 'm' });
+  assert.deepEqual(dispatchBody('wi', { ...job, agentProjectId: 'cb', capUsd: 2, instruction: ' Do it ' }, { 'run-budget': true, envelope: true }), {
+    workItemId: 'wi', model: 'm', agentProjectId: 'cb', instruction: 'Do it', budgetPerRunUsd: 2,
+    confirmOverRunBudget: true, confirmOverEnvelope: true,
+  });
+  assert.equal(dispatchBody('wi', job, {}, 'cb-picked')['agentProjectId'], 'cb-picked');
+});
+
+test('dispatch answers: codebase options, three gates with their own flags, 403/429 refusals, success', () => {
+  assert.equal(readDispatchResponse(409, { options: [{ id: 'a', repoFullName: 'o/a' }] }).kind, 'codebase');
+  const cap = readDispatchResponse(409, { gate: 'run-budget', error: 'over cap', runBudget: { budgetPerRunUsd: 0.5, costUsdP25: 0.4, costUsdP75: 1.1 } });
+  assert.ok(cap.kind === 'gate' && cap.stop.flag === 'confirmOverRunBudget' && /over the \$0\.50 cap you set/.test(cap.stop.body));
+  const alloc = readDispatchResponse(409, { gate: 'allocation', error: 'over', allocation: { allocatedUsd: 100, spentUsd: 99, remainingUsd: 1 } });
+  assert.ok(alloc.kind === 'gate' && alloc.stop.flag === 'confirmOverAllocation' && /\$99\.00 of \$100\.00 is already spent/.test(alloc.stop.body));
+  const env = readDispatchResponse(409, { gate: 'envelope', envelope: { sprintName: 'Sprint 14', allocatedUsd: 30, attributedSpentUsd: 29, remainingUsd: 1, attributionAvailable: true } });
+  assert.ok(env.kind === 'gate' && env.stop.flag === 'confirmOverEnvelope' && env.stop.fields.some((f) => f.value === '$1.00'));
+  assert.deepEqual(readDispatchResponse(403, { error: 'No active sprint grant' }), { kind: 'refused', message: 'No active sprint grant' });
+  assert.equal(readDispatchResponse(429, {}).kind, 'refused');
+  assert.deepEqual(readDispatchResponse(202, { run: { id: 'r1' } }), { kind: 'dispatched', run: { id: 'r1' } });
+  assert.deepEqual(readDispatchResponse(500, { error: 'boom' }), { kind: 'refused', message: 'Dispatch failed: boom' });
+});
+
+function harness(over: Partial<PrepareJobView> = {}) {
+  const calls: string[] = [];
+  const actions: PrepareJobActions = {
+    dispatch: async (cb) => { calls.push(`dispatch${cb ? `:${cb}` : ''}`); return { receipt: 'Dispatched' }; },
+    edit: (what) => { calls.push(`edit:${what}`); },
+    setModel: (m) => { calls.push(`model:${m}`); },
+    setCap: (c) => { calls.push(`cap:${c}`); },
+    setInstruction: (t) => { calls.push(`instruction:${t}`); },
+    confirmGate: async (g) => { calls.push(`confirm:${g}`); return undefined; },
+    back: () => { calls.push('back'); },
+    saveEstimate: async () => { calls.push('save'); return undefined; },
+  };
+  const view: PrepareJobView = {
+    item, job: { model: DEFAULT_DEVBOX_MODEL, agentProjectId: 'cb-obs', capUsd: null, instruction: 'Do it' },
+    fields: [{ label: 'Item', value: 'OBS-14' }], step: { kind: 'confirm' }, rev: 1, canDispatch: true, blocked: null,
+    forecast: live, running: false, ...over,
+  };
+  return { prompts: prepareJobPrompts(view, actions), calls };
+}
+
+test('one question: Dispatch · Change model · Change cap · Edit instruction (· Save estimate), Dispatch the default', async () => {
+  const { prompts, calls } = harness();
+  assert.equal(prompts.length, 1);
+  const [p] = prompts;
+  assert.equal(p!.question, 'Dispatch with these settings?');
+  assert.deepEqual(p!.options!.map((o) => o.label), ['Dispatch', 'Change model', 'Change cap', 'Edit instruction', 'Save estimate']);
+  assert.equal(p!.defaultOptionId, 'dispatch');
+  await p!.onAnswer({ kind: 'choice', optionId: 'dispatch' });
+  await p!.onAnswer({ kind: 'choice', optionId: 'cap' });
+  await p!.onAnswer({ kind: 'choice', optionId: 'save' });
+  assert.deepEqual(calls, ['dispatch', 'edit:cap', 'save']);
+  // A recorded estimate is not offered for saving again.
+  assert.equal(harness({ forecast: { ...live, stored: true } }).prompts[0]!.options!.length, 4);
+});
+
+test('a reader sees the card read-only; a blocked item cannot dispatch and has no default', () => {
+  const reader = harness({ canDispatch: false, blocked: 'Your role cannot dispatch agents' }).prompts[0]!;
+  assert.equal(reader.readOnlyReason, READ_ONLY_REASON);
+  assert.equal(reader.eyebrow, 'Job setup');
+  assert.equal(reader.question, 'The job this item would run with.');
+  const blocked = harness({ blocked: 'Size this item first' }).prompts[0]!;
+  assert.equal(blocked.options![0]!.disabledReason, 'Size this item first');
+  assert.equal(blocked.defaultOptionId, undefined);
+});
+
+test('changing a value is its own prompt', async () => {
+  const model = harness({ step: { kind: 'model' } });
+  assert.equal(model.prompts[0]!.kind, 'choice');
+  assert.deepEqual(model.prompts[0]!.options!.map((o) => o.id), DEVBOX_MODELS.map((m) => m.id));
+  await model.prompts[0]!.onAnswer({ kind: 'choice', optionId: DEVBOX_MODELS[2]!.id });
+  assert.deepEqual(model.calls, [`model:${DEVBOX_MODELS[2]!.id}`]);
+
+  const cap = harness({ step: { kind: 'cap' } });
+  assert.equal(cap.prompts[0]!.kind, 'number');
+  assert.deepEqual(cap.prompts[0]!.options!.map((o) => o.label), ['No cap', 'Forecast high ($1.10)']);
+  await cap.prompts[0]!.onAnswer({ kind: 'number', value: 2.499 });
+  await cap.prompts[0]!.onAnswer({ kind: 'option', optionId: 'none' });
+  await cap.prompts[0]!.onAnswer({ kind: 'option', optionId: 'forecast' });
+  assert.deepEqual(cap.calls, ['cap:2.5', 'cap:null', 'cap:1.1']);
+
+  const text = harness({ step: { kind: 'instruction' } });
+  assert.equal(text.prompts[0]!.kind, 'text');
+  await text.prompts[0]!.onAnswer({ kind: 'text', text: 'Group by dependency' });
+  await text.prompts[0]!.onAnswer({ kind: 'option', optionId: 'keep' });
+  assert.deepEqual(text.calls, ['instruction:Group by dependency', 'back']);
+});
+
+test('a gate is a confirm carrying its reason and flag; a codebase pick dispatches to it', async () => {
+  const stop = (readDispatchResponse(409, { gate: 'envelope', envelope: { sprintName: null, allocatedUsd: 30, attributedSpentUsd: 29, remainingUsd: 1, attributionAvailable: true } }) as { stop: Extract<PrepareStep, { kind: 'gate' }>['stop'] }).stop;
+  const gate = harness({ step: { kind: 'gate', stop } });
+  const p = gate.prompts[0]!;
+  assert.equal(p.kind, 'confirm');
+  assert.equal(p.eyebrow, 'Budget gate · confirmOverEnvelope');
+  assert.match(p.question, /Dispatch anyway\?$/);
+  await p.onAnswer({ kind: 'confirm', optionId: 'confirm', confirmed: true });
+  await p.onAnswer({ kind: 'confirm', optionId: 'cancel', confirmed: false });
+  assert.deepEqual(gate.calls, ['confirm:envelope', 'back']);
+
+  const pick = harness({ step: { kind: 'codebase', options: [{ id: 'cb-a', repoFullName: 'o/a' }] } });
+  await pick.prompts[0]!.onAnswer({ kind: 'choice', optionId: 'cb-a' });
+  assert.deepEqual(pick.calls, ['dispatch:cb-a']);
+});
+
+test('prompt ids change with the revision, so a re-asked question is a new prompt', () => {
+  assert.notEqual(harness({ rev: 1 }).prompts[0]!.id, harness({ rev: 2 }).prompts[0]!.id);
+});

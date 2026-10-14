@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { signIn } from './realSession';
 import type { KnowledgeTreeResponse } from '../src/pages/assessment/knowledge/types';
+import { chooseOption } from './selectOption';
 
 // Exercise the real frame/permissions. Tree moves are confined to this browser
 // fixture: these checks never reorder the shared Confluence mock or publish content.
@@ -90,7 +91,7 @@ test('leaf and parent siblings align, active and hovered menus open sharing and 
   await leaf.hover();
   await activeMenu.click();
   await page.getByRole('menuitem', { name: 'Move to…', exact: true }).click();
-  await page.getByLabel('Move destination', { exact: true }).selectOption('page:100003');
+  await chooseOption(page.getByLabel('Move destination', { exact: true }), 'page:100003');
   await page.getByRole('button', { name: 'Move here', exact: true }).click();
   await expect(page.getByTestId('move-document-dialog')).toHaveCount(0);
   expect(moves).toEqual([{ id: 'page:100002', parentId: 'page:100003', position: 1 }]);
@@ -114,7 +115,7 @@ test('a refused move stays open and a drag nests through the same persisted path
   state.refuse();
   await page.getByTestId('document-rail-tree-row-page:100002-menu-trigger').click();
   await page.getByRole('menuitem', { name: 'Move to…', exact: true }).click();
-  await page.getByLabel('Move destination', { exact: true }).selectOption('page:100001');
+  await chooseOption(page.getByLabel('Move destination', { exact: true }), 'page:100001');
   await page.getByRole('button', { name: 'Move here', exact: true }).click();
   await expect(page.getByTestId('move-document-dialog')).toBeVisible();
   await expect(page.getByTestId('move-document-dialog')).toContainText('The source refused this move.');

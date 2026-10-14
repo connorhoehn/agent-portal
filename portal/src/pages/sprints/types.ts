@@ -53,6 +53,8 @@ export interface WorkItem {
   storyPoints: number | null;
   estimatedCostUsd: number | null;
   prUrl: string | null;
+  /** ISO timestamp of the last change; the board's "Recently updated" quick filter. */
+  updatedAt?: string;
 }
 
 // The GrantRow the /api/grants contract returns (a subset — the fields this

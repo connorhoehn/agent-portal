@@ -49,7 +49,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ConversationOwner, ConversationThread } from '../components/chat/ConversationThread';
-import { EstimateDrawer, type EstimateProvenance } from '../components/marketplace/EstimateDrawer';
+import type { EstimateProvenance } from '../components/marketplace/EstimateDrawer';
 import { OwnerEditor } from '../components/marketplace/GovernanceEditor';
 import { useInitiativeAgentActivity } from '../components/marketplace/InitiativeAgentRail';
 import { RecentWorkActivity } from '../components/work-graph/RecentWorkActivity';
@@ -65,7 +65,7 @@ import { useUrlState } from '../lib/useUrlState';
 import { HttpError, sendJson } from '../lib/writeJson';
 import type { BotRun } from './bots/BotsPage';
 import { AddNoteDialog, LinkDecisionDialog } from './project-detail/BriefDialogs';
-import { briefFacts, runSetupHint } from './project-detail/briefModel';
+import { briefFacts } from './project-detail/briefModel';
 import { workflowPrompt, type ComposerSetup, type ComposerSubject } from './project-detail/composerPrompts';
 import { ContributorsTable } from './project-detail/ContributorsTable';
 import { DecisionQueue } from './project-detail/DecisionQueue';
@@ -78,7 +78,7 @@ import {
   hasActiveGrantOnInitiative,
   runsByWorkItem,
 } from './project-detail/projectFormat';
-import { RunDraft, type RunChoice } from './project-detail/RunDraft';
+import { usePrepareJobDeck } from './project-detail/usePrepareJobDeck';
 import type {
 Codebase,
 MyScopedSprintsResponse,
@@ -206,14 +206,6 @@ function ProjectDetailPage() {
   // "Your envelope" badge (isGrantee + orgProjectId). Only fetched for sme —
   // every other role gets no cue.
   const { session } = useSession();
-  const isSme = session?.role === 'sme';
-  const { data: mySprints } = useFetch<MyScopedSprintsResponse>(
-    isSme && id ? '/api/sprints?scope=mine' : null,
-  );
-  // Absent data (still loading, fetch failed, or not an sme) means "say
-  // nothing" rather than guess — a wrong cue is worse than none.
-  const hasGrant = isSme && mySprints != null ? hasActiveGrantOnInitiative(mySprints.sprints, id ?? '') : null;
-  const showGrantCue = canDispatch && isSme && hasGrant === false;
 
   // Governance edits are optimistic: overrides sit on top of the fetched
   // project until the next reload; the editors revert them on PATCH failure.
@@ -276,8 +268,6 @@ function ProjectDetailPage() {
   // Status toggles in flight, so the row's checkbox reads busy until the
   // server answers rather than flickering back and forth.
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
-  // The run draft's current choices, for the collapsed Run setup's hint.
-  const [runChoice, setRunChoice] = useState<RunChoice | null>(null);
   const [prepareJobRequest, setPrepareJobRequest] = useState<{ itemId: string; revision: number } | null>(null);
   // "Draft with agent" puts the criteria workflow in the composer; the counter
   // keys the composer so a second press re-seeds it.
@@ -414,9 +404,8 @@ function ProjectDetailPage() {
     })();
   }, [id, project, rawTree]);
 
-  // Marketplace: the item being authorized with the run draft's choices, and
-  // the optimistic flip on 202.
-  const [authorizing, setAuthorizing] = useState<{ item: WorkItemTree; choice: RunChoice } | null>(null);
+  // Marketplace: the optimistic flip on 202 (Prepare job dispatches from the
+  // composer's deck, usePrepareJobDeck).
 
   const handleDispatched = useCallback((workItemId: string, _run: BotRun) => {
     setLocalItems((prev) => mapTree(prev ?? rawTree ?? [], (n) =>
@@ -445,6 +434,35 @@ function ProjectDetailPage() {
         }
       : n)));
   }, [rawTree]);
+
+  // Prepare job: derived from the open item, asked about in the composer's deck
+  // (only the questions that need a human). A hook, so before the early returns.
+  const jobPrompts = usePrepareJobDeck({
+    item: tab === 'work' ? current : null,
+    codebases,
+    linkedRepo: project?.repoFullName ?? null,
+    orgProjectId: id ?? null,
+    canDispatch,
+    role: session?.role,
+    run: current ? marketRuns[current.id] : undefined,
+    request: prepareJobRequest,
+    onDispatched: handleDispatched,
+    onEstimateSaved: handleEstimateSaved,
+  });
+
+  // The menu's "Prepare job" / "View job setup" re-asks the question (a new
+  // prompt id reopens a hidden deck) and puts the keyboard on its answers, so
+  // 1–4 / Enter work at once.
+  useEffect(() => {
+    if (!prepareJobRequest) return;
+    // Two frames: the request re-renders the deck (its hook's effect) before it is focusable.
+    let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => {
+      const deck = document.querySelector('[data-testid="initiative-central-composer"] [data-composer-prompt-deck="expanded"]');
+      (deck?.querySelector<HTMLElement>('[data-composer-prompt-option][data-default]:not(:disabled)')
+        ?? deck?.querySelector<HTMLElement>('[data-composer-prompt-option]:not(:disabled), [data-testid$="-hide"]'))?.focus();
+    }); });
+    return () => cancelAnimationFrame(frame);
+  }, [prepareJobRequest]);
 
   // The call (docs/social-calls-plan.md step 5): owner + SMEs, overrides
   // applied, computed before the early returns because it is a hook.
@@ -665,6 +683,7 @@ function ProjectDetailPage() {
   const composer = (
     <InitiativeComposer
       subject={subject}
+      prompts={onWork && current ? jobPrompts : undefined}
       onAsk={request => {
         const accepted = agentPanel.current?.submit(request) ?? 'The Agent pane is not ready. Try again.';
         if (accepted === true) paneControl.open('agent');
@@ -763,23 +782,12 @@ function ProjectDetailPage() {
       onValueChange={setTab} />
   </Stack>;
 
-  const selectedCodebase = codebases.find((c) => c.id === runChoice?.agentProjectId) ?? null;
-  const runHint = runSetupHint({
-    canDispatch,
-    isSme,
-    hasGrant,
-    model: runChoice ? DEVBOX_MODELS.find((m) => m.id === runChoice.model)?.label ?? runChoice.model : null,
-    repo: selectedCodebase?.repoFullName ?? null,
-    capUsd: runChoice?.capUsd ?? null,
-  });
-
   const workPane = current ? (
     <WorkItemDetail
       item={current}
       // A focused item's header is only the action cluster, on the item's own
       // title row — nothing between the trail and the item's title.
       headActions={header}
-      prepareJobRequest={prepareJobRequest}
       thread={thread}
       decisions={decisionsRead}
       contributors={contributors}
@@ -803,21 +811,6 @@ function ProjectDetailPage() {
       onAddContext={() => setBriefDialog('context')}
       onAddNote={() => setBriefDialog('note')}
       onOpenDiscussion={() => paneControl.open('discussion')}
-      runSetup={{
-        hint: runHint,
-        body: (
-          <RunDraft
-            item={current}
-            codebases={codebases}
-            run={marketRuns[current.id]}
-            canDispatch={canDispatch}
-            showGrantCue={showGrantCue}
-            onEstimateSaved={handleEstimateSaved}
-            onAuthorize={(choice) => setAuthorizing({ item: current, choice })}
-            onChoiceChange={setRunChoice}
-          />
-        ),
-      }}
     />
   ) : (
     <EmptyState
@@ -988,23 +981,6 @@ function ProjectDetailPage() {
         />
       )}
 
-      {/* Marketplace: authorize, with the run draft's choices prefilled. The
-          drawer owns the four dispatch gates and their confirms. */}
-      <EstimateDrawer
-        open={authorizing != null}
-        onClose={() => setAuthorizing(null)}
-        item={authorizing?.item ?? null}
-        codebases={codebases.map((cb) => ({ id: cb.id, repoFullName: cb.repoFullName }))}
-        // The initiative this run is charged to — the drawer reads the caller's
-        // own sprint envelope on it before they authorize.
-        orgProjectId={id ?? null}
-        initialModel={authorizing?.choice.model}
-        initialAgentProjectId={authorizing?.choice.agentProjectId}
-        initialInstruction={authorizing?.choice.instruction}
-        initialCapUsd={authorizing?.choice.capUsd}
-        onDispatched={handleDispatched}
-        onEstimateSaved={handleEstimateSaved}
-      />
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { signIn } from './realSession';
+import { chooseOption } from './selectOption';
 
 test('collection controls and table spacing inherit shared tokens in the live shell', async ({ page }) => {
   test.setTimeout(90_000);
@@ -20,7 +21,7 @@ test('collection controls and table spacing inherit shared tokens in the live sh
   expect((await filters.boundingBox())?.height).toBe(28);
   await filters.click();
   await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeVisible();
-  await page.getByRole('combobox', { name: 'Status', exact: true }).selectOption('running');
+  await chooseOption(page.getByRole('combobox', { name: 'Status', exact: true }), 'running');
   await expect(toolbar.getByRole('button', { name: 'Filters (1 active)' })).toBeVisible();
   await page.getByRole('button', { name: 'Clear filters' }).click();
   await page.keyboard.press('Escape');

@@ -2,6 +2,7 @@ import { loginAs } from './realSession';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { test, expect } from './cdpTest';
 import { chooseComposerMode } from './conversationViews';
+import { chooseOption, optionValues } from './selectOption';
 
 test.use({ viewport: { width: 1440, height: 900 }, baseURL: process.env.PARITY_BASE_URL ?? 'http://localhost:5261' });
 test.describe.configure({ mode: 'serial' });
@@ -80,8 +81,8 @@ async function composer(page: Page) {
   const dock = page.getByTestId('initiative-composer');
   await chooseComposerMode(page, dock, 'Agent', 'Chat');
   const target = dock.getByRole('combobox', { name: 'Chat recipient' });
-  await expect(target.locator('option[value="person:u-vera"]')).toHaveCount(1);
-  await target.selectOption('person:u-vera');
+  await expect.poll(() => optionValues(target)).toContain('person:u-vera');
+  await chooseOption(target, 'person:u-vera');
   return { dock, target, input: dock.getByTestId('rich-chat-composer-input'), send: dock.getByTestId('rich-chat-composer-send') };
 }
 async function leave(page: Page) {
@@ -190,7 +191,7 @@ test('a held real persisted DM receipt cannot clear the draft after its composer
     await expect.poll(() => release !== null, { timeout: 15_000 }).toBe(true);
     await expect(recipient).toContainText(marker);
     await expect(editor.input).toHaveAttribute('contenteditable', 'false');
-    await editor.target.selectOption('discussion'); release!();
+    await chooseOption(editor.target, 'discussion'); release!();
     await expect(editor.input).toBeEditable(); await expect(editor.input).toHaveText(marker);
     await expect(editor.dock.getByTestId('initiative-composer-note')).toContainText('Your current draft has been kept');
     const discussion = await rachel.page.request.get('/api/graph/work-items/wi-auth-e2-b3/comments');

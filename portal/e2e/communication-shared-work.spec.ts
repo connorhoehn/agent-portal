@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import { openAs } from './realSession';
+import { chooseOption } from './selectOption';
 
 // Communication shaped by the user's org context, and the work people share
 // (docs/communication-plane-goal.md §1–§4, judge item 4). Against the shared
@@ -245,7 +246,7 @@ test('shared work: empty for an outsider, populated after u-vera shares a node i
   // The share form opens in the far-right pane.
   const paneHost = page.getByTestId('page-conversation-pane');
   await expect(paneHost.getByTestId('plane-share-form')).toBeVisible({ timeout: 10_000 });
-  await paneHost.getByTestId('plane-share-target').selectOption('social:ch:general');
+  await chooseOption(paneHost.getByTestId('plane-share-target'), 'social:ch:general');
   await paneHost.getByTestId('plane-share-submit').click();
   await expect(paneHost.getByText('Shared.')).toBeVisible({ timeout: 10_000 });
 

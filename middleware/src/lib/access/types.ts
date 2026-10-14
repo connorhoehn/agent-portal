@@ -154,3 +154,23 @@ export interface AccessDirectory {
 
 /** The thread every request carries (decision A8; A1 admits it on the gateway). */
 export const requestThread = (id: string): string => `access:req:${id}`;
+
+/**
+ * `POST /api/access/requests/preview` (the request page's summary): what
+ * filing would produce, computed by the same checks as the submit and written
+ * nowhere. `item` carries the ACTOR's `heldByActor`/`sodConflicts` (the
+ * catalog's view); `sod` is evaluated against the BENEFICIARY's current grants.
+ */
+export interface AccessRequestPreview {
+  item: CatalogItem;
+  beneficiary: Person;
+  /** The chain planChain would write, each step's eligible deciders resolved live now. */
+  steps: Array<{ step: number; kind: StepKind; eligible: Person[]; escalated: string | null }>;
+  sod: { verdict: SodVerdict; conflicts: SodConflict[] };
+  /** The body's duration, else the item's default. */
+  duration: AccessDuration;
+  /** When the grant would end were it provisioned now; null for standing. */
+  expiresIfProvisionedNow: string | null;
+  /** The refusal the submit would answer now (already held, a duplicate open request, an SoD block), else null. */
+  refusal: null | { status: 400 | 403 | 409; error: string; requestId?: string };
+}

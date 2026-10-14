@@ -268,10 +268,9 @@ export function eventHref(e: Pick<AccessEvent, 'requestId' | 'policyId'>): strin
 
 export function policyHref(id: string): string { return `/access/policies/${encodeURIComponent(id)}`; }
 
-// ── The request wizard (who → what → why → how long) ───────────────────────
+// ── The request form (who → what → why → how long, on one page) ─────────────
 
 export const JUSTIFICATION_MIN = 20;
-export const WIZARD_STEPS = ['Who', 'What', 'Why', 'How long'] as const;
 
 export interface RequestDraft {
   beneficiaryId: string;
@@ -284,23 +283,51 @@ export interface RequestDraft {
 
 export const EMPTY_DRAFT: RequestDraft = { beneficiaryId: '', itemId: '', justification: '', duration: '', standingReason: '' };
 
-/** What blocks each wizard step, or null when it may advance. */
-export function draftProblem(step: number, draft: RequestDraft, item: CatalogItem | null): string | null {
-  if (step === 0) return draft.beneficiaryId ? null : 'Choose who the access is for.';
-  if (step === 1) {
-    if (!item) return 'Choose what to request from the catalog.';
-    if (item.sodConflicts.some((c) => c.severity === 'block')) return 'A separation-of-duties policy blocks this item; an access admin must override it.';
-    return null;
-  }
-  if (step === 2) {
-    const n = draft.justification.trim().length;
-    return n >= JUSTIFICATION_MIN ? null : `Say why in at least ${JUSTIFICATION_MIN} characters (${n} so far).`;
-  }
-  if (!draft.duration) return 'Choose how long the access should last.';
-  if (draft.duration === 'standing' && draft.standingReason.trim().length < JUSTIFICATION_MIN) {
-    return `Standing access needs its own reason of at least ${JUSTIFICATION_MIN} characters.`;
-  }
-  return null;
+export type RequestSection = 'who' | 'what' | 'why' | 'howLong';
+
+/** What blocks each section of the request form, or null when it is complete. The SoD verdict is the server's (the preview), not this. */
+export function sectionProblems(draft: RequestDraft, item: CatalogItem | null): Record<RequestSection, string | null> {
+  const n = draft.justification.trim().length;
+  const duration = draft.duration || item?.defaultDuration || '';
+  return {
+    who: draft.beneficiaryId ? null : 'Choose who the access is for.',
+    what: item ? null : 'Choose what to request from the catalog.',
+    why: n >= JUSTIFICATION_MIN ? null : `Say why in at least ${JUSTIFICATION_MIN} characters (${n} so far).`,
+    howLong: !duration ? 'Choose how long the access should last.'
+      : duration === 'standing' && draft.standingReason.trim().length < JUSTIFICATION_MIN
+        ? `Standing access needs its own reason of at least ${JUSTIFICATION_MIN} characters.` : null,
+  };
+}
+
+/** One step of the chain `POST /requests/preview` computed (docs/access-tenant-api.md). */
+export interface PreviewStep { step: number; kind: StepKind; eligible: AccessPerson[]; escalated: string | null }
+
+/** `POST /api/access/requests/preview`: the chain, SoD check and expiry a submit would produce, written nowhere. */
+export interface AccessRequestPreview {
+  item: CatalogItem;
+  beneficiary: AccessPerson;
+  steps: PreviewStep[];
+  sod: { verdict: 'clear' | SodSeverity; conflicts: SodConflict[] };
+  duration: AccessDuration;
+  expiresIfProvisionedNow: string | null;
+  refusal: null | { status: number; error: string; requestId?: string };
+}
+
+/** Who decides a previewed step, in words. */
+export function previewStepLabel(s: PreviewStep): string {
+  if (!s.eligible.length) return 'No one can decide this step';
+  return s.eligible.map((p) => p.displayName).join(', ');
+}
+
+/** "Tue, Oct 20, 2026" — the concrete end of a time-bound grant. */
+export function expiryDateLabel(iso: string, locale?: string): string {
+  return new Date(iso).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** The summary's "Until" line: the date a grant approved now would end, or why there is none. */
+export function untilLabel(duration: AccessDuration, expiresIfProvisionedNow: string | null): string {
+  if (duration === 'standing' || !expiresIfProvisionedNow) return 'No end date — standing access';
+  return `${expiryDateLabel(expiresIfProvisionedNow)} — ${DURATION_LABELS[duration]} from approval`;
 }
 
 /** The POST body (`docs/access-tenant-api.md`): only the keys the route accepts. */
@@ -359,6 +386,11 @@ export function reviewDecisionProblem(decision: ReviewDecision, comment: string)
 /** What blocks a new campaign, or null. */
 export function campaignProblem(tenant: string, title: string): string | null {
   if (!tenant) return 'Choose the workspace whose standing grants to review.';
+  return campaignTitleProblem(title);
+}
+
+/** What blocks a campaign's title, or null. */
+export function campaignTitleProblem(title: string): string | null {
   const n = title.trim().length;
   if (n < REVIEW_TITLE_MIN) return `Give the campaign a title of at least ${REVIEW_TITLE_MIN} characters.`;
   if (n > REVIEW_TITLE_MAX) return `Keep the title under ${REVIEW_TITLE_MAX} characters.`;

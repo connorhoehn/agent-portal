@@ -1,6 +1,7 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { loginAs } from './realSession';
 import { chooseComposerMode } from './conversationViews';
+import { optionLabels } from './selectOption';
 
 // The fourth pane holds the dialogue, the content column holds the composer
 // (the user, 2026-10-07: "for all apps that use this fourth pane: keep the chat
@@ -271,7 +272,7 @@ for (const route of [
       const recipient = composer.getByRole('combobox', { name: 'Chat recipient' });
       if (!(await recipient.isVisible().catch(() => false))) await chooseComposerMode(page, composer, 'Agent', 'Chat');
       await expect(recipient).toBeVisible({ timeout: 15_000 });
-      const options = await recipient.locator('option').allTextContents();
+      const options = await optionLabels(recipient);
       expect(options.some((o) => /discussion/i.test(o)), `To: offers the Discussion (${options.join(' | ')})`).toBe(true);
       expect(options.some((o) => /huddle/i.test(o)), `To: offers the huddle (${options.join(' | ')})`).toBe(true);
     } finally {

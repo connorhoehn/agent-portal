@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-14T02:27:09.970Z",
-  "serverHandlerSha": "0b144e4f66ca7edabe5bbe79e875ac1d1edfe0584072b626b109215c87297c1d",
+  "capturedAt": "2026-10-14T02:40:16.391Z",
+  "serverHandlerSha": "0f26c1853c87948366e870511afbd15ad6a0bf0c54fe00c28341791ec5d790d9",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -1034,6 +1034,66 @@
       },
       "values": {},
       "sent": []
+    },
+    "POST /api/access/requests/preview": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "beneficiary": "object",
+        "beneficiary.displayName": "string",
+        "beneficiary.id": "string",
+        "beneficiary.personId": "null",
+        "duration": "string",
+        "expiresIfProvisionedNow": "string",
+        "item": "object",
+        "item.defaultDuration": "string",
+        "item.description": "string",
+        "item.heldByActor": "boolean",
+        "item.id": "string",
+        "item.kind": "string",
+        "item.role": "string",
+        "item.sensitive": "boolean",
+        "item.sodConflicts": "array",
+        "item.stewardRule": "string",
+        "item.tenant": "string",
+        "item.title": "string",
+        "refusal": "null",
+        "sod": "object",
+        "sod.conflicts": "array",
+        "sod.verdict": "string",
+        "steps": "array",
+        "steps[]": "object",
+        "steps[].eligible": "array",
+        "steps[].eligible[]": "object",
+        "steps[].eligible[].displayName": "string",
+        "steps[].eligible[].id": "string",
+        "steps[].eligible[].personId": "string",
+        "steps[].escalated": "string",
+        "steps[].kind": "string",
+        "steps[].step": "number"
+      },
+      "values": {
+        "item.kind": [
+          "tenant-role"
+        ],
+        "item.role": [
+          "sme"
+        ],
+        "item.tenant": [
+          "orgiq"
+        ],
+        "sod.verdict": [
+          "clear"
+        ],
+        "steps[].kind": [
+          "steward"
+        ]
+      },
+      "sent": [
+        "duration",
+        "itemId"
+      ]
     },
     "POST /api/access/reviews": {
       "persona": "orgiq/admin",

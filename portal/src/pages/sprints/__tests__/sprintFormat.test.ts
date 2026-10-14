@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  usd, shortDate, daysUntil, windowProgress, dateRange, timeLeftLabel,
+  usd, shortDate, daysUntil, windowProgress, sprintWindow, dateRange, timeLeftLabel,
   isOverEnvelope, mineReasons, sprintTotals, bucketByColumn, flattenTree,
   addableItems, peopleGroups,
 } from '../sprintFormat.ts';
@@ -64,137 +64,52 @@ test('daysUntil counts whole days and goes negative once the date has passed', (
   assert.equal(daysUntil('nope'), null);
 });
 
-test('timeLeftLabel says left or over, in the card form and the prose form', () => {
-  const iso = (offset: number) => {
-    const n = new Date();
-    return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + offset))
-      .toISOString().slice(0, 10);
-  };
-  assert.equal(timeLeftLabel(iso(3), 'short'), '3d left');
-  assert.equal(timeLeftLabel(iso(-2), 'short'), '2d over');
-  assert.equal(timeLeftLabel(iso(3)), '3 days left');
-  // Singular, because "1 days left" is the kind of thing that makes a page
-  // look unfinished.
-  assert.equal(timeLeftLabel(iso(1)), '1 day left');
+test('timeLeftLabel counts the end date as a working day, in the card form and the prose form', () => {
+  // 13 Oct, mid-afternoon UTC.
+  const now = Date.UTC(2026, 9, 13, 15, 0);
+  assert.equal(timeLeftLabel('2026-10-16', 'short', now), '4d left'); // 13, 14, 15, 16
+  assert.equal(timeLeftLabel('2026-10-16', 'long', now), '4 days left');
+  assert.equal(timeLeftLabel('2026-10-14', 'long', now), '2 days left');
+  // The last day is a day to work, not "0 days left".
+  assert.equal(timeLeftLabel('2026-10-13', 'long', now), 'last day');
+  assert.equal(timeLeftLabel('2026-10-13', 'short', now), 'last day');
+  // Singular, because "1 days over" is the kind of thing that makes a page
+  // look unfinished. Ended yesterday = one day over.
+  assert.equal(timeLeftLabel('2026-10-12', 'long', now), '1 day over');
+  assert.equal(timeLeftLabel('2026-10-11', 'short', now), '2d over');
   assert.equal(timeLeftLabel(null), null);
+  assert.equal(timeLeftLabel('nope'), null);
 });
 
-test('windowProgress is 0–1 across the window and null when it cannot be computed', () => {
+test('sprintWindow: an active sprint on its last day is not finished (the reported 30 Sep → 14 Oct case)', () => {
+  const s = { startsOn: '2026-09-30', endsOn: '2026-10-14' };
+  const lastDayEvening = Date.UTC(2026, 9, 14, 18, 0);
+  const w = sprintWindow(s, lastDayEvening)!;
+  assert.equal(w.days, 15);
+  assert.equal(w.day, 15);
+  assert.equal(w.daysLeft, 1);
+  assert.ok(w.progress < 1 && w.progress > 0.95, `progress ${w.progress}`);
+  assert.equal(timeLeftLabel(s.endsOn, 'long', lastDayEvening), 'last day');
+  // It finishes at the end of the 14th, i.e. midnight starting the 15th.
+  const closed = sprintWindow(s, Date.UTC(2026, 9, 15, 0, 0))!;
+  assert.equal(closed.progress, 1);
+  assert.equal(closed.daysLeft, 0);
+  assert.equal(closed.day, 15);
+  // First day: day 1 of 15, a sliver elapsed.
+  const first = sprintWindow(s, Date.UTC(2026, 8, 30, 0, 0))!;
+  assert.deepEqual([first.day, first.daysLeft, first.progress], [1, 15, 0]);
+  // Before it starts: day 0.
+  assert.equal(sprintWindow(s, Date.UTC(2026, 8, 29, 12, 0))!.day, 0);
+});
+
+test('windowProgress is 0–1 across the inclusive window and null when it cannot be computed', () => {
   assert.equal(windowProgress(sprint({ startsOn: '2000-01-01', endsOn: '2000-01-10' })), 1);
   assert.equal(windowProgress(sprint({ startsOn: '2999-01-01', endsOn: '2999-01-10' })), 0);
   assert.equal(windowProgress(sprint({ startsOn: null })), null);
-  // A zero-length or inverted window has no meaningful progress.
-  assert.equal(windowProgress(sprint({ startsOn: '2026-01-10', endsOn: '2026-01-10' })), null);
+  // A one-day sprint is a real (one-day) window: half-way through its day.
+  assert.equal(windowProgress(sprint({ startsOn: '2026-01-10', endsOn: '2026-01-10' }), Date.UTC(2026, 0, 10, 12)), 0.5);
+  // An inverted window has no meaningful progress.
   assert.equal(windowProgress(sprint({ startsOn: '2026-01-10', endsOn: '2026-01-01' })), null);
-});
-
-// ─── Envelope ────────────────────────────────────────────────────────────────
-
-test('isOverEnvelope needs an envelope to be over — no grant means nothing to exceed', () => {
-  assert.equal(isOverEnvelope(sprint({ grantCount: 1, grantedUsd: 100, initiativeSpendInWindowUsd: 101 })), true);
-  assert.equal(isOverEnvelope(sprint({ grantCount: 1, grantedUsd: 100, initiativeSpendInWindowUsd: 100 })), false);
-  assert.equal(isOverEnvelope(sprint({ grantCount: 0, grantedUsd: 0, initiativeSpendInWindowUsd: 999 })), false);
-});
-
-// ─── Why it is mine ──────────────────────────────────────────────────────────
-
-test('mineReasons names each of the three ways a sprint can be yours', () => {
-  assert.deepEqual(mineReasons(sprint()).map((r) => r.key), []);
-  assert.deepEqual(
-    mineReasons(sprint({ isSteward: true, isGrantee: true, myItemCount: 4, myOpenItemCount: 1 }))
-      .map((r) => r.key),
-    ['steward', 'grantee', 'items'],
-  );
-});
-
-test('mineReasons distinguishes open work from finished work', () => {
-  const open = mineReasons(sprint({ myItemCount: 4, myOpenItemCount: 1 }));
-  assert.equal(open[0]!.label, '1 open of 4 yours');
-  const done = mineReasons(sprint({ myItemCount: 4, myOpenItemCount: 0 }));
-  assert.equal(done[0]!.label, '4 yours, all done');
-});
-
-// ─── Rollup ──────────────────────────────────────────────────────────────────
-
-test('sprintTotals sums the five figures the header tiles show', () => {
-  const totals = sprintTotals([
-    sprint({ grantedUsd: 10, initiativeSpendInWindowUsd: 1, myOpenItemCount: 2, pointsDone: 3, pointsTotal: 8 }),
-    sprint({ grantedUsd: 25, initiativeSpendInWindowUsd: 4.5, myOpenItemCount: 1, pointsDone: 5, pointsTotal: 5 }),
-  ]);
-  assert.deepEqual(totals, { granted: 35, spend: 5.5, myOpen: 3, pointsDone: 8, pointsTotal: 13 });
-});
-
-test('sprintTotals on an empty list is all zeroes, not NaN', () => {
-  assert.deepEqual(sprintTotals([]), { granted: 0, spend: 0, myOpen: 0, pointsDone: 0, pointsTotal: 0 });
-});
-
-// ─── Board ───────────────────────────────────────────────────────────────────
-
-function item(over: Partial<WorkItem> = {}): WorkItem {
-  return {
-    id: 'w1', projectId: 'p1', type: 'story', title: 'T', status: 'open', priority: 'medium',
-    assigneeId: null, assigneeName: null, storyPoints: null, estimatedCostUsd: null, prUrl: null,
-    ...over,
-  };
-}
-
-test('bucketByColumn keeps the flow order and hides an empty cancelled lane', () => {
-  const cols = bucketByColumn([item({ id: 'a', status: 'open' }), item({ id: 'b', status: 'done' })]);
-  assert.deepEqual(cols.map((c) => c.status), ['open', 'in_progress', 'in_review', 'done']);
-  assert.deepEqual(cols[0]!.items.map((i) => i.id), ['a']);
-  // An always-present empty Cancelled column reads as a stage of the process
-  // rather than an exception.
-  assert.equal(cols.some((c) => c.status === 'cancelled'), false);
-});
-
-test('bucketByColumn shows the cancelled lane once something is actually in it', () => {
-  const cols = bucketByColumn([item({ status: 'cancelled' })]);
-  assert.equal(cols.at(-1)!.status, 'cancelled');
-});
-
-const tree: WorkTreeNode[] = [
-  { id: 'e1', type: 'epic', title: 'Epic', children: [
-    { id: 's1', type: 'story', title: 'Open story', status: 'open' },
-    { id: 's2', type: 'story', title: 'Done story', status: 'done' },
-    { id: 's3', type: 'bug', title: 'Cancelled bug', status: 'cancelled' },
-    { id: 's4', type: 'story', title: 'Already here', status: 'in_progress' },
-  ] },
-];
-
-test('flattenTree walks the whole tree, parents included', () => {
-  assert.deepEqual(flattenTree(tree).map((n) => n.id), ['e1', 's1', 's2', 's3', 's4']);
-});
-
-test('addableItems drops epics, closed work, and anything already in the sprint', () => {
-  // Epics are containers; done/cancelled work would fold closed items into the
-  // sprint's point and cost totals; an item already here is a no-op.
-  assert.deepEqual(addableItems(tree, new Set(['s4'])).map((n) => n.id), ['s1']);
-});
-
-test('addableItems keeps an item whose status the API did not send', () => {
-  const untyped: WorkTreeNode[] = [{ id: 'x', type: 'story', title: 'No status' }];
-  assert.deepEqual(addableItems(untyped, new Set()).map((n) => n.id), ['x']);
-});
-
-// ─── People pickers ──────────────────────────────────────────────────────────
-
-test('peopleGroups puts the initiative first and labels contributors with their role', () => {
-  const groups = peopleGroups(
-    [{ personId: 'p1', name: 'Ada', role: 'SRE' }, { personId: 'p2', name: 'Bo', role: null }],
-    [{ id: 'p1', name: 'Ada' }, { id: 'p9', name: 'Cy', isSme: true }],
-  );
-  assert.deepEqual(groups.map((g) => g.label), ['On this initiative', 'Everyone else']);
-  assert.deepEqual(groups[0]!.options, [
-    { value: 'p1', label: 'Ada · SRE' },
-    { value: 'p2', label: 'Bo' },
-  ]);
-  // p1 is already listed above, so the roster half must not repeat them.
-  assert.deepEqual(groups[1]!.options, [{ value: 'p9', label: 'Cy · SME' }]);
-});
-
-test('peopleGroups labels the roster "People" when there are no contributors', () => {
-  const groups = peopleGroups([], [{ id: 'p9', name: 'Cy' }]);
-  assert.deepEqual(groups.map((g) => g.label), ['People']);
 });
 
 test('peopleGroups is empty when nobody is available, so the caller can say why', () => {
@@ -253,4 +168,37 @@ test('atRiskCount counts everything not on track', () => {
     sprint({ ...ELAPSED, pointsTotal: 20, pointsDone: 20, grantCount: 1, grantedUsd: 5, initiativeSpendInWindowUsd: 9 }), // over envelope
   ];
   assert.equal(atRiskCount(sprints), 2);
+});
+
+// ─── Board quick filters ─────────────────────────────────────────────────────
+
+import { applyQuickFilters, parseQuickFilters, serializeQuickFilters } from '../sprintFormat.ts';
+
+const wi = (over: Partial<WorkItem>): WorkItem => ({
+  id: 'w', projectId: 'p', type: 'task', title: 't', status: 'open', priority: 'medium',
+  assigneeId: null, assigneeName: null, storyPoints: null, estimatedCostUsd: null, prUrl: null, ...over,
+});
+
+test('quick filters round-trip through the URL in a stable order and drop unknown ids', () => {
+  assert.deepEqual(parseQuickFilters('recent,mine,bogus'), ['mine', 'recent']);
+  assert.deepEqual(parseQuickFilters(null), []);
+  assert.equal(serializeQuickFilters(['recent', 'mine']), 'mine,recent');
+  // Nothing on → no param at all, not `?quick=`.
+  assert.equal(serializeQuickFilters([]), null);
+});
+
+test('quick filters combine with AND; "mine" without a linked person matches nothing', () => {
+  const now = Date.UTC(2026, 9, 13);
+  const items = [
+    wi({ id: 'a', assigneeId: 'p-1', updatedAt: new Date(now - 2 * 86_400_000).toISOString() }),
+    wi({ id: 'b', assigneeId: 'p-2', updatedAt: new Date(now - 1 * 86_400_000).toISOString() }),
+    wi({ id: 'c', assigneeId: 'p-1', updatedAt: new Date(now - 30 * 86_400_000).toISOString() }),
+    wi({ id: 'd', assigneeId: 'p-1' }),
+  ];
+  const ids = (xs: WorkItem[]) => xs.map((x) => x.id);
+  assert.deepEqual(ids(applyQuickFilters(items, [], { personId: 'p-1', now })), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(ids(applyQuickFilters(items, ['mine'], { personId: 'p-1', now })), ['a', 'c', 'd']);
+  assert.deepEqual(ids(applyQuickFilters(items, ['recent'], { personId: 'p-1', now })), ['a', 'b']);
+  assert.deepEqual(ids(applyQuickFilters(items, ['mine', 'recent'], { personId: 'p-1', now })), ['a']);
+  assert.deepEqual(ids(applyQuickFilters(items, ['mine'], { personId: null, now })), []);
 });

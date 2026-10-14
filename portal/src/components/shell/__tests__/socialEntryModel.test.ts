@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { showSocialTenantDoor, socialEntryTarget } from '../socialEntryModel.ts';
+import { showSocialTenantDoor, socialActivityPath, socialEntryTarget } from '../socialEntryModel.ts';
 
 test('orgiq, assessment and pipelines open their Communication plane', () => {
   assert.deepEqual(socialEntryTarget({ tenant: 'orgiq', hasSocialGrant: true, pathname: '/iq/projects' }), { kind: 'navigate', path: '/iq/communication/channels' });
@@ -32,4 +32,11 @@ test('the tenant door needs a grant and hides inside Social', () => {
   assert.equal(showSocialTenantDoor('orgiq', true), true);
   assert.equal(showSocialTenantDoor('orgiq', false), false);
   assert.equal(showSocialTenantDoor('social', true), false);
+});
+
+test('the footer bell\'s "See all activity" opens the workspace Activity view where one exists', () => {
+  assert.equal(socialActivityPath('orgiq', true), '/iq/communication/channels?shelf=activity');
+  assert.equal(socialActivityPath('social', true), '/social/channels?shelf=activity');
+  assert.equal(socialActivityPath('orgiq', false), null);
+  assert.equal(socialActivityPath('unknown', true), null);
 });

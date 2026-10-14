@@ -217,6 +217,34 @@ fi
 # Specs sign in through ONE helper (audit 2026-10-07 T1, stop-doing rule 10):
 # a spec that POSTs /api/session/login itself, or declares its own
 # signIn/login function, has forked the session contract.
+section "human-in-the-loop decisions in the composer deck (ratchet)"
+# Since ui-components 2.444.0 a decision a page needs from a person is a
+# ComposerPromptDeck prompt in the docked composer (header card, one question,
+# numbered answers; Prepare job first — usePrepareJobDeck.ts). A ConfirmDialog,
+# or a Modal/Drawer holding a form control, asks it in a box instead.
+# scripts/count-hitl-modals.py counts those; the ceiling may go down, never up.
+# A runtime rule (the DOM audit) cannot see this: decision modals are closed at
+# load, and opening each takes a page-specific script — a page exception, which
+# the audit forbids. The fixtures keep the counter honest in both directions.
+HITL_BUDGET=57
+HITL_FIX=scripts/fixtures/hitl-decision
+if [ "$(python3 scripts/count-hitl-modals.py "$HITL_FIX/modal" | awk '$1=="decisionmodal"{print $2}')" = 1 ] \
+  && [ "$(python3 scripts/count-hitl-modals.py "$HITL_FIX/deck" | awk '$1=="decisionmodal"{print $2}')" = 0 ]; then
+  ok "decision-modal counter: modal fixture counts 1, deck fixture counts 0"
+else
+  fail "decision-modal counter disagrees with its fixtures ($HITL_FIX) — the ratchet is not measuring"
+fi
+HITL_OUT=$(python3 scripts/count-hitl-modals.py "$SRC" --list)
+HITL_N=$(printf '%s\n' "$HITL_OUT" | awk '$1=="decisionmodal"{print $2}')
+HITL_DECK=$(printf '%s\n' "$HITL_OUT" | awk '$1=="deck"{print $2}')
+if [ -n "$HITL_N" ] && [ "$HITL_N" -le "$HITL_BUDGET" ]; then
+  ok "decision modals: $HITL_N (budget $HITL_BUDGET); files on the composer deck: ${HITL_DECK:-0}"
+  [ "$HITL_N" -lt "$HITL_BUDGET" ] && printf '      under budget — lower HITL_BUDGET to %s\n' "$HITL_N"
+else
+  fail "decision modals: ${HITL_N:-?} > budget $HITL_BUDGET — ask through ConversationComposer prompts (ComposerPromptDeck) instead"
+  printf '%s\n' "$HITL_OUT" | awk '/^decisionmodal/{on=1;next} /^[a-z]+ [0-9]+$/{on=0} on' | head -20
+fi
+
 section "e2e sign-in discipline (portal/e2e/realSession.ts)"
 # Only a spec that itself POSTs/fetches/visits the login route forks the contract;
 # one that merely names the path while filtering observed requests does not.

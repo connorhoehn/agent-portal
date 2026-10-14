@@ -42,18 +42,23 @@
     },
     {
       "method": "GET",
+      "path": "/api/access/beneficiaries",
+      "source": "src/routes/access.ts:633"
+    },
+    {
+      "method": "GET",
       "path": "/api/access/catalog",
       "source": "src/routes/access.ts:252"
     },
     {
       "method": "GET",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:715"
+      "source": "src/routes/access.ts:797"
     },
     {
       "method": "PUT",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:720"
+      "source": "src/routes/access.ts:802"
     },
     {
       "method": "GET",
@@ -63,7 +68,7 @@
     {
       "method": "PUT",
       "path": "/api/access/policies/:id",
-      "source": "src/routes/access.ts:748"
+      "source": "src/routes/access.ts:830"
     },
     {
       "method": "GET",
@@ -73,7 +78,7 @@
     {
       "method": "POST",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:566"
+      "source": "src/routes/access.ts:648"
     },
     {
       "method": "GET",
@@ -83,22 +88,27 @@
     {
       "method": "POST",
       "path": "/api/access/requests/:id/revoke",
-      "source": "src/routes/access.ts:677"
+      "source": "src/routes/access.ts:759"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/sod-override",
-      "source": "src/routes/access.ts:651"
+      "source": "src/routes/access.ts:733"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/steps/:step/decide",
-      "source": "src/routes/access.ts:596"
+      "source": "src/routes/access.ts:678"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/withdraw",
-      "source": "src/routes/access.ts:573"
+      "source": "src/routes/access.ts:655"
+    },
+    {
+      "method": "POST",
+      "path": "/api/access/requests/preview",
+      "source": "src/routes/access.ts:592"
     },
     {
       "method": "GET",

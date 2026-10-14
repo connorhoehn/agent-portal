@@ -9,6 +9,7 @@ import {
   CatalogGrid,
   Chip,
   EmptyState,
+  FilterChip,
   IconButton,
   Inline,
   Link as ExternalLink,
@@ -16,14 +17,18 @@ import {
   MetaLine,
   Select,
   Stack,
-  Switch, T,
+  T,
+  Toolbar,
+  ToolbarGroup,
+  ToolbarLabel,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useUrlState } from '../../lib/useUrlState';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { escapeNestReducer, INITIAL_ESCAPE_NEST_STATE, shouldHostHandleEscape, topEscapeLayer } from './escapeNesting';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sprintItemUrl, sprintItemsUrl } from './sprintForm';
-import { addableItems, bucketByColumn, PRIORITY_TONE, usd } from './sprintFormat';
+import { addableItems, applyQuickFilters, bucketByColumn, parseQuickFilters, PRIORITY_TONE, QUICK_FILTERS, serializeQuickFilters, usd, type QuickFilter } from './sprintFormat';
 import { writeJson } from '../../lib/writeJson';
 import type { WorkItem, WorkTreeNode } from './types';
 
@@ -175,13 +180,18 @@ export function SprintBoard({ sprintId, orgProjectId, personId, canManageSprints
   const { data, isLoading, error, refresh } = useFetch<WorkItem[]>(
     `/api/graph/work?sprint=${encodeURIComponent(sprintId)}&limit=200`,
   );
-  const [mineOnly, setMineOnly] = useState(false);
+  // Jira-style quick filters, in the URL (`?quick=mine,recent`) so a filtered
+  // board survives Back, refresh and a shared link.
+  const [quick, setQuick] = useUrlState<QuickFilter[]>('quick', parseQuickFilters, serializeQuickFilters);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
-  const items = useMemo(() => {
-    const all = data ?? [];
-    return mineOnly && personId ? all.filter((i) => i.assigneeId === personId) : all;
-  }, [data, mineOnly, personId]);
+  const items = useMemo(
+    () => applyQuickFilters(data ?? [], quick, { personId }),
+    [data, quick, personId],
+  );
+  // "Only my issues" needs a linked person to mean anything.
+  const offered = QUICK_FILTERS.filter((f) => f.id !== 'mine' || personId);
+  const toggle = (id: QuickFilter) => setQuick(quick.includes(id) ? quick.filter((q) => q !== id) : [...quick, id]);
 
   const presentIds = useMemo(() => new Set((data ?? []).map((i) => i.id)), [data]);
   const columns = useMemo(() => bucketByColumn(items), [items]);
@@ -223,29 +233,43 @@ export function SprintBoard({ sprintId, orgProjectId, personId, canManageSprints
 
   return (
     <Stack gap="md">
-      <Inline justify="between">
-        {addControl ?? <span />}
-        {personId ? (
-          <Inline gap="xs" as="label" className="text-xs text-text-secondary cursor-pointer">
-            <Switch
-              checked={mineOnly}
-              onChange={setMineOnly}
+      {/* The quick-filter row above the board, as Jira and Linear draw it:
+          a labelled run of toggles at the board's left edge, the one write
+          (add an item) at its end. */}
+      <Toolbar size="sm" aria-label="Board quick filters" end={addControl ?? undefined}>
+        <ToolbarGroup aria-label="Quick filters">
+          <ToolbarLabel>Quick filters</ToolbarLabel>
+          {offered.map((f) => (
+            <FilterChip
+              key={f.id}
               size="sm"
-              aria-label="Only work assigned to me"
-            />
-            Only work assigned to me
-          </Inline>
+              active={quick.includes(f.id)}
+              onClick={() => toggle(f.id)}
+              title={f.title}
+              data-testid={`sprint-board-quick-${f.id}`}
+            >
+              {f.label}
+            </FilterChip>
+          ))}
+          {quick.length > 0 ? (
+            <Button size="sm" variant="link" onClick={() => setQuick([])}>Clear</Button>
+          ) : null}
+        </ToolbarGroup>
+        {quick.length > 0 ? (
+          <ToolbarGroup divided>
+            <ToolbarLabel>{items.length} of {(data ?? []).length} items</ToolbarLabel>
+          </ToolbarGroup>
         ) : null}
-      </Inline>
+      </Toolbar>
       {/* Fixed columns, not auto-fit: an auto-fit grid stretches the two empty
           lanes across half the screen the moment a board is lopsided. */}
-      <CatalogGrid columns={columns.length >= 5 ? 5 : 4} dense>
+      <CatalogGrid columns={columns.length >= 5 ? 5 : 4} dense variant="lanes">
         {columns.map((col) => (
           <BoardColumn
             key={col.status}
             label={col.label}
             count={col.items.length}
-            emptyLabel="—"
+            emptyLabel={quick.length ? 'No matching items' : 'No items'}
           >
             {col.items.map((i) => (
               <WorkItemCard

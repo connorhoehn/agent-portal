@@ -19,7 +19,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import type { ConversationCommand, ConversationOutgoing, ConversationRecipient, RichChatComposerHandle } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { ComposerPrompt, ConversationCommand, ConversationOutgoing, ConversationRecipient, RichChatComposerHandle } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { ComposerSendError, composerDraftOf } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
 import { Button, Inline, Select, Stack, T, useDensity } from '@connorhoehnslalom/ui-components/shared';
@@ -72,6 +72,8 @@ export interface InitiativeComposerProps {
   onComment?: () => void;
   /** Run beside the current content instead of navigating to standalone Ask. */
   onAsk?: (request: InitiativeAgentRequest) => boolean | string;
+  /** Human-in-the-loop questions for this subject (Prepare job), shown above the input. */
+  prompts?: readonly ComposerPrompt[];
   'data-testid'?: string;
 }
 
@@ -87,7 +89,7 @@ export function InitiativeComposer(props: InitiativeComposerProps) {
 function destinationStorage(): Storage | null { try { return typeof window === 'undefined' ? null : window.localStorage; } catch { return null; } }
 
 function DockedComposer({
-  subject, setup, conversation, chatUnavailableReason, dock, defaultMode = 'agent', expanded, onComment, onAsk, presentation = 'compact', 'data-testid': testId = 'initiative-composer',
+  subject, setup, conversation, chatUnavailableReason, dock, defaultMode = 'agent', expanded, onComment, onAsk, prompts, presentation = 'compact', 'data-testid': testId = 'initiative-composer',
 }: Omit<InitiativeComposerProps, 'setup'> & { setup: ComposerSetup }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -388,6 +390,7 @@ function DockedComposer({
       onAgent={text => ask(text)}
       workflows={workflowMenuRows(subject)}
       callBlock={dock}
+      {...(prompts ? { prompts } : {})}
       claim={{ label: 'the initiative composer' }}
       answersFocus
       // Native persistence stays scoped to the actor, tenant and subject. The separate

@@ -28,6 +28,15 @@ const selectors = {
   workspaceColumns: '[data-testid="social-chat-workspace"], [data-testid="explorer-layout"]',
   splitColumns: '[data-testid$="-split"]:has(> [data-testid$="-primary"])',
   controls: 'button, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]), select, textarea, [role="button"]',
+  // Dropdowns (ui-components 2.445.0, contracts.md "Dropdowns"): any <select>
+  // (painted or hidden), <input list> or <datalist> is the platform's unstyled
+  // menu unless it is Select's reasoned native escape hatch; a role=listbox
+  // without the library marker is hand-rolled; an open listbox's options sit
+  // on the 12/14 scale and the panel inside the viewport.
+  nativeSelects: 'select:not([data-ui-native-select][data-ui-native-reason]), select[data-ui-native-reason=""], input[list], datalist',
+  unmarkedListboxes: '[role="listbox"]:not([data-ui-listbox])',
+  listboxOptions: '[data-ui-listbox] [role="option"]',
+  openListboxes: '[data-ui-listbox]',
   railHeaders: '[data-testid="subnav-group-header"]',
   toolbarControls: '[data-toolbar-variant="collection"] button:not([aria-label="Clear search"]), [data-toolbar-variant="collection"] input',
   collections: '[data-collection-page]', collectionToolbars: '[data-toolbar-variant="collection"]', sectionTitles: '[data-section-title]',
@@ -43,7 +52,17 @@ const selectors = {
   // content column. Never use the ledger/command host as its own boundary.
   composerBoundary: 'section:has(> [data-collection-command-boundary="embedded"]), [data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-section-content], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
   rightPane: '[data-testid="page-conversation-pane"]',
+  // The content column (the trail's parent: SectionContent, or a ListRailLayout header's column) and its
+  // reading edge (the trail band, padded by the page gutter): content.gutter, header-alignment, single-title.
+  contentColumns: ':has(> [data-testid="section-crumbs"])', trail: '[data-testid="section-crumbs"]',
+  // layout.contained-controls: every visible control inside the viewport, its column and its clipping ancestors.
+  containedControls: ':is(button, a[href], [role="tab"], select, textarea, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]))',
+  containmentRegions: '[data-section-content], [data-subnav-content], [data-shell-nav] aside, .shell-header, [data-testid="shell-footer"]',
+  // people.sparse-row: tile lists (ActivePeopleGrid and other role="list" grids) in the app.
+  tileLists: '[data-shell-nav] [role="list"]',
   conversationState: '[data-composer-surface], [data-testid="social-channel-not-joined"], [data-testid="social-shared-work"]',
+  // popover.fit: an open InlinePopover panel; board.lane-*: CatalogGrid variant="lanes" and its BoardColumn lanes (ui-components 2.443.1).
+  popovers: '[data-ui-dialog="popover"]', boards: '[data-ui-board]', boardLanes: '[data-ui-board-lane]',
 };
 /** Body rows of a collection that has not declared its rows static (see `collectionTables`). */
 const collectionRows = ':is([data-shell-nav] [data-collection-table], [data-shell-nav] [data-collection-page]) table:not([role="presentation"]):not([data-collection-rows="static"] table) > tbody > tr:not(:has([colspan])):not([data-testid="datatable-loading-row"])';
@@ -53,8 +72,13 @@ const RECORD_DETAIL_ACTION = /^(revision history|version history|history|revisio
 const RECORD_ACTION_CANDIDATES = '[data-shell-nav] :is(button, [role="button"]):not([aria-expanded]):not(nav *):not([data-testid="subnav-group-header"])';
 /** Details buttons the `details-pane` state already opens into the right pane. */
 const DETAILS_PANE = /^(Initiative details|Open initiative details|Show details)$/;
+/** A conversation surface's view tabs (ConversationSurface: Chat | Documents | Pinned | Calls). */
+const CONVERSATION_VIEW_TABS = '[role="tablist"][aria-label="Views of this conversation"] [role="tab"]';
 type Probes = { activateRow: (page: Page, o: { rows: string }) => Promise<unknown>; recordAction: (page: Page, o: { scope: string; name: RegExp; candidates?: string }) => Promise<unknown>; toggleSelection: (page: Page, o: { checkbox: string }) => Promise<unknown> };
-type AuditState = { name: string; enter: (p: Page, ctx: { probes: Probes }) => Promise<unknown>; required?: string[]; navigates?: boolean };
+/** The footer's NotificationBell (shell chrome, the same on every route — so it is opened on one list route per tenant). */
+const FOOTER_BELL = '[data-testid="shell-footer"] [data-notification-bell] button[aria-haspopup="dialog"]';
+const BELL_STATE_ROUTES = /^\/(iq\/projects|assessment\/runs|pipelines\/runs|social\/contacts)$/;
+type AuditState = { name: string; enter: (p: Page, ctx: { probes: Probes }) => Promise<unknown>; required?: string[]; navigates?: boolean; composerExpectation?: { mode: 'exempt'; reason: string } };
 /** The shell regions every page keeps, including the record a probe navigated to. */
 const SHELL_REQUIRED = ['$header', '$footer', '$shellColumns'];
 /** After a probe navigated or opened something, wait (bounded) for its loading rows to settle. */
@@ -155,7 +179,7 @@ export default {
       const composer = await visible(selectors.composers);
       const table = await visible(selectors.tables);
       const pathname = auditAliasTarget(new URL(spec.path, 'http://audit.local').pathname);
-      const controls = await visible('select, [role="switch"], input[type="checkbox"], input[type="radio"], [data-testid$="-save"], button[type="submit"]');
+      const controls = await visible('select, [data-ui-control="select"], [role="switch"], input[type="checkbox"], input[type="radio"], [data-testid$="-save"], button[type="submit"]');
       const policy = tenantComposerPolicy({ tenant: spec.tenant, path: auditAliasTarget(new URL(spec.path, 'http://audit.local').pathname) + new URL(spec.path, 'http://audit.local').search, kind: spec.kind, judges: spec.judges, pattern: spec.pattern }, {
         collection: await visible(`${selectors.collections}, ${selectors.collectionToolbars}`),
         table,
@@ -169,7 +193,7 @@ export default {
         communicationOverview: await visible('[data-testid="communication-overview"]'),
         socialAccessRequired: await visible('[data-testid="communication-no-social"]'),
         settingsSurface: !composer && (await visible('[data-testid$="configuration-page"], [data-testid$="-configuration"], [data-testid="settings-profile"]') || (/\/(?:configuration|settings)$/.test(pathname) && controls)),
-        form: !composer && !table && (controls || await visible('form')),
+        form: !composer && !table && (controls || await visible('form, [data-form-wizard]')),
         placeholder: await visible('[data-testid^="social-empty-"], [data-testid="pipelines-empty-settings"], [data-testid="access-empty-settings"]'),
         lab: await visible('[data-testid^="lab-"]'),
         landing: await visible('[data-testid$="-landing"]'),
@@ -203,8 +227,24 @@ export default {
   async describe(page: Page) {
     return { conversation: await page.getByTestId('social-channel-not-joined').isVisible() ? 'join-required' : await page.getByTestId('social-shared-work').isVisible() ? 'shared-work' : await page.locator(selectors.composers).first().isVisible() ? 'composer' : 'not-present' };
   },
-  async discoverStates(page: Page) {
+  async discoverStates(page: Page, spec?: InventoryRoute) {
     const states: AuditState[] = [];
+    const pathname = spec ? new URL(spec.path, 'http://audit.local').pathname : '';
+    // popover.fit: the footer bell's panel (a 99+ feed once grew past the window, over its own trigger).
+    if (BELL_STATE_ROUTES.test(pathname) && await page.locator(FOOTER_BELL).count() === 1) states.push({ name: 'notification-bell-open', enter: async p => {
+      await p.locator(FOOTER_BELL).click();
+      await expect(p.locator(selectors.popovers).last()).toBeVisible();
+    } });
+    // board.lane-surface / board.lane-columns: the Sprints lens with its first sprint's board open.
+    if (pathname === '/iq/projects') states.push({ name: 'sprint-board', navigates: true, required: [...SHELL_REQUIRED, '$boardLanes'], enter: async p => {
+      const response = await p.request.get('/api/sprints?scope=mine&status=active');
+      if (!response.ok()) throw new Error(`Sprint discovery: ${response.status()}`);
+      const sprint = ((await response.json()) as { sprints?: { id: string }[] }).sprints?.[0];
+      if (!sprint) throw new Error('No active sprint for the sweep user; the board state cannot be exercised');
+      await p.goto(`/iq/projects?lens=sprints&sprint=${encodeURIComponent(sprint.id)}`);
+      await settled(p);
+      await expect(p.locator(selectors.boardLanes).first()).toBeVisible({ timeout: 15000 });
+    } });
     const group = page.getByTestId('subnav-group-header').first();
     if (await group.count() && await group.isVisible()) {
       for (const expanded of [false, true]) states.push({ name: `sidebar-${expanded ? 'expanded' : 'collapsed'}`, required: ['$railHeaders'], enter: async p => {
@@ -242,6 +282,21 @@ export default {
     } });
     const info = page.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ });
     if (await info.count() === 1 && await info.isVisible()) states.push({ name: 'details-pane', required: ['$rightPane'], enter: async p => { await p.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ }).click(); await expect(p.locator(selectors.rightPane)).toBeVisible(); } });
+    // A conversation's other views (Documents, Pinned, Calls …): each tab is a state, so a view's own
+    // layout (its tab row, empty state, panel) is measured on every plane and Social route that shows it.
+    // The composer belongs to the Chat view, so the other views declare it absent with that reason.
+    const viewTabs = page.locator(CONVERSATION_VIEW_TABS);
+    const views = (await viewTabs.evaluateAll(els => els.filter(el => (el as HTMLElement).offsetParent !== null && el.getAttribute('aria-selected') !== 'true').map(el => (el.textContent ?? '').replace(/\d+$/, '').trim()))).filter(Boolean);
+    // A view tab rewrites the URL (`?view=`), so the state is judged as the view it reached: the shell
+    // regions, not the Chat view's composer-or-join requirement.
+    for (const label of views) states.push({ name: `conversation-view-${label.toLowerCase()}`, navigates: true, required: SHELL_REQUIRED,
+      composerExpectation: { mode: 'exempt', reason: `The conversation's ${label} view lists what this conversation holds; its message composer belongs to the Chat view.` },
+      enter: async p => {
+        const tab = p.locator(CONVERSATION_VIEW_TABS).filter({ hasText: new RegExp(`^${label}\\s*\\d*$`) }).first();
+        await tab.click();
+        await expect(tab).toHaveAttribute('aria-selected', 'true');
+        await settled(p);
+      } });
     // Interaction probes (read-only: every non-GET request is blocked and reported).
     // record-popout: activating a collection row must route the record into the
     // page, never open a drawer or modal.
@@ -266,6 +321,13 @@ export default {
     const checkbox = `${collectionRows} input[type="checkbox"]`;
     const box = page.locator(checkbox).first();
     if (await box.count() && await box.isVisible()) states.push({ name: 'row-select', enter: (p, { probes }) => probes.toggleSelection(p, { checkbox }) });
+    // The first library dropdown on the page, opened: its listbox is judged on
+    // the option type scale and viewport containment (contracts.md "Dropdowns").
+    const dropdown = page.locator('[data-shell-nav] [data-ui-control="select"]:not([disabled])').first();
+    if (await dropdown.count() && await dropdown.isVisible()) states.push({ name: 'dropdown-open', required: ['$openListboxes'], enter: async p => {
+      await p.locator('[data-shell-nav] [data-ui-control="select"]:not([disabled])').first().click();
+      await expect(p.locator('[data-ui-listbox]').first()).toBeVisible();
+    } });
     return states;
   },
 };

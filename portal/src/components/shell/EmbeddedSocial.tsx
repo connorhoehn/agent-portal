@@ -17,7 +17,7 @@ import { presenceAvatarUsers } from '../../pages/assessment/knowledge/knowledgeF
 import SocialConversation from '../../pages/social/SocialConversation';
 import { TenantDirectEntry } from './TenantDirectMessages';
 import { MessagesOverviewDialog, type ConversationPreview } from './MessagesOverviewDialog';
-import { showSocialTenantDoor, socialEntryTarget } from './socialEntryModel';
+import { showSocialTenantDoor, socialActivityPath, socialEntryTarget } from './socialEntryModel';
 import { SOCIAL_PRESENCE_CHANNEL, namesFrom } from '../../pages/social/socialPlatform';
 import { dmTitle, socialInbox, type SocialPerson, type SocialDm } from '../../pages/social/socialChat';
 
@@ -250,6 +250,7 @@ function SocialEntryRow({ social }: { social: EmbeddedSocialContextValue }) {
     if (target.kind === 'here') { controller.closeMessage(); return; }
     social.selectPage(false); social.openMessage();
   };
+  const activityPath = socialActivityPath(session?.tenant, !!socialRole);
   const messagesOn = state.open && !social.pageOpen && !state.activity;
   return <Inline gap="sm" align="center" wrap={false} className="min-w-0" data-testid="shell-social-bar">
     <Inline gap="none" align="center" wrap={false}>
@@ -270,6 +271,8 @@ function SocialEntryRow({ social }: { social: EmbeddedSocialContextValue }) {
     </Inline>
     <Inline gap="none" align="center" className="border-l border-border pl-2">
       <WrappedNotificationBell notifications={activity} placement="bottom-start" size="sm" label="Social activity"
+        // The capped panel's footer link to the full Activity view (ui-components 2.443.1).
+        {...(activityPath ? { seeAll: { onSelect: () => { controller.closeMessage(); navigate(activityPath); } } } : {})}
         onItemClick={(item, entry) => {
           inbox.markAsRead(item.id); const href = entry?.action?.href;
           if (href?.startsWith('/social/dms/')) {

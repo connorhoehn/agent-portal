@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router';
 import {
   Button,
   FormField,
+  FormWizard,
   Inline,
-  InlineAlert,
   LockIcon,
   Modal,
   RadioGroup,
@@ -32,8 +32,8 @@ import type { BudgetAccessLocked } from './types';
 
 // The budgets read tier on the Initiatives page (decided 2026-10-13): a locked
 // figure, and the one quick request that unlocks it from here. Composed from
-// library primitives only (LockIcon, T, Inline, Modal, FormField, Textarea,
-// RadioGroup, Button); the request is the ordinary access request the
+// library primitives only (LockIcon, T, Inline, Modal, FormWizard, FormField,
+// Textarea, RadioGroup, Button); the request is the ordinary access request the
 // middleware files through routes/access-requests-quick.ts.
 
 /** A withheld dollar figure: a lock and "Locked", with the server's reason as its title. Never a zero. */
@@ -138,37 +138,42 @@ function BudgetAccessForm({ open, itemId, reason, onClose, onFiled }: {
 
   const n = justification.trim().length;
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Request budget access"
-      maxWidth={520}
-      footer={(
-        <Inline gap="sm" justify="end">
-          <Button size="sm" variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button size="sm" onClick={submit} disabled={busy || problem !== null} data-testid="budget-access-submit">
-            {busy ? 'Requesting…' : 'Send request'}
-          </Button>
-        </Inline>
-      )}
-    >
+    <Modal open={open} onClose={onClose} title="Request budget access" maxWidth={520}>
       <Stack gap="md">
         <T as="p" size="sm" tone="secondary">
           {reason} Your manager, then the budget owner, decide it in Access; once it is granted the figures appear here without signing out.
         </T>
-        <FormField label="Why do you need it?" hint={`${n} of at least ${JUSTIFICATION_MIN} characters`} required>
-          {(wiring) => (
-            <Textarea {...wiring} rows={4} value={justification} onChange={(e) => setJustification(e.target.value)}
-              data-testid="budget-access-justification" />
-          )}
-        </FormField>
-        <FormField label="For how long?">
-          {() => (
-            <RadioGroup<AccessDuration> name="budget-access-duration" value={duration} onChange={setDuration} orientation="horizontal"
-              options={QUICK_DURATIONS.map((d) => ({ value: d, label: DURATION_LABELS[d] }))} />
-          )}
-        </FormField>
-        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        <FormWizard
+          aria-label="Request budget access"
+          data-testid="budget-access"
+          onSubmit={submit}
+          submitLabel="Send request"
+          submittingLabel="Requesting…"
+          submitting={busy}
+          submitError={error}
+          onDismissError={() => setError(null)}
+          secondaryActions={<Button type="button" size="sm" variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>}
+          sections={[
+            {
+              key: 'why', title: 'Why do you need it?', error: n >= JUSTIFICATION_MIN ? null : problem,
+              content: (
+                <FormField label="Justification" hint={`${n} of at least ${JUSTIFICATION_MIN} characters`} required>
+                  {(wiring) => (
+                    <Textarea {...wiring} rows={4} value={justification} onChange={(e) => setJustification(e.target.value)}
+                      data-testid="budget-access-justification" />
+                  )}
+                </FormField>
+              ),
+            },
+            {
+              key: 'how-long', title: 'For how long?', description: 'Access ends on its own when the time is up.',
+              content: (
+                <RadioGroup<AccessDuration> name="budget-access-duration" aria-label="Duration" value={duration} onChange={setDuration} orientation="horizontal"
+                  options={QUICK_DURATIONS.map((d) => ({ value: d, label: DURATION_LABELS[d] }))} />
+              ),
+            },
+          ]}
+        />
       </Stack>
     </Modal>
   );

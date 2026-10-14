@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { chooseOption } from './selectOption';
 
 const SHOT_DIR = 'e2e-shots';
 
@@ -207,7 +208,7 @@ test.describe('observability pages', () => {
     // dropdown filter (text input only) — the .catch swallows that path and
     // we just verify the search button works regardless.
     const agentSelect = page.getByRole('combobox').first();
-    await agentSelect.selectOption({ label: /orgiq-supervisor/i }).catch(() => null);
+    await chooseOption(agentSelect, { label: /orgiq-supervisor/i }).catch(() => null);
     await page.getByRole('button', { name: /^Search$/i }).first().click();
     // Either rows appear or empty state — either is acceptable
     await page.waitForTimeout(2_000);

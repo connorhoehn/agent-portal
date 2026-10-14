@@ -37,7 +37,7 @@
 // The page root is `data-shell-flush`: the shell draws no 24px ring and no
 // breadcrumb row around it, so the rail starts at the content top at x=200.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ViewportFillRegion } from '@connorhoehnslalom/ui-components';
 import {
@@ -105,6 +105,8 @@ interface RecordingsResponse { recordings: SocialRecording[] }
  * Channels open.
  */
 const RAIL_MEMORY_KEY = 'social.chatRail';
+/** A conversation page's non-surface states share the conversation header's inset (see conversationPane). */
+const CONVERSATION_STATE_INSET = 'min-h-0 min-w-0 flex-1 px-[var(--ui-content-gutter,1rem)]';
 const DEFAULT_FOLDED: Readonly<Record<string, boolean>> = { Teams: true, Rooms: true };
 
 /**
@@ -218,10 +220,15 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   // Embedded (the Communication plane), the conversation's work graph is part of its Shared work view (`?view=shared`).
   const sharedWork = embedding?.sharedWork;
   const graph = params.get('view') === (sharedWork ? 'shared' : 'graph');
-  const graphPropsFor = (channel: string, name: string) => (sharedWork ? {
-    graphOpen: graph, graphLabel: 'Shared work', onToggleGraph: () => setView(graph ? 'chat' : 'shared'),
-    renderGraph: (messages: readonly SharedWorkMessage[]) => sharedWork({ channel, name, messages }),
-  } : { graphOpen: graph, onToggleGraph: () => setView(graph ? 'chat' : 'graph') });
+  // Embedded, the plane's own actions (Your work, Open in Social) join the open conversation's header row:
+  // the conversation is the page's one header, so they have no title band to sit in.
+  const graphPropsFor = (channel: string, name: string) => ({
+    ...(embedding?.actions ? { headerActions: embedding.actions } : {}),
+    ...(sharedWork ? {
+      graphOpen: graph, graphLabel: 'Shared work', onToggleGraph: () => setView(graph ? 'chat' : 'shared'),
+      renderGraph: (messages: readonly SharedWorkMessage[]) => sharedWork({ channel, name, messages }),
+    } : { graphOpen: graph, onToggleGraph: () => setView(graph ? 'chat' : 'graph') }),
+  });
   const setView = (next: string) => setParams((prev) => {
     const out = new URLSearchParams(prev);
     if (next === 'chat') out.delete('view'); else out.set('view', next);
@@ -235,8 +242,13 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     ? `${base}${href.slice('/social'.length)}` : href);
   const [shelf, setShelf] = useState<Shelf | null>(null);
   const [picking, setPicking] = useState(false);
-  // Any navigation leaves the shelf and the picker: the URL names the pane again.
-  useEffect(() => { setShelf(null); setPicking(false); }, [location.pathname, location.search]);
+  // Any navigation leaves the shelf and the picker: the URL names the pane again
+  // — including `?shelf=activity|mentions`, which the footer bell's "See all
+  // activity" link opens.
+  useEffect(() => {
+    const named = new URLSearchParams(location.search).get('shelf');
+    setShelf(named === 'activity' || named === 'mentions' ? named : null); setPicking(false);
+  }, [location.pathname, location.search]);
 
   const openTeam = findTeamChannel(teams, teamChannel);
   const focusTeamId = openTeam?.team.teamId ?? managing;
@@ -308,6 +320,8 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   // header density: an open conversation is rich content — the title as one
   // compact row, collapsible into the trail, remembered per device.
   const headerDensity = useHeaderDensity({ contentKind: selected?.kind === 'conversation' ? 'conversation' : 'list', headerId: 'communication' });
+  /** A conversation fills the content column (its header is the page's title); see the embedded SectionContent. */
+  const conversationOpen = selected?.kind === 'conversation';
 
   // ── Writes ────────────────────────────────────────────────────────────
   const [problem, setProblem] = useState<string | null>(null);
@@ -584,6 +598,18 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       : null;
   useSocialFooterContext(footerContext, call.unavailable);
 
+  /**
+   * Every state of an open conversation that is not the conversation surface itself — loading, an error, a
+   * missing channel or DM — sits on the conversation header's inset (`--ui-content-gutter`: 16px in Social,
+   * the page gutter on the Communication plane), never flush against the rail. The not-joined state draws its
+   * own frame (a full-bleed ChannelHeader over an inset EmptyState).
+   */
+  function conversationPane(): ReactNode {
+    const node = pane();
+    if (!conversationOpen || (isValidElement(node) && (node.type === SocialConversation || (node.props as { 'data-conversation-frame'?: string })['data-conversation-frame']))) return node;
+    return <Stack gap="md" className={CONVERSATION_STATE_INSET} data-testid="social-conversation-state">{node}</Stack>;
+  }
+
   function pane() {
     // The host's own view (a group's page discussion, an org team, a person's shared work) — the plane only.
     if (embedding?.pane && !shelf && !picking) return embedding.pane;
@@ -648,11 +674,14 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
           onLatestMessage={(summary) => openRowChanged(openChannel.channel, summary)} />;
       }
       return (
-        <Stack gap="md" className="min-w-0 flex-1">
-          <ChannelHeader name={`#${openChannel.slug}`} {...(openChannel.description ? { description: openChannel.description } : {})} memberCount={openChannel.memberCount} />
+        <Stack gap="md" className="min-w-0 flex-1" data-conversation-frame="not-joined">
+          <ChannelHeader name={`#${openChannel.slug}`} {...(openChannel.description ? { description: openChannel.description } : {})} memberCount={openChannel.memberCount}
+            className="px-[var(--ui-content-gutter,1rem)]" {...(embedding?.actions ? { actions: embedding.actions } : {})} />
+          <Stack gap="none" className={CONVERSATION_STATE_INSET}>
           <EmptyState align="start" testId="social-channel-not-joined" title={`You are not in #${openChannel.slug}`}
             description="Join to read the conversation and post in it. Everyone in the channel will see you arrive."
             action={<Button variant="primary" size="sm" disabled={busy} onClick={() => void channelMembership('join', openChannel)} data-testid="social-join-channel">Join #{openChannel.slug}</Button>} />
+          </Stack>
         </Stack>
       );
     }
@@ -750,17 +779,27 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       <ViewportFillRegion className="flex min-w-0" data-testid="social-chat-workspace">
         {railNode}
         {embedding ? (
-          <SectionContent breadcrumbs={embedding.breadcrumbs} title={embedding.title} body="fill" inset="conversation" {...headerDensity.headerProps}
-            {...(embedding.actions ? { actions: embedding.actions } : {})} data-testid="communication-content">
-            <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden" ref={headerDensity.contentRef} data-testid="social-chat-pane">
+          // One header per page (docs/layout-cascade.md): an open conversation IS the page — the plane's
+          // title folds into the trail's last crumb, its actions join the conversation's header row
+          // (graphPropsFor), and that header (avatar, name, view tabs) takes the title slot. Its header, history and composer share
+          // the trail's edge: the conversation gutter is the page gutter here. Anything else (the landing, the
+          // activity and mentions shelves, rooms, calls) is page content under the title at the page gutter.
+          <SectionContent breadcrumbs={embedding.breadcrumbs} title={embedding.title} body="fill"
+            inset={conversationOpen ? 'conversation' : 'page'}
+            {...(conversationOpen
+              ? { density: headerDensity.density, collapsed: true }
+              : { ...headerDensity.headerProps, ...(embedding.actions ? { actions: embedding.actions } : {}) })}
+            data-testid="communication-content">
+            <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" ref={headerDensity.contentRef} data-testid="social-chat-pane"
+              className={`min-h-0 min-w-0 flex-1 overflow-hidden${conversationOpen ? ' [--ui-content-gutter:var(--ui-page-gutter,1.5rem)]' : ''}`}>
               {alerts()}
-              {pane()}
+              {conversationPane()}
             </Stack>
           </SectionContent>
         ) : (
           <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="social-chat-pane">
             {alerts()}
-            {pane()}
+            {conversationPane()}
           </Stack>
         )}
       </ViewportFillRegion>

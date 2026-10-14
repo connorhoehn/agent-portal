@@ -2,6 +2,7 @@ import { test, expect } from './cdpTest';
 import { signIn } from './realSession';
 import { writeFile } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
+import { chooseOption } from './selectOption';
 test.use({ baseURL: 'http://localhost:5183', viewport: { width: 1280, height: 900 }, actionTimeout: 5_000, navigationTimeout: 10_000 });
 
 async function evidence(name: string, fileName: string, body: string, contentType: string) {
@@ -48,9 +49,9 @@ test('read-only deck keeps modern chrome and pinned composer with functional vie
   await page.getByTestId('fixture-reader-viewport').press('End');
   await expect(position).toHaveText('Slide 3 of 3');
   await page.getByTestId('fixture-reader-viewport').press('Home');
-  await page.getByRole('combobox', { name: 'Slide zoom' }).selectOption('100');
+  await chooseOption(page.getByRole('combobox', { name: 'Slide zoom' }), '100');
   await expect(page.locator('.deck-reader-slide-frame')).toHaveCSS('width', '960px');
-  await page.getByRole('combobox', { name: 'Slide zoom' }).selectOption('fit');
+  await chooseOption(page.getByRole('combobox', { name: 'Slide zoom' }), 'fit');
   const frame = await page.getByTestId('fixture-reader-stage').boundingBox();
   expect(frame).toBeTruthy(); expect(Math.abs(frame!.width / frame!.height - 16 / 9)).toBeLessThan(0.02);
   const input = page.getByTestId('fixture-question-input').locator('[contenteditable="true"]');
@@ -265,9 +266,9 @@ test('real Work member can view the saved deck and focus its composer without ed
   await page.getByTestId('initiative-deck-reader-viewport').press('ArrowRight');
   await expect(page.getByTestId('initiative-deck-reader-position')).toHaveText('Slide 2 of 7');
   await expect(message).toHaveText(draft);
-  await page.getByRole('combobox', { name: 'Slide zoom' }).selectOption('100');
+  await chooseOption(page.getByRole('combobox', { name: 'Slide zoom' }), '100');
   await expect(message).toHaveText(draft);
-  await page.getByRole('combobox', { name: 'Slide zoom' }).selectOption('fit');
+  await chooseOption(page.getByRole('combobox', { name: 'Slide zoom' }), 'fit');
   await page.getByRole('button', { name: 'Notes', exact: true }).click();
   await expect(message).toHaveText(draft);
   await page.getByRole('button', { name: 'Notes', exact: true }).click();

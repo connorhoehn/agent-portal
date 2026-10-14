@@ -25,19 +25,24 @@ for (const actor of [{ id: 'u-layla', role: 'sme' }, { id: 'u-vera', role: 'memb
     const prepare = page.getByTestId('work-item-prepare-job');
     await expect(prepare).toHaveAccessibleName(actor.role === 'sme' ? 'Prepare job' : 'View job setup');
     await prepare.click();
-    await expect(detail.getByRole('tab', { name: 'Brief', exact: true })).toHaveAttribute('aria-selected', 'true');
-    const setup = detail.getByTestId('run-setup');
-    await expect(setup.getByTestId('run-draft-panel')).toBeVisible();
-    await expect(setup.getByTestId('run-setup-summary')).toBeFocused();
+    // No form on the page: the job is a deck in the docked composer (ComposerPromptDeck).
+    await expect(detail.getByTestId('run-setup')).toHaveCount(0);
+    const deck = page.getByTestId('initiative-composer-prompts');
+    await expect(deck).toHaveAttribute('data-composer-prompt-deck', 'expanded');
+    const card = deck.getByTestId('initiative-composer-prompts-card');
+    await expect(card).toContainText(actor.role === 'member' ? 'The job this item would run with.' : 'Dispatch with these settings?');
+    await expect(deck.getByTestId('initiative-composer-prompts-fields')).toContainText('Model');
     await expect(page.getByTestId('initiative-composer')).toHaveCount(1);
     if (actor.role === 'member') {
-      await expect(setup.getByTestId('run-draft-access')).toContainText('An SME or leader authorizes jobs');
-      await expect(setup.getByTestId('run-draft-dispatch')).toBeDisabled();
+      await expect(deck.getByTestId('initiative-composer-prompts-read-only')).toContainText('authorizes jobs');
+      await expect(deck.getByTestId('initiative-composer-prompts-option-dispatch')).toHaveCount(0);
+    } else {
+      await expect(deck.getByTestId('initiative-composer-prompts-option-dispatch')).toBeVisible();
     }
     await expect(page).toHaveURL(/item=wi-obs-e2-b4/);
     await page.screenshot({ path: test.info().outputPath(`${actor.role}-job-setup-wide.png`) });
     await page.setViewportSize({ width: 1024, height: 768 });
-    await expect(setup.getByTestId('run-draft-panel')).toBeVisible();
+    await expect(deck).toBeVisible();
     await expect(page.getByTestId('initiative-composer')).toHaveCount(1);
     await page.screenshot({ path: test.info().outputPath(`${actor.role}-job-setup-narrow.png`) });
     expect(writes).toEqual([]);
