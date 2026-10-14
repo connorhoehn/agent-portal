@@ -29,7 +29,7 @@ import type { FlatWorkItem } from '../projectFormat.ts';
 import { node } from './obsFixture.ts';
 
 const item: FlatWorkItem = {
-  ...node({ id: 'wi-obs-e2-b4', key: 'OBS-14', type: 'bug', title: 'Stop duplicate alerts during a dependency outage', storyPoints: 3,
+  ...node({ id: 'wi-obs-e2-b4', key: 'ORG-OBS-11', type: 'bug', title: 'Stop duplicate alerts during a dependency outage', storyPoints: 3,
     summary: 'One page per outage, not one per dependent service', description: 'On-call was paged 40 times for one outage',
     nextStep: 'Confirm the dependency map with Eli Garcia', nextStepDetail: 'The grouping depends on it.' }),
   epicId: 'wi-obs-e2', epicTitle: 'SLOs and error budgets',
@@ -71,12 +71,12 @@ test('the header card: item, codebase, model, cap, forecast, envelope', () => {
   const job = { model: DEFAULT_DEVBOX_MODEL, agentProjectId: 'cb-obs', capUsd: 0.5, instruction: 'x' };
   const fields = jobFields({ item, job, codebases, forecast: live, envelope: { value: '$28.00 left of $30.00', tone: 'success' }, canDispatch: true });
   assert.deepEqual(fields.map((f) => [f.label, f.value]), [
-    ['Item', 'OBS-14'], ['Codebase', 'orgiq/observability'], ['Model', 'Haiku'], ['Run cap', '$0.50'],
+    ['Item', 'ORG-OBS-11'], ['Codebase', 'orgiq/observability'], ['Model', 'Haiku'], ['Run cap', '$0.50'],
     ['Forecast', '$0.40–$1.10 · 6–14 min'], ['Envelope', '$28.00 left of $30.00'],
   ]);
   assert.equal(fields.find((f) => f.label === 'Run cap')!.tone, 'warning', 'a cap under the forecast is flagged');
   const reader = jobFields({ item, job: { ...job, agentProjectId: null, capUsd: null }, codebases: [], forecast: { estimate: null, stored: false, loading: false, error: null }, envelope: null, canDispatch: false });
-  assert.deepEqual(reader.map((f) => f.value), ['OBS-14', 'Not shown to your role', 'Haiku', 'No cap', 'Needs dispatch rights']);
+  assert.deepEqual(reader.map((f) => f.value), ['ORG-OBS-11', 'Not shown to your role', 'Haiku', 'No cap', 'Needs dispatch rights']);
 });
 
 test('envelope label: unread, unresolved, no grant (sme), fits, over', () => {
@@ -129,7 +129,7 @@ function harness(over: Partial<PrepareJobView> = {}) {
   };
   const view: PrepareJobView = {
     item, job: { model: DEFAULT_DEVBOX_MODEL, agentProjectId: 'cb-obs', capUsd: null, instruction: 'Do it' },
-    fields: [{ label: 'Item', value: 'OBS-14' }], step: { kind: 'confirm' }, rev: 1, canDispatch: true, blocked: null,
+    fields: [{ label: 'Item', value: 'ORG-OBS-11' }], step: { kind: 'confirm' }, rev: 1, canDispatch: true, blocked: null,
     forecast: live, running: false, ...over,
   };
   return { prompts: prepareJobPrompts(view, actions), calls };
