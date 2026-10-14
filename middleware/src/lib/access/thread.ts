@@ -7,7 +7,7 @@
 // resource on every channel decision and every unread/mention recipient
 // (lib/live-principal.ts, lib/social-notify.ts); nothing caches a verdict.
 
-import { listCatalog, listRequests, listSteps, loadDirectory } from '../../providers/access.js';
+import { listCatalog, listRequests, listSteps, loadDirectory, withDirectoryUser } from '../../providers/access.js';
 import { mayRead, type AccessActor } from './rules.js';
 
 export const ACCESS_THREAD_PREFIX = 'access:req:';
@@ -31,7 +31,7 @@ export async function requestReadableBy(requestId: string, userId: string): Prom
   try {
     const request = listRequests().find((r) => r.id === requestId);
     if (!request) return false;
-    const dir = await loadDirectory();
+    const dir = await withDirectoryUser(await loadDirectory(), userId);
     const user = dir.users.find((u) => u.id === userId);
     if (!user) return false;
     const roles = user.grants['access'] ?? [];

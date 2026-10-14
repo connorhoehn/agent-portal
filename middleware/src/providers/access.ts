@@ -24,7 +24,7 @@ import { accessReviewItemsFixture, accessReviewsFixture, type AccessReviewItemRo
 import { accessDelegationsFixture, type AccessDelegationRow } from '../mock/access-delegations.js';
 import { delegationState } from '../lib/access/delegation.js';
 import { findInitiative } from '../mock/initiatives.js';
-import { listUsers } from './identity.js';
+import { getUser, listUsers } from './identity.js';
 import type { AccessDirectory } from '../lib/access/types.js';
 
 export type { AccessCatalogRow, AccessPolicyRow, AccessEventRow, AccessRequestRow, AccessStepRow, AccessReviewRow, AccessReviewItemRow, AccessDelegationRow };
@@ -296,4 +296,19 @@ export async function loadDirectory(): Promise<AccessDirectory> {
       return p ? { ownerPersonId: p.owner, memberPersonIds: [p.owner, ...p.smes] } : null;
     },
   };
+}
+
+/**
+ * The directory with `userId` in it. The listing leaves out the mock's
+ * ephemeral identity clones (providers/identity.ts: a clone resolves by id but
+ * is never listed), so a session signed in as a clone of Rhea was "unknown" to
+ * every access rule — its own request preview answered 400 and its record's
+ * thread 403. A clone stands in the directory as itself (its own id, its
+ * persona's person and grants); nobody else's listing changes.
+ */
+export async function withDirectoryUser(dir: AccessDirectory, userId: string): Promise<AccessDirectory> {
+  if (dir.users.some((u) => u.id === userId)) return dir;
+  const u = await getUser(userId, { authoritative: true });
+  if (!u) return dir;
+  return { ...dir, users: [...dir.users, { id: u.id, displayName: u.displayName, personId: u.personId ?? null, grants: structuredClone(u.grants) }] };
 }

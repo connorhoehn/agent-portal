@@ -62,6 +62,8 @@ import { accessEventsFixture, accessRequestsFixture, accessStepsFixture } from '
 import { accessReviewItemsFixture, accessReviewsFixture } from '../../mock/access-reviews.js';
 import { accessDelegationsFixture } from '../../mock/access-delegations.js';
 import { freezeClock, unfreezeClock } from '../../mock/core/index.js';
+import { identityClonesFixture } from '../../mock/identity-clones.js';
+import { requestReadableBy } from '../../lib/access/thread.js';
 import { sweepAccessEscalations } from '../../lib/access-escalation.js';
 import type { ReplicaFleet } from '../../lib/replica-fleet.js';
 import { identityGrantWritesFixture } from '../../mock/identity-grants.js';
@@ -326,5 +328,27 @@ describe('delegation', () => {
     const ownRecord = await record(ownId, omar);
     expect(ownRecord.steps.every((s) => !ids(s.eligible).includes('u-omar'))).toBe(true);
     expect((await post(`/api/access/requests/${ownId}/steps/1/decide`, omar, { decision: 'approve' })).status).toBe(403);
+  });
+});
+
+describe('a session signed in as an identity clone (lane M) is in the access directory', () => {
+  const clone = (id: string, from: string, personId: string, grants: Record<string, string[]>, displayName: string) => identityClonesFixture.rows().push({
+    id, from, label: 'lane-a', displayName, email: null, personId, grants, epoch: 0, createdAt: T0, expiresAt: at(2),
+  });
+  afterEach(() => identityClonesFixture.reset());
+
+  it('previews and files its own request, and reads its request thread', async () => {
+    clone('u-rhea-clone-a', 'u-rhea', 'p-rhea', { access: ['requester'] }, 'Rhea Castellanos');
+    clone('u-priya-clone-a', 'u-priya', 'p-priya', { access: ['access-admin'] }, 'Priya Venkataraman');
+    const rhea = await signIn('u-rhea-clone-a');
+    // Before 2026-10-14 the clone was "Unknown beneficiary" (400): listUsers leaves clones out.
+    const preview = await post('/api/access/requests/preview', rhea, { itemId: 'role:pipelines:operator' });
+    expect(preview.status).toBe(200);
+    expect((preview.body as { beneficiary: Person }).beneficiary.id).toBe('u-rhea-clone-a');
+    // Her manager is Omar through the persona's person (p-rhea): no fixture-specific code.
+    expect(ids((preview.body as { steps: Array<{ eligible: Person[] }> }).steps[0]!.eligible)).toEqual(['u-omar']);
+    // The access-admin clone reads every request thread, as Priya does.
+    expect(await requestReadableBy('req-0002', 'u-priya-clone-a')).toBe(true);
+    expect(await requestReadableBy('req-0004', 'u-rhea-clone-a')).toBe(false);
   });
 });

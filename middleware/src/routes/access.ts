@@ -54,7 +54,7 @@ import { expiresAtFor, provisionAccess, revokeAccess, SodBlockedError } from '..
 import { notifyAccessDelegation, notifyAccessRequest, type AccessNotifyKind } from '../lib/social-notify.js';
 import {
   accessNow, casRequest, casReviewItem, closeReviewIfDecided, endDelegation, insertDelegation, insertRequest, insertReview, listCatalog, listDelegations, listEvents,
-  listPolicies, listRequests, listReviewItems, listReviews, listSteps, loadDirectory, nextRequestId, saveTransition, updateCatalogItem, updatePolicy,
+  listPolicies, listRequests, listReviewItems, listReviews, listSteps, loadDirectory, nextRequestId, saveTransition, updateCatalogItem, updatePolicy, withDirectoryUser,
   type AccessCatalogRow, type AccessDelegationRow, type AccessPolicyRow, type AccessRequestRow, type AccessReviewItemRow, type AccessReviewRow, type AccessStepRow,
 } from '../providers/access.js';
 
@@ -86,9 +86,10 @@ export async function context(req: Request): Promise<Ctx> {
   const session = resolveSession(req);
   if (!session) throw new AppError(401, 'Sign in first');
   const principal = { sub: session.sub, tenant: session.tenant, role: session.role };
-  const [dir, mayDecide, mayProvision, mayManagePolicy] = await Promise.all([
+  const [listed, mayDecide, mayProvision, mayManagePolicy] = await Promise.all([
     loadDirectory(), isAllowed(principal, 'DecideAccess'), isAllowed(principal, 'ProvisionAccess'), isAllowed(principal, 'ManageAccessPolicy'),
   ]);
+  const dir = await withDirectoryUser(listed, session.sub);
   const self = dir.users.find((u) => u.id === session.sub) ?? null;
   return { dir, self, actor: { id: session.sub, personId: self?.personId ?? null, role: session.role, mayDecide, mayProvision, mayManagePolicy } };
 }
