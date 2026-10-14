@@ -44,7 +44,22 @@ import {
   type FixtureRegistry,
   type Scenario,
   type ScenarioName,
+  clearMockScopes,
+  createMockScope,
+  currentMockScope,
+  deleteMockScope,
+  describeMockScope,
+  getMockScope,
+  isDataState,
+  listMockScopes,
+  runInMockScope,
+  ScopeLimitError,
+  DATA_STATES,
+  type MockScope,
+  type ScopeScenario,
 } from '../mock/core/index.js';
+import { cloneIdentity, CloneRefused, deleteIdentityClone, listIdentityClones } from '../providers/identity.js';
+import { identityClonesFixture } from '../mock/identity-clones.js';
 import { requireServiceAuth, MOCK_CONTROL_SERVICE_AUTH } from '../lib/service-auth.js';
 import { join } from 'node:path';
 import { handlerSha, handlerSourceFiles } from '../mock/core/wire/handler-sha.js';
@@ -101,6 +116,10 @@ function rehydrateAll(): void {
 // Registered FIRST so the header below reaches every response, this plane's
 // own included — a router layer added after a matching route never runs.
 mockControlRouter.use(stampScenarioHeader);
+// Second: a request carrying a scope id runs the rest of its life inside that
+// scope (mock/core/scope.ts). Everything mounted after this router — every
+// API route — resolves fixtures through it.
+mockControlRouter.use(enterMockScope);
 
 // ── The worlds ─────────────────────────────────────────────────────────────
 
@@ -269,7 +288,9 @@ function pin(fixture: Fixture<unknown>, scenario: ScenarioName): void {
   const target = fixture as Pinnable;
   const original = target[PINNED] ?? fixture.rows.bind(fixture);
   target[PINNED] = original;
-  target.rows = (asked?: ScenarioName) => original(asked ?? scenario);
+  // A pin is a fact about the SHARED world. Inside a request scope the scope
+  // decides, so the pin steps aside and the scope's own resolution runs.
+  target.rows = (asked?: ScenarioName) => original(asked ?? (currentMockScope() ? undefined : scenario));
   overrides.set(fixture.key, scenario);
   // Rebuild that world from its factory so the pin starts from the seed, not
   // from whatever a previous audit left mutated in it.
@@ -311,6 +332,8 @@ function readState(registry: FixtureRegistry): {
   registryLoaded: boolean;
   demo: ReturnType<typeof getDemoState>;
   distillationDemo: ReturnType<typeof getDistillationDemoState>;
+  scopes: number;
+  clones: number;
 } {
   const fixtures = listFixtures(registry).map((fixture): FixtureState => {
     const scenario = effectiveScenario(fixture.key);
@@ -331,6 +354,7 @@ function readState(registry: FixtureRegistry): {
   return {
     enabled: true, scenario: globalScenario, fixtures, registryLoaded: fixtures.length > 0,
     demo: getDemoState(), distillationDemo: getDistillationDemoState(),
+    scopes: listMockScopes().length, clones: listIdentityClones().length,
   };
 }
 
@@ -414,7 +438,11 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
   resetDemoDirector();
   resetDistillationDemo();
   unpinAll(registry);
+  // Clones survive a world switch: another auditor asking for `empty` must not
+  // sign this run out. Only a full reset (below) removes them.
+  const clones = [...listIdentityClones()];
   registry.resetAll(scenario);
+  identityClonesFixture.rows().push(...clones);
   rehydrateAll();
   persistInitiativeDecks();
   globalScenario = scenario;
@@ -483,7 +511,11 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   // by hand reappears on the next boot and `reset` silently means "reset most
   // of it". No-op unless MOCK_PERSIST_PAIRINGS=1 (see mock/dev-pairings.ts).
   clearDevPairings();
+  // Every request scope goes too, and `resetAll` empties the identity-clones
+  // fixture, so every clone (and every session minted for one) is gone.
+  clearMockScopes();
   registry.resetAll(DEFAULT_SCENARIO);
+  identityClonesFixture.reset();
   // Same reason as the line above: the microVM fleet lives in an in-memory Map
   // in lib/devbox-fleet.ts, not in fixture rows, so `resetAll` cannot reach a
   // box that was renamed or stopped during a demo. Runs AFTER resetAll so it
@@ -551,6 +583,198 @@ function findFixture(registry: FixtureRegistry, key: unknown, res: Response): Fi
   return fixture;
 }
 
+// ── Request scopes ─────────────────────────────────────────────────────────
+//
+// A scope is a world only the requests carrying its id see — the cookie below
+// or the `x-mock-scope` header. The global world, every other session and the
+// shared fixture rows are untouched by anything done inside one (see
+// mock/core/scope.ts for the copy-on-write rule and the data states).
+
+export const MOCK_SCOPE_COOKIE = 'orgiq.mock-scope';
+export const MOCK_SCOPE_HEADER = 'x-mock-scope';
+
+/** Story scenarios run a process-wide director; they cannot be one context's. */
+const GLOBAL_ONLY: ReadonlySet<string> = new Set(['demo', 'distillation-demo']);
+
+function isScopeScenario(value: unknown): value is ScopeScenario {
+  return (isScenarioName(value) || isDataState(value)) && !GLOBAL_ONLY.has(value as string);
+}
+
+function scopeIdOf(req: Request): string | null {
+  const header = req.headers[MOCK_SCOPE_HEADER];
+  if (typeof header === 'string' && header) return header;
+  const parsed = (req as Request & { cookies?: Record<string, string> }).cookies?.[MOCK_SCOPE_COOKIE];
+  if (typeof parsed === 'string' && parsed) return parsed;
+  // A router mounted without cookie-parser (a test app) still honours the cookie.
+  const raw = req.headers.cookie;
+  if (typeof raw !== 'string') return null;
+  for (const part of raw.split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === MOCK_SCOPE_COOKIE) return decodeURIComponent(v.join('='));
+  }
+  return null;
+}
+
+/**
+ * Run the request inside its scope. The control plane's own routes stay
+ * global (they manage scopes; they are not served from one). An id that names
+ * no live scope is refused with 410 rather than served from the shared world:
+ * a context that believes it is in its own world must not write into everyone's.
+ */
+function enterMockScope(req: Request, res: Response, next: NextFunction): void {
+  if (!mockControlEnabled()) { next(); return; }
+  const id = scopeIdOf(req);
+  if (!id || req.path.startsWith('/api/__mock')) { next(); return; }
+  const scope = getMockScope(id);
+  if (!scope) {
+    res.clearCookie(MOCK_SCOPE_COOKIE, { path: '/' });
+    res.status(410).json({ error: 'mock scope expired or unknown — create a new one (POST /api/__mock/scope)', scope: id });
+    return;
+  }
+  res.setHeader('X-Mock-Scenario', scope.base);
+  res.removeHeader('X-Mock-Scenario-Pins');
+  res.setHeader('X-Mock-Scope', scope.id);
+  const named = Object.entries(scope.fixtures);
+  if (named.length > 0) res.setHeader('X-Mock-Scope-Fixtures', named.map(([k, v]) => `${k}=${v}`).sort().join(','));
+  const go = (): void => { runInMockScope(scope, () => next()); };
+  if (scope.delayMs > 0) setTimeout(go, scope.delayMs); else go();
+}
+
+function scopeReport(scope: MockScope): ReturnType<typeof describeMockScope> & { rows: Record<string, number | null> } {
+  const registry = injected ?? fixtureRegistry;
+  const rows: Record<string, number | null> = {};
+  runInMockScope(scope, () => {
+    for (const key of scope.touched) {
+      const fixture = registry.get(key);
+      if (!fixture) continue;
+      try { rows[key] = fixture.rows().length; } catch { rows[key] = null; }
+    }
+  });
+  return { ...describeMockScope(scope), rows };
+}
+
+/**
+ * POST /api/__mock/scope { scenario, fixture? | fixtures?, label?, ttlMs?, delayMs? }
+ *
+ * `{ scenario }` — every fixture in the scope resolves to it.
+ * `{ scenario, fixture }` — only that fixture; the rest of the scope is `default`.
+ * `{ fixtures: { key: scenario }, scenario? }` — several, over an optional base.
+ * Answers 201 with the scope id, sets the `orgiq.mock-scope` cookie on the
+ * caller, and names the header that carries the same id.
+ */
+mockControlRouter.post('/api/__mock/scope', ...gate, (req, res) => {
+  const body = (req.body ?? {}) as { scenario?: unknown; fixture?: unknown; fixtures?: unknown; label?: unknown; ttlMs?: unknown; delayMs?: unknown };
+  const known = [...SCENARIO_NAMES.filter((n) => !GLOBAL_ONLY.has(n)), ...Object.keys(DATA_STATES)];
+  const named: Record<string, ScopeScenario> = {};
+  let base: ScopeScenario = DEFAULT_SCENARIO;
+
+  if (body.fixture !== undefined || body.fixtures !== undefined) {
+    if (body.fixture !== undefined && body.fixtures !== undefined) {
+      res.status(400).json({ error: 'pass fixture or fixtures, not both' }); return;
+    }
+    if (body.fixture !== undefined) {
+      if (typeof body.fixture !== 'string') { res.status(400).json({ error: 'fixture must be a string key' }); return; }
+      if (!isScopeScenario(body.scenario)) { res.status(400).json({ error: 'unknown scenario', got: body.scenario ?? null, known }); return; }
+      named[body.fixture] = body.scenario;
+    } else {
+      if (!body.fixtures || typeof body.fixtures !== 'object' || Array.isArray(body.fixtures)) {
+        res.status(400).json({ error: 'fixtures must be an object of { fixtureKey: scenario }' }); return;
+      }
+      for (const [key, value] of Object.entries(body.fixtures as Record<string, unknown>)) {
+        if (!isScopeScenario(value)) { res.status(400).json({ error: 'unknown scenario', fixture: key, got: value ?? null, known }); return; }
+        named[key] = value;
+      }
+      if (body.scenario !== undefined) {
+        if (!isScopeScenario(body.scenario)) { res.status(400).json({ error: 'unknown scenario', got: body.scenario, known }); return; }
+        base = body.scenario;
+      }
+    }
+    const registry = resolveRegistry();
+    for (const [key, scenario] of Object.entries(named)) {
+      const fixture = findFixture(registry, key, res);
+      if (!fixture) return;
+      // Generic empty/error and the data states apply to any named fixture;
+      // `large`/`fresh` mean nothing a registry can derive, so they must be declared.
+      if (isScenarioName(scenario) && scenario !== 'empty' && scenario !== 'error' && !declaredScenariosFor(fixture).has(scenario)) {
+        res.status(409).json({ error: 'fixture does not implement this scenario', fixture: key, requested: scenario,
+          declares: SCENARIO_NAMES.filter((n) => declaredScenariosFor(fixture).has(n)) });
+        return;
+      }
+    }
+  } else {
+    if (!isScopeScenario(body.scenario)) { res.status(400).json({ error: 'unknown scenario', got: body.scenario ?? null, known }); return; }
+    base = body.scenario;
+  }
+
+  let scope: MockScope;
+  try {
+    scope = createMockScope({
+      base, fixtures: named,
+      label: typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, 80) : null,
+      ...(typeof body.ttlMs === 'number' ? { ttlMs: body.ttlMs } : {}),
+      ...(typeof body.delayMs === 'number' ? { delayMs: body.delayMs } : {}),
+    });
+  } catch (err) {
+    if (err instanceof ScopeLimitError) { res.status(429).json({ error: err.message }); return; }
+    throw err;
+  }
+  res.cookie(MOCK_SCOPE_COOKIE, scope.id, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: scope.expiresAt - scope.createdAt });
+  res.status(201).json({
+    scope: describeMockScope(scope),
+    cookie: { name: MOCK_SCOPE_COOKIE, value: scope.id },
+    header: MOCK_SCOPE_HEADER,
+  });
+});
+
+mockControlRouter.get('/api/__mock/scope', ...gate, (_req, res) => {
+  res.json({ scopes: listMockScopes().map(describeMockScope) });
+});
+
+mockControlRouter.get('/api/__mock/scope/:id', ...gate, (req, res) => {
+  const scope = getMockScope(String(req.params['id']));
+  if (!scope) { res.status(404).json({ error: 'unknown mock scope', scope: req.params['id'] }); return; }
+  res.json({ scope: scopeReport(scope) });
+});
+
+mockControlRouter.delete('/api/__mock/scope/:id', ...gate, (req, res) => {
+  const id = String(req.params['id']);
+  const deleted = deleteMockScope(id);
+  if (scopeIdOf(req) === id) res.clearCookie(MOCK_SCOPE_COOKIE, { path: '/' });
+  if (!deleted) { res.status(404).json({ error: 'unknown mock scope', scope: id }); return; }
+  res.json({ deleted: id });
+});
+
+// ── Identity clones ────────────────────────────────────────────────────────
+//
+// A test user minted from a seed persona: same grants, person link and name,
+// its own id and session epoch (providers/identity.ts `cloneIdentity`). Sign
+// in as it with the ordinary picker login, `POST /api/session/login {userId}`.
+
+mockControlRouter.post('/api/__mock/identity/clone', ...gate, (req, res) => {
+  const body = (req.body ?? {}) as { from?: unknown; label?: unknown; ttlMs?: unknown };
+  if (typeof body.from !== 'string' || !body.from) { res.status(400).json({ error: 'from (a seed user id) is required' }); return; }
+  try {
+    const clone = cloneIdentity(body.from, {
+      label: typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, 80) : null,
+      ...(typeof body.ttlMs === 'number' ? { ttlMs: body.ttlMs } : {}),
+    });
+    res.status(201).json({ clone });
+  } catch (err) {
+    if (err instanceof CloneRefused) { res.status(err.status).json({ error: err.message, from: body.from }); return; }
+    throw err;
+  }
+});
+
+mockControlRouter.get('/api/__mock/identity/clones', ...gate, (_req, res) => {
+  res.json({ clones: listIdentityClones() });
+});
+
+mockControlRouter.delete('/api/__mock/identity/clone/:id', ...gate, (req, res) => {
+  const id = String(req.params['id']);
+  if (!deleteIdentityClone(id)) { res.status(404).json({ error: 'unknown clone', id }); return; }
+  res.json({ deleted: id });
+});
+
 // ── The header seam ────────────────────────────────────────────────────────
 
 /**
@@ -588,6 +812,8 @@ export function __resetMockControlState(): void {
   overrides.clear();
   globalScenario = DEFAULT_SCENARIO;
   injected = null;
+  clearMockScopes();
+  identityClonesFixture.reset();
   resetDemoDirector();
   resetDistillationDemo();
 }

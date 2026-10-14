@@ -164,8 +164,9 @@ middleware is ever reachable from something other than localhost.
 |---|---|
 | `GET /api/__mock/scenarios` | The menu: every world with its one-line description, and per fixture the line *that* fixture declares (fixtures declaring nothing report the shared line from `SCENARIOS`). |
 | `POST /api/__mock/scenario` `{ scenario, fixture? }` | Switch everything to a world, or pin one fixture to it. |
-| `POST /api/__mock/reset` `{ fixture? }` | Put the starting state back — everything to `default`, or drop one fixture's pin. |
-| `GET /api/__mock/state` | Which world each fixture is in, with a row count each. Paste this into the journey log. |
+| `POST /api/__mock/reset` `{ fixture? }` | Put the starting state back — everything to `default` (and every request scope and identity clone removed), or drop one fixture's pin. |
+| `GET /api/__mock/state` | Which world each fixture is in, with a row count each, plus how many request scopes and identity clones are live. Paste this into the journey log. |
+| `/api/__mock/scope…`, `/api/__mock/identity/clone…` | Per-context worlds and per-run identities — see [Scopes and clones](#scopes-and-clones--parallel-runs-without-a-shared-world). |
 
 ```bash
 curl -s localhost:3011/api/__mock/scenarios              # what can I ask for?
@@ -205,6 +206,142 @@ mock-served** — nothing is stamped outside a non-production mock process, whic
 makes the header a screenshot-legible answer to "was this real data?". (`/health`
 and `/api/health` are registered before the mount and are deliberately not
 stamped.)
+
+## Scopes and clones — parallel runs without a shared world
+
+`POST /api/__mock/scenario` switches the **one** world every session shares, and
+a tenant/role switch bumps the user's session epoch, which revokes every other
+cookie that user holds within 120 s. Together they meant two browser runs could
+not coexist: one auditor's `empty` emptied the other's table, and two runs as
+`u-vera` signed each other out. Two additions to the control plane, same gate
+(mock provider on, `NODE_ENV !== 'production'`, optional `MOCK_CONTROL_SECRET`),
+remove both. Code: `middleware/src/mock/core/scope.ts`,
+`middleware/src/mock/identity-clones.ts`, the routes in
+`middleware/src/routes/mock-control.ts`; contracts in
+`middleware/src/routes/__tests__/mock-scope.test.ts`.
+
+### Request scopes
+
+| Route | Does |
+|---|---|
+| `POST /api/__mock/scope` `{ scenario, fixture? \| fixtures?, label?, ttlMs?, delayMs? }` | Mint a scope. `201 { scope, cookie: { name, value }, header }` and `Set-Cookie: orgiq.mock-scope=<id>`. |
+| `GET /api/__mock/scope` | Live scopes. |
+| `GET /api/__mock/scope/:id` | One scope, with a row count for every fixture read inside it. |
+| `DELETE /api/__mock/scope/:id` | Drop it and its rows. |
+
+A request carrying the id — the `orgiq.mock-scope` cookie or the `x-mock-scope`
+header — runs inside the scope (an `AsyncLocalStorage` entered by the control
+plane's router-level middleware, so every route mounted after it resolves
+fixtures through the scope, across awaits and timers the handler starts). No
+other request sees it. `{ scenario }` scopes every fixture;
+`{ scenario, fixture }` only that one (the rest of the scope is `default`);
+`{ fixtures: { key: scenario }, scenario? }` several over an optional base.
+`demo` and `distillation-demo` are refused: their directors are process-wide.
+
+**Copy-on-write.** The first read of a fixture inside a scope materializes the
+scope's own rows — a `structuredClone` of the shared rows of that scenario if
+they are live, else the scenario's factory — and keeps them on the scope. A
+write under the scope mutates that copy; the shared rows, the global world and
+every other scope are untouched, and a later shared write is not seen by a scope
+that already copied. A global switch or a pin does not reach into a scope (a
+pinned fixture's wrapper steps aside when a scope is active).
+
+**Data states.** Every registry scenario, plus three the registry derives for
+any fixture without the fixture declaring them:
+
+| State | Rows |
+|---|---|
+| `long-text` | Default rows with human-text fields (`*name`, `*title`, `*email`, `*label`, `*summary`, `*headline`, `*subject`, `*description`, `*caption`) padded to exactly 80 characters. A field qualifies only if it reads as prose — holds a space or is an email — so `name: 'orgiq-supervisor'`-style keys other code looks rows up by stay intact. Emails stay valid addresses. |
+| `many` | ≥ 200 rows: the fixture's declared `large` when that is big enough, else its rows replicated with `-m<n>` id suffixes. An empty fixture stays empty. |
+| `loading` | Default rows; every scoped response is held back `delayMs` (default 2 500, capped at 10 000). |
+
+`empty` and `error` are generic **only for a fixture the scope names**
+(`fixture`/`fixtures`): `[]`, or a read that throws like the declared error
+branches do. A whole-world `empty`/`error` scope keeps the registry's rule —
+declared branches only — because emptying a fixture nobody designed an empty
+state for (the capability catalogue, the cast) breaks the page instead of
+showing its empty state. `large`/`fresh` must be declared to be named (409
+otherwise, the same refusal as a pin).
+
+An id naming no live scope (expired, deleted, reset, forged) answers **410** on
+every non-control-plane route rather than being served the shared world: a
+context that believes it is in its own world must not write into everyone's.
+Scoped responses carry `X-Mock-Scenario: <scope base>`, `X-Mock-Scope: <id>` and
+`X-Mock-Scope-Fixtures: key=scenario,…` (no `Pins`). Scopes expire after 30 min
+by default (`ttlMs`, at most 6 h); at most 64 live at once.
+
+### What a scope does not reach
+
+These read state that is not a fixture read inside the request, so they serve
+the **shared** world even for a scoped context. Each is honest about it rather
+than half-scoped:
+
+- **The realtime gateway on `/ws`** (chat, presence, reactions, notifications
+  pushed over the socket, the work-graph stream's socket side). Socket frames
+  are not HTTP requests through the control plane; the upgrade carries no scope.
+- **In-memory mirrors** seeded from a copy of fixture rows: the devbox fleet
+  (`lib/devbox-fleet.ts`), crawl targets / crawls / ingest schedules, the
+  notification inbox (`lib/notification-store.ts`), the social chat cache
+  (`lib/social-chat.ts`). A scoped read of their routes shows the shared copy;
+  a scoped write to them is a shared write.
+- **Identity** — the grant-writes and clone fixtures are `scoped: false`
+  (`FixtureSpec.scoped`): the session middleware reads them before any scope is
+  entered, and a directory forked per scope would let a scope mint grants.
+- **The demo directors** (`demo`, `distillation-demo`) and anything their
+  timers write; the restart snapshot (scopes are memory-only and die with the
+  process).
+- **Module-level state that is not a registered fixture** — the same set
+  `POST /api/__mock/reset` cannot reach.
+- Any provider path that is not a fixture read at all (real Aurora, AWS).
+
+### Identity clones
+
+| Route | Does |
+|---|---|
+| `POST /api/__mock/identity/clone` `{ from, label?, ttlMs? }` | Mint a clone of a seed persona. `201 { clone }`; id `<from>-clone-<8 hex>`. |
+| `GET /api/__mock/identity/clones` | Live clones. |
+| `DELETE /api/__mock/identity/clone/:id` | Remove one; its sessions die at the next grants refresh. |
+
+A clone carries the persona's grants as they stand (grant writes included), its
+person link, name and email, and **its own id and session epoch** (starting at
+0). Sign in with the ordinary picker login, `POST /api/session/login
+{ userId: <clone id> }`. A tenant/role switch bumps only the clone's epoch, so
+it revokes neither the persona nor another clone. Clones resolve through
+`getUser` (login, the grants refresh, the realtime authority) but are left out
+of `listUsers`, so the picker and directory listings never show them; grant
+writes to a clone land on the clone's row, never the persona's. Later grant
+writes to the persona do **not** follow into an existing clone. Records keyed by
+user id rather than person id (a notification addressed to `u-vera`) are the
+persona's, not the clone's. Clones need `MOCK_AURORA` (409 otherwise); a clone
+of a clone is refused.
+
+Clones are rows of the registered `identity.clones` fixture: a full
+`POST /api/__mock/reset` removes every clone and every scope; a global scenario
+switch keeps clones (another auditor asking for `empty` must not sign this run
+out). They expire after 2 h by default (`ttlMs`, at most 12 h; 200 live at most).
+
+**Both are memory-only.** A BFF restart — and under Tilt `tsx watch` restarts
+the BFF on every edit under `middleware/src` — drops every scope and clone: a
+scoped context then gets 410 on every call and a clone's cookie 401
+(`SESSION_INVALID`). Measured 2026-10-14 during the live proof below: another
+lane's edit restarted the BFF mid-run and both contexts lost their world. A run
+that must survive edits re-mints (`openAsClone` again) rather than retrying.
+
+### From Playwright
+
+`portal/e2e/realSession.ts`:
+
+```ts
+const a = await openAsClone(browser, 'u-vera', { url: '/iq/work' });                 // clone, default world
+const b = await openAsClone(browser, 'u-vera', { url: '/iq/work', scope: 'empty' }); // clone, its own empty world
+const s = await withMockScope(context, { scenario: 'error', fixture: 'work-items' }); // any context
+await s.dispose(); await a.close(); await b.close();                                  // close() deletes scope + clone
+```
+
+The UI DOM audit adapter signs each actor in as a clone when
+`UI_DOM_AUDIT_CLONES=1` (and puts it in a scope with
+`UI_DOM_AUDIT_SCOPE=<scenario>`); without the flag it signs in as the seed
+persona exactly as before.
 
 ## The devbox, offline
 

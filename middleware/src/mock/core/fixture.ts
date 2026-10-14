@@ -15,6 +15,10 @@
 
 import type { Fixture, FixtureRegistry, Scenario, ScenarioName } from './contract.js';
 import { mockRestartSnapshot, restoredFixtureRows } from '../restart-state.js';
+import {
+  cloneRows, currentMockScope, isDataState, lengthen, MANY_ROWS, multiply,
+  scopedUnavailable, scopeNamesFixture, scopeScenarioFor, type MockScope,
+} from './scope.js';
 
 /** Produces a fresh, mutable row set. Called on first read and on every reset. */
 export type RowsFactory<Row> = () => Row[];
@@ -31,6 +35,14 @@ export interface FixtureSpec<Row> {
   scenarios: { default: RowsFactory<Row> } & Partial<Record<ScenarioName, RowsFactory<Row>>>;
   /** Defaults to the module-level `fixtureRegistry`; tests pass their own. */
   registry?: MockFixtureRegistry | null;
+  /**
+   * `false` keeps this fixture out of request scopes (core/scope.ts): every
+   * read, scoped or not, sees the one shared world. For process-wide state a
+   * scope must never fork — the identity directory's grant writes and clones,
+   * which the session middleware reads before any scope is entered. Default
+   * `true`.
+   */
+  scoped?: boolean;
 }
 
 /**
@@ -160,6 +172,47 @@ export function defineFixture<Row>(spec: FixtureSpec<Row>): Fixture<Row> {
   const resolve = (scenario?: ScenarioName): ScenarioName =>
     scenario ?? (registry ? registry.scenario() : 'default');
 
+  const scoped = spec.scoped !== false;
+  const declared = new Set(Object.keys(spec.scenarios) as ScenarioName[]);
+
+  /** The shared rows of a scenario as a scope's starting point: a copy of what is live, or the seed. */
+  const seedFor = (name: ScenarioName): Row[] => {
+    const shared = live.get(name);
+    return (shared && cloneRows(shared)) ?? factoryFor(name)();
+  };
+
+  /**
+   * Copy-on-write read inside a request scope. The scope's rows are built once
+   * per scenario and kept on the scope, so a write under the scope lands there
+   * and the shared `live` map is never handed out.
+   */
+  const scopedRows = (scope: MockScope, asked: ScenarioName | undefined): Row[] => {
+    const name = asked ?? scopeScenarioFor(scope, key);
+    scope.touched.add(key);
+    let mine = scope.rows.get(fixture) as Map<string, Row[]> | undefined;
+    if (!mine) { mine = new Map(); scope.rows.set(fixture, mine as Map<string, unknown[]>); }
+    const held = mine.get(name);
+    if (held) return held;
+    let rows: Row[];
+    if (isDataState(name)) {
+      if (name === 'long-text') rows = lengthen(seedFor('default')) as Row[];
+      else if (name === 'many') {
+        const large = declared.has('large') ? factoryFor('large')() : [];
+        rows = large.length >= MANY_ROWS ? large : multiply(large.length > 0 ? large : seedFor('default'));
+      } else rows = seedFor('default');
+    } else if (declared.has(name)) {
+      rows = seedFor(name); // a declared `error` throws from its factory, every read
+    } else if (name === 'empty' && scopeNamesFixture(scope, key)) {
+      rows = [];
+    } else if (name === 'error' && scopeNamesFixture(scope, key)) {
+      throw scopedUnavailable(key);
+    } else {
+      rows = seedFor('default');
+    }
+    mine.set(name, rows);
+    return rows;
+  };
+
   const fixture: Fixture<Row> = {
     key,
 
@@ -169,6 +222,8 @@ export function defineFixture<Row>(spec: FixtureSpec<Row>): Fixture<Row> {
      * deliberately not a copy — `reset` is how you get the seed back.
      */
     rows(scenario?: ScenarioName): Row[] {
+      const scope = scoped ? currentMockScope() : undefined;
+      if (scope) return scopedRows(scope, scenario);
       const name = resolve(scenario);
       let rows = live.get(name);
       if (!rows) {
@@ -182,7 +237,8 @@ export function defineFixture<Row>(spec: FixtureSpec<Row>): Fixture<Row> {
      * Rebuild from the factory. With no argument this resets every scenario
      * this fixture has materialized, not just the active one — a scenario
      * switch should never expose the mutations left behind in a world the
-     * caller has since walked away from.
+     * caller has since walked away from. Scopes keep their own rows: a reset
+     * of the shared world does not reach into a scope (DELETE the scope).
      */
     reset(scenario?: ScenarioName): void {
       if (scenario) live.delete(scenario);
@@ -190,10 +246,7 @@ export function defineFixture<Row>(spec: FixtureSpec<Row>): Fixture<Row> {
     },
   };
 
-  declaredScenarios.set(
-    fixture as unknown as Fixture<never>,
-    new Set(Object.keys(spec.scenarios) as ScenarioName[]),
-  );
+  declaredScenarios.set(fixture as unknown as Fixture<never>, declared);
 
   return registry ? registry.register(fixture) : fixture;
 }

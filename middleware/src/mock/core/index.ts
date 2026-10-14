@@ -40,3 +40,22 @@ export {
 
 export type { Accessor } from './derive.js';
 export { countBy, sumBy, groupBy, latestBy, todayInUtc, toRecord } from './derive.js';
+
+export type { DataState, MockScope, ScopeScenario, CreateScopeInput } from './scope.js';
+export {
+  currentMockScope,
+  runInMockScope,
+  runOutsideMockScope,
+  createMockScope,
+  getMockScope,
+  deleteMockScope,
+  listMockScopes,
+  clearMockScopes,
+  describeMockScope,
+  isDataState,
+  DATA_STATES,
+  MANY_ROWS,
+  LONG_TEXT_LENGTH,
+  MAX_DELAY_MS,
+  ScopeLimitError,
+} from './scope.js';

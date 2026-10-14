@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
-import { signIn } from './realSession';
+import { cloneIdentity, signIn, withMockScope, type MockScopeScenario } from './realSession';
 import { selectAuditRoutes, matchesAuditLocation, auditAliasTarget } from './ui-dom-audit.routes';
 import { pipelineComposerPolicy, tenantComposerPolicy } from './ui-dom-audit.policies';
 import { staticInventory, paramInventory, PARAM_ROUTES, OBSERVED_ROUTES, resolveParam, SWEEP_USER, sourceDigest, type InventoryRoute } from './route-inventory';
@@ -154,7 +154,17 @@ export default {
       required: ['$header', '$footer', '$shellColumns', ...(r.judges?.includes('table') ? ['$tables'] : []), ...(r.kind === 'chat' && r.source === 'param' ? ['$conversationState'] : [])],
     }));
   },
-  authenticate: (context: Parameters<typeof signIn>[0], spec: InventoryRoute) => signIn(context, spec.user ?? SWEEP_USER, { tenant: spec.tenant }),
+  // Default: sign in as the seed persona itself. UI_DOM_AUDIT_CLONES=1 signs each actor in as a
+  // fresh dev:mock clone of that persona (own session epoch), so the audit runs beside other
+  // browser runs as the same persona without revoking them; UI_DOM_AUDIT_SCOPE=<scenario> also puts
+  // the actor's context in a scoped dev:mock world (docs/mock-floor.md § Scopes and clones).
+  authenticate: async (context: Parameters<typeof signIn>[0], spec: InventoryRoute) => {
+    const persona = spec.user ?? SWEEP_USER;
+    if (process.env.UI_DOM_AUDIT_CLONES !== '1') return signIn(context, persona, { tenant: spec.tenant });
+    const clone = await cloneIdentity(context.request, persona, 'ui-dom-audit');
+    if (process.env.UI_DOM_AUDIT_SCOPE) await withMockScope(context, process.env.UI_DOM_AUDIT_SCOPE as MockScopeScenario);
+    return signIn(context, clone, { tenant: spec.tenant });
+  },
   async resolveCases(context: any, cases: any[]) {
     return Promise.all(cases.map(async spec => {
       if (spec.auditPreservePath) return spec;

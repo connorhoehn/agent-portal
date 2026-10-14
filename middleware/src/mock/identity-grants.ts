@@ -20,6 +20,9 @@ export interface IdentityGrantWriteRow {
 
 export const identityGrantWritesFixture = defineFixture<IdentityGrantWriteRow>({
   key: 'identity.grant-writes',
+  // Identity is one directory for the whole process: the session middleware
+  // reads it before any request scope is entered, so a scope must not fork it.
+  scoped: false,
   scenarios: {
     default: () => [],
   },

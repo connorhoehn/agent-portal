@@ -817,8 +817,14 @@ export const REFUSAL_RULES: readonly RefusalRule[] = [
       "The capture's own tool. `POST /api/__mock/scenario` switches the world " +
       'every later shape would be captured in, so the harness may not replay ' +
       'it. (`POST /api/__mock/reset` IS replayed — the sweep calls it between ' +
-      'every write anyway, so its shape comes for free and costs nothing.)',
-    applies: (route) => route === 'POST /api/__mock/scenario',
+      'every write anyway, so its shape comes for free and costs nothing.) ' +
+      '`POST /api/__mock/scope` sets a scope cookie on the caller, which would ' +
+      'move every later request of the sweep into that scope; ' +
+      '`POST /api/__mock/identity/clone` mints a user the sweep would then have ' +
+      'to sign in as to learn anything. Both shapes are pinned by ' +
+      'routes/__tests__/mock-scope.test.ts instead.',
+    applies: (route) => route === 'POST /api/__mock/scenario'
+      || route === 'POST /api/__mock/scope' || route === 'POST /api/__mock/identity/clone',
   },
   {
     id: 'spends',

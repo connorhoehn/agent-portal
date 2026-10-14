@@ -15,6 +15,12 @@ import {
 import { config } from '../config.js';
 import type { Grants } from '../lib/session.js';
 import { identityGrantWritesFixture } from '../mock/identity-grants.js';
+import {
+  findClone, liveClones, removeClone, DEFAULT_CLONE_TTL_MS, MAX_CLONE_TTL_MS, MAX_CLONES,
+  type IdentityCloneRow,
+} from '../mock/identity-clones.js';
+import { randomBytes } from 'node:crypto';
+import { clock } from '../mock/core/index.js';
 
 export interface TenantInfo {
   id: string;
@@ -135,7 +141,68 @@ function fallbackUsers(): UserInfo[] {
     return grants ? { ...u, grants: structuredClone(grants) } : u;
   });
 }
-const fallbackUser = (id: string): UserInfo | null => fallbackUsers().find((u) => u.id === id) ?? null;
+/**
+ * One user by id: the seed mirror, then the live identity clones
+ * (mock/identity-clones.ts). Clones resolve here — login, the grants refresh
+ * and the realtime authority all read through `getUser` — but are left out of
+ * `listUsers`, so the picker and directory listings never show them.
+ */
+const fallbackUser = (id: string): UserInfo | null =>
+  fallbackUsers().find((u) => u.id === id) ?? cloneAsUser(findClone(id));
+
+function cloneAsUser(clone: IdentityCloneRow | null): UserInfo | null {
+  if (!clone) return null;
+  return {
+    id: clone.id, displayName: clone.displayName, email: clone.email, personId: clone.personId,
+    grants: structuredClone(clone.grants), epoch: clone.epoch,
+  };
+}
+
+export class CloneRefused extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
+/**
+ * Mint an ephemeral clone of a seed persona (dev:mock only; the control plane
+ * gates the route). Same grants (as they stand now, grant writes included),
+ * person link and display name; its own id and session epoch.
+ */
+export function cloneIdentity(from: string, opts: { label?: string | null; ttlMs?: number } = {}): IdentityCloneRow {
+  if (!config.mock?.aurora) throw new CloneRefused('identity clones need MOCK_AURORA (the offline directory)', 409);
+  const persona = fallbackUsers().find((u) => u.id === from);
+  if (!persona) {
+    const isClone = Boolean(findClone(from));
+    throw new CloneRefused(isClone ? 'clone a seed persona, not a clone' : `unknown persona ${from}`, isClone ? 400 : 404);
+  }
+  const rows = liveClones();
+  if (rows.length >= MAX_CLONES) throw new CloneRefused(`at most ${MAX_CLONES} live clones; POST /api/__mock/reset`, 429);
+  const ttl = typeof opts.ttlMs === 'number' && Number.isFinite(opts.ttlMs) && opts.ttlMs > 0
+    ? Math.min(opts.ttlMs, MAX_CLONE_TTL_MS) : DEFAULT_CLONE_TTL_MS;
+  const now = clock.now().getTime();
+  const row: IdentityCloneRow = {
+    id: `${persona.id}-clone-${randomBytes(4).toString('hex')}`,
+    from: persona.id,
+    label: opts.label ?? null,
+    displayName: persona.displayName,
+    email: persona.email,
+    personId: persona.personId,
+    grants: structuredClone(persona.grants),
+    epoch: 0,
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + ttl).toISOString(),
+  };
+  rows.push(row);
+  return row;
+}
+
+/** Remove one clone; the next grants refresh treats its sessions as a deleted account. */
+export function deleteIdentityClone(id: string): boolean {
+  if (!removeClone(id)) return false;
+  directoryChanged(id);
+  return true;
+}
+
+export { liveClones as listIdentityClones };
 
 // ── RDS Data API helpers (local to this module) ──────────────────────────────
 
@@ -379,7 +446,9 @@ export async function bumpSessionEpoch(userId: string): Promise<number> {
   // MOCK_AURORA's authoritative reads are the seed mirror (getUser/listUsers
   // above), so its epoch is the one a live session is checked against.
   if (!auroraConfigured() || config.mock?.aurora) {
-    const u = FALLBACK_USERS.find(x => x.id === userId);
+    // A clone's epoch is its own: bumping it never touches the persona's.
+    const clone = findClone(userId);
+    const u = clone ?? FALLBACK_USERS.find(x => x.id === userId);
     const next = u ? (u.epoch = (u.epoch ?? 0) + 1) : 1;
     directoryChanged(userId);
     return next;
@@ -444,11 +513,19 @@ export async function createUser(
  */
 export async function setGrants(userId: string, grants: Grants): Promise<void> {
   if (config.mock?.aurora) {
-    if (!FALLBACK_USERS.some((u) => u.id === userId)) throw new Error(`No user ${userId} in the offline directory`);
+    const clone = findClone(userId);
+    if (!clone && !FALLBACK_USERS.some((u) => u.id === userId)) throw new Error(`No user ${userId} in the offline directory`);
     const clean: Grants = {};
     for (const [tenant, roles] of Object.entries(grants)) {
       const unique = [...new Set(roles)];
       if (unique.length) clean[tenant] = unique;
+    }
+    if (clone) {
+      // A clone's grants live on its own row, so a provisioning write under a
+      // clone never changes the persona it came from.
+      clone.grants = clean;
+      directoryChanged(userId);
+      return;
     }
     const rows = identityGrantWritesFixture.rows();
     const at = rows.findIndex((r) => r.userId === userId);
@@ -480,6 +557,6 @@ export async function setGrants(userId: string, grants: Grants): Promise<void> {
  */
 export function displayNameForSubject(subject: string | null | undefined): string | null {
   if (!subject) return null;
-  return FALLBACK_USERS.find((u) => u.id === subject)?.displayName ?? null;
+  return FALLBACK_USERS.find((u) => u.id === subject)?.displayName ?? findClone(subject)?.displayName ?? null;
 }
 
