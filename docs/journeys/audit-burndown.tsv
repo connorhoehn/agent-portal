@@ -1,0 +1,58 @@
+# Journey-map audit burn-down (docs/journeys.md "Journey maps"): route key, rule, owner, reason.
+# A finding listed here is recorded in the log's dom-audit: line instead of failing the walk. Every row is a
+# decision a person made (run-maps.mjs burndown only prints candidates); delete a row and that finding fails again.
+# Written 2026-10-14 from the first runner walks of the access and distillation families.
+/access/approvals	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/approvals	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/approvals	control.font-size	ui-components CollectionCommandHost	the composer status dismiss renders 13px; it appears only after a command runs, a state the standard sweep never reaches (found by the journey maps)
+/access/audit	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/audit	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/audit	content.honesty	lane A: access tables	deep-audit rule since 2.451.0: request ids (req-0001) shown as plain text instead of the record name or code style
+/access/audit	control.font-size	ui-components CollectionCommandHost	the composer status dismiss renders 13px; it appears only after a command runs, a state the standard sweep never reaches (found by the journey maps)
+/access/catalog	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/catalog	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/catalog	control.font-size	ui-components CollectionCommandHost	the composer status dismiss renders 13px; it appears only after a command runs, a state the standard sweep never reaches (found by the journey maps)
+/access/configuration	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/configuration	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/policies	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/policies	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/policies	control.font-size	ui-components CollectionCommandHost	the composer status dismiss renders 13px; it appears only after a command runs, a state the standard sweep never reaches (found by the journey maps)
+/access/policies/:id	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/policies/:id	a11y.heading-order	lane D fix lane: page outline	deep-audit rule since 2.451.0: a heading level is skipped under the page title
+/access/policies/:id	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/requests	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/requests	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/requests	content.honesty	lane A: access tables	deep-audit rule since 2.451.0: request ids (req-0001) shown as plain text instead of the record name or code style
+/access/requests	control.font-size	ui-components CollectionCommandHost	the composer status dismiss renders 13px; it appears only after a command runs, a state the standard sweep never reaches (found by the journey maps)
+/access/requests/:id	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/requests/:id	a11y.heading-order	lane D fix lane: page outline	deep-audit rule since 2.451.0: a heading level is skipped under the page title
+/access/requests/:id	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/requests/:id	composer.presence	portal/e2e/ui-dom-audit.adapter.ts (record composer policy)	a request outside the read rule renders Request not found without the composer, but the adapter classifies only -missing ids as missing records
+/access/requests/new	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/requests/new	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/reviews	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/reviews	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/reviews/:id	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/access/reviews/:id	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/access/reviews/:id	composer.presence	portal/e2e/ui-dom-audit.adapter.ts (record composer policy)	a request outside the read rule renders Request not found without the composer, but the adapter classifies only -missing ids as missing records
+/assessment/teams	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/assessment/teams	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/iq/distillation/activity	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/iq/distillation/activity	a11y.landmarks	lane D fix lane: AppShell and section rails	deep-audit rule since 2.451.0: two unnamed complementary landmarks (shell rail and section rail)
+/iq/distillation/activity	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/iq/distillation/activity	text.leading-separator	lane D fix lane: distillation activity rows	deep-audit rule since 2.451.0: a separator glyph leads a text run in the run rows
+/iq/distillation/knowledge	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/iq/distillation/knowledge	a11y.landmarks	lane D fix lane: AppShell and section rails	deep-audit rule since 2.451.0: two unnamed complementary landmarks (shell rail and section rail)
+/iq/distillation/knowledge	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/iq/distillation/knowledge?item=	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/iq/distillation/knowledge?item=	a11y.landmarks	lane D fix lane: AppShell and section rails	deep-audit rule since 2.451.0: two unnamed complementary landmarks (shell rail and section rail)
+/iq/distillation/knowledge?item=	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/iq/distillation/review?sample=	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/iq/distillation/review?sample=	a11y.landmarks	lane D fix lane: AppShell and section rails	deep-audit rule since 2.451.0: two unnamed complementary landmarks (shell rail and section rail)
+/iq/distillation/review?sample=	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/iq/projects	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/iq/projects	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/pipelines/runs	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/pipelines/runs	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/social/channels	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
+/social/channels	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)

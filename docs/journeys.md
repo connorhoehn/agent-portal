@@ -2,7 +2,8 @@
 
 A journey log (`docs/<family>-journeys/<dir>/<surface>.md` plus its
 screenshot) is the record of a real browser walk of one surface as one seeded
-user. Each family's `PROTOCOL.md` says how to walk and which fields to write;
+user. **The preferred way to produce one is a journey map walked by the runner**
+(below, "Journey maps"); a hand walk is still accepted where no map exists. Each family's `PROTOCOL.md` says how to walk and which fields to write;
 each family's validator judges the fields. This page is the one rule for the
 part they all share: **freshness and sealing**. One implementation backs it:
 `scripts/journeys/journeys.mjs`, sourced by every judge through
@@ -18,6 +19,120 @@ part they all share: **freshness and sealing**. One implementation backs it:
 | `distillation-journeys` | `validate-distillation.sh` | the current surfaces (knowledge, review, activity) |
 | `search-journeys` | `validate-search-workspace.sh` | every log |
 | `branding-journeys` | `validate-branding.sh` | the four theme cells |
+
+## Journey maps — executable walks (preferred)
+
+A journey map is the walk as data: who walks, what they want, the ordered
+steps, what each step must show, and which fields of the family's
+`PROTOCOL.md` the steps prove. `scripts/journeys/run-maps.mjs` walks it
+headlessly, measures every step with the ui-dom-audit, writes the family's log
+in its protocol's format with an honest verdict, and seals the directory only
+when every map in it passed. Coverage over all maps is generated into
+[docs/journeys/coverage.md](journeys/coverage.md).
+
+```bash
+node scripts/journeys/run-maps.mjs check                       # validate every map (no browser)
+node scripts/journeys/run-maps.mjs walk --family access        # walk, write logs, seal passing directories
+node scripts/journeys/run-maps.mjs walk --only requester/ --no-seal
+node scripts/journeys/run-maps.mjs coverage [--check]          # docs/journeys/coverage.md
+node scripts/journeys/run-maps.mjs burndown --family access    # route × rule pairs the last walk found, not yet owned
+node --test scripts/journeys/tests/*.test.mjs                  # the runner's own tests
+```
+
+### The format
+
+Maps live at `docs/journeys/maps/<family>/<dir>/<surface>.ts` (the log they
+write is `docs/<family>-journeys/<dir>/<surface>.md`) and default-export one
+object `satisfies JourneyMap` (types: `scripts/journeys/journey-map.ts`).
+Files starting with `_` are shared fragments: each family keeps its surfaces'
+steps once in `_shared.ts`, parameterised by role, so the roles' maps differ
+only where the separation of duties says they must.
+
+| key | what |
+|---|---|
+| `family`, `log`, `kind` | which family profile (`scripts/journeys/maps.mjs` `PROFILES`: the field list of each log kind — `surface`, `isolation-inbound`, `isolation-outbound`) |
+| `persona` | seed user, tenant and role (asserted on `/api/session/me`); `switchRole`/`switchTenant` when the role is not the user's landing |
+| `goal` | one sentence; it opens the log's `notes:` |
+| `scenario` | `'shared'` (the shared mock, read-only) or `{ scope }` — a request-scoped mock world (`withMockScope`, copy-on-write); a map that writes must have one |
+| `identity` | `clone` (default): a fresh clone of the persona per walk (`openAsClone`), so walks run beside audits and each other. `persona` (with `identityReason`): the seed user itself — the runner walks it only with `--allow-persona`, and never while `pgrep -f audit.mjs` shows an audit |
+| `writes`, `hold` | a map whose steps write declares `writes: true` (and a scope); `hold: '<why>'` keeps a map from being walked at all (e.g. a write that reaches state no scope covers) |
+| `fields`, `claims` | static fields (`surface`, `pages`); the value each claim field states when its proving steps pass (default `pass`) |
+| `steps` | ordered; the first navigates |
+
+A step is one of `navigate {url}`, `click {target}`, `press {key, target?}`,
+`fill {target, value}` (a UI-local control: search, filter, palette, command
+composer), `back`, `wait {target}`, `tab-walk {max?}` (the skill's
+`focusWalk` probe) and `api {url, method?, body?}`. Targets are by role and
+accessible name first (`{ role, name, level?, within? }`), then `testId`,
+`label`, `placeholder`, `text` or `css`. Each step carries `name` (a plain
+sentence written into the log), `state` (the coverage state it shows:
+`default`, `empty`, `filtered-empty`, `not-found`, `refused`, `row-open`,
+`dialog-open`, …), `proves` (the protocol fields it is evidence for) and
+`expect`: `url`, `urlNot`, `visible`, `absent` (not in the DOM at all),
+`hidden`, `text`, `noText`, `disabled`, `enabled`, `focused`, `count`, `attr`,
+`status` (api), `minVisited` (tab-walk), `firstRowTopMax` (the density rule)
+and `noHscroll` (on by default). `expectConsole` names console errors a step
+expects (a 404 lookup); any other console error fails the step.
+
+`check` refuses a map where a claim field of its kind is proven by no step, a
+step writes without `writes: true`, a writing map has no scope, a non-GET api
+call in a read-only map is not a 4xx refusal probe with a `refusal` reason
+(why it cannot write even if the gate were open — e.g. a body the route
+rejects), or any string would put TODO / unverified / placeholder into a log.
+
+### The runner
+
+For each map: a fresh context signed in through `portal/e2e/realSession.ts`
+(`openAsClone` by default; `withMockScope` for a scope), every non-GET request
+the page sends **blocked and recorded** for a read-only map (a user action that
+tried to write fails its step), then per step: act, settle (bounded), judge
+`expect`, record the layout facts the protocols ask for (horizontal scroll,
+h1 size/weight and position, the trail, row heights, the composer's dock,
+first-row-top), measure with the skill, screenshot to
+`.scratch/journeys/<family>/<log>/NN-<action>.jpg`. One protocol rule holds
+throughout: a failed step is recorded and the walk keeps going.
+
+The audit is the skill's own: the runner imports `measureDOM` from
+`.claude/skills/ui-dom-audit/scripts/measure.mjs`, the contract
+`references/work-ui.contract.json` (validated by `run.mjs`'s
+`validateContract`), the adapter's selectors and its composer policy
+(`portal/e2e/ui-dom-audit.adapter.ts`), and applies them the way `run.mjs`
+applies one case (motion paused, fonts and two frames, measured twice,
+instability reported). No rule is forked.
+
+A finding fails the step — except one the **audit burn-down**
+(`docs/journeys/audit-burndown.tsv`: route key, rule, owner, reason) owns.
+Those stay visible in every log's `dom-audit:` line and never vanish; a row
+is a decision a person writes (`run-maps.mjs burndown` only prints
+candidates), and removing a row makes the finding fail again.
+
+A BFF reload drops lane M's in-memory clones and scopes; the runner sees the
+401/410, re-mints and walks the map once more, and says so in `notes:`.
+
+The log is written in the family's field order: the built-in fields
+(`url:` from the URLs actually visited, `audited:`, `session:` with the clone's
+id, `screenshot:` — the first navigate's, or the step marked
+`screenshot: 'log'` — `verdict:`, `console errors:`, `layout:`, `dom-audit:`,
+`notes:`), each claim field as `<claim> — <the proving steps' sentences and
+observations>` or `fail — <the step and its first failure>`, and a step table.
+`verdict: pass` only when every step passed, no unexpected console error
+occurred and layout passed. Then `scripts/journeys/seal.sh <dir>` runs for
+each directory whose every log was written by this run and passed — the same
+seal as for a hand walk, with the same refusals (contracts not measured on the
+current source, the walk proof). A directory with a failed walk is left
+unsealed and its judge stays red.
+
+### What a clone can and cannot walk
+
+A clone carries its persona's grants and person link but its own user id, and
+records keyed by user id stay the persona's. In the access tenant that is
+every request, step and event, so a requester or approver clone owns nothing
+on the shared data: its maps prove the gates and the honest empty and
+not-found states, not the persona's own flows (withdraw, an inbox with a row,
+a decision). Those need either a scoped write that reaches no shared mirror
+(`maps/access/approver/decision-walk.ts`, held: a decision rings the bell
+through the unscoped notification store) or a clone that owns its persona's
+records.
 
 ## The rule: a log is stale when a walked route's rendered contract changed
 

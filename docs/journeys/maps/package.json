@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Journey maps (docs/journeys.md): ES modules, loaded by scripts/journeys/run-maps.mjs under Node and under Playwright."
+}
