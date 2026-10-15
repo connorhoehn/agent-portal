@@ -28,7 +28,7 @@ import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import { SignJWT } from 'jose';
 import {
-  attachRealtimeGateway, channelGuard, gatewayStatsLine, GATEWAY_STATS_TYPE, lobbyGuard, realtimeGatewayEnabled,
+  attachRealtimeGateway, channelGuard, gatewayStatsLine, type GatewayStatsInput, GATEWAY_STATS_TYPE, lobbyGuard, realtimeGatewayEnabled,
   realtimeGatewayStatus, REALTIME_GATEWAY_PATH, statsIntervalMs,
 } from '../realtime-gateway.js';
 import { rejectUnsupportedUpgrades } from '../unsupported-upgrades.js';
@@ -340,7 +340,7 @@ describe('the load line (capacity review #9)', () => {
     // The reading is the library's handle.stats() (0.119); the line adds its type and the store.
     const line = JSON.parse(gatewayStatsLine({
       sockets: 1000, activeCalls: 100, eventLoopDelayP99Ms: 12.35, eventLoopDelayMaxMs: 98, rssMb: 300, ts: '2026-10-01T00:00:00.000Z', store: 'redis',
-    }));
+    } as GatewayStatsInput)); // the library's other readings (0.120 queue depth, inbound) ride along unchanged
     expect(line).toEqual({
       type: GATEWAY_STATS_TYPE, sockets: 1000, activeCalls: 100, eventLoopDelayP99Ms: 12.35, eventLoopDelayMaxMs: 98,
       rssMb: 300, store: 'redis', ts: '2026-10-01T00:00:00.000Z',

@@ -1,0 +1,10 @@
+{
+  "package": "@connorhoehn/realtime-modules",
+  "version": "0.120.0",
+  "realtimeSource": "6dcaaeea8ee5b191a3152d1cbc6f9cb6c04fdc1b",
+  "tag": "v0.120.0",
+  "realtimeArchiveSha256": "578133acd727d202f48f0e676dc887eb9f63abc47fd0dd3426f832986a31f74e",
+  "distributedCore": "077d7594cc412e3153ace47ce0f0b4be60df84d5",
+  "packedWith": "npm pack (prepack: verify:exports + check:contract) from a clean checkout at the tag",
+  "packedOn": "2026-10-14"
+}
