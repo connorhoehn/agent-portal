@@ -298,7 +298,7 @@ export async function resolveSearchRecords(principal: PrincipalRef, refs: Search
     if (ref.type === 'decision') {
       const d = await getDecision(ref.id);
       if (!d) { const design = await getDesignThread(ref.id); return design?.status === 'approved' ? designRecord(design) : null; }
-      return d ? { ...ref, title: d.topic, description: d.summary ?? undefined, status: d.status, href: d.projectId ? `/iq/projects/${enc(d.projectId)}?tab=decisions&decision=${enc(d.id)}` : `/iq/search?type=decision&q=${enc(d.topic)}` } : null;
+      return d ? { ...ref, title: d.topic, description: d.summary ?? undefined, status: d.status, href: `/iq/decisions/${enc(d.id)}` } : null;
     }
     if (ref.type === 'knowledge') { const k = await getItem(ref.id); return k ? knowledgeRecord(k) : null; }
     if (ref.type === 'asset') { const a = await getAsset(ref.id); return a ? { ...ref, title: a.name, description: a.description, status: a.lifecycleStatus, href: `/iq/library/${enc(a.id)}` } : null; }

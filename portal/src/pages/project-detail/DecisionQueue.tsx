@@ -5,6 +5,7 @@
 
 import { ArrowRightIcon, Chip, DataTable, IconButton, InlinePlaceholder, T } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { RecordLink } from '../decisions/RecordLink';
 import { DECISION_TONE } from './projectFormat';
 import type { ProjectDecision } from './types';
 
@@ -18,7 +19,7 @@ const COLUMNS: DataTableColumn<ProjectDecision>[] = [
   {
     key: 'topic', header: 'Decision',
     render: (d) => (
-      <T size="sm" weight="semibold" className="block max-w-[320px] truncate" title={d.topic}>{d.topic}</T>
+      <RecordLink to={`/iq/decisions/${encodeURIComponent(d.id)}`} className="block max-w-[320px] truncate" title={d.topic}>{d.topic}</RecordLink>
     ),
   },
   {

@@ -445,11 +445,8 @@ export function workGraphNodeHref(nodeId: string, edges: Record<string, WorkGrap
     }
     // A sprint has no page of its own: the Sprints lens on the initiatives list.
     case 'sprint': return '/iq/projects?lens=sprints';
-    // A decision lives on its initiative's Decisions tab; an org-wide one has no page.
-    case 'decision': {
-      const project = out('works-on').find(to => to.startsWith('initiative:'));
-      return project ? `/iq/projects/${encodeURIComponent(project.slice('initiative:'.length))}?tab=decisions` : null;
-    }
+    // A decision is a record page of its own, raised against an initiative or org-wide.
+    case 'decision': return `/iq/decisions/${encodeURIComponent(id)}`;
     case 'agent': return `/iq/bots/${encodeURIComponent(id)}`;
     case 'doc': return `/iq/documents/${encodeURIComponent(id)}`;
     default: return null;

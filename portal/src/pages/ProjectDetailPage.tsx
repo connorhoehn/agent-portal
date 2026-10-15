@@ -845,6 +845,7 @@ function ProjectDetailPage() {
         {tab === 'overview' && (
           <InitiativeOverview
             model={overview}
+            decisions={decisions ?? null}
             onOpen={(href) => {
               const [path, childSearch] = href.split('?');
               const params = new URLSearchParams(initiativeHref(project.id, searchParams, listRail.scope).split('?')[1]);

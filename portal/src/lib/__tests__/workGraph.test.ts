@@ -196,14 +196,14 @@ test('view state and open destinations', () => {
   assert.equal(workGraphNodeHref('doc:h.abc', graph.edges, graph.nodes), null);
 });
 
-test('sprint and decision nodes open the pages that serve them, and org-wide decisions open nothing', () => {
+test('sprint and decision nodes open the pages that serve them, and an org-wide decision opens its record', () => {
   const edges = {
     e1: edge('e1', 'decision:d-1', 'initiative:p-a', 'works-on'),
     e2: edge('e2', 'sprint:s-1', 'initiative:p-a', 'works-on'),
   } as never;
   const nodes = { 'decision:d-1': node('decision:d-1', 'change'), 'decision:d-org': node('decision:d-org', 'change'), 'sprint:s-1': node('sprint:s-1', 'task'), 'initiative:p-a': node('initiative:p-a', 'project') } as never;
-  assert.equal(workGraphNodeHref('decision:d-1', edges, nodes), '/iq/projects/p-a?tab=decisions');
-  assert.equal(workGraphNodeHref('decision:d-org', edges, nodes), null);
+  assert.equal(workGraphNodeHref('decision:d-1', edges, nodes), '/iq/decisions/d-1');
+  assert.equal(workGraphNodeHref('decision:d-org', edges, nodes), '/iq/decisions/d-org');
   assert.equal(workGraphNodeHref('sprint:s-1', edges, nodes), '/iq/projects?lens=sprints');
   assert.equal(workGraphNodeHref('flow:osm-1', edges, nodes), null);
 });

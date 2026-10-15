@@ -40,6 +40,7 @@ import { runStateChip } from '../../lib/statusTone';
 import { DECISION_TONE } from '../project-detail/projectFormat';
 import type { OverviewModel } from '../project-detail/overviewModel';
 import type { ProjectDecision } from '../project-detail/types';
+import { RecordLink } from '../decisions/RecordLink';
 import { InitiativeFacts, type InitiativeFactsInput } from './InitiativeDetailsCard';
 import { jobIsLive, logLines, type LogJob } from './initiativePaneModel';
 import { isDetailsShortcut } from './detailsShortcut';
@@ -265,7 +266,8 @@ function DecisionTab({ id, decisions, onOpenWorkItem, onOpenDecisions }: {
           ? <Button variant="link" size="sm" onClick={() => onOpenWorkItem(decision.workItemId!)}><T size="sm" tone="inherit">{decision.workItemTitle}</T></Button>
           : 'None linked', muted: !decision.workItemId },
       ]} />
-      <Inline><Button variant="secondary" size="sm" onClick={onOpenDecisions}>Open Decisions</Button></Inline>
+      <Inline gap="sm"><RecordLink to={`/iq/decisions/${encodeURIComponent(decision.id)}`}>Open the decision record</RecordLink>
+        <Button variant="secondary" size="sm" onClick={onOpenDecisions}>Open Decisions</Button></Inline>
     </Stack>
   );
 }

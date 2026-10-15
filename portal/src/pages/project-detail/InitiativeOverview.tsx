@@ -27,7 +27,11 @@ import {
   type StatStripItem,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { relativeTime } from '../../lib/relativeTime';
+import { RecordLink } from '../decisions/RecordLink';
 import { ATTENTION_NONE, type OverviewModel, type OverviewStat } from './overviewModel';
+import { DECISION_TONE } from './projectFormat';
+import type { ProjectDecision } from './types';
 
 function statItem(s: OverviewStat): StatStripItem {
   return {
@@ -55,8 +59,11 @@ export function InitiativeOverview({
   onOpen,
   onRetry,
   recent,
+  decisions,
 }: {
   model: OverviewModel;
+  /** The initiative's decisions; the ones still waiting are listed, each opening its record. */
+  decisions?: ProjectDecision[] | null;
   /** The Recent activity list (a compact `RecentWorkActivity`); the canvas lives on the Activity tab. */
   recent?: ReactNode;
   /** Client-side navigation to a Work-tab deep link. */
@@ -68,6 +75,7 @@ export function InitiativeOverview({
     if (hit) onOpen(hit.href);
   };
 
+  const waiting = (decisions ?? []).filter((d) => d.status === 'open' || d.status === 'escalated');
   return (
     <Stack gap="xl" className="px-6 pb-6 pt-4" data-testid="initiative-overview">
       {/* Every role here sits on the app's body step (ui-components 2.429.0
@@ -129,6 +137,20 @@ export function InitiativeOverview({
                 data-testid="overview-attention"
               />
             }
+          </PageSection>}
+
+          {waiting.length > 0 && <PageSection size="sm" title="Waiting on a decision" count={waiting.length} data-testid="overview-decisions">
+            <Stack gap="xs">
+              {waiting.map((d) => (
+                <Inline key={d.id} gap="sm" align="center" wrap={false}>
+                  <Chip tone={DECISION_TONE[d.status] ?? 'warning'} size="xs" uppercase>{d.status}</Chip>
+                  <RecordLink to={`/iq/decisions/${encodeURIComponent(d.id)}`}>{d.topic}</RecordLink>
+                  <T size="xs" tone="tertiary" className="truncate">
+                    {[d.requiredRole ? `needs ${d.requiredRole}` : null, d.escalatedAt ? `escalated ${relativeTime(d.escalatedAt)}` : null].filter(Boolean).join(' · ')}
+                  </T>
+                </Inline>
+              ))}
+            </Stack>
           </PageSection>}
 
           <PageSection
