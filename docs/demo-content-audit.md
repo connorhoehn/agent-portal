@@ -447,3 +447,31 @@ tenants get none and the strip hides. The fixed "Demo" samples are gone.
 - **C13** (Rhea, Omar and Priya in the Work org graph) moved to L5:
   `access_schema.sql` already seeds their `people` rows in Aurora; the mock
   org graph and its parity entity do not carry them yet.
+
+## L4 and L5 outcome (2026-10-15)
+
+**Access (L5).** Rhea, Omar and Priya are people in the org graph (`schema/seed.sql`
+appended block, `mock/people.ts`, scores, avatars; Omar manages Rhea via
+`mock/access-people.ts`). Requests are links and "Waiting on" names the decider;
+audit rows carry a `subject` (item and beneficiary, policy title, delegation
+parties) and no ids; role labels (`roleLabel`) and status words replace slugs; the
+`step-approved`/`approved` pair of one decision shows once. Rev-0001 closes in 9
+days and its totals reach every reader. Policies show who changed them; sod-001
+was tightened yesterday and now catches Eli's Org leader request (Priya's step).
+Omar's grant ran out four days ago; req-0006 was decided for Omar by Priya inside
+his delegation. The escalation timer line is hidden when the next tier adds nobody.
+Not done: Rhea as a contributor on Auth Migration (the generator's `smes`,
+`seed_program.sql`, L1's files).
+
+**Pipelines (L4).** Ines records the nine commands and the three ladder runbooks;
+Dara last changed the default approver. Definitions have an Owner column; runs have
+Initiative, Owner and Started by columns and titles in words
+(`lib/pipeline-run-titles.ts`). The ladder, fleet memory and Queues are data-pipeline
+stories (ingest checkpoint, quarantine, schema pin, backfill dedupe) with a backlog on
+the in-process queue (`lib/pipeline-queue-defs.ts`). The seeded consult lives 3 days.
+Not done: a completed dry run (needs a seeded `agent_jobs` row and a decision on which
+runbook; the promotion tests assume none is recorded), initiative-named bot runs beyond
+the title, and the bot run outcomes (L1's `mock/bots.ts`). The demo family's story logs
+all read `fail` on the layout line because every step is `audit: false`
+(`scripts/journeys/maps.mjs` `layoutLine`); story-facts and cross-links pass for the
+access and pipelines stories.
