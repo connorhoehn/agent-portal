@@ -166,3 +166,27 @@ tenant group at most, as clones only.
 
 Identity: "my / me" resolves through `lib/record-owner.ts` (demo-content L0),
 so a clone of a persona searches as that persona.
+
+## Built (2026-10-15)
+
+- **S0.** `scripts/validate-user-search.sh` (catalog integrity, probe freshness by
+  a source digest, ratcheting floors in `scripts/user-search-floors.tsv`, zero-wrong
+  on the best surface as a per-tenant max, the `user-search` journey maps —
+  logs in `docs/user-search-journeys/`, because `docs/search-journeys/` is the
+  search workspace's audit — the storage-agnostic guard, the update-on-write
+  check `scripts/check-search-writers.mjs`, clone parity). Five Work maps walk
+  green; the other tenants' twenty are held for S2/S3 with their reason.
+- **S1.** `middleware/src/lib/search-index/`: `SearchIndex` (memory; kv over the
+  DynamoDB wire — Query/BatchGet/BatchWrite/one GSI), one contract suite over
+  both (the kv leg runs against `localhost:8000` when it answers), partitions per
+  mock scope and world generation, the orgiq projection (person, team,
+  initiative, work, decision with participants, knowledge, asset; collaborator,
+  member, decider edges), update on write from every orgiq writer, the
+  question rewrite (`question.ts`) shared by `/api/search` and the Answer tab's
+  index answers (`answers.ts`), "my / me" through `lib/mine.ts` →
+  `lib/record-owner.ts`. The mock agent routes on the question only.
+- **Measured** (probe digest 77bb1e79): orgiq pass 96% (22/23; baseline 75%),
+  phrasings 93% (59%), wrong on the best surface 0 (26).
+- **Open:** team records are not drawn by the portal until the library's
+  `RecordResultType` has `team` (`docs/ui-components-queue.md`); the palette
+  record group (ui-components 2.457.0 `searchRecords`) is not pinned or wired (S3).
