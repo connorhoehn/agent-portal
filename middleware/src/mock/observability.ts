@@ -643,9 +643,11 @@ const RATIONALES = {
     'Asserts specifics with no supporting document, and one of them contradicts the records.',
   ],
 } as const;
-function rationaleFor(score: number, key: string): string {
+function rationaleFor(score: number, key: string, agentName: string): string {
   const band = score >= 0.8 ? RATIONALES.strong : score >= 0.5 ? RATIONALES.middling : RATIONALES.weak;
-  return band[hash32(`${key}:rationale`) % band.length]!;
+  // The judge reads one agent's answer at a time, so the verdict names the agent: eight agents times a few
+  // verdicts is a page of different sentences rather than one sentence pasted down a column.
+  return `${agentName}: ${band[hash32(`${key}:rationale`) % band.length]!}`;
 }
 
 /**
@@ -851,7 +853,7 @@ function seededTraceRows(scenario?: ScenarioName): MockTraceRow[] {
       prompt_snippet: src.promptSnippet,
       response_snippet: src.responseSnippet,
       judge_score: judge,
-      judge_rationale: judge === null ? null : rationaleFor(judge, id),
+      judge_rationale: judge === null ? null : rationaleFor(judge, id, src.agentName),
       // Non-conforming output is what `schema_valid = false` means, and it is
       // half of what `errorRate` counts. A run that threw produced nothing that
       // could conform; a run that answered did.
@@ -1031,6 +1033,10 @@ function linkA2aParents(rows: MockTraceRow[]): void {
   if (supervisors.length === 0) return;
 
   const at = supervisors.map((r) => new Date(r.tsIso).getTime());
+  // A supervisor call delegates to a few specialists, not to everything that ran after it: without a cap the
+  // latest supervisor of a quiet stretch adopted a dozen children and one run's title filled a page of artifacts.
+  const MAX_CHILDREN = 3;
+  const adopted = new Map<number, number>();
   for (const row of rows) {
     if (row.agent_id === 'orgiq-supervisor') continue;
     if (unit(`${row.invocation_id}:a2a`) >= 0.25) continue;
@@ -1043,6 +1049,8 @@ function linkA2aParents(rows: MockTraceRow[]): void {
     // Nothing had run yet when this one did — an orphan, which is also what a
     // real table holds for the oldest rows in any window.
     if (best < 0) continue;
+    if ((adopted.get(best) ?? 0) >= MAX_CHILDREN) continue;
+    adopted.set(best, (adopted.get(best) ?? 0) + 1);
     row.parent_invocation_id = supervisors[best]!.invocation_id;
   }
 }

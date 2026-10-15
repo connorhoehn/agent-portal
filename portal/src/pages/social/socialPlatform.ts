@@ -186,10 +186,13 @@ export function namesFrom(people: ReadonlyArray<{ userId: string; displayName: s
   return (id) => map.get(id) ?? id;
 }
 
-/** "Town hall" for a room lobby (when known), the other people for a DM. */
+/** "Town hall" for a room lobby (when known), "#general" for a channel huddle, the other people for a DM. */
 export function lobbyLabel(lobby: string, me: string, nameOf: NameOf, rooms: readonly Pick<SocialRoom, 'slug' | 'name'>[] = []): string {
   const slug = roomSlugFromLobby(lobby);
   if (slug) return rooms.find((r) => r.slug === slug)?.name ?? slug;
+  // A huddle opened from a channel is named for the channel.
+  const channel = /^social:ch:([^:]+)$/.exec(lobby);
+  if (channel) return `#${channel[1]}`;
   const ids = dmIds(lobby);
   if (ids) {
     const others = ids.filter((id) => id !== me).map(nameOf);

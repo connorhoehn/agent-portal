@@ -714,7 +714,7 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
       : await exec(
       `SELECT invocation_id::text AS invocation_id,
               ts::text AS ts,
-              agent_id, judge_score, judge_rationale, response_snippet
+              agent_id, judge_score, judge_rationale, response_snippet, prompt_snippet
          FROM observability.invocation_traces
         WHERE ts > now() - INTERVAL '24 hours'
           AND judge_score IS NOT NULL
@@ -728,11 +728,12 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
       const score = r['judge_score'] == null ? null : Number(r['judge_score']);
       const rationale = r['judge_rationale'] == null ? '' : String(r['judge_rationale']);
       const snippet = r['response_snippet'] == null ? '' : String(r['response_snippet']);
+      const asked = r['prompt_snippet'] == null ? '' : String(r['prompt_snippet']).replace(/\s+/g, ' ').trim().slice(0, 60);
       events.push({
         ts: String(r['ts'] ?? ''),
         kind: 'judge-spike',
         severity: score != null && score < 0.2 ? 'critical' : 'warning',
-        title: `Judge regression: ${agentId} scored ${score == null ? '?' : score.toFixed(2)}`,
+        title: `Judge regression: ${agentId} scored ${score == null ? '?' : score.toFixed(2)}${asked ? ` on ${asked}` : ''}`,
         detail: rationale || snippet.slice(0, 140),
         relatedInvocationId: String(r['invocation_id'] ?? ''),
         relatedAgentId: agentId,

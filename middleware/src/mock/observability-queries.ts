@@ -1110,5 +1110,6 @@ export function mockOncallJudgeRegressions(windowHours: number, scenario?: Scena
       judge_score: r.judge_score,
       judge_rationale: r.judge_rationale,
       response_snippet: r.response_snippet,
+      prompt_snippet: r.prompt_snippet,
     }));
 }
