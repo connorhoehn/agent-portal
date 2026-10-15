@@ -69,6 +69,7 @@
 // (`presence:`, `typing:`, `cursor:`) publish under its read authority, so a
 // reader can still say "I am here" without being able to post.
 
+import { defineChannelFamilies, type ChannelFamilies, type ChannelFamily } from '@connorhoehnslalom/realtime-modules/server';
 import type { PageResourceKind } from './page-resources.js';
 
 /** `social` appears ONLY for the `social:workgraph` family (it is not a partition tenant: TENANT_PARTITIONS stays three, and every other `social:` name keeps its own rules). */
@@ -79,7 +80,7 @@ export type ChannelService = 'chat' | 'presence' | 'typing' | 'cursor' | 'reacti
  * `activeTenant` is false (grant holders anywhere), plus an optional Cedar action. */
 export interface ChannelAuthority { tenant: PartitionTenant; activeTenant: boolean; action: string | null }
 
-export interface TenantChannelFamily {
+export interface TenantChannelFamily extends ChannelFamily<ChannelAuthority> {
   id: string;
   tenant: PartitionTenant;
   pattern: RegExp;
@@ -103,8 +104,6 @@ export interface TenantChannelFamily {
   cursors?: true;
 }
 
-const SERVICE = /^(presence|reactions|cursor|chat|typing|activity|pins):/;
-const EPHEMERAL: ReadonlySet<ChannelService> = new Set(['presence', 'typing', 'cursor']);
 const RID = '\\S{1,256}';
 const ALL: ReadonlySet<ChannelService> = new Set(['chat', 'presence', 'typing', 'cursor', 'reactions', 'activity', 'pins']);
 const DISCUSSION: ReadonlySet<ChannelService> = new Set(['chat', 'presence', 'typing', 'reactions']);
@@ -194,22 +193,33 @@ export const TENANT_CHANNEL_FAMILIES: readonly TenantChannelFamily[] = [
 
 export const TENANT_PARTITIONS: ReadonlySet<string> = new Set(['orgiq', 'assessment', 'pipelines', 'access']);
 
+/**
+ * The family MECHANISM over the table above (realtime-modules 0.116
+ * `defineChannelFamilies`): the service prefixes (`presence|reactions|cursor|
+ * chat|typing|activity|pins`, a bare name is chat — the library defaults), the
+ * ephemeral services that publish under the read authority (`presence|typing|
+ * cursor`), the default-deny partitions. The table stays this host's data.
+ * The gateway's shape guards (lib/gateway/authority.ts) add the host
+ * namespaces and name rules over the same table.
+ */
+export const TENANT_FAMILIES: ChannelFamilies<ChannelAuthority, TenantChannelFamily> =
+  defineChannelFamilies<ChannelAuthority, TenantChannelFamily>(TENANT_CHANNEL_FAMILIES, { partitions: TENANT_PARTITIONS });
+
 /** The presence channel the shell joins so people who share `tenant` see each other. */
 export const tenantLobbyChannel = (tenant: string): string => `${tenant}:lobby`;
 
 /** `presence:assessment:doc:1` → service presence; a bare name is chat. */
 export function channelService(channel: string): { service: ChannelService; bare: string } {
-  const m = SERVICE.exec(channel);
-  return m ? { service: m[1] as ChannelService, bare: channel.slice(m[0].length) } : { service: 'chat', bare: channel };
+  return TENANT_FAMILIES.serviceOf(channel) as { service: ChannelService; bare: string };
 }
 
 export function tenantChannelFamily(bare: string): TenantChannelFamily | null {
-  return TENANT_CHANNEL_FAMILIES.find(family => family.pattern.test(bare)) ?? null;
+  return TENANT_FAMILIES.familyOf(bare);
 }
 
 /** A BARE chat name (no service prefix) on a family that keeps reader cursors, or null. */
 export function pageCursorFamily(channel: string): TenantChannelFamily | null {
-  if (SERVICE.test(channel)) return null;
+  if (channelService(channel).bare !== channel) return null;
   const family = tenantChannelFamily(channel);
   return family?.cursors && family.services.has('chat') ? family : null;
 }
@@ -217,8 +227,5 @@ export function pageCursorFamily(channel: string): TenantChannelFamily | null {
 /** The authority a frame on `channel` must satisfy, or null when the service
  * or kind is not offered on that family at all (a refusal). */
 export function channelAuthorityFor(family: TenantChannelFamily, channel: string, kind: 'subscribe' | 'publish'): ChannelAuthority | null {
-  const { service } = channelService(channel);
-  if (!family.services.has(service)) return null;
-  if (kind === 'subscribe' || EPHEMERAL.has(service)) return family.read;
-  return family.write;
+  return TENANT_FAMILIES.authorityFor(family, channel, kind);
 }

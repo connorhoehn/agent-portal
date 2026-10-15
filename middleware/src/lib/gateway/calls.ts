@@ -1,29 +1,22 @@
 // The calls feature on the /ws gateway: the library's `calls()` configured
-// with this host's admission (lib/gateway/authority.ts `admitCall`), the
-// invite ledger a missed call reads, and the missed-call producer
-// (docs/social-tenant-design.md §3.4 row 6). The call-page and huddle-chat
-// runtimes that observe a call's lifecycle are composed in
+// with this host's admission (lib/gateway/authority.ts `admitCall`) and the
+// missed-call producer (docs/social-tenant-design.md §3.4 row 6). The call-page
+// and huddle-chat runtimes that observe a call's lifecycle are composed in
 // lib/realtime-gateway.ts and reached here through accessors.
+//
+// realtime-modules 0.116 owns three things this file used to do by hand:
+//   - `verifyCaller` (default on): an invite must name the socket's
+//     authenticated user as `callerId` — the engine checks it again in
+//     `admitCall`;
+//   - `refuseEmptyTargets` (default on): an untargeted invite, which would ring
+//     every connected client in every tenant, is refused (was `canCall`);
+//   - `onCallMissed` carries `targetUserIds` and `channel` (was the invite
+//     ledger `recordInvite`).
 
 import { calls, type RealtimeFeature, type RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
 import type { CallCrossNodePubSub, CallStateStore } from '@connorhoehnslalom/realtime-modules/call';
 import { conversationHref, notify, pageHuddleHref, parseDmLobby } from '../social-notify.js';
 import { admitCall, callGuards, lobbyGuard } from './authority.js';
-
-/** Invites seen by `calls({ config.authorize })`, so a missed call knows who was rung and from where. */
-const invites = new Map<string, { targets: string[]; channel: string | null; at: number }>();
-const INVITE_TTL_MS = 10 * 60_000;
-
-export function recordInvite(action: string, data: { callId?: unknown; targetUserIds?: unknown; channel?: unknown }): void {
-  if (action !== 'invite' || typeof data?.callId !== 'string') return;
-  const now = Date.now();
-  for (const [id, v] of invites) if (now - v.at > INVITE_TTL_MS) invites.delete(id);
-  const targets = Array.isArray(data.targetUserIds) ? data.targetUserIds.filter((t): t is string => typeof t === 'string') : [];
-  // A later invite on the same call (someone added mid-ring) widens the audience; it never replaces it.
-  const before = invites.get(data.callId);
-  invites.set(data.callId, { targets: [...new Set([...(before?.targets ?? []), ...targets])],
-    channel: typeof data.channel === 'string' ? data.channel : before?.channel ?? null, at: now });
-}
 
 const MISSED_BODY: Record<string, string> = {
   cancelled: 'The call ended before anyone answered.',
@@ -31,16 +24,15 @@ const MISSED_BODY: Record<string, string> = {
   'no-answer': 'Nobody answered.',
 };
 
-/** Row 6: an invite that never became a call → its targets (from the invite, else a DM lobby's other members). */
-export async function notifyMissedCall(summary: { callId: string; lobbyName: string; callerId: string; callerName?: string; reason: string }): Promise<void> {
-  const seen = invites.get(summary.callId);
-  invites.delete(summary.callId);
+/** Row 6: an invite that never became a call → its targets (the library's rung set, else a DM lobby's other members). */
+export async function notifyMissedCall(summary: { callId: string; lobbyName: string; callerId: string; callerName?: string; reason: string;
+  targetUserIds?: string[]; channel?: string }): Promise<void> {
   const tenant = summary.lobbyName.split(':')[0] ?? '';
   if (!tenant) return;
   const dm = parseDmLobby(summary.lobbyName);
-  const targets = (seen?.targets.length ? seen.targets : dm?.members ?? []).filter((u) => u !== summary.callerId);
+  const targets = (summary.targetUserIds?.length ? summary.targetUserIds : dm?.members ?? []).filter((u) => u !== summary.callerId);
   if (!targets.length) return;
-  const channel = seen?.channel ?? null;
+  const channel = summary.channel ?? null;
   const href = conversationHref(tenant, summary.lobbyName, channel);
   const page = pageHuddleHref(summary.lobbyName, channel);
   const caller = summary.callerName || summary.callerId;
@@ -78,30 +70,24 @@ export interface CallsFeatureOptions {
 
 /** The library's calls feature under this host's admission. */
 export function tenantCalls(opts: CallsFeatureOptions): RealtimeFeature {
-  const guards = callGuards(opts.getLobby, guardWithLog);
+  const guards = callGuards(opts.getLobby);
   return calls({
     stateStore: opts.stateStore,
     ...(opts.crossNodePubSub ? { crossNodePubSub: opts.crossNodePubSub } : {}),
     config: {
-      // The library trusts callerId on invite. Prove it at this host
-      // boundary before it becomes call ownership (including stop rights).
-      // Normalize the same flat/nested envelopes the public service accepts.
+      // The engine normalises the flat/nested envelopes and proves `callerId`
+      // on invite; a refusal whose lobby the shape guard refuses is logged.
       authorize: async (clientId: string, action: string, data: Record<string, unknown>) => {
-        let payload = data ?? {};
-        const nested = payload['data'];
-        if (payload['callId'] == null && payload['lobbyName'] == null
-          && nested && typeof nested === 'object' && !Array.isArray(nested)) {
-          payload = { ...(nested as Record<string, unknown>), ...payload };
+        const ctx = opts.getCtx(clientId);
+        const allowed = await admitCall(ctx, action, data ?? {}, guards);
+        if (!allowed && ctx) {
+          const nested = data?.['data'];
+          const lobby = data?.['lobbyName'] ?? (nested && typeof nested === 'object' ? (nested as Record<string, unknown>)['lobbyName'] : undefined);
+          if (typeof lobby === 'string' && lobby) guardWithLog(ctx, lobby);
         }
-        const allowed = await admitCall(opts.getCtx(clientId), action, payload, guards);
-        if (!allowed) return false;
-        recordInvite(action, payload);
-        return true;
+        return allowed;
       },
-      // An invite with no targets is fanned out to every connected
-      // client — every tenant. The portal's hooks always target.
-      canCall: (_callerId: string, targetUserIds: string[]) => targetUserIds.length > 0,
-      onCallMissed: (summary: { callId: string; lobbyName: string; callerId: string; callerName?: string; reason: string }) => notifyMissedCall(summary),
+      onCallMissed: summary => notifyMissedCall(summary),
       onCallEnded: opts.onCallEnded,
     },
   });

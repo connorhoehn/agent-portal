@@ -8,7 +8,7 @@ jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 import { getUser } from '../../providers/identity.js';
 import { directRecipientFilter } from '../direct-recipient.js';
 import { conversationHref, pageHuddleHref, setNotificationSink, type NotificationInputLike } from '../social-notify.js';
-import { notifyMissedCall, recordInvite } from '../realtime-gateway.js';
+import { notifyMissedCall } from '../realtime-gateway.js';
 
 const TEAM = 'assessment:team:TEAM-1';
 const RUN = 'pipelines:run:r-1';
@@ -35,9 +35,9 @@ it.each([
   ['u-ines', RUN, ['u-kofi'], '/pipelines/runs/r-1'],
 ])('notifies only the people rung when a %s page huddle goes unanswered', async (caller, lobby, rung, href) => {
   const tenant = lobby.split(':')[0]!;
-  recordInvite('invite', { callId: `c-${lobby}`, targetUserIds: [...rung, caller], channel: lobby });
-  recordInvite('invite', { callId: `c-${lobby}`, targetUserIds: ['u-never-granted'], channel: lobby });
-  await notifyMissedCall({ callId: `c-${lobby}`, lobbyName: lobby, callerId: caller, callerName: caller, reason: 'cancelled' });
+  // The library's rung set: the union of both invites' targets (realtime-modules 0.116 onCallMissed.targetUserIds).
+  await notifyMissedCall({ callId: `c-${lobby}`, lobbyName: lobby, callerId: caller, callerName: caller, reason: 'cancelled',
+    targetUserIds: [...rung, caller, 'u-never-granted'], channel: lobby });
   const got = sent.map(s => s.userId);
   expect(got).not.toContain(caller);
   expect(got).not.toContain('u-never-granted');
@@ -46,8 +46,7 @@ it.each([
 });
 
 it('never notifies when nobody was rung (an empty-target page huddle)', async () => {
-  recordInvite('invite', { callId: 'c-empty', targetUserIds: [], channel: TEAM });
-  await notifyMissedCall({ callId: 'c-empty', lobbyName: TEAM, callerId: 'u-farah', reason: 'no-answer' });
+  await notifyMissedCall({ callId: 'c-empty', lobbyName: TEAM, callerId: 'u-farah', reason: 'no-answer', targetUserIds: [], channel: TEAM });
   expect(sent).toEqual([]);
 });
 

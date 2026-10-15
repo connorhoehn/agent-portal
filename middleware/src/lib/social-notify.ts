@@ -23,7 +23,7 @@
 // `notify*` helpers below; the socket producers (row 4, DMs; row 6, missed
 // calls) live in the gateway, which is the only thing that sees those frames.
 
-import { dmLobbyMembers } from '@connorhoehnslalom/realtime-modules/call';
+import { parseDmLobby as parseDmLobbyName } from '@connorhoehnslalom/realtime-modules/call';
 import type { AuthorityScope } from '@connorhoehnslalom/realtime-modules/server';
 import { getUser, listUsers } from '../providers/identity.js';
 
@@ -480,10 +480,9 @@ export async function notifyAccessDelegation(ev: {
 
 /** `<tenant>:dm:<a>:<b>…` → { tenant, members }, or null for any other name. */
 export function parseDmLobby(name: string): { tenant: string; members: string[] } | null {
-  const m = /^([a-z][a-z0-9-]*):dm:(.+)$/.exec(name);
-  if (!m) return null;
-  const members = dmLobbyMembers(name);
-  return members ? { tenant: m[1]!, members } : null;
+  // The library's parser (realtime-modules /call); this host's DMs carry exactly one tenant segment.
+  const parsed = parseDmLobbyName(name);
+  return parsed?.kind === 'dm' && /^[a-z][a-z0-9-]*:$/.test(parsed.prefix) ? { tenant: parsed.prefix.slice(0, -1), members: parsed.members } : null;
 }
 
 /**

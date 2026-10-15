@@ -28,11 +28,10 @@ import { Readable } from 'node:stream';
 import type { Request } from 'express';
 import { AppError } from '../lib/async-handler.js';
 import { isAllowed } from '../lib/authz.js';
-import { holdsChannelAuthority, huddleCallId } from '../lib/live-principal.js';
+import { huddleCallId } from '../lib/live-principal.js';
+import { admitLobbyReadFor } from '../lib/gateway/authority.js';
 import { gatewayUploadBackend, gatewayUploadConfig } from '../lib/gateway-attachments.js';
 import { requiredName } from '../lib/social-names.js';
-import { tenantChannelFamily } from '../lib/tenant-channels.js';
-import { pageResourceVisible } from '../lib/page-resources.js';
 import type { Session } from '../lib/session.js';
 import type { AgentTenant, PlanStep } from '../lib/agent-loop/plan.js';
 import type { FlowRunStep } from '../mock/flow-runs.js';
@@ -106,12 +105,12 @@ export async function createMeetingStep(req: Request, session: Session, tenant: 
     return { kind: 'created', detail: `Created the room "${room.name}". The rooms API cannot invite people, so they join from the link.`,
       link: { kind: 'room', label: room.name, href: `/social/rooms?room=${encodeURIComponent(room.slug)}`, lobbyName: room.lobbyName } };
   }
-  const family = tenantChannelFamily(channel);
   if (huddleCallId(channel)) throw new AppError(409, 'This conversation already is a huddle');
-  if (!family || !family.lobby || family.tenant !== tenant) throw new AppError(409, 'This conversation has no huddle lobby');
-  if (!await holdsChannelAuthority(session, family.read)) throw new AppError(403, 'Forbidden');
-  // A page lobby is the page's resource: no huddle for a team or run that is not there now.
-  if (family.lobbyResource && !await pageResourceVisible(family.lobbyResource, channel)) throw new AppError(404, 'This page is not available');
+  // The page lobby's read: a lobby of this tenant (409), the family's read (403), the page existing now (404).
+  const verdict = await admitLobbyReadFor(session, channel, { tenant });
+  if (verdict === 'not-a-lobby') throw new AppError(409, 'This conversation has no huddle lobby');
+  if (verdict === 'denied') throw new AppError(403, 'Forbidden');
+  if (verdict === 'gone') throw new AppError(404, 'This page is not available');
   return { kind: 'created', detail: `The huddle lobby is ready: ${channel}. Start it from the Huddle button in the footer.`,
     link: { kind: 'huddle', label: step.title, lobbyName: channel } };
 }

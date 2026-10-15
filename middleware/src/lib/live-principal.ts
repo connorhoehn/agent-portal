@@ -166,7 +166,7 @@ export async function currentSocialMembershipProof(channel: string, userId: stri
 
 /** The active (signed) source tenant, or the cross-tenant admin — the same
  * rule as `requireTenant` — and a current grant in the family's tenant. */
-function sessionMeets(session: Session, authority: ChannelAuthority): boolean {
+export function sessionMeets(session: Session, authority: ChannelAuthority): boolean {
   const granted = Object.entries(session.grants).some(([tenant, roles]) => tenant === authority.tenant && roles.length > 0);
   if (!authority.activeTenant) return granted || session.role === ADMIN_ROLE;
   return session.tenant === authority.tenant || session.role === ADMIN_ROLE;
@@ -187,6 +187,17 @@ export interface LiveChannelAuthorization {
 export interface LiveChannelGuards {
   baseChannel: (channel: string) => string;
   guard: (auth: LiveGatewayAuth, channel: string, kind: 'subscribe' | 'publish') => boolean;
+  /**
+   * The channel decision itself (realtime-modules 0.116: the facade's
+   * `admitChannel`, the library engine). Absent: this module's own
+   * `authorizeLiveGatewayChannel` — the host copy kept one release behind the
+   * engine for the dev parity assertion (lib/gateway/authority-parity.ts).
+   */
+  decide?: (args: LiveChannelAuthorization) => Promise<boolean>;
+}
+/** `guards.decide`, else the host copy. */
+export function decideLiveChannel(args: LiveChannelAuthorization, guards: LiveChannelGuards): Promise<boolean> {
+  return guards.decide ? guards.decide(args) : authorizeLiveGatewayChannel(args, guards);
 }
 /** Requires the async-aware public router; never pass to a boolean-only hook. */
 export async function authorizeLiveGatewayChannel(args: LiveChannelAuthorization, guards: LiveChannelGuards): Promise<boolean> {
@@ -239,7 +250,7 @@ export async function authorizeLiveGatewayChannel(args: LiveChannelAuthorization
 
 /** Any name under the social work graph's namespace, well-formed or not. */
 export const inSocialWorkGraphNamespace = (name: string): boolean => /^social:workgraph(?::|$)/.test(name);
-const SOCIAL_WORK_GRAPH_CONVERSATION = /^social:workgraph:conversation:(social:(?:ch|dm|team|room):[A-Za-z0-9][A-Za-z0-9._:-]{0,199})$/;
+export const SOCIAL_WORK_GRAPH_CONVERSATION = /^social:workgraph:conversation:(social:(?:ch|dm|team|room):[A-Za-z0-9][A-Za-z0-9._:-]{0,199})$/;
 
 /**
  * May this principal read conversation `conversation`'s chat NOW — the authority `/api/chat/*` asks (routes/chat-pins.ts
@@ -263,7 +274,7 @@ export async function socialConversationReadable(userId: string, conversation: s
  * non-member's subscribe is the same refusal as an unknown conversation. A second reload after the awaits denies a grant
  * revoked or an epoch bumped meanwhile.
  */
-async function authorizeSocialWorkGraphChannel(args: LiveChannelAuthorization, base: string, guards: LiveChannelGuards): Promise<boolean> {
+export async function authorizeSocialWorkGraphChannel(args: LiveChannelAuthorization, base: string, guards: LiveChannelGuards): Promise<boolean> {
   const conversation = SOCIAL_WORK_GRAPH_CONVERSATION.exec(base)?.[1];
   const family = tenantChannelFamily(base);
   if (!conversation || !family) return false;
@@ -286,7 +297,7 @@ async function authorizeSocialWorkGraphChannel(args: LiveChannelAuthorization, b
  * refusal. Asked on every subscribe and delivered frame; the caller reloads the
  * session afterwards, so a grant/epoch revoked during this I/O denies.
  */
-async function initiativeDeckVisible(base: string, session: Session): Promise<boolean> {
+export async function initiativeDeckVisible(base: string, session: Session): Promise<boolean> {
   const deckId = base.slice('orgiq:deck:'.length);
   const decks = await import('../providers/initiative-decks.js');
   return (await decks.visibleDeck(deckId, await decks.deckViewerFor(session))) !== null;
@@ -307,7 +318,7 @@ async function initiativeDeckVisible(base: string, session: Session): Promise<bo
  * Publish (any service) and service-prefixed names (presence:, reactions:, …)
  * are refused outright: frames come only from the server's emitEvent.
  */
-async function authorizeFlowRunChannel(args: LiveChannelAuthorization, base: string, guards: LiveChannelGuards): Promise<boolean> {
+export async function authorizeFlowRunChannel(args: LiveChannelAuthorization, base: string, guards: LiveChannelGuards): Promise<boolean> {
   const ref = parseFlowRunChannel(base);
   if (!ref || args.kind !== 'subscribe' || args.channel !== base) return false;
   let membership: SocialMembershipProof | null = null;
@@ -364,7 +375,7 @@ async function authorizeFlowRunChannel(args: LiveChannelAuthorization, base: str
  *     epoch; for a REST caller (`http`, `rest:*`), the session's own seat;
  *   - a second reload, so a grant revoked or epoch bumped meanwhile denies.
  */
-async function authorizeHuddleChannel(args: LiveChannelAuthorization, base: string, guards: LiveChannelGuards): Promise<boolean> {
+export async function authorizeHuddleChannel(args: LiveChannelAuthorization, base: string, guards: LiveChannelGuards): Promise<boolean> {
   const callId = huddleCallId(base);
   if (!callId) return false;
   try {
@@ -421,7 +432,7 @@ export async function authorizeConversationChat(
     }
     const family = summarizableFamily(args.channel);
     if (!family) return false;
-    if (!await authorizeLiveGatewayChannel({ kind: args.kind, clientId: args.clientId, channel: args.channel, ctx: args.ctx,
+    if (!await decideLiveChannel({ kind: args.kind, clientId: args.clientId, channel: args.channel, ctx: args.ctx,
       ...(args.scope ? { scope: args.scope } : {}) }, guards)) return false;
     const chat = socialChat(); await chat.ready;
     const rows = await chat.membershipStore.listMembers(args.channel);
@@ -442,7 +453,7 @@ export async function authorizeConversationChat(
  * deck and someone else's deck are one indistinguishable refusal. A second
  * reload after the awaits denies a grant revoked or an epoch bumped meanwhile.
  */
-async function authorizeSocialDeckChannel(args: LiveChannelAuthorization, base: string, guards: LiveChannelGuards): Promise<boolean> {
+export async function authorizeSocialDeckChannel(args: LiveChannelAuthorization, base: string, guards: LiveChannelGuards): Promise<boolean> {
   const ref = parseSocialDeckChannel(base);
   if (!ref || args.channel !== socialDeckPresenceChannel(ref.deckId)) return false;
   let membership: SocialMembershipProof | null = null;

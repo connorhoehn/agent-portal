@@ -124,23 +124,9 @@ export async function signRealtimeToken(
 
 // ── Verification (the gateway half: lib/realtime-gateway.ts) ────────────────
 
-/** The subprotocol marker realtime-modules' client offers first; the JWT is
- * the second entry: `Sec-WebSocket-Protocol: bearer-token-v1, <jwt>`. */
-export const REALTIME_BEARER_PROTOCOL = 'bearer-token-v1';
-
-/**
- * The JWT from a `Sec-WebSocket-Protocol` header, or null when the header is
- * anything other than exactly `bearer-token-v1, <token>`. No fallback to a
- * query string or cookie: a token in the URL lands in access logs, and a
- * cookie-authenticated socket would need the CSRF checks this path avoids.
- */
-export function tokenFromSubprotocol(header: string | string[] | undefined): string | null {
-  const raw = Array.isArray(header) ? header.join(',') : header;
-  if (!raw) return null;
-  const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
-  if (parts.length !== 2 || parts[0] !== REALTIME_BEARER_PROTOCOL) return null;
-  return parts[1] ?? null;
-}
+// The `Sec-WebSocket-Protocol: bearer-token-v1, <jwt>` parser is the
+// library's `bearerSubprotocolAuth` (realtime-modules 0.116), wired in
+// lib/gateway/auth.ts; this module only signs and verifies the token.
 
 /**
  * Verify a token this module signed: HS256 only, same secret, `iss`/`aud`

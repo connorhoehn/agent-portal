@@ -1,14 +1,12 @@
 // Current call identity is shared by page pins and huddle chat. Token claims
 // establish provenance; directory epochs/grants establish current authority.
-import type { ActiveCallStateView, CallStateStore } from '@connorhoehnslalom/realtime-modules/call';
+import { parseDmLobby, type ActiveCallStateView, type CallStateStore } from '@connorhoehnslalom/realtime-modules/call';
 import type { RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
 import { AppError } from './async-handler.js';
 import { currentDocumentSessionEpoch, documentSessionId } from './document-session.js';
 import { getUser } from '../providers/identity.js';
 import { DEMO_SUB, demoFallbackAllowed, type Grants, type Session } from './session.js';
-import { holdsChannelAuthority } from './live-principal.js';
 import { tenantChannelFamily } from './tenant-channels.js';
-import { pageResourceVisible } from './page-resources.js';
 
 export interface CallAuthority { displayName: string; grants: Grants }
 /** The tenants whose sockets page pins (OrgIQ only) and huddle chat resolve. */
@@ -19,7 +17,7 @@ export const HUDDLE_CHAT_TENANTS: readonly CallTenant[] = ['orgiq', 'assessment'
 /** The tenant a huddle-bearing lobby belongs to, or null (Social, documents, pipelines, malformed). */
 export function huddleLobbyTenant(lobbyName: string): CallTenant | null {
   if (lobbyName.startsWith('orgiq:')) return 'orgiq';
-  return /^assessment:team:TEAM-[A-Za-z0-9-]{1,120}$/.test(lobbyName) ? 'assessment' : null;
+  return tenantChannelFamily(lobbyName)?.id === 'assessment:team' ? 'assessment' : null;
 }
 export async function currentCallAuthority(session: Session, tenants: readonly CallTenant[] = ORGIQ_ONLY): Promise<CallAuthority> {
   if (!tenants.includes(session.tenant as CallTenant)) {
@@ -122,9 +120,9 @@ export async function currentCallChatGrant(session: Session, authority: CallAuth
   lobbyName: string): Promise<boolean> {
   const tenant = huddleLobbyTenant(lobbyName);
   if (!tenant || session.tenant !== tenant || !authority.grants[tenant]?.includes(session.role)) return false;
-  const family = tenantChannelFamily(lobbyName);
   // DMs have no tenant family; the caller's ID membership is lobbyGuard's.
-  if (!family) return tenant === 'orgiq' && /^orgiq:dm:[^:]+(?::[^:]+)+$/.test(lobbyName);
-  if (!family.lobby || family.tenant !== tenant || !await holdsChannelAuthority({ ...session, grants: authority.grants }, family.read)) return false;
-  return !family.lobbyResource || await pageResourceVisible(family.lobbyResource, lobbyName);
+  if (!tenantChannelFamily(lobbyName)) return tenant === 'orgiq' && parseDmLobby(lobbyName, { prefix: 'orgiq:' })?.kind === 'dm';
+  // The page lobby's read (lobby flag, family read, page existing now): the facade's one copy.
+  const { admitLobbyReadFor } = await import('./gateway/authority.js');
+  return await admitLobbyReadFor({ ...session, grants: authority.grants }, lobbyName, { tenant }) === 'ok';
 }

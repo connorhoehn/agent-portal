@@ -51,7 +51,7 @@
 import type { Server } from 'node:http';
 import { hostname } from 'node:os';
 import { RedisPresenceStore } from '@connorhoehnslalom/realtime-modules/presence';
-import { attachRealtime, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, RedisRealtimeRouter, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize } from '@connorhoehnslalom/realtime-modules/server';
+import { attachRealtime, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withPrincipalRevalidation, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehnslalom/realtime-modules/server';
 import { RedisCallStateStore, InMemoryCallStateStore, type CallStateRedis } from '@connorhoehnslalom/realtime-modules/call';
 import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
 import { createOrgiqWorkGraphStream, type WorkGraphStreamPublisher } from './work-graph/stream.js';
@@ -77,7 +77,6 @@ import { directRecipientFilter } from './direct-recipient.js';
 import { pageCursorFamily } from './tenant-channels.js';
 import { admitChannel, admitPrincipal, callGuards, channelGuards, lobbyGuard } from './gateway/authority.js';
 import { authenticateGatewayUpgrade } from './gateway/auth.js';
-import { getLivePrincipal } from './live-principal.js';
 import { socketContext, tenantCalls } from './gateway/calls.js';
 import { channelNotifyPlugin, dmNotifyPlugin, liveSubscribersForUsers, pageCursorChatOptions, pageUnreadNotifyPlugin, tenantMentionNotifyPlugin, type DmRouter, type PageReadReceiptHook } from './gateway/notify-plugins.js';
 import { startStatsLine, statsIntervalMs, type RealtimeGatewayStore } from './gateway/stats.js';
@@ -87,7 +86,7 @@ import { captureCallReaction, configuredCallReactionCapture, type CallReactionCa
 // Everything the pre-split file exported, from where it lives now.
 export { lobbyGuard, channelGuard } from './gateway/authority.js';
 export { authenticateGatewayUpgrade, gatewayAuthFromClaims, realtimeGatewayEnabled, type RealtimeGatewayAuth } from './gateway/auth.js';
-export { recordInvite, notifyMissedCall } from './gateway/calls.js';
+export { notifyMissedCall } from './gateway/calls.js';
 export { dmNotifyPlugin, channelNotifyPlugin, tenantMentionNotifyPlugin, pageUnreadNotifyPlugin, pageCursorChatOptions, notifyChannelMessage, liveSubscribers, liveSubscribersForUsers } from './gateway/notify-plugins.js';
 export { GATEWAY_STATS_TYPE, gatewayStatsLine, activeCallCount, statsIntervalMs, type GatewayStatsInput, type RealtimeGatewayStore } from './gateway/stats.js';
 export { peerOperationLingerMs, socialChatIndexWrites, publishProofMaxAgeMs, realtimeGatewayRouting, realtimeFanoutRequested } from './gateway/env.js';
@@ -107,6 +106,31 @@ const authorizeChannel: ChannelAuthorize = async ({ kind, clientId, channel, ctx
   }
   return ok;
 };
+
+// Principal revalidation (realtime-modules 0.116 `attachRealtime({ principal })`):
+// the directory read (epoch, grants, masquerade actor) the library runs
+//   - at upgrade, after the bearer auth (a stale principal is a 401);
+//   - before and after the `calls()` and `notifications()` hooks;
+//   - before delivering a USER-ADDRESSED frame (calls, notifications, call
+//     pages, huddle chat) — `revalidatedRecipientFilter` below.
+// It is deliberately NOT wrapped around the router's `authorize`: every
+// subscribe, publish and per-recipient fan-out check there is `admitChannel`,
+// which already loads the principal fresh before and after its own I/O, so
+// the library's wrapper would double those directory reads on the hottest
+// path. Channel frames therefore skip the filter's revalidation for the same
+// reason; their recipient check is `authorize`.
+const principal: PrincipalRevalidation = { revalidate: ctx => admitPrincipal(ctx), recheckAfterIo: true };
+/** Revalidate once before a user-addressed frame (no recheck: the filter's own call/notification decisions reload). */
+const recipientPrincipal: PrincipalRevalidation = { revalidate: principal.revalidate, recheckAfterIo: false };
+const USER_ADDRESSED = new Set(['call', 'call-page', 'call-chat', 'notification:new', 'notification:bulk-update', 'notification:read']);
+function revalidatedRecipientFilter(inner: ClientMessageFilter): ClientMessageFilter {
+  const revalidated = withPrincipalRevalidation({ filterClientMessage: inner }, recipientPrincipal).filterClientMessage;
+  return args => {
+    const frame = args.message && typeof args.message === 'object' ? args.message as Record<string, unknown> : null;
+    const huddle = frame?.type === 'chat' && typeof frame.channel === 'string' && (frame.channel === 'orgiq:huddle' || frame.channel.startsWith('orgiq:huddle:'));
+    return frame && (USER_ADDRESSED.has(frame.type as string) || huddle) ? revalidated(args) : inner(args);
+  };
+}
 
 let status: { gateway: 'on' | 'off'; store: RealtimeGatewayStore | null } = { gateway: 'off', store: null };
 let ready: (() => boolean) | null = null;
@@ -222,14 +246,14 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     // Recipient checks are never shared. A peer skips only its redundant
     // publisher re-check for a frame whose origin proof is this fresh.
     publishProofMaxAgeMs: publishProofMaxAgeMs(),
-    filterClientMessage: directRecipientFilter(callGuards(getLobby), async ({ clientId, message }) => {
+    filterClientMessage: revalidatedRecipientFilter(directRecipientFilter(callGuards(getLobby), async ({ clientId, message }) => {
       try {
         const frame = message as Record<string, unknown>;
         return frame.type === 'call-page'
           ? await pageRuntime?.filterSnapshot(clientId, frame as unknown as CallPageSnapshot) ?? null
           : await chatRuntime?.filterFrame(clientId, frame) ?? null;
       } catch { return null; }
-    }),
+    })),
     plugins: [
       dmNotifyPlugin(router),
       channelNotifyPlugin(router),
@@ -239,22 +263,26 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     ],
   };
   const clusterRouter = opts.routerFactory?.(routerHooks);
+  // The local router is built here rather than by attachRealtime so its
+  // `authorize` is not wrapped by the principal revalidation (see above).
+  const socketRouter = clusterRouter ?? new LocalRealtimeRouter({ ...routerHooks, logger });
   const handle = attachRealtime(server, {
     path: REALTIME_GATEWAY_PATH,
+    // A valid signature is not a current session: `principal` refuses retired
+    // roles, epochs and operator provenance after this returns, before the
+    // socket is registered with a cluster owner.
     auth: async req => {
       const ctx = await authenticateGatewayUpgrade(req);
-      // A valid signature is not a current session. Refuse retired roles,
-      // epochs and operator provenance before registering a cluster owner.
-      await getLivePrincipal(ctx);
       if (clusterRouter && !clusterRouter.isReady()) throw new Error('Realtime gateway ownership is unavailable');
       return ctx;
     },
+    principal,
     // This socket carries signalling and chat; canvas updates use /realtime.
     maxPayload: 256 * 1024,
     pingIntervalMs: opts.pingIntervalMs ?? 30_000,
     logger,
     // Chat + presence channels are tenant-scoped like call lobbies.
-    ...(clusterRouter ? { router: clusterRouter } : routerHooks),
+    router: socketRouter,
     // A fresh socket gets its unread set (the library leaves replay to the host).
     onConnect: (clientId: string, ctx: Record<string, unknown>) => {
       const userId = typeof ctx?.['userId'] === 'string' ? ctx['userId'] : '';
@@ -301,10 +329,9 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
       // authorize judges); server-publish only; frames from the viewer's own
       // rebuilt snapshot (lib/work-graph/stream.ts).
       workGraph({ channelFor: workGraphStream.channelFor, source: workGraphStream.source }),
-      notifications({ store: inbox.store, authorize: async clientId => {
-        const ctx = getCtx(clientId);
-        return ctx !== null && await admitPrincipal(ctx) && getCtx(clientId) === ctx;
-      } }),
+      // The library gates every notification action on `principal` (before and
+      // after); the host only requires a live connection.
+      notifications({ store: inbox.store, authorize: async clientId => getCtx(clientId) !== null }),
     ],
   });
   handleRef = handle;

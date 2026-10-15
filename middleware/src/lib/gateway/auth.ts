@@ -14,9 +14,10 @@
 // upgrade; the portal re-fetches on drops.
 
 import type { IncomingMessage } from 'node:http';
+import { bearerSubprotocolAuth } from '@connorhoehnslalom/realtime-modules/server';
 import { isAllowedBrowserOrigin } from '../browser-origin.js';
 import { upgradeScheme } from '../trusted-proxy.js';
-import { claimableAvatarUrl, realtimeSigningSecret, tokenFromSubprotocol, verifyRealtimeToken, type RealtimeTokenClaims } from '../realtime-token.js';
+import { claimableAvatarUrl, realtimeSigningSecret, verifyRealtimeToken, type RealtimeTokenClaims } from '../realtime-token.js';
 
 export interface RealtimeGatewayAuth {
   userId: string;
@@ -36,21 +37,26 @@ export function realtimeGatewayEnabled(env: NodeJS.ProcessEnv = process.env): bo
 }
 
 /**
+ * The library's bearer-subprotocol admission (realtime-modules 0.116
+ * `bearerSubprotocolAuth`): the Origin check when the upgrade carries one, the
+ * exact two-entry `bearer-token-v1, <jwt>` header, then this host's
+ * verification. A verified identity without a user id is refused.
+ */
+const bearerAuth = bearerSubprotocolAuth<RealtimeGatewayAuth>({
+  // The viewer's scheme behind the declared proxies (lib/trusted-proxy.ts).
+  allowOrigin: (origin, req) => isAllowedBrowserOrigin(origin, `${upgradeScheme(req)}://${req.headers.host ?? ''}`),
+  verify: async token => {
+    const secret = realtimeSigningSecret();
+    if (!secret) throw new Error('realtime token verification unavailable');
+    return gatewayAuthFromClaims(await verifyRealtimeToken(token, secret));
+  },
+});
+
+/**
  * The upgrade's auth callback. Throws to refuse (the library answers 401).
  */
 export async function authenticateGatewayUpgrade(req: IncomingMessage): Promise<RealtimeGatewayAuth> {
-  const origin = req.headers.origin;
-  if (origin) {
-    // The viewer's scheme behind the declared proxies (lib/trusted-proxy.ts).
-    if (!isAllowedBrowserOrigin(origin, `${upgradeScheme(req)}://${req.headers.host ?? ''}`)) {
-      throw new Error('browser origin is not allowed');
-    }
-  }
-  const token = tokenFromSubprotocol(req.headers['sec-websocket-protocol']);
-  if (!token) throw new Error('missing bearer-token-v1 subprotocol');
-  const secret = realtimeSigningSecret();
-  if (!secret) throw new Error('realtime token verification unavailable');
-  return gatewayAuthFromClaims(await verifyRealtimeToken(token, secret));
+  return await bearerAuth(req) as RealtimeGatewayAuth;
 }
 
 /** The socket context a verified realtime token stands for — the same shape

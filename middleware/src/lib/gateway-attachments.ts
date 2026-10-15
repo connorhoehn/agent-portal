@@ -19,7 +19,7 @@ import type { IncomingMessage } from 'node:http';
 import { FileBlobStore, type FileUploadMetadataStore, type FileUploadRow, type FileUploadService } from '@connorhoehnslalom/realtime-modules/fileupload';
 import type { ReactionStore, StoredReaction } from '@connorhoehnslalom/realtime-modules/reactions';
 import { getUser } from '../providers/identity.js';
-import { authorizeLiveGatewayChannel } from './live-principal.js';
+import { decideLiveChannel, type LiveChannelGuards } from './live-principal.js';
 import { config as appConfig } from '../config.js';
 import { gatewayReactionsFixture, gatewayUploadsFixture } from '../mock/gateway-attachments.js';
 
@@ -134,7 +134,7 @@ export function gatewayUploadBackend(config: GatewayUploadConfig = gatewayUpload
 export function resetGatewayUploadBackendForTests(): void { backend = null; }
 
 type Ctx = Record<string, unknown> | null;
-export interface UploadGuards { guard: Parameters<typeof authorizeLiveGatewayChannel>[1]['guard']; baseChannel: (channel: string) => string }
+export type UploadGuards = LiveChannelGuards;
 
 /**
  * The ONE read rule for a stored file, shared by the download, the list and the
@@ -144,7 +144,7 @@ export interface UploadGuards { guard: Parameters<typeof authorizeLiveGatewayCha
  */
 export async function mayReadUpload(found: FileUploadRow, ctx: Record<string, unknown>, guards: UploadGuards): Promise<boolean> {
   if (found.uploader === ctx['userId']) return true;
-  if (!await authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'http', channel: found.channel, ctx }, guards)) return false;
+  if (!await decideLiveChannel({ kind: 'subscribe', clientId: 'http', channel: found.channel, ctx }, guards)) return false;
   return fileAfterFloor(found, guards.baseChannel(found.channel), String(ctx['userId'] ?? ''));
 }
 
@@ -164,7 +164,7 @@ export function uploadFeatureOptions(getCtx: (clientId: string) => Ctx, guards: 
     metadataStore: be.metadata,
     maxBytes: be.maxBytes,
     authz: async (_service: FileUploadService, clientId: string, channel: string): Promise<boolean> =>
-      authorizeLiveGatewayChannel({ kind: 'publish', clientId, channel, ctx: getCtx(clientId) }, guards),
+      decideLiveChannel({ kind: 'publish', clientId, channel, ctx: getCtx(clientId) }, guards),
   };
 }
 
@@ -226,7 +226,7 @@ export function createUploadsRouter(
     if (!found) return fail(res, 404, 'UPLOAD_NOT_FOUND', 'No upload was requested for this id');
     if (found.uploader !== ctx['userId']) return fail(res, 403, 'FORBIDDEN', 'This upload belongs to another user');
     // The channel must still admit the uploader now, not only when they asked.
-    if (!await authorizeLiveGatewayChannel({ kind: 'publish', clientId: 'http', channel: found.channel, ctx }, guards)) {
+    if (!await decideLiveChannel({ kind: 'publish', clientId: 'http', channel: found.channel, ctx }, guards)) {
       return fail(res, 403, 'FORBIDDEN', 'You can no longer post in this conversation');
     }
     if (found.status === 'cancelled' || found.status === 'failed') return fail(res, 409, 'UPLOAD_TERMINAL', `Upload is ${found.status}`);
@@ -257,7 +257,7 @@ export function createUploadsRouter(
     const base = guards.baseChannel(channel);
     const tenants = Array.isArray(ctx['tenants']) ? ctx['tenants'].map(String) : [String(ctx['org'] ?? '')];
     if (!tenants.includes(base.split(':')[0]!)) return fail(res, 404, 'NOT_FOUND', 'No such conversation');
-    if (!await authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'http', channel, ctx }, guards)) {
+    if (!await decideLiveChannel({ kind: 'subscribe', clientId: 'http', channel, ctx }, guards)) {
       return fail(res, 403, 'FORBIDDEN', 'You cannot read this conversation');
     }
     const rows = await gatewayUploadBackend(config).metadata.listByChannel(channel).catch(() => []);

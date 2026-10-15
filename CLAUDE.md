@@ -15,9 +15,10 @@ the claim here is a bug.
 Durable facts the handoff does not repeat:
 
 - Pins: portal and middleware consume `@connorhoehnslalom/ui-components`
-  **2.440.7** and `@connorhoehnslalom/realtime-modules` **0.115.0** from
+  **2.440.7** and `@connorhoehnslalom/realtime-modules` **0.117.0** from
   tracked tarballs in `portal/vendor/` (`file:` deps, both lockfiles); middleware
-  pins `@connorhoehn/service-runtime` 0.4.0 by full sha; infra pins
+  pins `@connorhoehn/service-runtime` 0.4.1 and `distributed-core` 0.48.0
+  (`077d7594`) by full sha; infra pins
   `realtime-examples` `bea2572a`. Move a pin by replacing the tarball or sha,
   then clear `portal/node_modules/.vite` and restart Vite.
 - Three additive schema changes are registered in both loaders but **not
