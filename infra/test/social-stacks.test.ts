@@ -590,7 +590,7 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
   test('the table keys agree with the pinned realtime-examples manifest where both list a table', () => {
     // Not an exported subpath of the package, so read it off disk.
     const manifest = JSON.parse(fs.readFileSync(
-      path.join(__dirname, '..', 'node_modules', 'realtime-examples', 'infra', 'dynamodb-schemas.json'), 'utf8',
+      path.join(__dirname, '..', 'node_modules', '@connorhoehn', 'realtime-examples-cdk', 'dist', 'dynamodb-schemas.json'), 'utf8',
     )) as { tables: any[] };
     const byName = new Map(manifest.tables.map((x) => [x.tableName, x]));
     for (const spec of SOCIAL_TABLES) {

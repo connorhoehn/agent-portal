@@ -9,7 +9,7 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as discovery from 'aws-cdk-lib/aws-servicediscovery';
 import type { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
-import { ApplicationTables, DocumentWorkspaceServices, RedisService } from 'realtime-examples/cdk/document-workspace';
+import { ApplicationTables, DocumentWorkspaceServices, RedisService } from '@connorhoehn/realtime-examples-cdk';
 
 interface ImageConfig { repositoryName: string; digest: string }
 export interface DocumentWorkspaceConfig {

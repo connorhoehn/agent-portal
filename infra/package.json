@@ -11,19 +11,13 @@
     "test:watch": "node --require ts-node/register --test --watch \"test/**/*.test.ts\""
   },
   "dependencies": {
+    "@connorhoehn/realtime-examples-cdk": "file:vendor/connorhoehn-realtime-examples-cdk-0.1.0.tgz",
     "aws-cdk-lib": "^2.270.0",
-    "constructs": "^10.4.0",
-    "realtime-examples": "github:connorhoehn/realtime-examples#bea2572a14732122d3a22bd16c3526f8923ca7c2"
+    "constructs": "^10.4.0"
   },
   "devDependencies": {
     "aws-cdk": "^2.1143.0",
     "ts-node": "^10.9.0",
     "typescript": "~5.9.0"
-  },
-  "overrides": {
-    "realtime-examples": {
-      "aws-cdk-lib": "$aws-cdk-lib",
-      "constructs": "$constructs"
-    }
   }
 }
