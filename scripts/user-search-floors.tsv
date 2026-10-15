@@ -5,8 +5,8 @@
 # measured baseline (docs/user-search-probe-results.json of 2026-10-15, re-graded against the current catalog).
 # Columns: tenant, pass_floor, max_wrong_best, due (the phase target's date, or -), note.
 tenant	pass_floor	max_wrong_best	due	note
-orgiq	0.75	26	-	baseline; S1 target pass >= 0.70 with 0 wrong on best
+orgiq	0.96	0	-	S1 met 2026-10-15 (probe 77bb1e79): 22/23 supported, 0 wrong on best; baseline was 0.75 / 26
 assessment	0.33	2	-	baseline; S2 target >= 0.60
-social	0.06	15	-	baseline; S2 target >= 0.60
-pipelines	0.25	3	-	baseline; S2 target >= 0.60
-access	0.25	2	-	baseline (4 clone-blind intents excluded); S2 target >= 0.60
+social	0.06	16	-	baseline 15 + 1 for s-events-channel (added 2026-10-15 so community-admin has three intents; wrong on the palette at its first probe); S2 target >= 0.60
+pipelines	0.31	3	-	ratcheted 2026-10-15 (the runs composer reads "failed runs"); S2 target >= 0.60
+access	0.25	1	-	ratcheted 2026-10-15 (4 clone-blind intents excluded); S2 target >= 0.60
