@@ -56,6 +56,7 @@ import {
 import { clock } from '../mock/core/index.js';
 import { TENANTS } from './session.js';
 import { emitSocialWorkGraphEvent, socialConversationOrNull } from './work-graph/social-events.js';
+import { ownsRecord } from './record-owner.js';
 
 // ── Names ────────────────────────────────────────────────────────────────────
 
@@ -260,7 +261,8 @@ export class MirroredMembershipStore implements ChatMembershipStore {
       return structuredClone((await pending).find(row => row.userId === userId) ?? null);
     }
     await this.hydrate(channel);
-    const row = this.rows().find((m) => m.channel === channel && m.userId === userId);
+    const row = this.rows().find((m) => m.channel === channel && m.userId === userId)
+      ?? this.rows().find((m) => m.channel === channel && ownsRecord(m.userId, userId));
     return row ? structuredClone(row) : null;
   }
 
@@ -281,7 +283,7 @@ export class MirroredMembershipStore implements ChatMembershipStore {
 
   /** The guard's question. Synchronous; false for anything not mirrored. */
   isActiveMember(channel: string, userId: string): boolean {
-    return this.rows().some((m) => m.channel === channel && m.userId === userId && !m.removedAt);
+    return this.rows().some((m) => m.channel === channel && ownsRecord(m.userId, userId) && !m.removedAt);
   }
 
   /** Active members, from the mirror. */

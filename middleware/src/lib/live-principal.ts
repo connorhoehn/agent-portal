@@ -13,6 +13,7 @@ import { pageResourceVisible } from './page-resources.js';
 import { PIPELINE_DECK_REVISE_KIND, inFlowRunNamespace, isConversationSummarizeKind, parseFlowRunChannel } from './flow-runs/channel.js';
 import { flowRunStore } from './flow-runs/store.js';
 import { inSocialDeckNamespace, parseSocialDeckChannel, socialDeckPresenceChannel } from './social-deck-channel.js';
+import { ownsRecord } from './record-owner.js';
 
 export interface LiveGatewayAuth extends Record<string, unknown> {
   userId: string; displayName: string; org: string; role: string; tenants: string[];
@@ -159,7 +160,7 @@ export async function currentSocialMembershipProof(channel: string, userId: stri
     const shared = scope?.active ? chat.membershipStore.scopedMembers(channel, scope) : null;
     const read = shared ? await shared : null;
     const rows = read ? read.rows : await chat.membershipStore.listMembers(channel);
-    const allowed = rows.length === 0 || rows.some(row => row.userId === userId && row.removedAt == null);
+    const allowed = rows.length === 0 || rows.some(row => ownsRecord(row.userId, userId) && row.removedAt == null);
     return { channel, allows: () => allowed && !observer.changed() && !(read?.changed() ?? false), dispose: observer.dispose };
   } catch (error) { observer.dispose(); throw error; }
 }
@@ -212,7 +213,7 @@ export async function socialConversationReadable(userId: string, conversation: s
   const chat = socialChat(); await chat.ready;
   const rows = await chat.membershipStore.listMembers(conversation);
   // chatAccess's own rule: explicit rows close a conversation; none leaves the name's rule (already passed) to decide.
-  return rows.length === 0 || rows.some(row => row.userId === userId && row.removedAt == null);
+  return rows.length === 0 || rows.some(row => ownsRecord(row.userId, userId) && row.removedAt == null);
 }
 
 /**

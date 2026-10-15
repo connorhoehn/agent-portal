@@ -54,11 +54,16 @@ import {
   type LiveCallGuards, type LiveChannelAuthorization, type LiveChannelGuards, type LiveGatewayAuth, type LiveGatewayPrincipal,
 } from '../live-principal.js';
 import { mayReadUpload } from '../gateway-attachments.js';
+import { recordUserId } from '../record-owner.js';
 import { currentlyReadsTenantChannel } from '../social-notify.js';
 import type { Session } from '../session.js';
 
 /** What the shape guards read from a connection's auth context. */
 export type GuardAuth = { userId?: unknown; org?: unknown; tenants?: unknown; role?: unknown };
+/** The shape guards ask about the user whose records these are: a clone is its persona (lib/record-owner.ts), so a
+ * clone of Sana is inside Sana's channels and DM lobbies. Only the membership/DM-id half reads `userId`. */
+const asRecordOwner = <A extends GuardAuth>(auth: A): A =>
+  typeof auth.userId === 'string' && auth.userId.includes('-clone-') ? { ...auth, userId: recordUserId(auth.userId) } : auth;
 
 // ── The family table, as the engine reads it ─────────────────────────────────
 
@@ -134,12 +139,12 @@ const GATEWAY_FAMILIES = defineChannelFamilies<ChannelAuthority, GatewayFamily>(
 
 /** May this connection use `lobbyName` as a call lobby (the shape, before any I/O)? */
 export function lobbyGuard(auth: GuardAuth, lobbyName: string): boolean {
-  return GATEWAY_FAMILIES.lobbyGuard(auth as LibraryGuardAuth, lobbyName);
+  return GATEWAY_FAMILIES.lobbyGuard(asRecordOwner(auth) as LibraryGuardAuth, lobbyName);
 }
 
 /** May this connection subscribe to / publish on `channel` (the shape, before any I/O)? */
 export function channelGuard(auth: GuardAuth | null, channel: string, kind: 'subscribe' | 'publish' = 'subscribe'): boolean {
-  return GATEWAY_FAMILIES.guard(auth as LibraryGuardAuth | null, channel, kind);
+  return GATEWAY_FAMILIES.guard(auth ? asRecordOwner(auth) as LibraryGuardAuth : null, channel, kind);
 }
 
 // ── The engine ───────────────────────────────────────────────────────────────
@@ -148,7 +153,7 @@ export function channelGuard(auth: GuardAuth | null, channel: string, kind: 'sub
  * work graph's conversations, huddle chat) compose with: the engine's own guard
  * and channel decision. */
 const engineGuards: LiveChannelGuards = {
-  guard: (auth, channel, kind) => GATEWAY_FAMILIES.guard(auth as LibraryGuardAuth, channel, kind),
+  guard: (auth, channel, kind) => GATEWAY_FAMILIES.guard(asRecordOwner(auth as GuardAuth) as LibraryGuardAuth, channel, kind),
   baseChannel,
   decide: args => AUTHORITY.authorizeChannel(args),
 };

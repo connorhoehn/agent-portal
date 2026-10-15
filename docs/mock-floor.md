@@ -310,10 +310,22 @@ it revokes neither the persona nor another clone. Clones resolve through
 `getUser` (login, the grants refresh, the realtime authority) but are left out
 of `listUsers`, so the picker and directory listings never show them; grant
 writes to a clone land on the clone's row, never the persona's. Later grant
-writes to the persona do **not** follow into an existing clone. Records keyed by
-user id rather than person id (a notification addressed to `u-vera`) are the
-persona's, not the clone's. Clones need `MOCK_AURORA` (409 otherwise); a clone
-of a clone is refused.
+writes to the persona do **not** follow into an existing clone. Clones need
+`MOCK_AURORA` (409 otherwise); a clone of a clone is refused.
+
+**For record ownership a clone acts as its persona** (`lib/record-owner.ts`,
+2026-10-15; `docs/demo-content-goal.md` rule 4). Rows keyed by user id — access
+requests and the steps a clone decides, Social channel membership and the
+gateway's channel/DM guards, DM lobbies, the "mine" reader — resolve a live
+clone to the persona it was cloned from (`recordUserId`, `ownsRecord`), so a
+demo given from a clone of Rhea shows Rhea's requests and a clone of Omar
+stands in a chain once, as Omar. The session keeps the clone's own id: the
+epoch, a tenant switch, sign-out-others and the realtime token's subject never
+touch the persona. Only a live clone maps, and only to its own persona, so two
+personas stay isolated. Not yet mapped: the notification inbox (the gateway
+library's store is keyed by the socket's user id, so a clone's bell is empty)
+and messages a clone sends over the socket (they carry the clone's id and the
+persona's name).
 
 Clones are rows of the registered `identity.clones` fixture: a full
 `POST /api/__mock/reset` removes every clone and every scope; a global scenario

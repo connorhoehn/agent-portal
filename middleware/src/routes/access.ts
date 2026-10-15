@@ -50,6 +50,7 @@ import {
   type AccessDelegation, type AccessDirectory, type AccessDuration, type AccessEvent, type AccessRequestPreview, type Person, type AccessPolicy, type AccessRequest,
   type AccessReview, type AccessReviewItem, type AccessTenant, type CatalogItem, type Decision, type DirectoryUser,
 } from '../lib/access/types.js';
+import { recordUserId } from '../lib/record-owner.js';
 import { expiresAtFor, provisionAccess, revokeAccess, SodBlockedError } from '../lib/access-provision.js';
 import { notifyAccessDelegation, notifyAccessRequest, type AccessNotifyKind } from '../lib/social-notify.js';
 import {
@@ -89,9 +90,13 @@ export async function context(req: Request): Promise<Ctx> {
   const [listed, mayDecide, mayProvision, mayManagePolicy] = await Promise.all([
     loadDirectory(), isAllowed(principal, 'DecideAccess'), isAllowed(principal, 'ProvisionAccess'), isAllowed(principal, 'ManageAccessPolicy'),
   ]);
-  const dir = await withDirectoryUser(listed, session.sub);
-  const self = dir.users.find((u) => u.id === session.sub) ?? null;
-  return { dir, self, actor: { id: session.sub, personId: self?.personId ?? null, role: session.role, mayDecide, mayProvision, mayManagePolicy } };
+  // A clone acts as its persona for record ownership (lib/record-owner.ts): a
+  // clone of Rhea reads and writes Rhea's requests, and a clone of Omar decides
+  // as Omar — the directory holds Omar once, never "Omar Haddad, Omar Haddad".
+  const actorId = recordUserId(session.sub);
+  const dir = await withDirectoryUser(listed, actorId);
+  const self = dir.users.find((u) => u.id === actorId) ?? null;
+  return { dir, self, actor: { id: actorId, personId: self?.personId ?? null, role: session.role, mayDecide, mayProvision, mayManagePolicy } };
 }
 
 /** Does `who` hold the item now (a tenant role, or a contribution on the initiative)? */

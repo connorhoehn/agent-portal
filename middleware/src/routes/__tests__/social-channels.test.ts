@@ -35,6 +35,7 @@ import { errorHandler } from '../../lib/async-handler.js';
 import { socialChat } from '../../lib/social-chat.js';
 import { type Role, type Session } from '../../lib/session.js';
 import { socialChannelMembersFixture, socialChannelMessagesFixture, socialChannelsFixture, socialReadCursorsFixture } from '../../mock/social-channels.js';
+import { identityClonesFixture } from '../../mock/identity-clones.js';
 
 function appAs(sub: string, role: Role, tenant = 'social') {
   const app = express();
@@ -226,3 +227,42 @@ describe('GET /api/social/people', () => {
     expect(res.body.people.find((p: { userId: string }) => p.userId === 'u-mira')).toEqual({ userId: 'u-mira', displayName: 'Mira Okafor', roles: ['community-admin'], avatarUrl: '/avatars/photos/u-mira.jpg' });
   });
 });
+
+// docs/demo-content-goal.md rule 4: a clone of a persona sees the persona's
+// world. Membership and DM lobbies are keyed by user id, so before
+// lib/record-owner.ts a clone of Mira was "not in #general" and a clone of
+// Sana had no DMs. A clone maps only to its own persona: personas stay apart.
+describe('an identity clone acts as its persona for membership and DMs', () => {
+  const clone = (id: string, from: string, displayName: string, grants: Record<string, string[]>) => identityClonesFixture.rows().push({
+    id, from, label: 'record-owner', displayName, email: null, personId: null, grants, epoch: 0,
+    createdAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+  });
+  afterEach(() => identityClonesFixture.reset());
+
+  it('a clone of Sana is in her channels and lists her DMs, but not in a moderator-only channel', async () => {
+    clone('u-sana-clone-1', 'u-sana', 'Sana Iqbal', { social: ['participant'] });
+    const app = appAs('u-sana-clone-1', 'participant');
+    const channels = await request(app).get('/api/social/channels');
+    const general = channels.body.channels.find((c: { slug: string }) => c.slug === 'general');
+    expect(general).toMatchObject({ joined: true });
+    expect(channels.body.channels.map((c: { slug: string }) => c.slug)).not.toContain('moderators');
+    const dms = await request(app).get('/api/social/dms');
+    expect(dms.body.conversations.map((c: { channel: string }) => c.channel)).toContain('social:dm:u-lena:u-sana');
+    expect(chatGuardMember('social:ch:general', 'u-sana-clone-1')).toBe(true);
+  });
+
+  it('a clone of Lena is in #moderators; a clone of Sana is not (isolation between personas)', async () => {
+    clone('u-lena-clone-1', 'u-lena', 'Lena Brandt', { social: ['moderator'] });
+    clone('u-sana-clone-2', 'u-sana', 'Sana Iqbal', { social: ['participant'] });
+    const mod = await request(appAs('u-lena-clone-1', 'moderator')).get('/api/social/channels');
+    expect(mod.body.channels.map((c: { slug: string }) => c.slug)).toContain('moderators');
+    expect(chatGuardMember('social:ch:moderators', 'u-lena-clone-1')).toBe(true);
+    expect(chatGuardMember('social:ch:moderators', 'u-sana-clone-2')).toBe(false);
+    // An id that merely looks like a clone, with no live clone row, is nobody's persona.
+    expect(chatGuardMember('social:ch:moderators', 'u-lena-clone-dead')).toBe(false);
+  });
+});
+
+function chatGuardMember(channel: string, userId: string): boolean {
+  return socialChat().membershipStore.isActiveMember(channel, userId);
+}

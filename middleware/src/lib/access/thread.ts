@@ -9,6 +9,7 @@
 
 import { listCatalog, listRequests, listSteps, loadDirectory, withDirectoryUser } from '../../providers/access.js';
 import { mayRead, type AccessActor } from './rules.js';
+import { recordUserId } from '../record-owner.js';
 
 export const ACCESS_THREAD_PREFIX = 'access:req:';
 
@@ -31,8 +32,10 @@ export async function requestReadableBy(requestId: string, userId: string): Prom
   try {
     const request = listRequests().find((r) => r.id === requestId);
     if (!request) return false;
-    const dir = await withDirectoryUser(await loadDirectory(), userId);
-    const user = dir.users.find((u) => u.id === userId);
+    // A clone reads as its persona (lib/record-owner.ts), the same rule as the REST routes.
+    const owner = recordUserId(userId);
+    const dir = await withDirectoryUser(await loadDirectory(), owner);
+    const user = dir.users.find((u) => u.id === owner);
     if (!user) return false;
     const roles = user.grants['access'] ?? [];
     const role = roles.includes('access-admin') ? 'access-admin' : roles.includes('admin') ? 'admin' : roles[0] ?? 'none';

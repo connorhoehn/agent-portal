@@ -7,6 +7,7 @@ import { currentLiveSession, currentSocialMembershipProof, getLivePrincipal } fr
 import { currentSocialActionSession } from './social-authority.js';
 import { dmChannelFor, dmMembers, socialChat } from './social-chat.js';
 import type { Session } from './session.js';
+import { recordUserId } from './record-owner.js';
 
 export function dmPageDescriptor(value: unknown): CallPageDescriptor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -28,8 +29,9 @@ export function directMessageMembers(channel: string): string[] {
   return members;
 }
 async function membership(channel: string, session: Session) {
-  if (!directMessageMembers(channel).includes(session.sub)) throw new AppError(403, 'Not a member of this direct message');
-  const proof = await currentSocialMembershipProof(channel, session.sub);
+  const self = recordUserId(session.sub); // a clone is in its persona's DMs (lib/record-owner.ts)
+  if (!directMessageMembers(channel).includes(self)) throw new AppError(403, 'Not a member of this direct message');
+  const proof = await currentSocialMembershipProof(channel, self);
   if (!proof.allows()) { proof.dispose(); throw new AppError(403, 'Not a member of this direct message'); }
   return proof;
 }

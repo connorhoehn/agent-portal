@@ -38,6 +38,7 @@ import { deriveDefinitions } from './pipeline-definitions.js';
 import { config } from '../config.js';
 import * as M from '../mock/assessment.js';
 import * as A from '../providers/assessment-aurora.js';
+import { recordUserId } from './record-owner.js';
 
 export const MINE_KINDS = ['initiative', 'sprint', 'org-team', 'assessment-team', 'pipeline'] as const;
 export type MineKind = (typeof MINE_KINDS)[number];
@@ -82,7 +83,8 @@ export async function mineViewer(session: Session): Promise<MineViewer> {
   let user;
   try { user = await getUser(session.sub); }
   catch { throw new AppError(503, 'The identity store is unavailable'); }
-  return { userId: session.sub, personId: user?.personId ?? null };
+  // A clone's "mine" is its persona's (lib/record-owner.ts); the person link is the same either way.
+  return { userId: recordUserId(session.sub), personId: user?.personId ?? null };
 }
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);

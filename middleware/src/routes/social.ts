@@ -54,6 +54,7 @@ import { currentSocialMembershipProof, socialActionRole, type SocialMembershipPr
 import { currentSocialActionSession, socialGate } from '../lib/social-authority.js';
 import { requiredName, NAME_MAX } from '../lib/social-names.js';
 import { channelForSlug, dmChannelFor, dmMembers, isValidSlug, slugForChannel, slugify, socialChat, SOCIAL_DM_PREFIX } from '../lib/social-chat.js';
+import { recordUserId } from '../lib/record-owner.js';
 import { clock } from '../mock/core/index.js';
 import { unreadFor } from '../mock/social-channels.js';
 import { createChannel, DuplicateChannelError, getChannel, listChannels, type SocialChannelPrivacy, type SocialChannelRow } from '../providers/social-channels.js';
@@ -156,7 +157,8 @@ const RECENT_LIMIT = 30;
 /** How many recent DM messages the unread count looks at. */
 const UNREAD_WINDOW = 50;
 
-const me = (req: Request): string => req.session?.sub ?? '';
+/** The user whose Social records these are: a clone reads its persona's channels and DMs (lib/record-owner.ts). */
+const me = (req: Request): string => recordUserId(req.session?.sub ?? '');
 
 /** Everyone holding a social grant, by id. */
 export async function socialRoster(options: { authoritative?: boolean } = {}): Promise<Map<string, { userId: string; displayName: string; roles: string[] }>> {
@@ -353,7 +355,7 @@ function withPeerAvatars<Row extends { peers: Array<{ userId: string; displayNam
 
 socialEmbedRouter.post('/dms/read', socialGate('ViewSocial'), asyncHandler(async (req, res) => {
   const session = sessionOf(req);
-  const userId = session.sub;
+  const userId = recordUserId(session.sub);
   const channel = typeof (req.body as { channel?: unknown } | undefined)?.channel === 'string' ? String((req.body as { channel: string }).channel) : '';
   const ids = dmMembers(channel);
   if (!ids || new Set(ids).size < 2 || dmChannelFor(ids) !== channel) throw new ValidationError('name a sorted, distinct DM (channel: social:dm:<ids>)');
@@ -540,7 +542,7 @@ socialEmbedRouter.get('/embedded', socialGate('ViewSocial'), asyncHandler(async 
       .sort((a, b) => a.displayName.localeCompare(b.displayName) || a.userId.localeCompare(b.userId));
     await socialChat().ready;
     const bounds = { hasMore: false };
-    const conversations = await socialDirectMessages(gate.session.sub, names, 50, fences, bounds);
+    const conversations = await socialDirectMessages(recordUserId(gate.session.sub), names, 50, fences, bounds);
     // Directory/chat reads can outlive revocation. No roster or message preview
     // escapes unless the requesting source/actor and read action remain current.
     const current = await currentSocialActionSession(gate.session, 'ViewSocial');
@@ -575,7 +577,7 @@ socialEmbedRouter.get('/embedded', socialGate('ViewSocial'), asyncHandler(async 
  */
 socialEmbedRouter.get('/share-destinations', socialGate(['ViewSocial', 'PostMessage']), asyncHandler(async (req, res) => {
   const gate = { session: sessionOf(req) };
-  const userId = gate.session.sub;
+  const userId = recordUserId(gate.session.sub);
   const chat = socialChat();
   await chat.ready;
   const directory = await listChannels();
@@ -674,7 +676,7 @@ socialEmbedRouter.delete('/bindings', socialGate('ManageChannels', { grantIn: co
 // route gave. The DM itself is only ever read and written in the social shell.
 socialEmbedRouter.post('/dms', socialGate('PostMessage'), asyncHandler(async (req, res) => {
   const gate = { session: sessionOf(req) };
-  const userId = gate.session.sub;
+  const userId = recordUserId(gate.session.sub);
   const target = typeof (req.body as { userId?: unknown } | undefined)?.userId === 'string' ? String((req.body as { userId: string }).userId).trim() : '';
   if (!target) throw new ValidationError('name the person to message (userId)');
   if (target === userId) throw new ValidationError('a direct message needs someone other than you');

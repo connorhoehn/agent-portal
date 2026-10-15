@@ -21,6 +21,7 @@ import { listUsers } from '../providers/identity.js';
 import { userAvatars } from '../providers/user-avatars.js';
 import { socialChat } from '../lib/social-chat.js';
 import { unreadFor } from '../mock/social-channels.js';
+import { recordUserId } from '../lib/record-owner.js';
 
 export const peopleRouter = Router();
 
@@ -69,18 +70,20 @@ peopleRouter.get('/conversations', requireSession('SharedPeopleConversations'), 
   const session = await currentLiveSession(signed);
   const tenant = session.tenant;
   const prefix = `${tenant}:dm:`;
+  // A clone lists its persona's conversations (lib/record-owner.ts).
+  const self = recordUserId(session.sub);
   const chat = socialChat();
   let directory; let rows;
   try {
     directory = await listUsers({ authoritative: true });
     await chat.ready;
-    rows = await chat.conversations.listForUser(session.sub);
+    rows = await chat.conversations.listForUser(self);
   } catch { throw new AppError(503, 'Conversations are unavailable'); }
   const tenantUsers = directory.filter(u => (u.grants[tenant]?.length ?? 0) > 0);
   const names = new Map(tenantUsers.map(u => [u.id, u.displayName]));
   const mine = rows.filter(r => r.channel.startsWith(prefix) && r.channel.length > prefix.length)
     .map(r => ({ r, ids: r.channel.slice(prefix.length).split(':') }))
-    .filter(({ ids }) => ids.includes(session.sub) && ids.length >= 2 && ids.every(id => id === session.sub || names.has(id)))
+    .filter(({ ids }) => ids.includes(self) && ids.length >= 2 && ids.every(id => id === self || names.has(id)))
     .sort((a, b) => (b.r.lastMessageAt ?? '').localeCompare(a.r.lastMessageAt ?? '') || a.r.channel.localeCompare(b.r.channel))
     .slice(0, 200);
   const peerIds = new Set(mine.flatMap(({ ids }) => ids));
@@ -89,12 +92,12 @@ peopleRouter.get('/conversations', requireSession('SharedPeopleConversations'), 
   try {
     conversations = await Promise.all(mine.map(async ({ r, ids }) => {
       const [recent, cursors] = await Promise.all([chat.recentMessages(r.channel, UNREAD_WINDOW), chat.readReceiptStore.listReceipts(r.channel)]);
-      const readAt = cursors.find(c => c.userId === session.sub)?.readAt ?? null;
+      const readAt = cursors.find(c => c.userId === self)?.readAt ?? null;
       return {
         channel: r.channel,
-        peers: ids.filter(id => id !== session.sub).map(id => ({ userId: id, displayName: names.get(id) ?? id, avatarUrl: avatars.get(id) ?? null })),
+        peers: ids.filter(id => id !== self).map(id => ({ userId: id, displayName: names.get(id) ?? id, avatarUrl: avatars.get(id) ?? null })),
         lastMessageAt: r.lastMessageAt, lastMessagePreview: r.lastMessagePreview,
-        unreadCount: unreadFor(recent, r.channel, session.sub, readAt),
+        unreadCount: unreadFor(recent, r.channel, self, readAt),
       };
     }));
   } catch { throw new AppError(503, 'Conversations are unavailable'); }

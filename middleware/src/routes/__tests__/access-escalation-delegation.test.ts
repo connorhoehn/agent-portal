@@ -331,7 +331,7 @@ describe('delegation', () => {
   });
 });
 
-describe('a session signed in as an identity clone (lane M) is in the access directory', () => {
+describe('a session signed in as an identity clone (lane M) acts as its persona', () => {
   const clone = (id: string, from: string, personId: string, grants: Record<string, string[]>, displayName: string) => identityClonesFixture.rows().push({
     id, from, label: 'lane-a', displayName, email: null, personId, grants, epoch: 0, createdAt: T0, expiresAt: at(2),
   });
@@ -344,11 +344,31 @@ describe('a session signed in as an identity clone (lane M) is in the access dir
     // Before 2026-10-14 the clone was "Unknown beneficiary" (400): listUsers leaves clones out.
     const preview = await post('/api/access/requests/preview', rhea, { itemId: 'role:pipelines:operator' });
     expect(preview.status).toBe(200);
-    expect((preview.body as { beneficiary: Person }).beneficiary.id).toBe('u-rhea-clone-a');
+    // A clone acts as its persona for record ownership (lib/record-owner.ts): the request is Rhea's.
+    expect((preview.body as { beneficiary: Person }).beneficiary.id).toBe('u-rhea');
     // Her manager is Omar through the persona's person (p-rhea): no fixture-specific code.
     expect(ids((preview.body as { steps: Array<{ eligible: Person[] }> }).steps[0]!.eligible)).toEqual(['u-omar']);
     // The access-admin clone reads every request thread, as Priya does.
     expect(await requestReadableBy('req-0002', 'u-priya-clone-a')).toBe(true);
     expect(await requestReadableBy('req-0004', 'u-rhea-clone-a')).toBe(false);
+  });
+
+  it('lists the persona\'s requests, decides as the persona, and never stands beside it in a chain', async () => {
+    clone('u-rhea-clone-b', 'u-rhea', 'p-rhea', { access: ['requester'] }, 'Rhea Castellanos');
+    clone('u-omar-clone-b', 'u-omar', 'p-omar', { access: ['approver'] }, 'Omar Haddad');
+    const rhea = await signIn('u-rhea-clone-b');
+    // Rhea's seeded requests are keyed by u-rhea; her clone lists and opens them.
+    const mine = await get('/api/access/requests?scope=mine', rhea);
+    expect(mine.status).toBe(200);
+    const listed = (mine.body as { items: AccessRequest[] }).items;
+    expect(listed.some((r) => r.id === 'req-0001')).toBe(true);
+    // ...and only them: Omar's own request stays his (personas stay isolated).
+    expect(listed.every((r) => r.requester.id === 'u-rhea' || r.beneficiary.id === 'u-rhea')).toBe(true);
+    expect((await get('/api/access/requests/req-0001', rhea)).status).toBe(200);
+    // Omar's clone: the manager step names Omar once (not "Omar Haddad, Omar Haddad").
+    const omar = await signIn('u-omar-clone-b');
+    const r = await record('req-0001', omar);
+    const first = r.steps.find((st) => st.step === 1)!;
+    expect(ids(first.eligible).filter((id) => id.startsWith('u-omar'))).toEqual(['u-omar']);
   });
 });
