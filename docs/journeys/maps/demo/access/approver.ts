@@ -9,7 +9,7 @@ export default {
   fields: { surface: 'the approver story', pages: 'portal/src/pages/access' },
   steps: [
     fact('/access/approvals', 'Omar’s inbox holds Rhea’s request', ['Rhea Castellanos', 'SME in Work']),
-    { do: 'navigate', url: '/access/requests/req-0001', name: 'The chain names each approver once, and the steward is a person who can decide', proves: 'cross-links', audit: false, auditReason: 'a content walk: the layout judges measure this page',
+    { do: 'navigate', url: '/access/requests/req-0001', name: 'The chain names each approver once, and the steward is a person who can decide', proves: 'cross-links', audit: true,
       expect: { visible: ['Omar Haddad', 'Rhea Castellanos'].map(seen), noText: [/Omar Haddad, Omar Haddad/, /Escalated to the access admins/, /access:req:req-/, /\bsod-\d{3}:/] } },
   ],
 } satisfies JourneyMap;

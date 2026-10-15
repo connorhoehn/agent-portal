@@ -11,7 +11,7 @@ export default {
   steps: [
     fact('/access/reviews/rev-0001', 'The review campaign has a deadline and roles in words', ['Q4 SME certification', /Closes|Due/i], [/· sme\b/]),
     fact('/access/policies', 'Policies name roles in words, who last changed them, and one has caught a request', [/SME/, 'Priya Venkataraman'], [/\bsme · Work\b/, /\borg-leader · Work\b/]),
-    { do: 'navigate', url: '/access/audit', name: 'The audit trail reads as sentences, with no internal ids or duplicate rows', proves: 'cross-links', audit: false, auditReason: 'a content walk: the layout judges measure this page',
+    { do: 'navigate', url: '/access/audit', name: 'The audit trail reads as sentences, with no internal ids or duplicate rows', proves: 'cross-links', audit: true,
       expect: { visible: ['Rhea Castellanos'].map(seen), noText: [/\bsod-\d{3}\b/, /\bdlg-\d{4}\b/, /\bdraft → submitted\b/] } },
   ],
 } satisfies JourneyMap;

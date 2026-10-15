@@ -3,8 +3,8 @@
 // peer is shown (docs/demo-content-audit.md § the stories) and asserts the
 // story's FACTS are on screen: the cast by name, the records that refer to
 // each other, and none of the leaks a peer would notice (raw ids, template
-// filler, developer copy). The layout judges own the DOM audit, so page steps
-// here are content checks only.
+// filler, developer copy). Every page step is also
+// measured by the DOM audit at rest (docs/journeys/audit-burndown.tsv owns what is owed).
 import type { Persona, Step, Target, Text } from '../../../../scripts/journeys/journey-map.ts';
 
 export const P = {
@@ -26,7 +26,7 @@ export const LEAKS: Text[] = [
   /\b(?:dev:mock|fixture|box-mock-\d+|sess-mock|MOCK_[A-Z_]+)\b/,
 ];
 
-const quiet = { audit: false as const, auditReason: 'a content walk: the layout judges (cascade, type-scale, ui-dom-audit) measure this page' };
+const measured = { audit: true as const };
 
 /**
  * A fact must be VISIBLE inside the page's content (<main>). Not `{ text }`: the walker checks the first
@@ -41,12 +41,12 @@ export const seen = (text: Text): Target => ({
 
 /** Open a page of the story and assert its facts are on screen and no leak is. */
 export const fact = (url: string, name: string, text: Text[], noText: Text[] = []): Step => ({
-  do: 'navigate', url, name, proves: 'story-facts', ...quiet, expect: { visible: text.map(seen), noText: [...LEAKS, ...noText] },
+  do: 'navigate', url, name, proves: 'story-facts', ...measured, expect: { visible: text.map(seen), noText: [...LEAKS, ...noText] },
 });
 
 /** Follow a named link from the current page: the record the story names leads to its page. */
 export const follow = (target: Target, url: Text, name: string, text: Text[] = []): Step => ({
-  do: 'click', target, name, proves: 'cross-links', ...quiet, expect: { url, visible: text.map(seen), noText: LEAKS },
+  do: 'click', target, name, proves: 'cross-links', ...measured, expect: { url, visible: text.map(seen), noText: LEAKS },
 });
 
 export const link = (name: Text): Target => ({ role: 'link', name, within: { css: 'main' } });

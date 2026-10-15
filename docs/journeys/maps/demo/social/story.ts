@@ -15,6 +15,6 @@ export default {
       [/Mira Okafor|Lena Brandt/], [/welcome aboard/i]),
     fact('/social/dms', 'Sana’s DMs are conversations with people she works with', ['Lena Brandt']),
     fact('/social/contacts', 'Contacts are people, not accounts', ['Mira Okafor', 'Lena Brandt'], [/User ID/, /Platform Operator/]),
-    { do: 'navigate', url: '/social/recordings', name: 'A recording Sana was in has a transcript that matches the chat', proves: 'cross-links', audit: false, auditReason: 'a content walk: the layout judges measure this page', expect: { visible: [/Town hall|community call/i].map(seen), noText: [/Sana Iyer/, /spring community calendar/i, /no playable file/i] } },
+    { do: 'navigate', url: '/social/recordings', name: 'A recording Sana was in has a transcript that matches the chat', proves: 'cross-links', audit: true, expect: { visible: [/Town hall|community call/i].map(seen), noText: [/Sana Iyer/, /spring community calendar/i, /no playable file/i] } },
   ],
 } satisfies JourneyMap;

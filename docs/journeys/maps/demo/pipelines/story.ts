@@ -15,6 +15,6 @@ export default {
       [/Approve|Waiting/i], [/consult:con-mock/, /escalated to a release manager/]),
     fact('/pipelines/definitions', 'Definitions are owned by the pipelines cast and titled in words',
       ['Ines Moreau'], [/\bbot:[0-9a-f]{8}/, /orgiq-assessment-scorer/, /^classify-transcript$/m]),
-    { do: 'navigate', url: '/pipelines/bots', name: 'The bots that ran today are running, not parked', proves: 'cross-links', audit: false, auditReason: 'a content walk: the layout judges measure this page', expect: { visible: [/Enabled|Active|Running/i].map(seen), noText: [/awaiting repo provisioning/] } },
+    { do: 'navigate', url: '/pipelines/bots', name: 'The bots that ran today are running, not parked', proves: 'cross-links', audit: true, expect: { visible: [/Enabled|Active|Running/i].map(seen), noText: [/awaiting repo provisioning/] } },
   ],
 } satisfies JourneyMap;

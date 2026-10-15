@@ -12,6 +12,6 @@ export default {
       ['Auth Migration', 'Mia Singh', /\$\d/], [/\$0\.00 of/]),
     fact('/iq/projects/p-auth-migration', 'The initiative overview shows the sprint and the spend against its allocation',
       ['Auth Migration', /Sprint \d{1,2}\b/, /\$\d/], [/Sprint (?:4\d|9\d)\b/]),
-    { do: 'navigate', url: '/iq/projects?lens=sprints', name: 'The sprints lens shows each sprint with work in it', proves: 'cross-links', audit: false, auditReason: 'a content walk: the layout judges measure this page', expect: { visible: ['Auth Migration'].map(seen), noText: [/\b0 items\b/] } },
+    { do: 'navigate', url: '/iq/projects?lens=sprints', name: 'The sprints lens shows each sprint with work in it', proves: 'cross-links', audit: true, expect: { visible: ['Auth Migration'].map(seen), noText: [/\b0 items\b/] } },
   ],
 } satisfies JourneyMap;
