@@ -17,10 +17,11 @@ import { LocalRealtimeRouter, createAuthorityScope, baseChannel, type AuthorityS
 import type { ChatMember, ChatMembershipStore } from '@connorhoehnslalom/realtime-modules/chat';
 import { getUser, listUsers, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayChannel } from '../live-principal.js';
+
 import { channelGuard, channelNotifyPlugin, dmNotifyPlugin, tenantMentionNotifyPlugin } from '../realtime-gateway.js';
 import { createMemorySocialChatBackend, MirroredMembershipStore, setSocialChatBackend } from '../social-chat.js';
 import { setNotificationSink } from '../social-notify.js';
+import { admitChannel } from '../gateway/authority.js';
 
 const CH = 'social:ch:private';
 const DM = 'social:dm:alice:bob:carol';
@@ -71,7 +72,7 @@ function setup(subscribed: Record<string, string[]>) {
   router = new LocalRealtimeRouter({
     logger: { debug() {}, info() {}, warn() {}, error() {} },
     authorize: ({ kind, clientId, channel, ctx: c, scope }) =>
-      authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: c as Msg | null, ...(scope ? { scope } : {}) }, guards),
+      admitChannel({ kind, clientId, channel, ctx: c as Msg | null, ...(scope ? { scope } : {}) }),
     plugins: [dmNotifyPlugin(getRouter), channelNotifyPlugin(getRouter), tenantMentionNotifyPlugin(getRouter)],
   });
   router._setHandle({

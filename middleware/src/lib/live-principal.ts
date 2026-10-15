@@ -187,65 +187,12 @@ export interface LiveChannelAuthorization {
 export interface LiveChannelGuards {
   baseChannel: (channel: string) => string;
   guard: (auth: LiveGatewayAuth, channel: string, kind: 'subscribe' | 'publish') => boolean;
-  /**
-   * The channel decision itself (realtime-modules 0.116: the facade's
-   * `admitChannel`, the library engine). Absent: this module's own
-   * `authorizeLiveGatewayChannel` — the host copy kept one release behind the
-   * engine for the dev parity assertion (lib/gateway/authority-parity.ts).
-   */
-  decide?: (args: LiveChannelAuthorization) => Promise<boolean>;
+  /** The channel decision itself: the facade's `admitChannel` (the realtime-modules authority engine). */
+  decide: (args: LiveChannelAuthorization) => Promise<boolean>;
 }
-/** `guards.decide`, else the host copy. */
+/** The channel decision the primitives below compose with (`guards.decide`). */
 export function decideLiveChannel(args: LiveChannelAuthorization, guards: LiveChannelGuards): Promise<boolean> {
-  return guards.decide ? guards.decide(args) : authorizeLiveGatewayChannel(args, guards);
-}
-/** Requires the async-aware public router; never pass to a boolean-only hook. */
-export async function authorizeLiveGatewayChannel(args: LiveChannelAuthorization, guards: LiveChannelGuards): Promise<boolean> {
-  let membership: SocialMembershipProof | null = null;
-  try {
-    const base = guards.baseChannel(args.channel);
-    // A flow run's private channel has exactly one reader; it never reaches
-    // the Social or family rules below, which admit by grant or membership.
-    if (inFlowRunNamespace(base)) return await authorizeFlowRunChannel(args, base, guards);
-    // A Social deck's presence channel: owner or a current member of the source conversation.
-    if (inSocialDeckNamespace(base)) return await authorizeSocialDeckChannel(args, base, guards);
-    // `social:workgraph*` is default-deny: only the family's own names pass (the sync channel guard admits any `social:` name).
-    if (inSocialWorkGraphNamespace(base) && !tenantChannelFamily(base)) return false;
-    // The social work graph's per-conversation stream: the family's ViewSocial AND the conversation's own chat read, now.
-    if (SOCIAL_WORK_GRAPH_CONVERSATION.test(base)) return await authorizeSocialWorkGraphChannel(args, base, guards);
-    // A huddle's chat: only current seats of that call, never a grant or partition alone.
-    if (base === 'orgiq:huddle' || base.startsWith('orgiq:huddle:')) return await authorizeHuddleChannel(args, base, guards);
-    let principal = await getLivePrincipal(args.ctx);
-    if (base.startsWith('social:')) {
-      const allowedRole = await socialActionRole(principal.session, args.kind === 'subscribe' ? 'ViewSocial' : 'PostMessage');
-      if (allowedRole === null) return false;
-      membership = await currentSocialMembershipProof(base, principal.session.sub, args.scope);
-      if (!membership.allows()) return false;
-      principal = await getLivePrincipal(args.ctx);
-      if (!principal.session.grants.social?.includes(allowedRole) || !membership.allows()) return false;
-    }
-    // A non-Social tenant family asks the same authority its REST read/write
-    // route asks, against this freshly loaded session (lib/tenant-channels.ts).
-    // A family the shape table refuses never reaches the policy call.
-    const family = tenantChannelFamily(base);
-    if (family) {
-      const authority = channelAuthorityFor(family, args.channel, args.kind);
-      if (!authority || !await holdsChannelAuthority(principal.session, authority)) return false;
-      // An initiative deck is a per-resource read: the deck row now, and the
-      // REST route's own budget-tier rule (providers/initiative-decks.ts).
-      if (family.id === 'orgiq:deck' && !await initiativeDeckVisible(base, principal.session)) return false;
-      // A page resource (a team) is the REST read's 404 half, read now.
-      if (family.channelResource && !await pageResourceVisible(family.channelResource, base, principal.session.sub)) return false;
-      // The policy/row I/O can outlive a revocation: reload once more and decide
-      // the shape with only the grants that are current after it.
-      principal = await getLivePrincipal(args.ctx);
-      if (!sessionMeets(principal.session, authority)) return false;
-    }
-    // Existing namespace, DM, channel/team membership and distillation rules
-    // still decide the resource, using only refreshed tenant grant keys.
-    return guards.guard(principal.auth, args.channel, args.kind);
-  } catch { return false; }
-  finally { membership?.dispose(); }
+  return guards.decide(args);
 }
 
 /** Any name under the social work graph's namespace, well-formed or not. */
@@ -406,7 +353,7 @@ export function summarizableFamily(channel: string): TenantChannelFamily | null 
  * to that conversation's chat, reused for `/summarize` (REST and its private
  * run channel). No settled cache: every call reloads the directory session.
  *   - a tenant family (`orgiq:initiative|work|session|invoke`, `assessment:doc`,
- *     `pipelines:run|def`): `authorizeLiveGatewayChannel` on the bare chat name
+ *     `pipelines:run|def`): `admitChannel` on the bare chat name
  *     (family shape, active tenant, the family's Cedar action, partition and
  *     DM rules), then the chat service's own membership gate (explicit rows
  *     close a conversation to non-members), then a second reload so a grant
@@ -479,80 +426,8 @@ export async function authorizeSocialDeckChannel(args: LiveChannelAuthorization,
   finally { membership?.dispose(); }
 }
 
-/**
- * May this principal read the call history of a page lobby NOW — the same
- * authority a call on that lobby asks (the family's read authority, the page's
- * resource existing now, the name's partition rule), minus the Social
- * membership half that only `social:` lobbies carry. `not-a-lobby` means the
- * name is no tenant call lobby at all; `denied` a family the reader may not read.
- * No settled cache: the directory session is reloaded before and after the I/O.
- */
-export async function authorizeCallLobbyRead(ctx: Context, lobby: string, guard: (auth: LiveGatewayAuth, lobby: string) => boolean): Promise<'ok' | 'not-a-lobby' | 'gone' | 'denied'> {
-  const family = tenantChannelFamily(lobby);
-  if (!family || !family.lobby || !TENANT_PARTITIONS.has(family.tenant)) return 'not-a-lobby';
-  try {
-    let principal = await getLivePrincipal(ctx);
-    if (!await holdsChannelAuthority(principal.session, family.read)) return 'denied';
-    if (family.lobbyResource && !await pageResourceVisible(family.lobbyResource, lobby)) return 'gone';
-    principal = await getLivePrincipal(ctx);
-    return sessionMeets(principal.session, family.read) && guard(principal.auth, lobby) ? 'ok' : 'denied';
-  } catch { return 'denied'; }
-}
-
 export interface LiveCallGuards {
   guard: (auth: LiveGatewayAuth, lobby: string) => boolean;
   /** Public call state resolves legacy accepted/status frames without a lobby. */
   getLobby: (callId: string) => Promise<string | null>;
-}
-/** Fresh action admission; recipient reads use their own ViewSocial policy. */
-export async function authorizeLiveGatewayCall(ctx: Context, action: string, data: Record<string, unknown>, guards: LiveCallGuards): Promise<boolean> {
-  return liveCallDecision(ctx, action, data, guards, false);
-}
-export async function authorizeLiveGatewayCallRecipient(ctx: Context, data: Record<string, unknown>, guards: LiveCallGuards): Promise<boolean> {
-  return liveCallDecision(ctx, 'receive', data, guards, true);
-}
-async function liveCallDecision(ctx: Context, action: string, data: Record<string, unknown>, guards: LiveCallGuards, receiving: boolean): Promise<boolean> {
-  let membership: SocialMembershipProof | null = null;
-  try {
-    let principal = await getLivePrincipal(ctx);
-    let payload = data ?? {};
-    const nested = payload.data;
-    if (payload.callId == null && payload.lobbyName == null && nested && typeof nested === 'object' && !Array.isArray(nested)) {
-      payload = { ...(nested as Record<string, unknown>), ...payload };
-    }
-    if (action === 'invite' && payload.callerId !== principal.session.sub) return false;
-    const explicit = typeof payload.lobbyName === 'string' && payload.lobbyName ? payload.lobbyName : null;
-    const callId = typeof payload.callId === 'string' && payload.callId ? payload.callId : null;
-    const stored = callId ? await guards.getLobby(callId) : null;
-    // A frame cannot rename an existing Social call into a less restricted
-    // source lobby to bypass its current action or membership authority.
-    if (stored && explicit && stored !== explicit) return false;
-    const lobby = stored ?? explicit;
-    // The work graph's stream names are never a place to call into, well-formed or not.
-    if (lobby && inSocialWorkGraphNamespace(lobby)) return false;
-    if (receiving && !lobby) return false;
-    let socialRole: string | null = null;
-    if (lobby?.startsWith('social:')) {
-      socialRole = await socialActionRole(principal.session, receiving ? 'ViewSocial' : 'StartCall');
-      if (socialRole === null) return false;
-      membership = await currentSocialMembershipProof(lobby, principal.session.sub);
-      if (!membership.allows()) return false;
-    }
-    // A tenant family lobby (`orgiq:initiative:<id>`, `assessment:doc:<id>`)
-    // asks its REST read authority for every action, ringing included.
-    const family = lobby ? tenantChannelFamily(lobby) : null;
-    if (family && (!family.lobby || !await holdsChannelAuthority(principal.session, family.read))) return false;
-    // A page lobby (`assessment:team:<id>`, `pipelines:run:<id>`,
-    // `orgiq:initiative:<id>`) also asks
-    // its resource now, for every action including delivery: a deleted team
-    // or pruned run fences the call the way its page 404s.
-    if (family?.lobbyResource && lobby && !await pageResourceVisible(family.lobbyResource, lobby)) return false;
-    // Both the public call lookup and policy/membership I/O may outlive a
-    // source switch. The signed source role never changes during this check.
-    principal = await getLivePrincipal(ctx);
-    if (socialRole && !principal.session.grants.social?.includes(socialRole)) return false;
-    if (family && !sessionMeets(principal.session, family.read)) return false;
-    return (!membership || membership.allows()) && (!lobby || guards.guard(principal.auth, lobby));
-  } catch { return false; }
-  finally { membership?.dispose(); }
 }

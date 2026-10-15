@@ -14,10 +14,11 @@ import { createAuthorityScope, type AuthorityScope } from '@connorhoehnslalom/re
 import type { ChatMember, ChatMembershipStore } from '@connorhoehnslalom/realtime-modules/chat';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayChannel } from '../live-principal.js';
+
 import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { channelGuard } from '../realtime-gateway.js';
 import { createMemorySocialChatBackend, MirroredMembershipStore, setSocialChatBackend } from '../social-chat.js';
+import { admitChannel } from '../gateway/authority.js';
 
 const DM = 'social:dm:alice:bob:carol';
 const CH = 'social:ch:private';
@@ -27,7 +28,7 @@ const ctx = (userId: string, epoch = 1, act?: { sub: string; epoch: number }) =>
   epoch, sessionIat: 100, tenants: ['social'], displayName: userId, ...(act ? { act } : {}) });
 const guards = { guard: channelGuard, baseChannel };
 const check = (userId: string, scope?: AuthorityScope, channel = DM, kind: 'subscribe' | 'publish' = 'subscribe', c = ctx(userId)) =>
-  authorizeLiveGatewayChannel({ kind, clientId: `${userId}-socket`, channel, ctx: c, ...(scope ? { scope } : {}) }, guards);
+  admitChannel({ kind, clientId: `${userId}-socket`, channel, ctx: c, ...(scope ? { scope } : {}) });
 
 let durable: ChatMember[]; let mirror: ChatMember[]; let reads: number; let gate: Promise<void> | null;
 let fail: Error | null; let store: MirroredMembershipStore; let users: Map<string, UserInfo>; let order: string[];

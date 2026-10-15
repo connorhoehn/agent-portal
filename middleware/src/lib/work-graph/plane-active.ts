@@ -6,7 +6,7 @@
 //   inCall       a live call (a call-log row answered and not ended) in a
 //                lobby the viewer may read now: a Social conversation the
 //                viewer belongs to, or a tenant page lobby under the lobby's
-//                own authority (live-principal.ts authorizeCallLobbyRead —
+//                own authority (lib/gateway/authority.ts admitLobbyRead —
 //                the family's read action, the page existing, the partition).
 //                Anything else is null: the viewer is not told the person is
 //                in a call they could not see.
@@ -24,7 +24,7 @@ import { clock } from '../../mock/core/index.js';
 import { listUsers } from '../../providers/identity.js';
 import { getProject } from '../../providers/projects.js';
 import { listCallRows, socialPlatformBackend, type SocialCallLogRow } from '../../providers/social-platform.js';
-import { authorizeCallLobbyRead, sessionGatewayContext } from '../live-principal.js';
+import { sessionGatewayContext } from '../live-principal.js';
 import { tenantChannelFamily, TENANT_PARTITIONS } from '../tenant-channels.js';
 import { buildViewerWorkGraph } from './build.js';
 import { ownerSharingState, sharingViewerContext, todayQuery } from './shared-work.js';

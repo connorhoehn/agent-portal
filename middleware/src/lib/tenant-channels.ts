@@ -9,7 +9,7 @@
 // Two layers use this table:
 //   - the synchronous guards (realtime-gateway.ts `channelGuard`/`lobbyGuard`)
 //     check only the SHAPE: family, service and partition grant;
-//   - `authorizeLiveGatewayChannel`/call admission (live-principal.ts) then
+//   - the channel/call admission (lib/gateway/authority.ts `admitChannel`/`admitCall`) then
 //     ask the family's authority against the freshly reloaded session, every
 //     time, with no settled positive cache of their own.
 //

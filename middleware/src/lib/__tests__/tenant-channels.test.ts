@@ -1,5 +1,5 @@
 // Resource authority for the non-Social tenant channel families
-// (lib/tenant-channels.ts), through the real authorizeLiveGatewayChannel and
+// (lib/tenant-channels.ts), through the real admitChannel and
 // call admission with the real channelGuard/lobbyGuard. Identity and policy
 // are mocked so each case names exactly which authority decides it.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
@@ -7,12 +7,13 @@ jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayCall, authorizeLiveGatewayChannel } from '../live-principal.js';
+
 import { channelGuard, lobbyGuard } from '../realtime-gateway.js';
 import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { TENANT_CHANNEL_FAMILIES, tenantChannelFamily } from '../tenant-channels.js';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import { initiativeDecksFixture } from '../../mock/initiative-decks.js';
+import { admitCall, admitChannel } from '../gateway/authority.js';
 
 // The seed matrix, for the actions these families ask.
 const POLICY: Record<string, string[]> = {
@@ -26,7 +27,7 @@ const ctx = (userId: string, org: string, role: string, epoch = 1) =>
   ({ userId, org, role, epoch, sessionIat: 1, tenants: Object.keys(users.get(userId)?.grants ?? {}), displayName: userId });
 const guards = { guard: channelGuard, baseChannel };
 const authorize = (c: ReturnType<typeof ctx>, channel: string, kind: 'subscribe' | 'publish' = 'subscribe') =>
-  authorizeLiveGatewayChannel({ kind, clientId: 'socket', channel, ctx: c }, guards);
+  admitChannel({ kind, clientId: 'socket', channel, ctx: c });
 
 beforeEach(() => {
   setSocialChatBackend(createMemorySocialChatBackend({ fixtures: false }));
@@ -197,7 +198,7 @@ describe('default deny', () => {
 });
 
 describe('call lobbies ask the family read authority', () => {
-  const call = (c: ReturnType<typeof ctx>, lobbyName: string) => authorizeLiveGatewayCall(c, 'invite',
+  const call = (c: ReturnType<typeof ctx>, lobbyName: string) => admitCall(c, 'invite',
     { callId: 'c1', lobbyName, callerId: c.userId, targetUserIds: ['x'] }, { guard: lobbyGuard, getLobby: async () => null });
   it('admits the document reader and refuses the same person standing elsewhere', async () => {
     expect(await call(ctx('ana', 'assessment', 'assessor'), 'assessment:doc:page:1')).toBe(true);

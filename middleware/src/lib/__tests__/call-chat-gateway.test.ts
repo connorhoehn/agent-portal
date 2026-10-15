@@ -17,7 +17,8 @@ import WebSocket from 'ws';
 import request from '../../test-support/http.js';
 import type { IncomingMessage } from 'node:http';
 import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
-import { attachRealtimeGateway, authenticateGatewayUpgrade, channelGuard } from '../realtime-gateway.js';
+import { attachRealtimeGateway, authenticateGatewayUpgrade } from '../realtime-gateway.js';
+import { channelGuards } from '../gateway/authority.js';
 import { createUploadsRouter, gatewayUploadConfig, resetGatewayUploadBackendForTests } from '../gateway-attachments.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -89,7 +90,7 @@ beforeEach(async () => {
   app.use((req, _res, next) => { req.session = sessions.get(String(req.headers['x-user'])); next(); });
   app.use('/api/calls', callChatRouter); app.use('/api/chat', chatPinsRouter);
   app.use('/api/uploads', createUploadsRouter(token => authenticateGatewayUpgrade({ headers: { 'sec-websocket-protocol': `bearer-token-v1, ${token}` } } as IncomingMessage),
-    { guard: channelGuard, baseChannel }, uploads));
+    channelGuards, uploads));
   app.use(errorHandler);
   server = http.createServer(app); backend = createMemorySocialChatBackend({ fixtures: false });
   handle = attachRealtimeGateway(server, { redisUrl: null, socialChat: backend, statsIntervalMs: 0, pingIntervalMs: 0 });

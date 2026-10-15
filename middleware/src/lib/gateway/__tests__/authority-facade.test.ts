@@ -1,13 +1,12 @@
 // The facade contract (docs/realtime-validation/2026-10-08/gateway-split.md §3).
 //
-// Two assertions per row, both against the same directory world:
-//   1. the VERDICT column — what the rule must answer for this (feature,
-//      family, role): revoked grant, epoch bump, masquerade actor,
-//      cross-tenant, history floor, non-member lobby, page family existence;
-//   2. EQUALITY with the pre-split call — the live-principal primitive handed
-//      the `{ guard, baseChannel }` / `{ guard, getLobby }` pair every plugin
-//      and route assembled by hand until 2026-10-08. A facade that grows a rule
-//      of its own, or drops one, fails here before any socket does.
+// Every row asserts the VERDICT column — what the rule must answer for this
+// (feature, family, role): revoked grant, epoch bump, masquerade actor,
+// cross-tenant, history floor, non-member lobby, page family existence —
+// against one directory world. Until the 0.119 pin move each row also asserted
+// equality with the pre-split live-principal primitive (the host copy the
+// realtime-modules engine replaced); those copies are deleted, and the verdict
+// column, unchanged, is the contract.
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', aurora: {}, auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: false } } }));
 jest.mock('../../../providers/identity.js', () => ({ getUser: jest.fn(), listUsers: jest.fn(async () => []) }));
 jest.mock('../../authz.js', () => ({ isAllowed: jest.fn() }));
@@ -22,10 +21,7 @@ import {
   admitLobbyRead, admitPrincipal, admitReader, admitSocialConversation, admitSubscribe, admitPublish, admitUploadRead,
   callGuards, channelGuard, holdsFamilyAuthority, lobbyGuard, noStoredCall, producerChannelAllowed,
 } from '../authority.js';
-import {
-  authorizeCallLobbyRead, authorizeConversationChat, authorizeLiveGatewayCall, authorizeLiveGatewayCallRecipient,
-  authorizeLiveGatewayChannel, sessionGatewayContext, type LiveGatewayAuth,
-} from '../../live-principal.js';
+import { sessionGatewayContext, type LiveGatewayAuth } from '../../live-principal.js';
 import { createMemorySocialChatBackend, setSocialChatBackend, type SocialChatBackend } from '../../social-chat.js';
 import type { Grants, Session } from '../../session.js';
 
@@ -157,14 +153,13 @@ const CHANNEL_ROWS: ChannelRow[] = [
   { name: 'access: a malformed request id is refused', ctx: () => ctx('priya', 'access'), kind: 'subscribe', channel: 'access:req:nope', verdict: false },
 ];
 
-describe('admitChannel: the verdict, and equality with the pre-split primitive + guard pair', () => {
+describe('admitChannel: the verdict', () => {
   it.each(CHANNEL_ROWS.map(row => [row.name, row] as const))('%s', async (_name, row) => {
     await row.before?.();
     const context = row.ctx();
     const args = { kind: row.kind, clientId: 'c1', channel: row.channel, ctx: context };
     const facade = await admitChannel(args);
     expect(facade).toBe(row.verdict);
-    expect(facade).toBe(await authorizeLiveGatewayChannel(args, { guard: channelGuard, baseChannel }));
     const thin = row.kind === 'subscribe' ? await admitSubscribe(context, row.channel, { clientId: 'c1' }) : await admitPublish(context, row.channel, { clientId: 'c1' });
     expect(thin).toBe(row.verdict);
   });
@@ -234,7 +229,6 @@ describe('admitCall / admitCallRecipient / admitLobbyRead', () => {
     const context = row.ctx();
     const facade = await admitCall(context, row.action, row.payload, callGuards(stored));
     expect(facade).toBe(row.verdict);
-    expect(facade).toBe(await authorizeLiveGatewayCall(context, row.action, row.payload, { guard: lobbyGuard, getLobby: stored }));
   });
 
   it('the lobby-access route form asks with no stored call behind it', async () => {
@@ -248,7 +242,6 @@ describe('admitCall / admitCallRecipient / admitLobbyRead', () => {
     for (const [context, verdict] of [[ctx('bob', 'orgiq'), true], [ctx('pat', 'pipelines'), false], [ctx('ava', 'assessment'), false]] as const) {
       const facade = await admitCallRecipient(context, { callId: 'c-init' }, guards);
       expect(facade).toBe(verdict);
-      expect(facade).toBe(await authorizeLiveGatewayCallRecipient(context, { callId: 'c-init' }, guards));
     }
     users.get('bob')!.epoch = 1;
     expect(await admitCallRecipient(ctx('bob', 'orgiq'), { callId: 'c-init' }, guards)).toBe(false);
@@ -264,7 +257,6 @@ describe('admitCall / admitCallRecipient / admitLobbyRead', () => {
   ] as const)('lobby read: %s', async (_name, context, lobby, verdict) => {
     const facade = await admitLobbyRead(context, lobby);
     expect(facade).toBe(verdict);
-    expect(facade).toBe(await authorizeCallLobbyRead(context, lobby, lobbyGuard));
   });
 });
 
@@ -285,7 +277,6 @@ describe('admitConversationChat / admitSocialConversation', () => {
     const args = { ctx: context, channel, kind, clientId: 'rest:test' };
     const facade = await admitConversationChat(args);
     expect(facade).toBe(verdict);
-    expect(facade).toBe(await authorizeConversationChat(args, { guard: channelGuard, baseChannel }));
   });
 
   it.each([

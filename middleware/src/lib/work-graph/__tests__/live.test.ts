@@ -1,6 +1,6 @@
 // The work graph's live hint (lib/work-graph/live.ts) on the dedicated
 // default-deny family `orgiq:workgraph` (lib/tenant-channels.ts), through the
-// real authorizeLiveGatewayChannel + channelGuard and the library activity()
+// real admitChannel + channelGuard and the library activity()
 // feature over a recording router.
 //
 // Pinned: an orgiq reader may hold the plain subscribe; nothing else is offered
@@ -12,7 +12,7 @@ jest.mock('../../../providers/identity.js', () => ({ ...jest.requireActual('../.
 jest.mock('../../authz.js', () => ({ isAllowed: jest.fn() }));
 import { getUser, type UserInfo } from '../../../providers/identity.js';
 import { isAllowed } from '../../authz.js';
-import { authorizeLiveGatewayChannel } from '../../live-principal.js';
+
 import { channelGuard, lobbyGuard } from '../../realtime-gateway.js';
 import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { tenantChannelFamily } from '../../tenant-channels.js';
@@ -24,6 +24,7 @@ import {
   WORK_GRAPH_CHANNEL, WORK_GRAPH_HINT, hintForRunChange, hintForFlowRunMove, hintForJobChange, notifyWorkGraphChanged, stopWorkGraphLiveHints } from '../live.js';
 import { listBots } from '../../../providers/bots.js';
 import { flowRunsFixture } from '../../../mock/flow-runs.js';
+import { admitChannel } from '../../gateway/authority.js';
 
 let users: Map<string, UserInfo>;
 const user = (id: string, grants: Record<string, string[]>): UserInfo => ({ id, displayName: id, email: null, personId: null, epoch: 1, grants });
@@ -31,7 +32,7 @@ const ctx = (userId: string, org: string, role: string) =>
   ({ userId, org, role, epoch: 1, sessionIat: 1, tenants: Object.keys(users.get(userId)?.grants ?? {}), displayName: userId });
 const guards = { guard: channelGuard, baseChannel };
 const authorize = (c: ReturnType<typeof ctx>, channel: string, kind: 'subscribe' | 'publish' = 'subscribe') =>
-  authorizeLiveGatewayChannel({ kind, clientId: 'socket', channel, ctx: c }, guards);
+  admitChannel({ kind, clientId: 'socket', channel, ctx: c });
 
 type Sent = { to: string; message: Record<string, unknown> };
 function fakeRouter() {
@@ -43,7 +44,7 @@ function fakeRouter() {
     sendToClient: (to: string, message: Record<string, unknown>) => { sent.push({ to, message }); return true; },
     sendToChannel: async (channel: string, message: Record<string, unknown>) => { for (const to of members.get(channel) ?? []) sent.push({ to, message }); },
     checkChannel: (kind: 'subscribe' | 'publish', clientId: string, channel: string) =>
-      authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: contexts.get(clientId) ?? null }, guards),
+      admitChannel({ kind, clientId, channel, ctx: contexts.get(clientId) ?? null }),
     subscribeToChannel: async (clientId: string, channel: string) => {
       if (!await router.checkChannel('subscribe', clientId, channel)) return false;
       const set = members.get(channel) ?? new Set<string>(); set.add(clientId); members.set(channel, set); return true;

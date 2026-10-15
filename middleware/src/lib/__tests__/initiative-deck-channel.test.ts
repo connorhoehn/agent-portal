@@ -3,18 +3,19 @@
 // subscribe and every delivered frame: a deck built with budget figures is
 // invisible below the budgets read tier, so its presence channel must not leak
 // who views it or which slide they are on. Drives the real
-// authorizeLiveGatewayChannel + channelGuard and the installed LocalRealtimeRouter.
+// admitChannel + channelGuard and the installed LocalRealtimeRouter.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { LocalRealtimeRouter, baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayChannel } from '../live-principal.js';
+
 import { channelGuard } from '../realtime-gateway.js';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import { initiativeDecksFixture } from '../../mock/initiative-decks.js';
 import { deckViewerFor, getDeck } from '../../providers/initiative-decks.js';
+import { admitChannel } from '../gateway/authority.js';
 
 const BUDGET = 'idk-0b1c2d3e-0000-4000-8000-0000000000b1';
 const PLAIN = 'idk-0b1c2d3e-0000-4000-8000-0000000000a1';
@@ -29,7 +30,7 @@ const ctxOf = (userId: string, role: string, org = 'orgiq') =>
   ({ userId, org, role, epoch: 1, sessionIat: 1, tenants: Object.keys(users.get(userId)?.grants ?? {}), displayName: userId });
 const guards = { guard: channelGuard, baseChannel };
 const ask = (c: ReturnType<typeof ctxOf>, channel: string, kind: 'subscribe' | 'publish' = 'subscribe') =>
-  authorizeLiveGatewayChannel({ kind, clientId: 'c', channel, ctx: c }, guards);
+  admitChannel({ kind, clientId: 'c', channel, ctx: c });
 const wire = (id: string) => `presence:orgiq:deck:${id}`;
 const row = (id: string, includesBudget: boolean) =>
   ({ id, projectId: 'p-soc2', title: 'T', includesBudget, createdBy: 'lee', createdAt: 'x', updatedAt: 'x', headRevisionId: null });
@@ -106,7 +107,7 @@ describe('the router rechecks every delivered frame', () => {
     const router = new LocalRealtimeRouter({
       logger,
       authorize: ({ kind, clientId, channel, ctx }) =>
-        authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: ctx as Msg | null }, guards),
+        admitChannel({ kind, clientId, channel, ctx: ctx as Msg | null }),
     });
     (router as unknown as { _setHandle(h: unknown): void })._setHandle({
       getClientContext: (id: string) => contexts.get(id) ?? null,

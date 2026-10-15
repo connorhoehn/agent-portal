@@ -3,13 +3,14 @@ jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayCall, authorizeLiveGatewayCallRecipient, authorizeLiveGatewayChannel, currentLiveSession, getLivePrincipal } from '../live-principal.js';
+import { currentLiveSession, getLivePrincipal } from '../live-principal.js';
 import { currentSocialActionSession } from '../social-authority.js';
 import { channelGuard, lobbyGuard } from '../realtime-gateway.js';
 import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import type { Session } from '../session.js';
 import type { ChatMember, ChatMembershipStore } from '@connorhoehnslalom/realtime-modules/chat';
 import { createMemorySocialChatBackend, MirroredMembershipStore, setSocialChatBackend, socialChat } from '../social-chat.js';
+import { admitCall, admitCallRecipient, admitChannel } from '../gateway/authority.js';
 
 const session: Session = { sub: 'alice', tenant: 'orgiq', role: 'member', epoch: 2, iat: 100,
   grants: { orgiq: ['member'], social: ['participant'] } };
@@ -18,7 +19,7 @@ const context = (value: Session = session) => ({ userId: value.sub, org: value.t
   ...(value.act ? { act: { sub: value.act.sub, epoch: value.act.epoch } } : {}) });
 const guards = { guard: channelGuard, baseChannel };
 const authorize = (channel = 'social:dm:alice:bob', kind: 'subscribe' | 'publish' = 'subscribe', ctx = context()) =>
-  authorizeLiveGatewayChannel({ kind, clientId: 'socket-a', channel, ctx }, guards);
+  admitChannel({ kind, clientId: 'socket-a', channel, ctx });
 let users: Map<string, UserInfo>;
 beforeEach(() => {
   setSocialChatBackend(createMemorySocialChatBackend({ fixtures: false }));
@@ -106,11 +107,11 @@ it.each(['social:dm:alice:bob', 'social:team:example:general'])('rejects %s memb
   const identityStarted = new Promise<void>(resolve => { startIdentity = resolve; });
   const identityWait = new Promise<void>(resolve => { releaseIdentity = resolve; });
   jest.mocked(getUser).mockImplementation(async id => { if (++count === 2) { startIdentity(); await identityWait; } return users.get(id) ?? null; });
-  const pending = authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'a', channel, ctx: context() }, { ...guards, guard: () => true });
+  const pending = admitChannel({ kind: 'subscribe', clientId: 'a', channel, ctx: context() });
   await membershipStarted; releaseMembership(); await identityStarted;
   await store.putMember({ ...aliceRow, removedAt: '2026-10-03T01:00:00.000Z' }); releaseIdentity();
   expect(await pending).toBe(false); read.mockRestore();
-  expect(await authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'a', channel, ctx: context() }, { ...guards, guard: () => true })).toBe(false);
+  expect(await admitChannel({ kind: 'subscribe', clientId: 'a', channel, ctx: context() })).toBe(false);
 });
 
 it('preserves resource guards, server-only distillation and the reserved huddle namespace', async () => {
@@ -124,10 +125,10 @@ it('preserves resource guards, server-only distillation and the reserved huddle 
   const source = { ...session, tenant: 'assessment', role: 'assessor' } as Session;
   users.get('alice')!.grants.assessment = ['assessor'];
   expect(await authorize('orgiq:distill:jobs', 'subscribe', context(source))).toBe(false);
-  const resource = jest.fn().mockReturnValue(false);
-  expect(await authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'a', channel: 'social:ch:private', ctx: context() },
-    { ...guards, guard: resource })).toBe(false);
-  expect(resource).toHaveBeenCalledWith(expect.objectContaining({ tenants: ['orgiq', 'social', 'assessment'] }), 'social:ch:private', 'subscribe');
+  // The name's resource rule (the Social channel's membership) is asked, and refuses a non-member.
+  const resource = jest.spyOn(socialChat().membershipStore, 'isActiveMember');
+  expect(await admitChannel({ kind: 'subscribe', clientId: 'a', channel: 'social:ch:private', ctx: context() })).toBe(false);
+  expect(resource).toHaveBeenCalledWith('social:ch:private', 'alice');
 });
 
 it('fails closed on authoritative directory or policy outages without reusing previous authority', async () => {
@@ -176,29 +177,29 @@ it('preserves narrowed demo personas while retaining initial and admin demo gran
 it('fresh call admission binds flat/nested invite callers and refuses stale provenance before signaling', async () => {
   const callGuards = { guard: lobbyGuard, getLobby: jest.fn(async () => 'orgiq:dm:alice:bob') };
   const invite = { callId: 'call', lobbyName: 'orgiq:dm:alice:bob', callerId: 'alice', targetUserIds: ['bob'] };
-  expect(await authorizeLiveGatewayCall(context(), 'invite', invite, callGuards)).toBe(true);
-  expect(await authorizeLiveGatewayCall(context(), 'invite', { data: invite }, callGuards)).toBe(true);
-  expect(await authorizeLiveGatewayCall(context(), 'invite', { ...invite, callerId: 'bob' }, callGuards)).toBe(false);
+  expect(await admitCall(context(), 'invite', invite, callGuards)).toBe(true);
+  expect(await admitCall(context(), 'invite', { data: invite }, callGuards)).toBe(true);
+  expect(await admitCall(context(), 'invite', { ...invite, callerId: 'bob' }, callGuards)).toBe(false);
   users.get('alice')!.epoch += 1;
-  expect(await authorizeLiveGatewayCall(context(), 'participant-state', { callId: 'call' }, callGuards)).toBe(false);
-  expect(await authorizeLiveGatewayCall(context(), 'discover', {}, callGuards)).toBe(false);
+  expect(await admitCall(context(), 'participant-state', { callId: 'call' }, callGuards)).toBe(false);
+  expect(await admitCall(context(), 'discover', {}, callGuards)).toBe(false);
 });
 
 it('resolves missing call lobbies from public state and applies current Social StartCall authority', async () => {
   const callGuards = { guard: lobbyGuard, getLobby: jest.fn(async () => 'social:dm:alice:bob') };
-  expect(await authorizeLiveGatewayCall(context(), 'accepted', { callId: 'call' }, callGuards)).toBe(true);
+  expect(await admitCall(context(), 'accepted', { callId: 'call' }, callGuards)).toBe(true);
   expect(callGuards.getLobby).toHaveBeenCalledWith('call');
   expect(isAllowed).toHaveBeenCalledWith({ sub: 'alice', tenant: 'social', role: 'participant' }, 'StartCall');
   jest.mocked(isAllowed).mockImplementation(async (_p, action) => action === 'ViewSocial');
-  expect(await authorizeLiveGatewayCall(context(), 'accepted', { callId: 'call' }, callGuards)).toBe(false);
+  expect(await admitCall(context(), 'accepted', { callId: 'call' }, callGuards)).toBe(false);
   users.get('alice')!.grants.social = [];
-  expect(await authorizeLiveGatewayCall(context(), 'accepted', { callId: 'call' }, callGuards)).toBe(false);
+  expect(await admitCall(context(), 'accepted', { callId: 'call' }, callGuards)).toBe(false);
 });
 
 it('refuses a forged explicit lobby that renames an existing Social call into OrgIQ', async () => {
   const callGuards = { guard: lobbyGuard, getLobby: jest.fn(async () => 'social:dm:alice:bob') };
   users.get('alice')!.grants.social = [];
-  expect(await authorizeLiveGatewayCall(context(), 'participant-state', { callId: 'call', lobbyName: 'orgiq:dm:alice:bob' }, callGuards)).toBe(false);
+  expect(await admitCall(context(), 'participant-state', { callId: 'call', lobbyName: 'orgiq:dm:alice:bob' }, callGuards)).toBe(false);
   expect(callGuards.getLobby).toHaveBeenCalledWith('call');
 });
 
@@ -228,22 +229,23 @@ describe('membership authority still respects directory, actor and policy denial
   it('directory, actor, policy and resource denials still deny when membership allows', async () => {
     const channel = 'social:ch:private';
     durable = [member(channel, 'alice')];
-    const check = () => authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'a', channel, ctx: as('alice') }, allowAll);
+    const check = () => admitChannel({ kind: 'subscribe', clientId: 'a', channel, ctx: as('alice') });
     expect(await check()).toBe(true);
     users.get('alice')!.epoch = 3; expect(await check()).toBe(false);
     users.get('alice')!.epoch = 2; users.get('alice')!.grants.social = []; expect(await check()).toBe(false);
     users.get('alice')!.grants.social = ['participant'];
     users.set('operator', { id: 'operator', displayName: 'Operator', email: null, personId: null, epoch: 8, grants: { orgiq: ['admin'] } });
     const masquerade = context({ ...session, act: { sub: 'operator', epoch: 7, role: 'admin', tenant: 'orgiq', grants: {} } });
-    expect(await authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'a', channel, ctx: masquerade }, allowAll)).toBe(false);
+    expect(await admitChannel({ kind: 'subscribe', clientId: 'a', channel, ctx: masquerade })).toBe(false);
     jest.mocked(isAllowed).mockResolvedValueOnce(false); expect(await check()).toBe(false);
-    expect(await authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'a', channel, ctx: as('alice') }, { ...guards, guard: () => false })).toBe(false);
+    // The name's resource rule refusing while the membership proof allows.
+    jest.spyOn(store, 'isActiveMember').mockReturnValueOnce(false); expect(await check()).toBe(false);
     // The epoch bump lands while the early proof is outstanding.
     jest.mocked(getUser).mockImplementationOnce(async id => { const user = structuredClone(users.get(id)!); user.epoch = 9; return user; });
     expect(await check()).toBe(false);
     const lobby = 'social:dm:alice:bob'; durable.push(member(lobby, 'alice'));
     users.get('alice')!.epoch = 4;
-    expect(await authorizeLiveGatewayCallRecipient(as('alice'), { callId: 'call' }, { guard: () => true, getLobby: async () => lobby })).toBe(false);
+    expect(await admitCallRecipient(as('alice'), { callId: 'call' }, { guard: () => true, getLobby: async () => lobby })).toBe(false);
     expect(queries.mock.calls.length).toBeGreaterThan(0);
   });
 
@@ -253,14 +255,14 @@ describe('membership authority still respects directory, actor and policy denial
     try {
       queries.mockImplementation(async () => { throw new Error('Dynamo unavailable'); });
       jest.mocked(getUser).mockRejectedValueOnce(new Error('Aurora unavailable'));
-      expect(await authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'a', channel: 'social:dm:alice:bob', ctx: as('alice') }, allowAll)).toBe(false);
+      expect(await admitChannel({ kind: 'subscribe', clientId: 'a', channel: 'social:dm:alice:bob', ctx: as('alice') })).toBe(false);
       jest.mocked(isAllowed).mockResolvedValueOnce(false);
-      expect(await authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'a', channel: 'social:dm:alice:bob', ctx: as('alice') }, allowAll)).toBe(false);
-      expect(await authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: 'a', channel: 'social:dm:alice:bob', ctx: as('alice') }, allowAll)).toBe(false);
-      expect(await authorizeLiveGatewayCallRecipient(as('alice'), { callId: 'call' },
+      expect(await admitChannel({ kind: 'subscribe', clientId: 'a', channel: 'social:dm:alice:bob', ctx: as('alice') })).toBe(false);
+      expect(await admitChannel({ kind: 'subscribe', clientId: 'a', channel: 'social:dm:alice:bob', ctx: as('alice') })).toBe(false);
+      expect(await admitCallRecipient(as('alice'), { callId: 'call' },
         { guard: () => true, getLobby: async () => { throw new Error('Redis unavailable'); } })).toBe(false);
       jest.mocked(getUser).mockRejectedValueOnce(new Error('Aurora unavailable'));
-      expect(await authorizeLiveGatewayCallRecipient(as('alice'), { callId: 'call', lobbyName: 'social:dm:alice:bob' },
+      expect(await admitCallRecipient(as('alice'), { callId: 'call', lobbyName: 'social:dm:alice:bob' },
         { guard: () => true, getLobby: async () => { throw new Error('Redis unavailable'); } })).toBe(false);
       for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
       expect(rejections).toEqual([]);

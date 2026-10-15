@@ -25,7 +25,7 @@ import { workDayWindow, validateWorkGraphSnapshotV2, type WorkGraphSnapshotV2 } 
 import { applyWorkGraphSnapshotV2, createClientWorkGraphState, reduceWorkGraphStream, type ClientWorkGraphState } from '@connorhoehnslalom/realtime-modules/client';
 import { getUser, type UserInfo } from '../../../providers/identity.js';
 import { isAllowed } from '../../authz.js';
-import { authorizeLiveGatewayChannel } from '../../live-principal.js';
+
 import { channelGuard } from '../../realtime-gateway.js';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../../social-chat.js';
 import { clock, freezeClock, unfreezeClock } from '../../../mock/core/index.js';
@@ -46,6 +46,7 @@ import { buildViewerWorkGraph, rememberServedWorkGraph, resetServedWorkGraphs } 
 import { parseWorkGraphQuery } from '../snapshot.js';
 import { createOrgiqWorkGraphStream, publishWorkGraphChange, signalWorkGraphAccess, type OrgiqWorkGraphStream } from '../stream.js';
 import type { WorkGraphSubject } from '../sources.js';
+import { admitChannel } from '../../gateway/authority.js';
 
 type Msg = Record<string, unknown>;
 const TZ = 'UTC';
@@ -96,7 +97,7 @@ function setup(opts: { authorize?: boolean; feature?: 'none' } = {}) {
     logger: { debug() {}, info() {}, warn() {}, error() {} },
     ...(opts.authorize === false ? {} : {
       authorize: ({ kind, clientId, channel, ctx, scope }) =>
-        authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: ctx as Msg | null, ...(scope ? { scope } : {}) }, { guard: channelGuard, baseChannel }),
+        admitChannel({ kind, clientId, channel, ctx: ctx as Msg | null, ...(scope ? { scope } : {}) }),
     }),
     plugins: [stream.plugin],
   });
@@ -213,8 +214,8 @@ describe('default deny', () => {
     env.contexts.set('nora-s', ctxOf('nora', 'orgiq', 'sme'));
     await env.service.handleAction('nora-s', 'publish', { channel: `orgiq:workgraph:initiative:${INIT}`, change: {} });
     expect(env.acks('nora-s')).toEqual(['WORK_GRAPH_BAD_REQUEST']);
-    expect(await authorizeLiveGatewayChannel({ kind: 'publish', clientId: 'nora-s', channel: `orgiq:workgraph:initiative:${INIT}`,
-      ctx: ctxOf('nora', 'orgiq', 'sme') }, { guard: channelGuard, baseChannel })).toBe(false);
+    expect(await admitChannel({ kind: 'publish', clientId: 'nora-s', channel: `orgiq:workgraph:initiative:${INIT}`,
+      ctx: ctxOf('nora', 'orgiq', 'sme') })).toBe(false);
   });
 });
 

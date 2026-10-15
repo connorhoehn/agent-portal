@@ -12,7 +12,7 @@ jest.mock('../../authz.js', () => ({ ...jest.requireActual('../../authz.js'), is
 import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
 import { getUser, type UserInfo } from '../../../providers/identity.js';
 import { isAllowed } from '../../authz.js';
-import { authorizeLiveGatewayChannel } from '../../live-principal.js';
+
 import { channelGuard, lobbyGuard } from '../../realtime-gateway.js';
 import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { tenantChannelFamily } from '../../tenant-channels.js';
@@ -21,6 +21,7 @@ import { observeCallPageLifecycle } from '../../call-pages.js';
 import { resetGatewayRunFeed, tenantActivity } from '../../gateway-run-feed.js';
 import { SOCIAL_WORK_GRAPH_CHANNEL, WORK_GRAPH_HINT, coalescedSocialHint, notifySocialWorkGraphChanged, resetSocialHintCoalescing, stopWorkGraphLiveHints } from '../live.js';
 import { onSocialWorkGraphEvent, resetObservedCalls, observedCalls, type SocialWorkGraphEvent } from '../social-events.js';
+import { admitChannel } from '../../gateway/authority.js';
 
 let users: Map<string, UserInfo>;
 const user = (id: string, grants: Record<string, string[]>): UserInfo => ({ id, displayName: id, email: null, personId: null, epoch: 1, grants });
@@ -28,7 +29,7 @@ const ctx = (userId: string, org: string, role: string) =>
   ({ userId, org, role, epoch: 1, sessionIat: 1, tenants: Object.keys(users.get(userId)?.grants ?? {}), displayName: userId });
 const guards = { guard: channelGuard, baseChannel };
 const authorize = (c: ReturnType<typeof ctx>, channel: string, kind: 'subscribe' | 'publish' = 'subscribe') =>
-  authorizeLiveGatewayChannel({ kind, clientId: 'socket', channel, ctx: c }, guards);
+  admitChannel({ kind, clientId: 'socket', channel, ctx: c });
 const SECRET = 'social:ch:secret';
 const WS = 'social:workgraph:workspace';
 const CONV = `social:workgraph:conversation:${SECRET}`;
@@ -103,7 +104,7 @@ describe('the social hint', () => {
     const router = {
       sendToClient: (to: string, message: Record<string, unknown>) => { received.push({ to, message }); return true; },
       sendToChannel: async (channel: string, message: Record<string, unknown>) => { for (const to of members.get(channel) ?? []) received.push({ to, message }); },
-      checkChannel: (kind: 'subscribe' | 'publish', clientId: string, channel: string) => authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: contexts.get(clientId) ?? null }, guards),
+      checkChannel: (kind: 'subscribe' | 'publish', clientId: string, channel: string) => admitChannel({ kind, clientId, channel, ctx: contexts.get(clientId) ?? null }),
       subscribeToChannel: async (clientId: string, channel: string) => {
         if (!await router.checkChannel('subscribe', clientId, channel)) return false;
         const set = members.get(channel) ?? new Set<string>(); set.add(clientId); members.set(channel, set); return true;

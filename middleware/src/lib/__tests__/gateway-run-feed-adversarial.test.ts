@@ -1,7 +1,7 @@
 // Adversarial checks for lib/gateway-run-feed.ts against the INSTALLED
 // realtime-modules LocalRealtimeRouter (not a fake): every subscribe, history
 // read and per-recipient fan-out goes through the gateway's real
-// authorizeLiveGatewayChannel + channelGuard, so revocation and partition
+// admitChannel + channelGuard, so revocation and partition
 // rules are the ones production asks.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
@@ -9,10 +9,11 @@ jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { LocalRealtimeRouter, baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayChannel } from '../live-principal.js';
+
 import { channelGuard } from '../realtime-gateway.js';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import { publishChannelActivity, publishPipelineRunMove, resetGatewayRunFeed, tenantActivity, tenantPipeline } from '../gateway-run-feed.js';
+import { admitChannel } from '../gateway/authority.js';
 
 const POLICY: Record<string, string[]> = { member: [], author: ['ViewPipelines'], assessor: ['ViewAssessment'] };
 let users: Map<string, UserInfo>;
@@ -30,7 +31,7 @@ function realRouter() {
   const router = new LocalRealtimeRouter({
     logger,
     authorize: ({ kind, clientId, channel, ctx }) =>
-      authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: ctx as Msg | null }, { guard: channelGuard, baseChannel }),
+      admitChannel({ kind, clientId, channel, ctx: ctx as Msg | null }),
   });
   (router as unknown as { _setHandle(h: unknown): void })._setHandle({
     getClientContext: (id: string) => contexts.get(id) ?? null,

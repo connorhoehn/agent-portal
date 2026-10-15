@@ -1,18 +1,19 @@
 // Library activity/pipeline features under the tenant channel families:
-// admission goes through the real authorizeLiveGatewayChannel and the real
+// admission goes through the real admitChannel and the real
 // channelGuard; the router is a fake that records what reaches each client.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayChannel } from '../live-principal.js';
+
 import { channelGuard } from '../realtime-gateway.js';
 import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import {
   pipelineFamilyChannel, publishChannelActivity, publishPipelineRunMove, resetGatewayRunFeed, tenantActivity, tenantPipeline,
 } from '../gateway-run-feed.js';
+import { admitChannel } from '../gateway/authority.js';
 
 const POLICY: Record<string, string[]> = { member: [], author: ['ViewPipelines'] };
 let users: Map<string, UserInfo>;
@@ -32,7 +33,7 @@ function fakeRouter() {
       for (const to of members.get(channel) ?? []) sent.push({ to, message });
     },
     checkChannel: (kind: 'subscribe' | 'publish', clientId: string, channel: string) =>
-      authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: contexts.get(clientId) ?? null }, { guard: channelGuard, baseChannel }),
+      admitChannel({ kind, clientId, channel, ctx: contexts.get(clientId) ?? null }),
     subscribeToChannel: async (clientId: string, channel: string) => {
       if (!await router.checkChannel('subscribe', clientId, channel)) return false;
       const set = members.get(channel) ?? new Set<string>(); set.add(clientId); members.set(channel, set); return true;

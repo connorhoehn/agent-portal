@@ -1,6 +1,6 @@
 // `/summarize` beyond Social (routes/conversation-summarize.ts): one adversarial
 // matrix per tenant conversation family, plus huddle chat. Each case runs
-// against the gateway's real channel authority (authorizeLiveGatewayChannel +
+// against the gateway's real channel authority (admitChannel +
 // channelGuard), the directory read fresh on every decision, the chat store's
 // membership rows/history floor/deletions, and the durable flow-run fixture.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true, agentcore: true } } }));
@@ -22,12 +22,13 @@ import { config } from '../../config.js';
 import { createMemorySocialChatBackend, setSocialChatBackend, socialChat } from '../../lib/social-chat.js';
 import { flowRunsFixture } from '../../mock/flow-runs.js';
 import { flowRunChannel, flowRunStore, parseFlowRunChannel } from '../../lib/flow-runs/index.js';
-import { authorizeLiveGatewayChannel } from '../../lib/live-principal.js';
+
 import { channelGuard, lobbyGuard } from '../../lib/realtime-gateway.js';
 import { CallChatRuntime, setCallChatRuntime } from '../../lib/call-chat.js';
 import { MemoryCallChatStateStore } from '../../lib/call-chat-state.js';
 import { observeCallPageLifecycle, type RecoverableCallStateStore } from '../../lib/call-pages.js';
 import type { Session } from '../../lib/session.js';
+import { admitChannel } from '../../lib/gateway/authority.js';
 
 const POLICY: Record<string, string[]> = {
   member: [], sme: ['DispatchAgentRun'], assessor: ['ViewAssessment'], 'assessment-reader': [],
@@ -236,7 +237,7 @@ describe('the private run channel (<tenant>:flowrun:<id>)', () => {
     return { userId: sub, org, role, epoch: 1, sessionIat: 1, tenants: Object.keys(users.get(sub!)?.grants ?? {}), displayName: sub };
   };
   const subscribe = (as: string, channel: string, kind: 'subscribe' | 'publish' = 'subscribe') =>
-    authorizeLiveGatewayChannel({ kind, clientId: `${as}-sock`, channel, ctx: ctxOf(as) }, { guard: channelGuard, baseChannel });
+    admitChannel({ kind, clientId: `${as}-sock`, channel, ctx: ctxOf(as) });
 
   it.each(CASES)('$channel: only the requester, only while they still read the conversation', async (c) => {
     const started = await run(c.reader, c.channel); await settle();
@@ -325,8 +326,7 @@ describe('huddle chat (orgiq:huddle:<callId>)', () => {
     await say('bob', 'Ship it after lunch.', 'd-2');
     const started = await run(as('alice'), HUDDLE); await settle();
     const channel = flowRunChannel(started.body.runId)!;
-    const sub = (who: string) => authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: `${who}-s`, channel, ctx: { ...ctx(who), tenants: ['orgiq', 'social'] } },
-      { guard: channelGuard, baseChannel });
+    const sub = (who: string) => admitChannel({ kind: 'subscribe', clientId: `${who}-s`, channel, ctx: { ...ctx(who), tenants: ['orgiq', 'social'] } });
     expect(await sub('alice')).toBe(true);
     expect(await sub('bob')).toBe(false);
     // 77942166: a seated huddle member chats under the stored lobby's read

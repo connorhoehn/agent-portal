@@ -8,18 +8,18 @@ jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayChannel } from '../live-principal.js';
+
 import { channelGuard } from '../realtime-gateway.js';
 import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import { activeMembers, socialChannelMembersFixture } from '../../mock/social-channels.js';
+import { admitChannel } from '../gateway/authority.js';
 
 const SOURCE = 'social:ch:design-reviews';
 const members = (channel: string) => activeMembers(socialChannelMembersFixture.rows(), channel).map(m => m.userId);
 const user = (id: string): UserInfo => ({ id, displayName: id, email: null, personId: null, epoch: 1, grants: { social: ['participant'] } });
-const ask = (userId: string, channel: string) => authorizeLiveGatewayChannel(
-  { kind: 'subscribe', clientId: 'http', channel, ctx: { userId, org: 'social', role: 'participant', epoch: 1, sessionIat: 1, tenants: ['social'], displayName: userId } },
-  { guard: channelGuard, baseChannel });
+const ask = (userId: string, channel: string) => admitChannel(
+  { kind: 'subscribe', clientId: 'http', channel, ctx: { userId, org: 'social', role: 'participant', epoch: 1, sessionIat: 1, tenants: ['social'], displayName: userId } });
 
 beforeEach(() => {
   setSocialChatBackend(createMemorySocialChatBackend({ fixtures: true }));

@@ -1,19 +1,20 @@
 // `social:deck:<id>` (lib/social-deck-channel.ts): presence-only, admitted to the
 // deck's owner or a CURRENT member of its source conversation, asked fresh every
 // time against the deck row and the directory. Drives the gateway's real
-// authorizeLiveGatewayChannel + channelGuard.
+// admitChannel + channelGuard.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayChannel } from '../live-principal.js';
+
 import { channelGuard, lobbyGuard } from '../realtime-gateway.js';
 import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import { socialChannelMembersFixture } from '../../mock/social-channels.js';
 import { socialDecksFixture } from '../../mock/social-decks.js';
 import { inSocialDeckNamespace, parseSocialDeckChannel, socialDeckPresenceChannel } from '../social-deck-channel.js';
+import { admitChannel } from '../gateway/authority.js';
 
 const DECK = 'sdeck-0b1c2d3e-0000-4000-8000-000000000001';
 const CHANNEL = 'social:ch:general';
@@ -24,7 +25,7 @@ const user = (id: string, grants: Record<string, string[]>): UserInfo => ({ id, 
 const ctxOf = (userId: string, org = 'social') =>
   ({ userId, org, role: 'participant', epoch: 1, sessionIat: 1, tenants: Object.keys(users.get(userId)?.grants ?? {}), displayName: userId });
 const ask = (who: string, channel: string, kind: 'subscribe' | 'publish' = 'subscribe', org = 'social') =>
-  authorizeLiveGatewayChannel({ kind, clientId: 'c', channel, ctx: ctxOf(who, org) }, { guard: channelGuard, baseChannel });
+  admitChannel({ kind, clientId: 'c', channel, ctx: ctxOf(who, org) });
 const wire = socialDeckPresenceChannel(DECK);
 
 beforeEach(() => {

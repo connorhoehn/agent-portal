@@ -2,7 +2,7 @@
 // (`<tenant>:flowrun:<runId>`, lib/flow-runs/channel.ts) against the INSTALLED
 // realtime-modules LocalRealtimeRouter and pipeline() feature: every subscribe
 // and every per-recipient fan-out goes through the gateway's real
-// authorizeLiveGatewayChannel + channelGuard, and the run row is the durable
+// admitChannel + channelGuard, and the run row is the durable
 // store's (the registered mock fixture), read fresh on every decision.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
@@ -10,12 +10,13 @@ jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { LocalRealtimeRouter, baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayChannel } from '../live-principal.js';
+
 import { channelGuard, lobbyGuard } from '../realtime-gateway.js';
 import { createMemorySocialChatBackend, setSocialChatBackend, socialChat } from '../social-chat.js';
 import { pipelineFamilyChannel, resetGatewayRunFeed, tenantActivity, tenantPipeline } from '../gateway-run-feed.js';
 import { flowRunsFixture } from '../../mock/flow-runs.js';
 import { flowRunChannel, flowRunStore, parseFlowRunChannel, type FlowRunRow } from '../flow-runs/index.js';
+import { admitChannel } from '../gateway/authority.js';
 
 const POLICY: Record<string, string[]> = {
   member: [], assessor: ['ViewAssessment'], participant: ['ViewSocial', 'PostMessage'], author: ['ViewPipelines'], reader: [],
@@ -35,7 +36,7 @@ function setup() {
   const router = new LocalRealtimeRouter({
     logger,
     authorize: ({ kind, clientId, channel, ctx }) =>
-      authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: ctx as Msg | null }, { guard: channelGuard, baseChannel }),
+      admitChannel({ kind, clientId, channel, ctx: ctx as Msg | null }),
   });
   (router as unknown as { _setHandle(h: unknown): void })._setHandle({
     getClientContext: (id: string) => contexts.get(id) ?? null,
@@ -208,7 +209,7 @@ describe('server publish only', () => {
     const ch = flowRunChannel(run.id)!;
     contexts.set('ana-s', ctxOf('ana', 'assessment', 'assessor'));
     const decide = (kind: 'subscribe' | 'publish', channel: string) =>
-      authorizeLiveGatewayChannel({ kind, clientId: 'ana-s', channel, ctx: contexts.get('ana-s')! }, { guard: channelGuard, baseChannel });
+      admitChannel({ kind, clientId: 'ana-s', channel, ctx: contexts.get('ana-s')! });
     expect(await decide('subscribe', ch)).toBe(true);
     expect(await decide('publish', ch)).toBe(false);
     for (const prefixed of [`presence:${ch}`, `reactions:${ch}`, `cursor:${ch}`]) {
@@ -435,7 +436,7 @@ describe('pipelines deck revise runs (pdr-)', () => {
     contexts.set('pat-s', ctxOf('pat', 'pipelines', 'author'));
     contexts.set('pam-s', ctxOf('pam', 'pipelines', 'author'));
     const decide = (kind: 'subscribe' | 'publish', channel: string) =>
-      authorizeLiveGatewayChannel({ kind, clientId: 'pat-s', channel, ctx: contexts.get('pat-s')! }, { guard: channelGuard, baseChannel });
+      admitChannel({ kind, clientId: 'pat-s', channel, ctx: contexts.get('pat-s')! });
     expect(await decide('subscribe', ch)).toBe(true);
     expect(await decide('publish', ch)).toBe(false);
     for (const prefixed of [`presence:${ch}`, `reactions:${ch}`, `cursor:${ch}`]) expect(await decide('subscribe', prefixed)).toBe(false);

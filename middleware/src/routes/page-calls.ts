@@ -9,7 +9,7 @@
 //                                  page lobbies, with the missed count
 //
 // Authority is the lobby's own, asked fresh (live-principal.ts
-// `authorizeCallLobbyRead`: the family's read action, the page existing now,
+// `admitLobbyRead`: the family's read action, the page existing now,
 // the partition rule): a lobby in another tenant is a 404, a reader without the
 // family's action is a 403, a page that no longer exists is a 404. The tenant
 // list asks the tenant's own read action, the one that gates its pages.

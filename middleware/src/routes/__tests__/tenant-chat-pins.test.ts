@@ -1,7 +1,7 @@
 // Shared pins on tenant discussions (routes/chat-pins.ts `tenantPinAccess`):
 // one adversarial matrix per family — orgiq:initiative|work, pipelines:run|def,
 // assessment:doc. Every decision runs the gateway's real channel authority
-// (authorizeConversationChat → authorizeLiveGatewayChannel + channelGuard), the
+// (authorizeConversationChat → admitChannel + channelGuard), the
 // directory read fresh each time, and the chat store's membership rows,
 // history floor and deletions. Social pins keep their own suite (chat-pins.test.ts).
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true, agentcore: true } } }));

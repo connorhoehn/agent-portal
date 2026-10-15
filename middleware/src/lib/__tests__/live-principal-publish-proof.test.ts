@@ -10,9 +10,10 @@ import { createAuthorityScope, LocalRealtimeRouter, baseChannel } from '@connorh
 import type { ChatMember, ChatMembershipStore } from '@connorhoehnslalom/realtime-modules/chat';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
-import { authorizeLiveGatewayChannel } from '../live-principal.js';
+
 import { channelGuard, publishProofMaxAgeMs } from '../realtime-gateway.js';
 import { createMemorySocialChatBackend, MirroredMembershipStore, setSocialChatBackend } from '../social-chat.js';
+import { admitChannel } from '../gateway/authority.js';
 
 const CH = 'social:ch:private';
 const member = (userId: string, removedAt: string | null = null): ChatMember =>
@@ -38,7 +39,7 @@ beforeEach(() => {
   jest.mocked(getUser).mockImplementation(async id => { directoryReads++; return structuredClone(users.get(id) ?? null); });
   jest.mocked(isAllowed).mockImplementation(async (p, action) => p.tenant === 'social' && ['ViewSocial', 'PostMessage'].includes(action));
   contexts.clear(); contexts.set('alice-socket', ctx('alice')); contexts.set('bob-socket', ctx('bob'));
-  router = new LocalRealtimeRouter({ publishProofMaxAgeMs: 2000, authorize: args => authorizeLiveGatewayChannel(args, guards) });
+  router = new LocalRealtimeRouter({ publishProofMaxAgeMs: 2000, authorize: args => admitChannel(args) });
   router._setHandle({ getClientContext: (id: string) => contexts.get(id) ?? null, sendToClient: () => true, listClients: () => [...contexts.keys()] } as never);
 });
 afterEach(() => { setSocialChatBackend(null); jest.clearAllMocks(); });

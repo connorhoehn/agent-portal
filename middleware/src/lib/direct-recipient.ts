@@ -2,7 +2,8 @@
 // stored inbox data intact and recheck each socket before it receives data.
 import type { ClientMessageFilter } from '@connorhoehnslalom/realtime-modules/server';
 import { isAllowed } from './authz.js';
-import { authorizeLiveGatewayCallRecipient, currentSocialMembershipProof, getLivePrincipal, type LiveCallGuards, type SocialMembershipProof } from './live-principal.js';
+import { currentSocialMembershipProof, getLivePrincipal, type LiveCallGuards, type SocialMembershipProof } from './live-principal.js';
+import { admitCallRecipient } from './gateway/authority.js';
 import { hrefInsideTenant } from './social-notify.js';
 
 const object = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -33,7 +34,7 @@ export function directRecipientFilter(guards: LiveCallGuards, protectedFrames?: 
         if (frame.action === 'forgotten') {
           try { await getLivePrincipal(ctx); return message; } catch { return null; }
         }
-        return await authorizeLiveGatewayCallRecipient(ctx, data, guards) ? message : null;
+        return await admitCallRecipient(ctx, data, guards) ? message : null;
       }
       if (frame.type !== 'notification:new' && frame.type !== 'notification:bulk-update' && frame.type !== 'notification:read') return message;
       const proofs = new Map<string, SocialMembershipProof>();

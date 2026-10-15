@@ -20,10 +20,10 @@
 //     action + membership proof), the family's Cedar action and page resource,
 //     and a second reload after that I/O. Nothing here caches a positive verdict.
 //
-// For ONE release the host copies these replaced stay alive behind a dev parity
-// assertion (lib/gateway/authority-parity.ts: outside production every verdict
-// is also asked of lib/gateway/authority-legacy.ts / live-principal.ts's host
-// primitives, and a difference throws). Delete them at the 0.117 pin move.
+// The host copies the engine replaced (the hand-written shape guards and
+// live-principal.ts's channel / call / lobby-read primitives) ran one release
+// behind it under a dev parity assertion and were deleted at the 0.119 pin
+// move after a clean run (jest at 100%, the dev BFF at 5%, a live clone check).
 //
 // Verdict shapes are the ones the plugins and routes already expected: a
 // boolean for subscribe/publish/call/upload/reader/notification decisions, the
@@ -47,9 +47,8 @@ import {
   type ChannelAuthority, type TenantChannelFamily,
 } from '../tenant-channels.js';
 import {
-  SOCIAL_WORK_GRAPH_CONVERSATION, authorizeCallLobbyRead, authorizeConversationChat, authorizeFlowRunChannel,
-  authorizeHuddleChannel, authorizeLiveGatewayCall, authorizeLiveGatewayCallRecipient, authorizeLiveGatewayChannel,
-  authorizeSocialDeckChannel, authorizeSocialWorkGraphChannel, currentSocialMembershipProof, getLivePrincipal,
+  SOCIAL_WORK_GRAPH_CONVERSATION, authorizeConversationChat, authorizeFlowRunChannel,
+  authorizeHuddleChannel, authorizeSocialDeckChannel, authorizeSocialWorkGraphChannel, currentSocialMembershipProof, getLivePrincipal,
   holdsChannelAuthority, huddleCallId, inSocialWorkGraphNamespace, initiativeDeckVisible, sessionGatewayContext,
   sessionMeets, socialActionRole, socialConversationReadable,
   type LiveCallGuards, type LiveChannelAuthorization, type LiveChannelGuards, type LiveGatewayAuth, type LiveGatewayPrincipal,
@@ -57,16 +56,15 @@ import {
 import { mayReadUpload } from '../gateway-attachments.js';
 import { currentlyReadsTenantChannel } from '../social-notify.js';
 import type { Session } from '../session.js';
-import { legacyChannelGuard, legacyLobbyGuard, type GuardAuth } from './authority-legacy.js';
-import { parityAsync, paritySync } from './authority-parity.js';
 
-export type { GuardAuth } from './authority-legacy.js';
+/** What the shape guards read from a connection's auth context. */
+export type GuardAuth = { userId?: unknown; org?: unknown; tenants?: unknown; role?: unknown };
 
 // ── The family table, as the engine reads it ─────────────────────────────────
 
 /** An initiative deck's row + budget tier (providers/initiative-decks.ts), asked
  * as the `orgiq:deck` family's channel resource. The host copy asked it inline
- * (live-principal.ts `authorizeLiveGatewayChannel`); the table in
+ * (live-principal.ts `admitChannel`); the table in
  * lib/tenant-channels.ts keeps no resource for it, so only the engine's view
  * carries it. */
 const INITIATIVE_DECK = 'initiative-deck';
@@ -134,20 +132,14 @@ const GATEWAY_FAMILIES = defineChannelFamilies<ChannelAuthority, GatewayFamily>(
 
 // ── The synchronous shape guards ─────────────────────────────────────────────
 
-const lobbyGuardParity = paritySync('lobbyGuard',
-  (auth: GuardAuth, lobbyName: string) => GATEWAY_FAMILIES.lobbyGuard(auth as LibraryGuardAuth, lobbyName), legacyLobbyGuard);
-const channelGuardParity = paritySync('channelGuard',
-  (auth: GuardAuth | null, channel: string, kind: 'subscribe' | 'publish') => GATEWAY_FAMILIES.guard(auth as LibraryGuardAuth | null, channel, kind),
-  (auth: GuardAuth | null, channel: string, kind: 'subscribe' | 'publish') => legacyChannelGuard(auth, channel, kind));
-
 /** May this connection use `lobbyName` as a call lobby (the shape, before any I/O)? */
 export function lobbyGuard(auth: GuardAuth, lobbyName: string): boolean {
-  return lobbyGuardParity(auth, lobbyName);
+  return GATEWAY_FAMILIES.lobbyGuard(auth as LibraryGuardAuth, lobbyName);
 }
 
 /** May this connection subscribe to / publish on `channel` (the shape, before any I/O)? */
 export function channelGuard(auth: GuardAuth | null, channel: string, kind: 'subscribe' | 'publish' = 'subscribe'): boolean {
-  return channelGuardParity(auth, channel, kind);
+  return GATEWAY_FAMILIES.guard(auth as LibraryGuardAuth | null, channel, kind);
 }
 
 // ── The engine ───────────────────────────────────────────────────────────────
@@ -160,8 +152,6 @@ const engineGuards: LiveChannelGuards = {
   baseChannel,
   decide: args => AUTHORITY.authorizeChannel(args),
 };
-/** The host copies' guard pair (the parity half; no `decide`, so all host code). */
-const legacyChannelGuards: LiveChannelGuards = { guard: legacyChannelGuard, baseChannel };
 
 type Step<Q> = Q extends 'channel' ? ChannelStep<LiveGatewayPrincipal> : CallStep<LiveGatewayPrincipal>;
 
@@ -226,8 +216,8 @@ export const channelGuards: LiveChannelGuards = { guard: channelGuard, baseChann
 
 /** The `{ guard, getLobby }` pair for call decisions; `getLobby` resolves a
  * stored call's lobby (legacy accepted/status frames name only a callId).
- * `guard` is the host copy's lobby guard (the parity half) — the engine always
- * asks its own. */
+ * The engine asks its own lobby guard; `guard` is the shape check the direct
+ * recipient filter applies to a notification's channel. */
 export function callGuards(getLobby: LiveCallGuards['getLobby'], guard: LiveCallGuards['guard'] = lobbyGuard): LiveCallGuards {
   return { guard, getLobby };
 }
@@ -241,10 +231,6 @@ type Context = Record<string, unknown> | null;
 export type ChannelKind = 'subscribe' | 'publish';
 export type LobbyReadVerdict = LobbyVerdict;
 
-const admitChannelParity = parityAsync('admitChannel',
-  (args: LiveChannelAuthorization) => AUTHORITY.authorizeChannel(args),
-  (args: LiveChannelAuthorization) => authorizeLiveGatewayChannel(args, legacyChannelGuards));
-
 /**
  * May this socket (or REST caller standing in for one, `clientId: 'http'` /
  * `'rest:*'`) subscribe to or publish on `channel` NOW — the router's
@@ -253,7 +239,7 @@ const admitChannelParity = parityAsync('admitChannel',
  * the family's Cedar action and page resource, a second reload.
  */
 export function admitChannel(args: LiveChannelAuthorization): Promise<boolean> {
-  return admitChannelParity(args);
+  return AUTHORITY.authorizeChannel(args);
 }
 
 /** `admitChannel` for a subscribe. */
@@ -276,33 +262,19 @@ export function admitCursor(ctx: Context, channel: string, kind: ChannelKind, op
   return admitChannel({ kind, clientId: opts.clientId ?? 'http', channel: name, ctx, ...(opts.scope ? { scope: opts.scope } : {}) });
 }
 
-const admitCallParity = parityAsync('admitCall',
-  (ctx: Context, action: string, payload: Record<string, unknown>, guards: LiveCallGuards) =>
-    AUTHORITY.authorizeCall(ctx, action, payload, { getLobby: guards.getLobby }),
-  (ctx: Context, action: string, payload: Record<string, unknown>, guards: LiveCallGuards) =>
-    authorizeLiveGatewayCall(ctx, action, payload, { guard: legacyLobbyGuard, getLobby: guards.getLobby }));
-const admitCallRecipientParity = parityAsync('admitCallRecipient',
-  (ctx: Context, data: Record<string, unknown>, guards: LiveCallGuards) => AUTHORITY.authorizeCallRecipient(ctx, data, { getLobby: guards.getLobby }),
-  (ctx: Context, data: Record<string, unknown>, guards: LiveCallGuards) =>
-    authorizeLiveGatewayCallRecipient(ctx, data, { guard: legacyLobbyGuard, getLobby: guards.getLobby }));
-
 /**
  * A call frame (`invite`/`join`/`accepted`/…): the caller proves its own
  * identity on invite (`verifyCaller`), the lobby's shape, the family's REST
  * read, Social StartCall + membership, the page resource, a second reload.
  */
 export function admitCall(ctx: Context, action: string, payload: Record<string, unknown>, guards: LiveCallGuards): Promise<boolean> {
-  return admitCallParity(ctx, action, payload, guards);
+  return AUTHORITY.authorizeCall(ctx, action, payload, { getLobby: guards.getLobby });
 }
 
 /** A call frame about to be DELIVERED to this socket: the recipient's own fresh authority. */
 export function admitCallRecipient(ctx: Context, data: Record<string, unknown>, guards: LiveCallGuards): Promise<boolean> {
-  return admitCallRecipientParity(ctx, data, guards);
+  return AUTHORITY.authorizeCallRecipient(ctx, data, { getLobby: guards.getLobby });
 }
-
-const admitLobbyReadParity = parityAsync('admitLobbyRead',
-  (ctx: Context, lobby: string) => AUTHORITY.authorizeLobby(ctx, lobby, 'read'),
-  (ctx: Context, lobby: string) => authorizeCallLobbyRead(ctx, lobby, legacyLobbyGuard));
 
 /**
  * May this principal read a page lobby's call history NOW (`GET /api/calls`,
@@ -310,7 +282,7 @@ const admitLobbyReadParity = parityAsync('admitLobbyRead',
  * partition rule. `'not-a-lobby'` is a name no tenant family lists as a lobby.
  */
 export function admitLobbyRead(ctx: Context, lobby: string): Promise<LobbyReadVerdict> {
-  return admitLobbyReadParity(ctx, lobby);
+  return AUTHORITY.authorizeLobby(ctx, lobby, 'read');
 }
 
 /**
@@ -338,10 +310,9 @@ export async function admitLobbyReadFor(session: Session, lobby: string, opts: {
  * the chat service's explicit membership rows. Social names are refused here
  * (they keep `admitSocialConversation` / routes/chat-pins.ts chatAccess).
  */
-export const admitConversationChat: (args: { ctx: Context; channel: string; kind: ChannelKind; clientId: string; scope?: AuthorityScope }) => Promise<boolean> =
-  parityAsync('admitConversationChat',
-    (args: { ctx: Context; channel: string; kind: ChannelKind; clientId: string; scope?: AuthorityScope }) => authorizeConversationChat(args, engineGuards),
-    (args: { ctx: Context; channel: string; kind: ChannelKind; clientId: string; scope?: AuthorityScope }) => authorizeConversationChat(args, legacyChannelGuards));
+export function admitConversationChat(args: { ctx: Context; channel: string; kind: ChannelKind; clientId: string; scope?: AuthorityScope }): Promise<boolean> {
+  return authorizeConversationChat(args, engineGuards);
+}
 
 /**
  * May `userId` read Social conversation `conversation`'s chat NOW — the
@@ -359,9 +330,9 @@ export async function admitSocialConversation(userId: string, conversation: stri
  * conversation's shared work: the uploader, or someone who may subscribe to the
  * conversation now and whose history floor is older than the file.
  */
-export const admitUploadRead: (found: FileUploadRow, ctx: Record<string, unknown>) => Promise<boolean> = parityAsync('admitUploadRead',
-  (found: FileUploadRow, ctx: Record<string, unknown>) => mayReadUpload(found, ctx, engineGuards),
-  (found: FileUploadRow, ctx: Record<string, unknown>) => mayReadUpload(found, ctx, legacyChannelGuards));
+export function admitUploadRead(found: FileUploadRow, ctx: Record<string, unknown>): Promise<boolean> {
+  return mayReadUpload(found, ctx, engineGuards);
+}
 
 /**
  * The distillation feed's rule, as the cookie /realtime path asks it: a plain
@@ -413,11 +384,6 @@ export function producerChannelAllowed(channel: string): boolean {
  * `publish`), asked fresh against the session given — for a REST-side wrapper
  * that already holds a current session (lib/assessment-page-references.ts).
  */
-export const holdsFamilyAuthority: (session: Session, channel: string, kind: ChannelKind) => Promise<boolean> = parityAsync('holdsFamilyAuthority',
-  (session: Session, channel: string, kind: ChannelKind) =>
-    AUTHORITY.holdsFamily({ session, auth: sessionGatewayContext(session) as LiveGatewayAuth }, channel, kind),
-  async (session: Session, channel: string, kind: ChannelKind) => {
-    const family = tenantChannelFamily(baseChannel(channel));
-    const authority = family ? channelAuthorityFor(family, channel, kind) : null;
-    return !!authority && holdsChannelAuthority(session, authority);
-  });
+export function holdsFamilyAuthority(session: Session, channel: string, kind: ChannelKind): Promise<boolean> {
+  return AUTHORITY.holdsFamily({ session, auth: sessionGatewayContext(session) as LiveGatewayAuth }, channel, kind);
+}
