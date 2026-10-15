@@ -12,8 +12,8 @@
 //
 // The seed is the assessment cast's work (docs/demo-content-audit.md, the
 // assessment story): each team's `assessment_lead` in mock/assessment.ts is the
-// cast member with a lead row here. Jonas Lindqvist leads Northstar Payments
-// and Kubernetes Operator; Asha Nair leads Checkout Experience and Fraud
+// cast member with a lead row here. Jonas Lindqvist leads Northstar Payments,
+// Kubernetes Operator and Internal Tools; Asha Nair leads Checkout Experience and Fraud
 // Detection ML and contributes on Northstar; Farah Osei (program lead) leads
 // Data Platform and Notifications Service. The teams' own engineers the
 // fixture names (Deepa Natarajan, Jordan Lee, …) have no app account, so they
@@ -41,6 +41,7 @@ export const assessmentTeamMembersFixture = defineFixture<AssessmentTeamMemberRo
       { teamId: 'TEAM-004', userId: 'u-farah', role: 'lead', addedAt: clock.daysAgo(36) },
       { teamId: 'TEAM-005', userId: 'u-farah', role: 'lead', addedAt: clock.daysAgo(33) },
       { teamId: 'TEAM-006', userId: 'u-asha', role: 'lead', addedAt: clock.daysAgo(20) },
+      { teamId: 'TEAM-007', userId: 'u-jonas', role: 'lead', addedAt: clock.daysAgo(12) },
     ],
     empty: () => [],
   },

@@ -3308,7 +3308,7 @@ const seedTeams = (): MockTeam[] => [
   "name": "Internal Tools",
   "cohort": "general",
   "workflow_step": 1,
-  "assessment_lead": "",
+  "assessment_lead": "Jonas Lindqvist",
   "contacts": [],
   "repos": [],
   "archetype": null,

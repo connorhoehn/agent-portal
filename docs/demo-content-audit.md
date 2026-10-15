@@ -357,3 +357,93 @@ its judge sections green. The mock contract (`docs/mock-floor.md`) and
 Order: L0 first (cast, timeline, clone rule), then L1–L6 in parallel, then
 one Opus pass re-reading every story's screenshots against the rubric before
 calling the goal done.
+
+## L0 outcome (2026-10-15)
+
+L0 landed in six commits on main (`b9a4471e`…`93b8e0af`). What every other
+lane now writes against:
+
+### The cast
+
+| Name | Tenant · role | Owns in the story |
+|---|---|---|
+| Vera Green (u-vera, p-002) | Work org-leader; Access approver | Owns Auth Migration; escalated "Cutover order for legacy SSO tenants"; steward of her initiative's membership requests (req-0002) |
+| Sienna Garcia (u-release, p-005) | Work org-leader, title Release Manager | The decider of d-cognito-cutover (`decision_participants` role `decider`); decides after the rehearsal retry |
+| Nora DaSilva (u-nora, p-004) | Work SME | Runs the rehearsals, explains the failed JWKS run, proposed the runbook edit |
+| Simone Chang (p-051, no login; was Nora Chang) | Auth Migration SME | Assignee of the blocked runbook story, steward of Sprints 41/42 |
+| Theo Chang (u-theo) | Work member | Argues smallest-first; moved Search's last SAML callback |
+| Mia Singh (u-mia) | Work program-owner | The budget story |
+| Rachel Kowalski (u-rachel) | Work hr-admin + org-leader; Access approver | On call for the rehearsals; steward of Work role requests (req-0001 step 2) |
+| Helen Desai (u-hr; was Priya Desai) | Work hr-admin | No story role |
+| Jonas Lindqvist | Assessment lead-assessor | Leads Northstar Payments and Kubernetes Operator (roster + `assessment_lead`) |
+| Asha Nair | Assessment assessor | Leads Checkout Experience and Fraud Detection ML; contributes on Northstar |
+| Farah Osei | Assessment program-lead | Leads Data Platform and Notifications Service (the ENG-DATA follow-up is hers) |
+| Mira Okafor, Lena Brandt, Sana Iqbal | Social | Unchanged |
+| Ines Moreau, Kofi Mensah, Dara Whitfield, Tomás Ferreira | Pipelines | Unchanged names; ownership rows are L4's |
+| Rhea Castellanos, Omar Haddad, Priya Venkataraman | Access | Rhea asks (req-0001), Omar decides as manager, Rachel (or Vera, for req-0002) as steward, Priya governs |
+
+23 org-graph people were renamed (schema/seed.sql, mock/people.ts, the
+avatar index; seed.py's `NAME_OVERRIDES` keeps them through a regeneration);
+no first name repeats inside the org graph or with the sign-in cast. The
+assessment fixture's Priya Natarajan, Dana Whitfield, Connor Hoehn and Tomas
+Vega are Deepa Natarajan, Martina Kovacs, Lucia Romero and Bruno Vega.
+
+### The Auth Migration timeline (hours before the mock clock's now)
+
+| When | What | Where it is |
+|---|---|---|
+| 35 → 21 days | Sprint 41 (OIDC core); Sprint 42 runs 14 days → today | `seed_program.sql` sprints |
+| 180 h | Vera: rehearse on two internal tenants, then move customer tenants one at a time | `#auth-migration` a01 |
+| 72–69 h | Sienna asks the order; Nora argues riskiest-first, Theo smallest-first | a07–a09 |
+| 49–48 h | Vera escalates d-cognito-cutover to Sienna (`escalatedAt` 2 days); wi-auth-e2-s2 is blocked | a10, initiative thread auth-01, decisions, work item brief |
+| 47 h | Sienna: decides once both rehearsals are through | a11, auth-02 |
+| 46 h | Nora: the JWKS client migration run failed on stale test keys | a11b, auth-02b, `agent-project-runs` error |
+| 6 h | Rehearsal one passes on rb-tenant-cutover (sess-auth-05) | a12, auth-03, runbook runs |
+| 3 h | Rhea asks for SME in Work to pick up the SSO cutover stories | req-0001 |
+| 1.5–1 h | Rehearsal two (sess-auth-06) fails at the flip; prop-tenant-cutover-callback proposed | a13–a15, auth-04, runbooks seed |
+| 0.8 h | Sienna: expect the order tomorrow | a16 |
+| minutes | An agent on box-mock-0002 asks the same question (pending consult) | `mock/lab.ts` con-mock-1 |
+
+Nothing says the cutover is done. Work-item stamps are replayed from the mock
+clock inside the factory (`mock/work-items.ts` `onClock`), so the board has
+no spring dates.
+
+### Clones see their persona's records
+
+`middleware/src/lib/record-owner.ts` (`recordUserId`, `ownsRecord`,
+`recordOwnerSender`) is the one rule: for record ownership a live clone acts as
+its persona; the session, its epoch and the socket context keep the clone's
+id. Applied at the access actor, the access thread read, Social membership and
+the gateway's channel/DM guards, DM listings, the people DM index, the mine
+viewer, and the chat service's sender. Not covered: the notification inbox
+(the library's store is keyed by the socket's user id).
+
+### The footer Today strip
+
+`GET /api/today` (middleware `routes/today.ts`) builds Work's review,
+automation and budget items from the Inbox, fleet and Budgets selectors; other
+tenants get none and the strip hides. The fixed "Demo" samples are gone.
+
+### What changed for the other lanes
+
+- **L1** also owns: the orgiq story's step 4 (W12, design review by people),
+  the budget map (W6/W7), invocations/calibration's dangling ids (F3: 11 left)
+  and `u-admin` in `upload-links.ts`; W5 is done for work items (decision ADR
+  dates in seed.sql remain). Sprint renumbering (W8) still applies to Auth's
+  41/42. Completions inside sprint windows (the generator) are still open.
+- **L2**: the leads and roster rows are done; A1's remaining half is the
+  exception approver ("lead-assessor:jonas" is a raw string) and history
+  `changed_by`.
+- **L3** is now the blocker for the orgiq story's channel step: the
+  simulator's lines bury the seeded #auth-migration thread (X1).
+- **L4**: the consult still expires 30 minutes after a reset (P4); run titles
+  and the runs ledger need initiative names (orgiq story step 6, W9, P3).
+- **L5**: the requester list's "Waiting on" shows the step kind, not Omar; its
+  rows are not links; the record's thread subtitle `access:req:req-…`; the
+  review deadline and policy editor (C5, C7, C10).
+- **L6**: the decision record page (`/iq/decisions/:id` redirects to
+  Initiatives, so the orgiq story's step 2 cannot pass); X3 can now use
+  `recordUserId` to print a clone's persona.
+- **C13** (Rhea, Omar and Priya in the Work org graph) moved to L5:
+  `access_schema.sql` already seeds their `people` rows in Aurora; the mock
+  org graph and its parity entity do not carry them yet.

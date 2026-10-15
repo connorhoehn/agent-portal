@@ -166,7 +166,7 @@ describe('kind=assessment-team (assessment, assessment_team_members rows)', () =
   it('a namesake of a team’s lead is on no team: the display name is not a link, only a row is', async () => {
     // u-priya is named "Deepa Natarajan" here, a name TEAM-001 records as a contributor — the retired rule would have put her on it.
     expect(body(await mine('assessment-team', 'u-priya'))).toEqual({ viewer: { userId: 'u-priya', personId: null }, items: [], limits: [] });
-    expect(body(await mine('assessment-team', 'u-jonas')).items.map((i) => i.id).sort()).toEqual(['TEAM-001', 'TEAM-002']);
+    expect(body(await mine('assessment-team', 'u-jonas')).items.map((i) => i.id).sort()).toEqual(['TEAM-001', 'TEAM-002', 'TEAM-007']);
     // A row is: add her and she is on it, as its lead, beside Asha and Jonas.
     assessmentTeamMembersFixture.rows().push({ teamId: 'TEAM-001', userId: 'u-priya', role: 'lead', addedAt: '2026-10-01T00:00:00.000Z' });
     const now = body(await mine('assessment-team', 'u-priya'));

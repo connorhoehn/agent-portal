@@ -592,6 +592,15 @@ BRIEFS: dict[str, dict[str, str]] = {
         next_step_detail='She decides once the second internal rehearsal passes. Review the proposed '
                          'callback-list step for the cutover runbook first, so the retry can run.',
     ),
+    'wi-auth-e1-s1': dict(
+        description='Every sign-in goes through the BFF with the authorization-code flow and PKCE, so no token ever reaches the browser.',
+    ),
+    'wi-auth-e1-s2': dict(
+        description='Tokens are verified against the published JWKS, and a signing-key rotation signs nobody out.',
+    ),
+    'wi-auth-e2-s1': dict(
+        description='Every service and customer tenant still on the SAML shim, each with an owner, so the cutover order has a list to order.',
+    ),
     'wi-auth-e1-s3': dict(
         summary='A switched tenant or role stops honouring the old cookie within the refresh window.',
         description='Re-mint on every tenant and role switch. The pre-switch cookie stops working within the refresh window.',
