@@ -1,4 +1,4 @@
-# Goal (draft): user search that answers what each tenant's people ask
+# Goal : user search that answers what each tenant's people ask
 
 Status: **draft for review, 2026-10-14. Nothing here is built.** The intent
 catalog, the probe results and the gap analysis this goal is written against
@@ -151,3 +151,17 @@ tenant group at most, as clones only.
    answer cards only?
 4. Floors: start each tenant's floor at its measured baseline today, or at the
    S1 target with a due date?
+
+## Decisions taken (user, 2026-10-15)
+
+1. **Indexing:** update on write — every writer updates the index after commit;
+   the index interface leaves room for a store change stream later.
+2. **Palette records:** a record-results section in the ui-components palette,
+   reused by every tenant (library first).
+3. **Non-Work tenants:** an Ask tab in every tenant backed by deterministic
+   local answers for its intent catalog — no model, always correct, demoable.
+4. **Floors:** today's measured pass rates are each tenant's floor and only
+   ratchet up.
+
+Identity: "my / me" resolves through `lib/record-owner.ts` (demo-content L0),
+so a clone of a persona searches as that persona.
