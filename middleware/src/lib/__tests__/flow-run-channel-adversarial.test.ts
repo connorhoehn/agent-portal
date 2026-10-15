@@ -33,22 +33,32 @@ type Msg = Record<string, unknown>;
 function setup() {
   const contexts = new Map<string, Msg>();
   const sent: Array<{ to: string; message: Msg }> = [];
+  // `smuggle(clientId)` lets that socket's next subscribe skip the decision —
+  // a socket that got into the member set some other way — so the per-frame
+  // recheck is what has to withhold its frames.
+  const smuggled = new Set<string>();
   const router = new LocalRealtimeRouter({
     logger,
     authorize: ({ kind, clientId, channel, ctx }) =>
-      admitChannel({ kind, clientId, channel, ctx: ctx as Msg | null }),
+      smuggled.delete(clientId) ? true : admitChannel({ kind, clientId, channel, ctx: ctx as Msg | null }),
   });
   (router as unknown as { _setHandle(h: unknown): void })._setHandle({
     getClientContext: (id: string) => contexts.get(id) ?? null,
     sendToClient: (to: string, message: Msg) => { sent.push({ to, message }); return true; },
     listClients: () => [...contexts.keys()],
   });
-  const members = (channel: string) => [...((router as unknown as { channelMembers: Map<string, Set<string>> }).channelMembers.get(channel) ?? [])];
+  /** The sockets holding a readable subscription to `channel` (the router's public probe). */
+  const members = async (channel: string) => {
+    const out: string[] = [];
+    for (const id of contexts.keys()) if (await router.isClientSubscribed(id, channel)) out.push(id);
+    return out;
+  };
+  const smuggle = async (clientId: string, channel: string) => { smuggled.add(clientId); await router.subscribeToChannel(clientId, channel); smuggled.delete(clientId); };
   const frames = (to: string) => sent.filter(s => s.to === to && s.message['type'] === 'pipeline:event').map(s => s.message);
   const acks = (to: string) => sent.filter(s => s.to === to && s.message['type'] === 'pipeline' && s.message['action'] === 'subscribed');
   const pipe = tenantPipeline().create({ router: router as never, logger });
   const act = tenantActivity().create({ router: router as never, logger });
-  return { router, contexts, sent, members, frames, acks, pipe, act };
+  return { router, contexts, sent, members, smuggle, frames, acks, pipe, act };
 }
 
 /** A queued run, as the summarize/draft routes create it. */
@@ -108,7 +118,7 @@ describe('subscribe admission', () => {
     const run = await mkRun({ tenant: 'assessment', requestedBy: 'ana' });
     contexts.set('ana-s', ctxOf('ana', 'assessment', 'assessor'));
     await pipe.handleAction('ana-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual(['ana-s']);
+    expect(await members(flowRunChannel(run.id)!)).toEqual(['ana-s']);
     expect(acks('ana-s')).toHaveLength(1);
 
     await flowRunStore.claim({ kinds: [run.kind], owner: 'n1', leaseMs: 60_000, id: run.id });
@@ -129,7 +139,7 @@ describe('subscribe admission', () => {
     const run = await mkRun({ tenant: 'assessment', requestedBy: 'ana' });
     contexts.set('bea-s', ctxOf('bea', 'assessment', 'assessor'));
     await pipe.handleAction('bea-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
     expect(acks('bea-s')).toHaveLength(0);
   });
 
@@ -140,7 +150,7 @@ describe('subscribe admission', () => {
     contexts.set('sam-s', ctxOf('sam', 'orgiq', 'member')); // embedded Social: standing in orgiq, holding a social grant
     await pipe.handleAction('tom-s', 'subscribe', { channel: wire(run) });
     await pipe.handleAction('sam-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual(['sam-s']);
+    expect(await members(flowRunChannel(run.id)!)).toEqual(['sam-s']);
   });
 
   it('refuses the requester standing in another tenant, and another tenant\'s session naming the id', async () => {
@@ -150,7 +160,7 @@ describe('subscribe admission', () => {
     contexts.set('pat-s', ctxOf('pat', 'pipelines', 'author'));
     await pipe.handleAction('ana-o', 'subscribe', { channel: wire(run) });
     await pipe.handleAction('pat-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
   });
 
   it('refuses an unknown run exactly like someone else\'s', async () => {
@@ -160,8 +170,8 @@ describe('subscribe admission', () => {
     contexts.set('ana-s', ctxOf('ana', 'assessment', 'assessor'));
     await pipe.handleAction('ana-s', 'subscribe', { channel: `pipeline:run:${ghost}` });
     await pipe.handleAction('ana-s', 'subscribe', { channel: wire(other) });
-    expect(members(flowRunChannel(ghost)!)).toEqual([]);
-    expect(members(flowRunChannel(other.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(ghost)!)).toEqual([]);
+    expect(await members(flowRunChannel(other.id)!)).toEqual([]);
     // Same frame, modulo the channel it names (and timestamps).
     const answers = sent.filter(s => s.to === 'ana-s').map(s => JSON.stringify(s.message)
       .replaceAll(flowRunChannel(ghost)!, '<ch>').replaceAll(flowRunChannel(other.id)!, '<ch>').replace(/"timestamp":"[^"]+"/g, ''));
@@ -175,7 +185,7 @@ describe('subscribe admission', () => {
     contexts.set('ana-s', ctxOf('ana', 'assessment', 'assessor'));
     duringPolicy = () => { users.get('ana')!.grants = { orgiq: ['member'] }; };
     await pipe.handleAction('ana-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
     expect(acks('ana-s')).toHaveLength(0);
   });
 
@@ -185,7 +195,7 @@ describe('subscribe admission', () => {
     contexts.set('sam-s', ctxOf('sam', 'social', 'participant'));
     duringPolicy = () => { users.get('sam')!.epoch = 2; };
     await pipe.handleAction('sam-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
   });
 
   it('refuses the requester once they left the run\'s Social channel', async () => {
@@ -198,7 +208,7 @@ describe('subscribe admission', () => {
     const run = await mkRun({ tenant: 'social', requestedBy: 'sam', scope: channel });
     contexts.set('sam-s', ctxOf('sam', 'social', 'participant'));
     await pipe.handleAction('sam-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
   });
 });
 
@@ -219,24 +229,24 @@ describe('server publish only', () => {
     expect(channelGuard({ userId: 'ana', org: 'assessment', tenants: ['assessment'] }, ch, 'publish')).toBe(false);
     // A forged frame through the router's publish path never fans out.
     await router.subscribeToChannel('ana-s', ch);
-    const before = members(ch);
+    const before = await members(ch);
     await (router as unknown as { sendToChannel(c: string, m: unknown, x?: string, o?: unknown): Promise<void> })
       .sendToChannel(ch, { type: 'pipeline:event', eventType: 'pipeline:run:completed', payload: { runId: run.id } }, undefined, { publisherClientId: 'ana-s' });
     await act.handleAction('ana-s', 'publish', { channelId: ch, event: { eventType: 'run.completed' } });
-    expect(members(ch)).toEqual(before);
+    expect(await members(ch)).toEqual(before);
   });
 });
 
 describe('fan-out', () => {
   it('frames reach the requester only; a revocation after subscribing withholds the next frame', async () => {
-    const { pipe, router, contexts, frames } = setup();
+    const { pipe, router, contexts, frames, smuggle } = setup();
     const run = await mkRun({ tenant: 'assessment', requestedBy: 'ana' });
     const ch = flowRunChannel(run.id)!;
     contexts.set('ana-s', ctxOf('ana', 'assessment', 'assessor'));
     contexts.set('bea-s', ctxOf('bea', 'assessment', 'assessor'));
     await pipe.handleAction('ana-s', 'subscribe', { channel: wire(run) });
     // Even a socket that got into the member set some other way is re-asked per frame.
-    (router as unknown as { channelMembers: Map<string, Set<string>> }).channelMembers.get(ch)!.add('bea-s');
+    await smuggle('bea-s', ch);
     await flowRunStore.claim({ kinds: [run.kind], owner: 'n1', leaseMs: 60_000, id: run.id });
     await settle();
     expect(frames('ana-s')).toHaveLength(1);
@@ -284,7 +294,7 @@ describe('Social /deck runs (sdk-)', () => {
     const run = await mkDeckRun('sam');
     contexts.set('sam-s', ctxOf('sam', 'social', 'participant'));
     await pipe.handleAction('sam-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual(['sam-s']);
+    expect(await members(flowRunChannel(run.id)!)).toEqual(['sam-s']);
     await flowRunStore.claim({ kinds: [run.kind], owner: 'n1', leaseMs: 60_000, id: run.id });
     await flowRunStore.progress(run.id, 'n1', [{ id: 'outline', label: 'Outline', status: 'running' }], 60_000);
     await flowRunStore.finish(run.id, 'n1', { status: 'completed', result: { spec: { title: 'secret slides' } } });
@@ -302,8 +312,8 @@ describe('Social /deck runs (sdk-)', () => {
     await pipe.handleAction('tom-s', 'subscribe', { channel: wire(run) });
     await pipe.handleAction('pat-s', 'subscribe', { channel: wire(run) });
     await pipe.handleAction('tom-s', 'subscribe', { channel: `pipeline:run:${ghost}` });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
-    expect(members(flowRunChannel(ghost)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(ghost)!)).toEqual([]);
     const answers = sent.filter(s => s.to === 'tom-s').map(s => JSON.stringify(s.message)
       .replaceAll(flowRunChannel(ghost)!, '<ch>').replaceAll(flowRunChannel(run.id)!, '<ch>').replace(/"timestamp":"[^"]+"/g, ''));
     expect(answers).toHaveLength(2);
@@ -316,7 +326,7 @@ describe('Social /deck runs (sdk-)', () => {
     contexts.set('sam-s', ctxOf('sam', 'social', 'participant'));
     duringPolicy = () => { users.get('sam')!.epoch = 2; };
     await pipe.handleAction('sam-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
 
     duringPolicy = null; users.get('sam')!.epoch = 1;
     const channel = 'social:ch:ops';
@@ -326,17 +336,17 @@ describe('Social /deck runs (sdk-)', () => {
     await chat.membershipStore.putMember({ channel, userId: 'sam', role: 'member', addedBy: 'sam', addedAt: at, historyFrom: null, removedAt: at });
     const left = await mkDeckRun('sam', channel);
     await pipe.handleAction('sam-s', 'subscribe', { channel: wire(left) });
-    expect(members(flowRunChannel(left.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(left.id)!)).toEqual([]);
   });
 
   it('re-asks per frame: a smuggled member gets nothing, a revoked requester stops receiving', async () => {
-    const { pipe, router, contexts, frames } = setup();
+    const { pipe, router, contexts, frames, smuggle } = setup();
     const run = await mkDeckRun('sam');
     const ch = flowRunChannel(run.id)!;
     contexts.set('sam-s', ctxOf('sam', 'social', 'participant'));
     contexts.set('tom-s', ctxOf('tom', 'social', 'participant'));
     await pipe.handleAction('sam-s', 'subscribe', { channel: wire(run) });
-    (router as unknown as { channelMembers: Map<string, Set<string>> }).channelMembers.get(ch)!.add('tom-s');
+    await smuggle('tom-s', ch);
     await flowRunStore.claim({ kinds: [run.kind], owner: 'n1', leaseMs: 60_000, id: run.id });
     await settle();
     expect(frames('sam-s')).toHaveLength(1);
@@ -371,7 +381,7 @@ describe('pipelines deck revise runs (pdr-)', () => {
     const run = await mkRevise('pat');
     contexts.set('pat-s', ctxOf('pat', 'pipelines', 'author'));
     await pipe.handleAction('pat-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual(['pat-s']);
+    expect(await members(flowRunChannel(run.id)!)).toEqual(['pat-s']);
     await flowRunStore.claim({ kinds: [run.kind], owner: 'n1', leaseMs: 60_000, id: run.id });
     await flowRunStore.progress(run.id, 'n1', [{ id: 'revise', label: 'Revising', status: 'running' }], 60_000);
     await flowRunStore.finish(run.id, 'n1', { status: 'completed', result: { summary: 'secret slides' } });
@@ -392,8 +402,8 @@ describe('pipelines deck revise runs (pdr-)', () => {
     await pipe.handleAction('ana-s', 'subscribe', { channel: wire(run) });
     await pipe.handleAction('pat-o', 'subscribe', { channel: wire(run) });
     await pipe.handleAction('pam-s', 'subscribe', { channel: `pipeline:run:${ghost}` });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
-    expect(members(flowRunChannel(ghost)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(ghost)!)).toEqual([]);
     const answers = sent.filter(s => s.to === 'pam-s').map(s => JSON.stringify(s.message)
       .replaceAll(flowRunChannel(ghost)!, '<ch>').replaceAll(flowRunChannel(run.id)!, '<ch>').replace(/"timestamp":"[^"]+"/g, ''));
     expect(answers).toHaveLength(2);
@@ -405,7 +415,7 @@ describe('pipelines deck revise runs (pdr-)', () => {
     const run = await mkRevise('pat', { kind: 'pipelines.diagram' });
     contexts.set('pat-s', ctxOf('pat', 'pipelines', 'author'));
     await pipe.handleAction('pat-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
   });
 
   it('refuses the requester after a grant revoked or an epoch bumped while the policy call was in flight', async () => {
@@ -414,11 +424,11 @@ describe('pipelines deck revise runs (pdr-)', () => {
     contexts.set('pat-s', ctxOf('pat', 'pipelines', 'author'));
     duringPolicy = () => { users.get('pat')!.grants = { orgiq: ['member'] }; };
     await pipe.handleAction('pat-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
     duringPolicy = null; users.get('pat')!.grants = { pipelines: ['author'] };
     duringPolicy = () => { users.get('pat')!.epoch = 2; };
     await pipe.handleAction('pat-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
   });
 
   it('refuses a requester whose role lost ViewPipelines (the REST gate)', async () => {
@@ -426,11 +436,11 @@ describe('pipelines deck revise runs (pdr-)', () => {
     const run = await mkRevise('ora');
     contexts.set('ora-s', ctxOf('ora', 'pipelines', 'reader'));
     await pipe.handleAction('ora-s', 'subscribe', { channel: wire(run) });
-    expect(members(flowRunChannel(run.id)!)).toEqual([]);
+    expect(await members(flowRunChannel(run.id)!)).toEqual([]);
   });
 
   it('refuses every client write path and service prefix, and re-asks per frame', async () => {
-    const { pipe, router, contexts, frames } = setup();
+    const { pipe, router, contexts, frames, smuggle } = setup();
     const run = await mkRevise('pat');
     const ch = flowRunChannel(run.id)!;
     contexts.set('pat-s', ctxOf('pat', 'pipelines', 'author'));
@@ -441,7 +451,7 @@ describe('pipelines deck revise runs (pdr-)', () => {
     expect(await decide('publish', ch)).toBe(false);
     for (const prefixed of [`presence:${ch}`, `reactions:${ch}`, `cursor:${ch}`]) expect(await decide('subscribe', prefixed)).toBe(false);
     await pipe.handleAction('pat-s', 'subscribe', { channel: wire(run) });
-    (router as unknown as { channelMembers: Map<string, Set<string>> }).channelMembers.get(ch)!.add('pam-s');
+    await smuggle('pam-s', ch);
     await flowRunStore.claim({ kinds: [run.kind], owner: 'n1', leaseMs: 60_000, id: run.id });
     await settle();
     expect(frames('pat-s')).toHaveLength(1);

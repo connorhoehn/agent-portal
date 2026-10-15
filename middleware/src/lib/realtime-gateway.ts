@@ -54,7 +54,7 @@ import type { Server } from 'node:http';
 import { hostname } from 'node:os';
 import { RedisPresenceStore } from '@connorhoehnslalom/realtime-modules/presence';
 import { attachRealtime, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withPrincipalRevalidation, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehnslalom/realtime-modules/server';
-import { RedisCallStateStore, InMemoryCallStateStore, type CallStateRedis } from '@connorhoehnslalom/realtime-modules/call';
+import { RedisCallStateStore, InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
 import { createOrgiqWorkGraphStream, isWorkGraphStreamPublisher } from './work-graph/stream.js';
 import { tenantCursor } from './gateway-cursor.js';
 import { CallPageRuntime, MemoryCallPageStore, RedisCallPageStore, observeCallPageLifecycle, setCallPageRuntime, isCallPageSnapshot } from './call-pages.js';
@@ -213,7 +213,7 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   const redisUrl = opts.redisUrl === undefined ? (process.env['REDIS_URL'] ?? '').trim() || null : opts.redisUrl;
   const redis = opts.redisClient ?? (redisUrl ? new RedisLite(redisUrl) : null);
   const store: RealtimeGatewayStore = redis ? 'redis' : 'memory';
-  const baseStateStore = redis ? new RedisCallStateStore(redis as unknown as CallStateRedis) : new InMemoryCallStateStore();
+  const baseStateStore = redis ? new RedisCallStateStore(redis) : new InMemoryCallStateStore();
   let pageRuntime: CallPageRuntime | null = null;
   let chatRuntime: CallChatRuntime | null = null;
   const stateStore = observeCallPageLifecycle(baseStateStore, () => pageRuntime, () => chatRuntime);

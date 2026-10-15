@@ -104,10 +104,13 @@ describe('the router rechecks every delivered frame', () => {
   function setup() {
     const contexts = new Map<string, Msg>();
     const sent: Array<{ to: string; message: Msg }> = [];
+    // A socket in `smuggled` skips its next decision (it got into the member
+    // set some other way); the per-frame recheck must still withhold.
+    const smuggled = new Set<string>();
     const router = new LocalRealtimeRouter({
       logger,
       authorize: ({ kind, clientId, channel, ctx }) =>
-        admitChannel({ kind, clientId, channel, ctx: ctx as Msg | null }),
+        smuggled.delete(clientId) ? true : admitChannel({ kind, clientId, channel, ctx: ctx as Msg | null }),
     });
     (router as unknown as { _setHandle(h: unknown): void })._setHandle({
       getClientContext: (id: string) => contexts.get(id) ?? null,
@@ -115,17 +118,17 @@ describe('the router rechecks every delivered frame', () => {
       listClients: () => [...contexts.keys()],
     });
     const got = (to: string) => sent.filter(s => s.to === to && s.message['type'] === 'presence:update');
-    return { router, contexts, got };
+    return { router, contexts, got, smuggled };
   }
 
   it('withholds frames from a non-budget socket smuggled into the member set, and from a reader revoked after subscribing', async () => {
-    const { router, contexts, got } = setup();
+    const { router, contexts, got, smuggled } = setup();
     const ch = wire(BUDGET);
     contexts.set('lee-s', ctxOf('lee', 'org-leader'));
     contexts.set('mia-s', ctxOf('mia', 'member'));
     expect(await router.subscribeToChannel('lee-s', ch)).not.toBe(false);
     expect(await router.subscribeToChannel('mia-s', ch)).toBe(false);
-    (router as unknown as { channelMembers: Map<string, Set<string>> }).channelMembers.get(ch)!.add('mia-s');
+    smuggled.add('mia-s'); expect(await router.subscribeToChannel('mia-s', ch)).not.toBe(false);
 
     await router.sendToChannel(ch, { type: 'presence:update', slide: 3 });
     expect(got('lee-s')).toHaveLength(1);

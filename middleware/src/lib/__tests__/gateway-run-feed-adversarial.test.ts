@@ -38,7 +38,12 @@ function realRouter() {
     sendToClient: (to: string, message: Msg) => { sent.push({ to, message }); return true; },
     listClients: () => [...contexts.keys()],
   });
-  const members = (channel: string) => [...((router as unknown as { channelMembers: Map<string, Set<string>> }).channelMembers.get(channel) ?? [])];
+  /** The sockets holding a readable subscription to `channel` (the router's public probe). */
+  const members = async (channel: string) => {
+    const out: string[] = [];
+    for (const id of contexts.keys()) if (await router.isClientSubscribed(id, channel)) out.push(id);
+    return out;
+  };
   const of = (to: string, type: string) => sent.filter(s => s.to === to && s.message['type'] === type).map(s => s.message);
   return { router, contexts, sent, members, of };
 }
@@ -76,7 +81,7 @@ describe('pipeline feature: fail closed', () => {
     }
     // The library answers an unknown verb with an error frame; nothing else may be sent.
     expect(sent.filter(s => s.message['type'] !== 'error')).toHaveLength(0);
-    expect(members('pipelines:run:r1')).toEqual([]);
+    expect(await members('pipelines:run:r1')).toEqual([]);
   });
 
   it('refuses the firehoses, family names and other partitions as wire channels', async () => {
@@ -87,7 +92,7 @@ describe('pipeline feature: fail closed', () => {
     }
     // Refusals are error frames (PIPELINE_CHANNEL_REFUSED); no ack, no subscription.
     expect(sent.filter(s => s.message['type'] !== 'error')).toHaveLength(0);
-    for (const c of ['pipeline:all', 'pipeline:approvals', 'pipelines:run:r1', 'orgiq:initiative:p-1']) expect(members(c)).toEqual([]);
+    for (const c of ['pipeline:all', 'pipeline:approvals', 'pipelines:run:r1', 'orgiq:initiative:p-1']) expect(await members(c)).toEqual([]);
   });
 
   it('a revocation while the subscribe policy call is in flight admits nothing', async () => {
@@ -95,7 +100,7 @@ describe('pipeline feature: fail closed', () => {
     contexts.set('pat-s', ctxOf('pat', 'pipelines', 'author'));
     duringPolicy = () => { users.get('pat')!.epoch = 2; }; // sign-out elsewhere bumps the epoch
     await pipe.handleAction('pat-s', 'subscribe', { channel: 'pipeline:run:r1' });
-    expect(members('pipelines:run:r1')).toEqual([]);
+    expect(await members('pipelines:run:r1')).toEqual([]);
     expect(of('pat-s', 'pipeline').filter(f => f['action'] === 'subscribed')).toHaveLength(0);
   });
 
@@ -103,7 +108,7 @@ describe('pipeline feature: fail closed', () => {
     const { pipe, contexts, members, of } = setup();
     contexts.set('pat-s', ctxOf('pat', 'pipelines', 'author'));
     await pipe.handleAction('pat-s', 'subscribe', { channel: 'pipeline:run:r1' });
-    expect(members('pipelines:run:r1')).toEqual(['pat-s']);
+    expect(await members('pipelines:run:r1')).toEqual(['pat-s']);
     await publishPipelineRunMove({ id: 'r1', status: 'running' });
     expect(of('pat-s', 'pipeline:event')).toHaveLength(1);
     users.get('pat')!.grants = { orgiq: ['member'] }; // pipelines grant removed
@@ -116,7 +121,7 @@ describe('pipeline feature: fail closed', () => {
     const { pipe, contexts, members } = setup();
     contexts.set('ana-s', ctxOf('ana', 'assessment', 'assessor'));
     await pipe.handleAction('ana-s', 'subscribe', { channel: 'pipeline:run:r1' });
-    expect(members('pipelines:run:r1')).toEqual([]);
+    expect(await members('pipelines:run:r1')).toEqual([]);
   });
 });
 
@@ -138,7 +143,7 @@ describe('activity feature: server-produced only', () => {
     contexts.set('mia-s', ctxOf('mia', 'orgiq', 'member'));
     await act.handleAction('mia-s', 'emit', { channelId: 'orgiq:initiative:p-1', event: { eventType: 'x' } });
     expect(sent.map(s => s.message['type'])).toEqual(['error']);
-    expect(members('orgiq:initiative:p-1')).toEqual([]);
+    expect(await members('orgiq:initiative:p-1')).toEqual([]);
   });
 
   it('never auto-subscribes, and an explicit broadcast or activity-prefixed subscribe is refused', async () => {
@@ -147,7 +152,7 @@ describe('activity feature: server-produced only', () => {
     await act.onClientConnect?.('mia-s');
     for (const channelId of ['activity:broadcast', 'activity:orgiq:initiative:p-1', 'orgiq:made-up:1', 'pipeline:all']) {
       await act.handleAction('mia-s', 'subscribe', { channelId });
-      expect(members(channelId)).toEqual([]);
+      expect(await members(channelId)).toEqual([]);
     }
   });
 
