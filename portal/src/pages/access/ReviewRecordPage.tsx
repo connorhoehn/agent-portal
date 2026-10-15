@@ -161,7 +161,7 @@ function ReviewRecord({ id }: { id: string }) {
       <Stack gap="none" className="min-h-0 min-w-0 flex-1">
         <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
           <ProgressBar size="sm" value={review.progress.decided} max={Math.max(review.progress.total, 1)} completeTone="success"
-            label={<T size="sm">{review.status === 'closed' ? 'Closed: every item decided' : 'Progress'}</T>}
+            label={<T size="sm">{review.status === 'closed' ? 'Closed: every item decided' : `Progress${reviewDeadlineLabel(review) ? ` · ${reviewDeadlineLabel(review)}` : ''}`}</T>}
             valueLabel={`${reviewProgressLabel(review.progress)} · ${review.progress.kept} kept · ${review.progress.revoked} revoked`}
             data-testid="access-review-progress" aria-label={reviewProgressLabel(review.progress)} />
           <CollectionToolbar {...{
