@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-15T12:02:43.406Z",
-  "serverHandlerSha": "16ff76207149c1e2c7923332e07650b717d13373cf48a775a85352e882924d8a",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-10-15T12:58:13.426Z",
+  "serverHandlerSha": "5099cea1d71af2708e0f68416fd1e28d232280b477e01486fb2099ad6e15cc87",
+  "baseUrl": "http://127.0.0.1:3013",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -823,6 +823,7 @@
         "links[].bytesUsed": "number",
         "links[].createdAt": "string",
         "links[].createdBy": "string",
+        "links[].createdByName": "string",
         "links[].expiresAt": "string",
         "links[].filesUsed": "number",
         "links[].id": "string",
@@ -2889,7 +2890,6 @@
       "values": {
         "boxes[].status": [
           "idle",
-          "provisioning",
           "running",
           "waiting"
         ]
@@ -7437,6 +7437,7 @@
         "artifacts[].meta.turns": "number",
         "artifacts[].runId": "null|string",
         "artifacts[].runStatus": "null|string",
+        "artifacts[].runTitle": "null|string",
         "artifacts[].stepId": "null|string",
         "artifacts[].title": "string",
         "artifacts[].uri": "string",
@@ -9667,7 +9668,6 @@
       },
       "values": {
         "people[].roles[]": [
-          "admin",
           "community-admin",
           "moderator",
           "participant"
@@ -9784,7 +9784,6 @@
       },
       "values": {
         "people[].roles[]": [
-          "admin",
           "community-admin",
           "moderator",
           "participant"
@@ -10588,6 +10587,7 @@
         "proposals[].rationale": "string",
         "proposals[].reviewNote": "null|string",
         "proposals[].reviewer": "null|string",
+        "proposals[].reviewerName": "null|string",
         "proposals[].source": "string",
         "proposals[].status": "string",
         "proposals[].targetId": "string",
