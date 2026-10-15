@@ -73,6 +73,17 @@ function start(box: FleetBox, minutes: number): FleetEvent {
   };
 }
 
+/** TodoWrite's `activeForm` is the item in the present continuous ("Find x" -> "Finding x"), never a copy of `content`. */
+const GERUNDS: Record<string, string> = {
+  Reproduce: 'Reproducing', Find: 'Finding', Return: 'Returning', Cover: 'Covering', Bound: 'Bounding', Add: 'Adding',
+  'Soak-test': 'Soak-testing', Read: 'Reading', Weight: 'Weighting', 'Re-score': 'Re-scoring', Compare: 'Comparing',
+  Inventory: 'Inventorying', Draft: 'Drafting',
+};
+function progressive(content: string): string {
+  const [verb, ...rest] = content.split(' ');
+  return [GERUNDS[verb!] ?? verb, ...rest].join(' ');
+}
+
 /**
  * The run's plan, as Claude Code's TodoWrite (lab wire contract §1): items up
  * to `doneThrough` completed, the next in flight, the rest pending. The lab
@@ -81,7 +92,7 @@ function start(box: FleetBox, minutes: number): FleetEvent {
 function todo(plan: readonly string[], doneThrough: number, ts: string): FleetEvent {
   return tool('TodoWrite', {
     todos: plan.map((content, i) => ({
-      content, activeForm: content,
+      content, activeForm: progressive(content),
       status: i <= doneThrough ? 'completed' : i === doneThrough + 1 ? 'in_progress' : 'pending',
     })),
   }, ts);
