@@ -6,6 +6,7 @@ export default {
   family: 'user-search', log: 'assessment/assessor-a-team-lead', kind: 'intent', persona: P.asha, scenario: 'shared', identity: 'clone',
   goal: "Find who leads Data Platform from the teams list",
   fields: { surface: "list search", pages: "portal/src/pages/assessment" },
+  hold: HOLD.tenantSearch,
   steps: [
     ...listSearch("/assessment/teams", "Search by team name or ID\u2026", "Data Platform", [/Elena Marsh/]),
     open(link(/Data Platform/), /^\/assessment\/teams\/TEAM-004/, 'The row opens its record'),

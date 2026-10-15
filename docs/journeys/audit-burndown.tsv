@@ -56,3 +56,5 @@
 /pipelines/runs	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
 /social/channels	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: tertiary/caption tones and status chips measure 3.0–4.47:1 on tinted surfaces
 /social/channels	caption.typography	ui-components shell header (the user button role caption)	the header user button role caption renders 12px against the 11px caption profile on every route (ui-components 2.451.2)
+/iq/search	a11y.contrast	lane D fix lane: theme text tones (ui-components)	deep-audit rule since ui-components 2.451.0: the search results' caption and status tones measure under 4.5:1 (found by the user-search maps, 2026-10-15)
+/iq/search	a11y.heading-order	lane D fix lane: page outline	deep-audit rule since 2.451.0: the results' group headings skip a level under the query title (found by the user-search maps, 2026-10-15)

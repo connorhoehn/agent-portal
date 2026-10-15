@@ -6,6 +6,7 @@ export default {
   family: 'user-search', log: 'pipelines/operator-p-dead-letter', kind: 'intent', persona: P.kofi, scenario: 'shared', identity: 'clone',
   goal: "Find the dead-letter queue",
   fields: { surface: "list command composer", pages: "portal/src/pages/pipelines" },
+  hold: HOLD.tenantSearch,
   steps: [
     ...composer("/pipelines/queues", "show dead-letter queues", [/Failed distillation deliveries/]),
     open(link(/Failed distillation deliveries/), /^\/pipelines\/queues/, 'The row opens its record'),

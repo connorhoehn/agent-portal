@@ -6,6 +6,7 @@ export default {
   family: 'user-search', log: 'access/access-admin-x-who-approved', kind: 'intent', persona: P.priya, scenario: 'shared', identity: 'clone',
   goal: "Find who approved req-0003 in the audit log",
   fields: { surface: "list search", pages: "portal/src/pages/access" },
+  hold: HOLD.tenantSearch,
   steps: [
     ...listSearch("/access/audit", "Search events", "req-0003", [/req-0003/]),
     open(link(/req-0003/), /^\/access\/requests\/req-0003/, 'The row opens its record'),

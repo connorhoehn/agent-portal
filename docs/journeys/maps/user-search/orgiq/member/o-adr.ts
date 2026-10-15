@@ -8,6 +8,6 @@ export default {
   fields: { surface: "Work search: decisions", pages: "portal/src/pages/search, middleware/src/providers/search.ts, middleware/src/lib/search-index" },
   steps: [
     ask(searchUrl('Aurora Neptune decision'), 'The decision is the first result', ['Adopt Aurora over Neptune']),
-    open(result('Adopt Aurora over Neptune'), /^\/iq\/decisions\/d-aurora/, 'The decision opens its record page', ['Adopt Aurora over Neptune']),
+    open(result(/Adopt\s+Aurora\s+over\s+Neptune/), /^\/iq\/decisions\/d-aurora/, 'The decision opens its record page', ['Adopt Aurora over Neptune']),
   ],
 } satisfies JourneyMap;

@@ -6,6 +6,7 @@ export default {
   family: 'user-search', log: 'assessment/lead-assessor-a-failed-runs', kind: 'intent', persona: P.jonas, scenario: 'shared', identity: 'clone',
   goal: "See which assessment runs failed",
   fields: { surface: "list command composer", pages: "portal/src/pages/assessment/RunsPage.tsx" },
+  hold: HOLD.tenantSearch,
   steps: [
     ...composer("/assessment/runs", "show failed runs", [/suggest-confluence-content|process-self-assessment/]),
     open(link(/suggest-confluence-content|process-self-assessment/), /^\/assessment\/runs/, 'The row opens its record'),

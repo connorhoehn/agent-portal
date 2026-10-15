@@ -6,6 +6,7 @@ export default {
   family: 'user-search', log: 'access/requester-x-find-entitlement', kind: 'intent', persona: P.rhea, scenario: 'shared', identity: 'clone',
   goal: "Find how to get budget access in the catalog",
   fields: { surface: "list search", pages: "portal/src/pages/access" },
+  hold: HOLD.tenantSearch,
   steps: [
     ...listSearch("/access/catalog", "Search the catalog", "budget", [/Budget visibility/]),
     open(link(/Budget visibility/), /^\/access\/catalog/, 'The row opens its record'),

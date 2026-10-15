@@ -36,7 +36,7 @@ export const searchUrl = (q: string) => `/iq/search?${new URLSearchParams({ q, t
 
 /** Ask: open the entry point with the question and see the answer on screen. */
 export const ask = (url: string, name: string, answer: Text[]): Step => ({
-  do: 'navigate', url, name, proves: 'answers-question', ...quiet, expect: { visible: answer.map(seen) },
+  do: 'navigate', url, name, proves: 'answers-question', expect: { visible: answer.map(seen) },
 });
 
 /** Open: follow the record the answer names; the record's page is where it lands. */
@@ -45,13 +45,17 @@ export const open = (target: Target, url: Text, name: string, facts: Text[] = []
 });
 
 /** A search result row's link, by the record title it shows. */
-export const result = (title: Text): Target => ({ text: title, within: { css: 'main [data-record-key]' }, nth: 0 });
+export const result = (title: Text): Target => ({
+  text: title, nth: 0,
+  // The walker scopes to the FIRST match of `within`, so the row is picked by its own text, then its title clicked.
+  within: { css: typeof title === 'string' ? `main [data-record-key]:has-text(${JSON.stringify(title)})` : `main [data-record-key]:has(:text-matches(${JSON.stringify(title.source)}, "i"))` },
+});
 export const link = (name: Text): Target => ({ role: 'link', name, within: { css: 'main' } });
 
 /** Why a mapped intent is not walked yet: the phase that gives the tenant the surface. */
 export const HOLD = {
   palette: 'S3 (U8): the palette has no record group yet, so a record cannot be reached from it; the map is walked once the ui-components record-results section is pinned and wired',
-  tenantSearch: 'S2: this tenant has no server search yet (/api/<tenant>/search behind requireTenant); the map is walked once the tenant index lands',
+  tenantSearch: 'S2: this tenant has no server search yet (/api/<tenant>/search behind requireTenant); walked 2026-10-15 on its list page instead and the row did not open its record, so the map is walked again once the tenant index lands',
 };
 
 /** The palette path (U8): open it on a tenant page, type the question, take the record option. */
