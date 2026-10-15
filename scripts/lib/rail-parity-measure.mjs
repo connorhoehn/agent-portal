@@ -87,8 +87,18 @@ function findRailScript(anyLeft = false) {
   };
 }
 
-async function signIn(page, base, userId, tenant, role) {
+// JOURNEY_MEASURE_CLONES=1 (scripts/journeys/measure.sh): sign in as a dev:mock clone of the persona (same grants,
+// own session epoch) so the measurement runs beside an audit using that persona. Default: the persona itself.
+async function signIn(page, base, persona, tenant, role) {
   await page.goto(base + '/');
+  let userId = persona;
+  if (process.env.JOURNEY_MEASURE_CLONES === '1') {
+    userId = await page.evaluate(async ({ persona, secret }) => {
+      const res = await fetch('/api/__mock/identity/clone', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', ...(secret ? { 'x-mock-control-auth': secret } : {}) }, body: JSON.stringify({ from: persona, label: 'journey-measure' }) });
+      if (res.status !== 201) throw new Error(`clone ${persona}: ${res.status}`);
+      return (await res.json()).clone.id;
+    }, { persona, secret: process.env.MOCK_CONTROL_SECRET ?? '' });
+  }
   await page.evaluate(async ({ userId, tenant, role }) => {
     const h = { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
     await fetch('/api/session/login', { ...h, body: JSON.stringify({ userId }) });

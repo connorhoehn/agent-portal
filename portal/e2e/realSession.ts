@@ -10,6 +10,7 @@ import { seedPreJoin, type PreJoinMode } from './preJoin';
 //   signIn(pageOrContext, user, o)  a FRESH login on that context's cookie jar, then optional tenant/role switch
 //   demoSession(pageOrContext, o)   the cookie-less demo persona, switched into a tenant/role
 //   openAs(browser, user, o)        a fresh context per identity: page, page errors, /api/social requests
+//   signInMeasured(target, persona, o) signIn, as a cached clone when JOURNEY_MEASURE_CLONES=1 (scripts/journeys/measure.sh)
 //   openAsClone(browser, persona, o) openAs as a fresh dev:mock CLONE of a seed persona (own session epoch)
 //   withMockScope(context, scenario) this context alone sees a scoped dev:mock world (never the shared one)
 //
@@ -181,6 +182,30 @@ export async function cloneIdentity(request: APIRequestContext, persona: string,
 
 export async function deleteClone(request: APIRequestContext, cloneId: string): Promise<void> {
   await request.delete(`/api/__mock/identity/clone/${encodeURIComponent(cloneId)}`, { headers: mockControlHeaders() }).catch(() => undefined);
+}
+
+/**
+ * The journey measurement's sign-in (scripts/journeys/measure.sh sets JOURNEY_MEASURE_CLONES=1). Default:
+ * exactly `signIn(target, persona)`. With the flag: sign in as a clone of `persona` (same grants and person,
+ * its own session epoch), minted once per browser context and persona, so the sweep runs beside an audit as the
+ * same persona without either revoking the other. A clone is gone after a BFF reload: the login fails, so the
+ * clone is minted again and the sign-in retried once.
+ */
+const measureClones = new WeakMap<object, Map<string, string>>();
+export const measuringAsClones = () => process.env.JOURNEY_MEASURE_CLONES === '1' || process.env.TYPE_SCALE_CLONES === '1';
+export async function signInMeasured(target: Target, persona: string, opts: SignInOptions = {}): Promise<Principal> {
+  if (!measuringAsClones()) return signIn(target, persona, opts);
+  const context = contextOf(target), request = requestOf(target);
+  const ids = measureClones.get(context) ?? new Map<string, string>();
+  measureClones.set(context, ids);
+  const known = ids.get(persona);
+  if (known) {
+    const live = await request.get('/api/__mock/identity/clones', { headers: mockControlHeaders() });
+    const rows = live.ok() ? ((await live.json()).clones as Array<{ id: string }>) : [];
+    if (!rows.some((c) => c.id === known)) ids.delete(persona); // the BFF reloaded and dropped it: mint again
+  }
+  if (!ids.has(persona)) ids.set(persona, await cloneIdentity(request, persona, 'journey-measure'));
+  return signIn(target, ids.get(persona)!, opts);
 }
 
 export type MockScopeScenario = 'default' | 'empty' | 'error' | 'large' | 'fresh' | 'long-text' | 'many' | 'loading';

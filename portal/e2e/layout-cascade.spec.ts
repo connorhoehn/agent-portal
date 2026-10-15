@@ -27,7 +27,7 @@ import {
 } from './route-inventory';
 import { LAYOUT_CASCADE_BASELINE } from './layout-cascade-baseline';
 import { finishParts, recordPart } from './contracts';
-import { signIn as signInAs } from './realSession';
+import { signInMeasured as signInAs } from './realSession';
 
 const BASE = process.env.LAYOUT_CASCADE_BASE ?? 'http://127.0.0.1:5183';
 const GUTTER = 24;

@@ -56,7 +56,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { OBSERVED_ROUTES, PARAM_ROUTES, STATE_ROUTES, SWEEP_USER, TENANTS, resolveParam, sourceDigest, staticInventory, type InventoryRoute, type Tenant } from './route-inventory';
 import { DEFAULT_DUE, ownerOf, readRows, writeRows, type Row } from './burndown';
 import { finishParts, recordPart } from './contracts';
-import { signIn as signInAs } from './realSession';
+import { signInMeasured } from './realSession';
 
 const BASE = process.env.PARITY_BASE_URL ?? process.env.LAYOUT_CASCADE_BASE ?? 'http://127.0.0.1:5183';
 const ONLY = process.env.TYPE_SCALE_ONLY ?? '';
@@ -298,7 +298,8 @@ export const VOLATILE: ReadonlyArray<{ match: RegExp; reason: string }> = [
 const volatile = (o: Offender) => VOLATILE.some((v) => v.match.test(o.path));
 const keyOf = (o: Offender) => `${o.rule} ${o.region} ${o.sw}`;
 
-const signIn = (page: Page, tenant: Tenant | null, user = USER) => signInAs(page, user, tenant ? { tenant } : {});
+// JOURNEY_MEASURE_CLONES=1 (measure.sh) signs in as a clone of the persona; default: the seed persona (realSession.signInMeasured).
+const signIn = (page: Page, tenant: Tenant | null, user = USER) => signInMeasured(page, user, tenant ? { tenant } : {});
 
 async function resolveParams(page: Page, tenant: Tenant): Promise<InventoryRoute[]> {
   const out: InventoryRoute[] = [];
@@ -357,6 +358,9 @@ for (const tenant of TENANTS) {
       }
       const w = await walk(page, first && !ONLY);
       const offenders = judge(w);
+      if (process.env.TYPE_SCALE_DETAIL === '1') {
+        try { fs.appendFileSync(path.join(LOG_DIR, 'type-scale-detail.tsv'), offenders.filter((o) => !volatile(o)).map((o) => [r.pattern ?? r.path, o.rule, o.region, o.sw, o.path, o.text].join('\t') + '\n').join('')); } catch { /* detail is a copy */ }
+      }
       const titleEl = w.els.find((e) => e.title);
       contract[r.pattern ?? r.path] = { title: titleEl ? `${titleEl.size}/${titleEl.weight}` : null, offenders: [...new Set(offenders.filter((o) => o.region !== 'primary' && !volatile(o)).map(keyOf))].sort() };
       if (first && !ONLY) contract[`${tenant} · primary rail`] = { title: null, offenders: [...new Set(offenders.filter((o) => o.region === 'primary' && !volatile(o)).map(keyOf))].sort() };
