@@ -85,7 +85,7 @@ import { peerOperationLingerMs, publishProofMaxAgeMs, realtimeGatewayRouting } f
 import { captureCallReaction, configuredCallReactionCapture, type CallReactionCapture } from './call-reactions.js';
 
 // Everything the pre-split file exported, from where it lives now.
-export { lobbyGuard, channelGuard, stripServicePrefix } from './gateway/authority.js';
+export { lobbyGuard, channelGuard } from './gateway/authority.js';
 export { authenticateGatewayUpgrade, gatewayAuthFromClaims, realtimeGatewayEnabled, type RealtimeGatewayAuth } from './gateway/auth.js';
 export { recordInvite, notifyMissedCall } from './gateway/calls.js';
 export { dmNotifyPlugin, channelNotifyPlugin, tenantMentionNotifyPlugin, pageUnreadNotifyPlugin, pageCursorChatOptions, notifyChannelMessage, liveSubscribers, liveSubscribersForUsers } from './gateway/notify-plugins.js';

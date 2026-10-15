@@ -8,7 +8,8 @@ jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 import { authorizeLiveGatewayChannel } from '../live-principal.js';
-import { channelGuard, lobbyGuard, stripServicePrefix } from '../realtime-gateway.js';
+import { channelGuard, lobbyGuard } from '../realtime-gateway.js';
+import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import { socialChannelMembersFixture } from '../../mock/social-channels.js';
 import { socialDecksFixture } from '../../mock/social-decks.js';
@@ -23,7 +24,7 @@ const user = (id: string, grants: Record<string, string[]>): UserInfo => ({ id, 
 const ctxOf = (userId: string, org = 'social') =>
   ({ userId, org, role: 'participant', epoch: 1, sessionIat: 1, tenants: Object.keys(users.get(userId)?.grants ?? {}), displayName: userId });
 const ask = (who: string, channel: string, kind: 'subscribe' | 'publish' = 'subscribe', org = 'social') =>
-  authorizeLiveGatewayChannel({ kind, clientId: 'c', channel, ctx: ctxOf(who, org) }, { guard: channelGuard, baseChannel: stripServicePrefix });
+  authorizeLiveGatewayChannel({ kind, clientId: 'c', channel, ctx: ctxOf(who, org) }, { guard: channelGuard, baseChannel });
 const wire = socialDeckPresenceChannel(DECK);
 
 beforeEach(() => {

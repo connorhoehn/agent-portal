@@ -5,7 +5,8 @@ import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 import { authorizeLiveGatewayCall, authorizeLiveGatewayCallRecipient, authorizeLiveGatewayChannel, currentLiveSession, getLivePrincipal } from '../live-principal.js';
 import { currentSocialActionSession } from '../social-authority.js';
-import { channelGuard, lobbyGuard, stripServicePrefix } from '../realtime-gateway.js';
+import { channelGuard, lobbyGuard } from '../realtime-gateway.js';
+import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import type { Session } from '../session.js';
 import type { ChatMember, ChatMembershipStore } from '@connorhoehnslalom/realtime-modules/chat';
 import { createMemorySocialChatBackend, MirroredMembershipStore, setSocialChatBackend, socialChat } from '../social-chat.js';
@@ -15,7 +16,7 @@ const session: Session = { sub: 'alice', tenant: 'orgiq', role: 'member', epoch:
 const context = (value: Session = session) => ({ userId: value.sub, org: value.tenant, role: value.role,
   epoch: value.epoch, sessionIat: value.iat, tenants: ['orgiq', 'social', 'assessment'], displayName: 'Old token label',
   ...(value.act ? { act: { sub: value.act.sub, epoch: value.act.epoch } } : {}) });
-const guards = { guard: channelGuard, baseChannel: stripServicePrefix };
+const guards = { guard: channelGuard, baseChannel };
 const authorize = (channel = 'social:dm:alice:bob', kind: 'subscribe' | 'publish' = 'subscribe', ctx = context()) =>
   authorizeLiveGatewayChannel({ kind, clientId: 'socket-a', channel, ctx }, guards);
 let users: Map<string, UserInfo>;

@@ -16,7 +16,8 @@ import fs from 'node:fs';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
-import { attachRealtimeGateway, authenticateGatewayUpgrade, channelGuard, stripServicePrefix, REALTIME_GATEWAY_PATH } from '../realtime-gateway.js';
+import { attachRealtimeGateway, authenticateGatewayUpgrade, channelGuard, REALTIME_GATEWAY_PATH } from '../realtime-gateway.js';
+import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { createUploadsRouter, gatewayUploadConfig, resetGatewayUploadBackendForTests, uploadTypeAllowed } from '../gateway-attachments.js';
 import { rejectUnsupportedUpgrades } from '../unsupported-upgrades.js';
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';
@@ -45,7 +46,7 @@ beforeAll(async () => {
   const app = express();
   app.use('/api/uploads', createUploadsRouter(
     token => authenticateGatewayUpgrade({ headers: { 'sec-websocket-protocol': `bearer-token-v1, ${token}` } } as never),
-    { guard: channelGuard, baseChannel: stripServicePrefix },
+    { guard: channelGuard, baseChannel },
     gatewayUploadConfig(),
     // Stands in for the signed session cookie: the header names whose session it is.
     async req => tokens.get(req.get('x-test-session') ?? '') ?? null));

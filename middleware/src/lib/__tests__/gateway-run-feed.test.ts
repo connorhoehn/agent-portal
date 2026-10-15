@@ -7,7 +7,8 @@ jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 import { authorizeLiveGatewayChannel } from '../live-principal.js';
-import { channelGuard, stripServicePrefix } from '../realtime-gateway.js';
+import { channelGuard } from '../realtime-gateway.js';
+import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import {
   pipelineFamilyChannel, publishChannelActivity, publishPipelineRunMove, resetGatewayRunFeed, tenantActivity, tenantPipeline,
@@ -31,7 +32,7 @@ function fakeRouter() {
       for (const to of members.get(channel) ?? []) sent.push({ to, message });
     },
     checkChannel: (kind: 'subscribe' | 'publish', clientId: string, channel: string) =>
-      authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: contexts.get(clientId) ?? null }, { guard: channelGuard, baseChannel: stripServicePrefix }),
+      authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: contexts.get(clientId) ?? null }, { guard: channelGuard, baseChannel }),
     subscribeToChannel: async (clientId: string, channel: string) => {
       if (!await router.checkChannel('subscribe', clientId, channel)) return false;
       const set = members.get(channel) ?? new Set<string>(); set.add(clientId); members.set(channel, set); return true;

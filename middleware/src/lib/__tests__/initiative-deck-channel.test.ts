@@ -7,11 +7,11 @@
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
-import { LocalRealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { LocalRealtimeRouter, baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 import { authorizeLiveGatewayChannel } from '../live-principal.js';
-import { channelGuard, stripServicePrefix } from '../realtime-gateway.js';
+import { channelGuard } from '../realtime-gateway.js';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import { initiativeDecksFixture } from '../../mock/initiative-decks.js';
 import { deckViewerFor, getDeck } from '../../providers/initiative-decks.js';
@@ -27,7 +27,7 @@ let duringPolicy: (() => void) | null;
 const user = (id: string, grants: Record<string, string[]>, epoch = 1): UserInfo => ({ id, displayName: id, email: null, personId: null, epoch, grants });
 const ctxOf = (userId: string, role: string, org = 'orgiq') =>
   ({ userId, org, role, epoch: 1, sessionIat: 1, tenants: Object.keys(users.get(userId)?.grants ?? {}), displayName: userId });
-const guards = { guard: channelGuard, baseChannel: stripServicePrefix };
+const guards = { guard: channelGuard, baseChannel };
 const ask = (c: ReturnType<typeof ctxOf>, channel: string, kind: 'subscribe' | 'publish' = 'subscribe') =>
   authorizeLiveGatewayChannel({ kind, clientId: 'c', channel, ctx: c }, guards);
 const wire = (id: string) => `presence:orgiq:deck:${id}`;

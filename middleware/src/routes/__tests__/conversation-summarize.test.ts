@@ -12,7 +12,7 @@ import express from 'express';
 import request from '../../test-support/http.js';
 import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
 import { InMemoryChatStore, type ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
-import type { RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { baseChannel, type RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
 import { conversationSummarizeRouter, pendingConversationSummaries } from '../conversation-summarize.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { getUser, type UserInfo } from '../../providers/identity.js';
@@ -23,7 +23,7 @@ import { createMemorySocialChatBackend, setSocialChatBackend, socialChat } from 
 import { flowRunsFixture } from '../../mock/flow-runs.js';
 import { flowRunChannel, flowRunStore, parseFlowRunChannel } from '../../lib/flow-runs/index.js';
 import { authorizeLiveGatewayChannel } from '../../lib/live-principal.js';
-import { channelGuard, lobbyGuard, stripServicePrefix } from '../../lib/realtime-gateway.js';
+import { channelGuard, lobbyGuard } from '../../lib/realtime-gateway.js';
 import { CallChatRuntime, setCallChatRuntime } from '../../lib/call-chat.js';
 import { MemoryCallChatStateStore } from '../../lib/call-chat-state.js';
 import { observeCallPageLifecycle, type RecoverableCallStateStore } from '../../lib/call-pages.js';
@@ -236,7 +236,7 @@ describe('the private run channel (<tenant>:flowrun:<id>)', () => {
     return { userId: sub, org, role, epoch: 1, sessionIat: 1, tenants: Object.keys(users.get(sub!)?.grants ?? {}), displayName: sub };
   };
   const subscribe = (as: string, channel: string, kind: 'subscribe' | 'publish' = 'subscribe') =>
-    authorizeLiveGatewayChannel({ kind, clientId: `${as}-sock`, channel, ctx: ctxOf(as) }, { guard: channelGuard, baseChannel: stripServicePrefix });
+    authorizeLiveGatewayChannel({ kind, clientId: `${as}-sock`, channel, ctx: ctxOf(as) }, { guard: channelGuard, baseChannel });
 
   it.each(CASES)('$channel: only the requester, only while they still read the conversation', async (c) => {
     const started = await run(c.reader, c.channel); await settle();
@@ -326,7 +326,7 @@ describe('huddle chat (orgiq:huddle:<callId>)', () => {
     const started = await run(as('alice'), HUDDLE); await settle();
     const channel = flowRunChannel(started.body.runId)!;
     const sub = (who: string) => authorizeLiveGatewayChannel({ kind: 'subscribe', clientId: `${who}-s`, channel, ctx: { ...ctx(who), tenants: ['orgiq', 'social'] } },
-      { guard: channelGuard, baseChannel: stripServicePrefix });
+      { guard: channelGuard, baseChannel });
     expect(await sub('alice')).toBe(true);
     expect(await sub('bob')).toBe(false);
     // 77942166: a seated huddle member chats under the stored lobby's read

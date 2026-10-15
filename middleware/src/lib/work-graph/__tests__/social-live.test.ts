@@ -13,7 +13,8 @@ import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call
 import { getUser, type UserInfo } from '../../../providers/identity.js';
 import { isAllowed } from '../../authz.js';
 import { authorizeLiveGatewayChannel } from '../../live-principal.js';
-import { channelGuard, lobbyGuard, stripServicePrefix } from '../../realtime-gateway.js';
+import { channelGuard, lobbyGuard } from '../../realtime-gateway.js';
+import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { tenantChannelFamily } from '../../tenant-channels.js';
 import { createMemorySocialChatBackend, setSocialChatBackend, socialChat } from '../../social-chat.js';
 import { observeCallPageLifecycle } from '../../call-pages.js';
@@ -25,7 +26,7 @@ let users: Map<string, UserInfo>;
 const user = (id: string, grants: Record<string, string[]>): UserInfo => ({ id, displayName: id, email: null, personId: null, epoch: 1, grants });
 const ctx = (userId: string, org: string, role: string) =>
   ({ userId, org, role, epoch: 1, sessionIat: 1, tenants: Object.keys(users.get(userId)?.grants ?? {}), displayName: userId });
-const guards = { guard: channelGuard, baseChannel: stripServicePrefix };
+const guards = { guard: channelGuard, baseChannel };
 const authorize = (c: ReturnType<typeof ctx>, channel: string, kind: 'subscribe' | 'publish' = 'subscribe') =>
   authorizeLiveGatewayChannel({ kind, clientId: 'socket', channel, ctx: c }, guards);
 const SECRET = 'social:ch:secret';

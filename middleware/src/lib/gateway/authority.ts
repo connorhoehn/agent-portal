@@ -177,19 +177,6 @@ export function channelGuard(auth: GuardAuth | null, channel: string, kind: 'sub
   return admitName(auth, bare, family => channelAuthorityFor(family, channel, kind) !== null);
 }
 
-/**
- * The channel a tenant/membership rule judges is the library's `baseChannel`
- * (realtime-modules 0.107, /server): `presence:`/`reactions:`/`cursor:` are
- * removed, and `chat:` only where `channelForLobby` put it around a DM lobby
- * (`chat:social:dm:a:b` → `social:dm:a:b`). No library service, portal hook or
- * host producer names a channel with the wider `chat|typing|activity|pins` set
- * this gateway once stripped itself, so a name carrying one keeps its prefix
- * as its partition, which is never a tenant, and fails closed.
- *
- * @deprecated kept as an alias for existing importers; use `baseChannel`.
- */
-export const stripServicePrefix: (channel: string) => string = baseChannel;
-
 // ── The guard pairs the live-principal primitives take ───────────────────────
 
 /** The one `{ guard, baseChannel }` pair for channel decisions (chat, presence,

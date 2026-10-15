@@ -8,7 +8,8 @@ jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 import { authorizeLiveGatewayCall, authorizeLiveGatewayChannel } from '../live-principal.js';
-import { channelGuard, lobbyGuard, stripServicePrefix } from '../realtime-gateway.js';
+import { channelGuard, lobbyGuard } from '../realtime-gateway.js';
+import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { TENANT_CHANNEL_FAMILIES, tenantChannelFamily } from '../tenant-channels.js';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import { initiativeDecksFixture } from '../../mock/initiative-decks.js';
@@ -23,7 +24,7 @@ const user = (id: string, grants: Record<string, string[]>, epoch = 1): UserInfo
   ({ id, displayName: id, email: null, personId: null, epoch, grants });
 const ctx = (userId: string, org: string, role: string, epoch = 1) =>
   ({ userId, org, role, epoch, sessionIat: 1, tenants: Object.keys(users.get(userId)?.grants ?? {}), displayName: userId });
-const guards = { guard: channelGuard, baseChannel: stripServicePrefix };
+const guards = { guard: channelGuard, baseChannel };
 const authorize = (c: ReturnType<typeof ctx>, channel: string, kind: 'subscribe' | 'publish' = 'subscribe') =>
   authorizeLiveGatewayChannel({ kind, clientId: 'socket', channel, ctx: c }, guards);
 
@@ -62,7 +63,7 @@ const READERS: Array<[string, () => ReturnType<typeof ctx>]> = [
 
 describe('every family the portal uses', () => {
   it('lists each portal channel builder', () => {
-    for (const [channel] of READERS) expect(tenantChannelFamily(stripServicePrefix(channel))).not.toBeNull();
+    for (const [channel] of READERS) expect(tenantChannelFamily(baseChannel(channel))).not.toBeNull();
     expect(TENANT_CHANNEL_FAMILIES.length).toBeGreaterThanOrEqual(11);
   });
   it.each(READERS)('%s admits its reader', async (channel, c) => {

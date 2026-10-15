@@ -6,11 +6,11 @@
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
-import { LocalRealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { LocalRealtimeRouter, baseChannel } from '@connorhoehnslalom/realtime-modules/server';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 import { authorizeLiveGatewayChannel } from '../live-principal.js';
-import { channelGuard, stripServicePrefix } from '../realtime-gateway.js';
+import { channelGuard } from '../realtime-gateway.js';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import { publishChannelActivity, publishPipelineRunMove, resetGatewayRunFeed, tenantActivity, tenantPipeline } from '../gateway-run-feed.js';
 
@@ -30,7 +30,7 @@ function realRouter() {
   const router = new LocalRealtimeRouter({
     logger,
     authorize: ({ kind, clientId, channel, ctx }) =>
-      authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: ctx as Msg | null }, { guard: channelGuard, baseChannel: stripServicePrefix }),
+      authorizeLiveGatewayChannel({ kind, clientId, channel, ctx: ctx as Msg | null }, { guard: channelGuard, baseChannel }),
   });
   (router as unknown as { _setHandle(h: unknown): void })._setHandle({
     getClientContext: (id: string) => contexts.get(id) ?? null,
