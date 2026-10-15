@@ -1,16 +1,17 @@
 // THE SEAM between the runbook fixtures (runbooks.ts, lane B) and the seed
-// content (runbooks.seed.ts, lane C: the hand-written rewrites of the 11 seeded
-// artifacts). Until lane C lands, the default world is built from the model's
-// own known-good docs (lib/runbooks/__tests__/fixtures/good.ts) so the store,
-// the contract suite and the mock floor have something real to hold.
+// content (runbooks.seed.ts, lane C: the nine hand-written rewrites of the
+// eleven seeded distillation artifacts, their open proposals and the
+// application history carried over from distillation).
 //
-// To cut over: replace the body of `runbookSeedRows` with a call into
-// runbooks.seed.ts returning the same five arrays. Nothing else changes.
+// `default` is lane C's world, exactly. Briefs start empty: a brief is frozen
+// when a run is dispatched or claimed (lib/run-brief.ts), and every seeded run
+// predates briefs. `large` is that world plus generated bulk to page through.
 import type { Runbook, RunbookApplication, RunbookProposal, RunbookVersion, SessionBrief } from '../lib/runbooks/types.js';
 import { versionOf } from '../lib/runbooks/version.js';
 import { assembleBrief } from '../lib/runbooks/brief.js';
 import { clock } from './core/index.js';
-import { flakyRerunDiff, ssoNewOrigin, tenantCutoverV1, tenantCutoverV2 } from '../lib/runbooks/__tests__/fixtures/good.js';
+import { runbookSeedWorld } from './runbooks.seed.js';
+import { flakyRerunDiff, ssoNewOrigin, tenantCutoverV1 } from '../lib/runbooks/__tests__/fixtures/good.js';
 
 export interface RunbookSeedRows {
   runbooks: Runbook[];
@@ -21,36 +22,9 @@ export interface RunbookSeedRows {
 }
 
 const person = (id: string) => ({ kind: 'person' as const, id });
-const noEvidence = { lab_experience_ids: [] as string[] };
 
 export function runbookSeedRows(): RunbookSeedRows {
-  const created = clock.daysAgo(20), edited = clock.daysAgo(3), t = (d: number) => clock.daysAgo(d);
-  const runbooks: Runbook[] = [
-    { id: 'rb-tenant-cutover', scope: { kind: 'initiative', ref: 'p-auth-migration' }, owner_person_id: 'p-001', status: 'published', current_version: 2, created_at: created, updated_at: edited },
-    { id: 'rb-sso-new-origin', scope: { kind: 'repo', ref: 'orgiq-auth-service' }, owner_person_id: 'p-001', status: 'published', current_version: 1, created_at: created, updated_at: created },
-    { id: 'rb-flaky-test-rerun-diff', scope: { kind: 'repo', ref: 'orgiq-observability' }, owner_person_id: 'p-002', status: 'published', current_version: 1, created_at: created, updated_at: created },
-  ];
-  const versions: RunbookVersion[] = [
-    versionOf({ runbook_id: 'rb-tenant-cutover', version: 1, doc: tenantCutoverV1, author: person('p-001'), accepted_by: 'p-001', accepted_at: created, provenance: { source_artifact_ids: ['art-010'] } }),
-    versionOf({ runbook_id: 'rb-tenant-cutover', version: 2, doc: tenantCutoverV2, author: { kind: 'run', id: 'job-0001' }, proposal_id: 'prop-0001', accepted_by: 'p-001', accepted_at: edited, provenance: { run_refs: ['job-0001'] } }),
-    versionOf({ runbook_id: 'rb-sso-new-origin', version: 1, doc: ssoNewOrigin, author: person('p-001'), accepted_by: 'p-001', accepted_at: created, provenance: { source_artifact_ids: ['art-009'] } }),
-    versionOf({ runbook_id: 'rb-flaky-test-rerun-diff', version: 1, doc: flakyRerunDiff, author: person('p-002'), accepted_by: 'p-002', accepted_at: created }),
-  ];
-  const proposals: RunbookProposal[] = [
-    { id: 'prop-0001', kind: 'edit', runbook_id: 'rb-tenant-cutover', base_version: 1, proposed: tenantCutoverV2, rationale: 'A run found the flag flip must precede the session check.',
-      source: { kind: 'run', run_ref: 'job-0001', ...noEvidence }, lint: [], similar: [], status: 'accepted', decided_by: 'p-001', decided_at: edited, note: null, merged_into: null, created_at: t(4) },
-    { id: 'prop-0002', kind: 'edit', runbook_id: 'rb-sso-new-origin', base_version: 1, proposed: { ...ssoNewOrigin, summary: ssoNewOrigin.summary }, rationale: 'Open for review: tighten the wording of the summary.',
-      source: { kind: 'person', person_id: 'p-003', ...noEvidence }, lint: [], similar: [], status: 'open', decided_by: null, decided_at: null, note: null, merged_into: null, created_at: t(1) },
-  ];
-  const applications: RunbookApplication[] = [
-    { id: 'app-0001', runbook_id: 'rb-tenant-cutover', version: 2, run_ref: 'job-0002', brief_id: 'brief-job-0002', outcome: 'followed', failed_at_step: null, note: null, at: t(2) },
-    { id: 'app-0002', runbook_id: 'rb-tenant-cutover', version: 1, run_ref: 'job-0001', brief_id: 'brief-job-0001', outcome: 'failed', failed_at_step: 2, note: 'The flag flip did not take.', at: t(4) },
-  ];
-  const brief = assembleBrief({
-    run_ref: 'job-0002', assembled_at: t(2), framing: '', work_item: null, initiative: null, repo: 'orgiq-auth-service', decisions: [],
-    runbooks: [],
-  });
-  return { runbooks, versions, proposals, applications, briefs: [brief] };
+  return runbookSeedWorld();
 }
 
 /** The `large` scenario: `n` published runbooks of two versions each, with proposals, applications and briefs to page through. */

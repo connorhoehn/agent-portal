@@ -970,8 +970,8 @@ export function seedRunbooks(): RunbookSeed[] {
       id: `rba-${s.id.slice(3)}-${k + 1}`,
       runbook_id: s.id, version: 1, run_ref: runRef,
       // These runs predate session briefs: nothing was frozen for them, so
-      // there is no brief to name (see the lane C report).
-      brief_id: '',
+      // there is no brief to name (RunbookApplication.brief_id is nullable for it).
+      brief_id: null,
       outcome, failed_at_step: failedAt, note, at: clock.hoursAgo(h),
     }));
     return {

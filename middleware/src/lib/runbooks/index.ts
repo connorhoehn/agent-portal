@@ -14,7 +14,7 @@ export { similarity, tokens, sharedTokens, runbookTerms, scopesOverlap, findSimi
 export { selectRunbooks, SCOPE_WEIGHT, type WorkItemContext, type RunbookCandidate, type SelectedRunbook, type Selection } from './select.js';
 export {
   assembleBrief, briefBudget, ASSEMBLER_VERSION, DEFAULT_BRIEF_BUDGET, CONTEXT_CAP_TOKENS, MAX_FULL_RUNBOOKS,
-  type AssembleBriefInput, type BriefWorkItem, type BriefInitiative, type BriefDecision,
+  type AssembleBriefInput, type BriefWorkItem, type BriefInitiative, type BriefDecision, type BriefSkill,
 } from './brief.js';
 export { estimateTokens, sha256Hex } from './tokens.js';
 export { runbookHealth, PROVEN_TTL_DAYS } from './health.js';

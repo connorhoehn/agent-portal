@@ -107,7 +107,13 @@ export interface RunbookApplication {
   runbook_id: string;
   version: number;
   run_ref: string;
-  brief_id: string;
+  /**
+   * The frozen brief that handed the runbook to the run. null only for history
+   * that predates session briefs (applications migrated from distillation):
+   * nothing was frozen for those runs, so there is no brief to name. Every
+   * application a run reports now is checked against its brief and names it.
+   */
+  brief_id: string | null;
   outcome: ApplicationOutcome;
   failed_at_step: number | null;
   note: string | null;
@@ -139,6 +145,12 @@ export interface RunbookProposal {
   source: {
     kind: 'run' | 'person';
     run_ref?: string; session_id?: string; work_item_id?: string; person_id?: string;
+    /**
+     * A `run` proposal's accountable person: who dispatched or claimed the run,
+     * read from its frozen brief (never from the body). They may not accept it —
+     * the same rule as a person's own proposal.
+     */
+    dispatched_by?: string;
     lab_experience_ids: string[];
   };
   /** Stored at write time; re-run on read. */
@@ -162,7 +174,7 @@ export interface RunbookHealth {
   warning: string | null;
 }
 
-export type BriefSectionKind = 'framing' | 'work_item' | 'initiative' | 'decisions' | 'runbook' | 'how_to_report';
+export type BriefSectionKind = 'framing' | 'work_item' | 'initiative' | 'decisions' | 'skills' | 'runbook' | 'how_to_report';
 
 export interface BriefSection {
   kind: BriefSectionKind;
@@ -195,4 +207,10 @@ export interface SessionBrief {
   markdown: string;
   /** sha256 hex of `markdown`; the box's bytes and the portal's bytes are compared by it. */
   sha256: string;
+  /**
+   * Who bound the run to a box (the dispatcher's or job creator's session sub),
+   * stamped by the freeze, not part of the markdown. Absent for briefs frozen
+   * by no person (a scheduled bot) and for briefs assembled outside a run.
+   */
+  dispatched_by?: string | null;
 }

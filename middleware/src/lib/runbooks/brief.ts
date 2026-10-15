@@ -12,7 +12,10 @@
 //   - runbooks are included whole or not at all, at most four, in selection
 //     order; one that does not fit is listed under "Also available" with
 //     `lab runbook <id>`, and a later, smaller one may still fit;
-//   - the "N of 6,000 tokens" header counts the whole document, itself included.
+//   - the "N of 6,000 tokens" header counts the whole document, itself included;
+//   - the skills a devbox carries (what a session bundle used to deliver on its
+//     own, decision 4 of 2026-10-14) are listed in "Skills on this box", inside
+//     the context cap and never dropped for a runbook.
 import type { BriefOmission, BriefSection, SessionBrief } from './types.js';
 import type { SelectedRunbook } from './select.js';
 import { estimateTokens, groupThousands, sha256Hex } from './tokens.js';
@@ -34,6 +37,15 @@ export interface BriefWorkItem {
 }
 
 export interface BriefInitiative { id: string; name: string; repo?: string | null }
+
+/** A skill installed on the box (the live session bundle's skills), listed so the run knows it has it. */
+export interface BriefSkill {
+  id: string;
+  name: string;
+  /** "Use when …" — one line. */
+  description: string;
+  version: string;
+}
 
 export interface BriefDecision {
   id: string;
@@ -58,6 +70,8 @@ export interface AssembleBriefInput {
   decisions: BriefDecision[];
   /** selectRunbooks(...).selected, in order. */
   runbooks: SelectedRunbook[];
+  /** Skills on the box (devbox runs); omitted or [] renders no section. */
+  skills?: BriefSkill[];
   budget_tokens?: number;
 }
 
@@ -100,6 +114,13 @@ function decisionsSection(ds: BriefDecision[], dropped: number): string {
   return lines.join('\n');
 }
 
+function skillsSection(skills: BriefSkill[]): string {
+  return [
+    '## Skills on this box',
+    ...skills.map((k) => `- **${k.name}** (${k.id} v${k.version}) — ${k.description}`),
+  ].join('\n');
+}
+
 function runbookBlock(r: SelectedRunbook, n: number): string {
   const lines = [`### ${n}. ${r.title} (${r.runbook_id} v${r.version})`, `Included because: ${r.reasons.join('; ')}.`];
   if (r.health.status !== 'proven' && r.health.warning) lines.push(`⚠ ${r.health.warning}`);
@@ -138,8 +159,10 @@ export function assembleBrief(input: AssembleBriefInput): SessionBrief {
   }
   if (input.initiative) ctx.push({ kind: 'initiative', ref: input.initiative.id, text: initiativeSection(input.initiative, repo, w?.parent_epic ?? null), reason: "the work item's initiative" });
 
+  const skills = [...(input.skills ?? [])].sort((a, b) => cmp(a.id, b.id));
+  const skillsText = skills.length > 0 ? skillsSection(skills) : '';
   const decisions = [...input.decisions].sort((a, b) => cmp(b.at, a.at) || cmp(a.id, b.id));
-  const used = estimateTokens(ctx.map((c) => c.text).join('\n\n'));
+  const used = estimateTokens([...ctx.map((c) => c.text), ...(skillsText ? [skillsText] : [])].join('\n\n'));
   const kept: BriefDecision[] = [];
   for (const d of decisions) {
     const trial = decisionsSection([...kept, d], decisions.length - kept.length - 1);
@@ -152,6 +175,7 @@ export function assembleBrief(input: AssembleBriefInput): SessionBrief {
       reason: `${kept.length} binding decision${kept.length === 1 ? '' : 's'}, newest first`,
     });
   }
+  if (skillsText) ctx.push({ kind: 'skills', ref: skills.map((k) => k.id).join(','), text: skillsText, reason: `${skills.length} skill${skills.length === 1 ? '' : 's'} installed on the box` });
 
   // ── Runbooks: whole or not at all. ────────────────────────────────────────
   const title = `# Session brief — ${w?.id ?? input.run_ref}`;
