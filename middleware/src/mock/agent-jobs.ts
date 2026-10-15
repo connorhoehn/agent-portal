@@ -99,7 +99,7 @@ function seedAgentJobs(): AgentJob[] {
         // The bot's mission plus what its previous firing left behind: a real
         // run starts from its predecessor's outcome, and a prompt that reads
         // differently each time is not one sentence copied across a dozen jobs.
-        payload: { prompt: previousOutcome(history[index + 1]) ? `${bot.prompt} Previous run: ${previousOutcome(history[index + 1])}.` : bot.prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model },
+        payload: { prompt: previousOutcome(history[index + 1]) ? `Picking up after the previous run (${previousOutcome(history[index + 1])}) — ${bot.prompt.charAt(0).toLowerCase()}${bot.prompt.slice(1)}` : bot.prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model },
         status,
         priority: 100,
         boxId: null,
