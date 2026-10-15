@@ -28,7 +28,8 @@ export type RequestKind = 'grant' | 'revocation';
 export type ReviewStatus = 'open' | 'closed';
 export type ReviewDecision = 'keep' | 'revoke';
 
-export interface SodConflict { policyId: string; reason: string; severity: AccessSeverity }
+/** `title` is the policy's own name, so a page prints "Write and approve a pipeline", never `sod-002`. */
+export interface SodConflict { policyId: string; title: string; reason: string; severity: AccessSeverity }
 
 export interface CatalogItem {
   id: string;
@@ -112,8 +113,10 @@ export interface AccessReview {
   status: ReviewStatus;
   owner: Person | null;
   openedAt: string;
+  /** The campaign's deadline, else null. */
+  closesAt: string | null;
   closedAt: string | null;
-  /** Counted from the item rows the actor may see, at request time. */
+  /** Counted from the campaign's item rows at request time: the totals are the campaign's, whoever reads them. */
   progress: { total: number; decided: number; kept: number; revoked: number };
   can: { decide: boolean };
 }
@@ -145,6 +148,8 @@ export interface AccessEvent {
   id: string; at: string; requestId: string | null; policyId: string | null; delegationId: string | null; actor: Person | null;
   kind: AccessEventKind;
   before?: string | null; after?: string | null; reason?: string | null;
+  /** What the event is about, in words: the item and its beneficiary, the policy's title, or the delegation's parties. */
+  subject?: string | null;
 }
 
 /** A directory user as the resolver needs it: current grants and the org-graph link. */

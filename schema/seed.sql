@@ -881,3 +881,25 @@ INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-006'
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-044', 'd-nova', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-001', 'd-vectordb', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-044', 'd-vectordb', 'contributor');
+
+-- ── The access cast (docs/access-tenant-goal.md §Cast) ──────────────────────
+-- Rhea, Omar and Priya are people in the org graph, not only sign-in names:
+-- schema/access_schema.sql links them by id and sets people.manager_id
+-- (Priya manages Omar, Omar manages Rhea). Appended after the generator's
+-- draw so nothing it produced moves.
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-priya', 'Priya Venkataraman', 'priya.venkataraman@orgiq.example', 'Identity Governance Lead', 'Security', 71.4, 58.2, 64.14, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-omar', 'Omar Haddad', 'omar.haddad@orgiq.example', 'Engineering Manager', 'Security', 64.2, 49.6, 56.17, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-rhea', 'Rhea Castellanos', 'rhea.castellanos@orgiq.example', 'Security Engineer', 'Security', 58.7, 33.9, 45.06, NOW());
+INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-priya', 't-security', 'Identity Governance Lead');
+INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-omar', 't-security', 'Engineering Manager');
+INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-rhea', 't-security', 'Security Engineer');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-priya', 'sk-iam', 0.91, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-priya', 'sk-zero-trust', 0.84, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-priya', 'sk-aws-security', 0.7, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-omar', 'sk-zero-trust', 0.74, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-omar', 'sk-aws-security', 0.66, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-omar', 'sk-terraform', 0.5, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-rhea', 'sk-penetration-testing', 0.88, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-rhea', 'sk-aws-security', 0.8, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-rhea', 'sk-iam', 0.62, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-rhea', 'sk-python', 0.55, 'seed');

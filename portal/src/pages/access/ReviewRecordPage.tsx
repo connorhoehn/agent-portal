@@ -47,6 +47,8 @@ import {
   ACCESS_API,
   TENANT_LABELS,
   filterReviewItems,
+  reviewDeadlineLabel,
+  roleLabel,
   requestHref,
   reviewDecisionProblem,
   reviewItemTitle,
@@ -82,7 +84,7 @@ function ReviewRecord({ id }: { id: string }) {
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
-  useCrumbLabel(id, data ? `${data.review.id} · ${data.review.title}` : null);
+  useCrumbLabel(id, data ? data.review.title : null);
   const back = { label: 'Reviews', to: '/access/reviews', onClick: (e: { preventDefault: () => void }) => { e.preventDefault(); navigate('/access/reviews'); } };
 
   const all = data?.items ?? [];
@@ -92,9 +94,9 @@ function ReviewRecord({ id }: { id: string }) {
     open(target) {
       if (!data || error) throw new Error('Wait for the campaign to load before opening an item.');
       const item = resolveAccessTarget(target, rows.map((row) => ({ ...row, title: reviewItemTitle(row) })));
-      if (item.revocationRequestId) { navigate(requestHref(item.revocationRequestId)); return `Opened ${item.revocationRequestId}, the revocation ${item.id} created. Nothing was decided.`; }
+      if (item.revocationRequestId) { navigate(requestHref(item.revocationRequestId)); return `Opened the revocation for ${reviewItemTitle(item)}. Nothing was decided.`; }
       setQuery(item.user.displayName);
-      return `Showing ${item.id} (${reviewItemTitle(item)}). Nothing was decided.`;
+      return `Showing ${reviewItemTitle(item)}. Nothing was decided.`;
     },
   });
 
@@ -103,7 +105,7 @@ function ReviewRecord({ id }: { id: string }) {
       <Stack gap="md" data-testid="access-review-missing">
         <PageHeader density="compact" title="Review" back={back} />
         {isNotFoundError(error) || /404|not found/i.test(error) ? (
-          <EmptyState testId="access-review-unavailable" align="start" title="Campaign not found" description={`No review campaign ${id}.`} />
+          <EmptyState testId="access-review-unavailable" align="start" title="Campaign not found" description="No review campaign is here. It may have been removed." />
         ) : (
           <UnavailableNotice error={error} what="this review campaign" source="Campaigns are read from access_reviews" onRetry={refresh} />
         )}
@@ -125,13 +127,13 @@ function ReviewRecord({ id }: { id: string }) {
     setComment('');
     setNotice({ tone: 'success', text: d === 'keep'
       ? `Kept ${reviewItemTitle(item)}.`
-      : `Revoked ${reviewItemTitle(item)} through ${res.data?.item.revocationRequestId ?? 'a revocation request'}; their sessions end at their next request.` });
+      : `Revoked ${reviewItemTitle(item)} through a revocation request; their sessions end at their next request.` });
     refresh();
   }
 
   const columns: DataTableColumn<AccessReviewItem>[] = [
     { key: 'user', header: 'Person', sortable: true, compare: (a, b) => a.user.displayName.localeCompare(b.user.displayName), render: (i) => i.user.displayName },
-    { key: 'role', header: 'Role', width: '144px', render: (i) => <T size="sm" tabular>{i.role}</T> },
+    { key: 'role', header: 'Role', width: '144px', render: (i) => <T size="sm">{roleLabel(i.role)}</T> },
     {
       key: 'decision', header: 'Decision', width: '104px',
       render: (i) => (i.decision ? <Chip tone={i.decision === 'keep' ? 'success' : 'warning'} size="xs">{i.decision === 'keep' ? 'kept' : 'revoked'}</Chip> : <Chip tone="info" size="xs">undecided</Chip>),
@@ -144,7 +146,7 @@ function ReviewRecord({ id }: { id: string }) {
       // item is decided in its row, so only a revoked item has a page to open.
       render: (i) => (i.revocationRequestId
         ? <Link href={requestHref(i.revocationRequestId)} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(requestHref(i.revocationRequestId!)); }}
-            data-testid={`access-review-revocation-${i.id}`}><T size="sm" tabular>{i.revocationRequestId}</T></Link>
+            data-testid={`access-review-revocation-${i.id}`}><T size="sm">View revocation</T></Link>
         : <T size="xs" tone="tertiary">—</T>),
     },
     { key: 'decidedAt', header: 'Decided', numeric: true, render: (i) => (i.decidedAt ? relativeTime(i.decidedAt) : '—') },
@@ -155,7 +157,7 @@ function ReviewRecord({ id }: { id: string }) {
   const page = ACCESS_SURFACES.review;
   return (
     <CollectionCommandPage data-testid="access-review-record" title={review.title} back={back}
-      description={`${review.id} · ${TENANT_LABELS[review.tenant] ?? review.tenant} · opened ${relativeTime(review.openedAt)}${review.owner ? ` by ${review.owner.displayName}` : ''}${review.closedAt ? ` · closed ${relativeTime(review.closedAt)}` : ''}`}>
+      description={`${TENANT_LABELS[review.tenant] ?? review.tenant} · opened ${relativeTime(review.openedAt)}${review.owner ? ` by ${review.owner.displayName}` : ''}${review.closedAt ? ` · closed ${relativeTime(review.closedAt)}` : reviewDeadlineLabel(review) ? ` · ${reviewDeadlineLabel(review)}` : ''}`}>
       <Stack gap="none" className="min-h-0 min-w-0 flex-1">
         <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
           <ProgressBar size="sm" value={review.progress.decided} max={Math.max(review.progress.total, 1)} completeTone="success"
@@ -198,8 +200,8 @@ function ReviewRecord({ id }: { id: string }) {
         open={!!pending}
         title={pending?.decision === 'revoke' ? `Revoke ${pending ? reviewItemTitle(pending.item) : ''}?` : `Keep ${pending ? reviewItemTitle(pending.item) : ''}?`}
         body={pending?.decision === 'revoke'
-          ? `${pending.item.user.displayName} loses ${pending.item.role} in ${TENANT_LABELS[pending.item.tenant]} at once, and every session they hold is signed out at its next request. A pre-approved revocation request records it.`
-          : pending ? `${pending.item.user.displayName} keeps ${pending.item.role} in ${TENANT_LABELS[pending.item.tenant]}. The decision is recorded on the campaign.` : ''}
+          ? `${pending.item.user.displayName} loses ${roleLabel(pending.item.role)} in ${TENANT_LABELS[pending.item.tenant]} at once, and every session they hold is signed out at its next request. A pre-approved revocation request records it.`
+          : pending ? `${pending.item.user.displayName} keeps ${roleLabel(pending.item.role)} in ${TENANT_LABELS[pending.item.tenant]}. The decision is recorded on the campaign.` : ''}
         confirmLabel={pending?.decision === 'revoke' ? 'Revoke' : 'Keep'}
         confirmDisabled={!!commentProblem}
         cancelLabel="Not now"

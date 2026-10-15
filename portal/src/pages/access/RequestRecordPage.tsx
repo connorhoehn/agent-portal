@@ -133,13 +133,13 @@ function RequestRecord({ id }: { id: string }) {
   const maySend = can('ViewAccess');
   const [conversation, setConversationState] = useState<ConversationRuntime | null>(null);
   const setConversation = useCallback((next: ConversationRuntime | null) => setConversationState(next), []);
-  useCrumbLabel(id, request ? `${request.id} · ${request.item.title}` : null);
+  useCrumbLabel(id, request ? requestTitle(request) : null);
   const back = { label: 'Requests', to: '/access/requests', onClick: (e: { preventDefault: () => void }) => { e.preventDefault(); navigate('/access/requests'); } };
 
   const thread = request?.thread ?? `access:req:${id}`;
-  const title = request ? `${request.id} discussion` : 'Request discussion';
+  const title = request ? `${requestTitle(request)} discussion` : 'Request discussion';
   const pane = (
-    <SidePane title="Discussion" subtitle={thread} paneId="access-request" closeLabel="Collapse request discussion" data-testid="access-request-thread-pane">
+    <SidePane title="Discussion" subtitle={request ? requestTitle(request) : 'This request'} paneId="access-request" closeLabel="Collapse request discussion" data-testid="access-request-thread-pane">
       <Stack gap="none" className="min-h-0 flex-1" data-testid="access-request-thread">
         {conversation ? (
           <ConversationThread key={conversation.channel} conversation={conversation} title={title} input="below" notices
@@ -175,7 +175,7 @@ function RequestRecord({ id }: { id: string }) {
         <PageHeader density="compact" title="Request" back={back} />
         {isNotFoundError(error) || /404|not found/i.test(error) ? (
           <EmptyState testId="access-request-unavailable" align="start" title="Request not found"
-            description={`No request ${id} that you may read. You can read a request you made or benefit from, one you may decide, or any as an access admin.`} />
+            description={`There is no request here that you may read. You can read a request you made or benefit from, one you may decide, or any as an access admin.`} />
         ) : (
           <UnavailableNotice error={error} what="this request" source="Requests are read from access_requests" onRetry={refresh} />
         )}
@@ -222,7 +222,7 @@ function RequestRecord({ id }: { id: string }) {
     <Stack gap="none" className="h-full min-h-0 min-w-0" data-testid="access-request-record">
       <Stack gap="md" className="min-h-0 flex-1 overflow-auto">
         <PageHeader density="compact" title={requestTitle(request)} back={back}
-          description={`${request.id} · requested by ${request.requester.displayName} ${relativeTime(request.submittedAt)}`}
+          description={`Requested by ${request.requester.displayName} ${relativeTime(request.submittedAt)}`}
           badge={<Chip tone={statusTone(request.status)} size="xs">{statusLabel(request.status)}</Chip>}
           {...(headerActions.length ? { actions: <Inline gap="sm">{headerActions}</Inline> } : {})} />
         {writeError && <InlineAlert tone="error" onDismiss={() => setWriteError(null)}>{writeError}</InlineAlert>}
@@ -237,7 +237,7 @@ function RequestRecord({ id }: { id: string }) {
             ...(request.kind === 'revocation' ? [{
               label: 'From review',
               value: request.reviewId
-                ? <Button size="sm" variant="link" onClick={() => navigate(reviewHref(request.reviewId!))} data-testid="access-request-review-link">{request.reviewId}</Button>
+                ? <Button size="sm" variant="link" onClick={() => navigate(reviewHref(request.reviewId!))} data-testid="access-request-review-link">Open the review campaign</Button>
                 : <T size="sm" tone="tertiary">—</T>,
             }] : [
               { label: 'Duration', value: <T size="sm">{DURATION_LABELS[request.duration] ?? request.duration}</T> },
@@ -287,7 +287,7 @@ function RequestRecord({ id }: { id: string }) {
           ) : (
             <Stack gap="sm">
               {request.sod.conflicts.map((c) => (
-                <InlineAlert key={c.policyId} tone={c.severity === 'block' ? 'error' : 'warning'}>{`${c.policyId}: ${c.reason}`}</InlineAlert>
+                <InlineAlert key={c.policyId} tone={c.severity === 'block' ? 'error' : 'warning'}>{`${c.title ?? 'Separation of duties'}: ${c.reason}`}</InlineAlert>
               ))}
               {request.sod.overriddenBy && (
                 <T size="sm" tone="secondary">{`Overridden by ${request.sod.overriddenBy.displayName}: ${request.sod.overrideReason ?? 'no reason recorded'}`}</T>
@@ -332,7 +332,7 @@ function RequestRecord({ id }: { id: string }) {
       <ConfirmDialog
         open={!!confirm}
         title={confirm?.title}
-        body={confirm ? `${confirm.label} step ${step?.step ?? ''} (${step ? STEP_KIND_LABELS[step.kind] : ''}) of ${request.id}.${comment.trim() ? ` Comment: “${comment.trim()}”` : ''}` : ''}
+        body={confirm ? `${confirm.label} step ${step?.step ?? ''} (${step ? STEP_KIND_LABELS[step.kind] : ''}) of ${requestTitle(request)}.${comment.trim() ? ` Comment: “${comment.trim()}”` : ''}` : ''}
         confirmLabel={confirm?.label}
         cancelLabel="Keep it"
         tone={confirm?.tone}
@@ -342,7 +342,7 @@ function RequestRecord({ id }: { id: string }) {
       <ConfirmDialog
         open={pending === 'override'}
         title="Override the separation-of-duties block?"
-        body={`${request.beneficiary.displayName} will hold ${request.item.title} despite ${request.sod.conflicts.filter((c) => c.severity === 'block').map((c) => c.policyId).join(', ')}. Reason: “${overrideReason.trim()}”${request.status === 'approved' ? ' The grant is written as soon as the override is recorded.' : ''}`}
+        body={`${request.beneficiary.displayName} will hold ${request.item.title} despite ${request.sod.conflicts.filter((c) => c.severity === 'block').map((c) => c.title ?? 'the policy').join(', ')}. Reason: “${overrideReason.trim()}”${request.status === 'approved' ? ' The grant is written as soon as the override is recorded.' : ''}`}
         confirmLabel="Record override"
         cancelLabel="Keep it blocked"
         tone="caution"
@@ -367,7 +367,7 @@ function RequestRecord({ id }: { id: string }) {
       <ConfirmDialog
         open={pending === 'withdraw'}
         title="Withdraw this request?"
-        body={`${request.id} stops here: no approver can decide it and nothing is provisioned. You can submit a new request later.`}
+        body={`This request stops here: no approver can decide it and nothing is provisioned. You can submit a new request later.`}
         confirmLabel="Withdraw"
         cancelLabel="Keep it"
         tone="destructive"

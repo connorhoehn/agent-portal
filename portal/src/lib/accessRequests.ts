@@ -19,7 +19,7 @@ export type ReviewStatus = 'open' | 'closed';
 export type ReviewDecision = 'keep' | 'revoke';
 export type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'caution' | 'accent';
 
-export interface SodConflict { policyId: string; reason: string; severity: SodSeverity }
+export interface SodConflict { policyId: string; /** The policy's own name. */ title?: string; reason: string; severity: SodSeverity }
 
 export interface CatalogItem {
   id: string;
@@ -96,6 +96,8 @@ export interface AccessReview {
   status: ReviewStatus;
   owner: AccessPerson | null;
   openedAt: string;
+  /** The campaign's deadline, else null. */
+  closesAt?: string | null;
   closedAt: string | null;
   /** Counted by the server from the items the viewer may see. */
   progress: { total: number; decided: number; kept: number; revoked: number };
@@ -159,6 +161,8 @@ export interface AccessEvent {
   id: string; at: string; requestId: string | null; policyId?: string | null; delegationId?: string | null; actor: AccessPerson | null;
   kind: AccessEventKind;
   before?: string | null; after?: string | null; reason?: string | null;
+  /** What the event is about, in words (the item and its beneficiary, the policy, the delegation). */
+  subject?: string | null;
 }
 
 export interface ItemsResponse<T> { items: T[]; limits?: unknown }
@@ -192,6 +196,28 @@ export const EVENT_LABELS: Readonly<Record<AccessEventKind, string>> = {
   'policy-updated': 'Policy updated',
   escalated: 'Escalated', delegated: 'Delegated', 'delegation-ended': 'Delegation ended',
 };
+
+/** A role id in words: "sme" is "SME", "org-leader" is "Org leader" (the audit, the policies, the review items). */
+const ROLE_LABELS: Readonly<Record<string, string>> = {
+  sme: 'SME', 'org-leader': 'Org leader', 'hr-admin': 'HR admin', 'program-owner': 'Program owner', member: 'Member',
+  assessor: 'Assessor', 'lead-assessor': 'Lead assessor', 'program-lead': 'Program lead',
+  participant: 'Participant', moderator: 'Moderator', 'community-admin': 'Community admin',
+  author: 'Author', operator: 'Operator', 'pipeline-admin': 'Pipeline admin',
+  requester: 'Requester', approver: 'Approver', 'access-admin': 'Access admin', admin: 'Platform admin',
+  'budgets-reader': 'Budget visibility',
+};
+export function roleLabel(role: string): string {
+  const known = ROLE_LABELS[role];
+  if (known) return known;
+  const spaced = role.replaceAll('-', ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** "draft" is "Draft": a status as a word at the start of a cell. */
+export function statusWord(status: string): string {
+  const spaced = status.replaceAll('-', ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
 
 const STATUS_TONE: Readonly<Record<RequestStatus, Tone>> = {
   draft: 'neutral', submitted: 'info', pending: 'info', approved: 'success', provisioned: 'success',
@@ -250,12 +276,12 @@ export function filterRequests(rows: readonly AccessRequest[], query: string, st
 
 export function filterPolicies(rows: readonly AccessPolicy[], query: string, severity: string): AccessPolicy[] {
   return rows.filter((r) => (!severity || r.severity === severity)
-    && has(query, r.id, r.title, r.reason, `${r.left.tenant} ${r.left.role}`, `${r.right.tenant} ${r.right.role}`));
+    && has(query, r.id, r.title, r.reason, `${r.left.tenant} ${r.left.role}`, `${r.right.tenant} ${r.right.role}`, roleLabel(r.left.role), roleLabel(r.right.role)));
 }
 
 export function filterEvents(rows: readonly AccessEvent[], query: string, kind: string): AccessEvent[] {
   return rows.filter((r) => (!kind || r.kind === kind)
-    && has(query, r.id, r.requestId, r.policyId, r.actor?.displayName ?? 'system', EVENT_LABELS[r.kind], r.reason, r.before, r.after));
+    && has(query, r.id, r.requestId, r.policyId, r.subject, r.actor?.displayName ?? 'system', EVENT_LABELS[r.kind], r.reason, r.before, r.after));
 }
 
 /** A request's title for the table and `open <title>`: the item it asks for, for whom. */
@@ -424,7 +450,17 @@ export function reviewProgressLabel(p: AccessReview['progress']): string {
 
 /** A review item's title for the table and `open <title>`: who holds what. */
 export function reviewItemTitle(i: AccessReviewItem): string {
-  return `${i.user.displayName} · ${i.role}`;
+  return `${i.user.displayName} · ${roleLabel(i.role)}`;
+}
+
+/** A campaign's deadline as the page says it: "Closes in 9 days", or why there is none. */
+export function reviewDeadlineLabel(r: Pick<AccessReview, 'status' | 'closesAt'>, now: number = Date.now()): string | null {
+  if (r.status === 'closed' || !r.closesAt) return null;
+  const ms = Date.parse(r.closesAt) - now;
+  if (ms <= 0) return 'Past its deadline';
+  const days = Math.round(ms / 86_400_000);
+  if (days < 1) return 'Closes today';
+  return `Closes in ${days} ${days === 1 ? 'day' : 'days'}`;
 }
 
 /** The record's decision filter: open (undecided), keep or revoke. */

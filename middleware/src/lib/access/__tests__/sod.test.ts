@@ -12,7 +12,7 @@ const POLICIES = [
 
 describe('sodConflicts', () => {
   it('flags requesting one side while holding the other, in either direction', () => {
-    expect(sodConflicts(item({ role: 'org-leader' }), { orgiq: ['sme'] }, POLICIES)).toEqual([{ policyId: 'sod-001', reason: 'sod-001 reason', severity: 'block' }]);
+    expect(sodConflicts(item({ role: 'org-leader' }), { orgiq: ['sme'] }, POLICIES)).toEqual([{ policyId: 'sod-001', title: 'sod-001', reason: 'sod-001 reason', severity: 'block' }]);
     expect(sodConflicts(item({ role: 'sme' }), { orgiq: ['org-leader'] }, POLICIES).map((c) => c.policyId)).toEqual(['sod-001']);
   });
   it('is clear when the other side is not held, or held in another tenant', () => {
@@ -27,7 +27,7 @@ describe('sodConflicts', () => {
 describe('sodVerdict', () => {
   it('takes the worst severity', () => {
     expect(sodVerdict([])).toBe('clear');
-    expect(sodVerdict([{ policyId: 'a', reason: '', severity: 'warn' }])).toBe('warn');
-    expect(sodVerdict([{ policyId: 'a', reason: '', severity: 'warn' }, { policyId: 'b', reason: '', severity: 'block' }])).toBe('block');
+    expect(sodVerdict([{ policyId: 'a', title: 'a', reason: '', severity: 'warn' }])).toBe('warn');
+    expect(sodVerdict([{ policyId: 'a', title: 'a', reason: '', severity: 'warn' }, { policyId: 'b', title: 'b', reason: '', severity: 'block' }])).toBe('block');
   });
 });

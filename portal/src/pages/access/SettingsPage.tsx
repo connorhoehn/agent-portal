@@ -96,7 +96,6 @@ function DelegationSettings() {
   }
 
   const columns: DataTableColumn<AccessDelegation>[] = [
-    { key: 'id', header: 'Delegation', width: '112px', render: (d) => <T size="sm" tabular>{d.id}</T> },
     { key: 'delegator', header: 'From', render: (d) => (d.delegator.id === session?.sub ? `${d.delegator.displayName} (you)` : d.delegator.displayName) },
     { key: 'delegate', header: 'To', render: (d) => (d.delegate.id === session?.sub ? `${d.delegate.displayName} (you)` : d.delegate.displayName) },
     { key: 'window', header: 'Window', render: (d) => delegationWindowLabel(d) },
@@ -105,8 +104,8 @@ function DelegationSettings() {
   ];
   // Ending is the row's one action (the delegator's or an access admin's): an icon, as every access table's row action.
   const rowActions = (d: AccessDelegation) => (d.can.end ? (
-    <Tooltip content={`End ${d.id}: ${d.delegate.displayName} stops deciding for ${d.delegator.displayName}`}>
-      <IconButton size="sm" aria-label={`End ${d.id}`} icon={<CloseIcon />} disabled={busy} onClick={() => void end(d)} data-testid={`access-delegation-end-${d.id}`} />
+    <Tooltip content={`End this delegation: ${d.delegate.displayName} stops deciding for ${d.delegator.displayName}`}>
+      <IconButton size="sm" aria-label={`End the delegation from ${d.delegator.displayName} to ${d.delegate.displayName}`} icon={<CloseIcon />} disabled={busy} onClick={() => void end(d)} data-testid={`access-delegation-end-${d.id}`} />
     </Tooltip>
   ) : null);
 

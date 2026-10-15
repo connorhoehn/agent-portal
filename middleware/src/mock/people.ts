@@ -27,7 +27,7 @@ export interface Relationship {
   strength: number;
 }
 
-// schema/seed.sql is the source of truth for this cast (56 people, `people`
+// schema/seed.sql is the source of truth for this cast (56 generated people plus the three of the access cast, `people`
 // table). Keep this file's ids/names/titles/departments byte-for-byte in sync
 // with the seed's `people` rows — this array previously predated the seed and
 // drifted to a different 24-person cast, so the same person id (e.g. p-004)
@@ -92,6 +92,11 @@ export const seededPeople: PersonIdentity[] = [
   { id: 'p-054', name: 'Kevin Garcia', title: 'Senior Engineer', department: 'Security', skills: ['Zero Trust', 'CI/CD', 'Service Mesh', 'Python', 'Linux Internals'] },
   { id: 'p-055', name: 'Joy Chen', title: 'Senior Security Engineer', department: 'Security', skills: ['Terraform', 'TypeScript', 'CI/CD', 'Service Mesh', 'Linux Internals'] },
   { id: 'p-056', name: 'Hugo Lee', title: 'Security Engineer', department: 'Security', skills: ['Kubernetes', 'Storybook', 'Go', 'IAM'] },
+  // The access cast (seed.sql's appended block; schema/access_schema.sql links
+  // them and sets people.manager_id: Priya manages Omar, Omar manages Rhea).
+  { id: 'p-priya', name: 'Priya Venkataraman', title: 'Identity Governance Lead', department: 'Security', skills: ['IAM', 'Zero Trust', 'AWS Security'] },
+  { id: 'p-omar', name: 'Omar Haddad', title: 'Engineering Manager', department: 'Security', skills: ['Zero Trust', 'AWS Security', 'Terraform'] },
+  { id: 'p-rhea', name: 'Rhea Castellanos', title: 'Security Engineer', department: 'Security', skills: ['Penetration Testing', 'AWS Security', 'IAM', 'Python'] },
 ];
 
 /**

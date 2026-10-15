@@ -128,7 +128,7 @@ describe('reads', () => {
   it('summary counts from rows, per actor', async () => {
     expect((await get('/api/access/summary', 'u-rhea')).body).toEqual({ openRequests: 2, pendingForMe: 0, activeElevations: 0, policies: 4, reviews: 1 });
     expect((await get('/api/access/summary', 'u-omar')).body).toMatchObject({ openRequests: 2, pendingForMe: 1 });
-    expect((await get('/api/access/summary', 'u-priya')).body).toMatchObject({ pendingForMe: 1, activeElevations: 1 });
+    expect((await get('/api/access/summary', 'u-priya')).body).toMatchObject({ pendingForMe: 2, activeElevations: 1 });
   });
   it('catalog computes heldByActor and SoD conflicts from the actor\'s current grants', async () => {
     users.find((x) => x.id === 'u-rhea')!.grants = { access: ['requester'], orgiq: ['sme'] };
@@ -145,7 +145,7 @@ describe('reads', () => {
     expect(ids(await get('/api/access/requests?scope=reports', 'u-rhea'))).toEqual([]);
     expect(ids(await get('/api/access/requests?scope=reports', 'u-omar'))).toEqual(['req-0001', 'req-0002', 'req-0005', 'req-0006']);
     expect(ids(await get('/api/access/requests?scope=mine', 'u-omar'))).toEqual(['req-0003']);
-    expect(ids(await get('/api/access/requests?scope=all', 'u-priya'))).toHaveLength(6);
+    expect(ids(await get('/api/access/requests?scope=all', 'u-priya'))).toHaveLength(7);
     expect(ids(await get('/api/access/requests?scope=all&status=active', 'u-priya'))).toEqual(['req-0004']);
     expect((await get('/api/access/requests?scope=everyone', 'u-priya')).status).toBe(400);
   });
@@ -167,7 +167,7 @@ describe('reads', () => {
   });
   it('approvals lists only steps the actor may decide now', async () => {
     expect(ids(await get('/api/access/approvals', 'u-omar'))).toEqual(['req-0001']);
-    expect(ids(await get('/api/access/approvals', 'u-priya'))).toEqual(['req-0002']);
+    expect(ids(await get('/api/access/approvals', 'u-priya')).sort()).toEqual(['req-0002', 'req-0007']);
   });
   it('audit follows the request read rule; only an access admin reads every event', async () => {
     const own = (await get('/api/access/audit', 'u-rhea')).body as { items: AccessEvent[] };
@@ -176,17 +176,18 @@ describe('reads', () => {
     const omar = (await get('/api/access/audit', 'u-omar')).body as { items: AccessEvent[] };
     expect(new Set(omar.items.filter((e) => e.requestId).map((e) => e.requestId))).toEqual(new Set(['req-0001', 'req-0002', 'req-0003', 'req-0005', 'req-0006']));
     // …and the event of the delegation he made (dlg-0001, 2026-10-14) — no request, his own delegation.
-    expect(omar.items.filter((e) => !e.requestId).map((e) => [e.id, e.delegationId])).toEqual([['evt-0016', 'dlg-0001']]);
+    expect(omar.items.filter((e) => !e.requestId).map((e) => [e.id, e.delegationId])).toEqual([['evt-0020', null], ['evt-0016', 'dlg-0001']]);
     expect(ids(await get('/api/access/audit?requestId=req-0004', 'u-omar'))).toEqual([]);
     expect((await get('/api/access/requests/req-0004', 'u-omar')).status).toBe(404);
-    expect(ids(await get('/api/access/audit?requestId=req-0003', 'u-omar'))).toEqual(['evt-0004', 'evt-0005', 'evt-0006', 'evt-0007']);
+    expect(ids(await get('/api/access/audit?requestId=req-0003', 'u-omar'))).toEqual(['evt-0004', 'evt-0005', 'evt-0006', 'evt-0017', 'evt-0018']);
     const all = (await get('/api/access/audit', 'u-priya')).body as { items: AccessEvent[] };
-    expect(all.items).toHaveLength(accessEventsFixture.rows().length);
+    // The `approved` line a chain's last decision writes beside its `step-approved` is shown once.
+    expect(all.items).toHaveLength(accessEventsFixture.rows().filter((e) => e.kind !== 'approved').length);
   });
   it('policies and reviews', async () => {
     expect(ids(await get('/api/access/policies', 'u-rhea'))).toEqual(['sod-001', 'sod-002', 'sod-003', 'sod-004']);
-    // Lane A2: the seeded campaign; a requester sees it, but none of its items (they are not hers).
-    expect((await get('/api/access/reviews', 'u-rhea')).body).toMatchObject({ items: [{ id: 'rev-0001', status: 'open', progress: { total: 0 }, can: { decide: false } }] });
+    // Lane A2: the seeded campaign; a requester sees its totals (the review's own progress), but none of its items (they are not hers).
+    expect((await get('/api/access/reviews', 'u-rhea')).body).toMatchObject({ items: [{ id: 'rev-0001', status: 'open', progress: { total: 4 }, can: { decide: false } }] });
   });
 });
 
@@ -195,11 +196,11 @@ describe('submit', () => {
     const res = await post('/api/access/requests', 'u-rhea', { itemId: 'role:assessment:assessor', justification: JUST, duration: '7d' });
     expect(res.status).toBe(201);
     const r = asReq(res);
-    expect(r).toMatchObject({ id: 'req-0007', status: 'submitted', duration: '7d', thread: 'access:req:req-0007', can: { decide: false, withdraw: true } });
+    expect(r).toMatchObject({ id: 'req-0008', status: 'submitted', duration: '7d', thread: 'access:req:req-0008', can: { decide: false, withdraw: true } });
     expect(r.steps.map((s) => [s.kind, s.status, s.eligible.map((p) => p.id)])).toEqual([['manager', 'current', ['u-omar']], ['steward', 'waiting', ['u-priya']]]);
-    expect(accessEventsFixture.rows().filter((e) => e.requestId === 'req-0007').map((e) => e.kind)).toEqual(['submitted']);
+    expect(accessEventsFixture.rows().filter((e) => e.requestId === 'req-0008').map((e) => e.kind)).toEqual(['submitted']);
     // The new row is in the store: Omar's inbox has it now.
-    expect(ids(await get('/api/access/approvals', 'u-omar'))).toEqual(['req-0001', 'req-0007']);
+    expect(ids(await get('/api/access/approvals', 'u-omar'))).toEqual(['req-0001', 'req-0008']);
   });
   it('a sensitive item adds an access-admin step', async () => {
     const r = asReq(await post('/api/access/requests', 'u-rhea', { itemId: 'role:assessment:lead-assessor', justification: JUST, duration: '7d' }));
@@ -284,7 +285,7 @@ describe('decide — the row rules', () => {
     // He still reads it (people.manager_id makes him Rhea's manager) but may not decide it.
     expect(res.status).toBe(403);
     expect((res.body as { error: string }).error).toMatch(/not eligible/);
-    expect(ids(await get('/api/access/approvals', 'u-priya'))).toEqual(['req-0001', 'req-0002']);
+    expect(ids(await get('/api/access/approvals', 'u-priya')).sort()).toEqual(['req-0001', 'req-0002', 'req-0007']);
   });
 });
 

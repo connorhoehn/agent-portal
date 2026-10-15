@@ -155,7 +155,7 @@ describe('SoD at provisioning (A7)', () => {
     // The parties and the access admins hear, once; no `provision-failed`.
     expect(bell.map((b) => [b.userId, b.kind])).toEqual([['u-rhea', 'access-sod-blocked'], ['u-priya', 'access-sod-blocked']]);
     expect(bell.every((b) => b.href === `/access/requests/${id}`)).toBe(true);
-    expect((await events(id, priya)).map(([k]) => k)).toEqual(['submitted', 'step-approved', 'step-approved', 'approved', 'sod-blocked']);
+    expect((await events(id, priya)).map(([k]) => k)).toEqual(['submitted', 'step-approved', 'step-approved', 'sod-blocked']);
   });
 
   it('an access admin\'s override (reason ≥ 20 chars) provisions it; an approver is refused; it is recorded once', async () => {
@@ -175,7 +175,7 @@ describe('SoD at provisioning (A7)', () => {
     });
     expect((await getUser('u-rhea'))!.grants).toEqual({ access: ['requester'], orgiq: ['org-leader', 'sme'] });
     expect(await events(id, priya)).toEqual([
-      ['submitted', 'u-rhea'], ['step-approved', 'u-omar'], ['step-approved', 'u-rachel'], ['approved', 'u-rachel'],
+      ['submitted', 'u-rhea'], ['step-approved', 'u-omar'], ['step-approved', 'u-rachel'],
       ['sod-blocked', null], ['sod-override', 'u-priya'], ['provisioned', null],
     ]);
     // Once: a second override is the 409.
@@ -398,7 +398,7 @@ describe('policy audit', () => {
     expect(res.status).toBe(200);
     const audit = async (cookie: string, q = '') => ((await request(app).get(`/api/access/audit${q}`).set('Cookie', cookie)).body as { items: AccessEvent[] }).items;
     const ev = (await audit(priya)).find((e) => e.kind === 'policy-updated');
-    expect(ev).toMatchObject({ requestId: null, policyId: 'sod-003', actor: { id: 'u-priya' }, before: 'warn', after: 'block', reason: expect.stringMatching(/Score and except: reason now/) });
+    expect(ev).toMatchObject({ requestId: null, policyId: 'sod-003', actor: { id: 'u-priya' }, before: 'warn', after: 'block', reason: expect.stringMatching(/Score and approve exceptions: reason now/) });
     const omar = await signIn('u-omar');
     expect((await audit(omar)).some((e) => e.kind === 'policy-updated')).toBe(true);
     // A requester reads her own requests' events, never policy changes; a requestId filter never includes them.

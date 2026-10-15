@@ -1024,6 +1024,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
     mockId: (e: { id: string }) => e.id,
     fields: [
       { seed: 'request_id', mock: (e: { requestId: string | null }) => e.requestId },
+      { seed: 'policy_id', mock: (e: { policyId: string | null }) => e.policyId },
       { seed: 'delegation_id', mock: (e: { delegationId: string | null }) => e.delegationId },
       { seed: 'actor_id', mock: (e: { actorId: string | null }) => e.actorId },
       { seed: 'kind', mock: (e: { kind: string }) => e.kind },
@@ -1091,6 +1092,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       { seed: 'right_role', mock: (p: { right: { role: string } }) => p.right.role },
       { seed: 'severity', mock: (p: { severity: string }) => p.severity },
       { seed: 'reason', mock: (p: { reason: string }) => p.reason },
+      { seed: 'updated_by', mock: (p: { updatedBy: string | null }) => p.updatedBy },
     ],
   },
 

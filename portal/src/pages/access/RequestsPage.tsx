@@ -64,7 +64,7 @@ function RequestsWorkspace() {
       if (!data || error) throw new Error('Wait for requests to load before opening one.');
       const r = resolveAccessTarget(target, rows.map((row) => ({ ...row, title: requestTitle(row) })));
       navigate(requestHref(r.id));
-      return `Opened ${r.id}. Nothing was changed.`;
+      return `Opened ${requestTitle(r)}. Nothing was changed.`;
     },
   });
 
@@ -89,7 +89,7 @@ function RequestsWorkspace() {
               { id: 'status', label: 'Status', value: status, onChange: setStatus, options: STATUS_OPTIONS },
             ],
             summary: data ? `${rows.length} of ${all.length} requests` : undefined,
-            notices: decides ? ['“My reports’” lists requests for people whose manager is you in the org graph.'] : [],
+            notices: decides ? ['“My reports’” lists requests for the people who report to you.'] : [],
             onRefresh: refresh, refreshing: isLoading,
           }} />
           {error ? (

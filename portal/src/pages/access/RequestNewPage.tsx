@@ -128,8 +128,8 @@ export default function RequestNewPage() {
     setSubmitError(
       <Stack gap="xs">
         <span>{res.error ?? `The request was not submitted (HTTP ${res.status}).`}</span>
-        {existing && <RequestLink id={existing}>Open {existing}</RequestLink>}
-        {sod.map((c) => <span key={c.policyId}>{`${c.policyId}: ${c.reason}`}</span>)}
+        {existing && <RequestLink id={existing}>Open the existing request</RequestLink>}
+        {sod.map((c) => <span key={c.policyId}>{`${c.title ?? 'Separation of duties'}: ${c.reason}`}</span>)}
       </Stack>,
     );
   }
@@ -220,14 +220,14 @@ export default function RequestNewPage() {
               <InlineAlert tone="success">No separation-of-duties conflict with the access {beneficiaryId === selfId ? 'you hold' : 'they hold'} now.</InlineAlert>
             ) : preview.sod.conflicts.map((c) => (
               <InlineAlert key={c.policyId} tone={c.severity === 'block' ? 'error' : 'warning'}>
-                {`${c.severity === 'block' ? 'Blocked' : 'Warning'} (${c.policyId}): ${c.reason}`}
+                {`${c.severity === 'block' ? 'Blocked' : 'Warning'} (${c.title ?? 'separation of duties'}): ${c.reason}`}
               </InlineAlert>
             ))}
             {preview.refusal && preview.sod.verdict !== 'block' && (
               <InlineAlert tone={preview.refusal.requestId ? 'info' : 'error'} data-testid="access-new-refusal">
                 <Stack gap="xs">
                   <span>{preview.refusal.error}</span>
-                  {preview.refusal.requestId && <RequestLink id={preview.refusal.requestId}>Open {preview.refusal.requestId}</RequestLink>}
+                  {preview.refusal.requestId && <RequestLink id={preview.refusal.requestId}>Open the existing request</RequestLink>}
                 </Stack>
               </InlineAlert>
             )}

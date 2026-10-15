@@ -150,7 +150,7 @@ describe('escalation timers', () => {
     setClock(at(44));
     // req-0002's steward step (current since T0 - 24h) is due first. Its own tier is Vera, the
     // initiative owner, who approves in Access, so it escalates one level, to the access admins.
-    expect((await sweepAccessEscalations(solo)).escalated).toEqual(['req-0002#2→1']);
+    expect((await sweepAccessEscalations(solo)).escalated).toEqual(['req-0002#2→1', 'req-0007#2→1']);
     bell = [];
     setClock(at(46));
     expect((await sweepAccessEscalations(solo)).escalated).toEqual(['req-0001#1→1']);
@@ -181,7 +181,7 @@ describe('escalation timers', () => {
   it('an escalated decider decides; the own decider keeps the right; the next step starts its own clock', async () => {
     setClock(at(46));
     const swept = await sweepAccessEscalations(solo);
-    expect(swept.escalated).toEqual(['req-0001#1→1', 'req-0002#2→1']);
+    expect(swept.escalated).toEqual(['req-0001#1→1', 'req-0002#2→1', 'req-0007#2→1']);
     const priya = await signIn('u-priya');
     const decided = await post('/api/access/requests/req-0001/steps/1/decide', priya, { decision: 'approve', comment: 'Omar is away; approving as the access admin.' });
     expect(decided.status).toBe(200);
@@ -207,7 +207,7 @@ describe('escalation timers', () => {
     setClock(at(46));
     const [a, b] = await Promise.all([sweepAccessEscalations(make('replica-a', 'replica-b')), sweepAccessEscalations(make('replica-b', 'replica-a'))]);
     expect([a.ran, b.ran].sort()).toEqual(['locked-elsewhere', 'swept']);
-    expect([...a.escalated, ...b.escalated]).toEqual(['req-0001#1→1', 'req-0002#2→1']);
+    expect([...a.escalated, ...b.escalated]).toEqual(['req-0001#1→1', 'req-0002#2→1', 'req-0007#2→1']);
     // Without the lock (it expired mid-sweep), the step claim still decides: two solo sweeps, one escalation.
     setClock(at(95));
     const [c, d] = await Promise.all([sweepAccessEscalations(solo), sweepAccessEscalations(solo)]);

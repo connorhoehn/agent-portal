@@ -38,7 +38,7 @@
 import { Router, type Request } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { isAllowed, requireAction, resolveSession } from '../lib/authz.js';
-import { ACCESS_DECIDER_ROLES, BUDGET_OWNER_ROLE, decidingOnBehalfOf, eligibility, eligibleDeciders, personFor, planChain, TENANT_STEWARD_ROLE } from '../lib/access/chain.js';
+import { ACCESS_DECIDER_ROLES, BUDGET_OWNER_ROLE, decidingOnBehalfOf, eligibility, eligibleDeciders, nextEscalationLevel, personFor, planChain, TENANT_STEWARD_ROLE } from '../lib/access/chain.js';
 import { delegationRefusal, delegationState, MAX_DELEGATION_DAYS } from '../lib/access/delegation.js';
 import { escalatesAt, escalationSlaMs } from '../lib/access-escalation.js';
 import { sodConflicts, sodVerdict } from '../lib/access/sod.js';
@@ -171,7 +171,8 @@ function present(r: AccessRequestRow, ctx: Ctx, w: World): AccessRequest {
         decidedBy: personFor(ctx.dir, s.decidedBy), decidedAt: s.decidedAt, comment: s.comment,
         eligible: live?.people ?? [], escalated: live?.escalated ?? null,
         currentSince: s.currentSince, escalationLevel: s.escalationLevel, escalatedAt: s.escalatedAt,
-        escalatesAt: isOpen(r.status) && r.kind === 'grant' ? escalatesAt(s) : null,
+        // A timer that would add nobody new (the access admins already decide this step) is no escalation to announce.
+        escalatesAt: isOpen(r.status) && r.kind === 'grant' && (!row || nextEscalationLevel(s.kind, row, r, ctx.dir, s.escalationLevel) !== null) ? escalatesAt(s) : null,
         decidedOnBehalfOf: personFor(ctx.dir, s.delegatedFrom),
       };
     }),
@@ -354,11 +355,25 @@ accessRouter.get('/audit', requireAction('ViewAccess'), asyncHandler(async (req,
     }
     return e.requestId === null ? ctx.actor.mayDecide : visible.has(e.requestId);
   };
-  const items: AccessEvent[] = listEvents()
-    .filter((e) => seen(e) && (!requestId || e.requestId === requestId))
+  // What an event is about, in words (the page never prints a request, policy or delegation id).
+  const requestRows = new Map(listRequests().map((r) => [r.id, r]));
+  const policyTitles = new Map(w.policies.map((p) => [p.id, p.title]));
+  const subjectOf = (e: { requestId: string | null; policyId: string | null; delegationId: string | null }): string | null => {
+    if (e.requestId) {
+      const r = requestRows.get(e.requestId);
+      return r ? `${(itemOf(r, w) ?? missingItem(r.itemId)).title} · ${personFor(ctx.dir, r.beneficiaryId)?.displayName ?? r.beneficiaryId}` : null;
+    }
+    if (e.policyId) return policyTitles.get(e.policyId) ?? null;
+    const d = e.delegationId ? delegations.get(e.delegationId) : null;
+    return d ? `Delegation · ${personFor(ctx.dir, d.delegatorId)?.displayName ?? d.delegatorId} to ${personFor(ctx.dir, d.delegateId)?.displayName ?? d.delegateId}` : null;
+  };
+  const all = listEvents().filter((e) => seen(e) && (!requestId || e.requestId === requestId));
+  // The decision that completes a chain writes `step-approved` and `approved` at one instant; the trail shows the pair as one line.
+  const collapsed = all.filter((e) => !(e.kind === 'approved' && all.some((o) => o !== e && o.kind === 'step-approved' && o.requestId === e.requestId && o.at === e.at && o.afterStatus === e.afterStatus)));
+  const items: AccessEvent[] = collapsed
     .sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id))
-    .map((e) => ({ id: e.id, at: e.at, requestId: e.requestId, policyId: e.policyId, delegationId: e.delegationId, actor: personFor(ctx.dir, e.actorId), kind: e.kind, before: e.beforeStatus, after: e.afterStatus, reason: e.reason }))
-    .filter((e) => !q || [e.requestId ?? '', e.policyId ?? '', e.delegationId ?? '', e.kind, e.reason ?? '', e.actor?.displayName ?? ''].some((s) => s.toLowerCase().includes(q)));
+    .map((e) => ({ id: e.id, at: e.at, requestId: e.requestId, policyId: e.policyId, delegationId: e.delegationId, actor: personFor(ctx.dir, e.actorId), kind: e.kind, before: e.beforeStatus, after: e.afterStatus, reason: e.reason, subject: subjectOf(e) }))
+    .filter((e) => !q || [e.requestId ?? '', e.policyId ?? '', e.delegationId ?? '', e.subject ?? '', e.kind, e.reason ?? '', e.actor?.displayName ?? ''].some((s) => s.toLowerCase().includes(q)));
   res.setHeader('Cache-Control', 'no-store');
   res.json({ items });
 }));
@@ -379,15 +394,16 @@ const reviewsFor = (ctx: Ctx, review: AccessReviewRow): boolean =>
 const itemVisible = (ctx: Ctx) => (i: AccessReviewItemRow): boolean => ctx.actor.mayDecide || i.userId === ctx.actor.id;
 
 function presentReview(v: AccessReviewRow, items: readonly AccessReviewItemRow[], ctx: Ctx): AccessReview {
-  const seen = items.filter(itemVisible(ctx));
   return {
     id: v.id, tenant: v.tenant, title: v.title, status: v.status, owner: personFor(ctx.dir, v.openedBy),
-    openedAt: v.openedAt, closedAt: v.closedAt,
+    openedAt: v.openedAt, closesAt: v.closesAt, closedAt: v.closedAt,
+    // The campaign's own totals, for every reader: a requester sees how far the review is, not "0 of 0 decided".
+    // Who holds what stays behind itemVisible() on the items themselves.
     progress: {
-      total: seen.length,
-      decided: seen.filter((i) => i.decision !== null).length,
-      kept: seen.filter((i) => i.decision === 'keep').length,
-      revoked: seen.filter((i) => i.decision === 'revoke').length,
+      total: items.length,
+      decided: items.filter((i) => i.decision !== null).length,
+      kept: items.filter((i) => i.decision === 'keep').length,
+      revoked: items.filter((i) => i.decision === 'revoke').length,
     },
     can: { decide: v.status === 'open' && reviewsFor(ctx, v) },
   };

@@ -101,17 +101,17 @@ export default function ConfigurationPage() {
         <LoadingState label={isLoading ? 'Loading configuration…' : 'Loading…'} />
       ) : (
         <Stack gap="lg" data-testid="access-configuration-form">
-          <PageSection size="sm" title="Durations" description="Every request is time-bound unless the requester chooses standing access and gives a second reason. Expiry revokes through the same path as provisioning. Fixed by the design (A6).">
+          <PageSection size="sm" title="Durations" description="Every request is time-bound unless the requester chooses standing access and gives a second reason. Expiry revokes through the same path as provisioning. Set by the product, not edited here.">
             <KeyValue layout="grid" items={[
               { label: 'Offered', value: <T size="sm">{data.durations.offered.map((d) => DURATION_LABELS[d]).join(', ')}</T> },
               { label: 'Standing', value: <T size="sm">{`Needs its own reason of at least ${data.durations.standingReasonMin} characters`}</T> },
             ]} />
           </PageSection>
-          <PageSection size="sm" title="Stewards" description="Who approves after the manager, resolved from the directory at decision time. Fixed by the design (A4).">
+          <PageSection size="sm" title="Stewards" description="Who approves after the manager, resolved from the directory at decision time. Set by the product, not edited here.">
             <KeyValue layout="grid" items={data.stewards.map((s) => { const l = stewardLine(s); return { label: l.label, value: <T size="sm">{l.value}</T> }; })} />
           </PageSection>
           {data.escalation && (
-            <PageSection size="sm" title="Escalation and delegation" description="A step nobody decides in time reaches the next tier of deciders; its own deciders keep the right. Approvers hand their decisions on while away under Settings. Fixed by the deployment (ACCESS_ESCALATION_SLA_MS).">
+            <PageSection size="sm" title="Escalation and delegation" description="A step nobody decides in time reaches the next tier of deciders; its own deciders keep the right. Approvers hand their decisions on while away under Settings. The wait is set when the service is deployed.">
               <KeyValue layout="grid" data-testid="access-configuration-escalation" items={[
                 { label: 'Time limit', value: <T size="sm">{`${data.escalation.stepSlaHours} hours per step, counted from when it starts waiting`}</T> },
                 { label: 'Then', value: <T size="sm">{`The access admins, then after another ${data.escalation.stepSlaHours} hours the platform admins (an access-admin step goes straight to the platform admins)`}</T> },

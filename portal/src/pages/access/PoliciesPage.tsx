@@ -38,7 +38,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { ACCESS_API, TENANT_LABELS, filterPolicies, type AccessPolicy, type AccessTenant, type ItemsResponse, type SodSeverity } from '../../lib/accessRequests';
+import { ACCESS_API, TENANT_LABELS, filterPolicies, roleLabel, type AccessPolicy, type AccessTenant, type ItemsResponse, type SodSeverity } from '../../lib/accessRequests';
 import { accessCollectionAdapter, resolveAccessTarget } from './accessCollectionCommands';
 import { ACCESS_SURFACES } from './accessSurfaces';
 
@@ -48,7 +48,7 @@ const SEVERITY_OPTIONS = [
   { value: 'warn', label: 'Warning' },
 ];
 
-const pair = (p: { tenant: string; role: string }) => `${p.role} · ${TENANT_LABELS[p.tenant as AccessTenant] ?? p.tenant}`;
+const pair = (p: { tenant: string; role: string }) => `${roleLabel(p.role)} · ${TENANT_LABELS[p.tenant as AccessTenant] ?? p.tenant}`;
 const severityChip = (s: SodSeverity) => <Chip tone={s === 'block' ? 'danger' : 'warning'} size="xs">{s === 'block' ? 'blocking' : 'warning'}</Chip>;
 
 const COLUMNS: DataTableColumn<AccessPolicy>[] = [
@@ -58,6 +58,7 @@ const COLUMNS: DataTableColumn<AccessPolicy>[] = [
   { key: 'right', header: 'Must not hold', render: (p) => pair(p.right) },
   { key: 'severity', header: 'Severity', width: '104px', render: (p) => severityChip(p.severity) },
   { key: 'reason', header: 'Why', render: (p) => <T size="sm" tone="secondary" title={p.reason} className="block max-w-[24rem] truncate">{p.reason}</T> },
+  { key: 'updatedBy', header: 'Changed by', render: (p) => p.updatedBy?.displayName ?? <T size="xs" tone="tertiary">—</T> },
   { key: 'updatedAt', header: 'Updated', numeric: true, sortable: true, compare: (a, b) => a.updatedAt.localeCompare(b.updatedAt), render: (p) => relativeTime(p.updatedAt) },
 ];
 
@@ -129,7 +130,7 @@ export default function PoliciesPage() {
           // 14/600 section heading with its id as 12px meta, its facts 12px
           // labels over 14px values — the request record's shape.
           <Stack gap="md" data-testid="access-policy-record">
-            <DetailSection variant="heading" first title={open.title} hint={severityChip(open.severity)} description={open.id} data-testid="access-policy-summary">
+            <DetailSection variant="heading" first title={open.title} hint={severityChip(open.severity)} data-testid="access-policy-summary">
               <KeyValue layout="grid" items={[
                 { label: 'Holding', value: <T size="sm">{pair(open.left)}</T> },
                 { label: 'Must not hold', value: <T size="sm">{pair(open.right)}</T> },
@@ -169,7 +170,7 @@ export default function PoliciesPage() {
         ) : isLoading || !data ? (
           <LoadingState label="Loading policy…" />
         ) : (
-          <RecordNotFound heading="Policy" title="Policy not found" body={`No separation-of-duties policy has the id "${openId}".`}
+          <RecordNotFound heading="Policy" title="Policy not found" body="No separation-of-duties policy is here. It may have been removed."
             backLabel={page.title} onBack={() => setOpenId(null)} />
         )}
       </CollectionRecordFrame>

@@ -40,14 +40,14 @@ function unquote(s) {
   return s.replace(/\\'/g, "'");
 }
 
-/** p-NNN rows of `seededPeople` (the fixture, not the `large` clones). */
+/** p-NNN rows (and the access cast's p-<name> rows) of `seededPeople` (the fixture, not the `large` clones). */
 function readPeople() {
   const src = readFileSync(PEOPLE_SRC, 'utf8');
   const start = src.indexOf('export const seededPeople');
   const end = src.indexOf('];', start);
   if (start < 0 || end < 0) throw new Error(`seededPeople not found in ${PEOPLE_SRC}`);
   const block = src.slice(start, end);
-  const re = /\{ id: '(p-\d+)', name: '((?:[^'\\]|\\.)*)'/g;
+  const re = /\{ id: '(p-[a-z0-9]+)', name: '((?:[^'\\]|\\.)*)'/g;
   const out = [];
   for (let m; (m = re.exec(block));) out.push({ id: m[1], name: unquote(m[2]), kind: 'person' });
   if (out.length === 0) throw new Error('seededPeople parsed to zero rows');

@@ -116,10 +116,11 @@ describe('the leaderboard and the graph read the same people', () => {
   it('reports Hiro Green as the seed reports him — the row the defect was named for', () => {
     const hiro = mockScores.find((s) => s.personId === 'p-023')!;
     expect(hiro).toMatchObject({ name: 'Hiro Green', expertise: 0.3353, composite: 46.98 });
-    // 47th of 56 by composite, where the old fixture put him first.
+    // 49th of 59 by composite (the seed's 47th of 56, then Priya and Omar of
+    // the access cast scored above him), where the old fixture put him first.
     const rank = [...mockScores].sort((a, b) => b.composite - a.composite)
       .findIndex((s) => s.personId === 'p-023') + 1;
-    expect(rank).toBe(47);
+    expect(rank).toBe(49);
   });
 
   it('derives influenceScore rather than carrying a second copy of it', () => {

@@ -90,6 +90,9 @@ export const personScoreColumns: Record<string, PersonScoreColumns> = {
   'p-054': { expertiseScore: 75.3, pagerankScore: 85.78, compositeScore: 81.06 },
   'p-055': { expertiseScore: 70.08, pagerankScore: 51.84, compositeScore: 60.05 },
   'p-056': { expertiseScore: 55.42, pagerankScore: 35.2, compositeScore: 44.3 },
+  'p-priya': { expertiseScore: 71.4, pagerankScore: 58.2, compositeScore: 64.14 },
+  'p-omar': { expertiseScore: 64.2, pagerankScore: 49.6, compositeScore: 56.17 },
+  'p-rhea': { expertiseScore: 58.7, pagerankScore: 33.9, compositeScore: 45.06 },
 };
 
 /**

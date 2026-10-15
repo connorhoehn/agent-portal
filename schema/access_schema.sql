@@ -279,24 +279,25 @@ INSERT INTO access_catalog_items (id, kind, tenant, role, project_id, title, des
 ON CONFLICT (id) DO NOTHING;
 
 -- ── Seed: separation-of-duties policies (4) ──────────────────────────────────
-INSERT INTO access_policies (id, title, left_tenant, left_role, right_tenant, right_role, severity, reason) VALUES
+INSERT INTO access_policies (id, title, left_tenant, left_role, right_tenant, right_role, severity, reason, updated_at, updated_by) VALUES
   ('sod-001', 'Spend and allocate', 'orgiq', 'sme', 'orgiq', 'org-leader', 'block',
-     'An SME spends a sprint envelope; an org leader grants it. One person holding both approves their own spending.'),
+     'An SME spends a sprint envelope; an org leader grants it. One person holding both approves their own spending.', NOW() - INTERVAL '1 day', 'u-priya'),
   ('sod-002', 'Write and approve a pipeline', 'pipelines', 'author', 'pipelines', 'operator', 'block',
-     'An author writes a definition; an operator approves its steps. Holding both approves your own definition.'),
-  ('sod-003', 'Score and except', 'assessment', 'assessor', 'assessment', 'lead-assessor', 'warn',
-     'A lead assessor approves N/A exceptions on scores an assessor entered; review who scored before approving.'),
-  ('sod-004', 'Moderate and run pipelines', 'social', 'moderator', 'pipelines', 'operator', 'warn',
-     'Recordings a moderator retains can carry run approvals an operator decided; keep the two visible.')
+     'An author writes a definition; an operator approves its steps. Holding both approves your own definition.', NOW() - INTERVAL '92 days', 'u-priya'),
+  ('sod-003', 'Score and approve exceptions', 'assessment', 'assessor', 'assessment', 'lead-assessor', 'warn',
+     'A lead assessor approves not-applicable exceptions on scores that assessors entered. Holding both means approving exceptions to your own scores.', NOW() - INTERVAL '47 days', 'u-priya'),
+  ('sod-004', 'Retain recordings and approve runs', 'social', 'moderator', 'pipelines', 'operator', 'warn',
+     'Moderators decide which call recordings are kept; operators approve pipeline runs that can read them. One person holding both keeps the evidence and approves its use.', NOW() - INTERVAL '21 days', 'u-priya')
 ON CONFLICT (id) DO NOTHING;
 
--- ── Seed: requests (6, in six statuses), their steps and events ──────────────
+-- ── Seed: requests (7, in seven statuses), their steps and events ──────────────
 -- req-0001 submitted: Rhea asks for SME in Work; Omar (her manager) is current.
 -- req-0002 pending:   Rhea asks for Auth Migration; Omar approved, the steward is current.
--- req-0003 approved:  Omar asked for Operator in Pipelines; Priya (his manager) and the steward approved.
+-- req-0003 expired:   Omar asked for Operator in Pipelines for seven days; Priya (his manager) and the steward approved, it was provisioned and has lapsed.
 -- req-0004 active:    Nora's standing SME grant, provisioned (she holds it in user_tenant_roles).
 -- req-0005 rejected:  Rhea asked for Org leader; Omar rejected at the manager step.
--- req-0006 withdrawn: Rhea asked for Moderator in Social and withdrew it.
+-- req-0006 withdrawn: Rhea asked for Moderator in Social (Priya decided Omar's step for him, inside his delegation) and withdrew it.
+-- req-0007 pending:   Eli (an SME) asks for Org leader in Work; sod-001 now blocks it; Rachel approved the steward step, Priya's is current.
 INSERT INTO access_requests (id, requester_id, beneficiary_id, item_id, justification, duration, status, sod_verdict, submitted_at, decided_at, provisioned_at, expires_at, revoked_at) VALUES
   ('req-0001', 'u-rhea', 'u-rhea', 'role:orgiq:sme',
      'I am picking up the SSO cutover stories and need to dispatch agent work against the sprint envelope.', '30d', 'submitted', 'clear',
@@ -305,17 +306,20 @@ INSERT INTO access_requests (id, requester_id, beneficiary_id, item_id, justific
      'Pairing with Vera on the SAML shim retirement for the next two sprints.', '30d', 'pending', 'clear',
      NOW() - INTERVAL '2 days', NULL, NULL, NULL, NULL),
   ('req-0003', 'u-omar', 'u-omar', 'role:pipelines:operator',
-     'Covering the on-call approvals rotation for the ingest pipelines this week.', '7d', 'approved', 'clear',
-     NOW() - INTERVAL '4 days', NOW() - INTERVAL '3 days', NULL, NULL, NULL),
+     'Covering the on-call approvals rotation for the ingest pipelines for a week.', '7d', 'expired', 'clear',
+     NOW() - INTERVAL '12 days', NOW() - INTERVAL '11 days', NOW() - INTERVAL '11 days', NOW() - INTERVAL '4 days', NULL),
   ('req-0004', 'u-nora', 'u-nora', 'role:orgiq:sme',
-     'Standing SME on Observability and Auth Migration; owns the dispatched maintenance work.', 'standing', 'active', 'clear',
+     E'I run the Auth Migration cutover rehearsals and dispatch their agent work against the sprint envelope.\n\nStanding access: the rehearsals recur every sprint, so a 30-day grant would lapse in the middle of a cutover.', 'standing', 'active', 'clear',
      NOW() - INTERVAL '40 days', NOW() - INTERVAL '39 days', NOW() - INTERVAL '39 days', NULL, NULL),
   ('req-0005', 'u-rhea', 'u-rhea', 'role:orgiq:org-leader',
      'Would like to see the leaderboards while preparing the quarterly security review.', '7d', 'rejected', 'clear',
      NOW() - INTERVAL '6 days', NOW() - INTERVAL '5 days', NULL, NULL, NULL),
   ('req-0006', 'u-rhea', 'u-rhea', 'role:social:moderator',
      'Planned to curate the security-announcements channel during the rollout.', '30d', 'withdrawn', 'clear',
-     NOW() - INTERVAL '10 days', NULL, NULL, NULL, NULL)
+     NOW() - INTERVAL '13 days', NULL, NULL, NULL, NULL),
+  ('req-0007', 'u-eli', 'u-eli', 'role:orgiq:org-leader',
+     'The Observability dispatches wait on the release manager for each sprint envelope. As org leader I could grant them their envelope myself.', '7d', 'pending', 'warn',
+     NOW() - INTERVAL '30 hours', NULL, NULL, NULL, NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO access_request_steps (request_id, step, kind, status, decided_by, decided_at, comment, current_since) VALUES
@@ -323,38 +327,54 @@ INSERT INTO access_request_steps (request_id, step, kind, status, decided_by, de
   ('req-0001', 2, 'steward', 'waiting', NULL, NULL, NULL, NULL),
   ('req-0002', 1, 'manager', 'approved', 'u-omar', NOW() - INTERVAL '1 day', 'Agreed with Vera; two sprints.', NOW() - INTERVAL '2 days'),
   ('req-0002', 2, 'steward', 'current', NULL, NULL, NULL, NOW() - INTERVAL '1 day'),
-  ('req-0003', 1, 'manager', 'approved', 'u-priya', NOW() - INTERVAL '4 days', 'Covers the rotation.', NOW() - INTERVAL '4 days'),
-  ('req-0003', 2, 'steward', 'approved', 'u-priya', NOW() - INTERVAL '3 days', 'Seven days, then it lapses.', NOW() - INTERVAL '4 days'),
+  ('req-0003', 1, 'manager', 'approved', 'u-priya', NOW() - INTERVAL '12 days', 'Covers the rotation.', NOW() - INTERVAL '12 days'),
+  ('req-0003', 2, 'steward', 'approved', 'u-priya', NOW() - INTERVAL '11 days', 'Seven days, then it lapses.', NOW() - INTERVAL '12 days'),
   ('req-0004', 1, 'steward', 'approved', 'u-priya', NOW() - INTERVAL '39 days', 'Owns the maintenance bots.', NOW() - INTERVAL '40 days'),
   ('req-0005', 1, 'manager', 'rejected', 'u-omar', NOW() - INTERVAL '5 days', 'The review does not need leaderboard access; I will share the export.', NOW() - INTERVAL '6 days'),
   ('req-0005', 2, 'steward', 'skipped', NULL, NULL, NULL, NULL),
   ('req-0005', 3, 'access-admin', 'skipped', NULL, NULL, NULL, NULL),
-  ('req-0006', 1, 'manager', 'skipped', NULL, NULL, NULL, NOW() - INTERVAL '10 days'),
-  ('req-0006', 2, 'steward', 'skipped', NULL, NULL, NULL, NULL)
+  ('req-0006', 1, 'manager', 'approved', 'u-priya', NOW() - INTERVAL '12 days', 'Fine for the rollout window.', NOW() - INTERVAL '13 days'),
+  ('req-0006', 2, 'steward', 'skipped', NULL, NULL, NULL, NULL),
+  ('req-0007', 1, 'steward', 'approved', 'u-rachel', NOW() - INTERVAL '20 hours', 'Fine by me if Priya clears the policy side.', NOW() - INTERVAL '30 hours'),
+  ('req-0007', 2, 'access-admin', 'current', NULL, NULL, NULL, NOW() - INTERVAL '20 hours')
 ON CONFLICT (request_id, step) DO NOTHING;
 
 INSERT INTO access_events (id, request_id, at, actor_id, kind, before_status, after_status, reason) VALUES
   ('evt-0001', 'req-0001', NOW() - INTERVAL '3 hours', 'u-rhea', 'submitted', 'draft', 'submitted', NULL),
   ('evt-0002', 'req-0002', NOW() - INTERVAL '2 days', 'u-rhea', 'submitted', 'draft', 'submitted', NULL),
   ('evt-0003', 'req-0002', NOW() - INTERVAL '1 day', 'u-omar', 'step-approved', 'submitted', 'pending', 'Agreed with Vera; two sprints.'),
-  ('evt-0004', 'req-0003', NOW() - INTERVAL '4 days', 'u-omar', 'submitted', 'draft', 'submitted', NULL),
-  ('evt-0005', 'req-0003', NOW() - INTERVAL '4 days', 'u-priya', 'step-approved', 'submitted', 'pending', 'Covers the rotation.'),
-  ('evt-0006', 'req-0003', NOW() - INTERVAL '3 days', 'u-priya', 'step-approved', 'pending', 'approved', 'Seven days, then it lapses.'),
-  ('evt-0007', 'req-0003', NOW() - INTERVAL '3 days', 'u-priya', 'approved', 'pending', 'approved', NULL),
+  ('evt-0004', 'req-0003', NOW() - INTERVAL '12 days', 'u-omar', 'submitted', 'draft', 'submitted', NULL),
+  ('evt-0005', 'req-0003', NOW() - INTERVAL '12 days', 'u-priya', 'step-approved', 'submitted', 'pending', 'Covers the rotation.'),
+  ('evt-0006', 'req-0003', NOW() - INTERVAL '11 days', 'u-priya', 'step-approved', 'pending', 'approved', 'Seven days, then it lapses.'),
+  ('evt-0007', 'req-0003', NOW() - INTERVAL '11 days', 'u-priya', 'approved', 'pending', 'approved', NULL),
+  ('evt-0017', 'req-0003', NOW() - INTERVAL '11 days', NULL, 'provisioned', 'approved', 'active', NULL),
+  ('evt-0018', 'req-0003', NOW() - INTERVAL '4 days', NULL, 'expired', 'active', 'expired', NULL),
   ('evt-0008', 'req-0004', NOW() - INTERVAL '40 days', 'u-nora', 'submitted', 'draft', 'submitted', NULL),
   ('evt-0009', 'req-0004', NOW() - INTERVAL '39 days', 'u-priya', 'step-approved', 'submitted', 'approved', 'Owns the maintenance bots.'),
   ('evt-0010', 'req-0004', NOW() - INTERVAL '39 days', 'u-priya', 'approved', 'submitted', 'approved', NULL),
   ('evt-0011', 'req-0004', NOW() - INTERVAL '39 days', NULL, 'provisioned', 'approved', 'active', NULL),
   ('evt-0012', 'req-0005', NOW() - INTERVAL '6 days', 'u-rhea', 'submitted', 'draft', 'submitted', NULL),
   ('evt-0013', 'req-0005', NOW() - INTERVAL '5 days', 'u-omar', 'step-rejected', 'submitted', 'rejected', 'The review does not need leaderboard access; I will share the export.'),
-  ('evt-0014', 'req-0006', NOW() - INTERVAL '10 days', 'u-rhea', 'submitted', 'draft', 'submitted', NULL),
-  ('evt-0015', 'req-0006', NOW() - INTERVAL '9 days', 'u-rhea', 'withdrawn', 'submitted', 'withdrawn', 'The channel moved to the platform team.')
+  ('evt-0014', 'req-0006', NOW() - INTERVAL '13 days', 'u-rhea', 'submitted', 'draft', 'submitted', NULL),
+  ('evt-0019', 'req-0006', NOW() - INTERVAL '12 days', 'u-priya', 'step-approved', 'submitted', 'pending', 'Fine for the rollout window. — decided on behalf of Omar Haddad'),
+  ('evt-0015', 'req-0006', NOW() - INTERVAL '9 days', 'u-rhea', 'withdrawn', 'pending', 'withdrawn', 'The channel moved to the platform team.'),
+  ('evt-0021', 'req-0007', NOW() - INTERVAL '30 hours', 'u-eli', 'submitted', 'draft', 'submitted', NULL),
+  ('evt-0022', 'req-0007', NOW() - INTERVAL '23 hours', NULL, 'sod-blocked', 'submitted', 'submitted', 'Spend and allocate: Eli Garcia already holds SME in Work.'),
+  ('evt-0023', 'req-0007', NOW() - INTERVAL '20 hours', 'u-rachel', 'step-approved', 'submitted', 'pending', 'Fine by me if Priya clears the policy side.')
+ON CONFLICT (id) DO NOTHING;
+
+UPDATE access_request_steps SET delegated_from = 'u-omar' WHERE request_id = 'req-0006' AND step = 1 AND delegated_from IS NULL;
+
+-- sod-001 was tightened from a warning to a block yesterday; req-0007 is what it now catches.
+INSERT INTO access_events (id, request_id, policy_id, at, actor_id, kind, before_status, after_status, reason) VALUES
+  ('evt-0020', NULL, 'sod-001', NOW() - INTERVAL '1 day', 'u-priya', 'policy-updated', 'warn', 'block',
+     'Spend and allocate: tightened so that nobody grants the sprint envelope they spend.')
 ON CONFLICT (id) DO NOTHING;
 
 -- ── Seed: one review campaign (lane A2) ─────────────────────────────────────
 -- rev-0001 certifies the four standing `sme` grants in Work: two kept, two open.
 INSERT INTO access_reviews (id, tenant, title, status, opened_by, opened_at, closes_at, closed_at) VALUES
-  ('rev-0001', 'orgiq', 'Q4 SME certification — Work', 'open', 'u-priya', NOW() - INTERVAL '5 days', NULL, NULL)
+  ('rev-0001', 'orgiq', 'Q4 SME certification — Work', 'open', 'u-priya', NOW() - INTERVAL '5 days', NOW() + INTERVAL '9 days', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO access_review_items (id, review_id, user_id, tenant, role, decision, decided_by, decided_at, comment, revocation_request_id) VALUES

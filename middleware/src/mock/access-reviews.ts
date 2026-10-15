@@ -49,7 +49,7 @@ export const accessReviewsFixture = defineFixture<AccessReviewRow>({
   scenarios: {
     default: () => [
       { id: 'rev-0001', tenant: 'orgiq', title: 'Q4 SME certification — Work', status: 'open', openedBy: 'u-priya',
-        openedAt: clock.daysAgo(5), closesAt: null, closedAt: null },
+        openedAt: clock.daysAgo(5), closesAt: new Date(clock.now().getTime() + 9 * 86_400_000).toISOString(), closedAt: null },
     ],
     empty: () => [],
   },

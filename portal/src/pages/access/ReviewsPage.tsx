@@ -38,6 +38,7 @@ import {
   TENANT_LABELS,
   campaignTitleProblem,
   filterReviews,
+  reviewDeadlineLabel,
   reviewHref,
   reviewProgressLabel,
   type AccessReview,
@@ -45,6 +46,7 @@ import {
   type ItemsResponse,
   type ReviewRecord,
 } from '../../lib/accessRequests';
+import { AccessLink } from './accessColumns';
 import { accessCollectionAdapter, resolveAccessTarget } from './accessCollectionCommands';
 import { ACCESS_SURFACES } from './accessSurfaces';
 
@@ -56,10 +58,9 @@ const STATUS_OPTIONS = [
 const TENANT_OPTIONS = (Object.entries(TENANT_LABELS) as Array<[AccessTenant, string]>).map(([value, label]) => ({ value, label }));
 
 const COLUMNS: DataTableColumn<AccessReview>[] = [
-  { key: 'id', header: 'Campaign', width: '112px', render: (c) => <T size="sm" tabular>{c.id}</T> },
   {
     key: 'title', header: 'Title', sortable: true, compare: (a, b) => a.title.localeCompare(b.title),
-    render: (c) => <T size="sm" title={c.title} className="block max-w-[24rem] truncate">{c.title}</T>,
+    render: (c) => <AccessLink to={reviewHref(c.id)}><T size="sm" title={c.title} className="block max-w-[24rem] truncate">{c.title}</T></AccessLink>,
   },
   { key: 'tenant', header: 'Workspace', width: '120px', render: (c) => TENANT_LABELS[c.tenant] ?? c.tenant },
   { key: 'owner', header: 'Owner', render: (c) => c.owner?.displayName ?? <T size="xs" tone="tertiary">—</T> },
@@ -68,6 +69,10 @@ const COLUMNS: DataTableColumn<AccessReview>[] = [
     key: 'progress', header: 'Decided', width: '176px',
     render: (c) => <ProgressBar size="sm" value={c.progress.decided} max={Math.max(c.progress.total, 1)} completeTone="success"
       valueLabel={reviewProgressLabel(c.progress)} aria-label={`${c.title}: ${reviewProgressLabel(c.progress)}`} />,
+  },
+  {
+    key: 'closesAt', header: 'Deadline', width: '136px',
+    render: (c) => { const label = reviewDeadlineLabel(c); return label ?? <T size="xs" tone="tertiary">—</T>; },
   },
   {
     key: 'openedAt', header: 'Opened', numeric: true, sortable: true,
@@ -95,7 +100,7 @@ export default function ReviewsPage() {
       if (!data || error) throw new Error('Wait for the campaigns to load before opening one.');
       const c = resolveAccessTarget(target, rows);
       navigate(reviewHref(c.id));
-      return `Opened ${c.id}. Nothing was decided.`;
+      return `Opened ${c.title}. Nothing was decided.`;
     },
   });
 

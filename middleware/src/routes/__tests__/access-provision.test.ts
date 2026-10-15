@@ -167,10 +167,10 @@ it('Rhea requests SME in Work, Omar and Priya approve, and her open cookie holds
   // The audit has every row, the provisioning attributed to the system.
   const audit = (await request(app).get(`/api/access/audit?requestId=${id}`).set('Cookie', priya)).body as { items: AccessEvent[] };
   expect(audit.items.map((e) => [e.kind, e.actor?.id ?? null]).reverse()).toEqual([
-    ['submitted', 'u-rhea'], ['step-approved', 'u-omar'], ['step-approved', 'u-rachel'], ['approved', 'u-rachel'], ['provisioned', null],
+    ['submitted', 'u-rhea'], ['step-approved', 'u-omar'], ['step-approved', 'u-rachel'], ['provisioned', null],
   ]);
   // Rhea reads her own request's trail as a requester.
-  expect(((await request(app).get(`/api/access/audit?requestId=${id}`).set('Cookie', rhea2)).body as { items: AccessEvent[] }).items).toHaveLength(5);
+  expect(((await request(app).get(`/api/access/audit?requestId=${id}`).set('Cookie', rhea2)).body as { items: AccessEvent[] }).items).toHaveLength(4);
 });
 
 it('a rejection and a request for information ring the parties, not the approver who decided', async () => {

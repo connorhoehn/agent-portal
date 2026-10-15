@@ -63,7 +63,7 @@ function ApprovalsWorkspace() {
       if (!data || error) throw new Error('Wait for approvals to load before opening one.');
       const r = resolveAccessTarget(target, rows.map((row) => ({ ...row, title: requestTitle(row) })));
       navigate(requestHref(r.id));
-      return `Opened ${r.id} for review. No decision was recorded.`;
+      return `Opened ${requestTitle(r)} for review. No decision was recorded.`;
     },
   });
 

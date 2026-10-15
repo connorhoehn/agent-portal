@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { parseCollectionCommand } from '../../../components/collections/collectionCommands.ts';
 import {
   auditScopeNotice, campaignProblem, configurationPatch, filterReviewItems, filterReviews, overrideProblem,
-  reviewDecisionProblem, reviewHref, reviewItemTitle, reviewProgressLabel,
+  reviewDecisionProblem, reviewDeadlineLabel, reviewHref, reviewItemTitle, reviewProgressLabel, roleLabel, statusWord,
   type AccessConfiguration, type AccessReview, type AccessReviewItem,
 } from '../../../lib/accessRequests.ts';
 import { ACCESS_GRAMMARS, accessCollectionAdapter } from '../accessCollectionCommands.ts';
@@ -40,7 +40,7 @@ test('items filter by undecided / kept / revoked and search the person, role and
   assert.deepEqual(filterReviewItems(rows, '', 'keep').map((i) => i.id), ['ri-1']);
   assert.deepEqual(filterReviewItems(rows, '', 'revoke').map((i) => i.id), ['ri-2']);
   assert.deepEqual(filterReviewItems(rows, 'july', '').map((i) => i.id), ['ri-2']);
-  assert.equal(reviewItemTitle(rows[0]!), 'Nora · sme');
+  assert.equal(reviewItemTitle(rows[0]!), 'Nora · SME');
 });
 
 test('the guards the pages disable their controls on', () => {
@@ -101,4 +101,22 @@ test('a step names who may decide only while the request is open; a policy event
   assert.equal(eventHref({ requestId: null }), '/access/policies');
   // A policy-updated row opens that policy's record page, not the list.
   assert.equal(eventHref({ requestId: null, policyId: 'sod-001' }), '/access/policies/sod-001');
+});
+
+test('roleLabel and statusWord put ids in words', () => {
+  assert.equal(roleLabel('sme'), 'SME');
+  assert.equal(roleLabel('org-leader'), 'Org leader');
+  assert.equal(roleLabel('access-admin'), 'Access admin');
+  assert.equal(roleLabel('some-new-role'), 'Some new role');
+  assert.equal(statusWord('step-approved'), 'Step approved');
+});
+
+test('a campaign deadline reads as days, and a closed or open-ended campaign has none', () => {
+  const now = Date.parse('2026-10-15T12:00:00Z');
+  const days = (n: number) => new Date(now + n * 86_400_000).toISOString();
+  assert.equal(reviewDeadlineLabel({ status: 'open', closesAt: days(9) }, now), 'Closes in 9 days');
+  assert.equal(reviewDeadlineLabel({ status: 'open', closesAt: days(1) }, now), 'Closes in 1 day');
+  assert.equal(reviewDeadlineLabel({ status: 'open', closesAt: days(-2) }, now), 'Past its deadline');
+  assert.equal(reviewDeadlineLabel({ status: 'open', closesAt: null }, now), null);
+  assert.equal(reviewDeadlineLabel({ status: 'closed', closesAt: days(9) }, now), null);
 });

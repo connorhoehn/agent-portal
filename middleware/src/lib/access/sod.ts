@@ -16,7 +16,7 @@ export function sodConflicts(item: Pick<AccessCatalogRow, 'kind' | 'tenant' | 'r
   const out: SodConflict[] = [];
   for (const p of policies) {
     const other = same(p.left, item.tenant, item.role) ? p.right : same(p.right, item.tenant, item.role) ? p.left : null;
-    if (other && holds(grants, other)) out.push({ policyId: p.id, reason: p.reason, severity: p.severity });
+    if (other && holds(grants, other)) out.push({ policyId: p.id, title: p.title, reason: p.reason, severity: p.severity });
   }
   return out;
 }
