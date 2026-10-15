@@ -81,18 +81,14 @@ SC=portal/src/components/shell/SectionContent.tsx
 floating=$(grep -rlE "SECTION_LIST_PANE" portal/src --include='*.tsx' --include='*.ts' | sort)
 [ -z "$floating" ] && ok "no bordered list pane (SECTION_LIST_PANE) anywhere" || fail "a list still floats in a bordered pane: $(echo $floating)"
 # Every list page draws the shared list rail, never its own ExplorerLayout.
-for f in portal/src/components/shell/StackedCatalogLayout.tsx portal/src/pages/distillation/KnowledgeTab.tsx portal/src/pages/distillation/ReviewTab.tsx portal/src/pages/promotions/PromotionsPage.tsx portal/src/pages/distillation/ActivityTab.tsx; do
+for f in portal/src/components/shell/StackedCatalogLayout.tsx portal/src/pages/runbooks/RunbooksListFrame.tsx; do
   has "<ListRailLayout" "$f" && ok "$f composes ListRailLayout (the library list rail)" || fail "$f does not compose ListRailLayout (the shared list rail)"
   has "<ExplorerLayout" "$f" && fail "$f composes its own ExplorerLayout (use ListRailLayout)" || ok "$f: no ExplorerLayout of its own"
 done
-# Distillation: no repository button in the content header; the repository
-# is a facet in each list rail's filter popover (distillation-redesign-spec §1).
-DM=portal/src/pages/distillation/DistillationModule.tsx
-{ has "repoFacet" "$DM" && ! has "distillation-repo" "$DM" && ! has "controls=\{" "$DM"; } \
-  && ok "$DM: the repository is a rail filter facet, not a header control" || fail "$DM: the repository selector is still a content-header control"
-grep -lE "scope\.controls" portal/src/pages/distillation/*.tsx portal/src/pages/promotions/*.tsx >/dev/null 2>&1 \
-  && fail "a distillation page still hangs scope.controls in its header" || ok "no distillation page hangs a repository control in its header"
-grep -qE "EmptyState[^>]*Explore distillation|title=\"Browse \\$\{" portal/src/pages/distillation/DistillationModule.tsx portal/src/components/shell/StackedCatalogLayout.tsx \
+# Runbooks: no page hangs a repository control in its content header.
+grep -lE "scope\.controls" portal/src/pages/runbooks/*.tsx >/dev/null 2>&1 \
+  && fail "a runbooks page still hangs scope.controls in its header" || ok "no runbooks page hangs a control in its header"
+grep -qE "title=\"Browse \\$\{" portal/src/components/shell/StackedCatalogLayout.tsx \
   && fail "a section landing is still a bare placeholder" || ok "section landings show content, not a placeholder"
 # No page composes its own breadcrumb row: the trail comes from the shell row,
 # SectionContent, or a shell layout. Ratchet on the pages that still do.

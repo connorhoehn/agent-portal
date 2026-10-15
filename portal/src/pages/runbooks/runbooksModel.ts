@@ -5,6 +5,7 @@
 // No React; relative imports carry their `.ts` so `node --test` runs it.
 import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands.ts';
 import type { CollectionCommandAdapter } from '../../components/collections/CollectionCommandHost.tsx';
+import { NO_NAMES, type Names } from './runbookNames.ts';
 import type {
   BriefSummary, HealthStatus, LintFinding, Proposal, RunbookApplication, RunbookRow, RunbookScope, ScopeKind,
 } from './types.ts';
@@ -31,10 +32,17 @@ export const SCOPE_GROUPS: ReadonlyArray<{ id: ScopeKind; title: string }> = [
   { id: 'tool', title: 'Tools' },
 ];
 
-export function scopeLabel(scope: RunbookScope): string {
+/** Where a scope points, by name: an initiative's name, a repository's own name, a tool. */
+export function scopeTarget(scope: RunbookScope, names: Names = NO_NAMES): string {
+  if (scope.kind === 'org') return 'Whole organisation';
+  if (scope.kind === 'initiative') return names.initiative(scope.ref);
+  return scope.ref ?? '';
+}
+
+export function scopeLabel(scope: RunbookScope, names: Names = NO_NAMES): string {
   switch (scope.kind) {
     case 'org': return 'Whole organisation';
-    case 'initiative': return `Initiative ${scope.ref ?? ''}`.trim();
+    case 'initiative': return `Initiative ${names.initiative(scope.ref)}`;
     case 'repo': return `Repository ${scope.ref ?? ''}`.trim();
     case 'tool': return `Tool ${scope.ref ?? ''}`.trim();
   }
@@ -45,19 +53,19 @@ export const HEALTH_TONE: Record<HealthStatus, 'success' | 'warning' | 'neutral'
 
 export interface LibraryRow { id: string; groupId: ScopeKind; title: string; subline: string; health: HealthStatus; status: RunbookRow['status'] }
 
-export function matchesRunbook(r: RunbookRow, q: string): boolean {
+export function matchesRunbook(r: RunbookRow, q: string, names: Names = NO_NAMES): boolean {
   const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return true;
-  const hay = `${r.id} ${r.title} ${r.summary} ${r.scope.ref ?? ''} ${r.scope.kind}`.toLowerCase();
+  const hay = `${r.id} ${r.title} ${r.summary} ${r.scope.ref ?? ''} ${scopeTarget(r.scope, names)} ${r.scope.kind}`.toLowerCase();
   return terms.every((t) => hay.includes(t));
 }
 
-export function libraryRows(runbooks: readonly RunbookRow[], q = '', status: string | null = null): LibraryRow[] {
+export function libraryRows(runbooks: readonly RunbookRow[], q = '', status: string | null = null, names: Names = NO_NAMES): LibraryRow[] {
   return runbooks
-    .filter((r) => matchesRunbook(r, q) && (!status || r.status === status))
+    .filter((r) => matchesRunbook(r, q, names) && (!status || r.status === status))
     .map((r) => ({
       id: r.id, groupId: r.scope.kind, title: r.title, health: r.health.status, status: r.status,
-      subline: `${r.scope.ref ?? 'Whole organisation'} · v${r.current_version}${r.status !== 'published' ? ` · ${r.status}` : r.health.status === 'drifting' ? ' · drifting' : ''}${r.open_proposals ? ` · ${r.open_proposals} open` : ''}`,
+      subline: `${scopeTarget(r.scope, names)} · v${r.current_version}${r.status !== 'published' ? ` · ${r.status}` : r.health.status === 'drifting' ? ' · drifting' : ''}${r.open_proposals ? ` · ${r.open_proposals} open` : ''}`,
     }));
 }
 
@@ -122,21 +130,21 @@ export function proposalTitle(p: Proposal, titles: ReadonlyMap<string, string>):
   return (p.runbook_id && titles.get(p.runbook_id)) || p.proposed?.title || p.runbook_id || 'Runbook';
 }
 
-export function proposalAuthor(p: Proposal): { name: string; kind: 'human' | 'agent' } {
+export function proposalAuthor(p: Proposal, names: Names = NO_NAMES): { name: string; kind: 'human' | 'agent' } {
   return p.source.kind === 'run'
-    ? { name: `Run ${p.source.run_ref ?? ''}`.trim(), kind: 'agent' }
-    : { name: p.source.person_id ?? 'A colleague', kind: 'human' };
+    ? { name: names.run(p.source.run_ref), kind: 'agent' }
+    : { name: names.person(p.source.person_id), kind: 'human' };
 }
 
 export interface ProposalRow { id: string; groupId: 'open' | 'decided'; title: string; subline: string; kind: Proposal['kind']; status: Proposal['status'] }
 
-export function proposalRows(proposals: readonly Proposal[], titles: ReadonlyMap<string, string>, q = ''): ProposalRow[] {
+export function proposalRows(proposals: readonly Proposal[], titles: ReadonlyMap<string, string>, q = '', names: Names = NO_NAMES): ProposalRow[] {
   const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return proposals
     .map((p): ProposalRow => ({
       id: p.id, kind: p.kind, status: p.status, groupId: p.status === 'open' ? 'open' : 'decided',
       title: proposalTitle(p, titles),
-      subline: `${KIND_LABEL[p.kind]} · ${proposalAuthor(p).name}${p.status !== 'open' ? ` · ${PROPOSAL_STATUS_LABEL[p.status].toLowerCase()}` : ''}${p.lint.some((f) => f.severity === 'error') ? ' · lint errors' : ''}`,
+      subline: `${KIND_LABEL[p.kind]} · ${proposalAuthor(p, names).name}${p.status !== 'open' ? ` · ${PROPOSAL_STATUS_LABEL[p.status].toLowerCase()}` : ''}${p.lint.some((f) => f.severity === 'error') ? ' · lint errors' : ''}`,
     }))
     .filter((r) => terms.every((t) => `${r.id} ${r.title} ${r.subline}`.toLowerCase().includes(t)));
 }
@@ -188,15 +196,19 @@ export function refusalMessage(status: number, code: string | undefined, fallbac
 export const shortSha = (sha: string) => sha.slice(0, 12);
 
 export interface BriefRow { id: string; groupId: string; title: string; subline: string }
-export function briefRows(briefs: readonly BriefSummary[], q = ''): BriefRow[] {
+export function briefRows(briefs: readonly BriefSummary[], q = '', names: Names = NO_NAMES): BriefRow[] {
   const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return briefs
-    .map((b): BriefRow => ({
-      id: b.run_ref, groupId: b.assembled_at.slice(0, 10),
-      title: b.work_item_id ?? b.run_ref,
-      subline: `${b.run_ref} · ${shortSha(b.sha256)} · ${b.sections.filter((s) => s.kind === 'runbook').length} runbooks`,
-    }))
-    .filter((r) => terms.every((t) => `${r.id} ${r.title} ${r.subline}`.toLowerCase().includes(t)));
+    .map((b): BriefRow => {
+      const n = b.sections.filter((s) => s.kind === 'runbook').length;
+      return {
+        id: b.run_ref, groupId: b.assembled_at.slice(0, 10),
+        title: names.run(b.run_ref),
+        subline: `${b.initiative_id ? `${names.initiative(b.initiative_id)} · ` : ''}${n} ${n === 1 ? 'runbook' : 'runbooks'} · ${shortSha(b.sha256)}`,
+      };
+    })
+    // The ids stay searchable (a run reference pasted from a log finds its brief) even though they are not shown.
+    .filter((r, i) => terms.every((t) => `${r.id} ${briefs[i]!.work_item_id ?? ''} ${r.title} ${r.subline}`.toLowerCase().includes(t)));
 }
 export function briefGroups(rows: readonly BriefRow[]) {
   const days = [...new Set(rows.map((r) => r.groupId))].sort().reverse();

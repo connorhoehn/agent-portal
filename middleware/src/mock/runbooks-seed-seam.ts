@@ -3,9 +3,9 @@
 // eleven seeded distillation artifacts, their open proposals and the
 // application history carried over from distillation).
 //
-// `default` is lane C's world, exactly. Briefs start empty: a brief is frozen
-// when a run is dispatched or claimed (lib/run-brief.ts), and every seeded run
-// predates briefs. `large` is that world plus generated bulk to page through.
+// `default` is lane C's world, exactly. A brief is frozen when a run is
+// dispatched or claimed (lib/run-brief.ts); most seeded runs predate briefs, and
+// the one that started after the runbooks existed (job-auth-maint-1) carries one. `large` is that world plus generated bulk to page through.
 import type { Runbook, RunbookApplication, RunbookProposal, RunbookVersion, SessionBrief } from '../lib/runbooks/types.js';
 import { versionOf } from '../lib/runbooks/version.js';
 import { assembleBrief } from '../lib/runbooks/brief.js';

@@ -126,7 +126,7 @@ let paceOverride: number | null = null;
 const pace = (): number => paceOverride ?? beatMs();
 
 function sleepUntilBeat(beat: number, startedAt: number, signal: Signal): Promise<void> {
-  const ms = Math.max(0, startedAt + beat * pace() - Date.now());
+  const ms = Math.max(0, startedAt + beat * pace() - performance.now());
   if (ms === 0 || signal.cancelled) return Promise.resolve();
   return new Promise((resolve) => {
     const wake = (): void => { clearTimeout(t); signal.wakers.delete(wake); resolve(); };
@@ -189,7 +189,7 @@ async function dispatch(run: DemoRun): Promise<SessionBrief> {
 
 async function tell(baseUrl: string, signal: Signal): Promise<void> {
   const store = runbookStore();
-  const t0 = Date.now();
+  const t0 = performance.now();
 
   // 1 · Nora sends Basil; the brief it is handed carries v1.
   await sleepUntilBeat(FIRST_RUN.startBeat, t0, signal);

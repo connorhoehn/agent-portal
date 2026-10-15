@@ -7,7 +7,7 @@ import { getProject } from './projects.js';
 import { getWorkItem } from './work-items.js';
 import { getDesignThread, type DesignReview } from './design-reviews.js';
 import { getDecision } from './decisions.js';
-import { getItem, type DistillationItem } from './distillation.js';
+import { getRunbookSearchEntry, type RunbookSearchEntry } from '../lib/runbooks/search-entries.js';
 import { getAsset } from './prompt-library.js';
 import { listRecordingSearchRecords, resolveRecordingSearchRecord, type RecordingSearchRecord } from './recording-search.js';
 import { ensureIndexed } from '../lib/search-index/registry.js';
@@ -117,15 +117,11 @@ async function permissions(principal: PrincipalRef): Promise<{ people: boolean }
   }
   return { people: await isAllowed(principal, 'ViewOrgChart') };
 }
-function knowledgeRecord(item: DistillationItem): SearchRecord {
-  const artifact = item.level === 'L2';
-  return { id: item.id, type: 'knowledge', title: item.title,
-    description: 'summary' in item ? item.summary : item.body,
-    href: `/iq/distillation/knowledge?view=${artifact ? 'guides' : item.level === 'L1' ? 'patterns' : 'notes'}&item=${enc(item.id)}`,
-    subtitle: artifact ? item.type : item.level === 'L1' ? 'Pattern' : 'Observation',
-    ...('status' in item ? { status: item.status } : {}),
-    updatedAt: isoOrUndefined(item.level === 'L0' ? item.created_at : item.updated_at),
-    sourceRefs: 'initiative_id' in item ? [{ type: 'initiative', id: item.initiative_id }] : [],
+function knowledgeRecord(rb: RunbookSearchEntry): SearchRecord {
+  return { id: rb.id, type: 'knowledge', title: rb.title, description: rb.summary,
+    href: `/iq/runbooks/${enc(rb.id)}`, subtitle: `Runbook · v${rb.version}`, status: rb.status,
+    updatedAt: isoOrUndefined(rb.updated_at),
+    sourceRefs: rb.initiative_id ? [{ type: 'initiative', id: rb.initiative_id }] : [],
   };
 }
 
@@ -313,7 +309,7 @@ export async function resolveSearchRecords(principal: PrincipalRef, refs: Search
       if (!d) { const design = await getDesignThread(ref.id); return design?.status === 'approved' ? designRecord(design) : null; }
       return d ? { ...ref, title: d.topic, description: d.summary ?? undefined, status: d.status, href: `/iq/decisions/${enc(d.id)}` } : null;
     }
-    if (ref.type === 'knowledge') { const k = await getItem(ref.id); return k ? knowledgeRecord(k) : null; }
+    if (ref.type === 'knowledge') { const k = await getRunbookSearchEntry(ref.id); return k ? knowledgeRecord(k) : null; }
     if (ref.type === 'asset') { const a = await getAsset(ref.id); return a ? { ...ref, title: a.name, description: a.description, status: a.lifecycleStatus, href: `/iq/library/${enc(a.id)}` } : null; }
     if (ref.type === 'recording') return resolveRecordingSearchRecord(principal, ref.id);
     if (ref.type === 'team') {
@@ -362,14 +358,8 @@ export async function resolveSearchContext(principal: PrincipalRef, refs: Search
       const asset = await getAsset(record.id);
       if (asset?.designReviewId) link({ type: 'decision', id: asset.designReviewId }, record, 'ratifies');
     } else if (record.type === 'knowledge') {
-      const k = await getItem(record.id);
-      if (!k) return;
-      if ('initiative_id' in k) link({ type: 'initiative', id: k.initiative_id }, record, 'evidence');
-      if (k.level === 'L1') k.member_observation_ids.forEach(id => link({ type: 'knowledge', id }, record, 'supports'));
-      if (k.level === 'L2') {
-        k.cluster_ids.forEach(id => link({ type: 'knowledge', id }, record, 'distilled into'));
-        if (k.library_item_id) link(record, { type: 'asset', id: k.library_item_id }, 'derived asset');
-      }
+      const k = await getRunbookSearchEntry(record.id);
+      if (k?.initiative_id) link({ type: 'initiative', id: k.initiative_id }, record, 'scoped to');
     } else if (record.type === 'recording') {
       record.sourceRefs?.forEach(source => link(source, record, 'recorded artifacts'));
     }

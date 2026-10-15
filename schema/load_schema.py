@@ -224,14 +224,6 @@ def main():
         # table degrades to exactly the old behaviour rather than failing, so
         # it does not gate anything that loads after it.
         'devbox_fleet_schema.sql',
-        # L1 clusters + L2 artifacts distilled from lab_experiences (L0).
-        # Loads right after it: distillation_cluster_members FKs
-        # lab_experiences directly.
-        'distillation_schema.sql',
-        # Compaction job records + L0 writers — the durable mirror
-        # providers/distillation-store.ts upserts into. No FKs; grouped with
-        # the rest of the distillation tables.
-        'distillation_ops_schema.sql',
         # Bots + bot_runs. Loads last: it references agent_projects,
         # agent_project_runs, agent_jobs and projects, and its ALTERs add
         # linkage columns to tables the files above create.

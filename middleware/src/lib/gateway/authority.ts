@@ -11,7 +11,7 @@
 // Since realtime-modules 0.116 the MECHANISM is the library's authority kit and
 // this file holds only this host's DATA and business rules:
 //   - `defineChannelFamilies` over lib/tenant-channels.ts's family table, with
-//     the host namespaces (huddle chat, the distillation feed, flow runs, Social
+//     the host namespaces (huddle chat, flow runs, Social
 //     decks) and name rules (team rosters, the Social channel membership mirror)
 //     — the synchronous SHAPE guards `lobbyGuard` / `channelGuard`;
 //   - `createChannelAuthority` — the fresh-per-request decisions (`admit*`):
@@ -36,7 +36,6 @@ import {
 } from '@connorhoehnslalom/realtime-modules/server';
 import type { FileUploadRow } from '@connorhoehnslalom/realtime-modules/fileupload';
 import { inCallChatNamespace } from '../call-chat.js';
-import { inDistillationNamespace, isDistillationChannel, mayReadDistillation } from '../distillation-channels.js';
 import { inFlowRunNamespace, parseFlowRunChannel } from '../flow-runs/channel.js';
 import { inSocialDeckNamespace, parseSocialDeckChannel, socialDeckPresenceChannel } from '../social-deck-channel.js';
 import { SOCIAL_CHANNEL_PREFIX, slugForChannel, socialChat } from '../social-chat.js';
@@ -90,7 +89,6 @@ const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
  *   - host namespaces (decided before the table; never call lobbies):
  *     `orgiq:huddle:<callId>` chat (exact name or `reactions:`, a token holding
  *     orgiq or assessment — the SEAT is asked by the engine every time),
- *     the `orgiq:distill:*` feed (a plain subscribe under the REST read gate),
  *     `<tenant>:flowrun:<runId>` (a plain subscribe in a held partition),
  *     `social:deck:<id>` (presence only, a social grant);
  *   - `social:team:<team>:<channel>` only for the team's roster, a malformed
@@ -112,8 +110,6 @@ const GATEWAY_FAMILIES = defineChannelFamilies<ChannelAuthority, GatewayFamily>(
       return !!huddleCallId(bare) && (channel === bare || channel === `reactions:${bare}`) && !!str(auth.userId)
         && ['orgiq', 'assessment'].some(tenant => org === tenant || tenants.includes(tenant));
     } },
-    { id: 'distillation', match: name => inDistillationNamespace(name), guard: (auth, channel, kind, bare) =>
-      kind === 'subscribe' && channel === bare && isDistillationChannel(bare) && mayReadDistillation(auth as GuardAuth) },
     { id: 'flow-run', match: name => inFlowRunNamespace(name), guard: (auth, channel, kind, bare) => {
       const ref = parseFlowRunChannel(bare);
       return !!ref && kind === 'subscribe' && channel === bare && !!str(auth.userId)
@@ -337,23 +333,6 @@ export async function admitSocialConversation(userId: string, conversation: stri
  */
 export function admitUploadRead(found: FileUploadRow, ctx: Record<string, unknown>): Promise<boolean> {
   return mayReadUpload(found, ctx, engineGuards);
-}
-
-/**
- * The distillation feed's rule, as the cookie /realtime path asks it: a plain
- * subscribe on one of the three channels by a current session standing in
- * orgiq (or an admin). A publish is never admitted. The /ws path reaches the
- * same verdict through `channelGuard`'s distillation namespace under
- * `admitChannel`; the facade contract asserts the two agree.
- */
-export async function admitDistillation(ctx: Context, channel: string, kind: ChannelKind): Promise<boolean> {
-  if (kind === 'publish' || !isDistillationChannel(channel)) return false;
-  try { return mayReadDistillation((await getLivePrincipal(ctx)).auth); } catch { return false; }
-}
-
-/** May a frame for this principal be DELIVERED on the distillation feed now (the /realtime filter). */
-export async function admitDistillationDelivery(ctx: Context): Promise<boolean> {
-  try { return mayReadDistillation((await getLivePrincipal(ctx)).auth); } catch { return false; }
 }
 
 /**

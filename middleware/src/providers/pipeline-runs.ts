@@ -3,10 +3,7 @@
 //
 // MOCK (`config.mock.aurora`): the registered fixtures themselves —
 // `agentJobs`, the bot_runs rows (`allMockRuns()`: seeded + session),
-// `agentProjectRuns`, the assessment `runsFixture` and the compaction history
-// (read through `listCompactions`, whose mock branch reads the
-// `compactionJobs` fixture and derives each pass's phase and output from the
-// rows it produced). A scenario switch or `POST /api/__mock/reset` moves the
+// `agentProjectRuns` and the assessment `runsFixture`. A scenario switch or `POST /api/__mock/reset` moves the
 // projection with them, because nothing here keeps a copy.
 //
 // AURORA: the same tables through the providers that already own them. A
@@ -75,7 +72,6 @@ async function attempt<T>(
 
 export async function loadRunSources(): Promise<{ sources: RunSources; unavailable: LoadedProjection['unavailable'] }> {
   const unavailable: LoadedProjection['unavailable'] = [];
-  const { listCompactions } = await import('./distillation.js');
   const { listChangeRequests } = await import('./sdlc.js');
 
   if (config.mock.aurora) {
@@ -88,7 +84,6 @@ export async function loadRunSources(): Promise<{ sources: RunSources; unavailab
       botRuns: await attempt('bot_runs', unavailable, () => allMockRuns()),
       agentProjectRuns: await attempt('agent_project_runs', unavailable, () => agentProjectRuns.rows()),
       assessmentRuns: await attempt('assessment_runs', unavailable, () => runsFixture.rows()),
-      compactions: await attempt('distillation_compactions', unavailable, () => listCompactions()),
       invocations: await attempt('invocation_traces', unavailable, async () => {
         // The one offline invocation_traces: the seeded day with every written
         // bundle layered on top (mock/observability.ts traceRows()).
@@ -123,7 +118,6 @@ export async function loadRunSources(): Promise<{ sources: RunSources; unavailab
       return [...grouped.values()].flat();
     }),
     assessmentRuns: await attempt('assessment_runs', unavailable, () => assessment.listRuns({ limit: 500 })),
-    compactions: await attempt('distillation_compactions', unavailable, () => listCompactions()),
     invocations: await attempt('invocation_traces', unavailable, async () => {
       const { exec } = await import('./aurora.js');
       // A cluster that has not re-applied observability_schema.sql has no

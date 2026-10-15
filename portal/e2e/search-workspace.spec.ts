@@ -5,7 +5,7 @@ const records = [
   { id: 'vera', type: 'person', title: 'Vera Green', href: '/iq/people/vera', subtitle: 'Owner', description: 'Owns Auth Migration.' },
   { id: 'nora', type: 'person', title: 'Simone Chang', href: '/iq/people/nora', subtitle: 'SME', description: 'Coordinates the tenant cutover.' },
   { id: 'cutover', type: 'work', title: 'Tenant-by-tenant cutover', href: '/iq/work-items/cutover', status: 'blocked', subtitle: 'Simone Chang' },
-  { id: 'sso', type: 'knowledge', title: 'Bring SSO up on a new origin', href: '/iq/distillation/knowledge?item=sso', status: 'published' },
+  { id: 'sso', type: 'knowledge', title: 'Bring SSO up on a new origin', href: '/iq/runbooks/sso', status: 'published' },
 ];
 const edges = [
   { id: 'owner', source: 'person:vera', target: 'initiative:auth', label: 'owns' },

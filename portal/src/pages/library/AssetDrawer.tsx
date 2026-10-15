@@ -1,17 +1,10 @@
-import { knowledgeItemHref } from '../distillation/distillationRoutes';
-import { AssetRelationships } from '../distillation/AssetRelationships';
-// One asset, in the drawer: what it takes, where it came from, and what sits
-// next to it.
+// One asset, in the drawer: what it takes and what sits next to it.
 //
-// The three panels answer the three questions the list cannot:
+// The panels answer the questions the list cannot:
 //
 //   CONTRACT   — what inputs it takes, and crucially which of them are FENCED.
 //                A variable's source is the trust boundary, so it is rendered
 //                as a badge rather than buried in a schema view.
-//   PROVENANCE — for a distilled asset, the observations it stands on, with
-//                their support. A runbook built from nine observations across
-//                four sessions is a different claim from one built on three,
-//                and the ladder is only trustworthy if that is visible.
 //   RELATED    — the top-k neighbours, each carrying WHY it is a neighbour.
 //                An unexplained similarity list is not actionable.
 
@@ -21,7 +14,6 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { AssetEvals } from './AssetEvals';
-import { DistillationProvenance } from './DistillationProvenance';
 import { relativeTime } from '../../lib/relativeTime';
 import { Link } from 'react-router';
 import {
@@ -98,30 +90,6 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
         )}
       </DetailSection>
 
-      {a.derivedFrom && (
-        <DetailSection
-          title="Distilled from"
-          hint={`${a.derivedFrom.supportCount} observations across ${a.derivedFrom.sessionCount} sessions`}
-        >
-          <Stack gap="xs">
-            {a.derivedFrom.top.map((t) => (
-              <Card key={t.id} padding="none" className="px-3 py-2">
-                <Inline gap="xs" wrap={false}>
-                  <Chip tone="neutral" size="xs">{t.kind}</Chip>
-                  <Link to={knowledgeItemHref(t.id, 'L0')} className="min-w-0 truncate text-xs text-primary hover:underline" title={t.title}>{t.title}</Link>
-                  <T className="flex-1" />
-                  <T size="xs" className="tabular-nums text-text-tertiary">{Math.round(t.weight * 100)}%</T>
-                </Inline>
-                {t.repo && <T size="xs" as="div" className="mt-0.5 font-mono text-text-tertiary">{t.repo}</T>}
-              </Card>
-            ))}
-          </Stack>
-        </DetailSection>
-      )}
-
-      <DistillationProvenance libraryItemId={a.id} />
-      <AssetRelationships kind="library" id={a.id} />
-
       {/* The gate, as a checklist. A tier is a promise about blast radius, so
           the page shows what that promise costs rather than one verdict. */}
       {rows.length > 0 && (
@@ -188,7 +156,7 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
       </DetailSection>
 
       {related.length > 0 && (
-        <DetailSection title="Related" hint="closest by shared provenance, then tags">
+        <DetailSection title="Related" hint="closest by shared tags, then kind">
           {/* ChoiceRow: name + one line (kind and why it is related). This was
               a two-line label in a ghost `Button`, which the one-box-per-size
               button (2.407.14) clips. */}

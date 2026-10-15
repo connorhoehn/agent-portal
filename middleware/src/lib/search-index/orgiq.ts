@@ -20,7 +20,7 @@ import { listProjects, listProjectSummaries, getProject, type ProjectSummary, ty
 import { searchWorkItems, getWorkItem, type WorkItem } from '../../providers/work-items.js';
 import { listDesignReviews, getDesignThread, type DesignReview } from '../../providers/design-reviews.js';
 import { listDecisions, getDecision, type DecisionDetail } from '../../providers/decisions.js';
-import { listItems, getItem, type DistillationItem } from '../../providers/distillation.js';
+import { listRunbookSearchEntries, getRunbookSearchEntry, type RunbookSearchEntry } from '../runbooks/search-entries.js';
 import { listAssets, getAsset, type LibraryAsset } from '../../providers/prompt-library.js';
 import { listOrgTeams, type OrgTeamRoster } from '../../providers/org-teams.js';
 import type { Person, Relationship } from '../../providers/types.js';
@@ -148,26 +148,18 @@ export function designDoc(tenant: string, d: Pick<DesignReview, 'id' | 'title' |
   });
 }
 
-export function knowledgeDoc(tenant: string, item: DistillationItem): SearchDoc {
-  const artifact = item.level === 'L2';
-  const ref = docKey('knowledge', item.id);
-  const description = 'summary' in item ? item.summary : item.body;
-  const subtitle = artifact ? item.type : item.level === 'L1' ? 'Pattern' : 'Observation';
-  const edges: SearchDocEdge[] = [];
-  if ('initiative_id' in item) edges.push(edge(initiative(item.initiative_id), ref, 'evidence'));
-  if (item.level === 'L1') item.member_observation_ids.forEach(id => edges.push(edge(docKey('knowledge', id), ref, 'supports')));
-  if (item.level === 'L2') {
-    item.cluster_ids.forEach(id => edges.push(edge(docKey('knowledge', id), ref, 'distilled into')));
-    if (item.library_item_id) edges.push(edge(ref, docKey('asset', item.library_item_id), 'derived asset'));
-  }
-  return doc(tenant, 'knowledge', item.id, {
-    title: item.title, text: `${description ?? ''} ${subtitle}`,
-    facets: { level: [item.level], status: ['status' in item ? String(item.status) : ''], initiative: ['initiative_id' in item ? item.initiative_id : ''] },
-    edges, updatedAt: isoOrNull(item.level === 'L0' ? item.created_at : item.updated_at),
+export function knowledgeDoc(tenant: string, rb: RunbookSearchEntry): SearchDoc {
+  const ref = docKey('knowledge', rb.id);
+  const subtitle = `Runbook · v${rb.version}`;
+  return doc(tenant, 'knowledge', rb.id, {
+    title: rb.title, text: `${rb.summary} ${subtitle}`,
+    facets: { level: ['runbook'], status: [rb.status], initiative: [rb.initiative_id ?? ''] },
+    edges: rb.initiative_id ? [edge(initiative(rb.initiative_id), ref, 'scoped to')] : [],
+    updatedAt: isoOrNull(rb.updated_at),
     record: {
-      description, subtitle, ...('status' in item ? { status: item.status } : {}),
-      href: `/iq/distillation/knowledge?view=${artifact ? 'guides' : item.level === 'L1' ? 'patterns' : 'notes'}&item=${enc(item.id)}`,
-      sourceRefs: 'initiative_id' in item ? [{ type: 'initiative', id: item.initiative_id }] : [],
+      description: rb.summary, subtitle, status: rb.status,
+      href: `/iq/runbooks/${enc(rb.id)}`,
+      sourceRefs: rb.initiative_id ? [{ type: 'initiative', id: rb.initiative_id }] : [],
     },
   });
 }
@@ -206,14 +198,13 @@ export async function buildOrgiqDocs(tenant: string): Promise<OrgiqBuild> {
     read('Work', searchWorkItems({ limit: 200 }), []),
     read('Decisions', listDecisions({ limit: 200 }), []),
     read('Approved design decisions', listDesignReviews({ status: 'approved' }), []),
-    read('Knowledge', listItems({ limit: 1000 }), { items: [], total: 0, next_cursor: null }),
+    read('Runbooks', listRunbookSearchEntries(), [] as RunbookSearchEntry[]),
     read('Agent library', listAssets({ limit: 200 }), { assets: [], total: 0, facets: { kind: {}, tier: {}, role: {} } }),
   ]);
   if (graph && graph.peopleTotal > graph.nodes.length) partial.push('People source window is limited');
   if (projects.length >= 200) partial.push('Initiatives source window is limited');
   if (work.length >= 200) partial.push('Work source window is limited');
   if (decisions.length >= 200) partial.push('Decisions source window is limited');
-  if (knowledge.total > knowledge.items.length) partial.push('Knowledge source window is limited');
   if (assets.total > assets.assets.length) partial.push('Agent library source window is limited');
   const [summaries, details, decisionDetails] = await Promise.all([
     read('Initiative summaries', listProjectSummaries(projects.map(p => p.id)), new Map<string, string>()),
@@ -233,7 +224,7 @@ export async function buildOrgiqDocs(tenant: string): Promise<OrgiqBuild> {
     if (decisionIds.has(d.id)) { partial.push('Conflicting design decision ID'); return; }
     docs.push(designDoc(tenant, d));
   });
-  knowledge.items.forEach(k => docs.push(knowledgeDoc(tenant, k)));
+  knowledge.forEach(k => docs.push(knowledgeDoc(tenant, k)));
   assets.assets.forEach(a => docs.push(assetDoc(tenant, a)));
   return { docs, partial: [...new Set(partial)], failed };
 }
@@ -271,7 +262,7 @@ export async function projectOrgiqRecord(tenant: string, type: OrgiqDocType, id:
       return design?.status === 'approved' ? designDoc(tenant, design) : null;
     }
     case 'knowledge': {
-      const k = await getItem(id);
+      const k = await getRunbookSearchEntry(id);
       return k ? knowledgeDoc(tenant, k) : null;
     }
     case 'asset': {

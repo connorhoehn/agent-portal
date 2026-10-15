@@ -8,20 +8,6 @@ import WebSocket from 'ws';
 import { bases, db, durable, inbox, clients, pause, until, request, login, connect, send, call, close, upgradeStatus, seedUser, execute,
   huddleChannel, joinHuddle, sendHuddle, receivedHuddle } from './bff-cluster-fixture.mjs';
 
-async function cookieSocket(principal, node) {
-  const frames = [], ws = new WebSocket(bases[node].replace('http:', 'ws:') + '/realtime', {
-    headers: { cookie: [...principal.jar].map(([key, value]) => `${key}=${value}`).join('; ') },
-  });
-  const client = { ...principal, ws, frames }; clients.add(client);
-  ws.on('message', raw => frames.push(JSON.parse(String(raw)))); ws.on('error', () => {});
-  const status = await new Promise(resolve => {
-    ws.on('open', () => resolve(101));
-    ws.on('unexpected-response', (_req, response) => { resolve(response.statusCode); ws.terminate(); });
-  });
-  client.status = status;
-  return client;
-}
-
 test('two genuine tabs racing across full BFFs receive exactly one accepted seat', async () => {
   const alice = await connect(await login(0, 'u-theo'));
   const twins = [await connect(await login(0, 'u-vera')), await connect(await login(1, 'u-vera'))];
@@ -41,32 +27,6 @@ test('two genuine tabs racing across full BFFs receive exactly one accepted seat
       send(alice, { service: 'call', action: 'ended', callId, lobbyName, callerId: alice.userId, targetUserIds: ['u-vera'] });
     }
   } finally { close(alice, ...twins); }
-});
-
-test('a real REST job producer reaches both cookie and JWT peers, then stops for a retired cookie epoch', async () => {
-  await seedUser('cluster-distill-admin', [['orgiq', 'admin']]);
-  const source = await login(0, 'u-theo'), peer = await login(1, 'u-vera'), operator = await login(0, 'cluster-distill-admin');
-  const original = (await db.query('SELECT session_epoch FROM app_users WHERE id=$1', [peer.userId])).rows[0].session_epoch;
-  const sockets = [await cookieSocket(source, 0), await cookieSocket(peer, 1), await connect(peer)];
-  try {
-    for (const socket of sockets) {
-      if (socket.status !== undefined) assert.equal(socket.status, 101);
-      send(socket, { service: 'subscribe', action: 'subscribe', channel: 'orgiq:distill:jobs' });
-    }
-    await until(() => sockets.every(socket => socket.frames.some(frame => frame.action === 'subscribed' && frame.channel === 'orgiq:distill:jobs')), 'both authenticated transports subscribe');
-    const first = await request(operator, '/api/distillation/compact', 'POST', { level: 'L1', repo: 'orgiq/cluster-' + randomUUID().slice(0, 8) });
-    assert.equal(first.status, 201);
-    await until(() => sockets.every(socket => socket.frames.some(frame => frame.type === 'job' && frame.job?.id === first.body.id)), 'actual REST producer peer fanout');
-    await db.query('UPDATE app_users SET session_epoch=session_epoch+1 WHERE id=$1', [peer.userId]);
-    const second = await request(operator, '/api/distillation/compact', 'POST', { level: 'L1', repo: 'orgiq/cluster-' + randomUUID().slice(0, 8) });
-    assert.equal(second.status, 201);
-    await until(() => sockets[0].frames.some(frame => frame.job?.id === second.body.id), 'current source recipient remains live');
-    await pause(250);
-    assert.equal(sockets.slice(1).some(socket => socket.frames.some(frame => frame.job?.id === second.body.id)), false, 'retired recipients get no new REST job payload');
-    for (const node of [0, 1]) {
-      const refused = await cookieSocket(peer, node); assert.equal(refused.status, 401); close(refused);
-    }
-  } finally { await db.query('UPDATE app_users SET session_epoch=$2 WHERE id=$1', [peer.userId, original]); close(...sockets); }
 });
 
 test('two full BFFs share protected huddle messages and canonical Work pages', async () => {

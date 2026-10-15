@@ -14,6 +14,7 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
 import { RunbookDocView } from './RunbookDocView';
+import { useRunbookNames } from './useRunbookNames';
 import {
   KIND_LABEL, PROPOSAL_STATUS_LABEL, PROPOSAL_STATUS_TONE, lintCounts, proposalAuthor, proposalTitle, refusalMessage, runPageHref, runbookHref,
   viewerDiff,
@@ -43,6 +44,7 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
   const [scopeRef, setScopeRef] = useState('');
   const [mergeInto, setMergeInto] = useState('');
   const [busy, setBusy] = useState(false);
+  const names = useRunbookNames();
   const data = detail.data;
   const titles = new Map(published.map((r) => [r.id, r.title]));
   useCrumbLabel(pid, data ? proposalTitle(data.proposal, titles) : undefined);
@@ -50,7 +52,7 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
   if (detail.error && !data) {
     return (
       <Stack className="p-6" data-testid="proposal-missing">
-        <UnavailableNotice error={isNotFoundError(detail.error) ? `No proposal ${pid} exists.` : detail.error} what="this proposal" source="Proposals are read from the runbook store" onRetry={detail.refresh} />
+        <UnavailableNotice error={isNotFoundError(detail.error) ? 'That proposal does not exist.' : detail.error} what="this proposal" source="Proposals are read from the runbook store" onRetry={detail.refresh} />
       </Stack>
     );
   }
@@ -58,7 +60,7 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
   const { proposal: p, runbook, can_review: canReview } = data;
   const open = p.status === 'open';
   const title = proposalTitle(p, titles);
-  const author = proposalAuthor(p);
+  const author = proposalAuthor(p, names);
   const counts = lintCounts(p.lint);
   const stale = open && runbook != null && p.base_version != null && p.base_version !== runbook.current_version;
   const retired = runbook?.status === 'retired';
@@ -101,9 +103,10 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
   };
 
   const sources = [
-    ...(p.source.run_ref ? [{ id: 'run', title: `Run ${p.source.run_ref}`, kind: 'transcript' as const, meta: 'The run that proposed it', onOpen: () => onOpen(runPageHref(p.source.run_ref!)) }] : []),
-    ...(p.source.session_id ? [{ id: 'session', title: `Session ${p.source.session_id}`, kind: 'transcript' as const, meta: 'Its session' }] : []),
-    ...p.source.lab_experience_ids.map((l) => ({ id: `lab:${l}`, title: `Run note ${l}`, kind: 'transcript' as const, meta: 'Evidence cited' })),
+    ...(p.source.run_ref ? [{ id: 'run', title: names.run(p.source.run_ref), kind: 'transcript' as const, meta: 'The run that proposed it', onOpen: () => onOpen(runPageHref(p.source.run_ref!)) }] : []),
+    // The seeded runs are their own sessions; a separate session row only helps when it is a different one.
+    ...(p.source.session_id && p.source.session_id !== p.source.run_ref ? [{ id: 'session', title: 'The session it ran in', kind: 'transcript' as const, meta: 'Its session' }] : []),
+    ...p.source.lab_experience_ids.map((l, k) => ({ id: `lab:${l}`, title: `Run note ${k + 1}`, kind: 'transcript' as const, meta: 'Evidence cited' })),
   ];
 
   return (
@@ -118,8 +121,8 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
     >
       <Stack gap="md" className="w-full max-w-4xl px-5 py-4">
         {!open && (
-          <Banner variant={p.status === 'accepted' ? 'success' : 'info'} layout="callout" icon title={`${PROPOSAL_STATUS_LABEL[p.status]}${p.decided_by ? ` by ${p.decided_by}` : ''}${p.decided_at ? ` ${relativeTime(p.decided_at)}` : ''}`} data-testid="proposal-decided">
-            {p.note ?? (p.merged_into ? `Merged into proposal ${p.merged_into}.` : 'No note was left.')}
+          <Banner variant={p.status === 'accepted' ? 'success' : 'info'} layout="callout" icon title={`${PROPOSAL_STATUS_LABEL[p.status]}${p.decided_by ? ` by ${names.person(p.decided_by)}` : ''}${p.decided_at ? ` ${relativeTime(p.decided_at)}` : ''}`} data-testid="proposal-decided">
+            {p.note ?? (p.merged_into ? 'Merged into another proposal for review.' : 'No note was left.')}
           </Banner>
         )}
         {stale && (
@@ -137,7 +140,7 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
             <Stack gap="xs">
               {p.similar.map((s) => (
                 <Inline key={s.runbook_id} gap="sm" align="center">
-                  <Button variant="link" size="sm" onClick={() => onOpen(runbookHref(s.runbook_id))}>{s.runbook_id}</Button>
+                  <Button variant="link" size="sm" onClick={() => onOpen(runbookHref(s.runbook_id))} title={s.runbook_id}>{titles.get(s.runbook_id) ?? names.runbook(s.runbook_id)}</Button>
                   <T size="xs" tone="tertiary">{s.reason}</T>
                 </Inline>
               ))}
@@ -170,10 +173,18 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
                     options={[{ value: 'org', label: 'Whole organisation' }, { value: 'initiative', label: 'An initiative' }, { value: 'repo', label: 'A repository' }, { value: 'tool', label: 'A tool' }]} />
                 )}
               </FormField>
-              {scopeKind !== 'org' && (
+              {scopeKind === 'initiative' && names.initiatives.length > 0 && (
+                <FormField label="Which initiative">
+                  {({ labelId: _l, ...w }) => (
+                    <Select {...w} size="sm" className="w-auto min-w-56" value={scopeRef} placeholder="Choose an initiative…" onChange={(e) => setScopeRef(e.target.value)}
+                      options={names.initiatives.map((i) => ({ value: i.id, label: i.name }))} />
+                  )}
+                </FormField>
+              )}
+              {scopeKind !== 'org' && !(scopeKind === 'initiative' && names.initiatives.length > 0) && (
                 <FormField label="Which one">
                   {({ labelId: _l, ...w }) => (
-                    <Input {...w} value={scopeRef} onChange={(e) => setScopeRef(e.target.value)} placeholder={scopeKind === 'initiative' ? 'p-auth-migration' : scopeKind === 'repo' ? 'orgiq-auth-service' : 'fargate'} />
+                    <Input {...w} value={scopeRef} onChange={(e) => setScopeRef(e.target.value)} placeholder={scopeKind === 'initiative' ? 'Initiative reference' : scopeKind === 'repo' ? 'orgiq-auth-service' : 'fargate'} />
                   )}
                 </FormField>
               )}
@@ -184,7 +195,7 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
         {p.kind !== 'retire' && (
           <DetailSection variant="heading" first title="What it changes" hint={data.diff ? `+${data.diff.added} −${data.diff.removed}` : undefined}>
             {data.diff?.text
-              ? <DiffViewer diff={viewerDiff(data.diff.text, `${p.runbook_id ?? 'new-runbook'}.md`)} data-testid="proposal-diff" />
+              ? <DiffViewer diff={viewerDiff(data.diff.text, `${title}.md`)} data-testid="proposal-diff" />
               : <T size="sm" tone="secondary">The proposal has no textual change.</T>}
           </DetailSection>
         )}
@@ -192,8 +203,8 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
         {p.lint.length > 0 && (
           <DetailSection variant="heading" title="Lint findings" hint={`${counts.errors} errors · ${counts.warnings} warnings`}>
             <Stack gap="xs" data-testid="proposal-lint">
-              {p.lint.map((f: LintFinding) => (
-                <Banner key={`${f.rule}:${f.path}`} variant={f.severity === 'error' ? 'error' : 'warning'} title={`${f.rule} · ${f.path}`}>{f.message}</Banner>
+              {p.lint.map((f: LintFinding, i) => (
+                <Banner key={`${i}:${f.rule}:${f.path}`} variant={f.severity === 'error' ? 'error' : 'warning'} title={`${f.rule} · ${f.path}`}>{f.message}</Banner>
               ))}
             </Stack>
           </DetailSection>

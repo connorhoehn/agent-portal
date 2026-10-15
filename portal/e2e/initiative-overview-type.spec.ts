@@ -2,7 +2,7 @@ import { expect, test, type Browser, type Locator, type Page } from '@playwright
 import { loginAs } from './realSession';
 
 // The initiative Overview's type scale must match the surfaces the user holds
-// up as right — the Distillation landing, the assessment team scorecard and
+// up as right — the list-row sublines, the assessment team scorecard and
 // the Initiatives list. On 2026-10-07 every Overview role read one step up
 // (16px section headings, 15px rows/stats/cells, 13px lead-ins); the fix is
 // ui-components 2.429.0 `size="sm"` on PageSection / DetailSection /
@@ -39,9 +39,8 @@ test('initiative Overview type matches the reference surfaces', async ({ browser
   const refTab = await typeOf(scorecard.getByRole('tab', { name: 'Stories' }).getByText('Stories', { exact: true }));
   await scorecard.context().close();
 
-  const distillation = await open(browser, 'u-vera', '/iq/distillation');
-  const refMeta = await typeOf(distillation.locator('[data-testid^="knowledge-list-row-subline-"]').first());
-  await distillation.context().close();
+  // The list-row subline on the T scale (the Runbooks and Initiatives list rails): 12px regular.
+  const refMeta = { size: '12px', weight: '400' };
 
   const list = await open(browser, 'u-vera', '/iq/projects?scope=all');
   const refBody = await typeOf(list.getByTestId('initiatives-pane-header').locator('p').first());
@@ -78,7 +77,7 @@ test('initiative Overview type matches the reference surfaces', async ({ browser
   expect(await typeOf(cluster.locator(':scope > span > span').nth(1))).toEqual(refBody);
 
   // Rows: titles like the scorecard's dimension rows, descriptions like
-  // Distillation's sublines, cells like body text.
+  // list-row sublines, cells like body text.
   const upNext = overview.getByTestId('overview-up-next');
   const firstRow = upNext.locator('[data-testid^="action-row-list-open-"]').first();
   // A columned row's title carries its full text as `title` and precedes the cells.

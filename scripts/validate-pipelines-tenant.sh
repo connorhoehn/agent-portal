@@ -262,8 +262,8 @@ if [ ! -f "$PROJ" ]; then fail "$PROJ missing (the projection + crosswalk, pure)
   grep -qE "^import .*from '(express|\.\./routes|\.\./providers/aurora)" "$PROJ" && fail "$PROJ imports I/O — the projection must be pure" || ok "projection is pure (no express / route / aurora import)"
 fi
 if [ -f "$PROJ_TEST" ]; then
-  f_miss=""; for fx in agentJobs botRuns agentProjectRuns runsFixture compactionJobs; do has "\b$fx\b" "$PROJ_TEST" || f_miss="$f_miss $fx"; done
-  [ -z "$f_miss" ] && ok "projection test loads all five fixtures" || fail "$PROJ_TEST does not load:$f_miss"
+  f_miss=""; for fx in agentJobs botRuns agentProjectRuns runsFixture traceRows; do has "\b$fx\b" "$PROJ_TEST" || f_miss="$f_miss $fx"; done
+  [ -z "$f_miss" ] && ok "projection test loads every fixture" || fail "$PROJ_TEST does not load:$f_miss"
   has "sourceStatus" "$PROJ_TEST" && ok "projection test asserts sourceStatus" || fail "$PROJ_TEST never asserts context.sourceStatus"
 fi
 run_jest "projection property (every seed row of the five sources once, valid status)" "$PROJ_TEST"

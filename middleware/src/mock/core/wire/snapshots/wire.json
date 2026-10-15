@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-15T12:58:13.426Z",
-  "serverHandlerSha": "5099cea1d71af2708e0f68416fd1e28d232280b477e01486fb2099ad6e15cc87",
-  "baseUrl": "http://127.0.0.1:3013",
+  "capturedAt": "2026-10-15T15:59:50.417Z",
+  "serverHandlerSha": "6e566083db2f0a56ad0c8f298513d24abfc58afb43d6568c0f1c3cf40f41798b",
+  "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -80,32 +80,6 @@
         "demo.milestones.running3": "boolean",
         "demo.phase": "string",
         "demo.startedAt": "null",
-        "distillationDemo": "object",
-        "distillationDemo.applicationId": "null",
-        "distillationDemo.beatMs": "number",
-        "distillationDemo.errors": "array",
-        "distillationDemo.finishedAt": "null",
-        "distillationDemo.guideId": "null",
-        "distillationDemo.jobs": "object",
-        "distillationDemo.jobs.guide": "null",
-        "distillationDemo.jobs.patterns": "null",
-        "distillationDemo.jobs.retry": "null",
-        "distillationDemo.milestones": "object",
-        "distillationDemo.milestones.applied": "boolean",
-        "distillationDemo.milestones.guideMinted": "boolean",
-        "distillationDemo.milestones.notesWritten": "number",
-        "distillationDemo.milestones.patternsMinted": "boolean",
-        "distillationDemo.milestones.published": "boolean",
-        "distillationDemo.milestones.retried": "boolean",
-        "distillationDemo.milestones.reviewed": "boolean",
-        "distillationDemo.milestones.sampled": "boolean",
-        "distillationDemo.notes": "array",
-        "distillationDemo.notesTotal": "number",
-        "distillationDemo.openDecidedBy": "null",
-        "distillationDemo.patterns": "object",
-        "distillationDemo.phase": "string",
-        "distillationDemo.samples": "object",
-        "distillationDemo.startedAt": "null",
         "enabled": "boolean",
         "fixtures": "array",
         "fixtures[]": "object",
@@ -115,6 +89,22 @@
         "fixtures[].scenario": "string",
         "handlerSha": "string",
         "registryLoaded": "boolean",
+        "runbooksDemo": "object",
+        "runbooksDemo.acceptedVersion": "null",
+        "runbooksDemo.beatMs": "number",
+        "runbooksDemo.errors": "array",
+        "runbooksDemo.finishedAt": "null",
+        "runbooksDemo.first": "null",
+        "runbooksDemo.milestones": "object",
+        "runbooksDemo.milestones.accepted": "boolean",
+        "runbooksDemo.milestones.firstBrief": "boolean",
+        "runbooksDemo.milestones.proposed": "boolean",
+        "runbooksDemo.milestones.secondBrief": "boolean",
+        "runbooksDemo.milestones.secondBriefCarriesAccepted": "boolean",
+        "runbooksDemo.phase": "string",
+        "runbooksDemo.proposalId": "null",
+        "runbooksDemo.second": "null",
+        "runbooksDemo.startedAt": "null",
         "scenario": "string",
         "scopes": "number"
       },
@@ -122,11 +112,11 @@
         "demo.phase": [
           "idle"
         ],
-        "distillationDemo.phase": [
-          "idle"
-        ],
         "fixtures[].scenario": [
           "default"
+        ],
+        "runbooksDemo.phase": [
+          "idle"
         ],
         "scenario": [
           "default"
@@ -2256,9 +2246,35 @@
       "shape": {
         "$": "object",
         "briefs": "array",
+        "briefs[]": "object",
+        "briefs[].assembled_at": "string",
+        "briefs[].assembler_version": "string",
+        "briefs[].budget_tokens": "number",
+        "briefs[].id": "string",
+        "briefs[].initiative_id": "string",
+        "briefs[].omitted": "array",
+        "briefs[].repo": "string",
+        "briefs[].run_ref": "string",
+        "briefs[].sections": "array",
+        "briefs[].sections[]": "object",
+        "briefs[].sections[].kind": "string",
+        "briefs[].sections[].reason": "string",
+        "briefs[].sections[].ref": "null|string",
+        "briefs[].sections[].tokens": "number",
+        "briefs[].sections[].version": "number",
+        "briefs[].sha256": "string",
+        "briefs[].used_tokens": "number",
+        "briefs[].work_item_id": "null",
         "next": "null"
       },
-      "values": {}
+      "values": {
+        "briefs[].sections[].kind": [
+          "framing",
+          "how_to_report",
+          "initiative",
+          "runbook"
+        ]
+      }
     },
     "GET /api/budgets": {
       "persona": "orgiq/admin",
@@ -2890,6 +2906,7 @@
       "values": {
         "boxes[].status": [
           "idle",
+          "provisioning",
           "running",
           "waiting"
         ]
@@ -2930,757 +2947,6 @@
           "orgiq"
         ]
       }
-    },
-    "GET /api/distillation/artifacts": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "artifacts": "array",
-        "artifacts[]": "object",
-        "artifacts[].body_markdown": "string",
-        "artifacts[].classification": "string",
-        "artifacts[].cluster_ids": "array",
-        "artifacts[].cluster_ids[]": "string",
-        "artifacts[].confidence": "number",
-        "artifacts[].created_at": "string",
-        "artifacts[].created_by_compaction_id": "string",
-        "artifacts[].facts": "array",
-        "artifacts[].facts[]": "string",
-        "artifacts[].id": "string",
-        "artifacts[].last_used_at": "null|string",
-        "artifacts[].library_item_id": "null|string",
-        "artifacts[].owner": "string",
-        "artifacts[].reviewed_at": "null|string",
-        "artifacts[].reviewed_by": "null|string",
-        "artifacts[].status": "string",
-        "artifacts[].summary": "string",
-        "artifacts[].title": "string",
-        "artifacts[].type": "string",
-        "artifacts[].updated_at": "string",
-        "artifacts[].when_this_helps": "null|string"
-      },
-      "values": {
-        "artifacts[].classification": [
-          "confidential",
-          "internal"
-        ],
-        "artifacts[].status": [
-          "draft",
-          "published",
-          "retired"
-        ],
-        "artifacts[].type": [
-          "convention",
-          "decision",
-          "insight",
-          "procedure",
-          "runbook"
-        ]
-      }
-    },
-    "GET /api/distillation/compactions": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "jobs": "array",
-        "jobs[]": "object",
-        "jobs[].attempts": "number",
-        "jobs[].bytesReclaimed": "number",
-        "jobs[].costUsd": "number",
-        "jobs[].cost_usd": "number",
-        "jobs[].dedupedItems": "number",
-        "jobs[].duration_ms": "number",
-        "jobs[].error": "string",
-        "jobs[].finishedAt": "string",
-        "jobs[].id": "string",
-        "jobs[].inputItems": "number",
-        "jobs[].input_ids": "array",
-        "jobs[].input_ids[]": "string",
-        "jobs[].level": "string",
-        "jobs[].log": "array",
-        "jobs[].log[]": "object",
-        "jobs[].log[].at": "string",
-        "jobs[].log[].level": "string",
-        "jobs[].log[].message": "string",
-        "jobs[].outputItems": "number",
-        "jobs[].output_ids": "array",
-        "jobs[].output_ids[]": "string",
-        "jobs[].percent": "null|number",
-        "jobs[].phase": "string",
-        "jobs[].produced": "object",
-        "jobs[].produced.artifact_ids": "array",
-        "jobs[].produced.artifact_ids[]": "string",
-        "jobs[].produced.cluster_ids": "array",
-        "jobs[].produced.cluster_ids[]": "string",
-        "jobs[].queue": "string",
-        "jobs[].queued_at": "string",
-        "jobs[].repo": "null",
-        "jobs[].requested_by": "null",
-        "jobs[].startedAt": "string",
-        "jobs[].status": "string",
-        "jobs[].stepLabel": "null",
-        "jobs[].what_changed": "string"
-      },
-      "values": {
-        "jobs[].level": [
-          "L1",
-          "L2"
-        ],
-        "jobs[].log[].level": [
-          "error",
-          "info"
-        ],
-        "jobs[].phase": [
-          "done",
-          "failed"
-        ],
-        "jobs[].status": [
-          "failed",
-          "succeeded"
-        ]
-      }
-    },
-    "GET /api/distillation/compactions/:id": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "attempts": "number",
-        "bytesReclaimed": "number",
-        "costUsd": "number",
-        "cost_usd": "number",
-        "dedupedItems": "number",
-        "duration_ms": "number",
-        "finishedAt": "string",
-        "id": "string",
-        "inputItems": "number",
-        "input_ids": "array",
-        "input_ids[]": "string",
-        "level": "string",
-        "log": "array",
-        "log[]": "object",
-        "log[].at": "string",
-        "log[].level": "string",
-        "log[].message": "string",
-        "outputItems": "number",
-        "output_ids": "array",
-        "output_ids[]": "string",
-        "percent": "number",
-        "phase": "string",
-        "produced": "object",
-        "produced.artifact_ids": "array",
-        "produced.cluster_ids": "array",
-        "produced.cluster_ids[]": "string",
-        "queue": "string",
-        "queued_at": "string",
-        "repo": "null",
-        "requested_by": "null",
-        "startedAt": "string",
-        "status": "string",
-        "stepLabel": "null",
-        "what_changed": "string"
-      },
-      "values": {
-        "level": [
-          "L1"
-        ],
-        "log[].level": [
-          "info"
-        ],
-        "phase": [
-          "done"
-        ],
-        "status": [
-          "succeeded"
-        ]
-      }
-    },
-    "GET /api/distillation/facets": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "initiatives": "array",
-        "initiatives[]": "object",
-        "initiatives[].count": "number",
-        "initiatives[].label": "string",
-        "initiatives[].value": "string",
-        "kinds": "array",
-        "kinds[]": "object",
-        "kinds[].count": "number",
-        "kinds[].label": "string",
-        "kinds[].value": "string",
-        "repos": "array",
-        "repos[]": "object",
-        "repos[].count": "number",
-        "repos[].label": "string",
-        "repos[].value": "string"
-      },
-      "values": {}
-    },
-    "GET /api/distillation/facts/:id/lineage": {
-      "skipped": "no value found for :id under /api/distillation/facts (orgiq/admin); no value found for :id under /api/distillation/facts (assessment/admin); no value found for :id under /api/distillation/facts (anonymous)"
-    },
-    "GET /api/distillation/ingest": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "activeWriters": "number",
-        "observationsPerHour": "number",
-        "topRepos": "array",
-        "topRepos[]": "object",
-        "topRepos[].repo": "string",
-        "topRepos[].share": "number"
-      },
-      "values": {}
-    },
-    "GET /api/distillation/items": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "items": "array",
-        "items[]": "object",
-        "items[].body": "string",
-        "items[].body_markdown": "string",
-        "items[].box_id": "string",
-        "items[].classification": "string",
-        "items[].cluster_ids": "array",
-        "items[].cluster_ids[]": "string",
-        "items[].confidence": "number",
-        "items[].created_at": "string",
-        "items[].created_by_compaction_id": "string",
-        "items[].facts": "array",
-        "items[].facts[]": "string",
-        "items[].id": "string",
-        "items[].initiative_id": "string",
-        "items[].kind": "string",
-        "items[].last_used_at": "null|string",
-        "items[].level": "string",
-        "items[].library_item_id": "null|string",
-        "items[].member_observation_ids": "array",
-        "items[].member_observation_ids[]": "string",
-        "items[].owner": "string",
-        "items[].repo": "string",
-        "items[].reviewed_at": "null|string",
-        "items[].reviewed_by": "null|string",
-        "items[].session_id": "string",
-        "items[].status": "string",
-        "items[].summary": "string",
-        "items[].tags": "array",
-        "items[].tags[]": "string",
-        "items[].title": "string",
-        "items[].type": "string",
-        "items[].updated_at": "string",
-        "items[].when_this_helps": "string",
-        "next_cursor": "string",
-        "total": "number"
-      },
-      "values": {
-        "items[].classification": [
-          "confidential",
-          "internal"
-        ],
-        "items[].kind": [
-          "convention",
-          "decision",
-          "failed",
-          "gotcha",
-          "worked"
-        ],
-        "items[].level": [
-          "L0",
-          "L1",
-          "L2"
-        ],
-        "items[].status": [
-          "draft",
-          "published"
-        ],
-        "items[].type": [
-          "procedure"
-        ]
-      }
-    },
-    "GET /api/distillation/items/:id": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "body_markdown": "string",
-        "classification": "string",
-        "cluster_ids": "array",
-        "cluster_ids[]": "string",
-        "confidence": "number",
-        "created_at": "string",
-        "created_by_compaction_id": "string",
-        "facts": "array",
-        "facts[]": "string",
-        "guide": "object",
-        "guide.approach": "array",
-        "guide.approach[]": "object",
-        "guide.approach[].ordinal": "number",
-        "guide.approach[].step_id": "string",
-        "guide.approach[].text": "string",
-        "guide.based_on": "array",
-        "guide.based_on[]": "object",
-        "guide.based_on[].id": "string",
-        "guide.based_on[].kind": "string",
-        "guide.based_on[].repo": "string",
-        "guide.based_on[].repo_label": "string",
-        "guide.based_on[].title": "string",
-        "guide.run_warning": "object",
-        "guide.run_warning.at": "string",
-        "guide.run_warning.body": "string",
-        "guide.run_warning.failed_at_ordinal": "number",
-        "guide.run_warning.outcome": "string",
-        "guide.run_warning.run_id": "string",
-        "guide.run_warning.title": "string",
-        "id": "string",
-        "last_used_at": "null",
-        "level": "string",
-        "library_item_id": "null",
-        "owner": "string",
-        "reviewed_at": "null",
-        "reviewed_by": "null",
-        "status": "string",
-        "summary": "string",
-        "title": "string",
-        "type": "string",
-        "updated_at": "string",
-        "when_this_helps": "string"
-      },
-      "values": {
-        "classification": [
-          "confidential"
-        ],
-        "guide.based_on[].kind": [
-          "cluster"
-        ],
-        "guide.run_warning.outcome": [
-          "failed"
-        ],
-        "level": [
-          "L2"
-        ],
-        "status": [
-          "draft"
-        ],
-        "type": [
-          "procedure"
-        ]
-      }
-    },
-    "GET /api/distillation/items/:id/lineage": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "edges": "array",
-        "edges[]": "object",
-        "edges[].from": "string",
-        "edges[].relation": "string",
-        "edges[].to": "string",
-        "nodes": "array",
-        "nodes[]": "object",
-        "nodes[].id": "string",
-        "nodes[].kind": "string",
-        "nodes[].label": "string",
-        "nodes[].meta": "object",
-        "nodes[].meta.applied_at": "string",
-        "nodes[].meta.artifactType": "string",
-        "nodes[].meta.box_id": "string",
-        "nodes[].meta.clusterKind": "string",
-        "nodes[].meta.confidence": "number",
-        "nodes[].meta.created_at": "string",
-        "nodes[].meta.failed_at_step_id": "null|string",
-        "nodes[].meta.initiative_id": "string",
-        "nodes[].meta.library_item_id": "null",
-        "nodes[].meta.memberCount": "number",
-        "nodes[].meta.object": "string",
-        "nodes[].meta.obsKind": "string",
-        "nodes[].meta.ordinal": "number",
-        "nodes[].meta.outcome": "string",
-        "nodes[].meta.plain": "string",
-        "nodes[].meta.predicate": "string",
-        "nodes[].meta.repo": "string",
-        "nodes[].meta.session_id": "string",
-        "nodes[].meta.status": "string",
-        "nodes[].meta.subject": "string",
-        "nodes[].meta.subtitle": "string"
-      },
-      "values": {
-        "nodes[].kind": [
-          "application",
-          "artifact",
-          "cluster",
-          "fact",
-          "observation"
-        ],
-        "nodes[].meta.outcome": [
-          "failed",
-          "succeeded"
-        ],
-        "nodes[].meta.status": [
-          "draft"
-        ]
-      }
-    },
-    "GET /api/distillation/items/:id/sources": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "sources": "array",
-        "sources[]": "object",
-        "sources[].excerpt": "string",
-        "sources[].id": "string",
-        "sources[].kind": "string",
-        "sources[].repo": "string",
-        "sources[].session_id": "string",
-        "sources[].timestamp": "string",
-        "sources[].title": "string"
-      },
-      "values": {
-        "sources[].kind": [
-          "cluster",
-          "observation"
-        ]
-      }
-    },
-    "GET /api/distillation/levels": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "health": "array",
-        "health[]": "object",
-        "health[].level": "string",
-        "health[].reason": "string",
-        "health[].status": "string",
-        "levels": "array",
-        "levels[]": "object",
-        "levels[].backlog": "number",
-        "levels[].digest": "string",
-        "levels[].health": "object",
-        "levels[].health.lagSeconds": "number",
-        "levels[].health.reason": "string",
-        "levels[].health.state": "string",
-        "levels[].items": "number",
-        "levels[].lagSeconds": "number",
-        "levels[].lastCompletedAt": "null|string",
-        "levels[].level": "string",
-        "levels[].oldestAt": "string",
-        "levels[].sizeBytes": "number",
-        "levels[].writers": "number"
-      },
-      "values": {
-        "health[].level": [
-          "L0",
-          "L1",
-          "L2"
-        ],
-        "health[].status": [
-          "behind",
-          "healthy",
-          "stalled"
-        ],
-        "levels[].health.state": [
-          "behind",
-          "ok",
-          "stalled"
-        ],
-        "levels[].level": [
-          "L0",
-          "L1",
-          "L2"
-        ]
-      }
-    },
-    "GET /api/distillation/library/:libraryItemId/provenance": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "artifact": "null",
-        "lineage": "null"
-      },
-      "values": {}
-    },
-    "GET /api/distillation/procedures": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "procedures": "array",
-        "procedures[]": "object",
-        "procedures[].applied_per_day": "array",
-        "procedures[].applied_per_day[]": "number",
-        "procedures[].artifact": "object",
-        "procedures[].artifact.body_markdown": "string",
-        "procedures[].artifact.classification": "string",
-        "procedures[].artifact.cluster_ids": "array",
-        "procedures[].artifact.cluster_ids[]": "string",
-        "procedures[].artifact.confidence": "number",
-        "procedures[].artifact.created_at": "string",
-        "procedures[].artifact.created_by_compaction_id": "string",
-        "procedures[].artifact.facts": "array",
-        "procedures[].artifact.facts[]": "string",
-        "procedures[].artifact.id": "string",
-        "procedures[].artifact.last_used_at": "null|string",
-        "procedures[].artifact.library_item_id": "null|string",
-        "procedures[].artifact.owner": "string",
-        "procedures[].artifact.reviewed_at": "null|string",
-        "procedures[].artifact.reviewed_by": "null|string",
-        "procedures[].artifact.status": "string",
-        "procedures[].artifact.summary": "string",
-        "procedures[].artifact.title": "string",
-        "procedures[].artifact.type": "string",
-        "procedures[].artifact.updated_at": "string",
-        "procedures[].artifact.when_this_helps": "string",
-        "procedures[].drift": "object",
-        "procedures[].drift.failed_runs": "number",
-        "procedures[].drift.new_gotcha_clusters": "number",
-        "procedures[].health": "object",
-        "procedures[].health.reason": "string",
-        "procedures[].health.status": "string",
-        "procedures[].last_applied_at": "null|string",
-        "procedures[].last_succeeded_at": "null|string",
-        "procedures[].last_succeeded_by": "null|string",
-        "procedures[].repo": "string",
-        "procedures[].runs": "object",
-        "procedures[].runs.abandoned": "number",
-        "procedures[].runs.failed": "number",
-        "procedures[].runs.succeeded": "number",
-        "procedures[].runs.total": "number",
-        "procedures[].step_count": "number"
-      },
-      "values": {
-        "procedures[].artifact.classification": [
-          "confidential",
-          "internal"
-        ],
-        "procedures[].artifact.status": [
-          "draft",
-          "published"
-        ],
-        "procedures[].artifact.type": [
-          "procedure"
-        ],
-        "procedures[].health.status": [
-          "drifting",
-          "proven",
-          "unproven"
-        ]
-      }
-    },
-    "GET /api/distillation/procedures/:id": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "applied_per_day": "array",
-        "applied_per_day[]": "number",
-        "artifact": "object",
-        "artifact.body_markdown": "string",
-        "artifact.classification": "string",
-        "artifact.cluster_ids": "array",
-        "artifact.cluster_ids[]": "string",
-        "artifact.confidence": "number",
-        "artifact.created_at": "string",
-        "artifact.created_by_compaction_id": "string",
-        "artifact.facts": "array",
-        "artifact.facts[]": "string",
-        "artifact.id": "string",
-        "artifact.last_used_at": "null",
-        "artifact.library_item_id": "null",
-        "artifact.owner": "string",
-        "artifact.reviewed_at": "null",
-        "artifact.reviewed_by": "null",
-        "artifact.status": "string",
-        "artifact.summary": "string",
-        "artifact.title": "string",
-        "artifact.type": "string",
-        "artifact.updated_at": "string",
-        "artifact.when_this_helps": "string",
-        "drift": "object",
-        "drift.failed_runs": "number",
-        "drift.new_gotcha_clusters": "number",
-        "health": "object",
-        "health.reason": "string",
-        "health.status": "string",
-        "last_applied_at": "string",
-        "last_succeeded_at": "string",
-        "last_succeeded_by": "string",
-        "repo": "string",
-        "runs": "object",
-        "runs.abandoned": "number",
-        "runs.failed": "number",
-        "runs.succeeded": "number",
-        "runs.total": "number",
-        "step_count": "number"
-      },
-      "values": {
-        "artifact.classification": [
-          "confidential"
-        ],
-        "artifact.status": [
-          "draft"
-        ],
-        "artifact.type": [
-          "procedure"
-        ],
-        "health.status": [
-          "drifting"
-        ]
-      }
-    },
-    "GET /api/distillation/procedures/:id/applications": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "applications": "array",
-        "applications[]": "object|object(dictionary)",
-        "applications[].advice": "null",
-        "applications[].applied_at": "string",
-        "applications[].box_id": "string",
-        "applications[].failed_at_step_id": "null",
-        "applications[].id": "string",
-        "applications[].note": "null",
-        "applications[].outcome": "string",
-        "applications[].plain_reason": "null",
-        "applications[].procedure_id": "string",
-        "applications[].repo": "string",
-        "applications[].session_id": "string"
-      },
-      "values": {
-        "applications[].outcome": [
-          "succeeded"
-        ]
-      }
-    },
-    "GET /api/distillation/procedures/:id/runs": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "runs": "array",
-        "runs[]": "object",
-        "runs[].actor": "string",
-        "runs[].at": "string",
-        "runs[].box_id": "string",
-        "runs[].failed_at_step_id": "null|string",
-        "runs[].id": "string",
-        "runs[].note": "null|string",
-        "runs[].outcome": "string",
-        "runs[].steps": "array",
-        "runs[].steps[]": "object",
-        "runs[].steps[].status": "string",
-        "runs[].steps[].step_id": "string"
-      },
-      "values": {
-        "runs[].outcome": [
-          "failed",
-          "succeeded"
-        ],
-        "runs[].steps[].status": [
-          "done",
-          "failed",
-          "pending"
-        ]
-      }
-    },
-    "GET /api/distillation/relationships/:kind/:id": {
-      "skipped": "no value found for :kind under /api/distillation/relationships (orgiq/admin); no value found for :kind under /api/distillation/relationships (assessment/admin); no value found for :kind under /api/distillation/relationships (anonymous)"
-    },
-    "GET /api/distillation/replication": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "inSync": "boolean",
-        "primary": "object",
-        "primary.digest": "string",
-        "primary.id": "string",
-        "replicas": "array",
-        "replicas[]": "object",
-        "replicas[].digest": "string",
-        "replicas[].id": "string",
-        "replicas[].lagMs": "number",
-        "replicas[].lastSync": "string",
-        "replicas[].repaired": "number"
-      },
-      "values": {}
-    },
-    "GET /api/distillation/review": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "samples": "array",
-        "samples[]": "object",
-        "samples[].id": "string",
-        "samples[].note": "null|string",
-        "samples[].reviewer": "null|string",
-        "samples[].sampled_at": "string",
-        "samples[].target": "object",
-        "samples[].target.id": "string",
-        "samples[].target.kind": "string",
-        "samples[].target.repo": "string",
-        "samples[].target.source_count": "number",
-        "samples[].target.title": "string",
-        "samples[].target.type": "string",
-        "samples[].target_id": "string",
-        "samples[].target_kind": "string",
-        "samples[].verdict": "string"
-      },
-      "values": {
-        "samples[].target.kind": [
-          "artifact",
-          "cluster"
-        ],
-        "samples[].target.type": [
-          "convention",
-          "decision",
-          "failed",
-          "gotcha",
-          "insight",
-          "procedure",
-          "runbook",
-          "worked"
-        ],
-        "samples[].verdict": [
-          "agree",
-          "disagree",
-          "pending"
-        ]
-      }
-    },
-    "GET /api/distillation/sampling": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "agreementRatePct": "number",
-        "l1SampleRatePct": "number",
-        "queueDepth": "number",
-        "reviewedLast30d": "number",
-        "verdict": "object",
-        "verdict.reason": "string",
-        "verdict.verdict": "string"
-      },
-      "values": {
-        "verdict.verdict": [
-          "calibrated"
-        ]
-      }
-    },
-    "GET /api/distillation/sessions/:id": {
-      "skipped": "no value found for :id under /api/distillation/sessions (orgiq/admin); no value found for :id under /api/distillation/sessions (assessment/admin); no value found for :id under /api/distillation/sessions (anonymous)"
     },
     "GET /api/drop/:token": {
       "skipped": "no value found for :token under /api/drop (orgiq/admin); no value found for :token under /api/drop (assessment/admin); no value found for :token under /api/drop (anonymous)"
@@ -4465,12 +3731,12 @@
           "ORG-INF-1",
           "ORG-INF-2",
           "ORG-INF-3",
+          "ORG-INF-4",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
           "ORG-LLM-1",
           "ORG-LLM-10",
-          "ORG-LLM-2",
           "ORG-LLM-3",
           "ORG-LLM-4",
           "ORG-LLM-5",
@@ -4583,8 +3849,6 @@
         "mocks.cloudwatch": "boolean",
         "mocks.guardrails": "boolean",
         "realtime": "object",
-        "realtime.distillation": "object",
-        "realtime.distillation.router": "string",
         "realtime.gateway": "string",
         "realtime.store": "string",
         "region": "string",
@@ -5555,17 +4819,6 @@
         "assets[].contract.variables[].required": "boolean",
         "assets[].contract.variables[].source": "string",
         "assets[].contract.variables[].type": "string",
-        "assets[].derivedFrom": "object",
-        "assets[].derivedFrom.fromKind": "string",
-        "assets[].derivedFrom.sessionCount": "number",
-        "assets[].derivedFrom.supportCount": "number",
-        "assets[].derivedFrom.top": "array",
-        "assets[].derivedFrom.top[]": "object",
-        "assets[].derivedFrom.top[].id": "string",
-        "assets[].derivedFrom.top[].kind": "string",
-        "assets[].derivedFrom.top[].repo": "string",
-        "assets[].derivedFrom.top[].title": "string",
-        "assets[].derivedFrom.top[].weight": "number",
         "assets[].description": "string",
         "assets[].designReviewId": "null|string",
         "assets[].evalPassRate": "null|number",
@@ -5612,13 +4865,6 @@
           "enum",
           "longtext",
           "text"
-        ],
-        "assets[].derivedFrom.top[].kind": [
-          "convention",
-          "decision",
-          "failed",
-          "gotcha",
-          "worked"
         ],
         "assets[].kind": [
           "evaluator",
@@ -5694,17 +4940,6 @@
         "related[].asset.contract.variables[].required": "boolean",
         "related[].asset.contract.variables[].source": "string",
         "related[].asset.contract.variables[].type": "string",
-        "related[].asset.derivedFrom": "object",
-        "related[].asset.derivedFrom.fromKind": "string",
-        "related[].asset.derivedFrom.sessionCount": "number",
-        "related[].asset.derivedFrom.supportCount": "number",
-        "related[].asset.derivedFrom.top": "array",
-        "related[].asset.derivedFrom.top[]": "object",
-        "related[].asset.derivedFrom.top[].id": "string",
-        "related[].asset.derivedFrom.top[].kind": "string",
-        "related[].asset.derivedFrom.top[].repo": "string",
-        "related[].asset.derivedFrom.top[].title": "string",
-        "related[].asset.derivedFrom.top[].weight": "number",
         "related[].asset.description": "string",
         "related[].asset.designReviewId": "null|string",
         "related[].asset.evalPassRate": "number",
@@ -5745,13 +4980,6 @@
         "related[].asset.contract.variables[].type": [
           "enum",
           "longtext"
-        ],
-        "related[].asset.derivedFrom.top[].kind": [
-          "convention",
-          "decision",
-          "failed",
-          "gotcha",
-          "worked"
         ],
         "related[].asset.kind": [
           "evaluator",
@@ -7429,7 +6657,6 @@
         "artifacts[].meta.filesChanged": "number",
         "artifacts[].meta.href": "string",
         "artifacts[].meta.invocationId": "string",
-        "artifacts[].meta.level": "string",
         "artifacts[].meta.parentInvocationId": "string",
         "artifacts[].meta.status": "string",
         "artifacts[].meta.teamId": "string",
@@ -7452,9 +6679,6 @@
           "document",
           "trace",
           "transcript"
-        ],
-        "artifacts[].meta.level": [
-          "L2"
         ],
         "artifacts[].meta.status": [
           "changes_requested",
@@ -7819,8 +7043,7 @@
         "runs[].context.kind": [
           "agent",
           "assessment-command",
-          "bot",
-          "compaction"
+          "bot"
         ],
         "runs[].context.sources[].role": [
           "child",
@@ -7832,8 +7055,7 @@
           "completed",
           "done",
           "failed",
-          "running",
-          "succeeded"
+          "running"
         ],
         "runs[].context.tenant": [
           "assessment",
@@ -8658,8 +7880,7 @@
       "values": {
         "runs[].context.kind": [
           "agent",
-          "bot",
-          "compaction"
+          "bot"
         ],
         "runs[].context.sources[].role": [
           "child",
@@ -8671,8 +7892,7 @@
           "completed",
           "done",
           "failed",
-          "running",
-          "succeeded"
+          "running"
         ],
         "runs[].context.tenant": [
           "orgiq"
@@ -9108,6 +8328,7 @@
         "related[].updatedAt": "string",
         "results": "array",
         "results[]": "object|object(dictionary)",
+        "results[].avatarUrl": "string",
         "results[].description": "string",
         "results[].href": "string",
         "results[].id": "string",
@@ -9128,15 +8349,20 @@
           "initiative"
         ],
         "related[].status": [
-          "escalated",
+          "blocked",
+          "done",
+          "in_progress",
+          "in_review",
           "open",
-          "resolved",
-          "retired"
+          "published",
+          "resolved"
         ],
         "related[].type": [
           "decision",
           "knowledge",
-          "person"
+          "person",
+          "team",
+          "work"
         ],
         "results[].sourceRefs[].type": [
           "initiative"
@@ -9144,8 +8370,9 @@
         "results[].status": [
           "approved",
           "done",
-          "draft",
+          "escalated",
           "in_progress",
+          "in_review",
           "open",
           "published",
           "resolved"
@@ -9154,6 +8381,7 @@
           "decision",
           "knowledge",
           "person",
+          "team",
           "work"
         ]
       }
@@ -10675,8 +9903,6 @@
         "mocks.cloudwatch": "boolean",
         "mocks.guardrails": "boolean",
         "realtime": "object",
-        "realtime.distillation": "object",
-        "realtime.distillation.router": "string",
         "realtime.gateway": "string",
         "realtime.store": "string",
         "region": "string",
@@ -10788,7 +10014,6 @@
     "classification": {
       "open": false,
       "values": [
-        "confidential",
         "internal"
       ]
     },
@@ -10812,7 +10037,6 @@
         "agent",
         "analysis",
         "answer",
-        "application",
         "artifact",
         "assessment-command",
         "blocked",
@@ -10821,9 +10045,7 @@
         "change",
         "clarification",
         "close_claim",
-        "cluster",
         "comment",
-        "compaction",
         "confluence",
         "convention",
         "decision",
@@ -10836,15 +10058,16 @@
         "evaluator",
         "exception_review",
         "expired",
-        "fact",
         "failed",
         "follow_up",
+        "framing",
         "general",
         "github",
         "gotcha",
         "grant",
         "hitl-decided",
         "hitl-expired",
+        "how_to_report",
         "in-review",
         "initiative",
         "initiative-membership",
@@ -10861,7 +10084,6 @@
         "migration",
         "ms_forms_export",
         "new",
-        "observation",
         "person",
         "policy-updated",
         "problem",
@@ -10895,16 +10117,6 @@
         "write"
       ]
     },
-    "level": {
-      "open": false,
-      "values": [
-        "L0",
-        "L1",
-        "L2",
-        "error",
-        "info"
-      ]
-    },
     "mode": {
       "open": false,
       "values": [
@@ -10918,17 +10130,13 @@
     "outcome": {
       "open": false,
       "values": [
-        "failed",
         "pass",
-        "requires_approval",
-        "succeeded"
+        "requires_approval"
       ]
     },
     "phase": {
       "open": false,
       "values": [
-        "done",
-        "failed",
         "idle"
       ]
     },
@@ -11011,12 +10219,10 @@
       "values": [
         "active",
         "available",
-        "behind",
         "ended",
         "imported",
         "missing",
-        "ok",
-        "stalled"
+        "ok"
       ]
     },
     "status": {
@@ -11043,7 +10249,6 @@
         "applied",
         "approved",
         "awaiting_input",
-        "behind",
         "blocked",
         "cancelled",
         "candidate",
@@ -11085,14 +10290,11 @@
         "rejected",
         "requested",
         "resolved",
-        "retired",
         "revoked",
         "running",
         "staged",
         "stale",
-        "stalled",
         "submitted",
-        "succeeded",
         "superseded",
         "unproven",
         "verified",
@@ -11121,40 +10323,30 @@
         "browser screenshot",
         "bug",
         "collaborates",
-        "convention",
         "decision",
         "enum",
         "epic",
-        "failed",
-        "gotcha",
         "initiative",
-        "insight",
         "knowledge",
         "longtext",
         "manual",
         "mentors",
         "person",
         "pipeline.approval.requested",
-        "procedure",
         "reports_to",
-        "runbook",
         "schedule",
         "sql",
         "story",
+        "team",
         "text",
-        "work",
-        "worked"
+        "work"
       ]
     },
     "verdict": {
       "open": false,
       "values": [
-        "agree",
         "approve",
-        "calibrated",
-        "clear",
-        "disagree",
-        "pending"
+        "clear"
       ]
     }
   }

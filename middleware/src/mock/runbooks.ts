@@ -12,23 +12,23 @@ import { runbookLargeRows, runbookSeedRows } from './runbooks-seed-seam.js';
 
 export const runbooksFixture = defineFixture<Runbook>({
   key: 'runbooks',
-  scenarios: { default: () => runbookSeedRows().runbooks, empty: () => [], large: () => runbookLargeRows().runbooks },
+  scenarios: { default: () => runbookSeedRows().runbooks, 'runbooks-demo': () => runbookSeedRows().runbooks, empty: () => [], large: () => runbookLargeRows().runbooks },
 });
 export const runbookVersionsFixture = defineFixture<RunbookVersion>({
   key: 'runbook-versions',
-  scenarios: { default: () => runbookSeedRows().versions, empty: () => [], large: () => runbookLargeRows().versions },
+  scenarios: { default: () => runbookSeedRows().versions, 'runbooks-demo': () => runbookSeedRows().versions, empty: () => [], large: () => runbookLargeRows().versions },
 });
 export const runbookProposalsFixture = defineFixture<RunbookProposal>({
   key: 'runbook-proposals',
-  scenarios: { default: () => runbookSeedRows().proposals, empty: () => [], large: () => runbookLargeRows().proposals },
+  scenarios: { default: () => runbookSeedRows().proposals, 'runbooks-demo': () => runbookSeedRows().proposals, empty: () => [], large: () => runbookLargeRows().proposals },
 });
 export const runbookApplicationsFixture = defineFixture<RunbookApplication>({
   key: 'runbook-applications',
-  scenarios: { default: () => runbookSeedRows().applications, empty: () => [], large: () => runbookLargeRows().applications },
+  scenarios: { default: () => runbookSeedRows().applications, 'runbooks-demo': () => runbookSeedRows().applications, empty: () => [], large: () => runbookLargeRows().applications },
 });
 export const sessionBriefsFixture = defineFixture<SessionBrief>({
   key: 'session-briefs',
-  scenarios: { default: () => runbookSeedRows().briefs, empty: () => [], large: () => runbookLargeRows().briefs },
+  scenarios: { default: () => runbookSeedRows().briefs, 'runbooks-demo': () => runbookSeedRows().briefs, empty: () => [], large: () => runbookLargeRows().briefs },
 });
 
 /** The live rows behind RowsRunbookStore. */

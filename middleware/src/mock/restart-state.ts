@@ -8,7 +8,7 @@ export interface MockRestartSnapshot {
   schema: 'orgiq-private-runtime-snapshot/v1';
   pid: number; capturedAt: string; scenario: string;
   clock: { frozenStackDepth: 0 };
-  idleDirectors: { demo: Record<string, unknown>; distillation: Record<string, unknown> };
+  idleDirectors: { demo: Record<string, unknown> };
   overrides: Array<[string, string]>;
   fixtures: Array<{ key: string; scenarios: Array<{ scenario: string; rows: unknown[] }> }>;
   mirrors: {
@@ -20,7 +20,7 @@ export interface MockRestartSnapshot {
   sourceIntegrity: { schema: 'mock-restart-source/v1'; files: Record<string, string> };
 }
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
-const scenarios = new Set(['default', 'empty', 'error', 'large', 'fresh', 'demo', 'distillation-demo', 'runbooks-demo']);
+const scenarios = new Set(['default', 'empty', 'error', 'large', 'fresh', 'demo', 'runbooks-demo']);
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const pairs = (v: unknown, item: (key: unknown, value: unknown) => boolean): v is Array<[unknown, unknown]> => Array.isArray(v) && v.every(p => Array.isArray(p) && p.length === 2 && item(p[0], p[1]));
 const rows = (v: unknown) => Array.isArray(v) && v.every(record);
@@ -28,7 +28,7 @@ export function validateMockRestartSnapshot(value: unknown): MockRestartSnapshot
   if (!record(value) || value.schema !== 'orgiq-private-runtime-snapshot/v1' || !Number.isInteger(value.pid) || typeof value.capturedAt !== 'string' || !Number.isFinite(Date.parse(value.capturedAt)) || !scenarios.has(String(value.scenario))) throw Error('invalid mock restart snapshot header');
   if (!pairs(value.overrides, (key, scenario) => typeof key === 'string' && scenarios.has(String(scenario))) || value.overrides.length > 0) throw Error('invalid mock restart pins');
   if (!record(value.clock) || value.clock.frozenStackDepth !== 0) throw Error('mock restart requires a free-running clock');
-  if (!record(value.idleDirectors) || !record(value.idleDirectors.demo) || !record(value.idleDirectors.distillation) || [value.idleDirectors.demo, value.idleDirectors.distillation].some(d => d.phase !== 'idle' || d.startedAt !== null || d.finishedAt !== null)) throw Error('mock restart requires idle demo directors');
+  if (!record(value.idleDirectors) || !record(value.idleDirectors.demo) || [value.idleDirectors.demo].some(d => d.phase !== 'idle' || d.startedAt !== null || d.finishedAt !== null)) throw Error('mock restart requires idle demo directors');
   const fixtures = value.fixtures;
   if (!Array.isArray(fixtures) || fixtures.some(f => !record(f) || typeof f.key !== 'string' || !Array.isArray(f.scenarios) || f.scenarios.some(s => !record(s) || !scenarios.has(String(s.scenario)) || !Array.isArray(s.rows)))) throw Error('invalid mock restart fixtures');
   if (new Set(fixtures.map(f => f.key)).size !== fixtures.length || fixtures.some(f => new Set(f.scenarios.map((s: { scenario: string }) => s.scenario)).size !== f.scenarios.length)) throw Error('duplicate mock restart fixture/scenario');
@@ -109,7 +109,7 @@ export function mockRestartMirror<K extends keyof MockRestartSnapshot['mirrors']
 export function completeMockRestartReplay(): void { replayComplete = true; }
 
 /** Idle director status is observable on /__mock/state; prove the unchanged native boot defaults reproduce it. */
-export function assertMockRestartIdleDirectors(demo: unknown, distillation: unknown): void {
+export function assertMockRestartIdleDirectors(demo: unknown): void {
   const snapshot = mockRestartSnapshot();
-  if (snapshot && (JSON.stringify(demo) !== JSON.stringify(snapshot.idleDirectors.demo) || JSON.stringify(distillation) !== JSON.stringify(snapshot.idleDirectors.distillation))) throw Error('mock restart idle director cache differs from its captured state');
+  if (snapshot && (JSON.stringify(demo) !== JSON.stringify(snapshot.idleDirectors.demo) )) throw Error('mock restart idle director cache differs from its captured state');
 }

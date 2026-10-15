@@ -54,7 +54,7 @@ export type PipelineRunStatus = (typeof PIPELINE_RUN_STATUSES)[number];
 export type PipelineStepStatus = 'pending' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'skipped';
 
 /** Definition kinds (research §D.3). `runbook` runs are the dry-runs P2 enqueues. */
-export type DefinitionKind = 'runbook' | 'agent' | 'bot' | 'assessment-command' | 'compaction';
+export type DefinitionKind = 'runbook' | 'agent' | 'bot' | 'assessment-command';
 
 /** pipeline-runtime's trigger vocabulary (platform-api `triggerType`). */
 export type TriggerType = 'manual' | 'schedule' | 'webhook' | 'document-event';
@@ -62,10 +62,10 @@ export type TriggerType = 'manual' | 'schedule' | 'webhook' | 'document-event';
 export type ArtifactKind = 'change' | 'document' | 'scores' | 'trace' | 'transcript' | 'image';
 
 /** The six run-shaped tables the projection reads (research §D.1). */
-export type SourceTable = 'agent_jobs' | 'bot_runs' | 'agent_project_runs' | 'assessment_runs' | 'distillation_compactions'
+export type SourceTable = 'agent_jobs' | 'bot_runs' | 'agent_project_runs' | 'assessment_runs'
   | 'invocation_traces';
 export const SOURCE_TABLES: readonly SourceTable[] = [
-  'agent_jobs', 'bot_runs', 'agent_project_runs', 'assessment_runs', 'distillation_compactions',
+  'agent_jobs', 'bot_runs', 'agent_project_runs', 'assessment_runs',
   'invocation_traces',
 ];
 
@@ -75,7 +75,6 @@ const TENANT_OF: Record<SourceTable, ContextTenant> = {
   agent_jobs: 'orgiq',
   bot_runs: 'orgiq',
   agent_project_runs: 'orgiq',
-  distillation_compactions: 'orgiq',
   assessment_runs: 'assessment',
   // The default only: an agent Run's tenant is the trace's own (see agentTenant).
   invocation_traces: 'orgiq',
@@ -168,14 +167,6 @@ export interface AssessmentRunSource {
   source?: string | null; launched_by?: string | null;
   started_at: string; finished_at: string | null;
   summary?: string | null; error: string | null; files_written?: string[] | null;
-}
-
-export interface CompactionSource {
-  id: string; level: string; status: string;
-  startedAt: string; finishedAt: string | null;
-  error?: string; requestedBy?: string | null; repo?: string | null;
-  phase?: string | null; stepLabel?: string | null; costUsd?: number | null;
-  produced?: { cluster_ids: string[]; artifact_ids: string[] };
 }
 
 /** `agent_change_requests` — the `change` artifact (commit-per-capture). */
@@ -297,7 +288,6 @@ export interface RunSources {
   botRuns: readonly BotRunSource[];
   agentProjectRuns: readonly ProjectRunSource[];
   assessmentRuns: readonly AssessmentRunSource[];
-  compactions: readonly CompactionSource[];
   /** `observability.invocation_traces` — agent runs (P1). */
   invocations?: readonly InvocationSource[];
   /** Relayed runs whose bundle has not arrived yet (not a table). */
@@ -430,7 +420,7 @@ export interface Projection {
 export function runIdFor(table: SourceTable, id: string): string {
   const prefix: Record<SourceTable, string> = {
     agent_jobs: 'job', bot_runs: 'bot-run', agent_project_runs: 'project-run',
-    assessment_runs: 'assessment-run', distillation_compactions: 'compaction',
+    assessment_runs: 'assessment-run',
     // Keyed on the AG-UI run id, not the trace uuid: the Run exists from
     // RUN_STARTED (live), before any trace row does, and keeps its id when
     // the bundle lands.
@@ -669,47 +659,6 @@ export function projectRuns(src: RunSources): Projection {
         runId: id, stepId: 'write', kind: /scoring_log_/.test(f) ? 'scores' : 'document',
         uri: f, title: f.split('/').pop() ?? f, createdAt: a.finished_at, meta: { command: a.command, teamId: a.team_id },
       });
-    }
-  }
-
-  // distillation_compactions — the one table with step-level progress (`phase`).
-  const PHASES = ['claim', 'read', 'merge', 'write'] as const;
-  for (const c of src.compactions) {
-    const id = runIdFor('distillation_compactions', c.id);
-    const status = crosswalkStatus(c.status);
-    runs.push({
-      id,
-      definitionId: `compaction:${c.level}`,
-      tenant: TENANT_OF.distillation_compactions,
-      status,
-      triggeredBy: c.requestedBy ?? null,
-      triggerType: c.requestedBy ? 'manual' : 'schedule',
-      startedAt: c.startedAt,
-      finishedAt: c.finishedAt,
-      costUsd: num(c.costUsd),
-      context: {
-        tenant: TENANT_OF.distillation_compactions, kind: 'compaction', table: 'distillation_compactions', id: c.id,
-        sourceStatus: c.status,
-        sources: [{ table: 'distillation_compactions', id: c.id, status: c.status, role: 'primary' }],
-        title: `${c.level} compaction${c.repo ? ` · ${c.repo}` : ''}`, error: c.error ?? null,
-      },
-    });
-    const at = c.phase === 'done' ? PHASES.length : PHASES.indexOf(c.phase as (typeof PHASES)[number]);
-    steps.set(id, PHASES.map((p, i) => {
-      let st: PipelineStepStatus;
-      if (status === 'completed') st = 'completed';
-      else if (status === 'pending') st = 'pending';
-      else if (at < 0) st = i === 0 && status !== 'failed' ? 'running' : i === 0 ? 'completed' : status === 'failed' ? 'skipped' : 'pending';
-      else if (i < at) st = 'completed';
-      else if (i === at) st = status === 'failed' ? 'failed' : 'running';
-      else st = status === 'failed' ? 'skipped' : 'pending';
-      return step(id, p, p[0]!.toUpperCase() + p.slice(1), st,
-        i === 0 ? c.startedAt : null, st === 'completed' && i === PHASES.length - 1 ? c.finishedAt : null,
-        i === at && c.stepLabel ? c.stepLabel : null);
-    }));
-    for (const aid of c.produced?.artifact_ids ?? []) {
-      artifacts.push({ id: `document:${c.id}:${aid}`, runId: id, stepId: 'write', kind: 'document',
-        uri: `distillation/artifacts/${aid}`, title: aid, createdAt: c.finishedAt, meta: { level: c.level } });
     }
   }
 

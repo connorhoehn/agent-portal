@@ -5,6 +5,7 @@ import { useNavigate, useOutletContext, useParams } from 'react-router';
 import { EmptyState, Stack, StatusPill, T } from '@connorhoehnslalom/ui-components/shared';
 import { EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
 import { useFetch } from '../../hooks/useFetch';
+import { useRunbookNames } from './useRunbookNames';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { RunBriefPanel } from './RunBriefPanel';
@@ -21,9 +22,10 @@ export default function BriefsTab() {
   const [query, setQuery] = useState('');
   const feed = useFetch<{ briefs: BriefSummary[] }>('/api/briefs?limit=200', 0);
   const all = feed.data?.briefs ?? [];
-  const rows = useMemo(() => briefRows(all, query), [all, query]);
+  const names = useRunbookNames();
+  const rows = useMemo(() => briefRows(all, query, names), [all, query, names]);
   const current = all.find((b) => b.run_ref === ref) ?? null;
-  useCrumbLabel(ref, current?.work_item_id ? `${current.work_item_id}` : ref);
+  useCrumbLabel(ref, ref ? names.run(ref) : undefined);
   const commands = briefsCommandAdapter(rows, { setQuery, refresh: feed.refresh, open: (r) => navigate(briefHref(r)) });
 
   return (
@@ -57,9 +59,9 @@ export default function BriefsTab() {
       {ref ? (
         <EditorShell
           titleSize="sm" titleAs="h2"
-          title={current?.work_item_id ?? ref}
+          title={names.run(ref)}
           statusPill={current ? <StatusPill tone="neutral" label={`sha ${shortSha(current.sha256)}`} size="sm" /> : undefined}
-          subtitle={<T size="xs" tone="tertiary">{current ? `Run ${ref} · frozen ${relativeTime(current.assembled_at)}` : `Run ${ref}`}</T>}
+          subtitle={<T size="xs" tone="tertiary">{current ? `${current.initiative_id ? `${names.initiative(current.initiative_id)} · ` : ''}frozen ${relativeTime(current.assembled_at)}` : 'A frozen brief'}</T>}
           tabsTrailing={<Button size="sm" variant="secondary" onClick={() => navigate(runPageHref(ref))}>Open the run</Button>}
           surface="plain"
           label="Brief"

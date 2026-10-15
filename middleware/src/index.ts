@@ -1,5 +1,4 @@
 import { getDemoState } from './mock/demo-director.js';
-import { getDistillationDemoState } from './mock/distillation-demo.js';
 import { startAssessmentDispatcher } from './lib/assessment-dispatcher.js';
 import { startFlowRunDispatcher } from './lib/flow-runs/index.js';
 import express from 'express';
@@ -7,13 +6,11 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { browserOrigin } from './lib/browser-origin.js';
 import cookieParser from 'cookie-parser';
 import { rejectUnsupportedUpgrades } from './lib/unsupported-upgrades.js';
-import { startDistillationRealtime, distillationRealtimeStatus, REALTIME_PATH } from './lib/distillation-realtime.js';
 import { linkNodeOwnership, type LeasedOwner } from './lib/realtime-node-ownership.js';
 import { startRealtimeGateway, realtimeGatewayEnabled, realtimeGatewayStatus, REALTIME_GATEWAY_PATH, authenticateGatewayUpgrade } from './lib/realtime-gateway.js';
 import { channelGuards } from './lib/gateway/authority.js';
 import { createUploadsRouter, gatewayUploadConfig } from './lib/gateway-attachments.js';
 import { realtimeClaims, realtimeSigningSecret, signRealtimeToken } from './lib/realtime-token.js';
-import { startCompactionConsumer, startCompactionScheduler, startReplicaSync } from './providers/distillation.js';
 import { config } from './config.js';
 import { errorHandler } from './lib/async-handler.js';
 import { sessionMiddleware, setGrantsResolver } from './lib/session.js';
@@ -33,7 +30,6 @@ import { promotionsRouter } from './routes/promotions.js';
 import { sessionBundleRouter } from './routes/session-bundle.js';
 import { rediscoveryRouter } from './routes/rediscovery.js';
 import { promptEvalsRouter } from './routes/prompt-evals.js';
-import { distillationRouter } from './routes/distillation.js';
 import { knowledgeBaseRouter } from './routes/knowledge-base.js';
 import { assessmentRouter } from './routes/assessment.js';
 import { socialEmbedRouter, socialRouter } from './routes/social.js';
@@ -169,10 +165,7 @@ app.use(sessionMiddleware());
 // the /api/observability block can share it.
 const viewObs = [requireTenant('orgiq'), requireAction('ViewObservability')];
 
-const healthHandler = createHealthHandler({ readRealtime: () => {
-  const realtime = realtimeGatewayStatus(), distillation = distillationRealtimeStatus();
-  return { ...realtime, distillation, ...(distillation.ready === false ? { ready: false } : {}) };
-},
+const healthHandler = createHealthHandler({ readRealtime: () => realtimeGatewayStatus(),
   readAws: () => Object.values(config.mock).every(Boolean) ? { ok: true } : readAwsCredentialsStatus(),
   readDatastore: readDatastoreStatus, mocks: config.mock, region: config.region });
 app.get('/health', healthHandler);
@@ -228,9 +221,6 @@ app.use('/api/rediscovery', requireTenant('orgiq'), requireSession('ViewRediscov
 // Per-asset eval sets — the thing that produces the pass rate decideDeploy
 // gates on. Until this existed the gate judged a number nothing computed.
 app.use('/api/library/evals', requireTenant('orgiq'), requireSession('ViewLibrary'), promptEvalsRouter);
-// The distillation pipeline's operational log + corpus health. Read-open: how
-// the org's shared memory is doing is everyone's business.
-app.use('/api/distillation', requireTenant('orgiq'), requireSession('ViewDistillation'), distillationRouter);
 // Work-items: mounted at /api/graph so its sub-paths (/work, /projects/:id/work,
 // /people/:id/work, /work-items) resolve before the gated graphRouter. Reads
 // are tenant-open; the router gates its POST/PATCH per-route on
@@ -593,23 +583,20 @@ ensureSchema()
 
 const server = createServer(app);
 
-// This BFF serves SSE plus two realtime-modules WebSocket paths:
-// REALTIME_PATH pushes the distillation channels (orgiq:distill:levels / orgiq:distill:jobs
-// / orgiq:distill:review) to a signed-in orgiq session (cookie auth), and — when
-// REALTIME_GATEWAY is on (default outside production) — REALTIME_GATEWAY_PATH
+// This BFF serves SSE plus one realtime-modules WebSocket path: when
+// REALTIME_GATEWAY is on (default outside production) REALTIME_GATEWAY_PATH
 // (/ws) is the chat/presence/calls gateway, authenticated by the realtime
 // token over `Sec-WebSocket-Protocol` (lib/realtime-gateway.ts). Every other
-// upgrade is still refused before a socket is accepted.
-const distillationHandle = await startDistillationRealtime(server);
+// upgrade is refused before a socket is accepted.
 const gatewayOn = realtimeGatewayEnabled();
 const gatewayHandle = gatewayOn ? await startRealtimeGateway(server) : null;
-if (mockRestartSnapshot()) { await fleetInitialization; assertMockRestartIdleDirectors(getDemoState(), getDistillationDemoState()); completeMockRestartReplay(); }
+if (mockRestartSnapshot()) { await fleetInitialization; assertMockRestartIdleDirectors(getDemoState()); completeMockRestartReplay(); }
 if (!gatewayHandle) console.log('[realtime-gateway] off (REALTIME_GATEWAY) — /ws upgrades are refused');
 // A node is one owner: the first leased router to fence retires the other
 // (lib/realtime-node-ownership.ts), so /health's 503 never leaves half a lease alive.
-const stopOwnershipLink = linkNodeOwnership([gatewayHandle?.ownership, 'ownership' in distillationHandle ? distillationHandle.ownership : undefined]
+const stopOwnershipLink = linkNodeOwnership([gatewayHandle?.ownership]
   .filter((owner): owner is LeasedOwner => !!owner));
-rejectUnsupportedUpgrades(server, { allowPaths: gatewayOn ? [REALTIME_PATH, REALTIME_GATEWAY_PATH] : [REALTIME_PATH] });
+rejectUnsupportedUpgrades(server, { allowPaths: gatewayOn ? [REALTIME_GATEWAY_PATH] : [] });
 server.listen(config.port, '0.0.0.0', () => {
   consumeMockRestartHandoff();
   const mockedDomains = Object.entries(config.mock).filter(([, v]) => v).map(([k]) => k);
@@ -622,18 +609,10 @@ const shutdown = async () => {
   const deadline = setTimeout(() => process.exit(1), 10000); deadline.unref();
   stopOwnershipLink();
   try {
-    await gatewayHandle?.dispose(); await distillationHandle.detach();
+    await gatewayHandle?.dispose();
     await new Promise<void>(resolve => server.close(() => resolve()));
     process.exit(0);
   } catch (error) { console.error('[shutdown] gateway cleanup failed', error); process.exit(1); }
 };
 process.once('SIGTERM', () => { void shutdown(); });
 process.once('SIGINT', () => { void shutdown(); });
-
-// Distillation's background work: the compaction consumer (claims passes off
-// distill-compact-l1|l2 — message-queue, or in process under MOCK_QUEUE), the
-// optional cadence scheduler (DISTILL_COMPACT_INTERVAL_MIN), and the L2
-// replica's anti-entropy sweep.
-startCompactionConsumer();
-startCompactionScheduler();
-startReplicaSync();

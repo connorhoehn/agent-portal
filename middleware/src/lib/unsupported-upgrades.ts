@@ -1,8 +1,7 @@
 import type { Server } from 'node:http';
 
 /**
- * The BFF speaks no WebSocket protocol except realtime's own paths — the
- * distillation push on /realtime (lib/distillation-realtime.ts) and, when
+ * The BFF speaks no WebSocket protocol except realtime's own path — when
  * REALTIME_GATEWAY is on, the chat/presence/calls gateway on /ws
  * (lib/realtime-gateway.ts). Every other upgrade is refused before a socket
  * is accepted or allocated.

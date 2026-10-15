@@ -5,6 +5,7 @@ import {
   briefGroups, briefRefOfRun, briefRows, distillationRedirect, libraryCommandAdapter, libraryGroups, libraryRows, parseTab,
   proposalGroups, proposalRows, refusalMessage, stepMarkers, viewerDiff,
 } from '../runbooksModel.ts';
+import { briefTaskTitle, buildNames } from '../runbookNames.ts';
 import type { BriefSummary, Proposal, RunbookApplication, RunbookRow } from '../types.ts';
 
 const health = { status: 'proven' as const, reason: '', warning: null };
@@ -45,7 +46,7 @@ test('proposals group into open and decided, newest wording from the source', ()
   });
   const rows = proposalRows([p('prop-1', 'open'), p('prop-2', 'accepted', { source: { kind: 'person', person_id: 'p-003', lab_experience_ids: [] } })], new Map([['rb-a', 'Cut over']]));
   assert.deepEqual(proposalGroups(rows).map((g) => g.id), ['open', 'decided']);
-  assert.equal(rows[0]!.subline, 'Edit · Run job-9');
+  assert.equal(rows[0]!.subline, 'Edit · A run');
   assert.equal(rows[1]!.title, 'Cut over');
 });
 
@@ -85,4 +86,47 @@ test('runbooks redirect: every /iq/distillation path lands on a runbooks page', 
   for (const [path, search] of [['/iq/distillation', ''], ['/iq/distillation/knowledge', '?view=notes'], ['/iq/distillation/activity', '?view=graph'], ['/iq/distillation/tiers', ''], ['/iq/distillation/knowledge', '?item=art-007']] as const) {
     assert.equal(distillationRedirect(path, search), '/iq/runbooks', `${path}${search}`);
   }
+});
+
+test('ids resolve to names; what nothing resolves reads as a plain description, never the id', () => {
+  const names = buildNames({
+    people: [{ id: 'p-011', name: 'Eli Garcia' }],
+    initiatives: [{ id: 'p-auth-migration', name: 'Auth Migration' }],
+    jobs: [{ id: 'job-auth-maint-2', title: 'auth-dep-watch' }],
+    runbooks: [{ id: 'rb-a', title: 'Cut over' }],
+  });
+  assert.equal(names.person('p-011'), 'Eli Garcia');
+  assert.equal(names.person('p-999'), 'A colleague');
+  assert.equal(names.initiative('p-auth-migration'), 'Auth Migration');
+  assert.equal(names.run('job-auth-maint-2'), 'auth-dep-watch run');
+  assert.equal(names.run('job:job-auth-maint-2'), 'auth-dep-watch run');
+  assert.equal(names.run('sess-auth-06'), 'A session run');
+  assert.equal(names.runbook('rb-zzz'), 'A runbook');
+  const all = [rb('rb-a', 'initiative', 'p-auth-migration')];
+  assert.equal(libraryRows(all, '', null, names)[0]!.subline, 'Auth Migration · v2');
+  assert.equal(libraryRows(all, 'auth migration', null, names).length, 1);
+  const p: Proposal = {
+    id: 'prop-1', kind: 'edit', runbook_id: 'rb-a', base_version: 1, proposed: null, rationale: '',
+    source: { kind: 'person', person_id: 'p-011', lab_experience_ids: [] }, lint: [], similar: [], status: 'open',
+    decided_by: null, decided_at: null, note: null, merged_into: null, created_at: '',
+  };
+  assert.equal(proposalRows([p], new Map(), '', names)[0]!.subline, 'Edit · Eli Garcia');
+});
+
+test('a brief row is titled by its run, grouped by day, and still found by its run reference', () => {
+  const names = buildNames({ initiatives: [{ id: 'p-auth-migration', name: 'Auth Migration' }], jobs: [{ id: 'job-auth-maint-2', title: 'auth-dep-watch' }] });
+  const b: BriefSummary = {
+    id: 'brief-job-auth-maint-2', run_ref: 'job-auth-maint-2', work_item_id: null, initiative_id: 'p-auth-migration', repo: null,
+    assembled_at: '2026-10-11T08:00:00.000Z', assembler_version: '1', budget_tokens: 6000, used_tokens: 900,
+    sections: [{ kind: 'runbook', ref: 'rb-a', version: 1, tokens: 300, reason: 'x' }], omitted: [], sha256: 'ab'.repeat(32),
+  };
+  const [row] = briefRows([b], '', names);
+  assert.equal(row!.title, 'auth-dep-watch run');
+  assert.equal(row!.subline, 'Auth Migration · 1 runbook · abababababab');
+  assert.equal(briefRows([b], 'job-auth-maint-2', names).length, 1);
+});
+
+test('the task title comes from the brief markdown', () => {
+  assert.equal(briefTaskTitle('# Brief\n\n## Your task\n**Tenant-by-tenant cutover** (story, 3 pts)\nbody'), 'Tenant-by-tenant cutover');
+  assert.equal(briefTaskTitle('## The project\n**Auth**'), null);
 });

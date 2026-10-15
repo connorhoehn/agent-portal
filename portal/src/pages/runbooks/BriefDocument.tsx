@@ -6,19 +6,30 @@ import { KeyValue } from '@connorhoehnslalom/ui-components';
 import { Banner, Button, DataTable, DetailSection, Inline, Stack, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
 import { SafeMarkdown } from './SafeMarkdown';
+import { briefTaskTitle } from './runbookNames';
 import { SECTION_KIND_LABEL, runbookHref } from './runbooksModel';
+import { useRunbookNames } from './useRunbookNames';
 import type { Brief, BriefSection } from './types';
 
 export function BriefDocument({ brief, frozen, onOpen }: { brief: Brief; frozen: boolean; onOpen: (href: string) => void }) {
   const [copied, setCopied] = useState(false);
+  const names = useRunbookNames();
+  const task = briefTaskTitle(brief.markdown);
+  // What a section points at, by name. Long values truncate (the full text is the hover title) so a row stays one line.
+  const refText = (s: BriefSection): string => {
+    if (s.kind === 'runbook') return `${names.runbook(s.ref)}${s.version ? ` v${s.version}` : ''}`;
+    if (s.kind === 'initiative') return names.initiative(s.ref ?? brief.initiative_id);
+    if (s.kind === 'work_item') return task ?? 'The work item';
+    return '';
+  };
   const columns: DataTableColumn<BriefSection>[] = [
     { key: 'kind', header: 'Section', render: (s) => SECTION_KIND_LABEL[s.kind] ?? s.kind },
     {
-      key: 'ref', header: 'Reference',
-      render: (s) => `${s.ref ?? ''}${s.version ? ` v${s.version}` : ''}`,
+      key: 'ref', header: 'Reference', className: 'max-w-xs truncate',
+      render: (s) => <T title={s.ref ?? undefined}>{refText(s)}</T>,
     },
     { key: 'tokens', header: 'Tokens', numeric: true, render: (s) => s.tokens.toLocaleString('en-US') },
-    { key: 'reason', header: 'Why it is here', render: (s) => s.reason },
+    { key: 'reason', header: 'Why it is here', className: 'max-w-sm truncate', render: (s) => <T title={s.reason}>{s.reason}</T> },
   ];
   return (
     <Stack gap="md" data-testid="brief-document">
@@ -29,7 +40,8 @@ export function BriefDocument({ brief, frozen, onOpen }: { brief: Brief; frozen:
           { label: 'sha256', value: brief.sha256, mono: true, title: brief.sha256 },
           { label: 'Tokens', value: `${brief.used_tokens.toLocaleString('en-US')} of ${brief.budget_tokens.toLocaleString('en-US')}` },
           { label: frozen ? 'Frozen' : 'Assembled', value: relativeTime(brief.assembled_at), title: brief.assembled_at },
-          ...(brief.work_item_id ? [{ label: 'Work item', value: brief.work_item_id, mono: true }] : []),
+          ...(brief.work_item_id ? [{ label: 'Work item', value: task ?? 'The work item', title: brief.work_item_id }] : []),
+          ...(brief.initiative_id ? [{ label: 'Initiative', value: names.initiative(brief.initiative_id), title: brief.initiative_id }] : []),
           ...(brief.repo ? [{ label: 'Repository', value: brief.repo }] : []),
         ]}
       />
@@ -40,7 +52,7 @@ export function BriefDocument({ brief, frozen, onOpen }: { brief: Brief; frozen:
       )}
       {brief.omitted.length > 0 && (
         <Banner variant="warning" layout="callout" icon title={`${brief.omitted.length} left out`} data-testid="brief-omitted">
-          {brief.omitted.map((o) => `${o.runbook_id} (${o.reason === 'budget' ? 'over the token budget' : o.reason === 'scope' ? 'out of scope' : 'drifting, excluded'})`).join(' · ')}
+          {brief.omitted.map((o) => `${names.runbook(o.runbook_id)} (${o.reason === 'budget' ? 'over the token budget' : o.reason === 'scope' ? 'out of scope' : 'drifting, excluded'})`).join(' · ')}
         </Banner>
       )}
       <DetailSection variant="heading" first title="Sections" hint={`${brief.sections.length}`}>

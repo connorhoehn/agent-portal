@@ -43,7 +43,7 @@ import {
 } from '../agent-runs-live.js';
 
 const AT = '2026-09-29T15:00:00.000Z';
-const EMPTY = { agentJobs: [], botRuns: [], agentProjectRuns: [], assessmentRuns: [], compactions: [] };
+const EMPTY = { agentJobs: [], botRuns: [], agentProjectRuns: [], assessmentRuns: [] };
 
 const invocations = (): InvocationSource[] =>
   traceRows().map((r) => invocationSourceFromRow({ ...r, ts_iso: r.tsIso }));

@@ -89,7 +89,7 @@ const CURATED: Array<{ id: string; persona: string }> = [
   { id: 'u-release', persona: 'Release manager — allocates budgets, grants SME envelopes' },
   // The org leader the audits sign in as (docs/*-journeys/PROTOCOL.md); the
   // roster is curated, and she was missing from it.
-  { id: 'u-vera', persona: 'Org leader — leaderboards, approvals, compaction + review decisions' },
+  { id: 'u-vera', persona: 'Org leader — leaderboards, approvals, runbook proposals' },
   // Assessment tenant cast — one per persona in docs/assessment-tenant.md.
   // Without these the only way into the assessment product from this
   // picker was the cross-tenant operator, which proves nothing about what an

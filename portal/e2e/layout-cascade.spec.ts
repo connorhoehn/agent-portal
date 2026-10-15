@@ -449,9 +449,7 @@ test('rail collapse: a selection explored in the right pane is deep (Search › 
 // Rule 5: every page with a list draws it as a flush list rail beside the
 // section rail (the library ListRailLayout) — the sweep above judges a list rail where
 // one exists; this case requires one on each list page, so a list cannot
-// drift back into a bordered pane inside the content. Distillation's content
-// header carries no repository button: the repository is in the list rail's
-// filter popover beside its search (docs/distillation-redesign-spec.md §1).
+// drift back into a bordered pane inside the content.
 // `record`: a record is open beside the list rail — the selection level, so
 // the primary rail folds to its strip (the library rail model) while the section
 // rail and the list rail stay open. `editor`: the record is an EditorShell
@@ -472,10 +470,6 @@ test('list pages draw a flush list rail beside the section rail, trail first aft
     const lines = judge(path, m, new Set()).filter((v) => v.inv === 'list-rail' || v.inv === 'gutter' || v.inv === 'crumbs-first').map((v) => v.line);
     if (!m.listRail) lines.push(`${path}  no list rail ([data-list-rail] nav[aria-label="Explorer"])`);
     else if (m.crumb && m.crumb.left < m.listRail.right) lines.push(`${path}  the trail (x=${m.crumb.left}) is not right of the list rail (ends ${m.listRail.right})`);
-    if (path.startsWith('/iq/distillation')) {
-      if (await page.locator('main [data-testid="section-crumbs"] select, main [data-testid="distillation-repo"]').count()) lines.push(`${path}  a repository control sits in the content header`);
-      if (await page.locator('main').getByRole('combobox', { name: 'Repository' }).count()) lines.push(`${path}  a "Repository" select outside the rail's filter popover`);
-    }
     if (entry.repoInRail) {
       const rail = page.locator('[data-list-rail] nav[aria-label="Explorer"]').first();
       await rail.getByRole('button', { name: /^Filter/ }).first().click();
@@ -500,7 +494,7 @@ test('list pages draw a flush list rail beside the section rail, trail first aft
         };
         const heading = [...pane.querySelectorAll('h1, h2')].find((e) => e.getBoundingClientRect().width > 1);
         const section = [...pane.querySelectorAll('h2, h3, [role="heading"]')].find((e) => e !== heading && e.getBoundingClientRect().width > 1);
-        const dock = pane.querySelector('[data-testid="distillation-composer"]');
+        const dock = pane.querySelector('[data-testid$="-composer"]');
         const frame = dock ? [...dock.querySelectorAll('*')].find((e) => parseFloat(getComputedStyle(e).borderLeftWidth) > 0 && e.getBoundingClientRect().width > 300) : null;
         const crumbs = [...pane.querySelectorAll('nav[aria-label*="readcrumb"]')].map((e) => (e.textContent ?? '').trim());
         return { header: textLeft(heading), body: textLeft(section), composer: frame ? Math.round(frame.getBoundingClientRect().left) : null, crumbs };

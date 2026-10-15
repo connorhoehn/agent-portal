@@ -14,7 +14,7 @@ export const PIPELINE_RUN_STATUSES = [
 ] as const;
 export type PipelineRunStatus = (typeof PIPELINE_RUN_STATUSES)[number];
 export type PipelineStepStatus = 'pending' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'skipped';
-export type DefinitionKind = 'runbook' | 'agent' | 'bot' | 'assessment-command' | 'compaction';
+export type DefinitionKind = 'runbook' | 'agent' | 'bot' | 'assessment-command';
 export type ArtifactKind = 'change' | 'document' | 'scores' | 'trace' | 'transcript' | 'image';
 
 export interface RunSourceRef { table: string; id: string; status: string; role: 'primary' | 'trigger' | 'child' }
@@ -171,7 +171,7 @@ export function sourceStatusNote(run: Pick<PipelineRun, 'status' | 'context'>): 
 }
 
 const KIND_LABEL: Record<DefinitionKind, string> = {
-  runbook: 'Runbook', agent: 'Agent', bot: 'Bot', 'assessment-command': 'Assessment command', compaction: 'Compaction',
+  runbook: 'Runbook', agent: 'Agent', bot: 'Bot', 'assessment-command': 'Assessment command',
 };
 export function kindLabel(kind: string): string {
   return KIND_LABEL[kind as DefinitionKind] ?? kind;
@@ -179,7 +179,7 @@ export function kindLabel(kind: string): string {
 
 const TABLE_LABEL: Record<string, string> = {
   agent_jobs: 'queue job', bot_runs: 'bot firing', agent_project_runs: 'governed run',
-  assessment_runs: 'assessment run', distillation_compactions: 'compaction pass',
+  assessment_runs: 'assessment run',
   invocation_traces: 'agent trace',
 };
 export function sourceLabel(table: string): string {
@@ -222,7 +222,7 @@ export const STATUS_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
 
 export const KIND_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: 'Any kind' },
-  ...(['bot', 'agent', 'assessment-command', 'compaction'] as DefinitionKind[]).map((k) => ({ value: k, label: KIND_LABEL[k] })),
+  ...(['bot', 'agent', 'assessment-command'] as DefinitionKind[]).map((k) => ({ value: k, label: KIND_LABEL[k] })),
 ];
 
 export const TENANT_FILTER_OPTIONS: Array<{ value: string; label: string }> = [

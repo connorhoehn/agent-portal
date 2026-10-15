@@ -75,7 +75,7 @@ export default function QueuesPage() {
     <CollapsibleSection title="About queue delivery" density="compact">
       <Stack gap="sm">
         <Inline gap="sm" align="center" wrap><Chip size="xs" tone={gateway?.connectionState === 'connected' ? 'success' : 'warning'}>{gateway?.connectionState === 'connected' ? 'Realtime connected' : 'Realtime disconnected'}</Chip><T size="sm">Run progress uses realtime-modules.</T></Inline>
-        <T size="sm" tone="secondary" wrap>Distillation workers consume the compaction queues and acknowledge successful passes. Failed deliveries retry and eventually move to their dead-letter queue.</T>
+        <T size="sm" tone="secondary" wrap>Pipeline workers consume these queues and acknowledge successful loads. Failed deliveries retry and eventually move to their dead-letter queue.</T>
         <T size="sm" tone="secondary" wrap>The run ledger reads jobs, bot runs, and assessment commands. Run pages subscribe to authorized progress channels; queue counts are separate HTTP snapshots. A connected gateway does not prove workers are processing messages.</T>
         <Inline gap="sm"><Tooltip content="View runs"><IconButton size="sm" aria-label="View runs" icon={<ListIcon />} onClick={() => navigate('/pipelines/runs')} /></Tooltip><Tooltip content="Definitions"><IconButton size="sm" aria-label="Definitions" icon={<BranchIcon />} onClick={() => navigate('/pipelines/definitions')} /></Tooltip></Inline>
       </Stack>

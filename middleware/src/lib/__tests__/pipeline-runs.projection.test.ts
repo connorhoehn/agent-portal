@@ -8,8 +8,8 @@
 //
 // The fixtures are imported directly — `agentJobs` (mock/agent-jobs.ts),
 // `botRuns` (mock/bots.ts), `agentProjectRuns` (mock/agent-project-runs.ts),
-// `runsFixture` (mock/assessment.ts, the assessment_runs rows) and
-// `compactionJobs` (mock/distillation.ts, distillation_compactions) — so a
+// `runsFixture` (mock/assessment.ts, the assessment_runs rows) and the
+// seeded invocation traces — so a
 // fixture that grows a row the projection drops, or double-counts, fails here.
 
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: true, agentcore: true } } }));
@@ -22,7 +22,6 @@ import { agentJobs } from '../../mock/agent-jobs.js';
 import { botRuns } from '../../mock/bots.js';
 import { agentProjectRuns } from '../../mock/agent-project-runs.js';
 import { runsFixture } from '../../mock/assessment.js';
-import { compactionJobs } from '../../mock/distillation.js';
 import { traceRows } from '../../mock/observability.js';
 import { invocationSourceFromRow } from '../../providers/pipeline-runs.js';
 import type { ScenarioName } from '../../mock/core/index.js';
@@ -33,7 +32,6 @@ function fixtureSources(scenario?: ScenarioName): RunSources {
     botRuns: botRuns.rows(scenario),
     agentProjectRuns: agentProjectRuns.rows(scenario),
     assessmentRuns: runsFixture.rows(scenario),
-    compactions: compactionJobs.rows(scenario),
     // invocation_traces — the seeded day plus written bundles (mock/observability.ts).
     invocations: traceRows(scenario).map((r) => invocationSourceFromRow({ ...r, ts_iso: r.tsIso })),
   };
@@ -45,12 +43,11 @@ function sourceRows(src: RunSources): Array<{ table: SourceTable; id: string; st
     ...src.botRuns.map((r) => ({ table: 'bot_runs' as const, id: r.id, status: r.status })),
     ...src.agentProjectRuns.map((r) => ({ table: 'agent_project_runs' as const, id: r.id, status: r.status })),
     ...src.assessmentRuns.map((r) => ({ table: 'assessment_runs' as const, id: r.id, status: r.status })),
-    ...src.compactions.map((r) => ({ table: 'distillation_compactions' as const, id: r.id, status: r.status })),
     ...(src.invocations ?? []).map((r) => ({ table: 'invocation_traces' as const, id: r.invocationId, status: traceSourceStatus(r) })),
   ];
 }
 
-describe('the run projection over the five registered fixtures', () => {
+describe('the run projection over the registered fixtures', () => {
   const src = fixtureSources();
   const { runs, steps, unlinked } = projectRuns(src);
   const rows = sourceRows(src);

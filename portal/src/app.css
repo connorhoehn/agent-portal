@@ -589,8 +589,7 @@ tbody tr:focus-within .row-reveal,
 [data-shell-nav] > div > main:has([data-shell-flush]) .shell-breadcrumbs {
   display: none;
 }
-/* Distillation's nested workspace owns its spacing and scrolling. */
-[data-shell-nav] [data-testid="distillation-module"] section[aria-label="Distillation"][data-subnav-content],
+/* The nested workspaces own their spacing and scrolling. */
 [data-shell-nav] [data-testid="runbooks-module"] section[aria-label="Runbooks"][data-subnav-content],
 [data-shell-nav] [data-initiative-stack] section[aria-label="Initiatives workspace"][data-subnav-content],
 [data-shell-nav] [data-testid="stacked-catalog"] section[data-subnav-content] {
@@ -598,20 +597,9 @@ tbody tr:focus-within .row-reveal,
   overflow: hidden;
   min-height: 0;
 }
-[data-testid="distillation-knowledge-pane"] {
-  overflow: hidden;
-}
-[data-testid="knowledge-record"] {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-}
-[data-testid="distillation-knowledge-rail-header"],
 [data-initiative-stack] [data-testid="explorer-layout-rail-header"],
 [data-testid="initiative-work-explorer-rail-header"],
 [data-testid="catalog-explorer-rail-header"],
-[data-testid="distillation-promotions-rail-header"],
-[data-testid="distillation-review-rail-header"],
 [data-testid="runbooks-library-rail-header"],
 [data-testid="runbooks-proposals-rail-header"],
 [data-testid="runbooks-briefs-rail-header"] {
@@ -619,12 +607,9 @@ tbody tr:focus-within .row-reveal,
   padding: 14px 16px;
   border-bottom: 1px solid var(--color-border);
 }
-[data-testid="distillation-knowledge-rail-title"],
 [data-initiative-stack] [data-testid="explorer-layout-rail-title"],
 [data-testid="initiative-work-explorer-rail-title"],
 [data-testid="catalog-explorer-rail-title"],
-[data-testid="distillation-promotions-rail-title"],
-[data-testid="distillation-review-rail-title"],
 [data-testid="runbooks-library-rail-title"],
 [data-testid="runbooks-proposals-rail-title"],
 [data-testid="runbooks-briefs-rail-title"] {
@@ -634,17 +619,17 @@ tbody tr:focus-within .row-reveal,
   color: var(--color-text-tertiary);
 }
 /* Keep the trail in normal flow when another rail narrows the record pane. */
-:is([data-testid="distillation-module"], [data-testid="runbooks-module"], [data-testid="stacked-catalog"], [data-initiative-stack]) [data-variant="crumbs"] {
+:is([data-testid="runbooks-module"], [data-testid="stacked-catalog"], [data-initiative-stack]) [data-variant="crumbs"] {
   flex-wrap: wrap;
   row-gap: 0.5rem;
 }
-:is([data-testid="distillation-module"], [data-testid="runbooks-module"], [data-testid="stacked-catalog"], [data-initiative-stack]) [data-variant="crumbs"] > div:first-child {
+:is([data-testid="runbooks-module"], [data-testid="stacked-catalog"], [data-initiative-stack]) [data-variant="crumbs"] > div:first-child {
   flex: 1 1 20rem;
   height: auto;
   min-height: 1.25rem;
   align-items: flex-start;
 }
-:is([data-testid="distillation-module"], [data-testid="runbooks-module"], [data-testid="stacked-catalog"], [data-initiative-stack]) [data-variant="crumbs"] [data-hang] {
+:is([data-testid="runbooks-module"], [data-testid="stacked-catalog"], [data-initiative-stack]) [data-variant="crumbs"] [data-hang] {
   margin: 0 0 0 auto;
   max-width: 100%;
   flex-wrap: wrap;

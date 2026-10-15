@@ -72,7 +72,6 @@ import { rehydrateMockNotifications } from '../lib/notification-store.js';
 import { rehydrateMockSocialChat } from '../lib/social-chat.js';
 import { getDemoState, resetDemoDirector, startDemoDirector, stopDemoDirector } from '../mock/demo-director.js';
 import { getRunbooksDemoState, resetRunbooksDemo, startRunbooksDemo, stopRunbooksDemo } from '../mock/runbooks-demo.js';
-import { getDistillationDemoState, resetDistillationDemo, startDistillationDemo, stopDistillationDemo } from '../mock/distillation-demo.js';
 import { invalidateAll } from '../lib/gateway/authority-invalidation.js';
 
 export const mockControlRouter = Router();
@@ -336,7 +335,6 @@ function readState(registry: FixtureRegistry): {
   fixtures: FixtureState[];
   registryLoaded: boolean;
   demo: ReturnType<typeof getDemoState>;
-  distillationDemo: ReturnType<typeof getDistillationDemoState>;
   runbooksDemo: ReturnType<typeof getRunbooksDemoState>;
   scopes: number;
   clones: number;
@@ -356,10 +354,10 @@ function readState(registry: FixtureRegistry): {
   // dev:mock: is this feature unseeded, or has no fixture registered at all?
   // `demo` is where the Computer Lab demo's story has got to (mock/demo-director.ts)
   // — phase and milestones, so an e2e can wait on the story instead of a clock.
-  // `distillationDemo` is the same for the Distillation demo (mock/distillation-demo.ts).
+  // `runbooksDemo` is the same for the Runbooks demo (mock/runbooks-demo.ts).
   return {
     enabled: true, scenario: globalScenario, fixtures, registryLoaded: fixtures.length > 0,
-    demo: getDemoState(), distillationDemo: getDistillationDemoState(), runbooksDemo: getRunbooksDemoState(),
+    demo: getDemoState(), runbooksDemo: getRunbooksDemoState(),
     scopes: listMockScopes().length, clones: listIdentityClones().length,
   };
 }
@@ -428,7 +426,6 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
     // A pin rebuilds the in-memory fleet and silences every run in flight
     // (rehydrateAll), so a demo story cannot survive it — say so by stopping.
     stopDemoDirector();
-    stopDistillationDemo();
     stopRunbooksDemo();
     pin(fixture, scenario);
     // See rehydrateMockFleet's doc comment: the microVM fleet lives in an
@@ -443,7 +440,6 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
   }
 
   resetDemoDirector();
-  resetDistillationDemo();
   resetRunbooksDemo();
   unpinAll(registry);
   // Clones survive a world switch: another auditor asking for `empty` must not
@@ -466,17 +462,6 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
     void startDemoDirector(`http://127.0.0.1:${port}`, {
       ...(typeof raw.paceMs === 'number' && raw.paceMs >= 0 ? { paceMs: raw.paceMs } : {}),
       ...(typeof raw.autoAnswer === 'boolean' ? { autoAnswer: raw.autoAnswer } : {}),
-    });
-  }
-  // The Distillation demo plays in-process into the world just established.
-  // Same per-start knobs as `demo`: `paceMs` (beat length) and
-  // `autoDecideBeats` (how long it waits for a person on the open pattern;
-  // 0 → only a person decides it).
-  if (scenario === 'distillation-demo') {
-    const raw = req.body as { paceMs?: unknown; autoDecideBeats?: unknown };
-    void startDistillationDemo({
-      ...(typeof raw.paceMs === 'number' && raw.paceMs >= 0 ? { paceMs: raw.paceMs } : {}),
-      ...(typeof raw.autoDecideBeats === 'number' && raw.autoDecideBeats >= 0 ? { autoDecideBeats: raw.autoDecideBeats } : {}),
     });
   }
   // The Runbooks demo is told through this server's own routes (the owner's
@@ -512,7 +497,6 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
     const fixture = findFixture(registry, body.fixture, res);
     if (!fixture) return;
     stopDemoDirector();
-    stopDistillationDemo();
     stopRunbooksDemo();
     unpin(fixture);
     fixture.reset();
@@ -523,7 +507,6 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   }
 
   resetDemoDirector();
-  resetDistillationDemo();
   resetRunbooksDemo();
   unpinAll(registry);
   // The dev-pairing file as well as the rows: without this, a machine paired
@@ -613,7 +596,7 @@ export const MOCK_SCOPE_COOKIE = 'orgiq.mock-scope';
 export const MOCK_SCOPE_HEADER = 'x-mock-scope';
 
 /** Story scenarios run a process-wide director; they cannot be one context's. */
-const GLOBAL_ONLY: ReadonlySet<string> = new Set(['demo', 'distillation-demo', 'runbooks-demo']);
+const GLOBAL_ONLY: ReadonlySet<string> = new Set(['demo', 'runbooks-demo']);
 
 function isScopeScenario(value: unknown): value is ScopeScenario {
   return (isScenarioName(value) || isDataState(value)) && !GLOBAL_ONLY.has(value as string);
@@ -834,6 +817,5 @@ export function __resetMockControlState(): void {
   clearMockScopes();
   identityClonesFixture.reset();
   resetDemoDirector();
-  resetDistillationDemo();
   resetRunbooksDemo();
 }

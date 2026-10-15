@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-15T12:58:15.212Z",
-  "serverHandlerSha": "5099cea1d71af2708e0f68416fd1e28d232280b477e01486fb2099ad6e15cc87",
-  "baseUrl": "http://127.0.0.1:3013",
+  "capturedAt": "2026-10-15T15:59:52.073Z",
+  "serverHandlerSha": "6e566083db2f0a56ad0c8f298513d24abfc58afb43d6568c0f1c3cf40f41798b",
+  "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -149,7 +149,14 @@
       }
     },
     "DELETE /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-rta-e1-s1/decisions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 404,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "DELETE /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
@@ -504,7 +511,7 @@
         "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
-        "completedAt": "null",
+        "completedAt": "string",
         "createdAt": "string",
         "description": "null",
         "estimateForecast": "null",
@@ -523,8 +530,8 @@
         "nextStep": "null",
         "nextStepDetail": "null",
         "parentId": "string",
-        "prStatus": "null",
-        "prUrl": "null",
+        "prStatus": "string",
+        "prUrl": "string",
         "priority": "string",
         "projectId": "string",
         "projectName": "string",
@@ -538,10 +545,10 @@
       },
       "values": {
         "key": [
-          "ORG-RTA-2"
+          "ORG-LLM-10"
         ],
         "status": [
-          "in_progress"
+          "done"
         ],
         "type": [
           "story"
@@ -746,32 +753,6 @@
         "demo.milestones.running3": "boolean",
         "demo.phase": "string",
         "demo.startedAt": "null",
-        "distillationDemo": "object",
-        "distillationDemo.applicationId": "null",
-        "distillationDemo.beatMs": "number",
-        "distillationDemo.errors": "array",
-        "distillationDemo.finishedAt": "null",
-        "distillationDemo.guideId": "null",
-        "distillationDemo.jobs": "object",
-        "distillationDemo.jobs.guide": "null",
-        "distillationDemo.jobs.patterns": "null",
-        "distillationDemo.jobs.retry": "null",
-        "distillationDemo.milestones": "object",
-        "distillationDemo.milestones.applied": "boolean",
-        "distillationDemo.milestones.guideMinted": "boolean",
-        "distillationDemo.milestones.notesWritten": "number",
-        "distillationDemo.milestones.patternsMinted": "boolean",
-        "distillationDemo.milestones.published": "boolean",
-        "distillationDemo.milestones.retried": "boolean",
-        "distillationDemo.milestones.reviewed": "boolean",
-        "distillationDemo.milestones.sampled": "boolean",
-        "distillationDemo.notes": "array",
-        "distillationDemo.notesTotal": "number",
-        "distillationDemo.openDecidedBy": "null",
-        "distillationDemo.patterns": "object",
-        "distillationDemo.phase": "string",
-        "distillationDemo.samples": "object",
-        "distillationDemo.startedAt": "null",
         "enabled": "boolean",
         "fixtures": "array",
         "fixtures[]": "object",
@@ -783,6 +764,22 @@
         "reset": "object",
         "reset.fixture": "null",
         "reset.scenario": "string",
+        "runbooksDemo": "object",
+        "runbooksDemo.acceptedVersion": "null",
+        "runbooksDemo.beatMs": "number",
+        "runbooksDemo.errors": "array",
+        "runbooksDemo.finishedAt": "null",
+        "runbooksDemo.first": "null",
+        "runbooksDemo.milestones": "object",
+        "runbooksDemo.milestones.accepted": "boolean",
+        "runbooksDemo.milestones.firstBrief": "boolean",
+        "runbooksDemo.milestones.proposed": "boolean",
+        "runbooksDemo.milestones.secondBrief": "boolean",
+        "runbooksDemo.milestones.secondBriefCarriesAccepted": "boolean",
+        "runbooksDemo.phase": "string",
+        "runbooksDemo.proposalId": "null",
+        "runbooksDemo.second": "null",
+        "runbooksDemo.startedAt": "null",
         "scenario": "string",
         "scopes": "number"
       },
@@ -790,14 +787,14 @@
         "demo.phase": [
           "idle"
         ],
-        "distillationDemo.phase": [
-          "idle"
-        ],
         "fixtures[].scenario": [
           "default"
         ],
         "reset.scenario": [
           "default"
+        ],
+        "runbooksDemo.phase": [
+          "idle"
         ],
         "scenario": [
           "default"
@@ -2461,123 +2458,6 @@
       },
       "values": {},
       "sent": []
-    },
-    "POST /api/distillation/artifacts/:id/publish": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "body_markdown": "string",
-        "classification": "string",
-        "cluster_ids": "array",
-        "cluster_ids[]": "string",
-        "confidence": "number",
-        "created_at": "string",
-        "created_by_compaction_id": "string",
-        "facts": "array",
-        "facts[]": "string",
-        "id": "string",
-        "last_used_at": "null",
-        "library_item_id": "null",
-        "owner": "string",
-        "reviewed_at": "null",
-        "reviewed_by": "null",
-        "status": "string",
-        "summary": "string",
-        "title": "string",
-        "type": "string",
-        "updated_at": "string",
-        "when_this_helps": "string"
-      },
-      "values": {
-        "classification": [
-          "confidential"
-        ],
-        "status": [
-          "published"
-        ],
-        "type": [
-          "procedure"
-        ]
-      },
-      "sent": []
-    },
-    "POST /api/distillation/compact": {
-      "refused": {
-        "rule": "fires",
-        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: schedules a three-second completion timer."
-      }
-    },
-    "POST /api/distillation/procedures/:id/apply": {
-      "persona": "orgiq/admin",
-      "status": 201,
-      "shape": {
-        "$": "object",
-        "advice": "null",
-        "applied_at": "string",
-        "box_id": "string",
-        "failed_at_step_id": "null",
-        "id": "string",
-        "note": "null",
-        "outcome": "string",
-        "plain_reason": "null",
-        "procedure_id": "string",
-        "repo": "string",
-        "session_id": "string"
-      },
-      "values": {
-        "outcome": [
-          "succeeded"
-        ]
-      },
-      "sent": [
-        "outcome"
-      ]
-    },
-    "POST /api/distillation/review": {
-      "persona": "orgiq/admin",
-      "status": 201,
-      "shape": {
-        "$": "object",
-        "id": "string",
-        "note": "string",
-        "reviewer": "null",
-        "sampled_at": "string",
-        "target_id": "string",
-        "target_kind": "string",
-        "verdict": "string"
-      },
-      "values": {
-        "verdict": [
-          "pending"
-        ]
-      },
-      "sent": [
-        "target_id",
-        "target_kind"
-      ]
-    },
-    "POST /api/distillation/review/:id": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "id": "string",
-        "note": "null",
-        "reviewer": "string",
-        "sampled_at": "string",
-        "target_id": "string",
-        "target_kind": "string",
-        "verdict": "string"
-      },
-      "values": {
-        "verdict": [
-          "agree"
-        ]
-      },
-      "sent": [
-        "verdict"
-      ]
     },
     "POST /api/drop/:token/upload": {
       "refused": {
@@ -4680,7 +4560,25 @@
       }
     },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-rta-e1-s1/decisions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "escalatedAt": "null",
+        "id": "string",
+        "requiredRole": "null",
+        "status": "string",
+        "summary": "string",
+        "topic": "string",
+        "workItemId": "string",
+        "workItemTitle": "string"
+      },
+      "values": {
+        "status": [
+          "resolved"
+        ]
+      },
+      "sent": []
     },
     "PUT /api/graph/work-items/:id/documents/:documentId": {
       "refused": {

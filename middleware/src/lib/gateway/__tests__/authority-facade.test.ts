@@ -17,7 +17,7 @@ import { getUser, type UserInfo } from '../../../providers/identity.js';
 import { isAllowed } from '../../authz.js';
 import { pageResourceVisible } from '../../page-resources.js';
 import {
-  admitCall, admitCallRecipient, admitChannel, admitConversationChat, admitCursor, admitDistillation, admitDistillationDelivery,
+  admitCall, admitCallRecipient, admitChannel, admitConversationChat, admitCursor,
   admitLobbyRead, admitPrincipal, admitReader, admitSocialConversation, admitSubscribe, admitPublish, admitUploadRead,
   callGuards, channelGuard, holdsFamilyAuthority, lobbyGuard, noStoredCall, producerChannelAllowed,
 } from '../authority.js';
@@ -51,7 +51,7 @@ const DIRECTORY: Record<string, Grants> = {
 };
 /** Cedar, as the seed matrix would answer it: `admin` everything, otherwise the role's own actions. */
 const POLICY: Record<string, Record<string, string[]>> = {
-  orgiq: { member: ['ViewDistillation'], sme: ['DispatchAgentRun'], admin: ['*'] },
+  orgiq: { member: ['ViewOrgChart'], sme: ['DispatchAgentRun'], admin: ['*'] },
   assessment: { assessor: ['ViewAssessment'] },
   pipelines: { operator: ['ViewPipelines'] },
   social: { participant: ['ViewSocial', 'PostMessage', 'StartCall'] },
@@ -127,10 +127,7 @@ const CHANNEL_ROWS: ChannelRow[] = [
   { name: 'a DM admits one of its ids', ctx: () => ctx('alice', 'social'), kind: 'subscribe', channel: 'social:dm:alice:bob', verdict: true },
   { name: 'a DM refuses a third person', ctx: () => ctx('carol', 'social'), kind: 'subscribe', channel: 'social:dm:alice:bob', verdict: false },
   { name: 'a social grant holder standing in orgiq reaches a social DM (E5)', ctx: () => ctx('alice', 'orgiq'), kind: 'subscribe', channel: 'social:dm:alice:bob', verdict: true },
-  { name: 'the distillation feed: a plain subscribe standing in orgiq', ctx: () => ctx('alice', 'orgiq'), kind: 'subscribe', channel: 'orgiq:distill:jobs', verdict: true },
-  { name: 'the distillation feed: never a publish', ctx: () => ctx('alice', 'orgiq'), kind: 'publish', channel: 'orgiq:distill:jobs', verdict: false },
-  { name: 'the distillation feed: an orgiq grant held from assessment is not enough', ctx: () => ctx('ava', 'assessment'), kind: 'subscribe', channel: 'orgiq:distill:jobs', verdict: false },
-  { name: 'the distillation feed: an admin reads it from anywhere', ctx: () => ctx('root', 'orgiq', 'admin'), kind: 'subscribe', channel: 'orgiq:distill:jobs', verdict: true },
+  { name: 'the retired distillation feed is refused to an orgiq member', ctx: () => ctx('alice', 'orgiq'), kind: 'subscribe', channel: 'orgiq:distill:jobs', verdict: false },
   { name: 'a huddle chat name is never admitted by grant alone', ctx: () => ctx('alice', 'orgiq'), kind: 'subscribe', channel: 'orgiq:huddle:c1', verdict: false },
   { name: 'no context is refused', ctx: () => null, kind: 'subscribe', channel: 'orgiq:initiative:p-1', verdict: false },
   // access:req:<id> — the request's read rule for THIS reader, now (lane A1).
@@ -169,30 +166,6 @@ describe('admitChannel: the verdict', () => {
     expect(await admitCursor(ctx('ava', 'assessment'), 'cursor:assessment:doc:d1', 'publish')).toBe(true);
     expect(await admitCursor(ctx('alice', 'orgiq'), 'assessment:doc:d1', 'publish')).toBe(false);
     expect(await admitCursor(ctx('alice', 'orgiq'), 'orgiq:work:w1', 'subscribe')).toBe(false);
-  });
-});
-
-// ── /realtime (cookie) and /ws answer the distillation feed the same way ────
-
-describe('admitDistillation: the cookie path equals the /ws path', () => {
-  const contexts: Array<[string, Ctx | null]> = [
-    ['orgiq member', ctx('alice', 'orgiq')], ['assessment-standing orgiq grant holder', ctx('ava', 'assessment')],
-    ['admin', ctx('root', 'orgiq', 'admin')], ['pipelines operator', ctx('pat', 'pipelines')], ['no context', null],
-  ];
-  it.each(contexts)('%s', async (_name, context) => {
-    for (const channel of ['orgiq:distill:jobs', 'orgiq:distill:levels', 'orgiq:distill:review', 'orgiq:distill:other']) {
-      for (const kind of ['subscribe', 'publish'] as const) {
-        expect(await admitDistillation(context, channel, kind))
-          .toBe(await admitChannel({ kind, clientId: 'c1', channel, ctx: context }));
-      }
-    }
-    expect(await admitDistillationDelivery(context)).toBe(await admitDistillation(context, 'orgiq:distill:jobs', 'subscribe'));
-  });
-  it('fails closed on an epoch bump between frames', async () => {
-    const context = ctx('alice', 'orgiq');
-    expect(await admitDistillationDelivery(context)).toBe(true);
-    users.get('alice')!.epoch = 2;
-    expect(await admitDistillationDelivery(context)).toBe(false);
   });
 });
 

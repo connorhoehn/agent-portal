@@ -13,9 +13,9 @@ const fixtures = [runbooksFixture, runbookVersionsFixture, runbookProposalsFixtu
 afterEach(() => fixtureRegistry.resetAll('default'));
 
 describe('runbook fixtures', () => {
-  it('registers all five and declares empty and large', () => {
+  it('registers all five and declares empty, large and the demo world', () => {
     for (const k of KEYS) expect(fixtureRegistry.get(k)).toBeDefined();
-    for (const f of fixtures) expect([...declaredScenariosFor(f)].sort()).toEqual(['default', 'empty', 'large']);
+    for (const f of fixtures) expect([...declaredScenariosFor(f)].sort()).toEqual(['default', 'empty', 'large', 'runbooks-demo']);
   });
 
   it('default is populated and self-consistent: every version belongs to a runbook, current_version exists', () => {
@@ -26,6 +26,18 @@ describe('runbook fixtures', () => {
     // Lane C's seeded proposals (mock/runbooks.seed.ts): a run's edit, a run's new runbook, a person's near-duplicate.
     expect(fixtureRegistry.get('runbook-proposals')!.rows().map((p) => (p as { id: string }).id).sort())
       .toEqual(['prop-flaky-quarantine-check', 'prop-judge-rubric-weights', 'prop-tenant-cutover-callback']);
+  });
+
+  it('default carries one frozen brief on a done Auth Migration job, and the runbook application that names it', () => {
+    const briefs = sessionBriefsFixture.rows();
+    expect(briefs.map((b) => b.run_ref)).toEqual(['job-auth-maint-1']);
+    const [brief] = briefs;
+    expect(brief!.initiative_id).toBe('p-auth-migration');
+    expect(brief!.sections.some((x) => x.kind === 'runbook' && x.ref === 'rb-auth-pr-csrf-gate')).toBe(true);
+    const app = runbookApplicationsFixture.rows().find((a) => a.run_ref === 'job-auth-maint-1');
+    expect(app?.brief_id).toBe(brief!.id);
+    expect(Date.parse(app!.at)).toBeGreaterThan(Date.parse(brief!.assembled_at));
+    expect(Date.parse(app!.at)).toBeLessThanOrEqual(Date.now() + 1000);
   });
 
   it('empty is empty and large is large, for every fixture', () => {

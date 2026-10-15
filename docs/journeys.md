@@ -16,7 +16,6 @@ part they all share: **freshness and sealing**. One implementation backs it:
 | `social-journeys` | `validate-social-tenant.sh` | every log |
 | `pipelines-journeys` | `validate-pipelines-tenant.sh` | every log but fixtures |
 | `communication-journeys` | `validate-communication-plane.sh` | the 24 required logs that carry every field |
-| `distillation-journeys` | `validate-distillation.sh` | the current surfaces (knowledge, review, activity) |
 | `search-journeys` | `validate-search-workspace.sh` | every log |
 | `branding-journeys` | `validate-branding.sh` | the four theme cells |
 

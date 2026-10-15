@@ -23,6 +23,7 @@ import type {
   Runbook, RunbookApplication, RunbookDoc, RunbookHeader, RunbookProposal, RunbookScope, RunbookStatus, RunbookVersion, SessionBrief,
 } from '../lib/runbooks/index.js';
 import { findSimilar, lintRunbook, versionOf } from '../lib/runbooks/index.js';
+import { assembleBrief } from '../lib/runbooks/brief.js';
 import { clock } from './core/clock.js';
 
 // ─── Cast and places ─────────────────────────────────────────────────────────
@@ -883,7 +884,7 @@ function specs(): Spec[] {
       created_h: 70, accepted_h: 60,
       provenance: { run_refs: [], session_ids: ['sess-auth-01'], lab_experience_ids: ['obs-039', 'obs-040', 'obs-041', 'obs-042'], source_artifact_ids: ['art-004'] },
       cites: [], step_map: [],
-      runs: [['sess-auth-05', 12, 'followed', null, null]],
+      runs: [['sess-auth-05', 12, 'followed', null, null], [FROZEN_RUN.runRef, 3, 'followed', null, null]],
       story: 'Written from distillation decision art-004, which said what is required but not how to get through it, and the run notes of session sess-auth-01.',
     },
     {
@@ -961,6 +962,37 @@ function header(s: Spec): RunbookHeader {
   return { id: s.id, version: 1, scope_label: s.scope_label, owner_name: PEOPLE[s.owner], provenance: s.story };
 }
 
+// ─── The one frozen brief ────────────────────────────────────────────────────
+// auth-dep-watch's firing of today (mock/bots.ts `job-auth-maint-1`: done, "bumped the JWT library in the
+// token verifier; the OIDC conformance suite is green", 238 s) is the one seeded run that started after the
+// runbooks existed (they were accepted 45-60 h ago), so it is the run whose brief was frozen. It is a
+// scheduled run, so it has no work item: the brief carries the project and the CSRF-gate runbook the
+// auth-service repo scope selected. Its start is the bot run's own (clock.hoursAgo(3, keepWithinToday)).
+export const FROZEN_RUN = { runRef: 'job-auth-maint-1', briefId: 'brief-job-auth-maint-1', startedHoursAgo: 3, seconds: 238 } as const;
+const frozenRunStartMs = () => Date.parse(clock.hoursAgo(FROZEN_RUN.startedHoursAgo, { keepWithinToday: true }));
+const frozenRunFinishedAt = () => new Date(Math.min(frozenRunStartMs() + FROZEN_RUN.seconds * 1000, Date.parse(clock.nowIso()))).toISOString();
+
+/** The briefs frozen on seeded runs: assembled when the job was claimed, a few seconds before it started. */
+export function seedBriefs(): SessionBrief[] {
+  const rb = seedRunbooks().find((x) => x.runbook.id === 'rb-auth-pr-csrf-gate')!;
+  const v = rb.versions[0]!;
+  return [assembleBrief({
+    run_ref: FROZEN_RUN.runRef,
+    brief_id: FROZEN_RUN.briefId,
+    assembled_at: new Date(frozenRunStartMs() - 20_000).toISOString(),
+    framing: 'You are running unattended as the auth-dep-watch bot. Nobody can answer a question: do the task, say what you did, and stop.',
+    work_item: null,
+    initiative: { id: 'p-auth-migration', name: 'Auth Migration', repo: REPO.AUTH },
+    repo: REPO.AUTH,
+    decisions: [],
+    runbooks: [{
+      runbook_id: rb.runbook.id, version: v.version, title: v.doc?.title ?? rb.runbook.id, markdown: v.markdown, pinned: false, score: 3,
+      reasons: ['repo orgiq-auth-service'],
+      health: { status: 'proven', reason: 'Followed by its last run.', warning: null },
+    }],
+  })];
+}
+
 /** One RunbookSeed per runbook, timestamps read from the clock now. */
 export function seedRunbooks(): RunbookSeed[] {
   return specs().map((s) => {
@@ -969,10 +1001,12 @@ export function seedRunbooks(): RunbookSeed[] {
     const apps: RunbookApplication[] = s.runs.map(([runRef, h, outcome, failedAt, note], k) => ({
       id: `rba-${s.id.slice(3)}-${k + 1}`,
       runbook_id: s.id, version: 1, run_ref: runRef,
-      // These runs predate session briefs: nothing was frozen for them, so
+      // Most seeded runs predate session briefs: nothing was frozen for them, so
       // there is no brief to name (RunbookApplication.brief_id is nullable for it).
-      brief_id: null,
-      outcome, failed_at_step: failedAt, note, at: clock.hoursAgo(h),
+      // The one job that ran after the runbooks existed was handed a frozen brief.
+      brief_id: runRef === FROZEN_RUN.runRef ? FROZEN_RUN.briefId : null,
+      outcome, failed_at_step: failedAt, note,
+      at: runRef === FROZEN_RUN.runRef ? frozenRunFinishedAt() : clock.hoursAgo(h),
     }));
     return {
       runbook: {
@@ -1039,7 +1073,7 @@ export interface RunbookSeedWorld {
   versions: RunbookVersion[];
   proposals: RunbookProposal[];
   applications: RunbookApplication[];
-  /** Empty: a brief is frozen when a run is dispatched or claimed, and the seeded runs predate briefs. */
+  /** Frozen on dispatch or claim; one seeded run (FROZEN_RUN) started after the runbooks existed. */
   briefs: SessionBrief[];
 }
 
@@ -1050,6 +1084,6 @@ export function runbookSeedWorld(): RunbookSeedWorld {
     versions: seeds.flatMap((s) => s.versions),
     proposals: seedRunbookProposals(),
     applications: seeds.flatMap((s) => s.applications),
-    briefs: [],
+    briefs: seedBriefs(),
   };
 }

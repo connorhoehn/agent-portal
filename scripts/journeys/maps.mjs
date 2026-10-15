@@ -30,8 +30,6 @@ export const PROFILES = {
     'isolation-inbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'pipelines-tile-visible', 'pipelines-nav-visible', 'direct-route-result', 'api-status', 'events-status', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
     'isolation-outbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'other-nav-visible', 'iq-route-result', 'iq-api-status', 'assessment-route-result', 'assessment-api-status', 'social-route-result', 'social-api-status', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
   },
-  // docs/distillation-journeys/PROTOCOL.md: the same surface fields (its role-gating line states the ManageBots controls).
-  distillation: { surface: SURFACE },
   // docs/demo-journeys/PROTOCOL.md (docs/demo-content-goal.md): one story per tenant a peer follows in five
   // minutes; each step asserts a fact of the story is on screen (story-facts) and that the records it names
   // lead to each other (cross-links).

@@ -4,8 +4,8 @@ user: u-nora (Nora DaSilva, SME on Auth Migration)
 url: /iq/runbooks
 map: docs/journeys/maps/runbooks/box/brief.ts
 pages: middleware/src/routes/session-briefs.ts, middleware/src/routes/runbooks.ts
-audited: 2026-10-15 10:54–10:55 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-6a5258e2), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.0
-session: /api/session/me sub u-nora-clone-6a5258e2, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-10-15 11:44–11:44 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-6ed0d145), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.0
+session: /api/session/me sub u-nora-clone-6ed0d145, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: brief.jpg
 verdict: pass
 console errors: 0

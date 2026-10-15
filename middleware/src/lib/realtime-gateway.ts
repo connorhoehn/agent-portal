@@ -70,7 +70,6 @@ import type { LeasedOwner } from './realtime-node-ownership.js';
 import { createGatewayNotificationStore, releaseGatewayNotificationStore, seedMockNotifications } from './notification-store.js';
 import { admitTenantNotification, setNotificationSink } from './social-notify.js';
 import { createSocialChatBackend, setSocialChatBackend, setThreadLiveAppend, type SocialChatBackend } from './social-chat.js';
-import { setDistillationGatewayTarget } from './distillation-channels.js';
 import { createReactionStore, gatewayUploadConfig, uploadFeatureOptions } from './gateway-attachments.js';
 import { tenantActivity, tenantPipeline } from './gateway-run-feed.js';
 import { directRecipientFilter } from './direct-recipient.js';
@@ -398,9 +397,6 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   setCallChatRuntime(chatRuntime);
   setCallMediaProofRuntime(new CallMediaProofRuntime({ calls: baseStateStore, router: handle.router, lobbyAllowed: lobbyGuard }));
   setNotificationSink(handle.services.notification ?? null);
-  // lib/distillation-realtime.ts pushes the distillation feed here as well as
-  // on /realtime: this is the socket the portal actually opens.
-  setDistillationGatewayTarget(handle.router);
   // The routes read the same backend; a mock reset drops the ChatService's
   // per-channel caches so the rebuilt fixture rows are what the next join reads.
   setSocialChatBackend(chatBackend, () => {
@@ -446,7 +442,6 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
         setCallChatRuntime(null);
         setCallMediaProofRuntime(null);
         setNotificationSink(null);
-        setDistillationGatewayTarget(null);
         setSocialChatBackend(null);
         setThreadLiveAppend(null);
         releaseGatewayNotificationStore();

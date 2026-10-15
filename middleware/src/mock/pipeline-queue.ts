@@ -1,23 +1,16 @@
-// The in-process compaction queue's message store (lib/memory-queue.ts under
-// `MOCK_QUEUE=true`). A registered fixture rather than a private array for one
-// reason: `POST /api/__mock/reset` must take a queued or leased compaction
-// back with everything else. A queue that survived a reset would redeliver a
-// job the reset had just erased, and the consumer would run a pass against a
-// corpus that no longer contains its job row.
-//
-// No COMPACTION message is ever seeded — it would be a job the consumer runs
-// at boot, mutating the corpus before anyone looked at it. The one backlog
-// below is on queues no consumer reads (see `pipelineBacklog`).
+// The in-process pipeline queues' message store (lib/memory-queue.ts under
+// `MOCK_QUEUE=true`). A registered fixture rather than a private array so
+// `POST /api/__mock/reset` takes a queued or leased message back with everything
+// else. The backlog below is on queues no consumer reads, so nothing runs at boot.
 
 import { clock, defineFixture } from './core/index.js';
 import type { MemoryQueueRow } from '../lib/memory-queue.js';
 import { BACKFILL_QUEUE, INGEST_DLQ, INGEST_QUEUE } from '../lib/pipeline-queue-defs.js';
 
 /**
- * The one exception to "nothing queued": the pipelines tenant's data-pipeline
- * queues (lib/pipeline-queue-defs.ts) hold a believable backlog, because the
- * Queues page is read with something on it. Nothing consumes these queues, so
- * nothing runs at boot. Depth is the rows; no count is stored.
+ * The pipelines tenant's data-pipeline queues (lib/pipeline-queue-defs.ts) hold
+ * a believable backlog, because the Queues page is read with something on it.
+ * Nothing consumes these queues. Depth is the rows; no count is stored.
  */
 function pipelineBacklog(): MemoryQueueRow[] {
   const now = clock.now().getTime();
@@ -36,8 +29,8 @@ function pipelineBacklog(): MemoryQueueRow[] {
   ];
 }
 
-export const distillationQueueMessages = defineFixture<MemoryQueueRow>({
-  key: 'distillation-queue-messages',
+export const pipelineQueueMessages = defineFixture<MemoryQueueRow>({
+  key: 'pipeline-queue-messages',
   scenarios: {
     default: pipelineBacklog,
     empty: () => [],

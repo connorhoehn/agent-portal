@@ -54,7 +54,6 @@ const FAMILIES = {
   'docs/assessment-journeys': ['^verdict: *pass'],
   'docs/branding-journeys': ['^verdict: *pass', '^console errors: *0', '^layers:', '^contrast:', '^brand: *#[0-9a-fA-F]{6}', '^rhythm:'],
   'docs/communication-journeys': ['^surface: *\\S', '^role: *\\S', '^user: *\\S', '^url: *\\S', '^audited: *\\S', '^verdict: *pass', '^console errors: *\\S', '^layout: *\\S', '^keyboard: *\\S', '^empty-state: *\\S', '^realtime: *\\S'],
-  'docs/distillation-journeys': ['^verdict: *pass', '^console errors: *0', '^layout: *pass', '^keyboard: *pass', '^empty-state: *(pass|n/a)'],
   'docs/pipelines-journeys': ['^verdict: *pass'],
   'docs/access-journeys': ['^surface: *\\S', '^role: *\\S', '^user: *\\S', '^url: *\\S', '^verdict: *pass', '^console errors: *\\S', '^layout: *\\S', '^keyboard: *\\S', '^empty-state: *\\S', '^role-gating: *\\S'],
   'docs/search-journeys': ['^verdict: *pass', '^console errors: *0', '^layout: *pass', '^keyboard: *pass', '^empty-state: *(pass|n/a)'],

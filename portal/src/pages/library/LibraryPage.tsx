@@ -37,7 +37,6 @@ import {
   LIBRARY_SOURCE, facetOptions, libraryEmptyKind,
 } from './libraryFormat';
 import type { AssetKind, AssetTier, LibraryAsset, LibraryResponse } from './types';
-import { knowledgeHref } from '../distillation/distillationRoutes';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
 import { LIBRARY_GRAMMAR, libraryTargets } from './libraryCommands';
@@ -213,10 +212,10 @@ export default function LibraryPage() {
       ) : !(isLoading && !data) && emptyKind === 'catalog-empty' ? (
         <EmptyState
           title="Agent library has no assets yet"
-          description="Reusable assets include manually authored prompts, system prompts, evaluators and skills, plus assets reviewed in Distillation."
+          description="Reusable assets include manually authored prompts, system prompts, evaluators and skills, plus skills promoted from runbooks."
           action={(
-            <Link to={knowledgeHref({ view: 'guides' })} className="text-xs font-semibold text-primary no-underline hover:underline">
-              Open Distillation → Knowledge →
+            <Link to="/iq/runbooks" className="text-xs font-semibold text-primary no-underline hover:underline">
+              Open Runbooks →
             </Link>
           )}
         />

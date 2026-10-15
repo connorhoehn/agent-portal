@@ -194,7 +194,6 @@ export const PARAM_SOURCES: Record<string, string> = {
   'jobId@/api/ingest/job': '/api/ingest/jobs',
   'id@/api/ingest/survey': '/api/ingest/surveys',
   'assetId@/api/library/evals': '/api/library',
-  'libraryItemId@/api/distillation/library': '/api/library',
   'id@/api/observability/harness/runs': '/api/observability/harness/runs#runId',
   'invocationId@/api/observability/invocations': '/api/observability/recent-invocations#invocationId',
   'invocationId@/api/observability/drift/neighbors': '/api/observability/recent-invocations#invocationId',
@@ -234,20 +233,6 @@ export const PARAM_SOURCES: Record<string, string> = {
   // them reach `build` at all instead of failing earlier, at path resolution,
   // for a less exact reason.
   'jobId@/api/local-compute/jobs': '/api/work/jobs#id',
-  'id@/api/distillation/review': '/api/distillation/review?verdict=pending#id',
-  // Unfiltered, the collection's default sort (most-recently-updated first)
-  // hands back a published artifact — publish would then 409. Filtering to
-  // draft the same way `/promotions?status=candidate` does above keeps this
-  // capture on the 200 branch.
-  'id@/api/distillation/artifacts': '/api/distillation/artifacts?status=draft#id',
-  // Unfiltered, `/items` opens on an L0 run note, so the capture never saw
-  // an L2 record's derived `guide` { approach, based_on, run_warning } — the
-  // one shape the guide record page reads. The SAML cut-over procedure is the
-  // L2 record whose latest run failed, so this one read witnesses every
-  // guide key including a non-null `run_warning`. (Also governs
-  // `/items/:id/lineage` and `/items/:id/sources`; the L0 item shape is still
-  // witnessed by `GET /api/distillation/items`' `items[]`.)
-  'id@/api/distillation/items': '/api/distillation/items?level=L2&q=SAML#items[].id',
   'id@/api/observability/calibration/cases': '/api/observability/calibration/cases#calibrationId',
   'id@/api/observability/harness/cases': '/api/observability/harness/cases#testId',
   'id@/api/observability/approvals': '/api/observability/approvals#approvalId',

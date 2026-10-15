@@ -21,13 +21,6 @@ export interface AssetContract {
   guardrailId?: string | null;
 }
 
-export interface DerivationSummary {
-  fromKind: 'observation' | 'pattern';
-  supportCount: number;
-  sessionCount: number;
-  top: Array<{ id: string; kind: string; title: string; repo: string | null; weight: number }>;
-}
-
 export interface LibraryAsset {
   id: string;
   name: string;
@@ -43,7 +36,6 @@ export interface LibraryAsset {
   evalPassRate: number | null;
   usedBy: string[];
   updatedAt: string;
-  derivedFrom?: DerivationSummary;
   template: string;
   signoffs: number;
   designReviewId?: string | null;

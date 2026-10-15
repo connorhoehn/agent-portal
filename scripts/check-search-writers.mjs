@@ -20,7 +20,6 @@ const MODULES = [
   'middleware/src/providers/work-items.ts',      // work
   'middleware/src/providers/decisions.ts',       // decision
   'middleware/src/providers/design-reviews.ts',  // decision (approved designs)
-  'middleware/src/providers/distillation.ts',    // knowledge
   'middleware/src/providers/prompt-library.ts',  // asset
   'middleware/src/providers/graph-proposals.ts', // person (skills, title, collaborations)
   'middleware/src/providers/org-teams.ts',       // team
@@ -44,9 +43,6 @@ const EXEMPT = {
   'work-items.ts:updateWorkItemCriterion': 'acceptance criteria are not part of the work doc',
   'work-items.ts:deleteWorkItemCriterion': 'acceptance criteria are not part of the work doc',
   'design-reviews.ts:answerQuestion': 'a thread post changes neither the design\'s title, summary nor status',
-  'distillation.ts:writeAmplification': 'a pure metric over compaction jobs; it writes nothing',
-  'distillation.ts:decideReview': 'review samples are not knowledge records',
-  'distillation.ts:applyProcedure': 'a procedure application is a run record; the guide doc is unchanged',
 };
 
 /** The body of `export (async) function name(` — walks braces, skipping strings and template literals roughly. */

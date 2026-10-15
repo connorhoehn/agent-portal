@@ -16,6 +16,8 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
 import { RunbookDocView } from './RunbookDocView';
+import { useRunbookNames } from './useRunbookNames';
+import type { Names } from './runbookNames';
 import { SafeMarkdown } from './SafeMarkdown';
 import {
   HEALTH_LABEL, HEALTH_TONE, OUTCOME_LABEL, RECORD_TABS, briefHref, parseTab, proposalHref, refusalMessage, runPageHref,
@@ -37,6 +39,7 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
   const tab = parseTab(params.get('tab'));
   const record = useFetch<RecordResponse>(`/api/runbooks/${encodeURIComponent(id)}`, 0);
   const applications = useFetch<{ applications: RunbookApplication[] }>(tab === 'runs' ? `/api/runbooks/${encodeURIComponent(id)}/applications` : null, 0);
+  const names = useRunbookNames();
   const title = record.data?.runbook.title ?? summary?.title;
   useCrumbLabel(id, title);
 
@@ -44,7 +47,7 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
     return (
       <Stack className="p-6" data-testid="runbook-missing">
         <UnavailableNotice
-          error={isNotFoundError(record.error) ? `No runbook ${id} exists.` : record.error}
+          error={isNotFoundError(record.error) ? 'That runbook does not exist.' : record.error}
           what="this runbook"
           source="Runbooks are read from the runbook store"
           onRetry={record.refresh}
@@ -66,7 +69,7 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
       titleSize="sm" titleAs="h2"
       title={runbook.title}
       statusPill={<StatusPill tone={pill.tone} label={pill.label} size="sm" />}
-      subtitle={<T size="xs" tone="tertiary">{`${scopeLabel(runbook.scope)} · owner ${runbook.owner_person_id} · v${runbook.current_version} · updated ${relativeTime(runbook.updated_at)}`}</T>}
+      subtitle={<T size="xs" tone="tertiary">{`${scopeLabel(runbook.scope, names)} · owner ${names.person(runbook.owner_person_id)} · v${runbook.current_version} · updated ${relativeTime(runbook.updated_at)}`}</T>}
       tabs={tabs}
       activeTab={tab}
       onTabChange={setTab}
@@ -76,9 +79,9 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
       data-testid="runbook-record"
     >
       <Stack gap="md" className="w-full max-w-4xl px-5 py-4">
-        {tab === 'read' && <ReadTab runbook={runbook} version={current} onOpen={onOpen} />}
-        {tab === 'history' && <HistoryTab runbook={runbook} />}
-        {tab === 'runs' && <RunsTab runbook={runbook} version={current} applications={applications.data?.applications ?? null} error={applications.error} onOpen={onOpen} />}
+        {tab === 'read' && <ReadTab runbook={runbook} version={current} names={names} onOpen={onOpen} />}
+        {tab === 'history' && <HistoryTab runbook={runbook} names={names} />}
+        {tab === 'runs' && <RunsTab runbook={runbook} version={current} names={names} applications={applications.data?.applications ?? null} error={applications.error} onOpen={onOpen} />}
         {tab === 'suggest' && <SuggestTab runbook={runbook} version={current} onOpen={onOpen} onChanged={() => { record.refresh(); onChanged(); }} />}
       </Stack>
     </EditorShell>
@@ -96,13 +99,13 @@ function CopyMarkdown({ markdown }: { markdown: string }) {
   );
 }
 
-function ReadTab({ runbook, version, onOpen }: { runbook: RunbookRow; version: RunbookVersion; onOpen: (href: string) => void }) {
+function ReadTab({ runbook, version, names, onOpen }: { runbook: RunbookRow; version: RunbookVersion; names: Names; onOpen: (href: string) => void }) {
   const prov = version.provenance;
   const sources = [
-    ...prov.run_refs.map((r) => ({ id: `run:${r}`, title: `Run ${r}`, kind: 'transcript' as const, meta: 'Proposed this version', onOpen: () => onOpen(runPageHref(r)) })),
-    ...prov.session_ids.map((s) => ({ id: `session:${s}`, title: `Session ${s}`, kind: 'transcript' as const, meta: 'Session it came from' })),
-    ...prov.lab_experience_ids.map((l) => ({ id: `lab:${l}`, title: `Run note ${l}`, kind: 'transcript' as const, meta: 'Evidence cited' })),
-    ...(prov.source_artifact_ids ?? []).map((a) => ({ id: `art:${a}`, title: `Migrated from ${a}`, kind: 'page' as const, meta: 'Earlier Distillation guide' })),
+    ...prov.run_refs.map((r) => ({ id: `run:${r}`, title: names.run(r), kind: 'transcript' as const, meta: 'Proposed this version', onOpen: () => onOpen(runPageHref(r)) })),
+    ...prov.session_ids.map((s, k) => ({ id: `session:${s}`, title: prov.session_ids.length > 1 ? `Session ${k + 1}` : 'The session it came from', kind: 'transcript' as const, meta: 'Session it came from' })),
+    ...prov.lab_experience_ids.map((l, k) => ({ id: `lab:${l}`, title: `Run note ${k + 1}`, kind: 'transcript' as const, meta: 'Evidence cited' })),
+    ...(prov.source_artifact_ids ?? []).map((a, k, all) => ({ id: `art:${a}`, title: all.length > 1 ? `Migrated from earlier guide ${k + 1}` : 'Migrated from an earlier guide', kind: 'page' as const, meta: 'Earlier Distillation guide' })),
   ];
   return (
     <>
@@ -123,7 +126,7 @@ function ReadTab({ runbook, version, onOpen }: { runbook: RunbookRow; version: R
         : <SafeMarkdown markdown={version.markdown} scale="md" testId="runbook-markdown" />}
       <DetailSection variant="heading" title="Where it came from" hint={`v${version.version}`}>
         <Stack gap="sm">
-          <T size="xs" tone="tertiary" className="font-mono">{`sha256 ${shortSha(version.sha256)}${version.accepted_at ? ` · accepted ${relativeTime(version.accepted_at)}${version.accepted_by ? ` by ${version.accepted_by}` : ''}` : ''}`}</T>
+          <T size="xs" tone="tertiary" className="font-mono">{`sha256 ${shortSha(version.sha256)}${version.accepted_at ? ` · accepted ${relativeTime(version.accepted_at)}${version.accepted_by ? ` by ${names.person(version.accepted_by)}` : ''}` : ''}`}</T>
           <SourceList aria-label="Provenance" emptyLabel="Written by hand; no run is cited." items={sources} data-testid="runbook-provenance" />
         </Stack>
       </DetailSection>
@@ -131,18 +134,24 @@ function ReadTab({ runbook, version, onOpen }: { runbook: RunbookRow; version: R
   );
 }
 
-function HistoryTab({ runbook }: { runbook: RunbookRow }) {
+function HistoryTab({ runbook, names }: { runbook: RunbookRow; names: Names }) {
   const versions = useFetch<{ versions: RunbookVersion[] }>(`/api/runbooks/${encodeURIComponent(runbook.id)}/versions`, 0);
   const list = useMemo(() => [...(versions.data?.versions ?? [])].sort((a, b) => b.version - a.version), [versions.data]);
   const [to, setTo] = useState(runbook.current_version);
   const [from, setFrom] = useState(Math.max(1, runbook.current_version - 1));
   const diff = useFetch<{ diff: string; added: number; removed: number }>(
     list.length > 1 && from !== to ? `/api/runbooks/${encodeURIComponent(runbook.id)}/diff?from=${from}&to=${to}` : null, 0);
+  // A row opens what that version changed: it sets the comparison below to the version and the one before it.
+  const compareWithPrevious = (v: RunbookVersion) => {
+    const n = v.version;
+    setTo(n > 1 ? n : Math.min(2, list[0]!.version));
+    setFrom(n > 1 ? n - 1 : 1);
+  };
   const options = list.map((v) => ({ value: String(v.version), label: `v${v.version}` }));
   const columns: DataTableColumn<RunbookVersion>[] = [
     { key: 'version', header: 'Version', render: (v) => `v${v.version}`, numeric: true },
-    { key: 'author', header: 'Written by', render: (v) => (v.author.kind === 'run' ? `Run ${v.author.id}` : v.author.kind === 'migration' ? 'Migration' : v.author.id) },
-    { key: 'accepted', header: 'Accepted', render: (v) => (v.accepted_at ? `${relativeTime(v.accepted_at)}${v.accepted_by ? ` by ${v.accepted_by}` : ''}` : 'Seeded') },
+    { key: 'author', header: 'Written by', render: (v) => (v.author.kind === 'run' ? names.run(v.author.id) : v.author.kind === 'migration' ? 'Migration' : names.person(v.author.id)) },
+    { key: 'accepted', header: 'Accepted', render: (v) => (v.accepted_at ? `${relativeTime(v.accepted_at)}${v.accepted_by ? ` by ${names.person(v.accepted_by)}` : ''}` : 'Seeded') },
     { key: 'sha', header: 'sha256', render: (v) => shortSha(v.sha256) },
   ];
   if (versions.error) return <UnavailableNotice error={versions.error} what="the version history" source="Versions are read from the runbook store" onRetry={versions.refresh} />;
@@ -150,7 +159,7 @@ function HistoryTab({ runbook }: { runbook: RunbookRow }) {
   return (
     <>
       <DetailSection variant="heading" first title="Versions" hint={`${list.length}`}>
-        <DataTable data={list} columns={columns} keyField={(v) => String(v.version)} frameless emptyMessage="No versions." data-testid="runbook-versions" />
+        <DataTable data={list} columns={columns} keyField={(v) => String(v.version)} frameless emptyMessage="No versions." {...(list.length > 1 ? { onRowClick: compareWithPrevious } : { staticRows: 'There is only one version, so there is nothing earlier to compare it with.' })} data-testid="runbook-versions" />
       </DetailSection>
       <DetailSection variant="heading" title="What changed" description="Compare any two versions of the canonical markdown.">
         <Stack gap="sm">
@@ -166,7 +175,7 @@ function HistoryTab({ runbook }: { runbook: RunbookRow }) {
           {from === to && list.length > 1 && <T size="sm" tone="secondary">Choose two different versions.</T>}
           {diff.error && <T size="sm" tone="secondary" className="text-danger-fg">{diff.error}</T>}
           {diff.data && (diff.data.diff
-            ? <DiffViewer diff={viewerDiff(diff.data.diff, `${runbook.id}.md`)} data-testid="runbook-diff" />
+            ? <DiffViewer diff={viewerDiff(diff.data.diff, `${runbook.title}.md`)} data-testid="runbook-diff" />
             : <T size="sm" tone="secondary">These two versions are identical.</T>)}
         </Stack>
       </DetailSection>
@@ -174,8 +183,9 @@ function HistoryTab({ runbook }: { runbook: RunbookRow }) {
   );
 }
 
-function RunsTab({ runbook, version, applications, error, onOpen }: {
+function RunsTab({ runbook, version, names, applications, error, onOpen }: {
   runbook: RunbookRow;
+  names: Names;
   version: RunbookVersion;
   applications: RunbookApplication[] | null;
   error: string | null;
@@ -186,7 +196,7 @@ function RunsTab({ runbook, version, applications, error, onOpen }: {
   const steps = version.doc?.steps ?? [];
   const markers = stepMarkers(steps, applications, runbook.current_version);
   const columns: DataTableColumn<RunbookApplication>[] = [
-    { key: 'run', header: 'Run', render: (a) => `${a.run_ref} · v${a.version}` },
+    { key: 'run', header: 'Run', render: (a) => <T title={a.run_ref}>{`${names.run(a.run_ref)} · v${a.version}`}</T> },
     { key: 'outcome', header: 'Outcome', render: (a) => `${OUTCOME_LABEL[a.outcome]}${a.failed_at_step ? ` at step ${a.failed_at_step}` : ''}` },
     { key: 'note', header: 'Note', render: (a) => a.note ?? '' },
     { key: 'at', header: 'When', render: (a) => relativeTime(a.at) },
@@ -211,8 +221,8 @@ function LintList({ findings }: { findings: readonly LintFinding[] }) {
   if (!findings.length) return null;
   return (
     <Stack gap="xs" data-testid="suggest-lint">
-      {findings.map((f) => (
-        <Banner key={`${f.rule}:${f.path}`} variant={f.severity === 'error' ? 'error' : 'warning'} title={`${f.rule} · ${f.path}`}>{f.message}</Banner>
+      {findings.map((f, i) => (
+        <Banner key={`${i}:${f.rule}:${f.path}`} variant={f.severity === 'error' ? 'error' : 'warning'} title={`${f.rule} · ${f.path}`}>{f.message}</Banner>
       ))}
     </Stack>
   );
@@ -259,7 +269,7 @@ function SuggestTab({ runbook, version, onOpen, onChanged }: { runbook: RunbookR
       </T>
       <FormField label="Runbook markdown" hint="The same canonical format a box receives: numbered steps, a command under each, what to expect.">
         {({ labelId: _l, ...w }) => (
-          <Textarea {...w} value={markdown} onChange={(e) => setMarkdown(e.target.value)} rows={22} className="font-mono" data-testid="suggest-markdown" />
+          <Textarea {...w} value={markdown} onChange={(e) => setMarkdown(e.target.value)} rows={22} data-testid="suggest-markdown" />
         )}
       </FormField>
       <FormField label="Why this change" required>

@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 test.use({ baseURL: process.env.PARITY_BASE_URL ?? 'http://127.0.0.1:5263', viewport: { width: 1440, height: 1000 } });
 const queues = [
-  { name: 'distill-compact-l1', purpose: 'L0 → L1 compaction', deadLetter: false, redriveTo: 'distill-compact-l1-dlq', maxReceives: 3, state: 'available', reason: null, snapshot: { ready: 7, inFlight: 2, delayed: 0, visibilityTimeoutSeconds: 60, fifo: null } },
-  { name: 'distill-compact-l1-dlq', purpose: 'Failed distillation deliveries', deadLetter: true, redriveTo: null, maxReceives: null, state: 'available', reason: null, snapshot: { ready: 3, inFlight: 0, delayed: 0, visibilityTimeoutSeconds: 60, fifo: null } },
-  { name: 'distill-compact-l2', purpose: 'L1 → L2 compaction', deadLetter: false, redriveTo: 'distill-compact-l2-dlq', maxReceives: 3, state: 'unavailable', reason: 'Queue service refused the metadata read.', snapshot: null },
+  { name: 'ingest-landing', purpose: 'Source files landed and waiting to be loaded', deadLetter: false, redriveTo: 'ingest-landing-dlq', maxReceives: 3, state: 'available', reason: null, snapshot: { ready: 7, inFlight: 2, delayed: 0, visibilityTimeoutSeconds: 60, fifo: null } },
+  { name: 'ingest-landing-dlq', purpose: 'Files that failed three loads and need a person', deadLetter: true, redriveTo: null, maxReceives: null, state: 'available', reason: null, snapshot: { ready: 3, inFlight: 0, delayed: 0, visibilityTimeoutSeconds: 60, fifo: null } },
+  { name: 'backfill-requests', purpose: 'Backfills requested and waiting for a window', deadLetter: false, redriveTo: 'ingest-landing-dlq', maxReceives: 3, state: 'unavailable', reason: 'Queue service refused the metadata read.', snapshot: null },
 ];
 
 test('metadata-only queue view keeps partial failures visible and transport distinct from realtime', async ({ page }) => {
@@ -19,13 +19,13 @@ test('metadata-only queue view keeps partial failures visible and transport dist
   await root.getByRole('button', { name: 'About queue delivery' }).click();
   await expect(root.getByText('Realtime disconnected', { exact: true })).toBeVisible();
   await expect(root.getByText('Unavailable', { exact: true })).toBeVisible();
-  await root.getByText('distill-compact-l2', { exact: true }).click();
+  await root.getByText('backfill-requests', { exact: true }).click();
   await expect(page.getByTestId('pipeline-queue-details')).toContainText('Queue service refused the metadata read.');
-  await root.getByText('distill-compact-l1', { exact: true }).click();
+  await root.getByText('ingest-landing', { exact: true }).click();
   await expect(page.getByTestId('pipeline-queue-details')).toContainText('Not reported by service');
   await page.screenshot({ path: test.info().outputPath('queue-metadata-desktop.png') });
-  await root.getByRole('textbox', { name: 'Search queues' }).fill('l1-dlq');
-  await expect(root.getByTestId('pipeline-queues-table').getByText('distill-compact-l2', { exact: true })).toHaveCount(0);
+  await root.getByRole('textbox', { name: 'Search queues' }).fill('landing-dlq');
+  await expect(root.getByTestId('pipeline-queues-table').getByText('backfill-requests', { exact: true })).toHaveCount(0);
   backend = 'memory';
   await root.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(root.getByText('Their messages do not survive a restart.', { exact: false })).toBeVisible();

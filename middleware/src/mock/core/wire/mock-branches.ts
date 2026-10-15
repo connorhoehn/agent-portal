@@ -409,8 +409,8 @@ function callsLiveAws(fn: FnDecl, modRel: string): boolean {
  *     reported as reaching live AWS through its own auth check.
  *   * `sessionSigningSecretArn` — lib/session.ts signs with a deterministic dev
  *     key rather than reading Secrets Manager when no secret ARN is set.
- *   * `inProcessQueue` — lib/distillation-queue.ts carries distillation
- *     compaction passes on the in-process queue (lib/memory-queue.ts, same
+ *   * `inProcessQueue` — lib/pipeline-queue-transport.ts carries the
+ *     pipelines tenant's queues on the in-process queue (lib/memory-queue.ts, same
  *     send/receive/ack/redrive semantics, rows in a registered fixture) under
  *     MOCK_QUEUE — which `dev:mock` sets — or when MESSAGE_QUEUE_URL is unset,
  *     and on message-queue over HTTP otherwise. A queue `.send()` looks like an

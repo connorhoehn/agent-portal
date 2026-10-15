@@ -81,7 +81,6 @@ other scenario stops it. Each reports where it has got to in
 | scenario | director | state key | guide |
 |---|---|---|---|
 | `demo` | `mock/demo-director.ts` — the Computer Lab: three agents dispatched through the governed path (`DEMO_DIRECTOR_PACE_MS`) | `demo` | the file's header |
-| `distillation-demo` | `mock/distillation-demo.ts` — run notes → patterns → review → guide → an agent runs it, on `/iq/distillation` (`DISTILL_DEMO_PACE_MS`, `DISTILL_DEMO_AUTO_DECIDE_BEATS`). Only `distillation-ingest-writers` declares a branch (the six scripted sessions); every other fixture is `default`, and simulated ingest is off in this world because the director is the write stream | `distillationDemo` | `docs/distillation-demo.md` |
 
 ```ts
 fixtureRegistry.resetAll('empty');   // switch every fixture at once
@@ -120,7 +119,7 @@ names/ids, never a typed literal count) rather than invented:
 | `mock/bots.ts`'s `botRuns` | every seeded bot's history extended 220+ runs past its own seed | `listBotRuns`/`listBotRunsForBotsResult`'s 200-run-per-bot cap |
 | `mock/invocations.ts`'s `invocationTail` | 5× the default traffic volume | the Invocations page's density and the 50-row `/recent-invocations` window against a busy fleet |
 | `mock/traces.ts`'s `traces` | 12 rounds of the seeded traces (36 total) | the trace list's paging and the waterfall's density |
-| `mock/local-compute.ts`, `mock/distillation.ts` | see each fixture's own header | their own pagination surfaces |
+| `mock/local-compute.ts` | see the fixture's own header | their own pagination surfaces |
 
 Fixtures that deliberately still fall back to `default` under `large`: every
 other fixture in the registry. Most seed a cast too small to have a
@@ -236,7 +235,7 @@ fixtures through the scope, across awaits and timers the handler starts). No
 other request sees it. `{ scenario }` scopes every fixture;
 `{ scenario, fixture }` only that one (the rest of the scope is `default`);
 `{ fixtures: { key: scenario }, scenario? }` several over an optional base.
-`demo` and `distillation-demo` are refused: their directors are process-wide.
+`demo` and `runbooks-demo` are refused: their directors are process-wide.
 
 **Copy-on-write.** The first read of a fixture inside a scope materializes the
 scope's own rows — a `structuredClone` of the shared rows of that scenario if
@@ -287,7 +286,7 @@ than half-scoped:
 - **Identity** — the grant-writes and clone fixtures are `scoped: false`
   (`FixtureSpec.scoped`): the session middleware reads them before any scope is
   entered, and a directory forked per scope would let a scope mint grants.
-- **The demo directors** (`demo`, `distillation-demo`) and anything their
+- **The demo directors** (`demo`, `runbooks-demo`) and anything their
   timers write; the restart snapshot (scopes are memory-only and die with the
   process).
 - **Module-level state that is not a registered fixture** — the same set
@@ -778,11 +777,12 @@ Two things came with the widening, both recorded in `mock-branches.ts`:
   spellings of "this has an offline path" is drift waiting to happen;
   consolidating them is a separate slice.
 - `GUARD_TOKENS` later gained `inProcessQueue` (2026-09-24), the named
-  decision in `lib/distillation-queue.ts` that puts distillation compaction
-  passes on the in-process queue under `MOCK_QUEUE` (or with no
-  `MESSAGE_QUEUE_URL`). A queue client's `.send()` reads as an SDK send to the
-  scan, so without the token `POST /api/distillation/compact` was reported as
-  reaching live AWS while its offline branch was the one `dev:mock` takes.
+  decision (now in `lib/pipeline-queue-transport.ts`; it began in the
+  distillation queue, removed in R7) that puts the queues on the in-process
+  transport under `MOCK_QUEUE` (or with no `MESSAGE_QUEUE_URL`). A queue
+  client's `.send()` reads as an SDK send to the scan, so without the token a
+  queue write was reported as reaching live AWS while its offline branch was
+  the one `dev:mock` takes.
   Five spellings now; the consolidation slice still stands.
 
 **It was widened a second time, in 2026-09, to count an outbound `fetch`.**
@@ -977,62 +977,15 @@ Say it out loud so nobody over-trusts it.
   server. Where a fixture is right and the page is wrong — or both are wrong
   together in a way no fixture states — only an audit will find it.
 
-## Distillation's queue, replica and live channel offline (2026-09-24)
+## Distillation's queue, replica and live channel (retired, R7)
 
-The distillation redesign (`docs/distillation-redesign-spec.md` §3) put three
-pieces of infrastructure under `/api/distillation`. All three run under
-`dev:mock` with nothing else started, and all three reset with the floor.
-
-| Piece | Offline | Against the real thing |
-|---|---|---|
-| Compaction jobs on **message-queue** — `distill-compact-l1`, `distill-compact-l2` (FIFO, group = repo, DLQ after 3 deliveries) | `MOCK_QUEUE=true` (set by `dev:mock`): `lib/memory-queue.ts`, same send/receive/ack/visibility/redrive semantics; its messages are the `distillation-queue-messages` fixture, so `POST /api/__mock/reset` drops queued and leased passes with the job rows they belong to | `MESSAGE_QUEUE_URL=http://127.0.0.1:3000` and `MOCK_QUEUE` unset. `MESSAGE_QUEUE_AUTH_SECRET` + `MESSAGE_QUEUE_SERVICE_ID` (default `orgiq-middleware`) sign `X-Service-Auth`; leave the secret unset against a non-production message-queue with no secret of its own |
-| The **L2 read replica** (`lib/distillation-replica.ts`, distributed-core `MerkleSyncer`) | In process always — the "remote" is the artifacts fixture, reached through `fetchSubtree`/`fetchValues` callbacks | Same; `GET /api/distillation/replication` reports digest, lag, last sweep, keys repaired |
-| **realtime-modules** on `/realtime` — `distill:levels`, `distill:jobs`, `distill:review` | The local router needs no infra; the portal points `VITE_GATEWAY_URL` at `ws://localhost:3001/realtime` | Same path behind the ALB (WebSockets pass through); the upgrade checks Origin and the signed session cookie |
-
-What the floor rules mean here:
-
-- **No stored aggregates on a job.** A job row stores what happened (its
-  status, the batch ids it claimed, its log as it ran); `input_ids`,
-  `output_ids`, `what_changed`, `duration_ms` and `cost_usd` are counted from
-  the corpus on every read. The seeded jobs predate the queue, so their log is
-  reconstructed from their rows rather than typed into the seed.
-- **The clock.** Lease expiry, dedup windows and job timestamps read the mock
-  clock, so a test freezes it and steps past a visibility timeout on purpose
-  (`providers/__tests__/distillation-queue.test.ts`).
-- **The scheduler is off offline.** `DISTILL_COMPACT_INTERVAL_MIN` (and
-  `DISTILL_COMPACT_L2_INTERVAL_MIN`, default 6×) enables re-enqueueing passes on
-  a cadence. Unset under `dev:mock`, because a background pass would compact
-  away the backlog an audit came to look at.
-- **A pass mid-flight across a reset writes nothing.** It re-checks that its
-  job row still exists before its write phase.
-
-### The guide record's plain-language fields (2026-09-24)
-
-The guide-record redesign (`docs/distillation-guide-record-spec.md`) added
-plain-language text to the distillation fixtures. It is **stored text, not a
-count**, so floor rule 1 holds:
-
-- `when_this_helps` on every seeded artifact row (the `large` scenario's
-  generated rows carry null, like a compaction-minted one) —
-  the "When this helps" paragraph; `\n` separates paragraphs.
-- `plain` on facts (the procedure steps of art-009/010/011, via the `steps()`
-  helper's optional fifth tuple element) — the step in plain words; the statement
-  stays the technical record.
-- `advice` and `plain_reason` on procedure applications (papp-006 carries
-  "Check the redirect before you use this" / "sign-in still pointed to the old
-  service"). `POST /procedures/:id/apply` accepts both, trimmed, ≤200 chars,
-  only on failed or abandoned runs, and writes the registered applications
-  fixture, so `POST /api/__mock/reset` undoes a recorded run.
-- `guide` on `GET /items/:id` for L2 is **derived, never stored**:
-  `guideFor(artifactId)` builds `approach` (`plain ?? statement`), `based_on`
-  (cluster ids → clusters, `repo_label` from the one `repoDisplayName` rule
-  the facets use) and `run_warning` (the latest application in
-  `listApplications` order when it failed or was abandoned) on every read, so
-  recording a successful run clears the warning with nothing to invalidate.
-- Compaction-minted artifacts and facts write `when_this_helps: null` and
-  `plain: null`; nothing offline invents plain language. The corpus still has
-  no Aurora read path — `schema/distillation_schema.sql` carries the columns
-  as DDL only.
+The distillation tier machinery (compaction queues, the L2 read replica, the
+`/realtime` push of `distill:*`) was removed with the Distillation module
+(`docs/distillation-runbooks-goal.md` R7); the floor rules it recorded are in
+`docs/history/distillation/`. What survives of its queue plumbing is the
+in-process transport the pipelines tenant's ingest and backfill queues ride:
+`lib/pipeline-queue-transport.ts`, its messages the `pipeline-queue-messages`
+fixture (`mock/pipeline-queue.ts`), so `POST /api/__mock/reset` empties it.
 
 ## Initiatives: the fixture, two runs in flight, and the brief fields (2026-09-24)
 

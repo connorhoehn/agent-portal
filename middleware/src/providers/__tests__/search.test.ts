@@ -6,7 +6,7 @@ jest.mock('../projects.js', () => ({ listProjects: jest.fn(), listProjectSummari
 jest.mock('../work-items.js', () => ({ searchWorkItems: jest.fn(), getWorkItem: jest.fn() }));
 jest.mock('../design-reviews.js', () => ({ listDesignReviews: jest.fn(), getDesignThread: jest.fn() }));
 jest.mock('../decisions.js', () => ({ listDecisions: jest.fn(), getDecision: jest.fn() }));
-jest.mock('../distillation.js', () => ({ listItems: jest.fn(), getItem: jest.fn() }));
+jest.mock('../../lib/runbooks/search-entries.js', () => ({ listRunbookSearchEntries: jest.fn(), getRunbookSearchEntry: jest.fn() }));
 jest.mock('../prompt-library.js', () => ({ listAssets: jest.fn(), getAsset: jest.fn() }));
 jest.mock('../org-teams.js', () => ({ listOrgTeams: jest.fn(async () => []) }));
 jest.mock('../recording-search.js', () => ({ listRecordingSearchRecords: jest.fn(async () => ({ records: [], partial: [] })), resolveRecordingSearchRecord: jest.fn() }));
@@ -16,7 +16,7 @@ import { listProjects, listProjectSummaries, getProject } from '../projects.js';
 import { searchWorkItems, getWorkItem } from '../work-items.js';
 import { listDesignReviews, getDesignThread } from '../design-reviews.js';
 import { listDecisions } from '../decisions.js';
-import { listItems } from '../distillation.js';
+import { listRunbookSearchEntries } from '../../lib/runbooks/search-entries.js';
 import { listAssets } from '../prompt-library.js';
 import { searchRecords, resolveSearchRecords, resolveSearchContext, recordingSearchResponse } from '../search.js';
 import { listRecordingSearchRecords, resolveRecordingSearchRecord } from '../recording-search.js';
@@ -41,11 +41,9 @@ beforeEach(() => {
   mock(listDesignReviews).mockResolvedValue([]);
   mock(getDesignThread).mockResolvedValue(null);
   mock(listDecisions).mockResolvedValue([{ id: 'order', topic: 'Choose cutover order', summary: '', status: 'open', projectId: 'auth' }]);
-  mock(listItems).mockResolvedValue({ items: [
-    { id: 'obs', title: 'Check callback', body: 'Use exact origin', level: 'L0', initiative_id: 'auth' },
-    { id: 'cluster', title: 'Identity origin pattern', summary: '', level: 'L1', initiative_id: 'auth', member_observation_ids: ['obs'] },
-    { id: 'guide', title: 'Bring SSO up', summary: '', level: 'L2', cluster_ids: ['cluster'], library_item_id: 'skill', status: 'published', type: 'procedure' },
-  ], total: 3 });
+  mock(listRunbookSearchEntries).mockResolvedValue([
+    { id: 'rb-sso', title: 'Bring SSO up', summary: 'Cut one tenant over on the exact origin', scope: { kind: 'initiative', ref: 'auth' }, status: 'published', version: 2, updated_at: '2026-10-01T00:00:00Z', initiative_id: 'auth' },
+  ]);
   mock(listAssets).mockResolvedValue({ assets: [{ id: 'skill', name: 'Bring SSO up', description: '', lifecycleStatus: 'draft', kind: 'skill', usedBy: [] }], total: 1 });
 });
 test('native recording text is searchable and scoped, but only an excerpt leaves the projection', async () => {
@@ -146,12 +144,11 @@ test('tenant and Search denial stop all source reads', async () => {
   await expect(searchRecords(principal)).rejects.toMatchObject({ status: 403 });
   expect(listProjects).not.toHaveBeenCalled();
 });
-test('scope follows recorded evidence into guide and asset without merging their state', async () => {
+test('scope follows a runbook to its initiative', async () => {
   const r = await searchRecords(principal, { scope: 'auth' });
   expect(r.results.map(x => x.id)).not.toContain('other');
-  expect(r.results.find(x => x.id === 'guide')?.status).toBe('published');
-  expect(r.results.find(x => x.id === 'skill')?.status).toBe('draft');
-  expect(r.edges).toContainEqual(expect.objectContaining({ source: 'knowledge:guide', target: 'asset:skill', label: 'derived asset' }));
+  expect(r.results.find(x => x.id === 'rb-sso')?.status).toBe('published');
+  expect(r.edges).toContainEqual(expect.objectContaining({ source: 'initiative:auth', target: 'knowledge:rb-sso', label: 'scoped to' }));
 });
 test('a scoped unrelated query does not silently return the whole initiative', async () => {
   const r = await searchRecords(principal, { scope: 'auth', q: 'unfindableword' });
@@ -162,11 +159,6 @@ test('source failure is explicit and edges never point at missing records', asyn
   const r = await searchRecords(principal);
   expect(r.partial).toContain('Agent library unavailable');
   expect(r.edges.some(x => x.target === 'asset:skill')).toBe(false);
-});
-test('bounded source windows are disclosed', async () => {
-  mock(listItems).mockResolvedValue({ items: [], total: 1001 });
-  const r = await searchRecords(principal);
-  expect(r.partial).toContain('Knowledge source window is limited');
 });
 test('context resolution drops missing records and re-reads canonical values', async () => {
   mock(getWorkItem).mockImplementation(async id => id === 'cutover' ? { id, title: 'Current title', projectId: 'auth', status: 'open' } : null);
@@ -252,7 +244,7 @@ test('sort=recent orders by source updatedAt, undated rows last, relevance as th
   mock(listProjects).mockResolvedValue([{ id: 'auth', name: 'Auth Migration', status: 'active', ownerId: 'vera', ownerName: 'Vera Green', lastActivityAt: '2026-09-01 10:00:00', createdAt: '2026-01-01T00:00:00Z' }]);
   mock(searchWorkItems).mockResolvedValue([{ id: 'cutover', projectId: 'auth', projectName: 'Auth Migration', title: 'Tenant cutover', status: 'open', updatedAt: '2026-09-20T12:00:00Z' }]);
   mock(listDecisions).mockResolvedValue([{ id: 'order', topic: 'Choose cutover order', summary: '', status: 'open', projectId: 'auth', decidedAt: null }]);
-  mock(listItems).mockResolvedValue({ items: [], total: 0 });
+  mock(listRunbookSearchEntries).mockResolvedValue([]);
   mock(listAssets).mockResolvedValue({ assets: [], total: 0 });
   const r = await searchRecords(principal, { q: 'Auth Migration', sort: 'recent' });
   const ids = r.results.map(x => x.id);

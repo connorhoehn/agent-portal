@@ -605,7 +605,6 @@ const FIRES: Family[] = [
   { pattern: 'POST /api/assessment/decks/*/revise', what: 'launches a revise-review-deck run whose eight-second timer writes a deck revision' },
   { pattern: 'POST /api/pipelines/decks/*/revise', what: 'starts a requester-private flow run whose executor appends a deck revision after the response, so a reset can land before it writes' },
   { pattern: 'POST /api/assessment/knowledge/pull', what: 'schedules a deferred pull that mutates the section 1.5s later' },
-  { pattern: 'POST /api/distillation/compact', what: 'schedules a three-second completion timer' },
   { pattern: 'POST /api/ingest/schedules', what: 'writes ingest-schedules.json and registers a node-cron task' },
   { pattern: 'PATCH /api/ingest/schedules/*', what: 'writes ingest-schedules.json and starts or stops a node-cron task' },
   { pattern: 'POST /api/ingest/crawl-targets', what: 'writes crawl-targets.json and may register a node-cron task' },
@@ -1513,37 +1512,6 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
       if (experienceId === null) return unsynthesisable('GET /api/lab/experiences listed no experience to record an outcome against');
       return { experienceId, action: 'used' };
     },
-  },
-  {
-    route: 'POST /api/distillation/review/:id',
-    persona: 'orgiq/admin',
-    safe: 'Mutates the registered `distillation` fixture; reset restores the review sample. No AWS, no model, no timer.',
-    bodyFrom: "routes/distillation.ts: `verdict` ∈ {'agree','disagree'}; the sample must still be pending.",
-    build: ok({ verdict: 'agree' }),
-  },
-  {
-    route: 'POST /api/distillation/review',
-    persona: 'orgiq/admin',
-    safe: 'Appends to the registered `distillation` review-samples fixture; reset drops the appended row. No AWS, no model, no timer.',
-    bodyFrom: "routes/distillation.ts: `target_kind` ∈ {'cluster','artifact'}; `target_id` off GET /api/distillation/artifacts?status=published#id. Every seeded pending review sample targets a DRAFT artifact or a cluster (art-006, art-007, art-010, cl-019..022) — none targets a published one — so a published artifact's id never collides with the 409-already-pending branch.",
-    build: async (ctx) => {
-      const id = await ctx.pick('/api/distillation/artifacts?status=published', 'id');
-      if (id === null) return unsynthesisable('GET /api/distillation/artifacts?status=published listed no artifact to queue for review');
-      return { target_kind: 'artifact', target_id: id };
-    },
-  },
-  {
-    route: 'POST /api/distillation/artifacts/:id/publish',
-    persona: 'orgiq/admin',
-    safe: 'Mutates the registered `distillation` artifacts fixture (draft -> published); reset restores the row. No AWS, no model, no timer.',
-    bodyFrom: 'routes/distillation.ts: no body. The :id resolves to a draft artifact via the `id@/api/distillation/artifacts` override in http.ts (`?status=draft`), so the write never targets an already-published or retired row and never hits the 409 branch.',
-  },
-  {
-    route: 'POST /api/distillation/procedures/:id/apply',
-    persona: 'orgiq/admin',
-    safe: 'Appends a run to the registered `distillation-procedure-applications` fixture; reset drops it and the procedure’s counted health goes back to the seed. No AWS, no model, no timer. The `:id` is drawn from GET /api/distillation/procedures, which lists only procedure artifacts, so the 404 branch (a non-procedure id) is never what gets captured.',
-    bodyFrom: "routes/distillation.ts: `outcome` ∈ {'succeeded','failed','abandoned'}; `failed_at_step_id` is required for `failed` and must be null for `succeeded`, so a succeeded body carries no step and needs no second lookup. `advice` / `plain_reason` (optional strings, trimmed, ≤200 chars) are accepted only on a failed or abandoned run — a succeeded body must omit them — so the replayed succeeded body carries neither; the captured response still pins both keys, as null.",
-    build: ok({ outcome: 'succeeded' }),
   },
   {
     route: 'POST /api/library/evals/:assetId/run',

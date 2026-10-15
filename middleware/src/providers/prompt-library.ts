@@ -24,9 +24,7 @@
 // mock/prompt-library.ts behind the `library-assets` fixture, so a reader
 // can ask for the empty or the failed-load world instead of editing rows.
 // The asset ids and their fields are unchanged — other work depends on them
-// verbatim — but `derivedFrom` is now DERIVED from the distillation store
-// rather than stored, because the stored copies cited observation ids that
-// existed nowhere. That file says why.
+// verbatim.
 //
 // LIVE MODE is a merge of two sources that each know half the story:
 //
@@ -63,8 +61,7 @@ import {
 // The offline catalog is a registered fixture (`library-assets`), so
 // `GET /api/__mock/state` can see it and an auditor can ask for the empty
 // or the failed-load world over HTTP. `mockLibraryAssets` is where a stored
-// row meets the provenance derived from the distillation store — see
-// mock/prompt-library.ts for why `derivedFrom` is not a field on a row.
+// row meets the latest eval run's pass rate.
 import { mockLibraryAssets } from '../mock/prompt-library.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -89,9 +86,6 @@ export interface LibraryAsset {
    *  yet, which is a fact worth showing rather than a label saying "unused". */
   usedBy: string[];
   updatedAt: string;
-  /** Set when this asset was distilled from session observations rather than
-   *  hand-written — the provenance half of the promotion ladder. */
-  derivedFrom?: DerivationSummary;
   /** The template text. Held here so the release gate can check the contract
    *  against what the template actually references — an undeclared variable
    *  would render as untrusted, which is safe but unintended. */
@@ -104,30 +98,8 @@ export interface LibraryAsset {
   designReviewId?: string | null;
 }
 
-/**
- * An asset as it is STORED offline — everything a reader sees except the one
- * field that is a COUNT over rows this module does not own. `derivedFrom`
- * carries `supportCount`/`sessionCount` beside three citations and the drawer
- * renders that pair as a banner above those citations, which is rule 1 of the
- * mock floor with the cards right there to contradict it — and the stored
- * copies had already drifted into citing ids no surface could open. It is
- * computed per read by `mock/prompt-library.ts` `derivationFor`, walking the
- * distillation store's real lineage. Same split, and same reason, as
- * `SeededCandidate` in promotions.ts.
- */
-export type LibraryAssetRow = Omit<LibraryAsset, 'derivedFrom'>;
-
-/** Where a derived asset came from. Ranked support, not just a link: a runbook
- *  standing on nine observations across four sessions is a different claim
- *  from one standing on three. */
-export interface DerivationSummary {
-  /** observation | pattern — the rung below this asset on the ladder. */
-  fromKind: 'observation' | 'pattern';
-  supportCount: number;
-  sessionCount: number;
-  /** Top-k contributing records, strongest first. */
-  top: Array<{ id: string; kind: string; title: string; repo: string | null; weight: number }>;
-}
+/** An asset as it is STORED offline. */
+export type LibraryAssetRow = LibraryAsset;
 
 export interface LibraryQuery {
   q?: string;
@@ -419,8 +391,7 @@ export async function getAsset(id: string): Promise<LibraryAsset | null> {
 /**
  * Assets closest to this one — the "top-k derivatives" view.
  *
- * Ranked by shared provenance first (two skills distilled from the same
- * sessions really are siblings), then shared tags, then same kind. Cheap and
+ * Ranked by shared tags, then same kind. Cheap and
  * explainable on purpose: every neighbour carries the REASON it is a
  * neighbour, because an unexplained similarity list is not something anyone
  * can act on.
@@ -431,21 +402,17 @@ export async function relatedAssets(id: string, k = 5): Promise<Array<{
   const all = await loadAllAssets();
   const self = all.find((a) => a.id === id);
   if (!self) return [];
-  const selfSources = new Set((self.derivedFrom?.top ?? []).map((t) => t.id));
   const selfTags = new Set(self.tags);
 
   return all
     .filter((a) => a.id !== id)
     .map((a) => {
-      const sharedSources = (a.derivedFrom?.top ?? []).filter((t) => selfSources.has(t.id)).length;
       const sharedTags = a.tags.filter((t) => selfTags.has(t));
       const sameKind = a.kind === self.kind ? 1 : 0;
-      const score = sharedSources * 3 + sharedTags.length * 2 + sameKind;
-      const reason = sharedSources > 0
-        ? `distilled from ${sharedSources} of the same observation${sharedSources === 1 ? '' : 's'}`
-        : sharedTags.length > 0
-          ? `shares ${sharedTags.join(', ')}`
-          : `another ${a.kind}`;
+      const score = sharedTags.length * 2 + sameKind;
+      const reason = sharedTags.length > 0
+        ? `shares ${sharedTags.join(', ')}`
+        : `another ${a.kind}`;
       return { asset: a, score, reason };
     })
     .filter((r) => r.score > 0)

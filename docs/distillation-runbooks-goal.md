@@ -77,9 +77,10 @@ Every line is mechanical. `--quick` skips the Playwright sections.
   registered and reset by `POST /api/__mock/reset`.
 
 **migration**
-- `node scripts/runbooks/migrate-distillation.mjs --check` exits 0: every
-  distillation artifact id appears in the report as `migrated → rb-…` or
-  `not-migrated: <reason>`; zero unaccounted.
+- Every distillation artifact id appears in `docs/runbooks-migration-report.md` as
+  `migrated → rb-…` or `not-migrated: <reason>`; zero unaccounted. (The migration
+  script was retired to `docs/history/runbooks-migration/` in R7 with the fixtures
+  it read; the report is frozen.)
 - Every migrated runbook's `provenance.source_artifact_ids` names its source.
 - No migrated runbook contains a string matching `(+\d+ more)`, `Load-corpus`,
   `; ` joining two sentences in a step, or a step without an imperative verb

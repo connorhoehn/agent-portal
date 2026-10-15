@@ -63,7 +63,6 @@ if [ "$QUICK" = 0 ]; then
   if (cd portal && node --test 'src/**/__tests__/*.test.ts' >/dev/null 2>&1); then ok "portal node tests"; else fail "portal: node tests failing"; fi
   if jg_vite_build >/dev/null 2>&1; then ok "portal vite build"; else fail "portal: vite build failed"; fi
   if scripts/validate-assessment-tenant.sh --quick --no-time >/dev/null 2>&1; then ok "assessment validator still passes"; else fail "assessment validator regressed"; fi
-  if scripts/validate-distillation.sh --quick >/dev/null 2>&1; then ok "distillation validator still passes"; else fail "distillation validator regressed"; fi
 fi
 
 section "journey proof"

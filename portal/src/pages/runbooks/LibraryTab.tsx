@@ -10,6 +10,7 @@ import type { RunbooksOutletContext } from './RunbooksModule';
 import { STATUS_FILTERS, libraryCommandAdapter, libraryGroups, libraryRows, runbookHref } from './runbooksModel';
 import type { RunbookRow } from './types';
 import { useFetch } from '../../hooks/useFetch';
+import { useRunbookNames } from './useRunbookNames';
 
 export default function LibraryTab() {
   const { id } = useParams();
@@ -19,7 +20,8 @@ export default function LibraryTab() {
   const [status, setStatus] = useState<string | null>(null);
   const feed = useFetch<{ runbooks: RunbookRow[] }>('/api/runbooks?status=draft,published,retired&limit=200', 0);
   const all = feed.data?.runbooks ?? [];
-  const rows = useMemo(() => libraryRows(all, query, status), [all, query, status]);
+  const names = useRunbookNames();
+  const rows = useMemo(() => libraryRows(all, query, status, names), [all, query, status, names]);
   const byId = new Map(all.map((r) => [r.id, r]));
 
   const commands = libraryCommandAdapter(rows, {

@@ -114,12 +114,12 @@ it.each(['social:dm:alice:bob', 'social:team:example:general'])('rejects %s memb
   expect(await admitChannel({ kind: 'subscribe', clientId: 'a', channel, ctx: context() })).toBe(false);
 });
 
-it('preserves resource guards, server-only distillation and the reserved huddle namespace', async () => {
+it('preserves resource guards, the retired distillation feed and the reserved huddle namespace', async () => {
   expect(await authorize('social:dm:bob:charlie')).toBe(false);
   expect(await authorize('orgiq:dm:alice:bob')).toBe(true);
   expect(await authorize('orgiq:huddle:call-1')).toBe(false);
   expect(await authorize('presence:orgiq:huddle:call-1', 'publish')).toBe(false);
-  expect(await authorize('orgiq:distill:jobs')).toBe(true);
+  expect(await authorize('orgiq:distill:jobs')).toBe(false);
   expect(await authorize('orgiq:distill:jobs', 'publish')).toBe(false);
   expect(await authorize('presence:orgiq:distill:jobs')).toBe(false);
   const source = { ...session, tenant: 'assessment', role: 'assessor' } as Session;
@@ -155,10 +155,9 @@ it('a later action cannot reuse an older pending directory snapshot after remote
   expect(getUser).toHaveBeenCalledTimes(3);
 });
 
-it('retains local demo distillation while ignoring forged Social tenants and captured grants', async () => {
+it('ignores forged Social tenants and captured grants for the local demo identity', async () => {
   const demo = { ...session, sub: 'demo-user', epoch: 0 };
   const current = await getLivePrincipal(context(demo)); expect(current.auth.tenants).not.toContain('social');
-  expect(await authorize('orgiq:distill:jobs', 'subscribe', context(demo))).toBe(true);
   expect(await authorize('social:dm:bob:demo-user', 'subscribe', context(demo))).toBe(false);
 });
 

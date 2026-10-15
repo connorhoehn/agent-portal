@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { compactionQueue } from './distillation-queue.js';
+import { pipelineQueue } from './pipeline-queue-transport.js';
 import { MessageQueueError, type MessageQueue, type QueueSnapshot } from './mq-client.js';
 import { PIPELINE_QUEUE_PURPOSE, pipelineQueueDefinitions } from './pipeline-queue-defs.js';
 
@@ -22,7 +22,7 @@ export function pipelineQueueInventory(extra = '') {
 }
 
 /** Reads actual transport metadata; missing/failed reads never become zero backlog. */
-export async function readPipelineQueues(queue: MessageQueue = compactionQueue(), extra = config.messageQueue?.observedQueues ?? '') {
+export async function readPipelineQueues(queue: MessageQueue = pipelineQueue(), extra = config.messageQueue?.observedQueues ?? '') {
   const queues: PipelineQueueRow[] = await Promise.all(pipelineQueueInventory(extra).map(async row => {
     try {
       if (!queue.inspect) return { ...row, state: 'unavailable' as const, snapshot: null, reason: 'This transport does not expose queue attributes.' };

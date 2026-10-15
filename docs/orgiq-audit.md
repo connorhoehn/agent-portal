@@ -239,7 +239,7 @@ covered anyway, and re-deriving that each pass is wasted work, so:
 | rail item | matrix row? | actually covered by |
 |---|---|---|
 | `/admin/observability` | no | its `index` redirects to `summary`, which IS a row (`health`); the sub-pages `invocations` and `tool-calls` have rows too |
-| `/iq/distillation` | no | **its own journey system** — `docs/distillation-journeys/{member,org-leader}/{overview,tiers,artifacts,lineage,compactions,review}.md`, 12 logs judged by `validate-distillation.sh`, including its own staleness check |
+| `/iq/distillation` | no | retired in R7: redirects to `/iq/runbooks` (journey logs under `docs/history/distillation/`; the runbooks family is judged by `validate-distillation-runbooks.sh`) |
 | `/admin/identity` | no | the `index` redirects to `roles`, which HAS a row now (`identity-roles`, added 2026-09-17) alongside `identity-users` |
 
 Every rail item is now covered, here or in its own system. Closing the last

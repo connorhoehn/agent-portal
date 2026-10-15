@@ -1,5 +1,5 @@
 // The asset library, offline — the catalog `dev:mock` serves, and the
-// provenance that makes it the far end of the distillation ladder.
+// registered as a fixture so the scenarios can reach it.
 //
 // WHY THIS FILE EXISTS. `MOCK_ASSETS` was a `LibraryAsset[]` at module scope
 // inside providers/prompt-library.ts. It registered no fixture, so
@@ -17,34 +17,10 @@
 //      literal, so `updated 2h ago` meant two hours before the PROCESS
 //      BOOTED. A dev server up for a day showed a skill "updated 2h ago"
 //      that the corpus had aged 26 hours past.
-//   3. A TYPED AGGREGATE OVER ROWS IT DID NOT OWN (#1), and it had already
-//      drifted into fiction. Every `derivedFrom` block stored a
-//      `supportCount`/`sessionCount` pair beside three `top` citations, and
-//      the drawer renders that pair as a banner —
-//      "11 observations across 6 sessions" over three cards. The cited ids
-//      (`exp-441`, `exp-388`, `exp-352`, `exp-501`, `exp-498`, `exp-577`,
-//      `exp-570`, `exp-233`) existed NOWHERE: the shared-memory store spells
-//      its observations `obs-NNN` (mock/distillation.ts), the promotions
-//      inbox spells its own `obs-<topic>-N` (mock/promotions.ts), and
-//      `lab_experiences` offline holds `exp-mock-N` (mock/lab.ts). So the
-//      Library claimed a published skill stood on eleven observations across
-//      six sessions and named three of them, and not one of those three was
-//      a record any surface in this middleware could open. That is precisely
-//      the lineage break docs/mock-floor.md exists to stop — a promoted item
-//      with no source finding — and no test could see it, because the count
-//      and the citations were stored side by side and agreed with each other.
 //
-// SO PROVENANCE IS DERIVED, NOT STORED. `derivationFor` below walks the real
-// lineage the distillation store already holds —
-// library item → library-links row → L2 artifact → its L1 clusters → their
-// member L0 observations — and counts `supportCount` and `sessionCount` off
-// the observations it found. There is no `derivedFrom` field on a row here
-// to drift, the banner cannot disagree with the store, and emptying
-// `distillation-library-links` makes the drawer's "Distilled from" section
-// disappear rather than go stale. `weight` is the CONFIDENCE OF THE CLUSTER
-// the observation was merged into (an observation in two clusters takes the
-// higher) — a number the L1 rows already carry, not a similarity score
-// invented here to fill a field.
+// (A third problem, a stored "derived from N observations" banner that cited
+// ids no surface could open, went away with the distillation tier machinery
+// in R7: the Library no longer claims a provenance it cannot back.)
 //
 // AGE IS THE CLAIM, NOT THE DAY, so nothing below uses `keepWithinToday`:
 // both the table column and the drawer render `updatedAt` through
@@ -53,20 +29,16 @@
 //
 // IDS AND WIRE STRINGS ARE NOT INVENTED. `kind` is PromptKind and `tier` is
 // PromptTier (lib/prompt-contract.ts); `lifecycleStatus` values are the ones
-// `observability.prompt_version_meta.lifecycle_status` carries; the seven
-// asset ids that carry provenance are exactly the seven
-// `library_item_id`s seedLibraryLinks() publishes into
-// (mock/distillation.ts), which is what closes the loop in both directions.
+// `observability.prompt_version_meta.lifecycle_status` carries.
 
 import { clock, defineFixture } from './core/index.js';
-import { artifacts, clusters, libraryLinks, observations } from './distillation.js';
 import { promptEvalRuns } from './prompt-evals.js';
 // Type-only, so it is erased at compile: providers/prompt-library.ts imports
 // the fixture below at run time, and a value import back the other way would
 // be a genuine cycle rather than a shared shape. Same pattern as
 // mock/promotions.ts.
 import type {
-  DerivationSummary, LibraryAsset, LibraryAssetRow,
+  LibraryAsset, LibraryAssetRow,
 } from '../providers/prompt-library.js';
 import type { PromptContract, PromptKind, PromptTier } from '../lib/prompt-contract.js';
 import { EMPTY_CONTRACT } from '../lib/prompt-contract.js';
@@ -259,73 +231,6 @@ export const libraryAssets = defineFixture<LibraryAssetRow>({
   },
 });
 
-/**
- * Where a Library asset came from, counted off the distillation store rather
- * than stored beside it.
- *
- * The walk is the lineage docs/distillation.md draws, read right to left:
- *
- *   library item ◀──published_as── artifact ◀──distilled_into── cluster ◀──merged_into── observation
- *
- * `undefined` (no "Distilled from" section at all) is the honest answer for
- * an asset nothing published into — a hand-written prompt, or a draft skill
- * — and it is also what an auditor sees after pinning
- * `distillation-library-links` to `empty`, which is the link running both
- * ways rather than a second copy of it.
- *
- * `fromKind` names the rung directly below: an artifact standing on L1
- * clusters was distilled from PATTERNS, one standing on none from raw
- * OBSERVATIONS. Every seeded artifact has at least one cluster, so the demo
- * corpus reports `pattern` throughout — that is the corpus telling the truth
- * about itself, not the field being constant.
- */
-export function derivationFor(libraryItemId: string, topK = 3): DerivationSummary | undefined {
-  const link = libraryLinks.rows().find((l) => l.library_item_id === libraryItemId);
-  if (!link) return undefined;
-  const artifact = artifacts.rows().find((a) => a.id === link.artifact_id);
-  if (!artifact) return undefined;
-
-  // observation id -> the confidence of the cluster it was merged into. An
-  // observation carried by two of the artifact's clusters keeps the higher:
-  // the strongest pattern it belongs to is the one that supports the claim.
-  const weightByObservation = new Map<string, number>();
-  let clusterCount = 0;
-  for (const cluster of clusters.rows()) {
-    if (!artifact.cluster_ids.includes(cluster.id)) continue;
-    clusterCount += 1;
-    for (const id of cluster.member_observation_ids) {
-      weightByObservation.set(id, Math.max(weightByObservation.get(id) ?? 0, cluster.confidence));
-    }
-  }
-
-  const supporting = observations.rows().filter((o) => weightByObservation.has(o.id));
-  if (supporting.length === 0) return undefined;
-
-  return {
-    fromKind: clusterCount > 0 ? 'pattern' : 'observation',
-    // Counted, never stored — the whole reason this function exists.
-    supportCount: supporting.length,
-    sessionCount: new Set(supporting.map((o) => o.session_id)).size,
-    top: supporting
-      .slice()
-      // Strongest first; ties broken by id so the list is stable across reads
-      // and a test can assert on it without depending on fixture order.
-      .sort((a, b) =>
-        (weightByObservation.get(b.id) ?? 0) - (weightByObservation.get(a.id) ?? 0)
-        || a.id.localeCompare(b.id))
-      .slice(0, topK)
-      .map((o) => ({
-        id: o.id,
-        kind: o.kind,
-        title: o.title,
-        repo: o.repo,
-        weight: weightByObservation.get(o.id) ?? 0,
-      })),
-  };
-}
-
-/** A stored row, decorated with the provenance the distillation store knows.
- *  This is the only place a `LibraryAsset` is assembled offline. */
 /** The newest eval run for an asset version, or null when it has never been
  *  run. The runs are the rows; the rate on the asset is read from them. */
 function latestRunRate(assetId: string, version: string): number | null | undefined {
@@ -339,13 +244,12 @@ function latestRunRate(assetId: string, version: string): number | null | undefi
 
 export function mockLibraryAssets(): LibraryAsset[] {
   return libraryAssets.rows().map((row) => {
-    const derivedFrom = derivationFor(row.id);
     // Health & usage, Release readiness and the Evals panel used to disagree
     // on one asset's pass rate — the asset carried a seeded literal while the
     // panel read the latest run. The run corpus is the source; the seeded
     // figure stands only for an asset that has never been run.
     const fromRuns = latestRunRate(row.id, row.version);
     const evalPassRate = fromRuns === undefined ? row.evalPassRate : fromRuns;
-    return derivedFrom ? { ...row, evalPassRate, derivedFrom } : { ...row, evalPassRate };
+    return { ...row, evalPassRate };
   });
 }

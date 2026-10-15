@@ -5,6 +5,7 @@ import { useNavigate, useOutletContext, useParams } from 'react-router';
 import { WorkListFilters } from '@connorhoehnslalom/ui-components';
 import { EmptyState, FilterPopover, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useRunbookNames } from './useRunbookNames';
 import { ProposalReview } from './ProposalReview';
 import { RunbooksListFrame } from './RunbooksListFrame';
 import type { RunbooksOutletContext } from './RunbooksModule';
@@ -22,10 +23,11 @@ export default function ProposalsTab() {
   const feed = useFetch<{ proposals: Proposal[] }>('/api/runbooks/proposals?limit=200', 0);
   const library = useFetch<{ runbooks: RunbookRow[] }>('/api/runbooks?status=draft,published,retired&limit=200', 0);
   const titles = useMemo(() => new Map((library.data?.runbooks ?? []).map((r) => [r.id, r.title])), [library.data]);
+  const names = useRunbookNames();
   const all = feed.data?.proposals ?? [];
   const rows = useMemo(
-    () => proposalRows(status ? all.filter((p) => p.status === status) : all, titles, query),
-    [all, titles, query, status],
+    () => proposalRows(status ? all.filter((p) => p.status === status) : all, titles, query, names),
+    [all, titles, query, status, names],
   );
   const commands = proposalsCommandAdapter(rows, {
     setQuery, setStatus, refresh: feed.refresh, open: (id) => navigate(proposalHref(id)),

@@ -131,10 +131,11 @@ keyed on its primary row, and `context.sourceStatus` is the primary row's
 status. A bot run with neither id is a Run of its own.
 
 **The property test** is `middleware/src/lib/__tests__/pipeline-runs.projection.test.ts`.
-It imports the five registered fixtures — `agentJobs` (`mock/agent-jobs.ts`),
+It imports the registered fixtures — `agentJobs` (`mock/agent-jobs.ts`),
 `botRuns` (`mock/bots.ts`), `agentProjectRuns` (`mock/agent-project-runs.ts`),
-`runsFixture` (`mock/assessment.ts`, the `assessment_runs` rows) and
-`compactionJobs` (`mock/distillation.ts`, `distillation_compactions`) — runs
+`runsFixture` (`mock/assessment.ts`, the `assessment_runs` rows) and the
+seeded invocation traces (`mock/observability.ts`; the compaction history
+left with the distillation tier machinery in R7) — runs
 the projection, and asserts: each `(table, id)` occurs in exactly one Run;
 every Run's status is one of the nine; every `context.sourceStatus` equals
 the source row's own status; every Run carries `context.tenant` (`orgiq` for

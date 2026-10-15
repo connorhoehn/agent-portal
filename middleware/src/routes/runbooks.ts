@@ -34,6 +34,7 @@
 // The store is injected (`deps.store`), default `runbookStore()` (lib/runbooks/store-select),
 // so a suite can hand the router a private RowsRunbookStore.
 
+import { noteSearchWriteSoon } from '../lib/search-index/writes.js';
 import { Router, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
 import { randomUUID, createHash } from 'node:crypto';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
@@ -531,6 +532,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
         proposal_id: p.id, decided_by: actor, at, note,
         retire: { reason, superseded_by: supersededBy },
       });
+      noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
       res.json({ proposal: result.proposal, runbook: result.runbook, version: null });
       return;
     }
@@ -551,6 +553,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     if (p.kind === 'edit') {
       const version = versionOf({ runbook_id: target!.id, version: target!.current_version + 1, doc, author, provenance });
       const result = await s.acceptProposal({ proposal_id: p.id, decided_by: actor, at, note, version });
+      noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
       res.json({ proposal: result.proposal, runbook: result.runbook, version: result.version });
       return;
     }
@@ -565,6 +568,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     };
     const version = versionOf({ runbook_id: id, version: 1, doc, author, provenance });
     const result = await s.acceptProposal({ proposal_id: p.id, decided_by: actor, at, note, runbook, version });
+    noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
     res.status(201).json({ proposal: result.proposal, runbook: result.runbook, version: result.version });
   }));
 
@@ -676,6 +680,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const at = now();
     const next: Runbook = { ...r, status: 'retired', updated_at: at, retired: { at, by: actor, reason, superseded_by: supersededBy } };
     await s.putRunbook(next, r.updated_at);
+    noteSearchWriteSoon({ type: 'knowledge', id: next.id });
     res.json({ runbook: next });
   }));
 

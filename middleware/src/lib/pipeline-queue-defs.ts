@@ -1,10 +1,8 @@
 // The data-pipeline queues the pipelines tenant observes (docs/demo-content-audit.md P5).
 //
 // What a data team's pipelines wait on: source files landed and not yet loaded,
-// the files that failed three loads, and backfills someone asked for. The
-// distillation compaction queues are that feature's own and are read on its
-// pages. Definitions only: no transport here, so the in-process queue
-// (lib/distillation-queue.ts under MOCK_QUEUE) and the observer
+// the files that failed three loads, and backfills someone asked for. Definitions only: no transport here, so the in-process queue
+// (lib/pipeline-queue-transport.ts under MOCK_QUEUE) and the observer
 // (lib/pipeline-queues.ts) share one spelling of the names.
 
 import type { QueueDefinition } from './mq-client.js';

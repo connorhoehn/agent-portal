@@ -69,7 +69,7 @@ test('tenant policy: dashboards stay exempt unless their table is searchable; li
   const dash = { tenant: 'orgiq', path: '/admin/observability/cost', kind: 'page' };
   assert.equal(tenantComposerPolicy(dash, { charts: true, table: true })?.mode, 'exempt');
   assert.deepEqual(tenantComposerPolicy(dash, { charts: true, table: true, tableSearch: true }), { mode: 'required' });
-  assert.deepEqual(tenantComposerPolicy({ tenant: 'orgiq', path: '/iq/distillation/knowledge', kind: 'page' }, { listRail: true, charts: true }), { mode: 'required' });
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'orgiq', path: '/iq/runbooks', kind: 'page' }, { listRail: true, charts: true }), { mode: 'required' });
   assert.deepEqual(tenantComposerPolicy({ tenant: 'orgiq', path: '/admin/observability/sessions', kind: 'page' }, { charts: true }), { mode: 'required' });
   assert.equal(tenantComposerPolicy({ tenant: 'social', path: '/social/profile', kind: 'page' }, { placeholder: true })?.mode, 'exempt');
   assert.equal(tenantComposerPolicy({ tenant: 'social', path: '/social/configuration', kind: 'page' }, { settingsSurface: true, table: true })?.mode, 'exempt');

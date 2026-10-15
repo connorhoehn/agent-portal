@@ -24,19 +24,6 @@ function seedResponses(): MockResponse[] {
       toolCalls: [],
       response: 'Observability work summary',
     },
-    // The Distillation demo's guide (mock/distillation-demo-script.ts): "Explain
-    // this guide" on its Knowledge record sends the guide's title and steps
-    // (portal knowledgeModel.guidePrompt), and this is the answer. FIRST so it
-    // wins over the auth row below, whose 'login' would otherwise take it. No
-    // tool calls: the guide is in the prompt, so nothing is retrieved, and the
-    // answer claims no source it did not read. It describes the steps the
-    // script produces and says nothing about the guide's run state, which the
-    // answer cannot know.
-    {
-      keywords: ['smallest tenant first'],
-      toolCalls: [],
-      response: `Here is how to use **Cut over the smallest tenant first — one tenant a day**, in the order the guide gives:\n\n1. **Start with the smallest tenant, one tenant a day**, so a bad cutover reaches the fewest people.\n2. **Fix logout first**: expire the legacy shim cookie in the same response that ends the Cognito session, or a signed-out user can still reach shim-served pages.\n3. **Make a revoked grant terminal**: answer it with a 401 the client signs out on, rather than a 403 it retries — the retry is what looped.\n4. **Update the tenant's redirect before the flip**: point its hosted-UI callback at the Cognito domain, then flip the tenant's flag.\n5. **Keep the SAML shim behind the per-tenant flag until the last tenant is over** — flipping back is only a quick rollback while the shim still runs.\n\n**Why this order:** each step answers something that went wrong in the lab sessions the guide was distilled from — the shim cookie outliving logout, a refresh loop on revoked grants, and a redirect that still pointed at the old domain.\n\nI have not changed anything. The guide's Runs tab shows where it has been used.`,
-    },
     // The demo topics below are canned and route on the QUESTION only
     // (questionOf): they used to fire on words in the attached search records,
     // so any Observability record turned every question into the Observability

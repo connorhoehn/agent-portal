@@ -228,7 +228,7 @@ were public until 2026-09-29 because nothing in this tree creates them.
 Features follow goal-doc + validator: `docs/<feature>-goal.md` is the
 definition of done and `scripts/validate-<feature>.sh` is the only judge (most
 take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
-(23 validators).
+(22 validators).
 
 | Doc | What it is | Judge |
 |-----|------------|-------|
@@ -238,7 +238,6 @@ take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
 | `orgiq-audit.md`, `orgiq-audit-goal.md` | Org tenant audit as real seed users | `validate-orgiq-audit.sh` |
 | `journeys.md` | Journey logs; stale when a walked route's rendered contract changed (`scripts/journeys/measure.sh`), sealed only by `scripts/journeys/seal.sh` after a walk | tenant validators' freshness sections |
 | `branding.md` | Token/colour system | `validate-branding.sh` |
-| `distillation.md` | `/iq/distillation` | `validate-distillation.sh` |
 | `distillation-runbooks-design.md`, `distillation-runbooks-goal.md` | Runbooks replace distillation: readable procedures, run proposals, the frozen session brief a box receives (R0 model built 2026-10-14) | `validate-distillation-runbooks.sh` |
 | `layout-cascade.md` | Page frame: two rails max, trail first, flush list rails, one type scale; route inventory in `portal/e2e/route-inventory.ts` | `validate-rail-parity.sh` |
 | `route-test-coverage.md` | Route ↔ test parity | `validate-route-coverage.sh` |

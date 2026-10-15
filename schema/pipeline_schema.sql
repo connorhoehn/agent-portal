@@ -2,9 +2,9 @@
 -- docs/social-tenant-and-pipelines-research-2026-09-29.md §D.3, lane P2).
 --
 -- WHAT LIVES HERE, AND WHAT DOES NOT. The run projection
--- (middleware/src/lib/pipeline-runs.ts) stays the read path for the six
+-- (middleware/src/lib/pipeline-runs.ts) stays the read path for the
 -- run-shaped tables that already exist — agent_jobs, bot_runs,
--- agent_project_runs, assessment_runs, distillation_compactions and
+-- agent_project_runs, assessment_runs and
 -- observability.invocation_traces. Nothing is copied from them into these
 -- tables. These tables hold only what ORIGINATES in the pipelines tenant:
 --

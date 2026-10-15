@@ -123,15 +123,11 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 if want migration; then
 section "migration (R2 · distillation → runbooks)"
-MIG=scripts/runbooks/migrate-distillation.mjs
+MIG=docs/history/runbooks-migration/migrate-distillation.mjs
 SEED=$MW/src/mock/runbooks.seed.ts
-exists "$MIG" "migration script"
+exists "$MIG" "migration script (retired to docs/history in R7; its source fixtures were deleted, so it no longer runs)"
 exists "$SEED" "hand-authored seed rewrites (mock/runbooks.seed.ts)"
 exists docs/runbooks-migration-report.md "migration report"
-if [ -f "$MIG" ]; then
-  if node "$MIG" --check >"$SCRATCH/mig.out" 2>&1; then ok "migrate --check: every distillation artifact accounted for"; else
-    fail "migrate --check fails"; tail -5 "$SCRATCH/mig.out" | sed 's/^/        /'; fi
-fi
 if [ -f docs/runbooks-migration-report.md ]; then
   check "! grep -qi 'unaccounted: *[1-9]' docs/runbooks-migration-report.md" "report: zero unaccounted"
   n=$(grep -cE 'migrated → rb-' docs/runbooks-migration-report.md); [ "$n" -ge 9 ] && ok "report: $n artifacts migrated (≥ 9)" || fail "report: only $n artifacts marked migrated → rb-… (need ≥ 9)"

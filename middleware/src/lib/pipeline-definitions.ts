@@ -300,7 +300,7 @@ export function deriveDefinitions(src: DefinitionSources): Definition[] {
     } : d);
   }
   for (const s of src.stored) if (!seen.has(s.id)) { seen.add(s.id); out.push(orphanDefinition(s)); }
-  const rank: Record<DefinitionKind, number> = { runbook: 0, bot: 1, 'assessment-command': 2, agent: 3, compaction: 4 };
+  const rank: Record<DefinitionKind, number> = { runbook: 0, bot: 1, 'assessment-command': 2, agent: 3 };
   return out.sort((a, b) => rank[a.kind] - rank[b.kind] || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
 }
 

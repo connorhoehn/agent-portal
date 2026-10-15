@@ -43,7 +43,9 @@ export const PROPOSAL_FROM_RUN = 'prop-tenant-cutover-callback';
 export const SURFACE_PAGES = 'portal/src/pages/runbooks, middleware/src/routes/runbooks.ts';
 
 /**
- * The proposal page's diff (ui-components DiffViewer) logs React's duplicate-key warning for its table body on
- * every render. A page that shows a diff expects it; the library owns the fix (docs/ui-components-queue.md).
+ * The proposal page's diff (ui-components DiffViewer) logs React's missing-key warning on every render: the
+ * library keys the inner <tr> of each line's Fragment instead of the Fragment. The page cannot key it (the
+ * rows are the library's); the fix is queued in docs/ui-components-queue.md ("DiffViewer is not render-clean").
+ * Delete this and the expectConsole uses when the pinned ui-components fixes it.
  */
 export const DIFF_KEY_WARNING = /unique "key" prop/;
