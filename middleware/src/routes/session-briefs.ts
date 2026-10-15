@@ -1,5 +1,6 @@
 // The session brief over HTTP (docs/distillation-runbooks-design.md §3.4–§3.5; lane D / R3).
 //
+//   GET /api/briefs                         frozen briefs, newest first, WITHOUT their markdown (the Briefs list)
 //   GET /api/runs/:ref/brief                the FROZEN brief a run was given
 //   GET /api/runs/:ref/runbooks/:id         a runbook that brief named (`lab runbook <id>`), as markdown
 //   GET /api/work-items/:id/brief-preview   what a run would be given now (assembled, never stored)
@@ -53,6 +54,22 @@ function refuseRunToken(res: Response): void {
 
 export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
   const router = Router();
+
+  // The Briefs list (portal /iq/runbooks/briefs): people only, summaries only. The bytes stay behind
+  // /runs/:ref/brief so the sha a row shows is read against the markdown a person opens.
+  router.get('/briefs', briefLimit, requireTenant('orgiq'), requireAction('ViewSessionBrief'),
+    asyncHandler(async (req, res) => {
+      const rawLimit = Number(req.query['limit']);
+      const cursor = typeof req.query['cursor'] === 'string' && req.query['cursor'] ? req.query['cursor'] : undefined;
+      const page = await (await deps.store()).listBriefs({
+        ...(cursor ? { cursor } : {}),
+        ...(Number.isInteger(rawLimit) && rawLimit > 0 ? { limit: Math.min(rawLimit, 200) } : {}),
+      });
+      res.json({
+        briefs: page.items.map(({ markdown: _markdown, ...summary }) => summary),
+        next: page.next,
+      });
+    }));
 
   router.get('/runs/:ref/brief', briefLimit, machineMark,
     unlessMachine(requireTenant('orgiq')), unlessMachine(requireAction('ViewSessionBrief')),

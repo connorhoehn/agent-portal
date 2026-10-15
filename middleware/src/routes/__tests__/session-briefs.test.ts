@@ -152,6 +152,22 @@ describe('GET /api/runs/:ref/brief', () => {
   });
 });
 
+describe('GET /api/briefs', () => {
+  it('lists frozen briefs newest first without their markdown, for people only', async () => {
+    const brief = await freeze('job-1');
+    const res = await request(appAs(USERS.member!)).get('/api/briefs');
+    expect(res.status).toBe(200);
+    const row = res.body.briefs.find((b: { run_ref: string }) => b.run_ref === 'job-1');
+    expect(row.sha256).toBe(brief.sha256);
+    expect(row.markdown).toBeUndefined();
+    expect(Array.isArray(row.sections)).toBe(true);
+    expect((await request(appAs(USERS.strayAssessor!)).get('/api/briefs')).status).toBe(403);
+    expect((await request(appAs(null)).get('/api/briefs')).status).toBe(401);
+    const target = '/api/briefs';
+    expect((await request(appAs(null)).get(target).set(boxHeaders('GET', target))).status).toBe(401);
+  });
+});
+
 describe('GET /api/work-items/:id/brief-preview', () => {
   it('assembles what a box would get, without storing it', async () => {
     const res = await request(appAs(USERS.member!)).get('/api/work-items/wi-auth-1/brief-preview');
