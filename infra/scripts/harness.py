@@ -358,6 +358,25 @@ def _service_auth_headers(url: str) -> dict[str, str]:
     return headers
 
 
+def _signed_trace_headers(method: str, url: str, data: bytes | None) -> dict[str, str]:
+    """The trace POST's signed envelope (lane C4), from the agents' own signer.
+
+    ``agents/_shared/callbacks.request_headers`` signs the exact bytes sent
+    and decides, from ``SERVICE_AUTH_LEGACY_HEADERS``, whether the static
+    ``x-harness-auth`` rides along. If the signer cannot be imported the
+    static header set by ``_service_auth_headers`` stays, which is the
+    pre-C4 request.
+    """
+    try:
+        agents_dir = str(Path(__file__).resolve().parents[2] / "agents")
+        if agents_dir not in sys.path:
+            sys.path.insert(0, agents_dir)
+        from _shared import callbacks  # noqa: PLC0415
+    except ImportError:
+        return {}
+    return callbacks.request_headers(callbacks.HARNESS_TRACE, method, url, data)
+
+
 def trace_auth_hint(status: int) -> str:
     """One actionable sentence for a trace POST the middleware rejected.
 
@@ -417,6 +436,11 @@ def _http(method: str, url: str, body: dict | None = None, timeout: int = 60) ->
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
     headers.update(_service_auth_headers(url))
+    if url.split("?", 1)[0].endswith(_TRACE_PATH) and _trace_secret():
+        signed = _signed_trace_headers(method, url, data)
+        if signed:  # the signer decides whether the static header stays
+            headers.pop(_TRACE_AUTH_HEADER, None)
+            headers.update(signed)
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:

@@ -36,6 +36,7 @@ to fix. A rejected *poll* also stops polling immediately rather than burning
 five minutes on a request that cannot start succeeding.
 """
 
+import json
 import os
 import time
 from typing import Any
@@ -90,10 +91,21 @@ def request_approval(tx_id: str, payload: dict, reason: str) -> dict:
     # ── Create the approval row ──────────────────────────────────────────────
     # Empty dict when APPROVALS_REQUEST_SECRET is unset — the request then goes
     # out byte-for-byte as it did before service auth existed.
-    auth = callbacks.auth_headers(callbacks.APPROVALS_REQUEST)
+    #
+    # With the secret set the request is signed (lane C4): the envelope covers
+    # the exact body bytes, so we serialise once and send those bytes rather
+    # than letting httpx re-serialise `json=` its own way.
+    signing = bool(callbacks.secret_for(callbacks.APPROVALS_REQUEST))
     try:
         with httpx.Client(timeout=_HTTP_TIMEOUT_SEC) as client:
-            resp = client.post(create_url, json=body, headers=auth)
+            if signing:
+                data = json.dumps(body, default=str, ensure_ascii=False).encode("utf-8")
+                headers = {"Content-Type": "application/json"}
+                headers.update(callbacks.request_headers(
+                    callbacks.APPROVALS_REQUEST, "POST", create_url, data))
+                resp = client.post(create_url, content=data, headers=headers)
+            else:
+                resp = client.post(create_url, json=body, headers={})
             resp.raise_for_status()
             approval_id = resp.json().get("approvalId")
     except httpx.HTTPStatusError as exc:
@@ -116,12 +128,15 @@ def request_approval(tx_id: str, payload: dict, reason: str) -> dict:
     poll_url = f"{base}/api/observability/approvals/{approval_id}"
 
     # ── Long-poll until decided or budget exhausted ──────────────────────────
-    # Same `auth` headers as the POST: the read side of this loop is a machine
-    # call too (see the module docstring).
+    # The same credential as the POST: the read side of this loop is a machine
+    # call too (see the module docstring). Signed fresh per poll — each
+    # envelope carries its own timestamp and single-use nonce.
     last_err: str | None = None
     with httpx.Client(timeout=_HTTP_TIMEOUT_SEC) as client:
         for _ in range(_MAX_POLLS):
             try:
+                auth = callbacks.request_headers(
+                    callbacks.APPROVALS_REQUEST, "GET", poll_url)
                 resp = client.get(poll_url, headers=auth)
                 resp.raise_for_status()
                 row = resp.json()

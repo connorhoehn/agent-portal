@@ -49,10 +49,20 @@ describe('the machine-callback specs are the canonical list', () => {
     // infra/lib/middleware-service-stack.ts (which mints the secrets) and with
     // agents/_shared/callbacks.py (which sends the headers). Renaming one here
     // silently 401s the fleet, so they are spelled out rather than derived.
-    expect(APPROVALS_SERVICE_AUTH).toEqual({ envVar: 'APPROVALS_REQUEST_SECRET', header: 'x-approvals-auth' });
-    expect(HARNESS_TRACE_SERVICE_AUTH).toEqual({ envVar: 'HARNESS_TRACE_SECRET', header: 'x-harness-auth' });
-    expect(ASSESSMENT_RUN_COMPLETE_SERVICE_AUTH)
-      .toEqual({ envVar: 'ASSESSMENT_RUN_COMPLETE_SECRET', header: 'x-assessment-run-auth' });
+    // The `signed` audiences are the same kind of contract (lane C4): they
+    // must match the `audience=` fields on the Callback specs in callbacks.py.
+    expect(APPROVALS_SERVICE_AUTH).toEqual({
+      envVar: 'APPROVALS_REQUEST_SECRET', header: 'x-approvals-auth',
+      signed: { audience: 'orgiq-middleware/approvals', allowedServices: ['orgiq-agent'] },
+    });
+    expect(HARNESS_TRACE_SERVICE_AUTH).toEqual({
+      envVar: 'HARNESS_TRACE_SECRET', header: 'x-harness-auth',
+      signed: { audience: 'orgiq-middleware/harness-trace', allowedServices: ['orgiq-agent'] },
+    });
+    expect(ASSESSMENT_RUN_COMPLETE_SERVICE_AUTH).toEqual({
+      envVar: 'ASSESSMENT_RUN_COMPLETE_SECRET', header: 'x-assessment-run-auth',
+      signed: { audience: 'orgiq-middleware/assessment-run-complete', allowedServices: ['orgiq-agent'] },
+    });
   });
 
   it('gives every spec its own env var and its own header', () => {

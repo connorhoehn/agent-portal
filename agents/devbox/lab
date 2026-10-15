@@ -23,7 +23,9 @@
 #
 # Config (set by the runtime / CDK stack):
 #   LAB_API_BASE        middleware origin, e.g. https://orgiq.example.com
-#   LAB_CALLBACK_SECRET optional; sent as x-lab-auth when set
+#   LAB_CALLBACK_SECRET optional; when set every call carries a signed
+#                       X-Service-Auth envelope + x-service-nonce (lane C4),
+#                       plus x-lab-auth unless SERVICE_AUTH_LEGACY_HEADERS=refuse
 #   LAB_SESSION_ID / LAB_BOX_ID / LAB_REPO / LAB_INITIATIVE_ID  attribution
 set -euo pipefail
 
@@ -33,15 +35,52 @@ if [ -z "$BASE" ]; then
   exit 0   # soft: a missing loop must never fail an agent's bash step
 fi
 
+# Service auth (middleware lib/service-auth.ts, LAB_CALLBACK_SERVICE_AUTH).
+# Unset secret → no headers at all. Set → service-runtime's signed request
+# envelope over (method, path+query, exact body, audience#nonce), the same
+# wire format agents/_shared/callbacks.py signs; the static x-lab-auth header
+# rides along until the transition flag says refuse. Signed per request: each
+# envelope is single-use.
 auth=()
-[ -n "${LAB_CALLBACK_SECRET:-}" ] && auth=(-H "x-lab-auth: ${LAB_CALLBACK_SECRET}")
+sign() { # $1=METHOD $2=path+query $3=exact body → fills auth=()
+  auth=()
+  local secret="${LAB_CALLBACK_SECRET:-}"
+  secret="${secret#"${secret%%[![:space:]]*}"}"; secret="${secret%"${secret##*[![:space:]]}"}"
+  [ -n "$secret" ] || return 0
+  if [ "$(printf '%s' "${SERVICE_AUTH_LEGACY_HEADERS:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" != "refuse" ]; then
+    auth+=(-H "x-lab-auth: ${secret}")
+  fi
+  local lines
+  lines=$(LAB_SIGN_SECRET="$secret" python3 -I -c '
+import base64, hashlib, hmac, json, os, secrets, sys, time
+method, target, body = sys.argv[1], sys.argv[2], sys.argv[3]
+nonce = secrets.token_urlsafe(18)
+payload = json.dumps({"protocol": "service-http-v1", "audience": "orgiq-middleware/lab#" + nonce,
+                      "method": method.upper(), "target": target, "body": body},
+                     sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+ts = int(time.time())
+mac = hmac.new(os.environ["LAB_SIGN_SECRET"].encode(), f"orgiq-devbox.{ts}.{payload}".encode(), hashlib.sha256).digest()
+print("X-Service-Auth: v1.orgiq-devbox.%d.%s" % (ts, base64.urlsafe_b64encode(mac).rstrip(b"=").decode()))
+print("x-service-nonce: " + nonce)
+' "$1" "$2" "$3") || return 0   # soft: an unsignable request goes out with the static header only
+  while IFS= read -r line; do auth+=(-H "$line"); done <<<"$lines"
+}
 
 repo="${LAB_REPO:-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")}"
 
 json_escape() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
 
-post() { # $1=path $2=json-body
-  curl -sS --max-time 15 -X POST "$BASE$1" -H 'content-type: application/json' ${auth[@]+"${auth[@]}"} -d "$2"
+base_path() { python3 -I -c 'import sys,urllib.parse; print(urllib.parse.urlsplit(sys.argv[1]).path.rstrip("/"))' "$BASE"; }
+PREFIX="$(base_path)"
+
+post() { # $1=path $2=json-body (sent byte for byte: --data-binary, never -d)
+  sign POST "$PREFIX$1" "$2"
+  curl -sS --max-time 15 -X POST "$BASE$1" -H 'content-type: application/json' ${auth[@]+"${auth[@]}"} --data-binary "$2"
+}
+
+get() { # $1=path+query
+  sign GET "$PREFIX$1" ""
+  curl -sS --max-time 15 ${auth[@]+"${auth[@]}"} "$BASE$1"
 }
 
 common_fields() {
@@ -65,7 +104,7 @@ case "$cmd" in
       && echo "remembered for $repo"
     ;;
   recall)
-    curl -sS --max-time 15 ${auth[@]+"${auth[@]}"} "$BASE/api/lab/experiences?repo=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$repo")&limit=20" \
+    get "/api/lab/experiences?repo=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$repo")&limit=20" \
       | python3 -c '
 import json, sys
 exps = json.load(sys.stdin).get("experiences", [])
@@ -87,7 +126,7 @@ else:
     deadline=$(( $(date +%s) + 600 ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
       sleep 5
-      out=$(curl -sS --max-time 15 ${auth[@]+"${auth[@]}"} "$BASE/api/lab/consults/$cid" || true)
+      out=$(get "/api/lab/consults/$cid" || true)
       status=$(printf '%s' "$out" | python3 -c 'import json,sys
 try: print(json.load(sys.stdin)["consult"]["status"])
 except Exception: print("pending")')
@@ -101,7 +140,7 @@ except Exception: print("pending")')
     exit 0   # soft: an unanswered consult must not fail the run
     ;;
   *)
-    sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import json
+import json as _json
 import os
 import sys
 import types
@@ -70,7 +71,11 @@ class StubClient:
     def __exit__(self, *exc) -> bool:  # noqa: ANN002 - stub
         return False
 
-    def post(self, url, json=None, headers=None):  # noqa: A002 - mirrors httpx
+    def post(self, url, json=None, content=None, headers=None):  # noqa: A002 - mirrors httpx
+        if content is not None:  # signed path sends exact bytes (lane C4)
+            StubClient.posts.append({"url": url, "json": _json.loads(content),
+                                     "content": content, "headers": headers or {}})
+            return StubClient.post_response
         StubClient.posts.append({"url": url, "json": json, "headers": headers or {}})
         return StubClient.post_response
 
@@ -286,9 +291,17 @@ class RequestApprovalTests(unittest.TestCase):
     def test_header_sent_when_secret_set(self):
         os.environ["APPROVALS_REQUEST_SECRET"] = "approve-secret"
         self._call()
-        self.assertEqual(
-            StubClient.posts[0]["headers"], {"x-approvals-auth": "approve-secret"}
+        headers = StubClient.posts[0]["headers"]
+        self.assertEqual(headers["x-approvals-auth"], "approve-secret")
+        # The envelope covers the exact bytes sent.
+        nonce = headers["x-service-nonce"]
+        ok, _ = cb.verify_service_request(
+            headers["X-Service-Auth"], "POST", "/api/observability/approvals/request",
+            StubClient.posts[0]["content"].decode("utf-8"),
+            secret="approve-secret", allowed_services=["orgiq-agent"],
+            audience=f"orgiq-middleware/approvals#{nonce}",
         )
+        self.assertTrue(ok)
 
     def test_401_fails_closed_with_an_actionable_note(self):
         # No second delivery path here — the agent must not read a rejected
@@ -332,9 +345,8 @@ class ApprovalPollTests(unittest.TestCase):
         os.environ["APPROVALS_REQUEST_SECRET"] = "approve-secret"
         result = self._call()
         self.assertEqual(result["status"], "APPROVED")
-        self.assertEqual(
-            StubClient.gets[0]["headers"], {"x-approvals-auth": "approve-secret"}
-        )
+        self.assertEqual(StubClient.gets[0]["headers"]["x-approvals-auth"], "approve-secret")
+        self.assertIn("X-Service-Auth", StubClient.gets[0]["headers"])
 
     def test_poll_sends_no_header_when_the_secret_is_unset(self):
         # Byte-for-byte the pre-existing request, so nothing changes for a

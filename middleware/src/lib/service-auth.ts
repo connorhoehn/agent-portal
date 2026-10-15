@@ -49,16 +49,80 @@
 // newline, which would otherwise turn a correct secret into a silent mismatch.
 // The agent half of this contract is agents/_shared/callbacks.py, which trims
 // for the same reason.
+//
+// SIGNED ENVELOPES (lane C4, 2026-10-14). A static header is a bearer token:
+// anything that sees one request (an access log, a proxy, a debug dump) can
+// replay it forever against any route that shares the secret. The four agent
+// and devbox callbacks (approvals, harness trace, assessment run-complete, lab)
+// now also accept service-runtime's signed request envelope, keyed by the SAME
+// secret, so the rollout mints nothing new:
+//
+//   X-Service-Auth:  v1.<serviceId>.<unixTs>.<base64url HMAC-SHA256>
+//                    over service-runtime's `service-http-v1` payload
+//                    {protocol, audience, method, target, body}
+//   x-service-nonce: 16–128 base64url chars, fresh per request
+//
+// `verifyServiceRequest` binds the MAC to the method, the exact origin-form
+// target (`req.originalUrl`, query included), the exact UTF-8 body bytes (kept
+// by `captureRawBody`, wired into express.json in index.ts) and an audience.
+// The audience is `<spec audience>#<nonce>`, so the nonce is inside the MAC:
+// changing it breaks the signature, and replaying it is refused by the
+// single-use cache below. Timestamps outside 60 s (+10 s future skew) are
+// refused by service-runtime itself; MAC compares are timing-safe there, and
+// the legacy compare below stays timing-safe here.
+//
+// THE TRANSITION FLAG. Deployed agent images send only the static header, so
+// the middleware accepts EITHER a valid envelope OR the legacy header while
+// `SERVICE_AUTH_LEGACY_HEADERS` is unset or `accept` (the default). Set it to
+// `refuse` once every signer is on the envelope; the agents read the same
+// variable and stop sending the static header when it says `refuse`. An
+// envelope that is present always decides on its own — a bad envelope is not
+// rescued by a legacy header riding alongside it. Specs with no `signed`
+// contract (harness runner, document policy, mock control) are unchanged and
+// ignore the flag. Unset-secret behaviour is untouched: open outside
+// production, 503 in production, and `serviceAuthOr` never opens.
+//
+// REPLAY SCOPE. The nonce cache is per process. The BFF runs as one replica
+// today (the single-gateway safeguard pins it); with more replicas a captured
+// request could be replayed once per replica inside the 70 s window. Moving the
+// cache to Redis is the follow-up if that safeguard is lifted.
+//
+// Ordered rollout: docs/agentcore-preview-surface.md §6a.
 
 import { timingSafeEqual } from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
+import { SERVICE_AUTH_HEADER, verifyServiceRequest } from '@connorhoehn/service-runtime';
+
+export interface SignedServiceAuth {
+  /** Audience prefix the signer binds; the nonce is appended as `#<nonce>`. */
+  audience: string;
+  /** Envelope service ids allowed to call this route. */
+  allowedServices: readonly string[];
+}
 
 export interface ServiceAuthSpec {
   /** Env var the shared secret is read from. */
   envVar: string;
   /** Header the caller presents it in (lower-case). */
   header: string;
+  /** Signed-envelope contract (lane C4). Absent → the legacy header only. */
+  signed?: SignedServiceAuth;
 }
+
+/** Envelope service id the Strands agents sign as (agents/_shared/callbacks.py). */
+export const AGENT_SERVICE_ID = 'orgiq-agent';
+/** Envelope service id the devbox `lab` CLI signs as (agents/devbox/lab). */
+export const DEVBOX_SERVICE_ID = 'orgiq-devbox';
+/** Per-request nonce header, bound into the signed audience. */
+export const SERVICE_NONCE_HEADER = 'x-service-nonce';
+/** The transition flag both the middleware and the signers read. */
+export const LEGACY_HEADERS_ENV = 'SERVICE_AUTH_LEGACY_HEADERS';
+
+/** Envelope lifetime and tolerated future skew — service-runtime's request defaults, spelled out. */
+const ENVELOPE_TTL_SEC = 60;
+const ENVELOPE_TOLERANCE_SEC = 10;
+const NONCE_RE = /^[A-Za-z0-9_-]{16,128}$/;
 
 export const DOCUMENT_POLICY_SERVICE_AUTH: ServiceAuthSpec = {
   envVar: 'DOCUMENT_POLICY_SECRET',
@@ -68,16 +132,19 @@ export const DOCUMENT_POLICY_SERVICE_AUTH: ServiceAuthSpec = {
 export const APPROVALS_SERVICE_AUTH: ServiceAuthSpec = {
   envVar: 'APPROVALS_REQUEST_SECRET',
   header: 'x-approvals-auth',
+  signed: { audience: 'orgiq-middleware/approvals', allowedServices: [AGENT_SERVICE_ID] },
 };
 
 export const HARNESS_TRACE_SERVICE_AUTH: ServiceAuthSpec = {
   envVar: 'HARNESS_TRACE_SECRET',
   header: 'x-harness-auth',
+  signed: { audience: 'orgiq-middleware/harness-trace', allowedServices: [AGENT_SERVICE_ID] },
 };
 
 export const ASSESSMENT_RUN_COMPLETE_SERVICE_AUTH: ServiceAuthSpec = {
   envVar: 'ASSESSMENT_RUN_COMPLETE_SECRET',
   header: 'x-assessment-run-auth',
+  signed: { audience: 'orgiq-middleware/assessment-run-complete', allowedServices: [AGENT_SERVICE_ID] },
 };
 
 /**
@@ -111,6 +178,7 @@ export const HARNESS_RUNNER_SERVICE_AUTH: ServiceAuthSpec = {
 export const LAB_CALLBACK_SERVICE_AUTH: ServiceAuthSpec = {
   envVar: 'LAB_CALLBACK_SECRET',
   header: 'x-lab-auth',
+  signed: { audience: 'orgiq-middleware/lab', allowedServices: [DEVBOX_SERVICE_ID] },
 };
 
 export const MOCK_CONTROL_SERVICE_AUTH: ServiceAuthSpec = {
@@ -128,23 +196,121 @@ export function serviceAuthConfigured(spec: ServiceAuthSpec): boolean {
   return serviceSecret(spec) !== '';
 }
 
+/** True while the transition flag still accepts the static header (the default). */
+export function legacyHeadersAccepted(): boolean {
+  return (process.env[LEGACY_HEADERS_ENV] ?? '').trim().toLowerCase() !== 'refuse';
+}
+
+type RawBodyRequest = IncomingMessage & { rawBody?: Buffer };
+
+/**
+ * `express.json({ verify: captureRawBody })` — keep the exact body bytes for
+ * requests that carry a signed envelope, so the MAC is checked against what
+ * was sent rather than a re-serialisation of what was parsed. Requests without
+ * the header keep nothing extra.
+ */
+export function captureRawBody(req: IncomingMessage, _res: ServerResponse, buf: Buffer): void {
+  if (req.headers[SERVICE_AUTH_HEADER.toLowerCase()]) (req as RawBodyRequest).rawBody = buf;
+}
+
+// Single-use nonces: `<serviceId>:<nonce>` → expiry (ms). Insertion order is
+// expiry order (fixed window), so sweeping from the front is enough.
+const seenNonces = new Map<string, number>();
+const NONCE_CACHE_MAX = 50_000;
+const NONCE_WINDOW_MS = (ENVELOPE_TTL_SEC + ENVELOPE_TOLERANCE_SEC) * 1000;
+
+function claimNonce(key: string, nowMs: number): boolean {
+  for (const [k, exp] of seenNonces) {
+    if (exp > nowMs && seenNonces.size < NONCE_CACHE_MAX) break;
+    seenNonces.delete(k);
+  }
+  if (seenNonces.has(key)) return false;
+  seenNonces.set(key, nowMs + NONCE_WINDOW_MS);
+  return true;
+}
+
+/** Test hook — forget every claimed nonce. */
+export function resetServiceNonceCache(): void {
+  seenNonces.clear();
+}
+
+export type EnvelopeVerdict =
+  | { ok: true; serviceId: string }
+  | { ok: false; reason: string };
+
+/**
+ * Verify the signed envelope on `req` for `spec` (lane C4). The caller has
+ * already established that a secret is configured and the header is present.
+ */
+export function verifySignedRequest(req: Request, spec: ServiceAuthSpec, secret: string): EnvelopeVerdict {
+  if (!spec.signed) return { ok: false, reason: 'unsigned-spec' };
+  const header = req.headers[SERVICE_AUTH_HEADER.toLowerCase()];
+  const nonce = req.headers[SERVICE_NONCE_HEADER];
+  if (typeof header !== 'string') return { ok: false, reason: 'malformed' };
+  if (typeof nonce !== 'string' || !NONCE_RE.test(nonce)) return { ok: false, reason: 'bad-nonce' };
+  const raw = (req as unknown as RawBodyRequest).rawBody;
+  let result;
+  try {
+    result = verifyServiceRequest(
+      header,
+      { method: req.method, target: req.originalUrl, body: raw ? raw.toString('utf8') : '' },
+      {
+        secret,
+        allowedServices: [...spec.signed.allowedServices],
+        audience: `${spec.signed.audience}#${nonce}`,
+        ttlSec: ENVELOPE_TTL_SEC,
+        toleranceSec: ENVELOPE_TOLERANCE_SEC,
+      },
+    );
+  } catch {
+    return { ok: false, reason: 'malformed' };
+  }
+  if (!result.ok) return { ok: false, reason: result.reason };
+  // After the MAC, never before: only a holder of the secret can spend a nonce.
+  if (!claimNonce(`${result.serviceId}:${nonce}`, Date.now())) return { ok: false, reason: 'replayed' };
+  return { ok: true, serviceId: result.serviceId };
+}
+
 /**
  * Does this request present the configured credential?
  *
  * False when no secret is configured — "no credential exists" is not the same
  * question as "is this route open", and conflating them is how a read gate
  * would accidentally open. Callers decide what an unconfigured secret means.
+ *
+ * A signed spec takes a valid envelope; a present envelope decides alone. The
+ * static header passes only for unsigned specs or while the transition flag
+ * accepts it.
  */
 export function hasServiceAuth(req: Request, spec: ServiceAuthSpec): boolean {
   const secret = serviceSecret(spec);
   if (!secret) return false;
+  if (spec.signed) {
+    if (req.headers[SERVICE_AUTH_HEADER.toLowerCase()] !== undefined) {
+      return verifySignedRequest(req, spec, secret).ok;
+    }
+    if (!legacyHeadersAccepted()) return false;
+  }
   const raw = req.headers[spec.header];
   const presented = typeof raw === 'string' ? raw : '';
   const a = Buffer.from(presented);
   const b = Buffer.from(secret);
   // timingSafeEqual throws on a length mismatch, so the length check is not
   // optional — it also leaks only the length, which the header already does.
-  return a.length === b.length && timingSafeEqual(a, b);
+  const ok = a.length === b.length && timingSafeEqual(a, b);
+  if (ok && spec.signed) noteLegacyAccepted(spec);
+  return ok;
+}
+
+// Once per spec per process: the signal an operator reads before setting
+// SERVICE_AUTH_LEGACY_HEADERS=refuse (§6a). Silence across a full traffic
+// cycle means every caller of that route signs.
+const legacyNoted = new Set<string>();
+function noteLegacyAccepted(spec: ServiceAuthSpec): void {
+  if (legacyNoted.has(spec.envVar)) return;
+  legacyNoted.add(spec.envVar);
+  console.warn(`[service-auth] accepted the static ${spec.header} header (${spec.envVar}); `
+    + `this caller does not sign yet — keep ${LEGACY_HEADERS_ENV} unset/accept until it does (lane C4)`);
 }
 
 /**

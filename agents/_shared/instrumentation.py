@@ -860,7 +860,9 @@ def post_trace(bundle: dict[str, Any], *, middleware_url: str | None = None) -> 
     (HTTP succeeds + CW Logs ingestion picks it up too) is safe.
 
     Service auth: when ``HARNESS_TRACE_SECRET`` is set in the runtime's
-    environment the POST carries it as ``x-harness-auth``; when it is unset no
+    environment the POST carries a signed ``X-Service-Auth`` envelope over the
+    exact body (plus ``x-harness-auth`` while the lane C4 transition flag
+    allows it, ``callbacks.request_headers``); when it is unset no
     header is sent, which is exactly the pre-existing behaviour and exactly
     what the middleware guard expects while *it* is unconfigured too. A
     rejected POST (401/403) is **not** retried without the header — that could
@@ -886,7 +888,7 @@ def post_trace(bundle: dict[str, Any], *, middleware_url: str | None = None) -> 
         log.warning("instrumentation: failed to serialise trace bundle: %s", exc)
         return False
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    headers.update(callbacks.auth_headers(callbacks.HARNESS_TRACE))
+    headers.update(callbacks.request_headers(callbacks.HARNESS_TRACE, "POST", url, data))
     req = urllib.request.Request(url, data=data, method="POST", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_S) as resp:

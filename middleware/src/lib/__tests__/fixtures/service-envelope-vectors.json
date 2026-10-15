@@ -1,0 +1,77 @@
+{
+  "_comment": "Cross-language contract for service-runtime's signed request envelope (lane C4). signedBy=ts rows were produced by @connorhoehn/service-runtime 0.4.1 signServiceRequest; signedBy=py rows by agents/_shared/callbacks.py sign_service_request. Both suites verify every row and re-sign it byte for byte: middleware/src/lib/__tests__/service-envelope-contract.test.ts and agents/_shared/test_service_envelope.py. Regenerate only if the wire format changes on purpose.",
+  "vectors": [
+    {
+      "name": "trace POST, ascii JSON body",
+      "method": "POST",
+      "target": "/api/observability/harness/trace",
+      "body": "{\"agentId\":\"orgiq-search\",\"prompt\":\"p\",\"response\":\"r\"}",
+      "audience": "orgiq-middleware/harness-trace#nonce-ts-000000000001",
+      "serviceId": "orgiq-agent",
+      "secret": "trace-secret",
+      "nowSec": 1760400000,
+      "signedBy": "ts",
+      "header": "v1.orgiq-agent.1760400000.C8u36m2YG1MW65F7_BPNW4YFM-WldTL6GuATshXVzT0"
+    },
+    {
+      "name": "run-complete POST, non-ASCII and control characters",
+      "method": "POST",
+      "target": "/api/assessment/runs/run-7/complete",
+      "body": "{\"status\":\"failed\",\"error\":\"café — 😀\\n\\t\",\"summary\":\"line1\nline2\u0001\"}",
+      "audience": "orgiq-middleware/assessment-run-complete#nonce-ts-000000000002",
+      "serviceId": "orgiq-agent",
+      "secret": "run-secret",
+      "nowSec": 1760400001,
+      "signedBy": "ts",
+      "header": "v1.orgiq-agent.1760400001.89lTiPxd422o7YfLVBx-vJ0OFUJiW_ht_H0qLw7yXdg"
+    },
+    {
+      "name": "approval poll GET, empty body",
+      "method": "GET",
+      "target": "/api/observability/approvals/ap-1",
+      "body": "",
+      "audience": "orgiq-middleware/approvals#nonce-ts-000000000003",
+      "serviceId": "orgiq-agent",
+      "secret": "approve-secret",
+      "nowSec": 1760400002,
+      "signedBy": "ts",
+      "header": "v1.orgiq-agent.1760400002.a0Me6jzrrFs0t3uAdcovTEN2AXdJdXdOQMnw9SuOrqY"
+    },
+    {
+      "name": "lab GET with a query string",
+      "method": "GET",
+      "target": "/api/lab/experiences?repo=orgiq%20core&limit=20",
+      "body": "",
+      "audience": "orgiq-middleware/lab#nonce-ts-000000000004",
+      "serviceId": "orgiq-devbox",
+      "secret": "lab-secret",
+      "nowSec": 1760400003,
+      "signedBy": "ts",
+      "header": "v1.orgiq-devbox.1760400003.wW5gw5Zbz1mj8uIXYyIsZ8Fsh0RDFauKECbevSOSQOU"
+    },
+    {
+      "name": "approval request POST signed in Python",
+      "method": "POST",
+      "target": "/api/observability/approvals/request",
+      "body": "{\"txId\": \"tx-1\", \"agentId\": \"orgiq-ops\", \"payload\": {\"amount\": 25000, \"note\": \"ünïcode ✓\"}, \"reason\": \"over threshold\"}",
+      "audience": "orgiq-middleware/approvals#nonce-py-000000000005",
+      "serviceId": "orgiq-agent",
+      "secret": "approve-secret",
+      "nowSec": 1760400004,
+      "signedBy": "py",
+      "header": "v1.orgiq-agent.1760400004.ZyvCcjHb6aNhxQJ9i5N013ElUJp3Z-ccf0goZZLHvlM"
+    },
+    {
+      "name": "lab POST signed in Python, lower-case method",
+      "method": "post",
+      "target": "/api/lab/signals",
+      "body": "{\"severity\":\"info\",\"title\":\"tab\there \\\"quoted\\\" \\\\ back\"}",
+      "audience": "orgiq-middleware/lab#nonce-py-000000000006",
+      "serviceId": "orgiq-devbox",
+      "secret": "lab-secret",
+      "nowSec": 1760400005,
+      "signedBy": "py",
+      "header": "v1.orgiq-devbox.1760400005.UYOQPLev8u4bZ4wSBwmR9HuGGf3zdELNmkyDOg6O3eM"
+    }
+  ]
+}

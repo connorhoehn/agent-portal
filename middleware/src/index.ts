@@ -108,7 +108,7 @@ import { botsRouter } from './routes/bots.js';
 import { mockControlRouter } from './routes/mock-control.js';
 import { assertMockRestartAdopted, completeMockRestartReplay, mockRestartSnapshot, assertMockRestartIdleDirectors, consumeMockRestartHandoff } from './mock/restart-state.js';
 import { requireAction, requireTenant, readForRolesElseAction, requireSession, resolveSession } from './lib/authz.js';
-import { HARNESS_RUNNER_SERVICE_AUTH, serviceAuthOr } from './lib/service-auth.js';
+import { HARNESS_RUNNER_SERVICE_AUTH, captureRawBody, serviceAuthOr } from './lib/service-auth.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initBotScheduler } from './lib/bot-scheduler.js';
 import { initFleetPersistence } from './providers/devbox-fleet-store.js';
@@ -141,7 +141,7 @@ const app = express();
 app.set('trust proxy', trustedProxyHops());
 
 app.use(browserOrigin);
-app.use(express.json());
+app.use(express.json({ verify: captureRawBody }));
 app.use(cookieParser());
 // HMAC-only source-owned attachments for platform/gateway collaboration
 // sessions. Mount before browser/session routes so it never inherits a user

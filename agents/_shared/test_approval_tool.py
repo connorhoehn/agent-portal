@@ -25,6 +25,7 @@ Run:  cd agents/_shared && ../../.venv-synth/bin/python -m unittest test_approva
 
 from __future__ import annotations
 
+import json as _json
 import os
 import sys
 import types
@@ -74,7 +75,9 @@ class _FakeClient:
     def __exit__(self, *exc):
         return False
 
-    def post(self, url, json=None, headers=None):
+    def post(self, url, json=None, content=None, headers=None):
+        if content is not None:  # signed path: exact bytes (lane C4)
+            json = _json.loads(content)
         return _FakeClient.server.post(url, json, headers or {})
 
     def get(self, url, headers=None):
@@ -359,10 +362,17 @@ class ServiceAuthHeaderTests(_Base):
             ]
         )
         self.run_tool(server)
-        self.assertEqual(server.post_calls[0]["headers"], {"x-approvals-auth": "s3cret"})
+        post_headers = server.post_calls[0]["headers"]
+        self.assertEqual(post_headers["x-approvals-auth"], "s3cret")
+        self.assertTrue(post_headers["X-Service-Auth"].startswith("v1.orgiq-agent."))
         self.assertEqual(len(server.get_calls), 3)
+        nonces = set()
         for call in server.get_calls:
-            self.assertEqual(call["headers"], {"x-approvals-auth": "s3cret"})
+            self.assertEqual(call["headers"]["x-approvals-auth"], "s3cret")
+            self.assertIn("X-Service-Auth", call["headers"])
+            nonces.add(call["headers"]["x-service-nonce"])
+        # Each poll is signed fresh: a single-use nonce per request.
+        self.assertEqual(len(nonces), 3)
 
     def test_a_pasted_trailing_newline_is_stripped(self):
         # `aws secretsmanager get-secret-value --output text` yields one; a
@@ -372,7 +382,7 @@ class ServiceAuthHeaderTests(_Base):
         callbacks.reset_announcements()
         server = _Server(polls=[_FakeResponse(200, {"status": "APPROVED"})])
         self.run_tool(server)
-        self.assertEqual(server.get_calls[0]["headers"], {"x-approvals-auth": "s3cret"})
+        self.assertEqual(server.get_calls[0]["headers"]["x-approvals-auth"], "s3cret")
 
 
 class NeverFabricatesApprovalTests(_Base):

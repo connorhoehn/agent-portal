@@ -34,6 +34,30 @@ Env contract
 ``ASSESSMENT_RUN_COMPLETE_SECRET``  unlock the assessment run-complete callback
 ``MIDDLEWARE_URL``                  base URL (default the compose service name)
 
+``SERVICE_AUTH_LEGACY_HEADERS``     transition flag (lane C4): unset/``accept`` sends
+                                    the static header AND the signed envelope;
+                                    ``refuse`` sends the envelope only
+
+Signed envelopes (lane C4)
+--------------------------
+With a secret set, every callback also carries service-runtime's signed
+request envelope (``X-Service-Auth``, ``service-http-v1``), keyed by the same
+secret, plus a fresh ``x-service-nonce``. The MAC covers the method, the exact
+origin-form target (path + query), the exact UTF-8 body bytes sent, and the
+audience ``<callback audience>#<nonce>`` — so the middleware's
+``verifyServiceRequest`` refuses a tampered body/method/target/audience, a
+stale timestamp, or a replayed nonce. ``sign_service_request`` below is a
+byte-for-byte port of service-runtime 0.4.1's TS signer; the fixed vectors in
+``middleware/src/lib/__tests__/fixtures/service-envelope-vectors.json`` are
+checked by both languages (``test_service_envelope.py`` and
+``service-envelope-contract.test.ts``).
+
+During the transition the static header still rides along, because deployed
+middleware builds only know the header; the middleware lets a present
+envelope decide on its own. Once ``SERVICE_AUTH_LEGACY_HEADERS=refuse`` is set
+on both stacks, the static secret stops crossing the wire. Rollout order:
+``docs/agentcore-preview-surface.md`` §6a.
+
 Values are read live from ``os.environ`` on each call — an env lookup is far
 cheaper than the HTTP request it decorates, and reading live keeps tests and
 `agentcore dev` honest. Surrounding whitespace is stripped: an operator
@@ -44,13 +68,20 @@ turn a header mismatch into an unsendable request.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
+import re
+import secrets
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable
+from urllib.parse import urlsplit
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +104,8 @@ class Callback:
     header: str
     #: Human-readable route, used in log/error text.
     route: str
+    #: Signed-envelope audience prefix; must match the middleware's spec.
+    audience: str = ""
 
 
 APPROVALS_REQUEST = Callback(
@@ -80,6 +113,7 @@ APPROVALS_REQUEST = Callback(
     env_var="APPROVALS_REQUEST_SECRET",
     header="x-approvals-auth",
     route="POST /api/observability/approvals/request",
+    audience="orgiq-middleware/approvals",
 )
 
 HARNESS_TRACE = Callback(
@@ -87,6 +121,7 @@ HARNESS_TRACE = Callback(
     env_var="HARNESS_TRACE_SECRET",
     header="x-harness-auth",
     route="POST /api/observability/harness/trace",
+    audience="orgiq-middleware/harness-trace",
 )
 
 ASSESSMENT_RUN_COMPLETE = Callback(
@@ -94,6 +129,7 @@ ASSESSMENT_RUN_COMPLETE = Callback(
     env_var="ASSESSMENT_RUN_COMPLETE_SECRET",
     header="x-assessment-run-auth",
     route="POST /api/assessment/runs/:runId/complete",
+    audience="orgiq-middleware/assessment-run-complete",
 )
 
 ALL_CALLBACKS = (APPROVALS_REQUEST, HARNESS_TRACE, ASSESSMENT_RUN_COMPLETE)
@@ -131,6 +167,188 @@ def auth_headers(cb: Callback) -> dict:
     """
     value = secret_for(cb)
     return {cb.header: value} if value else {}
+
+
+# ── Signed envelope (service-runtime `service-http-v1`, lane C4) ──────────────
+
+SERVICE_AUTH_HEADER = "X-Service-Auth"
+SERVICE_NONCE_HEADER = "x-service-nonce"
+#: Envelope service id the Strands agents sign as (middleware AGENT_SERVICE_ID).
+AGENT_SERVICE_ID = "orgiq-agent"
+LEGACY_HEADERS_ENV = "SERVICE_AUTH_LEGACY_HEADERS"
+
+_ENVELOPE_VERSION = "v1"
+_PROTOCOL = "service-http-v1"
+_NONCE_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
+
+
+def _b64url(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(text: str) -> bytes | None:
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", text or ""):
+        return None
+    try:
+        return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    except (ValueError, TypeError):
+        return None
+
+
+def canonical_request_payload(method: str, target: str, body: str, audience: str) -> str:
+    """service-runtime's canonical string for a request envelope.
+
+    TS builds ``{protocol, audience, method, target, body}`` and serialises it
+    with sorted keys and ``JSON.stringify`` for each value. For an all-string
+    object that is exactly ``json.dumps(sort_keys, separators=(",", ":"),
+    ensure_ascii=False)``: both escape only ``"``, ``\\`` and C0 controls
+    (``\\b \\f \\n \\r \\t`` short forms, ``\\u00xx`` lower-case otherwise).
+    """
+    if not audience.strip():
+        raise ValueError("Service request audience is required")
+    if not re.fullmatch(r"[A-Za-z]+", method or ""):
+        raise ValueError("Invalid HTTP method")
+    if not target.startswith("/") or re.search(r"[\s#]", target):
+        raise ValueError("Service request target must be an exact origin-form path and query")
+    payload = {
+        "protocol": _PROTOCOL,
+        "audience": audience,
+        "method": method.upper(),
+        "target": target,
+        "body": body or "",
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _mac(secret: str, service_id: str, ts: int, payload: str) -> bytes:
+    msg = f"{service_id}.{ts}.{payload}".encode("utf-8")
+    return hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).digest()
+
+
+def sign_service_request(
+    method: str,
+    target: str,
+    body: str,
+    *,
+    secret: str,
+    service_id: str,
+    audience: str,
+    now: float | None = None,
+) -> str:
+    """``v1.<serviceId>.<unixTs>.<base64url mac>`` — service-runtime's signServiceRequest."""
+    if not secret or not secret.strip():
+        raise ValueError("secret must be a non-empty, non-whitespace string")
+    if not service_id or not service_id.strip() or "." in service_id:
+        raise ValueError("serviceId must be non-empty and must not contain '.'")
+    ts = int(time.time() if now is None else now)
+    mac = _mac(secret, service_id, ts, canonical_request_payload(method, target, body, audience))
+    return f"{_ENVELOPE_VERSION}.{service_id}.{ts}.{_b64url(mac)}"
+
+
+def verify_service_request(
+    header: str,
+    method: str,
+    target: str,
+    body: str,
+    *,
+    secret: str,
+    allowed_services: Iterable[str],
+    audience: str,
+    now: float | None = None,
+    ttl_sec: int = 60,
+    tolerance_sec: int = 10,
+) -> tuple[bool, str]:
+    """Python mirror of service-runtime's verifyServiceRequest → ``(ok, serviceId|reason)``.
+
+    Used by the cross-language contract tests; the middleware is the real
+    verifier. MAC comparison is constant time (``hmac.compare_digest``).
+    """
+    parts = (header or "").split(".")
+    if len(parts) != 4:
+        return False, "malformed"
+    version, service_id, ts_str, mac_b64 = parts
+    if version != _ENVELOPE_VERSION or not service_id or not ts_str or not mac_b64:
+        return False, "malformed"
+    if not re.fullmatch(r"\d+", ts_str):
+        return False, "malformed"
+    presented = _b64url_decode(mac_b64)
+    if presented is None or len(presented) != 32:
+        return False, "malformed"
+    if service_id not in set(allowed_services):
+        return False, "unknown-service"
+    ts = int(ts_str)
+    now_sec = int(time.time() if now is None else now)
+    if ts > now_sec + tolerance_sec:
+        return False, "future-skew"
+    if ts < now_sec - ttl_sec:
+        return False, "stale"
+    try:
+        payload = canonical_request_payload(method, target, body, audience)
+    except ValueError:
+        return False, "malformed"
+    if hmac.compare_digest(_mac(secret, service_id, ts, payload), presented):
+        return True, service_id
+    return False, "bad-signature"
+
+
+def nonce_audience(audience: str, nonce: str) -> str:
+    """The audience actually signed: the callback's prefix with the nonce bound in."""
+    return f"{audience}#{nonce}"
+
+
+def new_nonce() -> str:
+    """24 base64url chars (144 bits) — inside the middleware's 16–128 bound."""
+    return secrets.token_urlsafe(18)
+
+
+def legacy_headers_allowed() -> bool:
+    """False only when the transition flag says ``refuse``."""
+    return (os.environ.get(LEGACY_HEADERS_ENV) or "").strip().lower() != "refuse"
+
+
+def request_target(url: str) -> str:
+    """Origin-form target (path + query) exactly as urllib/httpx put it on the wire."""
+    parts = urlsplit(url)
+    target = parts.path or "/"
+    return f"{target}?{parts.query}" if parts.query else target
+
+
+def request_headers(
+    cb: Callback,
+    method: str,
+    url: str,
+    body: bytes | str | None = None,
+    *,
+    service_id: str = AGENT_SERVICE_ID,
+) -> dict:
+    """Every auth header this request should carry, or ``{}`` when the secret is unset.
+
+    ``body`` must be the exact bytes sent. With a secret: the signed envelope
+    and its nonce, plus the static header while the transition flag allows it.
+    A signing failure never crashes the caller; it falls back to the static
+    header so the request is no worse than before lane C4.
+    """
+    value = secret_for(cb)
+    if not value:
+        return {}
+    headers: dict = {}
+    if legacy_headers_allowed():
+        headers[cb.header] = value
+    try:
+        text = body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else (body or "")
+        nonce = new_nonce()
+        headers[SERVICE_AUTH_HEADER] = sign_service_request(
+            method, request_target(url), text,
+            secret=value, service_id=service_id,
+            audience=nonce_audience(cb.audience, nonce),
+        )
+        headers[SERVICE_NONCE_HEADER] = nonce
+    except Exception as exc:  # noqa: BLE001 — a callback must never crash the agent
+        log.warning("callbacks: could not sign %s (%s); sending the static header only", cb.route, exc)
+        headers.pop(SERVICE_AUTH_HEADER, None)
+        headers.pop(SERVICE_NONCE_HEADER, None)
+        headers[cb.header] = value
+    return headers
 
 
 def is_auth_failure(status: Any) -> bool:
@@ -209,14 +427,14 @@ def post_run_complete(
     if scoring_log is not None:
         body["scoring_log"] = list(scoring_log)
 
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    headers.update(auth_headers(ASSESSMENT_RUN_COMPLETE))
-
     try:
         data = json.dumps(body, default=str, ensure_ascii=False).encode("utf-8")
     except (TypeError, ValueError) as exc:
         return {"ok": False, "status": None, "run": None,
                 "note": f"failed to serialise run-complete body: {exc}"}
+
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    headers.update(request_headers(ASSESSMENT_RUN_COMPLETE, "POST", url, data))
 
     req = urllib.request.Request(url, data=data, method="POST", headers=headers)
     try:

@@ -610,6 +610,96 @@ sending service auth / no service auth`), and the failure messages distinguish
 "variable unset in this runtime" from "value does not match the middleware's" —
 so CloudWatch answers which half is stale without guessing.
 
+### 6a.1 Signed envelopes replace the static headers (lane C4, 2026-10-14)
+
+**Changelog (lane C4).** The four static-secret machine callbacks (approvals
+request + long-poll, harness trace, assessment run-complete, lab) now verify
+service-runtime's signed request envelope (`verifyServiceRequest`, service-runtime
+0.4.1) in `middleware/src/lib/service-auth.ts`. The harness runner,
+document-policy and mock-control credentials are unchanged.
+
+What the envelope binds, and why it beats the static header: the HMAC key is
+the callback's **existing** secret (nothing new to mint or wire), and the MAC
+covers the method, the exact path + query (`req.originalUrl`), the exact UTF-8
+body bytes (kept by `captureRawBody` on `express.json`), a timestamp (refused
+past 60 s, or more than 10 s in the future) and the audience
+`orgiq-middleware/<callback>#<nonce>`. The nonce travels in `x-service-nonce`
+and is single-use per process, checked only after the MAC passes. So a
+captured request cannot be replayed, retargeted, or edited, and the static
+secret stops crossing the wire once the legacy header is refused.
+
+| callback | signer | envelope service id | audience prefix |
+|---|---|---|---|
+| approvals request + poll | `agents/_shared/approval_tool.py` | `orgiq-agent` | `orgiq-middleware/approvals` |
+| harness trace | `agents/_shared/instrumentation.py`, `infra/scripts/harness.py` | `orgiq-agent` | `orgiq-middleware/harness-trace` |
+| assessment run-complete | `callbacks.post_run_complete` | `orgiq-agent` | `orgiq-middleware/assessment-run-complete` |
+| lab | `agents/devbox/lab` (bash + inline python3) | `orgiq-devbox` | `orgiq-middleware/lab` |
+
+**The transition flag** is `SERVICE_AUTH_LEGACY_HEADERS`, read by both halves:
+
+- unset or `accept` (default): the middleware accepts a valid envelope **or**
+  the static header; signers send both. A present envelope decides alone, so a
+  bad envelope is not rescued by a correct static header.
+- `refuse`: the middleware accepts only the envelope on those four routes;
+  signers send only the envelope.
+
+Unchanged: an unset secret is still open outside production and 503 in
+production; `serviceAuthOr` still never opens on an unset secret.
+
+**Ordered rollout.** This is **BLOCKED (cloud)** until the default credentials
+work again. Do not skip or reorder steps: each one is a no-op for the stack
+that has not moved yet.
+
+1. **Agent and devbox images first.** Build and push the base image, every
+   agent and the devbox (`agents/base/build.sh`, `agents/build-all.sh`, the
+   devbox build), then `./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context
+   deployRuntimes=true` with the **same** secret contexts as today, and the
+   devbox stack with its current `labCallbackSecret`. Leave the flag unset. The
+   new images send the static header *and* the envelope. The deployed
+   middleware only reads the static header, so nothing changes.
+2. **Middleware second.** Build and push the middleware image, then deploy
+   `OrgIQ-MiddlewareService` with the flag unset. Signed callers now pass on the
+   envelope, and any caller still on an old image passes on the static header.
+   Each signed route logs `[service-auth] accepted the static <header> header`
+   **once per task** for the first legacy caller it sees.
+3. **Watch for the legacy signal.** Across at least one full traffic cycle
+   (an agent turn that requests approval, a harness run, an assessment run, a
+   devbox `lab` call), the middleware logs should show no
+   `[service-auth] accepted the static` lines after the task started. Any line
+   names the route whose caller still needs step 1.
+4. **Refuse the static header on the middleware.** Set
+   `SERVICE_AUTH_LEGACY_HEADERS=refuse` on the middleware task and redeploy.
+   CDK does not wire this variable yet, so add it to the container environment
+   in `infra/lib/middleware-service-stack.ts` as part of this step. Callers
+   still send both headers, and the static one is now ignored.
+5. **Stop sending the static header.** Set the same variable to `refuse` on
+   the runtimes and the devbox (each is a runtime version roll that wipes
+   `/mnt/workspace`) and in the shell that runs `infra/scripts/harness.py`.
+   Steps 4 and 5 can run in either order once step 3 is clean: an
+   envelope-only signer passes a middleware in `accept`, and a middleware in
+   `refuse` ignores the static header that signers in `accept` still send.
+
+**Rollback.** At any step, set the middleware flag back to `accept` (or unset
+it) and redeploy. Signers still sending the envelope keep working, and signers
+on older images work again. Rolling the agents back to a pre-C4 image is safe
+while the middleware is in `accept`.
+
+**Limits worth knowing.** The nonce cache lives in one process. The BFF runs
+one task today (the single-gateway safeguard), so a replay is refused
+outright. With N tasks, a captured request could be replayed once per task
+inside the 70 s window, so move the cache to Redis before lifting that
+safeguard. Any proxy that rewrites the path between the agent and the BFF
+breaks the target binding. CloudFront and the ALB forward the path unchanged
+today. A `MIDDLEWARE_URL` with a path prefix is fine as long as the BFF
+receives that same prefix.
+
+**Cross-language contract.** The TS signer (service-runtime) and the Python
+signer (`callbacks.sign_service_request`) are checked against fixed vectors
+in `middleware/src/lib/__tests__/fixtures/service-envelope-vectors.json` by
+both `service-envelope-contract.test.ts` and `agents/_shared/test_service_envelope.py`.
+The TS suite also runs the devbox `lab` CLI and `callbacks.post_run_complete`
+live against a locked guard with the legacy header refused.
+
 ## 7. Explicitly out of scope
 
 - Payment resources (`CfnPaymentManager` / `CfnPaymentConnector` / `CfnPaymentCredentialProvider`) — no OrgIQ use case.

@@ -114,6 +114,28 @@ class TraceAuthHeaderTests(unittest.TestCase):
         harness.os.environ["HARNESS_TRACE_SECRET"] = "   "
         self.assertEqual(harness._service_auth_headers(TRACE_URL), {})
 
+    def test_the_trace_post_is_signed_over_its_exact_bytes(self):
+        # Lane C4: the same envelope the agents send (agents/_shared/callbacks.py).
+        harness.os.environ["HARNESS_TRACE_SECRET"] = "trace-secret"
+        req = self._post(TRACE_URL)
+        harness._signed_trace_headers  # noqa: B018 - imported the signer
+        from _shared import callbacks  # noqa: PLC0415 - on sys.path via harness
+        nonce = _header(req, "x-service-nonce")
+        ok, _ = callbacks.verify_service_request(
+            _header(req, "x-service-auth"), "POST", "/api/observability/harness/trace",
+            req.data.decode("utf-8"), secret="trace-secret", allowed_services=["orgiq-agent"],
+            audience=f"orgiq-middleware/harness-trace#{nonce}",
+        )
+        self.assertTrue(ok)
+        self.assertEqual(_header(req, "x-harness-auth"), "trace-secret")  # transition: both
+
+    def test_refuse_mode_drops_the_static_trace_header(self):
+        harness.os.environ["HARNESS_TRACE_SECRET"] = "trace-secret"
+        harness.os.environ["SERVICE_AUTH_LEGACY_HEADERS"] = "refuse"
+        req = self._post(TRACE_URL)
+        self.assertIsNone(_header(req, "x-harness-auth"))
+        self.assertIsNotNone(_header(req, "x-service-auth"))
+
     def test_body_and_method_are_otherwise_untouched(self):
         req = self._post(TRACE_URL)
         self.assertEqual(req.get_method(), "POST")
