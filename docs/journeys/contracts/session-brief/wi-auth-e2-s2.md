@@ -1,17 +1,17 @@
 # Session brief — wi-auth-e2-s2
 
-> Assembled 2026-10-14 for run job-contract-wi-auth-e2-s2 · 2,649 of 6,000 tokens · brief-job-contract-wi-auth-e2-s2
+> Assembled 2026-10-14 for run job-contract-wi-auth-e2-s2 · 2,695 of 6,000 tokens · brief-job-contract-wi-auth-e2-s2
 
 ## Your task
 **Tenant-by-tenant cutover runbook with rollback** (story, 5 pts, Auth Migration)
-Cannot be written until the cutover order is settled — smallest tenant first or riskiest first is still escalated.
+Each tenant already moves with the single-tenant cutover runbook. This story writes the order the remaining tenants move in and the rollback for each, which waits on the escalated decision "Cutover order for legacy SSO tenants".
 Labels: decom, runbook, blocked.
 
 ## The project
 **Auth Migration** — repo connorhoehnslalom/orgiq-auth-service. Parent epic: Legacy SSO decommission.
 
 ## Decisions that bind this work
-- **Sunset legacy auth service** — resolved: Migrate remaining services off the v1 auth gateway before Q3 2026.
+- **Sunset legacy auth service** — resolved: Move every remaining service off the v1 auth gateway; the SAML shim is deleted once the last tenant has cut over to Cognito.
 
 ## Skills on this box
 - **Recover a cold Aurora Data API** (skill-cold-start-aurora v2) — Use when the first Data API call after idle fails with HttpEndpointNotEnabled. Warms the endpoint and retries with backoff.
@@ -21,7 +21,7 @@ Labels: decom, runbook, blocked.
 ## Runbooks for this work
 
 ### 1. Cut one tenant over from SAML to Cognito (rb-tenant-cutover v1)
-Included because: initiative p-auth-migration; labels decom, runbook; triggers on repo orgiq-auth-service; keywords tenant, cutover.
+Included because: initiative p-auth-migration; labels decom, runbook; triggers on repo orgiq-auth-service; keywords tenant, cutover, single.
 ⚠ Last run failed at step 2: flag flipped but the hosted-UI redirect still resolved to the old domain — check that step before relying on it.
 
 # Cut one tenant over from SAML to Cognito
@@ -166,7 +166,7 @@ Read the CSRF evaluator before you push, fix what it flags in the code, and get 
 Decision art-004: every diff touching orgiq-auth-service runs the CSRF evaluator as a required check, because an advisory-only comment once let a CSRF-weakening change merge.
 
 ### 3. Bring SSO up on a new origin without breaking the picker (rb-sso-new-origin v1)
-Included because: initiative p-auth-migration; triggers on repo orgiq-auth-service; keywords tenant.
+Included because: initiative p-auth-migration; triggers on repo orgiq-auth-service; keywords tenant, sso.
 
 # Bring SSO up on a new origin without breaking the picker
 

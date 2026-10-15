@@ -24,7 +24,7 @@ export const workItemCriteria = defineFixture<WorkItemCriterionRow>({
   key: 'work-item-criteria',
   scenarios: {
     // schema/seed_program.sql's "Acceptance-criteria checklists on select
-    // Observability items" block, byte-for-byte.
+    // Observability and Auth Migration items" block, byte-for-byte.
     default: () => [
       { id: 'wicr-obs-e1-s4-1', workItemId: 'wi-obs-e1-s4', text: 'Route metrics through the collector', done: false, position: 0, createdAt: clock.daysAgo(5), updatedAt: clock.daysAgo(5) },
       { id: 'wicr-obs-e1-s4-2', workItemId: 'wi-obs-e1-s4', text: 'Verify dashboard and alert parity', done: false, position: 1, createdAt: clock.daysAgo(5), updatedAt: clock.daysAgo(5) },
@@ -40,6 +40,14 @@ export const workItemCriteria = defineFixture<WorkItemCriterionRow>({
 
       { id: 'wicr-obs-e2-s3-1', workItemId: 'wi-obs-e2-s3', text: 'Wire one dashboard panel per team', done: false, position: 0, createdAt: clock.daysAgo(4), updatedAt: clock.daysAgo(4) },
       { id: 'wicr-obs-e2-s3-2', workItemId: 'wi-obs-e2-s3', text: 'Add drill-down to the underlying SLO burn', done: false, position: 1, createdAt: clock.daysAgo(4), updatedAt: clock.daysAgo(4) },
+
+      // Auth Migration's two in-flight stories (the Work demo story).
+      { id: 'wicr-auth-e2-s2-1', workItemId: 'wi-auth-e2-s2', text: 'Rehearse the cutover on both internal tenants', done: false, position: 0, createdAt: clock.daysAgo(9), updatedAt: clock.daysAgo(1) },
+      { id: 'wicr-auth-e2-s2-2', workItemId: 'wi-auth-e2-s2', text: 'Record the decided tenant order and the reason for it', done: false, position: 1, createdAt: clock.daysAgo(9), updatedAt: clock.daysAgo(9) },
+      { id: 'wicr-auth-e2-s2-3', workItemId: 'wi-auth-e2-s2', text: 'Give every tenant a rollback that answers within two minutes', done: false, position: 2, createdAt: clock.daysAgo(9), updatedAt: clock.daysAgo(9) },
+
+      { id: 'wicr-auth-e1-s3-1', workItemId: 'wi-auth-e1-s3', text: 'Re-mint the session cookie on every tenant and role switch', done: true, position: 0, createdAt: clock.daysAgo(20), updatedAt: clock.daysAgo(6) },
+      { id: 'wicr-auth-e1-s3-2', workItemId: 'wi-auth-e1-s3', text: 'The pre-switch cookie stops working within the refresh window', done: false, position: 1, createdAt: clock.daysAgo(20), updatedAt: clock.daysAgo(20) },
     ],
     // Declared, so an auditor can see the checklist's own empty state without
     // damaging the seed — see docs/mock-floor.md's fallback rule.

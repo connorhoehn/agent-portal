@@ -54,7 +54,7 @@ function seedExperiences(): LabExperience[] {
   return [
     {
       id: 'exp-mock-1',
-      sessionId: 'sess-mock-aurora-cold-start-000000000001', boxId: 'box-mock-1',
+      sessionId: 'sess-mock-aurora-cold-start-000000000001', boxId: 'box-mock-0006',
       repo: 'aws-agentcore', initiativeId: 'p-observability',
       kind: 'worked',
       title: 'Warm-up SELECT 1 then a 6x3s backoff clears the Aurora cold-start race',
@@ -66,7 +66,7 @@ function seedExperiences(): LabExperience[] {
     },
     {
       id: 'exp-mock-2',
-      sessionId: 'sess-mock-arm64-fargate-0000000000001', boxId: 'box-mock-1',
+      sessionId: 'sess-mock-arm64-fargate-0000000000001', boxId: 'box-mock-0006',
       // Was 'p-agent-fleet-ops' — no such row in mock/budgets.ts's fourteen
       // initiatives (there is no "fleet ops" initiative in the OrgIQ demo
       // cast). This is the platform's own middleware deploy, not one of the
@@ -83,7 +83,7 @@ function seedExperiences(): LabExperience[] {
     },
     {
       id: 'exp-mock-3',
-      sessionId: 'sess-mock-adot-configurator-00000000001', boxId: 'box-mock-2',
+      sessionId: 'sess-mock-adot-configurator-00000000001', boxId: 'box-mock-0002',
       repo: 'aws-agentcore', initiativeId: 'p-observability',
       kind: 'gotcha',
       title: 'Vanilla opentelemetry-distro leaves aws/spans silently empty on AgentCore Runtime',
@@ -95,7 +95,7 @@ function seedExperiences(): LabExperience[] {
     },
     {
       id: 'exp-mock-4',
-      sessionId: 'sess-mock-custodian-sg-drift-000000001', boxId: 'box-mock-2',
+      sessionId: 'sess-mock-custodian-sg-drift-000000001', boxId: 'box-mock-0002',
       // Was 'p-security-baseline' — no such row in mock/budgets.ts. Repointed
       // to the nearest real initiative this story is actually about: security
       // group ingress hardening is squarely 'p-zero-trust' work ("service
@@ -112,7 +112,7 @@ function seedExperiences(): LabExperience[] {
     },
     {
       id: 'exp-mock-5',
-      sessionId: 'sess-mock-session-storage-cache-00000001', boxId: 'box-mock-3',
+      sessionId: 'sess-mock-session-storage-cache-00000001', boxId: 'box-mock-0004',
       repo: 'orgiq-portal', initiativeId: 'p-observability',
       kind: 'convention',
       title: 'Treat /mnt/workspace as a cache, never a durable store',
@@ -141,10 +141,10 @@ function seedConsults(): LabConsult[] {
   return [
     {
       id: 'con-mock-1',
-      sessionId: 'sess-mock-auth-cutover-order-000000000001', boxId: 'box-mock-2',
-      repo: 'aws-agentcore', initiativeId: 'p-auth-migration',
-      question: 'Cut tenants over smallest-first or riskiest-first? The runbook cannot be written until this is settled.',
-      context: 'wi-auth-e2-s2 is blocked on it, and the decision is escalated to a release manager.',
+      sessionId: 'sess-mock-auth-cutover-order-000000000001', boxId: 'box-mock-0002',
+      repo: 'orgiq-auth-service', initiativeId: 'p-auth-migration',
+      question: 'Which customer tenant goes first after the rehearsals, the smallest or the riskiest? The cutover sequence cannot be written until that is decided.',
+      context: '"Tenant-by-tenant cutover runbook with rollback" is blocked on it. Vera Green escalated "Cutover order for legacy SSO tenants" to Sienna Garcia, the release manager, who decides it.',
       status: 'pending',
       answer: null, answeredBy: null,
       // Minutes, not hours — a pending consult stamped outside the 30-minute
@@ -154,7 +154,7 @@ function seedConsults(): LabConsult[] {
     },
     {
       id: 'con-mock-2',
-      sessionId: 'sess-mock-collector-oom-00000000000000001', boxId: 'box-mock-1',
+      sessionId: 'sess-mock-collector-oom-00000000000000001', boxId: 'box-mock-0006',
       repo: 'aws-agentcore', initiativeId: 'p-observability',
       question: 'Is bounding the collector queue acceptable if it means dropping spans under burst?',
       context: 'wi-obs-e1-b5 — the collector OOMs under burst ingest with an unbounded queue.',
@@ -166,7 +166,7 @@ function seedConsults(): LabConsult[] {
     },
     {
       id: 'con-mock-3',
-      sessionId: 'sess-mock-abandoned-poller-0000000000001', boxId: 'box-mock-3',
+      sessionId: 'sess-mock-abandoned-poller-0000000000001', boxId: 'box-mock-0004',
       repo: 'orgiq-portal', initiativeId: null,
       question: 'Should the terminal dock survive a tenant switch?',
       context: null,

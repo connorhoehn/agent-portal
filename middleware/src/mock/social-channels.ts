@@ -31,7 +31,7 @@
 
 import type { ChatMember, ChatMessage, ChatReadReceipt, PinnedMessage } from '@connorhoehnslalom/realtime-modules/chat';
 import { clock, defineFixture } from './core/index.js';
-import { CAST, EXTRA_CHANNELS, EXTRA_MEMBERS, HISTORY, PINS } from './social-history.js';
+import { CAST, EXTRA_CHANNELS, EXTRA_MEMBERS, HISTORY, INITIATIVE_THREAD, PINS } from './social-history.js';
 import { workItemComments, type WorkItemCommentRow } from './work-item-comments.js';
 import { legacyCommentMessage, type LegacyWorkComment } from '../lib/work-thread.js';
 import { seededPeople } from './people.js';
@@ -57,7 +57,7 @@ function seedChannels(): SocialChannelRow[] {
     { tenant: 'social', slug: 'general', name: 'General', description: 'Announcements and anything that does not have a home yet.', privacy: 'public', createdBy: 'u-mira', createdAt: clock.daysAgo(21) },
     { tenant: 'social', slug: 'design-reviews', name: 'Design reviews', description: 'Post a design, get eyes on it.', privacy: 'public', createdBy: 'u-lena', createdAt: clock.daysAgo(14) },
     { tenant: 'social', slug: 'moderators', name: 'Moderators', description: 'Moderation calls and escalations.', privacy: 'private', createdBy: 'u-lena', createdAt: clock.daysAgo(10) },
-    { tenant: 'social', slug: 'auth-migration', name: 'Auth migration', description: 'Discussion for the auth migration initiative (bound to its overview in OrgIQ).', privacy: 'public', createdBy: 'u-vera', createdAt: clock.daysAgo(8) },
+    { tenant: 'social', slug: 'auth-migration', name: 'Auth migration', description: 'Customer tenants moving off the legacy SAML shim to Cognito, one at a time. Bound to the Auth Migration initiative in Work.', privacy: 'public', createdBy: 'u-vera', createdAt: clock.daysAgo(8) },
     // The demo history's extra channels (mock/social-history.ts).
     ...EXTRA_CHANNELS.map((c): SocialChannelRow => ({ tenant: 'social', slug: c.slug, name: c.name, description: c.description, privacy: c.privacy, createdBy: c.owner, createdAt: clock.daysAgo(c.daysAgo) })),
   ];
@@ -138,18 +138,19 @@ function seedMessages(): ChatMessage[] {
   const dmLenaMira = 'social:dm:u-lena:u-mira';
   return [
     msg('seed-general-1', ch('general'), 'u-mira', 'Mira Okafor', 'Welcome to the community workspace. Channels are where we talk in the open; DMs are for everything else.', clock.daysAgo(21)),
-    msg('seed-general-2', ch('general'), 'u-lena', 'Lena Brandt', 'Moderation guidelines are pinned in #moderators for the mod team. Ping me with questions.', clock.daysAgo(3)),
     msg('seed-general-3', ch('general'), 'u-theo', 'Theo Chang', 'Is the Thursday community call still on?', clock.hoursAgo(6)),
     msg('seed-general-4', ch('general'), 'u-mira', 'Mira Okafor', 'Yes — same time, same room.', clock.hoursAgo(5)),
     msg('seed-design-1', ch('design-reviews'), 'u-lena', 'Lena Brandt', 'First pass at the onboarding flow is up. Comments by Friday, please.', clock.daysAgo(2)),
     msg('seed-design-2', ch('design-reviews'), 'u-farah', 'Farah Osei', 'The empty state on step two reads well. The progress bar feels heavy.', clock.hoursAgo(20)),
-    msg('seed-auth-1', ch('auth-migration'), 'u-vera', 'Vera Green', 'Tenant two cuts over to the BFF login on Thursday. Shout here if your team still calls the SAML shim.', clock.daysAgo(2)),
-    msg('seed-auth-2', ch('auth-migration'), 'u-theo', 'Theo Chang', 'Search still has one SAML callback in staging — patching it today.', clock.hoursAgo(7)),
     msg('seed-mods-1', ch('moderators'), 'u-mira', 'Mira Okafor', 'Two reports on the same thread overnight — Lena, can you take a look?', clock.hoursAgo(9)),
-    msg('seed-dm-ls-1', dmLenaSana, 'u-lena', 'Lena Brandt', 'Hi Sana — welcome aboard. Shout if anything in #general is unclear.', clock.daysAgo(1)),
+    msg('seed-dm-ls-1', dmLenaSana, 'u-lena', 'Lena Brandt', 'Your lightning talk slot is confirmed for the community call, right after Asha. Five minutes.', clock.daysAgo(1)),
     msg('seed-dm-ls-2', dmLenaSana, 'u-sana', 'Sana Iqbal', 'Thanks Lena, will do.', clock.hoursAgo(22)),
     msg('seed-dm-lm-1', dmLenaMira, 'u-mira', 'Mira Okafor', 'Can you cover the Thursday call if I run late?', clock.hoursAgo(4)),
     ...workThreadMessages(),
+    // Auth Migration's own thread (`orgiq:initiative:p-auth-migration`, the
+    // initiative page's Discussion pane): the same blocker #auth-migration
+    // argues out, said where the board is.
+    ...INITIATIVE_THREAD.map(([key, user, hours, text]) => msg(`i-${key}`, 'orgiq:initiative:p-auth-migration', user, CAST[user] ?? user, text, clock.hoursAgo(hours))),
     // Ten days of history from the whole social cast (mock/social-history.ts).
     ...[...HISTORY].sort((a, b) => b[3] - a[3]).map(([key, where, user, hours, text]) =>
       msg(`h-${key}`, where.includes('|') ? dmChannelFor(where) : ch(where), user, CAST[user] ?? user, text, clock.hoursAgo(hours))),

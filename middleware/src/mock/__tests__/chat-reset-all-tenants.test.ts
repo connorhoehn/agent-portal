@@ -16,20 +16,25 @@ test('a reset removes messages, receipts, pins, reactions and uploads on every t
   const be = createMemorySocialChatBackend({ fixtures: true });
   const reactions = new MemoryReactionStore(() => gatewayReactionsFixture.rows());
   const uploads = new RowsFileUploadMetadataStore(() => gatewayUploadsFixture.rows());
-  const seeded = (await be.chatStore.listMessages('social:ch:general', 100)).length;
+  // Some channels carry seeded history (#general, Auth Migration's initiative thread): a reset puts exactly that back.
+  const seededIn = new Map<string, number>();
+  for (const channel of channels) seededIn.set(channel, (await be.chatStore.listMessages(channel, 100)).length);
   for (const channel of channels) {
     await be.chatStore.putMessage({ id: `m-${channel}`, clientId: 'c', userId: 'u-a', channel, message: 'Highlights', metadata: {}, timestamp: new Date().toISOString() });
     await reactions.add({ channel, targetId: `m-${channel}`, emoji: '+1', userId: 'u-a', timestamp: new Date().toISOString() } as never);
   }
   await uploads.create({ uploadId: 'up1', channel: channels[0]!, uploader: 'u-a', filename: 'f.txt', size: 1, status: 'pending' });
-  expect(await be.chatStore.listMessages(channels[0]!, 10)).toHaveLength(1);
+  expect(await be.chatStore.listMessages(channels[0]!, 10)).toHaveLength(seededIn.get(channels[0]!)! + 1);
   expect(await reactions.list(channels[1]!)).toHaveLength(1);
   expect(await uploads.get('up1')).not.toBeNull();
 
   fixtureRegistry.resetAll();
 
-  for (const channel of channels.slice(0, 4)) expect(await be.chatStore.listMessages(channel, 10)).toHaveLength(0);
-  expect(await be.chatStore.listMessages('social:ch:general', 100)).toHaveLength(seeded);
+  for (const channel of channels) {
+    const after = await be.chatStore.listMessages(channel, 100);
+    expect(after).toHaveLength(seededIn.get(channel)!);
+    expect(after.some((m) => m.id === `m-${channel}`)).toBe(false);
+  }
   expect(await reactions.list(channels[1]!)).toHaveLength(0);
   expect(await uploads.get('up1')).toBeNull();
 });

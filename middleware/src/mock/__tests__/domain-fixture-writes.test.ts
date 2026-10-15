@@ -119,10 +119,10 @@ describe('the board (work-items)', () => {
     expect(await getWorkItem('wi-obs-e3-s1')).toMatchObject({
       title: 'Metric cardinality budgets',
       priority: 'medium',
-      // The seeded stamp is an offset from MOCK_EPOCH, not a wall-clock
-      // instant, so it comes back exactly as the seed spells it — this row's
-      // `updatedAt` is D(0), i.e. the epoch itself.
-      updatedAt: '2026-05-21T12:00:00.000Z',
+      // The seed's D(n) is replayed from the mock clock inside the factory,
+      // so a reset under the freeze puts back "n days before now": this row's
+      // `updatedAt` is D(0), i.e. the frozen now itself.
+      updatedAt: '2026-09-06T11:22:33.000Z',
     });
   });
 

@@ -1,6 +1,6 @@
 # Session brief — wi-auth-e2-b3
 
-> Assembled 2026-10-14 for run job-contract-wi-auth-e2-b3 · 2,658 of 6,000 tokens · brief-job-contract-wi-auth-e2-b3
+> Assembled 2026-10-14 for run job-contract-wi-auth-e2-b3 · 2,672 of 6,000 tokens · brief-job-contract-wi-auth-e2-b3
 
 ## Your task
 **Logout leaves the legacy shim cookie alive** (bug, 2 pts, Auth Migration)
@@ -11,7 +11,7 @@ Labels: session, decom.
 **Auth Migration** — repo connorhoehnslalom/orgiq-auth-service. Parent epic: Legacy SSO decommission.
 
 ## Decisions that bind this work
-- **Sunset legacy auth service** — resolved: Migrate remaining services off the v1 auth gateway before Q3 2026.
+- **Sunset legacy auth service** — resolved: Move every remaining service off the v1 auth gateway; the SAML shim is deleted once the last tenant has cut over to Cognito.
 
 ## Skills on this box
 - **Recover a cold Aurora Data API** (skill-cold-start-aurora v2) — Use when the first Data API call after idle fails with HttpEndpointNotEnabled. Warms the endpoint and retries with backoff.

@@ -148,7 +148,11 @@ INITIATIVES = [
                  per_run=0.40, per_day=1.50, runs=8),
         decision=('d-cognito-cutover', 'Cutover order for legacy SSO tenants',
                   'Smallest tenant first vs. riskiest first. Riskiest-first surfaces unknowns '
-                  'while rollback is cheap, but a failed first cutover is loud.', 'escalated', 'org-leader', 'e2'),
+                  'while rollback is cheap, but a failed first cutover is loud.', 'escalated', 'org-leader', 'e2',
+                  # Escalated BY the owner (Vera) TO the release manager: Sienna
+                  # Garcia (p-005, u-release) decides it, not the person who
+                  # raised it (docs/demo-content-audit.md, Work story-breaker 4).
+                  'p-005'),
     ),
     dict(
         id='p-llm-platform', slug='llm', repo='orgiq-llm-platform', tier='flagship',
@@ -516,6 +520,16 @@ CRITERIA = [
         ('Wire one dashboard panel per team', False, 4, 4),
         ('Add drill-down to the underlying SLO burn', False, 4, 4),
     ]),
+    # Auth Migration's two in-flight stories (the Work demo story).
+    ('auth', 'e2-s2', [
+        ('Rehearse the cutover on both internal tenants', False, 9, 1),
+        ('Record the decided tenant order and the reason for it', False, 9, 9),
+        ('Give every tenant a rollback that answers within two minutes', False, 9, 9),
+    ]),
+    ('auth', 'e1-s3', [
+        ('Re-mint the session cookie on every tenant and role switch', True, 20, 6),
+        ('The pre-switch cookie stops working within the refresh window', False, 20, 20),
+    ]),
 ]
 
 # Work-item briefs: the copy the initiative Overview and a work item's Brief
@@ -565,6 +579,30 @@ BRIEFS: dict[str, dict[str, str]] = {
         description='Fast burn pages, slow burn tickets. Thresholds derived from the SLO, not hand-picked.',
     ),
     'wi-obs-e3-s2': dict(),
+    # Auth Migration, the Work demo story (docs/demo-content-audit.md): the
+    # runbook story is blocked on the escalated cutover-order decision, which
+    # the release manager decides, not the owner who escalated it.
+    'wi-auth-e2-s2': dict(
+        summary='Sequence the remaining customer tenants off the SAML shim, each with a five-minute way back.',
+        description='Each tenant already moves with the single-tenant cutover runbook. This story '
+                    'writes the order the remaining tenants move in and the rollback for each, '
+                    'which waits on the escalated decision "Cutover order for legacy SSO tenants".',
+        blocked_reason='Blocked on "Cutover order for legacy SSO tenants", escalated to Sienna Garcia.',
+        next_step='Sienna Garcia decides the cutover order.',
+        next_step_detail='She decides once the second internal rehearsal passes. Review the proposed '
+                         'callback-list step for the cutover runbook first, so the retry can run.',
+    ),
+    'wi-auth-e1-s3': dict(
+        summary='A switched tenant or role stops honouring the old cookie within the refresh window.',
+        description='Re-mint on every tenant and role switch. The pre-switch cookie stops working within the refresh window.',
+    ),
+    'wi-auth-e1-b4': dict(
+        summary='A revoked grant must sign the session out once, not loop on refresh.',
+    ),
+    'wi-auth-e2-b3': dict(
+        summary='Signing out must also clear the SAML shim cookie.',
+        description='Signing out clears the OrgIQ session and not the SAML shim cookie, so the next visit silently re-authenticates.',
+    ),
 }
 BRIEF_FIELDS = ('summary', 'description', 'blocked_reason', 'next_step', 'next_step_detail')
 
@@ -762,7 +800,10 @@ def main() -> None:
         # work_item_id can only be written from THIS file: the epic it names is
         # emitted a few lines above, and does not exist when seed.sql runs.
         if ini['decision']:
-            (did, topic, summary, status, req_role, dec_ekey) = ini['decision']
+            (did, topic, summary, status, req_role, dec_ekey, *rest) = ini['decision']
+            # An escalated decision names who decides it; the owner who raised
+            # it is then a contributor, never the decider of their own escalation.
+            decider = rest[0] if rest else ini['owner']
             resolved = days(RNG.randint(5, 20)) if status == 'resolved' else 'NULL'
             escalated = days(RNG.randint(1, 5)) if status == 'escalated' else 'NULL'
             # A decision has a decided_at exactly when it has been decided. The
@@ -781,8 +822,13 @@ def main() -> None:
             # showed read "0 participants" on the graph's decision list.
             emit(
                 "INSERT INTO decision_participants (person_id, decision_id, role) "
-                f"VALUES ('{ini['owner']}', '{did}', 'decider') ON CONFLICT DO NOTHING"
+                f"VALUES ('{decider}', '{did}', 'decider') ON CONFLICT DO NOTHING"
             )
+            if decider != ini['owner']:
+                emit(
+                    "INSERT INTO decision_participants (person_id, decision_id, role) "
+                    f"VALUES ('{ini['owner']}', '{did}', 'contributor') ON CONFLICT DO NOTHING"
+                )
             for sme in ini['smes']:
                 emit(
                     "INSERT INTO decision_participants (person_id, decision_id, role) "
@@ -902,7 +948,7 @@ def main() -> None:
 
     # Acceptance-criteria checklists.
     L.append('')
-    L.append('-- Acceptance-criteria checklists on select Observability items.')
+    L.append('-- Acceptance-criteria checklists on select Observability and Auth Migration items.')
     for slug, key, items in CRITERIA:
         for i, (text, done, created_age, updated_age) in enumerate(items):
             cid = f'wicr-{slug}-{key}-{i + 1}'

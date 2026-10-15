@@ -125,7 +125,8 @@ export const agentProjectRuns = defineFixture<ProjectRunSeed>({
         finishedAt: clock.daysAgo(1.96),
         filesChanged: null,
         diffSummary: null,
-        error: 'Command exited 1: npm test failed in auth/verify.test.ts (3 failing).',
+        // The cause Nora explains in #auth-migration and the initiative thread (mock/social-history.ts).
+        error: 'npm test failed in auth/verify.test.ts: 3 tests still expect the signing key from before the last JWKS rotation.',
         costUsd: 0.81,
       },
       {

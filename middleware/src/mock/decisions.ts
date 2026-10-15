@@ -85,7 +85,7 @@ export const decisionRows = defineFixture<DecisionRow>({
     decidedAt: '2026-04-21', escalatedAt: null, workItemId: null },
   { id: 'd-legacy-auth', topic: 'Sunset legacy auth service',
     summary:
-      'Migrate remaining services off the v1 auth gateway before Q3 2026.',
+      'Move every remaining service off the v1 auth gateway; the SAML shim is deleted once the last tenant has cut over to Cognito.',
     status: 'resolved', projectId: 'p-auth-migration', requiredRole: null,
     decidedAt: '2026-01-30', escalatedAt: null, workItemId: null },
   { id: 'd-otel', topic: 'Adopt OpenTelemetry',
@@ -208,7 +208,9 @@ export const decisionParticipantRows = defineFixture<DecisionParticipantRow>({
   { decisionId: 'd-otel-vendor', personId: 'p-004', role: 'decider', weight: 1.0 },
   { decisionId: 'd-otel-vendor', personId: 'p-008', role: 'contributor', weight: 1.0 },
   { decisionId: 'd-otel-vendor', personId: 'p-011', role: 'contributor', weight: 1.0 },
-  { decisionId: 'd-cognito-cutover', personId: 'p-002', role: 'decider', weight: 1.0 },
+  // Escalated by its owner (Vera, p-002) to the release manager (Sienna, p-005), who decides it.
+  { decisionId: 'd-cognito-cutover', personId: 'p-005', role: 'decider', weight: 1.0 },
+  { decisionId: 'd-cognito-cutover', personId: 'p-002', role: 'contributor', weight: 1.0 },
   { decisionId: 'd-cognito-cutover', personId: 'p-051', role: 'contributor', weight: 1.0 },
   { decisionId: 'd-cognito-cutover', personId: 'p-004', role: 'contributor', weight: 1.0 },
   { decisionId: 'd-eval-judge-model', personId: 'p-047', role: 'decider', weight: 1.0 },

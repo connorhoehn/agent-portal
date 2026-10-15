@@ -70,8 +70,8 @@ export const HISTORY: readonly HistoryLine[] = [
   ['g09', 'general', 'u-nora', 150, 'Office hours this week are in the Town hall room, 11 to 12. Bring questions about the migration.'],
   ['g10', 'general', 'u-release', 121, 'Heads up: the release train leaves Friday. Anything that needs a sign-off, ping me by Thursday noon.'],
   ['g11', 'general', 'u-mia', 120, '@Sienna Garcia will do. Two items from my side, both small.'],
-  ['g12', 'general', 'u-vera', 96, 'Thank you all for the quick turnaround on the tenant cutover. It went smoother than the rehearsal.'],
-  ['g13', 'general', 'u-rachel', 94, 'Seconding that. Zero pages overnight, which I will take.'],
+  ['g12', 'general', 'u-vera', 96, 'Auth Migration update: the new sign-in screen is ready, and customer tenants move over one at a time in the coming weeks. Details in #auth-migration.'],
+  ['g13', 'general', 'u-rachel', 94, 'And nobody gets signed out when their tenant moves, which is the part I care about.'],
   ['g14', 'general', 'u-mira', 73.5, 'Welcome Mia and Nora to the moderators rota for next month, subject to Lena handing over the runbook.'],
   ['g15', 'general', 'u-lena', 71.5, 'Runbook is in the pinned message in #moderators. Read it before your first shift please.'],
   ['g16', 'general', 'u-farah', 50, '@Mira Okafor can I get added to the events team? I would like to help with the call notes.'],
@@ -105,20 +105,30 @@ export const HISTORY: readonly HistoryLine[] = [
   ['m04', 'moderators', 'u-mira', 100, 'Rota for next month is drafted. Lena, please check the Tuesday overlap.'],
   ['m05', 'moderators', 'u-lena', 99, 'Tuesday overlap is fine, I will cover the gap myself.'],
   // ── #auth-migration ──
-  ['a01', 'auth-migration', 'u-vera', 200, 'Plan for the week: tenants two and three move to the BFF login, then we retire the SAML shim.'],
-  ['a02', 'auth-migration', 'u-theo', 198, 'Search has one callback left on the shim. I will have it moved by Wednesday.'],
-  ['a03', 'auth-migration', 'u-mia', 192, 'Support docs updated for the new sign-in screen. Screenshots are in the shared folder.'],
-  ['a04', 'auth-migration', 'u-nora', 150, 'Are session cookies shared across tenants after the switch? A few people asked.'],
-  ['a05', 'auth-migration', 'u-vera', 148, '@Nora DaSilva no, one cookie per tenant context, and switching tenants mints a fresh one.'],
-  ['a06', 'auth-migration', 'u-farah', 146, 'That matches what I saw on the assessment side. Switching felt instant.'],
-  ['a07', 'auth-migration', 'u-release', 120, 'Cutover window confirmed for Thursday 6am. Rollback plan is in the initiative overview.'],
-  ['a08', 'auth-migration', 'u-rachel', 118, 'On call for the window. I will watch the login error rate and post here at 6:30.'],
-  ['a09', 'auth-migration', 'u-rachel', 91, 'Cutover is done. Login errors peaked at 0.4% for two minutes and settled to baseline.'],
-  ['a10', 'auth-migration', 'u-vera', 90, 'Excellent. @Theo Chang can you confirm search is clean?'],
-  ['a11', 'auth-migration', 'u-theo', 89, 'Clean. The last callback was patched yesterday.'],
-  ['a12', 'auth-migration', 'u-mia', 30, 'Two customers asked whether the old SAML URL still works. I told them it redirects for another week.'],
-  ['a13', 'auth-migration', 'u-vera', 29, '@Mia Singh correct, redirect stays until Friday week, then it returns a 410.'],
-  ['a14', 'auth-migration', 'u-release', 4, '@Farah Osei the assessment tenant is next. Do you want the dry run on Tuesday or Wednesday?'],
+  // One timeline with the Work board (docs/demo-content-audit.md, the Work
+  // story): customer tenants leave the SAML shim one at a time; the ORDER is
+  // the escalated decision d-cognito-cutover, which Vera raised and Sienna
+  // (release manager) decides; the runbook story wi-auth-e2-s2 waits on it.
+  // Rehearsal two (session sess-auth-06) failed at the flip and its runbook
+  // edit (prop-tenant-cutover-callback) is pending. Nothing here says the
+  // cutover is done: it is not.
+  ['a01', 'auth-migration', 'u-vera', 180, 'Plan for the next two weeks: rehearse the cutover runbook on our two internal tenants, then move customer tenants off the SAML shim one at a time.'],
+  ['a02', 'auth-migration', 'u-theo', 178, 'Search has one callback left on the SAML shim. I will move it before the first rehearsal.'],
+  ['a03', 'auth-migration', 'u-mia', 160, 'Support docs for the new sign-in screen are drafted. Screenshots are in the shared folder.'],
+  ['a04', 'auth-migration', 'u-nora', 140, 'Are session cookies shared across tenants after the switch? A few people asked.'],
+  ['a05', 'auth-migration', 'u-vera', 139, '@Nora DaSilva no, one cookie per tenant context, and a cutover never signs anyone out.'],
+  ['a06', 'auth-migration', 'u-rachel', 130, 'I am on call for both rehearsals and will watch the login error rate during each flip.'],
+  ['a07', 'auth-migration', 'u-release', 72, 'Before I approve any customer cutover: which tenant goes first? Smallest first or riskiest first changes who we warn and when.'],
+  ['a08', 'auth-migration', 'u-nora', 70, 'Riskiest first. The two tenants with custom SAML attributes are where the unknowns are, and rollback is cheapest while the shim is still warm.'],
+  ['a09', 'auth-migration', 'u-theo', 69, 'Smallest first. A loud failure on our biggest customer costs more than anything we would learn from it.'],
+  ['a10', 'auth-migration', 'u-vera', 49, 'We are split, and the order is a release call more than an engineering one. I have escalated "Cutover order for legacy SSO tenants" to @Sienna Garcia. The cutover runbook story waits on it; the session work carries on.'],
+  ['a11', 'auth-migration', 'u-release', 47, 'Got it. I want both rehearsals through first, then I will decide the order.'],
+  ['a11b', 'auth-migration', 'u-nora', 46, 'The agent run that moved the token verifier off the deprecated JWKS client failed on three tests. They still expected the signing key from before the last rotation, so the test keys were stale, not the verifier. I regenerated them and queued the rerun.'],
+  ['a12', 'auth-migration', 'u-nora', 6, 'First rehearsal is through on the cutover runbook: zero forced logouts, login errors flat.'],
+  ['a13', 'auth-migration', 'u-nora', 1.4, 'Second rehearsal failed at the flip: the hosted sign-in page still redirected to the old domain, because the tenant origin was missing from its Cognito callback list. Rolled back in two minutes and nobody was signed out.'],
+  ['a14', 'auth-migration', 'u-vera', 1.2, '@Nora DaSilva good catch. Can the callback check go into the runbook before we retry?'],
+  ['a15', 'auth-migration', 'u-nora', 1, 'Proposed as an edit to the cutover runbook: a new step that checks the callback list before the flip. It needs a review before the retry.'],
+  ['a16', 'auth-migration', 'u-release', 0.8, 'Then I decide the order once the retry is clean. Expect it tomorrow.'],
   // ── #random ──
   ['r01', 'random', 'u-theo', 230, 'Rule one of #random: no work talk. Rule two: see rule one.'],
   ['r02', 'random', 'u-jonas', 226, 'Found a keyboard that is exactly the one from my first job. I may have bought it.'],
@@ -164,9 +174,9 @@ export const HISTORY: readonly HistoryLine[] = [
   ['p06', 'u-farah|u-theo', 'u-theo', 90, 'Do you have a minute to look at the rubric thread? I think we are saying the same thing differently.'],
   ['p07', 'u-farah|u-theo', 'u-farah', 88, 'Probably yes. Give me until after lunch.'],
   ['p08', 'u-farah|u-theo', 'u-theo', 6, 'Sent you the doc link. No rush, tomorrow is fine.'],
-  ['p09', 'u-farah|u-vera', 'u-vera', 52, 'Farah, the assessment tenant cutover needs one sign-off from you. It is a checkbox, not an essay.'],
-  ['p10', 'u-farah|u-vera', 'u-farah', 51, 'Understood. I will tick it once the dry run is clean.'],
-  ['p11', 'u-farah|u-vera', 'u-vera', 1, 'Dry run is Tuesday. I will ping you the moment it finishes.'],
+  ['p09', 'u-farah|u-vera', 'u-vera', 52, 'Farah, thank you for reporting the transcript delay first. Rachel is writing the postmortem.'],
+  ['p10', 'u-farah|u-vera', 'u-farah', 51, 'Happy to review it when the draft is ready.'],
+  ['p11', 'u-farah|u-vera', 'u-vera', 1, 'The draft is up. I will send you the link once Rachel has added the timeline.'],
   ['p12', 'u-farah|u-lena', 'u-lena', 26, 'Thanks for the accessibility notes, they were exactly the kind of thing we miss.'],
   ['p13', 'u-farah|u-lena', 'u-farah', 25, 'Happy to. Want me to run the same check on the moderation queue?'],
   ['p14', 'u-farah|u-lena', 'u-lena', 0.5, 'Yes please. I will share the staging link in a few minutes.'],
@@ -180,10 +190,25 @@ export const HISTORY: readonly HistoryLine[] = [
 export const PINS: readonly (readonly [slug: string, key: string, by: string, hoursAgo: number])[] = [
   ['design-reviews', 'd01', 'u-lena', 199],
   ['moderators', 'm01', 'u-lena', 229],
-  ['auth-migration', 'a01', 'u-vera', 199],
-  ['auth-migration', 'a07', 'u-release', 118],
+  ['auth-migration', 'a01', 'u-vera', 179],
+  ['auth-migration', 'a10', 'u-vera', 48],
   ['events', 'e01', 'u-mira', 188],
   ['incidents', 'i01', 'u-rachel', 165],
+];
+
+/**
+ * Auth Migration's initiative thread (`orgiq:initiative:p-auth-migration`, the
+ * Discussion pane on the initiative page): [key, author, hours ago, text]. The
+ * same timeline as #auth-migration above, said beside the board — the owner
+ * escalates, the release manager answers, the SME reports the rehearsal.
+ */
+export const INITIATIVE_THREAD: readonly (readonly [key: string, user: string, hoursAgo: number, text: string])[] = [
+  ['auth-01', 'u-vera', 48.5, 'I have escalated "Cutover order for legacy SSO tenants" to Sienna Garcia. "Tenant-by-tenant cutover runbook with rollback" is blocked until she decides; the rest of Sprint 42 carries on.'],
+  ['auth-02', 'u-release', 46.5, 'I will decide once both internal rehearsals are through. Keep the session hardening moving in the meantime.'],
+  ['auth-02b', 'u-nora', 45.5, 'The JWKS client migration run failed on stale test keys from before the last rotation, not on the verifier. Keys regenerated, rerun queued.'],
+  ['auth-03', 'u-nora', 5.5, 'Rehearsal one passed on the cutover runbook: zero forced logouts.'],
+  ['auth-04', 'u-nora', 1.3, 'Rehearsal two failed at the flip because the tenant origin was missing from its Cognito callback list. Rolled back cleanly. I proposed the missing step as an edit to the runbook; it is waiting for review.'],
+  ['auth-05', 'u-vera', 1.1, 'Thanks Nora. Simone, can you review the runbook edit before the retry? Sienna decides the order after that.'],
 ];
 
 /** Everyone in `where` (a channel slug or `a|b` pair) who is named by `@Display Name` in `text`. */

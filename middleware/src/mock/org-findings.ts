@@ -52,7 +52,7 @@ function seedFindings(): Finding[] {
   return [
     // The one skill the mock cast holds at or under the sweep's HAVING
     // count(person_id) <= 2 (providers/org-sweeps.ts): MLOps, held by Lena
-    // Dubois and Aisha Thompson (mock/people.ts + graph-taxonomy.ts agree).
+    // Dubois and Zoe Thompson (mock/people.ts + graph-taxonomy.ts agree).
     // Title and evidence follow `sweepBusFactor`'s exact shape so the Explore
     // page's rare-skill strip can join to it by name. Earlier this row named a
     // prompt-library skill (skill-cold-start-aurora) that no person in the
@@ -63,9 +63,9 @@ function seedFindings(): Finding[] {
       id: 'find-mock-1',
       sweep: 'bus_factor', severity: 'warning',
       title: 'MLOps: 2 holders org-wide',
-      detail: 'MLOps is held by just Lena Dubois, Aisha Thompson. One departure leaves a single point of failure.',
+      detail: 'MLOps is held by just Camille Dubois, Zoe Thompson. One departure leaves a single point of failure.',
       entityType: 'skill', entityId: 'sk-mlops',
-      evidence: { holders: 2, holderIds: ['p-019', 'p-044'], holderNames: ['Lena Dubois', 'Aisha Thompson'], initiatives: ['p-observability'] },
+      evidence: { holders: 2, holderIds: ['p-019', 'p-044'], holderNames: ['Camille Dubois', 'Zoe Thompson'], initiatives: ['p-observability'] },
       status: 'open', jobId: null,
       firstSeenAt: clock.hoursAgo(70), lastSeenAt: clock.hoursAgo(6),
       fingerprint: 'skill:sk-mlops',
@@ -126,7 +126,7 @@ function seedFindings(): Finding[] {
       id: 'find-mock-5',
       sweep: 'orphan_decisions', severity: 'warning',
       title: 'Decision "Adopt Aurora over Neptune" links to no initiative',
-      detail: 'd-aurora has an owner (Caleb Patel, p-046) but no initiative or work item cites it; every initiative depends on the Aurora/pgvector store this decision picked, and p-auth-migration is as reasonable a place as any to record that it happened.',
+      detail: 'd-aurora has an owner (Vikram Patel, p-046) but no initiative or work item cites it; every initiative depends on the Aurora/pgvector store this decision picked, and p-auth-migration is as reasonable a place as any to record that it happened.',
       entityType: 'decision', entityId: 'd-aurora',
       evidence: { ownerId: 'p-046', candidateInitiative: 'p-auth-migration', citedBy: 0 },
       status: 'open', jobId: null,
@@ -156,10 +156,10 @@ function seedFindings(): Finding[] {
       title: 'Devbox session left 412 MB of build output in /mnt/workspace',
       detail: 'Session storage is wiped on every runtime update; the artefacts were never pushed. Dismissed: the box was a throwaway experiment.',
       entityType: 'repo', entityId: 'orgiq-portal',
-      evidence: { sessionId: 'sess-mock-throwaway-experiment-000000000001', boxId: 'box-mock-3', repo: 'orgiq-portal', initiativeId: 'p-observability' },
+      evidence: { sessionId: 'sess-mock-throwaway-experiment-000000000001', boxId: 'box-mock-0004', repo: 'orgiq-portal', initiativeId: 'p-observability' },
       status: 'dismissed', jobId: null,
       firstSeenAt: clock.hoursAgo(20), lastSeenAt: clock.hoursAgo(20),
-      fingerprint: 'lab:workspace-bloat:box-mock-3',
+      fingerprint: 'lab:workspace-bloat:box-mock-0004',
     },
     // A second lab signal, and the reason it is OPEN rather than another
     // dismissed one.

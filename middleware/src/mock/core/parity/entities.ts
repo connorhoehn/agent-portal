@@ -566,17 +566,14 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
        * though the seed said it, so the three are named rather than waved
        * through as a class. A fourth invented description fails here.
        *
-       * There were six. The three wi-obs-* ones are now SEEDED — the
-       * generator's BRIEFS UPDATEs write them, and sql-seed.ts overlays an
-       * UPDATE onto the row it names — so they are compared, not excused.
+       * There were six. All six are now SEEDED — the generator's BRIEFS
+       * UPDATEs write them (the three wi-auth-* ones since 2026-10-15, the
+       * Auth Migration demo story), and sql-seed.ts overlays an UPDATE onto
+       * the row it names — so they are compared, not excused.
        */
       {
         seed: 'description',
         mock: (i: { description: string | null }) => i.description,
-        knownDrift: Object.fromEntries(
-          ['wi-auth-e1-s3', 'wi-auth-e2-s2', 'wi-auth-e2-b3']
-            .map((id) => [id, 'the mock adds narrative the seed does not carry (the seed omits `description` on this row entirely). Accepted because the text is consistent with the item and nothing derives from it — but it is the mock speaking, not the seed.']),
-        ),
       },
     ],
   },
