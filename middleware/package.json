@@ -32,7 +32,7 @@
     "@aws-sdk/lib-dynamodb": "^3.700.0",
     "@aws-sdk/signature-v4": "^3.370.0",
     "@connorhoehn/service-runtime": "github:connorhoehn/service-runtime#7a0e338764ff82cbc482927f3878b77561067d8a",
-    "@connorhoehnslalom/realtime-modules": "file:../portal/vendor/connorhoehn-realtime-modules-0.115.0-consolidated-main.tgz",
+    "@connorhoehnslalom/realtime-modules": "file:../portal/vendor/connorhoehn-realtime-modules-0.116.1.tgz",
     "@smithy/protocol-http": "^5.3.14",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-collaboration": "^3.31.3",
@@ -50,7 +50,7 @@
     "aws-jwt-verify": "^5.2.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "distributed-core": "github:connorhoehn/distributed-core#ad0879c1c75d384e8e5f86b60a91f634d5147a2a",
+    "distributed-core": "github:connorhoehn/distributed-core#077d7594cc412e3153ace47ce0f0b4be60df84d5",
     "express": "^5.1.0",
     "jose": "^5.10.0",
     "node-cron": "^3.0.3",
@@ -75,10 +75,12 @@
     "typescript": "~5.9.3"
   },
   "overrides": {
-    "distributed-core": {
-      "@opentelemetry/auto-instrumentations-node": "0.78.0",
-      "@opentelemetry/sdk-node": "0.220.0",
-      "@opentelemetry/exporter-trace-otlp-http": "0.220.0"
+    "@connorhoehn/service-runtime": {
+      "distributed-core": {
+        "@opentelemetry/auto-instrumentations-node": "0.78.0",
+        "@opentelemetry/sdk-node": "0.220.0",
+        "@opentelemetry/exporter-trace-otlp-http": "0.220.0"
+      }
     },
     "node-cron": {
       "uuid": "11.1.1"
