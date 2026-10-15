@@ -36,6 +36,9 @@ export type Action =
   | 'ManageBudgets'
   | 'ManageSprints'
   | 'ConnectLocalCompute'
+  // Runbooks (docs/distillation-runbooks-goal.md R3) — in CAPABILITY_ACTIONS server-side
+  | 'ReviewRunbook'
+  | 'ViewSessionBrief'
   // Assessment tenant (docs/assessment-tenant.md)
   | 'ViewAssessment'
   | 'ScoreAssessment'
