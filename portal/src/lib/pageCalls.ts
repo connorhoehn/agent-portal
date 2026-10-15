@@ -13,7 +13,7 @@
 import { formatDuration, type NameOf, type SocialCall } from '../pages/social/socialPlatform.ts';
 
 export type PageCallRow = SocialCall;
-export interface PageCallsResponse { source: string; lobby?: string; tenant?: string; calls: PageCallRow[]; counts: { total: number; missed: number } }
+export interface PageCallsResponse { source: string; /** Set when the call log service is down: `calls` is empty because it could not be read. */ unavailable?: string; lobby?: string; tenant?: string; calls: PageCallRow[]; counts: { total: number; missed: number } }
 
 const LOBBY = /^(orgiq:initiative|assessment:team|assessment:doc|pipelines:run):(\S{1,200})$/;
 

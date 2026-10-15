@@ -48,6 +48,8 @@ export function PageCallsView({ lobby, calls, me, nameOf, testId = 'page-calls' 
       )}
       {isLoading && !data ? <LoadingState label="Loading calls…" /> : error && !data ? (
         <ErrorState title="Calls could not be loaded" description={error} actionLabel="Try again" onAction={refresh} />
+      ) : data?.unavailable ? (
+        <ErrorState title="Call history is unavailable" description={data.unavailable} actionLabel="Try again" onAction={refresh} />
       ) : (data?.calls.length ?? 0) === 0 ? (
         !live && <EmptyState testId={`${testId}-empty`} align="start" title="No calls yet"
           description="Huddles you join on this page, and the calls you missed, are listed here." />

@@ -48,8 +48,9 @@ pageCallsRouter.get('/', requireSession('ReadPageCalls'), asyncHandler(async (re
   const verdict = await admitLobbyRead(sessionGatewayContext(session), lobby);
   if (verdict === 'not-a-lobby' || verdict === 'gone') throw new NotFoundError('no such call lobby');
   if (verdict === 'denied') throw new AppError(403, 'You cannot read this page’s calls');
-  const calls = (await listCallRows(session)).filter((r) => r.lobbyName === lobby);
-  res.json({ source: source(), lobby, calls: await withCallAvatars(calls), counts: { total: calls.length, missed: missedFor(calls) } });
+  const { rows: all, unavailable } = await callRowsOrUnavailable(session);
+  const calls = all.filter((r) => r.lobbyName === lobby);
+  res.json({ source: unavailable ? 'unavailable' : source(), ...(unavailable ? { unavailable } : {}), lobby, calls: await withCallAvatars(calls), counts: { total: calls.length, missed: missedFor(calls) } });
 }));
 
 pageCallsRouter.get('/tenant', requireSession('ReadPageCalls'), asyncHandler(async (req, res) => {
@@ -58,7 +59,8 @@ pageCallsRouter.get('/tenant', requireSession('ReadPageCalls'), asyncHandler(asy
   if (!(tenant in TENANT_CALLS_ACTION)) throw new NotFoundError('this tenant has no page calls');
   const action = TENANT_CALLS_ACTION[tenant];
   if (action && !await isAllowed({ sub: session.sub, tenant, role: session.role }, action)) throw new AppError(403, 'Forbidden');
-  const rows = (await listCallRows(session)).filter((r) => {
+  const { rows: all, unavailable } = await callRowsOrUnavailable(session);
+  const rows = all.filter((r) => {
     const family = tenantChannelFamily(r.lobbyName);
     return !!family?.lobby && family.tenant === tenant;
   });
@@ -76,5 +78,19 @@ pageCallsRouter.get('/tenant', requireSession('ReadPageCalls'), asyncHandler(asy
   };
   const admitted = await Promise.all(rows.map((r) => readable(r.lobbyName)));
   const calls = rows.filter((_, i) => admitted[i]);
-  res.json({ source: source(), tenant, calls: await withCallAvatars(calls), counts: { total: calls.length, missed: missedFor(calls) } });
+  res.json({ source: unavailable ? 'unavailable' : source(), ...(unavailable ? { unavailable } : {}), tenant, calls: await withCallAvatars(calls), counts: { total: calls.length, missed: missedFor(calls) } });
 }));
+
+/**
+ * The call log is a forwarded service (platform-api). When it is down the page
+ * still loads: an empty history marked `source: 'unavailable'` with the reason,
+ * not a raw 502 (the Vite proxy and the browser console report those as errors
+ * on every initiative page). Authority errors above are never swallowed.
+ */
+async function callRowsOrUnavailable(session: Session): Promise<{ rows: SocialCallLogRow[]; unavailable?: string }> {
+  try { return { rows: await listCallRows(session) }; }
+  catch (err) {
+    if (err instanceof AppError && err.status >= 502) return { rows: [], unavailable: 'The call log is unavailable right now' };
+    throw err;
+  }
+}

@@ -15,7 +15,7 @@ jest.mock('../../lib/page-resources.js', () => ({ pageResourceVisible: jest.fn(a
 import express from 'express';
 import request from '../../test-support/http.js';
 import { pageCallsRouter } from '../page-calls.js';
-import { errorHandler } from '../../lib/async-handler.js';
+import { AppError, errorHandler } from '../../lib/async-handler.js';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../../lib/authz.js';
 import { socialCallLogFixture, type SocialCallLogRow } from '../../mock/social-platform.js';
@@ -138,5 +138,21 @@ describe('GET /api/calls/tenant', () => {
     expect((await request(app).get('/api/calls/tenant')).status).toBe(401);
     users.set('sam', user('sam', { social: ['participant'] }));
     expect((await request(app).get('/api/calls/tenant').set('x-as', 'sam/social/participant')).status).toBe(404);
+  });
+
+  it('answers 200 with an unavailable marker, not a raw 502, when the call log service is down', async () => {
+    const providers = await import('../../providers/social-platform.js');
+    const down = jest.spyOn(providers, 'listCallRows').mockRejectedValue(new AppError(502, 'platform-api is unreachable (fetch failed)'));
+    try {
+      const one = await request(app).get('/api/calls').query({ lobby: INIT }).set('x-as', 'olu/orgiq/sme');
+      expect(one.status).toBe(200);
+      expect(one.body).toMatchObject({ source: 'unavailable', lobby: INIT, calls: [], counts: { total: 0, missed: 0 } });
+      expect(typeof one.body.unavailable).toBe('string');
+      const tenant = await request(app).get('/api/calls/tenant').set('x-as', 'olu/orgiq/sme');
+      expect(tenant.status).toBe(200);
+      expect(tenant.body.source).toBe('unavailable');
+      // Authority is still asked first: another tenant's lobby stays a 404.
+      expect((await request(app).get('/api/calls').query({ lobby: TEAM }).set('x-as', 'olu/orgiq/sme')).status).toBe(404);
+    } finally { down.mockRestore(); }
   });
 });
