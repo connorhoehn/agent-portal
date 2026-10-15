@@ -37,11 +37,11 @@ export function RunbookDocView({ doc, markdown, sha256 }: { doc: RunbookDoc; mar
     <Stack gap="md" data-testid="runbook-doc">
       <T size="sm" tone="secondary" wrap data-testid="runbook-summary">{doc.summary}</T>
 
-      {doc.use_when.length > 0 && <DetailSection variant="heading" size="sm" first title="Use this when">{list(doc.use_when, 'Use this when')}</DetailSection>}
-      {doc.not_for.length > 0 && <DetailSection variant="heading" size="sm" title="Not for">{list(doc.not_for, 'Not for')}</DetailSection>}
-      {doc.preconditions.length > 0 && <DetailSection variant="heading" size="sm" title="Before you start">{list(doc.preconditions, 'Before you start')}</DetailSection>}
+      {doc.use_when.length > 0 && <DetailSection variant="heading" first title="Use this when">{list(doc.use_when, 'Use this when')}</DetailSection>}
+      {doc.not_for.length > 0 && <DetailSection variant="heading" title="Not for">{list(doc.not_for, 'Not for')}</DetailSection>}
+      {doc.preconditions.length > 0 && <DetailSection variant="heading" title="Before you start">{list(doc.preconditions, 'Before you start')}</DetailSection>}
 
-      <DetailSection variant="heading" size="sm" title="Steps" hint={`${doc.steps.length}`}>
+      <DetailSection variant="heading" title="Steps" hint={`${doc.steps.length}`}>
         <ProcedureSteps
           aria-label="Steps"
           size="md"
@@ -58,7 +58,7 @@ export function RunbookDocView({ doc, markdown, sha256 }: { doc: RunbookDoc; mar
       </DetailSection>
 
       {doc.verify.length > 0 && (
-        <DetailSection variant="heading" size="sm" title="Verify">
+        <DetailSection variant="heading" title="Verify">
           <ProcedureSteps
             aria-label="Verify" numbered={false} size="md"
             steps={doc.verify.map((v, i) => ({ id: `verify-${i}`, title: inline(v.check), ...(v.command ? { body: <Command command={v.command} /> } : {}) }))}
@@ -67,7 +67,7 @@ export function RunbookDocView({ doc, markdown, sha256 }: { doc: RunbookDoc; mar
       )}
 
       {doc.failure_modes.length > 0 && (
-        <DetailSection variant="heading" size="sm" title="If it goes wrong">
+        <DetailSection variant="heading" title="If it goes wrong">
           <ProcedureSteps
             aria-label="If it goes wrong" numbered={false} size="md"
             steps={doc.failure_modes.map((f, i) => ({
@@ -82,7 +82,7 @@ export function RunbookDocView({ doc, markdown, sha256 }: { doc: RunbookDoc; mar
       )}
 
       {doc.rollback.length > 0 && (
-        <DetailSection variant="heading" size="sm" title="Roll back">
+        <DetailSection variant="heading" title="Roll back">
           <ProcedureSteps
             aria-label="Roll back" size="md"
             steps={doc.rollback.map((r, i) => ({ id: `rb-${i}`, title: inline(r.do), ...(r.command ? { body: <Command command={r.command} /> } : {}) }))}
@@ -90,7 +90,7 @@ export function RunbookDocView({ doc, markdown, sha256 }: { doc: RunbookDoc; mar
         </DetailSection>
       )}
 
-      {doc.notes ? <DetailSection variant="heading" size="sm" title="Notes"><SafeMarkdown markdown={doc.notes} scale="sm" testId="runbook-notes" /></DetailSection> : null}
+      {doc.notes ? <DetailSection variant="heading" title="Notes"><SafeMarkdown markdown={doc.notes} scale="sm" testId="runbook-notes" /></DetailSection> : null}
 
       <Disclosure summary="How a run is matched to this runbook" variant="plain" density="compact" data-testid="runbook-triggers">
         <KeyValue layout="row" labelWidth="w-32" items={triggers.map(([label, values]) => ({ label, value: values.length ? values.join(', ') : '—' }))} />

@@ -15,9 +15,7 @@ export function BriefDocument({ brief, frozen, onOpen }: { brief: Brief; frozen:
     { key: 'kind', header: 'Section', render: (s) => SECTION_KIND_LABEL[s.kind] ?? s.kind },
     {
       key: 'ref', header: 'Reference',
-      render: (s) => (s.kind === 'runbook' && s.ref
-        ? <Button variant="link" size="sm" onClick={() => onOpen(runbookHref(s.ref!))}>{`${s.ref}${s.version ? ` v${s.version}` : ''}`}</Button>
-        : s.ref ?? ''),
+      render: (s) => `${s.ref ?? ''}${s.version ? ` v${s.version}` : ''}`,
     },
     { key: 'tokens', header: 'Tokens', numeric: true, render: (s) => s.tokens.toLocaleString('en-US') },
     { key: 'reason', header: 'Why it is here', render: (s) => s.reason },
@@ -46,7 +44,7 @@ export function BriefDocument({ brief, frozen, onOpen }: { brief: Brief; frozen:
         </Banner>
       )}
       <DetailSection variant="heading" first title="Sections" hint={`${brief.sections.length}`}>
-        <DataTable data={brief.sections} columns={columns} keyField={(s) => `${s.kind}:${s.ref ?? ""}:${s.reason}`} size="sm" frameless emptyMessage="No sections." data-testid="brief-sections" />
+        <DataTable data={brief.sections} columns={columns} keyField={(s) => `${s.kind}:${s.ref ?? ""}:${s.reason}`} frameless emptyMessage="No sections." onRowClick={(s) => { if (s.kind === 'runbook' && s.ref) onOpen(runbookHref(s.ref)); }} data-testid="brief-sections" />
       </DetailSection>
       <DetailSection
         variant="heading"

@@ -150,7 +150,7 @@ function HistoryTab({ runbook }: { runbook: RunbookRow }) {
   return (
     <>
       <DetailSection variant="heading" first title="Versions" hint={`${list.length}`}>
-        <DataTable data={list} columns={columns} keyField={(v) => String(v.version)} size="sm" frameless emptyMessage="No versions." data-testid="runbook-versions" />
+        <DataTable data={list} columns={columns} keyField={(v) => String(v.version)} frameless emptyMessage="No versions." data-testid="runbook-versions" />
       </DetailSection>
       <DetailSection variant="heading" title="What changed" description="Compare any two versions of the canonical markdown.">
         <Stack gap="sm">
@@ -186,11 +186,10 @@ function RunsTab({ runbook, version, applications, error, onOpen }: {
   const steps = version.doc?.steps ?? [];
   const markers = stepMarkers(steps, applications, runbook.current_version);
   const columns: DataTableColumn<RunbookApplication>[] = [
-    { key: 'run', header: 'Run', render: (a) => <Button variant="link" size="sm" onClick={() => onOpen(runPageHref(a.run_ref))}>{`${a.run_ref} · v${a.version}`}</Button> },
+    { key: 'run', header: 'Run', render: (a) => `${a.run_ref} · v${a.version}` },
     { key: 'outcome', header: 'Outcome', render: (a) => `${OUTCOME_LABEL[a.outcome]}${a.failed_at_step ? ` at step ${a.failed_at_step}` : ''}` },
     { key: 'note', header: 'Note', render: (a) => a.note ?? '' },
     { key: 'at', header: 'When', render: (a) => relativeTime(a.at) },
-    { key: 'brief', header: 'Brief', render: (a) => <Button variant="link" size="sm" onClick={() => onOpen(briefHref(a.run_ref))}>Read brief</Button> },
   ];
   return (
     <>
@@ -201,8 +200,8 @@ function RunsTab({ runbook, version, applications, error, onOpen }: {
           emptyLabel="This runbook has no steps."
         />
       </DetailSection>
-      <DetailSection variant="heading" title="Runs that were given it" hint={`${applications.length}`}>
-        <DataTable data={[...applications].sort((a, b) => b.at.localeCompare(a.at))} columns={columns} keyField={(a) => a.id} size="sm" frameless emptyMessage="No run has reported on this runbook yet." data-testid="runbook-applications" />
+      <DetailSection variant="heading" title="Runs that were given it" hint={`${applications.length} · open one to read its brief`}>
+        <DataTable data={[...applications].sort((a, b) => b.at.localeCompare(a.at))} columns={columns} keyField={(a) => a.id} frameless emptyMessage="No run has reported on this runbook yet. Open a row to read the brief that run was given." onRowClick={(a) => onOpen(briefHref(a.run_ref))} data-testid="runbook-applications" />
       </DetailSection>
     </>
   );
