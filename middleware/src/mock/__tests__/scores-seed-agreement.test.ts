@@ -116,11 +116,11 @@ describe('the leaderboard and the graph read the same people', () => {
   it('reports Hiro Green as the seed reports him — the row the defect was named for', () => {
     const hiro = mockScores.find((s) => s.personId === 'p-023')!;
     expect(hiro).toMatchObject({ name: 'Hiro Green', expertise: 0.3353, composite: 46.98 });
-    // 49th of 59 by composite (the seed's 47th of 56, then Priya and Omar of
+    // 50th of 59 by composite (the seed's 47th of 56, then Priya and Omar of
     // the access cast scored above him), where the old fixture put him first.
     const rank = [...mockScores].sort((a, b) => b.composite - a.composite)
       .findIndex((s) => s.personId === 'p-023') + 1;
-    expect(rank).toBe(49);
+    expect(rank).toBe(50);
   });
 
   it('derives influenceScore rather than carrying a second copy of it', () => {
@@ -189,7 +189,7 @@ describe('nothing countable is stored', () => {
     const { entries } = await mockAurora.getLeaderboard({ limit: 200 });
     const composites = entries.map((e) => e.composite);
     expect([...composites].sort((a, b) => b - a)).toEqual(composites);
-    expect(entries[0]!.personId).toBe('p-028'); // Felix Rivera, 96.02
+    expect(entries[0]!.personId).toBe('p-002'); // Vera Green, 95.82: the owner of the flagship initiative leads the board
   });
 
   it('filters by department without inventing a cast', async () => {

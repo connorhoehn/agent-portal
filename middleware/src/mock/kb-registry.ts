@@ -88,7 +88,7 @@ function seedRegistry(): KbRegistryEntry[] {
       slug: 'orgiq-legacy',
       tenant: 'orgiq',
       purpose: 'legacy',
-      description: 'Deprecated — superseded by orgiq-default. Left registered to demo drift detection.',
+      description: 'Deprecated — superseded by orgiq-default. Its Bedrock index was deleted; the row stays until an admin removes it.',
       s3Prefix: 'orgiq-legacy/',
       auroraTable: 'bedrock_kb_orgiq_legacy',
       embeddingModel: 'amazon.titan-embed-text-v2:0',

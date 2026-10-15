@@ -66,20 +66,20 @@ type Authored = Omit<MockInvocation, 'id' | 'hoursAgo'>;
 const AUTHORED: Authored[] = [
   // ── Supervisor ──
   { agentId: 'orgiq-supervisor', promptSnippet: 'Who knows Kubernetes best on the platform team?', responseSnippet: 'Marcus Müller and Eli Garcia both show strong expertise scores on Kubernetes — Marcus via 6 merged PRs on the ingress controller, Eli via the on-call rotation.', durationMs: 2140, tokensIn: 620, tokensOut: 240 },
-  { agentId: 'orgiq-supervisor', promptSnippet: 'Summarize the auth-rotation ADR for the exec review', responseSnippet: 'The ADR proposes rotating session-signing secrets quarterly via Secrets Manager, ratified 2026-08-14 with 2 sign-offs.', durationMs: 3420, tokensIn: 880, tokensOut: 310 },
-  { agentId: 'orgiq-supervisor', promptSnippet: 'What changed in the org chart this month?', responseSnippet: 'Two new SME contributions were recorded on p-obs-rollout, and Nora DaSilva picked up ownership of p-kb-migration.', durationMs: 1870, tokensIn: 540, tokensOut: 200 },
+  { agentId: 'orgiq-supervisor', promptSnippet: 'Summarize the auth-rotation ADR for the exec review', responseSnippet: 'The ADR proposes rotating session-signing secrets quarterly via Secrets Manager, ratified with 2 sign-offs.', durationMs: 3420, tokensIn: 880, tokensOut: 310 },
+  { agentId: 'orgiq-supervisor', promptSnippet: 'What changed in the org chart this month?', responseSnippet: 'Two new SME contributions were recorded on Observability Platform, and Nora DaSilva joined Auth Migration as an SME.', durationMs: 1870, tokensIn: 540, tokensOut: 200 },
   { agentId: 'orgiq-supervisor', promptSnippet: 'Route this to the scoring agent and get PageRank for the platform team', responseSnippet: '', durationMs: 4980, tokensIn: 410, tokensOut: 0, error: 'A2A timeout invoking orgiq-scoring after 4500ms' },
   { agentId: 'orgiq-supervisor', promptSnippet: 'Who should own the incident-review runbook?', responseSnippet: 'Layla Hassan — she authored the two most-cited postmortems referencing incident review this quarter.', durationMs: 2260, tokensIn: 600, tokensOut: 190 },
-  { agentId: 'orgiq-supervisor', promptSnippet: 'Draft a one-line status update on p-obs-rollout for the release manager', responseSnippet: 'p-obs-rollout: on track, sprint 4 of 6, no budget overage.', durationMs: 1510, tokensIn: 480, tokensOut: 110 },
+  { agentId: 'orgiq-supervisor', promptSnippet: 'Draft a one-line status update on Auth Migration for the release manager', responseSnippet: 'Auth Migration: on track except the tenant cutover runbook, which waits on Sienna Garcia’s decision on cutover order.', durationMs: 1510, tokensIn: 480, tokensOut: 110 },
 
   // ── Search ──
-  { agentId: 'orgiq-search', promptSnippet: 'Find every decision record mentioning Aurora cold starts', responseSnippet: 'Found 3: des-aurora-warmup, des-data-api-retry, des-kb-datasource-init — all cite the 0.5-ACU cold-start gap.', durationMs: 980, tokensIn: 320, tokensOut: 150 },
+  { agentId: 'orgiq-search', promptSnippet: 'Find every decision record mentioning Aurora cold starts', responseSnippet: "Found 3: 'Adopt Aurora over Neptune' and two postmortem follow-ups — all cite the 0.5-ACU cold-start gap.", durationMs: 980, tokensIn: 320, tokensOut: 150 },
   { agentId: 'orgiq-search', promptSnippet: 'Search for anyone with OpenSearch Serverless experience', responseSnippet: 'Caleb Turner (2 postmortems), Mia Singh (1 ADR authored).', durationMs: 720, tokensIn: 280, tokensOut: 90 },
   { agentId: 'orgiq-search', promptSnippet: 'What is our employee compensation band for L5 engineers?', responseSnippet: '', durationMs: 410, tokensIn: 210, tokensOut: 40, guardrailIntervened: true },
-  { agentId: 'orgiq-search', promptSnippet: 'Pull the Slack thread where we decided on Titan v2 embeddings', responseSnippet: 'thread-2026-03-12-embeddings: consensus on Titan v2 @1024d, cites cost vs. recall tradeoff.', durationMs: 860, tokensIn: 300, tokensOut: 130 },
+  { agentId: 'orgiq-search', promptSnippet: 'Pull the Slack thread where we decided on Titan v2 embeddings', responseSnippet: 'The embeddings thread in the platform channel: consensus on Titan v2 @1024d, citing the cost vs. recall tradeoff.', durationMs: 860, tokensIn: 300, tokensOut: 130 },
   { agentId: 'orgiq-search', promptSnippet: 'Vector search for "guardrail intervention rate"', responseSnippet: '', durationMs: 5100, tokensIn: 260, tokensOut: 0, error: 'OpenSearch Serverless query timed out after 5000ms' },
   { agentId: 'orgiq-search', promptSnippet: 'Who reviewed the CSRF hardening PR?', responseSnippet: 'Simone Chang approved with 2 inline comments; Eli Garcia co-reviewed.', durationMs: 690, tokensIn: 250, tokensOut: 100 },
-  { agentId: 'orgiq-search', promptSnippet: 'Find the postmortem for the ARM64 Fargate incident', responseSnippet: 'pm-2026-06-02-fargate-exec-format: root cause was a default x86_64 runtime platform on an Apple Silicon build.', durationMs: 810, tokensIn: 290, tokensOut: 140 },
+  { agentId: 'orgiq-search', promptSnippet: 'Find the postmortem for the ARM64 Fargate incident', responseSnippet: 'The Fargate exec-format postmortem: root cause was a default x86_64 runtime platform on an Apple Silicon build.', durationMs: 810, tokensIn: 290, tokensOut: 140 },
 
   // ── Scoring ──
   { agentId: 'orgiq-scoring', promptSnippet: 'Recompute composite scores for the platform team', responseSnippet: 'Recomputed for 14 people; top mover: Theo Chang +0.06 on PageRank.', durationMs: 640, tokensIn: 220, tokensOut: 90 },
@@ -92,7 +92,7 @@ const AUTHORED: Authored[] = [
   { agentId: 'orgiq-advisor', promptSnippet: 'Identify knowledge gaps on the identity & tenancy initiative', responseSnippet: 'Only 1 SME (Simone Chang) covers session-epoch invalidation — recommend pairing a second contributor before her rotation.', durationMs: 3100, tokensIn: 1100, tokensOut: 420 },
   { agentId: 'orgiq-advisor', promptSnippet: 'Recommend a pairing for the new hire on graph ingestion', responseSnippet: 'Pair with Caleb Turner — highest recent activity on merge_* tools and lowest current mentee load.', durationMs: 2870, tokensIn: 980, tokensOut: 360 },
   { agentId: 'orgiq-advisor', promptSnippet: 'Analyze bus-factor risk across all initiatives', responseSnippet: '', durationMs: 6800, tokensIn: 1240, tokensOut: 0, error: 'Bedrock ThrottlingException after 3 retries' },
-  { agentId: 'orgiq-advisor', promptSnippet: 'Which initiative is most at risk of stalling next sprint?', responseSnippet: 'p-kb-migration — its sole owner is on-call this sprint with no SME backup scheduled.', durationMs: 3320, tokensIn: 1050, tokensOut: 390 },
+  { agentId: 'orgiq-advisor', promptSnippet: 'Which initiative is most at risk of stalling next sprint?', responseSnippet: 'Data Lake Migration — its sole owner is on-call this sprint with no SME backup scheduled.', durationMs: 3320, tokensIn: 1050, tokensOut: 390 },
   { agentId: 'orgiq-advisor', promptSnippet: 'Suggest a mentor for someone picking up Cedar policy authoring', responseSnippet: 'Simone Chang — authored 4 of the 6 tenant policy sets and the only cross-tenant admin.cedar.', durationMs: 2940, tokensIn: 1010, tokensOut: 370 },
 
   // ── Ingestion (the degraded one) ──
@@ -130,6 +130,118 @@ const VOLUME: ReadonlyArray<{ agentId: string; rows: number; errors: number }> =
   { agentId: 'orgiq-ingestion', rows: 20, errors: 8 },
   { agentId: 'orgiq-graph-builder', rows: 30, errors: 1 },
 ];
+
+// ── Variants ───────────────────────────────────────────────────────────────
+//
+// The volume below multiplies the authored rows out to a day's traffic. It used
+// to repeat them verbatim, so one page showed "Search for anyone with OpenSearch
+// Serverless experience" twenty-one times. A repeat is now a new question about
+// the org's own initiatives, decisions and people, answered in terms of the
+// same ones, so no sentence recurs more than a handful of times and every name
+// a reader meets is somebody on the Initiatives page.
+
+const INITIATIVES: ReadonlyArray<{ name: string; owner: string }> = [
+  { name: 'Observability Platform', owner: 'Nora DaSilva' },
+  { name: 'Auth Migration', owner: 'Vera Green' },
+  { name: 'LLM Application Platform', owner: 'Nina Rivera' },
+  { name: 'Cost Optimization', owner: 'Layla Hassan' },
+  { name: 'Real-time Analytics Pipeline', owner: 'Daniel Chang' },
+  { name: 'Data Lake Migration', owner: 'Anika Mehta' },
+  { name: 'ML Feature Store', owner: 'Katya Petrov' },
+  { name: 'Mobile App Redesign', owner: 'Mia Singh' },
+  { name: 'Design System v3', owner: 'Ben Okafor' },
+  { name: 'Design System API', owner: 'Isabel Vasquez' },
+  { name: 'Inference Platform', owner: 'Paolo Mancini' },
+  { name: 'SOC2 Compliance', owner: 'Diego Ortiz' },
+  { name: 'Zero Trust Network', owner: 'Simone Chang' },
+  { name: 'RAG Knowledge Search', owner: 'Lucas Kim' },
+];
+
+const PEOPLE = [
+  'Theo Chang', 'Owen Brooks', 'Maria Johnson', 'Marcus Müller', 'Arjun Shah', 'Kenji Chen', 'Eli Garcia', 'Rachel Kowalski',
+  'Caleb Turner', 'Grace Singh', 'Raj Mehta', 'Camille Dubois', 'Henry Hassan', 'Andre Williams', 'Mateo Green', 'Ezra Park',
+  'Fatima Ahmed', 'Miles Wright', 'David Tanaka', 'Rosa Ahmed', 'Zoe Thompson', 'Noah Vasquez', 'Vikram Patel', 'Ingrid Larsen',
+  'Kevin Garcia', 'Joy Chen', 'Hugo Lee', 'Sasha Kim',
+];
+
+const DECISIONS = [
+  'Adopt Aurora over Neptune', 'Migrate to Kubernetes from ECS', 'Standardize on Nova Pro', 'Sunset legacy auth service',
+  'Adopt OpenTelemetry', 'React 19 upgrade timeline', 'Vector DB vendor selection', 'Self-hosted OTel collectors over vendor agents',
+  'Judge model for canary evaluation', 'Iceberg over Delta for the lakehouse table format',
+];
+
+const SKILLS = [
+  'Kubernetes', 'Terraform', 'Cedar policy authoring', 'Flink', 'Iceberg', 'OpenTelemetry', 'Postgres tuning', 'OIDC and JWKS',
+  'prompt evaluation', 'Android accessibility', 'dbt', 'incident response',
+];
+
+type Variant = { promptSnippet: string; responseSnippet: string };
+type VariantCtx = { n: number; init: (typeof INITIATIVES)[number]; init2: (typeof INITIATIVES)[number]; p: string; p2: string; d: string; skill: string };
+
+const VARIANTS: Record<string, Array<(c: VariantCtx) => Variant>> = {
+  'orgiq-supervisor': [
+    (c) => ({ promptSnippet: `What is in flight on ${c.init.name}?`, responseSnippet: `${c.init.owner} owns ${c.init.name}; ${1 + (c.n % 4)} work items are in review and ${c.p} has the most recent merged change.` }),
+    (c) => ({ promptSnippet: `Who owns ${c.init.name}?`, responseSnippet: `${c.init.owner}, with ${c.p} and ${c.p2} as the SMEs who touched it most recently.` }),
+    (c) => ({ promptSnippet: `Summarize "${c.d}" for ${c.p}`, responseSnippet: `The decision on "${c.d}" carries ${1 + (c.n % 3)} sign-offs; the summary names the cost and rollback trade-offs and links ${c.init.name}.` }),
+    (c) => ({ promptSnippet: `Draft a status line on ${c.init.name} for the release manager`, responseSnippet: `${c.init.name}: ${c.init.owner} owns it, sprint work is moving and spend is inside this month's allocation.` }),
+    (c) => ({ promptSnippet: `What changed on ${c.init.name} this week?`, responseSnippet: `${2 + (c.n % 5)} work items moved; ${c.p} closed ${1 + (c.n % 3)} and the rest are waiting on review from ${c.p2}.` }),
+    (c) => ({ promptSnippet: `Which initiatives does ${c.p} contribute to?`, responseSnippet: `${c.init.name} and ${c.init2.name}; the strongest signal is merged work on ${c.init.name}.` }),
+  ],
+  'orgiq-search': [
+    (c) => ({ promptSnippet: `Find every decision record that mentions ${c.init.name}`, responseSnippet: `Found ${1 + (c.n % 4)} for ${c.init.name}, led by "${c.d}" and owned by ${c.init.owner}.` }),
+    (c) => ({ promptSnippet: `Search for anyone with ${c.skill} experience`, responseSnippet: `${c.p} (${1 + (c.n % 3)} postmortems) and ${c.p2} (${1 + (c.n % 2)} ADRs authored) have the most evidence for ${c.skill}.` }),
+    (c) => ({ promptSnippet: `Pull the discussion where ${c.init.name} settled on "${c.d}"`, responseSnippet: `The thread started by ${c.p}; ${c.init.owner} closed it with a summary of the trade-offs.` }),
+    (c) => ({ promptSnippet: `Who reviewed the last change to ${c.init.name}?`, responseSnippet: `${c.p} approved with ${1 + (c.n % 4)} inline comments; ${c.p2} co-reviewed.` }),
+    (c) => ({ promptSnippet: `Find the runbook for ${c.skill}`, responseSnippet: `The ${c.skill} runbook, last edited by ${c.p}; ${c.init.name} links to it from its operations page.` }),
+    (c) => ({ promptSnippet: `What did ${c.p} write about ${c.init2.name}?`, responseSnippet: `${1 + (c.n % 5)} documents: a design note, ${1 + (c.n % 2)} postmortem follow-up and a section of the ${c.init2.name} plan.` }),
+  ],
+  'orgiq-scoring': [
+    (c) => ({ promptSnippet: `Recompute composite scores for the ${c.init.name} team`, responseSnippet: `Recomputed for ${8 + (c.n % 9)} people; top mover: ${c.p} +0.0${1 + (c.n % 8)} on PageRank.` }),
+    (c) => ({ promptSnippet: `What is ${c.p}'s ${c.skill} score trend over 90 days?`, responseSnippet: `Rising: 0.${60 + (c.n % 20)} → 0.${70 + (c.n % 25)}, driven by ${1 + (c.n % 4)} merged changes on ${c.init.name}.` }),
+    (c) => ({ promptSnippet: `Run centrality analysis on the ${c.init.name} sub-graph`, responseSnippet: `Betweenness computed for ${14 + (c.n % 20)} nodes; ${c.p} is the top bridge node, ahead of ${c.p2}.` }),
+    (c) => ({ promptSnippet: `Which skills are thinnest on ${c.init.name}?`, responseSnippet: `${c.skill} (${1 + (c.n % 2)} people) is the thinnest; ${c.p} is the only strong contributor.` }),
+    (c) => ({ promptSnippet: `Refresh the leaderboard after the ${c.init.name} sprint closed`, responseSnippet: `Leaderboard refreshed; ${18 + (c.n % 12)} people rescored, ${c.p} moved up ${1 + (c.n % 3)} places.` }),
+  ],
+  'orgiq-advisor': [
+    (c) => ({ promptSnippet: `Identify knowledge gaps on ${c.init.name}`, responseSnippet: `Only ${1 + (c.n % 2)} person (${c.p}) covers ${c.skill}; recommend pairing ${c.p2} with them before the next sprint.` }),
+    (c) => ({ promptSnippet: `Recommend a pairing for a new hire on ${c.init.name}`, responseSnippet: `Pair with ${c.p} — recent activity on ${c.init.name} and the lightest mentee load of ${c.init.owner}'s team.` }),
+    (c) => ({ promptSnippet: `Is ${c.init.name} at risk of stalling next sprint?`, responseSnippet: `${c.init.name} has ${1 + (c.n % 3)} open decisions and one owner (${c.init.owner}); backup is thin on ${c.skill}.` }),
+    (c) => ({ promptSnippet: `Suggest a mentor for someone picking up ${c.skill}`, responseSnippet: `${c.p} — authored ${2 + (c.n % 5)} of the recent ${c.skill} changes and has mentored on ${c.init.name}.` }),
+    (c) => ({ promptSnippet: `Who should review "${c.d}" before it is final?`, responseSnippet: `${c.p} and ${c.p2}; both have deep context from ${c.init.name}.` }),
+  ],
+  'orgiq-ingestion': [
+    (c) => ({ promptSnippet: `Ingest the ${c.init.name} planning notes from ${c.p}`, responseSnippet: `Extracted ${8 + (c.n % 14)} entities, ${1 + (c.n % 4)} decisions and ${c.n % 2} org-chart change; synced to the knowledge base.` }),
+    (c) => ({ promptSnippet: `Re-run entity extraction on the ${c.init.name} postmortems`, responseSnippet: `Extracted entities for ${5 + (c.n % 6)} of ${7 + (c.n % 6)} postmortems; the rest were already current.` }),
+    (c) => ({ promptSnippet: `Process the "${c.d}" decision record`, responseSnippet: `Linked the record to ${c.init.name} and ${2 + (c.n % 4)} people; embeddings queued.` }),
+    (c) => ({ promptSnippet: `Trigger graph-builder for ${c.init.name} documents`, responseSnippet: `Dispatched ${3 + (c.n % 7)} merge jobs to orgiq-graph-builder; all acknowledged.` }),
+    (c) => ({ promptSnippet: `Sync the knowledge base after the ${c.init.name} import`, responseSnippet: `Sync job finished: ${12 + (c.n % 30)} documents added, ${c.n % 4} updated.` }),
+  ],
+  'orgiq-graph-builder': [
+    (c) => ({ promptSnippet: `Merge the new ${c.init.name} decision nodes into the graph`, responseSnippet: `Upserted ${2 + (c.n % 5)} decision nodes and ${5 + (c.n % 9)} edges linking ${c.p} and ${c.p2}.` }),
+    (c) => ({ promptSnippet: `Generate embeddings for ${20 + (c.n % 40)} new ${c.init.name} documents`, responseSnippet: `Generated Titan v2 @1024d embeddings; wrote to node_embeddings.` }),
+    (c) => ({ promptSnippet: `Validate the person-skill edges for ${c.skill}`, responseSnippet: `${6 + (c.n % 12)} edges valid; ${c.p} was added to ${c.skill}.` }),
+    (c) => ({ promptSnippet: `Merge duplicate person nodes flagged near ${c.p}`, responseSnippet: `Merged ${1 + (c.n % 3)} duplicate pair${c.n % 3 === 0 ? '' : 's'}; kept the higher-tenure node in each.` }),
+    (c) => ({ promptSnippet: `Rebuild the rollup edges for ${c.init.name}`, responseSnippet: `Rebuilt ${14 + (c.n % 20)} rollup edges for ${c.init.name} and ${c.init2.name}.` }),
+  ],
+};
+
+/** A fresh, deterministic question and answer for an agent's `i`th repeat. */
+function variantFor(base: Authored, i: number): Authored {
+  const templates = VARIANTS[base.agentId];
+  if (!templates || templates.length === 0) return base;
+  const t = i % templates.length;
+  const r = Math.floor(i / templates.length);
+  const ctx: VariantCtx = {
+    n: i,
+    init: INITIATIVES[r % INITIATIVES.length]!,
+    init2: INITIATIVES[(r + 5) % INITIATIVES.length]!,
+    p: PEOPLE[(r * 5 + t) % PEOPLE.length]!,
+    p2: PEOPLE[(r * 7 + t + 3) % PEOPLE.length]!,
+    d: DECISIONS[(r + t) % DECISIONS.length]!,
+    skill: SKILLS[(r * 3 + t) % SKILLS.length]!,
+  };
+  return { ...base, ...templates[t]!(ctx) };
+}
 
 /**
  * Failure strings for rows the authored corpus does not cover on its own —
@@ -306,7 +418,7 @@ function corpus(scale: { rows: number; errors: number }): MockInvocation[] {
           ? base
           // Repeats vary their cost a little so a duration percentile is not
           // one value repeated, which would make p50 and p99 identical.
-          : { ...base, durationMs: Math.round(base.durationMs * (0.75 + ((i * 17) % 50) / 100)) },
+          : { ...variantFor(base, i - authoredClean.length), durationMs: Math.round(base.durationMs * (0.75 + ((i * 17) % 50) / 100)) },
       );
     }
   }

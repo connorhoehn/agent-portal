@@ -97,7 +97,7 @@ export const calibrationCases = defineFixture<CalibrationCaseRow>({
         agentId: 'orgiq-search',
         prompt: 'Find every decision record mentioning Aurora cold starts.',
         response:
-          'Found 3: des-aurora-warmup, des-data-api-retry, des-kb-datasource-init — all cite the 0.5-ACU cold-start gap.',
+          "Found 3: 'Adopt Aurora over Neptune' and two postmortem follow-ups — all cite the 0.5-ACU cold-start gap.",
         humanScore: 0.88,
         humanRationale: 'Complete and each hit is checkable.',
         active: true,
@@ -122,7 +122,7 @@ export const calibrationCases = defineFixture<CalibrationCaseRow>({
         agentId: 'orgiq-advisor',
         prompt: 'Which initiative is most at risk of stalling next sprint?',
         response:
-          'Several initiatives carry risk. p-kb-migration and p-obs-rollout are both worth watching this sprint.',
+          'Several initiatives carry risk. Data Lake Migration and Observability Platform are both worth watching this sprint.',
         humanScore: 0.42,
         humanRationale: 'Names two without choosing, and gives no reason for either. The question asked for one.',
         active: true,

@@ -38,12 +38,15 @@ describe('initiatives fixture — default', () => {
     }
   });
 
-  it('counts Observability\'s two in-flight marketplace runs and reads every other initiative Idle', async () => {
+  it('counts Observability\'s two in-flight marketplace runs, a working box as one agent, and reads the rest Idle', async () => {
     const running = botRuns.rows().filter((r) => r.status === 'running');
     expect(running).toHaveLength(2);
     const list = await listProjects({ limit: 200 });
     for (const p of list) {
-      expect(p.activeAgentRuns).toBe(p.id === 'p-observability' ? 2 : 0);
+      // Auth Migration and the LLM platform each have a devbox box mid-task and no
+      // bot_runs row behind it: still one agent running, not "0 agents running".
+      const expected = p.id === 'p-observability' ? 2 : p.id === 'p-auth-migration' || p.id === 'p-llm-platform' ? 1 : 0;
+      expect(p.activeAgentRuns).toBe(expected);
     }
   });
 

@@ -18,6 +18,8 @@ import { noteSearchWrite, type SearchWriteRef } from '../lib/search-index/writes
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+import { clock, countBy } from '../mock/core/index.js';
+import { graphProposals } from '../mock/graph-proposals.js';
 
 export type ProposalKind =
   | 'add_person_skill'      // payload: { personId, skillId, weight? }

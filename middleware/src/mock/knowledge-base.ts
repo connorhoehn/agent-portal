@@ -95,6 +95,9 @@ const hoursAgoPlus = (hours: number, minutes = 0): string => {
 
 /** The all-hands recap's id and title carry its date (`all-hands-YYYY-MM-DD`). */
 const allHandsDate = (daysAgo: number): string => clock.daysAgo(daysAgo).slice(0, 10);
+/** "Oct 13" — the title a person reads; the id above keeps the sortable day. */
+const allHandsLabel = (daysAgo: number): string =>
+  new Date(clock.daysAgo(daysAgo)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 const uri = (prefix: string, id: string): string =>
   `s3://${MOCK_DOCUMENTS_BUCKET}/synth/internal/${prefix}/${id}.md`;
@@ -123,7 +126,7 @@ export const kbDocumentRows = defineFixture<IngestedDoc>({
           sourceUri: uri('slack', 'slack-p-observability-00'),
           title: '#proj-observability — incident triage in the first 10 minutes', ingestedAt: recent },
         { id: allHands(2), source: 'all_hands', sourceUri: uri('all_hands', allHands(2)),
-          title: `All-Hands — ${allHandsDate(2)}`, ingestedAt: recent },
+          title: `All-Hands, ${allHandsLabel(2)}`, ingestedAt: recent },
 
         // ── the first full sync ──
         { id: 'adr-d-aurora', source: 'adr', sourceUri: uri('adr', 'adr-d-aurora'),
@@ -150,7 +153,7 @@ export const kbDocumentRows = defineFixture<IngestedDoc>({
           sourceUri: uri('slack', 'slack-p-auth-migration-00'),
           title: '#proj-auth-migration — weighing two competing library choices', ingestedAt: older },
         { id: allHands(23), source: 'all_hands', sourceUri: uri('all_hands', allHands(23)),
-          title: `All-Hands — ${allHandsDate(23)}`, ingestedAt: older },
+          title: `All-Hands, ${allHandsLabel(23)}`, ingestedAt: older },
       ];
     },
     // A knowledge base that exists and has never been synced — the state a
@@ -240,7 +243,7 @@ export const kbDataSourceRows = defineFixture<DataSourceSummary>({
       id: 'DSMOCK0001AB',
       name: 'orgiq-documents-s3',
       status: 'AVAILABLE',
-      description: 'The documents bucket — everything schema/synth loads plus portal uploads.',
+      description: 'The documents bucket — everything the org has ingested plus portal uploads.',
       type: 'S3',
       sourceUri: `s3://${MOCK_DOCUMENTS_BUCKET}/synth/internal`,
       updatedAt: clock.daysAgo(21),
@@ -290,7 +293,7 @@ export const kbIngestionJobRows = defineFixture<KbIngestionJobRow>({
       {
         jobId: 'IJMOCK0001', dataSourceId: 'DSMOCK0001AB', status: 'COMPLETE',
         startedAt: daysAgoPlus(21), finishedAt: daysAgoPlus(21, 34),
-        description: 'Initial corpus load (schema.synth all)', failureReasons: [],
+        description: 'First full sync of the org corpus', failureReasons: [],
       },
     ],
     // A knowledge base with a data source and no run history — "never synced",

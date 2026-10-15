@@ -466,7 +466,9 @@ export function App() {
             </RequireTenant>
           )}
         >
-          <Route index element={<Navigate to="work" replace />} />
+          {/* The front door is the org's work (TENANT_HOME.orgiq), not the Automate inbox:
+              a peer's first screen is the initiatives, not an agent queue. */}
+          <Route index element={<Navigate to="projects" replace />} />
           {/* Architecture is a platform surface — nav shows it to platform
               roles only, so the route matches (it was URL-open to anyone). */}
           <Route path="agents" element={

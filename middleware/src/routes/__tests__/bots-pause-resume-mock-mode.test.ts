@@ -48,16 +48,13 @@ function buildApp() {
   return app;
 }
 
-// Every seeded bot starts PARKED (enabled:false + the seed's own
-// paused_reason): schema/seed_program.sql parks them all pending repo
-// provisioning and MOCK_BOTS mirrors that, so there is no "starts enabled"
-// bot to pause. What the pause tests below pin is therefore that pause
-// OVERWRITES the reason with the operator's, and that resume clears it and
-// brings the bot up — the state the portal's toast claims either way.
+// dev:mock enables every bot whose initiative is alive (mock/bots.ts) and parks
+// rag-index-health, whose initiative shipped, with the seed's own reason. The
+// pause tests below drive a live bot; the resume test brings the parked one up.
 // obs-nightly-maintenance — the bot this suite drives through the cycle.
 const RUNNING_BOT_ID = '32970d0a-e28e-5100-8fb0-a5cbb87dac99';
 // finops-daily-sweep — the seed's p-cost-opt bot, resumed from parked below.
-const PARKED_BOT_ID = '4448041c-0350-5d7f-930e-7dbcd87a149f';
+const PARKED_BOT_ID = 'f595b10b-5f52-50d0-81a0-9117e9334fb4';
 
 describe('POST /api/bots/:id/pause and /resume (dev:mock)', () => {
   // MOCK_BOTS is a shared singleton the provider mutates in place — restore

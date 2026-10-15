@@ -68,10 +68,16 @@ function jobStatusForRunStatus(status: BotRun['status']): JobStatus {
  * dispatch enqueues (`lib/bot-runner.ts` `fireBot`: kind `devbox:task`, title
  * is the bot's name, payload carries prompt/model/botId, `bot_id` column set).
  */
+function previousOutcome(run: BotRun | undefined): string | null {
+  const reason = run?.outcome['reason'];
+  return typeof reason === 'string' && reason !== 'scheduled maintenance' ? reason : null;
+}
+
 function seedAgentJobs(): AgentJob[] {
   const jobs: AgentJob[] = [];
   for (const bot of MOCK_BOTS) {
-    for (const run of MOCK_BOT_RUNS[bot.id] ?? []) {
+    const history = MOCK_BOT_RUNS[bot.id] ?? [];
+    for (const [index, run] of history.entries()) {
       if (!run.jobId || jobs.some((j) => j.id === run.jobId)) continue;
       const status = jobStatusForRunStatus(run.status);
       const terminal = status === 'done' || status === 'failed' || status === 'cancelled';
@@ -90,7 +96,10 @@ function seedAgentJobs(): AgentJob[] {
         id: run.jobId,
         kind: 'devbox:task',
         title: bot.name,
-        payload: { prompt: bot.prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model },
+        // The bot's mission plus what its previous firing left behind: a real
+        // run starts from its predecessor's outcome, and a prompt that reads
+        // differently each time is not one sentence copied across a dozen jobs.
+        payload: { prompt: previousOutcome(history[index + 1]) ? `${bot.prompt} Previous run: ${previousOutcome(history[index + 1])}.` : bot.prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model },
         status,
         priority: 100,
         boxId: null,

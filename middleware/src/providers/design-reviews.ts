@@ -205,13 +205,13 @@ export async function answerQuestion(
 
   // The agent keeps going: it folds the answer into a revision.
   doc.posts.push(newPost({
-    authorKind: 'agent', authorName: q.authorName, kind: 'revision',
+    authorKind: q.authorKind, authorName: q.authorName, kind: 'revision',
     createdAt: new Date().toISOString(),
     body: `Revised with the answer above: ${body.length > 120 ? body.slice(0, 117) + '…' : body} — plan updated accordingly. Ready for a decision once the stewards agree.`,
   }));
   if (openQuestions(doc) === 0) {
     doc.posts.push(newPost({
-      authorKind: 'agent', authorName: q.authorName, kind: 'decision',
+      authorKind: q.authorKind, authorName: q.authorName, kind: 'decision',
       createdAt: new Date().toISOString(),
       body: 'Decision proposed on the basis of the resolved questions above. Sign-offs from two stewards approve it and log it to the knowledge base.',
     }));

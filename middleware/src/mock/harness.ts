@@ -196,6 +196,12 @@ export const testCases = defineFixture<MockTestCase>({
 
 // ── Runs ───────────────────────────────────────────────────────────────────
 
+/** `nightly-oct-13` — the label of the nightly that ran `daysAgo` days back, read from the clock so it never trails the dates beside it. */
+function nightlyLabel(daysAgo: number): string {
+  const month = new Date(clock.daysAgo(daysAgo)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }).toLowerCase();
+  return `nightly-${month}-${new Date(clock.daysAgo(daysAgo)).getUTCDate()}`;
+}
+
 /**
  * Runs.
  *
@@ -209,7 +215,7 @@ export const testRuns = defineFixture<MockTestRunSeed>({
     default: () => [
       {
         runId: RUN_A,
-        label: 'nightly-2026-08-19',
+        label: nightlyLabel(7),
         gitSha: 'a1b2c3d',
         judgeModelId: 'amazon.nova-pro-v1:0',
         agentVersions: { 'orgiq-search': 'sha-1a2b3c', 'orgiq-supervisor': 'sha-4d5e6f' },
@@ -221,7 +227,7 @@ export const testRuns = defineFixture<MockTestRunSeed>({
       },
       {
         runId: RUN_B,
-        label: 'nightly-2026-08-24',
+        label: nightlyLabel(2),
         gitSha: 'e7f8a9b',
         judgeModelId: 'amazon.nova-pro-v1:0',
         agentVersions: { 'orgiq-search': 'sha-1a2b3c', 'orgiq-supervisor': 'sha-7g8h9i' },

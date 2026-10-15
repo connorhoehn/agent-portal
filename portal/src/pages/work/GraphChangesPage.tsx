@@ -62,15 +62,15 @@ function describe(p: Proposal): string {
   const pl = p.payload;
   switch (p.kind) {
     case 'link_document_mention':
-      return `${String(pl['documentId'] ?? p.targetId)} → ${String(pl['entityType'] ?? '?')} ${String(pl['entityId'] ?? '?')}`;
+      return `${String(pl['documentTitle'] ?? pl['documentId'] ?? p.targetId)} → ${String(pl['entityName'] ?? `${String(pl['entityType'] ?? '?')} ${String(pl['entityId'] ?? '?')}`)}`;
     case 'add_person_skill':
-      return `${String(pl['personId'] ?? '?')} → skill ${String(pl['skillId'] ?? '?')}`;
+      return `${String(pl['personName'] ?? pl['personId'] ?? '?')} → ${String(pl['skillName'] ?? `skill ${String(pl['skillId'] ?? '?')}`)}`;
     case 'update_person_title':
-      return `${String(pl['personId'] ?? '?')} → "${String(pl['title'] ?? '?')}"`;
+      return `${String(pl['personName'] ?? pl['personId'] ?? '?')} → "${String(pl['title'] ?? '?')}"`;
     case 'add_collaboration':
-      return `${String(pl['personAId'] ?? '?')} ↔ ${String(pl['personBId'] ?? '?')}`;
+      return `${String(pl['personAName'] ?? pl['personAId'] ?? '?')} ↔ ${String(pl['personBName'] ?? pl['personBId'] ?? '?')}`;
     case 'add_skill':
-      return `${String(pl['skillId'] ?? '?')} (${String(pl['name'] ?? '?')})`;
+      return `${String(pl['name'] ?? pl['skillId'] ?? '?')}`;
     default:
       return JSON.stringify(pl);
   }

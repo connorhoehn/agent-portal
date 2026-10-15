@@ -150,6 +150,24 @@ export interface CodeSession {
  *           fresh ids and leaves .env.aws pointing at the dead ones — because
  *           an invented failure would teach the reader the wrong symptom.
  */
+// What each interpreter session has run, oldest first. `executionCount` is the
+// length of its list and `lastCode` is its last entry, so the counter and the
+// code it reports cannot disagree (docs/mock-floor.md rule 1).
+const GRAPH_BUILDER_CODE = [
+  'import json, re\nraw = open("auth-runbook.md").read()',
+  'sections = re.split(r"^## ", raw, flags=re.M)\nprint(len(sections))',
+  'people = extract_people(sections)\nprint(people)',
+  'decisions = extract_decisions(sections)\nprint(decisions)',
+  'edges = link(people, decisions)\nprint(len(edges))',
+  'assert all(e.source and e.target for e in edges)',
+  'import json\nentities = extract_ner(doc_text)\nprint(json.dumps(entities, indent=2))',
+];
+const SCORING_CODE = [
+  'graph = load_subgraph("p-auth-migration")\nprint(graph.number_of_nodes())',
+  'centrality = betweenness(graph)\nprint(max(centrality, key=centrality.get))',
+  'pagerank = compute_pagerank(graph, damping=0.85, iterations=20)\nprint(sorted(pagerank.items(), key=lambda x: -x[1])[:10])',
+];
+
 export const codeSessions = defineFixture<CodeSession>({
   key: 'code-sessions',
   scenarios: {
@@ -160,9 +178,9 @@ export const codeSessions = defineFixture<CodeSession>({
         status: 'ACTIVE',
         startedAt: clock.hoursAgo(5 / 60),
         lastActivityAt: clock.hoursAgo(15 / 3600),
-        executionCount: 7,
-        lastCode: 'import json\nentities = extract_ner(doc_text)\nprint(json.dumps(entities, indent=2))',
-        lastOutput: '{"people": ["Alice Smith", "Bob Jones"], "skills": ["Kubernetes", "Python"]}',
+        executionCount: GRAPH_BUILDER_CODE.length,
+        lastCode: GRAPH_BUILDER_CODE[GRAPH_BUILDER_CODE.length - 1]!,
+        lastOutput: '{"people": ["Vera Green", "Simone Chang", "Nora DaSilva"], "skills": ["OIDC", "JWKS", "Session management"]}',
         memoryUsageMb: 128,
       },
       {
@@ -171,9 +189,9 @@ export const codeSessions = defineFixture<CodeSession>({
         status: 'IDLE',
         startedAt: clock.hoursAgo(15 / 60),
         lastActivityAt: clock.hoursAgo(7 / 60),
-        executionCount: 3,
-        lastCode: 'pagerank = compute_pagerank(graph, damping=0.85, iterations=20)\nprint(sorted(pagerank.items(), key=lambda x: -x[1])[:10])',
-        lastOutput: "[('alice_smith', 0.89), ('bob_jones', 0.73), ('carol_wu', 0.61)]",
+        executionCount: SCORING_CODE.length,
+        lastCode: SCORING_CODE[SCORING_CODE.length - 1]!,
+        lastOutput: "[('vera_green', 0.89), ('simone_chang', 0.73), ('nora_dasilva', 0.61)]",
         memoryUsageMb: 64,
       },
     ],
@@ -215,6 +233,21 @@ export interface BrowserSession {
  *           failure was undiagnosable. The message is the real one a stale
  *           BROWSER_PROFILE_ID produces.
  */
+// Pages each browser session has requested, oldest first; `requestCount` is the
+// length of its list and `currentUrl` its last entry.
+const SEARCH_BROWSER_PAGES = [
+  'https://github.com/orgs/connorhoehnslalom/repositories', 'https://github.com/connorhoehnslalom/orgiq-auth-service',
+  'https://github.com/connorhoehnslalom/orgiq-auth-service/pulls', 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/49',
+  'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/49/files', 'https://github.com/connorhoehnslalom/orgiq-auth-service/issues',
+  'https://github.com/connorhoehnslalom/orgiq-observability', 'https://github.com/connorhoehnslalom/orgiq-observability/pulls',
+  'https://github.com/connorhoehnslalom/orgiq-llm-platform', 'https://github.com/connorhoehnslalom/orgiq-llm-platform/pulls',
+  'https://github.com/connorhoehnslalom/orgiq-inference-platform', 'https://github.com/connorhoehnslalom/orgiq-inference-platform/pulls',
+];
+const ADVISOR_BROWSER_PAGES = [
+  'https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-verifying-a-jwt.html',
+  'https://openid.net/specs/openid-connect-core-1_0.html', 'https://datatracker.ietf.org/doc/html/rfc7636', 'about:blank',
+];
+
 export const browserSessions = defineFixture<BrowserSession>({
   key: 'browser-sessions',
   scenarios: {
@@ -225,9 +258,9 @@ export const browserSessions = defineFixture<BrowserSession>({
         status: 'ACTIVE',
         startedAt: clock.hoursAgo(2 / 60),
         lastActivityAt: clock.hoursAgo(5 / 3600),
-        currentUrl: 'https://linkedin.com/in/alice-smith',
-        pageTitle: 'Alice Smith | LinkedIn',
-        requestCount: 12,
+        currentUrl: SEARCH_BROWSER_PAGES[SEARCH_BROWSER_PAGES.length - 1]!,
+        pageTitle: 'Pull requests · connorhoehnslalom/orgiq-inference-platform',
+        requestCount: SEARCH_BROWSER_PAGES.length,
         profileId: 'bp-default',
       },
       {
@@ -236,9 +269,9 @@ export const browserSessions = defineFixture<BrowserSession>({
         status: 'IDLE',
         startedAt: clock.hoursAgo(10 / 60),
         lastActivityAt: clock.hoursAgo(5 / 60),
-        currentUrl: 'about:blank',
+        currentUrl: ADVISOR_BROWSER_PAGES[ADVISOR_BROWSER_PAGES.length - 1]!,
         pageTitle: '',
-        requestCount: 4,
+        requestCount: ADVISOR_BROWSER_PAGES.length,
         profileId: 'bp-default',
       },
     ],

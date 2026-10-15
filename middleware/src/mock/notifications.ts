@@ -24,6 +24,7 @@
 import { clock, defineFixture } from './core/index.js';
 import { socialChannelMembersFixture, socialChannelMessagesFixture } from './social-channels.js';
 import { CAST } from './social-history.js';
+import { approvalRequests } from './observability.js';
 
 export interface MockNotificationRow {
   id: string;
@@ -124,14 +125,17 @@ function seedNotifications(): MockNotificationRow[] {
       timestamp: clock.hoursAgo(1),
       extra: { kind: 'call-missed', callerId: 'u-nora', callerName: 'Nora DaSilva', reason: 'no-answer', channel: 'initiative:p-auth-migration' },
     },
-    {
-      id: 'mock-notif-approval-release', userId: 'u-release', tenant: 'orgiq', type: 'approval-requested',
-      title: 'orgiq-advisor is waiting on an approval',
-      body: 'Vendor renewal above the $10k threshold · $18,500',
+    // Derived from the approval queue's own pending row, never typed beside it:
+    // the bell and /admin/observability/approvals must be asking the same
+    // question of the same agent.
+    ...approvalRequests.rows().filter((a) => a.status === 'PENDING').map((a): MockNotificationRow => ({
+      id: `mock-notif-approval-${a.approval_id.slice(-4)}`, userId: 'u-release', tenant: 'orgiq', type: 'approval-requested',
+      title: `${a.agent_id} is waiting on an approval`,
+      body: a.reason ?? 'An agent is waiting on a human decision.',
       href: '/admin/observability/approvals', actionLabel: 'Open the approval queue',
-      timestamp: clock.hoursAgo(3),
-      extra: { kind: 'approval', agentId: 'orgiq-advisor' },
-    },
+      timestamp: a.requested_at ?? clock.hoursAgo(1),
+      extra: { kind: 'approval', agentId: a.agent_id },
+    })),
   ];
 }
 

@@ -28,6 +28,7 @@ import { mockRunsAttributedTo } from './bots.js';
 import { clock, countBy } from '../mock/core/index.js';
 import { initiatives, findInitiative, type MockInitiative } from '../mock/initiatives.js';
 import { mockAvatarUrl } from '../mock/avatars.js';
+import { devboxBoxes } from '../mock/devbox-fleet.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -299,10 +300,17 @@ const ACTIVE_RUN_WINDOW_MS = 24 * 60 * 60 * 1000;
  */
 export function mockActiveAgentRuns(projectId: string): number {
   const cutoff = clock.now().getTime() - ACTIVE_RUN_WINDOW_MS;
-  return countBy(
+  const botRuns = countBy(
     mockRunsAttributedTo(projectId),
     (r) => r.status === 'running' && Date.parse(r.startedAt) > cutoff,
   ).get(true) ?? 0;
+  // A devbox box mid-task on the initiative is an agent running on it too, even
+  // when no bot_runs row backs it (the fleet and the run table are two fixtures).
+  // Taking the larger of the two counts keeps a box and the run that dispatched
+  // it from being counted twice, and stops "0 agents running" beside a box that
+  // is visibly working the initiative's items.
+  const boxes = countBy(devboxBoxes.rows(), (b) => b.status === 'running' && b.projectId === projectId).get(true) ?? 0;
+  return Math.max(botRuns, boxes);
 }
 
 function castName(personId: string): string {
