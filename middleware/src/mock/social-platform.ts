@@ -187,30 +187,40 @@ export const socialRecordingsFixture = defineFixture<SocialRecordingRow>({
 export interface SocialTranscriptSegment { startMs: number; endMs: number; speakerId: string; speakerLabel: string; text: string; kind?: 'reaction' }
 export interface SocialRecordingTranscriptRow { recordingId: string; transcriptStatus: 'ready' | 'pending' | 'failed'; segments: SocialTranscriptSegment[] }
 
-const seg = (startMs: number, speakerId: string, speakerLabel: string, text: string, kind?: 'reaction'): SocialTranscriptSegment =>
-  ({ startMs, endMs: startMs + 8_000, speakerId, speakerLabel, text, ...(kind ? { kind } : {}) });
+const MIN = 60_000;
+/** A segment at `atMin` minutes into the call, `secs` seconds long (spread over the recording, not packed at its start). */
+const seg = (atMin: number, speakerId: string, speakerLabel: string, text: string, secs = 40, kind?: 'reaction'): SocialTranscriptSegment =>
+  ({ startMs: Math.round(atMin * MIN), endMs: Math.round(atMin * MIN) + secs * 1000, speakerId, speakerLabel, text, ...(kind ? { kind } : {}) });
 
 /** One transcript per seeded recording (`transcript.json`, served by `GET /api/recordings/:id/transcript`). */
 export const socialRecordingTranscriptsFixture = defineFixture<SocialRecordingTranscriptRow>({
   key: 'social.recording-transcripts',
   scenarios: {
     default: () => [
+      // town-hall-1: 41 min, 26 h ago (the first Thursday call of the autumn schedule).
       { recordingId: 'mock-rec-town-hall-1', transcriptStatus: 'ready', segments: [
-        seg(0, 'u-mira', 'Mira Okafor', 'Welcome to the town hall. We will cover the spring community calendar first.'),
-        seg(9_000, 'u-lena', 'Lena Brandt', 'Moderation volume doubled after the launch, so we need two more volunteers.'),
-        seg(18_000, 'u-sana', 'Sana Iqbal', 'I can take the Tuesday shift and write the onboarding guide.'),
-        seg(20_000, 'u-lena', 'Lena Brandt', 'reacted with a thumbs up', 'reaction'),
-        seg(27_000, 'u-mira', 'Mira Okafor', 'Decision: the event calendar goes live on Friday with Sana as the owner.'),
+        seg(0, 'u-mira', 'Mira Okafor', 'Welcome to the town hall. The call has a new slot for the autumn, so we will cover the autumn community calendar first.', 45),
+        seg(4, 'u-lena', 'Lena Brandt', 'Moderation volume doubled after the launch, so we need two more volunteers on the rota.', 50),
+        seg(9, 'u-mira', 'Mira Okafor', 'Mia and Nora have said yes for next month. Lena, the runbook handover is yours.', 35),
+        seg(15, 'u-sana', 'Sana Iqbal', 'I can take the Tuesday shift and write the onboarding guide from the feedback I collected.', 55),
+        seg(15.9, 'u-lena', 'Lena Brandt', 'reacted with a thumbs up', 1, 'reaction'),
+        seg(22, 'u-mira', 'Mira Okafor', 'Questions on the calendar before we lock it? Office hours stay where they are.', 40),
+        seg(29, 'u-lena', 'Lena Brandt', 'One request: keep decisions in the call notes so the next person finds them without a recording.', 45),
+        seg(37, 'u-mira', 'Mira Okafor', 'Decision: the event calendar goes live on Friday with Sana as the owner. Thanks everyone.', 40),
       ] },
+      // town-hall-2: 37 min, 170 h ago (the previous week's call).
       { recordingId: 'mock-rec-town-hall-2', transcriptStatus: 'ready', segments: [
-        seg(0, 'u-mira', 'Mira Okafor', 'Last week we agreed to trial a weekly office hour for new members.'),
-        seg(9_000, 'u-sana', 'Sana Iqbal', 'Attendance was thirty people and most questions were about channel etiquette.'),
+        seg(0, 'u-mira', 'Mira Okafor', 'Last week we agreed to trial a weekly office hour for new members.', 40),
+        seg(8, 'u-sana', 'Sana Iqbal', 'Attendance was thirty people and most questions were about channel etiquette.', 45),
+        seg(19, 'u-mira', 'Mira Okafor', 'Then we keep it. I will put it in the autumn calendar and post it in #events.', 40),
+        seg(31, 'u-sana', 'Sana Iqbal', 'I can draft a short etiquette page so the same questions get answered once.', 40),
       ] },
+      // dm-lena-sana: 9 min.
       { recordingId: 'mock-rec-dm-lena-sana', transcriptStatus: 'ready', segments: [
-        seg(0, 'u-lena', 'Lena Brandt', 'Can you review the moderation checklist before the call with Mira?'),
-        seg(8_000, 'u-sana', 'Sana Iqbal', 'Yes, I will send my edits tonight and flag anything unclear.'),
-        seg(16_000, 'u-lena', 'Lena Brandt', 'Great, the escalation section is the part I am least sure about.'),
-        seg(24_000, 'u-sana', 'Sana Iqbal', 'Agreed, I will rewrite the escalation steps and share them tomorrow morning.'),
+        seg(0, 'u-lena', 'Lena Brandt', 'Can you review the moderation checklist before the call with Mira?', 25),
+        seg(2, 'u-sana', 'Sana Iqbal', 'Yes, I will send my edits tonight and flag anything unclear.', 25),
+        seg(5, 'u-lena', 'Lena Brandt', 'Great, the escalation section is the part I am least sure about.', 30),
+        seg(7.5, 'u-sana', 'Sana Iqbal', 'Agreed, I will rewrite the escalation steps and share them tomorrow morning.', 30),
       ] },
     ],
     empty: () => [],
