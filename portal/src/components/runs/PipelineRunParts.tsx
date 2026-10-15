@@ -64,7 +64,8 @@ export function PipelineRunSummary({ run }: { run: PipelineRun }) {
         layout="grid"
         aria-label="Run context"
         items={[
-          { label: 'Run', value: run.id, mono: true },
+          // The title says which run this is; the id is one hover away for an operator who needs to quote it.
+          { label: 'Run', value: run.context.title, title: run.id },
           { label: 'Definition', value: run.definitionId, mono: true, title: run.definitionId },
           { label: 'Workspace', value: run.context.tenant },
           { label: 'Source', value: `${sourceLabel(run.context.table)} ${run.context.id}`, mono: true },

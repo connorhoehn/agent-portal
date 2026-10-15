@@ -124,7 +124,7 @@ describe('the trace corpus is the invocation tail', () => {
       template_id: 'orgiq.supervisor.route',
       model_id: 'amazon.nova-pro-v1:0',
       judge_score: 0.745,
-      judge_rationale: 'Supervisor: Answers the question, though the reasoning skips a step a reader would want shown.',
+      judge_rationale: 'Supervisor: Covers the question but stops short of the follow-up a reader would ask next.',
       schema_valid: true,
       guardrail_action: null,
       input_tokens: 620,

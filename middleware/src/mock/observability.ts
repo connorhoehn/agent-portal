@@ -630,17 +630,26 @@ const RATIONALES = {
     'Names the right people and records, and the citations check out against the knowledge base.',
     'Direct answer, supported by the cited sources; nothing asserted without evidence.',
     'Correct and complete for the question, with sources a reader can open.',
+    'Accurate on the specifics, and each one is backed by a document the agent actually retrieved.',
+    'Stays inside what the sources say and says so where they are silent.',
+    'The people and dates match the records, and the answer is short enough to act on.',
+    'Complete answer with citations; the one inference is flagged as an inference.',
   ],
   middling: [
     'Answers the question but leaves one claim uncited; a reader would have to verify it.',
     'Mostly grounded, but one figure has no source and the scope is a little broad.',
     'Right direction, thin evidence: two of the three points are cited.',
     'Answers the question, though the reasoning skips a step a reader would want shown.',
+    'Useful and mostly correct; one name is given without the record it came from.',
+    'Covers the question but stops short of the follow-up a reader would ask next.',
+    'Sound on the main point, with a date that does not match the cited document.',
   ],
   weak: [
     'Does not answer the question asked and cites nothing retrievable.',
     'Off the question: the answer discusses a neighbouring topic and cites no source.',
     'Asserts specifics with no supporting document, and one of them contradicts the records.',
+    'Confident but unsupported: nothing in the answer can be traced to a retrieved source.',
+    'Answers a different question from the one asked, and the citation points at an unrelated page.',
   ],
 } as const;
 function rationaleFor(score: number, key: string, agentName: string): string {
