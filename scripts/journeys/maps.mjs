@@ -32,6 +32,10 @@ export const PROFILES = {
   },
   // docs/distillation-journeys/PROTOCOL.md: the same surface fields (its role-gating line states the ManageBots controls).
   distillation: { surface: SURFACE },
+  // docs/demo-journeys/PROTOCOL.md (docs/demo-content-goal.md): one story per tenant a peer follows in five
+  // minutes; each step asserts a fact of the story is on screen (story-facts) and that the records it names
+  // lead to each other (cross-links).
+  demo: { story: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'story-facts', 'cross-links', 'dom-audit', 'notes'] },
 };
 export const BUILTIN = new Set(['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'dom-audit', 'notes']);
 /** Built-ins a map supplies itself (static facts the walk does not measure). */

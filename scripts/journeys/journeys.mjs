@@ -63,6 +63,8 @@ const FAMILIES = {
   // holds no recordings here). validate-social-tenant.sh's S2 check keeps them
   // visibly red; the seal only records that the walk happened on this contract.
   'docs/social-journeys': ['^verdict: *(pass|limited — \\S)'],
+  // The demo story walks (docs/demo-content-goal.md): every fact of a tenant's story on screen.
+  'docs/demo-journeys': ['^verdict: *pass', '^story-facts: *pass', '^cross-links: *pass'],
 };
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
