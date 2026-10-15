@@ -15,11 +15,11 @@ the claim here is a bug.
 Durable facts the handoff does not repeat:
 
 - Pins: portal and middleware consume `@connorhoehnslalom/ui-components`
-  **2.440.7** and `@connorhoehnslalom/realtime-modules` **0.117.0** from
+  **2.455.0** and `@connorhoehnslalom/realtime-modules` **0.117.0** from
   tracked tarballs in `portal/vendor/` (`file:` deps, both lockfiles); middleware
   pins `@connorhoehn/service-runtime` 0.4.1 and `distributed-core` 0.48.0
-  (`077d7594`) by full sha; infra pins
-  `realtime-examples` `bea2572a`. Move a pin by replacing the tarball or sha,
+  (`077d7594`) by full sha; infra consumes
+  `@connorhoehn/realtime-examples-cdk` 0.1.0 from `infra/vendor/`. Move a pin by replacing the tarball or sha,
   then clear `portal/node_modules/.vite` and restart Vite.
 - Three additive schema changes are registered in both loaders but **not
   applied to Aurora**: `assessment_team_members_schema.sql`,
@@ -195,9 +195,11 @@ histories. Check the remote the pin names before concluding a commit is gone.
 - **service-runtime** (`@connorhoehn/service-runtime`): the `X-Service-Auth`
   HMAC envelope for internal hops.
 - **realtime-examples** (infra only): `ApplicationTables`,
-  `DocumentWorkspaceServices`, `RedisService` via `dist-cdk/`; there is no
-  `cdk/` directory, so diff `dist-cdk/` and `infra/dynamodb-schemas.json`.
-  `npm install` in `infra/` after a bump builds it from source for many minutes.
+  `DocumentWorkspaceServices`, `RedisService`, `MessageQueueTask` from its
+  dependency-free `cdk/` package (`@connorhoehn/realtime-examples-cdk`, peers
+  `aws-cdk-lib`/`constructs`), packed into `infra/vendor/`. Rebuild and repack in
+  `realtime-examples/cdk` (its README), then move the tarball; the manifest
+  ships inside the package's `dist/`.
 - **distributed-core** consume `connorhoehn`; **message-queue** consume
   `connorhoehnslalom` (diverged lineages). message-queue is the `mq` container
   image input, not an npm dep.
