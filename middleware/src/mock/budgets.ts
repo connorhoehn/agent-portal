@@ -39,7 +39,9 @@ function seededAllocations(): MockBudget[] {
     { id: 'p-llm-platform',      name: 'LLM Application Platform', allocated: 85 },
     // Covers Nora DaSilva's (p-004) envelope on spr-auth-s2 alongside p-051's —
     // sme.md defect #1.
-    { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 75 },
+    // Mia Singh (u-mia, program-owner) holds the money for this initiative: her
+    // name is the one on its allocation, which is what the budget story shows.
+    { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 75, updatedBy: 'u-mia' },
     { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 45 },
     // p-soc2 / p-feature-store / p-mobile-redesign used to derive $0: they hold
     // an allocation, but the mock fleet mirrored only 5 of the seed's 12 bots, so
@@ -115,33 +117,46 @@ export const initiativeBudgets = defineFixture<MockBudget>({
 // ─── Sprint envelopes (budget_grants) ────────────────────────────────────────
 
 function seededGrants(): MockGrantSeed[] {
+  const grant = (
+    id: string, orgProjectId: string, granteePersonId: string, granteeName: string,
+    sprintId: string, sprintName: string, sprintStatus: 'active' | 'done', allocatedUsd: number,
+  ): MockGrantSeed => ({
+    id, orgProjectId, granteePersonId, granteeName, sprintId, sprintName, sprintStatus, allocatedUsd, grantedBy: 'u-release',
+  });
   return [
-    { id: 'bg-obs-3', orgProjectId: 'p-observability', granteePersonId: 'p-008', granteeName: 'Layla Hassan',
-      sprintId: 'spr-obs-s3', sprintName: 'Sprint 98 — Span metrics + decom', sprintStatus: 'active', allocatedUsd: 30, grantedBy: 'u-release' },
-    { id: 'bg-llm-2', orgProjectId: 'p-llm-platform', granteePersonId: 'p-013', granteeName: 'Caleb Turner',
-      sprintId: 'spr-llm-s2', sprintName: 'Sprint 8 — Judge + evals', sprintStatus: 'active', allocatedUsd: 35, grantedBy: 'u-release' },
-    { id: 'bg-auth-2', orgProjectId: 'p-auth-migration', granteePersonId: 'p-051', granteeName: 'Simone Chang',
-      sprintId: 'spr-auth-s2', sprintName: 'Sprint 42 — Session hygiene', sprintStatus: 'active', allocatedUsd: 20, grantedBy: 'u-release' },
+    grant('bg-obs-1', 'p-observability', 'p-008', 'Layla Hassan', 'spr-obs-s1', 'Sprint 9 — Ingest hardening', 'done', 25),
+    grant('bg-obs-2', 'p-observability', 'p-011', 'Eli Garcia', 'spr-obs-s2', 'Sprint 10 — Burn-rate alerts', 'done', 20),
+    grant('bg-obs-3', 'p-observability', 'p-008', 'Layla Hassan', 'spr-obs-s3', 'Sprint 11 — Span metrics + decom', 'active', 30),
+    grant('bg-llm-1', 'p-llm-platform', 'p-042', 'Katya Petrov', 'spr-llm-s1', 'Sprint 8 — Prompt registry', 'done', 30),
+    grant('bg-llm-2', 'p-llm-platform', 'p-013', 'Caleb Turner', 'spr-llm-s2', 'Sprint 9 — Judge + evals', 'active', 35),
+    grant('bg-auth-1', 'p-auth-migration', 'p-051', 'Simone Chang', 'spr-auth-s1', 'Sprint 9 — OIDC core', 'done', 25),
+    grant('bg-auth-2', 'p-auth-migration', 'p-051', 'Simone Chang', 'spr-auth-s2', 'Sprint 10 — Session hygiene', 'active', 20),
     // The seeded sme login (u-nora / p-004) is an SME on Auth Migration and
     // holds her own envelope on the same active sprint as p-051's, so the sme
     // persona can exercise the role's core loop in dev:mock — sme.md defect #1.
     // Two grantees on one sprint is allowed (budget_grants has no such
     // uniqueness constraint) and mirrors bg-auth-3 in the seed exactly.
-    { id: 'bg-auth-3', orgProjectId: 'p-auth-migration', granteePersonId: 'p-004', granteeName: 'Nora DaSilva',
-      sprintId: 'spr-auth-s2', sprintName: 'Sprint 42 — Session hygiene', sprintStatus: 'active', allocatedUsd: 15, grantedBy: 'u-release' },
-    { id: 'bg-cost-2', orgProjectId: 'p-cost-opt', granteePersonId: 'p-017', granteeName: 'Daniel Chang',
-      sprintId: 'spr-cost-s2', sprintName: 'Sprint 24 — Attribution', sprintStatus: 'active', allocatedUsd: 20, grantedBy: 'u-release' },
+    grant('bg-auth-3', 'p-auth-migration', 'p-004', 'Nora DaSilva', 'spr-auth-s2', 'Sprint 10 — Session hygiene', 'active', 15),
+    grant('bg-cost-1', 'p-cost-opt', 'p-011', 'Eli Garcia', 'spr-cost-s1', 'Sprint 9 — Floors and orphans', 'done', 15),
+    grant('bg-cost-2', 'p-cost-opt', 'p-017', 'Daniel Chang', 'spr-cost-s2', 'Sprint 10 — Attribution', 'active', 20),
+    grant('bg-rta-1', 'p-realtime-analytics', 'p-019', 'Camille Dubois', 'spr-rta-s1', 'Sprint 9 — Checkpoint + schema', 'active', 15),
+    grant('bg-lake-1', 'p-data-lake', 'p-017', 'Daniel Chang', 'spr-lake-s1', 'Sprint 6 — Format decision', 'active', 10),
+    grant('bg-fs-1', 'p-feature-store', 'p-019', 'Camille Dubois', 'spr-fs-s1', 'Sprint 8 — Freshness', 'active', 12),
     // bg-mob-1 — the sprint envelope on Mia Singh's own initiative.
-    { id: 'bg-mob-1', orgProjectId: 'p-mobile-redesign', granteePersonId: 'p-035', granteeName: 'Ben Okafor',
-      sprintId: 'spr-mob-s1', sprintName: 'Sprint 31 — Routing', sprintStatus: 'active', allocatedUsd: 12, grantedBy: 'u-release' },
+    grant('bg-mob-1', 'p-mobile-redesign', 'p-035', 'Ben Okafor', 'spr-mob-s1', 'Sprint 9 — Routing', 'active', 12),
+    grant('bg-ds-1', 'p-design-v3', 'p-038', 'Isabel Vasquez', 'spr-ds-s1', 'Sprint 8 — Token sync', 'active', 10),
+    grant('bg-soc2-1', 'p-soc2', 'p-055', 'Joy Chen', 'spr-soc2-s1', 'Sprint 9 — Collectors', 'active', 12),
+    grant('bg-dsapi-1', 'p-design-system-api', 'p-035', 'Ben Okafor', 'spr-dsapi-s1', 'Sprint 7 — Contracts', 'active', 10),
+    grant('bg-inf-1', 'p-inference-platform', 'p-013', 'Caleb Turner', 'spr-inf-s1', 'Sprint 9 — Queue-depth scaling', 'active', 15),
+    grant('bg-zt-1', 'p-zero-trust', 'p-052', 'Diego Ortiz', 'spr-zt-s1', 'Sprint 5 — Inventory', 'active', 8),
   ];
 }
 
 /**
  * SME sprint envelopes — the rows `decideEnvelope()` spends against.
  *
- * `default` — the six of schema/seed_program.sql's envelopes whose sprint the
- *             mock sprint calendar carries.
+ * `default` — all nineteen of schema/seed_program.sql's envelopes; the mock
+ *             sprint calendar carries every sprint they name.
  * `empty`   — sprints exist, nobody has been granted anything. Declared, because
  *             "your SME holds no envelope on this initiative" is a real state
  *             `decideGrantScopedDispatch` 403s on and an audit should be able to

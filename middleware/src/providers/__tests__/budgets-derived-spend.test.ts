@@ -18,16 +18,24 @@ import {
   mockInitiativeSpend, mockInitiativeWindowSpendUsd, MOCK_BUDGETS,
 } from '../budgets.js';
 import { MOCK_BOTS, MOCK_BOT_RUNS, type BotRun } from '../bots.js';
+import { botRuns } from '../../mock/bots.js';
+import { mockWorkItemProjectId } from '../work-items.js';
 import { freezeClock } from '../../mock/core/index.js';
 
 /** The rows the ledger claims to count, resolved here independently of the
- *  provider — arm 2 of spendPredicateSql. Arm 1 (through a work item) can only
- *  match a run this process dispatched, and this suite dispatches none; the
+ *  provider — arm 2 of spendPredicateSql. Arm 1 (through a work item) matches the seeded
+ *  marketplace dispatches and any run this process makes, and this suite makes none; the
  *  live-dispatch invariant is pinned in budgets-live-spend.test.ts. */
 function runsFor(orgProjectId: string): BotRun[] {
-  return MOCK_BOTS
+  const cron = MOCK_BOTS
     .filter((b) => b.orgProjectId === orgProjectId)
     .flatMap((b) => MOCK_BOT_RUNS[b.id] ?? []);
+  // Bot-less marketplace dispatches (arm 1) key to an initiative through their
+  // work item: the seeded history carries this month's finished ones.
+  const marketplace = botRuns.rows().filter(
+    (r) => r.botId === null && r.workItemId != null && mockWorkItemProjectId(r.workItemId) === orgProjectId,
+  );
+  return [...cron, ...marketplace];
 }
 
 /** `cost_usd` is NUMERIC(10,4), so four decimals is the scale Postgres would

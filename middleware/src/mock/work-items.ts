@@ -37,6 +37,7 @@
 // climbing past a seed it no longer collides with.
 
 import { clock, defineFixture } from './core/index.js';
+import { mockSprintDates } from './sprints.js';
 import { createHash } from 'node:crypto';
 import { SEEDED_WORK_KEYS, WORK_KEY_PREFIXES } from '../lib/work-item-keys.js';
 // Type-only, so it is erased at compile: providers/work-items.ts imports the
@@ -354,7 +355,41 @@ function onClock(iso: string | null): string | null {
   return new Date(clock.now().getTime() - (MOCK_EPOCH.getTime() - Date.parse(iso))).toISOString();
 }
 
+/**
+ * A done item finished inside the sprint it belongs to.
+ *
+ * The seed stamped completions "3 to 18 days ago" without looking at the
+ * sprint window, so a story in a sprint that ended five weeks ago read as
+ * finished last week, and an item could be updated before it completed. The
+ * completion is moved into [sprint start, min(sprint end, now)] at a stable
+ * point derived from the id (the same item lands on the same day after every
+ * reset); creation is kept three days ahead of it and `updatedAt` never trails
+ * it. A completion already inside the window is left exactly as the seed has it.
+ */
+function completedInSprint(item: { id: string; status: string; sprintId: string | null; createdAt: string; updatedAt: string; completedAt: string | null }): void {
+  if (item.status !== 'done' || !item.sprintId || !item.completedAt) return;
+  const window = mockSprintDates(item.sprintId);
+  if (!window) return;
+  const now = clock.now().getTime();
+  const start = Date.parse(`${window.startsOn}T12:00:00.000Z`);
+  const end = Math.min(Date.parse(`${window.endsOn}T12:00:00.000Z`), now - 3_600_000);
+  let completed = Date.parse(item.completedAt);
+  if (!(completed >= start && completed <= end)) {
+    const spread = [...item.id].reduce((n, c) => (n * 31 + c.charCodeAt(0)) % 997, 11) / 997;
+    completed = Math.round(start + spread * 0.85 * Math.max(0, end - start));
+    item.completedAt = new Date(completed).toISOString();
+  }
+  if (Date.parse(item.createdAt) > completed - 3 * 86_400_000) item.createdAt = new Date(completed - 3 * 86_400_000).toISOString();
+  if (Date.parse(item.updatedAt) < completed) item.updatedAt = item.completedAt;
+}
+
 function normalizeSeed(seed: MockSeed, idOverride?: { id: string; parentId: string | null }): WorkItem {
+  const item = buildSeed(seed, idOverride);
+  completedInSprint(item);
+  return item;
+}
+
+function buildSeed(seed: MockSeed, idOverride?: { id: string; parentId: string | null }): WorkItem {
   return {
     key: SEEDED_WORK_KEYS[seed.id] ?? null,
     sprintId: null,

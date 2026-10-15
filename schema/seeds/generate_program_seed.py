@@ -26,7 +26,25 @@ OUT = Path(__file__).resolve().parent.parent / 'seed_program.sql'
 WORK_KEYS = json.loads((Path(__file__).resolve().parent / 'work_item_keys.json').read_text())['items']
 RNG = random.Random(20260821)
 
+# What each seeded maintenance firing did, per bot. middleware/src/mock/bots.ts reads
+# the same file, so the dev:mock fleet and this seed tell one story.
+RUN_NOTES = json.loads((Path(__file__).resolve().parent.parent.parent / 'middleware/src/mock/bot-run-notes.json').read_text())
+
+
+def run_note(prefix: str, seq: int) -> dict:
+    notes = RUN_NOTES.get(prefix) or []
+    if not notes:
+        return {'reason': 'scheduled maintenance'}
+    if seq <= len(notes):
+        return notes[seq - 1]
+    ok = [n for n in notes if 'status' not in n]
+    return ok[(seq - 1) % len(ok)]
+
 GH = 'https://github.com/connorhoehnslalom'
+
+# Whose name is on an initiative's monthly allocation when it is not the release
+# manager's: Mia Singh (u-mia, program-owner) holds Auth Migration's money.
+ALLOCATED_BY = {'p-auth-migration': 'u-mia'}
 
 # The credential every initiative repo is linked through. All fourteen
 # orgiq-* repos are PRIVATE (flipped 2026-09-29; CLAUDE.md requires it), and
@@ -85,11 +103,11 @@ INITIATIVES = [
              ]),
         ],
         sprints=[
-            ('s1', 'Sprint 96 — Ingest hardening', 'p-008', -42, -28, 'done',
+            ('s1', 'Sprint 9 — Ingest hardening', 'p-008', -42, -28, 'done',
              'Collector fleet stable at 2x peak ingest.'),
-            ('s2', 'Sprint 97 — Burn-rate alerts', 'p-011', -28, -14, 'done',
+            ('s2', 'Sprint 10 — Burn-rate alerts', 'p-011', -28, -14, 'done',
              'Tier-1 services alert on error-budget burn, not raw error rate.'),
-            ('s3', 'Sprint 98 — Span metrics + decom', 'p-008', -14, 0, 'active',
+            ('s3', 'Sprint 11 — Span metrics + decom', 'p-008', -14, 0, 'active',
              'RED dashboards from span metrics; two services off StatsD.'),
         ],
         grants=[('s1', 'p-008', 25), ('s2', 'p-011', 20), ('s3', 'p-008', 30)],
@@ -127,9 +145,9 @@ INITIATIVES = [
              ]),
         ],
         sprints=[
-            ('s1', 'Sprint 41 — OIDC core', 'p-051', -35, -21, 'done',
+            ('s1', 'Sprint 9 — OIDC core', 'p-051', -35, -21, 'done',
              'Code+PKCE flow live; JWKS rotation survives a key roll.'),
-            ('s2', 'Sprint 42 — Session hygiene', 'p-051', -14, 0, 'active',
+            ('s2', 'Sprint 10 — Session hygiene', 'p-051', -14, 0, 'active',
              'Sessions expire server-side; revoked grants bite within a minute.'),
         ],
         # p-004 (Nora DaSilva, u-nora — the seeded sme login) is an SME here
@@ -182,9 +200,9 @@ INITIATIVES = [
              ]),
         ],
         sprints=[
-            ('s1', 'Sprint 7 — Prompt registry', 'p-042', -30, -16, 'done',
+            ('s1', 'Sprint 8 — Prompt registry', 'p-042', -30, -16, 'done',
              'Prompt edits reach the fleet without a redeploy.'),
-            ('s2', 'Sprint 8 — Judge + evals', 'p-013', -14, 0, 'active',
+            ('s2', 'Sprint 9 — Judge + evals', 'p-013', -14, 0, 'active',
              'Canary judge scores every ask; golden sets gate merges.'),
         ],
         grants=[('s1', 'p-042', 30), ('s2', 'p-013', 35)],
@@ -220,9 +238,9 @@ INITIATIVES = [
              ]),
         ],
         sprints=[
-            ('s1', 'Sprint 23 — Floors and orphans', 'p-011', -28, -14, 'done',
+            ('s1', 'Sprint 9 — Floors and orphans', 'p-011', -28, -14, 'done',
              'Idle floors documented; orphan sweep automated.'),
-            ('s2', 'Sprint 24 — Attribution', 'p-017', -14, 0, 'active',
+            ('s2', 'Sprint 10 — Attribution', 'p-017', -14, 0, 'active',
              'Every running resource carries an initiative tag.'),
         ],
         grants=[('s1', 'p-011', 15), ('s2', 'p-017', 20)],
@@ -250,7 +268,7 @@ INITIATIVES = [
                 ('story', 'Self-serve backfill tooling with replay budgets', 'open', 'medium', 5, ['backfill'], None),
              ]),
         ],
-        sprints=[('s1', 'Sprint 15 — Checkpoint + schema', 'p-019', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 9 — Checkpoint + schema', 'p-019', -14, 0, 'active',
                   'Recovery under 60s; producers on registry contracts.')],
         grants=[('s1', 'p-019', 15)],
         budget=20,
@@ -274,7 +292,7 @@ INITIATIVES = [
                 ('story', 'Bronze/silver/gold access zone design', 'open', 'medium', 5, ['governance'], None),
              ]),
         ],
-        sprints=[('s1', 'Sprint 3 — Format decision', 'p-017', -10, 4, 'active',
+        sprints=[('s1', 'Sprint 6 — Format decision', 'p-017', -10, 4, 'active',
                   'Table format chosen with a written ADR.')],
         grants=[('s1', 'p-017', 10)],
         budget=10,
@@ -297,7 +315,7 @@ INITIATIVES = [
                 ('bug', 'TTL eviction races leave stale features served', 'open', 'high', 3, ['online-store'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 11 — Freshness', 'p-019', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 8 — Freshness', 'p-019', -14, 0, 'active',
                   'Every online feature group has a freshness SLA and an owner.')],
         grants=[('s1', 'p-019', 12)],
         budget=18,
@@ -321,7 +339,7 @@ INITIATIVES = [
                 ('bug', 'Android back gesture conflicts with drawer swipe', 'open', 'medium', 2, ['android', 'gestures'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 31 — Routing', 'p-035', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 9 — Routing', 'p-035', -14, 0, 'active',
                   'Every marketing link deep-links to a real screen.')],
         grants=[('s1', 'p-035', 12)],
         budget=15,
@@ -345,7 +363,7 @@ INITIATIVES = [
                 ('bug', 'Dark-mode contrast regression on disabled states', 'open', 'medium', 2, ['a11y'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 19 — Token sync', 'p-038', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 8 — Token sync', 'p-038', -14, 0, 'active',
                   'A token edit in Figma lands as a PR the same day.')],
         grants=[('s1', 'p-038', 10)],
         budget=15,
@@ -416,7 +434,7 @@ INITIATIVES = [
                 ('bug', 'Breaking prop rename slipped past the semver gate', 'open', 'high', 3, ['semver'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 6 — Contracts', 'p-035', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 7 — Contracts', 'p-035', -14, 0, 'active',
                   'Consumers upgrade via codemod, not by reading a changelog.')],
         grants=[('s1', 'p-035', 10)],
         budget=12,
@@ -440,7 +458,7 @@ INITIATIVES = [
                 ('bug', 'Cold-start p99 breaches SLA after scale-to-zero', 'open', 'critical', 3, ['latency'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 14 — Queue-depth scaling', 'p-013', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 9 — Queue-depth scaling', 'p-013', -14, 0, 'active',
                   'Scaling reacts to demand, not to a proxy metric.')],
         grants=[('s1', 'p-013', 15)],
         budget=20,
@@ -464,7 +482,7 @@ INITIATIVES = [
                 ('story', 'Policy engine selection ADR', 'open', 'medium', 3, ['adr'], None),
              ]),
         ],
-        sprints=[('s1', 'Sprint 2 — Inventory', 'p-052', -7, 7, 'active',
+        sprints=[('s1', 'Sprint 5 — Inventory', 'p-052', -7, 7, 'active',
                   'Every service maps to an identity or a documented exception.')],
         grants=[('s1', 'p-052', 8)],
         budget=10,
@@ -752,7 +770,7 @@ def main() -> None:
         allocation = max(ini['budget'], derived)
         emit(
             "INSERT INTO initiative_budgets (org_project_id, allocated_usd, period, updated_by) "
-            f"VALUES ('{pid}', {allocation}, 'monthly', 'u-release') "
+            f"VALUES ('{pid}', {allocation}, 'monthly', '{ALLOCATED_BY.get(pid, 'u-release')}') "
             "ON CONFLICT (org_project_id) DO NOTHING"
         )
 
@@ -778,7 +796,16 @@ def main() -> None:
                 est = cost_for(pts)
                 created = RNG.randint(20, item_age)
                 if cstatus == 'done':
-                    completed = days(RNG.randint(3, 18))
+                    drawn = RNG.randint(3, 18)  # always drawn, so the RNG stream is unchanged
+                    # A done item finished inside its sprint's window: the draw is mapped
+                    # into [window start, min(window end, yesterday)] rather than trusted.
+                    win = next((sp for sp in ini['sprints'] if sp[0] == skey), None)
+                    if win is not None:
+                        newest = max(1, -win[4])          # days ago the window closes (or yesterday)
+                        oldest = max(newest, -win[3])     # days ago it opened
+                        drawn = newest + (drawn - 3) % (oldest - newest + 1)
+                        created = max(created, drawn + 3)
+                    completed = days(drawn)
                     pr_counter += RNG.randint(1, 7)
                     pr_sql = f"'{GH}/{ini['repo']}/pull/{pr_counter}', 'merged'"
                 elif cstatus == 'in_review':
@@ -883,18 +910,37 @@ def main() -> None:
                 age = j * max(1, 30 // bot['runs']) + 1
                 cost = round(bot['per_run'] * RNG.uniform(0.25, 0.85), 4)
                 jid = f'job-{slug}-maint-{j + 1}'
+                note = run_note(f'{slug}-maint', j + 1)
+                status = note.get('status')  # None (finished), 'failed' or 'skipped'
+                seconds = int(note.get('seconds', 240))
+                reason = note['reason']
+                end = f"{days(age)} + INTERVAL '{seconds} seconds'"
+                if status == 'skipped':
+                    # A skipped firing never dispatched: no job, no spend.
+                    emit(
+                        "INSERT INTO bot_runs (id, bot_id, trigger, job_id, status, cost_usd, started_at, finished_at, outcome) "
+                        f"VALUES ('{run_uuid(pid, j + 1)}', '{bid}', 'cron', NULL, 'skipped', 0, "
+                        f"{days(age)}, {end}, '{{\"reason\": \"{q(reason)}\"}}'::jsonb) "
+                        "ON CONFLICT (id) DO NOTHING"
+                    )
+                    continue
+                job_status = 'failed' if status == 'failed' else 'done'
+                result = ('NULL' if status == 'failed'
+                          else f"'{{\"summary\": \"{q(reason[0].upper() + reason[1:])}.\", \"costUsd\": {cost}}}'::jsonb")
+                job_error = f"'{q(reason)}'" if status == 'failed' else 'NULL'
                 emit(
-                    "INSERT INTO agent_jobs (id, kind, title, payload, status, priority, attempts, max_attempts, result, created_by, created_at, finished_at, bot_id) "
+                    "INSERT INTO agent_jobs (id, kind, title, payload, status, priority, attempts, max_attempts, result, error, created_by, created_at, finished_at, bot_id) "
                     f"VALUES ('{jid}', 'devbox:task', '{q(bot['name'])}', "
                     f"'{{\"prompt\": \"{q(bot['mission'])[:120]}\", \"requiresReview\": true, \"botId\": \"{bid}\", \"model\": \"us.amazon.nova-lite-v1:0\"}}'::jsonb, "
-                    f"'done', 100, 1, 1, '{{\"summary\": \"Maintenance pass complete\", \"costUsd\": {cost}}}'::jsonb, "
-                    f"'scheduler', {days(age)}, {days(age)}, '{bid}') "
+                    f"'{job_status}', 100, 1, 1, {result}, {job_error}, "
+                    f"'scheduler', {days(age)}, {end}, '{bid}') "
                     "ON CONFLICT (id) DO NOTHING"
                 )
+                outcome = f'{{\"reason\": \"{q(reason)}\"' + (f', \"error\": \"{q(reason)}\"' if status == 'failed' else '') + '}'
                 emit(
                     "INSERT INTO bot_runs (id, bot_id, trigger, job_id, status, cost_usd, started_at, finished_at, outcome) "
-                    f"VALUES ('{run_uuid(pid, j + 1)}', '{bid}', 'cron', '{jid}', 'done', {cost}, "
-                    f"{days(age)}, {days(age)}, '{{\"reason\": \"scheduled maintenance\"}}'::jsonb) "
+                    f"VALUES ('{run_uuid(pid, j + 1)}', '{bid}', 'cron', '{jid}', '{job_status}', {cost}, "
+                    f"{days(age)}, {end}, '{outcome}'::jsonb) "
                     "ON CONFLICT (id) DO NOTHING"
                 )
             # No 'queued' rows are seeded. The job dispatcher claims any queued

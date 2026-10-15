@@ -90,7 +90,7 @@ describe('the value comparison fails when a value moves', () => {
     // `label` is what makes this readable: the column is `outcome`, the thing
     // that moved is `outcome.reason`.
     expect(broken).toContain('outcome.reason');
-    expect(broken).toContain("seed 'scheduled maintenance'");
+    expect(broken).toContain("seed 'bumped the collector image and re-ran the gateway smoke test; no regressions'");
     expect(broken).toContain("mock 'manual re-run'");
   });
 

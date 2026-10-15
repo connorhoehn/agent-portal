@@ -90,15 +90,19 @@ describe('the mock period window, at a frozen instant', () => {
     });
   });
 
-  // Every seeded run is cron, so before any dispatch the org's whole spend is
-  // its maintenance floor — and both breakdown cards cover the same rows.
+  // The seeded month is cron maintenance plus the marketplace dispatches people
+  // made from the board, so the org's spend is the floor and the dispatches —
+  // and both breakdown cards cover the same rows.
   it('makes the org total the sum of its own rows', async () => {
     await frozen(AT, async ({ budgets }) => {
       const s = await budgets.orgSummary();
-      expect(s.totalSpentThisPeriodUsd).toBe(s.totalMaintenanceUsd);
-      expect(s.byTrigger).toEqual([
-        { trigger: 'cron', spentUsd: s.totalSpentThisPeriodUsd, runCount: s.byTrigger[0]!.runCount },
-      ]);
+      const cron = s.byTrigger.find((t) => t.trigger === 'cron');
+      const marketplace = s.byTrigger.find((t) => t.trigger === 'marketplace');
+      expect(cron?.spentUsd).toBe(s.totalMaintenanceUsd);
+      expect(marketplace?.spentUsd ?? 0).toBeGreaterThan(0);
+      expect(s.byTrigger).toHaveLength(2);
+      const scaleTo = (n: number): number => Math.round(n * 10_000) / 10_000;
+      expect(scaleTo(s.byTrigger.reduce((n, t) => n + t.spentUsd, 0))).toBe(s.totalSpentThisPeriodUsd);
       const scale = (n: number): number => Math.round(n * 10_000) / 10_000;
       expect(scale(s.byModel.reduce((n, m) => n + m.spentUsd, 0))).toBe(s.totalSpentThisPeriodUsd);
     });

@@ -98,18 +98,6 @@ const sameToTheCent = (seed: unknown, mock: unknown): boolean =>
   typeof seed === 'number' && typeof mock === 'number' && Math.abs(seed - mock) <= 0.005 + 1e-9;
 
 /**
- * `decisions.decided_at` is seeded as `DATE '2026-03-12'`, which the seed
- * parser keeps as raw SQL. The RDS Data API hands a DATE back as the bare
- * 'YYYY-MM-DD' the mock carries, so unwrap the literal before comparing.
- */
-function asSeedDate(v: SeedValue): string | null {
-  if (v === null || typeof v === 'string') return v;
-  if (typeof v !== 'object' || Array.isArray(v)) return null;
-  const m = /'([0-9]{4}-[0-9]{2}-[0-9]{2})'/.exec(v.raw);
-  return m ? m[1]! : null;
-}
-
-/**
  * `decisions` is ONE table with TWO seed authors: schema/seed.sql writes the
  * org graph's settled calls, schema/seed_program.sql writes the ones an
  * initiative raised (it alone can set `work_item_id`, because it emits the
@@ -216,6 +204,24 @@ const contributionCollisions = (column: string): Record<string, string> => {
   }
   return out;
 };
+
+/**
+ * The eleven bots dev:mock turns on. schema/seed_program.sql parks all twelve
+ * (initBotScheduler registers every enabled cron bot at boot, and the seeded
+ * repositories do not exist on a real cluster). Offline there is no cron, and
+ * a roster reading "0 enabled" above runs that finished this morning cannot be
+ * demoed, so mock/bots.ts enables every bot whose initiative is alive. Only
+ * rag-index-health (its initiative shipped) stays parked, as the seed has it.
+ */
+const LIVE_MOCK_BOTS = [
+  '32970d0a-e28e-5100-8fb0-a5cbb87dac99', '697c6a52-72e2-57f7-8e44-062ab9935336', 'affd22b0-b348-5436-9eff-2b8d5206d601',
+  '1edd9a68-e432-5dc2-b89d-93867bd090da', '4448041c-0350-5d7f-930e-7dbcd87a149f', '15a4eb8e-743b-57f8-835b-3a7aac701702',
+  '88d1fd78-0618-5431-865e-027db71adb27', '5168695c-fa7e-5ca0-9218-ffa4453947a9', 'a0a4b025-3e67-5004-8b8a-05a3d4f2028d',
+  '28006587-cf6f-5a60-a68c-6a574ba7cb5d', '402eb3d6-0cf2-55a4-b5b5-deb9be35b01f',
+];
+const LIVE_MOCK_BOTS_DRIFT = (column: string): Record<string, string> =>
+  Object.fromEntries(LIVE_MOCK_BOTS.map((id) => [id,
+    `DELIBERATE: dev:mock enables this bot (${column}). The seed parks it until its repository is provisioned; offline no cron exists to fire against a missing repo, and a fleet of 12 paused bots with runs from this morning cannot be demoed.`]));
 
 export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
   // ── the org graph (schema/seed.sql) ────────────────────────────────────────
@@ -702,7 +708,11 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       { seed: 'model', mock: (b: { model: string }) => b.model },
       { seed: 'trigger', mock: (b: { trigger: string }) => b.trigger },
       { seed: 'cron_expr', mock: (b: { cronExpr: string | null }) => b.cronExpr },
-      { seed: 'enabled', mock: (b: { enabled: boolean }) => b.enabled },
+      {
+        seed: 'enabled',
+        mock: (b: { enabled: boolean }) => b.enabled,
+        knownDrift: LIVE_MOCK_BOTS_DRIFT('enabled'),
+      },
       { seed: 'budget_per_run_usd', mock: (b: { budgetPerRunUsd: number | null }) => b.budgetPerRunUsd, normalize: num },
       { seed: 'budget_per_day_usd', mock: (b: { budgetPerDayUsd: number | null }) => b.budgetPerDayUsd, normalize: num },
       { seed: 'max_runs_per_day', mock: (b: { maxRunsPerDay: number }) => b.maxRunsPerDay, normalize: num },
@@ -718,6 +728,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
         seed: 'paused_reason',
         mock: (b: { pausedReason: string | null }) => b.pausedReason,
         knownDrift: {
+          ...LIVE_MOCK_BOTS_DRIFT('paused_reason'),
           'f595b10b-5f52-50d0-81a0-9117e9334fb4':
             'DEFECT: rag-index-health. schema/seed_program.sql:326 parks it with \'initiative completed — bot parked\' (p-rag-search is done); providers/bots.ts overwrites that with the fleet-wide \'awaiting repo provisioning — un-pause once the repository exists\'. The blanket reason is right for the bots the mock parks itself and wrong for the one the seed had already parked, for a different reason. Fix belongs in providers/bots.ts.',
         },
@@ -780,6 +791,8 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       { seed: 'title', mock: (j: { title: string }) => j.title },
       { seed: 'status', mock: (j: { status: string }) => j.status },
       { seed: 'bot_id', mock: (j: { botId: string | null }) => j.botId },
+      // Why a failed run failed — the sentence the job page prints under the status.
+      { seed: 'error', mock: (j: { error: string | null }) => j.error },
       { seed: 'created_by', mock: (j: { createdBy: string | null }) => j.createdBy },
       // The numbers on the queue row: where it sits in the run order, how many
       // times it has been tried, and how many tries it gets before
@@ -1164,7 +1177,9 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       // an initiative's Decisions tab could not reach one of them.
       { seed: 'status', mock: (d: { status: string }) => d.status },
       { seed: 'project_id', mock: (d: { projectId: string | null }) => d.projectId },
-      { seed: 'decided_at', mock: (d: { decidedAt: string | null }) => d.decidedAt, normalize: asSeedDate },
+      // A relative expression (`(NOW() - INTERVAL '147 days')::date`) like the program
+      // decisions' — there is no instant to compare, only whether it is set.
+      { seed: 'decided_at', mock: (d: { decidedAt: string | null }) => d.decidedAt, equals: setExactlyWhenTheSeedSetsIt },
     ],
   },
   {

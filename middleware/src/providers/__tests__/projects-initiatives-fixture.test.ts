@@ -75,8 +75,13 @@ describe('initiatives fixture — default', () => {
     const active = await listActiveRuns();
     expect(active.map((r) => r.workItemId).sort()).toEqual(['wi-obs-e1-b5', 'wi-obs-e1-s3']);
     const market = await listMarketplaceRuns('p-observability');
-    expect(market).toHaveLength(2);
-    expect(await listMarketplaceRuns('p-auth-migration')).toHaveLength(0);
+    // Two in flight, plus the two dispatches that already finished this month.
+    expect(market.filter((r) => r.status === 'running')).toHaveLength(2);
+    expect(market).toHaveLength(4);
+    // Auth Migration's envelope holder has spent against it too (all finished).
+    const auth = await listMarketplaceRuns('p-auth-migration');
+    expect(auth).toHaveLength(4);
+    expect(auth.every((r) => r.status === 'done')).toBe(true);
   });
 
   it('does not let a cost-less in-flight run move the initiative\'s last activity', async () => {

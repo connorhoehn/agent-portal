@@ -79,6 +79,13 @@ function seedAgentJobs(): AgentJob[] {
         ? new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()
         : null;
       const reason = typeof run.outcome['reason'] === 'string' ? run.outcome['reason'] as string : 'scheduled maintenance';
+      // A real dispatch is queued, claimed by a box, then started — never three
+      // identical instants. Deterministic gaps from the job id keep a reset
+      // stable while no two jobs share one.
+      const spread = [...run.jobId].reduce((n, c) => (n * 31 + c.charCodeAt(0)) % 9973, 7);
+      const startMs = new Date(run.startedAt).getTime();
+      const claimedAtIso = new Date(startMs - (3 + (spread % 22)) * 1000).toISOString();
+      const createdAtIso = new Date(startMs - (3 + (spread % 22)) * 1000 - (12 + (spread % 97)) * 1000).toISOString();
       jobs.push({
         id: run.jobId,
         kind: 'devbox:task',
@@ -97,7 +104,7 @@ function seedAgentJobs(): AgentJob[] {
         maxAttempts: 1,
         result: status === 'done'
           ? {
-              summary: `${reason} — completed.`,
+              summary: `${reason.charAt(0).toUpperCase()}${reason.slice(1)}.`,
               costUsd: run.costUsd ?? undefined,
               durationMs: durationMs ?? undefined,
               // Pass the outcome's counts through when the seed recorded them —
@@ -118,8 +125,8 @@ function seedAgentJobs(): AgentJob[] {
         // someone's morning. Fall back per trigger, and only a genuinely
         // hand-driven run with no attribution column reads as 'portal'.
         createdBy: run.dispatchedBy ?? (run.trigger === 'cron' || run.trigger === 'pr_watch' ? 'scheduler' : 'portal'),
-        createdAt: run.startedAt,
-        claimedAt: run.startedAt,
+        createdAt: createdAtIso,
+        claimedAt: claimedAtIso,
         startedAt: run.startedAt,
         finishedAt: run.finishedAt,
         botId: bot.id,

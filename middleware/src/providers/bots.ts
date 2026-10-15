@@ -792,7 +792,8 @@ export async function listMarketplaceRuns(orgProjectId: string, limit = 100): Pr
   if (config.mock.aurora) {
     // The same two conditions the statement below applies, resolved row by row,
     // over the whole table: the seeded history carries two in-flight
-    // marketplace runs (mock/bots.ts `inFlightMarketplaceRuns`) and the rest is
+    // marketplace runs (mock/bots.ts `inFlightMarketplaceRuns`), this month's
+    // finished dispatches (`finishedMarketplaceRuns`), and the rest is
     // what this process dispatched.
     const botless = allMockRuns().filter((r) => r.botId === null && r.workItemId);
     const matched: BotRun[] = [];

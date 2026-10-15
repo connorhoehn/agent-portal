@@ -37,6 +37,9 @@
 import { clock, defineFixture, latestBy, sumBy, todayInUtc, toRecord, groupBy } from './core/index.js';
 import { liveArrayView, liveRecordView } from './live-view.js';
 import type { Bot, BotRun } from '../providers/bots.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { middlewareRoot } from './core/wire/paths.js';
 
 // ─── The seeded run history ──────────────────────────────────────────────────
 
@@ -63,18 +66,64 @@ function daysBack(days: number): string {
   return clock.daysAgo(days);
 }
 
+/**
+ * What one seeded firing did, in the words its bot's own log would use.
+ *
+ * Every bot used to record the same "scheduled maintenance" and finish in
+ * exactly four minutes, so the ledger read as one run copied seventy times.
+ * The notes (bot-run-notes.json, which schema/seeds/generate_program_seed.py
+ * reads too, so the seed and this fixture tell the same story) are per bot
+ * (keyed by the seed's job prefix) and tied to the
+ * initiative the bot maintains. Entry N describes the Nth firing (`seq`);
+ * firings past the end of a list reuse its successful entries, so the `large`
+ * scenario's long tail does not repeat a failure on a loop.
+ */
+interface RunNote {
+  reason: string;
+  /** Absent means the run finished. */
+  status?: 'failed' | 'skipped';
+  /** Wall-clock duration; absent means a bot-specific spread. */
+  seconds?: number;
+}
+
+let runNotesCache: Record<string, RunNote[]> | null = null;
+/** Read lazily, so importing this module never touches the disk (only dev:mock reads the rows). */
+function runNotes(): Record<string, RunNote[]> {
+  if (runNotesCache) return runNotesCache;
+  try {
+    runNotesCache = JSON.parse(readFileSync(join(middlewareRoot(), 'src/mock/bot-run-notes.json'), 'utf8')) as Record<string, RunNote[]>;
+  } catch {
+    runNotesCache = {};
+  }
+  return runNotesCache;
+}
+
+function noteFor(jobPrefix: string, seq: number): RunNote | undefined {
+  const notes = runNotes()[jobPrefix];
+  if (!notes || notes.length === 0) return undefined;
+  if (seq <= notes.length) return notes[seq - 1];
+  const ok = notes.filter((n) => n.status === undefined);
+  return ok[(seq - 1) % ok.length];
+}
+
 function genRun(botId: string, seq: number, startedAtIso: string, costUsd: number, jobPrefix: string): BotRun {
   const startedAt = new Date(startedAtIso);
-  const finishedAt = new Date(startedAt.getTime() + 4 * 60_000);
+  const note = noteFor(jobPrefix, seq);
+  const seconds = note?.seconds ?? 240;
+  const skipped = note?.status === 'skipped';
+  const failed = note?.status === 'failed';
+  const finishedAt = new Date(startedAt.getTime() + seconds * 1000);
   return {
     id: `${botId}-run-${seq}`,
     botId,
     trigger: 'cron',
     runId: null,
-    jobId: `job-${jobPrefix}-${seq}`,
+    // A skipped firing never dispatched, so it has no job (see
+    // jobStatusForRunStatus in mock/agent-jobs.ts).
+    jobId: skipped ? null : `job-${jobPrefix}-${seq}`,
     workItemId: null,
-    status: 'done',
-    costUsd,
+    status: skipped ? 'skipped' : failed ? 'failed' : 'done',
+    costUsd: skipped ? 0 : costUsd,
     // Null, not 'bedrock', because schema/seed_program.sql does not write the
     // column and this fixture mirrors that seed. These rows are exactly the
     // history the migration deliberately leaves un-backfilled, so offline they
@@ -87,11 +136,12 @@ function genRun(botId: string, seq: number, startedAtIso: string, costUsd: numbe
     // What a real run's outcome records beside the reason (lib/devbox-runner.ts
     // OutcomeSummary): how many turns it took and how many tools it called.
     // Deterministic from the sequence so the derived tool-call strip on the
-    // Automate pages has rows to draw under dev:mock — a fixture that said
-    // "0 tools" for every finished maintenance run made that strip
-    // unreachable offline. Cost stays as seeded; a $0.20 run of three or
-    // four calls is the shape the cluster's own rows have.
-    outcome: { reason: 'scheduled maintenance', turns: 2 + (seq % 3), toolCalls: 3 + (seq % 4) },
+    // Automate pages has rows to draw under dev:mock.
+    outcome: {
+      reason: note?.reason ?? 'scheduled maintenance',
+      ...(skipped ? {} : { turns: 2 + (seq % 3), toolCalls: 3 + (seq % 4) }),
+      ...(failed ? { error: note?.reason } : {}),
+    },
     dispatchedBy: null,
   };
 }
@@ -342,11 +392,56 @@ function inFlightMarketplaceRuns(): BotRun[] {
 }
 
 /**
+ * Agent work dispatched from the board this month, already finished.
+ *
+ * The ledger's spend used to be cron maintenance and nothing else, so Auth
+ * Migration read "$0.43 of $75" beside a board whose items agents had visibly
+ * worked. These are the marketplace dispatches the story implies: an SME spends
+ * their sprint envelope by sending an agent at one work item, the run settles
+ * with a cost, and the item moves. Each names a real work item and the person
+ * whose envelope paid for it (`dispatchedBy`).
+ *
+ * Mock-only, like the in-flight pair above: a seed cannot carry a dispatch a
+ * person made. They are left out of the `demo` scenario, where the Computer Lab
+ * walkthrough sizes an envelope against an untouched sprint.
+ */
+function finishedMarketplaceRuns(): BotRun[] {
+  const run = (
+    id: string, workItemId: string, daysAgo: number, minutes: number, costUsd: number, dispatchedBy: string, reason: string,
+  ): BotRun => {
+    const startedAt = clock.daysAgo(daysAgo);
+    return {
+      id, botId: null, trigger: 'marketplace', runId: null, jobId: null, workItemId, status: 'done', costUsd,
+      modelProvider: 'bedrock', startedAt,
+      finishedAt: new Date(new Date(startedAt).getTime() + minutes * 60_000).toISOString(),
+      outcome: { reason, turns: 4, toolCalls: 9 }, dispatchedBy,
+    };
+  };
+  return [
+    // Auth Migration — Vera Green dispatching from her own board (the owner's
+    // dispatches carry no SME envelope, so Nora DaSilva's stays untouched).
+    run('run-mkt-auth-e1-s3-a', 'wi-auth-e1-s3', 9, 11, 2.18, 'u-vera', 'drafted the cookie max-age and rotation-on-switch change; opened for review'),
+    run('run-mkt-auth-e1-s3-b', 'wi-auth-e1-s3', 6, 8, 1.42, 'u-vera', 'addressed review comments on the rotation epoch; tests green'),
+    run('run-mkt-auth-e1-b4', 'wi-auth-e1-b4', 4, 14, 2.87, 'u-vera', 'reproduced the refresh loop on a revoked grant and proposed a guard in the grants refresh'),
+    run('run-mkt-auth-e2-b3', 'wi-auth-e2-b3', 3, 6, 0.96, 'u-vera', 'traced the logout path that leaves the legacy shim cookie alive'),
+    // Observability Platform — Layla Hassan's envelope on Sprint 11.
+    run('run-mkt-obs-e2-s2', 'wi-obs-e2-s2', 8, 12, 2.41, 'u-layla', 'finished the multi-window burn-rate rules and their alert tests'),
+    run('run-mkt-obs-e1-s4', 'wi-obs-e1-s4', 5, 9, 1.65, 'u-layla', 'listed the 14 services still emitting to the StatsD bridge'),
+    // LLM Application Platform — Caleb Turner's envelope on Sprint 9.
+    run('run-mkt-llm-e1-s2', 'wi-llm-e1-s2', 7, 16, 3.12, 'u-caleb', 'scored the canary rubric against 40 labelled answers and tuned the weights'),
+    run('run-mkt-llm-e2-s1', 'wi-llm-e2-s1', 3, 10, 1.88, 'u-caleb', 'added golden sets for the graph-builder and ingestion agents'),
+    // Cost Optimization and Inference Platform.
+    run('run-mkt-cost-tagging', 'wi-cost-e2-s1', 5, 7, 1.27, 'u-release', 'drafted the deploy-time tagging check and ran it against the last 20 deploys'),
+    run('run-mkt-inf-queue', 'wi-inf-e1-s1', 6, 13, 2.34, 'u-caleb', 'wired queue depth into the autoscaler and ran a load test'),
+  ];
+}
+
+/**
  * The seeded cron history — one FLAT list, because `bot_runs` is one table.
  *
  * `default` — the ~30 days schema/seed_program.sql writes for the twelve
- *             maintenance bots, plus the two in-flight marketplace runs
- *             (`inFlightMarketplaceRuns` — mock-only, see there).
+ *             maintenance bots, plus this month's finished marketplace
+ *             dispatches and the two in-flight ones (mock-only, see there).
  * `empty`   — a fleet that has never fired. Declared explicitly: an undeclared
  *             scenario falls back to `default`, and this is the state the
  *             "no runs yet" copy on the roster and the detail page is for.
@@ -356,9 +451,9 @@ function inFlightMarketplaceRuns(): BotRun[] {
 export const botRuns = defineFixture<BotRun>({
   key: 'bot-runs',
   scenarios: {
-    default: () => [...Object.values(seededRunsByBot()).flat(), ...inFlightMarketplaceRuns()],
+    default: () => [...Object.values(seededRunsByBot()).flat(), ...finishedMarketplaceRuns(), ...inFlightMarketplaceRuns()],
     empty: () => [],
-    large: () => [...largeBotRuns(), ...inFlightMarketplaceRuns()],
+    large: () => [...largeBotRuns(), ...finishedMarketplaceRuns(), ...inFlightMarketplaceRuns()],
     // The Computer Lab demo (mock/demo-director.ts): the cron history without
     // Observability's two in-flight runs. Those hold two of the three
     // concurrency slots (see inFlightMarketplaceRuns), and the demo's three
@@ -442,34 +537,31 @@ function mockBot(over: BotSeed): Bot {
   return {
     agentProjectId: null, agentProjectRepo: null,
     model: 'us.amazon.nova-lite-v1:0', trigger: 'cron', cronExpr: '0 6 * * *',
-    // Parked by default, exactly as the seed writes them — see the roster note
-    // below. An entry that wants to be live has to say so and own why.
-    enabled: false, budgetPerRunUsd: 0.5, budgetPerDayUsd: 2, maxRunsPerDay: 4,
+    // Live by default: these bots have run history, and a roster that reads
+    // "0 enabled" over runs that finished this morning contradicts itself. An
+    // entry that wants to be parked says so and owns why (rag-index-health).
+    enabled: true, budgetPerRunUsd: 0.5, budgetPerDayUsd: 2, maxRunsPerDay: 4,
     requiresReview: true, enforceAllocation: false, createdBy: 'u-rachel',
     createdAt: clock.daysAgo(45),
-    pausedReason: SEED_PAUSED_REASON,
+    pausedReason: null,
     ...deriveBotStats(seededRunsFor(over.id)),
     ...over,
   };
 }
 
 // Mirrors schema/seed_program.sql's maintenance bots so dev:mock shows the same
-// fleet the Queue page reports on — the SAME bot ids, the same budgets and,
-// critically, the same PARKED state.
+// fleet the Queue page reports on — the SAME bot ids, missions, cron
+// expressions and budgets.
 //
-// Every seeded bot is `enabled = FALSE` with `paused_reason = 'awaiting repo
-// provisioning …'` on purpose (CLAUDE.md, "Program operating model"):
-// initBotScheduler registers every enabled cron bot at boot and the fleet
-// dispatcher claims queued jobs as soon as a box is idle, so an enabled bot here
-// fires against repositories that do not exist yet. This fixture used to flip
-// three of them to `enabled: true` "so the queue's bots panel has motion
-// offline" — a fixture that demonstrates the exact configuration the seed
-// documents as unsafe, and one a developer copying dev:mock state into Aurora
-// would carry across. Parked is the honest state: a roster reading "0 enabled"
-// over real run history is the product working, not a broken page.
-//
-// Their run HISTORY is unaffected — a parked bot that fired before it was parked
-// still has runs, which is exactly the seed's shape too.
+// ONE DELIBERATE DIVERGENCE: the seed parks every bot (`enabled = FALSE`,
+// 'awaiting repo provisioning') because initBotScheduler registers every
+// enabled cron bot at boot and the seeded repositories do not exist on a real
+// cluster. Offline there is no cron at all (initBotScheduler returns early under
+// MOCK_AURORA), so nothing can fire against a missing repo, and a roster that
+// says "0 enabled · 12 paused" above runs that finished this morning cannot be
+// demoed. Here the bots that have a live initiative are enabled; only
+// rag-index-health stays parked, for the seed's own reason (its initiative
+// shipped). The parity entity names the drift per bot.
 function seededBots(): Bot[] {
   return [
     mockBot({ id: '32970d0a-e28e-5100-8fb0-a5cbb87dac99', name: 'obs-nightly-maintenance', template: 'bug',
@@ -527,7 +619,7 @@ function seededBots(): Bot[] {
       // The seed gives this one its OWN park reason — its initiative is
       // finished, which is a different remedy from "provision the repo". The
       // blanket default overwrote it, so an operator read the wrong fix.
-      pausedReason: 'initiative completed — bot parked',
+      enabled: false, pausedReason: 'initiative completed — bot parked',
       budgetPerRunUsd: 0.2, budgetPerDayUsd: 0.6 }),
     mockBot({ id: '28006587-cf6f-5a60-a68c-6a574ba7cb5d', name: 'compliance-evidence-cron', template: 'story',
       prompt: 'Weekday evidence sweep: snapshot IAM diffs, change-management records, and backup verifications into the evidence store.',

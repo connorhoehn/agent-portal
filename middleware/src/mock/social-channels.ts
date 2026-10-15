@@ -148,7 +148,7 @@ function seedMessages(): ChatMessage[] {
     msg('seed-dm-lm-1', dmLenaMira, 'u-mira', 'Mira Okafor', 'Can you cover the Thursday call if I run late?', clock.hoursAgo(4)),
     ...workThreadMessages(),
     // Rhea's open access request (req-0001, \`access:req:<id>\`): why she asked, and her manager's answer so far.
-    msg('a-req1-1', 'access:req:req-0001', 'u-rhea', 'Rhea Castellanos', 'Vera wants me on the cutover sequencing once Sienna decides the tenant order. That work dispatches agents against the Sprint 42 envelope, which needs SME in Work.', clock.hoursAgo(2.9)),
+    msg('a-req1-1', 'access:req:req-0001', 'u-rhea', 'Rhea Castellanos', 'Vera wants me on the cutover sequencing once Sienna decides the tenant order. That work dispatches agents against the Sprint 10 envelope, which needs SME in Work.', clock.hoursAgo(2.9)),
     msg('a-req1-2', 'access:req:req-0001', 'u-omar', 'Omar Haddad', 'Makes sense. I will approve once Vera confirms there is room in the envelope.', clock.hoursAgo(1.6)),
     // Auth Migration's own thread (`orgiq:initiative:p-auth-migration`, the
     // initiative page's Discussion pane): the same blocker #auth-migration

@@ -95,35 +95,35 @@ function seededSprints(): MockSprint[] {
 
   return [
     sprint('spr-obs-s1', 'p-observability', 'Observability Platform',
-      'Sprint 96 — Ingest hardening', 'Collector fleet stable at 2x peak ingest.',
+      'Sprint 9 — Ingest hardening', 'Collector fleet stable at 2x peak ingest.',
       'p-008', 'Layla Hassan', 'done', 42, 28),
     sprint('spr-obs-s2', 'p-observability', 'Observability Platform',
-      'Sprint 97 — Burn-rate alerts', 'Tier-1 services alert on error-budget burn, not raw error rate.',
+      'Sprint 10 — Burn-rate alerts', 'Tier-1 services alert on error-budget burn, not raw error rate.',
       'p-011', 'Eli Garcia', 'done', 28, 14),
     sprint('spr-obs-s3', 'p-observability', 'Observability Platform',
-      'Sprint 98 — Span metrics + decom', 'RED dashboards from span metrics; two services off StatsD.',
+      'Sprint 11 — Span metrics + decom', 'RED dashboards from span metrics; two services off StatsD.',
       'p-008', 'Layla Hassan', 'active', 14, 0),
     sprint('spr-auth-s2', 'p-auth-migration', 'Auth Migration',
-      'Sprint 42 — Session hygiene', 'Sessions expire server-side; revoked grants bite within a minute.',
+      'Sprint 10 — Session hygiene', 'Sessions expire server-side; revoked grants bite within a minute.',
       'p-051', 'Simone Chang', 'active', 14, 0),
     sprint('spr-llm-s1', 'p-llm-platform', 'LLM Application Platform',
-      'Sprint 7 — Prompt registry', 'Prompt edits reach the fleet without a redeploy.',
+      'Sprint 8 — Prompt registry', 'Prompt edits reach the fleet without a redeploy.',
       'p-042', 'Katya Petrov', 'done', 30, 16),
     sprint('spr-llm-s2', 'p-llm-platform', 'LLM Application Platform',
-      'Sprint 8 — Judge + evals', 'Canary judge scores every ask; golden sets gate merges.',
+      'Sprint 9 — Judge + evals', 'Canary judge scores every ask; golden sets gate merges.',
       'p-013', 'Caleb Turner', 'active', 14, 0),
     sprint('spr-inf-s1', 'p-inference-platform', 'Inference Platform',
-      'Sprint 14 — Queue-depth scaling', 'Scaling reacts to demand, not to a proxy metric.',
+      'Sprint 9 — Queue-depth scaling', 'Scaling reacts to demand, not to a proxy metric.',
       'p-013', 'Caleb Turner', 'active', 14, 0),
     // The one sprint whose window has not closed yet — `endDaysAgo: -7`. It is
     // here because an envelope on a still-open sprint is the state
     // decideEnvelope actually spends against, and a calendar in which every
     // window has already ended cannot demonstrate that.
     sprint('spr-zt-s1', 'p-zero-trust', 'Zero Trust Network',
-      'Sprint 2 — Inventory', 'Every service maps to an identity or a documented exception.',
+      'Sprint 5 — Inventory', 'Every service maps to an identity or a documented exception.',
       'p-052', 'Diego Ortiz', 'active', 7, -7),
     sprint('spr-cost-s2', 'p-cost-opt', 'Cost Optimization',
-      'Sprint 24 — Attribution', 'Every running resource carries an initiative tag.',
+      'Sprint 10 — Attribution', 'Every running resource carries an initiative tag.',
       'p-017', 'Daniel Chang', 'active', 14, 0),
     // Mia Singh (p-030, u-mia, program-owner) owns Mobile App Redesign, and
     // schema/seed_program.sql gives that initiative a live sprint (steward
@@ -132,7 +132,7 @@ function seededSprints(): MockSprint[] {
     // read $0/empty for the one persona the operating model is built to demo.
     // program-owner.md defect #1.
     sprint('spr-mob-s1', 'p-mobile-redesign', 'Mobile App Redesign',
-      'Sprint 31 — Routing', 'Every marketing link deep-links to a real screen.',
+      'Sprint 9 — Routing', 'Every marketing link deep-links to a real screen.',
       'p-035', 'Ben Okafor', 'active', 14, 0),
     // The eight schema/seed_program.sql mints that this fixture's own header
     // comment already claims are here ("every sprint a work-items.ts row
@@ -142,29 +142,29 @@ function seededSprints(): MockSprint[] {
     // bug this file's sibling (org-findings.ts) was fixed for, just on a
     // different pair of fixtures. Dates, stewards and goals are the seed's own.
     sprint('spr-auth-s1', 'p-auth-migration', 'Auth Migration',
-      'Sprint 41 — OIDC core', 'Code+PKCE flow live; JWKS rotation survives a key roll.',
+      'Sprint 9 — OIDC core', 'Code+PKCE flow live; JWKS rotation survives a key roll.',
       'p-051', 'Simone Chang', 'done', 35, 21),
     sprint('spr-cost-s1', 'p-cost-opt', 'Cost Optimization',
-      'Sprint 23 — Floors and orphans', 'Idle floors documented; orphan sweep automated.',
+      'Sprint 9 — Floors and orphans', 'Idle floors documented; orphan sweep automated.',
       'p-011', 'Eli Garcia', 'done', 28, 14),
     sprint('spr-rta-s1', 'p-realtime-analytics', 'Real-time Analytics Pipeline',
-      'Sprint 15 — Checkpoint + schema', 'Recovery under 60s; producers on registry contracts.',
+      'Sprint 9 — Checkpoint + schema', 'Recovery under 60s; producers on registry contracts.',
       'p-019', 'Camille Dubois', 'active', 14, 0),
     // The seed's own future-dated window (spr-zt-s1 is the other one here).
     sprint('spr-lake-s1', 'p-data-lake', 'Data Lake Migration',
-      'Sprint 3 — Format decision', 'Table format chosen with a written ADR.',
+      'Sprint 6 — Format decision', 'Table format chosen with a written ADR.',
       'p-017', 'Daniel Chang', 'active', 10, -4),
     sprint('spr-fs-s1', 'p-feature-store', 'ML Feature Store',
-      'Sprint 11 — Freshness', 'Every online feature group has a freshness SLA and an owner.',
+      'Sprint 8 — Freshness', 'Every online feature group has a freshness SLA and an owner.',
       'p-019', 'Camille Dubois', 'active', 14, 0),
     sprint('spr-ds-s1', 'p-design-v3', 'Design System v3',
-      'Sprint 19 — Token sync', 'A token edit in Figma lands as a PR the same day.',
+      'Sprint 8 — Token sync', 'A token edit in Figma lands as a PR the same day.',
       'p-038', 'Isabel Vasquez', 'active', 14, 0),
     sprint('spr-soc2-s1', 'p-soc2', 'SOC2 Compliance',
       'Sprint 9 — Collectors', 'Change-management evidence collected without manual export.',
       'p-055', 'Joy Chen', 'active', 14, 0),
     sprint('spr-dsapi-s1', 'p-design-system-api', 'Design System API',
-      'Sprint 6 — Contracts', 'Consumers upgrade via codemod, not by reading a changelog.',
+      'Sprint 7 — Contracts', 'Consumers upgrade via codemod, not by reading a changelog.',
       'p-035', 'Ben Okafor', 'active', 14, 0),
   ];
 }

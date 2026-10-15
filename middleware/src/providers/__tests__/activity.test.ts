@@ -87,6 +87,10 @@ describe('getProjectActivitySeries — mock mode', () => {
         dayKeys: fresh.buildDayKeys(30),
         bots: botsFixture.MOCK_BOTS,
         botRuns: botsFixture.MOCK_BOT_RUNS,
+        // This month's finished marketplace dispatches on the initiative's board
+        // (bot-less, keyed to it through the work item) share its day buckets.
+        marketplace: (await import('../../mock/bots.js')).botRuns.rows()
+          .filter((r) => r.botId === null && r.workItemId?.startsWith('wi-auth-')),
       };
     } finally {
       jest.useRealTimers();
@@ -102,19 +106,20 @@ describe('getProjectActivitySeries — mock mode', () => {
     // series now replays its OWN run history (bots.ts's MOCK_BOT_RUNS) rather
     // than synthesizing one run per cron weekday — so the shape to pin is: a
     // bucket with a run carries that run's own cost, and every day between two
-    // runs is a real 0 rather than a missing element. (The bot is parked, as
-    // every seeded bot is; a parked bot's past runs still happened, so its
-    // history must still show — Aurora does not filter on bots.enabled.)
-    const { result, dayKeys, bots: MOCK_BOTS, botRuns: MOCK_BOT_RUNS } = await freshActivitySeries(now);
+    // runs is a real 0 rather than a missing element. (Whether the bot is
+    // parked or live, its past runs still happened, so its
+    // history must still show — Aurora does not filter on bots.enabled. In
+    // dev:mock the bot is switched on, since it ran this morning.)
+    const { result, dayKeys, bots: MOCK_BOTS, botRuns: MOCK_BOT_RUNS, marketplace } = await freshActivitySeries(now);
     expect(result).not.toBeNull();
 
     const bot = MOCK_BOTS.find((b) => b.orgProjectId === 'p-auth-migration')!;
     expect(bot.name).toBe('auth-dep-watch');
-    expect(bot.enabled).toBe(false);
+    expect(bot.enabled).toBe(true);
 
     const wantRuns = new Map<string, number>();
     const wantSpend = new Map<string, number>();
-    for (const run of MOCK_BOT_RUNS[bot.id] ?? []) {
+    for (const run of [...(MOCK_BOT_RUNS[bot.id] ?? []), ...marketplace]) {
       const key = run.startedAt.slice(0, 10);
       wantRuns.set(key, (wantRuns.get(key) ?? 0) + 1);
       wantSpend.set(key, Math.round(((wantSpend.get(key) ?? 0) + (run.costUsd ?? 0)) * 100) / 100);

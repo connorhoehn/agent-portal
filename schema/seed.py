@@ -93,14 +93,14 @@ PROJECTS = [
 ]
 
 DECISIONS = [
-    ("d-aurora",        "Adopt Aurora over Neptune",       "Picked Aurora PostgreSQL + relational graph over Neptune Analytics for cost + latency reasons.",                 "2026-03-12"),
-    ("d-k8s",           "Migrate to Kubernetes from ECS",  "Standardize compute layer on EKS for portability and ecosystem.",                                                "2026-02-04"),
-    ("d-nova",          "Standardize on Nova Pro",         "Use amazon.nova-pro-v1 as primary inference model across all agents.",                                           "2026-04-21"),
-    ("d-legacy-auth",   "Sunset legacy auth service",      "Move every remaining service off the v1 auth gateway; the SAML shim is deleted once the last tenant has cut over to Cognito.", "2026-01-30"),
-    ("d-otel",          "Adopt OpenTelemetry",             "Replace ad-hoc tracing with OTLP + AWS X-Ray for unified observability.",                                        "2026-03-25"),
-    ("d-react-19",      "React 19 upgrade timeline",       "Roll out React 19 across portal + design system over Q2.",                                                       "2026-04-02"),
-    ("d-iceberg",       "Snowflake to Iceberg evaluation", "Pilot Iceberg-on-S3 for the analytics lakehouse — defer go/no-go to Q3.",                                        "2026-05-01"),
-    ("d-vectordb",      "Vector DB vendor selection",      "Chose pgvector inside Aurora over standalone vector DBs to keep ops surface small.",                             "2026-03-18"),
+    ("d-aurora",        "Adopt Aurora over Neptune",       "Picked Aurora PostgreSQL + relational graph over Neptune Analytics for cost + latency reasons.",                 147),
+    ("d-k8s",           "Migrate to Kubernetes from ECS",  "Standardize compute layer on EKS for portability and ecosystem.",                                                183),
+    ("d-nova",          "Standardize on Nova Pro",         "Use amazon.nova-pro-v1 as primary inference model across all agents.",                                           107),
+    ("d-legacy-auth",   "Sunset legacy auth service",      "Move every remaining service off the v1 auth gateway; the SAML shim is deleted once the last tenant has cut over to Cognito.", 188),
+    ("d-otel",          "Adopt OpenTelemetry",             "Replace ad-hoc tracing with OTLP + AWS X-Ray for unified observability.",                                        134),
+    ("d-react-19",      "React 19 upgrade timeline",       "Roll out React 19 across portal + design system in stages, design system first.",                                                       126),
+    ("d-iceberg",       "Snowflake to Iceberg evaluation", "Pilot Iceberg-on-S3 for the analytics lakehouse — defer go/no-go until the pilot has a full quarter of query data.",                                        97),
+    ("d-vectordb",      "Vector DB vendor selection",      "Chose pgvector inside Aurora over standalone vector DBs to keep ops surface small.",                             141),
 ]
 
 # Realistic name pool — keep this seed-data deterministic but varied.
@@ -419,7 +419,7 @@ def emit_statements(scale: float) -> list[str]:
     for d_id, topic, summary, decided_at in DECISIONS:
         stmts.append(
             "INSERT INTO decisions (id, topic, summary, decided_at) VALUES ("
-            f"{sqlstr(d_id)}, {sqlstr(topic)}, {sqlstr(summary)}, DATE {sqlstr(decided_at)})"
+            f"{sqlstr(d_id)}, {sqlstr(topic)}, {sqlstr(summary)}, (NOW() - INTERVAL '{decided_at} days')::date)"
         )
 
     # People with computed scores

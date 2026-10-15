@@ -35,15 +35,24 @@ describe('botRuns large scenario', () => {
     // Bot history only. The two in-flight marketplace runs (bot-less, no job
     // yet — mock/bots.ts `inFlightMarketplaceRuns`) ride along in every
     // non-empty world and are pinned by their own shape below.
-    const inFlight = large.filter((r) => r.botId === null);
+    const inFlight = large.filter((r) => r.botId === null && r.status === 'running');
     expect(inFlight.map((r) => r.status)).toEqual(['running', 'running']);
+    // The finished marketplace dispatches (mock/bots.ts `finishedMarketplaceRuns`)
+    // are bot-less too, but they settled with a cost.
+    for (const run of large.filter((r) => r.botId === null && r.status !== 'running')) {
+      expect(run.status).toBe('done');
+      expect(typeof run.costUsd).toBe('number');
+      expect(run.jobId).toBeNull();
+    }
     for (const run of inFlight) {
       expect(run.jobId).toBeNull();
       expect(run.costUsd).toBeNull();
     }
     for (const run of large.filter((r) => r.botId !== null)) {
       expect(run.id).toMatch(/^[0-9a-f-]+-run-\d+$/);
-      expect(run.jobId).toMatch(/^job-.+-\d+$/);
+      // A skipped firing never dispatched, so it has no job to link to.
+      if (run.status === 'skipped') expect(run.jobId).toBeNull();
+      else expect(run.jobId).toMatch(/^job-.+-\d+$/);
       expect(typeof run.costUsd === 'number' || run.costUsd === null).toBe(true);
     }
   });

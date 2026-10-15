@@ -1,0 +1,366 @@
+{
+  "obs-maint": [
+    {
+      "reason": "bumped the collector image and re-ran the gateway smoke test; no regressions",
+      "seconds": 212
+    },
+    {
+      "reason": "quarantined 1 flaky pipeline test (the collector-restart case) and linked the bug",
+      "seconds": 168
+    },
+    {
+      "reason": "linted 31 dashboards; 2 panels still read the retired StatsD bridge, filed",
+      "seconds": 301
+    },
+    {
+      "reason": "bumped 3 SDK dependencies in the span-metrics connector; tests green",
+      "seconds": 187
+    },
+    {
+      "reason": "collector config lint could not reach the staging gateway before the timeout",
+      "status": "failed",
+      "seconds": 480
+    },
+    {
+      "reason": "no dependency drift; refreshed the burn-rate alert fixtures",
+      "seconds": 96
+    },
+    {
+      "reason": "triaged 4 flaky tests, quarantined 1",
+      "seconds": 254
+    },
+    {
+      "reason": "pruned 2 unused dashboards and opened a story for the cardinality budget",
+      "seconds": 273
+    },
+    {
+      "reason": "bumped the OTLP exporter patch version across 6 services",
+      "seconds": 141
+    }
+  ],
+  "auth-maint": [
+    {
+      "reason": "bumped the JWT library in the token verifier; the OIDC conformance suite is green",
+      "seconds": 238
+    },
+    {
+      "reason": "flagged an advisory in a dependency of the legacy SAML shim as critical and attached the evidence",
+      "seconds": 197
+    },
+    {
+      "reason": "no new advisories; refreshed the JWKS test fixtures",
+      "seconds": 84
+    },
+    {
+      "reason": "main was red when the sweep started, so nothing was bumped",
+      "status": "skipped",
+      "seconds": 3
+    },
+    {
+      "reason": "bumped the cookie-signing dependency; session tests green",
+      "seconds": 211
+    },
+    {
+      "reason": "conformance suite failed against a rotated test key, so the bump was left unmerged",
+      "status": "failed",
+      "seconds": 356
+    },
+    {
+      "reason": "no advisories this week",
+      "seconds": 79
+    },
+    {
+      "reason": "bumped 2 patch versions in the BFF; opened no bugs",
+      "seconds": 166
+    }
+  ],
+  "llm-maint": [
+    {
+      "reason": "golden sets re-run on the live prompts: 41 of 42 pass, the judge-rubric case regressed 0.04",
+      "seconds": 612
+    },
+    {
+      "reason": "all 42 golden cases pass; drift under 0.01 on every agent",
+      "seconds": 548
+    },
+    {
+      "reason": "drift of 0.06 on the supervisor agent after the prompt edit; opened a bug",
+      "seconds": 634
+    },
+    {
+      "reason": "all golden cases pass",
+      "seconds": 531
+    },
+    {
+      "reason": "the eval harness lost its Bedrock session midway, 29 of 42 cases ran",
+      "status": "failed",
+      "seconds": 702
+    },
+    {
+      "reason": "re-ran the full set after the harness fix; 42 of 42 pass",
+      "seconds": 566
+    },
+    {
+      "reason": "scoring drift within tolerance; refreshed the baseline file",
+      "seconds": 489
+    },
+    {
+      "reason": "all golden cases pass; latency up 8 percent on the graph-builder",
+      "seconds": 517
+    },
+    {
+      "reason": "all golden cases pass",
+      "seconds": 523
+    }
+  ],
+  "inf-maint": [
+    {
+      "reason": "canaried the new serving build: p95 latency flat, error rate flat",
+      "seconds": 187
+    },
+    {
+      "reason": "p95 up 11 percent on the embedding model; recommended holding the rollout",
+      "seconds": 243
+    },
+    {
+      "reason": "canary clean on all 4 served models",
+      "seconds": 164
+    },
+    {
+      "reason": "could not reach the canary endpoint to start the comparison",
+      "status": "failed",
+      "seconds": 61
+    },
+    {
+      "reason": "rollback recommendation withdrawn after the second sample came back clean",
+      "seconds": 290
+    },
+    {
+      "reason": "canary clean; queue depth steady at the new autoscaling target",
+      "seconds": 176
+    },
+    {
+      "reason": "no new build to canary",
+      "status": "skipped",
+      "seconds": 2
+    }
+  ],
+  "cost-maint": [
+    {
+      "reason": "spend by service within 6 percent of the 7-day baseline; 3 untagged resources listed",
+      "seconds": 142
+    },
+    {
+      "reason": "flagged a 34 percent jump in NAT gateway cost and listed the 5 resources behind it",
+      "seconds": 208
+    },
+    {
+      "reason": "no anomalies over 20 percent",
+      "seconds": 98
+    },
+    {
+      "reason": "the cost export for the day had not landed yet, so the sweep stopped",
+      "status": "skipped",
+      "seconds": 4
+    },
+    {
+      "reason": "spend flat against baseline; 2 untagged volumes tagged to Observability Platform",
+      "seconds": 133
+    },
+    {
+      "reason": "no anomalies over 20 percent",
+      "seconds": 105
+    },
+    {
+      "reason": "spend by service within baseline",
+      "seconds": 117
+    }
+  ],
+  "rta-maint": [
+    {
+      "reason": "consumer lag steady under 4 seconds; checkpoint duration unchanged",
+      "seconds": 154
+    },
+    {
+      "reason": "lag trending up on the clickstream topic; profiled the hot operator and filed a bug with the trace",
+      "seconds": 331
+    },
+    {
+      "reason": "lag steady",
+      "seconds": 121
+    },
+    {
+      "reason": "could not read checkpoint metrics from the job manager",
+      "status": "failed",
+      "seconds": 44
+    },
+    {
+      "reason": "lag back under threshold after the parallelism change",
+      "seconds": 139
+    },
+    {
+      "reason": "lag steady; checkpoint duration down 12 percent",
+      "seconds": 148
+    }
+  ],
+  "fs-maint": [
+    {
+      "reason": "no drift across 23 production feature groups",
+      "seconds": 246
+    },
+    {
+      "reason": "distribution shift on the session-length group; filed a retraining story",
+      "seconds": 372
+    },
+    {
+      "reason": "no drift",
+      "seconds": 218
+    },
+    {
+      "reason": "drift on 1 group inside tolerance; watching",
+      "seconds": 259
+    },
+    {
+      "reason": "no drift across 23 feature groups",
+      "seconds": 231
+    },
+    {
+      "reason": "feature store read timed out; the check did not complete",
+      "status": "failed",
+      "seconds": 400
+    },
+    {
+      "reason": "no drift",
+      "seconds": 204
+    }
+  ],
+  "mob-maint": [
+    {
+      "reason": "end-to-end suite green on both platforms in 17 minutes",
+      "seconds": 1020
+    },
+    {
+      "reason": "quarantined 2 flaky deep-link specs and linked an issue",
+      "seconds": 1108
+    },
+    {
+      "reason": "suite green; runtime down to 16 minutes",
+      "seconds": 977
+    },
+    {
+      "reason": "the iOS simulator pool was unavailable",
+      "status": "skipped",
+      "seconds": 6
+    },
+    {
+      "reason": "suite green on both platforms",
+      "seconds": 1004
+    },
+    {
+      "reason": "one Android spec failed on the new routing screen; filed a bug with the recording",
+      "seconds": 1066
+    }
+  ],
+  "ds-maint": [
+    {
+      "reason": "audited 64 components; 2 contrast regressions in the new button variants, filed",
+      "seconds": 524
+    },
+    {
+      "reason": "audited 64 components; focus order fixed in the menu, no new issues",
+      "seconds": 489
+    },
+    {
+      "reason": "audited 62 components; 1 missing ARIA label on the date picker, filed",
+      "seconds": 510
+    },
+    {
+      "reason": "audited 62 components; clean",
+      "seconds": 471
+    }
+  ],
+  "rag-maint": [
+    {
+      "reason": "index fresh; 3 documents re-embedded after their sources changed",
+      "seconds": 188
+    },
+    {
+      "reason": "index fresh; no citation links broken",
+      "seconds": 143
+    },
+    {
+      "reason": "index fresh; 1 broken citation link repaired",
+      "seconds": 156
+    },
+    {
+      "reason": "index fresh",
+      "seconds": 121
+    },
+    {
+      "reason": "index fresh; re-embedded 2 documents",
+      "seconds": 149
+    }
+  ],
+  "soc2-maint": [
+    {
+      "reason": "snapshotted IAM diffs and 4 change-management records into the evidence store",
+      "seconds": 203
+    },
+    {
+      "reason": "backup verification evidence was missing for one account; flagged it as a gap",
+      "seconds": 249
+    },
+    {
+      "reason": "evidence collected for all 6 controls",
+      "seconds": 187
+    },
+    {
+      "reason": "the evidence store rejected the upload with a quota error",
+      "status": "failed",
+      "seconds": 52
+    },
+    {
+      "reason": "re-collected evidence for all 6 controls after the quota was raised",
+      "seconds": 221
+    },
+    {
+      "reason": "evidence collected for all 6 controls",
+      "seconds": 194
+    },
+    {
+      "reason": "evidence collected; 1 access review overdue and noted",
+      "seconds": 232
+    },
+    {
+      "reason": "evidence collected for all 6 controls",
+      "seconds": 178
+    }
+  ],
+  "dsapi-maint": [
+    {
+      "reason": "no breaking drift between the published API and its 9 consumers",
+      "seconds": 159
+    },
+    {
+      "reason": "a renamed prop would break 2 consumers; codemod still applies cleanly",
+      "seconds": 226
+    },
+    {
+      "reason": "no drift",
+      "seconds": 132
+    },
+    {
+      "reason": "consumer repo checkout failed",
+      "status": "failed",
+      "seconds": 38
+    },
+    {
+      "reason": "no breaking drift; codemods apply",
+      "seconds": 147
+    },
+    {
+      "reason": "no drift",
+      "seconds": 126
+    }
+  ]
+}

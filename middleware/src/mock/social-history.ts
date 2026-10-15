@@ -203,7 +203,7 @@ export const PINS: readonly (readonly [slug: string, key: string, by: string, ho
  * escalates, the release manager answers, the SME reports the rehearsal.
  */
 export const INITIATIVE_THREAD: readonly (readonly [key: string, user: string, hoursAgo: number, text: string])[] = [
-  ['auth-01', 'u-vera', 48.5, 'I have escalated "Cutover order for legacy SSO tenants" to Sienna Garcia. "Tenant-by-tenant cutover runbook with rollback" is blocked until she decides; the rest of Sprint 42 carries on.'],
+  ['auth-01', 'u-vera', 48.5, 'I have escalated "Cutover order for legacy SSO tenants" to Sienna Garcia. "Tenant-by-tenant cutover runbook with rollback" is blocked until she decides; the rest of Sprint 10 carries on.'],
   ['auth-02', 'u-release', 46.5, 'I will decide once both internal rehearsals are through. Keep the session hardening moving in the meantime.'],
   ['auth-02b', 'u-nora', 45.5, 'The JWKS client migration run failed on stale test keys from before the last rotation, not on the verifier. Keys regenerated, rerun queued.'],
   ['auth-03', 'u-nora', 5.5, 'Rehearsal one passed on the cutover runbook: zero forced logouts.'],
