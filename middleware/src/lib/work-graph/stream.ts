@@ -312,6 +312,11 @@ export interface WorkGraphStreamPublisher {
   publish(channel: string, change?: unknown): Promise<{ delivered: number }>;
   signalAccess(channel: string): Promise<{ restored: number }>;
 }
+/** The `work-graph` feature's service, read through what it offers rather than a cast. */
+export function isWorkGraphStreamPublisher(service: unknown): service is WorkGraphStreamPublisher {
+  const s = service as Partial<Record<keyof WorkGraphStreamPublisher, unknown>> | null | undefined;
+  return !!s && typeof s.publish === 'function' && typeof s.signalAccess === 'function';
+}
 interface PeerEvents {
   publish(topic: string, payload: string): Promise<void>;
   subscribe(topic: string, handler: (payload: string) => void | Promise<void>): () => void;

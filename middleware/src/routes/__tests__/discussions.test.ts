@@ -14,7 +14,8 @@ import { isAllowed } from '../../lib/authz.js';
 import { pageResourceVisible } from '../../lib/page-resources.js';
 import type { Session } from '../../lib/session.js';
 import { createMemorySocialChatBackend, setSocialChatBackend, type SocialChatBackend } from '../../lib/social-chat.js';
-import { setDiscussionInbox, unreadItemId, DISCUSSION_UNREAD_KIND } from '../../lib/page-thread-unread.js';
+import { unreadItemId, DISCUSSION_UNREAD_KIND } from '../../lib/page-thread-unread.js';
+import { setNotificationSink } from '../../lib/social-notify.js';
 
 const TEAM = 'assessment:team:TEAM-005';
 const asha: Session = { sub: 'asha', name: 'Asha', tenant: 'assessment', role: 'assessor', epoch: 2, iat: 1, grants: { assessment: ['assessor'] } };
@@ -29,7 +30,7 @@ const prevDemo = process.env['AUTH_DEMO_MODE'];
 beforeAll(() => { process.env['NODE_ENV'] = 'production'; process.env['AUTH_DEMO_MODE'] = 'false'; });
 afterAll(() => {
   process.env['NODE_ENV'] = 'test'; if (prevDemo === undefined) delete process.env['AUTH_DEMO_MODE']; else process.env['AUTH_DEMO_MODE'] = prevDemo;
-  setSocialChatBackend(null); setDiscussionInbox(null);
+  setSocialChatBackend(null); setNotificationSink(null);
 });
 beforeEach(async () => {
   session = structuredClone(asha); teamExists = true;
@@ -42,9 +43,10 @@ beforeEach(async () => {
   setSocialChatBackend(backend);
   for (const m of [msg('m1', 'jonas', '2026-10-06T09:00:00.000Z'), msg('m2', 'jonas', '2026-10-06T09:05:00.000Z'), msg('m3', 'jonas', '2026-10-06T09:06:00.000Z')]) await backend.chatStore.putMessage(m);
   await backend.readReceiptStore.advance({ channel: TEAM, userId: 'asha', readAt: '2026-10-06T09:00:00.000Z', updatedAt: '2026-10-06T09:00:00.000Z' });
+  // A pre-0.118 item (no `chatUnread` marker) still names its thread.
   items = [{ id: unreadItemId(TEAM, '2026-10-06T09:00:00.000Z'), payload: { kind: DISCUSSION_UNREAD_KIND, tenant: 'assessment', channel: TEAM } },
     { id: 'other', payload: { kind: 'mention', tenant: 'assessment', channel: TEAM } }];
-  setDiscussionInbox({ listForUser: async () => items, markReadForUser: async () => undefined });
+  setNotificationSink({ notifyUser: async () => undefined, listForUser: async () => items });
 });
 
 it('returns the reader\'s threads with a server-computed count and the rail door they belong to', async () => {
@@ -78,6 +80,6 @@ it('re-asks the read gate per thread: a denied policy, a gone page or another ac
 });
 
 it('lists nothing without a gateway inbox', async () => {
-  setDiscussionInbox(null);
+  setNotificationSink(null);
   expect((await request(app).get('/api/discussions/unread')).body).toEqual({ tenant: 'assessment', threads: [], sections: {} });
 });

@@ -20,7 +20,7 @@
 //                                  (`lobbyGuard`, `channelGuard`) and every
 //                                  fresh-per-request `admit*` decision
 //   lib/gateway/calls.ts           the calls feature, invites, missed calls
-//   lib/gateway/notify-plugins.ts  DM / channel / mention / page-unread producers
+//   lib/gateway/notify-plugins.ts  DM / channel / mention producers, page-thread unread options
 //   lib/gateway/stats.ts           the load line
 //   lib/gateway/env.ts             the tuning knobs
 //   lib/gateway-cursor.ts, gateway-run-feed.ts, gateway-attachments.ts,
@@ -44,19 +44,20 @@
 //
 // Notifications (docs/social-tenant-design.md §3.3–§3.4): the library's
 // user-addressed inbox, persisted by lib/notification-store.ts. The library
-// does not replay a user's unread set by itself — `onConnect` below does, once
-// per socket. The producers are lib/social-notify.ts's `notify` (wired here as
-// the sink) plus the socket-side plugins in lib/gateway/notify-plugins.ts.
+// replays a user's unread set once per socket (`replayOnConnect`, 0.118) and
+// asks the host's read gate before every delivery (`admit`). The producers are
+// lib/social-notify.ts's `notify` (wired here as the sink), the socket-side
+// plugins in lib/gateway/notify-plugins.ts, and the chat service's own
+// page-thread unread items (`unread`, lib/page-thread-unread.ts).
 
 import type { Server } from 'node:http';
 import { hostname } from 'node:os';
 import { RedisPresenceStore } from '@connorhoehnslalom/realtime-modules/presence';
 import { attachRealtime, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withPrincipalRevalidation, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehnslalom/realtime-modules/server';
 import { RedisCallStateStore, InMemoryCallStateStore, type CallStateRedis } from '@connorhoehnslalom/realtime-modules/call';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
-import { createOrgiqWorkGraphStream, type WorkGraphStreamPublisher } from './work-graph/stream.js';
+import { createOrgiqWorkGraphStream, isWorkGraphStreamPublisher } from './work-graph/stream.js';
 import { tenantCursor } from './gateway-cursor.js';
-import { CallPageRuntime, MemoryCallPageStore, RedisCallPageStore, observeCallPageLifecycle, setCallPageRuntime, type CallPageSnapshot } from './call-pages.js';
+import { CallPageRuntime, MemoryCallPageStore, RedisCallPageStore, observeCallPageLifecycle, setCallPageRuntime, isCallPageSnapshot } from './call-pages.js';
 import { CallChatRuntime, huddleMembershipStore, setCallChatRuntime } from './call-chat.js';
 import { CallMediaProofRuntime, setCallMediaProofRuntime } from './call-media-proof.js';
 import { withHuddleChat } from './call-chat-send.js';
@@ -67,18 +68,16 @@ import { RedisLite, type GatewayRedisStore } from './redis-lite.js';
 import { GatewayRedis } from './gateway-redis.js';
 import type { LeasedOwner } from './realtime-node-ownership.js';
 import { createGatewayNotificationStore, releaseGatewayNotificationStore, seedMockNotifications } from './notification-store.js';
-import { setNotificationSink, type NotificationSink } from './social-notify.js';
-import { notifyPageThreadMessage, setDiscussionInbox, type DiscussionInbox } from './page-thread-unread.js';
-import { createSocialChatBackend, setSocialChatBackend, setThreadLiveAppend, socialChat, type SocialChatBackend } from './social-chat.js';
+import { admitTenantNotification, setNotificationSink } from './social-notify.js';
+import { createSocialChatBackend, setSocialChatBackend, setThreadLiveAppend, type SocialChatBackend } from './social-chat.js';
 import { setDistillationGatewayTarget } from './distillation-channels.js';
 import { createReactionStore, gatewayUploadConfig, uploadFeatureOptions } from './gateway-attachments.js';
 import { tenantActivity, tenantPipeline } from './gateway-run-feed.js';
 import { directRecipientFilter } from './direct-recipient.js';
-import { pageCursorFamily } from './tenant-channels.js';
 import { admitChannel, admitPrincipal, callGuards, channelGuards, lobbyGuard } from './gateway/authority.js';
 import { authenticateGatewayUpgrade } from './gateway/auth.js';
 import { socketContext, tenantCalls } from './gateway/calls.js';
-import { channelNotifyPlugin, dmNotifyPlugin, liveSubscribersForUsers, pageCursorChatOptions, pageUnreadNotifyPlugin, tenantMentionNotifyPlugin, type DmRouter, type PageReadReceiptHook } from './gateway/notify-plugins.js';
+import { channelNotifyPlugin, dmNotifyPlugin, pageCursorChatOptions, tenantMentionNotifyPlugin } from './gateway/notify-plugins.js';
 import { startStatsLine, statsIntervalMs, type RealtimeGatewayStore } from './gateway/stats.js';
 import { peerOperationLingerMs, publishProofMaxAgeMs, realtimeGatewayRouting } from './gateway/env.js';
 import { captureCallReaction, configuredCallReactionCapture, type CallReactionCapture } from './call-reactions.js';
@@ -87,8 +86,8 @@ import { captureCallReaction, configuredCallReactionCapture, type CallReactionCa
 export { lobbyGuard, channelGuard } from './gateway/authority.js';
 export { authenticateGatewayUpgrade, gatewayAuthFromClaims, realtimeGatewayEnabled, type RealtimeGatewayAuth } from './gateway/auth.js';
 export { notifyMissedCall } from './gateway/calls.js';
-export { dmNotifyPlugin, channelNotifyPlugin, tenantMentionNotifyPlugin, pageUnreadNotifyPlugin, pageCursorChatOptions, notifyChannelMessage, liveSubscribers, liveSubscribersForUsers } from './gateway/notify-plugins.js';
-export { GATEWAY_STATS_TYPE, gatewayStatsLine, activeCallCount, statsIntervalMs, type GatewayStatsInput, type RealtimeGatewayStore } from './gateway/stats.js';
+export { dmNotifyPlugin, channelNotifyPlugin, tenantMentionNotifyPlugin, pageCursorChatOptions, notifyChannelMessage, liveSubscribersForUsers } from './gateway/notify-plugins.js';
+export { GATEWAY_STATS_TYPE, gatewayStatsLine, statsIntervalMs, type GatewayStatsInput, type RealtimeGatewayStore } from './gateway/stats.js';
 export { peerOperationLingerMs, socialChatIndexWrites, publishProofMaxAgeMs, realtimeGatewayRouting, realtimeFanoutRequested } from './gateway/env.js';
 export { createSocialChatBackend } from './social-chat.js';
 
@@ -225,13 +224,11 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   const workGraphStream = createOrgiqWorkGraphStream();
   // Bound after attach: the plugin and onConnect run only once sockets exist.
   let handleRef: RealtimeHandle | null = null;
-  const router = () => (handleRef?.router as unknown as DmRouter | undefined) ?? null;
+  const router = () => handleRef?.router ?? null;
   const getCtx = (clientId: string) => socketContext(handleRef?.router, clientId);
   const getLobby = async (callId: string) => (await baseStateStore.getCall(callId))?.lobbyName ?? null;
   const reactionCapture = opts.callReactionCapture === undefined ? configuredCallReactionCapture() : opts.callReactionCapture;
   const onReaction = captureCallReaction({ calls: baseStateStore, context: getCtx, store: reactionCapture });
-  const notificationService = (): (NotificationSink & { replayUnreadForUser(clientId: string, userId: string): Promise<void> }) | null =>
-    (handleRef?.services['notification'] as unknown as (NotificationSink & { replayUnreadForUser(clientId: string, userId: string): Promise<void> }) | undefined) ?? null;
   // Since realtime-modules 0.98.6 the router is the single authorization
   // point: a refused presence/reactions/cursor subscribe reaches no service
   // state and every fan-out runs `authorize` first, answering
@@ -249,16 +246,14 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     filterClientMessage: revalidatedRecipientFilter(directRecipientFilter(callGuards(getLobby), async ({ clientId, message }) => {
       try {
         const frame = message as Record<string, unknown>;
-        return frame.type === 'call-page'
-          ? await pageRuntime?.filterSnapshot(clientId, frame as unknown as CallPageSnapshot) ?? null
-          : await chatRuntime?.filterFrame(clientId, frame) ?? null;
+        if (frame.type === 'call-page') return isCallPageSnapshot(frame) ? await pageRuntime?.filterSnapshot(clientId, frame) ?? null : null;
+        return await chatRuntime?.filterFrame(clientId, frame) ?? null;
       } catch { return null; }
     })),
     plugins: [
       dmNotifyPlugin(router),
       channelNotifyPlugin(router),
       tenantMentionNotifyPlugin(router),
-      pageUnreadNotifyPlugin(router),
       workGraphStream.plugin,
     ],
   };
@@ -283,22 +278,17 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     logger,
     // Chat + presence channels are tenant-scoped like call lobbies.
     router: socketRouter,
-    // A fresh socket gets its unread set (the library leaves replay to the host).
-    onConnect: (clientId: string, ctx: Record<string, unknown>) => {
-      const userId = typeof ctx?.['userId'] === 'string' ? ctx['userId'] : '';
-      if (userId) void notificationService()?.replayUnreadForUser(clientId, userId);
-    },
     features: [
-      // Tenant and team prefixes make valid channel names exceed the
-      // library's 50-character default (a 40-character team slug + General).
-      // Huddle chat (`orgiq:huddle:<callId>`) is this same service: its
+      // Channel names up to 256 characters (the library default since 0.119;
+      // tenant and team prefixes exceed 50). Huddle chat (`orgiq:huddle:<callId>`) is this same service: its
       // membership rows come from the call-chat mirror and its sends carry the
       // huddle contract (lib/call-chat-send.ts withHuddleChat).
-      withHuddleChat(withAssessmentPageReferences(withDmPageReferences(chat({ ...chatOpts, chatStore: chatOpts.chatStore, maxChannelNameLength: 256,
+      withHuddleChat(withAssessmentPageReferences(withDmPageReferences(chat({ ...chatOpts, chatStore: chatOpts.chatStore,
         membershipStore: huddleMembershipStore(chatOpts.membershipStore, () => chatRuntime),
         // Page discussions keep a cursor per current reader, with no member
-        // list (realtime-modules 0.115; lib/page-thread-unread.ts).
-        ...pageCursorChatOptions(chatOpts.onReadReceipt as PageReadReceiptHook | undefined) }))),
+        // list, and the service makes their "new messages" items
+        // (realtime-modules 0.115 / 0.118; lib/page-thread-unread.ts).
+        ...pageCursorChatOptions(router) }))),
         () => chatRuntime),
       presence(clusterRouter && redis ? { store: new RedisPresenceStore({ command: (...args) => redis.command(...args) },
         process.env['REALTIME_GATEWAY_NAMESPACE'] || 'orgiq-gateway') } : {}),
@@ -330,13 +320,17 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
       // rebuilt snapshot (lib/work-graph/stream.ts).
       workGraph({ channelFor: workGraphStream.channelFor, source: workGraphStream.source }),
       // The library gates every notification action on `principal` (before and
-      // after); the host only requires a live connection.
-      notifications({ store: inbox.store, authorize: async clientId => getCtx(clientId) !== null }),
+      // after); the host only requires a live connection. Every delivery —
+      // live, the once-per-socket replay, history — asks `admit`: an item
+      // about a tenant discussion reaches only someone who reads it now.
+      notifications({ store: inbox.store, authorize: async clientId => getCtx(clientId) !== null,
+        replayOnConnect: true, admit: (userId, record) => admitTenantNotification(userId, record) }),
     ],
   });
   handleRef = handle;
-  const stopWorkGraph = workGraphStream.attach(handle.services['work-graph'] as unknown as WorkGraphStreamPublisher,
-    clusterRouter?.peerEvents ?? null);
+  const workGraphService = handle.services['work-graph'];
+  if (!isWorkGraphStreamPublisher(workGraphService)) throw new Error('work-graph feature did not register its stream service');
+  const stopWorkGraph = workGraphStream.attach(workGraphService, clusterRouter?.peerEvents ?? null);
   const stopPeerMembership = clusterRouter?.peerEvents.subscribe('social:membership', payload => {
     try {
       const channel = JSON.parse(payload) as unknown;
@@ -355,35 +349,25 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     messages: chatBackend.chatStore, router: handle.router, lobbyAllowed: lobbyGuard });
   setCallChatRuntime(chatRuntime);
   setCallMediaProofRuntime(new CallMediaProofRuntime({ calls: baseStateStore, router: handle.router, lobbyAllowed: lobbyGuard }));
-  setNotificationSink(notificationService());
-  setDiscussionInbox(handle.services['notification'] as unknown as DiscussionInbox);
+  setNotificationSink(handle.services.notification ?? null);
   // lib/distillation-realtime.ts pushes the distillation feed here as well as
   // on /realtime: this is the socket the portal actually opens.
   setDistillationGatewayTarget(handle.router);
   // The routes read the same backend; a mock reset drops the ChatService's
   // per-channel caches so the rebuilt fixture rows are what the next join reads.
   setSocialChatBackend(chatBackend, () => {
-    (handleRef?.services['chat'] as unknown as { channelCaches?: Map<string, unknown> } | undefined)?.channelCaches?.clear();
+    handleRef?.services.chat?.channelCaches.clear();
   }, (channel) => {
     void Promise.resolve(handle.router.sendToChannel(channel, { type: 'chat:pins-changed', channel })).catch((error: unknown) => {
       console.warn('[social-pins] live refresh failed', error);
     });
   });
   // A server-side thread post (lib/social-chat.ts postThreadMessage — the REST
-  // work-item comment) is already stored; the ChatService's cache and the
-  // channel's live readers hear of it the way they hear of a system card.
+  // work-item comment) is already stored; `appendServerMessage` caches and
+  // broadcasts it the way a system card goes out, which also makes its unread
+  // items (the service's `noteMessagePosted`, the path a socket send takes).
   setThreadLiveAppend(async (message) => {
-    const chatService = handle.services['chat'] as unknown as { addToChannelHistory?(c: string, m: ChatMessage): void; broadcastMessage?(c: string, m: ChatMessage): Promise<void> } | undefined;
-    chatService?.addToChannelHistory?.(message.channel, message);
-    await chatService?.broadcastMessage?.(message.channel, message);
-    // The page-unread item a socket send would have produced (pageUnreadNotifyPlugin).
-    if (!pageCursorFamily(message.channel) || !message.userId) return;
-    const others = (await socialChat().readReceiptStore.listReceipts(message.channel).catch(() => [])).map(c => c.userId).filter(u => u !== message.userId);
-    if (!others.length) return;
-    const live = await liveSubscribersForUsers(handle.router as unknown as DmRouter, message.channel, others);
-    const senderName = typeof message.metadata?.['displayName'] === 'string' ? message.metadata['displayName'] : undefined;
-    await notifyPageThreadMessage({ channel: message.channel, sender: message.userId, ...(senderName ? { senderName } : {}),
-      message: { id: message.id, timestamp: message.timestamp }, text: message.message, live });
+    await handle.services.chat?.appendServerMessage(message.channel, message);
   });
   if (inbox.memory) void seedMockNotifications().catch(() => undefined);
   status = { gateway: 'on', store };
@@ -413,7 +397,6 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
         setCallChatRuntime(null);
         setCallMediaProofRuntime(null);
         setNotificationSink(null);
-        setDiscussionInbox(null);
         setDistillationGatewayTarget(null);
         setSocialChatBackend(null);
         setThreadLiveAppend(null);

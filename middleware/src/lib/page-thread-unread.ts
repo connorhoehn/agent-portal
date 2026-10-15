@@ -1,13 +1,12 @@
 // Read cursors and unread state for the page discussions (orgiq initiative and
 // work-item threads, assessment team and document chats, pipelines run
-// threads): the families marked `cursors` in lib/tenant-channels.ts.
+// threads, access request threads): the families marked `cursors` in
+// lib/tenant-channels.ts.
 //
 // Those channels are OPEN — the gateway admits each request by the page's read
-// gate (live-principal.ts authorizeLiveGatewayChannel), never by a member list —
-// so until realtime-modules 0.115 they kept no read cursor (`receipts` answered
-// `enabled:false, reason:'open-channel'`) and the "new messages" divider had
-// nothing to draw from. Now the chat service runs them in `cursorMode:
-// 'readers'`, and no member list is invented anywhere:
+// gate (lib/gateway/authority.ts admitChannel), never by a member list — so the
+// chat service runs them in `cursorMode: 'readers'`, and no member list is
+// invented anywhere:
 //
 //   - a cursor is stored per (user, channel) when someone the page's read gate
 //     admits reads the thread; the gateway asks that gate on every `read` and
@@ -16,21 +15,27 @@
 //   - the router re-checks every recipient of a `readReceipt` frame, so a "seen
 //     by" never reaches someone who lost access, and `currentPageReaders`
 //     drops a revoked reader's stored cursor from every listing;
-//   - the unread badge is server-side: a message on the thread produces one
-//     "new messages" item per cursor holder who is not watching the thread
-//     and still passes the read gate NOW (`currentlyReadsTenantChannel`, the
-//     notify plugin path's per-recipient check, sharing the send's authority
-//     scope), and `GET /api/discussions/unread` recomputes every count from the
-//     cursor and the stored messages on each call, re-asking the gate.
+//   - the unread badge is server-side. Since realtime-modules 0.118 the chat
+//     service makes the "new messages" item itself (`pageThreadUnread` below
+//     is its `unread` option): one item per cursor holder who is not the
+//     sender, not watching the thread, and still passes the read gate NOW
+//     (`currentlyReadsTenantChannel`, asked again per recipient), on every
+//     post path; reading the thread clears it. The notifications service
+//     asks the same gate before it delivers or replays any item about a
+//     tenant discussion (lib/social-notify.ts admitTenantNotification).
+//     `GET /api/discussions/unread` recomputes every count from the cursor
+//     and the stored messages on each call, re-asking the gate.
 //
 // The item id carries the cursor it was produced against
 // (`discussion-unread:<channel>:<readAt>`), so a thread produces one bell item
-// per stretch of unread messages, and reading the thread marks it read.
+// per stretch of unread messages, and reading the thread marks it read. Items
+// stored before 0.118 (no `chatUnread` marker) are still recognised by
+// `payload.kind`.
 
 import type { AuthorityScope } from '@connorhoehnslalom/realtime-modules/server';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatUnreadOpts } from '@connorhoehnslalom/realtime-modules/chat';
 import { pageCursorFamily, channelService } from './tenant-channels.js';
-import { currentlyReadsTenantChannel, notify, tenantDiscussionLink } from './social-notify.js';
+import { currentlyReadsTenantChannel, notificationInbox, tenantDiscussionLink } from './social-notify.js';
 import { holdsChannelAuthority } from './live-principal.js';
 import { socialChat } from './social-chat.js';
 import { unreadFor } from '../mock/social-channels.js';
@@ -57,92 +62,45 @@ export function unreadItemId(channel: string, readAt: string | null): string {
   return `${DISCUSSION_UNREAD_KIND}:${channel}:${readAt ?? 'never'}`;
 }
 
-/** The slice of the gateway's NotificationService the unread items use (realtime-modules 0.115). */
-export interface DiscussionInbox {
-  listForUser(userId: string): Promise<Array<{ id: string; timestamp?: string; read?: boolean; payload?: Record<string, unknown> }>>;
-  markReadForUser(userId: string, ids: readonly string[]): Promise<void>;
-}
-let inbox: DiscussionInbox | null = null;
-/** Wired by attachRealtimeGateway; `null` on dispose (and in tests that do not attach). */
-export function setDiscussionInbox(next: DiscussionInbox | null): void { inbox = next; }
-
-const isUnreadItem = (n: { payload?: Record<string, unknown> }, channel?: string): boolean =>
-  n.payload?.['kind'] === DISCUSSION_UNREAD_KIND && (channel === undefined || n.payload?.['channel'] === channel);
+/** An item about `channel` the unread model made: the library's marker, or a pre-0.118 item's kind. */
+export const isUnreadItem = (n: { payload?: Record<string, unknown> }, channel?: string): boolean =>
+  channel === undefined
+    ? n.payload?.['kind'] === DISCUSSION_UNREAD_KIND || typeof n.payload?.['chatUnread'] === 'string'
+    : n.payload?.['chatUnread'] === channel || (n.payload?.['kind'] === DISCUSSION_UNREAD_KIND && n.payload?.['channel'] === channel);
 
 function snippet(text: string, max = 140): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
-export interface PageThreadMessage {
-  channel: string;
-  sender: string;
-  senderName?: string;
-  message: Pick<ChatMessage, 'id' | 'timestamp'> & Partial<ChatMessage>;
-  text: string;
-  /** Users watching the thread right now (their open panel reads it); null when unknown. */
-  live: Set<string> | null;
-  scope?: AuthorityScope;
-}
-
 /**
- * A message on a page discussion: every cursor holder (someone who has read
- * the thread before) who is not the sender, not watching it, and still passes
- * the page's read gate gets ONE "new messages" item for the stretch since
- * their cursor. Resolves to the users given an item; never throws.
+ * The chat service's `unread` option (realtime-modules 0.118) for the page
+ * families. `live` names who is watching a thread (they get no item). Any
+ * other channel gets no item: DMs and Social channels have their own
+ * producers (lib/gateway/notify-plugins.ts), so every holder there counts as
+ * "watching" and `describe` refuses too.
  */
-export async function notifyPageThreadMessage(ev: PageThreadMessage): Promise<string[]> {
-  try {
-    const family = pageCursorFamily(ev.channel);
-    if (!family) return [];
-    const link = await tenantDiscussionLink(ev.channel);
-    if (!link) return [];
-    const chat = socialChat(); await chat.ready;
-    const cursors = await chat.readReceiptStore.listReceipts(ev.channel);
-    const candidates = cursors.filter(c => c.userId !== ev.sender && !(ev.live?.has(c.userId) ?? false));
-    if (!candidates.length) return [];
-    const recent = await chat.recentMessages(ev.channel, UNREAD_WINDOW);
-    const messages = recent.some(m => m.id === ev.message.id) ? recent
-      : [...recent, { ...ev.message, channel: ev.channel, userId: ev.sender } as ChatMessage];
-    const name = ev.senderName || ev.sender;
-    const given: string[] = [];
-    for (const cursor of candidates) {
-      if (!await currentlyReadsTenantChannel(cursor.userId, ev.channel, ev.scope)) continue;
-      if (unreadFor(messages, ev.channel, cursor.userId, cursor.readAt) < 1) continue;
-      const id = unreadItemId(ev.channel, cursor.readAt);
-      if (inbox && (await inbox.listForUser(cursor.userId)).some(n => n.id === id)) continue;
-      const sent = await notify([cursor.userId], {
-        id,
+export function pageThreadUnread(live: (channel: string, userIds: readonly string[], scope?: AuthorityScope) => Promise<ReadonlySet<string> | null>): ChatUnreadOpts {
+  return {
+    itemId: unreadItemId,
+    window: UNREAD_WINDOW,
+    isItem: (n, channel) => isUnreadItem(n, channel),
+    live: (channel, userIds, scope) => pageCursorFamily(channel) ? live(channel, userIds, scope) : new Set(userIds),
+    describe: async ({ channel, message, senderName }) => {
+      if (!pageCursorFamily(channel)) return null;
+      const link = await tenantDiscussionLink(channel);
+      if (!link) return null;
+      const stamped = message.metadata?.['displayName'];
+      const name = senderName || (typeof stamped === 'string' && stamped ? stamped : '') || message.userId || 'Someone';
+      return {
         type: 'message',
         title: `New messages in ${link.place}`,
-        body: `${name}: ${snippet(ev.text) || 'New message'}`,
-        timestamp: ev.message.timestamp,
-        channel: ev.channel,
-        payload: { tenant: link.tenant, kind: DISCUSSION_UNREAD_KIND, channel: ev.channel, actorId: ev.sender, actorName: name },
+        body: `${name}: ${snippet(typeof message.message === 'string' ? message.message : '') || 'New message'}`,
+        payload: { tenant: link.tenant, kind: DISCUSSION_UNREAD_KIND, channel, actorId: message.userId ?? null, actorName: name },
         action: { label: link.label, href: link.href },
-      });
-      given.push(...sent);
-    }
-    return given;
-  } catch (err) {
-    console.warn(`[page-thread-unread] notify failed: ${(err as Error).message}`);
-    return [];
-  }
-}
-
-/** The reader's cursor moved: their "new messages" items for this thread at or before it are read. */
-export async function clearPageThreadItems(userId: string, channel: string, readAt: string): Promise<string[]> {
-  try {
-    if (!inbox || !pageCursorFamily(channel)) return [];
-    const ids = (await inbox.listForUser(userId))
-      .filter(n => !n.read && isUnreadItem(n, channel) && (n.timestamp ?? '') <= readAt)
-      .map(n => n.id);
-    if (ids.length) await inbox.markReadForUser(userId, ids);
-    return ids;
-  } catch (err) {
-    console.warn(`[page-thread-unread] clear failed: ${(err as Error).message}`);
-    return [];
-  }
+      };
+    },
+  };
 }
 
 /** The rail door a family's threads count against (the tenant's own nav path). */
@@ -185,6 +143,7 @@ export interface UnreadThread {
  * cursor and messages. Nothing is counted on the client.
  */
 export async function unreadThreadsFor(session: Session, limit = 50): Promise<UnreadThread[]> {
+  const inbox = notificationInbox();
   if (!inbox) return [];
   const items = await inbox.listForUser(session.sub);
   const channels = [...new Set(items.filter(n => isUnreadItem(n) && n.payload?.['tenant'] === session.tenant)

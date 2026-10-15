@@ -13,7 +13,11 @@
 //     resource row is gone, are refused like an unknown channel;
 //   - unread: a message gives an earlier reader who is not watching ONE "new
 //     messages" item, the REST count is recomputed server-side, reading clears
-//     both, and a revoked reader gets neither.
+//     both, and a revoked reader gets neither;
+//   - since realtime-modules 0.118 the chat service makes those items on every
+//     post path (a REST thread post too), the notifications service replays
+//     them once per socket through the host's read gate (`admit`), and an
+//     item stored before 0.118 (no `chatUnread` marker) still clears on read.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', aurora: {}, auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: false } } }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn(), listUsers: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
@@ -27,7 +31,8 @@ import { pageResourceVisible } from '../page-resources.js';
 import { attachRealtimeGateway } from '../realtime-gateway.js';
 import { createMemorySocialChatBackend, type SocialChatBackend } from '../social-chat.js';
 import { realtimeClaims, signRealtimeToken } from '../realtime-token.js';
-import { unreadThreadsFor, DISCUSSION_UNREAD_KIND } from '../page-thread-unread.js';
+import { unreadThreadsFor, unreadItemId, DISCUSSION_UNREAD_KIND } from '../page-thread-unread.js';
+import { postThreadMessage } from '../social-chat.js';
 import type { Session } from '../session.js';
 
 type Frame = Record<string, unknown>;
@@ -231,4 +236,51 @@ it('gives a revoked reader no item and no count', async () => {
   await until(async () => (await unreadItems('asha')).length === 1);
   deniedActions.add('ViewAssessment'); // the page's read policy, revoked: the REST count re-asks it
   expect(await unreadThreadsFor(session('asha'))).toEqual([]);
+});
+
+const bulk = (client: Client) => client.frames.filter(f => f.type === 'notification:bulk-update');
+const bulkIds = (client: Client) => bulk(client).flatMap(f => ((f.payload as { notifications?: Array<{ id: string }> } | undefined)?.notifications ?? []).map(n => n.id));
+
+it('a server-side thread post (the REST comment) gives the same item a socket send does', async () => {
+  const jonas = await connect('jonas'), asha = await connect('asha');
+  await join(asha); await join(jonas);
+  await post(jonas, 'Seen'); await read(asha);
+  asha.ws.terminate(); await pause(30);
+  await postThreadMessage({ id: 'rest-1', clientId: 'rest', channel: TEAM, userId: 'jonas', message: 'From the work item page',
+    timestamp: new Date().toISOString(), metadata: { displayName: 'Jonas' } });
+  await until(async () => (await unreadItems('asha')).length === 1);
+  const [item] = await unreadItems('asha');
+  expect(item).toMatchObject({ payload: expect.objectContaining({ channel: TEAM, actorId: 'jonas', actorName: 'Jonas', chatUnread: TEAM }) });
+  expect(await unreadItems('jonas')).toEqual([]);
+});
+
+it('replays the unread item once to a reconnecting reader, and withholds it once the page read is revoked', async () => {
+  const jonas = await connect('jonas'); let asha = await connect('asha');
+  await join(asha); await join(jonas);
+  await post(jonas, 'Seen'); await read(asha);
+  asha.ws.terminate(); await pause(30);
+  await post(jonas, 'While away');
+  await until(async () => (await unreadItems('asha')).length === 1);
+  const [item] = await unreadItems('asha');
+  asha = await connect('asha');
+  await until(() => bulkIds(asha).includes(item!.id));
+  expect(bulk(asha)).toHaveLength(1); // once per socket
+  asha.ws.terminate(); await pause(30);
+  deniedActions.add('ViewAssessment'); // the page's read policy, revoked: the stored item stays, delivery is refused
+  asha = await connect('asha'); await pause(150);
+  expect(bulkIds(asha)).not.toContain(item!.id);
+  expect((await unreadItems('asha')).map(n => n.id)).toEqual([item!.id]);
+});
+
+it('an item stored before 0.118 (no chatUnread marker) still clears when the thread is read', async () => {
+  const notification = handle.services.notification!;
+  const asha = await connect('asha'), jonas = await connect('jonas');
+  await join(asha); await join(jonas);
+  await post(jonas, 'Seen'); await read(asha);
+  const legacyId = unreadItemId(TEAM, 'never');
+  await notification.notifyUser('asha', { id: legacyId, type: 'message', title: 'New messages in a team discussion', timestamp: '2026-01-01T00:00:00.000Z',
+    channel: TEAM, payload: { tenant: 'assessment', kind: DISCUSSION_UNREAD_KIND, channel: TEAM, actorId: 'jonas' } });
+  expect((await unreadItems('asha')).find(n => n.id === legacyId)?.read).toBeFalsy();
+  await post(jonas, 'Newer'); await read(asha);
+  await until(async () => (await unreadItems('asha')).find(n => n.id === legacyId)?.read === true);
 });

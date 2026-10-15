@@ -39,9 +39,11 @@ export interface NotificationInputLike {
   action?: { label: string; href?: string };
 }
 
-/** The slice of `NotificationService` this seam uses. */
+/** The slice of `NotificationService` this seam uses. The inbox reads are
+ * there when the sink is the gateway's service (GET /api/discussions/unread). */
 export interface NotificationSink {
   notifyUser(userId: string, input: NotificationInputLike): Promise<unknown>;
+  listForUser?(userId: string): Promise<Array<{ id: string; timestamp?: string; read?: boolean; payload?: Record<string, unknown> }>>;
 }
 
 /** An item this seam will send: the tenant is required, the rest is the library's input. */
@@ -58,6 +60,12 @@ export function setNotificationSink(next: NotificationSink | null): void {
 
 export function notificationSinkActive(): boolean {
   return sink !== null;
+}
+
+/** The gateway's inbox when it can be read (the per-user index the unread list starts from). */
+export function notificationInbox(): Required<Pick<NotificationSink, 'listForUser'>> | null {
+  const s = sink;
+  return s?.listForUser ? { listForUser: userId => s.listForUser!(userId) } : null;
 }
 
 /** The bell's category line — the tenant as the header names it. */
@@ -643,6 +651,34 @@ export async function currentlyReadsTenantChannel(userId: string, bare: string, 
   } catch {
     return false;
   }
+}
+
+/**
+ * The notifications service's read admission (realtime-modules 0.118
+ * `notifications({ admit })`), asked FRESH for every record on every delivery
+ * (live fan-out, connect replay, history): an item about a tenant discussion
+ * (its `channel` is a tenant family with chat — a page thread's "new
+ * messages", a mention) reaches the user only while they read that channel
+ * now (`currentlyReadsTenantChannel`). Items about anything else (DMs, Social
+ * channels, calls, approvals) were decided by their producer's own gate and
+ * are delivered as before. Concurrent asks for the same (user, channel) — a
+ * replay of several items on one thread — share one in-flight verdict; no
+ * verdict outlives its ask.
+ */
+const admitting = new Map<string, Promise<boolean>>();
+export async function admitTenantNotification(userId: string, record: { channel?: string; payload?: Record<string, unknown> }): Promise<boolean> {
+  const fromPayload = record.payload?.['chatUnread'] ?? record.payload?.['channel'];
+  const channel = typeof record.channel === 'string' && record.channel ? record.channel : typeof fromPayload === 'string' ? fromPayload : '';
+  if (!channel) return true;
+  const { tenantChannelFamily } = await import('./tenant-channels.js');
+  if (!tenantChannelFamily(channel)?.services.has('chat')) return true;
+  const key = `${userId}\u0000${channel}`;
+  let pending = admitting.get(key);
+  if (!pending) {
+    pending = currentlyReadsTenantChannel(userId, channel).finally(() => admitting.delete(key));
+    admitting.set(key, pending);
+  }
+  return pending;
 }
 
 /**

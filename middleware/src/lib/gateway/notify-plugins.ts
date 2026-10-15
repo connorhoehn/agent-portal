@@ -1,10 +1,10 @@
 // The gateway's socket-side notification producers (docs/social-tenant-design.md
-// §3.4 rows 4–6 and the page-thread unread items), as router plugins over the
-// chat service's `message` frames. Who may be told is never decided here: the
+// §3.4 rows 4–6), as router plugins over the chat service's `message` frames,
+// plus the chat options that give the page discussions reader cursors and
+// their "new messages" items. Who may be told is never decided here: the
 // gateway's `authorize` already refused a publish by a non-member, and each
 // recipient's own read is asked through lib/gateway/authority.ts (`admitReader`
-// behind lib/page-thread-unread.ts and lib/social-notify.ts) before an item is
-// written.
+// behind lib/social-notify.ts) before an item is written.
 //
 //   - a DM message (chat publish on `<tenant>:dm:<a>:<b>…`) → the other
 //     members who have no live subscription to that channel;
@@ -12,61 +12,42 @@
 //     active members who have no live subscription to it; `@<name>` in the
 //     text → the mentioned members, as a `mention` (design §3.4 row 5);
 //   - a mention on a tenant discussion → the mentioned readers;
-//   - a message on a page discussion → each earlier reader's "new messages".
+//   - a message on a page discussion → each earlier reader's "new messages",
+//     made by the chat service itself (realtime-modules 0.118 `unread`) on
+//     every post path; see `pageCursorChatOptions` and lib/page-thread-unread.ts.
 
-import { baseChannel, type AuthorityScope } from '@connorhoehnslalom/realtime-modules/server';
+import type { AuthorityScope, RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { parseChatPluginMessage, type ChatServiceOpts } from '@connorhoehnslalom/realtime-modules/chat';
 import { conversationHref, notify, notifyTenantChannelMention, parseDmLobby, resolveMentions } from '../social-notify.js';
-import { clearPageThreadItems, currentPageReaders, notifyPageThreadMessage, pageCursorMode } from '../page-thread-unread.js';
+import { currentPageReaders, pageCursorMode, pageThreadUnread } from '../page-thread-unread.js';
 import { socialChat, slugForChannel, type MirroredMembershipStore } from '../social-chat.js';
 import { pageCursorFamily } from '../tenant-channels.js';
 
-/** Public subscription probes cover current local and peer readers. The private
- * inventory remains a compatibility fallback for older local routers. */
-export interface DmRouter {
-  getUserIdForClient?(clientId: string): string | undefined;
-  getClientsByUserId?(userIds: string[]): Array<{ clientId: string; userId: string }> | Promise<Array<{ clientId: string; userId: string }>>;
-  isClientSubscribed?(clientId: string, channel: string, opts?: { scope?: AuthorityScope }): boolean | Promise<boolean>;
-  channelMembers?: Map<string, Set<string>>;
-}
+/** What the producers ask of the router: the authenticated user of a
+ * connection and which users hold a live, readable subscription (0.119). */
+export type LiveRouter = Pick<RealtimeRouter, 'getUserIdForClient' | 'liveUsersOn'>;
 
 function snippet(text: unknown, max = 140): string {
   const flat = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
-/** Users with a live subscription to `channel` (chat subscribes it bare; `chat:`-prefixed covered too). */
-export function liveSubscribers(router: DmRouter, channel: string): Set<string> | null {
-  const members = router.channelMembers;
-  if (!(members instanceof Map)) return null;
-  const out = new Set<string>();
-  for (const name of [channel, `chat:${channel}`]) {
-    for (const clientId of members.get(name) ?? []) {
-      const userId = router.getUserIdForClient?.(clientId);
-      if (userId) out.add(userId);
-    }
-  }
-  return out;
-}
-
-/** Public peer-aware probes verify the actual recipient's readable
- * subscription. An unavailable/legacy router retains conservative alerts.
- * `scope` is the send's operation when the caller has one: since 0.108 the
- * router hands every plugin hook the operation's scope (`info.scope`, retained
- * until the hook settles, at most PLUGIN_SCOPE_RETAIN_MAX_MS), so the probes
- * below share the send's membership proof — one durable read per channel
- * across the send's authorize checks and its plugins. A revocation observed
- * during the operation still denies every later probe (live-principal's
- * sticky shared fence); a closed scope is never passed on. */
-export async function liveSubscribersForUsers(router: DmRouter, channel: string, users: string[], scope?: AuthorityScope): Promise<Set<string> | null> {
-  if (!router.getClientsByUserId || !router.isClientSubscribed) return liveSubscribers(router, channel);
+/**
+ * Which of `users` are watching `channel` right now: a live, READABLE
+ * subscription (the router's `liveUsersOn`, peer-aware on the cluster router,
+ * re-asking the channel authority per connection). Chat subscribes the bare
+ * name; a `chat:`-prefixed subscription counts too. `scope` is the send's
+ * operation when it is still open (0.108 plugin scope), so the probes share
+ * the send's membership proof; a closed scope is never passed on. Null when
+ * the router cannot answer — callers then alert everyone (conservative).
+ */
+export async function liveSubscribersForUsers(router: LiveRouter, channel: string, users: readonly string[], scope?: AuthorityScope): Promise<Set<string> | null> {
+  if (!router.liveUsersOn) return null;
   try {
-    const wanted = new Set(users), live = new Set<string>();
-    const probe = (clientId: string, name: string) => scope?.active
-      ? router.isClientSubscribed!(clientId, name, { scope }) : router.isClientSubscribed!(clientId, name);
-    const clients = await router.getClientsByUserId([...wanted]);
-    await Promise.all(clients.filter(client => wanted.has(client.userId)).map(async client => {
-      if (await probe(client.clientId, channel) || await probe(client.clientId, `chat:${channel}`)) live.add(client.userId);
-    }));
+    const opts = scope?.active ? { scope } : {};
+    const live = new Set(await router.liveUsersOn(channel, [...users], opts));
+    const rest = users.filter(user => !live.has(user));
+    if (rest.length) for (const user of await router.liveUsersOn(`chat:${channel}`, rest, opts)) live.add(user);
     return live;
   } catch { return null; }
 }
@@ -74,27 +55,17 @@ export async function liveSubscribersForUsers(router: DmRouter, channel: string,
 export type ChatPluginArgs = { clientId: string; channelId: string; message: unknown; userId?: string; scope?: AuthorityScope };
 /** The send's authority scope while it is still open, else nothing (a fresh read). */
 const liveScope = (args: ChatPluginArgs): AuthorityScope | undefined => args.scope?.active ? args.scope : undefined;
-type ChatFrameMessage = { id?: unknown; timestamp?: unknown; userId?: unknown; message?: unknown; metadata?: { userId?: unknown; displayName?: unknown } };
 
 /**
- * The one reading of a notify plugin's input: a chat `message` frame whose
- * server-stamped sender agrees with the authenticated sender (the plugin's
- * `userId`, else the publishing connection's). Null for anything else.
+ * The one reading of a notify plugin's input (the library's
+ * `parseChatPluginMessage`): a chat `message` frame whose server-stamped
+ * sender agrees with the authenticated sender (the plugin's `userId`, else the
+ * publishing connection's). Null for anything else.
  */
-function chatMessageFrame(args: ChatPluginArgs, getRouter: () => DmRouter | null):
-  { channel: string; router: DmRouter | null; sender: string; message: ChatFrameMessage; text: string; displayName: string | undefined } | null {
-  const frame = args.message as { type?: unknown; action?: unknown; message?: ChatFrameMessage } | null;
-  if (!frame || frame.type !== 'chat' || frame.action !== 'message' || !frame.message) return null;
+function chatMessageFrame(args: ChatPluginArgs, getRouter: () => LiveRouter | null) {
   const router = getRouter();
-  const sender = args.userId ?? router?.getUserIdForClient?.(args.clientId);
-  const stamped = frame.message.userId ?? frame.message.metadata?.userId;
-  if (!sender || (typeof stamped === 'string' && stamped !== sender)) return null;
-  const name = frame.message.metadata?.displayName;
-  return {
-    channel: baseChannel(args.channelId), router, sender, message: frame.message,
-    text: typeof frame.message.message === 'string' ? frame.message.message : '',
-    displayName: typeof name === 'string' && name ? name : undefined,
-  };
+  const parsed = parseChatPluginMessage(args, { resolveUserId: clientId => router?.getUserIdForClient?.(clientId) });
+  return parsed ? { ...parsed, router } : null;
 }
 
 /**
@@ -105,7 +76,7 @@ function chatMessageFrame(args: ChatPluginArgs, getRouter: () => DmRouter | null
  * library version stamps it there) must agree or the frame is ignored. The
  * gateway's `authorize` already refused a publish by a non-member.
  */
-export function dmNotifyPlugin(getRouter: () => DmRouter | null) {
+export function dmNotifyPlugin(getRouter: () => LiveRouter | null) {
   return {
     name: 'social-dm-notify',
     onMessage: async (args: ChatPluginArgs) => {
@@ -139,7 +110,7 @@ export function dmNotifyPlugin(getRouter: () => DmRouter | null) {
  * link would open a channel they cannot read. The sender is the plugin's
  * authenticated `userId` (0.99.0), falling back to the publishing connection's.
  */
-export function channelNotifyPlugin(getRouter: () => DmRouter | null, members: () => MirroredMembershipStore = () => socialChat().membershipStore) {
+export function channelNotifyPlugin(getRouter: () => LiveRouter | null, members: () => MirroredMembershipStore = () => socialChat().membershipStore) {
   return {
     name: 'social-channel-notify',
     onMessage: async (args: ChatPluginArgs) => {
@@ -178,7 +149,7 @@ export function channelNotifyPlugin(getRouter: () => DmRouter | null, members: (
  * document/team chat. Only `mention` items: unread message alerts are separate.
  * The sender is the authenticated plugin user (or the publishing connection).
  */
-export function tenantMentionNotifyPlugin(getRouter: () => DmRouter | null) {
+export function tenantMentionNotifyPlugin(getRouter: () => LiveRouter | null) {
   return {
     name: 'tenant-mention-notify',
     onMessage: async (args: ChatPluginArgs) => {
@@ -195,42 +166,23 @@ export function tenantMentionNotifyPlugin(getRouter: () => DmRouter | null) {
 }
 
 /**
- * Unread on page discussions (lib/page-thread-unread.ts): a message on an
- * orgiq initiative/work, assessment team/document or pipelines run thread
- * gives each earlier reader who is not watching it, and still passes the
- * page's read gate now, one "new messages" item. The send's authority scope is
- * retained while the readers are asked, as for mentions.
+ * Reader cursors and unread on the page discussions (lib/page-thread-unread.ts):
+ * those families run in `cursorMode: 'readers'` (a cursor per current reader,
+ * no member list), and the chat service makes each earlier reader's "new
+ * messages" item on every post — a socket send, `appendServerMessage`, or a
+ * host's `noteMessagePosted` — skipping the sender, anyone watching the thread
+ * (`live`, the router's readable-subscription probe) and anyone the page's
+ * read gate refuses now (`currentReaders`, asked again per recipient). Reading
+ * the thread clears the item (the service's own read-receipt path).
  */
-export function pageUnreadNotifyPlugin(getRouter: () => DmRouter | null) {
-  return {
-    name: 'page-unread-notify',
-    onMessage: async (args: ChatPluginArgs) => {
-      const frame = chatMessageFrame(args, getRouter);
-      if (!frame || !pageCursorFamily(frame.channel)) return;
-      const { channel, router, sender, text, displayName, message } = frame;
-      const id = typeof message.id === 'string' ? message.id : '';
-      const timestamp = typeof message.timestamp === 'string' ? message.timestamp : '';
-      if (!id || !timestamp) return;
-      const scope = liveScope(args);
-      const cursors = await socialChat().readReceiptStore.listReceipts(channel).catch(() => []);
-      const others = cursors.map(c => c.userId).filter(u => u !== sender);
-      if (!others.length) return;
-      const live = router ? await liveSubscribersForUsers(router, channel, others, scope) : null;
-      await notifyPageThreadMessage({ channel, sender, ...(displayName ? { senderName: displayName } : {}), message: { id, timestamp }, text, live, ...(scope ? { scope } : {}) });
-    },
-  };
-}
-
-export type PageReadReceiptHook = (info: { channel: string; receipt: { userId: string; readAt: string } }) => void;
-/** The chat options that turn on reader cursors for the page families, composed over the store's own read hook. */
-export function pageCursorChatOptions(storeHook?: PageReadReceiptHook) {
+export function pageCursorChatOptions(getRouter: () => LiveRouter | null): Pick<ChatServiceOpts, 'cursorMode' | 'currentReaders' | 'unread'> {
   return {
     cursorMode: pageCursorMode,
-    currentReaders: (channel: string, userIds: readonly string[]) => currentPageReaders(channel, userIds),
-    onReadReceipt(info: { channel: string; receipt: { userId: string; readAt: string } }) {
-      storeHook?.(info);
-      if (pageCursorFamily(info.channel)) void clearPageThreadItems(info.receipt.userId, info.channel, info.receipt.readAt);
-    },
+    currentReaders: (channel, userIds, scope) => currentPageReaders(channel, userIds, scope),
+    unread: pageThreadUnread(async (channel, userIds, scope) => {
+      const router = getRouter();
+      return router ? liveSubscribersForUsers(router, channel, userIds, scope) : null;
+    }),
   };
 }
 

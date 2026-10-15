@@ -28,7 +28,7 @@ import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import { SignJWT } from 'jose';
 import {
-  activeCallCount, attachRealtimeGateway, channelGuard, gatewayStatsLine, GATEWAY_STATS_TYPE, lobbyGuard, realtimeGatewayEnabled,
+  attachRealtimeGateway, channelGuard, gatewayStatsLine, GATEWAY_STATS_TYPE, lobbyGuard, realtimeGatewayEnabled,
   realtimeGatewayStatus, REALTIME_GATEWAY_PATH, statsIntervalMs,
 } from '../realtime-gateway.js';
 import { rejectUnsupportedUpgrades } from '../unsupported-upgrades.js';
@@ -337,21 +337,16 @@ describe('REALTIME_GATEWAY', () => {
 
 describe('the load line (capacity review #9)', () => {
   it('is one JSON object with the fields the infra metric filters read', () => {
+    // The reading is the library's handle.stats() (0.119); the line adds its type and the store.
     const line = JSON.parse(gatewayStatsLine({
-      sockets: 1000, activeCalls: 100, eventLoopP99Ns: 12_345_678, eventLoopMaxNs: 98_000_000, rssBytes: 300 * 1048576, store: 'redis',
-    }, new Date('2026-10-01T00:00:00Z')));
+      sockets: 1000, activeCalls: 100, eventLoopDelayP99Ms: 12.35, eventLoopDelayMaxMs: 98, rssMb: 300, ts: '2026-10-01T00:00:00.000Z', store: 'redis',
+    }));
     expect(line).toEqual({
       type: GATEWAY_STATS_TYPE, sockets: 1000, activeCalls: 100, eventLoopDelayP99Ms: 12.35, eventLoopDelayMaxMs: 98,
       rssMb: 300, store: 'redis', ts: '2026-10-01T00:00:00.000Z',
     });
     // The infra filter and this line must agree on the names.
     expect(GATEWAY_STATS_TYPE).toBe('realtime-gateway-stats');
-  });
-
-  it('counts the call service\'s active calls, whatever it is registered as', () => {
-    expect(activeCallCount({ call: { activeCalls: new Map([['a', 1], ['b', 2]]) } })).toBe(2);
-    expect(activeCallCount({ calls: { activeCalls: new Map([['a', 1]]) } })).toBe(1);
-    expect(activeCallCount({})).toBe(0);
   });
 
   it('defaults to once a minute; REALTIME_STATS_INTERVAL_MS=0 turns it off', () => {

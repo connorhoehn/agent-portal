@@ -28,6 +28,12 @@ export interface CallPageSnapshot {
   revision: number;
   page: SharedCallPage | null;
 }
+/** A `call-page` frame as the router hands it to the recipient filter. */
+export function isCallPageSnapshot(frame: unknown): frame is CallPageSnapshot {
+  const f = frame as Partial<Record<keyof CallPageSnapshot, unknown>> | null;
+  return !!f && f.type === 'call-page' && typeof f.callId === 'string' && typeof f.revision === 'number'
+    && (f.page === null || (typeof f.page === 'object' && f.page !== undefined));
+}
 export interface StoredCallPage {
   revision: number;
   page: (CallPageDescriptor & { presenter: SharedCallPage['presenter']; sharedAt: string; provenance: string }) | null;
