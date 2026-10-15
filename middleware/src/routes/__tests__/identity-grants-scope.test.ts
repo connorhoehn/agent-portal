@@ -132,7 +132,7 @@ describe('PUT /api/identity/users/:id/grants — tenant scoping', () => {
       .put('/api/identity/users/u-farah/grants')
       .send({ grants: { assessment: ['lead-assessor'] } });
     expect(res.status).toBe(200);
-    expect(setGrantsMock).toHaveBeenCalledWith('u-farah', { assessment: ['lead-assessor'] });
+    expect(setGrantsMock).toHaveBeenCalledWith('u-farah', { assessment: ['lead-assessor'] }, {});
   });
 
   it('merges a scoped write onto a target user\'s grants in other tenants rather than wiping them', async () => {
@@ -145,7 +145,7 @@ describe('PUT /api/identity/users/:id/grants — tenant scoping', () => {
       .send({ grants: { assessment: ['lead-assessor'] } });
     expect(res.status).toBe(200);
     // the orgiq row the caller never named must survive the write untouched
-    expect(setGrantsMock).toHaveBeenCalledWith('u-farah', { assessment: ['lead-assessor'], orgiq: ['member'] });
+    expect(setGrantsMock).toHaveBeenCalledWith('u-farah', { assessment: ['lead-assessor'], orgiq: ['member'] }, {});
   });
 
   it('lets admin write any tenant key with no scoping restriction', async () => {
@@ -154,7 +154,45 @@ describe('PUT /api/identity/users/:id/grants — tenant scoping', () => {
       .put('/api/identity/users/u-farah/grants')
       .send({ grants: { orgiq: ['hr-admin'] } });
     expect(res.status).toBe(200);
-    expect(setGrantsMock).toHaveBeenCalledWith('u-farah', { orgiq: ['hr-admin'] });
+    expect(setGrantsMock).toHaveBeenCalledWith('u-farah', { orgiq: ['hr-admin'] }, {});
+  });
+});
+
+describe('PUT /api/identity/users/:id/grants — the editor\'s base (2026-10-14)', () => {
+  it('passes the loaded matrix through as the diff base, so a role granted since is not erased', async () => {
+    getUserMock.mockResolvedValueOnce(FARAH).mockResolvedValueOnce(FARAH);
+    const res = await request(buildApp(admin))
+      .put('/api/identity/users/u-farah/grants')
+      .send({ grants: { assessment: ['lead-assessor'] }, base: { assessment: ['program-lead', 'lead-assessor'] } });
+    expect(res.status).toBe(200);
+    expect(setGrantsMock).toHaveBeenCalledWith('u-farah', { assessment: ['lead-assessor'] }, { base: { assessment: ['program-lead', 'lead-assessor'] } });
+  });
+
+  it('scopes a non-admin base like its grants: another tenant in base is a 403, its own is merged over current', async () => {
+    const multiTenantUser = { ...FARAH, grants: { assessment: ['program-lead'], orgiq: ['member'] } };
+    getUserMock.mockResolvedValue(multiTenantUser);
+    const refused = await request(buildApp(programLead))
+      .put('/api/identity/users/u-farah/grants')
+      .send({ grants: { assessment: ['lead-assessor'] }, base: { orgiq: ['member'] } });
+    expect(refused.status).toBe(403);
+    expect(setGrantsMock).not.toHaveBeenCalled();
+    const ok = await request(buildApp(programLead))
+      .put('/api/identity/users/u-farah/grants')
+      .send({ grants: { assessment: ['lead-assessor'] }, base: { assessment: ['program-lead'] } });
+    expect(ok.status).toBe(200);
+    expect(setGrantsMock).toHaveBeenCalledWith('u-farah',
+      { assessment: ['lead-assessor'], orgiq: ['member'] },
+      { base: { assessment: ['program-lead'], orgiq: ['member'] } });
+    getUserMock.mockReset();
+  });
+
+  it('400s a malformed base', async () => {
+    getUserMock.mockResolvedValueOnce(FARAH);
+    const res = await request(buildApp(admin))
+      .put('/api/identity/users/u-farah/grants')
+      .send({ grants: { orgiq: ['hr-admin'] }, base: ['orgiq'] });
+    expect(res.status).toBe(400);
+    expect(setGrantsMock).not.toHaveBeenCalled();
   });
 });
 

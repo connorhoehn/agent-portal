@@ -70,3 +70,47 @@ transaction semantics, and the cluster half of `providers/access.ts`, which
 still answers 503 off the mock until the user decides to apply the schema
 (lane E). The statements are the ones that half will run; the mock's
 compare-and-set (`casRequest`, `casStep`) mirrors them in one tick.
+
+## Addendum — grant writes fixed at the source (2026-10-14, later)
+
+The finding above is closed in `providers/identity.ts`: provisioning and
+revocation call `grantRole` / `revokeRole` (one `GRANT_ROLE_SQL` /
+`REVOKE_ROLE_SQL` row, now owned by `lib/identity-grants-sql.ts` and
+re-exported from `lib/access/sql.ts`); `setGrants`, whose one remaining
+writer is the admin editor (`PUT /api/identity/users/:id/grants`, and
+`POST /api/identity/users` at creation), applies only the diff from the
+matrix the editor loaded (`base`, sent by `UsersPage.tsx`; read inside the
+transaction when absent), one row per statement, in one Data API
+transaction (`writeGrantSet`, shared with the contract). No writer deletes a
+user's whole set. Epochs unchanged: grants and admin edits never bump;
+revocation and expiry bump in `lib/access-provision.ts`. The mock applies the
+same per-row diff in one tick, so the per-beneficiary lock is gone.
+
+The setGrants contrast case was replaced by three races; the suite is now
+**11/11** on the same container:
+
+```
+    ✓ grant + grant: concurrent single-role grants for one person never lose a role, and bump nothing (32383 ms)
+    ✓ grant + revoke: a provisioning racing a revocation keeps one, removes the other; only the revoke bumps (19821 ms)
+    ✓ admin edit + provisioning: the whole-set editor applies a diff in one transaction and never erases a concurrent grant (7464 ms)
+Tests:       11 passed, 11 total
+Time:        116.886 s
+```
+
+- grant + grant: twenty rounds of four concurrent grants (two roles) keep
+  both; epoch 0. The old delete-and-reinsert, interleaved, still drops one
+  (kept in the test as the contrast).
+- grant + revoke: ten rounds of a grant racing a revoke-then-bump keep the
+  granted role, remove the revoked one, epoch +1 per round.
+- admin edit + provisioning: the editor's transaction is held open on its own
+  connection (one psql session) while another connection commits a grant or a
+  revoke-and-bump between its base read and its writes. With no base, with a
+  stale loaded base, and with a concurrent revocation of a role it does not
+  change, nothing the other writer did is undone; ten editors and ten
+  provisioners at once on distinct roles land all 20 rows; the only epoch
+  bump is the revocation's.
+
+Mock mirror: `lib/__tests__/access-provision.test.ts` "concurrent writers to
+one person's grants" (the same three races through `provisionAccess`,
+`revokeAccess` and `setGrants({ base })`). Data API wire shape:
+`providers/__tests__/identity-grant-writes.test.ts`. Still not Aurora.

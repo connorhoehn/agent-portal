@@ -25,7 +25,7 @@ authority; this tenant is the governed way of changing them.
 | # | Decision | Why |
 |---|---|---|
 | A1 | A fifth tenant, `access`, with its own roles, Cedar seeds, routes (`/api/access/*`), portal tree (`/access/*`) and cast, registered through the same 21 points as `pipelines` (`docs/pipelines-tenant-goal.md` §P0). | Tenants are separate products that share only the BFF; approvals about the other tenants' access must not live inside any one of them. |
-| A2 | The **grant store is the existing one**: `user_tenant_roles` + `project_contributions`, written only through `providers/identity.ts::setGrants` and the initiative contribution writer. Provisioning never writes a second table of "effective access". | Two stores for one fact is the split-worlds bug class this repo has already paid for (`decisions`, work comments). |
+| A2 | The **grant store is the existing one**: `user_tenant_roles` + `project_contributions`, written only through `providers/identity.ts`'s grant writers (`grantRole` / `revokeRole` one row at a time; the admin editor's `setGrants` as a per-row diff in one transaction) and the initiative contribution writer. Provisioning never writes a second table of "effective access". | Two stores for one fact is the split-worlds bug class this repo has already paid for (`decisions`, work comments). |
 | A3 | A grant reaches the beneficiary's open cookie through the existing ≤120 s grants refresh (`GRANTS_REFRESH_S`, `lib/session.ts`) without signing them out: provisioning does **not** bump `session_epoch`. A removal — revocation or expiry — **does** bump it (`bumpSessionEpoch`), retiring every cookie they hold at its next read. (Decided 2026-10-13, lane A1.) | The refresh already re-reads grants, so a grant needs nothing more; a bump would sign the beneficiary out. A removal must not wait out the refresh window or survive in a copied cookie, which is what the epoch is for. |
 | A4 | Approvers are resolved **live** from the directory and the org graph at decision time, never copied onto the request: the beneficiary's manager (new additive `people.manager_id`), then the resource's steward (initiative owner from `project_contributions`; a tenant's steward role holders for a tenant role: orgiq `hr-admin`, assessment `program-lead`, social `community-admin`, pipelines `pipeline-admin`). Sensitive items add an `access-admin` step. | A request that caches "who may approve" would let a demoted approver still decide. The same live-principal rule governs the realtime gateway and Social. |
 | A5 | Nobody decides a request they submitted or benefit from, and a step is decided once. Enforced in the route (Cedar cannot see request rows) with a contract test, in addition to the Cedar role gates. | Separation of duties is the whole point; a role-only gate cannot express "not your own". |
@@ -49,7 +49,7 @@ request the upgrade from where they are.
 - **Provisioning: a capability grant, not a role.** The catalog item
   `capability:orgiq:budgets-read` (new kind `capability`) provisions the orgiq
   grant entry `budgets-reader` into `user_tenant_roles` through the same
-  `setGrants` merge (A2: one grant store). `lib/budget-read-tier.ts`
+  single-role grant write (A2: one grant store). `lib/budget-read-tier.ts`
   `canReadBudgets` recognises it (orgiq sessions only) alongside the roles and
   `ManageBudgets`. Nothing else does: it is in no Cedar file, carries no action,
   and `lib/session.ts` `rolesForTenant` filters it out, so it is never an active
@@ -90,8 +90,11 @@ they are a party to, never an access-admin step without holding access-admin
 (SoD), never transitively; the decision is recorded "on behalf of". **The
 cluster's grant writes** — provisioning on Aurora must write one role
 (`GRANT_ROLE_SQL`), not `setGrants`' delete-and-reinsert, which the native
-PostgreSQL contract shows losing a concurrent grant; offline the merge is
-serialized per beneficiary.
+PostgreSQL contract shows losing a concurrent grant. Fixed at the source
+2026-10-14: provisioning and revocation call `grantRole` / `revokeRole`, and
+`setGrants` (the admin editor) applies only the diff from the matrix the editor
+loaded, per row, in one transaction — mock and cluster alike, no
+per-beneficiary lock.
 
 Not decided here: whether `manager_id` is seeded from team leads or typed by hand in `/admin/identity/users` (the seed generator can do either); whether `admin` cross-tenant grants are requestable at all (default: no, they are provisioned by hand); whether the SLA should vary per item or step kind (one deployment-wide value today).
 
@@ -116,7 +119,7 @@ Status machine: `draft → submitted → pending → approved → provisioned �
 
 1. **Request.** Catalog (browse what can be requested, filtered by tenant and kind, with "you already hold this" and SoD warnings shown before submit) → request wizard (`WorkflowStepper`: who (self, or on behalf when `approver`/`access-admin`), what, why, how long) → policy pre-check → submit. The requester sees the computed chain and SLA immediately.
 2. **Approve.** Inbox (`/access/approvals`): the steps the signed-in user may decide *now*, resolved live; approve / reject / request information, each with a comment; bulk is deliberately absent. Request detail shows the chain, the discussion thread, the beneficiary's current grants and the SoD check.
-3. **Provision.** The last approval provisions: `setGrants` merge (or a contribution insert), an `access_events` row, a bell item to the requester and beneficiary; no epoch bump (A3). Expiry is a sweeper over `expires_at` that revokes through the inverse path — removal, `bumpSessionEpoch`, an event; it is single-flight across replicas like the dispatcher's boot recovery (`lib/replica-fleet.ts`).
+3. **Provision.** The last approval provisions: a single-role `grantRole` (or a contribution insert), an `access_events` row, a bell item to the requester and beneficiary; no epoch bump (A3). Expiry is a sweeper over `expires_at` that revokes through the inverse path — removal, `bumpSessionEpoch`, an event; it is single-flight across replicas like the dispatcher's boot recovery (`lib/replica-fleet.ts`).
 4. **Govern.** Policies (SoD matrix, `access-admin`), Audit (every event, filterable, exportable), Reviews (phase A2).
 
 ## 5. Roles and actions
@@ -160,7 +163,7 @@ Everything is drawn from `@connorhoehnslalom/ui-components`: `CollectionCommandP
 | lane | brings | judged by |
 |---|---|---|
 | **A0** registration + model + mock + routes + pages | the 21 registration points, the cast, `access_schema.sql` + mock fixtures, `/api/access/{summary,catalog,requests,approvals,policies,audit}` reads and the submit/decide/withdraw writes on the mock, every page honest and on the composer contract, DOM-audit policy for `/access/*`, journey logs per role × surface | `validate-access-tenant.sh --phase A0` |
-| **A1** provisioning + expiry + notifications + thread | `setGrants` merge with epoch bump, the expiry sweeper, bell items, `access:req:<id>` thread, the self-approval and once-only contracts | `--phase A1` |
+| **A1** provisioning + expiry + notifications + thread | single-role grant writes (`grantRole` / `revokeRole`; revocation bumps the epoch), the expiry sweeper, bell items, `access:req:<id>` thread, the self-approval and once-only contracts | `--phase A1` |
 | **A2** policies + reviews | SoD evaluation at submit/provision with override, review campaigns on the same model | `--phase A2` |
 | **A3** timers + delegation | escalation timers, delegation, the admin's person picker (2026-10-14) | `--phase A3` |
 | **E** evidence | Aurora application of the additive schema (user decision), native PostgreSQL contracts for the request/step tables (done 2026-10-14), Cognito seed users | `--phase E` |

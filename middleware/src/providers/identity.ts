@@ -8,6 +8,9 @@
 import {
   RDSDataClient,
   ExecuteStatementCommand,
+  BeginTransactionCommand,
+  CommitTransactionCommand,
+  RollbackTransactionCommand,
   type SqlParameter,
   type Field,
 } from '@aws-sdk/client-rds-data';
@@ -15,6 +18,9 @@ import {
 import { config } from '../config.js';
 import type { Grants } from '../lib/session.js';
 import { identityGrantWritesFixture } from '../mock/identity-grants.js';
+import {
+  GRANT_ROLE_SQL, REVOKE_ROLE_SQL, applyGrantDiff, grantDiff, writeGrantSet, type GrantDiff,
+} from '../lib/identity-grants-sql.js';
 import {
   findClone, liveClones, removeClone, DEFAULT_CLONE_TTL_MS, MAX_CLONE_TTL_MS, MAX_CLONES,
   type IdentityCloneRow,
@@ -226,15 +232,32 @@ function auroraConfigured(): boolean {
   return !!(config.aurora?.clusterArn && config.aurora?.secretArn);
 }
 
-async function exec(sql: string, params: SqlParameter[] = []): Promise<unknown[][]> {
+async function exec(sql: string, params: SqlParameter[] = [], transactionId?: string): Promise<unknown[][]> {
   const out = await getClient().send(new ExecuteStatementCommand({
     resourceArn: config.aurora.clusterArn,
     secretArn: config.aurora.secretArn,
     database: config.aurora.database,
     sql,
     parameters: params,
+    ...(transactionId ? { transactionId } : {}),
   }));
   return (out.records ?? []).map(row => row.map(readField));
+}
+
+/** Run `fn` in one Data API transaction: committed if it returns, rolled back if it throws. */
+async function inTransaction<T>(fn: (transactionId: string) => Promise<T>): Promise<T> {
+  const target = { resourceArn: config.aurora.clusterArn, secretArn: config.aurora.secretArn };
+  const begun = await getClient().send(new BeginTransactionCommand({ ...target, database: config.aurora.database }));
+  const transactionId = begun.transactionId;
+  if (!transactionId) throw new Error('Data API returned no transaction id');
+  try {
+    const result = await fn(transactionId);
+    await getClient().send(new CommitTransactionCommand({ ...target, transactionId }));
+    return result;
+  } catch (error) {
+    await getClient().send(new RollbackTransactionCommand({ ...target, transactionId })).catch(() => undefined);
+    throw error;
+  }
 }
 
 function str(name: string, value: string): SqlParameter {
@@ -501,49 +524,83 @@ export async function createUser(
     ]);
 }
 
-/**
- * Replace a user's grants wholesale (the admin UI edits the full matrix; the
- * access tenant merges one role in or out, lib/access-provision.ts).
- *
- * Under MOCK_AURORA (whose authoritative reads are the seed mirror) the write lands in the registered
- * `identity.grant-writes` fixture, which every fallback read above applies,
- * so `POST /api/__mock/reset` restores the seed grants. Without MOCK_AURORA an
- * unconfigured cluster still refuses: an unmocked process has no store to
- * write and must not pretend to.
- */
-export async function setGrants(userId: string, grants: Grants): Promise<void> {
-  if (config.mock?.aurora) {
-    const clone = findClone(userId);
-    if (!clone && !FALLBACK_USERS.some((u) => u.id === userId)) throw new Error(`No user ${userId} in the offline directory`);
-    const clean: Grants = {};
-    for (const [tenant, roles] of Object.entries(grants)) {
-      const unique = [...new Set(roles)];
-      if (unique.length) clean[tenant] = unique;
-    }
-    if (clone) {
-      // A clone's grants live on its own row, so a provisioning write under a
-      // clone never changes the persona it came from.
-      clone.grants = clean;
-      directoryChanged(userId);
-      return;
-    }
+// ── Grant writes ─────────────────────────────────────────────────────────────
+// Every write changes named (user, tenant, role) rows and nothing else
+// (lib/identity-grants-sql.ts): `grantRole` / `revokeRole` one row,
+// `setGrants` the diff between the set its caller started from and the set it
+// wants. No writer deletes a user's rows and re-inserts its set, so concurrent
+// writers to different roles never clobber each other. None of them bumps the
+// session epoch — a grant reaches open cookies at the grants refresh; a caller
+// that removes access and must retire cookies (access revocation, expiry —
+// docs/access-tenant-design.md A3) calls `bumpSessionEpoch` itself.
+//
+// Under MOCK_AURORA (whose authoritative reads are the seed mirror) a write
+// lands in the registered `identity.grant-writes` fixture, which every
+// fallback read above applies, so `POST /api/__mock/reset` restores the seed
+// grants. The mock reads and writes in one synchronous step — the same
+// per-row outcome the statements give on the cluster. Without MOCK_AURORA an
+// unconfigured cluster refuses: an unmocked process has no store to write and
+// must not pretend to.
+
+/** The offline write: apply `diff` (computed from `base`, default the current grants) in one tick. */
+function applyMockGrants(userId: string, diffFrom: (current: Grants) => GrantDiff): void {
+  const clone = findClone(userId);
+  const current = clone?.grants ?? fallbackUsers().find((u) => u.id === userId)?.grants;
+  if (!current) throw new Error(`No user ${userId} in the offline directory`);
+  const next = applyGrantDiff(current, diffFrom(current));
+  if (clone) {
+    // A clone's grants live on its own row, so a provisioning write under a
+    // clone never changes the persona it came from.
+    clone.grants = next;
+  } else {
     const rows = identityGrantWritesFixture.rows();
     const at = rows.findIndex((r) => r.userId === userId);
-    const row = { userId, grants: clean };
+    const row = { userId, grants: next };
     if (at >= 0) rows[at] = row; else rows.push(row);
-    directoryChanged(userId);
+  }
+  directoryChanged(userId);
+}
+
+async function writeRole(userId: string, tenant: string, role: string, present: boolean): Promise<void> {
+  if (config.mock?.aurora) {
+    applyMockGrants(userId, () => (present ? { add: [[tenant, role]], remove: [] } : { add: [], remove: [[tenant, role]] }));
     return;
   }
   if (!auroraConfigured()) throw new Error('Aurora not configured — cannot edit grants');
-  await exec(`DELETE FROM user_tenant_roles WHERE user_id = :id`, [str('id', userId)]);
-  for (const [tenant, roles] of Object.entries(grants)) {
-    for (const role of roles) {
-      await exec(
-        `INSERT INTO user_tenant_roles (user_id, tenant_id, role)
-         VALUES (:id, :tenant, :role) ON CONFLICT DO NOTHING`,
-        [str('id', userId), str('tenant', tenant), str('role', role)]);
-    }
+  await exec(present ? GRANT_ROLE_SQL : REVOKE_ROLE_SQL, [str('user_id', userId), str('tenant', tenant), str('role', role)]);
+  directoryChanged(userId);
+}
+
+/** Grant one role (or capability grant) to a user. Idempotent; touches no other grant; no epoch bump. */
+export function grantRole(userId: string, tenant: string, role: string): Promise<void> {
+  return writeRole(userId, tenant, role, true);
+}
+
+/** Remove one role (or capability grant) from a user. Idempotent; touches no other grant; no epoch bump. */
+export function revokeRole(userId: string, tenant: string, role: string): Promise<void> {
+  return writeRole(userId, tenant, role, false);
+}
+
+/**
+ * Set a user's grants to `grants` (the admin UI edits the full matrix) by
+ * writing only what differs from `base`, in one transaction.
+ *
+ * `base` is the set the caller started from — the grants the editor loaded.
+ * A role written by someone else since (an access provisioning) is in neither
+ * set and is left alone, so the edit cannot erase it. With no `base` the
+ * user's rows as read inside the transaction are the base: the result is
+ * exactly `grants` for every row that read saw, and a row committed after it
+ * still survives. No epoch bump (unchanged behaviour).
+ */
+export async function setGrants(userId: string, grants: Grants, options: { base?: Grants } = {}): Promise<void> {
+  if (config.mock?.aurora) {
+    applyMockGrants(userId, (current) => grantDiff(options.base ?? current, grants));
+    return;
   }
+  if (!auroraConfigured()) throw new Error('Aurora not configured — cannot edit grants');
+  await inTransaction((tx) => writeGrantSet(
+    (sql, params) => exec(sql, Object.entries(params).map(([name, value]) => str(name, value)), tx),
+    userId, grants, options.base));
   directoryChanged(userId);
 }
 

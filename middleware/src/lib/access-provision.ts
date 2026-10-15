@@ -5,11 +5,14 @@
 // any later revocation call `revokeAccess`. Both write ONLY the stores the rest
 // of the app already reads:
 //
-//   tenant-role             the beneficiary's grants, merged through
-//                           providers/identity.ts `setGrants` (user_tenant_roles)
-//   capability              the same grants merge — a grant entry that is not a
-//                           role (lib/session.ts CAPABILITY_GRANTS), e.g. orgiq
-//                           `budgets-reader` for budget visibility
+//   tenant-role             ONE row in the beneficiary's grants, written by
+//                           providers/identity.ts `grantRole` / `revokeRole`
+//                           (user_tenant_roles) — never a `setGrants` of the
+//                           merged set, whose read-modify-write lost a
+//                           concurrent grant (2026-10-14)
+//   capability              the same single-row write — a grant entry that is
+//                           not a role (lib/session.ts CAPABILITY_GRANTS), e.g.
+//                           orgiq `budgets-reader` for budget visibility
 //   initiative-membership   a project_contributions row, through
 //                           providers/projects.ts `addContribution`
 //
@@ -53,14 +56,13 @@
 // until schema/access_schema.sql is applied (lane E).
 
 import { AppError } from './async-handler.js';
-import { bumpSessionEpoch, getUser, listUsers, setGrants } from '../providers/identity.js';
+import { bumpSessionEpoch, getUser, grantRole, listUsers, revokeRole } from '../providers/identity.js';
 import { addContribution, removeContribution } from '../providers/projects.js';
 import { accessNow, casRequest, findRequest, listCatalog, listPolicies, type AccessCatalogRow, type AccessRequestRow } from '../providers/access.js';
 import { requestItem } from './access/items.js';
 import { sodConflicts, sodVerdict } from './access/sod.js';
 import { notifyAccessRequest } from './social-notify.js';
 import type { AccessDuration, SodConflict } from './access/types.js';
-import type { Grants } from './session.js';
 
 /** An audit reason is read by people: a calendar date (UTC, the store's zone), never an ISO stamp. */
 export function expiryLabel(iso: string): string {
@@ -117,41 +119,28 @@ async function beneficiaryOf(request: AccessRequestRow) {
   return user;
 }
 
-/** `grants` with `role` added to (or removed from) `tenant`; tenants left empty are dropped. */
-export function withRole(grants: Grants, tenant: string, role: string, present: boolean): Grants {
-  const next: Grants = structuredClone(grants);
-  const roles = new Set(next[tenant] ?? []);
-  if (present) roles.add(role); else roles.delete(role);
-  if (roles.size) next[tenant] = [...roles]; else delete next[tenant];
-  return next;
-}
-
 /**
  * Write (or remove) the item for the beneficiary in the existing grant store. Idempotent.
  *
- * Serialized per BENEFICIARY, not per request: the merge reads the user's
- * grants and writes the whole set back (`setGrants`), so two different
- * requests provisioning the same person at once (SME and budget visibility,
- * say) would each write a set missing the other's role — a lost update the
- * per-request lock above cannot see (2026-10-14, lane A). On the cluster the
- * single-role statements in lib/access/sql.ts (`GRANT_ROLE_SQL` /
- * `REVOKE_ROLE_SQL`) remove the read-modify-write altogether; the native
- * PostgreSQL contract shows setGrants' delete-and-reinsert losing a grant
- * under the same race.
+ * A role or capability is one row (`grantRole` / `revokeRole`: an idempotent
+ * insert or a targeted delete), so two requests provisioning the same person
+ * at once (SME and budget visibility, say), a provisioning racing a
+ * revocation, or one racing an admin edit in /admin/identity/users each write
+ * only their own row and never lose the other's — on the cluster and in the
+ * mock alike, with no per-beneficiary lock. The native PostgreSQL contract
+ * (lib/access/__tests__/access-postgres.test.ts) runs the same statements
+ * under those races.
  */
 async function applyGrant(request: AccessRequestRow, item: AccessCatalogRow, present: boolean): Promise<void> {
-  return serialized(`beneficiary:${request.beneficiaryId}`, () => applyGrantNow(request, item, present));
-}
-
-async function applyGrantNow(request: AccessRequestRow, item: AccessCatalogRow, present: boolean): Promise<void> {
-  const user = await beneficiaryOf(request);
-  // A capability (orgiq `budgets-reader`) is a grant entry like a role: same store, same merge.
+  // A capability (orgiq `budgets-reader`) is a grant entry like a role: same store, same write.
   if (item.kind === 'tenant-role' || item.kind === 'capability') {
     if (!item.role) throw new ProvisionError(`${item.id} names no ${item.kind === 'capability' ? 'capability' : 'role'}`);
-    const holds = (user.grants[item.tenant] ?? []).includes(item.role);
-    if (holds !== present) await setGrants(user.id, withRole(user.grants, item.tenant, item.role, present));
+    // The beneficiary must still be in the directory; the write itself needs no read of their grants.
+    await beneficiaryOf(request);
+    await (present ? grantRole : revokeRole)(request.beneficiaryId, item.tenant, item.role);
     return;
   }
+  const user = await beneficiaryOf(request);
   if (!item.projectId) throw new ProvisionError(`${item.id} names no initiative`);
   if (!user.personId) throw new ProvisionError(`${user.displayName} has no linked person; an initiative membership needs one`);
   if (present) await addContribution(item.projectId, user.personId);

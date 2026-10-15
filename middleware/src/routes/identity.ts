@@ -152,9 +152,18 @@ identityRouter.post('/users', requireAction('ManageUsers'), asyncHandler(async (
 }));
 
 identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandler(async (req, res) => {
-  const { grants } = req.body as { grants?: Grants };
+  const { grants, base } = req.body as { grants?: Grants; base?: Grants };
   if (!grants || typeof grants !== 'object') {
     res.status(400).json({ error: 'grants object is required' });
+    return;
+  }
+  // `base` (optional) is the matrix the editor loaded. The write applies only
+  // what differs from it, so a role granted since (an access provisioning)
+  // survives a save from a stale page instead of being erased by it.
+  const isGrantSet = (g: unknown): g is Grants => !!g && typeof g === 'object' && !Array.isArray(g)
+    && Object.values(g).every((roles) => Array.isArray(roles) && roles.every((r) => typeof r === 'string'));
+  if (base !== undefined && !isGrantSet(base)) {
+    res.status(400).json({ error: 'base must be a grants object' });
     return;
   }
   const known = new Map(roleRegistry().map(r => [`${r.tenant ?? '*'}/${r.id}`, r]));
@@ -171,7 +180,7 @@ identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandl
   }
   const userId = String(req.params['id']);
   const session = req.session!;
-  const offending = offendingTenant(session, grants);
+  const offending = offendingTenant(session, grants) ?? (base ? offendingTenant(session, base) : null);
   if (offending) {
     res.status(403).json({ error: `cannot set grants for tenant '${offending}' — your session is scoped to '${session.tenant}'` });
     return;
@@ -181,13 +190,16 @@ identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandl
     res.status(404).json({ error: `user '${userId}' not found` });
     return;
   }
-  // setGrants replaces a user's grants wholesale, so a scoped caller's
-  // payload (which only ever names their own tenant) is merged onto the
-  // user's existing grants first — otherwise every other tenant's roles
-  // would be deleted, not merely left unwritten.
-  const merged: Grants = session.role === 'admin' ? grants : { ...current.grants, ...grants };
+  // setGrants makes the user's grants equal `merged` (writing only the rows
+  // that differ), so a scoped caller's payload (which only ever names their
+  // own tenant) is merged onto the user's existing grants first — otherwise
+  // every other tenant's roles would be removed, not merely left unwritten.
+  // Their base is scoped the same way.
+  const scoped = session.role !== 'admin';
+  const merged: Grants = scoped ? { ...current.grants, ...grants } : grants;
+  const from = base && scoped ? { ...current.grants, ...base } : base;
   if (auroraMissing(res, 'set grants')) return;
-  await setGrants(userId, merged);
+  await setGrants(userId, merged, from ? { base: from } : {});
   res.json(await getUser(userId));
 }));
 

@@ -10,13 +10,15 @@
 //   ORGIQ_DOCKER='colima ssh -- sudo docker' npx jest src/lib/access/__tests__/access-postgres.test.ts
 //
 // The container must carry the label orgiq.validation=access-postgres.
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import {
   ACTIVE_DELEGATIONS_SQL, DECIDE_STEP_SQL, END_DELEGATION_SQL, END_GRANT_SQL, ESCALATE_STEP_SQL, EXPIRY_DUE_SQL, GRANT_ROLE_SQL,
   INSERT_DELEGATION_SQL, INSERT_EVENT_SQL, INSERT_REQUEST_SQL, INSERT_STEP_SQL, PROVISION_ACTIVATE_SQL, PROVISION_CLAIM_SQL,
   REVOKE_ROLE_SQL, BUMP_EPOCH_SQL, WARN_EXPIRY_SQL,
 } from '../sql.js';
+import { USER_GRANTS_SQL, grantDiff, writeGrantSet, type GrantExec } from '../../identity-grants-sql.js';
+import type { Grants } from '../../session.js';
 
 const enabled = process.env['REAL_ACCESS_POSTGRES'] === '1';
 const container = process.env['ORGIQ_ACCESS_POSTGRES_CONTAINER'] ?? '';
@@ -66,6 +68,74 @@ async function run(statement: string, params: Record<string, Param> = {}): Promi
   return parseCsv(await psql(`${bound};`, true));
 }
 const one = async (q: string, params: Record<string, Param> = {}) => (await run(q, params))[0] ?? {};
+
+const bind = (statement: string, params: Record<string, Param>) => statement.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, name: string) => {
+  if (!(name in params)) throw new Error(`Unbound parameter ${name}`);
+  const v = params[name]!;
+  return v === null ? 'NULL' : typeof v === 'number' ? String(Math.trunc(v)) : literal(v);
+});
+
+/**
+ * One held connection (one psql process kept open), so a transaction spans
+ * several calls the way a Data API transaction id does — while other calls
+ * run on their own connections in between.
+ */
+class Session {
+  private out = '';
+  private err = '';
+  private n = 0;
+  private readonly child = spawn(docker[0]!, [...docker.slice(1), 'exec', '-i', container, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1',
+    '--csv', '-P', `null=${NULL}`, '-U', 'postgres', '-d', 'orgiq_validation'], { stdio: ['pipe', 'pipe', 'pipe'] });
+  constructor() {
+    this.child.stdout.on('data', (d: Buffer) => { this.out += d.toString(); });
+    this.child.stderr.on('data', (d: Buffer) => { this.err += d.toString(); });
+    this.child.stdin.write(`SET search_path TO ${SCHEMA}; SET client_min_messages TO warning;\n`);
+  }
+  /** Run one statement on this connection and return its rows. */
+  query(statement: string, params: Record<string, Param> = {}): Promise<Record<string, string | null>[]> {
+    const marker = `__done_${++this.n}__`;
+    this.child.stdin.write(`${bind(statement, params)};\n\\echo ${marker}\n`);
+    return new Promise((resolve, reject) => {
+      const poll = setInterval(() => {
+        const at = this.out.indexOf(`${marker}\n`);
+        if (at >= 0) {
+          clearInterval(poll);
+          const text = this.out.slice(0, at);
+          this.out = this.out.slice(at + marker.length + 1);
+          resolve(parseCsv(text));
+        } else if (this.child.exitCode !== null || this.err.includes('ERROR')) {
+          clearInterval(poll);
+          reject(new Error(this.err || `psql exited ${this.child.exitCode}`));
+        }
+      }, 10);
+    });
+  }
+  /** The GrantExec a whole-set writer runs inside this connection's transaction. */
+  readonly exec: GrantExec = async (statement, params) => (await this.query(statement, params)).map((r) => Object.values(r));
+  async close(): Promise<void> {
+    this.child.stdin.end();
+    await new Promise((r) => this.child.once('close', r));
+  }
+}
+
+/** providers/identity.ts setGrants on the cluster: BEGIN, writeGrantSet (the shared body), COMMIT. `between` runs after the base read. */
+async function setGrantsInTransaction(userId: string, grants: Grants, base: Grants | undefined, between: () => Promise<unknown> = async () => undefined) {
+  const tx = new Session();
+  try {
+    await tx.query('BEGIN');
+    let paused = false;
+    await writeGrantSet(async (statement, params) => {
+      const result = await tx.exec(statement, params);
+      // Interleave the other writer right after the transaction has its base.
+      if (!paused && (statement === USER_GRANTS_SQL || base)) { paused = true; await between(); }
+      return result;
+    }, userId, grants, base);
+    if (!paused) await between();
+    await tx.query('COMMIT');
+  } finally { await tx.close(); }
+}
+const rolesOf = async (userId: string) => (await run(`SELECT tenant_id || ':' || role AS g FROM user_tenant_roles WHERE user_id = :id ORDER BY 1`, { id: userId })).map((r) => r['g']);
+const epochOf = async (userId: string) => Number((await one(`SELECT session_epoch AS e FROM app_users WHERE id = :id`, { id: userId }))['e']);
 
 const T0 = '2026-10-14T09:00:00.000Z';
 const at = (h: number) => new Date(Date.parse(T0) + h * 3_600_000).toISOString();
@@ -197,22 +267,68 @@ const reject = (requestId: string, step: number, actor: string) => run(DECIDE_ST
     expect(resumed.sort()).toEqual([0, 1]);
   });
 
-  it('single-role grant writes never lose a concurrent grant; setGrants\' delete-and-reinsert does', async () => {
-    // Two provisionings for one person at once — SME and budget visibility — through GRANT_ROLE_SQL.
-    await Promise.all([['orgiq', 'sme'], ['orgiq', 'budgets-reader'], ['orgiq', 'sme'], ['orgiq', 'budgets-reader']]
-      .map(([tenant, role]) => run(GRANT_ROLE_SQL, { user_id: 'u-rhea', tenant: tenant!, role: role! })));
-    expect((await run(`SELECT role FROM user_tenant_roles WHERE user_id = 'u-rhea' AND tenant_id = 'orgiq' ORDER BY role`)).map((r) => r['role'])).toEqual(['budgets-reader', 'sme']);
-    // providers/identity.ts setGrants on the cluster: each caller read the grants, merged its role,
-    // then DELETEs every row and re-INSERTs its set. Interleaved, the second write drops the first role.
+  it('grant + grant: concurrent single-role grants for one person never lose a role, and bump nothing', async () => {
+    // Two provisionings for one person at once — SME and budget visibility — each twice, through GRANT_ROLE_SQL
+    // (providers/identity.ts grantRole), twenty rounds.
+    for (let round = 0; round < 20; round++) {
+      await sql(`DELETE FROM user_tenant_roles WHERE user_id = 'u-rhea' AND tenant_id = 'orgiq'`);
+      await Promise.all([['orgiq', 'sme'], ['orgiq', 'budgets-reader'], ['orgiq', 'sme'], ['orgiq', 'budgets-reader']]
+        .map(([tenant, role]) => run(GRANT_ROLE_SQL, { user_id: 'u-rhea', tenant: tenant!, role: role! })));
+      expect(await rolesOf('u-rhea')).toEqual(['access:requester', 'orgiq:budgets-reader', 'orgiq:sme']);
+    }
+    expect(await epochOf('u-rhea')).toBe(0);
+    // The writer this replaced — read the set, merge one role, DELETE every row, re-INSERT — interleaved, drops one.
     await sql(`DELETE FROM user_tenant_roles WHERE user_id = 'u-rhea' AND tenant_id = 'orgiq'`);
-    const setGrants = async (set: Array<[string, string]>) => {
+    const wholesale = async (set: Array<[string, string]>) => {
       await run(`DELETE FROM user_tenant_roles WHERE user_id = :id`, { id: 'u-rhea' });
-      for (const [tenant, role] of set) await run(`INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES (:id, :tenant, :role) ON CONFLICT DO NOTHING`, { id: 'u-rhea', tenant, role });
+      for (const [tenant, role] of set) await run(GRANT_ROLE_SQL, { user_id: 'u-rhea', tenant, role });
     };
-    // Both read {access: requester} first (the read-modify-write), then write.
-    await setGrants([['access', 'requester'], ['orgiq', 'sme']]);
-    await setGrants([['access', 'requester'], ['orgiq', 'budgets-reader']]);
-    expect((await run(`SELECT role FROM user_tenant_roles WHERE user_id = 'u-rhea' AND tenant_id = 'orgiq'`)).map((r) => r['role'])).toEqual(['budgets-reader']);
+    await wholesale([['access', 'requester'], ['orgiq', 'sme']]);
+    await wholesale([['access', 'requester'], ['orgiq', 'budgets-reader']]);
+    expect(await rolesOf('u-rhea')).toEqual(['access:requester', 'orgiq:budgets-reader']);
+  });
+
+  it('grant + revoke: a provisioning racing a revocation keeps one, removes the other; only the revoke bumps', async () => {
+    for (let round = 0; round < 10; round++) {
+      await sql(`DELETE FROM user_tenant_roles WHERE user_id = 'u-rhea' AND tenant_id = 'orgiq';
+        INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES ('u-rhea', 'orgiq', 'sme');`);
+      // Provision budget visibility (no bump, A3) while SME is revoked (remove, then bump — revokeAccess's order).
+      await Promise.all([
+        run(GRANT_ROLE_SQL, { user_id: 'u-rhea', tenant: 'orgiq', role: 'budgets-reader' }),
+        run(REVOKE_ROLE_SQL, { user_id: 'u-rhea', tenant: 'orgiq', role: 'sme' }).then(() => run(BUMP_EPOCH_SQL, { user_id: 'u-rhea' })),
+      ]);
+      expect(await rolesOf('u-rhea')).toEqual(['access:requester', 'orgiq:budgets-reader']);
+      expect(await epochOf('u-rhea')).toBe(round + 1);
+    }
+  });
+
+  it('admin edit + provisioning: the whole-set editor applies a diff in one transaction and never erases a concurrent grant', async () => {
+    // (a) No base: the editor's transaction reads Rhea's rows, then SME is provisioned on another
+    // connection and commits, then the editor applies its diff (add approver) and commits.
+    await setGrantsInTransaction('u-rhea', { access: ['requester', 'approver'] }, undefined,
+      () => run(GRANT_ROLE_SQL, { user_id: 'u-rhea', tenant: 'orgiq', role: 'sme' }));
+    expect(await rolesOf('u-rhea')).toEqual(['access:approver', 'access:requester', 'orgiq:sme']);
+    // (b) The editor's base (the matrix the page loaded, before the grant): a stale save that drops
+    // approver removes only approver; budget visibility, provisioned while the page was open, survives.
+    const loaded: Grants = { access: ['requester', 'approver'], orgiq: ['sme'] };
+    await setGrantsInTransaction('u-rhea', { access: ['requester'], orgiq: ['sme'] }, loaded,
+      () => run(GRANT_ROLE_SQL, { user_id: 'u-rhea', tenant: 'orgiq', role: 'budgets-reader' }));
+    expect(await rolesOf('u-rhea')).toEqual(['access:requester', 'orgiq:budgets-reader', 'orgiq:sme']);
+    // (c) A revocation of a role the editor is NOT changing, committed mid-edit, stays revoked.
+    await setGrantsInTransaction('u-rhea', { access: ['requester', 'approver'], orgiq: ['sme', 'budgets-reader'] },
+      { access: ['requester'], orgiq: ['sme', 'budgets-reader'] },
+      () => run(REVOKE_ROLE_SQL, { user_id: 'u-rhea', tenant: 'orgiq', role: 'budgets-reader' }).then(() => run(BUMP_EPOCH_SQL, { user_id: 'u-rhea' })));
+    expect(await rolesOf('u-rhea')).toEqual(['access:approver', 'access:requester', 'orgiq:sme']);
+    // Admin edits and provisionings never bump; the one revocation did, once.
+    expect(await epochOf('u-rhea')).toBe(1);
+    // Ten editors and ten provisioners at once, each on its own role: every write lands.
+    await sql(`DELETE FROM user_tenant_roles WHERE user_id = 'u-rhea'; INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES ('u-rhea', 'access', 'requester');`);
+    await Promise.all([
+      ...Array.from({ length: 10 }, (_, i) => setGrantsInTransaction('u-rhea', { access: ['requester'], orgiq: [`editor-${i}`] }, { access: ['requester'] })),
+      ...Array.from({ length: 10 }, (_, i) => run(GRANT_ROLE_SQL, { user_id: 'u-rhea', tenant: 'orgiq', role: `prov-${i}` })),
+    ]);
+    expect((await rolesOf('u-rhea')).length).toBe(21);
+    expect(grantDiff({ access: ['requester'] }, { access: ['requester'], orgiq: ['editor-0'] })).toEqual({ add: [['orgiq', 'editor-0']], remove: [] });
   });
 
   it('the expiry sweep is single-flight: six racing sweepers and a person\'s revoke end each grant once', async () => {

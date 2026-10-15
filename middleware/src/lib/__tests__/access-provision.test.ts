@@ -4,8 +4,8 @@
 // fixture — no identity mock, so a grant written here is the grant every
 // other route reads.
 //
-//   * a tenant-role request merges the role into the beneficiary's grants
-//     through setGrants (their other grants untouched), does NOT bump their
+//   * a tenant-role request writes the ONE role into the beneficiary's grants
+//     through grantRole (their other grants untouched), does NOT bump their
 //     epoch (A3: the grant reaches open cookies at the grants refresh; live
 //     readers still hear onDirectoryChange), records
 //     `provisioned`, and lands `active` with expiresAt from its duration;
@@ -20,8 +20,8 @@ jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', aurora: {}, auth: { policyStoreId: undefined, sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } },
 }));
 
-import { provisionAccess, revokeAccess, expiresAtFor, withRole } from '../access-provision.js';
-import { getUser, onDirectoryChange } from '../../providers/identity.js';
+import { provisionAccess, revokeAccess, expiresAtFor } from '../access-provision.js';
+import { getUser, onDirectoryChange, setGrants } from '../../providers/identity.js';
 import { listInitiativeMemberships } from '../../providers/projects.js';
 import { setNotificationSink, type NotificationInputLike } from '../social-notify.js';
 import { accessEventsFixture, accessRequestsFixture, accessStepsFixture } from '../../mock/access-requests.js';
@@ -52,7 +52,7 @@ beforeEach(() => {
 afterEach(() => { stopListening(); setNotificationSink(null); unfreezeClock(); jest.restoreAllMocks(); });
 
 describe('provisionAccess: a tenant role', () => {
-  it('merges the role through setGrants without bumping the epoch, records provisioned, lands active', async () => {
+  it('writes the role through grantRole without bumping the epoch, records provisioned, lands active', async () => {
     const before = structuredClone((await getUser('u-rhea'))!);
     expect(before.grants).toEqual({ access: ['requester'] });
     approve('req-0001');
@@ -181,12 +181,6 @@ describe('revokeAccess: the inverse', () => {
   });
 });
 
-it('withRole adds and removes one role and drops an emptied tenant', () => {
-  expect(withRole({ access: ['requester'] }, 'orgiq', 'sme', true)).toEqual({ access: ['requester'], orgiq: ['sme'] });
-  expect(withRole({ access: ['requester'], orgiq: ['sme'] }, 'orgiq', 'sme', false)).toEqual({ access: ['requester'] });
-  expect(withRole({ orgiq: ['sme', 'member'] }, 'orgiq', 'sme', false)).toEqual({ orgiq: ['member'] });
-});
-
 describe('the provisioned audit reason reads as a date', () => {
   it('formats an ISO expiry as a calendar date in UTC', async () => {
     const { expiryLabel } = await import('../access-provision.js');
@@ -195,13 +189,57 @@ describe('the provisioned audit reason reads as a date', () => {
   });
 });
 
-describe('two requests for one beneficiary provisioned at once (lane A, 2026-10-14)', () => {
-  it('keeps both grants: the merge is serialized per beneficiary, not only per request', async () => {
+describe('concurrent writers to one person\'s grants (lane A finding, 2026-10-14)', () => {
+  // The mock half of the race the native PostgreSQL contract runs on the
+  // cluster statements (lib/access/__tests__/access-postgres.test.ts): every
+  // writer changes only its own (tenant, role) row, with no per-beneficiary
+  // lock, so none of them loses another's write; epochs move as A3 says.
+  const second = (id: string, itemId: string) =>
+    accessRequestsFixture.rows().push({ ...structuredClone(row('req-0001')), id, itemId, duration: '30d' });
+
+  it('grant + grant: two requests for one beneficiary provisioned at once keep both roles, no bump', async () => {
     approve('req-0001');
-    // A second approved request for Rhea: budget visibility in Work.
-    accessRequestsFixture.rows().push({ ...structuredClone(row('req-0001')), id: 'req-0099', itemId: 'capability:orgiq:budgets-read', duration: '30d' });
+    second('req-0099', 'capability:orgiq:budgets-read');
+    const epoch = (await getUser('u-rhea'))!.epoch;
     const [a, b] = await Promise.all([provisionAccess({ id: 'req-0001' }), provisionAccess({ id: 'req-0099' })]);
     expect([a.changed, b.changed]).toEqual([true, true]);
-    expect((await getUser('u-rhea'))!.grants['orgiq']?.sort()).toEqual(['budgets-reader', 'sme']);
+    const after = (await getUser('u-rhea', { authoritative: true }))!;
+    expect(after.grants).toEqual({ access: ['requester'], orgiq: ['sme', 'budgets-reader'] });
+    expect(after.epoch).toBe(epoch);
+  });
+
+  it('grant + revoke: a provisioning racing a revocation keeps the new role, removes the old, bumps once', async () => {
+    approve('req-0001');
+    await provisionAccess({ id: 'req-0001' });
+    second('req-0099', 'capability:orgiq:budgets-read');
+    row('req-0099').status = 'approved';
+    const epoch = (await getUser('u-rhea'))!.epoch;
+    const [granted, revoked] = await Promise.all([
+      provisionAccess({ id: 'req-0099' }),
+      revokeAccess({ id: 'req-0001' }, 'Moved teams', 'u-priya'),
+    ]);
+    expect([granted.request.status, revoked.request.status]).toEqual(['active', 'revoked']);
+    const after = (await getUser('u-rhea', { authoritative: true }))!;
+    expect(after.grants).toEqual({ access: ['requester'], orgiq: ['budgets-reader'] });
+    expect(after.epoch).toBe(epoch + 1);
+  });
+
+  it('admin edit + provisioning: a save from the matrix loaded before the grant keeps the grant', async () => {
+    approve('req-0001');
+    // The admin opens Rhea's record (before the grant), then the last approval provisions SME…
+    const loaded = structuredClone((await getUser('u-rhea'))!.grants);
+    const epoch = (await getUser('u-rhea'))!.epoch;
+    await Promise.all([
+      provisionAccess({ id: 'req-0001' }),
+      // …and the admin saves their edit (adds approver) against the matrix they loaded.
+      setGrants('u-rhea', { access: ['requester', 'approver'] }, { base: loaded }),
+    ]);
+    const after = (await getUser('u-rhea', { authoritative: true }))!;
+    expect(after.grants).toEqual({ access: ['requester', 'approver'], orgiq: ['sme'] });
+    // Neither an admin edit nor a provisioning bumps.
+    expect(after.epoch).toBe(epoch);
+    // The edit's removals are still applied: dropping approver against a base that holds it removes only it.
+    await setGrants('u-rhea', { access: ['requester'] }, { base: { access: ['requester', 'approver'] } });
+    expect((await getUser('u-rhea'))!.grants).toEqual({ access: ['requester'], orgiq: ['sme'] });
   });
 });

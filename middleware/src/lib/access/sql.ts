@@ -25,8 +25,8 @@
 //                          writer that tries either.
 //   PROVISION_CLAIM_SQL /  approved → provisioned → active, each a claim, so a
 //   PROVISION_ACTIVATE_SQL racing provisioner does nothing twice; GRANT_ROLE_SQL
-//                          writes the one role (never setGrants' delete-and-
-//                          reinsert, which loses a concurrent grant).
+//                          writes the one role (providers/identity.ts grantRole;
+//                          no writer deletes and re-inserts a user's set).
 //   END_GRANT_SQL          active|provisioned → expired|revoked once, with its
 //                          event; the expiry sweep and a person's revoke race safely.
 //   WARN_EXPIRY_SQL        the 24-hour warning claimed once per request.
@@ -110,14 +110,12 @@ UPDATE access_requests
  WHERE id = :id AND status = 'approved' AND kind = 'grant'
 RETURNING id`;
 
-/** The grant itself: one (user, tenant, role) row, idempotent — never the whole set rewritten. */
-export const GRANT_ROLE_SQL = `
-INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES (:user_id, :tenant, :role)
-ON CONFLICT DO NOTHING`;
-
-/** Remove exactly the role provisioning wrote. Idempotent. */
-export const REVOKE_ROLE_SQL = `
-DELETE FROM user_tenant_roles WHERE user_id = :user_id AND tenant_id = :tenant AND role = :role`;
+/**
+ * The grant itself (one (user, tenant, role) row, idempotent) and its inverse.
+ * They belong to the grant store, so they live beside it: providers/identity.ts
+ * `grantRole` / `revokeRole` / `setGrants` run exactly these strings.
+ */
+export { GRANT_ROLE_SQL, REVOKE_ROLE_SQL } from '../identity-grants-sql.js';
 
 /** Retire every cookie the beneficiary holds (decision A3) — the epoch bump revocation and expiry make. */
 export const BUMP_EPOCH_SQL = `

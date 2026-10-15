@@ -98,8 +98,8 @@ standing in `access` with `ViewAccess`; posting needs the same
 (`middleware/src/lib/access/thread.ts`, family `access:req` in
 `lib/tenant-channels.ts`, reader cursors on).
 
-Provisioning (A1): a `tenant-role` merges the role into the beneficiary's
-grants (`setGrants`); an `initiative-membership` inserts a
+Provisioning (A1): a `tenant-role` writes the one role into the beneficiary's
+grants (`grantRole`, a single row); an `initiative-membership` inserts a
 `project_contributions` row (role `contributor`). Neither bumps the
 beneficiary's `session_epoch`: the grant reaches their open cookie through the
 ≤120 s grants refresh. Revocation and expiry (`lib/access-expiry.ts`) remove
@@ -250,7 +250,7 @@ type StewardRule = 'tenant-steward' | 'initiative-owner' | 'budget-owner';
 ```
 
 A `capability` item provisions like a `tenant-role` (the entry merges into the
-beneficiary's grants through `setGrants`; revocation and expiry remove it and
+beneficiary's grants through `grantRole`; revocation and expiry remove it and
 bump the epoch) and carries no SoD. `GET /configuration`'s `stewards` gains
 `{ scope: 'capability', tenant: 'orgiq', rule: 'budget-owner', role: 'org-leader' }`.
 

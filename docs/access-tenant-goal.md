@@ -162,7 +162,7 @@ rendered-contract change per `docs/journeys.md`.
 ## A1 — provisioning, expiry, notifications, thread
 
 - The last approval calls `provisionAccess(request)` in
-  `middleware/src/lib/access-provision.ts`: `setGrants` merge or a
+  `middleware/src/lib/access-provision.ts`: a single-role `grantRole` or a
   `project_contributions` insert, an `access_events` row, status
   `provisioned` then `active`. It does **not** bump the session epoch: the
   grant reaches the beneficiary's open cookie through the ≤120 s grants
@@ -238,8 +238,9 @@ rendered-contract change per `docs/journeys.md`.
   submits file once; twelve concurrent approvers decide a step once; no
   self-approval through the statement or any other writer (trigger);
   provisioning idempotent under eight racing provisioners and resumable after a
-  crash; single-role grant writes keep a concurrent grant where `setGrants`'
-  delete-and-reinsert loses it; the expiry sweep single-flight under six racing
+  crash; single-role grant writes keep a concurrent grant where the old
+  delete-and-reinsert loses it (grant + grant, grant + revoke, and an admin
+  edit's per-row diff transaction racing a provisioning); the expiry sweep single-flight under six racing
   sweepers and a person's revoke; escalation once per level; delegations.
   Record: `docs/realtime-validation/<date>/access-postgres.md`. The judge
   runs the suite when the container is up and otherwise judges the record,

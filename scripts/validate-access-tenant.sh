@@ -130,7 +130,7 @@ else fail "docs/access-journeys/ missing"; fi
 if judged A1; then
   section "A1 · provisioning, expiry, notifications, thread"
   exists middleware/src/lib/access-provision.ts "lib/access-provision.ts"
-  need "setGrants" middleware/src/lib/access-provision.ts "provisions through providers/identity setGrants"
+  need "grantRole" middleware/src/lib/access-provision.ts "provisions one role through providers/identity grantRole"
   need "bumpSessionEpoch" middleware/src/lib/access-provision.ts "bumps the beneficiary's session epoch"
   exists middleware/src/lib/access-expiry.ts "lib/access-expiry.ts"
   need "replica-fleet|replicaFleet|withFleetLock|hasPeers" middleware/src/lib/access-expiry.ts "sweeper is single-flight across replicas"

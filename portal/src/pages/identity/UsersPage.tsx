@@ -112,8 +112,10 @@ function UsersPage() {
     try { await fn(); } catch (e) { setMutationError((e as Error).message); } finally { setBusy(false); }
   };
 
-  const saveGrants = (userId: string, grants: Record<string, string[]>) => run(async () => {
-    await sendJson(`/api/identity/users/${userId}/grants`, 'PUT', { grants });
+  // `base` is the matrix the record was loaded with: the server writes only what
+  // differs from it, so a role granted since (an access provisioning) survives.
+  const saveGrants = (userId: string, grants: Record<string, string[]>, base: Record<string, string[]>) => run(async () => {
+    await sendJson(`/api/identity/users/${userId}/grants`, 'PUT', { grants, base });
     load();
     // If we just edited the signed-in user, their session grants are stale
     // until the next login — refresh so the switcher reflects reality.
@@ -212,7 +214,7 @@ function UsersPage() {
             canSignInAs={canSignInAs && session?.sub !== open.id}
             onSignIn={() => signInAs(open)}
             onLinkPerson={(personId) => void linkPerson(open.id, personId)}
-            onSaveGrants={(grants) => void saveGrants(open.id, grants)}
+            onSaveGrants={(grants) => void saveGrants(open.id, grants, open.grants)}
           />
         ) : loadingFirst || !usersData ? (
           <LoadingState label="Loading user…" />
