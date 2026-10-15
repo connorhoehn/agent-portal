@@ -261,18 +261,14 @@ describe('seeded submission status requires provenance rather than guessing', ()
     // two with `>=`, and each stamp is sampled when its own fixture materializes,
     // so this row flipped between "committed" and "processed" run to run with
     // nothing changed. The wire snapshot caught it churning.
-    const awaiting = listing.envelopes.find(
-      (e) => e.envelope_id === 'sub-20260810T091500Z-form5-jordan-lee-r3',
-    );
+    const awaiting = listing.envelopes.find((e) => e.team_id === 'TEAM-002' && e.revision === 3);
     expect(awaiting?.status).toBe('committed');
     expect(Date.parse(awaiting!.ingested_at))
       .toBeGreaterThan(Date.parse(M.scoresFor('TEAM-002')!['1']!.history.at(-1)!.changed_at));
 
     // TEAM-005 has later team scores, but no envelope-linked run. Those scores
     // must not fabricate proof that this particular submission was processed.
-    const done = listing.envelopes.find(
-      (e) => e.envelope_id === 'sub-20260819T134500Z-form9-dana-whitfield',
-    );
+    const done = listing.envelopes.find((e) => e.team_id === 'TEAM-005');
     expect(done?.status).toBe('committed');
 
     // A processed fixture needs explicit provenance; tests above provide it.

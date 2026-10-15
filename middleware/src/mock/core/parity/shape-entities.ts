@@ -257,8 +257,6 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     unmodelledColumns: {
       id:
         'A BIGSERIAL the database mints. A fixture that carried one would be inventing a sequence value, and nothing addresses a history entry by it — the portal reads a dimension\'s trail in order.',
-      na_claimed:
-        'Records an N/A CLAIM independent of `is_na` (N/A is never self-granting, so a claim with no approved exception leaves is_na false). Optional on DimensionHistoryEntry for backward compatibility, and every seeded entry predates it; the column\'s NOT NULL DEFAULT FALSE is exactly what an absent claim means.',
     },
     extraKeys: {
       _at:
@@ -324,8 +322,6 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockRows: async () => (await assessment()).scoringLogsFixture.rows('default'),
     mockId: (l: { team_id: string; stamp: string }) => `${l.team_id}@${l.stamp}`,
     unmodelledColumns: {
-      run_id:
-        'The agent run that produced the log, when there was one. Optional on ScoringLog by design: none of the seeded logs has a run behind it, and pointing one at a seeded run id would assert a lineage that never happened.',
       created_at:
         'A log is addressed and ordered by its `stamp`, which is its creation instant in the id\'s own format; `created_at` is the database\'s copy of the same thing, defaulted to NOW().',
     },

@@ -32,7 +32,11 @@ import request from '../../test-support/http.js';
 import { assessmentRouter } from '../assessment.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { type Session } from '../../lib/session.js';
-import { upsertSubmission, removeSubmission } from '../../mock/assessment.js';
+import { upsertSubmission, removeSubmission, submissions, scoringLogsFor } from '../../mock/assessment.js';
+
+// The seed's ids and stamps embed dates off the mock clock, so tests look them up.
+const T2 = (): string => submissions().find((e) => e.team_id === 'TEAM-002' && e.revision === 1)!.envelope_id;
+const LOG1 = (): string => scoringLogsFor('TEAM-001')[0]!.stamp;
 
 function buildApp(session: Partial<Session> = { role: 'assessor' }) {
   const app = express();
@@ -327,7 +331,7 @@ describe('GET /teams/:id/scoring-logs', () => {
   it('200s TEAM-001 with the seeded scoring pass', async () => {
     const res = await request(buildApp()).get('/api/assessment/teams/TEAM-001/scoring-logs');
     expect(res.status).toBe(200);
-    expect(res.body.logs.some((l: { stamp: string }) => l.stamp === '20260831T080015Z')).toBe(true);
+    expect(res.body.logs.some((l: { stamp: string }) => l.stamp === LOG1())).toBe(true);
   });
 
   it('400s a traversal-shaped team id', async () => {
@@ -348,13 +352,13 @@ describe('GET /teams/:id/scoring-logs', () => {
 
 describe('GET /teams/:id/scoring-logs/:stamp', () => {
   it('200s the seeded scoring log for TEAM-001', async () => {
-    const res = await request(buildApp()).get('/api/assessment/teams/TEAM-001/scoring-logs/20260831T080015Z');
+    const res = await request(buildApp()).get(`/api/assessment/teams/TEAM-001/scoring-logs/${LOG1()}`);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ team_id: 'TEAM-001', stamp: '20260831T080015Z', source: 'agent' });
+    expect(res.body).toMatchObject({ team_id: 'TEAM-001', stamp: LOG1(), source: 'agent' });
   });
 
   it('400s a traversal-shaped team id', async () => {
-    const res = await request(buildApp()).get('/api/assessment/teams/TEAM-../scoring-logs/20260831T080015Z');
+    const res = await request(buildApp()).get(`/api/assessment/teams/TEAM-../scoring-logs/${LOG1()}`);
     expect(res.status).toBe(400);
   });
 
@@ -365,7 +369,7 @@ describe('GET /teams/:id/scoring-logs/:stamp', () => {
 
   it('403s a role with no ViewAssessment', async () => {
     const res = await request(buildApp({ role: OUTSIDE_ROLE }))
-      .get('/api/assessment/teams/TEAM-001/scoring-logs/20260831T080015Z');
+      .get(`/api/assessment/teams/TEAM-001/scoring-logs/${LOG1()}`);
     expect(res.status).toBe(403);
   });
 });
@@ -468,7 +472,7 @@ describe('GET /submissions', () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.envelopes)).toBe(true);
     expect(Array.isArray(res.body.groups)).toBe(true);
-    expect(res.body.envelopes.some((e: { envelope_id: string }) => e.envelope_id === 'sub-20260810T091500Z-form5-jordan-lee')).toBe(true);
+    expect(res.body.envelopes.some((e: { envelope_id: string }) => e.envelope_id === T2())).toBe(true);
   });
 
   it('403s a role with no ViewAssessment', async () => {
@@ -480,9 +484,9 @@ describe('GET /submissions', () => {
 describe('GET /submissions/:team/:envelope', () => {
   it('200s the seeded TEAM-002 envelope', async () => {
     const res = await request(buildApp())
-      .get('/api/assessment/submissions/TEAM-002/sub-20260810T091500Z-form5-jordan-lee');
+      .get(`/api/assessment/submissions/TEAM-002/${T2()}`);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ envelope_id: 'sub-20260810T091500Z-form5-jordan-lee', team_id: 'TEAM-002' });
+    expect(res.body).toMatchObject({ envelope_id: T2(), team_id: 'TEAM-002' });
   });
 
   it('400s a traversal-shaped team id', async () => {
@@ -497,7 +501,7 @@ describe('GET /submissions/:team/:envelope', () => {
 
   it('403s a role with no ViewAssessment', async () => {
     const res = await request(buildApp({ role: OUTSIDE_ROLE }))
-      .get('/api/assessment/submissions/TEAM-002/sub-20260810T091500Z-form5-jordan-lee');
+      .get(`/api/assessment/submissions/TEAM-002/${T2()}`);
     expect(res.status).toBe(403);
   });
 });
@@ -505,15 +509,15 @@ describe('GET /submissions/:team/:envelope', () => {
 describe('PATCH /submissions/:team/:envelope/links', () => {
   it('200s an assessor marking a dimension link fetched', async () => {
     const res = await request(buildApp())
-      .patch('/api/assessment/submissions/TEAM-002/sub-20260810T091500Z-form5-jordan-lee/links')
+      .patch(`/api/assessment/submissions/TEAM-002/${T2()}/links`)
       .send({ dimension_id: '5', status: 'fetched' });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ envelope_id: 'sub-20260810T091500Z-form5-jordan-lee' });
+    expect(res.body).toMatchObject({ envelope_id: T2() });
   });
 
   it('400s a missing status', async () => {
     const res = await request(buildApp())
-      .patch('/api/assessment/submissions/TEAM-002/sub-20260810T091500Z-form5-jordan-lee/links')
+      .patch(`/api/assessment/submissions/TEAM-002/${T2()}/links`)
       .send({ dimension_id: '5' });
     expect(res.status).toBe(400);
   });
@@ -533,7 +537,7 @@ describe('PATCH /submissions/:team/:envelope/links', () => {
 
   it('403s a role with no ManageSubmissions', async () => {
     const res = await request(buildApp({ role: OUTSIDE_ROLE }))
-      .patch('/api/assessment/submissions/TEAM-002/sub-20260810T091500Z-form5-jordan-lee/links')
+      .patch(`/api/assessment/submissions/TEAM-002/${T2()}/links`)
       .send({ dimension_id: '5', status: 'fetched' });
     expect(res.status).toBe(403);
   });
@@ -628,9 +632,9 @@ describe('POST /submissions/commit', () => {
   it('200s an assessor committing a real envelope', async () => {
     const res = await request(buildApp())
       .post('/api/assessment/submissions/commit')
-      .send({ team_id: 'TEAM-002', envelope_ids: ['sub-20260810T091500Z-form5-jordan-lee'] });
+      .send({ team_id: 'TEAM-002', envelope_ids: [T2()] });
     expect(res.status).toBe(200);
-    expect(res.body.committed).toEqual(['sub-20260810T091500Z-form5-jordan-lee']);
+    expect(res.body.committed).toEqual([T2()]);
   });
 
   it('400s a traversal-shaped team id', async () => {
@@ -732,19 +736,19 @@ describe('POST /submissions/commit — staging_token / selections', () => {
       .send({ staging_token: stagingToken, selections: [{ row_index: 0, team_id: 'TEAM-002' }] });
 
     expect(commitRes.status).toBe(200);
-    expect(commitRes.body.committed).toEqual(['sub-20260810T091500Z-form5-jordan-lee-r4']);
+    expect(commitRes.body.committed).toEqual([`${T2()}-r4`]);
     expect(commitRes.body.results).toEqual([
       {
-        row_index: 0, team_id: 'TEAM-002', envelope_id: 'sub-20260810T091500Z-form5-jordan-lee-r4',
+        row_index: 0, team_id: 'TEAM-002', envelope_id: `${T2()}-r4`,
         links: [{ url: 'https://github.com/example/k8s-operator/actions', label: 'Evidence / Additional Context for Dimension 1', dimension_id: '1', status: 'pending' }],
       },
     ]);
 
     const detail = await request(buildApp())
-      .get('/api/assessment/submissions/TEAM-002/sub-20260810T091500Z-form5-jordan-lee-r4');
+      .get(`/api/assessment/submissions/TEAM-002/${T2()}-r4`);
     expect(detail.status).toBe(200);
     expect(detail.body).toMatchObject({
-      revision: 4, status: 'committed', supersedes: 'sub-20260810T091500Z-form5-jordan-lee-r3',
+      revision: 4, status: 'committed', supersedes: `${T2()}-r3`,
       team_name_raw: 'Kubernetes Operator', submitter: { name: 'Jamie Lee', email: 'jamie.lee@example.com' },
     });
     expect(detail.body.dimension_hints).toEqual([
@@ -757,7 +761,7 @@ describe('POST /submissions/commit — staging_token / selections', () => {
     ]);
 
     const superseded = await request(buildApp())
-      .get('/api/assessment/submissions/TEAM-002/sub-20260810T091500Z-form5-jordan-lee-r3');
+      .get(`/api/assessment/submissions/TEAM-002/${T2()}-r3`);
     expect(superseded.body.status).toBe('superseded');
   });
 
@@ -1066,7 +1070,7 @@ describe('GET /teams/:id/exceptions', () => {
   it('200s the team archetype, the archetype options and its open exceptions', async () => {
     const res = await request(buildApp()).get('/api/assessment/teams/TEAM-001/exceptions');
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ team_id: 'TEAM-001', archetype: 'internal-tooling-no-deploy' });
+    expect(res.body).toMatchObject({ team_id: 'TEAM-001', archetype: null });
     expect(Array.isArray(res.body.archetypes) && res.body.archetypes.length > 0).toBe(true);
     expect(res.body.exceptions.map((e: { dimension_id: string }) => e.dimension_id).sort()).toEqual(['6', '7']);
   });

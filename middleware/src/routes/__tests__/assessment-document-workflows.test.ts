@@ -69,8 +69,8 @@ describe('document comments', () => {
   it('lists through the BFF with no-store and never takes a document id from the browser', async () => {
     const list = await request(app()).get(`${url}/comments?id=page%3A100002`);
     expect(list.status).toBe(200); expect(list.headers['cache-control']).toBe('no-store');
-    expect(list.body.comments.map((c: { commentId: string }) => c.commentId)).toEqual(['kc-rubric-01', 'kc-rubric-02']);
-    expect(list.body.import).toMatchObject({ state: 'imported', imported: 2 });
+    expect(list.body.comments.map((c: { commentId: string }) => c.commentId)).toEqual(['kc-rubric-01', 'kc-rubric-02', 'kc-rubric-03']);
+    expect(list.body.import).toMatchObject({ state: 'imported', imported: 3 });
     expect((await request(app()).get(`${url}/comments`)).status).toBe(400);
   });
   it('rejects browser-supplied authority fields on a comment', async () => {

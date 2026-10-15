@@ -54,15 +54,20 @@ describe('TeamCertification: below_target / above_target', () => {
     }
   });
 
-  it('reports the split TEAM-001 actually has: one dimension over target, one under', async () => {
+  it('reports the split TEAM-001 actually has: some dimensions over target, some under', async () => {
     const teams = await provider.listTeams();
     const t1 = teams.find((t) => t.id === 'TEAM-001')!;
-    // Seeded: 15 applicable, 14 at/above the target of 3, dimension 9 at
-    // Level 4 and dimension 1 stuck at Level 2 behind an open claim.
+    // Counted from the seeded sheet rather than typed: strong dimensions (4, 8, 9
+    // at Level 4) sit above the target of 3, and the weak ones (1, 10, 13, 17 at
+    // Level 2) below it. Dimension 6 is an approved N/A; dimension 7's request is
+    // still open, so it has no level and is neither over nor under.
+    const levels = Object.values(M.scoresFor('TEAM-001')!).filter((d) => !d.is_na && d.current_level !== null).map((d) => d.current_level!);
     expect(t1.certification.target_level).toBe(3);
-    expect(t1.certification.at_or_above_target).toBe(14);
-    expect(t1.certification.below_target).toBe(1);
-    expect(t1.certification.above_target).toBe(1);
+    expect(t1.certification.at_or_above_target).toBe(levels.filter((l) => l >= 3).length);
+    expect(t1.certification.below_target).toBe(levels.filter((l) => l < 3).length);
+    expect(t1.certification.above_target).toBe(levels.filter((l) => l > 3).length);
+    expect(t1.certification.above_target).toBeGreaterThan(1);
+    expect(t1.certification.below_target).toBeGreaterThan(1);
   });
 
   it('a brand-new team reports zero on both rather than omitting them', async () => {

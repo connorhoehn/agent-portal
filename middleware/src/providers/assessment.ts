@@ -3116,18 +3116,18 @@ A gap between the two is the normal state of a baseline, not a fault.
 
 ## Levels 4 and 5 are exceptional
 Level 4 requires *observed* evidence — pipelines, dashboards, code. Level 5 additionally requires that practice sustained over time.`,
-  '100003': 'Playbooks for each assessment motion. Pick the one for the team\'s cohort.',
-  '100004': `## White Glove playbook
-1. Kick-off with the named lead.
-2. Two 1:1 assessment reviews, transcripts into intake.
-3. Evidence walk-through against the open claims.
-4. Publish the summary to the team's Confluence space.`,
-  '100005': `## Self-Service playbook
-1. Team completes the Forms self-assessment.
-2. Envelope ingested; links fetched.
-3. \`process-self-assessment\` scores what the envelope informs.
-4. Follow-ups go back through Teams.`,
-  '100006': `**Why did my verified level come out below what I rated?**
+  '100003': `Each team follows the playbook for its cohort.
+
+- **White Glove** — Kick-off with the named lead, two 1:1 assessment reviews with transcripts into intake, an evidence walk-through against the open claims, then the summary published to the team's Confluence space.
+- **Self-Service** — The team completes the Forms self-assessment, the envelope is ingested and its links fetched, \`process-self-assessment\` scores what the envelope informs, and follow-ups go back through Teams.`,
+  '100004': `## Northstar Payments
+Northstar is a White Glove team led by Jonas Lindqvist, with Asha Nair as the assessor.
+
+1. Kick-off with Deepa Natarajan and Idris Diallo.
+2. Review the two repositories, northstar-payments-api and northstar-payments-infra, against the open claims.
+3. Walk through the governance review minutes with the team.
+4. Publish the summary to the PAY space.`,
+  '100005': `**Why did my verified level come out below what I rated?**
 Because verification can only reach as far as the evidence on file. Nothing was revised down — the claim stays open until an artifact lets us see the practice.
 
 **Can a dimension be N/A?**
