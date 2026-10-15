@@ -18,7 +18,7 @@ export default {
       ['Tenant-by-tenant cutover runbook', /blocked/i, 'Cutover order for legacy SSO tenants', 'Sienna Garcia'], [/\b(?:Jan|Feb|Mar|Apr|May|Jun) \d{1,2}\b/]),
     fact('/iq/designs/des-auth-rotation', 'The design review is signed off by people on the initiative, not by a bot',
       ['Auth Migration', 'Vera Green'], [/auth-dep-watch/]),
-    fact('/iq/communication/channels/auth-migration?view=shared', 'The initiative channel discusses the same blocker the board shows',
+    fact('/iq/communication/channels/auth-migration?view=chat', 'The initiative channel discusses the same blocker the board shows',
       [/cutover/i, 'Vera Green', 'Sienna Garcia'], [/Cutover is done/]),
     fact('/iq/runs', 'Agent runs read as real work: varied outcomes, one failure with a cause',
       [/\bfailed\b/i, /Auth Migration/], [/scheduled maintenance — completed/]),

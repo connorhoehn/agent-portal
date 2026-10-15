@@ -4,12 +4,12 @@ user: u-priya (Priya Venkataraman)
 url: /access/reviews/rev-0001; /access/policies; /access/audit
 map: docs/journeys/maps/demo/access/admin.ts
 pages: portal/src/pages/access
-audited: 2026-10-14 23:48–23:48 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-priya-clone-26129f02), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.456.3
-session: /api/session/me sub u-priya-clone-26129f02, tenant access, role access-admin, grants {"access":["access-admin"]}
+audited: 2026-10-15 00:33–00:33 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-priya-clone-701ab894), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.456.4
+session: /api/session/me sub u-priya-clone-701ab894, tenant access, role access-admin, grants {"access":["access-admin"]}
 screenshot: admin.jpg
 verdict: fail — 3 of 3 steps failed; step 1 (The review campaign has a deadline and roles in words): not visible: main :visible:text-matches("Closes|Due", "i")
 console errors: 0
-layout: fail — no step was measured; at /access/reviews/rev-0001: no horizontal scroll (1680/1680), 0 h1
+layout: fail — no step was measured; at /access/reviews/rev-0001: no horizontal scroll (1680/1680), 1 h1 "Q4 SME certification — Work" 20/600 at 264/111, table body rows 44px ×4, first-row-top: 279px, composer at y 833–891 of 940
 story-facts: fail — step 1 (The review campaign has a deadline and roles in words): not visible: main :visible:text-matches("Closes|Due", "i"); step 2 (Policies name roles in words, who last changed them, and one has caught a request): not visible: main :visible:has-text("Priya Venkataraman")
 cross-links: fail — step 3 (The audit trail reads as sentences, with no internal ids or duplicate rows): text present (expected none): /\bdlg-\d{4}\b/
 dom-audit: 0 failing finding(s) at 0 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 441f4fa4c88814c2
