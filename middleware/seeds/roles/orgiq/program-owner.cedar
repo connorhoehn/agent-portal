@@ -24,7 +24,14 @@ permit (
     OrgIQ::Action::"ManageBots",
     // Set the monthly allocation per initiative — the program owner runs the
     // delivery program, so they are exactly who should be setting its ceiling.
-    OrgIQ::Action::"ManageBudgets"
+    OrgIQ::Action::"ManageBudgets",
+    // Read the session brief a run was given (GET /api/runs/:ref/brief, the work-item
+    // brief preview). Every role that can see work can see what a box was told.
+    OrgIQ::Action::"ViewSessionBrief",
+    // Decide runbook proposals. Role-wide here; routes/runbooks.ts scopes it to the
+    // runbook's owner or an SME on its initiative (lib/runbook-review.ts), with
+    // org-leader and admin overriding.
+    OrgIQ::Action::"ReviewRunbook"
   ],
   resource
 )

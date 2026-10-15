@@ -39,7 +39,10 @@ permit (
     OrgIQ::Action::"ManageEnvironments",
     // Pair their own machine as a local presence node (see member.cedar for
     // why this is personal, not fleet, authority).
-    OrgIQ::Action::"ConnectLocalCompute"
+    OrgIQ::Action::"ConnectLocalCompute",
+    // Read the session brief a run was given (GET /api/runs/:ref/brief, the work-item
+    // brief preview). Every role that can see work can see what a box was told.
+    OrgIQ::Action::"ViewSessionBrief"
   ],
   resource
 )

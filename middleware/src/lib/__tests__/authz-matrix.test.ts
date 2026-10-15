@@ -136,7 +136,10 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     // ConnectLocalCompute is personal, not fleet, authority: every node a
     // member pairs is bound to their own sub, and dispatching work TO a
     // machine stays behind DispatchAgentRun.
-    granted: ['Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ConnectLocalCompute'],
+    granted: ['Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ConnectLocalCompute',
+      // Reading what a run was told is open to everyone who can see work; deciding
+      // a runbook proposal is not (ReviewRunbook, below).
+      'ViewSessionBrief'],
   },
   'orgiq/sme': {
     tenant: 'orgiq',
@@ -150,6 +153,9 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // Standing up template bots / loop crons for mundane work is the SME's
       // own job — the dispatch pipeline's money brakes still govern the spend.
       'ManageBots', 'ConnectLocalCompute',
+      // ReviewRunbook is role-wide; routes/runbooks.ts scopes an SME to the
+      // runbooks they own or whose initiative they are attached to.
+      'ViewSessionBrief', 'ReviewRunbook',
     ],
   },
   'orgiq/program-owner': {
@@ -161,6 +167,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // org-leader. Transaction approval and the admin surface stay closed.
       'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback',
       'DispatchAgentRun', 'ManageSprints', 'ManageBots', 'ManageBudgets',
+      'ViewSessionBrief', 'ReviewRunbook',
     ],
   },
   'orgiq/org-leader': {
@@ -169,6 +176,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewObservability', 'LabelFeedback',
       'ManageCanary', 'DispatchAgentRun', 'ManageBudgets', 'ManageSprints', 'ManageBots',
       'ApproveTransaction', 'EnterEnvironment', 'ManageEnvironments', 'ConnectLocalCompute',
+      'ViewSessionBrief', 'ReviewRunbook',
     ],
   },
   'orgiq/hr-admin': {
@@ -178,7 +186,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'EditGuardrail', 'EditPolicy', 'EditSchema', 'ViewIdentityAdmin', 'ViewObservability',
       'LabelFeedback', 'ManageIngest', 'ManageCanary', 'ManageKB', 'ManageDevbox',
       'ManageBots', 'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
-      'ConnectLocalCompute',
+      'ConnectLocalCompute', 'ViewSessionBrief',
     ],
   },
   'assessment/assessor': {
@@ -291,6 +299,14 @@ describe('capability boundaries that must not regress', () => {
     ]) {
       expect(m).not.toContain(cap);
     }
+  });
+
+  test('runbook review: member and hr-admin read briefs but never decide a proposal', () => {
+    for (const r of ['orgiq/member', 'orgiq/sme', 'orgiq/program-owner', 'orgiq/org-leader', 'orgiq/hr-admin']) {
+      expect(has(r, 'ViewSessionBrief')).toBe(true);
+    }
+    for (const r of ['orgiq/sme', 'orgiq/program-owner', 'orgiq/org-leader']) expect(has(r, 'ReviewRunbook')).toBe(true);
+    for (const r of ['orgiq/member', 'orgiq/hr-admin']) expect(has(r, 'ReviewRunbook')).toBe(false);
   });
 
   test('sme adds dispatch + sprints only; never budgets, ingest, approval, masquerade', () => {

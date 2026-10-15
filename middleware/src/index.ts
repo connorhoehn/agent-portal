@@ -61,6 +61,8 @@ import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
 import { harnessRouter } from './routes/harness.js';
 import { labRouter } from './routes/lab.js';
+import { runbooksRouter } from './routes/runbooks.js';
+import { sessionBriefsRouter } from './routes/session-briefs.js';
 import { promptVersionsRouter } from './routes/prompt-versions.js';
 import { costRouter } from './routes/cost.js';
 import { calibrationRouter } from './routes/calibration.js';
@@ -328,6 +330,11 @@ app.use('/api/access-requests', accessQuickRouter);
 // The orgiq read of the pipelines run projection — only runs whose
 // context.tenant is 'orgiq' (docs/pipelines-tenant-goal.md §"The vertical
 // slice"). The bot detail page reads its runs here, never /api/pipelines/*.
+// The frozen session brief + a work item's brief preview. Mounted BEFORE the
+// /api/runs facade (which would 401 a box's cookie-less read first) and with no
+// blanket gate: a box signs a lab envelope, a person needs ViewSessionBrief —
+// both guarded per route inside the router (routes/session-briefs.ts).
+app.use('/api', sessionBriefsRouter);
 app.use('/api/runs', requireTenant('orgiq'), runsFacadeRouter);
 // Initiative status decks (docs/agentic-flows-migration.md slice 6); a deck built
 // with budget figures is visible only at the budgets read tier (routes/initiative-decks.ts).
@@ -388,6 +395,10 @@ app.use('/api/observability/harness', harnessRouter);
 // optional service auth INSIDE the router — no blanket session mount here,
 // same rule as approvals/harness above).
 app.use('/api/lab', labRouter);
+// Runbooks (docs/distillation-runbooks-design.md): reads need a signed-in orgiq
+// user; proposals take a person OR a box's signed lab envelope; decisions are
+// ReviewRunbook + owner/initiative-SME scope. Per-route guards inside the router.
+app.use('/api/runbooks', runbooksRouter);
 // Prompt-versions registry — populated at run start by the harness runner.
 // NOT ungated (the old comment here said so and was wrong): tenant + Cedar,
 // with the harness runner's machine identity as the alternative to a session.

@@ -17,7 +17,10 @@ permit (
     // authority: the routes bind every node to the pairing session's sub, and
     // a member only ever sees or manages their own machines. Dispatching work
     // TO a machine stays behind DispatchAgentRun, which members do not hold.
-    OrgIQ::Action::"ConnectLocalCompute"
+    OrgIQ::Action::"ConnectLocalCompute",
+    // Read the session brief a run was given (GET /api/runs/:ref/brief, the work-item
+    // brief preview). Every role that can see work can see what a box was told.
+    OrgIQ::Action::"ViewSessionBrief"
   ],
   resource
 )

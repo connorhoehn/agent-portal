@@ -375,6 +375,26 @@
           ]
         }
       },
+      "ReviewRunbook": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ViewSessionBrief": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
       "ViewSocial": {
         "appliesTo": {
           "principalTypes": [
