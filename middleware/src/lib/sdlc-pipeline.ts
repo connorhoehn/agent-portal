@@ -27,6 +27,7 @@ import { isGitFailure, parsePorcelainFiles } from './capture-parse.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
 import { registerBox, getBoxBySession, appendEvent, reserveBox, releaseBox } from './devbox-fleet.js';
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
+import type { DevboxLabContext } from './devbox-runner.js';
 
 export interface CaptureInput {
   client: BedrockAgentCoreClient;
@@ -59,7 +60,9 @@ export async function dispatchGovernedRun(input: {
    *  box this dispatch has to mint. See ensureWorkspace in lib/bot-runner.ts:
    *  an unattributed box is invisible to the SME who created it. */
   attribution?: { ownerId?: string | undefined; projectId?: string | undefined };
-}): Promise<{ ok: true; runId: string; checkout: string } | { ok: false; error: string }> {
+  /** The person dispatching (session sub), stamped on the run's frozen brief. */
+  dispatchedBy?: string | null;
+}): Promise<{ ok: true; runId: string; checkout: string; briefId: string | null } | { ok: false; error: string }> {
   const arn = await resolveDevboxArn();
   if (!arn) return { ok: false, error: 'the devbox runtime is not deployed' };
 
@@ -88,6 +91,27 @@ export async function dispatchGovernedRun(input: {
     ts: new Date().toISOString(),
   });
 
+  // The session brief freezes here, keyed by the run id, before the runtime is
+  // invoked: the box's SessionStart hook (`lab brief`) fetches it. A brief
+  // that cannot be assembled leaves the run briefless rather than unstarted.
+  let lab: DevboxLabContext | undefined;
+  let briefId: string | null = null;
+  try {
+    const { freezeBrief, labRunContext } = await import('./run-brief.js');
+    const brief = await freezeBrief({
+      run_ref: run.id, box: 'devbox',
+      work_item_id: input.workItemId ?? null,
+      initiative_id: input.project.orgProjectId ?? null,
+      repo: input.project.repoFullName ?? null,
+      task: { title: titleFrom(input.prompt), text: input.prompt },
+      dispatched_by: input.dispatchedBy ?? null,
+    });
+    briefId = brief.id;
+    lab = { ...(await labRunContext(brief)), session_id: input.sessionId, box_id: box.id };
+  } catch (err) {
+    console.warn(`[sdlc] could not freeze a brief for run ${run.id}:`, (err as Error).message);
+  }
+
   // The box is this run's until the run returns — including while it waits on
   // its operator — so no queued job is handed a checkout mid-run.
   const holder = `run:${run.id}`;
@@ -101,6 +125,7 @@ export async function dispatchGovernedRun(input: {
     runtimeArn: arn,
     client: devboxDataClient(),
     onEvent: (ev) => appendEvent(box.id, ev),
+    ...(lab ? { lab } : {}),
     onChanged: () => {
       void captureAndGate({
         client: devboxDataClient(), runtimeArn: arn, sessionId: input.sessionId,
@@ -111,7 +136,7 @@ export async function dispatchGovernedRun(input: {
     },
   }).finally(() => releaseBox(box.id, holder));
 
-  return { ok: true, runId: run.id, checkout };
+  return { ok: true, runId: run.id, checkout, briefId };
 }
 
 /** A concise change title from the task prompt — the first line, bounded. */

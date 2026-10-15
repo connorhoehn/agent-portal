@@ -1,6 +1,7 @@
 // The session brief over HTTP (docs/distillation-runbooks-design.md §3.4–§3.5; lane D / R3).
 //
 //   GET /api/runs/:ref/brief                the FROZEN brief a run was given
+//   GET /api/runs/:ref/runbooks/:id         a runbook that brief named (`lab runbook <id>`), as markdown
 //   GET /api/work-items/:id/brief-preview   what a run would be given now (assembled, never stored)
 //
 // Mounted at /api with NO blanket gate: the first is read by two kinds of caller —
@@ -8,17 +9,23 @@
 // and a person (the run's Brief tab, session + Cedar ViewSessionBrief). Per-route
 // guards, the lab.ts rule: a mount-level session floor would 401 the fleet.
 //
+// A box presents the lab envelope (some box of the fleet) AND the run token
+// for exactly :ref (lib/run-token.ts, minted at dispatch/claim, never derivable
+// from the fleet secret): a box reads its own run and no other.
+//
 // A box and the portal read the SAME bytes: `?format=markdown` (or `Accept:
 // text/markdown`) returns the brief's markdown verbatim with its sha256 in
 // `X-Brief-Sha256`/`ETag`; the JSON form carries `brief.sha256` for the portal to
 // compare. The brief is write-once, so the response is immutable.
 
-import { Router, type RequestHandler } from 'express';
+import { Router, type RequestHandler, type Response } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction, requireTenant } from '../lib/authz.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { LAB_CALLBACK_SERVICE_AUTH, hasServiceAuth } from '../lib/service-auth.js';
 import { previewBrief } from '../lib/session-brief-preview.js';
+import { liveBundleSkills, loadWorkContext } from '../lib/run-brief.js';
+import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
 import type { RunbookStore } from '../lib/runbooks/index.js';
 import { clock } from '../mock/core/clock.js';
 
@@ -40,14 +47,21 @@ const unlessMachine = (human: RequestHandler): RequestHandler => (req, res, next
 
 const briefLimit = rateLimit('session-brief', 240, 60_000);
 
+function refuseRunToken(res: Response): void {
+  res.status(403).json({ error: `a box reads only its own run: present ${RUN_TOKEN_HEADER} for this run`, code: 'RUN_TOKEN' });
+}
+
 export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
   const router = Router();
 
   router.get('/runs/:ref/brief', briefLimit, machineMark,
     unlessMachine(requireTenant('orgiq')), unlessMachine(requireAction('ViewSessionBrief')),
     asyncHandler(async (req, res) => {
+      const ref = String(req.params['ref']);
+      // The fleet secret proves "some box"; only this run's token proves "the box running THIS run".
+      if (res.locals['machine'] && !(await runTokenMatches(req, ref))) { refuseRunToken(res); return; }
       const s = await deps.store();
-      const brief = await s.getBrief(String(req.params['ref']));
+      const brief = await s.getBrief(ref);
       if (!brief) { res.status(404).json({ error: 'no brief was frozen for this run', code: 'NO_BRIEF' }); return; }
       res.setHeader('ETag', `"${brief.sha256}"`);
       res.setHeader('X-Brief-Id', brief.id);
@@ -61,35 +75,44 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
       res.json({ brief });
     }));
 
+  // `lab runbook <id>`: a runbook the run's brief named but did not include in full ("Also
+  // available"), or one it did include. Bound to the run like the brief itself; a runbook the
+  // brief never mentioned is not this run's to read through this door.
+  router.get('/runs/:ref/runbooks/:id', briefLimit, machineMark,
+    unlessMachine(requireTenant('orgiq')), unlessMachine(requireAction('ViewSessionBrief')),
+    asyncHandler(async (req, res) => {
+      const ref = String(req.params['ref']);
+      const id = String(req.params['id']);
+      if (!RUNBOOK_ID.test(id)) throw new ValidationError('not a runbook id');
+      if (res.locals['machine'] && !(await runTokenMatches(req, ref))) { refuseRunToken(res); return; }
+      const s = await deps.store();
+      const brief = await s.getBrief(ref);
+      const named = brief && (brief.sections.some((x) => x.kind === 'runbook' && x.ref === id) || brief.omitted.some((o) => o.runbook_id === id));
+      if (!brief || !named) { res.status(404).json({ error: `run ${ref} was not given ${id}`, code: 'NOT_GIVEN' }); return; }
+      const rb = await s.getRunbook(id);
+      const given = brief.sections.find((x) => x.kind === 'runbook' && x.ref === id)?.version;
+      const version = rb ? await s.getVersion(id, given ?? rb.current_version) : null;
+      if (!rb || !version || (given === undefined && rb.status !== 'published')) { res.status(404).json({ error: `${id} is not available`, code: 'NOT_AVAILABLE' }); return; }
+      res.setHeader('X-Runbook-Version', String(version.version));
+      res.setHeader('X-Runbook-Sha256', version.sha256);
+      res.type('text/markdown; charset=utf-8').send(version.markdown);
+    }));
+
   router.get('/work-items/:id/brief-preview', briefLimit, requireTenant('orgiq'), requireAction('ViewSessionBrief'),
     asyncHandler(async (req, res) => {
       const id = String(req.params['id']);
       const pinned = String(req.query['pin'] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
       for (const p of pinned) if (!RUNBOOK_ID.test(p)) throw new ValidationError(`pin: "${p}" is not a runbook id`);
 
-      const { getWorkItem, getProjectDecisions } = await import('../providers/work-items.js');
-      const work = await getWorkItem(id);
-      if (!work) { res.status(404).json({ error: 'work item not found' }); return; }
-      const { getProject } = await import('../providers/projects.js');
-      const [project, parent, decisions] = await Promise.all([
-        work.projectId ? getProject(work.projectId) : Promise.resolve(null),
-        work.parentId ? getWorkItem(work.parentId) : Promise.resolve(null),
-        work.projectId ? getProjectDecisions(work.projectId) : Promise.resolve([]),
-      ]);
-      // Decisions that bind THIS work: the ones attached to it, plus project-wide ones already settled.
-      const binding = decisions.filter((d) => d.workItemId === work.id || (d.workItemId === null && d.status === 'resolved'));
-
+      // The same context reading and the same skills a dispatched devbox run gets (lib/run-brief.ts).
+      const ctx = await loadWorkContext(id);
+      if (!ctx) { res.status(404).json({ error: 'work item not found' }); return; }
       const brief = await previewBrief({
         store: await deps.store(),
-        work: {
-          id: work.id, title: work.title, description: work.description, type: work.type,
-          storyPoints: work.storyPoints, labels: work.labels, parentId: work.parentId,
-        },
-        parent: parent ? { title: parent.title } : null,
-        project: project ? { id: project.id, name: project.name, repoFullName: project.repoFullName } : null,
-        decisions: binding,
+        ...ctx,
         pinned,
         nowIso: clock.nowIso(),
+        skills: await liveBundleSkills(),
       });
       res.json({ brief, stored: false, pinned });
     }));

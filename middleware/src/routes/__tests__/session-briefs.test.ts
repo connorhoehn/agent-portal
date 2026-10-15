@@ -32,6 +32,7 @@ import request from '../../test-support/http.js';
 import { SERVICE_AUTH_HEADER, signServiceRequest } from '@connorhoehn/service-runtime';
 import { LAB_CALLBACK_SERVICE_AUTH, SERVICE_NONCE_HEADER, captureRawBody, resetServiceNonceCache } from '../../lib/service-auth.js';
 import { createSessionBriefsRouter } from '../session-briefs.js';
+import { RUN_TOKEN_HEADER, mintRunToken } from '../../lib/run-token.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { assembleBrief, selectRunbooks, type RunbookStore } from '../../lib/runbooks/index.js';
 import { loadCandidates } from '../../lib/session-brief-preview.js';
@@ -53,11 +54,12 @@ function appAs(user: TestUser | null) {
   return app;
 }
 
-function boxHeaders(method: string, target: string, over: { secret?: string; nonce?: string } = {}): Record<string, string> {
+function boxHeaders(method: string, target: string, over: { secret?: string; nonce?: string; runToken?: string } = {}): Record<string, string> {
   const nonce = over.nonce ?? randomBytes(18).toString('base64url');
   return {
     [SERVICE_AUTH_HEADER]: signServiceRequest({ method, target, body: '' }, { secret: over.secret ?? SECRET, serviceId: 'orgiq-devbox', audience: `orgiq-middleware/lab#${nonce}` }),
     [SERVICE_NONCE_HEADER]: nonce,
+    ...(over.runToken ? { [RUN_TOKEN_HEADER]: over.runToken } : {}),
   };
 }
 
@@ -83,15 +85,16 @@ afterEach(() => { delete process.env[LAB_CALLBACK_SERVICE_AUTH.envVar]; });
 describe('GET /api/runs/:ref/brief', () => {
   it('a box with a valid envelope gets the frozen bytes, and the sha matches', async () => {
     const brief = await freeze('job-1');
+    const runToken = await mintRunToken('job-1');
     const target = '/api/runs/job-1/brief?format=markdown';
-    const res = await request(appAs(null)).get(target).set(boxHeaders('GET', target));
+    const res = await request(appAs(null)).get(target).set(boxHeaders('GET', target, { runToken }));
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('text/markdown');
     expect(res.headers['x-brief-sha256']).toBe(brief.sha256);
     expect(res.text).toBe(brief.markdown);
 
     const jsonTarget = '/api/runs/job-1/brief';
-    const json = await request(appAs(null)).get(jsonTarget).set(boxHeaders('GET', jsonTarget));
+    const json = await request(appAs(null)).get(jsonTarget).set(boxHeaders('GET', jsonTarget, { runToken }));
     expect(json.body.brief.sha256).toBe(brief.sha256);
     expect(json.body.brief.sections.some((s: { kind: string; ref: string }) => s.kind === 'runbook')).toBe(true);
   });
@@ -106,7 +109,7 @@ describe('GET /api/runs/:ref/brief', () => {
     // An envelope signed for job-2 cannot read job-1.
     expect((await request(anon).get('/api/runs/job-1/brief').set(boxHeaders('GET', '/api/runs/job-2/brief'))).status).toBe(401);
     // A spent nonce is spent.
-    const headers = boxHeaders('GET', wrongSecret);
+    const headers = boxHeaders('GET', wrongSecret, { runToken: await mintRunToken('job-1') });
     expect((await request(anon).get(wrongSecret).set(headers)).status).toBe(200);
     expect((await request(anon).get(wrongSecret).set(headers)).status).toBe(401);
     // The legacy static header does not unlock a read of a run's brief when the transition is closed.

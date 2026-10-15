@@ -194,7 +194,7 @@ export function decideClaim(input: {
  * `reviewed` moves only where the assumptions are addressed. A run nobody will
  * review still has to finish.
  */
-export function frameLocalPrompt(task: string, reviewed: boolean): string {
+export function frameLocalPrompt(task: string, reviewed: boolean, brief?: FramedBrief | null): string {
   return [
     'You are running non-interactively on a paired workstation. Nothing is reading your output as you write it, and there is nobody to answer a question: anything you ask ends the run without doing the work.',
     '',
@@ -202,9 +202,50 @@ export function frameLocalPrompt(task: string, reviewed: boolean): string {
     reviewed
       ? 'Someone will read the result afterwards, so put every assumption you made where they will see it.'
       : 'Nobody will review this before it lands, so take the conservative option wherever you have to choose, and state what you assumed at the end.',
+    ...(brief ? ['', ...briefBlock(brief)] : []),
     '',
     'The task:',
     '',
     task,
   ].join('\n');
+}
+
+/** The frozen session brief, as the framing carries it. */
+export interface FramedBrief { id: string; sha256: string; markdown: string }
+
+export const BRIEF_BEGIN = '----- BEGIN SESSION BRIEF -----';
+export const BRIEF_END = '----- END SESSION BRIEF -----';
+
+/**
+ * The brief INSIDE the framing, between the instructions and the task: the
+ * framing still opens the prompt (nobody is listening) and the task still
+ * closes it, verbatim. The markdown between the markers is the frozen brief's
+ * bytes exactly — the sha printed above it is the sha a person sees on the
+ * run's Brief tab. There is no `lab` command on a workstation, so the report
+ * lines the brief asks for go in the final message, where the reviewer reads
+ * them.
+ */
+function briefBlock(b: FramedBrief): string[] {
+  return [
+    `Below is the session brief for this run (${b.id}, sha256 ${b.sha256}): the project context, the decisions that bind the work and the runbooks selected for it. Follow a runbook where it fits the task.`,
+    'This machine has no `lab` command. Where the brief says to run one, write that line, as written, at the end of your final message instead.',
+    '',
+    BRIEF_BEGIN,
+    b.markdown.replace(/\n$/, ''),
+    BRIEF_END,
+  ];
+}
+
+/**
+ * Claim-time brief for a local job: freeze it (lib/run-brief.ts `freezeBrief`,
+ * via freezeJobBrief, which also stamps brief_id + brief_sha on the job) and
+ * return what the framing needs. A brief that cannot be assembled degrades to
+ * the bare framing rather than refusing the claim.
+ */
+export async function briefForClaim(
+  job: { id: string; title: string; payload: Record<string, unknown>; createdBy: string | null },
+): Promise<FramedBrief | null> {
+  const { freezeJobBrief } = await import('./run-brief.js');
+  const frozen = await freezeJobBrief(job, 'local');
+  return frozen ? { id: frozen.brief.id, sha256: frozen.brief.sha256, markdown: frozen.brief.markdown } : null;
 }

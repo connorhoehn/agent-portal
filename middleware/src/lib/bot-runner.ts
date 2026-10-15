@@ -1276,6 +1276,7 @@ export async function dispatchWorkItem(input: {
   const started = await dispatchGovernedRun({
     project, prompt, model: input.model, sessionId: ws.sessionId,
     workItemId: item.id,
+    ...(input.actor ? { dispatchedBy: input.actor } : {}),
     attribution: { projectId: item.projectId, ...(input.actor ? { ownerId: input.actor } : {}) },
   });
   if (!started.ok) { await revertClaim(); return { ok: false, status: 503, error: started.error }; }
@@ -1288,6 +1289,7 @@ export async function dispatchWorkItem(input: {
     dispatchedBy: input.actor ?? null,
     outcome: {
       sessionId: ws.sessionId, boxId: ws.boxId,
+      ...(started.briefId ? { brief_id: started.briefId } : {}),
       ...(input.actor ? { actor: input.actor } : {}),
       ...(input.estimate ? { estimate: input.estimate } : {}),
     },
@@ -1428,6 +1430,12 @@ async function simulateMarketplaceDispatch(input: {
     await input.revertClaim();
     return { ok: false, status: 503, error: 'could not enqueue the job' };
   }
+  // The box is bound here (registered above, claimed below), so this is the
+  // moment the session brief freezes — the same lib/run-brief.ts step the
+  // job dispatcher takes, so the run's Brief tab has bytes the moment the
+  // dispatch answers.
+  const { freezeJobBrief } = await import('./run-brief.js');
+  const frozen = await freezeJobBrief({ ...job, createdBy: input.actor ?? job.createdBy }, 'devbox');
 
   const run = await createBotRun({
     botId: null, trigger: 'marketplace', jobId: job.id, workItemId: item.id,
@@ -1439,6 +1447,7 @@ async function simulateMarketplaceDispatch(input: {
       sessionId, boxId: box.id,
       ...(input.actor ? { actor: input.actor } : {}),
       ...(input.estimate ? { estimate: input.estimate } : {}),
+      ...(frozen ? { brief_id: frozen.brief.id, brief_sha: frozen.brief.sha256 } : {}),
       // Said on the row, not only in this file. Every surface that renders a
       // run outcome can then tell a simulated dispatch from a real one, which
       // matters most for the money: this run's cost is a fixture, not a bill.

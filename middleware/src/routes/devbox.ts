@@ -45,7 +45,7 @@ import {
   normalizeRuntimeSessionId,
   RUNTIME_SESSION_ID_MIN_LENGTH,
 } from '../lib/runtime-session.js';
-import { executeDevboxTask, type DevboxRunOutcome } from '../lib/devbox-runner.js';
+import { executeDevboxTask, type DevboxLabContext, type DevboxRunOutcome } from '../lib/devbox-runner.js';
 import {
   registerBox,
   listBoxes,
@@ -936,6 +936,8 @@ export async function runDevboxTask(opts: {
   resume?: boolean;
   model?: string;
   onEvent?: (event: Record<string, unknown>) => void;
+  /** The run's LAB_* context (lib/run-brief.ts); see DevboxRunOptions.lab. */
+  lab?: DevboxLabContext;
 }): Promise<DevboxRunOutcome> {
   // Offline, a dispatched job plays a scripted run instead of dead-ending.
   // Without this the one journey the Work page exists for — pick a suggested
@@ -976,6 +978,7 @@ export async function runDevboxTask(opts: {
     ...(opts.resume !== undefined ? { resume: opts.resume } : {}),
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.onEvent ? { onEvent: opts.onEvent } : {}),
+    ...(opts.lab ? { lab: opts.lab } : {}),
     runtimeArn: arn,
     client: dataClient(),
   });

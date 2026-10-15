@@ -18,7 +18,7 @@ import {
   // rather than running a shell command.
   InvokeAgentRuntimeCommandCommand as RunRuntimeCommand,
 } from '@aws-sdk/client-bedrock-agentcore';
-import { executeDevboxTask } from './devbox-runner.js';
+import { executeDevboxTask, type DevboxLabContext } from './devbox-runner.js';
 import { finishRun } from '../providers/agent-projects.js';
 
 /**
@@ -151,6 +151,8 @@ export interface ProjectRunRequest {
    * pipeline importing the runner without the runner importing back into it.
    */
   onChanged?: (filesChanged: number) => void;
+  /** The run's LAB_* context (lib/run-brief.ts); the box's `lab brief` reads it. */
+  lab?: DevboxLabContext;
 }
 
 /**
@@ -174,6 +176,7 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
       runtimeArn: req.runtimeArn,
       client: req.client,
       ...(req.onEvent ? { onEvent: req.onEvent } : {}),
+      ...(req.lab ? { lab: req.lab } : {}),
     });
 
     // Measure the repository even when the agent reported failure — a run that

@@ -24,6 +24,9 @@
 //                Nobody accepts their own proposal. Merge needs review rights on BOTH the
 //                proposal's own runbook and the target. No write is made under a masquerade.
 //   applications service auth only — a person does not report on a run.
+//   run binding  a box's proposal and its application also carry the run token for that
+//                run_ref (lib/run-token.ts): the fleet secret alone acts for no run. A run
+//                proposal's dispatcher (from its frozen brief) may not decide it.
 //
 // Machine-vs-person is decided ONCE (`machineMark`), because a signed envelope's nonce is
 // single-use: asking hasServiceAuth twice would turn a valid call into a "replayed" one.
@@ -37,6 +40,7 @@ import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { isAllowed, requireAction, requireSession, requireTenant, resolveSession } from '../lib/authz.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { LAB_CALLBACK_SERVICE_AUTH, hasServiceAuth, requireServiceAuth } from '../lib/service-auth.js';
+import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
 import type { Session } from '../lib/session.js';
 import { actorId, mayReviewRunbook, type ReviewVerdict } from '../lib/runbook-review.js';
 import { unifiedDiff } from '../lib/unified-diff.js';
@@ -110,6 +114,11 @@ const reviewGate: RequestHandler[] = [requireTenant('orgiq'), requireAction('Rev
 const suggestGate: RequestHandler[] = [machineMark, unlessMachine(requireTenant('orgiq')), unlessMachine(requireSession('SuggestRunbook'))];
 
 const callbackLimit = rateLimit('runbook-callback', 120, 60_000);
+
+/** A box acts only for its own run: the envelope AND the run token for exactly that run_ref (lib/run-token.ts). */
+function refuseRunToken(res: Response): void {
+  res.status(403).json({ error: `a box acts only for its own run: present ${RUN_TOKEN_HEADER} for this run_ref`, code: 'RUN_TOKEN' });
+}
 const requireLabAuth = requireServiceAuth(LAB_CALLBACK_SERVICE_AUTH);
 
 /**
@@ -125,15 +134,6 @@ function refuseMasquerade(req: Request, res: Response): boolean {
   return true;
 }
 
-function session(req: Request): Session {
-  const s = resolveSession(req);
-  if (!s) throw new ValidationError('no session'); // the gate already 401'd; this keeps the handler honest
-  return s;
-}
-
-// ── Errors ───────────────────────────────────────────────────────────────────
-
-function storeError(err: unknown, res: Response): boolean {
 async function workItemExists(id: string): Promise<boolean> {
   const { getWorkItem } = await import('../providers/work-items.js');
   return !!(await getWorkItem(id));
@@ -146,11 +146,22 @@ async function personExists(id: string): Promise<boolean> {
   return (await import('../providers/sprints.js')).personExists(id);
 }
 
+function session(req: Request): Session {
+  const s = resolveSession(req);
+  if (!s) throw new ValidationError('no session'); // the gate already 401'd; this keeps the handler honest
+  return s;
+}
+
+// ── Errors ───────────────────────────────────────────────────────────────────
+
+function storeError(err: unknown, res: Response): boolean {
   if (!(err instanceof RunbookStoreError)) return false;
   if (err instanceof VersionConflictError) {
     res.status(409).json({ error: err.message, code: 'VERSION_CONFLICT', expected: err.expected, actual: err.actual });
   } else if (err instanceof ProposalClosedError) {
     res.status(409).json({ error: err.message, code: 'PROPOSAL_CLOSED', status: err.status });
+  } else if (err instanceof RetiredRunbookError) {
+    res.status(409).json({ error: err.message, code: 'RETIRED' });
   } else if (err instanceof SelfAcceptError) {
     res.status(403).json({ error: err.message, code: 'SELF_ACCEPT' });
   } else if (err instanceof AlreadyExistsError) {
@@ -160,8 +171,6 @@ async function personExists(id: string): Promise<boolean> {
   } else if (err instanceof InvalidWriteError) {
     res.status(400).json({ error: err.message });
   } else {
-  } else if (err instanceof RetiredRunbookError) {
-    res.status(409).json({ error: err.message, code: 'RETIRED' });
     res.status(500).json({ error: 'runbook store error' });
   }
   return true;
@@ -348,20 +357,27 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const src = (body['source'] && typeof body['source'] === 'object' ? body['source'] : {}) as Record<string, unknown>;
     const labIds = Array.isArray(src['lab_experience_ids']) ? src['lab_experience_ids'].filter((x): x is string => typeof x === 'string') : [];
 
-    // Attribution is never taken from the body for a person, and a machine is only ever a run.
-    let source: RunbookProposal['source'];
-    if (machine) {
-      const runRef = str(src['run_ref']);
-      if (!runRef) throw new ValidationError('a run proposal needs `source.run_ref`');
-      source = {
-        kind: 'run', run_ref: runRef, lab_experience_ids: labIds,
-        ...(str(src['session_id']) ? { session_id: str(src['session_id'])! } : {}),
-        ...(str(src['work_item_id']) ? { work_item_id: str(src['work_item_id'])! } : {}),
     // A person's work item must exist (work-item reads are open to every orgiq session, so existence is the read check).
     // A box's work item comes from its frozen brief, not the body.
     const workItemId = machine ? undefined : str(src['work_item_id']);
     if (workItemId && !await workItemExists(workItemId)) throw new ValidationError('`source.work_item_id` does not name a work item');
 
+    // Attribution is never taken from the body for a person, and a machine is only ever a run.
+    let source: RunbookProposal['source'];
+    if (machine) {
+      const runRef = str(src['run_ref']);
+      if (!runRef) throw new ValidationError('a run proposal needs `source.run_ref`');
+      // The fleet secret says "some box"; the run token says "the box running THIS run" (lib/run-token.ts).
+      if (!(await runTokenMatches(req, runRef))) { refuseRunToken(res); return; }
+      // A run proposal is attributed from the run's frozen brief, never the body: its work item, and
+      // the person who dispatched it — who may then not accept it (decidable's SELF_ACCEPT).
+      const brief = await s.getBrief(runRef);
+      if (!brief) { res.status(409).json({ error: `no brief was frozen for run ${runRef}`, code: 'NO_BRIEF' }); return; }
+      source = {
+        kind: 'run', run_ref: runRef, lab_experience_ids: labIds,
+        ...(str(src['session_id']) ? { session_id: str(src['session_id'])! } : {}),
+        ...(brief.work_item_id ? { work_item_id: brief.work_item_id } : {}),
+        ...(brief.dispatched_by ? { dispatched_by: brief.dispatched_by } : {}),
       };
     } else {
       if (refuseMasquerade(req, res)) return;
@@ -433,6 +449,12 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const { actor, personId } = await actorId(sess);
     if (p.source.kind === 'person' && p.source.person_id && (p.source.person_id === actor || p.source.person_id === personId || p.source.person_id === sess.sub)) {
       res.status(403).json({ error: 'you cannot decide your own proposal', code: 'SELF_ACCEPT' });
+      return null;
+    }
+    // A run's proposal is its dispatcher's: whoever sent the box cannot accept what the box wrote.
+    const dispatcher = p.source.kind === 'run' ? p.source.dispatched_by : undefined;
+    if (dispatcher && (dispatcher === actor || dispatcher === personId || dispatcher === sess.sub)) {
+      res.status(403).json({ error: 'you dispatched the run that proposed this; someone else decides it', code: 'SELF_ACCEPT' });
       return null;
     }
     const target = await proposalTarget(s, p);
@@ -533,6 +555,8 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       return;
     }
 
+    const ownerId = str(body['owner_person_id']);
+    if (ownerId && !await personExists(ownerId)) throw new ValidationError('`owner_person_id` does not name a person');
     const id = str(body['id']) ?? slug(doc.title);
     if (!RUNBOOK_ID.test(id)) throw new ValidationError('`id` must look like rb-some-name (lowercase letters, digits, hyphens)');
     const runbook: Runbook = {
@@ -555,8 +579,28 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const d = await decidable(req, res, s, override);
     if (!d) return;
     const proposal = await s.decideProposal({ proposal_id: d.p.id, decision: 'rejected', decided_by: d.actor, at: now(), note });
-    const ownerId = str(body['owner_person_id']);
-    if (ownerId && !await personExists(ownerId)) throw new ValidationError('`owner_person_id` does not name a person');
+    res.json({ proposal });
+  }));
+
+  // The proposer pulls their own open proposal. Session-only (a run cannot withdraw), identity-bound like every
+  // runbook write, so masquerade is refused; the reviewer's reject of one's own proposal stays blocked.
+  router.post('/proposals/:pid/withdraw', requireTenant('orgiq'), requireSession('SuggestRunbook'), handler(async (req, res) => {
+    if (refuseMasquerade(req, res)) return;
+    const s = await store();
+    const sess = session(req);
+    const p = await s.getProposal(String(req.params['pid']));
+    if (!p) { res.status(404).json({ error: 'proposal not found' }); return; }
+    const { actor, personId } = await actorId(sess);
+    if (p.source.kind !== 'person' || !p.source.person_id || ![actor, personId, sess.sub].includes(p.source.person_id)) {
+      res.status(403).json({ error: 'only the proposer can withdraw a proposal', code: 'NOT_PROPOSER' });
+      return;
+    }
+    if (p.status !== 'open') {
+      res.status(409).json({ error: `proposal ${p.id} is already ${p.status}`, code: 'PROPOSAL_CLOSED', status: p.status });
+      return;
+    }
+    const note = str((req.body as Record<string, unknown> | undefined)?.['note']) ?? null;
+    const proposal = await s.decideProposal({ proposal_id: p.id, decision: 'withdrawn', decided_by: actor, at: now(), note });
     res.json({ proposal });
   }));
 
@@ -582,28 +626,6 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     // The reviewer must be able to review the TARGET, whatever the source says.
     const d = await decidable(req, res, s, { scope: dest.scope, owner: dest.owner_person_id });
     if (!d) return;
-  // The proposer pulls their own open proposal. Session-only (a run cannot withdraw), identity-bound like every
-  // runbook write, so masquerade is refused; the reviewer's reject of one's own proposal stays blocked.
-  router.post('/proposals/:pid/withdraw', requireTenant('orgiq'), requireSession('SuggestRunbook'), handler(async (req, res) => {
-    if (refuseMasquerade(req, res)) return;
-    const s = await store();
-    const sess = session(req);
-    const p = await s.getProposal(String(req.params['pid']));
-    if (!p) { res.status(404).json({ error: 'proposal not found' }); return; }
-    const { actor, personId } = await actorId(sess);
-    if (p.source.kind !== 'person' || !p.source.person_id || ![actor, personId, sess.sub].includes(p.source.person_id)) {
-      res.status(403).json({ error: 'only the proposer can withdraw a proposal', code: 'NOT_PROPOSER' });
-      return;
-    }
-    if (p.status !== 'open') {
-      res.status(409).json({ error: `proposal ${p.id} is already ${p.status}`, code: 'PROPOSAL_CLOSED', status: p.status });
-      return;
-    }
-    const note = str((req.body as Record<string, unknown> | undefined)?.['note']) ?? null;
-    const proposal = await s.decideProposal({ proposal_id: p.id, decision: 'withdrawn', decided_by: actor, at: now(), note });
-    res.json({ proposal });
-  }));
-
     const { p, actor, target: source } = d;
     // Merging closes the proposal on its own target, so it is a decision about THAT
     // runbook too: without this, a reviewer of any published runbook could close any
@@ -666,6 +688,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const runRef = str(body['run_ref']);
     if (!runRef) throw new ValidationError('`run_ref` is required');
+    if (!(await runTokenMatches(req, runRef))) { refuseRunToken(res); return; }
     const outcome = oneOf(OUTCOMES, body['outcome'], 'outcome');
     if (!outcome) throw new ValidationError(`\`outcome\` is required: ${OUTCOMES.join(' | ')}`);
     const failedAt = body['failed_at_step'] === undefined || body['failed_at_step'] === null ? null : int(body['failed_at_step']);

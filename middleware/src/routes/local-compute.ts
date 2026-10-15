@@ -113,6 +113,7 @@ import {
   allowedKinds,
   capConcurrency,
   frameLocalPrompt,
+  briefForClaim,
   LOCAL_JOB_KINDS,
   LOCAL_HEARTBEAT_INTERVAL_S,
 } from '../lib/local-work.js';
@@ -540,6 +541,10 @@ localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (_req, r
     return;
   }
 
+  // The session brief freezes at claim — the one chokepoint every locally run
+  // job passes through — and rides INSIDE the framing (lib/local-work.ts).
+  const brief = await briefForClaim(claim.job);
+
   res.json({
     // The prompt the worker runs is framed here rather than stored framed, so
     // the job row keeps the task somebody actually asked for. See
@@ -549,11 +554,13 @@ localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (_req, r
       ...claim.job,
       payload: {
         ...claim.job.payload,
+        ...(brief ? { brief_id: brief.id, brief_sha: brief.sha256 } : {}),
         ...(typeof claim.job.payload['prompt'] === 'string'
           ? {
             prompt: frameLocalPrompt(
               claim.job.payload['prompt'] as string,
               claim.job.payload['requiresReview'] !== false,
+              brief,
             ),
           }
           : {}),

@@ -346,10 +346,13 @@ export async function requeueJob(id: string, requeuedBy?: string): Promise<Agent
   const dead = await getJob(id);
   if (!dead) return null;
   if (dead.status !== 'failed' && dead.status !== 'cancelled') return null;
+  // The clone is a NEW run: it gets its own brief at dispatch (lib/run-brief.ts),
+  // so the dead run's brief stamp does not ride along.
+  const { brief_id: _briefId, brief_sha: _briefSha, ...payload } = dead.payload;
   return enqueueJob({
     kind: dead.kind,
     title: dead.title,
-    payload: dead.payload,
+    payload,
     priority: dead.priority,
     createdBy: requeuedBy ? `${requeuedBy} (requeue of ${dead.id})` : `requeue of ${dead.id}`,
     ...(dead.botId ? { botId: dead.botId } : {}),
@@ -437,6 +440,26 @@ export async function listJobsForBoxes(
     [intParam('lim', limit), ...boxParams, ...nodeParams],
   );
   return rows.map(rowToJob);
+}
+
+/**
+ * Merge `patch` into a job's payload — the session brief's stamp
+ * (`brief_id`/`brief_sha`, lib/run-brief.ts) written when the run is bound to
+ * a box. Only those keys are written by callers; the task the person asked for
+ * is never touched.
+ */
+export async function stampJobPayload(id: string, patch: Record<string, string>): Promise<boolean> {
+  if (config.mock.aurora) {
+    const job = mockJobs.find((j) => j.id === id);
+    if (!job) return false;
+    job.payload = { ...job.payload, ...patch };
+    return true;
+  }
+  const rows = await exec(
+    `UPDATE agent_jobs SET payload = payload || :patch::jsonb WHERE id = :id RETURNING id`,
+    [strParam('id', id), strParam('patch', JSON.stringify(patch))],
+  );
+  return rows.length > 0;
 }
 
 export async function getJob(id: string): Promise<AgentJob | null> {

@@ -1,0 +1,177 @@
+{
+  "assembler_version": "1",
+  "clock": "2026-10-14T09:00:00.000Z",
+  "budget_tokens": 6000,
+  "cases": {
+    "wi-auth-e2-s2": {
+      "path": "dispatch",
+      "why": "Auth Migration: the cutover runbook story; rb-tenant-cutover leads (drifting, with its warning)",
+      "run_ref": "job-contract-wi-auth-e2-s2",
+      "sections": [
+        {
+          "kind": "work_item",
+          "ref": "wi-auth-e2-s2"
+        },
+        {
+          "kind": "initiative",
+          "ref": "p-auth-migration"
+        },
+        {
+          "kind": "decisions",
+          "ref": "d-legacy-auth"
+        },
+        {
+          "kind": "skills",
+          "ref": "skill-cold-start-aurora,skill-flaky-test-triage,skill-pr-review-scoped"
+        },
+        {
+          "kind": "runbook",
+          "ref": "rb-tenant-cutover",
+          "version": 1
+        },
+        {
+          "kind": "runbook",
+          "ref": "rb-auth-pr-csrf-gate",
+          "version": 1
+        },
+        {
+          "kind": "runbook",
+          "ref": "rb-sso-new-origin",
+          "version": 1
+        },
+        {
+          "kind": "how_to_report",
+          "ref": null
+        }
+      ],
+      "omitted": [],
+      "used_tokens": 2649,
+      "sha256": "ef94e5b70f66111fecf8e6c1c60b025a9181e55439cdbeacc0fe1f9a5d393c63"
+    },
+    "wi-auth-e2-b3": {
+      "path": "dispatch",
+      "why": "Auth Migration: the logout-cookie bug; the auth-service PR gate leads",
+      "run_ref": "job-contract-wi-auth-e2-b3",
+      "sections": [
+        {
+          "kind": "work_item",
+          "ref": "wi-auth-e2-b3"
+        },
+        {
+          "kind": "initiative",
+          "ref": "p-auth-migration"
+        },
+        {
+          "kind": "decisions",
+          "ref": "d-legacy-auth"
+        },
+        {
+          "kind": "skills",
+          "ref": "skill-cold-start-aurora,skill-flaky-test-triage,skill-pr-review-scoped"
+        },
+        {
+          "kind": "runbook",
+          "ref": "rb-auth-pr-csrf-gate",
+          "version": 1
+        },
+        {
+          "kind": "runbook",
+          "ref": "rb-tenant-cutover",
+          "version": 1
+        },
+        {
+          "kind": "runbook",
+          "ref": "rb-sso-new-origin",
+          "version": 1
+        },
+        {
+          "kind": "how_to_report",
+          "ref": null
+        }
+      ],
+      "omitted": [],
+      "used_tokens": 2658,
+      "sha256": "5a1504ec28374b5279713809eec0bc2492cdddbf7b60570c49e20c45822517c0"
+    },
+    "wi-obs-e2-b4": {
+      "path": "dispatch",
+      "why": "Observability: one repo-scoped runbook",
+      "run_ref": "job-contract-wi-obs-e2-b4",
+      "sections": [
+        {
+          "kind": "work_item",
+          "ref": "wi-obs-e2-b4"
+        },
+        {
+          "kind": "initiative",
+          "ref": "p-observability"
+        },
+        {
+          "kind": "decisions",
+          "ref": "d-otel"
+        },
+        {
+          "kind": "skills",
+          "ref": "skill-cold-start-aurora,skill-flaky-test-triage,skill-pr-review-scoped"
+        },
+        {
+          "kind": "runbook",
+          "ref": "rb-flaky-test-rerun-diff",
+          "version": 1
+        },
+        {
+          "kind": "how_to_report",
+          "ref": null
+        }
+      ],
+      "omitted": [],
+      "used_tokens": 1341,
+      "sha256": "9f1ef133282a765e015d16b50f8621942cb16f3b68c6b1f586be2875090cd41d"
+    },
+    "wi-inf-e1-b3": {
+      "path": "dispatch",
+      "why": "Inference platform: no runbook matches — \"No runbooks matched this work.\"",
+      "run_ref": "job-contract-wi-inf-e1-b3",
+      "sections": [
+        {
+          "kind": "work_item",
+          "ref": "wi-inf-e1-b3"
+        },
+        {
+          "kind": "initiative",
+          "ref": "p-inference-platform"
+        },
+        {
+          "kind": "skills",
+          "ref": "skill-cold-start-aurora,skill-flaky-test-triage,skill-pr-review-scoped"
+        },
+        {
+          "kind": "how_to_report",
+          "ref": null
+        }
+      ],
+      "omitted": [],
+      "used_tokens": 350,
+      "sha256": "e119b65e56909050db3df95ddbacfd1fcf6571894ff65a7358a818cccc1eb726"
+    },
+    "task-fargate-arm64": {
+      "path": "claim",
+      "why": "Infra/Fargate on a paired workstation, from a free-form task: the tool-scoped Fargate runbook, inside the local framing",
+      "run_ref": "job-contract-task-fargate-arm64",
+      "sections": [
+        {
+          "kind": "runbook",
+          "ref": "rb-fargate-arm64-image",
+          "version": 1
+        },
+        {
+          "kind": "how_to_report",
+          "ref": null
+        }
+      ],
+      "omitted": [],
+      "used_tokens": 1031,
+      "sha256": "ca871a4833221a6e53cc5e78ddb5c15a902d212a90d34f7e86bfffc56e358f30"
+    }
+  }
+}

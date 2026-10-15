@@ -89,6 +89,24 @@ export interface DevboxRunOptions {
    *  stays free of ARN-resolution and test-hook concerns. */
   runtimeArn: string;
   client: BedrockAgentCoreClient;
+  /**
+   * The run this task is (lib/run-brief.ts): sent as `lab` in the invoke
+   * payload, which agents/devbox/main.py turns into the LAB_* env every `lab`
+   * call reads — LAB_RUN_REF + LAB_RUN_TOKEN for `lab brief`, `lab applied`
+   * and `lab propose`, plus attribution. Absent → the box has no run brief.
+   */
+  lab?: DevboxLabContext;
+}
+
+export interface DevboxLabContext {
+  run_ref: string;
+  run_token: string;
+  brief_id: string;
+  work_item_id: string | null;
+  initiative_id: string | null;
+  repo: string | null;
+  session_id: string;
+  box_id: string | null;
 }
 
 /**
@@ -117,6 +135,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
     resume: Boolean(opts.resume),
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.timeoutSeconds ? { timeout: Math.min(opts.timeoutSeconds, 3300) } : {}),
+    ...(opts.lab ? { lab: opts.lab } : {}),
   });
 
   try {

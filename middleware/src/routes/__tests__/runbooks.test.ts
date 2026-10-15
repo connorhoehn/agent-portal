@@ -25,6 +25,7 @@ import { randomBytes } from 'node:crypto';
 import request from '../../test-support/http.js';
 import { SERVICE_AUTH_HEADER, signServiceRequest } from '@connorhoehn/service-runtime';
 import { LAB_CALLBACK_SERVICE_AUTH, SERVICE_NONCE_HEADER, captureRawBody, resetServiceNonceCache } from '../../lib/service-auth.js';
+import { RUN_TOKEN_HEADER, mintRunToken } from '../../lib/run-token.js';
 import { createRunbooksRouter } from '../runbooks.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { assembleBrief, selectRunbooks, runbookHealth, type RunbookStore } from '../../lib/runbooks/index.js';
@@ -48,12 +49,13 @@ function appAs(user: TestUser | null) {
 }
 
 /** Headers for a box's signed lab envelope over exactly this request. */
-function boxHeaders(method: string, target: string, body = ''): Record<string, string> {
+function boxHeaders(method: string, target: string, body = '', runToken?: string): Record<string, string> {
   const nonce = randomBytes(18).toString('base64url');
   return {
     [SERVICE_AUTH_HEADER]: signServiceRequest({ method, target, body }, { secret: SECRET, serviceId: 'orgiq-devbox', audience: `orgiq-middleware/lab#${nonce}` }),
     [SERVICE_NONCE_HEADER]: nonce,
     'content-type': 'application/json',
+    ...(runToken ? { [RUN_TOKEN_HEADER]: runToken } : {}),
   };
 }
 
@@ -165,17 +167,19 @@ describe('proposing', () => {
   });
 
   it('a box proposes with a signed lab envelope as a RUN; without one it is refused', async () => {
+    await store.putBrief(assembleBrief({ run_ref: 'job-0042', assembled_at: '2026-10-14T00:00:00.000Z', framing: '', work_item: null, initiative: null, decisions: [], runbooks: [] }));
+    const token = await mintRunToken('job-0042');
     const body = JSON.stringify({ kind: 'edit', runbook_id: 'rb-tenant-cutover', markdown: EDIT_MD, rationale: 'The run skipped step 2.', source: { run_ref: 'job-0042', session_id: 's-1', lab_experience_ids: ['exp-1'] } });
     const anon = appAs(null);
     const refused = await request(anon).post('/api/runbooks/proposals').set('content-type', 'application/json').send(body);
     expect(refused.status).toBe(401);
 
-    const ok = await request(anon).post('/api/runbooks/proposals').set(boxHeaders('POST', '/api/runbooks/proposals', body)).send(body);
+    const ok = await request(anon).post('/api/runbooks/proposals').set(boxHeaders('POST', '/api/runbooks/proposals', body, token)).send(body);
     expect(ok.status).toBe(201);
     expect(ok.body.proposal.source).toEqual({ kind: 'run', run_ref: 'job-0042', session_id: 's-1', lab_experience_ids: ['exp-1'] });
 
     // A replay of the same envelope is spent.
-    const headers = boxHeaders('POST', '/api/runbooks/proposals', body);
+    const headers = boxHeaders('POST', '/api/runbooks/proposals', body, token);
     await request(anon).post('/api/runbooks/proposals').set(headers).send(body).expect(201);
     expect((await request(anon).post('/api/runbooks/proposals').set(headers).send(body)).status).toBe(401);
 
@@ -392,9 +396,9 @@ describe('retire and applications', () => {
     await freezeBrief('job-9');
     const anon = appAs(null);
     const path = '/api/runbooks/rb-tenant-cutover/applications';
-    const report = (payload: Record<string, unknown>) => {
+    const report = async (payload: Record<string, unknown>) => {
       const body = JSON.stringify(payload);
-      return request(anon).post(path).set(boxHeaders('POST', path, body)).send(body);
+      return request(anon).post(path).set(boxHeaders('POST', path, body, await mintRunToken(String(payload['run_ref'])))).send(body);
     };
     const unsigned = JSON.stringify({ run_ref: 'job-7', outcome: 'followed' });
     expect((await request(anon).post(path).set('content-type', 'application/json').send(unsigned)).status).toBe(401);
@@ -421,9 +425,9 @@ describe('retire and applications', () => {
   it('refuses a report from a run that was not given the runbook, a wrong version, or a bad outcome', async () => {
     await freezeBrief('job-8');
     const anon = appAs(null);
-    const post = (path: string, payload: Record<string, unknown>) => {
+    const post = async (path: string, payload: Record<string, unknown>) => {
       const body = JSON.stringify(payload);
-      return request(anon).post(path).set(boxHeaders('POST', path, body)).send(body);
+      return request(anon).post(path).set(boxHeaders('POST', path, body, await mintRunToken(String(payload['run_ref'] ?? '')))).send(body);
     };
     expect((await post('/api/runbooks/rb-sso-new-origin/applications', { run_ref: 'job-8', outcome: 'followed' })).body.code).toBe('NOT_GIVEN');
     expect((await post('/api/runbooks/rb-tenant-cutover/applications', { run_ref: 'job-none', outcome: 'followed' })).status).toBe(409);

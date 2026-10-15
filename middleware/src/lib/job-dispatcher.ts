@@ -23,6 +23,7 @@ import { listBoxes, appendEvent, getBox, registerBox, isReserved } from './devbo
 import { isLocalBoxId } from './local-compute-fleet.js';
 import { replicaFleet } from './replica-fleet.js';
 import { runDevboxTask } from '../routes/devbox.js';
+import { freezeJobBrief } from './run-brief.js';
 
 const TICK_MS = Number(process.env['JOB_DISPATCH_INTERVAL_MS'] ?? 10_000);
 /**
@@ -89,9 +90,23 @@ async function runJob(job: AgentJob): Promise<void> {
       return;
     }
 
+    // The session brief, frozen NOW — the moment this run is bound to a box
+    // (lib/run-brief.ts). Stamped onto the job as payload.brief_id + brief_sha;
+    // the box fetches exactly those bytes with `lab brief` (SessionStart). A
+    // re-dispatch of the same job (reaped, then claimed again) gets the SAME
+    // brief: the store is write-once per run_ref.
+    const frozen = await freezeJobBrief(job, 'devbox');
+    if (frozen) {
+      appendEvent(boxId, {
+        type: 'brief_frozen', jobId: job.id, brief_id: frozen.brief.id, brief_sha: frozen.brief.sha256,
+        tokens: frozen.brief.used_tokens, ts: new Date().toISOString(),
+      });
+    }
+
     const outcome = await runDevboxTask({
       sessionId,
       prompt,
+      ...(frozen ? { lab: { ...frozen.run, session_id: sessionId, box_id: boxId } } : {}),
       resume: Boolean(job.payload['resume']),
       // A queued job may ask for a bigger model; most should not need to.
       ...(typeof job.payload['model'] === 'string' ? { model: job.payload['model'] } : {}),
