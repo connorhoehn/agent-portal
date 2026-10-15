@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "405ee19bceb3698ad13cea4e66baa2638ea57fa83922d3ed9c49008aabb67ed9",
-  "at": "2026-10-15T15:41:26.044Z"
+  "sourceDigest": "4d35f2b2516a2529e8e2466a0ef28069fb91be97b9f3d99608334bbc4b325232",
+  "at": "2026-10-15T16:47:45.526Z"
  },
  "routes": {
   "/access": {
@@ -693,11 +693,9 @@
   "/iq/projects/:id": {
    "value": {
     "title": "20/600",
-    "offenders": [
-     "scale content 16/400"
-    ]
+    "offenders": []
    },
-   "changedAt": "2026-10-15T14:54:36.056Z"
+   "changedAt": "2026-10-15T16:32:00.604Z"
   },
   "/iq/projects/:id?item=": {
    "value": {

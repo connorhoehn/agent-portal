@@ -123,7 +123,7 @@ export default function DesignsPage() {
       rows={reviews.map((review) => ({ id: review.id, title: review.title, subline: STATUS_LABEL[review.status] }))}
       selectedId={id} selectedTitle={data?.reviews.find((review) => review.id === id)?.title}
       onSelect={(next) => navigate(`/iq/designs/${encodeURIComponent(next)}?${searchParams}`)}
-      footer={id ? <CollectionCommandHost adapter={adapter} /> : undefined}
+      footer={id ? <CollectionCommandHost inPlace adapter={adapter} /> : undefined}
       railNotice={designsFailure ? <UnavailableNotice error={designsFailure} what="designs" source={DESIGNS_SOURCE} onRetry={refresh} /> : isLoading && !data ? <LoadingState label="Loading designs…" /> : reviews.length === 0 ? <EmptyState title="No designs in this view" /> : undefined}
     >
     {id ? <DesignThreadPage key={id} /> : (

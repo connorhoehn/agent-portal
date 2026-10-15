@@ -98,7 +98,7 @@ export function RunbooksListFrame(p: ListFrameProps) {
         label: p.listLabel,
       }}
       fold={{ folded: fold.folded, onToggle: fold.toggle }}
-      footer={<CollectionCommandHost adapter={p.commands} />}
+      footer={<CollectionCommandHost inPlace adapter={p.commands} />}
       data-testid={p['data-testid']}
     >
       {p.children}

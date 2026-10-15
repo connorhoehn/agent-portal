@@ -58,7 +58,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { OBSERVED_ROUTES, PARAM_ROUTES, STATE_ROUTES, SWEEP_USER, TENANTS, resolveParam, sourceDigest, staticInventory, type InventoryRoute, type Tenant } from './route-inventory';
 import { DEFAULT_DUE, ownerOf, readRows, writeRows, type Row } from './burndown';
 import { finishParts, recordPart } from './contracts';
-import { cloneIdentity, signIn as signInAs, signInMeasured } from './realSession';
+import { signInMeasured } from './realSession';
 
 const BASE = process.env.PARITY_BASE_URL ?? process.env.LAYOUT_CASCADE_BASE ?? 'http://127.0.0.1:5183';
 const ONLY = process.env.TYPE_SCALE_ONLY ?? '';
@@ -302,31 +302,9 @@ export const VOLATILE: ReadonlyArray<{ match: RegExp; reason: string }> = [
 const volatile = (o: Offender) => VOLATILE.some((v) => v.match.test(o.path));
 const keyOf = (o: Offender) => `${o.rule} ${o.region} ${o.sw}`;
 
-// JOURNEY_MEASURE_CLONES=1 (measure.sh) signs in as a clone of the persona; default: the seed persona (realSession.signInMeasured).
-// TYPE_SCALE_CLONES=1 does the same for this sweep alone; both leave the default as the seed persona.
-const CLONES = process.env.TYPE_SCALE_CLONES === '1';
-const cloneOf = new WeakMap<object, Map<string, string>>();
-async function signIn(page: Page, tenant: Tenant | null, user = USER) {
-  if (!CLONES) return signInMeasured(page, user, tenant ? { tenant } : {});
-  const ids = cloneOf.get(page.context()) ?? new Map<string, string>();
-  cloneOf.set(page.context(), ids);
-  if (!ids.has(user)) {
-    // The BFF restarts when another run edits middleware (tsx watch); a clone minted mid-restart answers 5xx.
-    for (let attempt = 1; ; attempt++) {
-      try { ids.set(user, await cloneIdentity(page.request, user, 'type-scale-sweep')); break; } catch (error) {
-        if (attempt >= 4) throw error;
-        await page.waitForTimeout(3_000);
-      }
-    }
-  }
-  // The BFF also answers 5xx to a login while it restarts under another run's edit.
-  for (let attempt = 1; ; attempt++) {
-    try { return await signInAs(page, ids.get(user)!, tenant ? { tenant } : {}); } catch (error) {
-      if (attempt >= 4) throw error;
-      await page.waitForTimeout(3_000);
-    }
-  }
-}
+// realSession.signInMeasured owns the identity: the seed persona by default, a cached clone of it under
+// JOURNEY_MEASURE_CLONES=1 (measure.sh) or TYPE_SCALE_CLONES=1, with the login's own bounded retries.
+const enterAs = (page: Page, tenant: Tenant | null, user = USER) => signInMeasured(page, user, tenant ? { tenant } : {});
 
 async function resolveParams(page: Page, tenant: Tenant): Promise<InventoryRoute[]> {
   const out: InventoryRoute[] = [];
@@ -375,7 +353,7 @@ for (const tenant of TENANTS) {
   test(`type scale on every ${tenant} route`, async ({ page }) => {
     test.skip(ONLY_TENANTS.length > 0 && !ONLY_TENANTS.includes(tenant), 'TYPE_SCALE_TENANTS');
     test.setTimeout(40 * 60_000);
-    await signIn(page, tenant);
+    await enterAs(page, tenant);
     const routes = [...inventory.filter((r) => r.tenant === tenant), ...await resolveParams(page, tenant)]
       .filter((r) => !ONLY || r.path.includes(ONLY));
     // Journey-walked routes outside the judged inventory: their contract is recorded, never judged.
@@ -389,7 +367,7 @@ for (const tenant of TENANTS) {
       await goto(page, r.path);
       await settle(page);
       if (/^\/(select|login)/.test(new URL(page.url()).pathname)) {
-        await signIn(page, tenant);
+        await enterAs(page, tenant);
         await goto(page, r.path);
         await settle(page);
       }
@@ -458,7 +436,7 @@ test('the reference (/iq/projects) and the Communication plane states', async ({
   test.skip(!!ONLY && !'/iq/projects /communication'.includes(ONLY), 'TYPE_SCALE_ONLY');
   test.skip(ONLY_TENANTS.length > 0 && !ONLY_TENANTS.includes('orgiq'), 'TYPE_SCALE_TENANTS');
   test.setTimeout(5 * 60_000);
-  await signIn(page, 'orgiq');
+  await enterAs(page, 'orgiq');
   await page.goto('/iq/projects', { waitUntil: 'domcontentloaded' });
   await settle(page);
   const ref = await walk(page, false);
@@ -476,7 +454,7 @@ test('the reference (/iq/projects) and the Communication plane states', async ({
   const failures: string[] = [];
   for (const st of STATES) {
     await page.context().clearCookies();
-    await signIn(page, null, st.user);
+    await enterAs(page, null, st.user);
     await goto(page, st.path);
     await settle(page);
     await page.waitForTimeout(st.judged ? 0 : 2_500); // the granted landing opens its default conversation

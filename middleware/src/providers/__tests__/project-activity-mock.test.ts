@@ -31,7 +31,7 @@ describe('getProjectActivity — mock mode', () => {
 
   it('shows a completion as `completed`, dated by when it completed', async () => {
     const feed = await getProjectActivity('p-auth-migration', { limit: 100 });
-    // wi-auth-e1-s1 is done, completedAt D(14), PR merged — the merged arm
+    // wi-auth-e1-s1 is done, PR merged — the merged arm
     // wins the `kind`, and the action reads `completed` because the item
     // really is finished.
     const completion = feed.find((e) => e.workItemId === 'wi-auth-e1-s1');
@@ -40,13 +40,15 @@ describe('getProjectActivity — mock mode', () => {
     expect(completion!.ticketId).toBe('AUTH-E1-S1');
     expect(completion!.actorName).toBe('Simone Chang');
 
-    // Dated fourteen days ago, not four months ago: the seeds encode an offset
-    // from MOCK_EPOCH and the feed replays it from real today (the same
-    // reprojection providers/activity.ts's graph buckets by, so the two
-    // surfaces place one completion on one day).
+    // Dated by the item's own completion, not by when the seed was written:
+    // the fixture places a done item inside its sprint window and the feed
+    // replays that day from real today, so the two surfaces agree on the day.
+    const row = workItems.rows().find((r) => r.id === 'wi-auth-e1-s1');
+    expect(row?.completedAt).toBeTruthy();
     const ageDays = (Date.now() - Date.parse(completion!.at)) / 86_400_000;
-    expect(ageDays).toBeGreaterThan(13);
-    expect(ageDays).toBeLessThan(15);
+    const rowAgeDays = (Date.now() - Date.parse(row!.completedAt!)) / 86_400_000;
+    expect(Math.abs(ageDays - rowAgeDays)).toBeLessThan(0.01);
+    expect(ageDays).toBeGreaterThan(0);
   });
 
   it('carries the seeded discussion, keyed to the right initiative', async () => {

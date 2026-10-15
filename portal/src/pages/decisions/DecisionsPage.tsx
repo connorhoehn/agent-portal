@@ -100,7 +100,7 @@ export default function DecisionsPage() {
       rows={rows.map((d) => ({ id: d.id, title: d.topic, subline: statusLabel(d.status) }))}
       selectedId={id} selectedTitle={data?.find((d) => d.id === id)?.topic}
       onSelect={open}
-      footer={id ? <CollectionCommandHost adapter={adapter} /> : undefined}
+      footer={id ? <CollectionCommandHost inPlace adapter={adapter} /> : undefined}
       railNotice={failure ? <UnavailableNotice error={failure} what="decisions" source={DECISIONS_SOURCE} onRetry={refresh} />
         : isLoading && !data ? <LoadingState label="Loading decisions…" />
         : rows.length === 0 ? <EmptyState title="No decisions in this view" /> : undefined}

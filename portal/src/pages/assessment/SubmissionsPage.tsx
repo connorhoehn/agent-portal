@@ -363,7 +363,7 @@ export default function SubmissionsPage() {
           loading={loading && !data}
           error={error}
           onRetry={load}
-          footer={<CollectionCommandHost adapter={adapter} />}
+          footer={<CollectionCommandHost inPlace adapter={adapter} />}
           data-testid="assessment-submission-explorer"
         >
           {open ? (

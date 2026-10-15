@@ -172,7 +172,7 @@ export default function LibraryPage() {
       rows={assets.map((asset) => ({ id: asset.id, title: asset.name, subline: KIND_LABEL[asset.kind] }))}
       selectedId={openId} selectedTitle={assets.find((asset) => asset.id === openId)?.name}
       onSelect={setOpenId}
-      footer={openId ? <CollectionCommandHost adapter={adapter} /> : undefined}
+      footer={openId ? <CollectionCommandHost inPlace adapter={adapter} /> : undefined}
       railHeader={<SearchInput value={searchText} onChange={onSearchChange} placeholder="Search assets…" aria-label="Search Agent library" className="w-full" />}
       railNotice={libraryFailure ? <UnavailableNotice error={libraryFailure} what="library assets" source={LIBRARY_SOURCE} onRetry={refresh} /> : isLoading && !data ? <EmptyState title="Loading assets…" /> : assets.length === 0 ? <EmptyState title="No assets in this view" /> : undefined}
     >

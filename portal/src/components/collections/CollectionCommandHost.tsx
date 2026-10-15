@@ -1,7 +1,7 @@
 // Reusable input host: each collection declares its commands, scope and actions.
 // It never invents a chat channel, invokes an unrelated agent or executes a
 // proposed mutation before the user confirms that specific operation.
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { ColumnDock } from '@connorhoehnslalom/ui-components';
 import { ConfirmDialog, IconButton, InlinePopover, InfoIcon, Stack, T, Tooltip } from '@connorhoehnslalom/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehnslalom/ui-components/social/rich-composer';
@@ -29,12 +29,16 @@ export interface CollectionCommandAdapter {
  * spanning it, with every other block of the page above it. It still drives
  * that section's table: the portal keeps it in the section's React tree. In a
  * host with no dock it renders in place (docs/layout-cascade.md). */
-export function CollectionCommandHost({ adapter, disabled = false, prompts }: {
+export function CollectionCommandHost({ adapter, disabled = false, prompts, inPlace = false }: {
   adapter: CollectionCommandAdapter;
   disabled?: boolean;
   /** Items on the page that wait on a person (agent questions, work to review), as the composer's
    *  prompt deck — answered here, paged with the keyboard, instead of a block above the composer. */
   prompts?: readonly ComposerPrompt[];
+  /** Render where it is mounted instead of docking at the enclosing column's bottom. A list-rail
+   *  frame passes the host as its `footer`, which already sits under the record only: docking it
+   *  would span the column and cut the list rail short of the content height. */
+  inPlace?: boolean;
 }) {
   const [notice, setNotice] = useState<{ text: string; tone: 'info' | 'danger' } | null>(null);
   const [pending, setPending] = useState<CollectionCommandResult['confirmation']>();
@@ -55,7 +59,8 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts }: {
       return false;
     } finally { locked.current = false; setBusy(false); }
   };
-  return <ColumnDock><Stack gap="none" className="shrink-0 min-w-0" data-testid="collection-command-host" data-collection-command={adapter.id}>
+  const Dock = inPlace ? Fragment : ColumnDock;
+  return <Dock><Stack gap="none" className="shrink-0 min-w-0" data-testid="collection-command-host" data-collection-command={adapter.id}>
     <ConversationComposer channel={null} context={{ kind: 'document', id: adapter.id, title: adapter.label }}
       capabilities={{ maySend: false, agent: { allowed: true } }} defaultMode="agent" mode="agent"
       offModes={{ chat: 'This input controls the table; it does not post to a conversation', terminal: 'This table has no terminal' }}
@@ -86,5 +91,5 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts }: {
           text: error instanceof Error ? error.message : 'The operation failed.', tone: 'danger',
         })).finally(() => { locked.current = false; setBusy(false); });
       }} />
-  </Stack></ColumnDock>;
+  </Stack></Dock>;
 }

@@ -16,6 +16,7 @@ import { errorHandler } from '../../lib/async-handler.js';
 import { isAllowed, requireSession } from '../../lib/authz.js';
 import { getUser, listUsers, type UserInfo } from '../../providers/identity.js';
 import { loadDefinitionSources } from '../../providers/pipeline-definitions.js';
+import { humanizeSlug } from '../../lib/pipeline-run-titles.js';
 import { meGroupsRouter } from '../me-groups.js';
 import { MINE_KINDS, UNLINKED_LIMIT, type MineReply } from '../../lib/mine.js';
 import { assessmentTeamMembersFixture } from '../../mock/assessment-team-members.js';
@@ -187,8 +188,8 @@ describe('kind=pipeline (pipelines, a definition’s owner or last recorder)', (
   it('lists what the author owns or last edited, with the membership; another author reads nothing; an outage is 503', async () => {
     const res = body(await mine('pipeline', 'u-tomas'));
     expect(res.items).toEqual([
-      { kind: 'pipeline', id: 'bot:b2', name: 'edited-bot', role: 'paused', membership: 'editor' },
-      { kind: 'pipeline', id: 'bot:b1', name: 'mine-bot', role: 'paused', membership: 'owner' },
+      { kind: 'pipeline', id: 'bot:b2', name: humanizeSlug('edited-bot'), role: 'paused', membership: 'editor' },
+      { kind: 'pipeline', id: 'bot:b1', name: humanizeSlug('mine-bot'), role: 'paused', membership: 'owner' },
     ]);
     expect(body(await mine('pipeline', 'u-kofi', { userId: 'u-tomas' })).items).toEqual([]);
     jest.mocked(loadDefinitionSources).mockRejectedValueOnce(new Error('down'));

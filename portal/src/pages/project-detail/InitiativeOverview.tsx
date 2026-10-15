@@ -144,7 +144,7 @@ export function InitiativeOverview({
               {waiting.map((d) => (
                 <Inline key={d.id} gap="sm" align="baseline" wrap={false}>
                   <Chip tone={DECISION_TONE[d.status] ?? 'warning'} size="xs" uppercase>{d.status}</Chip>
-                  <RecordLink to={`/iq/decisions/${encodeURIComponent(d.id)}`}>{d.topic}</RecordLink>
+                  <T size="sm"><RecordLink to={`/iq/decisions/${encodeURIComponent(d.id)}`}>{d.topic}</RecordLink></T>
                   <T size="xs" tone="tertiary" className="truncate">
                     {[d.requiredRole ? `needs ${d.requiredRole}` : null, d.escalatedAt ? `escalated ${relativeTime(d.escalatedAt)}` : null].filter(Boolean).join(' · ')}
                   </T>

@@ -9,6 +9,7 @@ jest.mock('../identity.js', () => ({ listUsers: jest.fn(async () => [
 ]) }));
 jest.mock('../document-workflows.js', () => ({ ...jest.requireActual('../document-workflows.js'), performDocumentWorkflow: jest.fn() }));
 import { fixtureRegistry } from '../../mock/core/fixture.js';
+import { knowledgeCommentsFixture } from '../../mock/assessment.js';
 import { assessmentBroker } from '../../lib/assessment-broker.js';
 import { performDocumentWorkflow } from '../document-workflows.js';
 import {
@@ -19,6 +20,8 @@ import type { Session } from '../../lib/session.js';
 const farah: Session = { sub: 'u-farah', role: 'lead-assessor', tenant: 'assessment', iat: 0, grants: { assessment: ['lead-assessor'] } };
 const jonas: Session = { ...farah, sub: 'u-jonas', role: 'assessor' };
 const env = { ...process.env };
+// The legacy thread on the page, derived from the fixture rather than counted here.
+const legacyThread = () => knowledgeCommentsFixture.rows().filter(r => r.doc_id === 'page:100002');
 const anchor = { v: 1, key: 'body', start: 'AAE=', end: 'AAI=', quote: 'Partially met' };
 
 beforeEach(() => {
@@ -34,11 +37,13 @@ afterAll(() => { process.env = env; });
 describe('dev:mock backend', () => {
   it('lists the imported legacy thread with names from the identity store, oldest first', async () => {
     const list = await listDocumentComments('page:100002', farah);
-    expect(list.import).toMatchObject({ state: 'imported', imported: 2 });
-    expect(list.comments.map(c => [c.commentId, c.displayName, c.scope ?? null, c.parentCommentId ?? null])).toEqual([
-      ['kc-rubric-01', 'Jonas Lindqvist', 'document', null],
-      ['kc-rubric-02', 'Farah Osei', null, 'kc-rubric-01'],
-    ]);
+    expect(list.import).toMatchObject({ state: 'imported', imported: legacyThread().length });
+    const names: Record<string, string> = { 'u-jonas': 'Jonas Lindqvist', 'u-farah': 'Farah Osei' };
+    const expected = [...legacyThread()].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+    expect(list.comments.map(c => [c.commentId, c.displayName, c.parentCommentId ?? null])).toEqual(
+      expected.map(r => [r.id, names[r.author], r.parent_id]),
+    );
+    expect(list.comments[0]).toMatchObject({ commentId: 'kc-rubric-01', scope: 'document' });
     expect(list.documentId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -77,7 +82,7 @@ describe('dev:mock backend', () => {
     await createDocumentComment('page:100002', farah, { text: 'New', scope: 'document' });
     const targets = await documentCommentTargetIds('page:100002', farah);
     expect(targets).toEqual(expect.arrayContaining(['kc-rubric-01', 'kc-rubric-02']));
-    expect(targets).toHaveLength(3);
+    expect(targets).toHaveLength(legacyThread().length + 1);
   });
 
   it('refuses an unknown document', async () => {
@@ -97,7 +102,7 @@ describe('platform-api backend', () => {
     expect(performDocumentWorkflow).toHaveBeenNthCalledWith(2, 'page:100002', farah, { kind: 'comments', method: 'GET', cursor: 'next' });
     expect(list.comments.map(c => [c.commentId, c.displayName])).toEqual([['01A', 'Jonas Lindqvist'], ['01B', 'Farah Osei']]);
     // No import table configured: the legacy thread is reported, not silently dropped.
-    expect(list.import).toMatchObject({ state: 'unconfigured', legacy: 2 });
+    expect(list.import).toMatchObject({ state: 'unconfigured', legacy: legacyThread().length });
   });
 
   it('delegates writes as fixed comment operations and keeps platform refusals intact', async () => {

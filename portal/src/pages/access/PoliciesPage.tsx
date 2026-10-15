@@ -119,7 +119,7 @@ export default function PoliciesPage() {
         loading={isLoading && !data}
         error={error}
         onRetry={refresh}
-        footer={<CollectionCommandHost adapter={adapter} disabled={busy} />}
+        footer={<CollectionCommandHost inPlace adapter={adapter} disabled={busy} />}
         railType="app"
         data-testid="access-policy-explorer"
       >
