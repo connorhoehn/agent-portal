@@ -175,14 +175,30 @@ export function tenantMentionNotifyPlugin(getRouter: () => LiveRouter | null) {
  * read gate refuses now (`currentReaders`, asked again per recipient). Reading
  * the thread clears the item (the service's own read-receipt path).
  */
+/**
+ * Does a send on `channel` keep page-thread unread items (realtime-modules
+ * 0.120.1 `unread.channels`)? Only a page discussion with reader cursors
+ * (`pageCursorFamily`). A DM or a Social channel answers false, so its send
+ * does no unread work at all: no read-receipts read, no inbox read. The chat
+ * service passes the send's own channel, which the gateway's chat uses bare;
+ * a `chat:`-prefixed spelling is unwrapped before matching all the same.
+ */
+export function pageThreadKeepsUnread(channel: string): boolean {
+  const bare = channel.startsWith('chat:') ? channel.slice('chat:'.length) : channel;
+  return pageCursorFamily(bare) !== null;
+}
+
 export function pageCursorChatOptions(getRouter: () => LiveRouter | null): Pick<ChatServiceOpts, 'cursorMode' | 'currentReaders' | 'unread'> {
   return {
     cursorMode: pageCursorMode,
     currentReaders: (channel, userIds, scope) => currentPageReaders(channel, userIds, scope),
-    unread: pageThreadUnread(async (channel, userIds, scope) => {
-      const router = getRouter();
-      return router ? liveSubscribersForUsers(router, channel, userIds, scope) : null;
-    }),
+    unread: {
+      ...pageThreadUnread(async (channel, userIds, scope) => {
+        const router = getRouter();
+        return router ? liveSubscribersForUsers(router, channel, userIds, scope) : null;
+      }),
+      channels: pageThreadKeepsUnread,
+    },
   };
 }
 

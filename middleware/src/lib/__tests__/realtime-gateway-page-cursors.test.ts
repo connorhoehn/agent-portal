@@ -60,7 +60,7 @@ async function dispatched(client: Client, frame: Frame) {
   });
   try { send(client, frame); await receipt; } finally { action.mockRestore(); }
 }
-const ROLES: Record<string, string> = { assessment: 'assessor', orgiq: 'member', pipelines: 'operator' };
+const ROLES: Record<string, string> = { assessment: 'assessor', orgiq: 'member', pipelines: 'operator', social: 'participant' };
 const session = (sub: string, tenant = 'assessment'): Session => ({ sub, name: sub, tenant: tenant as Session['tenant'],
   role: (users.get(sub)?.grants[tenant]?.[0] ?? ROLES[tenant]) as Session['role'], epoch: users.get(sub)?.epoch ?? 0,
   grants: structuredClone(users.get(sub)?.grants ?? {}), iat: Math.floor(Date.now() / 1000) });
@@ -100,6 +100,7 @@ beforeEach(async () => {
     u('asha', { assessment: ['assessor'] }), u('jonas', { assessment: ['lead-assessor'] }),
     u('olaf', { orgiq: ['member'] }), u('mia', { orgiq: ['member'], assessment: ['assessor'] }),
     u('ola', { orgiq: ['member'] }), u('sam', { orgiq: ['sme'] }), u('kofi', { pipelines: ['operator'] }), u('ines', { pipelines: ['author'] }),
+    u('sana', { social: ['participant'] }), u('lena', { social: ['participant'] }),
   ]);
   jest.mocked(getUser).mockImplementation(async id => (users.has(id) ? structuredClone(users.get(id)!) : null));
   jest.mocked(listUsers).mockImplementation(async () => [...users.values()].map(x => structuredClone(x)));
@@ -109,6 +110,7 @@ beforeEach(async () => {
     if (action === 'ViewAssessment') return principal.tenant === 'assessment';
     if (action === 'ViewPipelines') return principal.tenant === 'pipelines';
     if (action === 'DispatchAgentRun') return principal.tenant === 'orgiq' && principal.role === 'sme';
+    if (action === 'ViewSocial' || action === 'PostMessage') return principal.tenant === 'social';
     return false;
   });
   jest.mocked(pageResourceVisible).mockImplementation(async (_kind, bare) => existing.has(bare));
@@ -283,4 +285,35 @@ it('an item stored before 0.118 (no chatUnread marker) still clears when the thr
   expect((await unreadItems('asha')).find(n => n.id === legacyId)?.read).toBeFalsy();
   await post(jonas, 'Newer'); await read(asha);
   await until(async () => (await unreadItems('asha')).find(n => n.id === legacyId)?.read === true);
+});
+
+// realtime-modules 0.120.1 `unread.channels` (lib/gateway/notify-plugins.ts
+// pageThreadKeepsUnread): only a page discussion keeps unread items, so a DM or
+// a Social channel send does no unread work — not one read-receipts read, not
+// one inbox read. The team page next to it still does (the positive control).
+it('a DM or Social channel send reads no receipts and no inbox; a page send still does', async () => {
+  const GENERAL = 'social:ch:general', DM = 'social:dm:lena:sana';
+  for (const userId of ['sana', 'lena']) await backend.membershipStore.putMember({ channel: GENERAL, userId, role: 'member',
+    addedBy: 'lena', addedAt: new Date().toISOString(), historyFrom: null, removedAt: null });
+  const sana = await connect('sana', 'social'), lena = await connect('lena', 'social');
+  for (const channel of [GENERAL, DM]) { await join(sana, channel); await join(lena, channel); }
+  const store = backend.readReceiptStore as unknown as Record<string, unknown>;
+  const reads = Object.keys(Object.getPrototypeOf(store)).concat(Object.keys(store))
+    .filter(name => name !== 'constructor' && typeof store[name] === 'function')
+    .map(name => jest.spyOn(store as Record<string, (...args: unknown[]) => unknown>, name));
+  const inboxReads = jest.spyOn(inbox(), 'listForUser');
+  const calls = () => reads.reduce((n, spy) => n + spy.mock.calls.length, 0) + inboxReads.mock.calls.length;
+  expect(reads.length).toBeGreaterThan(0);
+  lena.ws.terminate(); await pause(30); // a member who is not watching: the case unread work exists for
+  await post(sana, 'DM, no unread work', DM);
+  await post(sana, 'Channel, no unread work', GENERAL);
+  await pause(50);
+  expect(calls()).toBe(0);
+  const asha = await connect('asha'), jonas = await connect('jonas');
+  await join(asha); await join(jonas); await post(jonas, 'Seen'); await read(asha);
+  asha.ws.terminate(); await pause(30);
+  const before = calls();
+  await post(jonas, 'A page send keeps its unread item');
+  await until(async () => (await unreadItems('asha')).length === 1);
+  expect(calls()).toBeGreaterThan(before);
 });
