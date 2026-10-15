@@ -56,7 +56,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { OBSERVED_ROUTES, PARAM_ROUTES, STATE_ROUTES, SWEEP_USER, TENANTS, resolveParam, sourceDigest, staticInventory, type InventoryRoute, type Tenant } from './route-inventory';
 import { DEFAULT_DUE, ownerOf, readRows, writeRows, type Row } from './burndown';
 import { finishParts, recordPart } from './contracts';
-import { signInMeasured } from './realSession';
+import { cloneIdentity, signIn as signInAs, signInMeasured } from './realSession';
 
 const BASE = process.env.PARITY_BASE_URL ?? process.env.LAYOUT_CASCADE_BASE ?? 'http://127.0.0.1:5183';
 const ONLY = process.env.TYPE_SCALE_ONLY ?? '';
@@ -299,7 +299,24 @@ const volatile = (o: Offender) => VOLATILE.some((v) => v.match.test(o.path));
 const keyOf = (o: Offender) => `${o.rule} ${o.region} ${o.sw}`;
 
 // JOURNEY_MEASURE_CLONES=1 (measure.sh) signs in as a clone of the persona; default: the seed persona (realSession.signInMeasured).
-const signIn = (page: Page, tenant: Tenant | null, user = USER) => signInMeasured(page, user, tenant ? { tenant } : {});
+// TYPE_SCALE_CLONES=1 does the same for this sweep alone; both leave the default as the seed persona.
+const CLONES = process.env.TYPE_SCALE_CLONES === '1';
+const cloneOf = new WeakMap<object, Map<string, string>>();
+async function signIn(page: Page, tenant: Tenant | null, user = USER) {
+  if (!CLONES) return signInMeasured(page, user, tenant ? { tenant } : {});
+  const ids = cloneOf.get(page.context()) ?? new Map<string, string>();
+  cloneOf.set(page.context(), ids);
+  if (!ids.has(user)) {
+    // The BFF restarts when another run edits middleware (tsx watch); a clone minted mid-restart answers 5xx.
+    for (let attempt = 1; ; attempt++) {
+      try { ids.set(user, await cloneIdentity(page.request, user, 'type-scale-sweep')); break; } catch (error) {
+        if (attempt >= 4) throw error;
+        await page.waitForTimeout(3_000);
+      }
+    }
+  }
+  return signInAs(page, ids.get(user)!, tenant ? { tenant } : {});
+}
 
 async function resolveParams(page: Page, tenant: Tenant): Promise<InventoryRoute[]> {
   const out: InventoryRoute[] = [];

@@ -297,6 +297,8 @@ person-shaped and, like the `InlinePopover` under it, moves focus into the panel
 
 ## Rail and tile type off the app scale — 2026-10-07
 
+**Shipped 2026-10-14 in ui-components 2.453.0 / 2.454.0** (railType items 14/500, group captions and counts 12, `ConversationList`, `ScopeHeader`, `MetaLine`, `SectionLabel`, `DotMeter`, `StatStrip`, `StatCard`, `DetailSection`, `KeyValue`, `MarkdownView`, work-graph chrome; audit contract `rail.item-label` at 14). The `ActivePeopleGrid` tile names (11/500) and the `ConversationSurface` header `size` below are still owed.
+
 The type-scale sweep (`portal/e2e/type-scale-sweep.spec.ts`) holds every page
 to 20 (title) / 14 (headings, body) / 12 (meta), 10–11 only in a pill or count
 badge. The library's rail and tile composites draw their own scale, so every

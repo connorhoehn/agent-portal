@@ -621,7 +621,7 @@ tbody tr:focus-within .row-reveal,
 [data-testid="catalog-explorer-rail-title"],
 [data-testid="distillation-promotions-rail-title"],
 [data-testid="distillation-review-rail-title"] {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   letter-spacing: 0.05em;
   color: var(--color-text-tertiary);
