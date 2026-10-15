@@ -4,7 +4,7 @@
 #
 # `social-sim` (label: demo) keeps /social/channels lively: six seeded users
 # (u-lena, u-sana, u-asha, u-jonas, u-nora, u-rachel) hold real /ws sessions,
-# show up in Active now and channel presence, and post or react every 30-90 s.
+# show up in Active now and channel presence, and post (off-topic, #random only) or react every 15-30 min.
 # The ten-day history, mentions and unread items it sits on are mock fixtures
 # (docs/mock-floor.md). Demo as u-farah (or u-mira/u-theo/u-vera); do not log
 # in as a sim user, the tenant switch would sign the sim out and back in.

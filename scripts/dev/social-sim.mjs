@@ -5,8 +5,8 @@
 // switches each to the `social` tenant, fetches their realtime token, and holds
 // a real /ws connection per user (Sec-WebSocket-Protocol: bearer-token-v1, <jwt>):
 // they show up in "Active now" and in the presence of the channels they belong
-// to, and every 30-90 s one of them posts a short message or a reaction in a
-// channel they are a member of. Only authorized paths: no fixture is touched.
+// to, and every 15-30 min each posts a short off-topic line or a reaction in
+// #random (see POST_CHANNELS). Only authorized paths: no fixture is touched.
 //
 //   node scripts/dev/social-sim.mjs
 //   SOCIAL_SIM_BASE=http://127.0.0.1:3001   BFF origin (the gateway is its /ws)
@@ -26,16 +26,25 @@ const USERS = (process.env.SOCIAL_SIM_USERS ?? 'u-lena,u-sana,u-asha,u-jonas,u-n
 const LOBBY = 'social:lobby';
 const EMOJI = ['👍', '❤️', '😂', '🎉'];
 
+// Demo-quiet by default. The seeded threads (docs/demo-content-audit.md, the
+// Social and Work stories) are what a demo reads, so the sim never posts into
+// them: text goes only to the off-topic channels in POST_CHANNELS, as short
+// timeless lines per person that no seeded thread can contradict, a few an
+// hour across the whole cast. Each line is used once; when a person runs out
+// they go on reacting. Reactions also stay in POST_CHANNELS. Presence is
+// unchanged: everyone still shows as active. SOCIAL_SIM_POST_CHANNELS=slug,slug
+// widens it ("" posts nothing).
+const POST_CHANNELS = new Set((process.env.SOCIAL_SIM_POST_CHANNELS ?? 'random').split(',').map((s) => s.trim()).filter(Boolean));
 const LINES = {
-  general: ['Reminder: the community call is Thursday at 3pm.', 'Anyone have notes from yesterday\'s office hours?', 'Welcome to everyone who joined this week!', 'Quick thought: could we pin the call agenda somewhere easier to find?'],
-  'design-reviews': ['New mock is up, looking for eyes on the spacing.', 'The empty state reads much better now.', 'Dark mode contrast is still a bit low on the muted controls.', 'Can someone review the rubric editor before Friday?'],
-  moderators: ['Two new reports overnight, taking a look now.', 'Closing the thread from earlier, no action needed.'],
-  'auth-migration': ['Cutover checklist is updated in the overview.', 'No login errors in the last hour.', 'Support asked about the old SAML URL again, redirect is still on.', 'Dry run for the next tenant is on the calendar.'],
-  random: ['This week\'s playlist is unexpectedly good.', 'Best lunch near the office, go.', 'Found my old keyboard. It is loud.', 'Anyone watching the match tonight?'],
-  incidents: ['Alert on the search index looks like a stale health check again.', 'Maintenance window finished, nothing to report.', 'Postmortem draft is in the doc, comments welcome.'],
-  events: ['Agenda for the quarterly call is in the doc, add topics.', 'Volunteers for call notes this month?', 'Room is booked for the lightning talks.'],
-  _: ['Sounds good to me.', 'Thanks, that helps.', 'On it.', 'Let me check and get back to you.', 'Agreed, let\'s do that.', 'Nice, thanks for sharing.'],
+  'u-lena': ['Tea count today: three. I regret nothing.', 'Someone left a very good umbrella in the lobby. It is waiting for you.'],
+  'u-sana': ['Current favorite: a podcast about bridges. Yes, bridges.', 'My headset arrived. I can hear myself think, which is mixed news.'],
+  'u-asha': ['Ran the loop by the river this morning, the light was ridiculous.', 'Hot take: the best desk plant is the one you forget to water.'],
+  'u-jonas': ['Rewatching an old chess documentary. Nothing is as dramatic as a draw.', 'The loud keyboard has a fan club of exactly one.'],
+  'u-nora': ['The office plant is on its fourth new leaf. Respect.', 'Small win: my coffee stayed hot until the bottom of the cup.'],
+  'u-rachel': ['Lunch idea: leftover noodles with a fried egg. Highly recommended.', 'Spotted a heron by the car park. It looked unbothered.'],
 };
+const GENERIC = ['Anyone read anything good lately?', 'Cannot recommend the new corner bakery enough.'];
+const used = new Set();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pick = (xs) => xs[Math.floor(Math.random() * xs.length)];
@@ -128,18 +137,23 @@ class Bot {
 
   act() {
     if (stopping || !this.ws) return;
-    const c = pick(this.channels);
+    const quiet = this.channels.filter((c) => POST_CHANNELS.has(c.slug));
+    const c = quiet.length ? pick(quiet) : null;
     const known = c ? this.messageIds.get(c.channel) ?? [] : [];
-    if (c && known.length && Math.random() < 0.3) {
+    if (c && known.length && Math.random() < 0.4) {
       const emoji = pick(EMOJI);
       this.send({ service: 'reactions', action: 'send', channel: c.channel, emoji, targetId: pick(known) });
       log(this.id, `reacted ${emoji} in #${c.slug}`);
     } else if (c) {
-      const text = pick(LINES[c.slug] ?? LINES._) ;
-      this.send({ service: 'chat', action: 'send', channel: c.channel, message: Math.random() < 0.25 ? pick(LINES._) : text });
-      log(this.id, `posted in #${c.slug}: ${text.slice(0, 48)}`);
+      const text = [...(LINES[this.id] ?? GENERIC)].find((t) => !used.has(`${this.id}:${t}`));
+      if (text) {
+        used.add(`${this.id}:${text}`);
+        this.send({ service: 'chat', action: 'send', channel: c.channel, message: text });
+        log(this.id, `posted in #${c.slug}: ${text.slice(0, 48)}`);
+      }
     }
-    this.later(30_000 + Math.random() * 60_000, () => this.act());
+    // Six people, one action each every 15-30 minutes: roughly 15 an hour at most.
+    this.later(15 * 60_000 + Math.random() * 15 * 60_000, () => this.act());
   }
 
   async run() {
@@ -151,7 +165,7 @@ class Bot {
         const token = await this.token();
         await this.connect(token);
         log(this.id, `online as ${this.name} in ${this.channels.length} channels`);
-        this.later(5_000 + Math.random() * 25_000, () => this.act());
+        this.later(60_000 + Math.random() * 5 * 60_000, () => this.act());
         const heartbeat = () => { this.presence(); this.later(25_000, heartbeat); };
         this.later(25_000, heartbeat);
         // Refresh before the 10-minute token lapses: a new token means a new socket.
