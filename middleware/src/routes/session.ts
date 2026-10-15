@@ -49,7 +49,11 @@ const loginPerMin = (() => {
   return process.env.NODE_ENV !== 'production' && Number.isFinite(raw) && raw > 0 ? raw : 15;
 })();
 const loginLimit = rateLimit('session-login', loginPerMin, 60_000);
-const switchLimit = rateLimit('session-switch', 30, 60_000);
+// Tenant/role switches share the same loopback bucket problem (journey maps,
+// sweeps and audits switch tenants per persona and per clone), so the same
+// dev-only widening applies; production keeps 30/min.
+const switchPerMin = process.env.NODE_ENV !== 'production' && loginPerMin > 30 ? loginPerMin : 30;
+const switchLimit = rateLimit('session-switch', switchPerMin, 60_000);
 
 function publicView(session: Session) {
   return {
