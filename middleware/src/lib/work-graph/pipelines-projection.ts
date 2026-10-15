@@ -44,14 +44,14 @@ export interface PipelinesViewerReads {
   approvals: boolean;
 }
 
-export interface PDefinitionRow { id: string; title: string; kind: string; enabled: boolean; owner: string | null }
+export interface PDefinitionRow { id: string; title: string; kind: string; enabled: boolean; owner: string | null; ownerName?: string | null }
 export interface PRunRow {
-  id: string; definitionId: string; status: string; triggeredBy: string | null; triggerType: string;
+  id: string; definitionId: string; status: string; triggeredBy: string | null; triggeredByName?: string | null; triggerType: string;
   startedAt: string | null; finishedAt: string | null; costUsd: number | null; contextTenant: string;
 }
 export interface PStepRow { runId: string; stepId: string; label: string; status: string; startedAt: string | null; finishedAt: string | null; detail: string | null }
 export interface PApprovalRow { id: string; source: string; runId: string | null; definitionId: string | null; stepId: string; title: string; question: string; requestedAt: string | null; requiredRoles: string[] }
-export interface PDeckRow { id: string; runId: string; title: string; updatedAt: string; revisionLabel: string | null; producedBy: string | null }
+export interface PDeckRow { id: string; runId: string; title: string; updatedAt: string; revisionLabel: string | null; producedBy: string | null; producedByName?: string | null }
 
 export interface PipelinesProjectionInput {
   window: Pick<WorkDayWindow, 'start' | 'end'>;
@@ -130,7 +130,7 @@ export function projectPipelinesWorkGraph(input: PipelinesProjectionInput): Proj
     });
     return id;
   };
-  const person = (id: string | null | undefined) => (id && ID.test(id) && id.length <= 100 ? [{ id, label: clip(id) }] : []);
+  const person = (id: string | null | undefined, name?: string | null) => (id && ID.test(id) && id.length <= 100 ? [{ id, label: clip(name || id) }] : []);
 
   // Runs in the day (a run page also draws its own run, whatever the day).
   const definitions = new Map(input.definitions.map(d => [d.id, d]));
@@ -162,8 +162,8 @@ export function projectPipelinesWorkGraph(input: PipelinesProjectionInput): Proj
     details.set(id, {
       nodeId: id, summary: clip(definition ? `${words(definition.kind)} · ${definition.title}` : 'Pipeline run'), badge: words(run.status),
       ...(live ? { freshness: lease } : {}), lines,
-      ...(person(run.triggeredBy).length ? { participants: person(run.triggeredBy) } : {}),
-      footer: { label: clip(`Run · ${run.id}`) },
+      ...(person(run.triggeredBy).length ? { participants: person(run.triggeredBy, run.triggeredByName) } : {}),
+      footer: { label: clip(`Run · ${definition?.title ?? words(run.triggerType)}`) },
     });
     // run → its definition (drawn below).
     const toId = pNodeIdFor.definition(run.definitionId);
@@ -194,7 +194,7 @@ export function projectPipelinesWorkGraph(input: PipelinesProjectionInput): Proj
       nodeId: id, summary: clip(`Step · ${step.stepId}`), badge: words(step.status),
       ...(step.detail ? { lines: [clip(step.detail)] } : {}),
       ...(step.status === 'running' ? { freshness: lease } : {}),
-      footer: { label: clip(`Run · ${step.runId}`) },
+      footer: { label: clip(`Run · ${run.title}`) },
     });
     const edgeId = edge('works-on', node, run.id);
     // The contract's process is a run/agent/terminal node: the running step animates its edge to the run it belongs to.
@@ -233,7 +233,7 @@ export function projectPipelinesWorkGraph(input: PipelinesProjectionInput): Proj
       details.set(id, {
         nodeId: id, summary: clip(`Approval · ${approval.question || 'waiting on a decision'}`), badge: 'Pending',
         ...(approval.requiredRoles.length ? { lines: [clip(`Needs · ${approval.requiredRoles.join(', ')}`)] } : {}),
-        footer: { label: clip(`Approval · ${approval.id}`) },
+        footer: { label: clip(`Approval · ${approval.title || 'pending'}`) },
       });
       const step = approval.runId ? stepNodes.get(`${approval.runId}\u0000${approval.stepId}`) : undefined;
       if (step) edge('operates-on', node, step.id);
@@ -258,8 +258,8 @@ export function projectPipelinesWorkGraph(input: PipelinesProjectionInput): Proj
     observe(updated);
     details.set(id, {
       nodeId: id, summary: clip(deck.revisionLabel ? `Deck · ${deck.revisionLabel}` : 'Run report deck'), badge: 'Deck',
-      ...(person(deck.producedBy).length ? { participants: person(deck.producedBy) } : {}),
-      footer: { label: clip(`Deck · ${deck.id}`) },
+      ...(person(deck.producedBy).length ? { participants: person(deck.producedBy, deck.producedByName) } : {}),
+      footer: { label: clip(`Deck · ${deck.title || 'run report'}`) },
     });
     edge('derived-from', node, run.id);
   }
@@ -318,8 +318,8 @@ export function projectPipelinesWorkGraph(input: PipelinesProjectionInput): Proj
     });
     details.set(id, {
       nodeId: id, summary: clip(`${words(definition.kind)} definition`), badge: definition.enabled ? 'Enabled' : 'Parked',
-      ...(definition.owner ? { lines: [clip(`Owner · ${definition.owner}`)] } : {}),
-      footer: { label: clip(`Definition · ${definition.id}`) },
+      ...(definition.owner ? { lines: [clip(`Owner · ${definition.ownerName ?? definition.owner}`)] } : {}),
+      footer: { label: clip(`Definition · ${words(definition.kind)}`) },
     });
   }
   // Queue anchors for the rows no run owns.
@@ -330,7 +330,7 @@ export function projectPipelinesWorkGraph(input: PipelinesProjectionInput): Proj
       ...(earliest(...memberNodes.map(m => m.startedAt)) ? { startedAt: earliest(...memberNodes.map(m => m.startedAt))! } : {}),
       updatedAt: latest(...memberNodes.map(m => m.updatedAt)) ?? observedAt, capabilities: [],
     });
-    details.set(id, { nodeId: id, summary: 'Not part of any run drawn here', footer: { label: clip(id) } });
+    details.set(id, { nodeId: id, summary: 'Not part of any run drawn here', footer: { label: clip(title) } });
   }
 
   for (const [key, e] of edges) if (!nodes.has(e.fromId) || !nodes.has(e.toId)) edges.delete(key);

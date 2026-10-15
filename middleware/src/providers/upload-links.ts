@@ -12,6 +12,7 @@ import { exec } from './aurora.js';
 import { uploadToLandingZone } from './landing-zones.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { config } from '../config.js';
+import { userNameFor } from '../lib/user-names.js';
 import { clock } from '../mock/core/clock.js';
 import {
   claimUploadSlot,
@@ -44,6 +45,8 @@ export interface UploadLink {
   kbSlug: string;
   label: string;
   createdBy: string | null;
+  /** The creator as a person (a seeded or cloned account's display name), null when only the account id is known. */
+  createdByName: string | null;
   expiresAt: string;
   revokedAt: string | null;
   maxFiles: number;
@@ -81,6 +84,7 @@ function rowToLink(r: Record<string, unknown>): UploadLink {
     kbSlug: toStr(r['kb_slug']),
     label: toStr(r['label']),
     createdBy: r['created_by'] ? toStr(r['created_by']) : null,
+    createdByName: r['created_by'] ? userNameFor(toStr(r['created_by'])) : null,
     expiresAt: toStr(r['expires_at']),
     revokedAt: r['revoked_at'] ? toStr(r['revoked_at']) : null,
     maxFiles: toNum(r['max_files']),
@@ -110,6 +114,7 @@ function mockRowToLink(row: MockUploadLink): UploadLink {
     kbSlug: row.kbSlug,
     label: row.label,
     createdBy: row.createdBy,
+    createdByName: userNameFor(row.createdBy),
     expiresAt: row.expiresAt,
     revokedAt: row.revokedAt,
     maxFiles: row.maxFiles,

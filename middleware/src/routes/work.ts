@@ -11,6 +11,7 @@ import { Router } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { resolveSession, requireAction, requireSession } from '../lib/authz.js';
 import { type Session } from '../lib/session.js';
+import { userNameFor } from '../lib/user-names.js';
 import { getUser } from '../providers/identity.js';
 import { searchWorkItems, getWorkItem } from '../providers/work-items.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
@@ -466,7 +467,9 @@ workRouter.post('/findings/:id/dismiss', requireAction('ManageDevbox'), asyncHan
 
 workRouter.get('/proposals', asyncHandler(async (req, res) => {
   const status = typeof req.query['status'] === 'string' ? req.query['status'] : undefined;
-  res.json({ proposals: await listProposals({ ...(status ? { status } : {}) }) });
+  const proposals = await listProposals({ ...(status ? { status } : {}) });
+  // A reviewer is stored as the session subject; the page prints a person.
+  res.json({ proposals: proposals.map((p) => ({ ...p, reviewerName: userNameFor(p.reviewer) })) });
 }));
 
 workRouter.post('/proposals', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {

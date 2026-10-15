@@ -36,6 +36,14 @@ import {
 import { detailsForDisclosedNodes } from '@connorhoehnslalom/realtime-modules/work-graph/server';
 import type { DecisionActivityRow } from '../../providers/decisions.js';
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** A sprint's calendar day as a reader says it ("Oct 5"); anything that is not a plain date is left as it came. */
+function calendarDay(day: string): string {
+  const m = /^\d{4}-(\d{2})-(\d{2})/.exec(day);
+  const month = m ? MONTHS[Number(m[1]) - 1] : undefined;
+  return m && month ? `${month} ${Number(m[2])}` : day;
+}
+
 // ── Source rows (the subset of each provider type the projection reads) ─────
 
 export interface InitiativeRow { id: string; name: string; status: string | null; createdAt: string | null; ownerName?: string | null }
@@ -390,7 +398,7 @@ export function projectWorkGraph(input: ProjectionInput): Projection {
       money, envelopes,
     ].filter((l): l is string => !!l).map(l => clip(l));
     details.set(id, {
-      nodeId: id, summary: clip(`Sprint · ${sprint.startsOn} to ${sprint.endsOn}`), badge: words(sprint.status),
+      nodeId: id, summary: clip(`Sprint · ${calendarDay(sprint.startsOn)} to ${calendarDay(sprint.endsOn)}`), badge: words(sprint.status),
       lines,
       ...(sprint.stewardPersonId && sprint.stewardName && ID.test(sprint.stewardPersonId) ? { participants: [{ id: sprint.stewardPersonId, label: clip(sprint.stewardName) }] } : {}),
       footer: { label: clip(`Sprint · ${initiatives.get(sprint.orgProjectId)?.name ?? 'initiative'}`) },

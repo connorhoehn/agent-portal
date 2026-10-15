@@ -181,7 +181,7 @@ export function projectAssessmentWorkGraph(input: AssessmentProjectionInput): Pr
     details.set(id, {
       nodeId: id, summary: clip(`Dimension ${dimensionId} · ${row.title}`), badge: row.isNa ? 'N/A' : row.level != null ? `Level ${row.level}` : 'Open',
       lines, ...(person(row.changedBy).length ? { participants: person(row.changedBy) } : {}),
-      footer: { label: clip(`Team · ${teamId}`) },
+      footer: { label: clip(`Team · ${teamRows.get(teamId)?.name ?? 'team'}`) },
     });
     return node;
   };
@@ -218,7 +218,7 @@ export function projectAssessmentWorkGraph(input: AssessmentProjectionInput): Pr
     details.set(id, {
       nodeId: id, summary: clip(ev.excerpt || `Evidence ${ev.id}`), badge: words(ev.status),
       lines: [ev.supportsLevel != null ? `Supports · level ${ev.supportsLevel}` : 'Supports · no level yet'],
-      footer: { label: clip(`Evidence · ${ev.id}`) },
+      footer: { label: clip(`Evidence · ${teamRows.get(ev.teamId)?.name ?? 'team'}`) },
     });
     const dim = wantDimension(ev.teamId, ev.dimensionId);
     rememberChild(dim, node);
@@ -251,7 +251,7 @@ export function projectAssessmentWorkGraph(input: AssessmentProjectionInput): Pr
       ...(live ? { freshness: live } : {}),
       lines: [`Revision · ${draft.revision}`],
       ...(person(draft.requestedBy).length ? { participants: person(draft.requestedBy) } : {}),
-      footer: { label: clip(`Draft · ${draft.id}`) },
+      footer: { label: clip(`Draft · ${teamRows.get(draft.teamId)?.name ?? 'team'}`) },
     });
     const dim = wantDimension(draft.teamId, draft.dimensionId);
     rememberChild(dim, node);
@@ -275,7 +275,7 @@ export function projectAssessmentWorkGraph(input: AssessmentProjectionInput): Pr
     observe(updated);
     details.set(id, {
       nodeId: id, summary: clip(deck.revisionLabel ? `Review deck · ${deck.revisionLabel}` : 'Review deck'), badge: 'Deck',
-      footer: { label: clip(`Deck · ${deck.id}`) },
+      footer: { label: clip(`Deck · ${teamRows.get(deck.teamId)?.name ?? 'team'}`) },
     });
     edge('derived-from', node, teamNode(deck.teamId));
   }
@@ -309,7 +309,7 @@ export function projectAssessmentWorkGraph(input: AssessmentProjectionInput): Pr
     observe(start, end);
     details.set(id, {
       nodeId: id, summary: clip(run.summary || `Agent run · ${words(run.command)}`), badge: words(run.status),
-      ...(open ? { freshness: lease } : {}), footer: { label: clip(`Run · ${run.id}`) },
+      ...(open ? { freshness: lease } : {}), footer: { label: clip(`Run · ${run.teamId ? teamRows.get(run.teamId)?.name ?? 'team' : 'no team'}`) },
     });
     const deck = run.deckId ? deckNodes.get(run.deckId) : undefined;
     let edgeId: string | null = null;
@@ -384,9 +384,9 @@ export function projectAssessmentWorkGraph(input: AssessmentProjectionInput): Pr
     };
     nodes.set(id, node);
     details.set(id, {
-      nodeId: id, summary: clip(`${words(team.cohort)} assessment`), badge: team.id,
+      nodeId: id, summary: clip(`${words(team.cohort)} assessment`), badge: 'Team',
       ...(team.lead ? { participants: person(team.lead) } : {}),
-      footer: { label: clip(`Team · ${team.id}`) },
+      footer: { label: clip(`Team · ${team.name || 'team'}`) },
     });
     for (const link of pendingTeamLinks.filter(l => l.teamId === teamId)) edge('works-on', node, link.dimensionId);
   }
@@ -398,7 +398,7 @@ export function projectAssessmentWorkGraph(input: AssessmentProjectionInput): Pr
       ...(earliest(...memberNodes.map(m => m.startedAt)) ? { startedAt: earliest(...memberNodes.map(m => m.startedAt))! } : {}),
       updatedAt: latest(...memberNodes.map(m => m.updatedAt)) ?? observedAt, capabilities: [],
     });
-    details.set(id, { nodeId: id, summary: 'Not part of any team drawn here', footer: { label: clip(id) } });
+    details.set(id, { nodeId: id, summary: 'Not part of any team drawn here', footer: { label: clip(title) } });
   }
 
   for (const [key, e] of edges) if (!nodes.has(e.fromId) || !nodes.has(e.toId)) edges.delete(key);

@@ -90,7 +90,7 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
     columns: [
       { key: 'title', header: 'Command', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (d) => d.title },
       { key: 'summary', header: 'What it does', render: (d) => d.description ?? '—' },
-      { key: 'owner', header: 'Runs as', render: (d) => <T size="xs" tone="tertiary">{d.owner ?? '—'}</T> },
+      { key: 'owner', header: 'Runs as', render: (d) => <T size="xs" tone="tertiary">{d.ownerName ?? d.owner ?? '—'}</T> },
       ...RUNS,
     ],
   },

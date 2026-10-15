@@ -199,7 +199,7 @@ export function projectSocialWorkGraph(input: SocialProjectionInput): Projection
         ...(call.durationMs != null && call.durationMs > 0 ? [`Length · ${Math.max(1, Math.round(call.durationMs / 60_000))} min`] : []),
       ],
       ...(call.people.length ? { participants: people(call.people) } : {}),
-      footer: { label: clip(`Call · ${call.id}`) },
+      footer: { label: clip(`Call · ${convRows.get(call.conversationId)!.title}`) },
     });
     // A live call carries a freshness lease on its detail; the contract's `operations` are for run/agent/terminal nodes only.
     edge('runs-in', node, convNode(call.conversationId));
@@ -223,7 +223,7 @@ export function projectSocialWorkGraph(input: SocialProjectionInput): Projection
     details.set(id, {
       nodeId: id, summary: clip(`Recording in ${convRows.get(rec.conversationId)!.title}`), badge: words(rec.stage),
       ...(rec.people.length ? { participants: people(rec.people) } : {}),
-      footer: { label: clip(`Recording · ${rec.id}`) },
+      footer: { label: clip(`Recording · ${convRows.get(rec.conversationId)!.title}`) },
     });
     const call = callNodes.get(rec.callId);
     edge('derived-from', node, call ? call.id : convNode(rec.conversationId));
@@ -245,7 +245,7 @@ export function projectSocialWorkGraph(input: SocialProjectionInput): Projection
     details.set(id, {
       nodeId: id, summary: clip(`Deck from ${convRows.get(deck.conversationId)!.title}`), badge: 'Deck',
       ...(deck.ownerName ? { participants: [{ id: part(deck.ownerName), label: clip(deck.ownerName) }] } : {}),
-      footer: { label: clip(`Deck · ${deck.id}`) },
+      footer: { label: clip(`Deck · ${convRows.get(deck.conversationId)!.title}`) },
     });
     edge('derived-from', node, convNode(deck.conversationId));
   }
@@ -300,7 +300,7 @@ export function projectSocialWorkGraph(input: SocialProjectionInput): Projection
       nodeId: id, summary: clip(`${conv.private ? 'Private ' : ''}${KIND_LABEL[conv.kind]}`), badge: KIND_LABEL[conv.kind],
       ...(conv.people.length ? { participants: people(conv.people) } : {}),
       // The destination key the portal reads (`Conversation · <channel name>`); a name, never content.
-      footer: { label: clip(`Conversation · ${conv.id}`) },
+      footer: { label: clip(`Conversation · ${conv.title || conv.id}`) },
     });
     if (conv.teamId && teamRows.has(conv.teamId)) drawnTeams.add(conv.teamId);
   }
@@ -319,7 +319,7 @@ export function projectSocialWorkGraph(input: SocialProjectionInput): Projection
     nodes.set(id, node);
     details.set(id, {
       nodeId: id, summary: clip(`Team${team.role ? ` · you are ${team.role === 'owner' ? 'an owner' : 'a member'}` : ''}`), badge: 'Team',
-      footer: { label: clip(`Team · ${team.id}`) },
+      footer: { label: clip(`Team · ${team.name || 'team'}`) },
     });
     for (const ch of channels) edge('works-on', node, convNode(ch.id));
   }

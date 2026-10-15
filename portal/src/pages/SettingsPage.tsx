@@ -276,7 +276,7 @@ export function SettingsPage() {
           <SettingRow
             title="Endpoint"
             control={
-              <T size="sm" className="text-text-secondary font-mono">{gateway.gatewayUrl}</T>
+              <T size="sm" className="text-text-secondary font-mono">{/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/.test(gateway.gatewayUrl) ? 'This workspace' : gateway.gatewayUrl}</T>
             }
           />
           {gateway.mode === 'bff-only' ? (

@@ -8,6 +8,7 @@ import { loadDefinitions, listApprovals } from '../../providers/pipeline-definit
 import { listDecks } from '../../providers/pipeline-decks.js';
 import { flowRunStore, PIPELINE_DECK_REVISE_KIND, type FlowRunRow } from '../flow-runs/index.js';
 import type { Session } from '../session.js';
+import { userNameFor } from '../user-names.js';
 import { firstLine } from '../upstream.js';
 import type { SourceHealth } from './sources.js';
 import type { FlowRunGraphRow } from './projection.js';
@@ -70,7 +71,7 @@ export async function loadPipelinesWorkGraphRows(
   for (const u of projection.unavailable) problems.push(`${u.table}: ${firstLine(u.error)}`);
   if (subject.kind === 'run' && !projection.runs.some(r => r.id === subject.id)) return null;
   const runs: PRunRow[] = projection.runs.map(r => ({
-    id: r.id, definitionId: r.definitionId, status: r.status, triggeredBy: r.triggeredBy, triggerType: r.triggerType,
+    id: r.id, definitionId: r.definitionId, status: r.status, triggeredBy: r.triggeredBy, triggeredByName: userNameFor(r.triggeredBy), triggerType: r.triggerType,
     startedAt: r.startedAt, finishedAt: r.finishedAt, costUsd: r.costUsd, contextTenant: r.context.tenant,
   }));
   const wanted = (runId: string) => subject.kind !== 'run' || runId === subject.id;
@@ -84,7 +85,7 @@ export async function loadPipelinesWorkGraphRows(
   try {
     const loaded = await loadDefinitions();
     for (const u of loaded.unavailable) problems.push(`${u.source}: ${firstLine(u.error)}`);
-    definitions = loaded.definitions.map(d => ({ id: d.id, title: d.title, kind: d.kind, enabled: d.enabled, owner: d.owner }));
+    definitions = loaded.definitions.map(d => ({ id: d.id, title: d.title, kind: d.kind, enabled: d.enabled, owner: d.owner, ownerName: d.ownerName ?? userNameFor(d.owner) }));
   } catch (err) { problems.push(`definitions: ${firstLine(err)}`); }
 
   // Approvals: read only for a viewer who may decide them.
@@ -103,7 +104,7 @@ export async function loadPipelinesWorkGraphRows(
   try {
     decks = (await listDecks(subject.kind === 'run' ? subject.id : undefined)).map(d => ({
       id: d.id, runId: d.runId, title: d.title, updatedAt: d.updatedAt,
-      revisionLabel: d.latestRevision?.label ?? null, producedBy: d.latestRevision?.producedBy ?? null,
+      revisionLabel: d.latestRevision?.label ?? null, producedBy: d.latestRevision?.producedBy ?? null, producedByName: userNameFor(d.latestRevision?.producedBy),
     }));
   } catch (err) { problems.push(`decks: ${firstLine(err)}`); }
 

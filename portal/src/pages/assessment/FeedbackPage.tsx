@@ -66,7 +66,7 @@ const STATUS_OPTIONS: { value: HitlStatus | 'ALL'; label: string }[] = [
 function dimensionLabel(task: FeedbackTask, dim: Dimension | undefined): string {
   if (dim) return dim.title;
   if (task.dimension_title) return task.dimension_title;
-  return task.dimension_id ? `Dimension ${task.dimension_id}` : 'General';
+  return task.dimension_id ? `Dimension ${task.dimension_id}` : 'Whole assessment';
 }
 
 /** "Claimed L5 · verified L3" as two chips — the gap is the whole point. */

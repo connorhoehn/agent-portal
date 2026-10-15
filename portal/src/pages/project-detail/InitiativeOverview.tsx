@@ -142,7 +142,7 @@ export function InitiativeOverview({
           {waiting.length > 0 && <PageSection size="sm" title="Waiting on a decision" count={waiting.length} data-testid="overview-decisions">
             <Stack gap="xs">
               {waiting.map((d) => (
-                <Inline key={d.id} gap="sm" align="center" wrap={false}>
+                <Inline key={d.id} gap="sm" align="baseline" wrap={false}>
                   <Chip tone={DECISION_TONE[d.status] ?? 'warning'} size="xs" uppercase>{d.status}</Chip>
                   <RecordLink to={`/iq/decisions/${encodeURIComponent(d.id)}`}>{d.topic}</RecordLink>
                   <T size="xs" tone="tertiary" className="truncate">

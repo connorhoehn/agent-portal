@@ -660,7 +660,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
               ? 'Channels are where a community talks in the open. None exist in this workspace yet — create the first one.'
               : 'Channels are where a community talks in the open. None exist in this workspace yet; a moderator can create one.'}
             {...(mayCreateChannel ? { action: <Button variant="primary" size="sm" onClick={(e) => { channelAnchor.current = e.currentTarget; setCreatingChannel(true); }} data-testid="social-empty-create-channel">Create a channel</Button> } : {})} />
-          : <EmptyState align="start" title="Pick a channel" description="Choose a channel on the left to read it. Channels you have not joined show a Join button first." />;
+          : <EmptyState align="start" title="Pick a channel" description="Choose a channel on the left to read it. A channel you are not in shows a Join button first." />;
       }
       if (!openChannel) return <EmptyState align="start" testId="social-channel-missing" title={`#${slug} is not available`} description="This channel does not exist, or it is private and you are not a member." />;
       if (openChannel.joined) {

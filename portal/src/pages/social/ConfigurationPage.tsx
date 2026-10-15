@@ -42,7 +42,7 @@ const ACTIONS: Array<{ action: Action; label: string }> = [
 /** The social tenant's roles in rank order, then the cross-tenant admin. */
 const ROLE_ORDER = ['participant', 'moderator', 'community-admin', 'admin'];
 
-const SOURCE_LABEL: Record<SocialSource, string> = { platform: 'platform-api', mock: 'dev:mock fixtures' };
+const SOURCE_LABEL: Record<SocialSource, string> = { platform: 'platform-api', mock: 'demo data' };
 
 function Source({ url }: { url: string }) {
   const { data, error } = useFetch<{ source: SocialSource }>(url);

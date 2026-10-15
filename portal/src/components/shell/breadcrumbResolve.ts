@@ -120,7 +120,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       case 'documents':
         return [{ label: 'Engage' }, { label: 'Search', path: '/iq/search' }, ...(b ? [{ label: shortId(b), id: b }] : [])];
       case 'decks':
-        return [{ label: 'Initiatives', path: '/iq/projects' }, ...(b ? [{ label: `Deck ${shortId(b)}`, id: b }] : [])];
+        return [{ label: 'Initiatives', path: '/iq/projects' }, ...(b ? [{ label: 'Deck', id: b }] : [])];
       case 'sprints': return [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' }, { label: 'Sprints' }];
       case 'invoke': return [{ label: 'Engage' }, { label: 'Ask' }];
       case 'explore': return [{ label: 'Engage' }, { label: 'Explore' }];
@@ -213,7 +213,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
     if (a === 'decks') return [
       { label: 'Workspace', path: '/assessment/workspace?view=library' },
       { label: 'Presentations', path: '/assessment/workspace?view=presentations' },
-      ...(b ? [{ label: `Presentation ${shortId(b)}`, id: b }] : []),
+      ...(b ? [{ label: 'Presentation', id: b }] : []),
     ];
     // Mirrors the shell rail for this tenant (Layout.tsx NAV_ITEMS): the first
     // crumb is the GROUP the page sits under, the second the page — the same

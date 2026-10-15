@@ -86,6 +86,7 @@ export interface PipelineArtifact {
   title: string;
   createdAt: string | null;
   meta: Record<string, unknown>;
+  runTitle?: string | null;
   runStatus?: PipelineRunStatus | null;
   contextTenant?: string | null;
 }

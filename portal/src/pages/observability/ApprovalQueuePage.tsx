@@ -276,7 +276,7 @@ function ApprovalQueuePage() {
                 <TableTh>Requested</TableTh>
                 <TableTh>Tx</TableTh>
                 <TableTh>Reason</TableTh>
-                <TableTh>Payload</TableTh>
+                <TableTh>Details</TableTh>
                 <TableTh>Decision</TableTh>
               </TableRow>
             </TableHead>

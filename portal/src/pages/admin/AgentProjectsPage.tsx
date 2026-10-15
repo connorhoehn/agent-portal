@@ -580,11 +580,8 @@ export default function AgentProjectsPage() {
                   </T>
                 )}
 
-                {runs.length === 0 ? (
-                  <T as="span" size="xs" tone="tertiary" className="px-3.5 py-3">
-                    Nothing has been run against this yet.
-                  </T>
-                ) : (
+                {/* A project nothing has run against has no run list; eleven identical "nothing yet" rows said nothing. */}
+                {runs.length > 0 && (
                   <Stack gap="none">
                     {runs.map((r) => (
                       <Inline

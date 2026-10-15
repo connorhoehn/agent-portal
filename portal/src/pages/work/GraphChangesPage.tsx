@@ -40,6 +40,7 @@ interface Proposal {
   confidence: number | null;
   status: string;
   reviewer: string | null;
+  reviewerName?: string | null;
   reviewNote: string | null;
   applyError: string | null;
   createdAt: string;
@@ -228,7 +229,7 @@ export default function GraphChangesPage() {
                   items={[
                     p.source,
                     p.confidence != null ? `confidence ${(p.confidence * 100).toFixed(0)}%` : null,
-                    p.reviewer ? `decided by ${p.reviewer}` : 'undecided',
+                    p.reviewer ? `decided by ${p.reviewerName ?? p.reviewer}` : 'undecided',
                     absoluteTime(p.decidedAt ?? p.createdAt),
                     p.jobId && (
                       <Link to={`/iq/work/${p.jobId}`} className="text-primary no-underline hover:underline">

@@ -31,7 +31,7 @@ test('every rail path resolves to a section and a page', () => {
 
 test('Assessment Workspace and legacy presentation links use the files location without Informatics', () => {
   assert.deepEqual(resolveBreadcrumbs('/assessment/workspace'), [{ label: 'Workspace' }]);
-  assert.deepEqual(resolveBreadcrumbs('/assessment/decks/deck-existing').map(crumb => crumb.label), ['Workspace', 'Presentations', 'Presentation deck-exi…']);
+  assert.deepEqual(resolveBreadcrumbs('/assessment/decks/deck-existing').map(crumb => crumb.label), ['Workspace', 'Presentations', 'Presentation']);
   const deck = resolveBreadcrumbs('/assessment/decks/deck-existing');
   assert.equal(deck[0]?.path, '/assessment/workspace?view=library');
   assert.equal(deck[1]?.path, '/assessment/workspace?view=presentations');
@@ -41,7 +41,7 @@ test('Assessment Workspace and legacy presentation links use the files location 
 test('a Work presentation trail names its files location and resolved entity without Plan', () => {
   assert.deepEqual(resolveBreadcrumbs('/iq/decks/deck-existing'), [
     { label: 'Initiatives', path: '/iq/projects' },
-    { label: 'Deck deck-exi…', id: 'deck-existing' },
+    { label: 'Deck', id: 'deck-existing' },
   ]);
 });
 

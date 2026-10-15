@@ -145,7 +145,7 @@ export function runReadHandlers(scope: { contextTenant?: ContextTenant } = {}) {
         // An artifact no run owns has no tenant context; only the unscoped view shows it.
         .filter((a) => (a.runId ? runsById.has(a.runId) : !scope.contextTenant))
         .filter((a) => !kind || a.kind === kind)
-        .map((a) => ({ ...a, runStatus: a.runId ? runsById.get(a.runId)?.status ?? null : null, contextTenant: a.runId ? runsById.get(a.runId)?.context.tenant ?? null : null }));
+        .map((a) => ({ ...a, runTitle: a.runId ? runsById.get(a.runId)?.context.title ?? null : null, runStatus: a.runId ? runsById.get(a.runId)?.status ?? null : null, contextTenant: a.runId ? runsById.get(a.runId)?.context.tenant ?? null : null }));
       const limit = intParam(req.query['limit'], 100, 500) || 100;
       const offset = intParam(req.query['offset'], 0, Number.MAX_SAFE_INTEGER);
       res.json({ artifacts: rows.slice(offset, offset + limit), total: rows.length, limit, offset, unavailable: p.unavailable });

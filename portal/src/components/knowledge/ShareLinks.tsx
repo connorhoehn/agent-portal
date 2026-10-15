@@ -23,6 +23,7 @@ interface UploadLink {
   kbSlug: string;
   label: string;
   createdBy: string | null;
+  createdByName?: string | null;
   expiresAt: string;
   maxFiles: number;
   maxBytes: number;
@@ -213,7 +214,7 @@ export function ShareLinks({ kbSlug }: { kbSlug: string | null }) {
                   `${l.filesUsed}/${l.maxFiles} files`,
                   l.lastUsedAt ? `last used ${when(l.lastUsedAt)}` : 'never used',
                   l.status === 'live' ? `expires ${when(l.expiresAt)}` : null,
-                  l.createdBy ? `by ${l.createdBy}` : null,
+                  l.createdBy ? `by ${l.createdByName ?? l.createdBy}` : null,
                 ]}
               />
             </Stack>

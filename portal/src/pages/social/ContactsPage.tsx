@@ -237,7 +237,7 @@ function ContactsWorkspace() {
           <PageSection size="sm" title="Here now" count={here.length} data-testid="social-contacts-here">
             {here.length
               ? <PresenceAvatars size={32} maxVisible={12} users={here} />
-              : <EmptyState align="start" title="Nobody else is here" description="People show up here while Social is connected in their workspace." />}
+              : <T size="sm" tone="secondary">Nobody else is connected right now. People show up here while Social is open in their workspace.</T>}
           </PageSection>
           <DataTable
             data={filtered}
