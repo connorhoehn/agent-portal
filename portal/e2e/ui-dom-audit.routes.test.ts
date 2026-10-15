@@ -57,7 +57,7 @@ test('every documented alias is an App.tsx index/Navigate door and nothing else 
   assert.equal(matchesAuditLocation('/admin/identity', '/admin/identity/roles'), true);
   assert.equal(matchesAuditLocation('/admin/observability', '/admin/observability/summary'), true);
   assert.equal(matchesAuditLocation('/iq/scores/compare', '/iq/scores'), true);
-  assert.equal(matchesAuditLocation('/iq/decisions/d-aurora', '/iq/projects'), true);
+  assert.equal(matchesAuditLocation('/iq/decisions/d-aurora', '/iq/decisions/d-aurora'), true);
   // The alias target is exact: a door cannot certify a sibling page.
   assert.equal(matchesAuditLocation('/iq', '/iq/projects'), false);
   assert.equal(matchesAuditLocation('/admin/identity', '/admin/identity/users'), false);

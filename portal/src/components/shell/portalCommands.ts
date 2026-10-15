@@ -112,6 +112,8 @@ const PAGES: PageEntry[] = [
     keywords: ['finding', 'sweep', 'signal', 'dlq', 'dead letter', 'failure'] },
   { label: 'Initiatives',        hint: 'Epics, decisions, contributors',      path: '/iq/projects',                                tenant: 'orgiq',  group: 'Plan',
     keywords: ['initiative', 'project', 'program', 'sprint', 'epic'] },
+  { label: 'Decisions',          hint: 'Calls made and calls waiting',        path: '/iq/decisions',                               tenant: 'orgiq',  group: 'Plan',
+    keywords: ['decision', 'decide', 'escalated', 'adr', 'call', 'rationale', 'decider'] },
   { label: 'Agent library',            hint: 'Every prompt, evaluator, skill and insight', path: '/iq/library',                          tenant: 'orgiq',  group: 'Build',
     keywords: ['artifact', 'asset', 'library item', 'prompt', 'evaluator', 'skill', 'insight'] },
   { label: 'Designs',            hint: 'Design threads and sign-off',         path: '/iq/designs',                                 tenant: 'orgiq',  group: 'Design',

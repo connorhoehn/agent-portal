@@ -135,6 +135,8 @@ export function tenantComposerPolicy(spec: TenantRouteSpec, view: TenantViewEvid
   // list rail whose shared command composer docks under the column — on the record pages too, so a missing
   // record keeps it. No evidence can exempt one.
   if (/^\/iq\/runbooks(?:\/(?:proposals|briefs))?(?:\/[^/]+)?$/.test(pathname)) return { mode: 'required' };
+  // Decisions (L6): the register and every record keep the shared command composer docked under the column; a record with no evidence of one still owes it.
+  if (/^\/iq\/decisions(?:\/[^/]+)?$/.test(pathname)) return { mode: 'required' };
   if (view.listRoute || spec.judges?.includes('table') || view.collection) return { mode: 'required' };
   if (REVIEWED_COLLECTIONS.has(pathname)) return { mode: 'required' };
   if (view.tableSearch) return { mode: 'required' };

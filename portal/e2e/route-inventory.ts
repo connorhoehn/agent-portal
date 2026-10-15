@@ -86,6 +86,7 @@ export function tenantOf(p: string): Tenant {
 export const LANDINGS: ReadonlyArray<[Tenant, string]> = [
   ['orgiq', '/iq'],
   ['orgiq', '/iq/projects?nav=section'],
+  ['orgiq', '/iq/decisions?nav=section'],
   ['orgiq', '/iq/designs?nav=section'],
   ['orgiq', '/iq/library?nav=section'],
   ['assessment', '/assessment'],
@@ -111,7 +112,7 @@ export const PARAM_ROUTES: readonly ParamRoute[] = [
   // Org
   { tenant: 'orgiq', pattern: '/iq/projects/:id', template: '/iq/projects/:id', id: 'p-auth-migration' },
   { tenant: 'orgiq', pattern: '/iq/projects/:id?item=', template: '/iq/projects/p-auth-migration?item=:id', id: 'wi-auth-e1-s1' },
-  { tenant: 'orgiq', pattern: '/iq/decisions/:id', template: '/iq/decisions/:id', id: 'd-aurora' },
+  { tenant: 'orgiq', pattern: '/iq/decisions/:id', template: '/iq/decisions/:id', id: 'd-cognito-cutover' },
   { tenant: 'orgiq', pattern: '/iq/agents/:agentId', template: '/iq/agents/:id', id: 'orgiq-supervisor' },
   { tenant: 'orgiq', pattern: '/iq/designs/:id', template: '/iq/designs/:id', id: 'des-auth-rotation' },
   { tenant: 'orgiq', pattern: '/iq/documents/:documentId', template: '/iq/documents/:id', id: 'page:A100003' },
@@ -179,6 +180,7 @@ export const LIST_PAGES: readonly ListPage[] = [
   { param: PARAM_ROUTES.find((r) => r.pattern === '/iq/runbooks/proposals/:pid')!, repoInRail: false, record: true },
   { param: PARAM_ROUTES.find((r) => r.pattern === '/iq/runbooks/briefs/:ref')!, repoInRail: false, record: true },
   { path: '/iq/designs/des-auth-rotation', repoInRail: false, record: true },
+  { path: '/iq/decisions/d-cognito-cutover', repoInRail: false, record: true },
   { param: PARAM_ROUTES.find((r) => r.pattern === '/iq/library/:assetId')!, repoInRail: false, record: true },
 ];
 
@@ -237,6 +239,7 @@ export const DEPTH_PAIRS: ReadonlyArray<{ name: string; tenant: Tenant; shallow:
   { name: 'search / document', tenant: 'orgiq', shallow: '/iq/search', deep: '/iq/documents/page:A100003', key: '/iq/documents/:documentId' },
   // A record open beside a list rail is the selection level.
   { name: 'runbooks / runbook', tenant: 'orgiq', shallow: '/iq/runbooks', deep: '/iq/runbooks/rb-tenant-cutover', key: '/iq/runbooks/:id' },
+  { name: 'decisions / decision', tenant: 'orgiq', shallow: '/iq/decisions', deep: '/iq/decisions/d-cognito-cutover', key: '/iq/decisions/:id' },
   { name: 'designs / design', tenant: 'orgiq', shallow: '/iq/designs', deep: '/iq/designs/des-auth-rotation', key: '/iq/designs/:id' },
 ];
 

@@ -120,6 +120,7 @@ const NAV_ITEMS: NavItem[] = [
   // Plan's front door. Sprints are a lens on this page (?lens=sprints), not a
   // sibling item — a sprint is one initiative's iteration.
   { path: '/iq/projects',   label: 'Initiatives', tenant: 'orgiq',     group: 'Plan' },
+  { path: '/iq/decisions',  label: 'Decisions',   tenant: 'orgiq',     group: 'Plan' },
   // ONE Build door for the whole agentic loop. "Automate" opens on the
   // overview; its sub-rail carries Queue, Findings (DLQ), Bots and Changes —
   // work is automated by a bot configuration on a queue, and when it needs a
@@ -297,7 +298,7 @@ const SHELL_RAIL_DEPTH: RailDepthSpec = {
     /^\/(iq|pipelines)\/runs\/[^/]+$/,
     /^\/iq\/documents\/[^/]+$/,
     /^\/(iq|assessment|social|pipelines)\/decks\/[^/]+$/,
-    /^\/iq\/(designs|library)\/[^/]+$/,
+    /^\/iq\/(designs|library|decisions)\/[^/]+$/,
     /^\/iq\/runbooks\/(?!proposals$|briefs$)[^/]+$/,
     /^\/iq\/runbooks\/(proposals|briefs)\/[^/]+$/,
     /^\/assessment\/(submissions|feedback|runs)\/[^/]+$/,
@@ -550,7 +551,7 @@ function ShellLayout() {
             railLabel={`${tenantLabel} navigation`}
             renderNavItem={(item, children) => (
               <NavLink
-                to={['/iq/projects', '/iq/designs', '/iq/library'].includes(item.path) ? `${item.path}?nav=section` : item.path}
+                to={['/iq/projects', '/iq/designs', '/iq/library', '/iq/decisions'].includes(item.path) ? `${item.path}?nav=section` : item.path}
                 // className, not the inline `style` the composite's own doc
                 // comment used to force: ui-components 2.275.1 exports the
                 // class-name equivalents of `activeNavItemStyle`, so the whole

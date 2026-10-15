@@ -35,7 +35,6 @@ export const AUDIT_ROUTE_ALIASES: ReadonlyArray<{ pattern: RegExp; target: strin
   { pattern: /^\/admin\/identity$/, target: '/admin/identity/roles', why: 'section index opens Roles' },
   { pattern: /^\/admin\/observability$/, target: '/admin/observability/summary', why: 'section index opens Summary' },
   { pattern: /^\/iq\/scores\/compare$/, target: '/iq/scores', why: 'a comparison with no selected people returns to Scores (ScoresComparePage)' },
-  { pattern: /^\/iq\/decisions\/[^/]+$/, target: '/iq/projects', why: 'decision pages are retired; App.tsx redirects them to Initiatives' },
 ];
 export function auditAliasTarget(pathname: string): string {
   return AUDIT_ROUTE_ALIASES.find(a => a.pattern.test(pathname))?.target ?? pathname;

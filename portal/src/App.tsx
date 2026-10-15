@@ -102,6 +102,7 @@ const PromptOpsHomePage = lazy(() => import('./pages/iq/PromptOpsHomePage'));
 const WorkHomePage = lazy(() => import('./pages/work/WorkHomePage'));
 const WorkQueuePage = lazy(() => import('./pages/work/QueuePage'));
 const DesignsPage = lazy(() => import('./pages/designs/DesignsPage'));
+const DecisionsPage = lazy(() => import('./pages/decisions/DecisionsPage'));
 const LibraryPage = lazy(() => import('./pages/library/LibraryPage'));
 const PromotionsLegacyRedirect = lazy(() => import('./pages/promotions/LegacyRedirect'));
 const SessionConfigPage = lazy(() => import('./pages/local-compute/ConfigurationPage'));
@@ -194,6 +195,11 @@ function KbDetailRedirect() {
   return <Navigate to={`/admin/knowledge/registry/${id ?? ''}`} replace />;
 }
 
+function LegacyDecisionRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/iq/decisions/${id ?? ''}`} replace />;
+}
+
 function LegacyWorkspaceRedirect() {
   const { search, hash } = useLocation();
   return <Navigate to={`${CHOOSER}${search}${hash}`} replace />;
@@ -236,8 +242,8 @@ export function App() {
       <Route path="scores" element={<Navigate to="/iq/scores" replace />} />
       <Route path="scores/cohorts" element={<Navigate to="/iq/scores/cohorts" replace />} />
       <Route path="scores/compare" element={<Navigate to="/iq/scores/compare" replace />} />
-      <Route path="decisions" element={<Navigate to="/iq/projects" replace />} />
-      <Route path="decisions/:id" element={<Navigate to="/iq/projects" replace />} />
+      <Route path="decisions" element={<Navigate to="/iq/decisions" replace />} />
+      <Route path="decisions/:id" element={<LegacyDecisionRedirect />} />
       <Route path="projects" element={<Navigate to="/iq/projects" replace />} />
       <Route path="projects/:id" element={<Navigate to="/iq/projects" replace />} />
       <Route path="explore" element={<Page element={<LegacySearchRedirect />} />} />
@@ -529,8 +535,8 @@ export function App() {
               <Page element={<ScoresComparePage />} />
             </RequireRole>
           } />
-          <Route path="decisions" element={<Navigate to="/iq/projects" replace />} />
-          <Route path="decisions/:id" element={<Navigate to="/iq/projects" replace />} />
+          <Route path="decisions" element={<Page element={<DecisionsPage />} />} />
+          <Route path="decisions/:id" element={<Page element={<DecisionsPage />} />} />
           <Route path="projects" element={<Page element={<ProjectsPage />} />} />
           <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
           {/* Initiative status deck (agentic-flows slice 6): reached from the
