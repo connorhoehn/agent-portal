@@ -13,7 +13,7 @@ Artifacts: 11 · migrated: 9 · not migrated: 2 · unaccounted: 0
 - **art-002** (runbook, published) "Recover a cold Aurora Data API with a warm SELECT 1 and retry": migrated → rb-aurora-cold-start-retry (published, v1, sha e491d03807c6)
 - **art-003** (insight, published) "Collector-fleet Fargate tasks are ARM64": migrated → rb-fargate-arm64-image (published, v1, sha e26b43d8c7cd)
 - **art-004** (decision, published) "Gate auth diffs on the CSRF evaluator before merge": migrated → rb-auth-pr-csrf-gate (published, v1, sha f30a894ddc96)
-- **art-005** (convention, published) "Scan every ingested document for PII before it reaches the knowledge base": migrated → rb-ingest-pii-scan (published, v1, sha e3fb93f57e77)
+- **art-005** (convention, published) "Scan every ingested document for PII before it reaches the knowledge base": migrated → rb-ingest-pii-scan (published, v1, sha c05a8b7b2b13)
 - **art-006** (runbook, draft) "Decommission StatsD service by service without breaking dashboards": migrated → rb-statsd-decommission (draft, v1, sha 3f52b1c476cd)
 - **art-007** (convention, draft) "Bump session_epoch on every tenant/role switch": not-migrated: not a procedure: a session convention with nothing to run; kept as a note on rb-tenant-cutover and to be re-homed as a decision on p-auth-migration
 - **art-008** (insight, retired) "OpenSearch Serverless and Aurora Serverless v2 both bill a floor at zero traffic": not-migrated: retired and superseded (the Aurora half by skill-cold-start-aurora); its pre-drain lesson is a note on rb-idle-teardown-proposal

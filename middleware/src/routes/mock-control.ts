@@ -71,6 +71,7 @@ import { rehydrateMockSchedules } from '../lib/ingest-scheduler.js';
 import { rehydrateMockNotifications } from '../lib/notification-store.js';
 import { rehydrateMockSocialChat } from '../lib/social-chat.js';
 import { getDemoState, resetDemoDirector, startDemoDirector, stopDemoDirector } from '../mock/demo-director.js';
+import { getRunbooksDemoState, resetRunbooksDemo, startRunbooksDemo, stopRunbooksDemo } from '../mock/runbooks-demo.js';
 import { getDistillationDemoState, resetDistillationDemo, startDistillationDemo, stopDistillationDemo } from '../mock/distillation-demo.js';
 import { invalidateAll } from '../lib/gateway/authority-invalidation.js';
 
@@ -336,6 +337,7 @@ function readState(registry: FixtureRegistry): {
   registryLoaded: boolean;
   demo: ReturnType<typeof getDemoState>;
   distillationDemo: ReturnType<typeof getDistillationDemoState>;
+  runbooksDemo: ReturnType<typeof getRunbooksDemoState>;
   scopes: number;
   clones: number;
 } {
@@ -357,7 +359,7 @@ function readState(registry: FixtureRegistry): {
   // `distillationDemo` is the same for the Distillation demo (mock/distillation-demo.ts).
   return {
     enabled: true, scenario: globalScenario, fixtures, registryLoaded: fixtures.length > 0,
-    demo: getDemoState(), distillationDemo: getDistillationDemoState(),
+    demo: getDemoState(), distillationDemo: getDistillationDemoState(), runbooksDemo: getRunbooksDemoState(),
     scopes: listMockScopes().length, clones: listIdentityClones().length,
   };
 }
@@ -427,6 +429,7 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
     // (rehydrateAll), so a demo story cannot survive it — say so by stopping.
     stopDemoDirector();
     stopDistillationDemo();
+    stopRunbooksDemo();
     pin(fixture, scenario);
     // See rehydrateMockFleet's doc comment: the microVM fleet lives in an
     // in-memory Map, not in fixture rows, so pinning `devbox-boxes` to `empty`
@@ -441,6 +444,7 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
 
   resetDemoDirector();
   resetDistillationDemo();
+  resetRunbooksDemo();
   unpinAll(registry);
   // Clones survive a world switch: another auditor asking for `empty` must not
   // sign this run out. Only a full reset (below) removes them.
@@ -475,6 +479,15 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
       ...(typeof raw.autoDecideBeats === 'number' && raw.autoDecideBeats >= 0 ? { autoDecideBeats: raw.autoDecideBeats } : {}),
     });
   }
+  // The Runbooks demo is told through this server's own routes (the owner's
+  // review is a real HTTP accept), so it is handed the address this request
+  // arrived on. Optional `paceMs` plays it fast against a running server.
+  if (scenario === 'runbooks-demo') {
+    const raw = req.body as { paceMs?: unknown };
+    void startRunbooksDemo(`http://127.0.0.1:${req.socket.localPort}`, {
+      ...(typeof raw.paceMs === 'number' && raw.paceMs >= 0 ? { paceMs: raw.paceMs } : {}),
+    });
+  }
   res.json({ applied: { scenario, fixture: null }, ...readState(registry) });
 });
 
@@ -500,6 +513,7 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
     if (!fixture) return;
     stopDemoDirector();
     stopDistillationDemo();
+    stopRunbooksDemo();
     unpin(fixture);
     fixture.reset();
     rehydrateAll();
@@ -510,6 +524,7 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
 
   resetDemoDirector();
   resetDistillationDemo();
+  resetRunbooksDemo();
   unpinAll(registry);
   // The dev-pairing file as well as the rows: without this, a machine paired
   // by hand reappears on the next boot and `reset` silently means "reset most
@@ -598,7 +613,7 @@ export const MOCK_SCOPE_COOKIE = 'orgiq.mock-scope';
 export const MOCK_SCOPE_HEADER = 'x-mock-scope';
 
 /** Story scenarios run a process-wide director; they cannot be one context's. */
-const GLOBAL_ONLY: ReadonlySet<string> = new Set(['demo', 'distillation-demo']);
+const GLOBAL_ONLY: ReadonlySet<string> = new Set(['demo', 'distillation-demo', 'runbooks-demo']);
 
 function isScopeScenario(value: unknown): value is ScopeScenario {
   return (isScenarioName(value) || isDataState(value)) && !GLOBAL_ONLY.has(value as string);
@@ -820,4 +835,5 @@ export function __resetMockControlState(): void {
   identityClonesFixture.reset();
   resetDemoDirector();
   resetDistillationDemo();
+  resetRunbooksDemo();
 }

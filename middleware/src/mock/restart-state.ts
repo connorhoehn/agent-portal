@@ -20,7 +20,7 @@ export interface MockRestartSnapshot {
   sourceIntegrity: { schema: 'mock-restart-source/v1'; files: Record<string, string> };
 }
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
-const scenarios = new Set(['default', 'empty', 'error', 'large', 'fresh', 'demo', 'distillation-demo']);
+const scenarios = new Set(['default', 'empty', 'error', 'large', 'fresh', 'demo', 'distillation-demo', 'runbooks-demo']);
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const pairs = (v: unknown, item: (key: unknown, value: unknown) => boolean): v is Array<[unknown, unknown]> => Array.isArray(v) && v.every(p => Array.isArray(p) && p.length === 2 && item(p[0], p[1]));
 const rows = (v: unknown) => Array.isArray(v) && v.every(record);

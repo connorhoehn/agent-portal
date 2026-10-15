@@ -86,6 +86,10 @@ export const SCENARIOS: Record<ScenarioName, Scenario> = {
     name: 'distillation-demo',
     describes: 'The Distillation demo: three Auth Migration lab sessions write run notes live, a compaction turns them into patterns, reviewers agree with three and reject one (one waits for you), the agreed patterns become a cutover guide that is published and then run by an agent. Starts a ~3-minute director; reset or any other scenario stops it.',
   },
+  'runbooks-demo': {
+    name: 'runbooks-demo',
+    describes: 'The Runbooks demo: an agent run hits a gap in the SSO runbook and proposes the missing step, the runbook\'s owner reviews and accepts it, and the next run\'s session brief carries the new version. Starts a ~3-minute director; reset or any other scenario stops it.',
+  },
 };
 
 export const SCENARIO_NAMES: ScenarioName[] = Object.keys(SCENARIOS) as ScenarioName[];
