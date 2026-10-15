@@ -797,3 +797,16 @@ list are in `docs/distillation-runbooks-goal.md`. In short:
    dry-run + approver gate.
 5. **Nova extraction.** Off until runs demonstrably fail to propose on their
    own? Proposed: off in v1.
+
+### Decisions taken (user, 2026-10-14)
+
+1. **Who accepts:** the runbook's owner or an SME on its initiative accepts
+   (`ReviewRunbook`, scoped to the runbook's initiative); `org-leader` and
+   `admin` can override. A proposer never accepts their own proposal.
+2. **Brief budget:** 6,000 tokens, whole runbooks only.
+3. **Runbook vs Library skill:** a runbook is its own destination; a Library
+   skill may cite the runbook it implements (default taken by the coordinator).
+4. **Session bundles:** the session brief replaces bundles as the one thing a
+   box receives — the bundle's instruction content folds into the brief, and
+   the `lab brief` SessionStart hook is the delivery mechanism.
+5. **Nova extraction:** off for v1; runs and people propose explicitly.

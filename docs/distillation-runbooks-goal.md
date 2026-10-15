@@ -1,4 +1,4 @@
-# Goal (draft): runbooks a person can read and a booted box receives
+# Goal: runbooks a person can read and a booted box receives
 
 **Status: DRAFT for review, 2026-10-14. Nothing here is built.** The design,
 evidence and data shapes are in `docs/distillation-runbooks-design.md`; this
