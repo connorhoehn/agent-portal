@@ -2,55 +2,7 @@
 # Columns: route (inventory key) · offender (rule region size/weight) · count · owner surface · due date.
 # The sweep tolerates a listed offender; validate-rail-parity.sh fails a row still listed after its due date.
 # Rows only ever go: TYPE_SCALE_PRUNE=1 drops an offender that no longer occurs. Never add a row to pass; fix the page.
-/admin/devbox	scale content 11/400	1	admin/devbox	2026-10-21
-/admin/devbox	scale content 12.5/400	1	admin/devbox	2026-10-21
-/admin/devbox	scale content 12.5/700	1	admin/devbox	2026-10-21
-/admin/devbox	scale content 16/400	1	admin/devbox	2026-10-21
-/admin/knowledge	scale content 13/400	1	admin/knowledge	2026-10-21
-/admin/knowledge	scale content 13/700	1	admin/knowledge	2026-10-21
-/admin/observability/authz	scale content 11/400	1	admin/observability	2026-10-21
-/admin/observability/calibration	scale content 11/400	1	admin/observability	2026-10-21
-/admin/observability/cost	scale content 11/400	1	admin/observability	2026-10-21
-/admin/observability/drift	scale content 11/400	1	admin/observability	2026-10-21
-/admin/observability/harness	grows content 14/600 in 12/400	1	admin/observability	2026-10-21
-/admin/observability/harness	scale content 16/400	1	admin/observability	2026-10-21
-/admin/observability/model-compare	scale content 16/400	1	admin/observability	2026-10-21
-/admin/observability/oncall	scale content 11/400	1	admin/observability	2026-10-21
-/admin/observability/traffic	scale content 11/400	1	admin/observability	2026-10-21
-/assessment/reports	title-scale content 20/600	1	assessment/reports	2026-10-21
-/iq/activity	scale content 10/400	1	orgiq/activity	2026-10-21
-/iq/activity	scale content 11/400	1	orgiq/activity	2026-10-21
-/iq/designs/:id	scale content 10.5/400	1	orgiq/designs	2026-10-21
-/iq/designs/:id	scale content 11/400	1	orgiq/designs	2026-10-21
-/iq/designs/:id	scale content 13/400	1	orgiq/designs	2026-10-21
-/iq/designs/:id	scale content 18/400	1	orgiq/designs	2026-10-21
-/iq/designs/:id	title-scale content 20/600	1	orgiq/designs	2026-10-21
-/iq/distillation/activity	scale content 13/400	1	orgiq/distillation	2026-10-21
-/iq/distillation/activity	scale content 13/700	1	orgiq/distillation	2026-10-21
-/iq/distillation/activity?view=graph	scale content 13/400	1	orgiq/distillation	2026-10-21
-/iq/distillation/activity?view=graph	scale content 13/700	1	orgiq/distillation	2026-10-21
-/iq/distillation/activity?view=graph	scale content 15/400	1	orgiq/distillation	2026-10-21
-/iq/distillation/knowledge?item=	scale content 15/400	1	orgiq/distillation	2026-10-21
-/iq/distillation/knowledge?nav=distillation	scale content 16/600	1	orgiq/distillation	2026-10-21
-/iq/distillation/review	scale content 15/400	1	orgiq/distillation	2026-10-21
-/iq/distillation/review?sample=	scale content 15/400	1	orgiq/distillation	2026-10-21
-/iq/evaluations	scale content 16/400	1	orgiq/evaluations	2026-10-21
-/iq/library/:assetId	scale content 16/400	1	orgiq/library	2026-10-21
-/iq/library/:assetId	title-scale content 20/600	1	orgiq/library	2026-10-21
-/iq/projects/:id?item=	scale content 13/400	1	orgiq/projects	2026-10-21
-/iq/prompts	scale content 18/400	1	orgiq/prompts	2026-10-21
-/iq/runs/:id	scale content 18/400	1	orgiq/runs	2026-10-21
-/iq/search	actions content 16/600	1	orgiq/search	2026-10-21
-/iq/search	actions content 47px tall	1	orgiq/search	2026-10-21
-/iq/search	scale content 11/400	1	orgiq/search	2026-10-21
-/iq/search	scale content 16/600	1	orgiq/search	2026-10-21
-/iq/search	scale content 18/600	1	orgiq/search	2026-10-21
-/pipelines/activity	scale content 10/400	1	pipelines/activity	2026-10-21
-/pipelines/activity	scale content 10/600	1	pipelines/activity	2026-10-21
-/pipelines/activity	scale content 11/400	1	pipelines/activity	2026-10-21
-/pipelines/configuration	title-scale content 20/600	1	pipelines/configuration	2026-10-21
-/pipelines/runs/:id	scale content 10/400	1	pipelines/runs	2026-10-21
-/pipelines/runs/:id	scale content 11/400	1	pipelines/runs	2026-10-21
-/pipelines/runs/:id	scale content 11/500	1	pipelines/runs	2026-10-21
-/pipelines/runs/:id	scale content 18/400	1	pipelines/runs	2026-10-21
-/settings	scale content 13/400	1	shell/settings	2026-10-21
+/iq/runbooks/proposals/:pid	scale content 10/400	1	orgiq/runbooks	2026-10-21
+/iq/runbooks/proposals/:pid	scale content 10.5/400	1	orgiq/runbooks	2026-10-21
+/iq/runbooks/proposals/:pid	scale content 11/400	1	orgiq/runbooks	2026-10-21
+/iq/runbooks/proposals/:pid	scale content 11.5/400	1	orgiq/runbooks	2026-10-21

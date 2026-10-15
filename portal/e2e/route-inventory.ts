@@ -88,7 +88,6 @@ export const LANDINGS: ReadonlyArray<[Tenant, string]> = [
   ['orgiq', '/iq/projects?nav=section'],
   ['orgiq', '/iq/designs?nav=section'],
   ['orgiq', '/iq/library?nav=section'],
-  ['orgiq', '/iq/distillation/knowledge?nav=distillation'],
   ['assessment', '/assessment'],
   ['social', '/social'],
   ['pipelines', '/pipelines'],
@@ -120,10 +119,10 @@ export const PARAM_ROUTES: readonly ParamRoute[] = [
   { tenant: 'orgiq', pattern: '/iq/work/:jobId', template: '/iq/work/:id', resolve: { url: '/api/work/jobs?limit=1', pick: first('jobs') }, fallback: 'job-missing' },
   { tenant: 'orgiq', pattern: '/iq/library/:assetId', template: '/iq/library/:id', resolve: { url: '/api/library?limit=1', pick: first('assets') }, fallback: 'asset-missing' },
   { tenant: 'orgiq', pattern: '/iq/decks/:deckId', template: '/iq/decks/:id', id: 'deck-missing' },
-  { tenant: 'orgiq', pattern: '/iq/distillation/review?sample=', template: '/iq/distillation/review?sample=:id', id: 'rev-027' },
-  { tenant: 'orgiq', pattern: '/iq/distillation/knowledge?item=', template: '/iq/distillation/knowledge?item=:id', id: 'art-001' },
-  { tenant: 'orgiq', pattern: '/iq/distillation/knowledge?view=notes', template: '/iq/distillation/knowledge?view=:id', id: 'notes' },
-  { tenant: 'orgiq', pattern: '/iq/distillation/activity?view=graph', template: '/iq/distillation/activity?view=:id', id: 'graph' },
+  // Runbooks (docs/distillation-runbooks-design.md §4): a runbook, a proposal and a brief each open as a page beside their list rail.
+  { tenant: 'orgiq', pattern: '/iq/runbooks/:id', template: '/iq/runbooks/:id', id: 'rb-tenant-cutover' },
+  { tenant: 'orgiq', pattern: '/iq/runbooks/proposals/:pid', template: '/iq/runbooks/proposals/:id', resolve: { url: '/api/runbooks/proposals', pick: first('proposals') }, fallback: 'proposal-missing' },
+  { tenant: 'orgiq', pattern: '/iq/runbooks/briefs/:ref', template: '/iq/runbooks/briefs/:id', resolve: { url: '/api/briefs', pick: first('briefs', 'run_ref') }, fallback: 'brief-missing' },
   // Assessment
   { tenant: 'assessment', pattern: '/assessment/teams/:teamId', template: '/assessment/teams/:id', id: 'TEAM-001' },
   // A submission record beside its list rail; the id is a group's original envelope (a revision's id opens its group too).
@@ -173,14 +172,12 @@ export const OBSERVED_ROUTES: readonly ParamRoute[] = [
  *  Read by layout-cascade.spec.ts and validate-rail-parity.sh's list-rail measurement. */
 export interface ListPage { path?: string; param?: ParamRoute; repoInRail: boolean; record?: boolean; editor?: boolean }
 export const LIST_PAGES: readonly ListPage[] = [
-  { path: '/iq/distillation/review?sample=rev-027&panel=sources&sourceView=graph', repoInRail: true, record: true, editor: true },
-  { path: '/iq/distillation/review?tab=decided', repoInRail: true, record: true },
-  { path: '/iq/distillation/review?view=promotions', repoInRail: true },
-  { path: '/iq/distillation/knowledge?view=guides', repoInRail: true },
-  { path: '/iq/distillation/knowledge?view=patterns', repoInRail: true },
-  { path: '/iq/distillation/knowledge?view=notes', repoInRail: true },
-  { path: '/iq/distillation/knowledge?item=art-001', repoInRail: true, record: true, editor: true },
-  { path: '/iq/distillation/activity?view=runs', repoInRail: true },
+  { path: '/iq/runbooks', repoInRail: false },
+  { path: '/iq/runbooks/proposals', repoInRail: false },
+  { path: '/iq/runbooks/briefs', repoInRail: false },
+  { param: PARAM_ROUTES.find((r) => r.pattern === '/iq/runbooks/:id')!, repoInRail: false, record: true },
+  { param: PARAM_ROUTES.find((r) => r.pattern === '/iq/runbooks/proposals/:pid')!, repoInRail: false, record: true },
+  { param: PARAM_ROUTES.find((r) => r.pattern === '/iq/runbooks/briefs/:ref')!, repoInRail: false, record: true },
   { path: '/iq/designs/des-auth-rotation', repoInRail: false, record: true },
   { param: PARAM_ROUTES.find((r) => r.pattern === '/iq/library/:assetId')!, repoInRail: false, record: true },
 ];
@@ -239,7 +236,7 @@ export const DEPTH_PAIRS: ReadonlyArray<{ name: string; tenant: Tenant; shallow:
   { name: 'runs / run', tenant: 'pipelines', shallow: '/pipelines/runs', deep: PARAM_ROUTES.find((r) => r.pattern === '/pipelines/runs/:id')!, key: '/pipelines/runs/:id' },
   { name: 'search / document', tenant: 'orgiq', shallow: '/iq/search', deep: '/iq/documents/page:A100003', key: '/iq/documents/:documentId' },
   // A record open beside a list rail is the selection level.
-  { name: 'knowledge / guide', tenant: 'orgiq', shallow: '/iq/distillation/knowledge?view=guides', deep: '/iq/distillation/knowledge?item=art-001', key: '/iq/distillation/knowledge?item=' },
+  { name: 'runbooks / runbook', tenant: 'orgiq', shallow: '/iq/runbooks', deep: '/iq/runbooks/rb-tenant-cutover', key: '/iq/runbooks/:id' },
   { name: 'designs / design', tenant: 'orgiq', shallow: '/iq/designs', deep: '/iq/designs/des-auth-rotation', key: '/iq/designs/:id' },
 ];
 
