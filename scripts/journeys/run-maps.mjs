@@ -36,6 +36,8 @@ function args(argv) {
     if (a === '--no-seal') o.noSeal = true;
     else if (a === '--check') o.check = true;
     else if (a === '--allow-persona') o.allowPersona = true;
+    else if (a === '--role') o.role = argv[++i];
+    else if (!a.startsWith('--') && !o.family) o.family = a; // `check runbooks`, `walk runbooks --role author`
     else if (['--family', '--only', '--out', '--wait'].includes(a)) o[a.slice(2)] = argv[++i];
     else throw new Error(`unknown argument ${a}`);
   }
@@ -45,7 +47,9 @@ function args(argv) {
 
 async function selected(o) {
   const { maps, problems } = await loadMaps(mapFiles(o.family));
-  const only = o.only ? maps.filter(({ map, file }) => `${map.family}/${map.log}`.includes(o.only) || file.includes(o.only)) : maps;
+  let only = o.only ? maps.filter(({ map, file }) => `${map.family}/${map.log}`.includes(o.only) || file.includes(o.only)) : maps;
+  // --role author|reviewer|consumer|box: the maps whose log lives in that role's directory.
+  if (o.role) only = only.filter(({ map }) => map.log.startsWith(`${o.role}/`));
   return { maps: only, problems };
 }
 
@@ -274,7 +278,7 @@ async function main() {
     for (const [k, n] of [...rows].sort()) console.log(`${k}\t<owner>\t<reason> (${n} finding(s) in the last walk)`);
     return;
   }
-  if (o.cmd !== 'walk' && o.cmd !== 'write') { console.error('usage: run-maps.mjs check|walk|write|coverage [--family f] [--only s] [--no-seal] [--wait min] [--out dir]'); process.exit(2); }
+  if (o.cmd !== 'walk' && o.cmd !== 'write') { console.error('usage: run-maps.mjs check|walk|write|coverage [family|--family f] [--role r] [--only s] [--no-seal] [--wait min] [--out dir]'); process.exit(2); }
   const { maps, problems } = await selected(o);
   if (problems.length) { problems.forEach((p) => console.error(`  ✗ ${p}`)); process.exit(1); }
   if (!maps.length) { console.error('no maps selected'); process.exit(1); }

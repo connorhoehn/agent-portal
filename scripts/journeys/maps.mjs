@@ -36,6 +36,10 @@ export const PROFILES = {
   // minutes; each step asserts a fact of the story is on screen (story-facts) and that the records it names
   // lead to each other (cross-links).
   demo: { story: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'story-facts', 'cross-links', 'dom-audit', 'notes'] },
+  // docs/runbooks-journeys/PROTOCOL.md (docs/distillation-runbooks-goal.md R6): one map per step of the runbook
+  // loop for a role (author, reviewer, consumer) and one API map for the box. A `journey` log states what the
+  // page or route shows (`shows`) and what the role may or may not do there (`gating`).
+  runbooks: { journey: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'shows', 'gating', 'dom-audit', 'notes'] },
   // docs/user-search-journeys/PROTOCOL.md (docs/user-search-goal.md judge 5): one map per top intent per tenant;
   // the person asks the catalog's question where they would, the answer is on screen (answers-question) and
   // the record it names opens in at most two clicks (record-open).
