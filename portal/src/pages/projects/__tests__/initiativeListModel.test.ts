@@ -57,7 +57,7 @@ test('a full capped page reads "N+" in the header and footer', () => {
 });
 
 test('search narrows groups and the footer says "N of M"; no hits is no-match, not empty', () => {
-  const m = buildInitiativeList({ rows, scope: 'all', query: 'vera' });
+  const m = buildInitiativeList({ rows, scope: 'all', query: 'migration' });
   if (m.state !== 'ready') throw new Error(m.state);
   assert.equal(m.shown, 2);
   assert.equal(m.footer, '2 of 5 initiatives');
