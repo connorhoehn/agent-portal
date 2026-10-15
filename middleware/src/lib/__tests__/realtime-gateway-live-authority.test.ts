@@ -7,6 +7,7 @@ import WebSocket from 'ws';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 import { attachRealtimeGateway } from '../realtime-gateway.js';
+import { invalidateForUser } from '../gateway/authority-invalidation.js';
 import { createMemorySocialChatBackend, type SocialChatBackend } from '../social-chat.js';
 import { realtimeClaims, signRealtimeToken } from '../realtime-token.js';
 import type { Session } from '../session.js';
@@ -84,7 +85,10 @@ afterEach(async () => {
 it('reauthorizes every live recipient and history request after Social grant removal, then observes restoration', async () => {
   const alice = await connect(source('alice')), bob = await connect(source('bob'));
   await join(alice); await join(bob);
-  users.get('bob')!.grants.social = [];
+  // A grant write: the directory row, then the provider's post-commit call to
+  // the gateway's invalidation seam (providers/identity.ts directoryChanged,
+  // mocked away in this file, so the stand-in makes the call itself).
+  users.get('bob')!.grants.social = []; invalidateForUser('bob');
   await post(alice, 'Stored after recipient removal');
   expect(messages(bob)).toEqual([]);
   send(bob, { service: 'chat', action: 'history', channel: DM });

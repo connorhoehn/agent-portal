@@ -53,7 +53,7 @@
 import type { Server } from 'node:http';
 import { hostname } from 'node:os';
 import { RedisPresenceStore } from '@connorhoehnslalom/realtime-modules/presence';
-import { attachRealtime, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withPrincipalRevalidation, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehnslalom/realtime-modules/server';
+import { attachRealtime, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withAuthorityCache, withPrincipalRevalidation, type AuthorityVerdictCache, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehnslalom/realtime-modules/server';
 import { RedisCallStateStore, InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
 import { createOrgiqWorkGraphStream, isWorkGraphStreamPublisher } from './work-graph/stream.js';
 import { tenantCursor } from './gateway-cursor.js';
@@ -74,12 +74,13 @@ import { setDistillationGatewayTarget } from './distillation-channels.js';
 import { createReactionStore, gatewayUploadConfig, uploadFeatureOptions } from './gateway-attachments.js';
 import { tenantActivity, tenantPipeline } from './gateway-run-feed.js';
 import { directRecipientFilter } from './direct-recipient.js';
-import { admitChannel, admitPrincipal, callGuards, channelGuards, lobbyGuard } from './gateway/authority.js';
+import { admitChannel, admitPrincipal, callGuards, channelGuards, lobbyGuard, verdictCacheable } from './gateway/authority.js';
+import { applyChannel, authorityEpoch, bindAuthorityCache } from './gateway/authority-invalidation.js';
 import { authenticateGatewayUpgrade } from './gateway/auth.js';
 import { socketContext, tenantCalls } from './gateway/calls.js';
 import { channelNotifyPlugin, dmNotifyPlugin, pageCursorChatOptions, tenantMentionNotifyPlugin } from './gateway/notify-plugins.js';
 import { startStatsLine, statsIntervalMs, type RealtimeGatewayStore } from './gateway/stats.js';
-import { peerOperationLingerMs, publishProofMaxAgeMs, realtimeGatewayRouting } from './gateway/env.js';
+import { authorityCacheEnabled, authorityCacheMaxAgeMs, inboundRateLimit, peerOperationLingerMs, publishProofMaxAgeMs, realtimeGatewayRouting } from './gateway/env.js';
 import { captureCallReaction, configuredCallReactionCapture, type CallReactionCapture } from './call-reactions.js';
 
 // Everything the pre-split file exported, from where it lives now.
@@ -88,7 +89,7 @@ export { authenticateGatewayUpgrade, gatewayAuthFromClaims, realtimeGatewayEnabl
 export { notifyMissedCall } from './gateway/calls.js';
 export { dmNotifyPlugin, channelNotifyPlugin, tenantMentionNotifyPlugin, pageCursorChatOptions, notifyChannelMessage, liveSubscribersForUsers } from './gateway/notify-plugins.js';
 export { GATEWAY_STATS_TYPE, gatewayStatsLine, statsIntervalMs, type GatewayStatsInput, type RealtimeGatewayStore } from './gateway/stats.js';
-export { peerOperationLingerMs, socialChatIndexWrites, publishProofMaxAgeMs, realtimeGatewayRouting, realtimeFanoutRequested } from './gateway/env.js';
+export { peerOperationLingerMs, socialChatIndexWrites, publishProofMaxAgeMs, realtimeGatewayRouting, realtimeFanoutRequested, authorityCacheEnabled, inboundRateLimit } from './gateway/env.js';
 export { createSocialChatBackend } from './social-chat.js';
 
 export const REALTIME_GATEWAY_PATH = '/ws';
@@ -121,6 +122,30 @@ const authorizeChannel: ChannelAuthorize = async ({ kind, clientId, channel, ctx
 const principal: PrincipalRevalidation = { revalidate: ctx => admitPrincipal(ctx), recheckAfterIo: true };
 /** Revalidate once before a user-addressed frame (no recheck: the filter's own call/notification decisions reload). */
 const recipientPrincipal: PrincipalRevalidation = { revalidate: principal.revalidate, recheckAfterIo: false };
+/**
+ * The verdict cache (realtime-modules 0.120, contract V1–V7), behind
+ * REALTIME_AUTHORITY_CACHE. Composition, inside out: `authorizeChannel` (the
+ * full fresh decision) → the cache, keyed by `authorityEpoch` (the signed
+ * session epoch plus the invalidation seam's generations) → principal
+ * revalidation, which runs on EVERY check, hits included (V4), and drops the
+ * connection's verdicts when it refuses. A hit therefore costs one directory
+ * read instead of the whole decision (Social action, membership, Cedar, page
+ * resource, two reloads). Removals reach the cache through
+ * lib/gateway/authority-invalidation.ts; refusals are never cached, so a
+ * grant is admitted on the next frame. Names whose answer depends on another
+ * name (`verdictCacheable`) bypass it.
+ */
+export type GatewayVerdicts = { authorize: ChannelAuthorize; cache: AuthorityVerdictCache };
+export function gatewayVerdictCache(opts: { maxAgeMs?: number } = {}): GatewayVerdicts {
+  const cached = withAuthorityCache(authorizeChannel, {
+    epoch: ctx => authorityEpoch(ctx as Record<string, unknown>),
+    maxAgeMs: opts.maxAgeMs ?? authorityCacheMaxAgeMs(),
+  });
+  const fenced = withPrincipalRevalidation({ authorize: cached.authorize }, recipientPrincipal,
+    { onStale: clientId => cached.cache.invalidateConnection(clientId) }).authorize;
+  return { authorize: args => verdictCacheable(args.channel) ? fenced(args) : authorizeChannel(args), cache: cached.cache };
+}
+
 const USER_ADDRESSED = new Set(['call', 'call-page', 'call-chat', 'notification:new', 'notification:bulk-update', 'notification:read']);
 function revalidatedRecipientFilter(inner: ClientMessageFilter): ClientMessageFilter {
   const revalidated = withPrincipalRevalidation({ filterClientMessage: inner }, recipientPrincipal).filterClientMessage;
@@ -158,8 +183,16 @@ export interface AttachGatewayOptions {
   socialChat?: SocialChatBackend;
   /** Connected host-owned stores for the async cluster startup. */
   redisClient?: GatewayRedisStore;
-  routerFactory?: (hooks: Pick<RedisRealtimeRouterOptions, 'authorize' | 'filterClientMessage' | 'plugins' | 'publishProofMaxAgeMs'>) => RedisRealtimeRouter;
+  routerFactory?: (hooks: RouterHooks) => RedisRealtimeRouter;
+  /** Override REALTIME_AUTHORITY_CACHE (tests). */
+  authorityCache?: boolean;
 }
+
+/** What the gateway hands its router: the authority hooks, and (for the Redis
+ * router) the Social membership store whose committed writes travel to the
+ * peers on `social:membership` and drop their verdicts on arrival. */
+export type RouterHooks = Pick<RedisRealtimeRouterOptions, 'authorize' | 'filterClientMessage' | 'plugins' | 'publishProofMaxAgeMs'
+  | 'membershipStore' | 'membershipEventTopic' | 'acceptMembershipChannel' | 'authorityCache'>;
 
 export type GatewayHandle = RealtimeHandle & { store: RealtimeGatewayStore; redis: GatewayRedisStore | null };
 
@@ -234,8 +267,16 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   // state and every fan-out runs `authorize` first, answering
   // `AUTHZ_CHANNEL_DENIED`. Do NOT also wire `presence({ authorizeChannel })`:
   // that hook answers silently and hides the router's refusal frame.
-  const routerHooks: Pick<RedisRealtimeRouterOptions, 'authorize' | 'filterClientMessage' | 'plugins' | 'publishProofMaxAgeMs'> = {
-    authorize: authorizeChannel,
+  const verdicts = (opts.authorityCache ?? authorityCacheEnabled()) ? gatewayVerdictCache() : null;
+  const routerHooks: RouterHooks = {
+    authorize: verdicts?.authorize ?? authorizeChannel,
+    // A committed Social membership write is published to the peers on this
+    // topic; a peer invalidates its membership reads and (cache on) its
+    // verdicts on that name and the names derived from it (applyChannel).
+    membershipStore: chatBackend.membershipStore,
+    membershipEventTopic: 'social:membership',
+    acceptMembershipChannel: channel => channel.startsWith('social:') && channel.length <= 256,
+    ...(verdicts ? { authorityCache: { invalidateChannel: (channel: string) => applyChannel(channel, 'membership') } } : {}),
     // realtime-modules 0.109 publish proofs: one sender-side publish decision
     // per (socket, channel) per send, reused for that send's other publish
     // rechecks while younger than this and dropped when the membership store
@@ -260,7 +301,10 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   const clusterRouter = opts.routerFactory?.(routerHooks);
   // The local router is built here rather than by attachRealtime so its
   // `authorize` is not wrapped by the principal revalidation (see above).
-  const socketRouter = clusterRouter ?? new LocalRealtimeRouter({ ...routerHooks, logger });
+  // It takes only the authority hooks; the membership wiring is the Redis router's.
+  const { membershipStore: _members, membershipEventTopic: _topic, acceptMembershipChannel: _accept, authorityCache: _verdictHook, ...localHooks } = routerHooks;
+  const socketRouter = clusterRouter ?? new LocalRealtimeRouter({ ...localHooks, logger });
+  const inbound = inboundRateLimit();
   const handle = attachRealtime(server, {
     path: REALTIME_GATEWAY_PATH,
     // A valid signature is not a current session: `principal` refuses retired
@@ -276,6 +320,11 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     maxPayload: 256 * 1024,
     pingIntervalMs: opts.pingIntervalMs ?? 30_000,
     logger,
+    // Per-socket inbound frame budget (REALTIME_INBOUND_RATE_LIMIT; the
+    // measured rates are in lib/gateway/env.ts).
+    ...(inbound ? { inboundRateLimit: inbound } : {}),
+    // V7: a closed connection's verdicts go with it.
+    ...(verdicts ? { onDisconnect: (clientId: string) => { verdicts.cache.invalidateConnection(clientId); } } : {}),
     // Chat + presence channels are tenant-scoped like call lobbies.
     router: socketRouter,
     features: [
@@ -331,18 +380,13 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   const workGraphService = handle.services['work-graph'];
   if (!isWorkGraphStreamPublisher(workGraphService)) throw new Error('work-graph feature did not register its stream service');
   const stopWorkGraph = workGraphStream.attach(workGraphService, clusterRouter?.peerEvents ?? null);
-  const stopPeerMembership = clusterRouter?.peerEvents.subscribe('social:membership', payload => {
-    try {
-      const channel = JSON.parse(payload) as unknown;
-      if (typeof channel === 'string' && channel.startsWith('social:') && channel.length <= 256) {
-        chatBackend.membershipStore.invalidate(channel);
-      }
-    } catch { /* An invalidation hint is never a membership record. */ }
-  });
-  const stopMembershipWrites = chatBackend.membershipStore.onCommittedWrite(channel => {
-    if (clusterRouter) void clusterRouter.peerEvents.publish('social:membership', JSON.stringify(channel))
-      .catch(error => console.warn('[social-membership] peer invalidation failed', error));
-  });
+  // The invalidation seam drives this cache; with Redis routing its user,
+  // channel and global events also reach the peers (`orgiq:authority`).
+  const unbindAuthority = verdicts ? bindAuthorityCache(verdicts.cache, { peers: clusterRouter?.peerEvents ?? null }) : null;
+  // A local committed membership write drops this node's verdicts on the name;
+  // with Redis routing the router does that (and tells the peers) itself.
+  const stopMembershipWrites = verdicts && !clusterRouter
+    ? chatBackend.membershipStore.onCommittedWrite(channel => applyChannel(channel, 'membership')) : null;
   pageRuntime = new CallPageRuntime({ calls: baseStateStore, pages: redis ? new RedisCallPageStore(redis) : new MemoryCallPageStore(), router: handle.router, lobbyAllowed: lobbyGuard });
   setCallPageRuntime(pageRuntime);
   chatRuntime = new CallChatRuntime({ calls: baseStateStore, state: redis ? new RedisCallChatStateStore(redis) : new MemoryCallChatStateStore(),
@@ -384,13 +428,14 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   return Object.assign(handle, {
     store,
     redis,
+    ...(verdicts ? { authorityCache: verdicts.cache } : {}),
     dispose: async () => {
       stopStats();
       // Keep feature runtimes/ports live until socket disconnect hooks finish.
       try { await baseDispose(); } finally {
         stopWorkGraph();
-        stopPeerMembership?.();
-        stopMembershipWrites();
+        stopMembershipWrites?.();
+        unbindAuthority?.();
         pageRuntime?.dispose();
         setCallPageRuntime(null);
         chatRuntime?.dispose();

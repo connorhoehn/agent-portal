@@ -387,3 +387,19 @@ export function producerChannelAllowed(channel: string): boolean {
 export function holdsFamilyAuthority(session: Session, channel: string, kind: ChannelKind): Promise<boolean> {
   return AUTHORITY.holdsFamily({ session, auth: sessionGatewayContext(session) as LiveGatewayAuth }, channel, kind);
 }
+
+/**
+ * May the gateway's verdict cache (lib/gateway/authority-invalidation.ts) keep
+ * a positive answer for this name? Not for the namespaces whose answer hangs
+ * on ANOTHER name's membership or on a row no invalidation is keyed by:
+ *   - `social:deck:<id>` presence: the deck row's owner or the CURRENT members
+ *     of the conversation the deck was built from;
+ *   - `<tenant>:flowrun:<runId>`: the run row's requester plus, for Social and
+ *     summarize runs, the run's conversation membership.
+ * Both are low-rate (one presence channel per open deck, a subscribe per run),
+ * so they are asked fresh every time, exactly as before the cache.
+ */
+export function verdictCacheable(channel: string): boolean {
+  const base = baseChannel(channel);
+  return !inSocialDeckNamespace(base) && !inFlowRunNamespace(base);
+}
