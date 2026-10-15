@@ -12,6 +12,7 @@
 //    fails the same way.
 //  * A proposal is decided once. A second accept/reject/merge fails with
 //    ProposalClosedError; of two concurrent accepts exactly one wins.
+//  * A retired runbook takes no accepted edit or retire (RetiredRunbookError).
 //  * A proposer never accepts their own proposal (SelfAcceptError). Who MAY
 //    accept (owner / SME / org-leader) is the route's Cedar check, not here.
 //  * A session brief is write-once per run_ref (the frozen bytes): re-putting
@@ -60,7 +61,8 @@ export interface AcceptProposalResult { proposal: RunbookProposal; runbook: Runb
 
 export interface DecideProposalInput {
   proposal_id: string;
-  decision: 'rejected' | 'merged';
+  /** 'withdrawn' is the proposer pulling their own open proposal; who may do it is the route's check. */
+  decision: 'rejected' | 'merged' | 'withdrawn';
   decided_by: string;
   at: string;
   note?: string | null;
@@ -109,7 +111,7 @@ export interface RunbookStore {
 // ── Errors ───────────────────────────────────────────────────────────────────
 
 export type RunbookStoreErrorCode =
-  | 'version_conflict' | 'proposal_closed' | 'self_accept' | 'not_found' | 'already_exists' | 'brief_exists' | 'invalid';
+  | 'version_conflict' | 'proposal_closed' | 'self_accept' | 'not_found' | 'already_exists' | 'brief_exists' | 'invalid' | 'retired';
 
 export class RunbookStoreError extends Error {
   constructor(readonly code: RunbookStoreErrorCode, message: string) {
@@ -125,6 +127,9 @@ export class ProposalClosedError extends RunbookStoreError {
 }
 export class SelfAcceptError extends RunbookStoreError {
   constructor(id: string) { super('self_accept', `a proposer cannot accept their own proposal (${id})`); }
+}
+export class RetiredRunbookError extends RunbookStoreError {
+  constructor(id: string) { super('retired', `runbook ${id} is retired`); }
 }
 export class NotFoundError extends RunbookStoreError {
   constructor(what: string) { super('not_found', `${what} not found`); }
@@ -203,6 +208,8 @@ export function planAccept(
   }
 
   if (!runbook) throw new NotFoundError(`runbook ${proposal.runbook_id}`);
+  // A retired runbook takes no more versions and no second retirement, whatever route the caller came by.
+  if (runbook.status === 'retired') throw new RetiredRunbookError(runbook.id);
   if (proposal.base_version !== null && proposal.base_version !== runbook.current_version) {
     throw new VersionConflictError(
       `proposal ${proposal.id} was written against v${proposal.base_version}; ${runbook.id} is at v${runbook.current_version}`,

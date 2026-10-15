@@ -45,7 +45,7 @@ import { clock } from '../mock/core/clock.js';
 import {
   findSimilar, lintErrors, lintRunbook, runbookHealth, tryParseRunbook, versionOf,
   AlreadyExistsError, InvalidWriteError, NotFoundError as StoreNotFound, ProposalClosedError, RunbookStoreError,
-  SelfAcceptError, VersionConflictError,
+  SelfAcceptError, VersionConflictError, RetiredRunbookError,
   type LintContext, type LintFinding, type Runbook, type RunbookApplication, type RunbookDoc, type RunbookProposal,
   type RunbookScope, type RunbookStore, type RunbookVersion,
 } from '../lib/runbooks/index.js';
@@ -58,7 +58,7 @@ export interface RunbooksDeps {
 const OUTCOMES = ['followed', 'followed_with_deviation', 'failed', 'not_used'] as const;
 const SCOPE_KINDS = ['org', 'initiative', 'repo', 'tool'] as const;
 const STATUSES = ['draft', 'published', 'retired'] as const;
-const PROPOSAL_STATUSES = ['open', 'accepted', 'rejected', 'merged'] as const;
+const PROPOSAL_STATUSES = ['open', 'accepted', 'rejected', 'merged', 'withdrawn'] as const;
 const RUNBOOK_ID = /^rb-[a-z0-9][a-z0-9-]{1,58}$/;
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
@@ -134,6 +134,18 @@ function session(req: Request): Session {
 // ── Errors ───────────────────────────────────────────────────────────────────
 
 function storeError(err: unknown, res: Response): boolean {
+async function workItemExists(id: string): Promise<boolean> {
+  const { getWorkItem } = await import('../providers/work-items.js');
+  return !!(await getWorkItem(id));
+}
+
+/** Mock mode has no people table: the registered cast answers; otherwise Aurora's `people`. */
+async function personExists(id: string): Promise<boolean> {
+  const { config } = await import('../config.js');
+  if (config.mock.aurora) return (await import('../mock/people.js')).mockPeople.some((p) => p.id === id);
+  return (await import('../providers/sprints.js')).personExists(id);
+}
+
   if (!(err instanceof RunbookStoreError)) return false;
   if (err instanceof VersionConflictError) {
     res.status(409).json({ error: err.message, code: 'VERSION_CONFLICT', expected: err.expected, actual: err.actual });
@@ -148,6 +160,8 @@ function storeError(err: unknown, res: Response): boolean {
   } else if (err instanceof InvalidWriteError) {
     res.status(400).json({ error: err.message });
   } else {
+  } else if (err instanceof RetiredRunbookError) {
+    res.status(409).json({ error: err.message, code: 'RETIRED' });
     res.status(500).json({ error: 'runbook store error' });
   }
   return true;
@@ -343,6 +357,11 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
         kind: 'run', run_ref: runRef, lab_experience_ids: labIds,
         ...(str(src['session_id']) ? { session_id: str(src['session_id'])! } : {}),
         ...(str(src['work_item_id']) ? { work_item_id: str(src['work_item_id'])! } : {}),
+    // A person's work item must exist (work-item reads are open to every orgiq session, so existence is the read check).
+    // A box's work item comes from its frozen brief, not the body.
+    const workItemId = machine ? undefined : str(src['work_item_id']);
+    if (workItemId && !await workItemExists(workItemId)) throw new ValidationError('`source.work_item_id` does not name a work item');
+
       };
     } else {
       if (refuseMasquerade(req, res)) return;
@@ -517,7 +536,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const id = str(body['id']) ?? slug(doc.title);
     if (!RUNBOOK_ID.test(id)) throw new ValidationError('`id` must look like rb-some-name (lowercase letters, digits, hyphens)');
     const runbook: Runbook = {
-      id, scope: newScope!, owner_person_id: str(body['owner_person_id']) ?? actor, status: 'published',
+      id, scope: newScope!, owner_person_id: ownerId ?? actor, status: 'published',
       current_version: 1, created_at: at, updated_at: at,
     };
     const version = versionOf({ runbook_id: id, version: 1, doc, author, provenance });
@@ -536,6 +555,8 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const d = await decidable(req, res, s, override);
     if (!d) return;
     const proposal = await s.decideProposal({ proposal_id: d.p.id, decision: 'rejected', decided_by: d.actor, at: now(), note });
+    const ownerId = str(body['owner_person_id']);
+    if (ownerId && !await personExists(ownerId)) throw new ValidationError('`owner_person_id` does not name a person');
     res.json({ proposal });
   }));
 
@@ -561,6 +582,28 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     // The reviewer must be able to review the TARGET, whatever the source says.
     const d = await decidable(req, res, s, { scope: dest.scope, owner: dest.owner_person_id });
     if (!d) return;
+  // The proposer pulls their own open proposal. Session-only (a run cannot withdraw), identity-bound like every
+  // runbook write, so masquerade is refused; the reviewer's reject of one's own proposal stays blocked.
+  router.post('/proposals/:pid/withdraw', requireTenant('orgiq'), requireSession('SuggestRunbook'), handler(async (req, res) => {
+    if (refuseMasquerade(req, res)) return;
+    const s = await store();
+    const sess = session(req);
+    const p = await s.getProposal(String(req.params['pid']));
+    if (!p) { res.status(404).json({ error: 'proposal not found' }); return; }
+    const { actor, personId } = await actorId(sess);
+    if (p.source.kind !== 'person' || !p.source.person_id || ![actor, personId, sess.sub].includes(p.source.person_id)) {
+      res.status(403).json({ error: 'only the proposer can withdraw a proposal', code: 'NOT_PROPOSER' });
+      return;
+    }
+    if (p.status !== 'open') {
+      res.status(409).json({ error: `proposal ${p.id} is already ${p.status}`, code: 'PROPOSAL_CLOSED', status: p.status });
+      return;
+    }
+    const note = str((req.body as Record<string, unknown> | undefined)?.['note']) ?? null;
+    const proposal = await s.decideProposal({ proposal_id: p.id, decision: 'withdrawn', decided_by: actor, at: now(), note });
+    res.json({ proposal });
+  }));
+
     const { p, actor, target: source } = d;
     // Merging closes the proposal on its own target, so it is a decision about THAT
     // runbook too: without this, a reviewer of any published runbook could close any

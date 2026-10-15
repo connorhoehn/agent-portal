@@ -144,7 +144,7 @@ export interface RunbookProposal {
   /** Stored at write time; re-run on read. */
   lint: LintFinding[];
   similar: Array<{ runbook_id: string; score: number; reason: string }>;
-  status: 'open' | 'accepted' | 'rejected' | 'merged';
+  status: 'open' | 'accepted' | 'rejected' | 'merged' | 'withdrawn';
   decided_by: string | null;
   decided_at: string | null;
   note: string | null;

@@ -314,8 +314,8 @@ describe('deciding: who may accept', () => {
     const second = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD, rationale: 'Again.' });
     const org = await accept(USERS.smeAuth!, second.body.proposal.id, { scope: { kind: 'org' }, id: 'rb-org-wide' });
     expect(org.status).toBe(403);
-    expect((await accept(USERS.leader!, second.body.proposal.id, { scope: { kind: 'org' }, id: 'rb-org-wide', owner_person_id: 'p-101' })).status).toBe(201);
-    expect((await store.getRunbook('rb-org-wide'))!.owner_person_id).toBe('p-101');
+    expect((await accept(USERS.leader!, second.body.proposal.id, { scope: { kind: 'org' }, id: 'rb-org-wide', owner_person_id: 'p-002' })).status).toBe(201);
+    expect((await store.getRunbook('rb-org-wide'))!.owner_person_id).toBe('p-002');
 
     // No scope and nothing to infer it from.
     const third = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD, rationale: 'Third.' });

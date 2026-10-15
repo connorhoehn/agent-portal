@@ -26,7 +26,7 @@ import { captureRawBody } from '../../lib/service-auth.js';
 import { createRunbooksRouter } from '../runbooks.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import type { RunbookStore } from '../../lib/runbooks/index.js';
-import { EDIT_MD, USERS, seededStore, type TestUser } from './runbook-world.js';
+import { EDIT_MD, NEW_MD, USERS, seededStore, type TestUser } from './runbook-world.js';
 
 let store: RunbookStore;
 beforeEach(() => { store = seededStore(); });
@@ -118,5 +118,80 @@ describe('a retired runbook takes no decision', () => {
     const self = await request(appAs(USERS.owner!)).post(`/api/runbooks/proposals/${id}/accept`).send({ superseded_by: 'rb-tenant-cutover' });
     expect(self.status).toBe(400);
     expect((await store.getRunbook('rb-tenant-cutover'))!.status).toBe('published');
+  });
+});
+
+describe('references on proposals and accepts must be real', () => {
+  it('a proposal naming a work item that does not exist is a 400; a real one is accepted', async () => {
+    const post = (workItem: string) => request(appAs(USERS.member!)).post('/api/runbooks/proposals')
+      .send({ kind: 'new', markdown: NEW_MD, rationale: 'x', source: { work_item_id: workItem } });
+    const bad = await post('wi-nope');
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/work item/);
+    expect((await store.listProposals({})).items).toHaveLength(0);
+    expect((await post('wi-auth-1')).status).toBe(201);
+  });
+
+  it('accepting a new runbook with an owner who is not a person is a 400 and leaves the proposal open', async () => {
+    const created = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD, rationale: 'x' });
+    const id = created.body.proposal.id;
+    const bad = await request(appAs(USERS.leader!)).post(`/api/runbooks/proposals/${id}/accept`).send({ scope: { kind: 'org' }, id: 'rb-org-wide', owner_person_id: 'p-nope' });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/person/);
+    expect((await store.getProposal(id))!.status).toBe('open');
+    expect(await store.getRunbook('rb-org-wide')).toBeNull();
+    expect((await request(appAs(USERS.leader!)).post(`/api/runbooks/proposals/${id}/accept`).send({ scope: { kind: 'org' }, id: 'rb-org-wide', owner_person_id: 'p-002' })).status).toBe(201);
+  });
+});
+
+describe('a proposer may withdraw their own open proposal', () => {
+  const withdraw = (user: TestUser, id: string, actor?: TestUser) => request(appAs(user, actor)).post(`/api/runbooks/proposals/${id}/withdraw`).send({ note: 'changed my mind' });
+
+  it('withdraws once: status, decider and note are recorded, and it can no longer be accepted', async () => {
+    const id = (await proposeEdit(USERS.member!)).body.proposal.id;
+    const res = await withdraw(USERS.member!, id);
+    expect(res.status).toBe(200);
+    expect(res.body.proposal).toEqual(expect.objectContaining({ status: 'withdrawn', decided_by: 'p-300', note: 'changed my mind' }));
+    expect((await withdraw(USERS.member!, id)).status).toBe(409);
+    expect((await request(appAs(USERS.owner!)).post(`/api/runbooks/proposals/${id}/accept`).send({})).status).toBe(409);
+    expect((await request(appAs(USERS.member!)).get('/api/runbooks/proposals?status=withdrawn')).body.proposals).toHaveLength(1);
+  });
+
+  it('only the proposer: another person, even a reviewer or admin, is refused; so is an unknown proposal', async () => {
+    const id = (await proposeEdit(USERS.member!)).body.proposal.id;
+    for (const u of [USERS.owner!, USERS.leader!, USERS.admin!, USERS.proposer!]) {
+      const res = await withdraw(u, id);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('NOT_PROPOSER');
+    }
+    expect((await store.getProposal(id))!.status).toBe('open');
+    expect((await withdraw(USERS.member!, 'prop-nope')).status).toBe(404);
+  });
+
+  it('is refused during a masquerade, even by the proposer\'s impersonator', async () => {
+    const id = (await proposeEdit(USERS.member!)).body.proposal.id;
+    const res = await withdraw(USERS.member!, id, USERS.admin!);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('MASQUERADING');
+    expect((await store.getProposal(id))!.status).toBe('open');
+  });
+
+  it('is session-only: a box envelope and an anonymous caller cannot withdraw', async () => {
+    const id = (await proposeEdit(USERS.member!)).body.proposal.id;
+    const anon = express();
+    anon.use(express.json({ verify: captureRawBody }));
+    anon.use((req, _res, next) => { (req as unknown as { sessionInvalid: boolean }).sessionInvalid = true; next(); });
+    anon.use('/api/runbooks', createRunbooksRouter({ store: () => store }));
+    anon.use(errorHandler);
+    expect((await request(anon).post(`/api/runbooks/proposals/${id}/withdraw`).send({})).status).toBe(401);
+  });
+
+  it('a run proposal cannot be withdrawn by a person, and rejecting your own proposal stays blocked', async () => {
+    const id = (await proposeEdit(USERS.proposer!)).body.proposal.id;
+    const own = await request(appAs(USERS.proposer!)).post(`/api/runbooks/proposals/${id}/reject`).send({ note: 'no' });
+    expect(own.status).toBe(403);
+    expect(own.body.code).toBe('SELF_ACCEPT');
+    await store.putProposal({ ...(await store.getProposal(id))!, id: 'prop-run', source: { kind: 'run', run_ref: 'job-1', lab_experience_ids: [] } });
+    expect((await withdraw(USERS.member!, 'prop-run')).status).toBe(403);
   });
 });

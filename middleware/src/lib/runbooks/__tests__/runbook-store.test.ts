@@ -10,7 +10,7 @@ import { assembleBrief } from '../brief.js';
 import { RowsRunbookStore, privateRowSources } from '../store-rows.js';
 import { DynamoRunbookStore, createRunbookDynamoClient, dropRunbookTable, ensureRunbookTable, runbookStoreConfig } from '../store-dynamo.js';
 import {
-  AlreadyExistsError, BriefExistsError, InvalidWriteError, ProposalClosedError, SelfAcceptError, VersionConflictError,
+  AlreadyExistsError, BriefExistsError, InvalidWriteError, ProposalClosedError, RetiredRunbookError, SelfAcceptError, VersionConflictError,
   type RunbookStore,
 } from '../store.js';
 import { flakyRerunDiff, ssoNewOrigin, tenantCutoverV1, tenantCutoverV2 } from './fixtures/good.js';
@@ -217,6 +217,28 @@ describe.each(backends)('$name (RunbookStore contract)', ({ open }) => {
       expect(await store.getRunbook('rb-new')).toMatchObject({ status: 'retired', retired: { by: 'p-001', reason: 'superseded', superseded_by: 'rb-a' } });
       // a retired runbook keeps its history
       expect(await store.listVersions('rb-new')).toHaveLength(1);
+    });
+
+    it('refuses to accept an edit or a second retirement onto a retired runbook, and changes nothing', async () => {
+      await store.putProposal(proposal('prop-r', { kind: 'retire', proposed: null }));
+      await store.acceptProposal({ proposal_id: 'prop-r', decided_by: 'p-001', at: T1, retire: { reason: 'gone', superseded_by: null } });
+      await store.putProposal(proposal('prop-e'));
+      await expect(store.acceptProposal(editInput('prop-e', 'p-001'))).rejects.toBeInstanceOf(RetiredRunbookError);
+      await store.putProposal(proposal('prop-r2', { kind: 'retire', proposed: null }));
+      await expect(store.acceptProposal({ proposal_id: 'prop-r2', decided_by: 'p-001', at: T2, retire: { reason: 'again', superseded_by: null } })).rejects.toBeInstanceOf(RetiredRunbookError);
+      expect((await store.getProposal('prop-e'))!.status).toBe('open');
+      expect(await store.getRunbook('rb-a')).toMatchObject({ status: 'retired', current_version: 1 });
+      expect(await store.listVersions('rb-a')).toHaveLength(1);
+    });
+
+    it('lets a proposal be withdrawn once, and a withdrawn proposal is neither acceptable nor rewritable', async () => {
+      await store.putProposal(proposal('prop-1'));
+      const out = await store.decideProposal({ proposal_id: 'prop-1', decision: 'withdrawn', decided_by: 'p-002', at: T1, note: 'oops' });
+      expect(out).toMatchObject({ status: 'withdrawn', decided_by: 'p-002', note: 'oops', merged_into: null });
+      expect((await store.listProposals({ status: ['withdrawn'] })).items.map((x) => x.id)).toEqual(['prop-1']);
+      await expect(store.decideProposal({ proposal_id: 'prop-1', decision: 'withdrawn', decided_by: 'p-002', at: T2 })).rejects.toBeInstanceOf(ProposalClosedError);
+      await expect(store.acceptProposal(editInput('prop-1', 'p-003'))).rejects.toBeInstanceOf(ProposalClosedError);
+      await expect(store.putProposal(proposal('prop-1'))).rejects.toBeInstanceOf(AlreadyExistsError);
     });
 
     it('rejects or merges once, and a decided proposal is neither acceptable nor rewritable', async () => {
