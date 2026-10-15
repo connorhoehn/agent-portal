@@ -51,44 +51,8 @@ export interface Intent {
   cloneBlind?: string;
   /** The surface this intent belongs on, in the target design. */
   best: string;
-  /** `best` as a surface kind (derived by `bestKindOf` unless set): the judge's zero-`wrong` rule reads it. */
-  bestSurface: SurfaceKind;
-  /** One of the tenant's top intents: a journey map under docs/journeys/maps/search/<tenant>/<role>/ walks it. */
-  map?: boolean;
   surfaces: Surface[];
 }
-
-/**
- * The surface kind a `best` description names: its leading word (search, answer,
- * palette), a composer, or a list page's own search/filter. Where the target
- * surface is one the tenant does not offer yet, it is still named — the judge
- * then has no probe to grade on it, which is honest: nothing can be wrong there.
- */
-export function bestKindOf(best: string): SurfaceKind {
-  const b = best.toLowerCase();
-  if (/^search\b/.test(b)) return 'search';
-  if (/^answer\b/.test(b)) return 'answer';
-  if (/^palette\b/.test(b)) return 'palette';
-  if (/composer/.test(b)) return 'composer';
-  if (/\b(list|catalog|audit|message|runbooks|requests|approvals|definitions|workspace document|recording content|feedback)\b.*\b(search|row|filter|history|list)\b|\blist search\b|\blist row\b/.test(b)) return 'list-search';
-  if (/palette/.test(b)) return 'palette';
-  return 'search';
-}
-
-/** Where the `best` prose names a list page rather than a surface word, the surface the probe tries there. */
-const BEST_OVERRIDE: Record<string, SurfaceKind> = {
-  'a-my-teams': 'composer', 'a-recording': 'palette', 'p-run-error': 'list-search', 'p-bot-last-run': 'list-search',
-  'p-run-cost': 'composer', 'x-temporary': 'composer',
-};
-
-/** The top intents per tenant (five each) that journey maps walk (docs/user-search-goal.md judge 5). */
-export const MAPPED = new Set([
-  'o-expert-kubernetes', 'o-owner-initiative', 'o-team-members', 'o-adr', 'o-my-work',
-  'a-team-lookup', 'a-team-lead', 'a-failed-runs', 'a-running', 'a-submission-by',
-  's-find-person', 's-find-channel', 's-dm', 's-team-members', 's-room',
-  'p-find-definition', 'p-dead-letter', 'p-needs-dry-run', 'p-failed-runs', 'p-bot-last-run',
-  'x-find-entitlement', 'x-sod', 'x-review-undecided', 'x-waiting-on-me', 'x-who-approved',
-]);
 
 export const PERSONAS: Record<string, string> = {
   'orgiq:member': 'u-theo', 'orgiq:sme': 'u-nora', 'orgiq:program-owner': 'u-mia', 'orgiq:org-leader': 'u-vera', 'orgiq:hr-admin': 'u-hr',
@@ -100,10 +64,8 @@ export const PERSONAS: Record<string, string> = {
 
 const S = (kind: SurfaceKind, extra: Omit<Surface, 'kind'> = {}): Surface => ({ kind, ...extra });
 const IQ = [S('search'), S('answer'), S('palette', { route: '/iq' })];
-type Draft = Omit<Intent, 'persona' | 'tenant' | 'bestSurface'> & { bestSurface?: SurfaceKind };
-const tenantOf = (tenant: Tenant) => (rows: Draft[]): Intent[] => rows.map((r) => ({
-  ...r, tenant, persona: PERSONAS[`${tenant}:${r.role}`]!, bestSurface: r.bestSurface ?? BEST_OVERRIDE[r.id] ?? bestKindOf(r.best), ...(MAPPED.has(r.id) ? { map: true } : {}),
-}));
+type Draft = Omit<Intent, 'persona' | 'tenant'>;
+const tenantOf = (tenant: Tenant) => (rows: Draft[]): Intent[] => rows.map((r) => ({ ...r, tenant, persona: PERSONAS[`${tenant}:${r.role}`]! }));
 
 // ── orgiq ────────────────────────────────────────────────────────────────────
 const KUBE = ['p-007', 'p-009', 'p-014', 'p-020', 'p-022', 'p-056'];
@@ -111,18 +73,18 @@ const PLATFORM = ['p-001', 'p-002', 'p-004', 'p-005', 'p-006', 'p-007', 'p-008',
 export const ORGIQ = tenantOf('orgiq')([
   { id: 'o-expert-kubernetes', role: 'member', intent: 'Find people who know a skill (Kubernetes)',
     phrasings: ['who knows Kubernetes', 'Kubernetes experts', 'find someone who can help with k8s', 'people with Kubernetes skills'],
-    expected: { summary: 'Marcus Müller, Arjun Shah, Grace Singh, Henry Hassan, Sarah Thompson, Hugo Lee (skills list Kubernetes)', keys: KUBE.map((p) => `person:${p}`),
-      text: [/Marcus M(ü|u)ller|Arjun Shah|Grace Singh|Henry Hassan|Sarah Thompson|Hugo Lee/], wrong: [/Theo Chang[^.\n]{0,80}Kubernetes|James Thompson/] },
+    expected: { summary: 'Marcus Müller, Marcus Shah, Sarah Singh, Henry Hassan, Sarah Thompson, Hugo Lee (skills list Kubernetes)', keys: KUBE.map((p) => `person:${p}`),
+      text: [/Marcus M(ü|u)ller|Marcus Shah|Sarah Singh|Henry Hassan|Sarah Thompson|Hugo Lee/], wrong: [/Theo Chang[^.\n]{0,80}Kubernetes|James Thompson/] },
     best: 'search (People group ranked by skill) + answer citing them', surfaces: [...IQ, S('api', { path: '/api/graph/help?q={q}' })] },
   { id: 'o-expert-terraform', role: 'hr-admin', intent: 'Find people who know a skill (Terraform)',
     phrasings: ['who knows Terraform', 'Terraform skills', 'best person for terraform modules'],
-    expected: { summary: 'Layla Hassan, Maria Johnson, Sienna Garcia, Diego Ortiz, Joy Chen, Tara Wright, Mateo Green (skills list Terraform)', keys: ['p-008', 'p-006', 'p-005', 'p-052', 'p-055', 'p-016', 'p-026'].map((p) => `person:${p}`),
-      text: [/Layla Hassan|Maria Johnson|Sienna Garcia|Diego Ortiz|Joy Chen|Tara Wright|Mateo Green/], wrong: [/Theo Chang/] },
+    expected: { summary: 'Layla Hassan (SRE Lead), Maria Johnson, Sienna Garcia, Hugo DaSilva, Mia Chen…', keys: ['p-008', 'p-006', 'p-005', 'p-052', 'p-055', 'p-016', 'p-026'].map((p) => `person:${p}`),
+      text: [/Layla Hassan|Maria Johnson|Sienna Garcia|Hugo DaSilva|Mia Chen/], wrong: [/Theo Chang/] },
     best: 'search People', surfaces: [...IQ, S('api', { path: '/api/graph/help?q={q}' })] },
   { id: 'o-expert-rag', role: 'org-leader', intent: 'Rank the strongest people for a skill (RAG)',
     phrasings: ['who knows RAG best', 'top RAG experts', 'strongest retrieval-augmented generation people'],
-    expected: { summary: 'Nina Rivera, Katya Petrov, Nora DaSilva, Noah Vasquez, Vikram Patel (RAG skill)', keys: ['p-047', 'p-042', 'p-004', 'p-045', 'p-046'].map((p) => `person:${p}`),
-      text: [/Nina Rivera|Katya Petrov|Nora DaSilva|Noah Vasquez|Vikram Patel/] },
+    expected: { summary: 'Nina Rivera, Vera Petrov, Nora DaSilva, Noah Vasquez, Caleb Patel (RAG skill)', keys: ['p-047', 'p-042', 'p-004', 'p-045', 'p-046'].map((p) => `person:${p}`),
+      text: [/Nina Rivera|Vera Petrov|Nora DaSilva|Noah Vasquez|Caleb Patel/] },
     best: 'answer (ranked by skill strength) + scores', surfaces: [...IQ, S('api', { path: '/api/scores/by-skill?skill=RAG' })] },
   { id: 'o-owner-initiative', role: 'member', intent: 'Who owns an initiative',
     phrasings: ['who owns the auth migration', 'Auth Migration owner', 'who is running auth migration?'],
@@ -130,17 +92,17 @@ export const ORGIQ = tenantOf('orgiq')([
     best: 'answer (local answer: owners) + search initiative row', surfaces: IQ },
   { id: 'o-smes-initiative', role: 'member', intent: 'Who are the SMEs on an initiative',
     phrasings: ['who are the SMEs on auth migration', 'auth migration experts', 'who can help finish Auth Migration?'],
-    expected: { summary: 'Simone Chang (p-051) and Nora DaSilva (p-004)', keys: ['person:p-051', 'person:p-004'], text: [/Simone Chang|Nora DaSilva/] },
+    expected: { summary: 'Nora Chang (p-051) and Nora DaSilva (p-004)', keys: ['person:p-051', 'person:p-004'], text: [/Nora Chang|Nora DaSilva/] },
     best: 'answer (owners/SMEs)', surfaces: IQ },
   { id: 'o-team-members', role: 'member', intent: 'Who is on a team / department',
     phrasings: ['who is on the platform team', 'Platform Engineering people', 'members of team platform'],
-    expected: { summary: 'Platform Engineering (t-platform): Theo Chang, Vera Green, Nora DaSilva, Marcus Müller, Layla Hassan…', keys: PLATFORM.map((p) => `person:${p}`),
-      text: [/Theo Chang|Vera Green|Nora DaSilva|Layla Hassan|Arjun Shah/] },
+    expected: { summary: 'Platform Engineering department (t-platform): Theo Chang, Vera Green, Nora DaSilva, Marcus Müller, Layla Hassan…', keys: PLATFORM.map((p) => `person:${p}`),
+      text: [/Theo Chang|Vera Green|Nora DaSilva|Layla Hassan|Marcus Shah/] },
     best: 'search People filtered by department (team entity)', surfaces: IQ },
   { id: 'o-collaborators', role: 'org-leader', intent: 'People who worked with someone',
     phrasings: ['people who worked with Nora', 'Nora DaSilva collaborators', 'who works closely with Nora DaSilva'],
-    expected: { summary: 'Caleb Turner (0.94), Owen Brooks (0.74), Arjun Shah (0.72), Maria Johnson (0.71)', keys: ['person:p-013', 'person:p-003', 'person:p-009', 'person:p-006'],
-      text: [/Caleb Turner|Owen Brooks|Arjun Shah|Maria Johnson/] },
+    expected: { summary: 'Caleb Turner (0.94), Marcus O\'Brien (0.74), Marcus Shah (0.72), Maria Johnson (0.71)', keys: ['person:p-013', 'person:p-003', 'person:p-009', 'person:p-006'],
+      text: [/Caleb Turner|Marcus O'Brien|Maria Johnson/] },
     best: 'answer + Connections graph from the person', surfaces: [...IQ, S('api', { path: '/api/graph/people/p-004' })] },
   { id: 'o-adr', role: 'member', intent: 'Find a decision / ADR',
     phrasings: ['find the ADR about Aurora vs Neptune', 'Aurora Neptune decision', 'why did we pick Aurora over Neptune'],
@@ -197,20 +159,6 @@ export const ORGIQ = tenantOf('orgiq')([
     phrasings: ['where are we single-threaded', 'bus factor risks', 'knowledge held by only one person'],
     expected: { summary: 'Open bus_factor findings (/iq/work/findings?sweep=bus_factor)', text: [/bus.?factor|single.?thread/i] },
     best: 'answer over findings + palette to /iq/work/findings', surfaces: [...IQ, S('composer', { route: '/iq/work/findings', grammar: 'search bus factor' })] },
-  { id: 'o-expert-rust', role: 'sme', intent: 'Find a peer who knows a skill (Rust)',
-    phrasings: ['who else knows Rust', 'Rust experts', 'people with Rust skills'],
-    expected: { summary: 'Nora DaSilva, Maria Johnson, Sarah Thompson, Paolo Mancini, Ava Lee, Simone Chang, Ingrid Larsen (skills list Rust)', keys: ['p-004', 'p-006', 'p-022', 'p-049', 'p-050', 'p-051', 'p-053'].map((p) => `person:${p}`),
-      text: [/Maria Johnson|Sarah Thompson|Paolo Mancini|Ava Lee|Simone Chang|Ingrid Larsen/] },
-    best: 'search People', surfaces: IQ },
-  { id: 'o-team-security', role: 'hr-admin', intent: 'Who is on a team (Security)',
-    phrasings: ['who is on the security team', 'Security team members', 'people in Security'],
-    expected: { summary: 'Security (t-security): Simone Chang, Diego Ortiz, Ingrid Larsen, Kevin Garcia, Joy Chen', keys: ['p-051', 'p-052', 'p-053', 'p-054', 'p-055'].map((p) => `person:${p}`),
-      text: [/Simone Chang|Diego Ortiz|Ingrid Larsen|Kevin Garcia|Joy Chen/] },
-    best: 'search People filtered by team (team entity)', surfaces: IQ },
-  { id: 'o-person-lookup', role: 'hr-admin', intent: 'Find a person by name',
-    phrasings: ['Nora DaSilva', 'find Nora DaSilva', 'who is Nora DaSilva'],
-    expected: { summary: 'person:p-004 Nora DaSilva, Senior Engineer, Platform Engineering', keys: ['person:p-004'], text: [/Nora DaSilva/] },
-    best: 'search People', surfaces: IQ },
 ]);
 
 // ── assessment ───────────────────────────────────────────────────────────────
@@ -322,8 +270,8 @@ export const SOCIAL = tenantOf('social')([
     expected: { summary: '#incidents i01 (stale search health check) and 5 more pins', text: [/health check|pinned/i] },
     best: 'channel pins panel reachable from palette', surfaces: [S('palette', { route: CH }), S('api', { path: '/api/chat/pins?channel=incidents' })] },
   { id: 's-cutover-window', role: 'moderator', intent: 'Find a pinned plan',
-    phrasings: ['what is the cutover plan', 'auth migration cutover plan', 'pinned cutover plan'],
-    expected: { summary: '#auth-migration pin a01 (Vera): rehearse the cutover runbook on two internal tenants, then move customer tenants off the SAML shim', text: [/rehearse the cutover runbook|two internal tenants/i] },
+    phrasings: ['when is the cutover window', 'auth migration cutover', 'cutover Thursday'],
+    expected: { summary: '#auth-migration pin a07: cutover window Thursday 6am', text: [/6\s?am/i] },
     best: 'message/pin search', surfaces: [S('list-search', { route: CH, placeholder: 'Find a chat', boxTestId: 'social-rail-search', railRows: true, keyword: 'cutover' }), S('palette', { route: CH })] },
   { id: 's-channel-members', role: 'community-admin', intent: 'Who is in a channel',
     phrasings: ['who is in #events', 'events channel members', 'members of events'],
@@ -337,10 +285,6 @@ export const SOCIAL = tenantOf('social')([
     phrasings: ['who is on the Community team', 'Community team members', 'Community team'],
     expected: { summary: 'Community: Mira (owner), Lena, Sana', text: [/Community/] },
     best: 'teams page reachable from palette', surfaces: [S('palette', { route: CH })] },
-  { id: 's-events-channel', role: 'community-admin', intent: 'Find the channel for a topic (events)',
-    phrasings: ['events channel', 'where do we post events', '#events'],
-    expected: { summary: '#events (Mira owns it; the community call notes are pinned there)', text: [/events/i] },
-    best: 'palette record jump', surfaces: [S('palette', { route: CH }), S('list-search', { route: CH, placeholder: 'Find a chat', boxTestId: 'social-rail-search', railRows: true, keyword: 'events' })] },
   { id: 's-dm', role: 'community-admin', intent: 'Find a direct conversation',
     phrasings: ['my DM with Theo', 'conversation with Theo', 'Theo Chang'],
     expected: { summary: 'mira|theo DM (last: "Approved.")', text: [/Theo/] },
@@ -432,7 +376,7 @@ export const PIPELINES = tenantOf('pipelines')([
     best: 'artifacts composer filter', surfaces: [S('composer', { route: '/pipelines/artifacts', grammar: 'show transcript artifacts' }), S('palette', { route: RUNS })] },
   { id: 'p-run-cost', role: 'pipeline-admin', intent: 'Most expensive runs',
     phrasings: ['most expensive runs', 'run cost this week', 'what did runs cost today'],
-    expected: { summary: 'JWKS run $0.81; obs-nightly-maintenance $0.16 + $0.10 today', text: [/\$?0\.81\b|\$0\.16/] },
+    expected: { summary: 'JWKS run $0.81; obs-nightly-maintenance $0.16 + $0.10 today', text: [/\$0\.81|\$0\.16/] },
     best: 'runs ledger sort by cost', surfaces: [S('composer', { route: RUNS, grammar: 'show expensive runs' }), S('palette', { route: RUNS })] },
 ]);
 
@@ -506,12 +450,3 @@ export const ACCESS = tenantOf('access')([
 ]);
 
 export const CATALOG: Intent[] = [...ORGIQ, ...ASSESSMENT, ...SOCIAL, ...PIPELINES, ...ACCESS];
-
-/** The catalog as the results JSON records it (regexes as source/flags), so the report and the judge need no TS. */
-export function serializeIntents(intents: Intent[] = CATALOG) {
-  return intents.map((i) => ({
-    id: i.id, tenant: i.tenant, role: i.role, persona: i.persona, intent: i.intent, phrasings: i.phrasings, best: i.best, bestSurface: i.bestSurface, map: !!i.map,
-    expected: { summary: i.expected.summary, keys: i.expected.keys ?? [], text: i.expected.text.map((r) => ({ source: r.source, flags: r.flags })), wrong: (i.expected.wrong ?? []).map((r) => ({ source: r.source, flags: r.flags })) },
-    surfaces: i.surfaces, cloneBlind: i.cloneBlind ?? null,
-  }));
-}

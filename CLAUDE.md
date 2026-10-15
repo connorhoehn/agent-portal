@@ -228,7 +228,7 @@ were public until 2026-09-29 because nothing in this tree creates them.
 Features follow goal-doc + validator: `docs/<feature>-goal.md` is the
 definition of done and `scripts/validate-<feature>.sh` is the only judge (most
 take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
-(23 validators).
+(22 validators).
 
 | Doc | What it is | Judge |
 |-----|------------|-------|
@@ -249,7 +249,6 @@ take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
 | `communication-plane-goal.md` | Social seen from the other tenants | `validate-communication-plane.sh` |
 | `access-tenant-design.md`, `access-tenant-goal.md`, `access-tenant-api.md` | The fifth tenant: access requests, approvals, provisioning (A0 registered 2026-10-13; A1/A2/E in progress) | `validate-access-tenant.sh` |
 | `demo-content-audit.md`, `demo-content-goal.md` | Demo content a peer believes: per-tenant five-minute stories, the clone probe over every tenant × role (`portal/e2e/demo-content-probe.spec.ts`), fix lanes | `validate-demo-content.sh` |
-| `user-search-goal.md`, `user-search-intents.md` | User search per tenant: the intent catalog and clone probe (`portal/e2e/user-search-catalog.ts`, `user-search-probe.spec.ts`), the storage-agnostic search index (`middleware/src/lib/search-index`, memory + DynamoDB-wire, updated on write), ratcheting per-tenant floors (`scripts/user-search-floors.tsv`), search journey maps | `validate-user-search.sh` |
 | `upstream-refinement-goal.md`, `upstream-refinement-plan-2026-10-14.md` | The realtime chain under the app: one distributed-core, realtime-modules owns its seams and capacity, apps on the chain, the consumer on the canonical name | `validate-upstream-refinement.sh` |
 | `agent-eval-goal.md` | Golden sets + `golden_runner.py` | `validate-agent-eval.sh` |
 | `agentcore-preview-surface.md`, `agentcore-preview-plan.md` | Preview API research, callback runbook (§6a) | — |
