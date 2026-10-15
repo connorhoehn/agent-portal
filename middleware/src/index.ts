@@ -61,6 +61,7 @@ import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
 import { harnessRouter } from './routes/harness.js';
 import { labRouter } from './routes/lab.js';
+import { todayRouter } from './routes/today.js';
 import { runbooksRouter } from './routes/runbooks.js';
 import { sessionBriefsRouter } from './routes/session-briefs.js';
 import { promptVersionsRouter } from './routes/prompt-versions.js';
@@ -395,6 +396,8 @@ app.use('/api/observability/harness', harnessRouter);
 // optional service auth INSIDE the router — no blanket session mount here,
 // same rule as approvals/harness above).
 app.use('/api/lab', labRouter);
+// The footer's Today strip: selectors over the rows the pages read (routes/today.ts).
+app.use('/api/today', todayRouter);
 // Runbooks (docs/distillation-runbooks-design.md): reads need a signed-in orgiq
 // user; proposals take a person OR a box's signed lab envelope; decisions are
 // ReviewRunbook + owner/initiative-SME scope. Per-route guards inside the router.

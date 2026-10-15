@@ -1,14 +1,33 @@
-/** Sample data and exact signed-context key; rendering/preferences belong to native ActivityTicker. */
+/**
+ * The footer's Today strip: what the BFF says about today (GET /api/today,
+ * middleware routes/today.ts) and the exact signed-context preferences key.
+ * Rendering and preferences belong to the native ActivityTicker. There are no
+ * sample figures here: each item is a selector over the rows the page behind
+ * it reads, so the strip cannot contradict the Budgets or Inbox page.
+ */
 export const TODAY_CATEGORIES = ['review', 'agenda', 'goals', 'automation', 'budget'] as const;
 export type TodayCategory = typeof TODAY_CATEGORIES[number];
+export interface TodayItem { category: TodayCategory; label: string; summary: string; detail: string }
+
 export function todayPreferencesKey(actor: string | null | undefined, tenant: string | null | undefined): string | null {
   const identity = actor?.trim(), workspace = tenant?.trim();
   return identity && workspace ? `footer-today.preferences.v1:${JSON.stringify([identity, workspace])}` : null;
 }
-export const TODAY_SAMPLES: ReadonlyArray<{ category: TodayCategory; label: string; summary: string; detail: string }> = [
-  { category: 'review', label: 'Needs review', summary: '2 agent drafts need your decision', detail: 'Sample: two proposed changes are ready for review. Check the work and its evidence before approving the next step.' },
-  { category: 'agenda', label: 'Agenda', summary: 'Project review at 2 PM · 3 work items', detail: 'Sample: a project review at 2 PM covers three work items. A connected agenda would open the meeting and its shared work.' },
-  { category: 'goals', label: 'Goals', summary: 'Weekly goal · 3 of 5 milestones complete', detail: 'Sample: three of five milestones are complete. The next milestone depends on reviewing the outstanding agent drafts.' },
-  { category: 'automation', label: 'Automation', summary: '8 agents · 3 finished · 2 need review · 3 planning', detail: 'Sample: eight agents have work in progress. Of three finished runs, two succeeded and one needs attention; two other runs await review and three are planning.' },
-  { category: 'budget', label: 'Budget', summary: 'Daily budget · 20% used ($829)', detail: 'Sample: $829 of a $4,145 daily budget has been used. No live budget is connected, and this preview cannot request or authorize additional spending.' },
-];
+
+/** The wire's items in the strip's priority order; anything malformed or of an unknown category is dropped. */
+export function todayItemsFromWire(body: unknown): TodayItem[] {
+  const raw = (body as { items?: unknown } | null)?.items;
+  if (!Array.isArray(raw)) return [];
+  const known = new Set<string>(TODAY_CATEGORIES);
+  const items = raw.filter((i): i is TodayItem => !!i && typeof i === 'object'
+    && known.has((i as TodayItem).category) && typeof (i as TodayItem).label === 'string'
+    && typeof (i as TodayItem).summary === 'string' && typeof (i as TodayItem).detail === 'string');
+  return TODAY_CATEGORIES.flatMap((c) => items.filter((i) => i.category === c));
+}
+
+/** The categories the settings list offers: only those that have an item. */
+export function todayCategories(items: readonly TodayItem[]): Array<{ id: TodayCategory; label: string }> {
+  const seen = new Map<TodayCategory, string>();
+  for (const item of items) if (!seen.has(item.category)) seen.set(item.category, item.label);
+  return [...seen].map(([id, label]) => ({ id, label }));
+}

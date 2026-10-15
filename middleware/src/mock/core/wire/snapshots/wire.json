@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-15T03:27:26.740Z",
-  "serverHandlerSha": "09375a3c55e15f7b2413b897adadaa8c048460046cb532dc56dfbe51ec7fbe99",
+  "capturedAt": "2026-10-15T04:36:26.118Z",
+  "serverHandlerSha": "0ead12db6093162d97dd882f3148ba9e942a80dfea952020a80b2ceff222aba5",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -461,7 +461,7 @@
         "steps[].eligible[].displayName": "string",
         "steps[].eligible[].id": "string",
         "steps[].eligible[].personId": "string",
-        "steps[].escalated": "null|string",
+        "steps[].escalated": "null",
         "steps[].escalatedAt": "null",
         "steps[].escalatesAt": "null|string",
         "steps[].escalationLevel": "number",
@@ -4337,7 +4337,7 @@
         "$[].assigneeDept": "string",
         "$[].assigneeId": "string",
         "$[].assigneeName": "string",
-        "$[].blockedReason": "null",
+        "$[].blockedReason": "null|string",
         "$[].childCount": "number",
         "$[].childDoneCount": "number",
         "$[].completedAt": "null|string",
@@ -4356,8 +4356,8 @@
         "$[].key": "string",
         "$[].labels": "array",
         "$[].labels[]": "string",
-        "$[].nextStep": "null",
-        "$[].nextStepDetail": "null",
+        "$[].nextStep": "null|string",
+        "$[].nextStepDetail": "null|string",
         "$[].parentId": "null|string",
         "$[].prStatus": "null|string",
         "$[].prUrl": "null|string",
@@ -4377,6 +4377,7 @@
           "ORG-AUTH-1",
           "ORG-AUTH-2",
           "ORG-AUTH-5",
+          "ORG-AUTH-8",
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
@@ -4390,7 +4391,6 @@
           "ORG-INF-1",
           "ORG-INF-2",
           "ORG-INF-3",
-          "ORG-INF-4",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -10103,6 +10103,26 @@
       },
       "values": {}
     },
+    "GET /api/today": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].category": "string",
+        "items[].detail": "string",
+        "items[].label": "string",
+        "items[].summary": "string"
+      },
+      "values": {
+        "items[].category": [
+          "automation",
+          "budget",
+          "review"
+        ]
+      }
+    },
     "GET /api/topology/a2a": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -10688,6 +10708,14 @@
         "ViewPipelines",
         "ViewSessionBrief",
         "ViewSocial"
+      ]
+    },
+    "category": {
+      "open": false,
+      "values": [
+        "automation",
+        "budget",
+        "review"
       ]
     },
     "classification": {

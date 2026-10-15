@@ -1,5 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 
+// What GET /api/today answers in this inert fixture: one item per category, so
+// rotation, priority and the settings checkboxes have five to work with.
+const TODAY = [
+  { category: 'review', label: 'Needs review', summary: '1 agent question waiting for an answer', detail: 'Auth Migration: which customer tenant goes first after the rehearsals?' },
+  { category: 'agenda', label: 'Agenda', summary: 'Initiative review at 2 PM', detail: 'The review covers the cutover order.' },
+  { category: 'goals', label: 'Goals', summary: 'Sprint 42 · 3 of 5 stories done', detail: 'Session hardening is the next story.' },
+  { category: 'automation', label: 'Automation', summary: '8 agent computers · 3 running · 1 waiting', detail: '3 computers working, 1 waiting for a person and 4 idle.' },
+  { category: 'budget', label: 'Budget', summary: '$10.22 of $431.00 spent this month (2%)', detail: 'Agent spend this month across every initiative.' },
+];
 async function mount(page: Page, query = '') {
   const errors: string[] = [], mutations: string[] = [];
   let identity = { sub: 'fixture-reader', name: 'Fixture Reviewer', tenant: 'orgiq', role: 'member', grants: {}, switchable: {}, availableRoles: ['member'], masquerading: null };
@@ -15,6 +24,7 @@ async function mount(page: Page, query = '') {
     if (request.method() !== 'GET') mutations.push(path);
     if (path === '/api/session/me') return route.fulfill({ json: identity });
     if (path === '/api/auth/config') return route.fulfill({ json: { ssoEnabled: false } });
+    if (path === '/api/today') return route.fulfill({ json: { items: TODAY } });
     return route.fulfill({ status: 503, json: { error: 'The inert fixture denies all unmocked APIs.' } });
   });
   await page.route('**/__footer-today*', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body><div id="root"></div><script type="module">import RefreshRuntime from "/@react-refresh"; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$=()=>{}; window.$RefreshSig$=()=>type=>type; window.__vite_plugin_react_preamble_installed__=true;</script><script type="module" src="/e2e/fixtures/footer-today.tsx"></script></body></html>' }));
@@ -27,23 +37,23 @@ async function mount(page: Page, query = '') {
     await expect(page.getByTestId('today-identity')).toContainText(`"sub":"${sub}","tenant":"${tenant}"`);
   } };
 }
-const summary = (page: Page) => page.getByRole('button', { name: /^Demo today:/ });
-async function controls(page: Page) { await summary(page).focus(); await page.keyboard.press('ArrowUp'); await expect(page.getByRole('toolbar', { name: 'Sample Today controls' })).toBeVisible(); }
-async function settings(page: Page) { await controls(page); await page.getByRole('button', { name: 'Sample Today settings', exact: true }).click(); await expect(page.getByRole('dialog', { name: 'Sample Today settings', exact: true })).toBeVisible(); }
+const summary = (page: Page) => page.getByRole('button', { name: /^Today:/ });
+async function controls(page: Page) { await summary(page).focus(); await page.keyboard.press('ArrowUp'); await expect(page.getByRole('toolbar', { name: 'Today controls' })).toBeVisible(); }
+async function settings(page: Page) { await controls(page); await page.getByRole('button', { name: 'Today settings', exact: true }).click(); await expect(page.getByRole('dialog', { name: 'Today settings', exact: true })).toBeVisible(); }
 async function unfocus(page: Page) { await page.getByRole('button', { name: 'Outside focus target' }).focus(); await page.mouse.move(5, 5); await page.clock.runFor(200); }
 
-test('demo is visible in spare footer space with native floating icons, anchored details and safe navigation', async ({ page }) => {
+test('today is visible in spare footer space with native floating icons, anchored details and safe navigation', async ({ page }) => {
   const fixture = await mount(page);
-  await expect(summary(page)).toContainText('Demo'); await expect(summary(page)).toContainText('Needs review');
-  await expect(page.getByRole('toolbar', { name: 'Sample Today controls' })).toHaveCount(0);
+  await expect(summary(page)).not.toContainText('Demo'); await expect(summary(page)).toContainText('Needs review');
+  await expect(page.getByRole('toolbar', { name: 'Today controls' })).toHaveCount(0);
   await controls(page);
-  const toolbar = page.getByRole('toolbar', { name: 'Sample Today controls' });
+  const toolbar = page.getByRole('toolbar', { name: 'Today controls' });
   await expect(toolbar.getByRole('button')).toHaveCount(6);
   for (const button of await toolbar.getByRole('button').all()) { await expect(button.locator('svg')).toHaveCount(1); await expect(button).toHaveText(''); }
   const toolsBox = (await toolbar.boundingBox())!;
   expect(toolsBox.y + toolsBox.height).toBeLessThanOrEqual((await summary(page).boundingBox())!.y + 1);
-  await summary(page).click(); const detail = page.getByRole('dialog', { name: 'Sample Today details' });
-  await expect(detail).toContainText('No live activity is connected'); await expect(detail).toContainText('Sample:');
+  await summary(page).click(); const detail = page.getByRole('dialog', { name: 'Today details' });
+  await expect(detail).toContainText(TODAY[0]!.detail); await expect(detail).not.toContainText('Sample');
   expect((await detail.boundingBox())!.y + (await detail.boundingBox())!.height).toBeLessThan((await summary(page).boundingBox())!.y);
   await page.screenshot({ path: test.info().outputPath('today-demo-details.png') });
   await detail.getByRole('button', { name: 'Open workspace' }).click(); await expect(page.getByTestId('today-location')).toHaveText('/iq/projects');
@@ -58,31 +68,31 @@ test('rotation respects speed, hover and keyboard focus, pause, open settings an
   await expect(page.getByRole('button', { name: 'Rotation speed: fast' })).toBeVisible();
   await page.clock.runFor(12000); await expect(summary(page)).toHaveAccessibleName(/Agenda/);
   await unfocus(page); await page.clock.runFor(6000); await expect(summary(page)).toHaveAccessibleName(/Goals/);
-  await controls(page); await page.getByRole('button', { name: 'Pause sample rotation' }).click(); await unfocus(page);
+  await controls(page); await page.getByRole('button', { name: 'Pause rotation' }).click(); await unfocus(page);
   await page.clock.runFor(18000); await expect(summary(page)).toHaveAccessibleName(/Goals/);
-  await controls(page); await page.getByRole('button', { name: 'Resume sample rotation' }).click();
+  await controls(page); await page.getByRole('button', { name: 'Resume rotation' }).click();
   await settings(page); await page.clock.runFor(24000); await expect(summary(page)).toHaveAccessibleName(/Goals/);
-  const panel = page.getByRole('dialog', { name: 'Sample Today settings', exact: true });
+  const panel = page.getByRole('dialog', { name: 'Today settings', exact: true });
   for (const name of ['Needs review', 'Agenda', 'Goals', 'Automation']) await panel.getByRole('checkbox', { name, exact: true }).uncheck();
   await expect(summary(page)).toHaveAccessibleName(/Budget/);
   await panel.getByRole('checkbox', { name: 'Agenda', exact: true }).check(); await expect(summary(page)).toHaveAccessibleName(/Agenda/);
   await panel.getByRole('checkbox', { name: 'Quiet rotation · manual only' }).check();
   await panel.getByRole('button', { name: 'Close Today panel' }).click(); await unfocus(page); await page.clock.runFor(24000);
-  await expect(summary(page)).toHaveAccessibleName(/Agenda/); await controls(page); await page.getByRole('button', { name: 'Next sample' }).click(); await expect(summary(page)).toHaveAccessibleName(/Budget/);
+  await expect(summary(page)).toHaveAccessibleName(/Agenda/); await controls(page); await page.getByRole('button', { name: 'Next item' }).click(); await expect(summary(page)).toHaveAccessibleName(/Budget/);
   expect(fixture.errors).toEqual([]); expect(fixture.mutations).toEqual([]);
 });
 
 test('hide, restore, dim and settings persist only for the exact signed identity and workspace', async ({ page }) => {
   const fixture = await mount(page); await controls(page);
-  await page.getByRole('button', { name: 'Dim sample Today strip' }).click(); await expect(summary(page)).toHaveAttribute('data-dimmed', 'true');
+  await page.getByRole('button', { name: 'Dim Today strip' }).click(); await expect(summary(page)).toHaveAttribute('data-dimmed', 'true');
   expect(await summary(page).evaluate(element => Number(getComputedStyle(element).opacity))).toBe(.8);
-  await page.getByRole('button', { name: 'Hide sample Today strip' }).click(); await expect(summary(page)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Restore sample Today strip' })).toBeFocused();
-  await page.reload(); await expect(page.getByRole('button', { name: 'Restore sample Today strip' })).toBeVisible();
+  await page.getByRole('button', { name: 'Hide Today strip' }).click(); await expect(summary(page)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Restore Today strip' })).toBeFocused();
+  await page.reload(); await expect(page.getByRole('button', { name: 'Restore Today strip' })).toBeVisible();
   await fixture.identity('other-reader', 'orgiq'); await expect(summary(page)).toBeVisible(); await expect(summary(page)).not.toHaveAttribute('data-dimmed', 'true');
   await fixture.identity('fixture-reader', 'assessment'); await expect(summary(page)).toBeVisible();
-  await fixture.identity('fixture-reader', 'orgiq'); await expect(page.getByRole('button', { name: 'Restore sample Today strip' })).toBeVisible();
-  await page.getByRole('button', { name: 'Restore sample Today strip' }).click(); await expect(summary(page)).toBeFocused(); await expect(summary(page)).toHaveAttribute('data-dimmed', 'true');
+  await fixture.identity('fixture-reader', 'orgiq'); await expect(page.getByRole('button', { name: 'Restore Today strip' })).toBeVisible();
+  await page.getByRole('button', { name: 'Restore Today strip' }).click(); await expect(summary(page)).toBeFocused(); await expect(summary(page)).toHaveAttribute('data-dimmed', 'true');
   await settings(page); await expect(page.getByRole('dialog')).toContainText('Saved for your identity in this workspace');
   expect(fixture.errors).toEqual([]); expect(fixture.mutations).toEqual([]);
 });
@@ -90,14 +100,14 @@ test('hide, restore, dim and settings persist only for the exact signed identity
 test('reduced motion stays manual and an empty category selection has a clear recoverable state', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' }); await page.clock.install(); const fixture = await mount(page);
   await page.clock.runFor(60000); await expect(summary(page)).toHaveAccessibleName(/Needs review/);
-  await settings(page); const panel = page.getByRole('dialog', { name: 'Sample Today settings', exact: true });
+  await settings(page); const panel = page.getByRole('dialog', { name: 'Today settings', exact: true });
   await expect(panel).toContainText('Reduced motion is on');
   for (const name of ['Needs review', 'Agenda', 'Goals', 'Automation', 'Budget']) await panel.getByRole('checkbox', { name, exact: true }).uncheck();
-  await expect(summary(page)).toHaveAccessibleName(/no sample categories selected/);
-  await expect(page.getByRole('button', { name: 'Next sample' })).toBeDisabled();
+  await expect(summary(page)).toHaveAccessibleName(/Today: no categories selected/);
+  await expect(page.getByRole('button', { name: 'Next item' })).toBeDisabled();
   await panel.getByRole('checkbox', { name: 'Goals', exact: true }).check(); await expect(summary(page)).toHaveAccessibleName(/Goals/);
   await panel.getByRole('checkbox', { name: 'Agenda', exact: true }).check(); await expect(summary(page)).toHaveAccessibleName(/Agenda/);
-  await panel.getByRole('button', { name: 'Close Today panel' }).click(); await page.getByRole('button', { name: 'Next sample' }).click(); await expect(summary(page)).toHaveAccessibleName(/Goals/);
+  await panel.getByRole('button', { name: 'Close Today panel' }).click(); await page.getByRole('button', { name: 'Next item' }).click(); await expect(summary(page)).toHaveAccessibleName(/Goals/);
   expect(fixture.errors).toEqual([]); expect(fixture.mutations).toEqual([]);
 });
 

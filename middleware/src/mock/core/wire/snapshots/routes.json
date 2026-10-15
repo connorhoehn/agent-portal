@@ -68,127 +68,127 @@
     {
       "method": "GET",
       "path": "/api/access/approvals",
-      "source": "src/routes/access.ts:315"
+      "source": "src/routes/access.ts:320"
     },
     {
       "method": "GET",
       "path": "/api/access/audit",
-      "source": "src/routes/access.ts:329"
+      "source": "src/routes/access.ts:334"
     },
     {
       "method": "GET",
       "path": "/api/access/beneficiaries",
-      "source": "src/routes/access.ts:657"
+      "source": "src/routes/access.ts:662"
     },
     {
       "method": "GET",
       "path": "/api/access/catalog",
-      "source": "src/routes/access.ts:265"
+      "source": "src/routes/access.ts:270"
     },
     {
       "method": "GET",
-      "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:923"
-    },
-    {
-      "method": "PUT",
       "path": "/api/access/configuration",
       "source": "src/routes/access.ts:928"
     },
     {
+      "method": "PUT",
+      "path": "/api/access/configuration",
+      "source": "src/routes/access.ts:933"
+    },
+    {
       "method": "GET",
       "path": "/api/access/delegates",
-      "source": "src/routes/access.ts:839"
+      "source": "src/routes/access.ts:844"
     },
     {
       "method": "GET",
       "path": "/api/access/delegations",
-      "source": "src/routes/access.ts:826"
+      "source": "src/routes/access.ts:831"
     },
     {
       "method": "POST",
       "path": "/api/access/delegations",
-      "source": "src/routes/access.ts:849"
+      "source": "src/routes/access.ts:854"
     },
     {
       "method": "POST",
       "path": "/api/access/delegations/:id/end",
-      "source": "src/routes/access.ts:880"
+      "source": "src/routes/access.ts:885"
     },
     {
       "method": "GET",
       "path": "/api/access/policies",
-      "source": "src/routes/access.ts:323"
+      "source": "src/routes/access.ts:328"
     },
     {
       "method": "PUT",
       "path": "/api/access/policies/:id",
-      "source": "src/routes/access.ts:956"
+      "source": "src/routes/access.ts:961"
     },
     {
       "method": "GET",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:281"
+      "source": "src/routes/access.ts:286"
     },
     {
       "method": "POST",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:672"
+      "source": "src/routes/access.ts:677"
     },
     {
       "method": "GET",
       "path": "/api/access/requests/:id",
-      "source": "src/routes/access.ts:305"
+      "source": "src/routes/access.ts:310"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/revoke",
-      "source": "src/routes/access.ts:789"
+      "source": "src/routes/access.ts:794"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/sod-override",
-      "source": "src/routes/access.ts:763"
+      "source": "src/routes/access.ts:768"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/steps/:step/decide",
-      "source": "src/routes/access.ts:702"
+      "source": "src/routes/access.ts:707"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/withdraw",
-      "source": "src/routes/access.ts:679"
+      "source": "src/routes/access.ts:684"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/preview",
-      "source": "src/routes/access.ts:614"
+      "source": "src/routes/access.ts:619"
     },
     {
       "method": "GET",
       "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:409"
+      "source": "src/routes/access.ts:414"
     },
     {
       "method": "POST",
       "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:430"
+      "source": "src/routes/access.ts:435"
     },
     {
       "method": "GET",
       "path": "/api/access/reviews/:id",
-      "source": "src/routes/access.ts:419"
+      "source": "src/routes/access.ts:424"
     },
     {
       "method": "POST",
       "path": "/api/access/reviews/:id/items/:itemId/decide",
-      "source": "src/routes/access.ts:482"
+      "source": "src/routes/access.ts:487"
     },
     {
       "method": "GET",
       "path": "/api/access/summary",
-      "source": "src/routes/access.ts:249"
+      "source": "src/routes/access.ts:254"
     },
     {
       "method": "GET",
@@ -2058,7 +2058,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:178"
+      "source": "src/index.ts:179"
     },
     {
       "method": "GET",
@@ -3078,12 +3078,12 @@
     {
       "method": "GET",
       "path": "/api/people/conversations",
-      "source": "src/routes/people.ts:66"
+      "source": "src/routes/people.ts:67"
     },
     {
       "method": "GET",
       "path": "/api/people/shared",
-      "source": "src/routes/people.ts:32"
+      "source": "src/routes/people.ts:33"
     },
     {
       "method": "GET",
@@ -3598,62 +3598,62 @@
     {
       "method": "DELETE",
       "path": "/api/social/bindings",
-      "source": "src/routes/social.ts:665"
+      "source": "src/routes/social.ts:667"
     },
     {
       "method": "GET",
       "path": "/api/social/bindings",
-      "source": "src/routes/social.ts:642"
+      "source": "src/routes/social.ts:644"
     },
     {
       "method": "PUT",
       "path": "/api/social/bindings",
-      "source": "src/routes/social.ts:647"
+      "source": "src/routes/social.ts:649"
     },
     {
       "method": "GET",
       "path": "/api/social/calls",
-      "source": "src/routes/social.ts:479"
+      "source": "src/routes/social.ts:481"
     },
     {
       "method": "GET",
       "path": "/api/social/channels",
-      "source": "src/routes/social.ts:215"
+      "source": "src/routes/social.ts:217"
     },
     {
       "method": "POST",
       "path": "/api/social/channels",
-      "source": "src/routes/social.ts:227"
+      "source": "src/routes/social.ts:229"
     },
     {
       "method": "GET",
       "path": "/api/social/channels/:slug",
-      "source": "src/routes/social.ts:252"
+      "source": "src/routes/social.ts:254"
     },
     {
       "method": "POST",
       "path": "/api/social/channels/:slug/join",
-      "source": "src/routes/social.ts:274"
+      "source": "src/routes/social.ts:276"
     },
     {
       "method": "POST",
       "path": "/api/social/channels/:slug/leave",
-      "source": "src/routes/social.ts:294"
+      "source": "src/routes/social.ts:296"
     },
     {
       "method": "GET",
       "path": "/api/social/conversations/:id/shared-work",
-      "source": "src/routes/social.ts:492"
+      "source": "src/routes/social.ts:494"
     },
     {
       "method": "GET",
       "path": "/api/social/dms",
-      "source": "src/routes/social.ts:340"
+      "source": "src/routes/social.ts:342"
     },
     {
       "method": "POST",
       "path": "/api/social/dms",
-      "source": "src/routes/social.ts:675"
+      "source": "src/routes/social.ts:677"
     },
     {
       "method": "GET",
@@ -3663,17 +3663,17 @@
     {
       "method": "POST",
       "path": "/api/social/dms/read",
-      "source": "src/routes/social.ts:354"
+      "source": "src/routes/social.ts:356"
     },
     {
       "method": "GET",
       "path": "/api/social/embedded",
-      "source": "src/routes/social.ts:530"
+      "source": "src/routes/social.ts:532"
     },
     {
       "method": "GET",
       "path": "/api/social/people",
-      "source": "src/routes/social.ts:373"
+      "source": "src/routes/social.ts:375"
     },
     {
       "method": "GET",
@@ -3813,77 +3813,77 @@
     {
       "method": "GET",
       "path": "/api/social/recordings",
-      "source": "src/routes/social.ts:455"
+      "source": "src/routes/social.ts:457"
     },
     {
       "method": "DELETE",
       "path": "/api/social/recordings/:recordingId",
-      "source": "src/routes/social.ts:473"
+      "source": "src/routes/social.ts:475"
     },
     {
       "method": "GET",
       "path": "/api/social/recordings/:recordingId/playback",
-      "source": "src/routes/social.ts:460"
+      "source": "src/routes/social.ts:462"
     },
     {
       "method": "POST",
       "path": "/api/social/recordings/:recordingId/share",
-      "source": "src/routes/social.ts:469"
+      "source": "src/routes/social.ts:471"
     },
     {
       "method": "GET",
       "path": "/api/social/recordings/:recordingId/transcript",
-      "source": "src/routes/social.ts:464"
+      "source": "src/routes/social.ts:466"
     },
     {
       "method": "GET",
       "path": "/api/social/rooms",
-      "source": "src/routes/social.ts:390"
+      "source": "src/routes/social.ts:392"
     },
     {
       "method": "POST",
       "path": "/api/social/rooms",
-      "source": "src/routes/social.ts:396"
+      "source": "src/routes/social.ts:398"
     },
     {
       "method": "GET",
       "path": "/api/social/share-destinations",
-      "source": "src/routes/social.ts:576"
+      "source": "src/routes/social.ts:578"
     },
     {
       "method": "GET",
       "path": "/api/social/summary",
-      "source": "src/routes/social.ts:128"
+      "source": "src/routes/social.ts:129"
     },
     {
       "method": "GET",
       "path": "/api/social/teams",
-      "source": "src/routes/social.ts:403"
+      "source": "src/routes/social.ts:405"
     },
     {
       "method": "POST",
       "path": "/api/social/teams",
-      "source": "src/routes/social.ts:408"
+      "source": "src/routes/social.ts:410"
     },
     {
       "method": "GET",
       "path": "/api/social/teams/:teamId",
-      "source": "src/routes/social.ts:418"
+      "source": "src/routes/social.ts:420"
     },
     {
       "method": "PATCH",
       "path": "/api/social/teams/:teamId/me",
-      "source": "src/routes/social.ts:428"
+      "source": "src/routes/social.ts:430"
     },
     {
       "method": "POST",
       "path": "/api/social/teams/:teamId/members",
-      "source": "src/routes/social.ts:439"
+      "source": "src/routes/social.ts:441"
     },
     {
       "method": "DELETE",
       "path": "/api/social/teams/:teamId/members/:userId",
-      "source": "src/routes/social.ts:449"
+      "source": "src/routes/social.ts:451"
     },
     {
       "method": "GET",
@@ -3919,6 +3919,11 @@
       "method": "GET",
       "path": "/api/sprints/envelopes",
       "source": "src/routes/sprints.ts:195"
+    },
+    {
+      "method": "GET",
+      "path": "/api/today",
+      "source": "src/routes/today.ts:85"
     },
     {
       "method": "GET",
@@ -4053,7 +4058,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:177"
+      "source": "src/index.ts:178"
     },
     {
       "method": "DELETE",

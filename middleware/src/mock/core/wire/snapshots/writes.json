@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-15T03:27:29.085Z",
-  "serverHandlerSha": "09375a3c55e15f7b2413b897adadaa8c048460046cb532dc56dfbe51ec7fbe99",
+  "capturedAt": "2026-10-15T04:36:27.603Z",
+  "serverHandlerSha": "0ead12db6093162d97dd882f3148ba9e942a80dfea952020a80b2ceff222aba5",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -882,7 +882,7 @@
         "steps[].eligible[].displayName": "string",
         "steps[].eligible[].id": "string",
         "steps[].eligible[].personId": "string",
-        "steps[].escalated": "string",
+        "steps[].escalated": "null",
         "steps[].escalatedAt": "null",
         "steps[].escalatesAt": "string",
         "steps[].escalationLevel": "number",
@@ -1008,7 +1008,7 @@
         "steps[].eligible[].displayName": "string",
         "steps[].eligible[].id": "string",
         "steps[].eligible[].personId": "string",
-        "steps[].escalated": "string",
+        "steps[].escalated": "null",
         "steps[].escalatedAt": "null",
         "steps[].escalatesAt": "string",
         "steps[].escalationLevel": "number",
@@ -1131,7 +1131,7 @@
         "steps[].eligible[].displayName": "string",
         "steps[].eligible[].id": "string",
         "steps[].eligible[].personId": "string",
-        "steps[].escalated": "string",
+        "steps[].escalated": "null",
         "steps[].kind": "string",
         "steps[].step": "number"
       },
