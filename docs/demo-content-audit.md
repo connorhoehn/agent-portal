@@ -360,7 +360,7 @@ calling the goal done.
 
 ## L0 outcome (2026-10-15)
 
-L0 landed in six commits on main (`b9a4471e`…`93b8e0af`). What every other
+L0 landed in nine commits on main (`b9a4471e`…`961af6f1`). What every other
 lane now writes against:
 
 ### The cast
