@@ -183,7 +183,6 @@ function WhereToStart({ onSelectTeam, teamId }: { onSelectTeam: (id: string) => 
           key: 'name', header: 'Team',
           render: (g) => <T size="sm" weight="medium">{g.name}</T>,
         },
-        { key: 'id', header: 'ID', render: (g) => <T size="xs" tone="tertiary">{g.id}</T> },
         { key: 'kind', header: 'Start by', render: (g) => <Chip tone={KIND_TONE[g.top!.kind]} size="xs" dot="static">{RECOMMENDATION_KIND_LABEL[g.top!.kind]}</Chip> },
         { key: 'dimension', header: 'Dimension', render: (g) => <T size="sm" title={`dim ${g.top!.dimension_id}`}>{g.top!.title}</T> },
         { key: 'what', header: 'What it takes', render: (g) => { const w = g.top!.headline ?? g.top!.summary ?? '—'; return <T size="sm" title={w}>{w.length > 80 ? `${w.slice(0, 80)}…` : w}</T>; } },

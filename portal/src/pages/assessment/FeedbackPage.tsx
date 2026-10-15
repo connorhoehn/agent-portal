@@ -114,7 +114,7 @@ function QuestionRecord({
       <DetailHeader
         title={dimensionLabel(task, dim)}
         badge={<StatusPill size="sm" state={STATUS_PILL[task.status].state} label={STATUS_PILL[task.status].label} />}
-        description={`${teamName}${task.team_id ? ` · ${task.team_id}` : ''}`}
+        description={teamName}
       />
         <Stack gap="md">
           {dim && (
@@ -368,7 +368,6 @@ export default function FeedbackPage() {
               key: 'team_id', header: 'Team', sortable: true,
               render: (t) => <T size="sm" weight="medium">{teamNameOf(t)}</T>,
             },
-            { key: 'id', header: 'ID', render: (t) => <T size="xs" tone="tertiary">{t.team_id ?? '—'}</T> },
             { key: 'dimension_id', header: 'Dimension', sortable: true, render: (t) => <T size="sm">{dimensionLabel(t, dimOf(t))}</T> },
             {
               key: 'kind', header: 'Kind', sortable: true,

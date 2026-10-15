@@ -131,7 +131,7 @@ export default function PreviewStep({ parse, onCommitted, onBack }: PreviewStepP
             header: 'Team',
             render: (row) =>
               row.team_id ? (
-                <Chip tone="neutral">{row.team_id}</Chip>
+                <Chip tone="neutral">{teamOptions.find((t) => t.id === row.team_id)?.name ?? row.team_id}</Chip>
               ) : (
                 <Select
                   size="sm"
@@ -144,7 +144,7 @@ export default function PreviewStep({ parse, onCommitted, onBack }: PreviewStepP
                       setSelected((prev) => { const next = new Set(prev); next.delete(row.row_index); return next; });
                     }
                   }}
-                  options={teamOptions.map((t) => ({ value: t.id, label: `${t.name} (${t.id})` }))}
+                  options={teamOptions.map((t) => ({ value: t.id, label: t.name }))}
                   disabled={!canManage}
                 />
               ),

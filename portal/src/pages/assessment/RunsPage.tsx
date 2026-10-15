@@ -87,7 +87,7 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       const outcome = launchResponseMessage(res.status, body.error);
       if (outcome.ok) {
-        toastSuccess(null, 'Run started', `${command} for ${teamId}.`);
+        toastSuccess(null, 'Run started', `${command} for ${teams.find((t) => t.id === teamId)?.name ?? 'the team'}.`);
         setPreparing(null);
         onLaunched();
       } else {
@@ -109,7 +109,7 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
           placeholder="Choose a team…"
           value={teamId}
           onChange={(e) => setTeamId(e.target.value)}
-          options={teams.map((t) => ({ value: t.id, label: `${t.name} (${t.id})` }))}
+          options={teams.map((t) => ({ value: t.id, label: t.name }))}
         />
       </Inline>
       {commands.length === 0 ? (
@@ -179,6 +179,7 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
 }
 
 export default function RunsPage() {
+  const { teams } = useTeams();
   const { can, ready } = useCapabilities();
   const canStop = ready && can('RunAssessmentAgent');
 
@@ -232,7 +233,7 @@ export default function RunsPage() {
     }
   }
 
-  useCrumbLabel(detailId ?? undefined, detail ? `${detail.command} · ${detail.team_id ?? 'no team'}` : null);
+  useCrumbLabel(detailId ?? undefined, detail ? `${detail.command} · ${detail.team_id ? teams.find((t) => t.id === detail.team_id)?.name ?? detail.team_id : 'no team'}` : null);
   if (detailId) {
     const statuses = [...new Set(runs.map((r) => r.status))];
     return (
@@ -353,7 +354,7 @@ export default function RunsPage() {
               render: (r) => <T size="sm" tabular>{r.id}</T>,
             },
             { key: 'command', header: 'Command', render: (r) => r.command },
-            { key: 'team', header: 'Team', render: (r) => r.team_id ?? '—' },
+            { key: 'team', header: 'Team', render: (r) => (r.team_id ? teams.find((t) => t.id === r.team_id)?.name ?? r.team_id : '—') },
             {
               key: 'status',
               header: 'Status',

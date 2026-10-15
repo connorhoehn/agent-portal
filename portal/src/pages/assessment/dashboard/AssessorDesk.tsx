@@ -185,7 +185,6 @@ export function AssessorDesk({
             // own now (tabIndex + Enter/Space), so the name cell is plain text.
             render: (t) => <T size="sm" weight="medium">{t.name}</T>,
           },
-          { key: 'id', header: 'ID', sortable: true, render: (t) => <T size="xs" tone="tertiary">{t.id}</T> },
           {
             key: 'lead',
             header: 'Lead',

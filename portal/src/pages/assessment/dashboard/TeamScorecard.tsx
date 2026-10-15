@@ -29,6 +29,7 @@
 // one input; on the other tabs a team composer is docked at the bottom of the
 // content column instead.
 
+import { useCrumbLabel } from '../../../lib/crumbLabels';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { SidePane, useSidePane } from '@connorhoehnslalom/ui-components';
@@ -151,6 +152,8 @@ export function TeamScorecard({ teamId, tab, onTabChange, revealDiscussion = fal
     setVisited((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
   }, [tab]);
 
+  // The trail reads the team, not TEAM-001 (before the early returns: a hook).
+  useCrumbLabel(teamId, data?.team.name ?? null);
   if (isLoading) return <LoadingState label="Loading certification…" />;
   // A 404 is a wrong id (typed, stale link, deleted team) — say so and offer
   // the way back, rather than the outage copy a real failure gets below.

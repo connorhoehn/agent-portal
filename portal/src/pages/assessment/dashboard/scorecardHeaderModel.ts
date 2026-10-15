@@ -41,6 +41,8 @@ export interface HeaderFactsInput {
   dimensions_total: number;
   followups_open: number;
   workflow_step_label: string;
+  /** The lead assessor's name (a name, never a person id — types.ts). */
+  assessment_lead?: string | null;
 }
 
 export interface HeaderFact {
@@ -98,6 +100,9 @@ export function scorecardFacts(team: HeaderFactsInput, activeStepLabel?: string 
       progress: null,
     },
     { label: 'workflow step', value: step, tone: 'default', title: `Workflow step: ${step}`, progress: null },
+    ...(team.assessment_lead?.trim()
+      ? [{ label: 'lead assessor', value: team.assessment_lead.trim(), tone: 'default' as const, title: `Assessed by ${team.assessment_lead.trim()}`, progress: null }]
+      : []),
   ];
 }
 

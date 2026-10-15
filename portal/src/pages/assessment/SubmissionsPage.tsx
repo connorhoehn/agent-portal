@@ -152,7 +152,7 @@ function SubmissionRecord({ group, canManage, onDelete }: {
       <DetailHeader
         title={group.teamName}
         badge={<StatusPill state={group.processed ? 'success' : 'warning'} label={group.processed ? 'Processed' : 'Unprocessed'} size="sm" />}
-        description={`${group.teamId} · ${group.formId ? `Form #${group.formId}` : 'Manual submission'}`}
+        description={`${group.formId ? `Form #${group.formId}` : 'Manual submission'}`}
         {...(canManage ? {
           aside: (
             <Button variant="danger" size="sm" onClick={onDelete}>
@@ -165,7 +165,7 @@ function SubmissionRecord({ group, canManage, onDelete }: {
       <DetailSection title="Submission" variant="heading" first>
         <KeyValue
           items={[
-            { label: 'Team', value: group.teamId, mono: true },
+            { label: 'Team', value: group.teamName },
             { label: 'Submitted as', value: group.submittedTeamName ?? group.teamName, muted: !group.submittedTeamName },
             { label: 'Submitter', value: group.current.submitter_name || 'Not recorded', muted: !group.current.submitter_name },
             // The export's own "Completion time" string, verbatim (see the list's Received column).
@@ -232,7 +232,7 @@ export default function SubmissionsPage() {
   );
   const open = findGroup(groups, submissionId);
   // The trail's record crumb reads the team, not the envelope id.
-  useCrumbLabel(submissionId, open ? `${open.teamId} · ${open.teamName}` : null);
+  useCrumbLabel(submissionId, open ? open.teamName : null);
   // The strip's numbers are derived from the grouped rows — the listing sends
   // no summary block, and reading one that wasn't there hid the strip entirely.
   const summary = useMemo(() => ({
@@ -355,7 +355,7 @@ export default function SubmissionsPage() {
           rows={search.rows.map((g) => ({
             id: g.key,
             groupId: g.processed ? 'processed' : 'unprocessed',
-            title: `${g.teamId} · ${g.teamName}`,
+            title: g.teamName,
             subline: `${g.formId ? `Form #${g.formId}` : 'Manual submission'} · ${revisionLabel(g.current.envelope_id)}`,
           }))}
           currentId={open?.key ?? null}
@@ -496,7 +496,7 @@ export default function SubmissionsPage() {
                   ),
                 }]
               : []),
-            { key: 'team', header: 'Team', render: (g) => <T size="sm" weight="medium">{g.teamId}</T> },
+            { key: 'team', header: 'Team', render: (g) => <T size="sm" weight="medium">{g.teamName}</T> },
             {
               key: 'name',
               header: 'Team name',

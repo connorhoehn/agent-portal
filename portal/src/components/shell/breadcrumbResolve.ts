@@ -223,7 +223,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
     const group = ASSESSMENT_GROUPS[page] ?? 'Assessment';
     const pageLabel = ASSESSMENT_LABELS[page] ?? page;
     if (page === 'teams' && b) {
-      return [{ label: group }, { label: pageLabel, path: '/assessment/teams' }, { label: b }];
+      return [{ label: group }, { label: pageLabel, path: '/assessment/teams' }, { label: b, id: b }];
     }
     // A submission record: the page registers its team as the crumb's title.
     // A record opened beside its list rail: the page registers its title as the crumb's label.
