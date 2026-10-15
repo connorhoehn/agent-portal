@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-15T05:04:54.311Z",
-  "serverHandlerSha": "4103f9e9835e80740f6647bc85ef0877896a2fd918a12aa4f969a5b2ec332ad2",
+  "capturedAt": "2026-10-15T12:02:47.539Z",
+  "serverHandlerSha": "16ff76207149c1e2c7923332e07650b717d13373cf48a775a85352e882924d8a",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -306,7 +306,7 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "archetype": "string",
+        "archetype": "null",
         "assessment_lead": "string",
         "cohort": "string",
         "contacts": "array",
@@ -341,7 +341,7 @@
           "requested"
         ],
         "status": [
-          "ASSESSED"
+          "IN_PROGRESS"
         ]
       },
       "sent": []
@@ -1183,6 +1183,7 @@
         "review.can": "object",
         "review.can.decide": "boolean",
         "review.closedAt": "null",
+        "review.closesAt": "null",
         "review.id": "string",
         "review.openedAt": "string",
         "review.owner": "object",
@@ -1406,7 +1407,7 @@
       "shape": {
         "$": "object",
         "created_at": "string",
-        "dimension_id": "string",
+        "dimension_id": "null",
         "kind": "string",
         "question": "string",
         "resolved_at": "string",
@@ -1417,7 +1418,7 @@
       },
       "values": {
         "kind": [
-          "follow_up"
+          "general"
         ],
         "status": [
           "DISMISSED"
@@ -1429,9 +1430,25 @@
       "persona": "assessment/admin",
       "status": 200,
       "shape": {
-        "$": "object(dictionary)"
+        "$": "object",
+        "created_at": "string",
+        "dimension_id": "null",
+        "kind": "string",
+        "question": "string",
+        "resolved_at": "string",
+        "response": "string",
+        "status": "string",
+        "task_id": "string",
+        "team_id": "string"
       },
-      "values": {},
+      "values": {
+        "kind": [
+          "general"
+        ],
+        "status": [
+          "RESOLVED"
+        ]
+      },
       "sent": [
         "response"
       ]
@@ -1468,13 +1485,13 @@
         "$": "object",
         "id": "string",
         "ok": "boolean",
-        "parent_id": "string",
+        "parent_id": "null",
         "position": "number",
         "section": "string"
       },
       "values": {
         "section": [
-          "enterprise_context"
+          "workspace_drafts"
         ]
       },
       "sent": [
@@ -1533,7 +1550,7 @@
       },
       "values": {
         "section": [
-          "enterprise_context"
+          "workspace_drafts"
         ]
       },
       "sent": [
@@ -1542,18 +1559,7 @@
       ]
     },
     "POST /api/assessment/knowledge/doc/restore": {
-      "persona": "assessment/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "ok": "boolean",
-        "updated_at": "string"
-      },
-      "values": {},
-      "sent": [
-        "id",
-        "stamp"
-      ]
+      "skipped": "no body: no seeded version stamp for workspace_drafts/story-dim1-ci-evidence.md; only some documents carry history"
     },
     "POST /api/assessment/knowledge/doc/workflows/comments": {
       "refused": {
@@ -4397,7 +4403,45 @@
       "skipped": "no body: `kind` is a ProposalKind union with no run-time validation, and no GET route enumerates its members — inventing one is exactly the fiction this harness exists to stop."
     },
     "POST /api/work/proposals/:id/decide": {
-      "skipped": "no value found for :id under /api/work/proposals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "appliedAt": "string",
+        "applyError": "null",
+        "confidence": "number",
+        "createdAt": "string",
+        "decidedAt": "string",
+        "evidence": "object",
+        "findingId": "null",
+        "id": "string",
+        "jobId": "null",
+        "kind": "string",
+        "payload": "object",
+        "payload.documentId": "string",
+        "payload.documentTitle": "string",
+        "payload.entityId": "string",
+        "payload.entityName": "string",
+        "payload.entityType": "string",
+        "rationale": "string",
+        "reviewNote": "null",
+        "reviewer": "string",
+        "source": "string",
+        "status": "string",
+        "targetId": "string",
+        "targetType": "string"
+      },
+      "values": {
+        "kind": [
+          "link_document_mention"
+        ],
+        "status": [
+          "applied"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
     },
     "POST /api/work/sweeps/run": {
       "persona": "orgiq/admin",
@@ -4726,7 +4770,8 @@
         "approverRoleOptions": "array",
         "approverRoleOptions[]": "string",
         "defaultApproverRole": "string",
-        "updatedBy": "string"
+        "updatedBy": "string",
+        "updatedByName": "string"
       },
       "values": {},
       "sent": [
@@ -4753,8 +4798,11 @@
         "definition.meta.initiativeId": "string",
         "definition.meta.observationCount": "number",
         "definition.meta.proposedKind": "string",
+        "definition.meta.updatedAt": "string",
+        "definition.meta.updatedBy": "string",
         "definition.orphaned": "boolean",
-        "definition.owner": "null",
+        "definition.owner": "string",
+        "definition.ownerName": "string",
         "definition.recorded": "boolean",
         "definition.source": "object",
         "definition.source.id": "string",

@@ -68,127 +68,127 @@
     {
       "method": "GET",
       "path": "/api/access/approvals",
-      "source": "src/routes/access.ts:320"
+      "source": "src/routes/access.ts:321"
     },
     {
       "method": "GET",
       "path": "/api/access/audit",
-      "source": "src/routes/access.ts:334"
+      "source": "src/routes/access.ts:335"
     },
     {
       "method": "GET",
       "path": "/api/access/beneficiaries",
-      "source": "src/routes/access.ts:662"
+      "source": "src/routes/access.ts:678"
     },
     {
       "method": "GET",
       "path": "/api/access/catalog",
-      "source": "src/routes/access.ts:270"
+      "source": "src/routes/access.ts:271"
     },
     {
       "method": "GET",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:928"
+      "source": "src/routes/access.ts:944"
     },
     {
       "method": "PUT",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:933"
+      "source": "src/routes/access.ts:949"
     },
     {
       "method": "GET",
       "path": "/api/access/delegates",
-      "source": "src/routes/access.ts:844"
+      "source": "src/routes/access.ts:860"
     },
     {
       "method": "GET",
       "path": "/api/access/delegations",
-      "source": "src/routes/access.ts:831"
+      "source": "src/routes/access.ts:847"
     },
     {
       "method": "POST",
       "path": "/api/access/delegations",
-      "source": "src/routes/access.ts:854"
+      "source": "src/routes/access.ts:870"
     },
     {
       "method": "POST",
       "path": "/api/access/delegations/:id/end",
-      "source": "src/routes/access.ts:885"
+      "source": "src/routes/access.ts:901"
     },
     {
       "method": "GET",
       "path": "/api/access/policies",
-      "source": "src/routes/access.ts:328"
+      "source": "src/routes/access.ts:329"
     },
     {
       "method": "PUT",
       "path": "/api/access/policies/:id",
-      "source": "src/routes/access.ts:961"
+      "source": "src/routes/access.ts:977"
     },
     {
       "method": "GET",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:286"
+      "source": "src/routes/access.ts:287"
     },
     {
       "method": "POST",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:677"
+      "source": "src/routes/access.ts:693"
     },
     {
       "method": "GET",
       "path": "/api/access/requests/:id",
-      "source": "src/routes/access.ts:310"
+      "source": "src/routes/access.ts:311"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/revoke",
-      "source": "src/routes/access.ts:794"
+      "source": "src/routes/access.ts:810"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/sod-override",
-      "source": "src/routes/access.ts:768"
+      "source": "src/routes/access.ts:784"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/steps/:step/decide",
-      "source": "src/routes/access.ts:707"
+      "source": "src/routes/access.ts:723"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/withdraw",
-      "source": "src/routes/access.ts:684"
+      "source": "src/routes/access.ts:700"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/preview",
-      "source": "src/routes/access.ts:619"
+      "source": "src/routes/access.ts:635"
     },
     {
       "method": "GET",
       "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:414"
+      "source": "src/routes/access.ts:430"
     },
     {
       "method": "POST",
       "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:435"
+      "source": "src/routes/access.ts:451"
     },
     {
       "method": "GET",
       "path": "/api/access/reviews/:id",
-      "source": "src/routes/access.ts:424"
+      "source": "src/routes/access.ts:440"
     },
     {
       "method": "POST",
       "path": "/api/access/reviews/:id/items/:itemId/decide",
-      "source": "src/routes/access.ts:487"
+      "source": "src/routes/access.ts:503"
     },
     {
       "method": "GET",
       "path": "/api/access/summary",
-      "source": "src/routes/access.ts:254"
+      "source": "src/routes/access.ts:255"
     },
     {
       "method": "GET",
@@ -2598,17 +2598,17 @@
     {
       "method": "GET",
       "path": "/api/observability/authz",
-      "source": "src/routes/observability.ts:56"
+      "source": "src/routes/observability.ts:61"
     },
     {
       "method": "GET",
       "path": "/api/observability/authz/stream",
-      "source": "src/routes/observability.ts:71"
+      "source": "src/routes/observability.ts:77"
     },
     {
       "method": "GET",
       "path": "/api/observability/bedrock-invocations",
-      "source": "src/routes/observability.ts:92"
+      "source": "src/routes/observability.ts:98"
     },
     {
       "method": "GET",
@@ -2733,7 +2733,7 @@
     {
       "method": "GET",
       "path": "/api/observability/capability-events",
-      "source": "src/routes/observability.ts:86"
+      "source": "src/routes/observability.ts:92"
     },
     {
       "method": "GET",
@@ -2958,27 +2958,27 @@
     {
       "method": "GET",
       "path": "/api/observability/oncall/alarms",
-      "source": "src/routes/oncall.ts:537"
+      "source": "src/routes/oncall.ts:538"
     },
     {
       "method": "GET",
       "path": "/api/observability/oncall/hitl-sla",
-      "source": "src/routes/oncall.ts:550"
+      "source": "src/routes/oncall.ts:551"
     },
     {
       "method": "GET",
       "path": "/api/observability/oncall/recent-events",
-      "source": "src/routes/oncall.ts:626"
+      "source": "src/routes/oncall.ts:627"
     },
     {
       "method": "GET",
       "path": "/api/observability/oncall/timeline",
-      "source": "src/routes/oncall.ts:341"
+      "source": "src/routes/oncall.ts:342"
     },
     {
       "method": "GET",
       "path": "/api/observability/pr-watch-health",
-      "source": "src/routes/observability.ts:50"
+      "source": "src/routes/observability.ts:51"
     },
     {
       "method": "GET",
@@ -3008,12 +3008,12 @@
     {
       "method": "GET",
       "path": "/api/observability/recent-invocations",
-      "source": "src/routes/observability.ts:81"
+      "source": "src/routes/observability.ts:87"
     },
     {
       "method": "GET",
       "path": "/api/observability/summary",
-      "source": "src/routes/observability.ts:102"
+      "source": "src/routes/observability.ts:108"
     },
     {
       "method": "POST",
@@ -3043,32 +3043,32 @@
     {
       "method": "GET",
       "path": "/api/observability/traces",
-      "source": "src/routes/observability.ts:110"
+      "source": "src/routes/observability.ts:116"
     },
     {
       "method": "GET",
       "path": "/api/observability/traces/:traceId",
-      "source": "src/routes/observability.ts:119"
+      "source": "src/routes/observability.ts:125"
     },
     {
       "method": "GET",
       "path": "/api/observability/traffic/heatmap",
-      "source": "src/routes/traffic.ts:149"
+      "source": "src/routes/traffic.ts:150"
     },
     {
       "method": "GET",
       "path": "/api/observability/traffic/per-agent-summary",
-      "source": "src/routes/traffic.ts:273"
+      "source": "src/routes/traffic.ts:277"
     },
     {
       "method": "GET",
       "path": "/api/observability/traffic/rps",
-      "source": "src/routes/traffic.ts:90"
+      "source": "src/routes/traffic.ts:91"
     },
     {
       "method": "GET",
       "path": "/api/observability/traffic/top-users",
-      "source": "src/routes/traffic.ts:200"
+      "source": "src/routes/traffic.ts:203"
     },
     {
       "method": "GET",
@@ -3088,27 +3088,27 @@
     {
       "method": "GET",
       "path": "/api/pipelines/approvals",
-      "source": "src/routes/pipelines.ts:332"
+      "source": "src/routes/pipelines.ts:338"
     },
     {
       "method": "POST",
       "path": "/api/pipelines/approvals/:id/decide",
-      "source": "src/routes/pipelines.ts:337"
+      "source": "src/routes/pipelines.ts:343"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/artifacts",
-      "source": "src/routes/pipelines.ts:189"
+      "source": "src/routes/pipelines.ts:195"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/configuration",
-      "source": "src/routes/pipelines.ts:360"
+      "source": "src/routes/pipelines.ts:366"
     },
     {
       "method": "PUT",
       "path": "/api/pipelines/configuration",
-      "source": "src/routes/pipelines.ts:365"
+      "source": "src/routes/pipelines.ts:371"
     },
     {
       "method": "GET",
@@ -3153,47 +3153,47 @@
     {
       "method": "GET",
       "path": "/api/pipelines/definitions",
-      "source": "src/routes/pipelines.ts:241"
+      "source": "src/routes/pipelines.ts:247"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/definitions/:id",
-      "source": "src/routes/pipelines.ts:249"
+      "source": "src/routes/pipelines.ts:255"
     },
     {
       "method": "PUT",
       "path": "/api/pipelines/definitions/:id/approvers",
-      "source": "src/routes/pipelines.ts:269"
+      "source": "src/routes/pipelines.ts:275"
     },
     {
       "method": "POST",
       "path": "/api/pipelines/definitions/:id/dry-run",
-      "source": "src/routes/pipelines.ts:281"
+      "source": "src/routes/pipelines.ts:287"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/queues",
-      "source": "src/routes/pipelines.ts:56"
+      "source": "src/routes/pipelines.ts:58"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runbooks",
-      "source": "src/routes/pipelines.ts:319"
+      "source": "src/routes/pipelines.ts:325"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs",
-      "source": "src/routes/pipelines.ts:185"
+      "source": "src/routes/pipelines.ts:191"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs/:id",
-      "source": "src/routes/pipelines.ts:186"
+      "source": "src/routes/pipelines.ts:192"
     },
     {
       "method": "POST",
       "path": "/api/pipelines/runs/:id/cancel",
-      "source": "src/routes/pipelines.ts:351"
+      "source": "src/routes/pipelines.ts:357"
     },
     {
       "method": "POST",
@@ -3203,17 +3203,17 @@
     {
       "method": "GET",
       "path": "/api/pipelines/runs/:id/events",
-      "source": "src/routes/pipelines.ts:188"
+      "source": "src/routes/pipelines.ts:194"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/runs/:id/steps",
-      "source": "src/routes/pipelines.ts:187"
+      "source": "src/routes/pipelines.ts:193"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/summary",
-      "source": "src/routes/pipelines.ts:61"
+      "source": "src/routes/pipelines.ts:67"
     },
     {
       "method": "GET",

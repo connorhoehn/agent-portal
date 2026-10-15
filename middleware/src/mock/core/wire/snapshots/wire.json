@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-15T05:04:52.726Z",
-  "serverHandlerSha": "4103f9e9835e80740f6647bc85ef0877896a2fd918a12aa4f969a5b2ec332ad2",
+  "capturedAt": "2026-10-15T12:02:43.406Z",
+  "serverHandlerSha": "16ff76207149c1e2c7923332e07650b717d13373cf48a775a85352e882924d8a",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -168,15 +168,18 @@
         "items[].delegationId": "null|string",
         "items[].id": "string",
         "items[].kind": "string",
-        "items[].policyId": "null",
+        "items[].policyId": "null|string",
         "items[].reason": "null|string",
-        "items[].requestId": "null|string"
+        "items[].requestId": "null|string",
+        "items[].subject": "string"
       },
       "values": {
         "items[].kind": [
-          "approved",
           "delegated",
+          "expired",
+          "policy-updated",
           "provisioned",
+          "sod-blocked",
           "step-approved",
           "step-rejected",
           "submitted",
@@ -363,7 +366,10 @@
         "items[].severity": "string",
         "items[].title": "string",
         "items[].updatedAt": "string",
-        "items[].updatedBy": "null"
+        "items[].updatedBy": "object",
+        "items[].updatedBy.displayName": "string",
+        "items[].updatedBy.id": "string",
+        "items[].updatedBy.personId": "string"
       },
       "values": {
         "items[].left.role": [
@@ -510,6 +516,7 @@
         "items[].can": "object",
         "items[].can.decide": "boolean",
         "items[].closedAt": "null",
+        "items[].closesAt": "string",
         "items[].id": "string",
         "items[].openedAt": "string",
         "items[].owner": "object",
@@ -563,6 +570,7 @@
         "review.can": "object",
         "review.can.decide": "boolean",
         "review.closedAt": "null",
+        "review.closesAt": "string",
         "review.id": "string",
         "review.openedAt": "string",
         "review.owner": "object",
@@ -1110,7 +1118,7 @@
       "shape": {
         "$": "object",
         "created_at": "string",
-        "dimension_id": "string",
+        "dimension_id": "null",
         "kind": "string",
         "question": "string",
         "resolved_at": "null",
@@ -1122,7 +1130,7 @@
       },
       "values": {
         "kind": [
-          "follow_up"
+          "general"
         ],
         "status": [
           "OPEN"
@@ -1313,6 +1321,7 @@
         "runs[].definitionId": "string",
         "runs[].finishedAt": "null|string",
         "runs[].id": "string",
+        "runs[].ownerName": "string",
         "runs[].startedAt": "string",
         "runs[].status": "string",
         "runs[].tenant": "string",
@@ -1399,14 +1408,12 @@
       "values": {
         "teams[].top.certification.status": [
           "claim_open",
-          "pending",
-          "verified"
+          "pending"
         ],
         "teams[].top.existing_stories[].status": [
           "ready"
         ],
         "teams[].top.kind": [
-          "advance",
           "answer",
           "close_claim"
         ]
@@ -1618,7 +1625,7 @@
         "submitter.email": "string",
         "submitter.is_primary_contact": "boolean",
         "submitter.name": "string",
-        "supersedes": "null",
+        "supersedes": "string",
         "team_id": "string",
         "team_name_raw": "string"
       },
@@ -1627,7 +1634,7 @@
           "ms_forms_export"
         ],
         "status": [
-          "staged"
+          "committed"
         ]
       }
     },
@@ -1678,8 +1685,7 @@
       "values": {
         "$[].certification.status": [
           "claim_open",
-          "pending",
-          "verified"
+          "pending"
         ],
         "$[].status": [
           "ASSESSED",
@@ -1744,8 +1750,9 @@
         "dimensions[].history[].changed_by": "string",
         "dimensions[].history[].evidence_ids": "array",
         "dimensions[].history[].evidence_ids[]": "string",
-        "dimensions[].history[].from_level": "null",
+        "dimensions[].history[].from_level": "null|number",
         "dimensions[].history[].is_na": "boolean",
+        "dimensions[].history[].na_claimed": "boolean",
         "dimensions[].history[].rationale": "string",
         "dimensions[].history[].source_meeting": "string",
         "dimensions[].history[].to_level": "null|number",
@@ -1812,6 +1819,7 @@
         "dimensions[].certification.status": [
           "claim_open",
           "not_applicable",
+          "pending",
           "verified"
         ],
         "dimensions[].evidence[].status": [
@@ -1824,7 +1832,7 @@
           "claim_open"
         ],
         "team.status": [
-          "ASSESSED"
+          "IN_PROGRESS"
         ]
       }
     },
@@ -1859,7 +1867,7 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "archetype": "string",
+        "archetype": "null",
         "archetypes": "array",
         "archetypes[]": "object",
         "archetypes[].description": "string",
@@ -1923,14 +1931,14 @@
         "recommendations[]": "object",
         "recommendations[].certification": "object",
         "recommendations[].certification.basis": "string",
-        "recommendations[].certification.claimed_level": "number",
+        "recommendations[].certification.claimed_level": "null|number",
         "recommendations[].certification.meets_target": "boolean",
         "recommendations[].certification.statement": "string",
         "recommendations[].certification.status": "string",
         "recommendations[].certification.target_level": "number",
         "recommendations[].certification.to_verify_higher": "string",
-        "recommendations[].certification.verification_gap": "number",
-        "recommendations[].certification.verified_level": "number",
+        "recommendations[].certification.verification_gap": "null|number",
+        "recommendations[].certification.verified_level": "null|number",
         "recommendations[].dimension_id": "string",
         "recommendations[].existing_stories": "array",
         "recommendations[].existing_stories[]": "object",
@@ -1954,12 +1962,16 @@
       },
       "values": {
         "recommendations[].certification.status": [
-          "claim_open"
+          "claim_open",
+          "pending",
+          "verified"
         ],
         "recommendations[].existing_stories[].status": [
           "ready"
         ],
         "recommendations[].kind": [
+          "advance",
+          "answer",
           "close_claim"
         ]
       }
@@ -1983,6 +1995,7 @@
       "shape": {
         "$": "object",
         "envelope_id": "null",
+        "run_id": "string",
         "scores": "array",
         "scores[]": "object",
         "scores[].cap_applied": "boolean",
@@ -2115,7 +2128,7 @@
         "bots[].name": "string",
         "bots[].orgProjectId": "string",
         "bots[].orgProjectName": "string",
-        "bots[].pausedReason": "string",
+        "bots[].pausedReason": "null|string",
         "bots[].prompt": "string",
         "bots[].requiresReview": "boolean",
         "bots[].template": "string",
@@ -2147,7 +2160,7 @@
         "bot.name": "string",
         "bot.orgProjectId": "string",
         "bot.orgProjectName": "string",
-        "bot.pausedReason": "string",
+        "bot.pausedReason": "null",
         "bot.prompt": "string",
         "bot.requiresReview": "boolean",
         "bot.template": "string",
@@ -2172,6 +2185,7 @@
         "runs[].jobId": "string",
         "runs[].modelProvider": "null",
         "runs[].outcome": "object",
+        "runs[].outcome.error": "string",
         "runs[].outcome.reason": "string",
         "runs[].outcome.toolCalls": "number",
         "runs[].outcome.turns": "number",
@@ -2183,7 +2197,8 @@
       },
       "values": {
         "runs[].status": [
-          "done"
+          "done",
+          "failed"
         ]
       }
     },
@@ -3948,11 +3963,11 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "avatarUrl": "null",
+        "avatarUrl": "string",
         "connections": "array",
         "connections[]": "object",
         "connections[].otherPerson": "object",
-        "connections[].otherPerson.avatarUrl": "null",
+        "connections[].otherPerson.avatarUrl": "null|string",
         "connections[].otherPerson.id": "string",
         "connections[].otherPerson.name": "string",
         "connections[].otherPerson.title": "string",
@@ -3985,7 +4000,65 @@
       "values": {}
     },
     "GET /api/graph/people/:personId/work": {
-      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :personId under /api/graph/people (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "array",
+        "$[]": "object",
+        "$[].assigneeDept": "string",
+        "$[].assigneeId": "string",
+        "$[].assigneeName": "string",
+        "$[].blockedReason": "null",
+        "$[].childCount": "number",
+        "$[].childDoneCount": "number",
+        "$[].completedAt": "null",
+        "$[].createdAt": "string",
+        "$[].description": "null|string",
+        "$[].estimateForecast": "null",
+        "$[].estimateModel": "null",
+        "$[].estimateReviewedAt": "null",
+        "$[].estimateReviewedBy": "null",
+        "$[].estimateReviewedByName": "null",
+        "$[].estimatedAt": "null",
+        "$[].estimatedBy": "null",
+        "$[].estimatedByName": "null",
+        "$[].estimatedCostUsd": "null|number",
+        "$[].id": "string",
+        "$[].key": "string",
+        "$[].labels": "array",
+        "$[].labels[]": "string",
+        "$[].nextStep": "null",
+        "$[].nextStepDetail": "null",
+        "$[].parentId": "null|string",
+        "$[].prStatus": "null",
+        "$[].prUrl": "null",
+        "$[].priority": "string",
+        "$[].projectId": "string",
+        "$[].projectName": "string",
+        "$[].sprintId": "null|string",
+        "$[].status": "string",
+        "$[].storyPoints": "null|number",
+        "$[].summary": "null|string",
+        "$[].title": "string",
+        "$[].type": "string",
+        "$[].updatedAt": "string"
+      },
+      "values": {
+        "$[].key": [
+          "ORG-AUTH-1",
+          "ORG-AUTH-5",
+          "ORG-AUTH-6",
+          "ORG-AUTH-9"
+        ],
+        "$[].status": [
+          "in_progress",
+          "open"
+        ],
+        "$[].type": [
+          "bug",
+          "epic"
+        ]
+      }
     },
     "GET /api/graph/projects": {
       "persona": "orgiq/admin",
@@ -4382,17 +4455,16 @@
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
-          "ORG-DS-1",
           "ORG-DS-3",
           "ORG-DS-4",
           "ORG-DSAPI-1",
           "ORG-DSAPI-2",
-          "ORG-DSAPI-3",
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
-          "ORG-FS-4",
           "ORG-INF-1",
+          "ORG-INF-2",
+          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -4402,6 +4474,8 @@
           "ORG-LLM-3",
           "ORG-LLM-4",
           "ORG-LLM-5",
+          "ORG-LLM-7",
+          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
@@ -4418,7 +4492,6 @@
           "ORG-RTA-2",
           "ORG-RTA-3",
           "ORG-RTA-5",
-          "ORG-SOC2-1",
           "ORG-SOC2-2",
           "ORG-SOC2-3",
           "ORG-SOC2-4",
@@ -5941,62 +6014,9 @@
       "shape": {
         "$": "object",
         "events": "array",
-        "events[]": "object|object(dictionary)",
-        "events[].action": "string",
-        "events[].decision": "string",
-        "events[].path": "string",
-        "events[].role": "string",
-        "events[].sub": "string",
-        "events[].tenant": "string",
-        "events[].ts": "string"
+        "events[]": "object(dictionary)"
       },
-      "values": {
-        "events[].action": [
-          "ApproveStep",
-          "ApproveTransaction",
-          "AuthorDefinition",
-          "CancelRun",
-          "ConnectLocalCompute",
-          "DecideAccess",
-          "DispatchAgentRun",
-          "EditGuardrail",
-          "LabelFeedback",
-          "Login",
-          "ManageAccessPolicy",
-          "ManageAssessmentConfig",
-          "ManageBots",
-          "ManageBudgets",
-          "ManageCanary",
-          "ManageDevbox",
-          "ManageIngest",
-          "ManageKB",
-          "ManageKnowledge",
-          "ManagePipelineConfig",
-          "ManageSprints",
-          "ManageUsers",
-          "RequestAccess",
-          "ReviewRunbook",
-          "ScoreAssessment",
-          "ViewAccess",
-          "ViewAssessment",
-          "ViewIdentityAdmin",
-          "ViewLeaderboard",
-          "ViewObservability",
-          "ViewOrgChart",
-          "ViewPipelines",
-          "ViewSessionBrief"
-        ],
-        "events[].decision": [
-          "ALLOW"
-        ],
-        "events[].role": [
-          "admin"
-        ],
-        "events[].tenant": [
-          "assessment",
-          "orgiq"
-        ]
-      }
+      "values": {}
     },
     "GET /api/observability/authz/stream": {
       "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
@@ -6165,31 +6185,9 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "events": "array",
-        "events[]": "object",
-        "events[].detail": "object",
-        "events[].detail.agentName": "string",
-        "events[].detail.bytes": "number",
-        "events[].detail.codeSnippet": "string",
-        "events[].detail.language": "string",
-        "events[].detail.outputSnippet": "string",
-        "events[].detail.pageTitle": "string",
-        "events[].detail.url": "string",
-        "events[].durationMs": "number",
-        "events[].id": "string",
-        "events[].kind": "string",
-        "events[].ok": "boolean",
-        "events[].sessionId": "string",
-        "events[].startedAt": "string"
+        "events": "array"
       },
-      "values": {
-        "events[].kind": [
-          "browser_launch",
-          "browser_navigate",
-          "browser_screenshot",
-          "code_execute"
-        ]
-      }
+      "values": {}
     },
     "GET /api/observability/cost/a2a-overhead": {
       "persona": "orgiq/admin",
@@ -6488,7 +6486,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -7333,6 +7331,7 @@
         "users[].totalCostUsd": "number",
         "users[].uniqueAgents": "number",
         "users[].userId": "string",
+        "users[].userName": "string",
         "windowHours": "number"
       },
       "values": {}
@@ -7470,7 +7469,8 @@
         "approverRoleOptions": "array",
         "approverRoleOptions[]": "string",
         "defaultApproverRole": "string",
-        "updatedBy": "null"
+        "updatedBy": "string",
+        "updatedByName": "string"
       },
       "values": {}
     },
@@ -7503,6 +7503,7 @@
         "definitions": "array",
         "definitions[]": "object",
         "definitions[].approverRoles": "array",
+        "definitions[].approverRoles[]": "string",
         "definitions[].approversDefaulted": "boolean",
         "definitions[].contextTenant": "string",
         "definitions[].description": "null|string",
@@ -7528,7 +7529,7 @@
         "definitions[].meta.initiativeName": "string",
         "definitions[].meta.model": "string",
         "definitions[].meta.observationCount": "number",
-        "definitions[].meta.pausedReason": "string",
+        "definitions[].meta.pausedReason": "null|string",
         "definitions[].meta.promptDoc": "string",
         "definitions[].meta.proposedKind": "string",
         "definitions[].meta.protocol": "string",
@@ -7538,10 +7539,11 @@
         "definitions[].meta.tools": "array",
         "definitions[].meta.tools[]": "string",
         "definitions[].meta.trigger": "string",
-        "definitions[].meta.updatedAt": "null",
-        "definitions[].meta.updatedBy": "null",
+        "definitions[].meta.updatedAt": "string",
+        "definitions[].meta.updatedBy": "string",
         "definitions[].orphaned": "boolean",
-        "definitions[].owner": "null|string",
+        "definitions[].owner": "string",
+        "definitions[].ownerName": "string",
         "definitions[].recorded": "boolean",
         "definitions[].runCount": "number",
         "definitions[].source": "object",
@@ -7596,6 +7598,7 @@
         "approverRoleOptions[]": "string",
         "definition": "object",
         "definition.approverRoles": "array",
+        "definition.approverRoles[]": "string",
         "definition.approversDefaulted": "boolean",
         "definition.contextTenant": "string",
         "definition.description": "string",
@@ -7613,8 +7616,11 @@
         "definition.meta.initiativeId": "string",
         "definition.meta.observationCount": "number",
         "definition.meta.proposedKind": "string",
+        "definition.meta.updatedAt": "string",
+        "definition.meta.updatedBy": "string",
         "definition.orphaned": "boolean",
-        "definition.owner": "null",
+        "definition.owner": "string",
+        "definition.ownerName": "string",
         "definition.recorded": "boolean",
         "definition.runCount": "number",
         "definition.source": "object",
@@ -7695,6 +7701,7 @@
         "runbooks": "array",
         "runbooks[]": "object",
         "runbooks[].approverRoles": "array",
+        "runbooks[].approverRoles[]": "string",
         "runbooks[].approversDefaulted": "boolean",
         "runbooks[].contextTenant": "string",
         "runbooks[].description": "string",
@@ -7712,8 +7719,11 @@
         "runbooks[].meta.initiativeId": "null|string",
         "runbooks[].meta.observationCount": "number",
         "runbooks[].meta.proposedKind": "string",
+        "runbooks[].meta.updatedAt": "string",
+        "runbooks[].meta.updatedBy": "string",
         "runbooks[].orphaned": "boolean",
-        "runbooks[].owner": "null",
+        "runbooks[].owner": "string",
+        "runbooks[].ownerName": "string",
         "runbooks[].recorded": "boolean",
         "runbooks[].runCount": "number",
         "runbooks[].runbook": "object",
@@ -7772,6 +7782,7 @@
         "runs[].context.boxId": "null",
         "runs[].context.error": "null|string",
         "runs[].context.id": "string",
+        "runs[].context.initiativeName": "string",
         "runs[].context.kind": "string",
         "runs[].context.projectId": "string",
         "runs[].context.sourceStatus": "string",
@@ -7791,11 +7802,13 @@
         "runs[].definitionId": "string",
         "runs[].finishedAt": "null|string",
         "runs[].id": "string",
+        "runs[].ownerName": "string",
         "runs[].startedAt": "string",
         "runs[].status": "string",
         "runs[].tenant": "string",
         "runs[].triggerType": "string",
         "runs[].triggeredBy": "null|string",
+        "runs[].triggeredByName": "string",
         "total": "number",
         "unavailable": "array",
         "unlinked": "object",
@@ -7882,7 +7895,8 @@
         "run.status": "string",
         "run.tenant": "string",
         "run.triggerType": "string",
-        "run.triggeredBy": "string"
+        "run.triggeredBy": "string",
+        "run.triggeredByName": "string"
       },
       "values": {
         "artifacts[].kind": [
@@ -8092,7 +8106,6 @@
           "error",
           "idle",
           "running",
-          "stopped",
           "waiting"
         ]
       }
@@ -8609,6 +8622,7 @@
         "runs[].context.boxId": "null",
         "runs[].context.error": "null|string",
         "runs[].context.id": "string",
+        "runs[].context.initiativeName": "string",
         "runs[].context.kind": "string",
         "runs[].context.projectId": "string",
         "runs[].context.sourceStatus": "string",
@@ -8628,11 +8642,13 @@
         "runs[].definitionId": "string",
         "runs[].finishedAt": "null|string",
         "runs[].id": "string",
+        "runs[].ownerName": "string",
         "runs[].startedAt": "string",
         "runs[].status": "string",
         "runs[].tenant": "string",
         "runs[].triggerType": "string",
         "runs[].triggeredBy": "null|string",
+        "runs[].triggeredByName": "string",
         "total": "number",
         "unavailable": "array",
         "unlinked": "object",
@@ -8716,7 +8732,8 @@
         "run.status": "string",
         "run.tenant": "string",
         "run.triggerType": "string",
-        "run.triggeredBy": "string"
+        "run.triggeredBy": "string",
+        "run.triggeredByName": "string"
       },
       "values": {
         "artifacts[].kind": [
@@ -9110,11 +9127,7 @@
           "initiative"
         ],
         "related[].status": [
-          "blocked",
-          "done",
           "escalated",
-          "in_progress",
-          "in_review",
           "open",
           "resolved",
           "retired"
@@ -9122,8 +9135,7 @@
         "related[].type": [
           "decision",
           "knowledge",
-          "person",
-          "work"
+          "person"
         ],
         "results[].sourceRefs[].type": [
           "initiative"
@@ -10206,7 +10218,6 @@
           "completed",
           "idle",
           "running",
-          "stopped",
           "waiting"
         ]
       }
@@ -10218,7 +10229,27 @@
         "$": "object",
         "cursor": "string",
         "edges": "array",
+        "edges[]": "object",
+        "edges[].capabilities": "array",
+        "edges[].disclosure": "string",
+        "edges[].fromId": "string",
+        "edges[].id": "string",
+        "edges[].relation": "string",
+        "edges[].startedAt": "string",
+        "edges[].status": "string",
+        "edges[].toId": "string",
+        "edges[].updatedAt": "string",
         "nodes": "array",
+        "nodes[]": "object",
+        "nodes[].capabilities": "array",
+        "nodes[].capabilities[]": "string",
+        "nodes[].disclosure": "string",
+        "nodes[].id": "string",
+        "nodes[].kind": "string",
+        "nodes[].startedAt": "string",
+        "nodes[].status": "string",
+        "nodes[].title": "string",
+        "nodes[].updatedAt": "string",
         "partial": "boolean",
         "revision": "number",
         "schemaVersion": "number",
@@ -10234,7 +10265,21 @@
         "sources[].source": "string",
         "watermark": "number"
       },
-      "values": {}
+      "values": {
+        "edges[].status": [
+          "idle",
+          "waiting"
+        ],
+        "nodes[].kind": [
+          "change",
+          "project",
+          "task"
+        ],
+        "nodes[].status": [
+          "idle",
+          "waiting"
+        ]
+      }
     },
     "GET /api/work-graph/workspace/graph": {
       "persona": "orgiq/admin",
@@ -10299,7 +10344,6 @@
           "completed",
           "idle",
           "running",
-          "stopped",
           "waiting"
         ]
       }
@@ -10419,7 +10463,7 @@
         "jobs[].claimedAt": "string",
         "jobs[].createdAt": "string",
         "jobs[].createdBy": "string",
-        "jobs[].error": "null",
+        "jobs[].error": "null|string",
         "jobs[].finishedAt": "string",
         "jobs[].id": "string",
         "jobs[].kind": "string",
@@ -10430,7 +10474,7 @@
         "jobs[].payload.prompt": "string",
         "jobs[].payload.requiresReview": "boolean",
         "jobs[].priority": "number",
-        "jobs[].result": "object",
+        "jobs[].result": "null|object",
         "jobs[].result.costUsd": "number",
         "jobs[].result.durationMs": "number",
         "jobs[].result.summary": "string",
@@ -10450,7 +10494,8 @@
           "devbox:task"
         ],
         "jobs[].status": [
-          "done"
+          "done",
+          "failed"
         ]
       }
     },
@@ -10507,9 +10552,63 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "proposals": "array"
+        "proposals": "array",
+        "proposals[]": "object",
+        "proposals[].appliedAt": "null|string",
+        "proposals[].applyError": "null",
+        "proposals[].confidence": "number",
+        "proposals[].createdAt": "string",
+        "proposals[].decidedAt": "null|string",
+        "proposals[].evidence": "object",
+        "proposals[].evidence.channel": "string",
+        "proposals[].evidence.document": "string",
+        "proposals[].evidence.messages": "number",
+        "proposals[].evidence.section": "string",
+        "proposals[].evidence.source": "string",
+        "proposals[].findingId": "null",
+        "proposals[].id": "string",
+        "proposals[].jobId": "null",
+        "proposals[].kind": "string",
+        "proposals[].payload": "object",
+        "proposals[].payload.documentId": "string",
+        "proposals[].payload.documentTitle": "string",
+        "proposals[].payload.entityId": "string",
+        "proposals[].payload.entityName": "string",
+        "proposals[].payload.entityType": "string",
+        "proposals[].payload.personAId": "string",
+        "proposals[].payload.personAName": "string",
+        "proposals[].payload.personBId": "string",
+        "proposals[].payload.personBName": "string",
+        "proposals[].payload.personId": "string",
+        "proposals[].payload.personName": "string",
+        "proposals[].payload.skillId": "string",
+        "proposals[].payload.skillName": "string",
+        "proposals[].payload.title": "string",
+        "proposals[].payload.weight": "number",
+        "proposals[].rationale": "string",
+        "proposals[].reviewNote": "null|string",
+        "proposals[].reviewer": "null|string",
+        "proposals[].source": "string",
+        "proposals[].status": "string",
+        "proposals[].targetId": "string",
+        "proposals[].targetType": "string"
       },
-      "values": {}
+      "values": {
+        "proposals[].evidence.section": [
+          "Rehearsal plan"
+        ],
+        "proposals[].kind": [
+          "add_collaboration",
+          "add_person_skill",
+          "link_document_mention",
+          "update_person_title"
+        ],
+        "proposals[].status": [
+          "applied",
+          "pending",
+          "rejected"
+        ]
+      }
     },
     "GET /api/work/suggestions": {
       "persona": "orgiq/admin",
@@ -10611,40 +10710,7 @@
       "open": false,
       "values": [
         "ANONYMIZE",
-        "ApproveStep",
-        "ApproveTransaction",
-        "AuthorDefinition",
         "BLOCK",
-        "CancelRun",
-        "ConnectLocalCompute",
-        "DecideAccess",
-        "DispatchAgentRun",
-        "EditGuardrail",
-        "LabelFeedback",
-        "Login",
-        "ManageAccessPolicy",
-        "ManageAssessmentConfig",
-        "ManageBots",
-        "ManageBudgets",
-        "ManageCanary",
-        "ManageDevbox",
-        "ManageIngest",
-        "ManageKB",
-        "ManageKnowledge",
-        "ManagePipelineConfig",
-        "ManageSprints",
-        "ManageUsers",
-        "RequestAccess",
-        "ReviewRunbook",
-        "ScoreAssessment",
-        "ViewAccess",
-        "ViewAssessment",
-        "ViewIdentityAdmin",
-        "ViewLeaderboard",
-        "ViewObservability",
-        "ViewOrgChart",
-        "ViewPipelines",
-        "ViewSessionBrief",
         "commented on",
         "delete",
         "index",
@@ -10729,7 +10795,6 @@
     "decision": {
       "open": false,
       "values": [
-        "ALLOW",
         "approve",
         "keep"
       ]
@@ -10741,25 +10806,22 @@
     "kind": {
       "open": false,
       "values": [
+        "add_collaboration",
+        "add_person_skill",
         "advance",
         "agent",
         "analysis",
         "answer",
         "application",
-        "approved",
         "artifact",
         "assessment-command",
         "blocked",
         "bot",
-        "browser_launch",
-        "browser_navigate",
-        "browser_screenshot",
         "capability",
         "change",
         "clarification",
         "close_claim",
         "cluster",
-        "code_execute",
         "comment",
         "compaction",
         "confluence",
@@ -10773,6 +10835,7 @@
         "eks",
         "evaluator",
         "exception_review",
+        "expired",
         "fact",
         "failed",
         "follow_up",
@@ -10789,6 +10852,7 @@
         "jira",
         "judge-spike",
         "lambda",
+        "link_document_mention",
         "llm",
         "local",
         "manager",
@@ -10799,6 +10863,7 @@
         "new",
         "observation",
         "person",
+        "policy-updated",
         "problem",
         "project",
         "prompt",
@@ -10812,6 +10877,7 @@
         "run",
         "runbook",
         "skill",
+        "sod-blocked",
         "step-approved",
         "step-rejected",
         "steward",
@@ -10823,6 +10889,7 @@
         "tool",
         "trace",
         "transcript",
+        "update_person_title",
         "withdrawn",
         "worked",
         "write"
@@ -10920,6 +10987,12 @@
         "default"
       ]
     },
+    "section": {
+      "open": false,
+      "values": [
+        "Rehearsal plan"
+      ]
+    },
     "severity": {
       "open": false,
       "values": [
@@ -10967,6 +11040,7 @@
         "RESOLVED",
         "SCORED",
         "active",
+        "applied",
         "approved",
         "awaiting_input",
         "behind",
@@ -11008,6 +11082,7 @@
         "provisioning",
         "published",
         "ready",
+        "rejected",
         "requested",
         "resolved",
         "retired",
@@ -11016,7 +11091,6 @@
         "staged",
         "stale",
         "stalled",
-        "stopped",
         "submitted",
         "succeeded",
         "superseded",
