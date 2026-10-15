@@ -19,3 +19,6 @@ export {
 export { estimateTokens, sha256Hex } from './tokens.js';
 export { runbookHealth, PROVEN_TTL_DAYS } from './health.js';
 export { versionOf } from './version.js';
+export * from './store.js';
+export { RowsRunbookStore, privateRowSources, type RunbookRowSources } from './store-rows.js';
+export { DynamoRunbookStore, runbookStoreConfig, ensureRunbookTable, dropRunbookTable, createRunbookDynamoClient, type RunbookStoreConfig } from './store-dynamo.js';
