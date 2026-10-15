@@ -211,6 +211,19 @@ export const INITIATIVE_THREAD: readonly (readonly [key: string, user: string, h
   ['auth-05', 'u-vera', 1.1, 'Thanks Nora. Simone, can you review the runbook edit before the retry? Sienna decides the order after that.'],
 ];
 
+/**
+ * Northstar Payments' team thread (`assessment:team:TEAM-001`, the Discussion
+ * pane on the team page): [key, author, hours ago, text]. Jonas leads the
+ * assessment, Asha contributes; the thread says what the scorecard shows (the
+ * CI claim) and what waits on Jonas (the dimension 7 not-applicable request).
+ */
+export const TEAM_THREAD: readonly (readonly [key: string, user: string, hoursAgo: number, text: string])[] = [
+  ['nsp-01', 'u-asha', 52, 'Northstar rated Continuous Integration as Optimizing. The api repo builds on every push, but the infra repo has no pipeline at all, so I scored it Developing.'],
+  ['nsp-02', 'u-jonas', 50, 'Agreed, Developing stands. I will send them the story for closing the gap rather than argue the level on a call.'],
+  ['nsp-03', 'u-asha', 27, 'They also asked for not-applicable on performance and reliability testing. Their only job is the overnight reconciliation batch, with nothing internet-facing.'],
+  ['nsp-04', 'u-jonas', 26, 'That is mine to decide. I want to see the batch window and the rerun policy first; I will answer by the end of the week.'],
+];
+
 /** Everyone in `where` (a channel slug or `a|b` pair) who is named by `@Display Name` in `text`. */
 export function mentionedIn(text: string, candidates: readonly string[]): string[] {
   const lower = text.toLowerCase();
