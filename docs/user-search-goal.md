@@ -1,4 +1,4 @@
-# Goal : user search that answers what each tenant's people ask
+# Goal: user search that answers what each tenant's people ask
 
 Status: **draft for review, 2026-10-14. Nothing here is built.** The intent
 catalog, the probe results and the gap analysis this goal is written against
