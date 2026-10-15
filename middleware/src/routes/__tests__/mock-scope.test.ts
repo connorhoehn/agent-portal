@@ -180,6 +180,14 @@ describe('request-scoped scenarios', () => {
     expect(people.rows()).toHaveLength(3);
   });
 
+  it('lists every live scope', async () => {
+    expect((await request(app()).get('/api/__mock/scope')).body.scopes).toEqual([]);
+    const id = await scope({ scenario: 'empty', label: 'listed' });
+    const { scopes } = (await request(app()).get('/api/__mock/scope')).body as { scopes: Array<{ id: string; label: string | null }> };
+    expect(scopes.map((s) => s.id)).toEqual([id]);
+    expect(scopes[0]!.label).toBe('listed');
+  });
+
   it('expires on its TTL', async () => {
     const id = await scope({ scenario: 'empty', ttlMs: 30 });
     await new Promise((r) => setTimeout(r, 60));
@@ -230,6 +238,15 @@ describe('identity clones', () => {
     expect((await request(app()).get('/api/whoami').set('Cookie', cookieA)).body).toEqual({ sub: null, invalid: true });
     expect((await request(app()).get('/api/whoami').set('Cookie', cookieB)).body).toEqual({ sub: b, invalid: false });
     expect((await request(app()).get('/api/whoami').set('Cookie', cookieVera)).body).toEqual({ sub: 'u-vera', invalid: false });
+  });
+
+  it('deletes a clone by id, and a second delete or an unknown id is a 404', async () => {
+    const id = await clone();
+    expect((await request(app()).delete(`/api/__mock/identity/clone/${id}`)).body).toEqual({ deleted: id });
+    expect(await getUser(id)).toBeNull();
+    expect((await request(app()).get('/api/__mock/identity/clones')).body.clones).toEqual([]);
+    expect((await request(app()).delete(`/api/__mock/identity/clone/${id}`)).status).toBe(404);
+    expect((await request(app()).delete('/api/__mock/identity/clone/u-nobody')).status).toBe(404);
   });
 
   it('refuses a clone of a clone, an unknown persona, and runs without MOCK_AURORA', async () => {
