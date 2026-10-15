@@ -67,8 +67,8 @@ import {
 
 const OBSERVABILITY = '4870e01d-9274-5c4a-91af-ea9acb7f857a';
 
-/** Bedrock inference-profile ids, as `portal/src/lib/devboxModels.ts` sends them. */
-const SONNET = 'us.anthropic.claude-sonnet-5';
+/** The model that drafted each change (AWS-native models only). */
+const SONNET = 'amazon.nova-pro-v1:0';
 /** The reviewer's model — `lib/change-reviewer.ts`'s `SDLC_REVIEW_MODEL_ID` default. */
 const REVIEW_MODEL = 'amazon.nova-pro-v1:0';
 

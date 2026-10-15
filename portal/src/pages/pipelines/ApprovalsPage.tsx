@@ -55,12 +55,16 @@ import { writeJson } from '../../lib/writeJson';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 
+/** A step id as the step it is: the run's execution, the delivery gate, the human review. */
+const STEP_LABELS: Record<string, string> = { execute: 'Running', gate: 'Delivery gate', review: 'Human review' };
+const stepLabel = (id: string): string => STEP_LABELS[id] ?? id.charAt(0).toUpperCase() + id.slice(1).replaceAll(/[-_]+/g, ' ');
+
 interface ApprovalsResponse { approvals: ApprovalRequest[]; total: number; unavailable: Array<{ source: string; error: string }> }
 
 const COLUMNS: DataTableColumn<ApprovalRequest>[] = [
   { key: 'title', header: 'Waiting step', render: (a) => a.title },
   { key: 'source', header: 'Asked by', width: '128px', render: (a) => <Chip tone="neutral" size="xs">{approvalSourceLabel(a.source)}</Chip> },
-  { key: 'step', header: 'Step', render: (a) => a.stepId },
+  { key: 'step', header: 'Step', render: (a) => stepLabel(a.stepId) },
   { key: 'approvers', header: 'Approved by', render: (a) => approverSummary(a.requiredRoles, a.rolesDefaulted) },
   {
     key: 'requestedAt', header: 'Waiting since', numeric: true, sortable: true,
@@ -95,7 +99,7 @@ function ApprovalsWorkspace() {
 
   const adapter = pipelineCollectionAdapter('approvals', {
     setQuery, refresh,
-    scopeNote: 'Search uses loaded waiting steps, questions, IDs and sources across table pages. Open shows one exact visible step for review. Approve and reject remain explicit permission-checked actions on its page; this input records no decision.',
+    scopeNote: 'Search the waiting steps by question or source. Open shows one for review; approve and reject happen on its page.',
     open(target) {
       if (!data || isLoading || error) throw new Error('Wait for approvals to load successfully before opening a step.');
       const row = resolvePipelineCollectionTarget(target, rows);
@@ -128,7 +132,7 @@ function ApprovalsWorkspace() {
         {...(data ? { count: rows.length } : {})}
         search={{ value: query, onChange: setQuery, placeholder: 'Find a waiting step' }}
         groups={sources.map((src) => ({ id: src, title: approvalSourceLabel(src), count: rows.filter((a) => a.source === src).length }))}
-        rows={rows.map((a) => ({ id: a.id, groupId: a.source, title: a.title, subline: `${a.stepId} · ${a.requestedAt ? relativeTime(a.requestedAt) : 'waiting'}` }))}
+        rows={rows.map((a) => ({ id: a.id, groupId: a.source, title: a.title, subline: `${stepLabel(a.stepId)} · ${a.requestedAt ? relativeTime(a.requestedAt) : 'waiting'}` }))}
         currentId={openId}
         onOpen={(id) => { setNote(''); setOpenId(id); }}
         loading={isLoading && !data}
@@ -139,13 +143,13 @@ function ApprovalsWorkspace() {
       >
         {open ? (
           <Stack gap="md" data-testid="pipelines-approval-record">
-            <DetailHeader title={open.title} description={`${approvalSourceLabel(open.source)} · ${open.id}`} />
+            <DetailHeader title={open.title} description={`${approvalSourceLabel(open.source)}${open.requestedAt ? ` · waiting since ${relativeTime(open.requestedAt)}` : ''}`} />
             <MetaLine size="sm" tone="secondary" items={[open.question]} />
             {open.detail && <MetaLine size="xs" tone="secondary" items={[open.detail]} />}
             <KeyValue
               layout="row"
               items={[
-                { label: 'Step', value: open.stepId, mono: true },
+                { label: 'Step', value: stepLabel(open.stepId) },
                 { label: 'Run', value: open.runId ?? 'No run is linked', mono: Boolean(open.runId), muted: !open.runId },
                 { label: 'Definition', value: open.definitionId ?? 'None known', mono: Boolean(open.definitionId), muted: !open.definitionId },
                 { label: 'Approved by', value: approverSummary(open.requiredRoles, open.rolesDefaulted) },

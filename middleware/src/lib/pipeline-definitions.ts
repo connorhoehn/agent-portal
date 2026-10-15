@@ -33,6 +33,7 @@
 
 import type { ContextTenant, DefinitionKind, PipelineRunStatus, TriggerType } from './pipeline-runs.js';
 import { crosswalkStatus } from './pipeline-runs.js';
+import { humanizeSlug } from './pipeline-run-titles.js';
 
 // ─── Source rows (structural — fixture rows and provider rows both fit) ─────
 
@@ -102,6 +103,8 @@ export interface Definition {
   title: string;
   description: string | null;
   owner: string | null;
+  /** The owner as a name (a person, or the agent that runs it), when it is known. */
+  ownerName?: string | null;
   version: number;
   source: { table: DefinitionSourceTable; id: string };
   steps: DefinitionStep[];
@@ -161,7 +164,7 @@ function botTriggers(b: BotDefinitionSource): DefinitionTrigger[] {
 function botSteps(b: BotDefinitionSource): DefinitionStep[] {
   return [
     { id: 'trigger', label: 'Trigger fires', detail: b.trigger },
-    { id: 'enqueue', label: 'Enqueued', detail: 'agent_jobs, behind the money brakes in lib/bot-runner.ts' },
+    { id: 'enqueue', label: 'Enqueued', detail: 'on the work queue, behind the spending limits' },
     { id: 'claim', label: 'Claimed by a box' },
     { id: 'execute', label: 'Executed', detail: b.model },
     ...(b.requiresReview ? [{ id: 'review', label: 'Human review', detail: 'the job stops at awaiting_review' }] : []),
@@ -171,7 +174,7 @@ function botSteps(b: BotDefinitionSource): DefinitionStep[] {
 export function botDefinition(b: BotDefinitionSource): Definition {
   return {
     id: definitionIdFor.bot(b.id), tenant: 'pipelines', contextTenant: 'orgiq', kind: 'bot',
-    title: b.name, description: b.prompt.split('\n')[0]?.slice(0, 240) || null,
+    title: humanizeSlug(b.name), description: b.prompt.split('\n')[0]?.slice(0, 240) || null,
     owner: b.createdBy, version: 1,
     source: { table: 'agent_bots', id: b.id },
     steps: botSteps(b), triggers: botTriggers(b),
@@ -189,11 +192,11 @@ export function commandDefinition(c: CommandDefinitionSource): Definition {
   const owner = commandOwner(c);
   return {
     id: definitionIdFor.command(c.name), tenant: 'pipelines', contextTenant: 'assessment', kind: 'assessment-command',
-    title: c.name, description: c.summary, owner, version: 1,
+    title: humanizeSlug(c.name), description: c.summary, owner, version: 1,
     source: { table: 'assessment_commands', id: c.name },
     // The steps the projection records for an assessment run.
     steps: [
-      { id: 'launch', label: 'Launched', detail: 'POST /api/assessment/runs' },
+      { id: 'launch', label: 'Launched', detail: 'from the assessment workspace' },
       { id: 'execute', label: 'Executed', detail: `${owner} with ${c.allowed_tools.join(', ')}` },
       { id: 'write', label: 'Wrote outputs', detail: 'the run ledger; scores are applied by the BFF, never the agent' },
     ],
@@ -437,7 +440,7 @@ export function projectApprovals(src: ApprovalSources): ApprovalRequest[] {
       title: run?.context.title ?? j.title, question: 'Accept the work this job produced?',
       detail: j.boxId ? `ran on ${j.boxId}` : null, requestedAt: j.finishedAt,
       requiredRoles: r.roles, rolesDefaulted: r.defaulted, contextTenant: 'orgiq',
-      decidedThrough: 'job review (POST /api/work/jobs/:id/review)',
+      decidedThrough: 'the job review',
     });
   }
 
@@ -453,7 +456,7 @@ export function projectApprovals(src: ApprovalSources): ApprovalRequest[] {
       title: c.title, question: 'The policy gates require a person to approve this change before it is delivered.',
       detail: [c.repoFullName, typeof c.filesChanged === 'number' ? `${c.filesChanged} file(s)` : null].filter(Boolean).join(' · ') || null,
       requestedAt: c.createdAt, requiredRoles: r.roles, rolesDefaulted: r.defaulted, contextTenant: 'orgiq',
-      decidedThrough: 'change decision (POST /api/sdlc/changes/:id/decide)',
+      decidedThrough: 'the change review',
     });
   }
 
@@ -471,7 +474,7 @@ export function projectApprovals(src: ApprovalSources): ApprovalRequest[] {
       title: k.question.length > 120 ? `${k.question.slice(0, 117)}…` : k.question,
       question: k.question, detail: k.context, requestedAt: k.createdAt,
       requiredRoles: r.roles, rolesDefaulted: r.defaulted, contextTenant: 'orgiq',
-      decidedThrough: 'lab consult answer (POST /api/lab/consults/:id/answer)',
+      decidedThrough: 'the question put to a person',
     });
   }
 

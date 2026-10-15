@@ -18,7 +18,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { roleLabel } from '../../lib/pipelineDefinitions';
 import { writeJson } from '../../lib/writeJson';
 
-interface PipelinesConfig { defaultApproverRole: string; updatedBy: string | null; approverRoleOptions: string[] }
+interface PipelinesConfig { defaultApproverRole: string; updatedBy: string | null; updatedByName?: string | null; approverRoleOptions: string[] }
 
 export default function ConfigurationPage() {
   const { can } = useCapabilities();
@@ -57,7 +57,7 @@ export default function ConfigurationPage() {
           <Stack gap="md">
             <KeyValue items={[
               { label: 'Now', value: roleLabel(data.defaultApproverRole) },
-              { label: 'Last changed by', value: data.updatedBy ?? 'Nobody — the design default (operator)' },
+              { label: 'Last changed by', value: data.updatedByName ?? data.updatedBy ?? 'Nobody has changed it (the default is Operator)' },
             ]} />
             {canEdit && (
               <Stack gap="sm">

@@ -27,7 +27,7 @@ import { clock } from '../mock/core/index.js';
 // The rows themselves live behind registered fixtures, so a recorded
 // experience or an answered consult is undone by `POST /api/__mock/reset`.
 import {
-  labConsults, labExperiences, nextMockConsultId, nextMockExperienceId,
+  labConsults, labExperiences, nextMockConsultId, nextMockExperienceId, SEEDED_CONSULT_LIFETIME_MS,
 } from '../mock/lab.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
@@ -155,12 +155,17 @@ export interface LabConsult {
   answeredAt: string | null;
 }
 
+/** How long a pending consult waits before it expires: 30 minutes, longer for the one the mock seeds for a demo. */
+function consultLifetimeMs(c: LabConsult): number {
+  return (config.mock.aurora ? SEEDED_CONSULT_LIFETIME_MS[c.id] : undefined) ?? CONSULT_EXPIRY_MS;
+}
+
 function expireStale(c: LabConsult): LabConsult {
   // `clock.now()`, not `Date.now()`: openConsult stamps createdAt from the
   // clock, so measuring its age against wall time would expire every consult a
   // frozen-clock test opens in the past — and would leave a consult opened
   // under a freeze un-expirable forever.
-  if (c.status === 'pending' && clock.now().getTime() - Date.parse(c.createdAt) > CONSULT_EXPIRY_MS) {
+  if (c.status === 'pending' && clock.now().getTime() - Date.parse(c.createdAt) > consultLifetimeMs(c)) {
     c.status = 'expired';
   }
   return c;

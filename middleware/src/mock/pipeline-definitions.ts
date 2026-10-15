@@ -23,30 +23,41 @@
 // No counts are stored anywhere here (mock contract rule 1): a definition's
 // run count and last run are selected from the projection per read.
 
-import { defineFixture } from './core/index.js';
+import { clock, defineFixture } from './core/index.js';
+import { humanizeSlug } from '../lib/pipeline-run-titles.js';
 import type { PipelineRunRecord, StoredDefinition } from '../lib/pipeline-definitions.js';
 
-/** schema/pipeline_schema.sql's seed — the nine commands and the agent that runs each. */
-const SEEDED_COMMANDS: Array<[name: string, owner: string]> = [
-  ['classify-transcript', 'orgiq-assessment-scorer'],
-  ['score-dimensions', 'orgiq-assessment-scorer'],
-  ['process-self-assessment', 'orgiq-assessment-scorer'],
-  ['develop-jira-story', 'orgiq-assessment-drafter'],
-  ['extract-enterprise-context', 'orgiq-assessment-drafter'],
-  ['validate-outputs', 'orgiq-assessment-drafter'],
-  ['draft-confluence-page', 'orgiq-assessment-drafter'],
-  ['suggest-confluence-content', 'orgiq-assessment-drafter'],
-  ['draw-diagram', 'orgiq-assessment-drafter'],
+/**
+ * schema/pipeline_schema.sql's seed — the nine commands, each recorded by Ines
+ * Moreau (the pipelines author): her version, the operator role approving its
+ * steps. The agent that runs a command is the registry's derivation
+ * (commandOwner), not the definition's owner.
+ */
+const SEEDED_RUNBOOKS: Array<[candidate: string, title: string]> = [
+  ['promo-aurora-cold-start', 'Resume a nightly ingest from its last checkpoint'],
+  ['promo-arm64-fargate', 'Quarantine a malformed batch instead of failing the whole load'],
+  ['promo-custodian-sg-drift', 'Backfill a month of events without duplicating rows'],
+];
+const SEEDED_COMMANDS: string[] = [
+  'classify-transcript', 'score-dimensions', 'process-self-assessment', 'develop-jira-story',
+  'extract-enterprise-context', 'validate-outputs', 'draft-confluence-page', 'suggest-confluence-content', 'draw-diagram',
 ];
 
 export const pipelineDefinitionRows = defineFixture<StoredDefinition>({
   key: 'pipelines.definitions',
   scenarios: {
-    default: () => SEEDED_COMMANDS.map(([name, owner]) => ({
-      id: `assessment:${name}`, contextTenant: 'assessment', kind: 'assessment-command',
-      title: name, owner, version: 1, approverRoles: [],
-      sourceTable: 'assessment_commands', sourceId: name, updatedBy: null, updatedAt: null,
-    })),
+    default: () => [
+      ...SEEDED_COMMANDS.map((name, i): StoredDefinition => ({
+        id: `assessment:${name}`, contextTenant: 'assessment', kind: 'assessment-command',
+        title: humanizeSlug(name), owner: 'u-ines', version: 1, approverRoles: ['operator'],
+        sourceTable: 'assessment_commands', sourceId: name, updatedBy: 'u-ines', updatedAt: clock.daysAgo(30 + i * 4),
+      })),
+      // The three runbooks on the ladder are Ines's too: she wrote the procedures the fleet learned.
+      ...SEEDED_RUNBOOKS.map(([candidate, title], i): StoredDefinition => ({
+        id: `runbook:${candidate}`, contextTenant: 'orgiq', kind: 'runbook', title, owner: 'u-ines', version: 1, approverRoles: ['operator'],
+        sourceTable: 'promotion_candidates', sourceId: candidate, updatedBy: 'u-ines', updatedAt: clock.daysAgo(14 + i * 6),
+      })),
+    ],
     empty: () => [],
     error: () => { throw new Error('pipeline_definitions unavailable: relation does not exist'); },
   },
@@ -66,7 +77,7 @@ export interface PipelineConfigRow { key: string; value: unknown; updatedBy: str
 export const pipelineConfigRows = defineFixture<PipelineConfigRow>({
   key: 'pipelines.config',
   scenarios: {
-    default: () => [{ key: 'default_approver_role', value: 'operator', updatedBy: null }],
+    default: () => [{ key: 'default_approver_role', value: 'operator', updatedBy: 'u-dara' }],
     empty: () => [],
   },
 });

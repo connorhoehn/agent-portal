@@ -20,6 +20,8 @@ export interface PipelineDefinition {
   title: string;
   description: string | null;
   owner: string | null;
+  /** The owner as a name (a person, or the agent that runs it). */
+  ownerName?: string | null;
   version: number;
   source: { table: string; id: string };
   steps: DefinitionStep[];
@@ -157,8 +159,8 @@ export function brakesNote(brakes: readonly string[]): string {
 }
 
 /** The catalog search: title, id, owner and description, case-insensitive. Empty matches all. */
-export function matchesDefinition(def: Pick<PipelineDefinition, 'title' | 'id' | 'owner' | 'description'>, query: string): boolean {
+export function matchesDefinition(def: Pick<PipelineDefinition, 'title' | 'id' | 'owner' | 'description'> & { ownerName?: string | null }, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return [def.title, def.id, def.owner ?? '', def.description ?? ''].some((v) => v.toLowerCase().includes(q));
+  return [def.title, def.id, def.owner ?? '', def.ownerName ?? '', def.description ?? ''].some((v) => v.toLowerCase().includes(q));
 }

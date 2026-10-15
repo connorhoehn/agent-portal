@@ -30,7 +30,7 @@ export default function QueuesPage() {
   const rows = data?.queues ?? [];
   const filtered = filterQueues(rows, query, filter);
   const adapter = pipelineCollectionAdapter('queues', { setQuery, setFilter, refresh,
-    scopeNote: 'Search and status filters use loaded queue metadata across table pages. Fleet totals include all queues. Unknown counts stay unknown. Commands never consume, retry, purge or send queue messages.' });
+    scopeNote: 'Search and filter the queues shown. Unknown counts stay unknown. Commands never consume, retry, purge or send messages.' });
   const row = filtered.find(row => row.name === selected);
   const work = rows.filter(row => !row.deadLetter);
   const dlqs = rows.filter(row => row.deadLetter);

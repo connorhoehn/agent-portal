@@ -27,6 +27,8 @@ export interface PipelineRun {
   triggeredBy: string | null;
   /** The person behind `triggeredBy`, when it is a known account. */
   triggeredByName?: string;
+  /** Who owns the definition the run executes. */
+  ownerName?: string | null;
   triggerType: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -49,6 +51,8 @@ export interface PipelineRun {
     aguiRunId?: string | null;
     threadId?: string | null;
     agentId?: string | null;
+    /** The initiative the run acts for, when a name is known. */
+    initiativeName?: string | null;
   };
 }
 

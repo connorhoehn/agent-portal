@@ -930,7 +930,9 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       { seed: 'context_tenant', mock: (d: { contextTenant: string }) => d.contextTenant },
       { seed: 'owner', mock: (d: { owner: string | null }) => d.owner },
       { seed: 'version', mock: (d: { version: number }) => d.version, normalize: num },
+      { seed: 'approver_roles', mock: (d: { approverRoles: string[] }) => JSON.stringify(d.approverRoles) },
       { seed: 'source_id', mock: (d: { source: { id: string } }) => d.source.id },
+      { seed: 'updated_by', mock: (d: { meta: Record<string, unknown> }) => (d.meta['updatedBy'] as string | null | undefined) ?? null },
     ],
   },
 

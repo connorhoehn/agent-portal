@@ -344,6 +344,8 @@ export interface RunContext {
   aguiRunId?: string | null;
   threadId?: string | null;
   agentId?: string | null;
+  /** The initiative the run acts for, when a name is known (lib/pipeline-run-titles.ts). */
+  initiativeName?: string | null;
 }
 
 export interface Run {
@@ -355,6 +357,8 @@ export interface Run {
   triggeredBy: string | null;
   /** The person behind `triggeredBy` when it is a known account (a clone prints its persona); absent otherwise. */
   triggeredByName?: string;
+  /** Who owns the definition the run executes (its author, or the bot's creator), when a name is known. */
+  ownerName?: string | null;
   triggerType: TriggerType;
   startedAt: string | null;
   finishedAt: string | null;

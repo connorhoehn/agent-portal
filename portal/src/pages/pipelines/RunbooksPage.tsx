@@ -70,7 +70,7 @@ export default function RunbooksPage() {
   const all = data?.runbooks ?? [];
   const rows = filterRunbooks(all, query, filter);
   const adapter = pipelineCollectionAdapter('runbooks', { setQuery, setFilter, refresh,
-    scopeNote: 'Search and promotion filters use loaded runbooks across table pages. Passed means a completed dry-run; promoted runbooks have a separate filter. Commands never start a dry-run or promote a runbook.' });
+    scopeNote: 'Search and filter the runbooks shown. Passed means a completed dry-run. Commands never start a dry-run or promote a runbook.' });
 
   return (
     <CollectionCommandPage data-testid="pipelines-runbooks" title="Runbooks" description="Runbooks on their way to becoming skills. A runbook becomes a skill only after a completed dry-run of its own definition.">

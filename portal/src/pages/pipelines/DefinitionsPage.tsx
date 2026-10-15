@@ -50,6 +50,7 @@ const COLUMNS: DataTableColumn<PipelineDefinition>[] = [
     render: (d) => (d.enabled ? <Chip tone="success" size="xs">active</Chip> : <Chip tone="neutral" size="xs">{d.orphaned ? 'orphaned' : 'inactive'}</Chip>),
   },
   { key: 'kind', header: 'Kind', render: (d) => kindLabel(d.kind) },
+  { key: 'owner', header: 'Owner', render: (d) => d.ownerName ?? d.owner ?? <T size="xs" tone="tertiary">—</T> },
   { key: 'contextTenant', header: 'Workspace', render: (d) => <Chip tone="neutral" size="xs">{d.contextTenant}</Chip> },
   { key: 'triggers', header: 'Triggers', render: (d) => triggerSummary(d.triggers) },
   { key: 'approvers', header: 'Approved by', render: (d) => approverSummary(d.effectiveApproverRoles, d.approversDefaulted) },
@@ -80,7 +81,7 @@ export default function DefinitionsPage() {
   const all = data?.definitions ?? [];
   const rows = all.filter((d) => matchesDefinition(d, query));
   const adapter = pipelineCollectionAdapter('definitions', { setQuery, setFilter: setKind, refresh,
-    scopeNote: 'Search uses the loaded definition catalog. Kind changes refetch the catalog; search, paging and sorting remain table controls. Commands do not run or change definitions.' });
+    scopeNote: 'Search the catalog by name, owner or kind. Commands never run or change a definition.' });
 
   const open = (id: string) => navigate(definitionHref(id));
   useCrumbLabel(openId ?? undefined, all.find((d) => d.id === openId)?.title ?? null);

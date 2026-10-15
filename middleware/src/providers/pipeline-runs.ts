@@ -16,8 +16,9 @@
 import { config } from '../config.js';
 import {
   normalizeAgentSteps, projectRuns,
-  type Projection, type RunSources, type BotRunSource, type InvocationSource, type SourceTable,
+  type Projection, type Run, type RunSources, type BotRunSource, type InvocationSource, type SourceTable,
 } from '../lib/pipeline-runs.js';
+import { presentRunTitles, type RunNames } from '../lib/pipeline-run-titles.js';
 import { liveAgentRuns } from '../lib/agent-runs-live.js';
 import { userNameFor } from '../lib/user-names.js';
 
@@ -161,5 +162,42 @@ export async function loadProjection(): Promise<LoadedProjection> {
     const name = userNameFor(run.triggeredBy);
     if (name) run.triggeredByName = name;
   }
+  // Titles in words: the team, work item, bot and initiative behind each id (lib/pipeline-run-titles.ts).
+  const names = await loadRunNames(projection.runs);
+  presentRunTitles(projection.runs, names);
+  // The definition's owner, beside who started the run: the author's recorded name, else the bot's creator.
+  for (const run of projection.runs) {
+    const owner = names.owner(run.definitionId);
+    if (owner) run.ownerName = owner;
+  }
   return { ...projection, unavailable };
+}
+
+/** The names the projection's ids stand for, read once per projection; a reader that fails names nothing. */
+async function loadRunNames(runs: readonly Run[]): Promise<RunNames> {
+  const quiet = async <T>(read: () => Promise<T>, fallback: T): Promise<T> => { try { return await read(); } catch { return fallback; } };
+  const [teams, bots, linked, stored] = await Promise.all([
+    quiet(async () => (await import('./assessment.js')).listTeams(), []),
+    quiet(async () => (await import('./bots.js')).listBots(), []),
+    quiet(async () => (await import('./agent-projects.js')).listAgentProjects(), []),
+    quiet(async () => (await import('./pipeline-definitions.js')).listStoredDefinitions(), []),
+  ]);
+  const workItemIds = [...new Set(runs.map((r) => r.context.workItemId).filter((id): id is string => !!id))].slice(0, 60);
+  const items = await Promise.all(workItemIds.map((id) => quiet(async () => (await import('./work-items.js')).getWorkItem(id), null)));
+  const teamNames = new Map(teams.map((t) => [t.id, t.name]));
+  const botRows = new Map(bots.map((b) => [b.id, { name: b.name, initiative: b.orgProjectName ?? null }]));
+  const owners = new Map<string, string>();
+  for (const b of bots) { const n = userNameFor(b.createdBy); if (n) owners.set(`bot:${b.id}`, n); }
+  for (const d of stored) { const n = userNameFor(d.owner); if (n) owners.set(d.id, n); }
+  // The offline link rows carry no initiative name (mock/agent-projects.ts); the initiative fixture has it.
+  const findInitiative = config.mock.aurora ? (await import('../mock/initiatives.js')).findInitiative : null;
+  const projectNames = new Map(linked.map((p) => [p.id, p.orgProjectName ?? (p.orgProjectId && findInitiative ? findInitiative(p.orgProjectId)?.name ?? null : null)]));
+  const workItems = new Map(items.flatMap((w) => (w ? [[w.id, { title: w.title, initiative: w.projectName || null }] as const] : [])));
+  return {
+    team: (id) => teamNames.get(id) ?? null,
+    workItem: (id) => workItems.get(id) ?? null,
+    bot: (id) => botRows.get(id) ?? null,
+    project: (id) => projectNames.get(id) ?? null,
+    owner: (definitionId) => owners.get(definitionId) ?? null,
+  };
 }

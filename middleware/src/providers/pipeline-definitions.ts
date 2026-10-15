@@ -37,6 +37,7 @@ import type { ContextTenant, PipelineRunStatus } from '../lib/pipeline-runs.js';
 import { clock } from '../mock/core/index.js';
 import { pipelineConfigRows, pipelineDefinitionRows, pipelineRunRecords } from '../mock/pipeline-definitions.js';
 import { jobEvents, type JobChangeEvent } from './agent-jobs.js';
+import { userNameFor } from '../lib/user-names.js';
 import { publishPipelineRunMove } from '../lib/gateway-run-feed.js';
 import { notifyPipelineRun, PIPELINE_NOTIFY_STATUSES } from '../lib/social-notify.js';
 
@@ -201,7 +202,10 @@ export async function loadDefinitionSources(): Promise<{ sources: DefinitionSour
 
 export async function loadDefinitions(): Promise<LoadedDefinitions> {
   const { sources, unavailable } = await loadDefinitionSources();
-  return { definitions: deriveDefinitions(sources), unavailable };
+  const agentNames = new Map(sources.agents.map((a) => [a.id, a.name]));
+  // The owner as a name: a person's display name, or the agent that runs the definition.
+  const definitions = deriveDefinitions(sources).map((d) => ({ ...d, ownerName: d.owner ? userNameFor(d.owner) ?? agentNames.get(d.owner) ?? null : null }));
+  return { definitions, unavailable };
 }
 
 export async function getDefinition(id: string): Promise<Definition | null> {

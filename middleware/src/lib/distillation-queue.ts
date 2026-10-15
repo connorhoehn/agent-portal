@@ -19,6 +19,7 @@ import { clock } from '../mock/core/index.js';
 import { distillationQueueMessages } from '../mock/distillation-queue.js';
 import { HttpMessageQueue, type MessageQueue, type QueueDefinition } from './mq-client.js';
 import { MemoryMessageQueue } from './memory-queue.js';
+import { pipelineQueueDefinitions } from './pipeline-queue-defs.js';
 
 export type CompactionTarget = 'L1' | 'L2';
 
@@ -85,10 +86,13 @@ export function compactionQueue(): MessageQueue {
     if (!mq.mock && process.env['JEST_WORKER_ID'] === undefined) {
       console.warn('[distill] MESSAGE_QUEUE_URL is unset — compaction jobs ride the in-process queue and do not survive a restart');
     }
-    queue = new MemoryMessageQueue({
+    const memory = new MemoryMessageQueue({
       rows: () => distillationQueueMessages.rows(),
       now: () => clock.now().getTime(),
     });
+    // The pipelines tenant's data-pipeline queues live on the same in-process transport (no consumer reads them).
+    for (const def of pipelineQueueDefinitions()) void memory.ensureQueue(def);
+    queue = memory;
   }
   return queue;
 }

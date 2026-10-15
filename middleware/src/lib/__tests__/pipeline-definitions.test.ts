@@ -82,7 +82,7 @@ describe('deriveDefinitions — every source row yields exactly one definition',
   it('a recorded version merges over its derived definition by id (the seeded commands are v1, recorded)', () => {
     const cmd = defs.find((d) => d.id === 'assessment:score-dimensions')!;
     expect(cmd.recorded).toBe(true);
-    expect(cmd.owner).toBe('orgiq-assessment-scorer');
+    expect(cmd.owner).toBe('u-ines');
     expect(cmd.version).toBe(1);
   });
 
@@ -229,9 +229,9 @@ describe('projectApprovals — pipeline.approval.requested off the existing gate
   });
 
   it('routes each to its existing decision path', () => {
-    expect(approvals.find((a) => a.id === 'job:j1')!.decidedThrough).toMatch(/\/api\/work\/jobs\/:id\/review/);
-    expect(approvals.find((a) => a.id === 'change:c1')!.decidedThrough).toMatch(/\/api\/sdlc\/changes\/:id\/decide/);
-    expect(approvals.find((a) => a.id === 'consult:k1')!.decidedThrough).toMatch(/\/api\/lab\/consults\/:id\/answer/);
+    expect(approvals.find((a) => a.id === 'job:j1')!.decidedThrough).toBe('the job review');
+    expect(approvals.find((a) => a.id === 'change:c1')!.decidedThrough).toBe('the change review');
+    expect(approvals.find((a) => a.id === 'consult:k1')!.decidedThrough).toBe('the question put to a person');
   });
 
   it('a consult answer carries the decision and the note', () => {

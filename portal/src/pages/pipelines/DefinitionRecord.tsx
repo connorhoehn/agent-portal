@@ -127,7 +127,7 @@ export function DefinitionRecord({ id, onChanged }: { id: string; onChanged: () 
             layout="row"
             items={[
               { label: 'Workspace', value: def.contextTenant === 'assessment' ? 'Assessment' : 'Work' },
-              { label: 'Owner', value: def.owner ?? 'Not recorded', muted: !def.owner, mono: Boolean(def.owner) },
+              { label: 'Owner', value: def.ownerName ?? def.owner ?? 'Not recorded', muted: !def.owner },
               { label: 'Version', value: `v${def.version}${def.recorded ? ' (recorded)' : ' (derived)'}` },
               { label: 'Source', value: `${def.source.table} · ${def.source.id}`, mono: true },
               { label: 'Triggers', value: def.triggers.map((t) => `${triggerSummary([t])} — ${t.detail}`).join('; ') || 'none' },

@@ -32,6 +32,7 @@ import {
   filterRuns, runEvents, type ContextTenant, type PipelineEvent, type PipelineEventName, type Run,
 } from '../lib/pipeline-runs.js';
 import { loadProjection } from '../providers/pipeline-runs.js';
+import { userNameFor } from '../lib/user-names.js';
 import { pipelineDecksRouter } from './pipeline-decks.js';
 import { pipelinesWorkGraphRouter } from './pipelines-work-graph.js';
 import { notifyPipelinesWorkGraphChanged } from '../lib/work-graph/live.js';
@@ -50,12 +51,17 @@ import {
 import { decideDryRunGate } from '../providers/promotions.js';
 
 import { readPipelineQueues } from '../lib/pipeline-queues.js';
+import { agentWorkQueueRow } from '../lib/pipeline-queue-defs.js';
 
 export const pipelinesRouter = Router();
 
 pipelinesRouter.get('/queues', requireAction('ViewPipelines'), asyncHandler(async (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.json(await readPipelineQueues());
+  const read = await readPipelineQueues();
+  // The agent work queue is the job rows, counted: it sits beside the transport queues.
+  let jobs: Array<{ status: string }> = [];
+  try { jobs = await (await import('../providers/agent-jobs.js')).listJobs({ limit: 200 }); } catch { /* the transport queues still answer */ }
+  res.json({ ...read, queues: [agentWorkQueueRow(jobs), ...read.queues] });
 }));
 
 pipelinesRouter.get('/summary', requireAction('ViewPipelines'), asyncHandler(async (_req, res) => {
@@ -359,7 +365,7 @@ pipelinesRouter.post('/runs/:id/cancel', requireAction('CancelRun'), asyncHandle
 
 pipelinesRouter.get('/configuration', view, asyncHandler(async (_req, res) => {
   const cfg = await getPipelinesConfig();
-  res.json({ ...cfg, approverRoleOptions: APPROVER_ROLE_OPTIONS });
+  res.json({ ...cfg, updatedByName: userNameFor(cfg.updatedBy), approverRoleOptions: APPROVER_ROLE_OPTIONS });
 }));
 
 pipelinesRouter.put('/configuration', requireAction('ManagePipelineConfig'), asyncHandler(async (req, res) => {
@@ -368,5 +374,5 @@ pipelinesRouter.put('/configuration', requireAction('ManagePipelineConfig'), asy
     throw new ValidationError(`defaultApproverRole must be one of ${APPROVER_ROLE_OPTIONS.join(', ')}`);
   }
   const cfg = await setDefaultApproverRole(role, req.session?.sub ?? null);
-  res.json({ ...cfg, approverRoleOptions: APPROVER_ROLE_OPTIONS });
+  res.json({ ...cfg, updatedByName: userNameFor(cfg.updatedBy), approverRoleOptions: APPROVER_ROLE_OPTIONS });
 }));

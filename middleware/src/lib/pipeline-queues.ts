@@ -1,6 +1,7 @@
 import { config } from '../config.js';
-import { compactionQueue, compactionQueueDefinitions } from './distillation-queue.js';
+import { compactionQueue } from './distillation-queue.js';
 import { MessageQueueError, type MessageQueue, type QueueSnapshot } from './mq-client.js';
+import { PIPELINE_QUEUE_PURPOSE, pipelineQueueDefinitions } from './pipeline-queue-defs.js';
 
 export interface PipelineQueueRow {
   name: string; purpose: string; deadLetter: boolean; redriveTo: string | null; maxReceives: number | null;
@@ -9,8 +10,8 @@ export interface PipelineQueueRow {
 
 /** An explicit inventory, never an unrestricted list of another service's queues. */
 export function pipelineQueueInventory(extra = '') {
-  const owned = compactionQueueDefinitions().map(def => ({ name: def.name,
-    purpose: def.name.endsWith('-dlq') ? 'Failed distillation deliveries' : def.name.endsWith('-l1') ? 'L0 → L1 compaction' : 'L1 → L2 compaction',
+  const owned = pipelineQueueDefinitions().map(def => ({ name: def.name,
+    purpose: PIPELINE_QUEUE_PURPOSE[def.name] ?? 'Configured queue',
     deadLetter: def.name.endsWith('-dlq'), redriveTo: def.redrive?.deadLetterQueue ?? null, maxReceives: def.redrive?.maxReceiveCount ?? null }));
   const names = new Set(owned.map(row => row.name));
   for (const name of extra.split(',').map(name => name.trim())) {
@@ -37,3 +38,4 @@ export async function readPipelineQueues(queue: MessageQueue = compactionQueue()
   }));
   return { observedAt: new Date().toISOString(), backend: queue.backend, queues };
 }
+

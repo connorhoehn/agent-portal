@@ -29,15 +29,25 @@
 // `pending` consult 30 minutes after `createdAt`, on read. So the seeded
 // pending consult is stamped minutes ago, not hours — a seed stamped
 // `hoursAgo(3)` would arrive already `expired` and the Work page's "waiting on
-// you" panel would be empty in every fresh process. It does age out of the
-// window in a long-running dev session, exactly as a real one would;
-// `POST /api/__mock/reset` re-stamps it.
+// you" panel would be empty in every fresh process. The seeded one is also
+// given a long lifetime (`SEEDED_CONSULT_LIFETIME_MS`): a demo that sits open
+// for an hour must not lose the question it is about to show. Consults opened
+// by a run still expire after 30 minutes; `POST /api/__mock/reset` re-stamps
+// the seeded one.
 
 import { clock, defineFixture } from './core/index.js';
 // Type-only, so it is erased at compile: providers/lab.ts imports the fixtures
 // below at run time, and a value import back the other way would be a genuine
 // cycle rather than a shared shape.
 import type { LabConsult, LabExperience } from '../providers/lab.js';
+
+/**
+ * How long a SEEDED pending consult stays pending, by id — the demo's open
+ * question about the cutover order outlives a long walkthrough. Keyed here, not
+ * on the row: the wire shape of a consult has no such field, and the real path
+ * has none (providers/lab.ts `consultLifetimeMs`).
+ */
+export const SEEDED_CONSULT_LIFETIME_MS: Readonly<Record<string, number>> = { 'con-mock-1': 3 * 24 * 60 * 60 * 1000 };
 
 /**
  * What the fleet has learned, across repos on purpose: the point of fleet
@@ -54,60 +64,52 @@ function seedExperiences(): LabExperience[] {
   return [
     {
       id: 'exp-mock-1',
-      sessionId: 'sess-mock-aurora-cold-start-000000000001', boxId: 'box-mock-0006',
-      repo: 'aws-agentcore', initiativeId: 'p-observability',
+      sessionId: 'sess-mock-ingest-checkpoint-00000000000001', boxId: 'box-mock-0006',
+      repo: 'orgiq-data-platform', initiativeId: null,
       kind: 'worked',
-      title: 'Warm-up SELECT 1 then a 6x3s backoff clears the Aurora cold-start race',
-      body: 'The first Data API call to a scale-to-zero 0.5-ACU cluster fails with '
-          + 'HttpEndpointNotEnabledException until the HTTP endpoint enables. Genuine SQL errors '
-          + 'still raise immediately, so the loop does not mask real bugs.',
-      tags: ['aurora', 'data-api', 'cold-start'],
+      title: 'Resuming from the checkpointed page cursor finishes an interrupted nightly ingest',
+      body: 'The vendor export rate-limited the load a third of the way in. Resuming from the '
+          + 'cursor in the load ledger completed it in one pass with no duplicate rows, and the '
+          + 'counts matched the source manifest.',
+      tags: ['ingest', 'checkpoint', 'rate-limit'],
       createdAt: clock.daysAgo(6),
     },
     {
       id: 'exp-mock-2',
-      sessionId: 'sess-mock-arm64-fargate-0000000000001', boxId: 'box-mock-0006',
-      // Was 'p-agent-fleet-ops' — no such row in mock/budgets.ts's fourteen
-      // initiatives (there is no "fleet ops" initiative in the OrgIQ demo
-      // cast). This is the platform's own middleware deploy, not one of the
-      // fourteen business initiatives, so null is the honest "no initiative
-      // context" — same as con-mock-3 below.
-      repo: 'aws-agentcore', initiativeId: null,
+      sessionId: 'sess-mock-partner-quarantine-000000000001', boxId: 'box-mock-0006',
+      // The shared loaders belong to none of the demo's business initiatives,
+      // so null is the honest "no initiative context" (as con-mock-3 below).
+      repo: 'orgiq-data-platform', initiativeId: null,
       kind: 'failed',
-      title: 'Fargate replaced the middleware task in a loop with exec format error',
-      body: 'The image was built on Apple Silicon and Fargate defaulted the task definition to '
-          + 'x86_64. The service sat in UPDATE_IN_PROGRESS the whole time and no log line named '
-          + 'the architecture.',
-      tags: ['fargate', 'arm64'],
+      title: 'One malformed row failed the whole nightly partner batch',
+      body: 'A partner file carried one row with an unescaped quote. The parser raised, the '
+          + 'transaction rolled back and the entire batch stayed in the landing bucket overnight.',
+      tags: ['ingest', 'quarantine'],
       createdAt: clock.daysAgo(12),
     },
     {
       id: 'exp-mock-3',
-      sessionId: 'sess-mock-adot-configurator-00000000001', boxId: 'box-mock-0002',
-      repo: 'aws-agentcore', initiativeId: 'p-observability',
+      sessionId: 'sess-mock-feed-schema-shift-00000000000001', boxId: 'box-mock-0002',
+      repo: 'orgiq-data-platform', initiativeId: 'p-data-lake',
       kind: 'gotcha',
-      title: 'Vanilla opentelemetry-distro leaves aws/spans silently empty on AgentCore Runtime',
-      body: 'AgentCore Runtime injects OTEL_PYTHON_CONFIGURATOR=aws_configurator, which only '
-          + 'exists in aws-opentelemetry-distro. With the vanilla package no configurator loads '
-          + 'and no spans ever export — no error, just silence.',
-      tags: ['otel', 'adot', 'agentcore'],
+      title: 'A vendor column added mid-feed shifted every later column in the transform',
+      body: 'The transform selected columns by position, so a new nullable column moved everything '
+          + 'after it by one. Nothing raised an error and the dashboards read plausible, wrong '
+          + 'numbers for four days.',
+      tags: ['schema', 'feeds'],
       createdAt: clock.daysAgo(9),
     },
     {
       id: 'exp-mock-4',
-      sessionId: 'sess-mock-custodian-sg-drift-000000001', boxId: 'box-mock-0002',
-      // Was 'p-security-baseline' — no such row in mock/budgets.ts. Repointed
-      // to the nearest real initiative this story is actually about: security
-      // group ingress hardening is squarely 'p-zero-trust' work ("service
-      // identity everywhere, policy-engine enforced"). Kept in sync with the
-      // same incident's observations in mock/promotions.ts.
-      repo: 'aws-agentcore', initiativeId: 'p-zero-trust',
+      sessionId: 'sess-mock-backfill-dedupe-0000000000001', boxId: 'box-mock-0002',
+      // The same incident as mock/promotions.ts's backfill runbook.
+      repo: 'orgiq-data-platform', initiativeId: 'p-realtime-analytics',
       kind: 'decision',
-      title: 'Decided to allow-list the caller CIDR rather than fight the custodian',
-      body: 'custodian-restrict-security-group-admin-ingress revokes 0.0.0.0/0 ingress within '
-          + 'seconds, with no stack event and no drift. openListener: false plus an explicit '
-          + 'allow-list CIDR is the shape that survives.',
-      tags: ['security-groups', 'custodian'],
+      title: 'Decided to key the backfill upsert on the event id and its payload version',
+      body: 'The vendor now reuses an event id for a corrected payload, so an upsert on the id '
+          + 'alone kept both versions. Keying on the id and the payload version makes a repeated '
+          + 'window change nothing.',
+      tags: ['backfill', 'dedupe'],
       createdAt: clock.daysAgo(2),
     },
     {

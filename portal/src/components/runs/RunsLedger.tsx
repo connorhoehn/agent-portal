@@ -45,9 +45,11 @@ function columns(showWorkspace: boolean): DataTableColumn<PipelineRun>[] {
         <PipelineRunStatusChip status={r.status} title={sourceStatusNote(r) ?? undefined} />
       ),
     },
+    { key: 'initiative', header: 'Initiative', render: (r) => r.context.initiativeName ?? <T size="xs" tone="tertiary">—</T> },
+    { key: 'owner', header: 'Owner', render: (r) => r.ownerName ?? <T size="xs" tone="tertiary">—</T> },
     { key: 'kind', header: 'Kind', render: (r) => kindLabel(r.context.kind) },
     ...(showWorkspace ? [{ key: 'tenant', header: 'Workspace', render: (r: PipelineRun) => <Chip tone="neutral" size="xs">{r.context.tenant}</Chip> }] : []),
-    { key: 'triggerType', header: 'Trigger', render: (r) => r.context.trigger ?? r.triggerType },
+    { key: 'triggerType', header: 'Started by', render: (r) => (r.triggeredByName ? `${r.triggeredByName} · ${r.context.trigger ?? r.triggerType}` : r.context.trigger ?? r.triggerType) },
     { key: 'costUsd', header: 'Cost', numeric: true, render: (r) => (r.costUsd != null ? usd(r.costUsd, { precision: 4 }) : '—') },
     {
       key: 'startedAt', header: 'Started', numeric: true, sortable: true,

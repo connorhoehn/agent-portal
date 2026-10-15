@@ -64,48 +64,44 @@ function obs(over: Pick<Observation, 'id' | 'kind' | 'title' | 'body' | 'session
  */
 function seedCandidates(): SeededCandidate[] {
   return [
-  // These observations' initiativeId used to be 'p-platform-reliability' —
-  // no such row exists in mock/budgets.ts's fourteen initiatives. The Aurora
-  // cold-start race is the platform's own infra, not one of the demo's
-  // business initiatives, so null ("no initiative context") is what's honest,
-  // same as promo-arm64-fargate below and con-mock-3 in mock/lab.ts.
+  // The ladder's stories are the org's DATA pipelines (ingestion, transforms,
+  // backfills): they are what the pipelines tenant's Runbooks page shows, and
+  // mock/lab.ts's fleet memory holds the same incidents. The first two carry
+  // no initiative (null, "no initiative context": the platform's shared
+  // loaders belong to none of the demo's business initiatives).
   {
     id: 'promo-aurora-cold-start',
     proposedKind: 'skill',
-    title: 'Retry the Data API through an Aurora cold start',
-    rationale: 'Three independent sessions hit the same HttpEndpointNotEnabledException on the first call after a scale-to-zero cluster wakes, and the same warm-up-then-backoff fix cleared it every time — a clean, repeatable procedure worth running unattended rather than re-discovering per session.',
+    title: 'Resume a nightly ingest from its last checkpoint',
+    rationale: 'Three independent runs lost an overnight load to a source API rate limit partway through, and resuming from the last committed page cursor instead of re-pulling from the top finished each one without duplicate rows. A clean, repeatable procedure worth running unattended rather than re-discovering per run.',
     dryRunRunId: null,
     status: 'candidate',
     observations: [
       obs({
-        id: 'obs-aurora-1', kind: 'failed', sessionId: 'sess-914',
-        title: 'Aurora Data API call failed with HttpEndpointNotEnabledException on first request',
-        body: 'schema/load_schema.py hit HttpEndpointNotEnabledException calling a just-created 0.5-ACU cluster — the Data API endpoint was not enabled yet, not a real SQL error.',
+        id: 'obs-aurora-1', kind: 'failed', sessionId: 'sess-914', repo: 'orgiq-data-platform',
+        title: 'Nightly ingest aborted partway through when the source API rate-limited it',
+        body: 'The vendor billing export answered 429 for four minutes. The loader treated it as fatal and left the staging table half filled, with no cursor recorded to resume from.',
         initiativeId: null, createdAt: ago(19),
       }),
       obs({
-        id: 'obs-aurora-2', kind: 'decision', sessionId: 'sess-914',
-        title: 'Decided to retry the cold-start exception with backoff instead of failing loud',
-        body: 'A cold 0.5-ACU cluster fails the first Data API call until the HTTP endpoint enables. Decision: warm-up SELECT 1 first, then retry HttpEndpointNotEnabledException and its resume/scale siblings 6x with a 3s backoff before treating it as a real failure.',
+        id: 'obs-aurora-2', kind: 'decision', sessionId: 'sess-914', repo: 'orgiq-data-platform',
+        title: 'Decided to checkpoint the page cursor after every committed batch',
+        body: 'Each batch now writes its cursor to the load ledger in the same transaction as its rows, so a resume starts at the next page. Genuine failures still stop the load; only rate limits and timeouts are retried.',
         initiativeId: null, createdAt: ago(19),
       }),
       obs({
-        id: 'obs-aurora-3', kind: 'worked', sessionId: 'sess-1032',
-        title: 'Warm-up SELECT 1 plus 6x3s retry cleared the same cold-start race in a second rebuild',
-        body: 'Ran the retry loop again against a freshly redeployed OrgIQ-Aurora after a full teardown — same exception, same fix, cleared on attempt 2 of 6. Genuine SQL errors still raise immediately, so the loop does not mask real bugs.',
+        id: 'obs-aurora-3', kind: 'worked', sessionId: 'sess-1032', repo: 'orgiq-data-platform',
+        title: 'Resuming from the checkpoint finished a second interrupted load with no duplicate rows',
+        body: 'The same rate limit hit the next export a third of the way in. Resuming from the ledger cursor completed it in one pass, and the row counts matched the source manifest.',
         initiativeId: null, createdAt: ago(6),
       }),
     ],
   },
-  // Same fix as above: initiativeId was 'p-agent-fleet-ops', also not one of
-  // the fourteen mock/budgets.ts initiatives. The middleware's own deploy
-  // platform, not a business initiative — null, paired with exp-mock-2 in
-  // mock/lab.ts (the same incident).
   {
     id: 'promo-arm64-fargate',
     proposedKind: 'skill',
-    title: 'Pin Fargate tasks to ARM64 or eat exec format error',
-    rationale: 'Three sessions across two people independently hit the identical crash-loop, root-caused it to the same default, and shipped the same one-line fix — approved and dry-run verified, now a standing skill the fleet applies without rediscovering it.',
+    title: 'Quarantine a malformed batch instead of failing the whole load',
+    rationale: 'Three runs across two people independently hit the same failure, traced it to the same cause and shipped the same fix. It was reviewed and dry-run verified, and is now a standing skill the fleet applies without rediscovering it.',
     // Promoted before a dry-run was a recorded run (rule 1, pipelines P2):
     // the verdict predates `pipeline_runs`, so there is no run id to cite and
     // none is invented. Its "dry-run verified" is the reviewer's word, kept in
@@ -114,21 +110,21 @@ function seedCandidates(): SeededCandidate[] {
     status: 'promoted',
     observations: [
       obs({
-        id: 'obs-arm64-1', kind: 'failed', sessionId: 'sess-701', repo: 'aws-agentcore/middleware',
-        title: 'Middleware Fargate task crash-looped with exec format error after image push',
-        body: 'Task stuck UPDATE_IN_PROGRESS, replaced in a loop. The image was built on Apple Silicon and Fargate defaulted the task definition to x86_64.',
+        id: 'obs-arm64-1', kind: 'failed', sessionId: 'sess-701', repo: 'orgiq-data-platform/ingest',
+        title: 'A single malformed row failed the whole nightly partner batch',
+        body: 'A partner file carried one row with an unescaped quote. The parser raised, the transaction rolled back and the entire batch stayed in the landing bucket overnight.',
         initiativeId: null, createdAt: ago(41),
       }),
       obs({
-        id: 'obs-arm64-2', kind: 'decision', sessionId: 'sess-701', repo: 'aws-agentcore/middleware',
-        title: 'Decided to pin runtimePlatform to ARM64 explicitly rather than rely on the Fargate default',
-        body: 'MiddlewareServiceStack now sets runtimePlatform: ARM64 — also the cheaper option, so this is not a workaround with a cost tradeoff, it is strictly better.',
+        id: 'obs-arm64-2', kind: 'decision', sessionId: 'sess-701', repo: 'orgiq-data-platform/ingest',
+        title: 'Decided to route unparseable rows to a quarantine table and keep loading',
+        body: 'Rows that fail parsing now land in the quarantine table with their file and line, the batch continues, and the load report lists the quarantined count for a person to review. Strictly better than a silent skip.',
         initiativeId: null, createdAt: ago(41),
       }),
       obs({
-        id: 'obs-arm64-3', kind: 'worked', sessionId: 'sess-889', repo: 'aws-agentcore/middleware',
-        title: 'Explicit ARM64 runtimePlatform stopped the crash-loop on a second, unrelated rebuild',
-        body: 'Same fix applied to a fresh OrgIQ-MiddlewareService redeploy — task went healthy on the first attempt, no more exec format error.',
+        id: 'obs-arm64-3', kind: 'worked', sessionId: 'sess-889', repo: 'orgiq-data-platform/ingest',
+        title: 'Quarantine kept the next partner feed loading and surfaced three bad rows for review',
+        body: 'The same pattern on a different partner feed: the batch finished on time and the three malformed rows were waiting in quarantine the next morning.',
         initiativeId: null, createdAt: ago(12),
       }),
     ],
@@ -136,44 +132,41 @@ function seedCandidates(): SeededCandidate[] {
   {
     id: 'promo-adot-configurator',
     proposedKind: 'insight',
-    title: 'Agent images need ADOT, not vanilla opentelemetry-distro',
-    rationale: 'A pure fact about how AgentCore Runtime wires OTEL — no procedure to run, nothing to retry, just something every agent image must be built with. That makes it an insight to inject into the build-review checklist, not a runbook to execute.',
+    title: 'Every source feed needs a pinned schema version',
+    rationale: 'A pure fact about how feeds change: no procedure to run, nothing to retry, just something every ingestion definition must declare. That makes it an insight for the review checklist, not a runbook to execute.',
     dryRunRunId: null,
     status: 'candidate',
     observations: [
       obs({
-        id: 'obs-adot-1', kind: 'gotcha', sessionId: 'sess-552', repo: 'aws-agentcore/agents',
-        title: 'Vanilla opentelemetry-distro leaves aws/spans silently empty on AgentCore Runtime',
-        body: 'AgentCore Runtime injects OTEL_PYTHON_CONFIGURATOR=aws_configurator, which only exists in aws-opentelemetry-distro. With the vanilla package no configurator loads and no spans ever export — no error, just silence.',
-        initiativeId: 'p-observability', createdAt: ago(27),
+        id: 'obs-adot-1', kind: 'gotcha', sessionId: 'sess-552', repo: 'orgiq-data-platform/transforms',
+        title: 'A vendor added a column mid-feed and the transform silently shifted every later column',
+        body: 'The events feed gained a nullable column on a Tuesday. The transform selected columns by position, so everything after it moved by one and nothing raised an error.',
+        initiativeId: 'p-data-lake', createdAt: ago(27),
       }),
       obs({
-        id: 'obs-adot-2', kind: 'gotcha', sessionId: 'sess-552', repo: 'aws-agentcore/agents',
-        title: 'Empty aws/spans starved the span projector and /recent-invocations with no visible error',
-        body: 'Took a week to notice — the agent worked fine, it just produced zero observability. Nothing in the deploy logs pointed at the OTEL package choice.',
-        initiativeId: 'p-observability', createdAt: ago(27),
+        id: 'obs-adot-2', kind: 'gotcha', sessionId: 'sess-552', repo: 'orgiq-data-platform/transforms',
+        title: 'The shifted columns reached the dashboards before anyone noticed',
+        body: 'It took four days to notice: revenue by region looked plausible, just wrong. Nothing in the load report pointed at the feed.',
+        initiativeId: 'p-data-lake', createdAt: ago(27),
       }),
       obs({
-        id: 'obs-adot-3', kind: 'convention', sessionId: 'sess-670', repo: 'aws-agentcore/agents',
-        title: 'Every agent Dockerfile must install aws-opentelemetry-distro, never the vanilla package',
-        body: 'Confirmed the same silent-empty-spans failure on a second agent image that had copy-pasted an older base Dockerfile. Adding this as a standing build-review check.',
-        initiativeId: 'p-observability', createdAt: ago(9),
+        id: 'obs-adot-3', kind: 'convention', sessionId: 'sess-670', repo: 'orgiq-data-platform/transforms',
+        title: 'Every ingestion definition must declare the schema version it expects',
+        body: 'Confirmed the same silent shift on a second feed that had copied an older transform. Checking the declared version at load time is now a standing review check.',
+        initiativeId: 'p-data-lake', createdAt: ago(9),
       }),
     ],
   },
-  // initiativeId was 'p-security-baseline' — also not a real initiative.
-  // Repointed to 'p-zero-trust' (network perimeter hardening is squarely
-  // that initiative's work), matching exp-mock-4 in mock/lab.ts for the same
-  // incident. `driftedFrom: 'skl-custodian-sg-allowlist'` below is left as
-  // is — it points at a skill that was demoted back to runbook (see the
-  // rationale), so the id legitimately no longer resolves in
-  // mock/prompt-library.ts; it's a historical pointer, not a live FK, and
-  // it's pinned by providers/__tests__/promotions.test.ts.
+  // `driftedFrom: 'skl-custodian-sg-allowlist'` below is left as is: it points
+  // at a skill that was demoted back to runbook (see the rationale), so the id
+  // legitimately no longer resolves in mock/prompt-library.ts; it's a
+  // historical pointer, not a live FK, and it's pinned by
+  // providers/__tests__/promotions.test.ts.
   {
     id: 'promo-custodian-sg-drift',
     proposedKind: 'runbook',
-    title: 'Custodian revokes open security-group ingress within seconds — request an allow-list instead',
-    rationale: 'Was promoted to a skill after two clean sessions of the same fix (openListener: false, allow-list the caller CIDR). A third session hit the fix applied exactly as before and it STILL got revoked — custodian had started closing a second rule the skill did not cover. Drift detection caught the mismatch between the skill\'s recorded steps and observed behavior and sent it back down to runbook for a person to update before it runs unattended again.',
+    title: 'Backfill a month of events without duplicating rows',
+    rationale: 'Was promoted to a skill after two clean runs of the same backfill (replay the window, upsert on the event id). A third run applied the steps exactly as recorded and still produced duplicates: the vendor had started replaying an event id with a corrected payload. Drift detection caught the mismatch between the skill\'s recorded steps and observed behavior and sent it back down to runbook for a person to update before it runs unattended again.',
     // The failed dry-run the rationale describes ran before dry-runs were
     // recorded as runs; the next one is a `pipeline_runs` row.
     dryRunRunId: null,
@@ -181,22 +174,22 @@ function seedCandidates(): SeededCandidate[] {
     driftedFrom: 'skl-custodian-sg-allowlist',
     observations: [
       obs({
-        id: 'obs-custodian-1', kind: 'gotcha', sessionId: 'sess-410',
-        title: 'custodian-restrict-security-group-admin-ingress revoked our 0.0.0.0/0 ALB rule within seconds',
-        body: 'CFN authorized the rule at 14:20:22, custodian revoked it at 14:20:28 — no stack event, no drift, task healthy and target group green with zero traffic reaching it.',
-        initiativeId: 'p-zero-trust', createdAt: ago(58),
+        id: 'obs-custodian-1', kind: 'gotcha', sessionId: 'sess-410', repo: 'orgiq-data-platform/backfills',
+        title: 'Re-running the backfill window loaded the same events twice',
+        body: 'A retry replayed two days of events into staging a second time, and the warehouse model counted them twice until the duplicates were removed by hand.',
+        initiativeId: 'p-realtime-analytics', createdAt: ago(58),
       }),
       obs({
-        id: 'obs-custodian-2', kind: 'worked', sessionId: 'sess-410',
-        title: 'Setting openListener: false and passing an explicit allow-list CIDR kept the rule alive',
-        body: 'Reissued the ALB ingress scoped to a /32 instead of 0.0.0.0/0 — custodian left it alone. Promoted this to a skill after a second clean session repeated the same result.',
-        initiativeId: 'p-zero-trust', createdAt: ago(58),
+        id: 'obs-custodian-2', kind: 'worked', sessionId: 'sess-410', repo: 'orgiq-data-platform/backfills',
+        title: 'Replaying by event id and upserting on it made the backfill safe to repeat',
+        body: 'Reissued the same window with an upsert keyed on the event id: a second run changed nothing. Promoted this to a skill after a second clean run repeated the result.',
+        initiativeId: 'p-realtime-analytics', createdAt: ago(58),
       }),
       obs({
-        id: 'obs-custodian-3', kind: 'failed', sessionId: 'sess-1201',
-        title: 'The allow-list skill ran its recorded steps and the rule was revoked anyway',
-        body: 'Same openListener: false + allow-list CIDR pattern, applied by the skill exactly as recorded — custodian revoked it 4s later. The account now appears to also flag the allow-listed CIDR when it is wider than /28, which the skill\'s steps never accounted for.',
-        initiativeId: 'p-zero-trust', createdAt: ago(2),
+        id: 'obs-custodian-3', kind: 'failed', sessionId: 'sess-1201', repo: 'orgiq-data-platform/backfills',
+        title: 'The backfill skill ran its recorded steps and duplicates appeared anyway',
+        body: 'The same replay-and-upsert pattern, applied by the skill exactly as recorded, inserted duplicates again. The vendor now reuses an event id for a corrected payload, so keying on the id alone kept both versions; the skill\'s steps never accounted for payload versions.',
+        initiativeId: 'p-realtime-analytics', createdAt: ago(2),
       }),
     ],
   },

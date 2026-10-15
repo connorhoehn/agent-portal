@@ -106,24 +106,27 @@ CREATE TABLE IF NOT EXISTS pipeline_config (
 );
 
 -- Design §8: a definition that names no approver is approved by an operator.
-INSERT INTO pipeline_config (key, value) VALUES ('default_approver_role', '"operator"'::jsonb)
+INSERT INTO pipeline_config (key, value, updated_by) VALUES ('default_approver_role', '"operator"'::jsonb, 'u-dara')
 ON CONFLICT (key) DO NOTHING;
 
--- The nine assessment commands, version 1 — the commands the assessment
+-- The nine assessment commands (and the three ladder runbooks), version 1, recorded by Ines Moreau — the commands the assessment
 -- worker runs (providers/assessment.ts AGENT_COMMANDS, mirrored from the
 -- accelerator's .claude/commands as prompt documents). Seeded so a cluster
 -- carries each command's recorded version; the parity entity
 -- 'pipeline_definitions' (middleware/src/mock/core/parity/entities.ts) pins
 -- these rows against the derived registry, so a command added on one side
 -- and not the other fails the harness.
-INSERT INTO pipeline_definitions (id, context_tenant, kind, title, owner, version, source_table, source_id) VALUES
-  ('assessment:classify-transcript', 'assessment', 'assessment-command', 'classify-transcript', 'orgiq-assessment-scorer', 1, 'assessment_commands', 'classify-transcript'),
-  ('assessment:score-dimensions', 'assessment', 'assessment-command', 'score-dimensions', 'orgiq-assessment-scorer', 1, 'assessment_commands', 'score-dimensions'),
-  ('assessment:process-self-assessment', 'assessment', 'assessment-command', 'process-self-assessment', 'orgiq-assessment-scorer', 1, 'assessment_commands', 'process-self-assessment'),
-  ('assessment:develop-jira-story', 'assessment', 'assessment-command', 'develop-jira-story', 'orgiq-assessment-drafter', 1, 'assessment_commands', 'develop-jira-story'),
-  ('assessment:extract-enterprise-context', 'assessment', 'assessment-command', 'extract-enterprise-context', 'orgiq-assessment-drafter', 1, 'assessment_commands', 'extract-enterprise-context'),
-  ('assessment:validate-outputs', 'assessment', 'assessment-command', 'validate-outputs', 'orgiq-assessment-drafter', 1, 'assessment_commands', 'validate-outputs'),
-  ('assessment:draft-confluence-page', 'assessment', 'assessment-command', 'draft-confluence-page', 'orgiq-assessment-drafter', 1, 'assessment_commands', 'draft-confluence-page'),
-  ('assessment:suggest-confluence-content', 'assessment', 'assessment-command', 'suggest-confluence-content', 'orgiq-assessment-drafter', 1, 'assessment_commands', 'suggest-confluence-content'),
-  ('assessment:draw-diagram', 'assessment', 'assessment-command', 'draw-diagram', 'orgiq-assessment-drafter', 1, 'assessment_commands', 'draw-diagram')
+INSERT INTO pipeline_definitions (id, context_tenant, kind, title, owner, version, approver_roles, source_table, source_id, updated_by) VALUES
+  ('assessment:classify-transcript', 'assessment', 'assessment-command', 'Classify transcript', 'u-ines', 1, '["operator"]'::jsonb, 'assessment_commands', 'classify-transcript', 'u-ines'),
+  ('assessment:score-dimensions', 'assessment', 'assessment-command', 'Score dimensions', 'u-ines', 1, '["operator"]'::jsonb, 'assessment_commands', 'score-dimensions', 'u-ines'),
+  ('assessment:process-self-assessment', 'assessment', 'assessment-command', 'Process self-assessment', 'u-ines', 1, '["operator"]'::jsonb, 'assessment_commands', 'process-self-assessment', 'u-ines'),
+  ('assessment:develop-jira-story', 'assessment', 'assessment-command', 'Develop Jira story', 'u-ines', 1, '["operator"]'::jsonb, 'assessment_commands', 'develop-jira-story', 'u-ines'),
+  ('assessment:extract-enterprise-context', 'assessment', 'assessment-command', 'Extract enterprise context', 'u-ines', 1, '["operator"]'::jsonb, 'assessment_commands', 'extract-enterprise-context', 'u-ines'),
+  ('assessment:validate-outputs', 'assessment', 'assessment-command', 'Validate outputs', 'u-ines', 1, '["operator"]'::jsonb, 'assessment_commands', 'validate-outputs', 'u-ines'),
+  ('assessment:draft-confluence-page', 'assessment', 'assessment-command', 'Draft Confluence page', 'u-ines', 1, '["operator"]'::jsonb, 'assessment_commands', 'draft-confluence-page', 'u-ines'),
+  ('assessment:suggest-confluence-content', 'assessment', 'assessment-command', 'Suggest Confluence content', 'u-ines', 1, '["operator"]'::jsonb, 'assessment_commands', 'suggest-confluence-content', 'u-ines'),
+  ('assessment:draw-diagram', 'assessment', 'assessment-command', 'Draw diagram', 'u-ines', 1, '["operator"]'::jsonb, 'assessment_commands', 'draw-diagram', 'u-ines'),
+  ('runbook:promo-aurora-cold-start', 'orgiq', 'runbook', 'Resume a nightly ingest from its last checkpoint', 'u-ines', 1, '["operator"]'::jsonb, 'promotion_candidates', 'promo-aurora-cold-start', 'u-ines'),
+  ('runbook:promo-arm64-fargate', 'orgiq', 'runbook', 'Quarantine a malformed batch instead of failing the whole load', 'u-ines', 1, '["operator"]'::jsonb, 'promotion_candidates', 'promo-arm64-fargate', 'u-ines'),
+  ('runbook:promo-custodian-sg-drift', 'orgiq', 'runbook', 'Backfill a month of events without duplicating rows', 'u-ines', 1, '["operator"]'::jsonb, 'promotion_candidates', 'promo-custodian-sg-drift', 'u-ines')
 ON CONFLICT (id) DO NOTHING;
