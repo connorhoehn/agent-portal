@@ -111,7 +111,7 @@ export function DocumentLibrary({ sections, files = [], title = 'All documents',
       <PageHeader title={title} badge={<Chip size="md" data-testid="document-list-total">{rows.length}</Chip>}
         actions={<>
           {onUpload && <FilePickerButton accept=".md,.markdown,.txt,text/markdown,text/plain" multiple icon={<UploadIcon size={18} />}
-            disabled={uploading} onFiles={files => void onUpload(files)} data-testid="document-upload">
+            size="sm" disabled={uploading} onFiles={files => void onUpload(files)} data-testid="document-upload">
             {uploading ? 'Uploading…' : 'Upload'}
           </FilePickerButton>}
           {onNewPage && <DropdownMenu triggerVariant="primary" align="end" sections={newMenu}

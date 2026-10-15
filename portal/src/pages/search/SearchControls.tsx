@@ -41,8 +41,8 @@ export function SearchControls(props: SearchControlsProps) {
   return <Inline gap="xs" align="center" wrap={false} role="group" aria-label="Search controls" data-testid="search-chips"
     className="shrink-0 rounded-lg border border-border bg-surface-panel p-0.5">
     {controls(props).map(control => <Tooltip key={control.testId} content={`${control.label === 'Record type filter' ? 'Record type' : control.label}: ${control.value}`} placement="bottom">
-      <DropdownMenu align="end" triggerVariant="link" triggerLabel={control.label} triggerTestId={control.testId}
-        triggerClassName={`h-8 w-8 justify-center p-0 text-xs ${control.active ? 'bg-primary-soft text-primary' : 'text-text-secondary'}`}
+      <DropdownMenu align="end" triggerVariant="default" triggerLabel={control.label} triggerTestId={control.testId}
+        triggerClassName={`h-8 w-8 justify-center border-transparent p-0 text-xs ${control.active ? 'bg-primary-soft text-primary' : 'text-text-secondary'}`}
         trigger={control.icon} sections={control.sections} />
     </Tooltip>)}
   </Inline>;

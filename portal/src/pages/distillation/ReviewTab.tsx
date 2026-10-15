@@ -127,7 +127,7 @@ function Claim({
     <EditorShell titleSize="sm" titleAs="h2"
       title={row.title}
       statusPill={<StatusPill tone={VERDICT_PILL[sample.verdict].tone} label={VERDICT_PILL[sample.verdict].label} size="sm" />}
-      subtitle={[row.typeLabel, row.repo ? `From ${shortRepo(row.repo)}` : null, `Sampled ${relativeTime(row.sampledAt)}`].filter(Boolean).join(' · ')}
+      subtitle={<T size="xs" tone="tertiary">{[row.typeLabel, row.repo ? `From ${shortRepo(row.repo)}` : null, `Sampled ${relativeTime(row.sampledAt)}`].filter(Boolean).join(' · ')}</T>}
       headActions={(
         <Button size="sm" variant="secondary" onClick={onOpenSources} data-testid="review-sources-button">
           Sources{sourceCount != null ? ` ${sourceCount}` : ''}
@@ -161,7 +161,7 @@ function Claim({
               ) : claim == null ? (
                 <T size="sm" className="text-text-tertiary">Loading the claim…</T>
               ) : (
-                <T size="base" className="leading-6 text-text-primary" wrap data-testid="review-claim-text">{claim}</T>
+                <T size="sm" className="leading-6 text-text-primary" wrap data-testid="review-claim-text">{claim}</T>
               )}
               {guideHref && (
                 <Button size="sm" variant="link" className="self-start px-0" onClick={() => onOpen(guideHref)}>

@@ -40,7 +40,7 @@ function ScorePanelNodeImpl({ data }: NodeProps<ScorePanelNodeType>) {
       <Inline
         as="span"
         gap="none"
-        className="text-base font-bold tabular-nums leading-tight mb-1"
+        className="text-sm font-bold tabular-nums leading-tight mb-1"
         style={{ color }}
       >
         {data.rollingMean.toFixed(3)}

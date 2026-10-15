@@ -358,7 +358,7 @@ function OnCallPage() {
                     return [n.toFixed(3), label];
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} iconType="circle" />
 
                 <Bar
                   yAxisId="right"

@@ -234,7 +234,7 @@ function ContactsWorkspace() {
           description="People appear here once they hold a role in this workspace. An admin grants that from Identity." />
       ) : (
         <Stack gap="md">
-          <PageSection title="Here now" count={here.length} data-testid="social-contacts-here">
+          <PageSection size="sm" title="Here now" count={here.length} data-testid="social-contacts-here">
             {here.length
               ? <PresenceAvatars size={32} maxVisible={12} users={here} />
               : <EmptyState align="start" title="Nobody else is here" description="People show up here while Social is connected in their workspace." />}

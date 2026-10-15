@@ -57,7 +57,7 @@ function StoryCard({ story, teamId }: { story: Story; teamId: string }) {
       <Inline justify="between" align="start" wrap gap="sm">
         <Stack gap="none" className="min-w-0">
           <SectionLabel>{dimension ?? 'Not tied to a dimension'}</SectionLabel>
-          <strong className="mt-0.5 block text-base font-bold leading-tight text-text-primary">{story.title}</strong>
+          <strong className="mt-0.5 block text-sm font-bold leading-tight text-text-primary">{story.title}</strong>
         </Stack>
         <Inline gap="sm" align="center" className="shrink-0">
           {story.jira_key && <Chip size="xs" mono>{story.jira_key}</Chip>}

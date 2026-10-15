@@ -198,7 +198,7 @@ function ProgressTab({ dimension, teamId, onChanged, command }: { dimension: Dim
             {dimension.follow_up_questions.map((q) => (
               <Card key={q.question_id} padding="sm">
                 <Inline justify="between" align="start" gap="sm">
-                  {q.text}
+                  <T size="sm" wrap className="min-w-0">{q.text}</T>
                   <Chip tone={isOpenFollowUp(q.status) ? 'warning' : 'success'} size="xs" uppercase>{q.status}</Chip>
                 </Inline>
               </Card>

@@ -111,12 +111,12 @@ function RecommendationCard({ rec, teamId }: { rec: Recommendation; teamId: stri
       <Inline justify="between" align="start" wrap gap="sm">
         <Stack gap="none" className="min-w-0">
           <SectionLabel>Dimension {rec.dimension_id}</SectionLabel>
-          <strong className="mt-0.5 block text-base font-bold leading-tight text-text-primary">{rec.dimension_title}</strong>
+          <strong className="mt-0.5 block text-sm font-bold leading-tight text-text-primary">{rec.dimension_title}</strong>
         </Stack>
         <KindChip kind={rec.kind} />
       </Inline>
 
-      <Stack gap="none" className="mt-2.5 text-base font-semibold leading-snug text-text-primary">{rec.headline}</Stack>
+      <Stack gap="none" className="mt-2.5 text-sm font-semibold leading-snug text-text-primary">{rec.headline}</Stack>
 
       <Inline gap="sm" wrap align="center" className="mt-2.5">
         {cert && <LevelBadge level={cert.verified_level} size="xs" />}
@@ -204,7 +204,7 @@ function UnassessedGroup({ recs }: { recs: Recommendation[] }) {
     <Card padding="md" className="border-l-4 border-l-border">
       <Inline justify="between" align="start" wrap gap="sm">
         <Stack gap="none" className="min-w-0">
-          <strong className="text-base font-bold leading-tight text-text-primary">{unassessedGroupHeading(recs.length)}</strong>
+          <strong className="text-sm font-bold leading-tight text-text-primary">{unassessedGroupHeading(recs.length)}</strong>
           <Stack gap="none" className="mt-1 text-sm leading-relaxed text-text-secondary">
             There is not enough on file yet to say anything about{' '}
             {recs.length === 1 ? 'this dimension' : 'these dimensions'}. Answering the questions is what would let an
@@ -268,7 +268,7 @@ export function ImprovementPlan({ teamId }: { teamId: string }) {
     <Stack gap="lg">
       <Stack gap="xs">
         <SectionLabel>Improvement plan</SectionLabel>
-        {data.summary && <Stack gap="none" className="max-w-4xl text-lg font-semibold leading-snug text-text-primary">{data.summary}</Stack>}
+        {data.summary && <Stack gap="none" className="max-w-4xl text-sm font-semibold leading-snug text-text-primary">{data.summary}</Stack>}
         {counts && <Stack gap="none" className="max-w-4xl text-sm leading-relaxed text-text-secondary">{counts}</Stack>}
         <Stack gap="none" className="max-w-4xl text-xs leading-relaxed text-text-tertiary">
           Each entry states what the team has said about itself, how far the evidence reaches today, and what would

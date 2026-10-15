@@ -21,7 +21,8 @@
 //               badge (the library count Badge is 10 px; a chip is a filled,
 //               rounded box ≤24px tall); 16 px only inside the document editor
 //               canvas or the deck editor. Avatar initials (≤3 letters in a
-//               filled circle) are a glyph, not type, and are not walked.
+//               filled circle) and an icon drawn as a symbol or emoji ("⋯", "✓", "⬤", "🤖": no
+//               letters or digits) are glyphs, not type, and are not walked.
 //   title-scale 20 px belongs to the page title alone (the first visible h1 in
 //               the content column) — nothing else is that large
 //   above-title nothing in the content column is larger than the page title
@@ -31,6 +32,7 @@
 //   actions     the header action rows (PageHeader actions, the trail band's
 //               controls) hold only small buttons — no text above 14 px, no
 //               link-styled or md button in the title's action row
+//               (role=tab buttons are navigation, not actions, and are not judged)
 //
 // A burn-down (e2e/type-scale-burndown.tsv: route or App.tsx pattern ·
 // rule region size/weight · owner surface · due date): the sweep fails on any
@@ -152,6 +154,8 @@ async function walk(page: Page, withPrimary: boolean): Promise<Walk> {
       }
       return false;
     };
+    // An icon drawn as a glyph ("⋯", "✓", "⬤", "−", an emoji) is sized to its control, not set as type: symbols only, no letters or digits.
+    const glyphOf = (text: string) => /^[\p{S}\p{Extended_Pictographic}\u200d\ufe0f\s]+$/u.test(text);
     const canvasOf = (e: Element) => !!e.closest('.ProseMirror, .tiptap, [contenteditable="true"], [data-testid="deck-editor"], [data-testid^="doc-editor"]');
 
     // The page title: the first visible h1 in the content column.
@@ -184,7 +188,7 @@ async function walk(page: Page, withPrimary: boolean): Promise<Walk> {
         const where = regionOf(el);
         if (!where || (root === main && where.region !== 'content')) continue;
         seen.add(el);
-        if (!visible(el) || avatarOf(el, text)) continue;
+        if (!visible(el) || avatarOf(el, text) || glyphOf(text)) continue;
         const cs = getComputedStyle(el);
         let depth = 0;
         for (let a: Element | null = el; a && a !== where.root; a = a.parentElement) depth++;
@@ -226,7 +230,7 @@ async function walk(page: Page, withPrimary: boolean): Promise<Walk> {
     const buttons: ActionButton[] = [];
     for (const r of actionRoots) {
       for (const b of r.el.matches('button, a') ? [r.el] : r.el.querySelectorAll('button, a')) {
-        if (!visible(b) || r.kind !== 'title-row') continue;
+        if (!visible(b) || r.kind !== 'title-row' || b.getAttribute('role') === 'tab') continue; // tabs are navigation, not header actions
         const where = regionOf(b) ?? { region: 'content' as Region, root: main };
         buttons.push({ region: where.region, path: pathOf(b, where.root), text: (b.textContent ?? '').trim().slice(0, 40),
           variant: b.getAttribute('data-variant'), size: b.getAttribute('data-size'), height: Math.round(b.getBoundingClientRect().height) });
@@ -315,7 +319,13 @@ async function signIn(page: Page, tenant: Tenant | null, user = USER) {
       }
     }
   }
-  return signInAs(page, ids.get(user)!, tenant ? { tenant } : {});
+  // The BFF also answers 5xx to a login while it restarts under another run's edit.
+  for (let attempt = 1; ; attempt++) {
+    try { return await signInAs(page, ids.get(user)!, tenant ? { tenant } : {}); } catch (error) {
+      if (attempt >= 4) throw error;
+      await page.waitForTimeout(3_000);
+    }
+  }
 }
 
 async function resolveParams(page: Page, tenant: Tenant): Promise<InventoryRoute[]> {
@@ -323,6 +333,16 @@ async function resolveParams(page: Page, tenant: Tenant): Promise<InventoryRoute
   const get = async (url: string) => { const res = await page.request.get(url); return res.ok() ? res.json() : null; };
   for (const r of PARAM_ROUTES.filter((p) => p.tenant === tenant)) out.push({ tenant, path: await resolveParam(r, get), source: 'param', pattern: r.pattern });
   return out;
+}
+
+/** A navigation that survives the dev server restarting under another run's edit (connection refused / reset). */
+async function goto(page: Page, url: string) {
+  for (let attempt = 1; ; attempt++) {
+    try { await page.goto(url, { waitUntil: 'domcontentloaded' }); return; } catch (error) {
+      if (attempt >= 5 || !/ERR_CONNECTION|ERR_EMPTY_RESPONSE|ERR_NETWORK/.test(String(error))) throw error;
+      await page.waitForTimeout(4_000);
+    }
+  }
 }
 
 async function settle(page: Page) {
@@ -366,14 +386,19 @@ for (const tenant of TENANTS) {
     const stale: string[] = [];
     let first = true;
     for (const r of routes) {
-      await page.goto(r.path, { waitUntil: 'domcontentloaded' });
+      await goto(page, r.path);
       await settle(page);
       if (/^\/(select|login)/.test(new URL(page.url()).pathname)) {
         await signIn(page, tenant);
-        await page.goto(r.path, { waitUntil: 'domcontentloaded' });
+        await goto(page, r.path);
         await settle(page);
       }
-      const w = await walk(page, first && !ONLY);
+      // A client-side redirect or a dev-server reload can destroy the context mid-walk: settle and walk once more.
+      const w = await walk(page, first && !ONLY).catch(async (error: unknown) => {
+        if (!/Execution context was destroyed|navigation/i.test(String(error))) throw error;
+        await settle(page);
+        return walk(page, first && !ONLY);
+      });
       const offenders = judge(w);
       if (process.env.TYPE_SCALE_DETAIL === '1') {
         try { fs.appendFileSync(path.join(LOG_DIR, 'type-scale-detail.tsv'), offenders.filter((o) => !volatile(o)).map((o) => [r.pattern ?? r.path, o.rule, o.region, o.sw, o.path, o.text].join('\t') + '\n').join('')); } catch { /* detail is a copy */ }
@@ -403,7 +428,7 @@ for (const tenant of TENANTS) {
       first = false;
     }
     for (const o of observedRoutes) {
-      await page.goto(o.path, { waitUntil: 'domcontentloaded' });
+      await goto(page, o.path);
       await settle(page);
       const w = await walk(page, false);
       const titleEl = w.els.find((e) => e.title);
@@ -452,7 +477,7 @@ test('the reference (/iq/projects) and the Communication plane states', async ({
   for (const st of STATES) {
     await page.context().clearCookies();
     await signIn(page, null, st.user);
-    await page.goto(st.path, { waitUntil: 'domcontentloaded' });
+    await goto(page, st.path);
     await settle(page);
     await page.waitForTimeout(st.judged ? 0 : 2_500); // the granted landing opens its default conversation
     await settle(page);

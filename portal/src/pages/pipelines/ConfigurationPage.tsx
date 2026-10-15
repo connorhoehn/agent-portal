@@ -50,6 +50,7 @@ export default function ConfigurationPage() {
         <LoadingState label={isLoading ? 'Loading configuration…' : 'Loading…'} />
       ) : (
         <PageSection
+          size="sm"
           title="Default approver"
           description="Who approves a step when its definition names nobody. A definition's own approver roles always win."
         >

@@ -65,7 +65,7 @@ function TierNode({ node, selected }: { node: TierCanvasNode; selected: boolean 
       <Card padding="sm" className="h-full">
         <Stack gap="xs">
           <T size="xs" tone="tertiary">{`${d.level ?? 'Publish'} · ${d.title}`}</T>
-          <T size="base" weight="semibold" tone="primary" tabular>{d.value == null ? '—' : d.value}</T>
+          <T size="sm" weight="semibold" tone="primary" tabular>{d.value == null ? '—' : d.value}</T>
           {d.status && <StatusPill tone={d.status.tone === 'danger' ? 'error' : d.status.tone === 'warning' ? 'warning' : d.status.tone === 'info' ? 'info' : 'neutral'} label={d.status.label} size="sm" />}
           <T size="xs" className="text-primary">{node.kind === 'library' ? 'Open Agent library →' : `Browse ${d.title.toLowerCase()} →`}</T>
         </Stack>

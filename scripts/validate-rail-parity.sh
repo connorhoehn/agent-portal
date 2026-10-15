@@ -135,8 +135,8 @@ inv_forks=$(grep -lE "staticInventory|readFileSync\([^)]*components/shell|matchA
 section "type scale — 20 title / 14 headings+body / 12 meta down every page (portal/e2e/type-scale-sweep.spec.ts)"
 TS_SPEC=portal/e2e/type-scale-sweep.spec.ts
 TS_BURN=portal/e2e/type-scale-burndown.tsv
-# The ceiling: 674 at the 2026-10-07 adoption, 599 after the 2026-10-08 prune; it only goes down, and the burn-down's dates move it to zero.
-TYPE_SCALE_BASELINE_BUDGET=599
+# The ceiling: 674 at the 2026-10-07 adoption, 599 after the 2026-10-08 prune, 52 after ui-components 2.455.0, and 4 after 2.456.x emptied it (the 4 left are the runbooks proposal page's); it only goes down, and the burn-down's dates move it to zero.
+TYPE_SCALE_BASELINE_BUDGET=4
 [ -f "$TS_SPEC" ] && has "route-inventory" "$TS_SPEC" && ok "$TS_SPEC sweeps the route inventory" || fail "$TS_SPEC missing or not driven by route-inventory.ts"
 if [ -f "$TS_BURN" ]; then
   TS_V=$(node portal/e2e/burndown.ts check "$TS_BURN")

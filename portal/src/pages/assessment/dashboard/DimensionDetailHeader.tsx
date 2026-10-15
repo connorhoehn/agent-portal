@@ -20,7 +20,7 @@ export function DimensionDetailHeader({ dimension, index }: { dimension: Dimensi
     <Inline align="start" justify="between" wrap gap="md" className="p-5 pb-4">
       <Stack gap="none" className="min-w-0">
         <SectionLabel as="div">Dimension {String(index + 1).padStart(2, '0')}</SectionLabel>
-        <h2 className="mt-0.5 text-lg font-bold text-text-primary">{dimension.title}</h2>
+        <h2 className="mt-0.5 text-sm font-semibold text-text-primary">{dimension.title}</h2>
       </Stack>
       <Inline gap="sm" align="center" wrap={false} className="shrink-0">
         <SectionLabel as="div" className="hidden sm:block">

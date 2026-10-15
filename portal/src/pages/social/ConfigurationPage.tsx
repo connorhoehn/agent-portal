@@ -98,7 +98,7 @@ export default function ConfigurationPage() {
         <EmptyState align="start" testId="social-empty-configuration" title="Nobody holds a role here yet" description="An admin grants roles in this workspace from Identity." />
       ) : (
         <>
-          <PageSection title="What each role can do" data-testid="social-configuration-abilities">
+          <PageSection size="sm" title="What each role can do" data-testid="social-configuration-abilities">
             <Stack gap="sm">
               <DataTable data={ACTIONS} columns={columns} keyField={(r) => r.action} data-testid="social-configuration-matrix"
                 staticRows="A permission matrix: each row is an action and each cell is the decision; there is no record behind a row." />
@@ -109,14 +109,14 @@ export default function ConfigurationPage() {
               )}
             </Stack>
           </PageSection>
-          <PageSection title="People" count={summary.data.members.total} data-testid="social-configuration-people">
+          <PageSection size="sm" title="People" count={summary.data.members.total} data-testid="social-configuration-people">
             <Inline gap="sm" wrap>
               {Object.entries(summary.data.members.byRole)
                 .sort(([a], [b]) => (ROLE_ORDER.indexOf(a) + 1 || 99) - (ROLE_ORDER.indexOf(b) + 1 || 99))
                 .map(([r, n]) => <Chip key={r} tone={r === role ? 'info' : 'neutral'} size="sm">{roleLabel(r)} · {n} {n === 1 ? 'person' : 'people'}</Chip>)}
             </Inline>
           </PageSection>
-          <PageSection title="Where the data lives" data-testid="social-configuration-sources">
+          <PageSection size="sm" title="Where the data lives" data-testid="social-configuration-sources">
             <KeyValue items={[
               { label: 'Rooms', value: <Source url="/api/social/rooms" /> },
               { label: 'Teams', value: <Source url="/api/social/teams" /> },

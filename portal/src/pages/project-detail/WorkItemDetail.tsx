@@ -274,7 +274,7 @@ export function WorkItemDetail({
   return (
     <Stack gap="none" className="h-full min-h-0" data-testid="work-item-detail">
     <ScopeHeader
-      titleSize="lg"
+      titleSize="md"
       title={item.title}
       breadcrumbs={[{ label: item.epicTitle, onClick: onOpenEpic }]}
       controls={headActions}

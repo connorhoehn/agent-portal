@@ -329,7 +329,7 @@ function ModelComparePage() {
             onChange={setRunIdA}
             otherValue={runIdB}
           />
-          <T className="text-base text-text-tertiary pb-1.5">vs</T>
+          <T className="text-sm text-text-tertiary pb-1.5">vs</T>
           <RunPicker
             label="Run B (candidate)"
             runs={runs}

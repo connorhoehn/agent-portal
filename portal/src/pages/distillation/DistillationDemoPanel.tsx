@@ -51,7 +51,7 @@ export function DistillationDemoPanel({ canPlay, onChanged }: {
 
   return (
     <PageSection
-      size="md"
+      size="sm"
       title="Watch the fleet learn"
       description="A three-minute story: lab sessions write run notes, a compaction turns them into patterns, people review them, and the agreed ones become a guide an agent then runs. Playing it replaces this server's demo data for everyone using it."
       actions={(

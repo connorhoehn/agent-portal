@@ -178,10 +178,10 @@ export default function DesignThreadPage() {
   );
 
   return (
-    // The thread's title IS the page title: an empty PageSection title here
-    // rendered a blank <h1> above an 18px <h2>, so the page had no real h1
-    // and its title sat 42px lower than every other page's.
+    // The catalog layout's trail band draws the page's one 20px h1; the
+    // thread's own headline is a 14/600 section heading under it.
     <PageSection
+      size="sm"
       title={thread.title}
       actions={
         <Link to="/iq/designs" className="text-xs text-primary no-underline hover:underline">← All designs</Link>

@@ -293,6 +293,7 @@ export default function ReportsPage() {
             />
           )}
           <PageSection
+            size="sm"
             title={isScoped ? 'Certification' : 'Certification heatmap'}
             description={isScoped ? 'Columns are the rubric\'s seventeen dimensions.' : "Rows are teams, columns are the rubric's seventeen dimensions."}
           >
@@ -318,11 +319,11 @@ export default function ReportsPage() {
               </Stack>
             )}
           </PageSection>
-          <PageSection title="Where to start" description="Each team's top-ranked entry, ranked by the server — never re-ordered here. Closing a claim asks for an artifact, advancing a practice is real work, answering a question unblocks assessment.">
+          <PageSection size="sm" title="Where to start" description="Each team's top-ranked entry, ranked by the server — never re-ordered here. Closing a claim asks for an artifact, advancing a practice is real work, answering a question unblocks assessment.">
             <WhereToStart onSelectTeam={openTeam} teamId={isScoped ? scopedTeam!.id : undefined} />
           </PageSection>
           {!isScoped && (
-            <PageSection title="By cohort">
+            <PageSection size="sm" title="By cohort">
               <DataTable<[string, RollupResponse['by_cohort'][string]]>
                 data={Object.entries(rollup.by_cohort)}
                 keyField={([cohort]) => cohort}

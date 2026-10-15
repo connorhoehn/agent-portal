@@ -22,7 +22,7 @@ function TierPreview({ view, repo, count, version }: { view: KnowledgeView; repo
   const rows = useMemo(() => explorerRows(feed.items, { kind: null, lifecycle: null }, Date.now()).slice(0, PREVIEW), [feed.items]);
   return (
     <PageSection
-      size="md"
+      size="sm"
       title={VIEW_LABEL[view]}
       {...(count != null ? { count } : {})}
       actions={<Button size="sm" variant="ghost" onClick={() => navigate(knowledgeHref({ view, repo }))}>Open {VIEW_NOUN[view]} →</Button>}
@@ -37,7 +37,7 @@ function TierPreview({ view, repo, count, version }: { view: KnowledgeView; repo
       ) : (
         <GroupedList
           size="md"
-          groupHeading="label"
+          groupHeading="title"
           groups={[{ id: 'newest', title: 'Newest', count: rows.length }]}
           rows={rows.map((r) => ({ id: r.id, groupId: 'newest', title: r.title, subline: r.subline, ariaLabel: r.ariaLabel }))}
           onOpenRow={(row) => navigate(knowledgeItemHref(row.id, level, { repo }))}

@@ -87,6 +87,7 @@ export default function ConfigurationPage() {
       ) : config ? (
         <>
           <PageSection
+            size="sm"
             title="Certification target"
             description={`The level every team's headline measures against. Levels 4 and 5 always require observed evidence regardless of this setting.`}
           >
@@ -105,7 +106,7 @@ export default function ConfigurationPage() {
             </FormRow>
           </PageSection>
 
-          <PageSection title="Cohort motions" description="The cohort tiles teams are grouped into.">
+          <PageSection size="sm" title="Cohort motions" description="The cohort tiles teams are grouped into.">
             <Stack gap="sm">
               {config.motions.map((motion, i) => (
                 // Keyed by cohort: MotionConfig has no `key` field, and the

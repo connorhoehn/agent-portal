@@ -354,9 +354,9 @@ function HarnessHomePage() {
           gap="xs"
           className="text-xs text-[var(--color-text-secondary)] mt-1.5"
         >
-          <T size="sm" weight="semibold">{activeCount}</T> active case{activeCount === 1 ? '' : 's'}
+          <T size="xs" weight="semibold">{activeCount}</T> active case{activeCount === 1 ? '' : 's'}
           <T className="text-[var(--color-text-tertiary)]">·</T>
-          last run <T size="sm" weight="semibold">{relTime(lastRun?.startedAt ?? null)}</T>
+          last run <T size="xs" weight="semibold">{relTime(lastRun?.startedAt ?? null)}</T>
           <T className="text-[var(--color-text-tertiary)]">·</T>
           judge: <T size="xs" className="font-[ui-monospace,monospace]">{judgeModelId}</T>
         </Inline>
@@ -547,7 +547,7 @@ function HarnessHomePage() {
                 return (
                   <Inline key={c.agentId} as="div" align="center" gap="md" >
                     <Inline as="div" align="center" gap="xs" className="w-[160px] shrink-0">
-                      <span>{c.agentId}</span>
+                      <T size="sm">{c.agentId}</T>
                       {thin && (
                         <T
                           className="text-xs text-[var(--color-warning)]"

@@ -24,8 +24,8 @@ import {
   type SessionMe, type SessionPerson, type PersonName,
 } from './profileModel';
 
-const VALUE = 'text-[13px] text-text-secondary';
-const PENDING = 'text-[13px] text-text-tertiary';
+const VALUE = 'text-sm text-text-secondary';
+const PENDING = 'text-sm text-text-tertiary';
 
 export function ProfileSection() {
   const navigate = useNavigate();

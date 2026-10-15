@@ -47,8 +47,9 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
   return (
     <Stack gap="lg">
       <Stack gap="none">
-        {/* The asset's name is the page's one h1 (program-owner #25). */}
+        {/* The catalog layout's trail band draws the page's one 20px h1; the asset's name is its 14/600 headline. */}
         <PageHeader
+          size="sm"
           title={a.name}
           badge={(
             <Inline gap="xs" wrap>

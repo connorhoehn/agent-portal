@@ -132,6 +132,7 @@ export function InitiativeOverview({
           </PageSection>}
 
           <PageSection
+            size="sm"
             title="Up next"
             // The mockup puts 32px between the attention row and this heading
             // where the other sections sit 24px apart (the library story

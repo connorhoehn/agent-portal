@@ -359,7 +359,7 @@ function CalibrationPage() {
                     v == null ? '—' : (typeof v === 'number' ? v.toFixed(3) : String(v))
                   }
                 />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} iconType="circle" />
                 <ReferenceLine
                   y={WARN_MAE}
                   stroke="var(--color-warning)"

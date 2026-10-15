@@ -101,7 +101,7 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
   }
 
   return (
-    <PageSection title="Run a command" description="Choose a command and its source. Draft results stay in the run ledger for review; publishing is a separate action.">
+    <PageSection size="sm" title="Run a command" description="Choose a command and its source. Draft results stay in the run ledger for review; publishing is a separate action.">
       <Inline align="center" gap="sm" className="mb-3">
         <Select
           aria-label="Assessment team"
@@ -374,6 +374,7 @@ export default function RunsPage() {
           composition as /pipelines/runs and /iq/runs; rows do not open here
           (the run detail lives in the ledger's own tenant). */}
       <PageSection
+        size="sm"
         title="Pipeline runs"
         description="Each command above, as a run of the pipelines ledger — its status, kind and cost."
       >

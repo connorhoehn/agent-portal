@@ -788,7 +788,7 @@ tbody tr:focus-within .row-reveal,
 }
 [data-testid="work-item-header-crumbs"],
 [data-testid="work-item-header-crumbs"] :is(a, button, span) {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   font-style: italic;
   color: var(--color-text-secondary);

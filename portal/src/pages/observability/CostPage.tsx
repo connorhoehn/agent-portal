@@ -445,7 +445,7 @@ function CostPage() {
                     fmtUsd(typeof v === 'number' ? v : Number(v), 4)
                   }
                 />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="square" />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} iconType="square" />
                 {agentList.map((a, i) => (
                   <Bar
                     key={a}

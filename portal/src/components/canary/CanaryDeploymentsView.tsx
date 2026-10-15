@@ -45,7 +45,7 @@ export function CanaryDeploymentsView(): React.ReactElement {
     <Stack gap="md" className="p-6">
       <Inline gap="md" align="start" justify="between">
         <Stack gap="none">
-          <EntityCell label="Canary Deployments" labelClassName="text-base" />
+          <EntityCell label="Canary Deployments" labelClassName="text-sm" />
           <MetaLine
             size="sm"
             tone="secondary"

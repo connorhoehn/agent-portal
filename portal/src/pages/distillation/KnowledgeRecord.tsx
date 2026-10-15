@@ -66,9 +66,9 @@ function WhenThisHelps({ item }: { item: GuideItem }) {
     return item.summary ? <T size="sm" className="leading-6 text-text-secondary" wrap>{item.summary}</T> : null;
   }
   return (
-    <DetailSection first title="When this helps">
+    <DetailSection variant="heading" first title="When this helps">
       <Stack gap="none" data-testid="record-when-this-helps">
-        {paragraphs.map((p) => <T size="base" key={p} className="leading-[21px] text-text-primary" wrap>{p}</T>)}
+        {paragraphs.map((p) => <T size="sm" key={p} className="leading-[21px] text-text-primary" wrap>{p}</T>)}
       </Stack>
     </DetailSection>
   );
@@ -76,9 +76,9 @@ function WhenThisHelps({ item }: { item: GuideItem }) {
 
 function UseItInYourWork({ onDraftPlan, onExplain }: { onDraftPlan: () => void; onExplain: () => void }) {
   return (
-    <DetailSection title="Use it in your work">
+    <DetailSection variant="heading" title="Use it in your work">
       <Stack gap="sm">
-        <T size="base" className="leading-[21px] text-text-primary" wrap>
+        <T size="sm" className="leading-[21px] text-text-primary" wrap>
           Tell the agent which project you’re working on. It can explain the approach or help draft a plan using this guide.
         </T>
         <Inline gap="sm" align="center">
@@ -125,7 +125,7 @@ function BasedOn({ item, onOpen }: { item: GuideItem; onOpen: (href: string) => 
   const rows = basedOnRows(item.guide);
   if (rows.length === 0) return null;
   return (
-    <DetailSection title="Based on">
+    <DetailSection variant="heading" title="Based on">
       <SourceList
         layout="row"
         aria-label="Based on"
@@ -145,7 +145,7 @@ function Approach({ item, data }: { item: GuideItem; data: ProcedureData }) {
     ? approachSteps(item.guide)
     : data.steps.map((s) => ({ id: s.id, title: s.title }));
   return (
-    <DetailSection first={afterCallout} title="The approach" hint={steps.length > 0 ? approachHint(steps.length) : undefined}>
+    <DetailSection variant="heading" first={afterCallout} title="The approach" hint={steps.length > 0 ? approachHint(steps.length) : undefined}>
       <ProcedureSteps
         aria-label="The approach"
         numbered
@@ -200,8 +200,8 @@ function PatternContent({ item, onOpen }: { item: Extract<Item, { level: 'L1' }>
   const notes = sourceRows(sources.data).filter((r) => r.kind === 'observation');
   return (
     <>
-      <DetailSection first title="The claim">
-        <T size="base" className="leading-6 text-text-primary" wrap>{item.summary}</T>
+      <DetailSection variant="heading" first title="The claim">
+        <T size="sm" className="leading-6 text-text-primary" wrap>{item.summary}</T>
       </DetailSection>
       <KeyValue
         layout="row"
@@ -212,7 +212,7 @@ function PatternContent({ item, onOpen }: { item: Extract<Item, { level: 'L1' }>
           { label: 'Repository', value: shortRepo(item.repo), title: item.repo },
         ]}
       />
-      <DetailSection title="Run notes behind it" hint={`${item.member_observation_ids.length} notes`}>
+      <DetailSection variant="heading" title="Run notes behind it" hint={`${item.member_observation_ids.length} notes`}>
         <SourceList
           aria-label="Member run notes"
           emptyLabel={sources.isLoading ? 'Loading run notes…' : sources.error ? `Run notes could not be read: ${sources.error}` : 'No member notes recorded.'}
@@ -241,10 +241,10 @@ function NoteContent({ item, onOpen }: { item: Observation & { level: 'L0' }; on
           { label: 'Kind', value: kindLabel(item.kind) },
         ]}
       />
-      <DetailSection title="What happened">
+      <DetailSection variant="heading" title="What happened">
         <T size="sm" className="leading-6 text-text-primary" wrap>{item.body}</T>
       </DetailSection>
-      <DetailSection
+      <DetailSection variant="heading"
         title="From the same run"
         hint={session.data?.started_at ? `session started ${relativeTime(session.data.started_at)}` : undefined}
       >
@@ -328,7 +328,7 @@ export function KnowledgeRecord({
     <EditorShell titleSize="sm" titleAs="h2"
       title={item.title}
       statusPill={<StatusPill tone={status.tone} label={status.label} size="sm" />}
-      subtitle={`${item.level === 'L0' ? 'Written' : 'Updated'} ${relativeTime(updated)}${item.level !== 'L2' && item.repo ? ` · ${shortRepo(item.repo)}` : ''}`}
+      subtitle={<T size="xs" tone="tertiary">{`${item.level === 'L0' ? 'Written' : 'Updated'} ${relativeTime(updated)}${item.level !== 'L2' && item.repo ? ` · ${shortRepo(item.repo)}` : ''}`}</T>}
       tabsTrailing={(
         <Inline gap="sm" align="center" wrap={false}>
           <Button size="sm" variant="secondary" onClick={onOpenSources} data-testid="record-sources-button">
