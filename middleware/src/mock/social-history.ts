@@ -42,7 +42,7 @@ export const EXTRA_CHANNELS: readonly HistoryChannel[] = [
   { slug: 'random', name: 'Random', description: 'Off-topic. Links, lunch, and the occasional cat.', privacy: 'public', owner: 'u-theo', daysAgo: 20,
     members: ['u-farah', 'u-sana', 'u-jonas', 'u-asha', 'u-mia', 'u-nora', 'u-vera', 'u-rachel'] },
   { slug: 'incidents', name: 'Incidents', description: 'Something is on fire. Say what, say who, say when.', privacy: 'public', owner: 'u-rachel', daysAgo: 16,
-    members: ['u-vera', 'u-theo', 'u-release', 'u-nora', 'u-farah', 'u-mia'] },
+    members: ['u-vera', 'u-theo', 'u-release', 'u-nora', 'u-farah', 'u-mia', 'u-sana'] },
   { slug: 'events', name: 'Events', description: 'Meetups, office hours and the quarterly community call.', privacy: 'public', owner: 'u-mira', daysAgo: 13,
     members: ['u-lena', 'u-sana', 'u-farah', 'u-asha', 'u-jonas'] },
 ];

@@ -573,11 +573,11 @@ function seededBots(): Bot[] {
     mockBot({ id: '697c6a52-72e2-57f7-8e44-062ab9935336', name: 'auth-dep-watch', template: 'bug',
       prompt: 'Weekday dependency and CVE watch for the auth service: bump patch versions, flag security advisories as critical.',
       orgProjectId: 'p-auth-migration', orgProjectName: 'Auth Migration', cronExpr: '0 5 * * 1-5',
-      budgetPerRunUsd: 0.4, budgetPerDayUsd: 1.5 }),
+      budgetPerRunUsd: 0.4, budgetPerDayUsd: 1.5, createdBy: 'u-nora' }),
     mockBot({ id: 'affd22b0-b348-5436-9eff-2b8d5206d601', name: 'llm-evals-nightly', template: 'story',
       prompt: 'Re-run the golden-set eval suite against the live prompt versions; summarize score drift per agent.',
       orgProjectId: 'p-llm-platform', orgProjectName: 'LLM Application Platform', cronExpr: '30 4 * * *',
-      budgetPerRunUsd: 0.8, budgetPerDayUsd: 3 }),
+      budgetPerRunUsd: 0.8, budgetPerDayUsd: 3, createdBy: 'u-layla' }),
     // These last two used to be `pr-review-analyst` (p-inference-platform) and
     // `cost-anomaly-sweep` (p-cost-opt) — invented bots on real initiatives that
     // already have their own seeded maintenance mission. Mirrored to the seed's
@@ -585,11 +585,11 @@ function seededBots(): Bot[] {
     mockBot({ id: '1edd9a68-e432-5dc2-b89d-93867bd090da', name: 'inference-canary-nightly', template: 'bug',
       prompt: 'Nightly canary of every served model version: latency and error deltas against the previous build, rollback recommendation on breach.',
       orgProjectId: 'p-inference-platform', orgProjectName: 'Inference Platform', cronExpr: '15 3 * * *',
-      budgetPerRunUsd: 0.4, budgetPerDayUsd: 1.5 }),
+      budgetPerRunUsd: 0.4, budgetPerDayUsd: 1.5, createdBy: 'u-eli' }),
     mockBot({ id: '4448041c-0350-5d7f-930e-7dbcd87a149f', name: 'finops-daily-sweep', template: 'bug',
       prompt: "Daily spend sweep: diff yesterday's cost by service against the 7-day baseline, flag anomalies over 20%, and list untagged resources created in the last day.",
       orgProjectId: 'p-cost-opt', orgProjectName: 'Cost Optimization', cronExpr: '0 7 * * *',
-      budgetPerRunUsd: 0.3, budgetPerDayUsd: 1 }),
+      budgetPerRunUsd: 0.3, budgetPerDayUsd: 1, createdBy: 'u-mia' }),
 
     // The remaining seven of schema/seed_program.sql's twelve maintenance bots.
     // Ids, names, missions, cron expressions and per-run/per-day budgets are the
@@ -600,19 +600,19 @@ function seededBots(): Bot[] {
     mockBot({ id: '15a4eb8e-743b-57f8-835b-3a7aac701702', name: 'stream-lag-watch', template: 'bug',
       prompt: 'Watch consumer lag and checkpoint duration; when lag trends past threshold, profile the hot operator and file a bug with the trace.',
       orgProjectId: 'p-realtime-analytics', orgProjectName: 'Real-time Analytics Pipeline', cronExpr: '15 */6 * * *',
-      budgetPerRunUsd: 0.25, budgetPerDayUsd: 1.2 }),
+      budgetPerRunUsd: 0.25, budgetPerDayUsd: 1.2, createdBy: 'u-caleb' }),
     mockBot({ id: '88d1fd78-0618-5431-865e-027db71adb27', name: 'feature-drift-nightly', template: 'story',
       prompt: 'Nightly drift check across production feature groups; summarize distribution shifts and file a story when retraining is warranted.',
       orgProjectId: 'p-feature-store', orgProjectName: 'ML Feature Store', cronExpr: '45 3 * * *',
-      budgetPerRunUsd: 0.35, budgetPerDayUsd: 1.2 }),
+      budgetPerRunUsd: 0.35, budgetPerDayUsd: 1.2, createdBy: 'u-theo' }),
     mockBot({ id: '5168695c-fa7e-5ca0-9218-ffa4453947a9', name: 'mobile-e2e-nightly', template: 'bug',
       prompt: 'Run the end-to-end suite on both platforms nightly; quarantine flaky specs with a linked issue and keep the suite under 20 minutes.',
       orgProjectId: 'p-mobile-redesign', orgProjectName: 'Mobile App Redesign', cronExpr: '0 2 * * *',
-      budgetPerRunUsd: 0.3, budgetPerDayUsd: 1 }),
+      budgetPerRunUsd: 0.3, budgetPerDayUsd: 1, createdBy: 'u-caleb' }),
     mockBot({ id: 'a0a4b025-3e67-5004-8b8a-05a3d4f2028d', name: 'a11y-audit-weekly', template: 'bug',
       prompt: 'Weekly accessibility audit of the component library: contrast, focus order, ARIA completeness; file one bug per component regression.',
       orgProjectId: 'p-design-v3', orgProjectName: 'Design System v3', cronExpr: '0 8 * * 1',
-      budgetPerRunUsd: 0.45, budgetPerDayUsd: 1 }),
+      budgetPerRunUsd: 0.45, budgetPerDayUsd: 1, createdBy: 'u-layla' }),
     mockBot({ id: 'f595b10b-5f52-50d0-81a0-9117e9334fb4', name: 'rag-index-health', template: 'bug',
       prompt: 'Verify index freshness and citation link integrity; re-embed documents whose sources changed.',
       orgProjectId: 'p-rag-search', orgProjectName: 'RAG Knowledge Search', cronExpr: '0 9 * * *',
@@ -628,7 +628,7 @@ function seededBots(): Bot[] {
     mockBot({ id: '402eb3d6-0cf2-55a4-b5b5-deb9be35b01f', name: 'api-contract-watch', template: 'bug',
       prompt: 'Weekday contract check: diff the published component API against consumers, flag breaking drift, and verify codemods still apply.',
       orgProjectId: 'p-design-system-api', orgProjectName: 'Design System API', cronExpr: '30 7 * * 1-5',
-      budgetPerRunUsd: 0.25, budgetPerDayUsd: 0.8 }),
+      budgetPerRunUsd: 0.25, budgetPerDayUsd: 0.8, createdBy: 'u-theo' }),
   ];
 }
 

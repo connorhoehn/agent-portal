@@ -26,6 +26,15 @@ OUT = Path(__file__).resolve().parent.parent / 'seed_program.sql'
 WORK_KEYS = json.loads((Path(__file__).resolve().parent / 'work_item_keys.json').read_text())['items']
 RNG = random.Random(20260821)
 
+# Who created each maintenance bot (obs-nightly-maintenance is u-tomas, the pipelines author who also holds Social:
+# the Communication plane's "My pipelines" walker). middleware/src/mock/bots.ts mirrors this; bots not listed are u-rachel's.
+BOT_CREATORS = {
+    'obs-nightly-maintenance': 'u-tomas', 'auth-dep-watch': 'u-nora', 'llm-evals-nightly': 'u-layla',
+    'inference-canary-nightly': 'u-eli', 'finops-daily-sweep': 'u-mia', 'stream-lag-watch': 'u-caleb',
+    'feature-drift-nightly': 'u-theo', 'mobile-e2e-nightly': 'u-caleb', 'a11y-audit-weekly': 'u-layla',
+    'api-contract-watch': 'u-theo',
+}
+
 # What each seeded maintenance firing did, per bot. middleware/src/mock/bots.ts reads
 # the same file, so the dev:mock fleet and this seed tell one story.
 RUN_NOTES = json.loads((Path(__file__).resolve().parent.parent.parent / 'middleware/src/mock/bot-run-notes.json').read_text())
@@ -886,7 +895,9 @@ def main() -> None:
             enabled = 'FALSE'
             # obs-nightly-maintenance is created by u-tomas (pipelines author who
             # also holds Social): the Communication plane's "My pipelines" walker.
-            creator = 'u-tomas' if bot['name'] == 'obs-nightly-maintenance' else 'u-rachel'
+            # The other maintenance bots are set up by the people who work on their initiative, so a
+            # peer sees ten different owners on the definitions list rather than one person on all of them.
+            creator = BOT_CREATORS.get(bot['name'], 'u-rachel')
             emit(
                 "INSERT INTO bots (id, name, template, prompt_template, org_project_id, model, trigger, cron_expr, enabled, budget_per_run_usd, budget_per_day_usd, max_runs_per_day, requires_review, created_by, created_at, last_run_at, paused_reason) "
                 f"VALUES ('{bid}', '{q(bot['name'])}', '{bot['template']}', '{q(bot['mission'])}', "

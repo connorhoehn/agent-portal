@@ -29,6 +29,7 @@
 //     same row shapes, same visibility rules;
 //   - neither → 503.
 
+import { ownsRecord } from '../lib/record-owner.js';
 import { config } from '../config.js';
 import { AppError, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { realtimeClaims, realtimeSigningSecret, signRealtimeToken } from '../lib/realtime-token.js';
@@ -467,7 +468,7 @@ export async function listRecordings(session: Session): Promise<SocialRecordingR
     const body = await platformRequest<{ items?: SocialRecordingRow[] }>(session, 'GET', '/api/recordings?limit=100');
     rows = body?.items ?? [];
   } else if (backend === 'mock') {
-    rows = socialRecordingsFixture.rows().filter((r) => r.participants.some((p) => p.userId === session.sub));
+    rows = socialRecordingsFixture.rows().filter((r) => r.participants.some((p) => ownsRecord(p.userId, session.sub)));
   } else throw new AppError(503, 'recordings need platform-api (none configured)');
   return rows.filter((r) => isSocialLobby(r.lobbyName)).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
@@ -475,7 +476,7 @@ export async function listRecordings(session: Session): Promise<SocialRecordingR
 function mockOwnRecording(session: Session, recordingId: string): SocialRecordingRow {
   const row = socialRecordingsFixture.rows().find((r) => r.recordingId === recordingId);
   // Upstream `requireOwnRecording`: a recording you were not in does not exist for you.
-  if (!row || !isSocialLobby(row.lobbyName) || !row.participants.some((p) => p.userId === session.sub)) throw new NotFoundError(`no recording ${recordingId}`);
+  if (!row || !isSocialLobby(row.lobbyName) || !row.participants.some((p) => ownsRecord(p.userId, session.sub))) throw new NotFoundError(`no recording ${recordingId}`);
   return row;
 }
 
@@ -576,7 +577,7 @@ export async function listCallRows(session: Session): Promise<SocialCallLogRow[]
     const body = await platformRequest<{ calls?: SocialCallLogRow[] }>(session, 'GET', '/api/calls/log?limit=500');
     rows = body?.calls ?? [];
   } else if (backend === 'mock') {
-    rows = socialCallLogFixture.rows().filter((r) => r.userId === session.sub);
+    rows = socialCallLogFixture.rows().filter((r) => ownsRecord(r.userId, session.sub));
   } else throw new AppError(503, 'the call log needs platform-api (none configured)');
   return [...rows].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }

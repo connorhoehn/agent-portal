@@ -622,11 +622,30 @@ const TRAFFIC_USERS = [
   'u-theo', 'u-vera', 'u-nora', 'u-eli', 'u-layla', 'u-caleb', 'u-mia', 'u-release',
 ] as const;
 
-/** Three rationales, banded, so the text a reader sees matches the score beside it. */
-function rationaleFor(score: number): string {
-  if (score >= 0.8) return 'Grounded in retrieved evidence, answers the question asked, cites its sources.';
-  if (score >= 0.5) return 'Answers the question but leaves one claim uncited; a reader would have to verify it.';
-  return 'Does not answer the question asked and cites nothing retrievable.';
+/** Rationales, banded, so the text a reader sees matches the score beside it; a key picks one so a page of rows does not repeat a sentence. */
+const RATIONALES = {
+  strong: [
+    'Grounded in retrieved evidence, answers the question asked, cites its sources.',
+    'Every claim traces to a retrieved document and the answer stays on the question.',
+    'Names the right people and records, and the citations check out against the knowledge base.',
+    'Direct answer, supported by the cited sources; nothing asserted without evidence.',
+    'Correct and complete for the question, with sources a reader can open.',
+  ],
+  middling: [
+    'Answers the question but leaves one claim uncited; a reader would have to verify it.',
+    'Mostly grounded, but one figure has no source and the scope is a little broad.',
+    'Right direction, thin evidence: two of the three points are cited.',
+    'Answers the question, though the reasoning skips a step a reader would want shown.',
+  ],
+  weak: [
+    'Does not answer the question asked and cites nothing retrievable.',
+    'Off the question: the answer discusses a neighbouring topic and cites no source.',
+    'Asserts specifics with no supporting document, and one of them contradicts the records.',
+  ],
+} as const;
+function rationaleFor(score: number, key: string): string {
+  const band = score >= 0.8 ? RATIONALES.strong : score >= 0.5 ? RATIONALES.middling : RATIONALES.weak;
+  return band[hash32(`${key}:rationale`) % band.length]!;
 }
 
 /**
@@ -832,7 +851,7 @@ function seededTraceRows(scenario?: ScenarioName): MockTraceRow[] {
       prompt_snippet: src.promptSnippet,
       response_snippet: src.responseSnippet,
       judge_score: judge,
-      judge_rationale: judge === null ? null : rationaleFor(judge),
+      judge_rationale: judge === null ? null : rationaleFor(judge, id),
       // Non-conforming output is what `schema_valid = false` means, and it is
       // half of what `errorRate` counts. A run that threw produced nothing that
       // could conform; a run that answered did.
