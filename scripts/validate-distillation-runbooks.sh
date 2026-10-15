@@ -157,7 +157,9 @@ done
 need 'ReviewRunbook' $MW/seeds/roles/orgiq/sme.cedar "sme.cedar grants ReviewRunbook (owner or initiative SME accepts)"
 need 'ReviewRunbook' $MW/seeds/roles/orgiq/org-leader.cedar "org-leader.cedar grants ReviewRunbook (override)"
 for r in member sme program-owner org-leader hr-admin; do need 'ViewSessionBrief' $MW/seeds/roles/orgiq/$r.cedar "$r.cedar grants ViewSessionBrief"; done
-RB_TESTS=$(ls $MW/src/routes/__tests__/runbook*.test.ts 2>/dev/null)
+# One line, space-separated: `check` evals its string, and a newline inside it would
+# end the grep at the first file and run the second file's path as a command.
+RB_TESTS=$(ls $MW/src/routes/__tests__/runbook*.test.ts 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
 [ -n "$RB_TESTS" ] && ok "route suites: $(echo $RB_TESTS | wc -w | tr -d ' ')" || fail "no routes/__tests__/runbook*.test.ts"
 if [ -f "$RT" ] && [ -n "$RB_TESTS" ]; then
   untested=""

@@ -1,6 +1,9 @@
 // A small unified diff over lines (LCS), for showing a reviewer what a runbook
-// proposal changes. Runbooks are a few hundred lines at most, so the O(n*m)
-// table is fine; nothing here is on a hot path.
+// proposal changes. Runbooks are a few hundred lines, but the inputs reach this
+// from request bodies (a proposal's markdown) and any reader can ask for a diff,
+// so the work is bounded: the common prefix and suffix are trimmed first (an
+// ordinary edit leaves a small middle), and a middle whose LCS table would pass
+// MAX_CELLS is shown as a whole replacement instead of allocating n*m cells.
 
 export interface UnifiedDiff {
   /** Unified-diff text; '' when the inputs are identical. */
@@ -17,7 +20,24 @@ function lines(s: string): string[] {
   return parts;
 }
 
-function ops(a: string[], b: string[]): Op[] {
+/** 4M cells = 16 MB of Uint32: far above any real runbook pair, far below what hurts the BFF. */
+export const MAX_DIFF_CELLS = 4_000_000;
+
+function ops(a0: string[], b0: string[]): Op[] {
+  let pre = 0;
+  while (pre < a0.length && pre < b0.length && a0[pre] === b0[pre]) pre += 1;
+  let suf = 0;
+  while (suf < a0.length - pre && suf < b0.length - pre && a0[a0.length - 1 - suf] === b0[b0.length - 1 - suf]) suf += 1;
+  const head: Op[] = a0.slice(0, pre).map((line) => ({ t: ' ', line }));
+  const tail: Op[] = a0.slice(a0.length - suf).map((line) => ({ t: ' ', line }));
+  const a = a0.slice(pre, a0.length - suf), b = b0.slice(pre, b0.length - suf);
+  if ((a.length + 1) * (b.length + 1) > MAX_DIFF_CELLS) {
+    return [...head, ...a.map((line): Op => ({ t: '-', line })), ...b.map((line): Op => ({ t: '+', line })), ...tail];
+  }
+  return [...head, ...lcsOps(a, b), ...tail];
+}
+
+function lcsOps(a: string[], b: string[]): Op[] {
   const n = a.length, m = b.length;
   const w = m + 1;
   const dp = new Uint32Array((n + 1) * w);

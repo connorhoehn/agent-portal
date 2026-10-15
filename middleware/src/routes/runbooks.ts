@@ -21,7 +21,8 @@
 //                a person's proposal is always attributed to their own session.
 //   decisions    Cedar `ReviewRunbook` (the role floor) AND lib/runbook-review.ts (the
 //                runbook's owner, or an SME on its initiative; org-leader/admin override).
-//                Nobody accepts their own proposal.
+//                Nobody accepts their own proposal. Merge needs review rights on BOTH the
+//                proposal's own runbook and the target. No write is made under a masquerade.
 //   applications service auth only — a person does not report on a run.
 //
 // Machine-vs-person is decided ONCE (`machineMark`), because a signed envelope's nonce is
@@ -110,6 +111,19 @@ const suggestGate: RequestHandler[] = [machineMark, unlessMachine(requireTenant(
 
 const callbackLimit = rateLimit('runbook-callback', 120, 60_000);
 const requireLabAuth = requireServiceAuth(LAB_CALLBACK_SERVICE_AUTH);
+
+/**
+ * Refuse a write made under a masquerade. Every runbook write is identity-bound
+ * (a proposal's author, a decision's decider, "never accept your own"), and a
+ * masquerade splits that identity in two: an admin could propose as themselves and
+ * accept as an SME they impersonate, or file a proposal as someone else and then
+ * accept it as themselves. Impersonation is for seeing what someone sees.
+ */
+function refuseMasquerade(req: Request, res: Response): boolean {
+  if (!resolveSession(req)?.act) return false;
+  res.status(403).json({ error: 'stop masquerading to propose or decide on runbooks; these writes are attributed to a person', code: 'MASQUERADING' });
+  return true;
+}
 
 function session(req: Request): Session {
   const s = resolveSession(req);
@@ -331,6 +345,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
         ...(str(src['work_item_id']) ? { work_item_id: str(src['work_item_id'])! } : {}),
       };
     } else {
+      if (refuseMasquerade(req, res)) return;
       const { actor } = await actorId(session(req));
       source = {
         kind: 'person', person_id: actor, lab_experience_ids: labIds,
@@ -388,6 +403,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
 
   /** Load an OPEN proposal and prove the caller may decide it; sends the refusal and returns null otherwise. */
   async function decidable(req: Request, res: Response, s: RunbookStore, scopeOverride?: { scope: RunbookScope; owner: string | null }) {
+    if (refuseMasquerade(req, res)) return null;
     const sess = session(req);
     const p = await s.getProposal(String(req.params['pid']));
     if (!p) { res.status(404).json({ error: 'proposal not found' }); return null; }
@@ -457,11 +473,22 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       ? { kind: 'person', id: p.source.person_id ?? 'unknown' }
       : { kind: 'run', id: p.source.run_ref ?? 'unknown' };
 
+    // A runbook retired after this proposal was opened takes no more versions and no second retirement.
+    if (target && target.status === 'retired') {
+      res.status(409).json({ error: `${target.id} is retired`, code: 'RETIRED' });
+      return;
+    }
+
     if (p.kind === 'retire') {
       const reason = str(body['reason']) ?? p.rationale;
+      const supersededBy = str(body['superseded_by']) ?? null;
+      if (supersededBy) {
+        const sup = await s.getRunbook(supersededBy);
+        if (!sup || sup.status !== 'published' || sup.id === target!.id) throw new ValidationError('`superseded_by` must name another published runbook');
+      }
       const result = await s.acceptProposal({
         proposal_id: p.id, decided_by: actor, at, note,
-        retire: { reason, superseded_by: str(body['superseded_by']) ?? null },
+        retire: { reason, superseded_by: supersededBy },
       });
       res.json({ proposal: result.proposal, runbook: result.runbook, version: null });
       return;
@@ -534,7 +561,14 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     // The reviewer must be able to review the TARGET, whatever the source says.
     const d = await decidable(req, res, s, { scope: dest.scope, owner: dest.owner_person_id });
     if (!d) return;
-    const { p, actor } = d;
+    const { p, actor, target: source } = d;
+    // Merging closes the proposal on its own target, so it is a decision about THAT
+    // runbook too: without this, a reviewer of any published runbook could close any
+    // edit anywhere by merging it into their own.
+    if (source) {
+      const v = await mayReviewRunbook(d.sess, source.scope, source.owner_person_id);
+      if (!v.ok) { deny(res, v); return; }
+    }
     if (p.kind === 'retire' || !p.proposed) { res.status(409).json({ error: 'a retire proposal cannot be merged', code: 'NOT_MERGEABLE' }); return; }
     if (p.runbook_id === dest.id) { res.status(409).json({ error: 'this proposal already targets that runbook; accept it instead', code: 'SAME_TARGET' }); return; }
 
@@ -557,6 +591,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
   // ── Retiring ───────────────────────────────────────────────────────────────
 
   router.post('/:id/retire', ...reviewGate, handler(async (req, res) => {
+    if (refuseMasquerade(req, res)) return;
     const s = await store();
     const sess = session(req);
     const r = await s.getRunbook(String(req.params['id']));
