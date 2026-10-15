@@ -42,7 +42,7 @@ const channelDenials = (client: Client) => client.frames.filter(frame => frame.t
 const callFrames = (client: Client, action: string) => client.frames.filter(frame => frame.type === 'call' && frame.action === action);
 /** Wait until the call service has finished one action (admitted or refused). */
 async function dispatched(client: Client, frame: Frame) {
-  const service = handle.services['call'];
+  const service = handle.services.call!;
   const original = service.handleAction.bind(service);
   let complete!: () => void; const receipt = new Promise<void>(resolve => { complete = resolve; });
   const action = jest.spyOn(service, 'handleAction').mockImplementationOnce(async (...args) => {

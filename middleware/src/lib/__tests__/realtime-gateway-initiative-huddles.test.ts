@@ -45,7 +45,7 @@ const send = (client: Client, frame: Frame) => client.ws.send(JSON.stringify(fra
 const callErrors = (client: Client) => client.frames.filter(frame => frame.type === 'error' && frame.service === 'call');
 const callFrames = (client: Client, action: string) => client.frames.filter(frame => frame.type === 'call' && frame.action === action);
 async function dispatched(client: Client, frame: Frame) {
-  const service = handle.services['call'];
+  const service = handle.services.call!;
   const original = service.handleAction.bind(service);
   let complete!: () => void; const receipt = new Promise<void>(resolve => { complete = resolve; });
   const action = jest.spyOn(service, 'handleAction').mockImplementationOnce(async (...args) => {
