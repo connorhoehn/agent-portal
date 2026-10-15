@@ -111,8 +111,8 @@ describe('honesty against the social REST sources', () => {
     expect(general.participants!.map(p => p.label).sort()).toEqual(['Mira Okafor', 'Theo Chang']);
     expect(rel(body)).toContain(`sthread:${GENERAL}>sconv:${GENERAL}:discussed`);
     expect(rel(body)).toContain(`sthread:${DM}>sconv:${DM}:discussed`);
-    // The graph names a conversation in a footer a person can follow; it never carries message text.
-    expect(body.details.find(d => d.nodeId === `sconv:${GENERAL}`)!.footer!.label).toBe(`Conversation · ${GENERAL}`);
+    // The graph names a conversation in a footer a person can read (its title, never its channel key); it never carries message text.
+    expect(body.details.find(d => d.nodeId === `sconv:${GENERAL}`)!.footer!.label).toBe('Conversation · #general');
     expect(JSON.stringify(res.body)).not.toMatch(/secret sentence|another one|dm text/);
     // Every conversation is a project anchor; every node sits inside an effort.
     const inEffort = new Set((res.body.efforts as Array<{ nodeIds: string[] }>).flatMap(e => e.nodeIds));

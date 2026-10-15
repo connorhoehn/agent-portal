@@ -8,7 +8,7 @@
 //   - join/leave flip membership in the store the gateway's guard reads;
 //   - DMs: your conversations from the index; opening one names the sorted
 //     lobby, refuses yourself and anyone without a social grant;
-//   - the roster is exactly the users holding a social grant;
+//   - the roster is the users holding a social grant, less the platform operator account;
 //   - the whole surface stays behind requireTenant('social').
 
 jest.mock('../../config.js', () => ({
@@ -222,8 +222,10 @@ describe('GET /api/social/people', () => {
     const res = await request(sana()).get('/api/social/people');
     expect(res.status).toBe(200);
     const ids = res.body.people.map((p: { userId: string }) => p.userId);
-    expect(ids).toEqual(expect.arrayContaining(['u-mira', 'u-lena', 'u-sana', 'u-operator', 'u-theo']));
+    expect(ids).toEqual(expect.arrayContaining(['u-mira', 'u-lena', 'u-sana', 'u-theo']));
     expect(ids).not.toContain('u-hr');
+    // The cross-tenant platform operator holds a Social grant to administer the tenant; it is not a contact.
+    expect(ids).not.toContain('u-operator');
     expect(res.body.people.find((p: { userId: string }) => p.userId === 'u-mira')).toEqual({ userId: 'u-mira', displayName: 'Mira Okafor', roles: ['community-admin'], avatarUrl: '/avatars/photos/u-mira.jpg' });
   });
 });
