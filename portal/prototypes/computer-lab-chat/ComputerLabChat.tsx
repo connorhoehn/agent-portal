@@ -71,7 +71,7 @@ const ACTIVE_NOW = [
   { name: 'Nora DaSilva', busy: true },
   { name: 'Eli Garcia', busy: true },
   { name: 'Layla Hassan', busy: false },
-  { name: 'Priya Desai', busy: false },
+  { name: 'Helen Desai', busy: false },
 ];
 
 type MessageKind = 'text' | 'run';

@@ -135,7 +135,7 @@ describe('channels over the socket', () => {
   beforeEach(async () => {
     mira = await connectAs('u-mira', 'Mira Okafor', 'social');
     sana = await connectAs('u-sana', 'Sana Iqbal', 'social');
-    theo = await connectAs('u-hr', 'Priya Desai', 'orgiq');
+    theo = await connectAs('u-hr', 'Helen Desai', 'orgiq');
   });
   afterEach(() => { for (const o of [mira, sana, theo]) o.ws.close(); });
 

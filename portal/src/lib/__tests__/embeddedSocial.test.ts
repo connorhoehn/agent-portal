@@ -4,7 +4,7 @@ import { EmbeddedSocialSession, EmbeddedSocialRequestError, createEmbeddedSocial
   type EmbeddedSocialClient, type EmbeddedSocialScope, type EmbeddedSocialSnapshot } from '../embeddedSocial.ts';
 
 const scope: EmbeddedSocialScope = { userId: 'rachel', tenant: 'orgiq', role: 'hr-admin', actorId: null, asUserId: null };
-const vera = { userId: 'vera', displayName: 'Vera Green' }, nora = { userId: 'nora', displayName: 'Nora Chang' };
+const vera = { userId: 'vera', displayName: 'Vera Green' }, nora = { userId: 'nora', displayName: 'Simone Chang' };
 const snapshot = (patch: Partial<EmbeddedSocialSnapshot> = {}): EmbeddedSocialSnapshot => ({
   me: { userId: 'rachel', displayName: 'Rachel' }, canSend: true, people: [vera, nora].map(person => ({ ...person, roles: ['participant'] })),
   conversations: [{ channel: 'social:dm:rachel:vera', peers: [vera], lastMessageAt: null, lastMessagePreview: null, lastMessageUserId: null, unreadCount: 2 }],

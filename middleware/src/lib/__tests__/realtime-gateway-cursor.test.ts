@@ -164,8 +164,8 @@ describe('revocation while a cursor subscription is open', () => {
 describe.each([
   { name: 'an orgiq initiative', channel: 'orgiq:initiative:p-auth-migration', a: ['u-theo', 'Theo Chang', 'orgiq'], b: ['u-vera', 'Vera Green', 'orgiq'], outsider: ['u-farah', 'Farah Assessor', 'assessment'] },
   { name: 'an assessment team', channel: 'assessment:team:TEAM-001', a: ['u-farah', 'Farah Assessor', 'assessment'], b: ['u-jonas', 'Jonas Assessor', 'assessment'], outsider: ['u-theo', 'Theo Chang', 'orgiq'] },
-  { name: 'a social channel', channel: 'social:ch:general', a: ['u-theo', 'Theo Chang', 'social'], b: ['u-vera', 'Vera Green', 'social'], outsider: ['u-hr', 'Priya Desai', 'orgiq'] },
-  { name: 'a pipelines run', channel: 'pipelines:run:run-1', a: ['u-ines', 'Ines Moreau', 'pipelines'], b: ['u-kofi', 'Kofi Mensah', 'pipelines'], outsider: ['u-hr', 'Priya Desai', 'orgiq'] },
+  { name: 'a social channel', channel: 'social:ch:general', a: ['u-theo', 'Theo Chang', 'social'], b: ['u-vera', 'Vera Green', 'social'], outsider: ['u-hr', 'Helen Desai', 'orgiq'] },
+  { name: 'a pipelines run', channel: 'pipelines:run:run-1', a: ['u-ines', 'Ines Moreau', 'pipelines'], b: ['u-kofi', 'Kofi Mensah', 'pipelines'], outsider: ['u-hr', 'Helen Desai', 'orgiq'] },
 ])('canvas cursors on $name', ({ channel, a, b, outsider }) => {
   it('shows one member to another with the token identity, and refuses an outsider and a cross-tenant session', async () => {
     const one = await connectAs(a[0]!, a[1]!, a[2]!); const two = await connectAs(b[0]!, b[1]!, b[2]!); const out = await connectAs(outsider[0]!, outsider[1]!, outsider[2]!);

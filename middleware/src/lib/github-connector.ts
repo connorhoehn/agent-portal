@@ -2,7 +2,7 @@
 //
 // OrgIQ's central claim is that it knows who is good at what, and today every
 // expertise score in the database is synthetic — generated to look plausible.
-// The scoring page can tell you Theo Rivera is 94th percentile; nothing can
+// The scoring page can tell you Felix Rivera is 94th percentile; nothing can
 // tell you why, because there is no underlying evidence at all.
 //
 // Commit and review history is the strongest evidence of expertise that an org

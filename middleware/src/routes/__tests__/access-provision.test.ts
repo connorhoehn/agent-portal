@@ -123,7 +123,7 @@ it('Rhea requests SME in Work, Omar and Priya approve, and her open cookie holds
   const id = (filed.body as AccessRequest).id;
   expect(bell).toEqual([{ userId: 'u-omar', kind: 'access-submitted', href: `/access/requests/${id}` }]);
 
-  // Omar, her manager, approves step 1; Rhea hears, and Priya (the escalated steward) is asked.
+  // Omar, her manager, approves step 1; Rhea hears, and Rachel (Work's steward: hr-admin, approving in Access) is asked.
   bell = [];
   const omar = await signIn('u-omar');
   const step1 = await request(app).post(`/api/access/requests/${id}/steps/1/decide`).set('Cookie', omar).send({ decision: 'approve', comment: 'Fine for the cutover.' });
@@ -131,13 +131,14 @@ it('Rhea requests SME in Work, Omar and Priya approve, and her open cookie holds
   expect((step1.body as AccessRequest).status).toBe('pending');
   expect(bell).toEqual([
     { userId: 'u-rhea', kind: 'access-approved-step', href: `/access/requests/${id}` },
-    { userId: 'u-priya', kind: 'access-awaiting', href: `/access/requests/${id}` },
+    { userId: 'u-rachel', kind: 'access-awaiting', href: `/access/requests/${id}` },
   ]);
 
-  // Priya approves the last step: provisioned and active.
+  // Rachel approves the last step: provisioned and active.
   bell = [];
+  const rachel = await signIn('u-rachel');
   const priya = await signIn('u-priya');
-  const step2 = await request(app).post(`/api/access/requests/${id}/steps/2/decide`).set('Cookie', priya).send({ decision: 'approve' });
+  const step2 = await request(app).post(`/api/access/requests/${id}/steps/2/decide`).set('Cookie', rachel).send({ decision: 'approve' });
   expect(step2.status).toBe(200);
   const done = step2.body as AccessRequest;
   expect(done).toMatchObject({ status: 'active', provisionedAt: expect.any(String), expiresAt: expect.any(String) });
@@ -166,7 +167,7 @@ it('Rhea requests SME in Work, Omar and Priya approve, and her open cookie holds
   // The audit has every row, the provisioning attributed to the system.
   const audit = (await request(app).get(`/api/access/audit?requestId=${id}`).set('Cookie', priya)).body as { items: AccessEvent[] };
   expect(audit.items.map((e) => [e.kind, e.actor?.id ?? null]).reverse()).toEqual([
-    ['submitted', 'u-rhea'], ['step-approved', 'u-omar'], ['step-approved', 'u-priya'], ['approved', 'u-priya'], ['provisioned', null],
+    ['submitted', 'u-rhea'], ['step-approved', 'u-omar'], ['step-approved', 'u-rachel'], ['approved', 'u-rachel'], ['provisioned', null],
   ]);
   // Rhea reads her own request's trail as a requester.
   expect(((await request(app).get(`/api/access/audit?requestId=${id}`).set('Cookie', rhea2)).body as { items: AccessEvent[] }).items).toHaveLength(5);
@@ -188,9 +189,9 @@ it('a rejection and a request for information ring the parties, not the approver
 });
 
 it('an initiative membership provisions the contribution and the record says active', async () => {
-  const priya = await signIn('u-priya');
-  // req-0002: Rhea → Auth Migration, Omar approved step 1; the steward step escalated to Priya.
-  const res = await request(app).post('/api/access/requests/req-0002/steps/2/decide').set('Cookie', priya).send({ decision: 'approve' });
+  const vera = await signIn('u-vera');
+  // req-0002: Rhea → Auth Migration, Omar approved step 1; the steward step is Vera's, its owner.
+  const res = await request(app).post('/api/access/requests/req-0002/steps/2/decide').set('Cookie', vera).send({ decision: 'approve' });
   expect(res.status).toBe(200);
   expect((res.body as AccessRequest).status).toBe('active');
   expect(initiatives.rows().find((p) => p.id === 'p-auth-migration')!.smes).toContain('p-rhea');

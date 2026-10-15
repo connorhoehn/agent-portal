@@ -27,9 +27,9 @@ const USERS: UserInfo[] = [
   { id: 'u-vera', displayName: 'Vera Green', email: null, personId: 'p-002', epoch: 0, grants: { orgiq: ['org-leader', 'member'], social: ['participant'] } },
   { id: 'u-theo', displayName: 'Theo Chang', email: null, personId: 'p-001', epoch: 0, grants: { orgiq: ['member'] } },
   { id: 'u-raj', displayName: 'Raj Mehta', email: null, personId: 'p-015', epoch: 0, grants: { orgiq: ['member'] } },
-  { id: 'u-hr', displayName: 'Priya Desai', email: null, personId: null, epoch: 0, grants: { orgiq: ['hr-admin'] } },
+  { id: 'u-hr', displayName: 'Helen Desai', email: null, personId: null, epoch: 0, grants: { orgiq: ['hr-admin'] } },
   // A namesake of the TEAM-001 lead with an assessment grant: the name must not put her on the team.
-  { id: 'u-priya', displayName: 'Priya Natarajan', email: 'priya.natarajan@example.com', personId: null, epoch: 0, grants: { assessment: ['lead-assessor'] } },
+  { id: 'u-priya', displayName: 'Deepa Natarajan', email: 'deepa.natarajan@example.com', personId: null, epoch: 0, grants: { assessment: ['lead-assessor'] } },
   { id: 'u-asha', displayName: 'Asha Nair', email: 'asha.nair@assessment.example', personId: null, epoch: 0, grants: { assessment: ['assessor'] } },
   { id: 'u-jonas', displayName: 'Jonas Lindqvist', email: null, personId: null, epoch: 0, grants: { assessment: ['lead-assessor'] } },
   { id: 'u-tomas', displayName: 'Tomás Ferreira', email: null, personId: null, epoch: 0, grants: { pipelines: ['author'] } },
@@ -138,7 +138,7 @@ describe('kind=org-team (orgiq, team_memberships)', () => {
     expect(team.members!.map((m) => m.personId).sort()).toEqual(expected);
     expect(team.counts).toEqual({ members: expected.length });
     expect(team.members!.find((m) => m.personId === 'p-001')).toEqual({ personId: 'p-001', name: 'Theo Chang', userId: 'u-theo' });
-    expect(team.members!.find((m) => m.personId === 'p-003')).toEqual({ personId: 'p-003', name: "Marcus O'Brien", userId: null });
+    expect(team.members!.find((m) => m.personId === 'p-003')).toEqual({ personId: 'p-003', name: "Owen Brooks", userId: null });
     // Raj is on Data Platform: a different team, the same shape, and Vera is not on it.
     const raj = body(await mine('org-team', 'u-raj'));
     expect(raj.items.map((t) => t.id)).toEqual(['t-data']);
@@ -155,27 +155,29 @@ describe('kind=assessment-team (assessment, assessment_team_members rows)', () =
     const res = body(await mine('assessment-team', 'u-asha'));
     expect(res.viewer).toEqual({ userId: 'u-asha', personId: null });
     expect(res.limits).toEqual([]);
-    expect(res.items).toEqual([{
+    // Asha contributes on Northstar (Jonas leads it) and leads Checkout and Fraud Detection.
+    expect(res.items.map((i) => [i.id, i.membership]).sort()).toEqual([['TEAM-001', 'contributor'], ['TEAM-003', 'lead'], ['TEAM-006', 'lead']]);
+    expect(res.items.find((i) => i.id === 'TEAM-001')).toEqual({
       kind: 'assessment-team', id: 'TEAM-001', name: 'Northstar Payments', role: null, membership: 'contributor',
-      counts: { members: 1 }, members: [{ userId: 'u-asha', personId: null, name: 'Asha Nair' }],
-    }]);
+      counts: { members: 2 }, members: expect.arrayContaining([{ userId: 'u-asha', personId: null, name: 'Asha Nair' }, { userId: 'u-jonas', personId: null, name: 'Jonas Lindqvist' }]),
+    });
   });
 
   it('a namesake of a team’s lead is on no team: the display name is not a link, only a row is', async () => {
-    // u-priya is "Priya Natarajan", the name TEAM-001 records as its lead — the retired rule would have made her its lead.
+    // u-priya is named "Deepa Natarajan" here, a name TEAM-001 records as a contributor — the retired rule would have put her on it.
     expect(body(await mine('assessment-team', 'u-priya'))).toEqual({ viewer: { userId: 'u-priya', personId: null }, items: [], limits: [] });
-    expect(body(await mine('assessment-team', 'u-jonas')).items).toEqual([]);
-    // A row is: add her and she is on it, as its lead, beside Asha.
+    expect(body(await mine('assessment-team', 'u-jonas')).items.map((i) => i.id).sort()).toEqual(['TEAM-001', 'TEAM-002']);
+    // A row is: add her and she is on it, as its lead, beside Asha and Jonas.
     assessmentTeamMembersFixture.rows().push({ teamId: 'TEAM-001', userId: 'u-priya', role: 'lead', addedAt: '2026-10-01T00:00:00.000Z' });
     const now = body(await mine('assessment-team', 'u-priya'));
     expect(now.items).toHaveLength(1);
-    expect(now.items[0]).toMatchObject({ id: 'TEAM-001', membership: 'lead', counts: { members: 2 } });
-    expect(now.items[0]!.members!.map((m) => m.userId).sort()).toEqual(['u-asha', 'u-priya']);
+    expect(now.items[0]).toMatchObject({ id: 'TEAM-001', membership: 'lead', counts: { members: 3 } });
+    expect(now.items[0]!.members!.map((m) => m.userId).sort()).toEqual(['u-asha', 'u-jonas', 'u-priya']);
   });
 
   it('a membership row naming a team that no longer exists shows nothing; a provider outage is 503', async () => {
     assessmentTeamMembersFixture.rows().push({ teamId: 'TEAM-999', userId: 'u-asha', role: 'member', addedAt: '2026-10-01T00:00:00.000Z' });
-    expect(body(await mine('assessment-team', 'u-asha')).items.map((i) => i.id)).toEqual(['TEAM-001']);
+    expect(body(await mine('assessment-team', 'u-asha')).items.map((i) => i.id).sort()).toEqual(['TEAM-001', 'TEAM-003', 'TEAM-006']);
     jest.mocked(listUsers).mockRejectedValueOnce(new Error('down'));
     expect((await mine('assessment-team', 'u-asha')).status).toBe(503);
   });

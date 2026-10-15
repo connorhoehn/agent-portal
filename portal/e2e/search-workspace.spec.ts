@@ -3,8 +3,8 @@ import { test, expect, type Page } from '@playwright/test';
 const records = [
   { id: 'auth', type: 'initiative', title: 'Auth Migration', href: '/iq/initiatives/auth', status: 'in_progress', description: 'Move sign-in to a new origin.' },
   { id: 'vera', type: 'person', title: 'Vera Green', href: '/iq/people/vera', subtitle: 'Owner', description: 'Owns Auth Migration.' },
-  { id: 'nora', type: 'person', title: 'Nora Chang', href: '/iq/people/nora', subtitle: 'SME', description: 'Coordinates the tenant cutover.' },
-  { id: 'cutover', type: 'work', title: 'Tenant-by-tenant cutover', href: '/iq/work-items/cutover', status: 'blocked', subtitle: 'Nora Chang' },
+  { id: 'nora', type: 'person', title: 'Simone Chang', href: '/iq/people/nora', subtitle: 'SME', description: 'Coordinates the tenant cutover.' },
+  { id: 'cutover', type: 'work', title: 'Tenant-by-tenant cutover', href: '/iq/work-items/cutover', status: 'blocked', subtitle: 'Simone Chang' },
   { id: 'sso', type: 'knowledge', title: 'Bring SSO up on a new origin', href: '/iq/distillation/knowledge?item=sso', status: 'published' },
 ];
 const edges = [
@@ -15,7 +15,7 @@ const edges = [
 ];
 const counts = { all: 5, person: 2, initiative: 1, work: 1, knowledge: 1, decision: 0, asset: 0 };
 const question = 'Who can help finish Auth Migration?';
-const assistantText = 'Start with Vera Green, the initiative owner [1], and Nora Chang for the blocked cutover [2].';
+const assistantText = 'Start with Vera Green, the initiative owner [1], and Simone Chang for the blocked cutover [2].';
 const evidence = [{ ...records[1], n: 1 }, { ...records[3], n: 2 }];
 
 async function mockWorkspace(page: Page) {
@@ -74,7 +74,7 @@ async function mockWorkspace(page: Page) {
   } }));
   await page.route('**/api/graph/people/*', route => route.fulfill({ json: {
     id: 'vera', name: 'Vera Green', title: 'Staff Engineer', department: 'Platform Engineering', skills: ['OIDC'],
-    influenceScore: 0.8, scoredAt: null, connections: [{ type: 'collaborates', strength: 0.9, otherPerson: { id: 'nora', name: 'Nora Chang', title: 'SME' } }],
+    influenceScore: 0.8, scoredAt: null, connections: [{ type: 'collaborates', strength: 0.9, otherPerson: { id: 'nora', name: 'Simone Chang', title: 'SME' } }],
   } }));
   await page.route('**/api/graph/people/*/evidence', route => route.fulfill({ json: { documents: [] } }));
   return { submissions, invocationURLs };
@@ -82,7 +82,7 @@ async function mockWorkspace(page: Page) {
 
 const orgPeople = [
   { id: 'vera', name: 'Vera Green', title: 'Staff Engineer', department: 'Platform Engineering', skills: ['OIDC', 'Cognito'], influenceScore: 0.8 },
-  { id: 'nora', name: 'Nora Chang', title: 'Engineer', department: 'Platform Engineering', skills: ['SAML'], influenceScore: 0.6 },
+  { id: 'nora', name: 'Simone Chang', title: 'Engineer', department: 'Platform Engineering', skills: ['SAML'], influenceScore: 0.6 },
   { id: 'ben', name: 'Ben Okafor', title: 'Security Lead', department: 'Security', skills: ['Threat modeling'], influenceScore: 0.5 },
 ];
 
@@ -101,7 +101,7 @@ test('Search views preserve query, draft, typed selection and graph layout', asy
   await expect(node).toHaveAttribute('aria-pressed', 'true');
   // Only the selection and what an edge connects to it are drawn: Nora has
   // no edge to Vera, so the neighbour to add is the initiative Vera owns.
-  await expect(page.getByRole('button', { name: 'Person: Nora Chang', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Person: Simone Chang', exact: true })).toHaveCount(0);
   const other = page.getByRole('button', { name: 'Initiative: Auth Migration, In progress', exact: true });
   await other.focus();
   await page.keyboard.press('Space');
@@ -324,7 +324,7 @@ test('A lone person selection draws the org graph around that person, never the 
     await expect(page.getByTestId('search-connections')).toHaveCount(0);
     const graph = page.getByTestId('search-org-graph');
     await expect(graph.getByRole('button', { name: /^Vera Green/ })).toBeVisible();
-    await expect(graph.getByRole('button', { name: /^Nora Chang/ })).toBeVisible();
+    await expect(graph.getByRole('button', { name: /^Simone Chang/ })).toBeVisible();
     // Ben (Security) is not Vera's neighbour: the narrowed graph leaves him out.
     await expect(graph.getByRole('button', { name: /^Ben Okafor/ })).toHaveCount(0);
     await expect(panel).toContainText('2 / 3 people');
@@ -434,9 +434,9 @@ test('a bare composer send issues the query: q, the Results count and the rail c
   await page.goto('/iq/search');
   await expect(page.getByRole('tab', { name: /^Results/ })).toContainText('5');
   const composer = page.getByTestId('search-composer');
-  await composer.getByRole('textbox', { name: 'Search question' }).fill('Nora Chang');
+  await composer.getByRole('textbox', { name: 'Search question' }).fill('Simone Chang');
   await composer.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('Nora Chang');
+  await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('Simone Chang');
   await expect(page).toHaveURL(/tab=answer/);
   await expect(page.getByRole('tab', { name: /^Results/ })).toContainText('1');
   await expect(page.getByTestId('search-type-rail').getByRole('link', { name: /People/ })).toContainText('1');

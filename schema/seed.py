@@ -96,7 +96,7 @@ DECISIONS = [
     ("d-aurora",        "Adopt Aurora over Neptune",       "Picked Aurora PostgreSQL + relational graph over Neptune Analytics for cost + latency reasons.",                 "2026-03-12"),
     ("d-k8s",           "Migrate to Kubernetes from ECS",  "Standardize compute layer on EKS for portability and ecosystem.",                                                "2026-02-04"),
     ("d-nova",          "Standardize on Nova Pro",         "Use amazon.nova-pro-v1 as primary inference model across all agents.",                                           "2026-04-21"),
-    ("d-legacy-auth",   "Sunset legacy auth service",      "Migrate remaining services off the v1 auth gateway before Q3 2026.",                                             "2026-01-30"),
+    ("d-legacy-auth",   "Sunset legacy auth service",      "Move every remaining service off the v1 auth gateway; the SAML shim is deleted once the last tenant has cut over to Cognito.", "2026-01-30"),
     ("d-otel",          "Adopt OpenTelemetry",             "Replace ad-hoc tracing with OTLP + AWS X-Ray for unified observability.",                                        "2026-03-25"),
     ("d-react-19",      "React 19 upgrade timeline",       "Roll out React 19 across portal + design system over Q2.",                                                       "2026-04-02"),
     ("d-iceberg",       "Snowflake to Iceberg evaluation", "Pilot Iceberg-on-S3 for the analytics lakehouse — defer go/no-go to Q3.",                                        "2026-05-01"),
@@ -142,6 +142,40 @@ PEOPLE_PER_TEAM_BASE = {  # before --scale multiplier
     "t-security":  6,
 }
 
+# One cast (docs/demo-content-goal.md rule 5): no two people a peer meets in
+# one story share a first name, and none shares one with the sign-in cast
+# (middleware/src/providers/identity.ts). The random draw above produced three
+# Noras, four Hugos and namesakes of Vera, Theo, Mia, Caleb, Rachel and Lena;
+# these overrides rename them AFTER the draw, so every other generated value
+# (skills, collaborations, scores) is unchanged. A title override names what
+# the person does in the story (the release manager is not an "Engineer").
+NAME_OVERRIDES: dict[str, tuple[str, str | None]] = {
+    "p-003": ("Owen Brooks", None),  # was Marcus O'Brien
+    "p-009": ("Arjun Shah", None),  # was Marcus Shah
+    "p-010": ("Kenji Chen", None),  # was Tara Chen
+    "p-014": ("Grace Singh", None),  # was Sarah Singh
+    "p-018": ("Yusuf Ahmed", None),  # was Sarah Ahmed
+    "p-019": ("Camille Dubois", None),  # was Lena Dubois
+    "p-024": ("Andre Williams", None),  # was Theo Williams
+    "p-025": ("Anika Mehta", None),  # was Aisha Mehta
+    "p-028": ("Felix Rivera", None),  # was Theo Rivera
+    "p-031": ("Fatima Ahmed", None),  # was Sasha Ahmed
+    "p-032": ("Ruth Foster", None),  # was Nora Foster
+    "p-034": ("Miles Wright", None),  # was Asher Wright
+    "p-037": ("Oscar Foster", None),  # was Hugo Foster
+    "p-039": ("Nils Andersson", None),  # was Hugo Andersson
+    "p-041": ("Rosa Ahmed", None),  # was Vera Ahmed
+    "p-042": ("Katya Petrov", None),  # was Vera Petrov
+    "p-044": ("Zoe Thompson", None),  # was Aisha Thompson
+    "p-046": ("Vikram Patel", None),  # was Caleb Patel
+    "p-049": ("Paolo Mancini", None),  # was Hiro Mancini
+    "p-051": ("Simone Chang", None),  # was Nora Chang
+    "p-052": ("Diego Ortiz", None),  # was Hugo DaSilva
+    "p-053": ("Ingrid Larsen", None),  # was Rachel Turner
+    "p-055": ("Joy Chen", None),  # was Mia Chen
+    "p-005": ("Sienna Garcia", "Release Manager"),
+}
+
 
 @dataclass
 class Person:
@@ -176,6 +210,15 @@ def gen_people(scale: float) -> list[Person]:
                 team_id=team_id,
             ))
             pid += 1
+    for person in people:
+        override = NAME_OVERRIDES.get(person.id)
+        if override:
+            name, title = override
+            first, last = name.split(" ", 1)
+            person.name = name
+            person.email = f"{first.lower()}.{last.lower().replace(chr(39), '')}@orgiq.example"
+            if title:
+                person.title = title
     return people
 
 

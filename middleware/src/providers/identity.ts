@@ -68,15 +68,17 @@ const FALLBACK_USERS: UserInfo[] = [
     grants: { orgiq: ['admin'], assessment: ['admin'], social: ['admin'], pipelines: ['admin'], access: ['admin'] }, epoch: 0 },
   { id: 'u-theo', displayName: 'Theo Chang', email: 'theo.chang@orgiq.example', personId: 'p-001',
     grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
+  // Vera and Rachel also approve in Access: they steward Work's access steps
+  // (Rachel the Work roles as hr-admin, Vera her initiative) — schema/identity_schema.sql.
   { id: 'u-vera', displayName: 'Vera Green', email: 'vera.green@orgiq.example', personId: 'p-002',
-    grants: { orgiq: ['org-leader', 'member'], social: ['participant'] }, epoch: 0 },
-  { id: 'u-hr', displayName: 'Priya Desai', email: 'priya.desai@orgiq.example', personId: null,
+    grants: { orgiq: ['org-leader', 'member'], social: ['participant'], access: ['approver'] }, epoch: 0 },
+  { id: 'u-hr', displayName: 'Helen Desai', email: 'helen.desai@orgiq.example', personId: null,
     grants: { orgiq: ['hr-admin'] }, epoch: 0 },
   // Program operating model cast — see docs/program-operating-model.md.
   { id: 'u-release', displayName: 'Sienna Garcia', email: 'sienna.garcia@orgiq.example', personId: 'p-005',
     grants: { orgiq: ['org-leader', 'member'], social: ['participant'] }, epoch: 0 },
   { id: 'u-rachel', displayName: 'Rachel Kowalski', email: 'rachel.kowalski@orgiq.example', personId: 'p-012',
-    grants: { orgiq: ['hr-admin', 'org-leader'], social: ['participant'] }, epoch: 0 },
+    grants: { orgiq: ['hr-admin', 'org-leader'], social: ['participant'], access: ['approver'] }, epoch: 0 },
   // The program owner — runs the delivery program (sprints, bots, the board)
   // AND holds ManageBudgets on it: allocates the monthly budget and grants
   // sprint envelopes on the initiatives they own, the same allocation

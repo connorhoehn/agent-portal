@@ -386,7 +386,7 @@ const ingestPiiScan: RunbookDoc = {
     { do: 'Delete the uploaded object from the landing bucket.', command: bash('aws s3 rm "s3://$LANDING_BUCKET/uploads/$(basename "$DOC")"') },
     { do: 'Start a new ingestion job so the knowledge base drops the document.', command: bash('curl -s -b "$COOKIE_JAR" -X POST "$BFF/api/ingest/start" -H \'content-type: application/json\' -d "{\\"kbSlug\\":\\"$KB_SLUG\\"}"') },
   ],
-  notes: 'Convention art-005: scanning after ingestion was tried and rejected, because by then the document was already embedded and indexed.\nThe Library evaluator `lib-pii-scan` (owner Priya Desai) is the ingestion pipeline\'s own form of step 1.',
+  notes: 'Convention art-005: scanning after ingestion was tried and rejected, because by then the document was already embedded and indexed.\nThe Library evaluator `lib-pii-scan` (owner Helen Desai) is the ingestion pipeline\'s own form of step 1.',
 };
 
 const statsdDecommission: RunbookDoc = {

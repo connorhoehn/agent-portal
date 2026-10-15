@@ -139,8 +139,8 @@ describe('never throws', () => {
 describe('mentions', () => {
   it('resolves display names on the tenant roster only', async () => {
     expect(await resolveMentions('cc @Jonas Lindqvist and @farah osei.', 'assessment')).toEqual(expect.arrayContaining(['u-jonas', 'u-farah']));
-    // Priya Desai (u-hr) is not on the assessment roster: an unresolved mention notifies nobody.
-    expect(await resolveMentions('@Priya Desai please look', 'assessment')).toEqual([]);
+    // Helen Desai (u-hr) is not on the assessment roster: an unresolved mention notifies nobody.
+    expect(await resolveMentions('@Helen Desai please look', 'assessment')).toEqual([]);
     expect(await resolveMentions('@Somebody Else', 'assessment')).toEqual([]);
     expect(await resolveMentions('no mentions here', 'assessment')).toEqual([]);
     expect(await resolveMentions('@Jonas Lindqvistx', 'assessment')).toEqual([]);

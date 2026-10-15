@@ -25,12 +25,12 @@ beforeEach(() => {
   mock(listRecordingSearchRecords).mockResolvedValue({ records: [], partial: [] });
   mock(aurora.fetchGraph).mockResolvedValue({ peopleTotal: 2, nodes: [
     { id: 'vera', name: 'Vera Green', title: 'Engineer', department: 'Platform', skills: ['identity'] },
-    { id: 'nora', name: 'Nora Chang', title: 'Engineer', department: 'Design', skills: [] },
+    { id: 'nora', name: 'Simone Chang', title: 'Engineer', department: 'Design', skills: [] },
   ], edges: [] });
   mock(listProjects).mockResolvedValue([{ id: 'auth', name: 'Auth Migration', status: 'active', ownerId: 'vera', ownerName: 'Vera Green' }, { id: 'other', name: 'Other initiative' }]);
   mock(listProjectSummaries).mockResolvedValue(new Map([['auth', 'Migrate identity']]));
-  mock(getProject).mockImplementation(async id => id === 'auth' ? { id, name: 'Auth Migration', ownerName: 'Vera Green', summary: 'Migrate identity', contributors: [{ personId: 'nora', name: 'Nora Chang', role: 'sme' }] } : null);
-  mock(searchWorkItems).mockResolvedValue([{ id: 'cutover', projectId: 'auth', projectName: 'Auth Migration', title: 'Tenant cutover', status: 'open', blockedReason: 'Needs decision', assigneeId: 'nora', assigneeName: 'Nora Chang' }]);
+  mock(getProject).mockImplementation(async id => id === 'auth' ? { id, name: 'Auth Migration', ownerName: 'Vera Green', summary: 'Migrate identity', contributors: [{ personId: 'nora', name: 'Simone Chang', role: 'sme' }] } : null);
+  mock(searchWorkItems).mockResolvedValue([{ id: 'cutover', projectId: 'auth', projectName: 'Auth Migration', title: 'Tenant cutover', status: 'open', blockedReason: 'Needs decision', assigneeId: 'nora', assigneeName: 'Simone Chang' }]);
   mock(listDesignReviews).mockResolvedValue([]);
   mock(getDesignThread).mockResolvedValue(null);
   mock(listDecisions).mockResolvedValue([{ id: 'order', topic: 'Choose cutover order', summary: '', status: 'open', projectId: 'auth' }]);
@@ -114,7 +114,7 @@ test('denied people never appear in results, related records, counts, or graph e
 });
 test('search and selection hydration preserve authorized portraits, with initials for absent faces', async () => {
   const vera = { id: 'vera', name: 'Vera Green', title: 'Engineer', department: 'Platform', skills: ['identity'], avatarUrl: '/avatars/photos/vera.jpg', presence: 'office' };
-  mock(aurora.fetchGraph).mockResolvedValue({ peopleTotal: 2, nodes: [vera, { ...vera, id: 'nora', name: 'Nora Chang', avatarUrl: null }], edges: [] });
+  mock(aurora.fetchGraph).mockResolvedValue({ peopleTotal: 2, nodes: [vera, { ...vera, id: 'nora', name: 'Simone Chang', avatarUrl: null }], edges: [] });
   const r = await searchRecords(principal, { scope: 'auth', type: 'person' });
   expect(r.results.find(row => row.id === 'vera')?.avatarUrl).toBe(vera.avatarUrl);
   expect(r.results.find(row => row.id === 'nora')).not.toHaveProperty('avatarUrl');
@@ -171,7 +171,7 @@ test('context resolution applies the same person permission', async () => {
 });
 
 test('selected context edges link only selected authorized source identities', async () => {
-  mock(aurora.fetchPersonGraph).mockImplementation(async id => id === 'nora' ? { id, name: 'Nora Chang' } : null);
+  mock(aurora.fetchPersonGraph).mockImplementation(async id => id === 'nora' ? { id, name: 'Simone Chang' } : null);
   mock(getWorkItem).mockResolvedValue({ id: 'cutover', title: 'Tenant cutover', projectId: 'auth', assigneeId: 'nora', status: 'open' });
   const context = await resolveSearchContext(principal, [{ type: 'person', id: 'nora' }, { type: 'work', id: 'cutover' }]);
   expect(context.records).toHaveLength(2);

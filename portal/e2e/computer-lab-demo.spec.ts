@@ -233,7 +233,7 @@ test('computer lab walkthrough', async ({ page }) => {
     });
 
     await test.step('The changes wait in the review queue', async () => {
-      // Reviewing is a different right: Priya Desai (u-hr, hr-admin) decides
+      // Reviewing is a different right: Helen Desai (u-hr, hr-admin) decides
       // what lands. Single-role, so no workspace picker detour.
       await page.goto('/');
       await signIn(page, 'u-hr');

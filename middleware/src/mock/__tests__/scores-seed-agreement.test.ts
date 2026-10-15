@@ -188,7 +188,7 @@ describe('nothing countable is stored', () => {
     const { entries } = await mockAurora.getLeaderboard({ limit: 200 });
     const composites = entries.map((e) => e.composite);
     expect([...composites].sort((a, b) => b - a)).toEqual(composites);
-    expect(entries[0]!.personId).toBe('p-028'); // Theo Rivera, 96.02
+    expect(entries[0]!.personId).toBe('p-028'); // Felix Rivera, 96.02
   });
 
   it('filters by department without inventing a cast', async () => {

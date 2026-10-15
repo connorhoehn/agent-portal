@@ -123,7 +123,7 @@ afterEach(() => { setNotificationSink(null); jest.restoreAllMocks(); });
 const events = async (id: string, cookie: string) =>
   ((await request(app).get(`/api/access/audit?requestId=${id}`).set('Cookie', cookie)).body as { items: AccessEvent[] }).items.map((e) => [e.kind, e.actor?.id ?? null]).reverse();
 
-/** Rhea files SME in Work (clear at submit); org-leader then lands in her grants; Omar and Priya approve. */
+/** Rhea files SME in Work (clear at submit); org-leader then lands in her grants; Omar and Rachel approve. */
 async function blockedAtProvision(): Promise<{ id: string; rhea: string; omar: string; priya: string; approved: AccessRequest }> {
   const rhea = await signIn('u-rhea');
   const filed = await request(app).post('/api/access/requests').set('Cookie', rhea).send({ itemId: 'role:orgiq:sme', justification: JUST, duration: '7d' });
@@ -134,11 +134,15 @@ async function blockedAtProvision(): Promise<{ id: string; rhea: string; omar: s
   await setGrants('u-rhea', { access: ['requester'], orgiq: ['org-leader'] });
   const omar = await signIn('u-omar');
   expect((await request(app).post(`/api/access/requests/${id}/steps/1/decide`).set('Cookie', omar).send({ decision: 'approve' })).status).toBe(200);
+  // Rachel stewards Work roles (hr-admin, approving in Access) and decides the last step.
+  const rachel = await signIn('u-rachel');
   const priya = await signIn('u-priya');
   bell = [];
-  const last = await request(app).post(`/api/access/requests/${id}/steps/2/decide`).set('Cookie', priya).send({ decision: 'approve' });
+  const last = await request(app).post(`/api/access/requests/${id}/steps/2/decide`).set('Cookie', rachel).send({ decision: 'approve' });
   expect(last.status).toBe(200);
-  return { id, rhea, omar, priya, approved: last.body as AccessRequest };
+  // The record as the access admin reads it (only she may override the block).
+  const approved = (await request(app).get(`/api/access/requests/${id}`).set('Cookie', priya)).body as AccessRequest;
+  return { id, rhea, omar, priya, approved };
 }
 
 describe('SoD at provisioning (A7)', () => {
@@ -171,7 +175,7 @@ describe('SoD at provisioning (A7)', () => {
     });
     expect((await getUser('u-rhea'))!.grants).toEqual({ access: ['requester'], orgiq: ['org-leader', 'sme'] });
     expect(await events(id, priya)).toEqual([
-      ['submitted', 'u-rhea'], ['step-approved', 'u-omar'], ['step-approved', 'u-priya'], ['approved', 'u-priya'],
+      ['submitted', 'u-rhea'], ['step-approved', 'u-omar'], ['step-approved', 'u-rachel'], ['approved', 'u-rachel'],
       ['sod-blocked', null], ['sod-override', 'u-priya'], ['provisioned', null],
     ]);
     // Once: a second override is the 409.

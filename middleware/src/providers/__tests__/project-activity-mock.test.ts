@@ -38,7 +38,7 @@ describe('getProjectActivity — mock mode', () => {
     expect(completion).toBeDefined();
     expect(completion!.action).toBe('completed');
     expect(completion!.ticketId).toBe('AUTH-E1-S1');
-    expect(completion!.actorName).toBe('Nora Chang');
+    expect(completion!.actorName).toBe('Simone Chang');
 
     // Dated fourteen days ago, not four months ago: the seeds encode an offset
     // from MOCK_EPOCH and the feed replays it from real today (the same
@@ -54,7 +54,7 @@ describe('getProjectActivity — mock mode', () => {
     const comment = auth.find((e) => e.id === 'wic-prog-4');
     expect(comment).toMatchObject({
       kind: 'comment', action: 'commented on', actorId: 'p-051',
-      actorName: 'Nora Chang', workItemId: 'wi-auth-e1-b4',
+      actorName: 'Simone Chang', workItemId: 'wi-auth-e1-b4',
       // A human comment renders under its item's TITLE; the body is the
       // subject only for a system row.
       subject: 'Refresh loop when a grant is revoked mid-session',

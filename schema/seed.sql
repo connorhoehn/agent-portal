@@ -95,71 +95,71 @@ INSERT INTO projects (id, name, status) VALUES ('p-zero-trust', 'Zero Trust Netw
 INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-aurora', 'Adopt Aurora over Neptune', 'Picked Aurora PostgreSQL + relational graph over Neptune Analytics for cost + latency reasons.', 'resolved', NULL, NULL, DATE '2026-03-12', NULL, TIMESTAMPTZ '2026-03-12 00:00:00+00', NULL);
 INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-k8s', 'Migrate to Kubernetes from ECS', 'Standardize compute layer on EKS for portability and ecosystem.', 'resolved', NULL, NULL, DATE '2026-02-04', NULL, TIMESTAMPTZ '2026-02-04 00:00:00+00', NULL);
 INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-nova', 'Standardize on Nova Pro', 'Use amazon.nova-pro-v1 as primary inference model across all agents.', 'resolved', 'p-llm-platform', NULL, DATE '2026-04-21', NULL, TIMESTAMPTZ '2026-04-21 00:00:00+00', NULL);
-INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-legacy-auth', 'Sunset legacy auth service', 'Migrate remaining services off the v1 auth gateway before Q3 2026.', 'resolved', 'p-auth-migration', NULL, DATE '2026-01-30', NULL, TIMESTAMPTZ '2026-01-30 00:00:00+00', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-legacy-auth', 'Sunset legacy auth service', 'Move every remaining service off the v1 auth gateway; the SAML shim is deleted once the last tenant has cut over to Cognito.', 'resolved', 'p-auth-migration', NULL, DATE '2026-01-30', NULL, TIMESTAMPTZ '2026-01-30 00:00:00+00', NULL);
 INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-otel', 'Adopt OpenTelemetry', 'Replace ad-hoc tracing with OTLP + AWS X-Ray for unified observability.', 'resolved', 'p-observability', NULL, DATE '2026-03-25', NULL, TIMESTAMPTZ '2026-03-25 00:00:00+00', NULL);
 INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-react-19', 'React 19 upgrade timeline', 'Roll out React 19 across portal + design system over Q2.', 'resolved', 'p-design-v3', NULL, DATE '2026-04-02', NULL, TIMESTAMPTZ '2026-04-02 00:00:00+00', NULL);
 INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-vectordb', 'Vector DB vendor selection', 'Chose pgvector inside Aurora over standalone vector DBs to keep ops surface small.', 'resolved', 'p-rag-search', NULL, DATE '2026-03-18', NULL, TIMESTAMPTZ '2026-03-18 00:00:00+00', NULL);
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-001', 'Theo Chang', 'theo.chang@orgiq.example', 'Engineer', 'Platform Engineering', 64.46, 91.55, 79.36, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-002', 'Vera Green', 'vera.green@orgiq.example', 'Principal Engineer', 'Platform Engineering', 40.56, 80.31, 62.42, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-003', 'Marcus O''Brien', 'marcus.obrien@orgiq.example', 'Senior Engineer', 'Platform Engineering', 47.79, 77.32, 64.03, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-003', 'Owen Brooks', 'owen.brooks@orgiq.example', 'Senior Engineer', 'Platform Engineering', 47.79, 77.32, 64.03, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-004', 'Nora DaSilva', 'nora.dasilva@orgiq.example', 'Senior Engineer', 'Platform Engineering', 77.11, 85.71, 81.84, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-005', 'Sienna Garcia', 'sienna.garcia@orgiq.example', 'Engineer', 'Platform Engineering', 40.36, 41.35, 40.9, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-005', 'Sienna Garcia', 'sienna.garcia@orgiq.example', 'Release Manager', 'Platform Engineering', 40.36, 41.35, 40.9, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-006', 'Maria Johnson', 'maria.johnson@orgiq.example', 'Principal Engineer', 'Platform Engineering', 69.08, 98.1, 85.04, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-007', 'Marcus Müller', 'marcus.müller@orgiq.example', 'Engineer', 'Platform Engineering', 77.31, 95.0, 87.04, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-008', 'Layla Hassan', 'layla.hassan@orgiq.example', 'SRE Lead', 'Platform Engineering', 70.88, 64.8, 67.54, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-009', 'Marcus Shah', 'marcus.shah@orgiq.example', 'SRE', 'Platform Engineering', 26.31, 61.68, 45.76, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-010', 'Tara Chen', 'tara.chen@orgiq.example', 'Staff Engineer', 'Platform Engineering', 43.37, 72.12, 59.18, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-009', 'Arjun Shah', 'arjun.shah@orgiq.example', 'SRE', 'Platform Engineering', 26.31, 61.68, 45.76, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-010', 'Kenji Chen', 'kenji.chen@orgiq.example', 'Staff Engineer', 'Platform Engineering', 43.37, 72.12, 59.18, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-011', 'Eli Garcia', 'eli.garcia@orgiq.example', 'Senior SRE', 'Platform Engineering', 62.65, 69.38, 66.35, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-012', 'Rachel Kowalski', 'rachel.kowalski@orgiq.example', 'Principal Engineer', 'Platform Engineering', 67.67, 68.47, 68.11, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-013', 'Caleb Turner', 'caleb.turner@orgiq.example', 'Senior Engineer', 'Platform Engineering', 76.51, 88.13, 82.9, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-014', 'Sarah Singh', 'sarah.singh@orgiq.example', 'Senior Engineer', 'Platform Engineering', 24.7, 71.69, 50.54, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-014', 'Grace Singh', 'grace.singh@orgiq.example', 'Senior Engineer', 'Platform Engineering', 24.7, 71.69, 50.54, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-015', 'Raj Mehta', 'raj.mehta@orgiq.example', 'Data Engineer', 'Data Platform', 80.72, 49.64, 63.63, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-016', 'Tara Wright', 'tara.wright@orgiq.example', 'Data Analyst', 'Data Platform', 60.44, 62.03, 61.31, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-017', 'Daniel Chang', 'daniel.chang@orgiq.example', 'Staff Data Engineer', 'Data Platform', 100.0, 78.91, 88.4, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-018', 'Sarah Ahmed', 'sarah.ahmed@orgiq.example', 'Data Engineer', 'Data Platform', 52.81, 72.12, 63.43, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-019', 'Lena Dubois', 'lena.dubois@orgiq.example', 'Senior Data Engineer', 'Data Platform', 89.76, 89.79, 89.78, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-018', 'Yusuf Ahmed', 'yusuf.ahmed@orgiq.example', 'Data Engineer', 'Data Platform', 52.81, 72.12, 63.43, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-019', 'Camille Dubois', 'camille.dubois@orgiq.example', 'Senior Data Engineer', 'Data Platform', 89.76, 89.79, 89.78, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-020', 'Henry Hassan', 'henry.hassan@orgiq.example', 'Senior Engineer', 'Data Platform', 93.37, 63.85, 77.13, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-021', 'James Thompson', 'james.thompson@orgiq.example', 'Data Engineer', 'Data Platform', 39.96, 55.28, 48.39, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-022', 'Sarah Thompson', 'sarah.thompson@orgiq.example', 'Senior Engineer', 'Data Platform', 95.58, 86.54, 90.61, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-023', 'Hiro Green', 'hiro.green@orgiq.example', 'Data Analyst', 'Data Platform', 33.53, 57.99, 46.98, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-024', 'Theo Williams', 'theo.williams@orgiq.example', 'Staff Engineer', 'Data Platform', 84.94, 82.6, 83.65, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-025', 'Aisha Mehta', 'aisha.mehta@orgiq.example', 'Principal Engineer', 'Data Platform', 27.71, 55.8, 43.16, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-024', 'Andre Williams', 'andre.williams@orgiq.example', 'Staff Engineer', 'Data Platform', 84.94, 82.6, 83.65, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-025', 'Anika Mehta', 'anika.mehta@orgiq.example', 'Principal Engineer', 'Data Platform', 27.71, 55.8, 43.16, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-026', 'Mateo Green', 'mateo.green@orgiq.example', 'Senior UX Researcher', 'Product', 99.4, 54.26, 74.57, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-027', 'Sasha Kim', 'sasha.kim@orgiq.example', 'UX Researcher', 'Product', 54.62, 59.0, 57.03, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-028', 'Theo Rivera', 'theo.rivera@orgiq.example', 'UX Researcher', 'Product', 91.16, 100.0, 96.02, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-028', 'Felix Rivera', 'felix.rivera@orgiq.example', 'UX Researcher', 'Product', 91.16, 100.0, 96.02, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-029', 'Ezra Park', 'ezra.park@orgiq.example', 'Senior PM', 'Product', 52.21, 42.6, 46.92, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-030', 'Mia Singh', 'mia.singh@orgiq.example', 'Group PM', 'Product', 40.96, 56.48, 49.5, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-031', 'Sasha Ahmed', 'sasha.ahmed@orgiq.example', 'Senior PM', 'Product', 48.8, 73.91, 62.61, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-032', 'Nora Foster', 'nora.foster@orgiq.example', 'Technical Writer', 'Product', 59.44, 84.13, 73.02, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-031', 'Fatima Ahmed', 'fatima.ahmed@orgiq.example', 'Senior PM', 'Product', 48.8, 73.91, 62.61, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-032', 'Ruth Foster', 'ruth.foster@orgiq.example', 'Technical Writer', 'Product', 59.44, 84.13, 73.02, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-033', 'Iris Patel', 'iris.patel@orgiq.example', 'Senior PM', 'Product', 79.32, 45.23, 60.57, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-034', 'Asher Wright', 'asher.wright@orgiq.example', 'Accessibility Specialist', 'Design Systems', 70.28, 34.98, 50.87, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-034', 'Miles Wright', 'miles.wright@orgiq.example', 'Accessibility Specialist', 'Design Systems', 70.28, 34.98, 50.87, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-035', 'Ben Okafor', 'ben.okafor@orgiq.example', 'Staff Designer', 'Design Systems', 77.71, 57.69, 66.7, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-036', 'David Tanaka', 'david.tanaka@orgiq.example', 'Head of Design', 'Design Systems', 43.37, 49.67, 46.84, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-037', 'Hugo Foster', 'hugo.foster@orgiq.example', 'Senior Designer', 'Design Systems', 67.47, 50.28, 58.02, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-037', 'Oscar Foster', 'oscar.foster@orgiq.example', 'Senior Designer', 'Design Systems', 67.47, 50.28, 58.02, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-038', 'Isabel Vasquez', 'isabel.vasquez@orgiq.example', 'Design Engineer', 'Design Systems', 49.0, 67.11, 58.96, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-039', 'Hugo Andersson', 'hugo.andersson@orgiq.example', 'Senior Designer', 'Design Systems', 49.4, 88.83, 71.09, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-039', 'Nils Andersson', 'nils.andersson@orgiq.example', 'Senior Designer', 'Design Systems', 49.4, 88.83, 71.09, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-040', 'Jordan O''Brien', 'jordan.obrien@orgiq.example', 'Senior Designer', 'Design Systems', 50.8, 37.84, 43.67, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-041', 'Vera Ahmed', 'vera.ahmed@orgiq.example', 'ML Engineer', 'ML / AI', 61.04, 77.32, 69.99, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-042', 'Vera Petrov', 'vera.petrov@orgiq.example', 'Staff ML Engineer', 'ML / AI', 82.33, 70.06, 75.58, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-041', 'Rosa Ahmed', 'rosa.ahmed@orgiq.example', 'ML Engineer', 'ML / AI', 61.04, 77.32, 69.99, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-042', 'Katya Petrov', 'katya.petrov@orgiq.example', 'Staff ML Engineer', 'ML / AI', 82.33, 70.06, 75.58, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-043', 'Bria Petrov', 'bria.petrov@orgiq.example', 'Staff ML Engineer', 'ML / AI', 60.44, 89.04, 76.17, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-044', 'Aisha Thompson', 'aisha.thompson@orgiq.example', 'Staff Engineer', 'ML / AI', 36.95, 51.92, 45.18, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-044', 'Zoe Thompson', 'zoe.thompson@orgiq.example', 'Staff Engineer', 'ML / AI', 36.95, 51.92, 45.18, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-045', 'Noah Vasquez', 'noah.vasquez@orgiq.example', 'Senior Engineer', 'ML / AI', 72.89, 77.55, 75.45, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-046', 'Caleb Patel', 'caleb.patel@orgiq.example', 'Senior Engineer', 'ML / AI', 60.44, 58.4, 59.32, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-046', 'Vikram Patel', 'vikram.patel@orgiq.example', 'Senior Engineer', 'ML / AI', 60.44, 58.4, 59.32, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-047', 'Nina Rivera', 'nina.rivera@orgiq.example', 'Staff ML Engineer', 'ML / AI', 45.98, 76.12, 62.56, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-048', 'Lucas Kim', 'lucas.kim@orgiq.example', 'Staff ML Engineer', 'ML / AI', 62.45, 38.5, 49.28, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-049', 'Hiro Mancini', 'hiro.mancini@orgiq.example', 'Engineering Manager', 'ML / AI', 46.39, 51.24, 49.06, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-049', 'Paolo Mancini', 'paolo.mancini@orgiq.example', 'Engineering Manager', 'ML / AI', 46.39, 51.24, 49.06, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-050', 'Ava Lee', 'ava.lee@orgiq.example', 'Engineer', 'ML / AI', 74.3, 59.5, 66.16, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-051', 'Nora Chang', 'nora.chang@orgiq.example', 'Senior Security Engineer', 'Security', 94.18, 30.37, 59.08, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-052', 'Hugo DaSilva', 'hugo.dasilva@orgiq.example', 'Security Lead', 'Security', 60.24, 81.04, 71.68, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-053', 'Rachel Turner', 'rachel.turner@orgiq.example', 'Engineer', 'Security', 51.2, 40.71, 45.43, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-051', 'Simone Chang', 'simone.chang@orgiq.example', 'Senior Security Engineer', 'Security', 94.18, 30.37, 59.08, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-052', 'Diego Ortiz', 'diego.ortiz@orgiq.example', 'Security Lead', 'Security', 60.24, 81.04, 71.68, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-053', 'Ingrid Larsen', 'ingrid.larsen@orgiq.example', 'Engineer', 'Security', 51.2, 40.71, 45.43, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-054', 'Kevin Garcia', 'kevin.garcia@orgiq.example', 'Senior Engineer', 'Security', 75.3, 85.78, 81.06, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-055', 'Mia Chen', 'mia.chen@orgiq.example', 'Senior Security Engineer', 'Security', 70.08, 51.84, 60.05, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-055', 'Joy Chen', 'joy.chen@orgiq.example', 'Senior Security Engineer', 'Security', 70.08, 51.84, 60.05, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-056', 'Hugo Lee', 'hugo.lee@orgiq.example', 'Security Engineer', 'Security', 55.42, 35.2, 44.3, NOW());
 INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-001', 't-platform', 'Engineer');
 INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-002', 't-platform', 'Principal Engineer');
 INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-003', 't-platform', 'Senior Engineer');
 INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-004', 't-platform', 'Senior Engineer');
-INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-005', 't-platform', 'Engineer');
+INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-005', 't-platform', 'Release Manager');
 INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-006', 't-platform', 'Principal Engineer');
 INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-007', 't-platform', 'Engineer');
 INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-008', 't-platform', 'SRE Lead');
@@ -807,25 +807,25 @@ INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-045'
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-043', 'd-vectordb', 'contributor');
 
 -- ── Cross-functional projects ──────────────────────────────────────────────
--- Bridges Platform ↔ ML/AI (fixes Theo Chang ↔ Aisha Thompson search gap)
+-- Bridges Platform ↔ ML/AI (fixes Theo Chang ↔ Zoe Thompson search gap)
 INSERT INTO projects (id, name, status) VALUES ('p-inference-platform', 'Inference Platform', 'in_progress');
 -- Bridges Design ↔ Platform (fixes Theo Chang ↔ Isabel Vasquez search gap)
 INSERT INTO projects (id, name, status) VALUES ('p-design-system-api', 'Design System API', 'in_progress');
 
 -- ── Skills enrichment for thin profiles ───────────────────────────────────
--- p-009 Marcus Shah (SRE, Platform Engineering)
+-- p-009 Arjun Shah (SRE, Platform Engineering)
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-009', 'sk-kubernetes', 0.74, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-009', 'sk-observability', 0.61, 'seed');
--- p-014 Sarah Singh (Senior Engineer, Platform Engineering)
+-- p-014 Grace Singh (Senior Engineer, Platform Engineering)
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-014', 'sk-kubernetes', 0.83, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-014', 'sk-service-mesh', 0.65, 'seed');
 -- p-023 Hiro Green (Data Analyst, Data Platform)
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-023', 'sk-sql', 0.92, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-023', 'sk-analytics', 0.75, 'seed');
--- p-025 Aisha Mehta (Principal Engineer, Data Platform)
+-- p-025 Anika Mehta (Principal Engineer, Data Platform)
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-025', 'sk-spark', 0.88, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-025', 'sk-sql', 0.93, 'seed');
--- p-044 Aisha Thompson (Staff Engineer, ML / AI)
+-- p-044 Zoe Thompson (Staff Engineer, ML / AI)
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-044', 'sk-mlops', 0.91, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-044', 'sk-llms', 0.87, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-044', 'sk-embeddings', 0.76, 'seed');
@@ -850,20 +850,20 @@ INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES (
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-017', 'p-design-system-api', 'contributor', 0.49);
 
 -- ── Fill thin project profiles across existing projects ────────────────────
--- Aisha Thompson: second project (Theo leads llm-platform)
+-- Zoe Thompson: second project (Theo leads llm-platform)
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-044', 'p-llm-platform', 'contributor', 0.61);
 -- Maria Johnson: second + third projects (Platform Principal Engineer)
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-006', 'p-llm-platform', 'contributor', 0.73);
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-006', 'p-zero-trust', 'reviewer', 0.52);
 -- Kevin Garcia (Security): bridges to Data via real-time analytics security review
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-054', 'p-realtime-analytics', 'reviewer', 0.44);
--- Hugo DaSilva (Security): bridges to Product via mobile security review
+-- Diego Ortiz (Security): bridges to Product via mobile security review
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-052', 'p-mobile-redesign', 'reviewer', 0.48);
 -- Theo Chang: add to observability (many Platform colleagues there)
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-001', 'p-observability', 'contributor', 0.61);
 -- Bria Petrov (ML/AI): add to rag-search
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-043', 'p-rag-search', 'contributor', 0.67);
--- Vera Petrov (ML/AI): add to llm-platform
+-- Katya Petrov (ML/AI): add to llm-platform
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-042', 'p-llm-platform', 'contributor', 0.58);
 -- Ezra Park (Product): add to mobile-redesign
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-029', 'p-mobile-redesign', 'contributor', 0.55);
@@ -873,7 +873,7 @@ INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES (
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-026', 'p-llm-platform', 'reviewer', 0.41);
 -- Sasha Kim (Product): add to rag-search
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-027', 'p-rag-search', 'contributor', 0.46);
--- Theo Williams (Data): add to llm-platform
+-- Andre Williams (Data): add to llm-platform
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-024', 'p-llm-platform', 'reviewer', 0.52);
 
 -- ── Decision participants enrichment ──────────────────────────────────────

@@ -3124,9 +3124,9 @@ const seedTeams = (): MockTeam[] => [
   "name": "Northstar Payments",
   "cohort": "white_glove",
   "workflow_step": 4,
-  "assessment_lead": "Priya Natarajan",
+  "assessment_lead": "Jonas Lindqvist",
   "contacts": [
-   "priya.natarajan@example.com",
+   "deepa.natarajan@example.com",
    "sam.diallo@example.com"
   ],
   "repos": [
@@ -3147,7 +3147,7 @@ const seedTeams = (): MockTeam[] => [
     "status": "approved",
     "source": "archetype",
     "reason": "Archetype \"internal-tooling-no-deploy\": the team ships no customer-facing release artifact, so dedicated security-testing gates do not apply beyond what CI already runs.",
-    "approved_by": "lead-assessor:priya",
+    "approved_by": "lead-assessor:jonas",
     "approved_at": daysAgo(10)
    },
    {
@@ -3163,8 +3163,8 @@ const seedTeams = (): MockTeam[] => [
   "updated_at": daysAgo(2),
   "contributors": [
    {
-    "initials": "PN",
-    "name": "Priya Natarajan"
+    "initials": "DN",
+    "name": "Deepa Natarajan"
    },
    {
     "initials": "SD",
@@ -3181,7 +3181,7 @@ const seedTeams = (): MockTeam[] => [
   "name": "Kubernetes Operator",
   "cohort": "general",
   "workflow_step": 5,
-  "assessment_lead": "Jordan Lee",
+  "assessment_lead": "Jonas Lindqvist",
   "contacts": [
    "jordan.lee@example.com"
   ],
@@ -3202,8 +3202,8 @@ const seedTeams = (): MockTeam[] => [
     "name": "Jordan Lee"
    },
    {
-    "initials": "CH",
-    "name": "Connor Hoehn"
+    "initials": "LR",
+    "name": "Lucia Romero"
    }
   ]
  },
@@ -3212,7 +3212,7 @@ const seedTeams = (): MockTeam[] => [
   "name": "Checkout Experience",
   "cohort": "self_service",
   "workflow_step": 3,
-  "assessment_lead": "Sam Okafor",
+  "assessment_lead": "Asha Nair",
   "contacts": [
    "sam.okafor@example.com"
   ],
@@ -3239,10 +3239,10 @@ const seedTeams = (): MockTeam[] => [
   "name": "Data Platform",
   "cohort": "white_glove",
   "workflow_step": 3,
-  "assessment_lead": "Elena Marsh",
+  "assessment_lead": "Farah Osei",
   "contacts": [
    "elena.marsh@example.com",
-   "tomas.vega@example.com"
+   "bruno.vega@example.com"
   ],
   "repos": [
    {
@@ -3261,8 +3261,8 @@ const seedTeams = (): MockTeam[] => [
     "name": "Elena Marsh"
    },
    {
-    "initials": "TV",
-    "name": "Tomas Vega"
+    "initials": "BV",
+    "name": "Bruno Vega"
    }
   ]
  },
@@ -3271,9 +3271,9 @@ const seedTeams = (): MockTeam[] => [
   "name": "Notifications Service",
   "cohort": "general",
   "workflow_step": 2,
-  "assessment_lead": "Dana Whitfield",
+  "assessment_lead": "Farah Osei",
   "contacts": [
-   "dana.whitfield@example.com"
+   "martina.kovacs@example.com"
   ],
   "repos": [],
   "archetype": null,
@@ -3283,8 +3283,8 @@ const seedTeams = (): MockTeam[] => [
   "updated_at": daysAgo(4),
   "contributors": [
    {
-    "initials": "DW",
-    "name": "Dana Whitfield"
+    "initials": "MK",
+    "name": "Martina Kovacs"
    }
   ]
  },
@@ -3293,7 +3293,7 @@ const seedTeams = (): MockTeam[] => [
   "name": "Fraud Detection ML",
   "cohort": "self_service",
   "workflow_step": 1,
-  "assessment_lead": "",
+  "assessment_lead": "Asha Nair",
   "contacts": [],
   "repos": [],
   "archetype": null,
@@ -3564,7 +3564,7 @@ const seedAssessments = (): Record<string, Record<string, MockDimensionScore>> =
      "evidence_ids": [],
      "source_meeting": "teams/TEAM-001 (exception review)",
      "changed_at": daysAgo(10),
-     "changed_by": "lead-assessor:priya"
+     "changed_by": "lead-assessor:jonas"
     }
    ],
    "updated_at": daysAgo(10)
@@ -6518,7 +6518,7 @@ const seedProvenance = (): Record<string, Provenance[]> => ({
   {
    "provenance_id": "PROV-639265a04bca",
    "source_uri": "forms://submission/sub-team001-ci-survey",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(9)
   },
   {
@@ -6530,79 +6530,79 @@ const seedProvenance = (): Record<string, Provenance[]> => ({
   {
    "provenance_id": "PROV-2356de9da12e",
    "source_uri": "confluence://space/PAY/pages/200000",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(9)
   },
   {
    "provenance_id": "PROV-63a330928ddb",
    "source_uri": "confluence://space/PAY/pages/200001",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(8)
   },
   {
    "provenance_id": "PROV-9c6711a58acf",
    "source_uri": "confluence://space/PAY/pages/200002",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(7)
   },
   {
    "provenance_id": "PROV-5528573df5a1",
    "source_uri": "confluence://space/PAY/pages/200003",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(6)
   },
   {
    "provenance_id": "PROV-51872e462cb6",
    "source_uri": "confluence://space/PAY/pages/200004",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(5)
   },
   {
    "provenance_id": "PROV-147afd0bc006",
    "source_uri": "confluence://space/PAY/pages/200005",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(9)
   },
   {
    "provenance_id": "PROV-796525ee482c",
    "source_uri": "confluence://space/PAY/pages/200006",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(8)
   },
   {
    "provenance_id": "PROV-2be2c199d838",
    "source_uri": "confluence://space/PAY/pages/200007",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(7)
   },
   {
    "provenance_id": "PROV-ceef7b956a48",
    "source_uri": "confluence://space/PAY/pages/200008",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(6)
   },
   {
    "provenance_id": "PROV-366f7362260c",
    "source_uri": "confluence://space/PAY/pages/200009",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(5)
   },
   {
    "provenance_id": "PROV-f908b9c2e59c",
    "source_uri": "confluence://space/PAY/pages/200010",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(9)
   },
   {
    "provenance_id": "PROV-74def4982241",
    "source_uri": "confluence://space/PAY/pages/200011",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(8)
   },
   {
    "provenance_id": "PROV-2d4a9fd2bb88",
    "source_uri": "confluence://space/PAY/pages/200012",
-   "captured_by": "Priya Natarajan",
+   "captured_by": "Deepa Natarajan",
    "captured_at": daysAgo(7)
   }
  ],
@@ -6826,31 +6826,31 @@ const seedProvenance = (): Record<string, Provenance[]> => ({
   {
    "provenance_id": "PROV-ff1ac004cfac",
    "source_uri": "forms://submission/sub-20260819T134500Z-form9-dana-whitfield",
-   "captured_by": "Dana Whitfield",
+   "captured_by": "Martina Kovacs",
    "captured_at": daysAgo(6)
   },
   {
    "provenance_id": "PROV-60e7d542fa1b",
    "source_uri": "forms://submission/sub-20260819T134500Z-form9-dana-whitfield",
-   "captured_by": "Dana Whitfield",
+   "captured_by": "Martina Kovacs",
    "captured_at": daysAgo(6)
   },
   {
    "provenance_id": "PROV-2ae3f783bbe9",
    "source_uri": "forms://submission/sub-20260819T134500Z-form9-dana-whitfield",
-   "captured_by": "Dana Whitfield",
+   "captured_by": "Martina Kovacs",
    "captured_at": daysAgo(6)
   },
   {
    "provenance_id": "PROV-1502af09c3e8",
    "source_uri": "forms://submission/sub-20260819T134500Z-form9-dana-whitfield",
-   "captured_by": "Dana Whitfield",
+   "captured_by": "Martina Kovacs",
    "captured_at": daysAgo(6)
   },
   {
    "provenance_id": "PROV-e003e15b6b5e",
    "source_uri": "forms://submission/sub-20260819T134500Z-form9-dana-whitfield",
-   "captured_by": "Dana Whitfield",
+   "captured_by": "Martina Kovacs",
    "captured_at": daysAgo(6)
   }
  ],
@@ -7267,8 +7267,8 @@ const seedSubmissions = (): Record<string, Record<string, SubmissionEnvelope>> =
    "team_id": "TEAM-005",
    "team_name_raw": "Notifications Service",
    "submitter": {
-    "name": "Dana Whitfield",
-    "email": "dana.whitfield@example.com",
+    "name": "Martina Kovacs",
+    "email": "martina.kovacs@example.com",
     "is_primary_contact": true
    },
    "submitted_at": "8/19/2026 13:45",

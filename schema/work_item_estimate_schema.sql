@@ -9,7 +9,7 @@
 -- author, no timestamp, and no review anywhere in any schema file.
 --
 -- That is a real gap on a money path. "≈ $0.03–$0.30" with nobody's name on it
--- is a suggestion; the same figure with "estimated by Nora Chang, 20 minutes
+-- is a suggestion; the same figure with "estimated by Simone Chang, 20 minutes
 -- ago, on Haiku" is a decision somebody can be asked about.
 --
 -- THE MODEL IS PART OF THE ESTIMATE, NOT METADATA ABOUT IT. Measured on one

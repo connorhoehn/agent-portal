@@ -148,10 +148,9 @@ describe('escalation timers', () => {
     expect(ids(before.eligible)).toEqual(['u-omar']);
 
     setClock(at(44));
-    // req-0002's steward step (current since T0 - 24h) is due first. Its own tier was already the
-    // access admins (the initiative owner holds no deciding role in Access), so level 1 adds
-    // nobody new and it goes straight to the platform admins.
-    expect((await sweepAccessEscalations(solo)).escalated).toEqual(['req-0002#2→2']);
+    // req-0002's steward step (current since T0 - 24h) is due first. Its own tier is Vera, the
+    // initiative owner, who approves in Access, so it escalates one level, to the access admins.
+    expect((await sweepAccessEscalations(solo)).escalated).toEqual(['req-0002#2→1']);
     bell = [];
     setClock(at(46));
     expect((await sweepAccessEscalations(solo)).escalated).toEqual(['req-0001#1→1']);
@@ -170,8 +169,8 @@ describe('escalation timers', () => {
 
     setClock(at(95));
     bell = [];
-    expect((await sweepAccessEscalations(solo)).escalated).toEqual(['req-0001#1→2']);
-    expect(bell.map((b) => b.userId)).toEqual(['u-operator']);
+    expect((await sweepAccessEscalations(solo)).escalated).toEqual(['req-0001#1→2', 'req-0002#2→2']);
+    expect([...new Set(bell.map((b) => b.userId))]).toEqual(['u-operator']);
     expect(ids((await record('req-0001', priya)).steps[0]!.eligible)).toEqual(['u-omar', 'u-operator', 'u-priya']);
     // At the top: no further escalation, however long it waits.
     setClock(at(400));
@@ -182,7 +181,7 @@ describe('escalation timers', () => {
   it('an escalated decider decides; the own decider keeps the right; the next step starts its own clock', async () => {
     setClock(at(46));
     const swept = await sweepAccessEscalations(solo);
-    expect(swept.escalated).toEqual(['req-0001#1→1', 'req-0002#2→2']);
+    expect(swept.escalated).toEqual(['req-0001#1→1', 'req-0002#2→1']);
     const priya = await signIn('u-priya');
     const decided = await post('/api/access/requests/req-0001/steps/1/decide', priya, { decision: 'approve', comment: 'Omar is away; approving as the access admin.' });
     expect(decided.status).toBe(200);
@@ -191,7 +190,7 @@ describe('escalation timers', () => {
     expect(r.steps[1]).toMatchObject({ status: 'current', currentSince: at(46), escalationLevel: 0, escalatesAt: at(94) });
     // The decided step never escalates again.
     setClock(at(200));
-    expect((await sweepAccessEscalations(solo)).escalated).toEqual(['req-0001#2→2']);
+    expect((await sweepAccessEscalations(solo)).escalated).toEqual(['req-0001#2→1', 'req-0002#2→2']);
   });
 
   it('two replicas escalate a step once (the fleet lock, then the step claim)', async () => {
@@ -208,11 +207,11 @@ describe('escalation timers', () => {
     setClock(at(46));
     const [a, b] = await Promise.all([sweepAccessEscalations(make('replica-a', 'replica-b')), sweepAccessEscalations(make('replica-b', 'replica-a'))]);
     expect([a.ran, b.ran].sort()).toEqual(['locked-elsewhere', 'swept']);
-    expect([...a.escalated, ...b.escalated]).toEqual(['req-0001#1→1', 'req-0002#2→2']);
+    expect([...a.escalated, ...b.escalated]).toEqual(['req-0001#1→1', 'req-0002#2→1']);
     // Without the lock (it expired mid-sweep), the step claim still decides: two solo sweeps, one escalation.
     setClock(at(95));
     const [c, d] = await Promise.all([sweepAccessEscalations(solo), sweepAccessEscalations(solo)]);
-    expect([...c.escalated, ...d.escalated]).toEqual(['req-0001#1→2']);
+    expect([...c.escalated, ...d.escalated]).toEqual(['req-0001#1→2', 'req-0002#2→2']);
     expect(kinds('req-0001').filter((k) => k === 'escalated')).toHaveLength(2);
   });
 
@@ -230,7 +229,8 @@ describe('delegation', () => {
 
   it('the delegate decides the delegator\'s step on behalf of them; the step and the event say so', async () => {
     const [omar, priya] = [await signIn('u-omar'), await signIn('u-priya')];
-    expect(ids(((await get('/api/access/delegates', omar)).body as { items: Person[] }).items)).toEqual(['u-priya']);
+    // Every other approver in Access: Priya, and Work's stewards Rachel and Vera.
+    expect(ids(((await get('/api/access/delegates', omar)).body as { items: Person[] }).items)).toEqual(['u-priya', 'u-rachel', 'u-vera']);
     expect(await inbox(priya)).not.toContain('req-0001');
     const made = await post('/api/access/delegations', omar, { delegateId: 'u-priya', ...window(72), reason: REASON });
     expect(made.status).toBe(201);
@@ -307,8 +307,8 @@ describe('delegation', () => {
 
   it('never makes a delegate eligible on their own request, or on an access-admin step without access-admin', async () => {
     const [omar, priya, rhea] = [await signIn('u-omar'), await signIn('u-priya'), await signIn('u-rhea')];
-    // Rhea asks for Org leader (sensitive): manager (Omar), steward (no hr-admin decides in Access → the access admins), access-admin.
-    const filed = await post('/api/access/requests', rhea, { itemId: 'role:orgiq:org-leader', justification: JUST, duration: '7d' });
+    // Rhea asks for Lead assessor (sensitive): manager (Omar), steward (no program lead decides in Access → the access admins), access-admin.
+    const filed = await post('/api/access/requests', rhea, { itemId: 'role:assessment:lead-assessor', justification: JUST, duration: '7d' });
     expect(filed.status).toBe(201);
     const id = (filed.body as AccessRequest).id;
     expect((await post('/api/access/delegations', priya, { delegateId: 'u-omar', ...window(48), reason: REASON })).status).toBe(201);

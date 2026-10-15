@@ -13,7 +13,7 @@ jest.mock('../../providers/identity.js', () => {
   const users: Record<string, { id: string; displayName: string; grants: Record<string, string[]> }> = {
     'u-jonas': { id: 'u-jonas', displayName: 'Jonas Lindqvist', grants: { assessment: ['assessor'] } },
     'u-farah': { id: 'u-farah', displayName: 'Farah Osei', grants: { assessment: ['lead-assessor'] } },
-    'u-hr': { id: 'u-hr', displayName: 'Priya Desai', grants: { orgiq: ['hr-admin'] } },
+    'u-hr': { id: 'u-hr', displayName: 'Helen Desai', grants: { orgiq: ['hr-admin'] } },
   };
   return { listUsers: jest.fn(async () => []), getUser: jest.fn(async (id: string) => users[id] ?? null) };
 });
@@ -182,7 +182,7 @@ describe('GET reviewers — the eligible-reviewer directory', () => {
     jest.mocked(documentWorkflowAccess).mockResolvedValue({ documentId: uuid, token: 't', canManageWorkflow: true } as never);
     jest.mocked(listUsers).mockResolvedValue([
       { id: 'u-jonas', displayName: 'Jonas Lindqvist', grants: { assessment: ['assessor'] } },
-      { id: 'u-hr', displayName: 'Priya Desai', grants: { orgiq: ['hr-admin'] } },
+      { id: 'u-hr', displayName: 'Helen Desai', grants: { orgiq: ['hr-admin'] } },
     ] as never);
     fetchSpy = jest.spyOn(globalThis, 'fetch');
   });

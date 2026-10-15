@@ -110,7 +110,7 @@ beforeEach(() => {
 });
 afterEach(() => { setNotificationSink(null); jest.restoreAllMocks(); });
 
-it('a Work member sees locked figures, requests the tier from Work, an access admin approves, and the figures appear on the same cookie', async () => {
+it('a Work member sees locked figures, requests the tier from Work, a budget owner approves, and the figures appear on the same cookie', async () => {
   const theo = await signIn('u-theo');
   const before = await request(app).get('/api/graph/projects').set('Cookie', theo);
   expect(before.status).toBe(200);
@@ -131,10 +131,12 @@ it('a Work member sees locked figures, requests the tier from Work, an access ad
   expect(filed.status).toBe(201);
   const req1 = filed.body as AccessRequest;
   expect(req1).toMatchObject({ kind: 'grant', status: 'submitted', requester: { id: 'u-theo' }, beneficiary: { id: 'u-theo' }, item: { id: BUDGET_READ_ITEM_ID, kind: 'capability', stewardRule: 'budget-owner' } });
-  // No manager on record for Theo: the chain is the budget owner's step, and
-  // the org leaders hold no deciding role in Access, so it escalates (A0 rule).
-  expect(req1.steps).toEqual([expect.objectContaining({ step: 1, kind: 'steward', status: 'current', eligible: [expect.objectContaining({ id: 'u-priya' })], escalated: expect.stringContaining('access admins') })]);
-  expect(bell).toEqual([{ userId: 'u-priya', kind: 'access-submitted', href: `/access/requests/${req1.id}` }]);
+  // No manager on record for Theo: the chain is the budget owner's step. The
+  // org leaders who also approve in Access (Vera, Rachel) decide it; Sienna
+  // holds no Access grant, so she is not asked.
+  expect(req1.steps).toEqual([expect.objectContaining({ step: 1, kind: 'steward', status: 'current', escalated: null })]);
+  expect(req1.steps[0]!.eligible.map((p) => p.id).sort()).toEqual(['u-rachel', 'u-vera']);
+  expect(bell.map((b) => b.userId).sort()).toEqual(['u-rachel', 'u-vera']);
 
   // The status read and the duplicate refusal name the same request.
   const mine = (await request(app).get(`/api/access-requests/mine?itemId=${BUDGET_READ_ITEM_ID}`).set('Cookie', theo)).body as { items: AccessRequest[] };
@@ -143,9 +145,9 @@ it('a Work member sees locked figures, requests the tier from Work, an access ad
   expect(dup.status).toBe(409);
   expect(dup.body).toMatchObject({ requestId: req1.id });
 
-  // An access admin decides it in Access, as any request.
-  const priya = await signIn('u-priya', 'access');
-  const approved = await request(app).post(`/api/access/requests/${req1.id}/steps/1/decide`).set('Cookie', priya).send({ decision: 'approve' });
+  // A budget owner decides it in Access, as any request.
+  const rachel = await signIn('u-rachel', 'access');
+  const approved = await request(app).post(`/api/access/requests/${req1.id}/steps/1/decide`).set('Cookie', rachel).send({ decision: 'approve' });
   expect(approved.status).toBe(200);
   expect((approved.body as AccessRequest).status).toBe('active');
   expect((await getUser('u-theo'))!.grants['orgiq']).toEqual(['member', 'budgets-reader']);

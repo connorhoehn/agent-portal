@@ -47,7 +47,7 @@ test('the page words the nobody-to-call reason', () => {
 });
 
 test('targets skip yourself and unlinked people; duplicates collapse', () => {
-  const people = uniquePeople([{ personId: 'p-002', name: 'Vera' }, { personId: 'p-004', name: 'Nora' }, { personId: 'p-004', name: 'Nora' }, { personId: 'p-051', name: 'Nora Chang' }]);
+  const people = uniquePeople([{ personId: 'p-002', name: 'Vera' }, { personId: 'p-004', name: 'Nora' }, { personId: 'p-004', name: 'Nora' }, { personId: 'p-051', name: 'Simone Chang' }]);
   const users = [{ personId: 'p-002', userId: 'u-vera', displayName: 'Vera Green' }, { personId: 'p-004', userId: 'u-nora', displayName: 'Nora DaSilva' }];
   const { targets, skipped } = callTargets(people, users, 'u-vera');
   assert.deepEqual(targets, [{ userId: 'u-nora', displayName: 'Nora DaSilva' }]);
@@ -58,12 +58,12 @@ test('peopleFromRecordKeys: selected people then attached ones, named when a rec
   const { peopleFromRecordKeys } = await import('../conversationCallModel.ts');
   const people = peopleFromRecordKeys(
     ['person:p-004', 'initiative:p-soc2', 'person:p-002'],
-    [{ type: 'person', id: 'p-002', title: 'Vera Green' }, { type: 'person', id: 'p-051', title: 'Nora Chang' }, { type: 'initiative', id: 'p-soc2', title: 'SOC2' }],
+    [{ type: 'person', id: 'p-002', title: 'Vera Green' }, { type: 'person', id: 'p-051', title: 'Simone Chang' }, { type: 'initiative', id: 'p-soc2', title: 'SOC2' }],
   );
   assert.deepEqual(people, [
     { personId: 'p-004', name: 'p-004' },
     { personId: 'p-002', name: 'Vera Green' },
-    { personId: 'p-051', name: 'Nora Chang' },
+    { personId: 'p-051', name: 'Simone Chang' },
   ]);
 });
 
@@ -80,6 +80,6 @@ test('callTargets: only yourself selected reports selfOnly, not "nobody has a si
 });
 
 test('peopleFromRecordKeys: search results supply names without becoming people', () => {
-  const people = peopleFromRecordKeys(['person:p-051'], [], [{ type: 'person', id: 'p-051', title: 'Nora Chang' }, { type: 'person', id: 'p-999', title: 'Not selected' }]);
-  assert.deepEqual(people, [{ personId: 'p-051', name: 'Nora Chang' }]);
+  const people = peopleFromRecordKeys(['person:p-051'], [], [{ type: 'person', id: 'p-051', title: 'Simone Chang' }, { type: 'person', id: 'p-999', title: 'Not selected' }]);
+  assert.deepEqual(people, [{ personId: 'p-051', name: 'Simone Chang' }]);
 });

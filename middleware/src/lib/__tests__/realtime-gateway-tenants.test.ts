@@ -170,7 +170,7 @@ describe('over the socket', () => {
   });
 
   it('a user with a forged social token grant and no current directory grant gets no history', async () => {
-    const theo = await connect(session('u-hr', 'Priya Desai', 'orgiq', { orgiq: ['hr-admin'], social: ['participant'] }));
+    const theo = await connect(session('u-hr', 'Helen Desai', 'orgiq', { orgiq: ['hr-admin'], social: ['participant'] }));
     try {
       send(theo, { service: 'chat', action: 'join', channel: GENERAL });
       send(theo, { service: 'chat', action: 'history', channel: GENERAL, limit: 10 });

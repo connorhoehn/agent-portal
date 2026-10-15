@@ -14,7 +14,7 @@
 //   INSERT INTO <table> (<cols>) VALUES (<literals>) [ON CONFLICT ...];
 //
 // including the awkward bits those files really contain: `''` escapes inside
-// strings (`'Marcus O''Brien'`), `ARRAY['otel','infra']`, `NULL`, `TRUE`,
+// strings (`'Owen Brooks'`), `ARRAY['otel','infra']`, `NULL`, `TRUE`,
 // `'{"json": 1}'::jsonb`, `(NOW() - INTERVAL '42 days')::date`, and nested
 // parens inside a value. Anything it can't turn into a JS scalar it keeps as
 // `{ raw }` so a field check can still match on the SQL text.

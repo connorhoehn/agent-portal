@@ -87,8 +87,8 @@ describe('tenant discussion mentions', () => {
   });
 
   it('never notifies across tenants (no grant in the channel tenant)', async () => {
-    await notifyTenantChannelMention({ channel: 'pipelines:run:r-1', sender: 'u-ines', text: '@Priya Desai @Vera Green' });
-    await notifyTenantChannelMention({ channel: 'assessment:doc:x', sender: 'u-asha', text: '@Priya Desai' });
+    await notifyTenantChannelMention({ channel: 'pipelines:run:r-1', sender: 'u-ines', text: '@Helen Desai @Vera Green' });
+    await notifyTenantChannelMention({ channel: 'assessment:doc:x', sender: 'u-asha', text: '@Helen Desai' });
     expect(sent).toEqual([]);
   });
 

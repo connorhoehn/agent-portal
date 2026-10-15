@@ -84,7 +84,7 @@ export const calibrationCases = defineFixture<CalibrationCaseRow>({
         agentId: 'orgiq-supervisor',
         prompt: 'Who knows Kubernetes best on the platform team?',
         response:
-          'Priya Desai and Eli Garcia both show strong Kubernetes expertise — Priya via 6 merged PRs on the ingress controller, Eli via the on-call rotation.',
+          'Marcus Müller and Eli Garcia both show strong Kubernetes expertise — Marcus via 6 merged PRs on the ingress controller, Eli via the on-call rotation.',
         humanScore: 0.92,
         humanRationale: 'Names the right two people and says why for each. Nothing to verify by hand.',
         active: true,
@@ -109,7 +109,7 @@ export const calibrationCases = defineFixture<CalibrationCaseRow>({
         calibrationId: '2f1c8a40-6b71-4f0e-9d2c-11a5c9e40003',
         agentId: 'orgiq-search',
         prompt: 'Who reviewed the CSRF hardening PR?',
-        response: 'Nora Chang approved it. There may have been other reviewers.',
+        response: 'Simone Chang approved it. There may have been other reviewers.',
         humanScore: 0.55,
         humanRationale: 'Right as far as it goes, but hedges instead of listing the co-reviewer it could have found.',
         active: true,

@@ -5,7 +5,7 @@ test.use({ baseURL: process.env.CALL_SHELL_BASE_URL ?? 'http://localhost:5261' }
 const initial = { sub: 'u-vera', name: 'Vera Green', role: 'org-leader', tenant: 'orgiq',
   grants: { orgiq: ['org-leader'], social: ['participant'] }, switchable: { orgiq: ['org-leader'], social: ['participant'] },
   availableRoles: ['org-leader'], availableTenants: ['orgiq', 'social'], masquerading: null };
-const names: Record<string, string> = { 'u-vera': 'Vera Green', 'u-nora': 'Nora Chang', 'u-rachel': 'Rachel Kowalski' };
+const names: Record<string, string> = { 'u-vera': 'Vera Green', 'u-nora': 'Simone Chang', 'u-rachel': 'Rachel Kowalski' };
 const channel = 'social:dm:u-nora:u-vera';
 async function fixture(page: Page) {
   let session = { ...initial }, epoch = 1, fail = false;
@@ -29,7 +29,7 @@ async function fixture(page: Page) {
   await page.route('**/api/chat/pins**', route => route.fulfill({ json: { pins: [] } }));
   await page.route('**/api/social/embedded', route => fail ? route.fulfill({ status: 503, json: { error: 'Directory unavailable' } }) : route.fulfill({ json: {
     me: { userId: session.sub, displayName: session.name }, canSend: true, people,
-    conversations: session.sub === 'u-vera' ? [{ channel, peers: [{ userId: 'u-nora', displayName: 'Nora Chang' }],
+    conversations: session.sub === 'u-vera' ? [{ channel, peers: [{ userId: 'u-nora', displayName: 'Simone Chang' }],
       lastMessageAt: '2026-10-09T12:00:00Z', lastMessagePreview: 'Validate the service dependency map.', lastMessageUserId: 'u-nora', unreadCount: 1 }] : [],
     authorityKey: `${session.sub}:${session.tenant}:${epoch}`, source: { userId: session.sub, tenant: session.tenant, role: session.role, epoch, actor: null },
   } }));
@@ -94,7 +94,7 @@ test('Contacts and chat workspace read shell presence without unsubscribing it d
   const setup = await fixture(page);
   await page.evaluate(() => (window as unknown as { socialFixture: { receive(frame: unknown): void } }).socialFixture.receive({
     type: 'presence', action: 'subscribed', channel: 'social:lobby', presence: [
-      { clientId: 'n', status: 'online', channels: ['social:lobby'], metadata: { userId: 'u-nora', displayName: 'Nora Chang' } },
+      { clientId: 'n', status: 'online', channels: ['social:lobby'], metadata: { userId: 'u-nora', displayName: 'Simone Chang' } },
     ],
   }));
   await setup.panel.getByRole('button', { name: 'Close conversation overview' }).click();

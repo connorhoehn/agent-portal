@@ -1091,7 +1091,7 @@ function seedArtifacts(): ArtifactRow[] {
       facts: ['fact-005'],
       owner: OWNER_BY_REPO[REPO.OBS]!, classification: 'internal',
       status: 'published',
-      reviewed_by: 'Priya Desai', reviewed_at: clock.hoursAgo(30),
+      reviewed_by: 'Helen Desai', reviewed_at: clock.hoursAgo(30),
       last_used_at: clock.hoursAgo(4),
       created_by_compaction_id: 'comp-201',
       created_at: clock.hoursAgo(40), updated_at: clock.hoursAgo(30),
@@ -1476,25 +1476,25 @@ function seedReviewSamples(): ReviewSample[] {
     mkReview('cluster', 'cl-022', 0.8, null, 'pending', null),
     // decided — agree
     mkReview('cluster', 'cl-001', 5, 'Eli Garcia', 'agree', 'Matches what shipped.'),
-    mkReview('cluster', 'cl-002', 6, 'Priya Desai', 'agree', 'Sampling behavior checks out against the trace data.'),
+    mkReview('cluster', 'cl-002', 6, 'Helen Desai', 'agree', 'Sampling behavior checks out against the trace data.'),
     mkReview('cluster', 'cl-003', 7, 'Layla Hassan', 'agree', 'RED dashboards confirm the connector story.'),
     mkReview('cluster', 'cl-005', 9, 'Nora DaSilva', 'agree', 'Checklist step is exactly what caught the missed alert.'),
     mkReview('cluster', 'cl-006', 10, 'Rachel Kowalski', 'agree', 'Burn-rate alerts paged correctly on the next incident.'),
     mkReview('cluster', 'cl-007', 24, 'Mia Singh', 'agree', 'BFF flow matches the design review.'),
     mkReview('cluster', 'cl-008', 25, 'Caleb Turner', 'agree', 'Epoch bump behavior verified against the session tests.'),
-    mkReview('cluster', 'cl-010', 30, 'Priya Desai', 'agree', 'Rollback flag saved one tenant’s cutover already.'),
+    mkReview('cluster', 'cl-010', 30, 'Helen Desai', 'agree', 'Rollback flag saved one tenant’s cutover already.'),
     mkReview('cluster', 'cl-011', 32, 'Eli Garcia', 'agree', 'Evaluator gate is live and blocking as described.'),
     mkReview('cluster', 'cl-012', 40, 'Layla Hassan', 'agree', 'Prompt refresh timing matches observed deploys.'),
     mkReview('cluster', 'cl-013', 41, 'Rachel Kowalski', 'agree', 'Pagination fix confirmed against the full prompt count.'),
     mkReview('cluster', 'cl-014', 42, 'Mia Singh', 'agree', 'Guardrail-per-role behavior matches the Cedar policies.'),
     mkReview('cluster', 'cl-015', 50, 'Caleb Turner', 'agree', 'SSM-backed config edit took effect immediately as claimed.'),
     mkReview('cluster', 'cl-016', 55, 'Nora DaSilva', 'agree', 'Showback number is what got the teardown approved.'),
-    mkReview('cluster', 'cl-017', 58, 'Nora Chang', 'agree', 'OpenSearch floor confirmed against the billing export.'),
-    mkReview('cluster', 'cl-018', 60, 'Priya Desai', 'agree', 'Billing floor matches the Cost Explorer line item.'),
+    mkReview('cluster', 'cl-017', 58, 'Simone Chang', 'agree', 'OpenSearch floor confirmed against the billing export.'),
+    mkReview('cluster', 'cl-018', 60, 'Helen Desai', 'agree', 'Billing floor matches the Cost Explorer line item.'),
     mkReview('artifact', 'art-004', 60, 'Eli Garcia', 'agree', 'CSRF gate matches the merged PR history.'),
     // decided — disagree
     mkReview('cluster', 'cl-004', 12, 'Eli Garcia', 'disagree', 'This merged two separate incidents into one cluster; the queue-limit fix and the OOM report aren’t the same learning.'),
-    mkReview('cluster', 'cl-009', 20, 'Nora Chang', 'disagree', 'The HTTPS-callback gotcha and the picker-fallback decision read as two different learnings, not one cluster.'),
+    mkReview('cluster', 'cl-009', 20, 'Simone Chang', 'disagree', 'The HTTPS-callback gotcha and the picker-fallback decision read as two different learnings, not one cluster.'),
     mkReview('artifact', 'art-008', 70, 'Layla Hassan', 'disagree', 'Retiring this loses the OpenSearch half of the story — should stay published until a replacement artifact covers OpenSearch on its own.'),
     // pending — appended last rather than grouped with the other pending rows
     // because ids are positional (rev-NNN is the row's index): inserting it
@@ -1800,7 +1800,7 @@ function largeArtifacts(): ArtifactRow[] {
       owner: OWNER_BY_REPO[largeRepo(i).repo] ?? 'Unassigned',
       classification: LARGE_CLASSIFICATIONS[i % LARGE_CLASSIFICATIONS.length]!,
       status: LARGE_STATUSES[i % LARGE_STATUSES.length]!,
-      reviewed_by: i % 2 === 0 ? 'Priya Desai' : null,
+      reviewed_by: i % 2 === 0 ? 'Helen Desai' : null,
       reviewed_at: i % 2 === 0 ? clock.hoursAgo(20 + i * 4) : null,
       // The `large` scenario never seeds a matching library-links row (only
       // the hand-written art-00x rows are linked), so no generated artifact

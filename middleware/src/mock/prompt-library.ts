@@ -152,7 +152,7 @@ function seedAssets(): LibraryAssetRow[] {
       id: 'lib-csrf-check', name: 'CSRF risk evaluator',
       description: 'Given a request change, judge whether it weakens CSRF protection. Returns a verdict + evidence.',
       kind: 'evaluator', tier: 'endpoint', roles: ['sme', 'hr-admin'],
-      tags: ['security', 'review', 'classifier'], ownerName: 'Nora Chang', version: '5',
+      tags: ['security', 'review', 'classifier'], ownerName: 'Simone Chang', version: '5',
       lifecycleStatus: 'deployed', evalPassRate: 0.96,
       usedBy: ['bot:inference-canary-nightly', 'endpoint:/v1/checks/csrf'], updatedAt: hoursAgo(3),
       signoffs: 2, designReviewId: 'des-auth-rotation',
@@ -168,7 +168,7 @@ function seedAssets(): LibraryAssetRow[] {
       id: 'lib-pii-scan', name: 'PII leak evaluator',
       description: 'Flag personal data in a document before it reaches the knowledge base.',
       kind: 'evaluator', tier: 'internal', roles: ['hr-admin'], tags: ['security', 'privacy'],
-      ownerName: 'Priya Desai', version: '2', lifecycleStatus: 'published', evalPassRate: 0.93,
+      ownerName: 'Helen Desai', version: '2', lifecycleStatus: 'published', evalPassRate: 0.93,
       usedBy: ['pipeline:ingestion'], updatedAt: hoursAgo(50), signoffs: 1,
       template: 'Flag personal data in the document below.\n\n{{document}}',
       contract: contract('evaluator', 'internal', [

@@ -18,7 +18,7 @@ import {
 
 const vera = { personId: 'p-002', name: 'Vera Green' };
 const nora = { personId: 'p-004', name: 'Nora DaSilva' };
-const maya = { personId: 'p-051', name: 'Nora Chang' };
+const maya = { personId: 'p-051', name: 'Simone Chang' };
 const users = [
   { personId: 'p-002', userId: 'u-vera', displayName: 'Vera Green' },
   { personId: 'p-004', userId: 'u-nora', displayName: 'Nora DaSilva' },
@@ -41,8 +41,8 @@ test('nothing is decided before the user mapping arrives', () => {
 
 test('the skipped notice names each person', () => {
   assert.equal(skippedNotice([]), null);
-  assert.match(skippedNotice([maya])!, /^Nora Chang has no Work sign-in/);
-  assert.match(skippedNotice([maya, nora])!, /^Nora Chang and Nora DaSilva have no/);
+  assert.match(skippedNotice([maya])!, /^Simone Chang has no Work sign-in/);
+  assert.match(skippedNotice([maya, nora])!, /^Simone Chang and Nora DaSilva have no/);
 });
 
 const ready: Parameters<typeof initiativeCallAvailability>[0] = {

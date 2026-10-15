@@ -198,19 +198,19 @@ export const socialRecordingTranscriptsFixture = defineFixture<SocialRecordingTr
       { recordingId: 'mock-rec-town-hall-1', transcriptStatus: 'ready', segments: [
         seg(0, 'u-mira', 'Mira Okafor', 'Welcome to the town hall. We will cover the spring community calendar first.'),
         seg(9_000, 'u-lena', 'Lena Brandt', 'Moderation volume doubled after the launch, so we need two more volunteers.'),
-        seg(18_000, 'u-sana', 'Sana Iyer', 'I can take the Tuesday shift and write the onboarding guide.'),
+        seg(18_000, 'u-sana', 'Sana Iqbal', 'I can take the Tuesday shift and write the onboarding guide.'),
         seg(20_000, 'u-lena', 'Lena Brandt', 'reacted with a thumbs up', 'reaction'),
         seg(27_000, 'u-mira', 'Mira Okafor', 'Decision: the event calendar goes live on Friday with Sana as the owner.'),
       ] },
       { recordingId: 'mock-rec-town-hall-2', transcriptStatus: 'ready', segments: [
         seg(0, 'u-mira', 'Mira Okafor', 'Last week we agreed to trial a weekly office hour for new members.'),
-        seg(9_000, 'u-sana', 'Sana Iyer', 'Attendance was thirty people and most questions were about channel etiquette.'),
+        seg(9_000, 'u-sana', 'Sana Iqbal', 'Attendance was thirty people and most questions were about channel etiquette.'),
       ] },
       { recordingId: 'mock-rec-dm-lena-sana', transcriptStatus: 'ready', segments: [
         seg(0, 'u-lena', 'Lena Brandt', 'Can you review the moderation checklist before the call with Mira?'),
-        seg(8_000, 'u-sana', 'Sana Iyer', 'Yes, I will send my edits tonight and flag anything unclear.'),
+        seg(8_000, 'u-sana', 'Sana Iqbal', 'Yes, I will send my edits tonight and flag anything unclear.'),
         seg(16_000, 'u-lena', 'Lena Brandt', 'Great, the escalation section is the part I am least sure about.'),
-        seg(24_000, 'u-sana', 'Sana Iyer', 'Agreed, I will rewrite the escalation steps and share them tomorrow morning.'),
+        seg(24_000, 'u-sana', 'Sana Iqbal', 'Agreed, I will rewrite the escalation steps and share them tomorrow morning.'),
       ] },
     ],
     empty: () => [],

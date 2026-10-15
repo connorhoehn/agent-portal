@@ -10,7 +10,7 @@ import { signIn } from './realSession';
 //      page → u-jonas's bell reads 1 within 2s, no reload; the popover names
 //      the document and the author; clicking lands on the document with the
 //      Comments tab open, and the bell reads 0.
-//   2. u-hr (Priya Desai, orgiq hr-admin only — no social grant) receives
+//   2. u-hr (Helen Desai, orgiq hr-admin only — no social grant) receives
 //      nothing from a social DM addressed to her, while the same sender's DM
 //      to u-mira (a social grant holder) is delivered — the grant rule, with
 //      its control.

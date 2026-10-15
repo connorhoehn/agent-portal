@@ -11,7 +11,7 @@ const available = { ...page, status: 'available' as const, title: 'Clear the leg
   breadcrumbs: [{ title: 'Initiatives', href: '/iq/projects' }, { title: 'Auth', href: '/iq/projects/p-auth' }] };
 const snapshot = (extras: Partial<HuddleRosterSnapshot> = {}): HuddleRosterSnapshot => ({
   callId: scope.callId, channel: huddleChannel(scope.callId), revision: 1,
-  participants: [{ userId: 'u-vera', displayName: 'Vera Green' }, { userId: 'u-nora', displayName: 'Nora Chang' }],
+  participants: [{ userId: 'u-vera', displayName: 'Vera Green' }, { userId: 'u-nora', displayName: 'Simone Chang' }],
   canSend: true, historyFrom: '2026-10-03T10:00:00.000Z', ...extras,
 });
 const deferred = <T>() => {

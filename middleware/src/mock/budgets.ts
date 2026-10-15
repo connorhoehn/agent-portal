@@ -120,7 +120,7 @@ function seededGrants(): MockGrantSeed[] {
       sprintId: 'spr-obs-s3', sprintName: 'Sprint 98 — Span metrics + decom', sprintStatus: 'active', allocatedUsd: 30, grantedBy: 'u-release' },
     { id: 'bg-llm-2', orgProjectId: 'p-llm-platform', granteePersonId: 'p-013', granteeName: 'Caleb Turner',
       sprintId: 'spr-llm-s2', sprintName: 'Sprint 8 — Judge + evals', sprintStatus: 'active', allocatedUsd: 35, grantedBy: 'u-release' },
-    { id: 'bg-auth-2', orgProjectId: 'p-auth-migration', granteePersonId: 'p-051', granteeName: 'Nora Chang',
+    { id: 'bg-auth-2', orgProjectId: 'p-auth-migration', granteePersonId: 'p-051', granteeName: 'Simone Chang',
       sprintId: 'spr-auth-s2', sprintName: 'Sprint 42 — Session hygiene', sprintStatus: 'active', allocatedUsd: 20, grantedBy: 'u-release' },
     // The seeded sme login (u-nora / p-004) is an SME on Auth Migration and
     // holds her own envelope on the same active sprint as p-051's, so the sme

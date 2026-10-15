@@ -65,7 +65,7 @@ type Authored = Omit<MockInvocation, 'id' | 'hoursAgo'>;
 
 const AUTHORED: Authored[] = [
   // ── Supervisor ──
-  { agentId: 'orgiq-supervisor', promptSnippet: 'Who knows Kubernetes best on the platform team?', responseSnippet: 'Priya Desai and Eli Garcia both show strong expertise scores on Kubernetes — Priya via 6 merged PRs on the ingress controller, Eli via the on-call rotation.', durationMs: 2140, tokensIn: 620, tokensOut: 240 },
+  { agentId: 'orgiq-supervisor', promptSnippet: 'Who knows Kubernetes best on the platform team?', responseSnippet: 'Marcus Müller and Eli Garcia both show strong expertise scores on Kubernetes — Marcus via 6 merged PRs on the ingress controller, Eli via the on-call rotation.', durationMs: 2140, tokensIn: 620, tokensOut: 240 },
   { agentId: 'orgiq-supervisor', promptSnippet: 'Summarize the auth-rotation ADR for the exec review', responseSnippet: 'The ADR proposes rotating session-signing secrets quarterly via Secrets Manager, ratified 2026-08-14 with 2 sign-offs.', durationMs: 3420, tokensIn: 880, tokensOut: 310 },
   { agentId: 'orgiq-supervisor', promptSnippet: 'What changed in the org chart this month?', responseSnippet: 'Two new SME contributions were recorded on p-obs-rollout, and Nora DaSilva picked up ownership of p-kb-migration.', durationMs: 1870, tokensIn: 540, tokensOut: 200 },
   { agentId: 'orgiq-supervisor', promptSnippet: 'Route this to the scoring agent and get PageRank for the platform team', responseSnippet: '', durationMs: 4980, tokensIn: 410, tokensOut: 0, error: 'A2A timeout invoking orgiq-scoring after 4500ms' },
@@ -78,22 +78,22 @@ const AUTHORED: Authored[] = [
   { agentId: 'orgiq-search', promptSnippet: 'What is our employee compensation band for L5 engineers?', responseSnippet: '', durationMs: 410, tokensIn: 210, tokensOut: 40, guardrailIntervened: true },
   { agentId: 'orgiq-search', promptSnippet: 'Pull the Slack thread where we decided on Titan v2 embeddings', responseSnippet: 'thread-2026-03-12-embeddings: consensus on Titan v2 @1024d, cites cost vs. recall tradeoff.', durationMs: 860, tokensIn: 300, tokensOut: 130 },
   { agentId: 'orgiq-search', promptSnippet: 'Vector search for "guardrail intervention rate"', responseSnippet: '', durationMs: 5100, tokensIn: 260, tokensOut: 0, error: 'OpenSearch Serverless query timed out after 5000ms' },
-  { agentId: 'orgiq-search', promptSnippet: 'Who reviewed the CSRF hardening PR?', responseSnippet: 'Nora Chang approved with 2 inline comments; Eli Garcia co-reviewed.', durationMs: 690, tokensIn: 250, tokensOut: 100 },
+  { agentId: 'orgiq-search', promptSnippet: 'Who reviewed the CSRF hardening PR?', responseSnippet: 'Simone Chang approved with 2 inline comments; Eli Garcia co-reviewed.', durationMs: 690, tokensIn: 250, tokensOut: 100 },
   { agentId: 'orgiq-search', promptSnippet: 'Find the postmortem for the ARM64 Fargate incident', responseSnippet: 'pm-2026-06-02-fargate-exec-format: root cause was a default x86_64 runtime platform on an Apple Silicon build.', durationMs: 810, tokensIn: 290, tokensOut: 140 },
 
   // ── Scoring ──
-  { agentId: 'orgiq-scoring', promptSnippet: 'Recompute composite scores for the platform team', responseSnippet: 'Recomputed for 14 people; top mover: Priya Desai +0.06 on PageRank.', durationMs: 640, tokensIn: 220, tokensOut: 90 },
+  { agentId: 'orgiq-scoring', promptSnippet: 'Recompute composite scores for the platform team', responseSnippet: 'Recomputed for 14 people; top mover: Theo Chang +0.06 on PageRank.', durationMs: 640, tokensIn: 220, tokensOut: 90 },
   { agentId: 'orgiq-scoring', promptSnippet: 'What is Eli Garcia’s expertise_score trend over 90 days?', responseSnippet: 'Rising: 0.71 → 0.79, driven by 3 merged infra PRs and 1 authored insight.', durationMs: 580, tokensIn: 210, tokensOut: 85 },
   { agentId: 'orgiq-scoring', promptSnippet: 'Run centrality analysis on the observability sub-graph', responseSnippet: 'Betweenness centrality computed for 22 nodes; Layla Hassan is the top bridge node.', durationMs: 710, tokensIn: 240, tokensOut: 95 },
   { agentId: 'orgiq-scoring', promptSnippet: 'Update leaderboard after the sprint close', responseSnippet: 'Leaderboard refreshed; 24 people rescored, no ties broken.', durationMs: 560, tokensIn: 200, tokensOut: 70 },
   { agentId: 'orgiq-scoring', promptSnippet: 'Which skills have the thinnest bench (fewest experts)?', responseSnippet: 'OpenSearch Serverless (2 people) and Cedar policy authoring (1 person) are the thinnest.', durationMs: 630, tokensIn: 230, tokensOut: 100 },
 
   // ── Advisor ──
-  { agentId: 'orgiq-advisor', promptSnippet: 'Identify knowledge gaps on the identity & tenancy initiative', responseSnippet: 'Only 1 SME (Nora Chang) covers session-epoch invalidation — recommend pairing a second contributor before her rotation.', durationMs: 3100, tokensIn: 1100, tokensOut: 420 },
+  { agentId: 'orgiq-advisor', promptSnippet: 'Identify knowledge gaps on the identity & tenancy initiative', responseSnippet: 'Only 1 SME (Simone Chang) covers session-epoch invalidation — recommend pairing a second contributor before her rotation.', durationMs: 3100, tokensIn: 1100, tokensOut: 420 },
   { agentId: 'orgiq-advisor', promptSnippet: 'Recommend a pairing for the new hire on graph ingestion', responseSnippet: 'Pair with Caleb Turner — highest recent activity on merge_* tools and lowest current mentee load.', durationMs: 2870, tokensIn: 980, tokensOut: 360 },
   { agentId: 'orgiq-advisor', promptSnippet: 'Analyze bus-factor risk across all initiatives', responseSnippet: '', durationMs: 6800, tokensIn: 1240, tokensOut: 0, error: 'Bedrock ThrottlingException after 3 retries' },
   { agentId: 'orgiq-advisor', promptSnippet: 'Which initiative is most at risk of stalling next sprint?', responseSnippet: 'p-kb-migration — its sole owner is on-call this sprint with no SME backup scheduled.', durationMs: 3320, tokensIn: 1050, tokensOut: 390 },
-  { agentId: 'orgiq-advisor', promptSnippet: 'Suggest a mentor for someone picking up Cedar policy authoring', responseSnippet: 'Nora Chang — authored 4 of the 6 tenant policy sets and the only cross-tenant admin.cedar.', durationMs: 2940, tokensIn: 1010, tokensOut: 370 },
+  { agentId: 'orgiq-advisor', promptSnippet: 'Suggest a mentor for someone picking up Cedar policy authoring', responseSnippet: 'Simone Chang — authored 4 of the 6 tenant policy sets and the only cross-tenant admin.cedar.', durationMs: 2940, tokensIn: 1010, tokensOut: 370 },
 
   // ── Ingestion (the degraded one) ──
   { agentId: 'orgiq-ingestion', promptSnippet: 'Ingest the Q3 all-hands recap deck', responseSnippet: 'Extracted 18 entities, 4 decisions, 1 org-chart change; synced to knowledge base.', durationMs: 4200, tokensIn: 2400, tokensOut: 610 },

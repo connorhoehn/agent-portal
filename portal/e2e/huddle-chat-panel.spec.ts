@@ -9,7 +9,7 @@ const initial = { sub: 'u-vera', name: 'Vera Green', role: 'org-leader', tenant:
 async function fixture(page: Page, ownedPane = false, centralComposer = false, denied = false) {
   let session = { ...initial };
   const errors: string[] = [];
-  const people = [{ userId: 'u-vera', displayName: 'Vera Green' }, { userId: 'u-nora', displayName: 'Nora Chang' }];
+  const people = [{ userId: 'u-vera', displayName: 'Vera Green' }, { userId: 'u-nora', displayName: 'Simone Chang' }];
   await page.route('**/api/session/me', route => route.fulfill({ json: session }));
   await page.route('**/api/auth/config', route => route.fulfill({ json: { ssoEnabled: false } }));
   await page.route('**/api/session/realtime-token', route => route.fulfill({ json: { token: 'fixture-token',
@@ -46,13 +46,13 @@ async function fixture(page: Page, ownedPane = false, centralComposer = false, d
   await page.evaluate(callId => {
     (window as unknown as { callFixture: { receive(frame: unknown): void } }).callFixture.receive({
       type: 'call', action: 'accepted', data: { callId, lobbyName: 'orgiq:dm:u-vera:u-nora',
-        callerId: 'u-nora', userId: 'u-nora', displayName: 'Nora Chang', targetUserIds: ['u-vera'] },
+        callerId: 'u-nora', userId: 'u-nora', displayName: 'Simone Chang', targetUserIds: ['u-vera'] },
     });
   }, callId);
   await expect(page.getByTestId('shell-call-dock-chat')).toHaveCount(1);
   await page.getByTestId('shell-call-dock-chat').click();
   await expect(page.getByTestId(ownedPane ? 'fixture-owned-pane' : 'huddle-chat-panel')).toBeVisible();
-  if (!ownedPane && !denied) await expect(page.getByTestId('huddle-chat-participants')).toHaveText('Vera Green, Nora Chang');
+  if (!ownedPane && !denied) await expect(page.getByTestId('huddle-chat-participants')).toHaveText('Vera Green, Simone Chang');
   // The chat service's answers to this page's frames: join → joined + history;
   // send → the stored echo, then `sent` once persisted (unless held or failed).
   await page.evaluate(() => {

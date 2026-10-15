@@ -15,7 +15,7 @@ function p(id: string, status: string, extra: Partial<ProjectSummary> = {}): Pro
 
 const rows: ProjectSummary[] = [
   p('Observability Platform', 'in_progress', { id: 'p-observability', ownerName: 'Nora DaSilva', activeAgentRuns: 2 }),
-  p('ML Feature Store', 'in_progress', { ownerName: 'Vera Petrov', activeAgentRuns: 0 }),
+  p('ML Feature Store', 'in_progress', { ownerName: 'Katya Petrov', activeAgentRuns: 0 }),
   p('Auth Migration', 'active', { ownerName: 'Vera Green', activeAgentRuns: 1 }),
   p('Data Lake Migration', 'planning', { ownerName: 'Ben', activeAgentRuns: null }),
   p('Legacy', 'completed', { id: 'p-legacy' }),

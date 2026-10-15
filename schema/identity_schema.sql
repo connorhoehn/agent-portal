@@ -70,7 +70,7 @@ INSERT INTO app_users (id, display_name, email, person_id) VALUES
      (SELECT id FROM people WHERE name = 'Theo Chang' LIMIT 1)),
   ('u-vera',     'Vera Green',        'vera.green@orgiq.example',
      (SELECT id FROM people WHERE name = 'Vera Green' LIMIT 1)),
-  ('u-hr',       'Priya Desai',       'priya.desai@orgiq.example', NULL),
+  ('u-hr',       'Helen Desai',       'helen.desai@orgiq.example', NULL),
   -- Program operating model cast (docs/program-operating-model.md): a release
   -- manager who grants SME budget envelopes, a program operator who runs the
   -- program surfaces, and SMEs who masquerade in and assign compute to work.
@@ -194,5 +194,11 @@ INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   -- request they submitted or benefit from (a route rule, docs/access-tenant-goal.md).
   ('u-rhea',     'access',   'requester'),
   ('u-omar',     'access',   'approver'),
-  ('u-priya',    'access',   'access-admin')
+  ('u-priya',    'access',   'access-admin'),
+  -- Work's stewards decide the steward step of an access request themselves
+  -- (lib/access/chain.ts): Rachel stewards Work roles (hr-admin), Vera owns
+  -- Auth Migration. Without a deciding role in Access every steward step
+  -- escalated to Priya (docs/demo-content-audit.md, Access story-breaker 2).
+  ('u-vera',     'access',   'approver'),
+  ('u-rachel',   'access',   'approver')
 ON CONFLICT DO NOTHING;

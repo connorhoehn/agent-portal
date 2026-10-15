@@ -165,7 +165,7 @@ describe('the DM producer', () => {
   it('never notifies a member with no grant in the DM tenant (u-hr in an assessment DM)', async () => {
     const hrDm = 'assessment:dm:u-farah:u-hr';
     const farah = await connectAs('u-farah', 'Farah Osei', 'assessment');
-    const hr = await connectAs('u-hr', 'Priya Desai', 'orgiq');
+    const hr = await connectAs('u-hr', 'Helen Desai', 'orgiq');
     try {
       join(farah, hrDm);
       await until(() => joined(farah, hrDm));
