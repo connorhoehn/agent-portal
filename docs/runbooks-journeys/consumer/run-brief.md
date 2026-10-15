@@ -4,8 +4,8 @@ user: u-nora (Nora DaSilva, SME on Auth Migration)
 url: /iq/runbooks/briefs; /iq/runbooks/briefs/sess-auth-06
 map: docs/journeys/maps/runbooks/consumer/run-brief.ts
 pages: portal/src/pages/runbooks, middleware/src/routes/runbooks.ts
-audited: 2026-10-15 10:35–10:35 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-704921ea), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.0
-session: /api/session/me sub u-nora-clone-704921ea, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-10-15 10:55–10:55 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-0ebeca1c), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.0
+session: /api/session/me sub u-nora-clone-0ebeca1c, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: run-brief.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found))

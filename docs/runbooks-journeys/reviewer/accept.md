@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/runbooks/proposals/prop-tenant-cutover-callback; /iq/runbooks/rb-tenant-cutover
 map: docs/journeys/maps/runbooks/reviewer/accept.ts
 pages: portal/src/pages/runbooks, middleware/src/routes/runbooks.ts
-audited: 2026-10-15 10:35–10:35 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-242a8215), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.457.0
-session: /api/session/me sub u-vera-clone-242a8215, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-15 10:55–10:55 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-df349ec8), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.457.0
+session: /api/session/me sub u-vera-clone-df349ec8, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: accept.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Each child in a list should have a unique "key" prop.%s%s See https://react.dev/)

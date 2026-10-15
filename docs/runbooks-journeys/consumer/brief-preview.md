@@ -4,8 +4,8 @@ user: u-nora (Nora DaSilva, SME on Auth Migration)
 url: /iq/projects/p-auth-migration?item=wi-auth-e2-s2
 map: docs/journeys/maps/runbooks/consumer/brief-preview.ts
 pages: portal/src/pages/runbooks, middleware/src/routes/runbooks.ts, portal/src/pages/project-detail
-audited: 2026-10-15 10:35–10:35 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-7d0bc774), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.0
-session: /api/session/me sub u-nora-clone-7d0bc774, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-10-15 10:55–10:55 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-c2340e3c), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.0
+session: /api/session/me sub u-nora-clone-c2340e3c, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: brief-preview.jpg
 verdict: pass
 console errors: 0

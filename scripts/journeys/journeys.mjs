@@ -65,6 +65,8 @@ const FAMILIES = {
   'docs/social-journeys': ['^verdict: *(pass|limited — \\S)'],
   // The demo story walks (docs/demo-content-goal.md): every fact of a tenant's story on screen.
   'docs/demo-journeys': ['^verdict: *pass', '^story-facts: *pass', '^cross-links: *pass'],
+  // The runbook loop (docs/distillation-runbooks-goal.md R6): what each page shows, and what each role may do there.
+  'docs/runbooks-journeys': ['^verdict: *pass', '^shows: *pass', '^gating: *pass'],
 };
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
