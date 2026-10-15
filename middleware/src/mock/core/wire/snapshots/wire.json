@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-14T23:18:56.407Z",
-  "serverHandlerSha": "22d399385c3222c70ad3dc1f42dfa9ef16d3588bd731f2b2ba0081129345515a",
+  "capturedAt": "2026-10-15T03:27:26.740Z",
+  "serverHandlerSha": "09375a3c55e15f7b2413b897adadaa8c048460046cb532dc56dfbe51ec7fbe99",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -2231,6 +2231,16 @@
       "shape": {
         "$": "object",
         "runs": "array"
+      },
+      "values": {}
+    },
+    "GET /api/briefs": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "briefs": "array",
+        "next": "null"
       },
       "values": {}
     },
@@ -4764,6 +4774,12 @@
         "schema.OrgIQ.actions.RequestAccess.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.RequestAccess.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.RequestAccess.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ReviewRunbook": "object",
+        "schema.OrgIQ.actions.ReviewRunbook.appliesTo": "object",
+        "schema.OrgIQ.actions.ReviewRunbook.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ReviewRunbook.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ReviewRunbook.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ReviewRunbook.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.RunAssessmentAgent": "object",
         "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo": "object",
         "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo.principalTypes": "array",
@@ -4848,6 +4864,12 @@
         "schema.OrgIQ.actions.ViewSalary.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.ViewSalary.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.ViewSalary.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewSessionBrief": "object",
+        "schema.OrgIQ.actions.ViewSessionBrief.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewSessionBrief.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewSessionBrief.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewSessionBrief.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewSessionBrief.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.ViewSocial": "object",
         "schema.OrgIQ.actions.ViewSocial.appliesTo": "object",
         "schema.OrgIQ.actions.ViewSocial.appliesTo.principalTypes": "array",
@@ -5929,16 +5951,39 @@
       },
       "values": {
         "events[].action": [
+          "ApproveStep",
+          "ApproveTransaction",
+          "AuthorDefinition",
+          "CancelRun",
+          "ConnectLocalCompute",
           "DecideAccess",
+          "DispatchAgentRun",
+          "EditGuardrail",
+          "LabelFeedback",
           "Login",
+          "ManageAccessPolicy",
+          "ManageAssessmentConfig",
+          "ManageBots",
+          "ManageBudgets",
+          "ManageCanary",
+          "ManageDevbox",
           "ManageIngest",
+          "ManageKB",
+          "ManageKnowledge",
+          "ManagePipelineConfig",
+          "ManageSprints",
+          "ManageUsers",
           "RequestAccess",
+          "ReviewRunbook",
+          "ScoreAssessment",
           "ViewAccess",
           "ViewAssessment",
           "ViewIdentityAdmin",
           "ViewLeaderboard",
           "ViewObservability",
-          "ViewOrgChart"
+          "ViewOrgChart",
+          "ViewPipelines",
+          "ViewSessionBrief"
         ],
         "events[].decision": [
           "ALLOW"
@@ -5947,6 +5992,7 @@
           "admin"
         ],
         "events[].tenant": [
+          "assessment",
           "orgiq"
         ]
       }
@@ -6118,9 +6164,31 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "events": "array"
+        "events": "array",
+        "events[]": "object",
+        "events[].detail": "object",
+        "events[].detail.agentName": "string",
+        "events[].detail.bytes": "number",
+        "events[].detail.codeSnippet": "string",
+        "events[].detail.language": "string",
+        "events[].detail.outputSnippet": "string",
+        "events[].detail.pageTitle": "string",
+        "events[].detail.url": "string",
+        "events[].durationMs": "number",
+        "events[].id": "string",
+        "events[].kind": "string",
+        "events[].ok": "boolean",
+        "events[].sessionId": "string",
+        "events[].startedAt": "string"
       },
-      "values": {}
+      "values": {
+        "events[].kind": [
+          "browser_launch",
+          "browser_navigate",
+          "browser_screenshot",
+          "code_execute"
+        ]
+      }
     },
     "GET /api/observability/cost/a2a-overhead": {
       "persona": "orgiq/admin",
@@ -8145,6 +8213,385 @@
       },
       "values": {}
     },
+    "GET /api/runbooks": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "next": "null",
+        "runbooks": "array",
+        "runbooks[]": "object",
+        "runbooks[].created_at": "string",
+        "runbooks[].current_version": "number",
+        "runbooks[].health": "object",
+        "runbooks[].health.reason": "string",
+        "runbooks[].health.status": "string",
+        "runbooks[].health.warning": "null|string",
+        "runbooks[].id": "string",
+        "runbooks[].open_proposals": "number",
+        "runbooks[].owner_person_id": "string",
+        "runbooks[].scope": "object",
+        "runbooks[].scope.kind": "string",
+        "runbooks[].scope.ref": "string",
+        "runbooks[].sha256": "string",
+        "runbooks[].status": "string",
+        "runbooks[].summary": "string",
+        "runbooks[].title": "string",
+        "runbooks[].updated_at": "string"
+      },
+      "values": {
+        "runbooks[].health.status": [
+          "drifting",
+          "proven",
+          "unproven"
+        ],
+        "runbooks[].scope.kind": [
+          "initiative",
+          "repo",
+          "tool"
+        ],
+        "runbooks[].status": [
+          "draft",
+          "published"
+        ]
+      }
+    },
+    "GET /api/runbooks/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "can_review": "boolean",
+        "current": "object",
+        "current.accepted_at": "string",
+        "current.accepted_by": "string",
+        "current.author": "object",
+        "current.author.id": "string",
+        "current.author.kind": "string",
+        "current.doc": "object",
+        "current.doc.failure_modes": "array",
+        "current.doc.failure_modes[]": "object",
+        "current.doc.failure_modes[].cause": "string",
+        "current.doc.failure_modes[].response": "string",
+        "current.doc.failure_modes[].symptom": "string",
+        "current.doc.not_for": "array",
+        "current.doc.not_for[]": "string",
+        "current.doc.notes": "string",
+        "current.doc.preconditions": "array",
+        "current.doc.preconditions[]": "string",
+        "current.doc.rollback": "array",
+        "current.doc.rollback[]": "object",
+        "current.doc.rollback[].command": "object",
+        "current.doc.rollback[].command.lang": "string",
+        "current.doc.rollback[].command.text": "string",
+        "current.doc.rollback[].do": "string",
+        "current.doc.steps": "array",
+        "current.doc.steps[]": "object",
+        "current.doc.steps[].command": "object",
+        "current.doc.steps[].command.lang": "string",
+        "current.doc.steps[].command.text": "string",
+        "current.doc.steps[].do": "string",
+        "current.doc.steps[].expect": "string",
+        "current.doc.summary": "string",
+        "current.doc.title": "string",
+        "current.doc.triggers": "object",
+        "current.doc.triggers.keywords": "array",
+        "current.doc.triggers.keywords[]": "string",
+        "current.doc.triggers.repos": "array",
+        "current.doc.triggers.repos[]": "string",
+        "current.doc.triggers.tools": "array",
+        "current.doc.triggers.tools[]": "string",
+        "current.doc.triggers.work_item_labels": "array",
+        "current.doc.triggers.work_item_labels[]": "string",
+        "current.doc.use_when": "array",
+        "current.doc.use_when[]": "string",
+        "current.doc.verify": "array",
+        "current.doc.verify[]": "object",
+        "current.doc.verify[].check": "string",
+        "current.markdown": "string",
+        "current.proposal_id": "null",
+        "current.provenance": "object",
+        "current.provenance.lab_experience_ids": "array",
+        "current.provenance.lab_experience_ids[]": "string",
+        "current.provenance.run_refs": "array",
+        "current.provenance.session_ids": "array",
+        "current.provenance.session_ids[]": "string",
+        "current.provenance.source_artifact_ids": "array",
+        "current.provenance.source_artifact_ids[]": "string",
+        "current.runbook_id": "string",
+        "current.sha256": "string",
+        "current.version": "number",
+        "runbook": "object",
+        "runbook.created_at": "string",
+        "runbook.current_version": "number",
+        "runbook.health": "object",
+        "runbook.health.reason": "string",
+        "runbook.health.status": "string",
+        "runbook.health.warning": "null",
+        "runbook.id": "string",
+        "runbook.open_proposals": "number",
+        "runbook.owner_person_id": "string",
+        "runbook.scope": "object",
+        "runbook.scope.kind": "string",
+        "runbook.scope.ref": "string",
+        "runbook.sha256": "string",
+        "runbook.status": "string",
+        "runbook.summary": "string",
+        "runbook.title": "string",
+        "runbook.updated_at": "string"
+      },
+      "values": {
+        "current.author.kind": [
+          "migration"
+        ],
+        "runbook.health.status": [
+          "unproven"
+        ],
+        "runbook.scope.kind": [
+          "initiative"
+        ],
+        "runbook.status": [
+          "published"
+        ]
+      }
+    },
+    "GET /api/runbooks/:id/applications": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "applications": "array"
+      },
+      "values": {}
+    },
+    "GET /api/runbooks/:id/diff": {
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 400 (anonymous)"
+    },
+    "GET /api/runbooks/:id/versions": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "versions": "array",
+        "versions[]": "object",
+        "versions[].accepted_at": "string",
+        "versions[].accepted_by": "string",
+        "versions[].author": "object",
+        "versions[].author.id": "string",
+        "versions[].author.kind": "string",
+        "versions[].markdown": "string",
+        "versions[].proposal_id": "null",
+        "versions[].provenance": "object",
+        "versions[].provenance.lab_experience_ids": "array",
+        "versions[].provenance.lab_experience_ids[]": "string",
+        "versions[].provenance.run_refs": "array",
+        "versions[].provenance.session_ids": "array",
+        "versions[].provenance.session_ids[]": "string",
+        "versions[].provenance.source_artifact_ids": "array",
+        "versions[].provenance.source_artifact_ids[]": "string",
+        "versions[].runbook_id": "string",
+        "versions[].sha256": "string",
+        "versions[].version": "number"
+      },
+      "values": {
+        "versions[].author.kind": [
+          "migration"
+        ]
+      }
+    },
+    "GET /api/runbooks/proposals": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "next": "null",
+        "proposals": "array",
+        "proposals[]": "object",
+        "proposals[].base_version": "null|number",
+        "proposals[].created_at": "string",
+        "proposals[].decided_at": "null",
+        "proposals[].decided_by": "null",
+        "proposals[].id": "string",
+        "proposals[].kind": "string",
+        "proposals[].lint": "array",
+        "proposals[].merged_into": "null",
+        "proposals[].note": "null",
+        "proposals[].proposed": "object",
+        "proposals[].proposed.failure_modes": "array",
+        "proposals[].proposed.failure_modes[]": "object",
+        "proposals[].proposed.failure_modes[].cause": "string",
+        "proposals[].proposed.failure_modes[].response": "string",
+        "proposals[].proposed.failure_modes[].symptom": "string",
+        "proposals[].proposed.not_for": "array",
+        "proposals[].proposed.not_for[]": "string",
+        "proposals[].proposed.notes": "string",
+        "proposals[].proposed.preconditions": "array",
+        "proposals[].proposed.preconditions[]": "string",
+        "proposals[].proposed.rollback": "array",
+        "proposals[].proposed.rollback[]": "object",
+        "proposals[].proposed.rollback[].command": "object",
+        "proposals[].proposed.rollback[].command.lang": "string",
+        "proposals[].proposed.rollback[].command.text": "string",
+        "proposals[].proposed.rollback[].do": "string",
+        "proposals[].proposed.steps": "array",
+        "proposals[].proposed.steps[]": "object",
+        "proposals[].proposed.steps[].command": "object",
+        "proposals[].proposed.steps[].command.lang": "string",
+        "proposals[].proposed.steps[].command.text": "string",
+        "proposals[].proposed.steps[].do": "string",
+        "proposals[].proposed.steps[].expect": "string",
+        "proposals[].proposed.steps[].why": "string",
+        "proposals[].proposed.summary": "string",
+        "proposals[].proposed.title": "string",
+        "proposals[].proposed.triggers": "object",
+        "proposals[].proposed.triggers.keywords": "array",
+        "proposals[].proposed.triggers.keywords[]": "string",
+        "proposals[].proposed.triggers.repos": "array",
+        "proposals[].proposed.triggers.repos[]": "string",
+        "proposals[].proposed.triggers.tools": "array",
+        "proposals[].proposed.triggers.tools[]": "string",
+        "proposals[].proposed.triggers.work_item_labels": "array",
+        "proposals[].proposed.triggers.work_item_labels[]": "string",
+        "proposals[].proposed.use_when": "array",
+        "proposals[].proposed.use_when[]": "string",
+        "proposals[].proposed.verify": "array",
+        "proposals[].proposed.verify[]": "object",
+        "proposals[].proposed.verify[].check": "string",
+        "proposals[].proposed.verify[].command": "object",
+        "proposals[].proposed.verify[].command.lang": "string",
+        "proposals[].proposed.verify[].command.text": "string",
+        "proposals[].rationale": "string",
+        "proposals[].runbook_id": "null|string",
+        "proposals[].similar": "array",
+        "proposals[].similar[]": "object",
+        "proposals[].similar[].reason": "string",
+        "proposals[].similar[].runbook_id": "string",
+        "proposals[].similar[].score": "number",
+        "proposals[].source": "object",
+        "proposals[].source.kind": "string",
+        "proposals[].source.lab_experience_ids": "array",
+        "proposals[].source.person_id": "string",
+        "proposals[].source.run_ref": "string",
+        "proposals[].source.session_id": "string",
+        "proposals[].source.work_item_id": "string",
+        "proposals[].status": "string"
+      },
+      "values": {
+        "proposals[].kind": [
+          "edit",
+          "new"
+        ],
+        "proposals[].source.kind": [
+          "person",
+          "run"
+        ],
+        "proposals[].status": [
+          "open"
+        ]
+      }
+    },
+    "GET /api/runbooks/proposals/:pid": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "base_markdown": "string",
+        "can_review": "boolean",
+        "diff": "object",
+        "diff.added": "number",
+        "diff.removed": "number",
+        "diff.text": "string",
+        "proposal": "object",
+        "proposal.base_version": "number",
+        "proposal.created_at": "string",
+        "proposal.decided_at": "null",
+        "proposal.decided_by": "null",
+        "proposal.id": "string",
+        "proposal.kind": "string",
+        "proposal.lint": "array",
+        "proposal.merged_into": "null",
+        "proposal.note": "null",
+        "proposal.proposed": "object",
+        "proposal.proposed.failure_modes": "array",
+        "proposal.proposed.failure_modes[]": "object",
+        "proposal.proposed.failure_modes[].cause": "string",
+        "proposal.proposed.failure_modes[].response": "string",
+        "proposal.proposed.failure_modes[].symptom": "string",
+        "proposal.proposed.not_for": "array",
+        "proposal.proposed.not_for[]": "string",
+        "proposal.proposed.notes": "string",
+        "proposal.proposed.preconditions": "array",
+        "proposal.proposed.preconditions[]": "string",
+        "proposal.proposed.rollback": "array",
+        "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].do": "string",
+        "proposal.proposed.steps": "array",
+        "proposal.proposed.steps[]": "object",
+        "proposal.proposed.steps[].command": "object",
+        "proposal.proposed.steps[].command.lang": "string",
+        "proposal.proposed.steps[].command.text": "string",
+        "proposal.proposed.steps[].do": "string",
+        "proposal.proposed.steps[].expect": "string",
+        "proposal.proposed.steps[].why": "string",
+        "proposal.proposed.summary": "string",
+        "proposal.proposed.title": "string",
+        "proposal.proposed.triggers": "object",
+        "proposal.proposed.triggers.keywords": "array",
+        "proposal.proposed.triggers.keywords[]": "string",
+        "proposal.proposed.triggers.repos": "array",
+        "proposal.proposed.triggers.repos[]": "string",
+        "proposal.proposed.triggers.tools": "array",
+        "proposal.proposed.triggers.tools[]": "string",
+        "proposal.proposed.triggers.work_item_labels": "array",
+        "proposal.proposed.triggers.work_item_labels[]": "string",
+        "proposal.proposed.use_when": "array",
+        "proposal.proposed.use_when[]": "string",
+        "proposal.proposed.verify": "array",
+        "proposal.proposed.verify[]": "object",
+        "proposal.proposed.verify[].check": "string",
+        "proposal.proposed.verify[].command": "object",
+        "proposal.proposed.verify[].command.lang": "string",
+        "proposal.proposed.verify[].command.text": "string",
+        "proposal.rationale": "string",
+        "proposal.runbook_id": "string",
+        "proposal.similar": "array",
+        "proposal.source": "object",
+        "proposal.source.kind": "string",
+        "proposal.source.lab_experience_ids": "array",
+        "proposal.source.run_ref": "string",
+        "proposal.source.session_id": "string",
+        "proposal.source.work_item_id": "string",
+        "proposal.status": "string",
+        "proposed_markdown": "string",
+        "runbook": "object",
+        "runbook.created_at": "string",
+        "runbook.current_version": "number",
+        "runbook.id": "string",
+        "runbook.owner_person_id": "string",
+        "runbook.scope": "object",
+        "runbook.scope.kind": "string",
+        "runbook.scope.ref": "string",
+        "runbook.status": "string",
+        "runbook.updated_at": "string"
+      },
+      "values": {
+        "proposal.kind": [
+          "edit"
+        ],
+        "proposal.source.kind": [
+          "run"
+        ],
+        "proposal.status": [
+          "open"
+        ],
+        "runbook.scope.kind": [
+          "initiative"
+        ],
+        "runbook.status": [
+          "published"
+        ]
+      }
+    },
     "GET /api/runs": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -8329,6 +8776,12 @@
           "completed"
         ]
       }
+    },
+    "GET /api/runs/:ref/brief": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :ref under /api/runs (anonymous)"
+    },
+    "GET /api/runs/:ref/runbooks/:id": {
+      "skipped": "no value found for :id under /api/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb/runbooks (orgiq/admin); no value found for :id under /api/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb/runbooks (assessment/admin); no value found for :ref under /api/runs (anonymous)"
     },
     "GET /api/saved-searches": {
       "persona": "orgiq/admin",
@@ -8881,6 +9334,7 @@
           "ProvisionAccess",
           "PublishReport",
           "RequestAccess",
+          "ReviewRunbook",
           "RunAssessmentAgent",
           "RunPipeline",
           "ScoreAssessment",
@@ -8893,6 +9347,7 @@
           "ViewObservability",
           "ViewOrgChart",
           "ViewPipelines",
+          "ViewSessionBrief",
           "ViewSocial"
         ],
         "role": [
@@ -9828,6 +10283,9 @@
         ]
       }
     },
+    "GET /api/work-items/:id/brief-preview": {
+      "skipped": "no value found for :id under /api/work-items (orgiq/admin); no value found for :id under /api/work-items (assessment/admin); no value found for :id under /api/work-items (anonymous)"
+    },
     "GET /api/work/ask-suggestions": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -10132,17 +10590,40 @@
       "open": false,
       "values": [
         "ANONYMIZE",
+        "ApproveStep",
+        "ApproveTransaction",
+        "AuthorDefinition",
         "BLOCK",
+        "CancelRun",
+        "ConnectLocalCompute",
         "DecideAccess",
+        "DispatchAgentRun",
+        "EditGuardrail",
+        "LabelFeedback",
         "Login",
+        "ManageAccessPolicy",
+        "ManageAssessmentConfig",
+        "ManageBots",
+        "ManageBudgets",
+        "ManageCanary",
+        "ManageDevbox",
         "ManageIngest",
+        "ManageKB",
+        "ManageKnowledge",
+        "ManagePipelineConfig",
+        "ManageSprints",
+        "ManageUsers",
         "RequestAccess",
+        "ReviewRunbook",
+        "ScoreAssessment",
         "ViewAccess",
         "ViewAssessment",
         "ViewIdentityAdmin",
         "ViewLeaderboard",
         "ViewObservability",
         "ViewOrgChart",
+        "ViewPipelines",
+        "ViewSessionBrief",
         "commented on",
         "delete",
         "index",
@@ -10192,6 +10673,7 @@
         "ProvisionAccess",
         "PublishReport",
         "RequestAccess",
+        "ReviewRunbook",
         "RunAssessmentAgent",
         "RunPipeline",
         "ScoreAssessment",
@@ -10204,6 +10686,7 @@
         "ViewObservability",
         "ViewOrgChart",
         "ViewPipelines",
+        "ViewSessionBrief",
         "ViewSocial"
       ]
     },
@@ -10239,11 +10722,15 @@
         "assessment-command",
         "blocked",
         "bot",
+        "browser_launch",
+        "browser_navigate",
+        "browser_screenshot",
         "capability",
         "change",
         "clarification",
         "close_claim",
         "cluster",
+        "code_execute",
         "comment",
         "compaction",
         "confluence",
@@ -10253,6 +10740,7 @@
         "deploy",
         "devbox:task",
         "document",
+        "edit",
         "eks",
         "evaluator",
         "exception_review",
@@ -10266,6 +10754,7 @@
         "hitl-decided",
         "hitl-expired",
         "in-review",
+        "initiative",
         "initiative-membership",
         "insight",
         "jira",
@@ -10276,14 +10765,18 @@
         "manager",
         "max_cost",
         "max_files",
+        "migration",
         "ms_forms_export",
+        "new",
         "observation",
+        "person",
         "problem",
         "project",
         "prompt",
         "protected_paths",
         "provisioned",
         "question",
+        "repo",
         "require_review",
         "retrieval",
         "retrieve",

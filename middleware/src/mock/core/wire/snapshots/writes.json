@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-14T23:18:59.407Z",
-  "serverHandlerSha": "22d399385c3222c70ad3dc1f42dfa9ef16d3588bd731f2b2ba0081129345515a",
+  "capturedAt": "2026-10-15T03:27:29.085Z",
+  "serverHandlerSha": "09375a3c55e15f7b2413b897adadaa8c048460046cb532dc56dfbe51ec7fbe99",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -925,16 +925,30 @@
       ]
     },
     "POST /api/access/delegations": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 400,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": [
+        "delegateId",
+        "endsAt",
+        "reason"
+      ]
     },
     "POST /api/access/delegations/:id/end": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 409,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": [
+        "reason"
+      ]
     },
     "POST /api/access/requests": {
       "persona": "orgiq/admin",
@@ -3495,6 +3509,490 @@
         "action",
         "experienceId"
       ]
+    },
+    "POST /api/runbooks/:id/applications": {
+      "skipped": "no body: the route authenticates with an HMAC envelope over the raw body plus a run token bound to the run_ref, neither of which this harness can mint; routes/__tests__/runbooks*.test.ts and lib/__tests__/lab-cli-brief.test.ts cover the write."
+    },
+    "POST /api/runbooks/:id/retire": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runbook": "object",
+        "runbook.created_at": "string",
+        "runbook.current_version": "number",
+        "runbook.id": "string",
+        "runbook.owner_person_id": "string",
+        "runbook.retired": "object",
+        "runbook.retired.at": "string",
+        "runbook.retired.by": "string",
+        "runbook.retired.reason": "string",
+        "runbook.retired.superseded_by": "null",
+        "runbook.scope": "object",
+        "runbook.scope.kind": "string",
+        "runbook.scope.ref": "string",
+        "runbook.status": "string",
+        "runbook.updated_at": "string"
+      },
+      "values": {
+        "runbook.scope.kind": [
+          "initiative"
+        ],
+        "runbook.status": [
+          "retired"
+        ]
+      },
+      "sent": [
+        "reason"
+      ]
+    },
+    "POST /api/runbooks/proposals": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "proposal": "object",
+        "proposal.base_version": "number",
+        "proposal.created_at": "string",
+        "proposal.decided_at": "null",
+        "proposal.decided_by": "null",
+        "proposal.id": "string",
+        "proposal.kind": "string",
+        "proposal.lint": "array",
+        "proposal.merged_into": "null",
+        "proposal.note": "null",
+        "proposal.proposed": "null",
+        "proposal.rationale": "string",
+        "proposal.runbook_id": "string",
+        "proposal.similar": "array",
+        "proposal.source": "object",
+        "proposal.source.kind": "string",
+        "proposal.source.lab_experience_ids": "array",
+        "proposal.source.person_id": "string",
+        "proposal.status": "string"
+      },
+      "values": {
+        "proposal.kind": [
+          "retire"
+        ],
+        "proposal.source.kind": [
+          "person"
+        ],
+        "proposal.status": [
+          "open"
+        ]
+      },
+      "sent": [
+        "kind",
+        "rationale",
+        "runbook_id"
+      ]
+    },
+    "POST /api/runbooks/proposals/:pid/accept": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "proposal": "object",
+        "proposal.base_version": "number",
+        "proposal.created_at": "string",
+        "proposal.decided_at": "string",
+        "proposal.decided_by": "string",
+        "proposal.id": "string",
+        "proposal.kind": "string",
+        "proposal.lint": "array",
+        "proposal.merged_into": "null",
+        "proposal.note": "string",
+        "proposal.proposed": "object",
+        "proposal.proposed.failure_modes": "array",
+        "proposal.proposed.failure_modes[]": "object",
+        "proposal.proposed.failure_modes[].cause": "string",
+        "proposal.proposed.failure_modes[].response": "string",
+        "proposal.proposed.failure_modes[].symptom": "string",
+        "proposal.proposed.not_for": "array",
+        "proposal.proposed.not_for[]": "string",
+        "proposal.proposed.notes": "string",
+        "proposal.proposed.preconditions": "array",
+        "proposal.proposed.preconditions[]": "string",
+        "proposal.proposed.rollback": "array",
+        "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].do": "string",
+        "proposal.proposed.steps": "array",
+        "proposal.proposed.steps[]": "object",
+        "proposal.proposed.steps[].command": "object",
+        "proposal.proposed.steps[].command.lang": "string",
+        "proposal.proposed.steps[].command.text": "string",
+        "proposal.proposed.steps[].do": "string",
+        "proposal.proposed.steps[].expect": "string",
+        "proposal.proposed.steps[].why": "string",
+        "proposal.proposed.summary": "string",
+        "proposal.proposed.title": "string",
+        "proposal.proposed.triggers": "object",
+        "proposal.proposed.triggers.keywords": "array",
+        "proposal.proposed.triggers.keywords[]": "string",
+        "proposal.proposed.triggers.repos": "array",
+        "proposal.proposed.triggers.repos[]": "string",
+        "proposal.proposed.triggers.tools": "array",
+        "proposal.proposed.triggers.tools[]": "string",
+        "proposal.proposed.triggers.work_item_labels": "array",
+        "proposal.proposed.triggers.work_item_labels[]": "string",
+        "proposal.proposed.use_when": "array",
+        "proposal.proposed.use_when[]": "string",
+        "proposal.proposed.verify": "array",
+        "proposal.proposed.verify[]": "object",
+        "proposal.proposed.verify[].check": "string",
+        "proposal.proposed.verify[].command": "object",
+        "proposal.proposed.verify[].command.lang": "string",
+        "proposal.proposed.verify[].command.text": "string",
+        "proposal.rationale": "string",
+        "proposal.runbook_id": "string",
+        "proposal.similar": "array",
+        "proposal.source": "object",
+        "proposal.source.kind": "string",
+        "proposal.source.lab_experience_ids": "array",
+        "proposal.source.run_ref": "string",
+        "proposal.source.session_id": "string",
+        "proposal.source.work_item_id": "string",
+        "proposal.status": "string",
+        "runbook": "object",
+        "runbook.created_at": "string",
+        "runbook.current_version": "number",
+        "runbook.id": "string",
+        "runbook.owner_person_id": "string",
+        "runbook.scope": "object",
+        "runbook.scope.kind": "string",
+        "runbook.scope.ref": "string",
+        "runbook.status": "string",
+        "runbook.updated_at": "string",
+        "version": "object",
+        "version.accepted_at": "string",
+        "version.accepted_by": "string",
+        "version.author": "object",
+        "version.author.id": "string",
+        "version.author.kind": "string",
+        "version.doc": "object",
+        "version.doc.failure_modes": "array",
+        "version.doc.failure_modes[]": "object",
+        "version.doc.failure_modes[].cause": "string",
+        "version.doc.failure_modes[].response": "string",
+        "version.doc.failure_modes[].symptom": "string",
+        "version.doc.not_for": "array",
+        "version.doc.not_for[]": "string",
+        "version.doc.notes": "string",
+        "version.doc.preconditions": "array",
+        "version.doc.preconditions[]": "string",
+        "version.doc.rollback": "array",
+        "version.doc.rollback[]": "object",
+        "version.doc.rollback[].do": "string",
+        "version.doc.steps": "array",
+        "version.doc.steps[]": "object",
+        "version.doc.steps[].command": "object",
+        "version.doc.steps[].command.lang": "string",
+        "version.doc.steps[].command.text": "string",
+        "version.doc.steps[].do": "string",
+        "version.doc.steps[].expect": "string",
+        "version.doc.steps[].why": "string",
+        "version.doc.summary": "string",
+        "version.doc.title": "string",
+        "version.doc.triggers": "object",
+        "version.doc.triggers.keywords": "array",
+        "version.doc.triggers.keywords[]": "string",
+        "version.doc.triggers.repos": "array",
+        "version.doc.triggers.repos[]": "string",
+        "version.doc.triggers.tools": "array",
+        "version.doc.triggers.tools[]": "string",
+        "version.doc.triggers.work_item_labels": "array",
+        "version.doc.triggers.work_item_labels[]": "string",
+        "version.doc.use_when": "array",
+        "version.doc.use_when[]": "string",
+        "version.doc.verify": "array",
+        "version.doc.verify[]": "object",
+        "version.doc.verify[].check": "string",
+        "version.doc.verify[].command": "object",
+        "version.doc.verify[].command.lang": "string",
+        "version.doc.verify[].command.text": "string",
+        "version.markdown": "string",
+        "version.proposal_id": "string",
+        "version.provenance": "object",
+        "version.provenance.lab_experience_ids": "array",
+        "version.provenance.run_refs": "array",
+        "version.provenance.run_refs[]": "string",
+        "version.provenance.session_ids": "array",
+        "version.provenance.session_ids[]": "string",
+        "version.provenance.source_artifact_ids": "array",
+        "version.runbook_id": "string",
+        "version.sha256": "string",
+        "version.version": "number"
+      },
+      "values": {
+        "proposal.kind": [
+          "edit"
+        ],
+        "proposal.source.kind": [
+          "run"
+        ],
+        "proposal.status": [
+          "accepted"
+        ],
+        "runbook.scope.kind": [
+          "initiative"
+        ],
+        "runbook.status": [
+          "published"
+        ],
+        "version.author.kind": [
+          "run"
+        ]
+      },
+      "sent": [
+        "note"
+      ]
+    },
+    "POST /api/runbooks/proposals/:pid/merge": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "merged": "object",
+        "merged.base_version": "number",
+        "merged.created_at": "string",
+        "merged.decided_at": "string",
+        "merged.decided_by": "string",
+        "merged.id": "string",
+        "merged.kind": "string",
+        "merged.lint": "array",
+        "merged.merged_into": "string",
+        "merged.note": "string",
+        "merged.proposed": "object",
+        "merged.proposed.failure_modes": "array",
+        "merged.proposed.failure_modes[]": "object",
+        "merged.proposed.failure_modes[].cause": "string",
+        "merged.proposed.failure_modes[].response": "string",
+        "merged.proposed.failure_modes[].symptom": "string",
+        "merged.proposed.not_for": "array",
+        "merged.proposed.not_for[]": "string",
+        "merged.proposed.notes": "string",
+        "merged.proposed.preconditions": "array",
+        "merged.proposed.preconditions[]": "string",
+        "merged.proposed.rollback": "array",
+        "merged.proposed.rollback[]": "object",
+        "merged.proposed.rollback[].do": "string",
+        "merged.proposed.steps": "array",
+        "merged.proposed.steps[]": "object",
+        "merged.proposed.steps[].command": "object",
+        "merged.proposed.steps[].command.lang": "string",
+        "merged.proposed.steps[].command.text": "string",
+        "merged.proposed.steps[].do": "string",
+        "merged.proposed.steps[].expect": "string",
+        "merged.proposed.steps[].why": "string",
+        "merged.proposed.summary": "string",
+        "merged.proposed.title": "string",
+        "merged.proposed.triggers": "object",
+        "merged.proposed.triggers.keywords": "array",
+        "merged.proposed.triggers.keywords[]": "string",
+        "merged.proposed.triggers.repos": "array",
+        "merged.proposed.triggers.repos[]": "string",
+        "merged.proposed.triggers.tools": "array",
+        "merged.proposed.triggers.tools[]": "string",
+        "merged.proposed.triggers.work_item_labels": "array",
+        "merged.proposed.triggers.work_item_labels[]": "string",
+        "merged.proposed.use_when": "array",
+        "merged.proposed.use_when[]": "string",
+        "merged.proposed.verify": "array",
+        "merged.proposed.verify[]": "object",
+        "merged.proposed.verify[].check": "string",
+        "merged.proposed.verify[].command": "object",
+        "merged.proposed.verify[].command.lang": "string",
+        "merged.proposed.verify[].command.text": "string",
+        "merged.rationale": "string",
+        "merged.runbook_id": "string",
+        "merged.similar": "array",
+        "merged.source": "object",
+        "merged.source.kind": "string",
+        "merged.source.lab_experience_ids": "array",
+        "merged.source.run_ref": "string",
+        "merged.source.session_id": "string",
+        "merged.source.work_item_id": "string",
+        "merged.status": "string",
+        "proposal": "object",
+        "proposal.base_version": "number",
+        "proposal.created_at": "string",
+        "proposal.decided_at": "null",
+        "proposal.decided_by": "null",
+        "proposal.id": "string",
+        "proposal.kind": "string",
+        "proposal.lint": "array",
+        "proposal.merged_into": "null",
+        "proposal.note": "null",
+        "proposal.proposed": "object",
+        "proposal.proposed.failure_modes": "array",
+        "proposal.proposed.failure_modes[]": "object",
+        "proposal.proposed.failure_modes[].cause": "string",
+        "proposal.proposed.failure_modes[].response": "string",
+        "proposal.proposed.failure_modes[].symptom": "string",
+        "proposal.proposed.not_for": "array",
+        "proposal.proposed.not_for[]": "string",
+        "proposal.proposed.notes": "string",
+        "proposal.proposed.preconditions": "array",
+        "proposal.proposed.preconditions[]": "string",
+        "proposal.proposed.rollback": "array",
+        "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].do": "string",
+        "proposal.proposed.steps": "array",
+        "proposal.proposed.steps[]": "object",
+        "proposal.proposed.steps[].command": "object",
+        "proposal.proposed.steps[].command.lang": "string",
+        "proposal.proposed.steps[].command.text": "string",
+        "proposal.proposed.steps[].do": "string",
+        "proposal.proposed.steps[].expect": "string",
+        "proposal.proposed.steps[].why": "string",
+        "proposal.proposed.summary": "string",
+        "proposal.proposed.title": "string",
+        "proposal.proposed.triggers": "object",
+        "proposal.proposed.triggers.keywords": "array",
+        "proposal.proposed.triggers.keywords[]": "string",
+        "proposal.proposed.triggers.repos": "array",
+        "proposal.proposed.triggers.repos[]": "string",
+        "proposal.proposed.triggers.tools": "array",
+        "proposal.proposed.triggers.tools[]": "string",
+        "proposal.proposed.triggers.work_item_labels": "array",
+        "proposal.proposed.triggers.work_item_labels[]": "string",
+        "proposal.proposed.use_when": "array",
+        "proposal.proposed.use_when[]": "string",
+        "proposal.proposed.verify": "array",
+        "proposal.proposed.verify[]": "object",
+        "proposal.proposed.verify[].check": "string",
+        "proposal.proposed.verify[].command": "object",
+        "proposal.proposed.verify[].command.lang": "string",
+        "proposal.proposed.verify[].command.text": "string",
+        "proposal.rationale": "string",
+        "proposal.runbook_id": "string",
+        "proposal.similar": "array",
+        "proposal.source": "object",
+        "proposal.source.kind": "string",
+        "proposal.source.lab_experience_ids": "array",
+        "proposal.source.run_ref": "string",
+        "proposal.source.session_id": "string",
+        "proposal.source.work_item_id": "string",
+        "proposal.status": "string"
+      },
+      "values": {
+        "merged.kind": [
+          "edit"
+        ],
+        "merged.source.kind": [
+          "run"
+        ],
+        "merged.status": [
+          "merged"
+        ],
+        "proposal.kind": [
+          "edit"
+        ],
+        "proposal.source.kind": [
+          "run"
+        ],
+        "proposal.status": [
+          "open"
+        ]
+      },
+      "sent": [
+        "into",
+        "note"
+      ]
+    },
+    "POST /api/runbooks/proposals/:pid/reject": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "proposal": "object",
+        "proposal.base_version": "number",
+        "proposal.created_at": "string",
+        "proposal.decided_at": "string",
+        "proposal.decided_by": "string",
+        "proposal.id": "string",
+        "proposal.kind": "string",
+        "proposal.lint": "array",
+        "proposal.merged_into": "null",
+        "proposal.note": "string",
+        "proposal.proposed": "object",
+        "proposal.proposed.failure_modes": "array",
+        "proposal.proposed.failure_modes[]": "object",
+        "proposal.proposed.failure_modes[].cause": "string",
+        "proposal.proposed.failure_modes[].response": "string",
+        "proposal.proposed.failure_modes[].symptom": "string",
+        "proposal.proposed.not_for": "array",
+        "proposal.proposed.not_for[]": "string",
+        "proposal.proposed.notes": "string",
+        "proposal.proposed.preconditions": "array",
+        "proposal.proposed.preconditions[]": "string",
+        "proposal.proposed.rollback": "array",
+        "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].do": "string",
+        "proposal.proposed.steps": "array",
+        "proposal.proposed.steps[]": "object",
+        "proposal.proposed.steps[].command": "object",
+        "proposal.proposed.steps[].command.lang": "string",
+        "proposal.proposed.steps[].command.text": "string",
+        "proposal.proposed.steps[].do": "string",
+        "proposal.proposed.steps[].expect": "string",
+        "proposal.proposed.steps[].why": "string",
+        "proposal.proposed.summary": "string",
+        "proposal.proposed.title": "string",
+        "proposal.proposed.triggers": "object",
+        "proposal.proposed.triggers.keywords": "array",
+        "proposal.proposed.triggers.keywords[]": "string",
+        "proposal.proposed.triggers.repos": "array",
+        "proposal.proposed.triggers.repos[]": "string",
+        "proposal.proposed.triggers.tools": "array",
+        "proposal.proposed.triggers.tools[]": "string",
+        "proposal.proposed.triggers.work_item_labels": "array",
+        "proposal.proposed.triggers.work_item_labels[]": "string",
+        "proposal.proposed.use_when": "array",
+        "proposal.proposed.use_when[]": "string",
+        "proposal.proposed.verify": "array",
+        "proposal.proposed.verify[]": "object",
+        "proposal.proposed.verify[].check": "string",
+        "proposal.proposed.verify[].command": "object",
+        "proposal.proposed.verify[].command.lang": "string",
+        "proposal.proposed.verify[].command.text": "string",
+        "proposal.rationale": "string",
+        "proposal.runbook_id": "string",
+        "proposal.similar": "array",
+        "proposal.source": "object",
+        "proposal.source.kind": "string",
+        "proposal.source.lab_experience_ids": "array",
+        "proposal.source.run_ref": "string",
+        "proposal.source.session_id": "string",
+        "proposal.source.work_item_id": "string",
+        "proposal.status": "string"
+      },
+      "values": {
+        "proposal.kind": [
+          "edit"
+        ],
+        "proposal.source.kind": [
+          "run"
+        ],
+        "proposal.status": [
+          "rejected"
+        ]
+      },
+      "sent": [
+        "note"
+      ]
+    },
+    "POST /api/runbooks/proposals/:pid/withdraw": {
+      "persona": "orgiq/admin",
+      "status": 403,
+      "shape": {
+        "$": "object",
+        "code": "string",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/saved-searches": {
       "refused": {

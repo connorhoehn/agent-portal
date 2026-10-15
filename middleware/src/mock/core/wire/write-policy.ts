@@ -2482,6 +2482,102 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: ok({ tenant: 'pipelines', title: 'wire capture: a review campaign smoke test' }),
   },
 
+  // ── access delegations (A3: docs/access-tenant-api.md § "Escalation timers and delegation") ──
+  {
+    route: 'POST /api/access/delegations',
+    persona: 'orgiq/admin',
+    safe: 'Pushes one row onto the registered `access.delegations` fixture (mock/access-delegations.ts) and notifies through the same social sink the already-allowlisted decide route uses; reset restores the seed. Whether a delegation is in force is derived from the mock clock, never stored. The persona may be refused (400/403/409) by the delegation rules, which is a real shape too.',
+    bodyFrom: 'routes/access.ts: `delegateId` (a directory person, read off the seeded delegation), `endsAt` (an ISO instant) and `reason` (a string); `startsAt` defaults to the mock clock.',
+    intercepts: ['aurora'],
+    alsoAccept: [400, 403, 404, 409],
+    build: async (ctx) => {
+      const delegateId = await ctx.pick('/api/access/delegations', 'delegateId');
+      return delegateId === null ? unsynthesisable('GET /api/access/delegations listed no delegate to hand decisions to')
+        : { delegateId, endsAt: '2099-01-01T00:00:00.000Z', reason: 'wire capture: a delegation smoke test' };
+    },
+  },
+  {
+    route: 'POST /api/access/delegations/:id/end',
+    persona: 'orgiq/admin',
+    safe: 'Stamps `endedAt` / `endedBy` on one row of the registered `access.delegations` fixture; reset restores it. The seeded delegation has already run its course, so the 409 "already ended" may be the shape captured.',
+    bodyFrom: 'routes/access.ts: an optional `reason` string; `:id` resolves off GET /api/access/delegations.',
+    intercepts: ['aurora'],
+    alsoAccept: [403, 404, 409],
+    build: ok({ reason: 'wire capture: ending a delegation' }),
+  },
+
+  // ── runbooks (R3/R4: routes/runbooks.ts) ──────────────────────────────────
+  //
+  // Every runbook write goes through the store (lib/runbooks/store.ts), which in
+  // `dev:mock` is RowsRunbookStore over five REGISTERED fixtures (mock/runbooks.ts),
+  // so `POST /api/__mock/reset` undoes all of it. Time comes from `now()` (the mock
+  // clock); ids derive from the run and runbook, or `randomUUID` for a proposal row
+  // the snapshot records by key path only. Nothing reaches AWS or a model.
+  {
+    route: 'POST /api/runbooks/proposals',
+    persona: 'orgiq/admin',
+    safe: 'Appends one open proposal to the registered `runbook-proposals` fixture and lints/similarity-checks it in process; reset restores the seed.',
+    bodyFrom: 'routes/runbooks.ts: `kind` ∈ new | edit | retire and a `rationale`; an edit or retire names `runbook_id`, read off GET /api/runbooks. The person case takes no attribution from the body.',
+    alsoAccept: [400, 403, 409],
+    build: async (ctx) => {
+      const runbookId = await ctx.pick('/api/runbooks', 'id');
+      return runbookId === null ? unsynthesisable('GET /api/runbooks listed no runbook to propose retiring')
+        : { kind: 'retire', rationale: 'wire capture: a proposal smoke test', runbook_id: runbookId };
+    },
+  },
+  {
+    route: 'POST /api/runbooks/proposals/:pid/withdraw',
+    persona: 'orgiq/admin',
+    safe: 'Moves one open row of the registered `runbook-proposals` fixture to withdrawn; reset restores it. Only the proposer may withdraw, so the persona usually gets the 403 NOT_PROPOSER (or 409 on a closed proposal) — both real shapes. Takes no body.',
+    bodyFrom: 'routes/runbooks.ts: no body; `:pid` resolves off GET /api/runbooks/proposals.',
+    alsoAccept: [403, 404, 409],
+  },
+  {
+    route: 'POST /api/runbooks/proposals/:pid/accept',
+    persona: 'orgiq/admin',
+    safe: 'Decides one row of the registered `runbook-proposals` fixture and, for an edit or new, writes a runbook version into the registered `runbooks` / `runbook-versions` fixtures; reset restores all of them. Only in-process lint and persistence; no model, no AWS.',
+    bodyFrom: 'routes/runbooks.ts: optional `note`; a `new` proposal also needs `scope`, which the persona omits, so the 400/403/409 refusal is the usual shape captured.',
+    alsoAccept: [400, 403, 404, 409],
+    build: ok({ note: 'wire capture: accept smoke test' }),
+  },
+  {
+    route: 'POST /api/runbooks/proposals/:pid/reject',
+    persona: 'orgiq/admin',
+    safe: 'Decides one row of the registered `runbook-proposals` fixture to rejected; reset restores it.',
+    bodyFrom: 'routes/runbooks.ts: a `note` saying why (required).',
+    alsoAccept: [400, 403, 404, 409],
+    build: ok({ note: 'wire capture: reject smoke test' }),
+  },
+  {
+    route: 'POST /api/runbooks/proposals/:pid/merge',
+    persona: 'orgiq/admin',
+    safe: 'Closes one proposal as merged and appends the edit proposal it spawns, both in the registered `runbook-proposals` fixture; reset restores it.',
+    bodyFrom: 'routes/runbooks.ts: `into`, the id of a published runbook, read off GET /api/runbooks; optional `note`.',
+    alsoAccept: [400, 403, 404, 409],
+    build: async (ctx) => {
+      const into = await ctx.pick('/api/runbooks', 'id');
+      return into === null ? unsynthesisable('GET /api/runbooks listed no runbook to merge into') : { into, note: 'wire capture: merge smoke test' };
+    },
+  },
+  {
+    route: 'POST /api/runbooks/:id/retire',
+    persona: 'orgiq/admin',
+    safe: 'Marks one row of the registered `runbooks` fixture retired; reset restores it.',
+    bodyFrom: 'routes/runbooks.ts: a `reason` (required); `superseded_by` is optional and omitted. `:id` resolves off GET /api/runbooks.',
+    alsoAccept: [400, 403, 404, 409],
+    build: ok({ reason: 'wire capture: retire smoke test' }),
+  },
+  {
+    route: 'POST /api/runbooks/:id/applications',
+    persona: 'orgiq/admin',
+    safe: 'Would append one application to the registered `runbook-applications` fixture, but it is a BOX callback.',
+    bodyFrom: 'routes/runbooks.ts: `run_ref`, `outcome`, and an X-Service-Auth HMAC envelope PLUS a per-run token (lib/run-token.ts) for exactly that run_ref.',
+    build: async () =>
+      unsynthesisable(
+        'the route authenticates with an HMAC envelope over the raw body plus a run token bound to the run_ref, neither of which this harness can mint; routes/__tests__/runbooks*.test.ts and lib/__tests__/lab-cli-brief.test.ts cover the write.',
+      ),
+  },
+
   // ── the social tenant's context bindings (lane E) ─────────────────────────
   {
     route: 'PUT /api/social/bindings',

@@ -3,57 +3,57 @@
     {
       "method": "POST",
       "path": "/api/__mock/identity/clone",
-      "source": "src/routes/mock-control.ts:753"
+      "source": "src/routes/mock-control.ts:757"
     },
     {
       "method": "DELETE",
       "path": "/api/__mock/identity/clone/:id",
-      "source": "src/routes/mock-control.ts:772"
+      "source": "src/routes/mock-control.ts:776"
     },
     {
       "method": "GET",
       "path": "/api/__mock/identity/clones",
-      "source": "src/routes/mock-control.ts:768"
+      "source": "src/routes/mock-control.ts:772"
     },
     {
       "method": "POST",
       "path": "/api/__mock/reset",
-      "source": "src/routes/mock-control.ts:486"
+      "source": "src/routes/mock-control.ts:490"
     },
     {
       "method": "POST",
       "path": "/api/__mock/scenario",
-      "source": "src/routes/mock-control.ts:390"
+      "source": "src/routes/mock-control.ts:394"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scenarios",
-      "source": "src/routes/mock-control.ts:368"
+      "source": "src/routes/mock-control.ts:372"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scope",
-      "source": "src/routes/mock-control.ts:729"
+      "source": "src/routes/mock-control.ts:733"
     },
     {
       "method": "POST",
       "path": "/api/__mock/scope",
-      "source": "src/routes/mock-control.ts:665"
+      "source": "src/routes/mock-control.ts:669"
     },
     {
       "method": "DELETE",
       "path": "/api/__mock/scope/:id",
-      "source": "src/routes/mock-control.ts:739"
+      "source": "src/routes/mock-control.ts:743"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scope/:id",
-      "source": "src/routes/mock-control.ts:733"
+      "source": "src/routes/mock-control.ts:737"
     },
     {
       "method": "GET",
       "path": "/api/__mock/state",
-      "source": "src/routes/mock-control.ts:533"
+      "source": "src/routes/mock-control.ts:537"
     },
     {
       "method": "GET",
@@ -68,127 +68,127 @@
     {
       "method": "GET",
       "path": "/api/access/approvals",
-      "source": "src/routes/access.ts:314"
+      "source": "src/routes/access.ts:315"
     },
     {
       "method": "GET",
       "path": "/api/access/audit",
-      "source": "src/routes/access.ts:328"
+      "source": "src/routes/access.ts:329"
     },
     {
       "method": "GET",
       "path": "/api/access/beneficiaries",
-      "source": "src/routes/access.ts:656"
+      "source": "src/routes/access.ts:657"
     },
     {
       "method": "GET",
       "path": "/api/access/catalog",
-      "source": "src/routes/access.ts:264"
+      "source": "src/routes/access.ts:265"
     },
     {
       "method": "GET",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:922"
+      "source": "src/routes/access.ts:923"
     },
     {
       "method": "PUT",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:927"
+      "source": "src/routes/access.ts:928"
     },
     {
       "method": "GET",
       "path": "/api/access/delegates",
-      "source": "src/routes/access.ts:838"
+      "source": "src/routes/access.ts:839"
     },
     {
       "method": "GET",
       "path": "/api/access/delegations",
-      "source": "src/routes/access.ts:825"
+      "source": "src/routes/access.ts:826"
     },
     {
       "method": "POST",
       "path": "/api/access/delegations",
-      "source": "src/routes/access.ts:848"
+      "source": "src/routes/access.ts:849"
     },
     {
       "method": "POST",
       "path": "/api/access/delegations/:id/end",
-      "source": "src/routes/access.ts:879"
+      "source": "src/routes/access.ts:880"
     },
     {
       "method": "GET",
       "path": "/api/access/policies",
-      "source": "src/routes/access.ts:322"
+      "source": "src/routes/access.ts:323"
     },
     {
       "method": "PUT",
       "path": "/api/access/policies/:id",
-      "source": "src/routes/access.ts:955"
+      "source": "src/routes/access.ts:956"
     },
     {
       "method": "GET",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:280"
+      "source": "src/routes/access.ts:281"
     },
     {
       "method": "POST",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:671"
+      "source": "src/routes/access.ts:672"
     },
     {
       "method": "GET",
       "path": "/api/access/requests/:id",
-      "source": "src/routes/access.ts:304"
+      "source": "src/routes/access.ts:305"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/revoke",
-      "source": "src/routes/access.ts:788"
+      "source": "src/routes/access.ts:789"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/sod-override",
-      "source": "src/routes/access.ts:762"
+      "source": "src/routes/access.ts:763"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/steps/:step/decide",
-      "source": "src/routes/access.ts:701"
+      "source": "src/routes/access.ts:702"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/withdraw",
-      "source": "src/routes/access.ts:678"
+      "source": "src/routes/access.ts:679"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/preview",
-      "source": "src/routes/access.ts:613"
+      "source": "src/routes/access.ts:614"
     },
     {
       "method": "GET",
       "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:408"
+      "source": "src/routes/access.ts:409"
     },
     {
       "method": "POST",
       "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:429"
+      "source": "src/routes/access.ts:430"
     },
     {
       "method": "GET",
       "path": "/api/access/reviews/:id",
-      "source": "src/routes/access.ts:418"
+      "source": "src/routes/access.ts:419"
     },
     {
       "method": "POST",
       "path": "/api/access/reviews/:id/items/:itemId/decide",
-      "source": "src/routes/access.ts:481"
+      "source": "src/routes/access.ts:482"
     },
     {
       "method": "GET",
       "path": "/api/access/summary",
-      "source": "src/routes/access.ts:248"
+      "source": "src/routes/access.ts:249"
     },
     {
       "method": "GET",
@@ -1009,6 +1009,11 @@
       "method": "POST",
       "path": "/api/bots/work-items/:id/review-estimate",
       "source": "src/routes/bots.ts:482"
+    },
+    {
+      "method": "GET",
+      "path": "/api/briefs",
+      "source": "src/routes/session-briefs.ts:60"
     },
     {
       "method": "GET",
@@ -2053,32 +2058,32 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:176"
+      "source": "src/index.ts:178"
     },
     {
       "method": "GET",
       "path": "/api/identity/policies",
-      "source": "src/routes/identity.ts:297"
+      "source": "src/routes/identity.ts:309"
     },
     {
       "method": "POST",
       "path": "/api/identity/policies",
-      "source": "src/routes/identity.ts:316"
+      "source": "src/routes/identity.ts:328"
     },
     {
       "method": "DELETE",
       "path": "/api/identity/policies/:id",
-      "source": "src/routes/identity.ts:358"
+      "source": "src/routes/identity.ts:370"
     },
     {
       "method": "PUT",
       "path": "/api/identity/policies/:id",
-      "source": "src/routes/identity.ts:336"
+      "source": "src/routes/identity.ts:348"
     },
     {
       "method": "POST",
       "path": "/api/identity/policies/test",
-      "source": "src/routes/identity.ts:252"
+      "source": "src/routes/identity.ts:264"
     },
     {
       "method": "GET",
@@ -2088,12 +2093,12 @@
     {
       "method": "GET",
       "path": "/api/identity/schema",
-      "source": "src/routes/identity.ts:381"
+      "source": "src/routes/identity.ts:393"
     },
     {
       "method": "PUT",
       "path": "/api/identity/schema",
-      "source": "src/routes/identity.ts:390"
+      "source": "src/routes/identity.ts:402"
     },
     {
       "method": "GET",
@@ -2123,7 +2128,7 @@
     {
       "method": "PUT",
       "path": "/api/identity/users/:id/person",
-      "source": "src/routes/identity.ts:200"
+      "source": "src/routes/identity.ts:212"
     },
     {
       "method": "POST",
@@ -2433,132 +2438,132 @@
     {
       "method": "POST",
       "path": "/api/local-compute/announce",
-      "source": "src/routes/local-compute.ts:347"
+      "source": "src/routes/local-compute.ts:348"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/claim",
-      "source": "src/routes/local-compute.ts:499"
+      "source": "src/routes/local-compute.ts:500"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/events",
-      "source": "src/routes/local-compute.ts:1045"
+      "source": "src/routes/local-compute.ts:1052"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/heartbeat",
-      "source": "src/routes/local-compute.ts:382"
+      "source": "src/routes/local-compute.ts:383"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/complete",
-      "source": "src/routes/local-compute.ts:606"
+      "source": "src/routes/local-compute.ts:613"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/heartbeat",
-      "source": "src/routes/local-compute.ts:585"
+      "source": "src/routes/local-compute.ts:592"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/jobs/:jobId/log",
-      "source": "src/routes/local-compute.ts:729"
+      "source": "src/routes/local-compute.ts:736"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/log",
-      "source": "src/routes/local-compute.ts:689"
+      "source": "src/routes/local-compute.ts:696"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/jobs/:jobId/log/stream",
-      "source": "src/routes/local-compute.ts:747"
+      "source": "src/routes/local-compute.ts:754"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/start",
-      "source": "src/routes/local-compute.ts:570"
+      "source": "src/routes/local-compute.ts:577"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/log",
-      "source": "src/routes/local-compute.ts:807"
+      "source": "src/routes/local-compute.ts:814"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes",
-      "source": "src/routes/local-compute.ts:924"
+      "source": "src/routes/local-compute.ts:931"
     },
     {
       "method": "DELETE",
       "path": "/api/local-compute/nodes/:id",
-      "source": "src/routes/local-compute.ts:1122"
+      "source": "src/routes/local-compute.ts:1129"
     },
     {
       "method": "PATCH",
       "path": "/api/local-compute/nodes/:id",
-      "source": "src/routes/local-compute.ts:1100"
+      "source": "src/routes/local-compute.ts:1107"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/:nodeId/log",
-      "source": "src/routes/local-compute.ts:853"
+      "source": "src/routes/local-compute.ts:860"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/:nodeId/log/stream",
-      "source": "src/routes/local-compute.ts:871"
+      "source": "src/routes/local-compute.ts:878"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/nodes/:nodeId/work",
-      "source": "src/routes/local-compute.ts:1174"
+      "source": "src/routes/local-compute.ts:1181"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/all",
-      "source": "src/routes/local-compute.ts:936"
+      "source": "src/routes/local-compute.ts:943"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/pair/:code",
-      "source": "src/routes/local-compute.ts:227"
+      "source": "src/routes/local-compute.ts:228"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/pair/claim",
-      "source": "src/routes/local-compute.ts:243"
+      "source": "src/routes/local-compute.ts:244"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/pair/start",
-      "source": "src/routes/local-compute.ts:212"
+      "source": "src/routes/local-compute.ts:213"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/presence/repos",
-      "source": "src/routes/local-compute.ts:971"
+      "source": "src/routes/local-compute.ts:978"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/register",
-      "source": "src/routes/local-compute.ts:423"
+      "source": "src/routes/local-compute.ts:424"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/runs",
-      "source": "src/routes/local-compute.ts:1307"
+      "source": "src/routes/local-compute.ts:1314"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/sessions/:sessionId/end",
-      "source": "src/routes/local-compute.ts:390"
+      "source": "src/routes/local-compute.ts:391"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/stream",
-      "source": "src/routes/local-compute.ts:1017"
+      "source": "src/routes/local-compute.ts:1024"
     },
     {
       "method": "GET",
@@ -3277,6 +3282,76 @@
     },
     {
       "method": "GET",
+      "path": "/api/runbooks",
+      "source": "src/routes/runbooks.ts:243"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runbooks/:id",
+      "source": "src/routes/runbooks.ts:303"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runbooks/:id/applications",
+      "source": "src/routes/runbooks.ts:339"
+    },
+    {
+      "method": "POST",
+      "path": "/api/runbooks/:id/applications",
+      "source": "src/routes/runbooks.ts:684"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runbooks/:id/diff",
+      "source": "src/routes/runbooks.ts:326"
+    },
+    {
+      "method": "POST",
+      "path": "/api/runbooks/:id/retire",
+      "source": "src/routes/runbooks.ts:658"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runbooks/:id/versions",
+      "source": "src/routes/runbooks.ts:318"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runbooks/proposals",
+      "source": "src/routes/runbooks.ts:265"
+    },
+    {
+      "method": "POST",
+      "path": "/api/runbooks/proposals",
+      "source": "src/routes/runbooks.ts:349"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runbooks/proposals/:pid",
+      "source": "src/routes/runbooks.ts:280"
+    },
+    {
+      "method": "POST",
+      "path": "/api/runbooks/proposals/:pid/accept",
+      "source": "src/routes/runbooks.ts:484"
+    },
+    {
+      "method": "POST",
+      "path": "/api/runbooks/proposals/:pid/merge",
+      "source": "src/routes/runbooks.ts:618"
+    },
+    {
+      "method": "POST",
+      "path": "/api/runbooks/proposals/:pid/reject",
+      "source": "src/routes/runbooks.ts:571"
+    },
+    {
+      "method": "POST",
+      "path": "/api/runbooks/proposals/:pid/withdraw",
+      "source": "src/routes/runbooks.ts:587"
+    },
+    {
+      "method": "GET",
       "path": "/api/runs",
       "source": "src/routes/runs.ts:26"
     },
@@ -3294,6 +3369,16 @@
       "method": "GET",
       "path": "/api/runs/:id/steps",
       "source": "src/routes/runs.ts:28"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs/:ref/brief",
+      "source": "src/routes/session-briefs.ts:74"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs/:ref/runbooks/:id",
+      "source": "src/routes/session-briefs.ts:98"
     },
     {
       "method": "GET",
@@ -3443,62 +3528,62 @@
     {
       "method": "GET",
       "path": "/api/session/capabilities",
-      "source": "src/routes/session.ts:161"
+      "source": "src/routes/session.ts:165"
     },
     {
       "method": "POST",
       "path": "/api/session/login",
-      "source": "src/routes/session.ts:238"
+      "source": "src/routes/session.ts:242"
     },
     {
       "method": "POST",
       "path": "/api/session/logout",
-      "source": "src/routes/session.ts:393"
+      "source": "src/routes/session.ts:397"
     },
     {
       "method": "POST",
       "path": "/api/session/masquerade",
-      "source": "src/routes/session.ts:328"
+      "source": "src/routes/session.ts:332"
     },
     {
       "method": "POST",
       "path": "/api/session/masquerade/stop",
-      "source": "src/routes/session.ts:376"
+      "source": "src/routes/session.ts:380"
     },
     {
       "method": "GET",
       "path": "/api/session/me",
-      "source": "src/routes/session.ts:106"
+      "source": "src/routes/session.ts:110"
     },
     {
       "method": "GET",
       "path": "/api/session/person",
-      "source": "src/routes/session.ts:137"
+      "source": "src/routes/session.ts:141"
     },
     {
       "method": "GET",
       "path": "/api/session/realtime-token",
-      "source": "src/routes/session.ts:190"
+      "source": "src/routes/session.ts:194"
     },
     {
       "method": "POST",
       "path": "/api/session/revoke-others",
-      "source": "src/routes/session.ts:313"
+      "source": "src/routes/session.ts:317"
     },
     {
       "method": "POST",
       "path": "/api/session/role",
-      "source": "src/routes/session.ts:255"
+      "source": "src/routes/session.ts:259"
     },
     {
       "method": "POST",
       "path": "/api/session/tenant",
-      "source": "src/routes/session.ts:278"
+      "source": "src/routes/session.ts:282"
     },
     {
       "method": "GET",
       "path": "/api/session/users",
-      "source": "src/routes/session.ts:225"
+      "source": "src/routes/session.ts:229"
     },
     {
       "method": "GET",
@@ -3857,6 +3942,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/work-items/:id/brief-preview",
+      "source": "src/routes/session-briefs.ts:118"
+    },
+    {
+      "method": "GET",
       "path": "/api/work/ask-suggestions",
       "source": "src/routes/work.ts:149"
     },
@@ -3963,7 +4053,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:175"
+      "source": "src/index.ts:177"
     },
     {
       "method": "DELETE",
