@@ -443,6 +443,60 @@ interface RunbookStore {
   `aurora.js` or the RDS client (judge check). The table goes into
   `OrgIQ-Foundation` when the cloud is reachable again; that is not in scope.
 
+### 2.6 The model as built (R0, 2026-10-14)
+
+`middleware/src/lib/runbooks/` (exports in `index.ts`; everything is pure
+except `repo-context.ts`, which reads the route snapshot and the tree). The
+types above are in `types.ts` unchanged. Signatures:
+
+```ts
+renderRunbook(doc: RunbookDoc, header?: RunbookHeader): string      // throws RunbookFormatError
+formatProblems(doc: RunbookDoc): string[]                           // [] ⇔ the doc round-trips
+parseRunbook(md: string): RunbookDoc                                // throws RunbookParseError (line-numbered)
+tryParseRunbook(md: string): { ok: true; doc; header: string[]; provenance: string | null } | { ok: false; errors }
+lintRunbook(doc: RunbookDoc, ctx?: LintContext): LintFinding[]      // ctx = { routes?, pathExists? }; repoLintContext() builds it
+similarity(a: string | string[], b: string | string[]): number     // Jaccard over normalised tokens
+findSimilar(doc, scope, candidates, threshold = 0.5): SimilarRunbook[]
+selectRunbooks(work: WorkItemContext, candidates: RunbookCandidate[]): { selected: SelectedRunbook[]; excluded }
+assembleBrief(input: AssembleBriefInput): SessionBrief              // budget_tokens default 6000; briefBudget(env)
+estimateTokens(text: string): number                                // ceil(chars / 4)
+runbookHealth(apps: RunbookApplication[], version: number, nowMs: number): RunbookHealth  // { status, reason, warning }
+versionOf({ runbook_id, version, doc, author, ... }): RunbookVersion // markdown + sha256 always derived from the doc
+```
+
+Where the build refined §2.2–§3.3:
+
+- **Canonical markdown.** "Use when" and "Not for" are `##` bullet sections,
+  not prose; the trigger lists render as a `## Selection hints` section (so an
+  edit to them is a reviewable diff); a step is `1. **do**`, an indented
+  command fence, `Expect …`, `*Why: …*`. The `> Runbook id · vN · scope ·
+  owner` header and `## Where this came from` are optional presentation
+  (`RunbookHeader`) that the parser skips; health is never in the stored
+  markdown, so a version's sha does not move when a run reports. Every field
+  but `notes` and command text is one line (`formatProblems`).
+- **Lint.** R-imperative also covers roll-back steps. R-single-subject is the
+  one `warning`: a step is off-subject when it shares no normalised term with
+  the title + use_when, and the rule fires when more than half are. R-rollback
+  reads "changes state" as a step opening with a mutating verb (flip, set,
+  deploy, delete …) or a mutating command (POST/PUT/PATCH/DELETE, `aws …
+  update-*`, `cdk deploy`, DML). R-command-real matches `/api/...` paths
+  against `routes.json` templates (`:param` and `$VAR` segments match
+  anything) and repo script paths against the tree; it checks nothing
+  without a `LintContext`. Failing fixtures: the ten facts of §1.4 verbatim;
+  R-command-real and R-secrets, which none of the ten triggers, use fixtures
+  derived from example 3.
+- **Selection.** A work item's repo named in `triggers.repos` counts as one
+  label hit. A pin bypasses scope, never status.
+- **Brief.** The markdown names the brief id but not its own sha (a document
+  cannot contain its own hash); the id defaults to `brief-<run_ref>` so it is
+  as deterministic as the bytes. The "N of 6,000 tokens" header counts the
+  whole document, itself included (settled to a fixed point). Runbooks that do
+  not fit, or exceed four, are listed under "Also available" with `lab
+  runbook <id>`; a later, smaller one may still fit. Context (framing + task +
+  project + decisions) is capped at 1,800 tokens; decisions drop whole,
+  oldest first, and the drop is stated.
+- **Health** is per version: a new version is unproven until a run follows it.
+
 ---
 
 ## 3. Session injection: the session brief
