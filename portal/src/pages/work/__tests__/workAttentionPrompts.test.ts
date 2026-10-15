@@ -6,7 +6,7 @@ import type { Job, LabConsult, Proposal } from '../workShared';
 const now = '2026-10-14T09:00:00Z';
 const consult: LabConsult = { id: 'c1', question: 'Keep the legacy cookie?', context: 'Two clients read it.', repo: 'orgiq-auth-service', boxId: 'box-1', sessionId: null, status: 'pending', answer: null, answeredBy: null, createdAt: now };
 const job = (status: string): Job => ({ id: `j-${status}`, kind: 'devbox:task', title: 'Rotate keys', status, priority: 1, boxId: null, attempts: 1, maxAttempts: 3, result: { summary: 'Done.', costUsd: 0.42 }, error: null, createdAt: now, finishedAt: now, botId: null, botName: null, botTrigger: null });
-const proposal: Proposal = { id: 'p1', source: 'adr.md', kind: 'link_person_skill', targetId: 'p-014', payload: {}, rationale: 'Named in the ADR.', confidence: 0.86, evidence: { quote: 'Index design by Nora' }, status: 'pending', applyError: null, createdAt: now };
+const proposal: Proposal = { id: 'p1', source: 'adr.md', kind: 'add_person_skill', targetId: 'p-014', payload: {}, rationale: 'Named in the ADR.', confidence: 0.86, evidence: { quote: 'Index design by Nora' }, status: 'pending', applyError: null, createdAt: now };
 const calls: string[] = [];
 const handlers = {
   answerConsult: async (id: string, a: string) => { calls.push(`consult ${id} ${a}`); },
