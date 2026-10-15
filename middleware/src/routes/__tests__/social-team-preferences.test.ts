@@ -74,6 +74,7 @@ const savedEnv = { ...process.env };
 const originalFetch = global.fetch;
 beforeEach(() => {
   delete process.env['SOCIAL_PLATFORM_INTERNAL_URL'];
+  delete process.env['SOCIAL_PLATFORM_BACKEND'];
   delete process.env['DOCUMENT_PLATFORM_INTERNAL_URL'];
   delete process.env['PLATFORM_API_URL'];
   process.env['REALTIME_JWT_SECRET'] = 'team-preferences-test';
@@ -205,7 +206,7 @@ describe('upstream preference and membership contracts without HTTP listeners', 
   };
   const member = (userId = sana.sub) => ({ teamId: team.teamId, userId, role: userId === mira.sub ? 'owner' : 'member', addedBy: mira.sub, joinedAt: team.createdAt, favorite: false });
   const json = (body: unknown, status = 200) => new Response(status === 204 ? null : JSON.stringify(body), { status });
-  beforeEach(() => { process.env['SOCIAL_PLATFORM_INTERNAL_URL'] = 'http://platform.test'; });
+  beforeEach(() => { process.env['SOCIAL_PLATFORM_INTERNAL_URL'] = 'http://platform.test'; process.env['SOCIAL_PLATFORM_BACKEND'] = 'platform'; });
   it('uses the caller token and fixed social partition, preserves the upstream member response and never primes gateway membership', async () => {
     const mine = { ...member(), favorite: true };
     const fetcher = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>().mockImplementation(async (_url, init) => init?.method === 'GET'

@@ -40,7 +40,7 @@ import {
   socialCallLogFixture, socialRecordingsFixture, socialRecordingTranscriptsFixture, socialRoomMembersFixture, socialRoomsFixture,
   socialTeamMembersFixture, socialTeamsFixture,
 } from '../../mock/social-platform.js';
-import { socialPlatformBackend, socialRecordingSharesFixture, standaloneRooms } from '../../providers/social-platform.js';
+import { resetPlatformProbe, socialPlatformBackend, socialRecordingSharesFixture, standaloneRooms } from '../../providers/social-platform.js';
 
 function appAs(sub: string, role: Role, tenant = 'social', name?: string) {
   const app = express();
@@ -64,12 +64,29 @@ describe('dev:mock backend (no platform-api)', () => {
   const saved = { ...process.env };
   beforeAll(() => {
     delete process.env['SOCIAL_PLATFORM_INTERNAL_URL'];
+    delete process.env['SOCIAL_PLATFORM_BACKEND'];
     delete process.env['DOCUMENT_PLATFORM_INTERNAL_URL'];
     delete process.env['PLATFORM_API_URL'];
   });
   afterAll(() => { process.env = saved; });
 
   it('reads the fixtures', () => { expect(socialPlatformBackend()).toBe('mock'); });
+
+  it('reads the fixtures when a platform-api URL is set but nothing answers it', async () => {
+    const realFetch = global.fetch;
+    process.env['SOCIAL_PLATFORM_INTERNAL_URL'] = 'http://platform.down:3001';
+    global.fetch = (async () => { throw new Error('connect ECONNREFUSED'); }) as typeof fetch;
+    try {
+      resetPlatformProbe();
+      expect(socialPlatformBackend()).toBe('mock');
+      await new Promise((r) => setTimeout(r, 20));
+      expect(socialPlatformBackend()).toBe('mock');
+    } finally {
+      global.fetch = realFetch;
+      delete process.env['SOCIAL_PLATFORM_INTERNAL_URL'];
+      resetPlatformProbe();
+    }
+  });
 
   describe('GET /api/social/rooms', () => {
     it('lists open rooms and the private ones you are in — never a team channel', async () => {
@@ -211,7 +228,7 @@ describe('dev:mock backend (no platform-api)', () => {
       const res = await request(sana()).get('/api/social/recordings/mock-rec-town-hall-1/transcript');
       expect(res.status).toBe(200);
       // Reactions are not speech; indexes keep their place in the document so a citation stays stable.
-      expect(res.body.segments.map((s: { index: number }) => s.index)).toEqual([0, 1, 2, 4]);
+      expect(res.body.segments.map((s: { index: number }) => s.index)).toEqual([0, 1, 2, 3, 5, 6, 7]);
       expect(res.body.segments[1]).toMatchObject({ speaker: 'Lena Brandt', text: expect.stringContaining('Moderation volume') });
       expect(res.body).toMatchObject({ status: 'ready', conversation: null, lobbyName: 'social:room:town-hall' });
       const dm = await request(sana()).get('/api/social/recordings/mock-rec-dm-lena-sana/transcript');
@@ -270,7 +287,7 @@ describe('platform-api configured — the BFF proxies with the caller\'s token',
   let calls: Array<{ url: string; method: string; auth: string; body: unknown }> = [];
   let reply: (url: string, method: string) => { status: number; body: unknown };
 
-  beforeAll(() => { process.env['SOCIAL_PLATFORM_INTERNAL_URL'] = 'http://platform.test:3001/'; });
+  beforeAll(() => { process.env['SOCIAL_PLATFORM_INTERNAL_URL'] = 'http://platform.test:3001/'; process.env['SOCIAL_PLATFORM_BACKEND'] = 'platform'; });
   afterAll(() => { process.env = saved; global.fetch = realFetch; });
   beforeEach(() => {
     calls = [];

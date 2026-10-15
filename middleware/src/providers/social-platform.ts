@@ -57,8 +57,41 @@ export function socialPlatformUrl(env: NodeJS.ProcessEnv = process.env): string 
   return url ? url.replace(/\/+$/, '') : null;
 }
 
+// Under dev:mock the platform-api URL may be configured (Tilt sets it for the
+// real-media demo) while nothing answers it. A mock-Aurora run then reads the
+// registered fixtures until a health probe sees platform-api answer, instead of
+// proxying into a 502. Outside mock mode the URL always wins.
+const PROBE_TIMEOUT_MS = 1_500;
+const PROBE_UP_TTL_MS = 30_000;
+const PROBE_DOWN_TTL_MS = 10_000;
+// checkedAt is a monotonic reading (performance.now), not a stamp; -Infinity = never probed.
+let probe: { up: boolean; checkedAt: number; inFlight: boolean } = { up: false, checkedAt: -Infinity, inFlight: false };
+
+/** A transport failure to platform-api: serve the fixtures until the next probe says it is back. */
+export function markPlatformDown(): void { probe = { up: false, checkedAt: performance.now(), inFlight: probe.inFlight }; }
+/** Test seam: forget what the probe learned. */
+export function resetPlatformProbe(): void { probe = { up: false, checkedAt: -Infinity, inFlight: false }; }
+
+function probePlatform(base: string): void {
+  if (probe.inFlight) return;
+  probe.inFlight = true;
+  fetch(`${base}/health`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })
+    .then(() => { probe = { up: true, checkedAt: performance.now(), inFlight: false }; })
+    .catch(() => { probe = { up: false, checkedAt: performance.now(), inFlight: false }; });
+}
+
 export function socialPlatformBackend(): SocialPlatformBackend {
-  if (socialPlatformUrl()) return 'platform';
+  const base = socialPlatformUrl();
+  // SOCIAL_PLATFORM_BACKEND=platform|mock pins the choice (no probing).
+  const pinned = process.env['SOCIAL_PLATFORM_BACKEND'];
+  if (pinned === 'mock') return 'mock';
+  if (pinned === 'platform' && base) return 'platform';
+  if (base && config.mock?.aurora) {
+    const age = performance.now() - probe.checkedAt;
+    if (age >= (probe.up ? PROBE_UP_TTL_MS : PROBE_DOWN_TTL_MS)) probePlatform(base);
+    return probe.up ? 'platform' : 'mock';
+  }
+  if (base) return 'platform';
   if (config.mock?.aurora) return 'mock';
   return 'none';
 }
@@ -135,7 +168,8 @@ export async function platformRequest<T>(session: Session, method: string, path:
     });
   } catch (err) {
     if (err instanceof AppError) throw err;
-    throw new AppError(502, `platform-api is unreachable (${err instanceof Error ? err.message : String(err)})`);
+    markPlatformDown();
+    throw new AppError(502, 'Calls and rooms are unavailable right now. Try again in a moment.');
   }
   const text = await res.text();
   let parsed: unknown = null;
