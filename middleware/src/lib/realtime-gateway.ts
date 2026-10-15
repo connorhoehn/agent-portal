@@ -82,6 +82,7 @@ import { channelNotifyPlugin, dmNotifyPlugin, pageCursorChatOptions, tenantMenti
 import { startStatsLine, statsIntervalMs, type RealtimeGatewayStore } from './gateway/stats.js';
 import { authorityCacheEnabled, authorityCacheMaxAgeMs, inboundRateLimit, peerOperationLingerMs, publishProofMaxAgeMs, realtimeGatewayRouting } from './gateway/env.js';
 import { captureCallReaction, configuredCallReactionCapture, type CallReactionCapture } from './call-reactions.js';
+import { recordOwnerSender } from './record-owner.js';
 
 // Everything the pre-split file exported, from where it lives now.
 export { lobbyGuard, channelGuard } from './gateway/authority.js';
@@ -334,6 +335,9 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
       // huddle contract (lib/call-chat-send.ts withHuddleChat).
       withHuddleChat(withAssessmentPageReferences(withDmPageReferences(chat({ ...chatOpts, chatStore: chatOpts.chatStore,
         membershipStore: huddleMembershipStore(chatOpts.membershipStore, () => chatRuntime),
+        // The sender is the record owner: an identity clone chats as its
+        // persona (membership, history, authorship), its socket epoch its own.
+        resolveSender: recordOwnerSender,
         // Page discussions keep a cursor per current reader, with no member
         // list, and the service makes their "new messages" items
         // (realtime-modules 0.115 / 0.118; lib/page-thread-unread.ts).

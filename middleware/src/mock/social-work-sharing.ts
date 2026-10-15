@@ -16,8 +16,9 @@
 // The seed: Vera (u-vera, person p-002, owner of #auth-migration) shares her
 // Auth Migration work into `social:ch:auth-migration` — one active grant, and
 // one she has since stopped whose history grant keeps what was shared before
-// as `historical`. Theo and Mia, members of that channel, see both; Sana, who
-// is not, sees nothing of it.
+// as `historical`. Sienna, who decides the cutover order, shares the blocked
+// cutover runbook story there too. Theo and Mia, members of that channel, see
+// them; Sana, who is not, sees nothing of it.
 
 import type { WorkHistoryGrant, WorkSharingGrant } from '@connorhoehnslalom/realtime-modules/work-graph';
 import { WORK_GRAPH_SCHEMA_VERSION } from '@connorhoehnslalom/realtime-modules/work-graph';
@@ -66,7 +67,16 @@ function seed(): StoredWorkSharing[] {
     state: 'active', createdAt: clock.daysAgo(1), updatedAt: clock.daysAgo(1), expiresAt: historyExpiresAt, revision: 1,
     dayFrom: day(clock.daysAgo(1)), dayThrough: day(clock.nowIso()),
   };
+  // Sienna (u-release), who decides the escalated cutover order, shares the
+  // story waiting on her decision into the same channel (the Work demo story).
+  const deciding: WorkSharingGrant = {
+    schemaVersion: WORK_GRAPH_SCHEMA_VERSION, id: 'wsg-sienna-auth-cutover', organizationId: 'orgiq', ownerId: 'u-release',
+    audience: libraryAudience(AUTH_CHANNEL),
+    selection: { nodeIds: ['work:wi-auth-e2-s2'], edgeIds: [], disclosure: 'summary' },
+    state: 'active', createdAt: clock.hoursAgo(0.7), updatedAt: clock.hoursAgo(0.7), expiresAt, revision: 1,
+  };
   return [
+    { organizationId: 'orgiq', ownerId: 'u-release', grantId: deciding.id, kind: 'current', audience: AUTH_CHANNEL, grant: deciding },
     { organizationId: 'orgiq', ownerId: 'u-vera', grantId: active.id, kind: 'current', audience: AUTH_CHANNEL, grant: active },
     { organizationId: 'orgiq', ownerId: 'u-vera', grantId: stopped.id, kind: 'current', audience: AUTH_CHANNEL, grant: stopped },
     { organizationId: 'orgiq', ownerId: 'u-vera', grantId: history.id, kind: 'history', audience: AUTH_CHANNEL, grant: history },

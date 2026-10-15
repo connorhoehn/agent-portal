@@ -33,3 +33,30 @@ export function ownsRecord(rowUserId: string | null | undefined, userId: string 
   if (!rowUserId || !userId) return false;
   return rowUserId === userId || rowUserId === recordUserId(userId);
 }
+
+/** The chat sender a socket context stands for (the library's `resolveSender`). */
+export interface RecordOwnerSender { userId: string; displayName?: string; avatarUrl?: string; org?: string }
+
+/**
+ * The realtime chat service's sender for a socket: the library's default
+ * mapping (userId, displayName, avatarUrl, org straight off the auth context)
+ * with a clone standing as its persona. The chat gate compares this userId
+ * with the channel's membership rows and stamps it on what the socket sends,
+ * so a clone of Vera is inside #auth-migration and writes as Vera. The socket
+ * context itself — and so the live principal's epoch check — keeps the
+ * clone's id.
+ */
+export function recordOwnerSender(ctx: Record<string, unknown>): RecordOwnerSender | null {
+  const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
+  const userId = str(ctx['userId']);
+  if (!userId) return null;
+  const displayName = str(ctx['displayName']) ?? str(ctx['name']);
+  const avatarUrl = str(ctx['avatarUrl']) ?? str(ctx['picture']);
+  const org = str(ctx['org']);
+  return {
+    userId: recordUserId(userId),
+    ...(displayName ? { displayName } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
+    ...(org ? { org } : {}),
+  };
+}
