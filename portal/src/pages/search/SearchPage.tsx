@@ -415,7 +415,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
         railHeader={<RailNavList aria-label="Search types" currentStyle="tint" items={typeRows} data-testid="search-type-rail" />}
         rail={<>
           <RailSection title="Saved">
-            {savedRows.length?<RailNavList aria-label="Saved searches" currentStyle="tint" items={savedRows} />:<T className="text-xs text-text-tertiary">No saved searches yet.</T>}
+            {savedRows.length?<RailNavList aria-label="Saved searches" currentStyle="tint" items={savedRows} />:<T className="text-xs text-text-tertiary">None yet. Run a search, then Search actions (⋯) › Save search keeps it here.</T>}
           </RailSection>
           <RailSection title="Recent">
             {recentRows.length?<RailNavList aria-label="Recent conversations" currentStyle="tint" items={recentRows} />:<T className="text-xs text-text-tertiary">No conversations yet.</T>}
