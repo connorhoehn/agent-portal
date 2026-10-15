@@ -72,6 +72,7 @@ import { rehydrateMockNotifications } from '../lib/notification-store.js';
 import { rehydrateMockSocialChat } from '../lib/social-chat.js';
 import { getDemoState, resetDemoDirector, startDemoDirector, stopDemoDirector } from '../mock/demo-director.js';
 import { getDistillationDemoState, resetDistillationDemo, startDistillationDemo, stopDistillationDemo } from '../mock/distillation-demo.js';
+import { invalidateAll } from '../lib/gateway/authority-invalidation.js';
 
 export const mockControlRouter = Router();
 
@@ -111,6 +112,9 @@ function rehydrateAll(): void {
   for (const step of [rehydrateMockFleet, rehydrateIngestMocks, rehydrateMockNotifications, rehydrateMockSocialChat]) {
     try { step(); } catch { /* the fixture is pinned to `error`; its routes report it */ }
   }
+  // A world switch rewrites grants, rosters, memberships and rows at once: the
+  // gateway's cached verdicts cannot survive it (lib/gateway/authority-invalidation.ts).
+  invalidateAll('mock-world');
 }
 
 // Registered FIRST so the header below reaches every response, this plane's

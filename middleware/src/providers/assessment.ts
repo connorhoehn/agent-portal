@@ -24,6 +24,7 @@ import { NotFoundError } from '../lib/async-handler.js';
 import * as A from './assessment-aurora.js';
 import { sourceConfigured, readSourceTree, readSourcePage } from './document-source.js';
 import { assessmentRunInput, DECK_COMMANDS } from '../lib/assessment-run-input.js';
+import { invalidateChannel } from '../lib/gateway/authority-invalidation.js';
 
 // ─── Wire types (mirrors the source's ui/src/components/assessment/types.ts) ─
 
@@ -711,9 +712,11 @@ export async function patchTeam(
 }
 
 export async function deleteTeam(id: string): Promise<boolean> {
-  if (!config.mock.aurora) return A.deleteTeamRow(id);
   // One call, so a seventh team-keyed fixture can never be forgotten here.
-  return M.dropTeam(id);
+  const deleted = config.mock.aurora ? M.dropTeam(id) : await A.deleteTeamRow(id);
+  // The team page's discussion, cursors and lobby admit only an existing team.
+  if (deleted) invalidateChannel(`assessment:team:${id}`, 'assessment-team-deleted');
+  return deleted;
 }
 
 export async function resetAssessment(id: string): Promise<boolean> {

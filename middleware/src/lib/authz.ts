@@ -19,6 +19,7 @@ import {
   demoSession, demoFallbackAllowed, ssoAvailable, ADMIN_ROLE, DEFAULT_ROLE,
   type Tenant, type Role, type Session,
 } from './session.js';
+import { invalidateAll } from './gateway/authority-invalidation.js';
 
 const NAMESPACE = 'OrgIQ';
 const RESOURCE_ID = 'app';
@@ -448,4 +449,7 @@ export function readForRolesElseAction(readRoles: Role[], action: string) {
  */
 export function clearAuthzCache(): void {
   cache.clear();
+  // A policy edit can flip any decision: the gateway's verdicts go too, here
+  // and on every peer (lib/gateway/authority-invalidation.ts).
+  invalidateAll('cedar-policy');
 }

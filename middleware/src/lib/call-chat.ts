@@ -24,6 +24,7 @@ import { dmPageDescriptor } from './dm-page-references.js';
 import { huddleCallId } from './live-principal.js';
 import type { Session } from './session.js';
 import type { CallChatStateStore, CallChatState, CallChatMember } from './call-chat-state.js';
+import { invalidateChannel } from './gateway/authority-invalidation.js';
 
 export const CALL_CHAT_PREFIX = 'orgiq:huddle:';
 /** Also reserves malformed variants, so they cannot fall through tenant auth. */
@@ -172,6 +173,8 @@ export class CallChatRuntime implements CallLifecycleObserver {
     const control = this.controls.get(callId);
     if (!control) return;
     control.generation += 1;
+    // The seat is gone now: no cached verdict on the huddle may outlive it.
+    invalidateChannel(callChatChannel(callId), 'huddle-seat');
     if (clientId) {
       control.departed.add(clientId);
       control.seats.set(clientId, (control.seats.get(clientId) ?? 0) + 1);
@@ -194,6 +197,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
     if (!call?.participantClientIds.includes(clientId)) return;
     const control = this.control(callId); control.departed.delete(clientId); control.generation += 1;
     control.seats.set(clientId, (control.seats.get(clientId) ?? 0) + 1);
+    invalidateChannel(callChatChannel(callId), 'huddle-seat');
     const session = await resolveConnectedCallSession(this.opts.router, clientId);
     if (session) control.users.set(clientId, session.sub);
     // Explicit admission resets this person's floor even if a delayed old
@@ -223,6 +227,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
     const connections = await Promise.all(ids.map(id => resolveConnectedCallSession(this.opts.router, id)));
     if (userId && !ids.some((id, index) => !this.control(callId).departed.has(id)
       && connections[index]?.sub === userId)) await this.opts.state.leave(callId, userId);
+    invalidateChannel(callChatChannel(callId), 'huddle-seat');
     if (call?.participantClientIds.length) await this.broadcastMembers(callId);
   }
   async restored(callId: string, call: ActiveCallStateView) {
@@ -231,6 +236,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
   private async restoredCurrent(callId: string, call: ActiveCallStateView) {
     if (!huddleLobby(call.lobbyName)) return;
     this.check(callId); const control = this.control(callId); control.generation += 1;
+    invalidateChannel(callChatChannel(callId), 'huddle-seat');
     for (const id of call.participantClientIds) {
       control.departed.delete(id);
       const session = await resolveConnectedCallSession(this.opts.router, id); if (session) control.users.set(id, session.sub);
@@ -249,7 +255,10 @@ export class CallChatRuntime implements CallLifecycleObserver {
       this.control(callId).users.set(seat.clientId, seat.session.sub);
     }
     for (const [userId, member] of Object.entries(state.members)) {
-      if (member.active && !users.has(userId)) { this.fence(callId, generation); await this.opts.state.leave(callId, userId); }
+      if (member.active && !users.has(userId)) {
+        this.fence(callId, generation); await this.opts.state.leave(callId, userId);
+        invalidateChannel(callChatChannel(callId), 'huddle-seat');
+      }
     }
   }
   /** Initiative/work page references belong to OrgIQ huddles; an assessment huddle carries none. */
@@ -424,6 +433,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
   }
   async finish(callId: string, participantClientIds: string[] = []) {
     const control = this.control(callId); control.ended = true; control.generation += 1;
+    invalidateChannel(callChatChannel(callId), 'huddle-ended');
     for (const clientId of participantClientIds) {
       for (const channel of [callChatChannel(callId), `reactions:${callChatChannel(callId)}`]) {
         void Promise.resolve(this.opts.router.unsubscribeFromChannel?.(clientId, channel)).catch(() => undefined);

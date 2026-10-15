@@ -26,6 +26,10 @@ import { delegationState } from '../lib/access/delegation.js';
 import { findInitiative } from '../mock/initiatives.js';
 import { getUser, listUsers } from './identity.js';
 import type { AccessDirectory } from '../lib/access/types.js';
+import { invalidateAll, invalidateChannel } from '../lib/gateway/authority-invalidation.js';
+
+/** `access:req:<id>` (lib/access/thread.ts ACCESS_THREAD_PREFIX; not imported, that module imports this one). */
+const ACCESS_THREAD = 'access:req:';
 
 export type { AccessCatalogRow, AccessPolicyRow, AccessEventRow, AccessRequestRow, AccessStepRow, AccessReviewRow, AccessReviewItemRow, AccessDelegationRow };
 
@@ -150,6 +154,8 @@ export function casStep(
   if (!request || !['draft', 'submitted', 'pending'].includes(request.status)) return null;
   Object.assign(row, structuredClone(patch));
   appendEvents(requestId, actorId, events, at);
+  // An escalation changes who may decide the step, i.e. who reads the thread.
+  invalidateChannel(`${ACCESS_THREAD}${requestId}`, 'access-step');
   return structuredClone(row);
 }
 
@@ -169,6 +175,8 @@ export function insertDelegation(row: Omit<AccessDelegationRow, 'id'>, reason: s
   const stored: AccessDelegationRow = { ...structuredClone(row), id: nextId('dlg', rows.map((r) => r.id)) };
   rows.push(stored);
   appendDelegationEvent(stored.id, stored.delegatorId, 'delegated', reason, stored.createdAt);
+  // A delegation moves eligibility across every open request it touches.
+  invalidateAll('access-delegation');
   return structuredClone(stored);
 }
 
@@ -180,6 +188,7 @@ export function endDelegation(id: string, actorId: string, reason: string, at: s
   row.endedAt = at;
   row.endedBy = actorId;
   appendDelegationEvent(row.id, actorId, 'delegation-ended', reason, at);
+  invalidateAll('access-delegation');
   return structuredClone(row);
 }
 
@@ -189,6 +198,7 @@ export function insertRequest(request: AccessRequestRow, steps: readonly AccessS
   accessRequestsFixture.rows().push(structuredClone(request));
   accessStepsFixture.rows().push(...steps.map((s) => structuredClone(s)));
   appendEvents(request.id, actorId, events, request.submittedAt);
+  invalidateChannel(`${ACCESS_THREAD}${request.id}`, 'access-request');
 }
 
 /** Replace a request and its steps with a transition's result, and append its events. */
@@ -204,6 +214,8 @@ export function saveTransition(request: AccessRequestRow, steps: readonly Access
     if (j >= 0) all[j] = structuredClone(s);
   }
   appendEvents(request.id, actorId, events, at);
+  // A decision, withdrawal or close can end someone's read of the thread.
+  invalidateChannel(`${ACCESS_THREAD}${request.id}`, 'access-request');
 }
 
 /** One request row by id (a copy), or null. */
@@ -238,6 +250,7 @@ export function casRequest(
   if (when.warnedAtNull && row.expiryWarnedAt !== null) return null;
   Object.assign(row, structuredClone(patch));
   appendEvents(id, actorId, events, at);
+  invalidateChannel(`${ACCESS_THREAD}${id}`, 'access-request');
   return structuredClone(row);
 }
 
@@ -248,6 +261,8 @@ export function updateCatalogItem(id: string, patch: { defaultDuration?: AccessC
   if (!row) return null;
   if (patch.defaultDuration) row.defaultDuration = patch.defaultDuration;
   if (patch.sensitive !== undefined) row.sensitive = patch.sensitive;
+  // The item's sensitivity shapes every open request's decider chain.
+  invalidateAll('access-catalog');
   return structuredClone(row);
 }
 

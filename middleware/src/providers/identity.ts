@@ -27,6 +27,7 @@ import {
 } from '../mock/identity-clones.js';
 import { randomBytes } from 'node:crypto';
 import { clock } from '../mock/core/index.js';
+import { invalidateForUser } from '../lib/gateway/authority-invalidation.js';
 
 export interface TenantInfo {
   id: string;
@@ -493,6 +494,9 @@ export function onDirectoryChange(listener: (userId: string) => void): () => voi
   return () => { directoryListeners.delete(listener); };
 }
 function directoryChanged(userId: string): void {
+  // The gateway's verdict cache first (lib/gateway/authority-invalidation.ts):
+  // every grant write, epoch bump and clone removal lands here after commit.
+  invalidateForUser(userId, 'directory');
   for (const listener of directoryListeners) {
     try { listener(userId); } catch { /* a listener never fails the write */ }
   }

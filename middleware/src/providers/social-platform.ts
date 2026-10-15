@@ -41,6 +41,7 @@ import {
   socialTeamMembersFixture, socialTeamsFixture,
   type SocialCallLogRow, type SocialRecordingRow, type SocialRoomRow, type SocialTeamMemberRow, type SocialTeamRow,
 } from '../mock/social-platform.js';
+import { invalidateAll, invalidateForUser } from '../lib/gateway/authority-invalidation.js';
 
 export type { SocialCallLogRow, SocialRecordingRow, SocialRoomRow, SocialTeamRow } from '../mock/social-platform.js';
 
@@ -244,7 +245,7 @@ export function isSocialTeamMember(teamSlug: string, userId: string): boolean {
 }
 
 /** Tests only. */
-export function resetSocialTeamMirror(): void { teamRosterMirror.clear(); teamSlugById.clear(); teamRosterGeneration.clear(); }
+export function resetSocialTeamMirror(): void { teamRosterMirror.clear(); teamSlugById.clear(); teamRosterGeneration.clear(); invalidateAll('team-mirror-reset'); }
 
 // ── Teams ───────────────────────────────────────────────────────────────────
 
@@ -292,7 +293,12 @@ export async function getTeam(session: Session, teamId: string): Promise<SocialT
     const members = body.members ?? [];
     if (rosterGeneration(teamId) === generation) {
       mirrorTeam(body.team.teamId, body.team.slug);
-      teamRosterMirror.set(body.team.slug, new Set(members.map((m) => m.userId)));
+      const before = teamRosterMirror.get(body.team.slug);
+      const after = new Set(members.map((m) => m.userId));
+      teamRosterMirror.set(body.team.slug, after);
+      // A fresher roster can drop someone platform-api removed elsewhere: their
+      // cached team-channel verdicts go now (lib/gateway/authority-invalidation.ts).
+      for (const userId of before ?? []) if (!after.has(userId)) invalidateForUser(userId, 'team-roster');
     }
     const mine = members.find((m) => m.userId === session.sub);
     return {
@@ -379,6 +385,7 @@ export async function addTeamMember(session: Session, teamId: string, userId: st
     advanceRosterGeneration(teamId);
     const slug = teamSlugById.get(teamId);
     if (slug) mirrorAdd(slug, body.member.userId);
+    invalidateForUser(body.member.userId, 'team-roster');
     return { userId: body.member.userId, role: body.member.role, addedAt: body.member.addedAt };
   }
   if (backend === 'none') throw new AppError(503, 'teams need platform-api (none configured)');
@@ -390,6 +397,7 @@ export async function addTeamMember(session: Session, teamId: string, userId: st
   if (existing) return { userId, role: existing.role, addedAt: existing.addedAt };
   const row: SocialTeamMemberRow = { teamId, userId, role: 'member', favorite: false, addedAt: clock.nowIso(), addedBy: session.sub };
   members.push(row);
+  invalidateForUser(userId, 'team-roster');
   return { userId, role: row.role, addedAt: row.addedAt };
 }
 
@@ -405,12 +413,14 @@ export async function removeTeamMember(session: Session, teamId: string, userId:
     advanceRosterGeneration(teamId);
     const slug = teamSlugById.get(teamId) ?? detail.team.slug;
     if (slug) teamRosterMirror.get(slug)?.delete(userId);
+    invalidateForUser(userId, 'team-roster');
     return;
   }
   if (backend === 'none') throw new AppError(503, 'teams need platform-api (none configured)');
   const members = socialTeamMembersFixture.rows();
   const i = members.findIndex((m) => m.teamId === teamId && m.userId === userId);
   if (i >= 0) members.splice(i, 1);
+  invalidateForUser(userId, 'team-roster');
 }
 
 // ── Recordings ──────────────────────────────────────────────────────────────
