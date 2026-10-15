@@ -13,8 +13,8 @@ import {
 
 const me = { data: { sub: 'u-theo', name: 'Theo Chang' } };
 
-test('signed-in label carries the name and the account id, once', () => {
-  assert.equal(signedInLabel({ sub: 'u-theo', name: 'Theo Chang' }), 'Theo Chang (u-theo)');
+test('signed-in label prints the name, never the account id', () => {
+  assert.equal(signedInLabel({ sub: 'u-theo-clone-ab12cd34', name: 'Theo Chang' }), 'Theo Chang');
   assert.equal(signedInLabel({ sub: 'demo-user', name: 'demo-user' }), 'demo-user');
   assert.equal(signedInLabel({ sub: 'u-x', name: '  ' }), 'u-x');
 });

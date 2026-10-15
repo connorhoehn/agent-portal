@@ -282,12 +282,26 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   // rows (budgets, blocked work, owners, sprints) is computed from the same
   // providers the pages read, with no agent runtime involved. A question no
   // intent matches falls through to the agent path below, unchanged.
-  if (principal && localAnswerEligible(agentId, principal, { presentation: !!presentation, structured: Object.keys(structuredInput).length > 0 })
-    && matchIntent(rawUserMessage, scope, true)) {
+  const eligible = !!principal && localAnswerEligible(agentId, principal, { presentation: !!presentation, structured: Object.keys(structuredInput).length > 0 });
+  if (principal && eligible && matchIntent(rawUserMessage, scope, true)) {
     const { answerLocally } = await import('../lib/local-answers/index.js');
     const local = await answerLocally({ question: rawUserMessage, scope, session: principal });
     if (local) {
       await streamLocalAnswer(stream, local, { question: rawUserMessage, scope, stance, sessionId: canonicalSessionId, actorId });
+      return;
+    }
+  }
+  // Then the search projection's answers (lib/search-index/answers.ts): experts
+  // by skill, team members, collaborators, who decided, open decisions, my open
+  // work, an initiative's people, what changed on it — computed from the index
+  // and cited, never a model's guess. Anything else goes to the agent.
+  if (principal && eligible) {
+    // An index that cannot be read is no answer: the question goes to the agent.
+    const indexed = await import('../lib/search-index/answers.js')
+      .then(({ answerFromIndex, mayAnswerFromIndex }) => mayAnswerFromIndex(rawUserMessage) ? answerFromIndex({ question: rawUserMessage, session: principal }) : null)
+      .catch(() => null);
+    if (indexed) {
+      await streamLocalAnswer(stream, indexed, { question: rawUserMessage, scope, stance, sessionId: canonicalSessionId, actorId });
       return;
     }
   }
@@ -564,7 +578,9 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
  * with its evidence; no agent run or invocation is recorded, because no agent
  * ran.
  */
-async function streamLocalAnswer(stream: AgentStream, local: LocalAnswer, ctx: {
+/** A local answer or an index answer (lib/search-index/answers.ts): the same stream shape. */
+type StreamedAnswer = Omit<LocalAnswer, 'intent' | 'records'> & { intent: string; records: ReadonlyArray<{ type: string; id: string }> };
+async function streamLocalAnswer(stream: AgentStream, local: StreamedAnswer, ctx: {
   question: string; scope: AnswerScope | null; stance: AnswerStance | null; sessionId: string; actorId?: string | undefined;
 }): Promise<void> {
   const step = `local data: ${local.intent}`;

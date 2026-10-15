@@ -8,6 +8,7 @@ import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { driftRouter } from './drift.js';
 import { qualityRouter } from './quality.js';
 import { prWatchHealth } from '../lib/pr-watch-poller.js';
+import { userNameFor } from '../lib/user-names.js';
 
 export const observabilityRouter = Router();
 
@@ -53,6 +54,10 @@ observabilityRouter.get('/pr-watch-health', (_req, res) => {
 
 // ── Authorization decision audit log ─────────────────────────────────────────
 
+/** The people behind an event's account ids (`subName`, `actorName`; null when unknown). */
+const withNames = <E extends { sub: string; actor?: string }>(e: E) =>
+  ({ ...e, ...(userNameFor(e.sub) ? { subName: userNameFor(e.sub)! } : {}), ...(e.actor && userNameFor(e.actor) ? { actorName: userNameFor(e.actor)! } : {}) });
+
 observabilityRouter.get('/authz', (req, res) => {
   const q: AuthzQuery = {};
   const decision = req.query['decision'] as string | undefined;
@@ -65,16 +70,17 @@ observabilityRouter.get('/authz', (req, res) => {
   if (Number.isFinite(sinceMin) && sinceMin > 0) q.sinceMs = sinceMin * 60_000;
   const limit = parseInt((req.query['limit'] as string) ?? '200', 10);
   if (Number.isFinite(limit) && limit > 0) q.limit = Math.min(limit, 1000);
-  res.json({ events: recentAuthzEvents(q) });
+  // `subName`/`actorName`: the people behind the account ids (null when unknown).
+  res.json({ events: recentAuthzEvents(q).map(withNames) });
 });
 
 observabilityRouter.get('/authz/stream', (req, res) => {
   initSSE(res);
   // Send the recent buffer immediately so a fresh subscriber catches up.
   for (const ev of recentAuthzEvents({ limit: 50 }).reverse()) {
-    writeSSE(res, { type: 'authz', ...ev });
+    writeSSE(res, { type: 'authz', ...withNames(ev) });
   }
-  const unsubscribe = subscribeAuthz(ev => writeSSE(res, { type: 'authz', ...ev }));
+  const unsubscribe = subscribeAuthz(ev => writeSSE(res, { type: 'authz', ...withNames(ev) }));
   req.on('close', () => { unsubscribe(); endSSE(res); });
 });
 

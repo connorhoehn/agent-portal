@@ -37,6 +37,7 @@
 // Aurora path yet and stays mock-first, like promotions.ts and
 // design-reviews.ts. With config.mock.aurora on, every read is the fixture.
 
+import { noteSearchWrite, noteSearchWriteSoon } from '../lib/search-index/writes.js';
 import { config } from '../config.js';
 import { NotFoundError, AppError, ValidationError } from '../lib/async-handler.js';
 import { clock, countBy, groupBy, sumBy, utcDayStartMs, DAY_MS, fixtureRegistry } from '../mock/core/index.js';
@@ -836,6 +837,7 @@ export function simulateIngest(nowMs: number = clock.now().getTime()): Observati
   // An L0 write is a tier change: the realtime publisher re-reads /levels and
   // pushes it on orgiq:distill:levels (lib/distillation-realtime.ts).
   if (minted.length > 0) distillationEvents.emit('levels');
+  noteSearchWriteSoon(...minted.map((o) => ({ type: 'knowledge' as const, id: o.id })));
   return minted;
 }
 
@@ -854,6 +856,7 @@ export function recordObservation(obs: Observation): Observation {
   const writer = writerRows().find((w) => w.session_id === obs.session_id);
   if (writer) recordWriterWrite(writer, obs.created_at);
   distillationEvents.emit('levels');
+  noteSearchWriteSoon({ type: 'knowledge', id: obs.id });
   return obs;
 }
 
@@ -1149,6 +1152,7 @@ function runL1Compaction(jobId: string, startedAt: string, batch?: ReadonlySet<s
       updated_at: startedAt,
     };
     clusterRows().push(cluster);
+    noteSearchWriteSoon({ type: 'knowledge', id: cluster.id });
   }
 }
 
@@ -1323,6 +1327,7 @@ function runL2Compaction(jobId: string, startedAt: string, batch?: ReadonlySet<s
         updated_at: startedAt,
       };
       artifactRows().push(artifact);
+      noteSearchWriteSoon({ type: 'knowledge', id: artifact.id });
     }
   }
 }
@@ -2120,6 +2125,7 @@ export async function publishArtifact(
   row.updated_at = clock.nowIso();
   distillationEvents.emit('artifacts');
   distillationEvents.emit('levels');
+  await noteSearchWrite({ type: 'knowledge', id: row.id });
   return withLink(row);
 }
 

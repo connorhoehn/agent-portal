@@ -145,9 +145,9 @@ function UsersPage() {
       header: 'User',
       render: (u) => (
         <Inline gap="sm" align="center" wrap={false}>
-          <T as="span" size="sm" weight="semibold">{u.displayName}</T>
+          {/* The account id rides the tooltip and the open user's page, not the row. */}
+          <T as="span" size="sm" weight="semibold" title={u.id}>{u.displayName}</T>
           {session?.sub === u.id && <Chip size="xs">you</Chip>}
-          <T as="span" size="xs" tone="tertiary" className="font-mono">{u.id}</T>
         </Inline>
       ),
     },
@@ -159,7 +159,7 @@ function UsersPage() {
     {
       key: 'persona',
       header: 'Persona',
-      render: (u) => <T as="span" size="sm" tone="secondary" className="font-mono">{u.personId ?? '—'}</T>,
+      render: (u) => <T as="span" size="sm" tone="secondary" title={u.personId ?? undefined}>{u.personId ? 'Team profile linked' : 'Not linked'}</T>,
     },
     {
       key: 'grants',

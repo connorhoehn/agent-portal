@@ -27,7 +27,7 @@ export function localAnswersEnabled(env: NodeJS.ProcessEnv = process.env): boole
 const IMPERATIVE_RE = /^\s*(?:please\s+)?(?:create|add|move|assign|reassign|change|update|edit|delete|remove|dispatch|start|run|approve|set|allocate|grant|cancel|close|reopen|draft|write)\b/i;
 
 const MONEY_RE = /\b(?:budgets?|allocat(?:ion|ions|ed)|over\s*spen[dt]|overspen(?:d|t|ding)|unbudgeted|unallocated|maintenance floor)\b/i;
-const MONEY_SHAPE_RE = /\b(?:over|under|near(?:ly)?|close to|within|exceed(?:s|ed|ing)?|above|blown|burn(?:ed|t|ing)?)\b|\bunbudgeted\b|\bno (?:budget|allocation)\b|\bmaintenance\b/i;
+const MONEY_SHAPE_RE = /\b(?:over|overruns?|under|near(?:ly)?|close to|within|exceed(?:s|ed|ing)?|above|blown|burn(?:ed|t|ing)?)\b|\bunbudgeted\b|\bno (?:budget|allocation)\b|\bmaintenance\b/i;
 const SPEND_RE = /\bspen(?:d|t|ding)\b|\bburn(?:ed|t)?\b|\bcost (?:so far|this month|mtd)\b/i;
 const SPEND_SHAPE_RE = /\bhow much\b|\bwhat (?:did|has|is)\b|\btotal\b|\bthis month\b|\bmtd\b|\bso far\b|\bmost\b|\btop\b/i;
 const PROGRAM_NOUN_RE = /\b(?:initiatives?|projects?|programs?|programmes?)\b/i;

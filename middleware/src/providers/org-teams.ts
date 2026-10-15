@@ -72,3 +72,38 @@ export async function listTeamsForPerson(personId: string): Promise<OrgTeam[]> {
     role: r['role'] == null ? null : String(r['role']), members: byTeam.get(String(r['id'])) ?? [],
   }));
 }
+
+/** One org team with its member people, for the search projection (lib/search-index). */
+export interface OrgTeamRoster { id: string; name: string; parentId: string | null; members: Array<{ personId: string; name: string }> }
+
+/**
+ * Every org-graph team with its members (capped per team). The search
+ * projection's team docs (docs/user-search-goal.md U4) — "who is on the
+ * platform team" — read this; membership is the same source as
+ * `listTeamsForPerson`: `team_memberships`, or the people fixture's
+ * `department` under MOCK_AURORA.
+ */
+export async function listOrgTeams(): Promise<OrgTeamRoster[]> {
+  if (config.mock.aurora) {
+    const people = graphPeople.rows();
+    return graphTeams.rows().map(team => ({
+      id: team.id, name: team.name, parentId: team.parentId,
+      members: people.filter(p => p.department === team.name).slice(0, MEMBER_CAP).map(p => ({ personId: p.id, name: p.name })),
+    }));
+  }
+  const rows = await exec(
+    `SELECT t.id, t.name, t.parent_id, p.id AS person_id, p.name AS person_name
+       FROM teams t
+       LEFT JOIN team_memberships tm ON tm.team_id = t.id
+       LEFT JOIN people p ON p.id = tm.person_id
+      ORDER BY t.name, p.name`,
+  );
+  const teams = new Map<string, OrgTeamRoster>();
+  for (const row of rows) {
+    const id = String(row['id']);
+    let team = teams.get(id);
+    if (!team) { team = { id, name: String(row['name']), parentId: row['parent_id'] == null ? null : String(row['parent_id']), members: [] }; teams.set(id, team); }
+    if (row['person_id'] != null && team.members.length < MEMBER_CAP) team.members.push({ personId: String(row['person_id']), name: String(row['person_name']) });
+  }
+  return [...teams.values()];
+}

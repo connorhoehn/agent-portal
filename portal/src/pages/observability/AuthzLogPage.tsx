@@ -30,6 +30,9 @@ interface AuthzEvent {
   decision: 'ALLOW' | 'DENY';
   action: string;
   sub: string;
+  /** The person behind `sub`, when the server knows them. */
+  subName?: string | null;
+  actorName?: string | null;
   role: string;
   tenant?: string;
   /** Real identity when the event was produced under masquerade. */
@@ -212,10 +215,10 @@ function AuthzLogPage() {
                 </TableTd>
                 <TableTd>
                   <Inline gap="xs" align="baseline" wrap={false}>
-                    <T className="font-mono">{e.sub}</T>
+                    <T title={e.sub}>{e.subName ?? e.sub}</T>
                     {e.actor && (
-                      <T size="xs" title={`Masquerade — real identity: ${e.actor}`} className="text-warning">
-                        via {e.actor}
+                      <T size="xs" title={`Masquerade — real identity: ${e.actorName ?? e.actor}`} className="text-warning">
+                        via {e.actorName ?? e.actor}
                       </T>
                     )}
                   </Inline>

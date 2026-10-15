@@ -72,11 +72,11 @@ export interface ProfileModel {
 
 export const UNLINKED_TEXT = 'Not connected to a team profile';
 
-/** "Theo Chang (u-theo)" — the name, plus the account id when it adds anything. */
+/** "Theo Chang" — the name; the account id only when there is no name to print.
+ *  A dev:mock clone's `u-theo-clone-ab12cd34` is not something a peer should read. */
 export function signedInLabel(me: SessionMe): string {
   const name = me.name?.trim();
-  if (!name || name === me.sub) return me.sub;
-  return `${name} (${me.sub})`;
+  return name || me.sub;
 }
 
 export function buildProfile(input: ProfileInput): ProfileModel {

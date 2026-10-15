@@ -25,6 +25,8 @@ export interface PipelineRun {
   tenant: string;
   status: PipelineRunStatus;
   triggeredBy: string | null;
+  /** The person behind `triggeredBy`, when it is a known account. */
+  triggeredByName?: string;
   triggerType: string;
   startedAt: string | null;
   finishedAt: string | null;

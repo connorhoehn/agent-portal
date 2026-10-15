@@ -69,7 +69,7 @@ export function PipelineRunSummary({ run }: { run: PipelineRun }) {
           { label: 'Workspace', value: run.context.tenant },
           { label: 'Source', value: `${sourceLabel(run.context.table)} ${run.context.id}`, mono: true },
           { label: 'Source status', value: run.context.sourceStatus.replace(/_/g, ' ') },
-          { label: 'Triggered by', value: run.triggeredBy ?? 'not recorded', muted: run.triggeredBy == null },
+          { label: 'Triggered by', value: run.triggeredByName ?? run.triggeredBy ?? 'not recorded', muted: run.triggeredBy == null },
           { label: 'Cost', value: run.costUsd != null ? usd(run.costUsd, { precision: 4 }) : 'not recorded', muted: run.costUsd == null },
           ...(run.context.aguiRunId ? [{ label: 'AG-UI run', value: run.context.aguiRunId, mono: true }] : []),
           {

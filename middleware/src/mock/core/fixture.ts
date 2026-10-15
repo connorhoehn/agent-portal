@@ -125,6 +125,7 @@ class Registry implements MockFixtureRegistry {
   resetAll(scenario?: ScenarioName): void {
     if (scenario) this.active = scenario;
     for (const fixture of this.fixtures.values()) fixture.reset();
+    worldGeneration++;
   }
 
   scenario(): ScenarioName {
@@ -135,6 +136,16 @@ class Registry implements MockFixtureRegistry {
     return this.fixtures.size;
   }
 }
+
+/**
+ * Bumped whenever the SHARED world is rebuilt from factories (a fixture reset,
+ * a pin, a scenario switch, `resetAll`). A projection kept beside the fixtures
+ * (lib/search-index) keys its shared copy on it, so it never answers from a
+ * world that was put back. Request scopes keep their own rows and are keyed by
+ * their scope instead.
+ */
+let worldGeneration = 0;
+export function mockWorldGeneration(): number { return worldGeneration; }
 
 /** The registry every fixture in this repo registers with. */
 export const fixtureRegistry: MockFixtureRegistry = new Registry();
@@ -243,6 +254,7 @@ export function defineFixture<Row>(spec: FixtureSpec<Row>): Fixture<Row> {
     reset(scenario?: ScenarioName): void {
       if (scenario) live.delete(scenario);
       else live.clear();
+      worldGeneration++;
     },
   };
 

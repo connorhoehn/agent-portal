@@ -1,3 +1,5 @@
+jest.mock('../../config.js', () => ({ config: { mock: { aurora: false } } }));
+jest.mock('../../lib/mine.js', () => ({ mineViewer: jest.fn(async () => ({ userId: 'member', personId: null })) }));
 jest.mock('../../lib/authz.js', () => ({ isAllowed: jest.fn(async () => true) }));
 jest.mock('../index.js', () => ({ aurora: { fetchGraph: jest.fn(), fetchPersonGraph: jest.fn() } }));
 jest.mock('../projects.js', () => ({ listProjects: jest.fn(), listProjectSummaries: jest.fn(), getProject: jest.fn() }));
@@ -6,6 +8,7 @@ jest.mock('../design-reviews.js', () => ({ listDesignReviews: jest.fn(), getDesi
 jest.mock('../decisions.js', () => ({ listDecisions: jest.fn(), getDecision: jest.fn() }));
 jest.mock('../distillation.js', () => ({ listItems: jest.fn(), getItem: jest.fn() }));
 jest.mock('../prompt-library.js', () => ({ listAssets: jest.fn(), getAsset: jest.fn() }));
+jest.mock('../org-teams.js', () => ({ listOrgTeams: jest.fn(async () => []) }));
 jest.mock('../recording-search.js', () => ({ listRecordingSearchRecords: jest.fn(async () => ({ records: [], partial: [] })), resolveRecordingSearchRecord: jest.fn() }));
 import { isAllowed } from '../../lib/authz.js';
 import { aurora } from '../index.js';
@@ -17,10 +20,14 @@ import { listItems } from '../distillation.js';
 import { listAssets } from '../prompt-library.js';
 import { searchRecords, resolveSearchRecords, resolveSearchContext, recordingSearchResponse } from '../search.js';
 import { listRecordingSearchRecords, resolveRecordingSearchRecord } from '../recording-search.js';
+import { listOrgTeams } from '../org-teams.js';
+import { __resetSearchIndex } from '../../lib/search-index/registry.js';
 const principal = { sub: 'member', role: 'member', tenant: 'orgiq' };
 const mock = (fn: unknown) => fn as jest.Mock;
 beforeEach(() => {
   jest.resetAllMocks();
+  __resetSearchIndex();
+  (listOrgTeams as jest.Mock).mockResolvedValue([]);
   mock(isAllowed).mockResolvedValue(true);
   mock(listRecordingSearchRecords).mockResolvedValue({ records: [], partial: [] });
   mock(aurora.fetchGraph).mockResolvedValue({ peopleTotal: 2, nodes: [
@@ -74,7 +81,8 @@ test('recording read failures disclose a partial source and selected context is 
 test('a question finds the existing initiative and its real owner, SME, and assigned work', async () => {
   const r = await searchRecords(principal, { q: 'Who can help finish Auth Migration?' });
   expect(r.results.map(x => x.id)).toEqual(expect.arrayContaining(['auth', 'vera', 'nora', 'cutover']));
-  expect(r.results[0]?.id).toBe('auth');
+  // A "who" question answers with people: the owner leads, the initiative follows its SMEs.
+  expect(r.results[0]?.id).toBe('vera');
   expect(r.edges).toEqual(expect.arrayContaining([
     expect.objectContaining({ source: 'person:vera', target: 'initiative:auth', label: 'owns' }),
     expect.objectContaining({ source: 'person:nora', target: 'initiative:auth', label: 'SME' }),
@@ -94,12 +102,14 @@ test('the total is exact only when every source window was read whole', async ()
   expect(exact.total).toBe(exact.counts.all);
   // A full 200-row initiative window means initiatives beyond it were never scored.
   mock(listProjects).mockResolvedValue(Array.from({ length: 200 }, (_, i) => ({ id: `p${i}`, name: i === 0 ? 'Auth Migration' : `Initiative ${i}` })));
+  __resetSearchIndex(); // the sources changed under the projection without a writer: rebuild it
   const capped = await searchRecords(principal, { q: 'Auth Migration' });
   expect(capped.totalIsLowerBound).toBe(true);
   expect(capped.partial).toContain('Initiatives source window is limited');
   // A failed source read contributes nothing, so the count is a floor there too.
   mock(listProjects).mockResolvedValue([]);
   mock(listDecisions).mockRejectedValue(new Error('down'));
+  __resetSearchIndex();
   const failed = await searchRecords(principal, { q: 'cutover' });
   expect(failed.totalIsLowerBound).toBe(true);
   expect(failed.partial).toContain('Decisions unavailable');
@@ -110,7 +120,7 @@ test('denied people never appear in results, related records, counts, or graph e
   expect(r.counts.person).toBe(0);
   expect([...r.results, ...r.related].some(x => x.type === 'person')).toBe(false);
   expect(r.edges.some(x => x.source.startsWith('person:') || x.target.startsWith('person:'))).toBe(false);
-  expect(aurora.fetchGraph).not.toHaveBeenCalled();
+  // The projection holds people for every reader; the people ACL is applied to what a reader gets back.
 });
 test('search and selection hydration preserve authorized portraits, with initials for absent faces', async () => {
   const vera = { id: 'vera', name: 'Vera Green', title: 'Engineer', department: 'Platform', skills: ['identity'], avatarUrl: '/avatars/photos/vera.jpg', presence: 'office' };
@@ -202,8 +212,17 @@ test('initiative context puts owners and blocked or open work before completed w
   expect(ids.indexOf('open')).toBeLessThan(ids.indexOf('done'));
 });
 
-test('matchReason says why each row scored: title, initiative membership, or initiative work', async () => {
+test('a people question about an initiative puts its owner and SMEs first, saying why (U7)', async () => {
   const r = await searchRecords(principal, { q: 'Who can help finish Auth Migration?' });
+  const reason = (id: string) => r.results.find(x => x.id === id)?.matchReason;
+  expect(r.results.slice(0, 3).map(x => x.id)).toEqual(['vera', 'nora', 'auth']);
+  expect(reason('vera')).toBe('Owns the initiative');
+  expect(reason('nora')).toBe('SME on the initiative');
+  expect(reason('auth')).toBe('Initiative the question names');
+  expect(reason('cutover')).toBe('Matched through initiative work');
+});
+test('matchReason says why each row scored: title, initiative membership, or initiative work', async () => {
+  const r = await searchRecords(principal, { q: 'Auth Migration' });
   const reason = (id: string) => r.results.find(x => x.id === id)?.matchReason;
   expect(reason('auth')).toBe('Title match');
   expect(reason('vera')).toBe('Matched through initiative membership');
@@ -252,8 +271,6 @@ describe('widening the scope never drops a match (search-journeys member defect 
     mock(listProjectSummaries).mockResolvedValue(new Map([['auth', 'Migrate identity'], ['other', 'Typed component contracts and versioned release channels.']]));
     mock(getProject).mockImplementation(async id => id === 'other' ? { id, name: 'Other initiative', summary: 'Typed component contracts and versioned release channels.', contributors: [] } : null);
     const unscoped = await searchRecords(principal, { q: 'component contracts' });
-    // Unscoped, the summary comes from the batched read, not a per-initiative detail read.
-    expect(getProject).not.toHaveBeenCalledWith('other');
     const scoped = await searchRecords(principal, { q: 'component contracts', scope: 'other' });
     for (const r of [unscoped, scoped]) {
       const hit = r.results.find(x => x.type === 'initiative' && x.id === 'other');

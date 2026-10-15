@@ -4,6 +4,7 @@
 // Falls back to rich in-memory mock data when config.mock.aurora === true so
 // the portal is fully navigable in offline / local dev without Aurora.
 
+import { noteSearchWrite } from '../lib/search-index/writes.js';
 import { randomUUID } from 'node:crypto';
 import { displayNameForSubject, getUser } from './identity.js';
 import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
@@ -1154,7 +1155,9 @@ export async function unlinkDecisionFromWorkItem(workItemId: string, decisionId:
 
 export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
   if (!config.mock.aurora) {
-    return dbCreateWorkItem(data);
+    const created = await dbCreateWorkItem(data);
+    await noteSearchWrite({ type: 'work', id: created.id });
+    return created;
   }
   // Mock: append a real row to the fixture, so the create shows up in the next
   // GET and `POST /api/__mock/reset` takes it away again. The id is the
@@ -1202,6 +1205,7 @@ export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkIte
     childDoneCount: 0,
   };
   mockWorkItems().push(item);
+  await noteSearchWrite({ type: 'work', id: item.id });
   return item;
 }
 
@@ -1217,7 +1221,9 @@ export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkIte
  */
 export async function updateWorkItem(id: string, patch: UpdateWorkItemPatch): Promise<WorkItem | null> {
   if (!config.mock.aurora) {
-    return dbUpdateWorkItem(id, patch);
+    const updated = await dbUpdateWorkItem(id, patch);
+    if (updated) await noteSearchWrite({ type: 'work', id });
+    return updated;
   }
   const item = mockWorkItems().find((i) => i.id === id);
   if (!item) return null;
@@ -1236,6 +1242,7 @@ export async function updateWorkItem(id: string, patch: UpdateWorkItemPatch): Pr
   if (patch.prStatus !== undefined) item.prStatus = patch.prStatus;
   item.updatedAt = clock.nowIso();
   if (patch.status === 'done') item.completedAt = item.completedAt ?? item.updatedAt;
+  await noteSearchWrite({ type: 'work', id });
   return { ...item };
 }
 

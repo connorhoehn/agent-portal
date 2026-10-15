@@ -12,6 +12,12 @@ describe('Observability demo answers', () => {
   it('does not mistake author or authenticated for an auth question', () => {
     expect(selectMockResponse('What did the author say?').response).not.toContain('Auth Middleware');
     expect(selectMockResponse('authenticated access').response).not.toContain('Auth Middleware');
-    expect(selectMockResponse('Find authentication migration decisions').response).toContain('Auth Middleware');
+    // The auth row that answered this cited decisions that exist nowhere in the seed (docs/user-search-goal.md U10).
+    expect(selectMockResponse('Find authentication migration decisions').response).toMatch(/^I can't answer that here/);
+  });
+  it('routes on the question, never on words in the attached search records', () => {
+    const withContext = '<search_context>\n[1] {"title":"Observability Platform"}\n</search_context>\n\nwho knows Kubernetes';
+    expect(selectMockResponse(withContext).response).toMatch(/^I can't answer that here/);
+    expect(selectMockResponse(withContext).response).not.toContain('Theo Chang');
   });
 });

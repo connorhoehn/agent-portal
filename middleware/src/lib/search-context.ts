@@ -1,7 +1,7 @@
 import { ValidationError } from './async-handler.js';
 import type { SearchRef, SearchRecord, SearchEdge } from '../providers/search.js';
 
-const TYPES = new Set(['person', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording']);
+const TYPES = new Set(['person', 'team', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording']);
 /** Validate before opening the stream; client titles/content never become evidence. */
 export function parseSearchSelection(selection: unknown): SearchRef[] {
   if (selection == null) return [];

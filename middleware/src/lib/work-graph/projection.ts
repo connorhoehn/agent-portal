@@ -263,7 +263,7 @@ export function projectWorkGraph(input: ProjectionInput): Projection {
       badge: words(item.status),
       ...(lines.length ? { lines } : {}),
       ...(item.assigneeId && item.assigneeName && ID.test(item.assigneeId) ? { participants: [{ id: item.assigneeId, label: clip(item.assigneeName) }] } : {}),
-      footer: { label: clip(`Work item · ${item.id}`) },
+      footer: { label: clip(`Work item · ${initiatives.get(item.projectId)?.name ?? 'initiative'}`) },
     });
   }
 
@@ -393,7 +393,7 @@ export function projectWorkGraph(input: ProjectionInput): Projection {
       nodeId: id, summary: clip(`Sprint · ${sprint.startsOn} to ${sprint.endsOn}`), badge: words(sprint.status),
       lines,
       ...(sprint.stewardPersonId && sprint.stewardName && ID.test(sprint.stewardPersonId) ? { participants: [{ id: sprint.stewardPersonId, label: clip(sprint.stewardName) }] } : {}),
-      footer: { label: clip(`Sprint · ${sprint.id}`) },
+      footer: { label: clip(`Sprint · ${initiatives.get(sprint.orgProjectId)?.name ?? 'initiative'}`) },
     });
     const edgeId = edgeIdFor('works-on', id, nodeIdFor.initiative(sprint.orgProjectId));
     edges.set(edgeId, { id: edgeId, fromId: id, toId: nodeIdFor.initiative(sprint.orgProjectId), relation: 'works-on', status: nodes.get(id)!.status, disclosure: 'details', startedAt: started, updatedAt: updated, ...(ended ? { endedAt: ended } : {}), capabilities: [] });
@@ -437,7 +437,7 @@ export function projectWorkGraph(input: ProjectionInput): Projection {
       lines: [decision.summary ? clip(decision.summary) : null, decision.requiredRole ? `Needs · ${decision.requiredRole}` : null].filter((l): l is string => !!l),
       ...(decision.participants.length ? { participants: decision.participants.filter(p => ID.test(p.personId)).slice(0, 5).map(p => ({ id: p.personId, label: clip(p.name) })) } : {}),
       ...(workNode && workItem ? { workItem: { nodeId: workNode, label: clip(workItem.title || workItem.id) } } : {}),
-      footer: { label: clip(`Decision · ${decision.id}`) },
+      footer: { label: clip(decision.projectId && initiatives.get(decision.projectId)?.name ? `Decision · ${initiatives.get(decision.projectId)!.name}` : 'Decision · organisation-wide') },
     });
     const status = nodes.get(id)!.status;
     const edgeBase = { status, disclosure: 'details' as const, startedAt, updatedAt: endedAt ?? startedAt, ...(endedAt ? { endedAt } : {}), capabilities: [] };

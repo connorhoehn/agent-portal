@@ -17,6 +17,7 @@
 //   GET /per-agent-summary?windowHours=24        — RPS / p99 / err / cost rollup
 
 import { Router } from 'express';
+import { userNameFor } from '../lib/user-names.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler } from '../lib/async-handler.js';
 import { reasonLine } from '../lib/upstream.js';
@@ -186,6 +187,8 @@ trafficRouter.get('/heatmap', asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 interface TopUserRow {
   userId: string;
+  /** The person behind the account id, null when unknown. */
+  userName?: string;
   invocations: number;
   uniqueAgents: number;
   totalCostUsd: number;
@@ -225,6 +228,7 @@ trafficRouter.get('/top-users', asyncHandler(async (req, res) => {
         ]);
     const users: TopUserRow[] = rows.map((r) => ({
       userId: String(r['user_id'] ?? ''),
+      ...(userNameFor(String(r['user_id'] ?? '')) ? { userName: userNameFor(String(r['user_id'] ?? ''))! } : {}),
       invocations: Number(r['invocations'] ?? 0),
       uniqueAgents: Number(r['unique_agents'] ?? 0),
       totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),

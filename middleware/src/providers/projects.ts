@@ -5,6 +5,7 @@
 // spend window is one fact and duplicating it is what let the two pages
 // disagree in the first place.
 
+import { noteSearchWrite } from '../lib/search-index/writes.js';
 import {
   RDSDataClient,
   ExecuteStatementCommand,
@@ -851,6 +852,7 @@ export async function updateProjectOwner(
         [strParam('id', projectId), strParam('owner', ownerId)],
       ).catch(() => { /* advisory roles — never fail the owner write over this */ });
     }
+    await noteSearchWrite({ type: 'initiative', id: projectId });
     return { ok: true };
   } catch (err) {
     const msg = (err as Error).message ?? '';
@@ -890,6 +892,7 @@ export async function setContributionRole(
   if (rows.length === 0) {
     return { ok: false, status: 404, error: 'No contribution row for that person on this project' };
   }
+  await noteSearchWrite({ type: 'initiative', id: projectId });
   return { ok: true };
 }
 
@@ -914,6 +917,7 @@ export async function addContribution(projectId: string, personId: string, role:
     if (!p) throw new Error(`No initiative ${projectId}`);
     if (p.owner === personId || p.smes.includes(personId)) return { added: false };
     p.smes.push(personId);
+    await noteSearchWrite({ type: 'initiative', id: projectId });
     return { added: true };
   }
   if (!await projectExists(projectId)) throw new Error(`No initiative ${projectId}`);
@@ -924,6 +928,7 @@ export async function addContribution(projectId: string, personId: string, role:
      RETURNING person_id`,
     [strParam('person', personId), strParam('pid', projectId), strParam('role', role)],
   );
+  if (rows.length > 0) await noteSearchWrite({ type: 'initiative', id: projectId });
   return { added: rows.length > 0 };
 }
 
@@ -941,6 +946,7 @@ export async function removeContribution(projectId: string, personId: string, ro
     const at = p.smes.indexOf(personId);
     if (at < 0) return { removed: false };
     p.smes.splice(at, 1);
+    await noteSearchWrite({ type: 'initiative', id: projectId });
     return { removed: true };
   }
   const rows = await exec(
@@ -949,5 +955,6 @@ export async function removeContribution(projectId: string, personId: string, ro
       RETURNING person_id`,
     [strParam('pid', projectId), strParam('person', personId), strParam('role', role)],
   );
+  if (rows.length > 0) await noteSearchWrite({ type: 'initiative', id: projectId });
   return { removed: rows.length > 0 };
 }

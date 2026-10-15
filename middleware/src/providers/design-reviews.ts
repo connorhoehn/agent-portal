@@ -13,6 +13,7 @@
 // demoable offline. Mock writes mutate in-memory state so answer → agent
 // revision → sign-off → KB sync all actually happen in a dev session.
 
+import { noteSearchWrite } from '../lib/search-index/writes.js';
 import { config } from '../config.js';
 import { designReviewDocs, type DesignReviewDoc } from '../mock/design-reviews.js';
 
@@ -260,5 +261,7 @@ export async function signoffDesign(
   }
   doc.updatedAt = new Date().toISOString();
   const thread = await getDesignThread(id);
+  // An approval makes the design a searchable decision (lib/search-index); any signoff may change its status.
+  await noteSearchWrite({ type: 'decision', id });
   return thread ? { thread } : null;
 }

@@ -14,6 +14,7 @@
 //   • Applying is idempotent (ON CONFLICT), so a retried approval cannot
 //     double-write an edge or duplicate a skill.
 
+import { noteSearchWrite, type SearchWriteRef } from '../lib/search-index/writes.js';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
@@ -118,8 +119,14 @@ export async function proposeGraphChange(input: {
 }
 
 export async function listProposals(opts: { status?: string; limit?: number } = {}): Promise<GraphProposal[]> {
-  if (config.mock.aurora) return [];
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 300);
+  if (config.mock.aurora) {
+    return graphProposals.rows()
+      .filter((p) => !opts.status || p.status === opts.status)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit)
+      .map((p) => ({ ...p }));
+  }
   const params: SqlParameter[] = [{ name: 'lim', value: { longValue: limit } }];
   let where = '';
   if (opts.status) { where = 'WHERE status = :status'; params.push(s('status', opts.status)); }
@@ -216,6 +223,17 @@ async function applyProposal(p: GraphProposal): Promise<void> {
   }
 }
 
+/** The searchable records an applied proposal changed (lib/search-index): a person's skills, title or collaborations. */
+function searchRefsOf(p: GraphProposal): SearchWriteRef[] {
+  const pl = p.payload;
+  const person = (v: unknown): SearchWriteRef | null => (toStr(v) ? { type: 'person', id: toStr(v) } : null);
+  switch (p.kind) {
+    case 'add_person_skill': case 'update_person_title': return [person(pl['personId'])].filter((r): r is SearchWriteRef => !!r);
+    case 'add_collaboration': return [person(pl['personAId']), person(pl['personBId'])].filter((r): r is SearchWriteRef => !!r);
+    default: return []; // a new skill or a document mention changes no searchable record
+  }
+}
+
 /** Approve (and immediately apply) or reject a pending proposal. */
 /**
  * Approve (and apply) or reject a proposal.
@@ -232,7 +250,21 @@ export async function decideProposal(
   decision: 'approve' | 'reject',
   opts: { reviewer?: string; note?: string } = {},
 ): Promise<GraphProposal | null> {
-  if (config.mock.aurora) return null;
+  if (config.mock.aurora) {
+    // The same transition the statement below makes: only a pending or failed
+    // proposal can be decided; approving applies it. Rows are the fixture's, so
+    // a reset puts the queue back.
+    const row = graphProposals.rows().find((p) => p.id === id && (p.status === 'pending' || p.status === 'failed'));
+    if (!row) return null;
+    const at = clock.now().toISOString();
+    row.status = decision === 'approve' ? 'applied' : 'rejected';
+    row.reviewer = opts.reviewer ?? null;
+    row.reviewNote = opts.note ?? null;
+    row.decidedAt = at;
+    row.appliedAt = decision === 'approve' ? at : null;
+    row.applyError = null;
+    return { ...row };
+  }
 
   const rows = await exec(
     `UPDATE graph_proposals
@@ -251,6 +283,7 @@ export async function decideProposal(
   // thrown away, so a reviewer can see that their approval did not land.
   try {
     await applyProposal(proposal);
+    await noteSearchWrite(...searchRefsOf(proposal));
     const applied = await exec(
       `UPDATE graph_proposals SET status='applied', applied_at=NOW(), apply_error=NULL
         WHERE id=:id RETURNING ${COLS}`, [s('id', id)]);
@@ -266,7 +299,12 @@ export async function decideProposal(
 
 export async function proposalStats(): Promise<Record<string, number>> {
   const base: Record<string, number> = { pending: 0, approved: 0, applied: 0, rejected: 0, failed: 0, total: 0 };
-  if (config.mock.aurora) return base;
+  if (config.mock.aurora) {
+    const rows = graphProposals.rows();
+    for (const [status, n] of countBy(rows, 'status')) if (status in base) base[status] = n;
+    base['total'] = rows.length;
+    return base;
+  }
   const rows = await exec(`SELECT status, count(*)::int AS n FROM graph_proposals GROUP BY status`);
   for (const r of rows) {
     const st = toStr(r['status']);

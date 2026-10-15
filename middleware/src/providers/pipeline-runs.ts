@@ -19,6 +19,7 @@ import {
   type Projection, type RunSources, type BotRunSource, type InvocationSource, type SourceTable,
 } from '../lib/pipeline-runs.js';
 import { liveAgentRuns } from '../lib/agent-runs-live.js';
+import { userNameFor } from '../lib/user-names.js';
 
 /** How far back the agent-run source reads — the observability surfaces' own week. */
 const INVOCATION_WINDOW_HOURS = 24 * 7;
@@ -154,5 +155,11 @@ export async function loadRunSources(): Promise<{ sources: RunSources; unavailab
 /** Read the six sources (plus the relayed runs) and project them — once per request. */
 export async function loadProjection(): Promise<LoadedProjection> {
   const { sources, unavailable } = await loadRunSources();
-  return { ...projectRuns(sources), unavailable };
+  const projection = projectRuns(sources);
+  // Name the person behind each account id (a clone prints its persona) so a run record never reads "Triggered by u-mia".
+  for (const run of projection.runs) {
+    const name = userNameFor(run.triggeredBy);
+    if (name) run.triggeredByName = name;
+  }
+  return { ...projection, unavailable };
 }

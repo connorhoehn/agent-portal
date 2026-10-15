@@ -353,6 +353,8 @@ export interface Run {
   tenant: ContextTenant;
   status: PipelineRunStatus;
   triggeredBy: string | null;
+  /** The person behind `triggeredBy` when it is a known account (a clone prints its persona); absent otherwise. */
+  triggeredByName?: string;
   triggerType: TriggerType;
   startedAt: string | null;
   finishedAt: string | null;

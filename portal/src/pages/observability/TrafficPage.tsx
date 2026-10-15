@@ -64,6 +64,8 @@ interface HeatmapResponse {
 
 interface TopUserRow {
   userId: string;
+  /** The person behind `userId`, when the server knows them. */
+  userName?: string | null;
   invocations: number;
   uniqueAgents: number;
   totalCostUsd: number;
@@ -448,7 +450,7 @@ function TrafficPage() {
             <TableBody>
               {topUsers.map((u) => (
                 <TableRow key={u.userId}>
-                  <TableTd className="whitespace-nowrap"><T className="font-mono">{u.userId}</T></TableTd>
+                  <TableTd className="whitespace-nowrap"><T title={u.userId}>{u.userName ?? u.userId}</T></TableTd>
                   <TableTd numeric>{fmtInt(u.invocations)}</TableTd>
                   <TableTd numeric>{fmtInt(u.uniqueAgents)}</TableTd>
                   <TableTd numeric>{fmtUsd(u.totalCostUsd, 4)}</TableTd>

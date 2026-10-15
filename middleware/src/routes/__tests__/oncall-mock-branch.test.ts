@@ -121,7 +121,7 @@ describe('the mock branch answers offline, seeded, not degraded', () => {
     const app = buildApp();
     const res = await request(app).get(`${BASE}/recent-events`).expect(200);
     const events = res.body.events as Array<{ kind: string; title: string }>;
-    expect(events.some((e) => e.kind === 'hitl-decided' && e.title.includes('u-vera'))).toBe(true);
+    expect(events.some((e) => e.kind === 'hitl-decided' && e.title.includes('Vera Green') && !e.title.includes('u-vera'))).toBe(true);
   });
 });
 

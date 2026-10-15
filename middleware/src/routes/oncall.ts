@@ -28,6 +28,7 @@ import { Router } from 'express';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler } from '../lib/async-handler.js';
 import { reasonLine } from '../lib/upstream.js';
+import { userNameFor } from '../lib/user-names.js';
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import {
@@ -694,7 +695,7 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
           ts: String(r['ts'] ?? ''),
           kind: 'hitl-decided',
           severity: 'info',
-          title: `${status} by ${decidedBy} (${agentId})`,
+          title: `${status} by ${userNameFor(decidedBy) ?? decidedBy} (${agentId})`,
           detail: note || `Approval ${status.toLowerCase()}`,
           relatedAgentId: agentId,
         });
