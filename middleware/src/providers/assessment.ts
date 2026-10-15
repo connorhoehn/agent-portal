@@ -2857,10 +2857,12 @@ function slugify(value: string): string {
 // Parses an MS Forms "Completion time" export value (`M/D/YYYY H:mm[:ss]`) as
 // UTC, mirroring naming.py's `parse_forms_timestamp`. Falls back to now.
 function parseFormsTimestamp(value: string): Date | null {
-  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(value.trim());
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(value.trim());
   if (!m) return null;
   const [, mo, da, yr, hh, mi, ss] = m;
-  const date = new Date(Date.UTC(Number(yr), Number(mo) - 1, Number(da), Number(hh ?? '0'), Number(mi ?? '0'), Number(ss ?? '0')));
+  // Excel-style CSV output writes a two-digit year; both spellings are the export's.
+  const year = yr!.length === 2 ? 2000 + Number(yr) : Number(yr);
+  const date = new Date(Date.UTC(year, Number(mo) - 1, Number(da), Number(hh ?? '0'), Number(mi ?? '0'), Number(ss ?? '0')));
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

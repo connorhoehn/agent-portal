@@ -34,11 +34,14 @@ export const runStamp = (startedAtIso: string): string => stampOf(startedAtIso);
 export const runId = (startedAtIso: string, command: string, suffix: string): string =>
   `run-${runStamp(startedAtIso)}-${command}-${suffix}`;
 
-/** Microsoft Forms exports `M/D/YYYY H:mm` and `M/D/YYYY`, in UTC here. */
+/**
+ * The export's own "Completion time" string, carried verbatim. Excel-style CSV
+ * output from Microsoft Forms uses `M/D/YY H:mm`, in UTC here.
+ */
 const formsStamp = (iso: string): string => {
   const d = new Date(iso);
   const pad = (n: number): string => String(n).padStart(2, '0');
-  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${pad(d.getUTCFullYear() % 100)} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 };
 const formsDate = (iso: string): string => formsStamp(iso).split(' ')[0]!;
 const yearMonth = (iso: string): string => `${iso.slice(0, 4)}-${iso.slice(5, 7)}`;
