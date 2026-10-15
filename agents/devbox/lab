@@ -13,8 +13,26 @@
 #       Record a learning for the fleet. Future sessions on this repo recall
 #       it before starting work.
 #
+#   lab brief
+#       Print this run's session brief — the task, the project, the decisions
+#       that bind it and the runbooks selected for it, frozen when the run was
+#       dispatched. The SessionStart hook runs it. Byte-identical to the brief
+#       a person reads on the run (same sha256, checked here).
+#
+#   lab runbook <runbook-id>
+#       Print a runbook the brief listed under "Also available".
+#
+#   lab applied <runbook-id> <followed|followed_with_deviation|failed|not_used> [--step N] ["note"]
+#       Say whether you followed a runbook from your brief. A run that failed
+#       at a step names it. This is what the runbook's health is counted from.
+#
+#   lab propose <runbook-id|new> <file.md> ["why"]
+#       Propose the corrected (or a new) runbook, as canonical runbook
+#       markdown. A person reviews it; it never changes a runbook by itself.
+#
 #   lab recall
-#       Print the fleet's memory for this repo. Run at session start.
+#       Print the fleet's raw run notes for this repo (manual; the brief
+#       replaced it at session start).
 #
 #   lab consult "<question>" ["context"]
 #       Ask a human and WAIT (poll ≤10min). Prints the answer, or times out.
@@ -26,7 +44,10 @@
 #   LAB_CALLBACK_SECRET optional; when set every call carries a signed
 #                       X-Service-Auth envelope + x-service-nonce (lane C4),
 #                       plus x-lab-auth unless SERVICE_AUTH_LEGACY_HEADERS=refuse
-#   LAB_SESSION_ID / LAB_BOX_ID / LAB_REPO / LAB_INITIATIVE_ID  attribution
+#   LAB_RUN_REF / LAB_RUN_TOKEN  the run this session is, and the per-run token
+#                       that proves it (brief, applied, propose, runbook); set by
+#                       main.py from the invoke payload, absent outside a run
+#   LAB_SESSION_ID / LAB_BOX_ID / LAB_REPO / LAB_INITIATIVE_ID / LAB_WORK_ITEM_ID  attribution
 set -euo pipefail
 
 BASE="${LAB_API_BASE:-}"
@@ -66,6 +87,20 @@ print("x-service-nonce: " + nonce)
   while IFS= read -r line; do auth+=(-H "$line"); done <<<"$lines"
 }
 
+# The per-run token rides on every call when this session is a run: the
+# envelope says "a box of the fleet", the token says "the box running THIS run".
+run_hdr=()
+if [ -n "${LAB_RUN_TOKEN:-}" ]; then run_hdr=(-H "x-lab-run-token: ${LAB_RUN_TOKEN}"); fi
+
+need_run() { # soft: outside a dispatched run there is nothing to report against
+  if [ -z "${LAB_RUN_REF:-}" ] || [ -z "${LAB_RUN_TOKEN:-}" ]; then
+    echo "lab: this session is not a dispatched run (LAB_RUN_REF/LAB_RUN_TOKEN unset) — nothing to $1." >&2
+    exit 0
+  fi
+}
+
+urlq() { python3 -I -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
+
 repo="${LAB_REPO:-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")}"
 
 json_escape() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
@@ -75,12 +110,12 @@ PREFIX="$(base_path)"
 
 post() { # $1=path $2=json-body (sent byte for byte: --data-binary, never -d)
   sign POST "$PREFIX$1" "$2"
-  curl -sS --max-time 15 -X POST "$BASE$1" -H 'content-type: application/json' ${auth[@]+"${auth[@]}"} --data-binary "$2"
+  curl -sS --max-time 15 -X POST "$BASE$1" -H 'content-type: application/json' ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} --data-binary "$2"
 }
 
 get() { # $1=path+query
   sign GET "$PREFIX$1" ""
-  curl -sS --max-time 15 ${auth[@]+"${auth[@]}"} "$BASE$1"
+  curl -sS --max-time 15 ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} "$BASE$1"
 }
 
 common_fields() {
@@ -102,6 +137,85 @@ case "$cmd" in
     title="${2:?title required}"; body="${3:-}"
     post /api/lab/experiences "{\"kind\":$(json_escape "$kind"),\"title\":$(json_escape "$title"),\"body\":$(json_escape "$body"),$(common_fields)}" >/dev/null \
       && echo "remembered for $repo"
+    ;;
+  brief)
+    if [ -z "${LAB_RUN_REF:-}" ] || [ -z "${LAB_RUN_TOKEN:-}" ]; then
+      echo "No session brief: this session was not started by a dispatched run."
+      exit 0   # soft: an interactive session has no brief, and SessionStart must not fail
+    fi
+    tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+    target="/api/runs/$(urlq "$LAB_RUN_REF")/brief?format=markdown"
+    sign GET "$PREFIX$target" ""
+    code=$(curl -sS --max-time 15 -o "$tmp/body" -D "$tmp/head" -w '%{http_code}' \
+      ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} "$BASE$target" || echo 000)
+    if [ "$code" != "200" ]; then
+      echo "No session brief could be fetched for run $LAB_RUN_REF (HTTP $code). Work from the task prompt." 
+      exit 0
+    fi
+    # Print the frozen bytes verbatim, and check they are the bytes the run was stamped with.
+    python3 -I -c '
+import hashlib, sys
+body = open(sys.argv[1], "rb").read()
+want = ""
+for line in open(sys.argv[2], encoding="latin-1"):
+    k, _, v = line.partition(":")
+    if k.strip().lower() == "x-brief-sha256": want = v.strip()
+sys.stdout.write(body.decode("utf-8"))
+got = hashlib.sha256(body).hexdigest()
+if want and got != want:
+    print(f"lab: WARNING the brief bytes do not match their sha ({got} != {want})", file=sys.stderr)
+' "$tmp/body" "$tmp/head"
+    ;;
+  runbook)
+    need_run "fetch"
+    id="${1:?usage: lab runbook <runbook-id>}"
+    get "/api/runs/$(urlq "$LAB_RUN_REF")/runbooks/$(urlq "$id")"
+    ;;
+  applied)
+    need_run "report"
+    id="${1:?usage: lab applied <runbook-id> <followed|followed_with_deviation|failed|not_used> [--step N] [note]}"
+    outcome="${2:?outcome required: followed | followed_with_deviation | failed | not_used}"
+    shift 2
+    step=""; note=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --step) step="${2:?--step needs a number}"; shift 2 ;;
+        --step=*) step="${1#--step=}"; shift ;;
+        *) note="$1"; shift ;;
+      esac
+    done
+    body=$(python3 -I -c '
+import json, sys
+run_ref, outcome, step, note = sys.argv[1:5]
+d = {"run_ref": run_ref, "outcome": outcome}
+if step: d["failed_at_step"] = int(step)
+if note: d["note"] = note
+print(json.dumps(d))' "$LAB_RUN_REF" "$outcome" "$step" "$note")
+    post "/api/runbooks/$(urlq "$id")/applications" "$body" \
+      | python3 -c 'import json,sys
+r=json.load(sys.stdin); a=r.get("application")
+print("recorded: " + a["runbook_id"] + " v" + str(a["version"]) + " " + a["outcome"] if a else "not recorded: " + str(r.get("error")))'
+    ;;
+  propose)
+    need_run "propose"
+    target="${1:?usage: lab propose <runbook-id|new> <file.md> [why]}"
+    file="${2:?markdown file required}"; why="${3:-Proposed by run $LAB_RUN_REF.}"
+    [ -f "$file" ] || { echo "lab: no such file: $file" >&2; exit 2; }
+    body=$(python3 -I -c '
+import json, os, sys
+target, path, why, run_ref = sys.argv[1:5]
+d = {"kind": "new" if target == "new" else "edit", "markdown": open(path, encoding="utf-8").read(), "rationale": why,
+     "source": {"run_ref": run_ref, "session_id": os.environ.get("LAB_SESSION_ID", ""), "lab_experience_ids": []}}
+if target != "new": d["runbook_id"] = target
+print(json.dumps(d))' "$target" "$file" "$why" "$LAB_RUN_REF")
+    post /api/runbooks/proposals "$body" \
+      | python3 -c 'import json,sys
+r=json.load(sys.stdin); p=r.get("proposal")
+if p:
+    errs=[f for f in p.get("lint",[]) if f.get("severity")=="error"]
+    print("proposed: " + p["id"] + " (a person reviews it)" + (f" — {len(errs)} lint error(s) to fix first" if errs else ""))
+else:
+    print("not proposed: " + str(r.get("error")) + "".join("\n  " + str(x) for x in r.get("problems", [])))'
     ;;
   recall)
     get "/api/lab/experiences?repo=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$repo")&limit=20" \
@@ -140,7 +254,7 @@ except Exception: print("pending")')
     exit 0   # soft: an unanswered consult must not fail the run
     ;;
   *)
-    sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

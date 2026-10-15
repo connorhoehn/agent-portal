@@ -1,10 +1,10 @@
 {
-  "//": "Baked into /etc/claude-code/managed-settings.json in the devbox image. SessionStart injects the fleet's memory for the current repo (lab recall) so every session starts with what previous sessions learned — the read half of the lab loop; `lab` (signal|remember|consult) is the write half, documented in the CLI itself.",
+  "//": "Baked into /etc/claude-code/managed-settings.json in the devbox image. SessionStart prints this run's frozen session brief (lab brief → GET /api/runs/:ref/brief with the lab envelope and the run's LAB_RUN_TOKEN): the task, the project, the decisions that bind it, the skills on this box and the runbooks selected for it — the one thing a box receives (docs/distillation-runbooks-design.md §3). Outside a dispatched run it prints that there is none. `lab` (signal|remember|consult|applied|propose|runbook|recall) is the write half, documented in the CLI itself.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "lab recall" }
+          { "type": "command", "command": "lab brief" }
         ]
       }
     ]

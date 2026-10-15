@@ -128,16 +128,50 @@ def _model_of(cmd: list[str]) -> str:
     return os.environ.get("ANTHROPIC_MODEL", "")
 
 
-def _subprocess_env(workspace: str) -> dict:
+# The run this task is, as the middleware sent it (`lab` in the payload,
+# middleware lib/run-brief.ts). Every `lab` call reads these: LAB_RUN_REF and
+# LAB_RUN_TOKEN let `lab brief` fetch THIS run's frozen session brief (the
+# SessionStart hook) and let `lab applied` / `lab propose` report for it; the
+# rest is attribution, which used to fall back to basename(pwd).
+_LAB_ENV = {
+    "run_ref": "LAB_RUN_REF",
+    "run_token": "LAB_RUN_TOKEN",
+    "brief_id": "LAB_BRIEF_ID",
+    "work_item_id": "LAB_WORK_ITEM_ID",
+    "initiative_id": "LAB_INITIATIVE_ID",
+    "repo": "LAB_REPO",
+    "session_id": "LAB_SESSION_ID",
+    "box_id": "LAB_BOX_ID",
+}
+
+
+def _lab_env(lab: object) -> dict:
+    """LAB_* variables from the payload's `lab` object. Unknown keys, non-string
+    values and anything with a newline are dropped — these land in a shell."""
+    if not isinstance(lab, dict):
+        return {}
+    out = {}
+    for key, var in _LAB_ENV.items():
+        value = lab.get(key)
+        if isinstance(value, str) and value and "\n" not in value and len(value) <= 4096:
+            out[var] = value
+    return out
+
+
+def _subprocess_env(workspace: str, lab: object = None) -> dict:
     env = dict(os.environ)
     # HOME on the persistent mount → ~/.claude (session state, --continue
     # history) survives stop/resume alongside the working tree.
     env["HOME"] = workspace
     env.setdefault("CLAUDE_CODE_USE_BEDROCK", "1")
+    # A run never inherits another run's identity: clear first, then set.
+    for var in _LAB_ENV.values():
+        env.pop(var, None)
+    env.update(_lab_env(lab))
     return env
 
 
-async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeout_s: int) -> AsyncIterator[dict]:
+async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeout_s: int, lab: object = None) -> AsyncIterator[dict]:
     """Spawn claude and yield one dict per stream-json event line.
 
     Yield DICTS, not pre-serialised JSON strings: BedrockAgentCoreApp
@@ -163,7 +197,7 @@ async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeo
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=workspace,
-        env=_subprocess_env(workspace),
+        env=_subprocess_env(workspace, lab),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         start_new_session=True,
@@ -217,12 +251,12 @@ async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeo
     }
 
 
-async def _run_sync(cmd: list[str], workspace: str, persistent: bool, timeout_s: int) -> dict:
+async def _run_sync(cmd: list[str], workspace: str, persistent: bool, timeout_s: int, lab: object = None) -> dict:
     """Collected single-JSON run (`--output-format json`)."""
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=workspace,
-        env=_subprocess_env(workspace),
+        env=_subprocess_env(workspace, lab),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         start_new_session=True,  # see _run_streaming — group kill on timeout
@@ -263,7 +297,10 @@ async def handle(payload: dict) -> AsyncIterator | dict:
       "prompt":  str   (required — the Claude Code task),
       "resume":  bool  (optional — continue the workspace's last conversation),
       "stream":  bool  (optional, default true — SSE stream-json vs single JSON),
-      "timeout": int   (optional seconds, capped at MAX_TIMEOUT_S)
+      "timeout": int   (optional seconds, capped at MAX_TIMEOUT_S),
+      "lab":     dict  (optional — the run: run_ref, run_token, brief_id,
+                        work_item_id, initiative_id, repo, session_id, box_id;
+                        set as LAB_* for every `lab` call, see _LAB_ENV)
     }
     """
     if not isinstance(payload, dict):
@@ -286,10 +323,10 @@ async def handle(payload: dict) -> AsyncIterator | dict:
 
     if stream:
         cmd = _build_cmd(prompt, resume, "stream-json", model)
-        return _run_streaming(cmd, workspace, persistent, timeout_s)
+        return _run_streaming(cmd, workspace, persistent, timeout_s, payload.get("lab"))
 
     cmd = _build_cmd(prompt, resume, "json", model)
-    return await _run_sync(cmd, workspace, persistent, timeout_s)
+    return await _run_sync(cmd, workspace, persistent, timeout_s, payload.get("lab"))
 
 
 if __name__ == "__main__":

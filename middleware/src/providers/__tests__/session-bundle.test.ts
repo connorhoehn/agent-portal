@@ -112,7 +112,7 @@ describe('the mock publish flow end-to-end', () => {
   it('serves the live bundle mirroring the real managed-settings.json hook', async () => {
     const live = await getLiveBundle();
     expect(live).not.toBeNull();
-    expect(live!.hooks.some((h) => h.event === 'SessionStart' && h.command === 'lab recall')).toBe(true);
+    expect(live!.hooks.some((h) => h.event === 'SessionStart' && h.command === 'lab brief')).toBe(true);
   });
 
   it('marks exactly one bundled skill stale on the live bundle', async () => {

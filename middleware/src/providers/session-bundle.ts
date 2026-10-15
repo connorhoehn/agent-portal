@@ -1,7 +1,9 @@
 // Session bundles — what a Claude Code devbox session is actually running.
 //
 // Today the whole mechanism is agents/devbox/managed-settings.json baked into
-// the image at build time: one SessionStart hook (`lab recall`) and nothing
+// the image at build time: one SessionStart hook (`lab brief`, which prints the
+// run's frozen session brief — lib/run-brief.ts — where the bundle's skills now
+// reach the run as "Skills on this box") and nothing
 // else visible. That works, but it is invisible from the portal, it can only
 // change via an image rebuild + redeploy, and nobody can tell which skills a
 // RUNNING session actually has versus what the library has moved on to. This

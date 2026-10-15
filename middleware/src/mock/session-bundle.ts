@@ -53,10 +53,15 @@ export const MOCK_LIBRARY_VERSIONS: Record<string, string> = {
 
 // Mirrors agents/devbox/managed-settings.json + the Dockerfile's ENV block —
 // this is what "live" means for the fleet today, not a hypothetical.
-const LAB_RECALL_HOOK: SessionHook = {
+//
+// The session brief replaced bundles as the one thing a box receives (decision
+// 4, 2026-10-14; middleware lib/run-brief.ts): the hook is `lab brief`, which
+// prints the run's frozen brief, and the skills below reach the run as that
+// brief's "Skills on this box" section. `lab recall` is a manual command now.
+const LAB_BRIEF_HOOK: SessionHook = {
   event: 'SessionStart',
-  command: 'lab recall',
-  description: 'Print the fleet\'s memory for this repo — the read half of the lab loop, baked via /etc/claude-code/managed-settings.json.',
+  command: 'lab brief',
+  description: 'Print this run\'s frozen session brief (task, project, binding decisions, skills on the box, selected runbooks) — baked via /etc/claude-code/managed-settings.json.',
   enabled: true,
 };
 
@@ -77,7 +82,7 @@ function seedBundles(): RawBundle[] {
     {
       id: 'sb-2026-08-fleet', version: 'v12',
       publishedAt: ago(9 * 24), publishedBy: 'Eli Garcia',
-      hooks: [{ ...LAB_RECALL_HOOK }],
+      hooks: [{ ...LAB_BRIEF_HOOK }],
       skills: [
         // Bundled at v2, library has moved to v3 — one deliberate stale entry.
         { id: 'skill-flaky-test-triage', name: 'Triage a flaky test',
@@ -99,7 +104,7 @@ function seedBundles(): RawBundle[] {
       // publish this bundle awaits is what clears that one stale entry above.
       id: 'sb-2026-09-refresh', version: 'v13',
       publishedAt: ago(20), publishedBy: 'Layla Hassan',
-      hooks: [{ ...LAB_RECALL_HOOK }],
+      hooks: [{ ...LAB_BRIEF_HOOK }],
       skills: [
         { id: 'skill-flaky-test-triage', name: 'Triage a flaky test',
           description: 'Use when a test passes and fails without a code change. Reruns, diffs the outcomes, and files a bug with both logs.',

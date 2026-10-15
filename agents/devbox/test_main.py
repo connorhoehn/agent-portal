@@ -82,7 +82,7 @@ sleep 60
 """
 
 ECHO_ARGS_AND_ENV = r"""
-echo "{\"type\":\"argv\",\"args\":\"$*\",\"home\":\"$HOME\"}"
+echo "{\"type\":\"argv\",\"args\":\"$*\",\"home\":\"$HOME\",\"run_ref\":\"${LAB_RUN_REF:-}\"}"
 exit 0
 """
 
@@ -191,6 +191,40 @@ class DevboxWrapperTests(unittest.TestCase):
         else:
             self.assertFalse(persistent)
             self.assertTrue(os.path.isdir(ws))
+
+
+    # 9. The run's LAB_* env (lane E) ----------------------------------------
+
+    def test_lab_payload_sets_the_run_env_and_nothing_else(self):
+        os.environ["LAB_RUN_TOKEN"] = "stale-from-another-run"
+        try:
+            env = main._subprocess_env(self.workspace, {
+                "run_ref": "job-1", "run_token": "tok", "brief_id": "brief-job-1",
+                "work_item_id": "wi-1", "initiative_id": "p-auth", "repo": "o/r",
+                "session_id": "s-1", "box_id": "box-1",
+                "evil": "x", "repo_newline": "a\nb",
+            })
+            self.assertEqual(env["LAB_RUN_REF"], "job-1")
+            self.assertEqual(env["LAB_RUN_TOKEN"], "tok")
+            self.assertEqual(env["LAB_BRIEF_ID"], "brief-job-1")
+            self.assertEqual(env["LAB_REPO"], "o/r")
+            self.assertEqual(env["LAB_SESSION_ID"], "s-1")
+            self.assertNotIn("evil", env)
+            # No run → no inherited run identity.
+            bare = main._subprocess_env(self.workspace, None)
+            self.assertNotIn("LAB_RUN_TOKEN", bare)
+            self.assertNotIn("LAB_RUN_REF", bare)
+            # A value with a newline never reaches a shell.
+            self.assertNotIn("LAB_REPO", main._subprocess_env(self.workspace, {"repo": "a\nb"}))
+        finally:
+            del os.environ["LAB_RUN_TOKEN"]
+
+    def test_lab_env_reaches_the_claude_process(self):
+        self._use_stub(ECHO_ARGS_AND_ENV)
+        cmd = main._build_cmd("task", resume=False, output_format="stream-json")
+        events = _collect(main._run_streaming(cmd, self.workspace, True, timeout_s=30, lab={"run_ref": "job-9", "run_token": "t9"}))
+        argv = next(e for e in events if e["type"] == "argv")
+        self.assertEqual(argv["run_ref"], "job-9")
 
 
 if __name__ == "__main__":
