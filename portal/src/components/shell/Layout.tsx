@@ -125,10 +125,9 @@ const NAV_ITEMS: NavItem[] = [
   // work is automated by a bot configuration on a queue, and when it needs a
   // human it lands in review. Every signed-in role can read the loop.
   { path: '/iq/work',       label: 'Automate',    tenant: 'orgiq',     group: 'Build' },
-  // The other half of the loop: Automate is what the fleet DOES, Distillation
-  // is what it LEARNED — the run log of the pipeline that turns session
-  // observations into reusable runbooks and skills.
-  { path: '/iq/distillation/knowledge', label: 'Distillation', tenant: 'orgiq',   group: 'Build' },
+  // The other half of the loop: Automate is what the fleet DOES, Runbooks is
+  // what it LEARNED — procedures a person can read, that a booted box receives.
+  { path: '/iq/runbooks', label: 'Runbooks', tenant: 'orgiq',   group: 'Build' },
   { path: '/iq/library', label: 'Agent library', tenant: 'orgiq', group: 'Build' },
   { path: '/iq/local-compute', label: 'Local compute', tenant: 'orgiq', group: 'Build' },
   { path: '/iq/search',     label: 'Search',         tenant: 'orgiq',     group: 'Engage' },
@@ -299,6 +298,8 @@ const SHELL_RAIL_DEPTH: RailDepthSpec = {
     /^\/iq\/documents\/[^/]+$/,
     /^\/(iq|assessment|social|pipelines)\/decks\/[^/]+$/,
     /^\/iq\/(designs|library)\/[^/]+$/,
+    /^\/iq\/runbooks\/(?!proposals$|briefs$)[^/]+$/,
+    /^\/iq\/runbooks\/(proposals|briefs)\/[^/]+$/,
     /^\/assessment\/(submissions|feedback|runs)\/[^/]+$/,
     /^\/pipelines\/(definitions|approvals)\/[^/]+$/,
     /^\/access\/policies\/[^/]+$/,
@@ -549,8 +550,7 @@ function ShellLayout() {
             railLabel={`${tenantLabel} navigation`}
             renderNavItem={(item, children) => (
               <NavLink
-                to={item.path === '/iq/distillation/knowledge' ? `${item.path}?nav=distillation`
-                  : ['/iq/projects', '/iq/designs', '/iq/library'].includes(item.path) ? `${item.path}?nav=section` : item.path}
+                to={['/iq/projects', '/iq/designs', '/iq/library'].includes(item.path) ? `${item.path}?nav=section` : item.path}
                 // className, not the inline `style` the composite's own doc
                 // comment used to force: ui-components 2.275.1 exports the
                 // class-name equivalents of `activeNavItemStyle`, so the whole
@@ -567,10 +567,6 @@ function ShellLayout() {
                   ) || (
                     item.path === '/iq/work' &&
                     (pathname.startsWith('/admin/bots') || pathname.startsWith('/admin/changes'))
-                  ) || (
-                    // The rail opens Distillation on Knowledge; Review and
-                    // Activity are tabs of the same module.
-                    item.path.startsWith('/iq/distillation/') && pathname.startsWith('/iq/distillation')
                   ) || (
                     // The prompt-management family all lives behind Library.
                     item.path === '/iq/library' && (

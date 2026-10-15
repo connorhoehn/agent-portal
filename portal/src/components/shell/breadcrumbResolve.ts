@@ -78,11 +78,6 @@ const PROMPT_PAGES: Record<string, string> = {
   diff: 'Diff', evaluations: 'Evals',
 };
 // The module header prints the three tabs; the crumb names the one open.
-// Legacy sub-paths redirect before they render, so they need no label.
-const DISTILLATION_LABELS: Record<string, string> = {
-  knowledge: 'Knowledge', review: 'Review', activity: 'Activity',
-};
-
 function shortId(s: string): string {
   return s.length > 12 ? `${s.slice(0, 8)}…` : s;
 }
@@ -109,7 +104,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       case 'library':
         if (!b) return [{ label: 'Build' }, { label: 'Agent library' }];
         return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: shortId(b), id: b }];
-      case 'promotions': return [{ label: 'Build' }, { label: 'Distillation', path: '/iq/distillation/knowledge' }, { label: 'Review', path: '/iq/distillation/review' }, { label: 'Asset promotions' }];
+      case 'promotions': return [{ label: 'Build' }, { label: 'Runbooks', path: '/iq/runbooks' }, { label: 'Proposals' }];
       case 'release': return [{ label: 'Build' }, { label: 'Local compute', path: '/iq/local-compute' }, { label: 'Configuration' }];
       case 'activity': return [{ label: 'Operate' }, { label: 'Work graph' }];
       // The rail's groups (Layout.tsx NAV_ITEMS): Runs under Operate,
@@ -135,10 +130,16 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       // Prompt management is the Library's rail (Design); the rail lights
       // Library on these pages, so the crumb says the same.
       case 'prompt-ops': return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: 'What is deployed' }];
-      case 'distillation': {
-        const page = b ?? 'knowledge';
-        return [{ label: 'Build' }, { label: 'Distillation', path: '/iq/distillation/knowledge' }, { label: DISTILLATION_LABELS[page] ?? page }];
+      // Runbooks: Library (the bare page and a runbook), Proposals, Briefs. The retired
+      // /iq/distillation tree redirects before it renders.
+      case 'runbooks': {
+        const home = [{ label: 'Build' }, { label: 'Runbooks', path: '/iq/runbooks' }];
+        if (b === 'proposals') return [...home, ...(c ? [{ label: 'Proposals', path: '/iq/runbooks/proposals' }, { label: shortId(c), id: c }] : [{ label: 'Proposals' }])];
+        if (b === 'briefs') return [...home, ...(c ? [{ label: 'Briefs', path: '/iq/runbooks/briefs' }, { label: shortId(c), id: c }] : [{ label: 'Briefs' }])];
+        if (!b) return [...home, { label: 'Library' }];
+        return [...home, { label: 'Library', path: '/iq/runbooks' }, { label: shortId(b), id: b }];
       }
+      case 'distillation': return [{ label: 'Build' }, { label: 'Runbooks', path: '/iq/runbooks' }];
       case 'local-compute': return b === 'configuration'
         ? [{ label: 'Build' }, { label: 'Local compute', path: '/iq/local-compute' }, { label: 'Configuration' }]
         : [{ label: 'Build' }, { label: 'Local compute' }];

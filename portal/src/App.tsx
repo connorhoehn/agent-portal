@@ -9,7 +9,7 @@ import { CHOOSER, resolveHome } from './lib/tenantHome';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
 import { SharedNotificationsProvider } from './components/shell/SharedNotifications';
 // Eager: a redirect has nothing to lazy-load and must not flash a spinner.
-import DistillationLegacyRedirect from './pages/distillation/LegacyRedirect';
+import RunbooksDistillationRedirect from './pages/runbooks/DistillationRedirect';
 import { ComputeHost } from './components/compute/ComputeHost';
 import { LoadingState } from '@connorhoehnslalom/ui-components/shared';
 
@@ -105,10 +105,10 @@ const DesignsPage = lazy(() => import('./pages/designs/DesignsPage'));
 const LibraryPage = lazy(() => import('./pages/library/LibraryPage'));
 const PromotionsLegacyRedirect = lazy(() => import('./pages/promotions/LegacyRedirect'));
 const SessionConfigPage = lazy(() => import('./pages/local-compute/ConfigurationPage'));
-const DistillationModule = lazy(() => import('./pages/distillation/DistillationModule'));
-const DistillationKnowledgeTab = lazy(() => import('./pages/distillation/KnowledgeTab'));
-const DistillationReviewTab = lazy(() => import('./pages/distillation/ReviewTab'));
-const DistillationActivityTab = lazy(() => import('./pages/distillation/ActivityTab'));
+const RunbooksModule = lazy(() => import('./pages/runbooks/RunbooksModule'));
+const RunbooksLibraryTab = lazy(() => import('./pages/runbooks/LibraryTab'));
+const RunbooksProposalsTab = lazy(() => import('./pages/runbooks/ProposalsTab'));
+const RunbooksBriefsTab = lazy(() => import('./pages/runbooks/BriefsTab'));
 const WorkFindingsPage = lazy(() => import('./pages/work/FindingsPage'));
 const JobDetailPage = lazy(() => import('./pages/work/JobDetailPage'));
 const GraphChangesPage = lazy(() => import('./pages/work/GraphChangesPage'));
@@ -485,7 +485,7 @@ export function App() {
           } />
           <Route path="runs/:id" element={
             <RequireRole roles={['hr-admin', 'sme', 'program-owner', 'org-leader']} fallback={<HomeRedirect />}>
-              <Page element={<PipelinesRunDetailPage apiBase="/api/runs" listPath="/iq/runs" cancelable={false} />} />
+              <Page element={<PipelinesRunDetailPage apiBase="/api/runs" listPath="/iq/runs" cancelable={false} briefTab />} />
             </RequireRole>
           } />
           <Route path="search" element={<Page element={<SearchPage />} />} />
@@ -569,22 +569,21 @@ export function App() {
           {/* Release: what the Claude Code sessions themselves are shipped —
               hooks, bundled skills, config. */}
           <Route path="release" element={<Navigate to="/iq/local-compute/configuration" replace />} />
-          {/* The shared-memory pipeline: L0 run notes compacting into L1
-              patterns and L2 guides. One module frame, three destinations
-              (docs/distillation-redesign-spec.md §1): Knowledge, Review,
-              Activity. Every pre-redesign sub-route redirects to its new
-              home with filters and selection kept (distillationRoutes.ts). */}
-          <Route path="distillation" element={<Page element={<DistillationModule />} />}>
-            <Route index element={<DistillationLegacyRedirect />} />
-            <Route path="knowledge" element={<Page element={<DistillationKnowledgeTab />} />} />
-            <Route path="review" element={<Page element={<DistillationReviewTab />} />} />
-            <Route path="activity" element={<Page element={<DistillationActivityTab />} />} />
-            <Route path="overview" element={<DistillationLegacyRedirect />} />
-            <Route path="tiers" element={<DistillationLegacyRedirect />} />
-            <Route path="artifacts" element={<DistillationLegacyRedirect />} />
-            <Route path="lineage" element={<DistillationLegacyRedirect />} />
-            <Route path="compactions" element={<DistillationLegacyRedirect />} />
+          {/* Runbooks (docs/distillation-runbooks-design.md §4): the fleet's procedural
+              memory. One module frame, three destinations — Library (a runbook
+              opens as a page: /iq/runbooks/:id), Proposals (/iq/runbooks/proposals/:pid
+              is the review page) and Briefs (/iq/runbooks/briefs/:ref is a run's frozen
+              brief). The retired Distillation tree redirects here. */}
+          <Route path="runbooks" element={<Page element={<RunbooksModule />} />}>
+            <Route index element={<Page element={<RunbooksLibraryTab />} />} />
+            <Route path="proposals" element={<Page element={<RunbooksProposalsTab />} />} />
+            <Route path="proposals/:pid" element={<Page element={<RunbooksProposalsTab />} />} />
+            <Route path="briefs" element={<Page element={<RunbooksBriefsTab />} />} />
+            <Route path="briefs/:ref" element={<Page element={<RunbooksBriefsTab />} />} />
+            <Route path=":id" element={<Page element={<RunbooksLibraryTab />} />} />
           </Route>
+          <Route path="distillation" element={<Navigate to="/iq/runbooks" replace />} />
+          <Route path="distillation/*" element={<RunbooksDistillationRedirect />} />
           <Route path="local-compute" element={<Page element={<LocalComputePage />} />} />
           <Route path="local-compute/configuration" element={<Page element={<SessionConfigPage />} />} />
           <Route path="designs" element={<Page element={<DesignsPage />} />} />

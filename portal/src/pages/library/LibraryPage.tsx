@@ -188,7 +188,7 @@ export default function LibraryPage() {
         <Select size="sm" className="w-auto min-w-28" aria-label="Asset tier" value={tier} onChange={(e) => setFilter('tier', e.target.value)} options={[{ value: 'all', label: 'Tier: All' }, ...TIER_ORDER.map((value) => ({ value, label: TIER_LABEL[value] }))]} />
         <Select size="sm" className="w-auto min-w-28" aria-label="Asset status" value={status} onChange={(e) => setFilter('status', e.target.value)} options={[{ value: 'all', label: 'Status: All' }, ...[...new Set(['draft', 'published', 'retired', ...(data?.assets.map((a) => a.lifecycleStatus) ?? []), ...(status === 'all' ? [] : [status])])].map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) }))]} />
         <T size="xs" className="ml-auto text-text-tertiary">{data ? `${assets.length} assets` : 'Loading…'}</T>
-        <Link to="/iq/distillation/review?view=promotions" className="text-sm text-primary hover:underline">Review promotions ↗</Link>
+        <Link to="/iq/runbooks/proposals" className="text-sm text-primary hover:underline">Runbook proposals ↗</Link>
       </Inline>
 
       {/* See the shared list-page loading pattern comment in QueuePage.tsx:

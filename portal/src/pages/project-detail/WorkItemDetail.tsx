@@ -15,6 +15,7 @@
 // The composer is not here: it docks under the whole pane (the page's
 // InitiativeComposer), so the Overview and the item share one slot.
 
+import { WorkItemBriefPreview } from '../runbooks/WorkItemBriefPreview';
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   ChecklistSection,
@@ -374,6 +375,7 @@ export function WorkItemDetail({
                 <KeyValue layout="row" divided labelWidth="w-72" items={briefItems} aria-label={BRIEF_TITLE} />
               </DetailSection>
             )}
+            <WorkItemBriefPreview workItemId={item.id} />
           </>
         )}
         {tab === 'docs' && <WorkDocumentLinks workItemId={item.id} canEdit={canEdit} />}
