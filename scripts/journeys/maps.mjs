@@ -36,6 +36,10 @@ export const PROFILES = {
   // minutes; each step asserts a fact of the story is on screen (story-facts) and that the records it names
   // lead to each other (cross-links).
   demo: { story: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'story-facts', 'cross-links', 'dom-audit', 'notes'] },
+  // docs/search-journeys/PROTOCOL.md (docs/user-search-goal.md judge 5): one map per top intent per tenant;
+  // the person asks the catalog's question where they would, the answer is on screen (answers-question) and
+  // the record it names opens in at most two clicks (record-open).
+  search: { intent: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'answers-question', 'record-open', 'dom-audit', 'notes'] },
 };
 export const BUILTIN = new Set(['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'dom-audit', 'notes']);
 /** Built-ins a map supplies itself (static facts the walk does not measure). */

@@ -6,6 +6,11 @@
 //
 //   node scripts/user-search-report.mjs [results.json] [--markdown] [--json]
 //   node scripts/user-search-report.mjs --check orgiq=0.8,access=0.9 ...
+//   node scripts/user-search-report.mjs --floors scripts/user-search-floors.tsv   # the judge's floors (pass rate, wrong on best)
+//
+// "Wrong on best": probes of a NATURAL phrasing on the intent's best surface
+// (catalog `bestSurface`) whose verdict is `wrong` — a confidently wrong answer
+// where the person would look first (docs/user-search-goal.md judge 4).
 //
 // Verdicts per probe: supported / partial / wrong / unsupported ("evidence"
 // rows from the api surface never count). A surface's verdict for an intent is
@@ -95,16 +100,22 @@ const rows = intents.map((i) => {
   return { ...i, surfaces, verdict, phrasingOk, phrasingTotal: i.phrasings.length, apiEvidence: evidence };
 });
 
+// Wrong on the best surface, per natural phrasing (re-graded rows above).
+const wrongBest = data.probes.filter((p) => {
+  const i = intentById.get(p.intent);
+  return i && !i.cloneBlind && !p.grammar && p.verdict === 'wrong' && p.surface === (i.bestSurface ?? null);
+}).map((p) => ({ intent: p.intent, tenant: p.tenant, surface: p.surface, phrasing: p.phrasing, reason: p.reason }));
 const tenants = TENANTS.map((t) => {
   const rs = rows.filter((r) => r.tenant === t && r.verdict !== 'clone-blind');
   const n = rs.length || 1;
   const count = (v) => rs.filter((r) => r.verdict === v).length;
   const phr = rs.reduce((a, r) => a + r.phrasingOk, 0), phrT = rs.reduce((a, r) => a + r.phrasingTotal, 0) || 1;
   return { tenant: t, intents: rs.length, cloneBlind: rows.filter((r) => r.tenant === t && r.verdict === 'clone-blind').length, supported: count('supported'), partial: count('partial'), wrong: count('wrong'), unsupported: count('unsupported'),
-    passRate: +(count('supported') / n).toFixed(2), reachRate: +((count('supported') + count('partial')) / n).toFixed(2), phrasingRate: +(phr / phrT).toFixed(2) };
+    passRate: +(count('supported') / n).toFixed(2), reachRate: +((count('supported') + count('partial')) / n).toFixed(2), phrasingRate: +(phr / phrT).toFixed(2),
+    wrongBest: wrongBest.filter((w) => w.tenant === t).length };
 });
 
-if (args.includes('--json')) { console.log(JSON.stringify({ tenants, rows }, null, 1)); }
+if (args.includes('--json')) { console.log(JSON.stringify({ tenants, rows, wrongBest }, null, 1)); }
 else if (args.includes('--markdown')) {
   console.log('| tenant | intents | supported | partial | wrong | unsupported | pass rate | reach rate | phrasings answered |');
   console.log('|---|---|---|---|---|---|---|---|---|');
@@ -119,7 +130,26 @@ else if (args.includes('--markdown')) {
     }
   }
 } else {
-  for (const t of tenants) console.log(`${t.tenant.padEnd(11)} ${String(t.intents).padStart(3)} intents  pass ${Math.round(t.passRate * 100)}%  reach ${Math.round(t.reachRate * 100)}%  phrasings ${Math.round(t.phrasingRate * 100)}%  (S${t.supported} P${t.partial} W${t.wrong} U${t.unsupported})`);
+  for (const t of tenants) console.log(`${t.tenant.padEnd(11)} ${String(t.intents).padStart(3)} intents  pass ${Math.round(t.passRate * 100)}%  reach ${Math.round(t.reachRate * 100)}%  phrasings ${Math.round(t.phrasingRate * 100)}%  (S${t.supported} P${t.partial} W${t.wrong} U${t.unsupported})  wrong-on-best ${t.wrongBest}`);
+}
+
+// --floors <tsv>: tenant<TAB>pass_floor<TAB>max_wrong_best<TAB>due<TAB>note — measured pass ≥ floor, wrong-on-best ≤ max.
+const floorsAt = args.indexOf('--floors');
+if (floorsAt >= 0) {
+  const tsv = readFileSync(resolve(ROOT, args[floorsAt + 1] ?? 'scripts/user-search-floors.tsv'), 'utf8');
+  let failed = 0;
+  for (const line of tsv.split('\n')) {
+    if (!line.trim() || line.startsWith('#') || line.startsWith('tenant\t')) continue;
+    const [t, floor, maxWrong] = line.split('\t');
+    const row = tenants.find((x) => x.tenant === t);
+    if (!row) { failed++; console.log(`FAIL ${t}: no measured row`); continue; }
+    const passOk = row.passRate >= Number(floor), wrongOk = row.wrongBest <= Number(maxWrong);
+    if (!passOk || !wrongOk) failed++;
+    console.log(`${passOk ? 'PASS' : 'FAIL'} ${t} pass rate ${row.passRate} (floor ${floor})${row.passRate > Number(floor) ? ` — ratchet the floor up to ${row.passRate}` : ''}`);
+    console.log(`${wrongOk ? 'PASS' : 'FAIL'} ${t} wrong on best surface ${row.wrongBest} (max ${maxWrong})${row.wrongBest < Number(maxWrong) ? ` — ratchet the max down to ${row.wrongBest}` : ''}`);
+    if (!wrongOk) for (const w of wrongBest.filter((x) => x.tenant === t).slice(0, 8)) console.log(`      ${w.intent} ${w.surface} "${w.phrasing}": ${w.reason.slice(0, 100)}`);
+  }
+  process.exit(failed ? 1 : 0);
 }
 
 const check = args[args.indexOf('--check') + 1];
