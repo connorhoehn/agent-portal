@@ -14,6 +14,7 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { ses
 
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import { CreateTableCommand, DeleteTableCommand, DynamoDBClient, QueryCommand, waitUntilTableExists } from '@aws-sdk/client-dynamodb';
 import { ChatService } from '@connorhoehnslalom/realtime-modules/chat';
 import { LocalRealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
@@ -29,7 +30,7 @@ if (endpoint && !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(endpoint).
 const suite = endpoint ? describe : describe.skip;
 const prefix = `orgiq-chat-pagethread-${randomBytes(4).toString('hex')}-`;
 const TABLES = ['chat-messages', 'chat-members'];
-const manifest = JSON.parse(readFileSync(`${process.cwd()}/../infra/node_modules/realtime-examples/infra/dynamodb-schemas.json`, 'utf8')) as
+const manifest = JSON.parse(readFileSync(require.resolve('@connorhoehn/realtime-examples-cdk/dynamodb-schemas.json', { paths: [resolvePath(process.cwd(), '..', 'infra')] }), 'utf8')) as
   { tables: { tableName: string; hashKey: { name: string; type: 'S' }; rangeKey?: { name: string; type: 'S' } }[] };
 
 const client = () => new DynamoDBClient({ endpoint, region: 'us-east-1', maxAttempts: 2,
