@@ -1,0 +1,12 @@
+# User-search floors per tenant (docs/user-search-goal.md, decision 4): the measured pass rate may not fall
+# below pass_floor and the count of natural phrasings answered WRONG on the intent's best surface may not
+# rise above max_wrong_best. Ratchet only: a floor moves up and a max moves down, never back
+# (scripts/validate-user-search.sh compares this file with its committed version). Seeded 2026-10-15 at the
+# measured baseline (docs/user-search-probe-results.json of 2026-10-15, re-graded against the current catalog).
+# Columns: tenant, pass_floor, max_wrong_best, due (the phase target's date, or -), note.
+tenant	pass_floor	max_wrong_best	due	note
+orgiq	0.75	26	-	baseline; S1 target pass >= 0.70 with 0 wrong on best
+assessment	0.33	2	-	baseline; S2 target >= 0.60
+social	0.06	15	-	baseline; S2 target >= 0.60
+pipelines	0.25	3	-	baseline; S2 target >= 0.60
+access	0.25	2	-	baseline (4 clone-blind intents excluded); S2 target >= 0.60

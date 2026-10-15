@@ -50,7 +50,9 @@ export function parseRunCommand(text: string): RunCommand {
     if (!title) throw unsupported();
     return { kind: 'filter', filters: { title } };
   }
-  if (!/^(?:show|list|filter|status|kind|workspace)\b/.test(lower)) throw unsupported();
+  // A bare noun phrase that names its runs ("failed runs", "running agent runs") is the same filter as "show …".
+  const bare = /\bruns?$/.test(lower) && !/^(?:show|list|filter|status|kind|workspace)\b/.test(lower);
+  if (!bare && !/^(?:show|list|filter|status|kind|workspace)\b/.test(lower)) throw unsupported();
   let rest = lower.replace(/^(?:show|list|filter)(?:\s+by)?\s+/, '');
   const filters: Partial<RunFilters> = {};
   const workspace = /\b(?:in|workspace)\s+(?:the\s+)?(work|orgiq|assessment)(?:\s+workspace)?\b/g;

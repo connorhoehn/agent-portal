@@ -24,6 +24,9 @@ for (const [phrase, expected] of [
   ['show paused runs', { status: 'paused_at_breakpoint' }],
   ['search titles for "Auth Migration"', { title: 'Auth Migration' }],
   ['find runs named "Release notes"', { title: 'Release notes' }],
+  // A bare noun phrase is the same filter as its "show …" form (docs/user-search-goal.md U9).
+  ['failed runs', { status: 'failed' }],
+  ['running agent runs', { status: 'running', kind: 'agent' }],
 ] as const) test(`interprets ${phrase}`, () => assert.deepEqual(parseRunCommand(phrase), { kind: 'filter', filters: expected }));
 
 for (const phrase of ['reset filters', 'clear all filters', 'show all runs']) test(`resets: ${phrase}`, () => assert.deepEqual(parseRunCommand(phrase), { kind: 'reset' }));

@@ -1,6 +1,7 @@
 # Goal: user search that answers what each tenant's people ask
 
-Status: **draft for review, 2026-10-14. Nothing here is built.** The intent
+Status: **S0 and S1 built, 2026-10-15** (see "Built" at the end); S2–S4 not
+started. The intent
 catalog, the probe results and the gap analysis this goal is written against
 are in `docs/user-search-intents.md`. The probe is
 `portal/e2e/user-search-probe.spec.ts` over the catalog
@@ -65,7 +66,7 @@ Each phase ends with the judge green for that phase. Phases nest.
 - **S0 — the judge exists (this draft's probe, hardened).** The catalog and the
   probe run headless against `dev:mock` as clones, read-only; the report
   prints per-tenant pass rates; journey maps exist for the 17 role personas'
-  top intents (one map per intent family, `docs/journeys/maps/search/`).
+  top intents (one map per intent family, `docs/journeys/maps/user-search/`).
   Baseline recorded; floors only ratchet up.
 - **S1 — projection + orgiq parity.** `SearchIndex` (memory + kv), the orgiq
   types re-indexed through it, `/api/search` reads the index; team, decision
@@ -109,7 +110,7 @@ Mechanical, like the other validators; `--quick` skips the browser.
 4. **Zero wrong on best surfaces**: no intent's best surface may be `wrong` for
    any natural phrasing (wrong answers are worse than none).
 5. **Journey maps per intent family**: for each intent marked `map: true` in the
-   catalog (the top 5 per tenant), a map under `docs/journeys/maps/search/<tenant>/<role>/`
+   catalog (the top 5 per tenant), a map under `docs/journeys/maps/user-search/<tenant>/<role>/`
    walks query → result → record open (≤ 2 clicks asserted with `expect.url`),
    read-only `scenario: 'shared'`, `identity: 'clone'`; `run-maps.mjs coverage`
    counts them; the judge fails on a missing or failing map.

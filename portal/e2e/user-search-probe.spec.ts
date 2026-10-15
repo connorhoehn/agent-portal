@@ -1,10 +1,13 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, type BrowserContext, type Page } from '@playwright/test';
 import { openAsClone } from './realSession';
-import { CATALOG, type Intent, type Surface } from './user-search-catalog';
+import { CATALOG, serializeIntents, type Intent, type Surface } from './user-search-catalog';
+// @ts-ignore a plain .mjs module shared with the judge (no types)
+import { watchedDigest } from '../../scripts/user-search-freshness.mjs';
 
 // The user-search probe (docs/user-search-intents.md, docs/user-search-goal.md).
 //
@@ -24,6 +27,14 @@ import { CATALOG, type Intent, type Surface } from './user-search-catalog';
 //   cd portal && npx playwright test e2e/user-search-probe.spec.ts --workers=1 --reporter=line
 //   USER_SEARCH_ONLY=access (tenant), access:requester (persona) or a comma list narrows the run;
 //   results merge into docs/user-search-probe-results.json by persona.
+//
+// Hardened for the judge (scripts/validate-user-search.sh):
+//   - clones only: a session whose subject is not `<persona>-clone-…` aborts the group (never a seed persona);
+//   - one probe at a time: a pid lock in the OS temp dir refuses a second concurrent run;
+//   - the results carry `watchedDigest` (scripts/user-search-freshness.mjs — every search/answer/palette/composer
+//     source file and the catalog) and the catalog's intents with their best surface, so the judge can tell
+//     results of this tree from stale ones and grade "wrong on the best surface";
+//   - `runs` keeps one line per run (time, git head, digest, the personas it re-probed).
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(HERE, '..', '..', process.env.USER_SEARCH_OUT ?? 'docs/user-search-probe-results.json');
@@ -48,8 +59,22 @@ for (const intent of CATALOG) {
   groups.set(key, [...(groups.get(key) ?? []), intent]);
 }
 
+// One probe at a time (two would race the shared mock and the results file).
+const LOCK = join(tmpdir(), 'user-search-probe.lock');
+function takeLock() {
+  if (existsSync(LOCK)) {
+    const pid = Number(readFileSync(LOCK, 'utf8'));
+    let alive = false; try { process.kill(pid, 0); alive = pid !== process.pid; } catch { /* stale */ }
+    if (alive) throw new Error(`another user-search probe is running (pid ${pid}); one probe run at a time`);
+  }
+  writeFileSync(LOCK, String(process.pid));
+}
+test.beforeAll(() => takeLock());
+test.afterAll(() => { try { if (readFileSync(LOCK, 'utf8') === String(process.pid)) rmSync(LOCK); } catch { /* gone */ } });
+
 const run = {
   generatedAt: new Date().toISOString(),
+  watchedDigest: watchedDigest() as string,
   baseURL: 'http://localhost:5183',
   gitHead: (() => { try { return execSync('git rev-parse --short HEAD', { cwd: HERE }).toString().trim(); } catch { return null; } })(),
   personas: {} as Record<string, unknown>,
@@ -60,13 +85,16 @@ function save() {
   const prior = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : null;
   const ran = new Set(Object.keys(run.personas));
   const keep = (prior?.probes ?? []).filter((p: ProbeRow) => !ran.has(`${p.tenant}:${p.role}`));
-  const intents = CATALOG.map((i) => ({
-    id: i.id, tenant: i.tenant, role: i.role, persona: i.persona, intent: i.intent, phrasings: i.phrasings, best: i.best,
-    expected: { summary: i.expected.summary, keys: i.expected.keys ?? [], text: i.expected.text.map((r) => ({ source: r.source, flags: r.flags })), wrong: (i.expected.wrong ?? []).map((r) => ({ source: r.source, flags: r.flags })) },
-    surfaces: i.surfaces, cloneBlind: i.cloneBlind ?? null,
-  }));
+  const intents = serializeIntents(CATALOG);
+  const thisRun = { generatedAt: run.generatedAt, gitHead: run.gitHead, watchedDigest: run.watchedDigest, personas: Object.keys(run.personas) };
+  const runs = [...(prior?.runs ?? []).filter((r: { generatedAt: string }) => r.generatedAt !== run.generatedAt), thisRun];
+  // A partial run (USER_SEARCH_ONLY) keeps the other personas' probes, which were measured on an older tree:
+  // the digest is this run's only when every persona in the catalog was re-probed now.
+  const all = new Set(CATALOG.map((i) => `${i.tenant}:${i.role}`));
+  const complete = [...all].every((k) => ran.has(k));
   writeFileSync(OUT, JSON.stringify({
-    ...run, personas: { ...(prior?.personas ?? {}), ...run.personas }, intents, probes: [...keep, ...run.probes],
+    ...run, watchedDigest: complete ? run.watchedDigest : (prior?.watchedDigest ?? null), runs,
+    personas: { ...(prior?.personas ?? {}), ...run.personas }, intents, probes: [...keep, ...run.probes],
   }, null, 1) + '\n');
 }
 
@@ -374,6 +402,8 @@ for (const [key, intents] of groups) {
       throw new Error('unreachable');
     };
     person = await open();
+    // Clones only: never probe as the seed persona (its session would be revoked by a switch, and it owns records a peer does not).
+    if (!person.principal || !String(person.principal.sub).startsWith(`${persona}-clone-`)) throw new Error(`refusing to probe as ${person.principal?.sub ?? 'no principal'}: not a clone of ${persona}`);
     run.personas[key] = { cloneOf: persona, principal: person.principal && { sub: person.principal.sub, tenant: person.principal.tenant, role: person.principal.role } };
     try {
       for (const intent of intents) {
