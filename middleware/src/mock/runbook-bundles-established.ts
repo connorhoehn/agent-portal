@@ -202,7 +202,7 @@ export const libraryReleaseDoc: RunbookDoc = {
     {
       do: 'Build the library and run its tests against the fresh dist as separate commands.',
       command: bash('(cd "$LIB" && npm run build)', '(cd "$LIB" && npm test)'),
-      expect: 'both exit 0; the packaging test runs because dist/ now exists.',
+      expect: 'both exit 0, and the packaging suite is no longer skipped now that dist/ exists.',
       why: 'A release chained through a pipe once hid a failed build and shipped two version-only releases.',
     },
     {

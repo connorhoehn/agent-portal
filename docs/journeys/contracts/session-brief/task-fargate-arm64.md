@@ -3,7 +3,7 @@
 > Assembled 2026-10-14 for run job-contract-task-fargate-arm64 · 238 of 6,000 tokens · brief-job-contract-task-fargate-arm64
 
 ## The org's skills
-The org's 12 established skills are in the org's library (5f7be950a7f9) but not installed on this machine.
+The org's 18 established skills are in the org's library (7354127fe868) but not installed on this machine.
 
 ## How to report back
 - When you finish, say which skills you followed: `lab applied <skill> followed` (or `lab applied <skill> failed --step 2 "why"`).

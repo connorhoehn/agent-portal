@@ -26,7 +26,7 @@
         },
         {
           "kind": "skill_library",
-          "ref": "5f7be950a7f9d8c72532f0d6a0fb18223d1c48b29a0b3b1b1337cfe16f2c4dbc"
+          "ref": "7354127fe86832cca6c3e0d2f09fabeb7ffca553a84b08cb4417902908bd8797"
         },
         {
           "kind": "how_to_report",
@@ -34,8 +34,8 @@
         }
       ],
       "omitted": [],
-      "used_tokens": 548,
-      "sha256": "1b7e1ef52a66e3131677dc189477b49018e0cdb32a3521d6fbd7636db3073286"
+      "used_tokens": 654,
+      "sha256": "6fa45385c7bad10b4ab0690ab59ad02e81f2e110ff7640a735ed50252cb78330"
     },
     "wi-auth-e2-b3": {
       "path": "dispatch",
@@ -60,7 +60,7 @@
         },
         {
           "kind": "skill_library",
-          "ref": "5f7be950a7f9d8c72532f0d6a0fb18223d1c48b29a0b3b1b1337cfe16f2c4dbc"
+          "ref": "7354127fe86832cca6c3e0d2f09fabeb7ffca553a84b08cb4417902908bd8797"
         },
         {
           "kind": "how_to_report",
@@ -68,8 +68,8 @@
         }
       ],
       "omitted": [],
-      "used_tokens": 515,
-      "sha256": "9c42df536516a8b2c7244c3c29dfe317aee3e22a04b2d73f4c9a14b72304d1de"
+      "used_tokens": 614,
+      "sha256": "9b502809a215d3455ee07f6f168ebf089a89565f9a38b68975f746d50e7b288e"
     },
     "wi-obs-e2-b4": {
       "path": "dispatch",
@@ -94,7 +94,7 @@
         },
         {
           "kind": "skill_library",
-          "ref": "5f7be950a7f9d8c72532f0d6a0fb18223d1c48b29a0b3b1b1337cfe16f2c4dbc"
+          "ref": "7354127fe86832cca6c3e0d2f09fabeb7ffca553a84b08cb4417902908bd8797"
         },
         {
           "kind": "how_to_report",
@@ -102,8 +102,8 @@
         }
       ],
       "omitted": [],
-      "used_tokens": 523,
-      "sha256": "74312f6bbd0eac4a2d14662e6b852bca5091168f9eb7ebea6aa3454263ce1099"
+      "used_tokens": 628,
+      "sha256": "dae7de982d92d48306918b76bebd631536846fa6b14587d7f86fc80e119c745d"
     },
     "wi-inf-e1-b3": {
       "path": "dispatch",
@@ -124,7 +124,7 @@
         },
         {
           "kind": "skill_library",
-          "ref": "5f7be950a7f9d8c72532f0d6a0fb18223d1c48b29a0b3b1b1337cfe16f2c4dbc"
+          "ref": "7354127fe86832cca6c3e0d2f09fabeb7ffca553a84b08cb4417902908bd8797"
         },
         {
           "kind": "how_to_report",
@@ -132,8 +132,8 @@
         }
       ],
       "omitted": [],
-      "used_tokens": 437,
-      "sha256": "011b8e1d1a2149ac1e9703b9dd2834eb9cc381c9dd507b2506f9015e6fc54384"
+      "used_tokens": 499,
+      "sha256": "9e81876bb6ea171bdb6cd08742741e3c8aaab585652dde21466e886a4e33df08"
     },
     "task-fargate-arm64": {
       "path": "claim",
@@ -142,7 +142,7 @@
       "sections": [
         {
           "kind": "skill_library",
-          "ref": "5f7be950a7f9d8c72532f0d6a0fb18223d1c48b29a0b3b1b1337cfe16f2c4dbc"
+          "ref": "7354127fe86832cca6c3e0d2f09fabeb7ffca553a84b08cb4417902908bd8797"
         },
         {
           "kind": "how_to_report",
@@ -151,7 +151,7 @@
       ],
       "omitted": [],
       "used_tokens": 238,
-      "sha256": "67941bd0cdc0973bf6033867542b7e5865071b8c699cd282efcdc5432bf9737b"
+      "sha256": "2831ecd34dfb46568e809283ac6e99c9def7bb0a928afe2e29a493b46719b50b"
     }
   }
 }

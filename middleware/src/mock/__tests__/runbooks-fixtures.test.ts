@@ -24,9 +24,10 @@ describe('runbook fixtures', () => {
     for (const r of runbooks) expect(runbookVersionsFixture.rows().some((v) => v.runbook_id === r.id && v.version === r.current_version)).toBe(true);
     for (const v of runbookVersionsFixture.rows()) expect(runbooks.some((r) => r.id === v.runbook_id)).toBe(true);
     // Lane C's seeded proposals (mock/runbooks.seed.ts): a run's edit, a run's new runbook, a person's near-duplicate;
-    // and R8's run edit that changes a tool's files (mock/runbook-bundles.ts).
+    // R8's run edit that changes a tool's files (mock/runbook-bundles.ts); and the LLM-platform run's edit to the
+    // knowledge-base search runbook (mock/runbooks-engagement.ts).
     expect(fixtureRegistry.get('runbook-proposals')!.rows().map((p) => (p as { id: string }).id).sort())
-      .toEqual(['prop-flaky-quarantine-check', 'prop-judge-rubric-weights', 'prop-presence-busy', 'prop-tenant-cutover-callback']);
+      .toEqual(['prop-flaky-quarantine-check', 'prop-judge-rubric-weights', 'prop-kb-search-text-index', 'prop-presence-busy', 'prop-tenant-cutover-callback']);
   });
 
   it('default carries one frozen brief on a done Auth Migration job, and the runbook application that names it', () => {

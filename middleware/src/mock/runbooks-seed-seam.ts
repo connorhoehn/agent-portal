@@ -15,6 +15,7 @@ import { buildSkillLibrary, BOX_SKILLS_DIR } from '../lib/runbooks/library.js';
 import { flakyRerunDiff, ssoNewOrigin, tenantCutoverV1 } from '../lib/runbooks/__tests__/fixtures/good.js';
 import { CDP_RUNBOOK_ID, JOURNEY_WALK_RUNBOOK_ID, LIBRARY_RELEASE_RUNBOOK_ID, PRESENCE_BUSY_PROPOSAL, PRESENCE_RUNBOOK_ID, SEEDED_BUNDLES, bundleFiles } from './runbook-bundles.js';
 import { lintRunbook } from '../lib/runbooks/lint.js';
+import { engagementRunbookRows } from './runbooks-engagement.js';
 
 export interface RunbookSeedRows {
   runbooks: Runbook[];
@@ -27,7 +28,19 @@ export interface RunbookSeedRows {
 const person = (id: string) => ({ kind: 'person' as const, id });
 
 export function runbookSeedRows(): RunbookSeedRows {
-  return withTools(runbookSeedWorld(), toolRunbookRows());
+  return withTools(withEngagement(runbookSeedWorld()), toolRunbookRows());
+}
+
+/** The six runbooks written after a lost day (mock/runbooks-engagement.ts), added to the migrated world. */
+function withEngagement(world: RunbookSeedRows): RunbookSeedRows {
+  const e = engagementRunbookRows();
+  return {
+    ...world,
+    runbooks: [...world.runbooks, ...e.runbooks],
+    versions: [...world.versions, ...e.versions],
+    applications: [...world.applications, ...e.applications],
+    proposals: [...world.proposals, ...e.proposals],
+  };
 }
 
 /** The world plus tool runbooks, its frozen brief recording the whole library its box synced. */
@@ -60,7 +73,7 @@ function toolProposals(runbooks: Runbook[]): RunbookProposal[] {
  * which the demo's run builds, captures and gets accepted (mock/runbooks-tools-demo.ts).
  */
 export function runbookToolsDemoRows(): RunbookSeedRows {
-  return withTools(runbookSeedWorld(), toolRunbookRows([CDP_RUNBOOK_ID]));
+  return withTools(withEngagement(runbookSeedWorld()), toolRunbookRows([CDP_RUNBOOK_ID]));
 }
 
 /** Who owns each seeded tool runbook: all are org-wide skills (scope is a label; every box gets them). */

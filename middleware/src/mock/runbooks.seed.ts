@@ -137,7 +137,7 @@ const auroraColdStartRetry: RunbookDoc = {
   },
   preconditions: [
     'The cluster and secret ARNs are in `$AURORA_CLUSTER_ARN` and `$AURORA_SECRET_ARN` (both in `middleware/.env.aws`).',
-    'The AWS CLI is signed in to the innovation-lab account 647757222309.',
+    'The AWS CLI is signed in to the account that owns the cluster (`aws sts get-caller-identity` prints it).',
   ],
   steps: [
     {
@@ -415,11 +415,23 @@ const statsdDecommission: RunbookDoc = {
   steps: [
     {
       do: 'Keep the service dual-writing to StatsD and OpenTelemetry for at least one sprint.',
-      expect: 'both series present for the service on the dashboard for every day of the sprint.',
+      command: bash(
+        'for ns in StatsD OTel; do',
+        '  printf "%s " "$ns"; aws cloudwatch list-metrics --namespace "$ns" --dimensions Name=service,Value="$SERVICE" --query \'length(Metrics)\'',
+        'done',
+      ),
+      expect: 'a non-zero metric count for both namespaces on every day of the sprint.',
     },
     {
-      do: 'Compare the OpenTelemetry dashboard with the StatsD one for the same week.',
-      expect: 'request rate, error rate and p99 within 5% of each other, and anything further apart blocks the move.',
+      do: 'Compare the OpenTelemetry request count with the StatsD one for the same week.',
+      command: bash(
+        'for ns in StatsD OTel; do',
+        '  aws cloudwatch get-metric-statistics --namespace "$ns" --metric-name requests --dimensions Name=service,Value="$SERVICE" \\',
+        '    --start-time "$(date -u -v-7d +%FT%TZ)" --end-time "$(date -u +%FT%TZ)" --period 604800 --statistics Sum --query \'Datapoints[0].Sum\'',
+        'done',
+      ),
+      expect: 'two sums within 5% of each other (repeat for errors and p99), and anything further apart blocks the move.',
+      why: 'StatsD counters are flushed per interval and OTel sums are cumulative, so a mismatch is usually aggregation, not lost data.',
     },
     {
       do: "Save every alarm that still reads a StatsD metric for this service.",
@@ -541,7 +553,7 @@ const tenantCutoverV1: RunbookDoc = {
   },
   preconditions: [
     "The tenant's Cognito app client exists and you know its id (`$CLIENT_ID`).",
-    'The SAML shim is still running behind the per-tenant flag.',
+    'The SAML shim is still running behind the per-tenant flag, a parameter at `/auth/tenants/$TENANT/idp` that reads `saml`.',
     "You know the tenant's portal origin (`$ORIGIN`).",
   ],
   steps: [
@@ -552,11 +564,17 @@ const tenantCutoverV1: RunbookDoc = {
     },
     {
       do: "Flip only this tenant's flag, never several tenants in one change.",
-      expect: "this tenant's sign-in page sends you to the Cognito hosted UI while every other tenant still sees the shim.",
+      command: bash('aws ssm put-parameter --name "/auth/tenants/$TENANT/idp" --value cognito --type String --overwrite'),
+      expect: "a new parameter `Version`, and this tenant's sign-in page sends you to the Cognito hosted UI while every other tenant still sees the shim.",
+      why: 'One tenant per change keeps the blast radius to one customer and the rollback to one parameter.',
     },
     {
       do: 'Sign in as a test user of this tenant and check no live session was dropped.',
-      expect: 'sign-in on the first try and zero forced logouts in the session log.',
+      command: bash(
+        'aws logs filter-log-events --log-group-name /auth/bff --start-time "$(( ($(date +%s) - 900) * 1000 ))" \\',
+        '  --filter-pattern "{ $.event = \\"forced_logout\\" && $.tenant = \\"$TENANT\\" }" --query \'length(events)\'',
+      ),
+      expect: '`0` forced logouts in the last 15 minutes, and the test user signs in on the first try.',
     },
   ],
   verify: [
@@ -567,7 +585,10 @@ const tenantCutoverV1: RunbookDoc = {
     { symptom: 'Users signed out mid-day', cause: 'Flag flipped for more than one tenant', response: 'Roll back every tenant flipped in that change' },
     { symptom: 'The old SAML page still shows after the flip', cause: 'The flag has not reached this tenant yet', response: 'Wait one grants refresh (about 2 minutes), then redo step 3' },
   ],
-  rollback: [{ do: "Flip this tenant's flag back, and the shim answers within one grants refresh (about 2 minutes)." }],
+  rollback: [{
+    do: "Flip this tenant's flag back, and the shim answers within one grants refresh (about 2 minutes).",
+    command: bash('aws ssm put-parameter --name "/auth/tenants/$TENANT/idp" --value saml --type String --overwrite'),
+  }],
   notes: 'Existing sessions survive because a cutover never bumps `session_epoch`; only a tenant or role switch does, and that drops older cookies within about 120 seconds (convention art-007).\nTreat the order of tenants as a parameter: this runbook covers one tenant.',
 };
 
