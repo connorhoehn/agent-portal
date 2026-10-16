@@ -42,6 +42,7 @@ import { dispatchGovernedRun } from './sdlc-pipeline.js';
 import { runDevboxShell } from './project-runner.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
 import { registerBox, getBoxBySession, appendEvent, removeBox, type BoxStatus } from './devbox-fleet.js';
+import { currentMockScope } from '../mock/core/scope.js';
 
 /** A workspace in one of these states has someone in it — see ensureWorkspace. */
 const BUSY_BOX_STATUSES: ReadonlySet<BoxStatus> = new Set<BoxStatus>(['provisioning', 'running', 'waiting']);
@@ -1255,7 +1256,11 @@ export async function dispatchWorkItem(input: {
   // Deliberately AFTER the claim: the compare-and-swap above is the only
   // thing stopping two dispatches working one item, and it must hold in both
   // worlds.
-  if (!await resolveDevboxArn()) {
+  //
+  // Also whenever the request runs inside a scoped mock world: the real path
+  // below mints a computer in the fleet registry, which no scope forks, and
+  // computers are ephemeral — a walk must neither create nor depend on one.
+  if (currentMockScope() !== undefined || !await resolveDevboxArn()) {
     return simulateMarketplaceDispatch({
       item, project, prompt, model: input.model, revertClaim,
       ...(input.actor ? { actor: input.actor } : {}),
@@ -1408,11 +1413,23 @@ async function simulateMarketplaceDispatch(input: {
   // this actor's, working this initiative's item — so this is the attribution
   // the rule was written to read, not an exemption from it.
   const sessionId = normalizeRuntimeSessionId(project.sessionId);
-  const box = getBoxBySession(sessionId) ?? registerBox({
-    sessionId,
-    projectId: item.projectId,
-    ...(input.actor ? { ownerId: input.actor } : {}),
-  });
+  //
+  // Not inside a request-scoped mock world. The fleet is one in-memory
+  // registry no scope forks, so a box registered by a scoped dispatch would
+  // outlive the scope and show up in every other viewer's Computer Lab.
+  // Computers are ephemeral and a scoped walk must neither create nor depend
+  // on one (decision 2026-10-16), so the scoped run names the id the box
+  // WOULD have, registers nothing, and its appendEvent calls no-op on the
+  // missing box. Outside a scope (the demo, tests, a person's own dev:mock)
+  // this is unchanged.
+  const scoped = currentMockScope() !== undefined;
+  const box = scoped
+    ? { id: getBoxBySession(sessionId)?.id ?? sessionId.slice(-8) }
+    : getBoxBySession(sessionId) ?? registerBox({
+      sessionId,
+      projectId: item.projectId,
+      ...(input.actor ? { ownerId: input.actor } : {}),
+    });
   await markCloned(project.id, sessionId);
 
   const job = await enqueueJob({
@@ -1509,7 +1526,7 @@ async function simulateMarketplaceDispatch(input: {
       // landing it, not the contents of a prompt it cannot read), and its
       // returned figures are SIMULATED_RESULT's, so settleSimulatedRun below
       // still quotes the same price for the same fake run.
-      if (mockDispatchStepMs >= NARRATE_ABOVE_MS) {
+      if (!scoped && mockDispatchStepMs >= NARRATE_ABOVE_MS) {
         await playDispatchedRun({
           title: item.title,
           prompt: input.prompt,
@@ -1519,6 +1536,14 @@ async function simulateMarketplaceDispatch(input: {
     },
     async () => { await settleSimulatedRun({ jobId: job.id, runId: run.id, boxId: box.id, item, startedMs }); },
   ];
+
+  // A scoped dispatch is claimed and running, synchronously, and stays there:
+  // no timer outlives the request, no narration targets a box, and the item
+  // does not flip back to open under a walk that is reading it.
+  if (scoped) {
+    for (const step of progression.slice(0, 2)) await step();
+    return { ok: true, run };
+  }
 
   const walk = async (): Promise<void> => {
     for (const step of progression) {

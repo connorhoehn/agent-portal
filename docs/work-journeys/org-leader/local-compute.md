@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/local-compute; /iq/local-compute/configuration; /iq/local-compute/configuration?contents=hooks; /iq/local-compute/configuration?contents=settings
 map: docs/journeys/maps/work/org-leader/local-compute.ts
 pages: portal/src/pages/local-compute
-audited: 2026-10-16 07:30–07:31 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-00055571), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-00055571, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 11:04–11:04 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-8114d344), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-vera-clone-8114d344, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: local-compute.jpg
 verdict: pass
 console errors: 0 unexpected; 5 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

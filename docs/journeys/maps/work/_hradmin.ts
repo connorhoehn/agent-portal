@@ -17,7 +17,7 @@ export function hrAdminRefusalsMap(): JourneyMap {
   const shared = refusals('hr-admin');
   const tail = shared.filter((s) => s.do === 'tab-walk');
   const head = shared.filter((s) => s.do !== 'tab-walk');
-  // The palette carries entries per computer in the fleet (a dispatch adds a computer, and the fleet is not forked by a mock scope), so the count leaves out the Devbox group and the Terminals group.
+  // The palette carries entries per computer in the fleet (computers are ephemeral and the fleet is not forked by a mock scope, so a walk never counts them), so the count leaves out the Devbox group and the Terminals group.
   const entries = { css: '[role="dialog"] [role="option"]:not([data-testid^="command-palette-item-devbox:"]):not([data-testid^="command-palette-item-shell:"])' };
   const counted = head.map((s): Step => s.name.startsWith('The palette lists') ? { ...s, name: `The palette lists ${PALETTE_COUNT_STATIC} entries for this role, not counting the Devbox and Terminals entries, one of each per computer`, expect: { count: [{ target: entries, eq: PALETTE_COUNT_STATIC }] } } as Step : s);
   const steps: Step[] = [
@@ -38,7 +38,7 @@ export function hrAdminRefusalsMap(): JourneyMap {
     claims: {
       'rail-items': `${base.claims!['rail-items']} — the full Work rail: hr-admin holds every route's role, nothing is hidden`,
       'hidden-surfaces-direct-route': 'none — hr-admin reaches every gated /iq and /admin route, so no deep link bounces; /admin/identity opens and stays',
-      'palette-entries': `${PALETTE_COUNT_STATIC} — every entry this role's grants allow, not counting the Devbox and Terminals entries, one of each per computer (the fleet changes as runs are dispatched)`,
+      'palette-entries': `${PALETTE_COUNT_STATIC} — every entry this role's grants allow, not counting the Devbox and Terminals entries, one of each per computer (computers are ephemeral)`,
       'quick-switch': `${base.claims!['quick-switch']} — hr-admin holds ConnectLocalCompute and ManageDevbox, so ⌘I lists the computers`,
       'api-refused': 'pass',
     },

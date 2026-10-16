@@ -88,6 +88,15 @@ export function machineToComputer(n: NodeWire): Computer {
 export function withLocalMachines(base: ComputeClient): ComputeClient {
   return {
     ...base,
+    // Viewing the lab never provisions. The library's fleet poll re-adopts the
+    // browser's cached computers with `POST /boxes` whenever the server lists
+    // none, which made an empty or filtered fleet (a viewer, a scoped world, a
+    // restart) a write issued by merely opening a page. Computers are
+    // ephemeral: one that is gone stays gone, and a new one is created only by
+    // the person asking for it (`createComputer`).
+    async adoptComputer(): Promise<void> {
+      throw new Error('computers are ephemeral: viewing the lab does not re-create one');
+    },
     async listComputers(signal?: AbortSignal): Promise<Computer[]> {
       const boxes = await base.listComputers(signal);
       try {

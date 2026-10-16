@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /admin/capabilities/guardrails; /admin/capabilities/code-interpreter; /admin/capabilities/browser
 map: docs/journeys/maps/work/org-leader/capabilities.ts
 pages: portal/src/pages/capabilities/GuardrailsPage.tsx, portal/src/pages/capabilities/CodeInterpreterPage.tsx, portal/src/pages/capabilities/BrowserPage.tsx
-audited: 2026-10-16 07:26–07:26 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-2f754952), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-2f754952, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 11:55–11:55 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-01b34e4f), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-vera-clone-01b34e4f, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: capabilities.jpg
 verdict: pass
 console errors: 0

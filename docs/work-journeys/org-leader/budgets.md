@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /admin/budgets; /admin/budgets?report=sprints
 map: docs/journeys/maps/work/org-leader/budgets.ts
 pages: portal/src/pages/budgets/BudgetsPage.tsx, portal/src/pages/budgets/InitiativesReport.tsx, portal/src/pages/budgets/SprintsReport.tsx
-audited: 2026-10-16 07:26–07:26 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-7fa0f9a5), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-7fa0f9a5, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 11:00–11:00 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-f2d0edd2), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-vera-clone-f2d0edd2, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: budgets.jpg
 verdict: pass
 console errors: 0 unexpected; 3 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

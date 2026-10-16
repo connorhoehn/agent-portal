@@ -3,7 +3,7 @@
 // read-only, a program owner's pages are different: its clone is on no initiative with a computer, so the Computer Lab is
 // empty, and the review queue is unreadable (GET /api/sdlc/changes is ManageDevbox-gated), so the page says so.
 import type { Expect, JourneyMap, Step, Target } from '../../../../scripts/journeys/journey-map.ts';
-import { PERSONA, STILL, api, click, dialog, fill, open, press, readOnlyPostsFor, reload, scoped, seen, surfaceMap, tabClick, tabNamed, tabWalk, LEAKS, type Role } from './_shared.ts';
+import { PERSONA, STILL, api, click, dialog, fill, open, press, reload, scoped, seen, surfaceMap, tabClick, tabNamed, tabWalk, LEAKS, type Role } from './_shared.ts';
 
 const ROLE: Role = 'program-owner';
 const h1 = (name: string): Target => ({ role: 'heading', name, level: 1 });
@@ -11,7 +11,7 @@ const selected = (t: Target): Expect => ({ attr: [{ target: t, name: 'aria-selec
 
 function mapOf(journey: string, goal: string, pages: string, steps: Step[]): JourneyMap {
   return {
-    family: 'work', log: `${ROLE}/${journey}`, kind: 'surface', persona: PERSONA[ROLE], scenario: 'shared', identity: 'clone', ...readOnlyPostsFor(ROLE),
+    family: 'work', log: `${ROLE}/${journey}`, kind: 'surface', persona: PERSONA[ROLE], scenario: 'shared', identity: 'clone',
     viewport: { width: 1440, height: 900 }, goal: `${PERSONA[ROLE].name}: ${goal}`, fields: { surface: journey, pages }, steps,
   };
 }

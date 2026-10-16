@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/projects/p-auth-migration?tab=docs; /iq/documents/adr-d-vectordb; /iq/search; /iq/documents/doc-missing
 map: docs/journeys/maps/work/org-leader/documents.ts
 pages: portal/src/pages/iq/DocumentRecordPage.tsx, portal/src/lib/workDocuments.ts
-audited: 2026-10-16 07:28–07:28 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-5851f0c9), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-5851f0c9, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 11:02–11:02 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-2b36d68c), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-vera-clone-2b36d68c, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: documents.jpg
 verdict: pass
 console errors: 0 unexpected; 2 expected by the map (Failed to load resource: net::ERR_CONNECTION_REFUSED | Failed to load resource: the server responded with a status of 404 (Not Found))

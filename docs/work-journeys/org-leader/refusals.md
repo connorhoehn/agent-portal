@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/projects; /admin/projects; /admin/changes; /admin/changes/sample; /admin/ingest; /admin/ingest/summary; /admin/ingest/crawl; /admin/ingest/crawl/sample; /admin/ingest/history; /admin/ingest/history/sample; /admin/ingest/sources; /admin/ingest/storage; /admin/ingest/schedules; /admin/identity; /admin/identity/users; /admin/identity/users/sample; /admin/identity/roles; /admin/identity/policies; /admin/identity/schema; /admin/identity/test
 map: docs/journeys/maps/work/org-leader/refusals.ts
 pages: portal/src/App.tsx, portal/src/components/shell/Layout.tsx, portal/src/components/shell/portalCommands.ts, middleware/seeds/roles/orgiq
-audited: 2026-10-16 07:39–07:40 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-81f481ad), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-81f481ad, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 11:13–11:14 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-d711682c), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-vera-clone-d711682c, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: refusals.jpg
 verdict: pass
 console errors: 0

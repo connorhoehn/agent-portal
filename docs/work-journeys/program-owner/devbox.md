@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /admin/devbox
 map: docs/journeys/maps/work/program-owner/devbox.ts
 pages: portal/src/pages/admin/DevboxPage.tsx, portal/src/components/compute/ComputeHost.tsx
-audited: 2026-10-16 07:05–07:05 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-e68988ca), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-mia-clone-e68988ca, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-16 09:48–09:48 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-cb8b0669), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-mia-clone-cb8b0669, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: devbox.jpg
 verdict: pass
 console errors: 0

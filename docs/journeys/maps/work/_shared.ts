@@ -814,23 +814,13 @@ const SURFACE_STEPS: Record<string, (role: Role) => Step[]> = {
 /** The journeys that write for a role that dispatches: they run inside a scoped world. */
 const writesJourney = (role: Role, journey: string): boolean => writesJob(role) && (journey === 'work-write' || journey === 'prepare-job');
 
-/**
- * A role that holds ManageDevbox mounts the app-wide fleet poll. When a scoped mock world lists no computers the library's
- * `readopt` re-registers the ones cached in localStorage (POST /api/devbox/boxes, ui-components ComputeContext `useComputeFleet`),
- * which is not something the person did; it lands in the copy-on-write scope. hr-admin's clone owns a computer in every world and never sends it.
- */
-export const readOnlyPostsFor = (role: Role): Partial<JourneyMap> =>
-  CAPS[role].devbox && role !== 'hr-admin'
-    ? { readOnlyPosts: [{ path: '/api/devbox/boxes', reason: 'POST /api/devbox/boxes is the library fleet poll re-adopting its cached computers after a scoped world lists none (ComputeContext readopt); the scope is copy-on-write and the person wrote nothing' }] }
-    : {};
-
 /** The map a role walks for one surface: `docs/journeys/maps/work/<role>/<journey>.ts` is one line of this. */
 export function surfaceMap(role: Role, journey: string, opts: Partial<JourneyMap> = {}): JourneyMap {
   const steps = SURFACE_STEPS[journey];
   if (!steps) throw new Error(`no surface steps for ${journey}`);
   return {
     family: 'work', log: `${role}/${journey}`, kind: 'surface', persona: PERSONA[role], scenario: 'shared', identity: 'clone',
-    ...(writesJourney(role, journey) ? { scenario: { scope: 'default' }, writes: true } : readOnlyPostsFor(role)),
+    ...(writesJourney(role, journey) ? { scenario: { scope: 'default' }, writes: true } : {}),
     viewport: { width: 1440, height: 900 },
     goal: `${PERSONA[role].name}: ${GOAL[journey]}`,
     fields: { surface: journey, pages: PAGE_FILES[journey] ?? 'portal/src/pages' },

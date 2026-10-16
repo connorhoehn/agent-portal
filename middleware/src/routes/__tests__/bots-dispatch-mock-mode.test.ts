@@ -56,6 +56,8 @@ import { errorHandler } from '../../lib/async-handler.js';
 import { __setMockDispatchStepMs } from '../../lib/bot-runner.js';
 import { __resetMockRuns } from '../../providers/bots.js';
 import { getJob } from '../../providers/agent-jobs.js';
+import { createMockScope, deleteMockScope, runInMockScope } from '../../mock/core/scope.js';
+import { registerBox } from '../../lib/devbox-fleet.js';
 
 // Run the simulated dispatch's state progression synchronously — the seam
 // exists so a test never sleeps through it (providers/distillation.ts's
@@ -66,9 +68,11 @@ beforeAll(() => __setMockDispatchStepMs(0));
 afterAll(() => __setMockDispatchStepMs(2_000));
 beforeEach(() => __resetMockRuns());
 
-function buildApp() {
+function buildApp(scope?: ReturnType<typeof createMockScope>) {
   const app = express();
   app.use(express.json());
+  // The real scope middleware runs the rest of the request inside the scope.
+  if (scope) app.use((_req, _res, next) => { runInMockScope(scope, next); });
   app.use((req, _res, next) => {
     // Vera Green, org-leader — the exact persona/role DEFECTS.md #3 repros.
     (req as unknown as { session: unknown }).session = { sub: 'u-vera', role: 'org-leader', tenant: 'orgiq' };
@@ -119,5 +123,20 @@ describe('POST /api/bots/dispatch-work — Vera on Observability Platform (dev:m
       workItemId: BODY.workItemId, workItemTitle: 'Error-budget dashboard per team',
       initiativeId: 'p-observability', initiativeName: 'Observability Platform',
     });
+  });
+
+  it('registers no computer when the request runs in a scoped mock world', async () => {
+    // Computers are ephemeral and the fleet registry is one Map no scope
+    // forks: a scoped walk must neither create nor depend on one.
+    const scope = createMockScope({ base: 'default' } as never);
+    try {
+      (registerBox as jest.Mock).mockClear();
+      const res = await request(buildApp(scope)).post('/api/bots/dispatch-work').send(BODY);
+      expect(res.status).toBe(202);
+      expect(registerBox).not.toHaveBeenCalled();
+      expect(res.body.run.jobId).toMatch(/^job-/);
+    } finally {
+      deleteMockScope(scope.id);
+    }
   });
 });

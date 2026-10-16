@@ -5,7 +5,7 @@
 // portal/src/App.tsx. Helpers come from _shared.ts (owned by the member lane; never edited here).
 import type { Expect, JourneyMap, Step, Target, Text } from '../../../../scripts/journeys/journey-map.ts';
 import {
-  CAPS, LEAKS, PERSONA, readOnlyPostsFor, STILL, back, click, dialog, fill, firstRow, open, press, reload, scoped, search, seen, tabClick,
+  CAPS, LEAKS, PERSONA, STILL, back, click, dialog, fill, firstRow, open, press, reload, scoped, search, seen, tabClick,
   tabNamed, tabWalk, tableRows, api, type Role,
 } from './_shared.ts';
 
@@ -195,31 +195,31 @@ export function changesReview(role: Role): Step[] {
 const adminWrite = (role: Role): boolean => role === 'hr-admin';
 
 // ── devbox: /admin/devbox (the Computer Lab) ────────────────────────────────
+// Computers are ephemeral (decision 2026-10-16): the fleet is an in-memory registry no scope forks, so this map asserts
+// only what holds whatever the fleet holds (the frame, the two views and their counts agreeing, the viewer sentence, the
+// find box saying nothing matches) and never names, counts or filters to a computer.
 export function devbox(role: Role): Step[] {
   const c = CAPS[role];
   const fleet = { role: 'tablist', name: 'Fleet' } as Target;
   const computers = tabNamed(/^Computers/);
   const agents = tabNamed(/^Agents/);
   const VIEWER = /You can see the fleet but not drive it/;
-  // The fleet each persona's clone sees: hr-admin's has her scratch computer, an sme's is the initiatives she sits on.
-  const scratch = role === 'hr-admin' ? { name: 'rachel-scratch', query: 'rachel' } : { name: 'auth-migration-2', query: 'migration-2' };
+  const find = { placeholder: 'Find computer or agent…' };
   return [
-    open('/admin/devbox', 'Open the Computer Lab: the fleet grouped by initiative with each computer named, its spend against the initiative budget', {
-      url: '/admin/devbox', visible: [computers, agents, seen('Observability Platform'), seen('observability-1'), seen(/\d+ computers/)],
+    open('/admin/devbox', 'Open the Computer Lab: the Computers and Agents views with their counts, and the sentence for a viewer who cannot drive', {
+      url: '/admin/devbox', visible: [computers, agents, seen(/\d+ computers/)],
       numbers: [{ of: computers, re: /(\d+)/, eqNumberOf: seen(/^\d+ computers/), reOther: /^(\d+)/ }],
-      ...(c.devbox ? { noText: [VIEWER] } : { visible: [computers, agents, seen('observability-1'), seen(VIEWER)] }),
+      ...(c.devbox ? { noText: [VIEWER] } : { visible: [computers, agents, seen(VIEWER)] }),
     }, { facts: true, proves: ['story-facts', 'role-gating'] }),
     api('/api/devbox/boxes', 200, 'This role may read the fleet: GET /api/devbox/boxes answers 200'),
-    tabClick(agents, 'Click the Agents view (the Lab has no filter box, so the view switch is the stability check): the running agents list by work item and the header stays put', {
-      // The fleet is one in-memory registry no scope forks (dispatching walks add computers), so the agents view is judged by its counts agreeing, for every role.
+    tabClick(agents, 'Click the Agents view (the view switch is the stability check): the header stays put and the counts agree', {
       ...selected(agents), visible: [seen(/\d+ computers? · \d+ agents?/)], numbers: [{ of: agents, re: /(\d+)/, eqNumberOf: seen(/\d+ computers? · \d+ agents?/), reOther: /· (\d+) agents?/ }],
     }, [STILL.header, fleet], { proves: ['tab-stability', 'story-facts'], state: 'filtered' }),
-    tabClick(computers, 'Click the Computers view: the fleet is back, grouped by initiative', { ...selected(computers), visible: c.devbox ? [seen('Auth Migration'), seen('auth-migration-2')] : [seen('auth-migration-2'), seen('observability-1')] }, [STILL.header, fleet]),
+    tabClick(computers, 'Click the Computers view: the view is back and the header stays put', { ...selected(computers) }, [STILL.header, fleet]),
     press('Enter', 'Enter on the Agents tab (focused by the key press) selects it', { ...selected(agents), focused: agents }, { target: agents, proves: 'keyboard' }),
-    click(computers, 'Back to the Computers view with the mouse', { ...selected(computers), visible: [seen(scratch.name)] }),
-    fill({ placeholder: 'Find computer or agent…' }, 'zzzzqq', 'Find zzzzqq: the lab says nothing matches instead of an empty rail', { visible: [seen('Nothing matches.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
-    fill({ placeholder: 'Find computer or agent…' }, scratch.query, `Find ${scratch.query}: only ${scratch.name} stays`, { visible: [seen(scratch.name)], absent: [{ text: 'observability-1', exact: true }] }, { state: 'filtered' }),
-    fill({ placeholder: 'Find computer or agent…' }, '', 'Clear the find box: the whole fleet is back', { visible: [seen('observability-1'), seen(scratch.name)] }),
+    click(computers, 'Back to the Computers view with the mouse', { ...selected(computers) }),
+    fill(find, 'zzzzqq', 'Find zzzzqq: the lab says nothing matches instead of an empty rail', { visible: [seen(/Nothing matches\.|No computers in the lab/)] }, { state: 'filtered-empty', proves: 'empty-state' }),
+    fill(find, '', 'Clear the find box: the views are back', { visible: [computers, agents], absent: [seen(/Nothing matches\./)] }),
     tabWalk(10),
   ];
 }
@@ -490,7 +490,7 @@ export function adminMap(role: Role, journey: string, opts: Partial<JourneyMap> 
   const writes = WRITING.has(journey) && CAPS[role].budgets;
   return {
     family: 'work', log: `${role}/${journey}`, kind: 'surface', persona: PERSONA[role], identity: 'clone',
-    scenario: writes ? { scope: 'default' } : 'shared', ...(writes ? { writes: true } : readOnlyPostsFor(role)),
+    scenario: writes ? { scope: 'default' } : 'shared', ...(writes ? { writes: true } : {}),
     viewport: { width: 1440, height: 900 },
     goal: `${PERSONA[role].name}: ${GOAL[journey]}`,
     fields: { surface: journey, pages: PAGE_FILES[journey] ?? 'portal/src/pages' },

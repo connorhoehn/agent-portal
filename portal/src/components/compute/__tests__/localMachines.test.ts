@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  LOCAL_ID_PREFIX, isLocalMachineId, machineToComputer, nodeIdOf,
+  LOCAL_ID_PREFIX, isLocalMachineId, machineToComputer, nodeIdOf, withLocalMachines,
 } from '../localMachines.ts';
 
 const node = (over: Record<string, unknown> = {}) => ({
@@ -66,4 +66,15 @@ test('lastActivityAt is carried only when presence actually reports one', () => 
   assert.equal(seen.lastActivityAt, '2026-09-17T07:00:00.000Z');
   const never = machineToComputer(node({ presence: { status: 'offline' } }));
   assert.equal(never.lastActivityAt, undefined);
+});
+
+test('viewing the lab never re-adopts a computer (no POST /boxes from a read)', async () => {
+  let adopted = 0;
+  const base = {
+    listComputers: async () => [],
+    adoptComputer: async () => { adopted++; },
+  } as unknown as Parameters<typeof withLocalMachines>[0];
+  const wrapped = withLocalMachines(base);
+  await assert.rejects(() => wrapped.adoptComputer({ sessionId: 'x' } as never));
+  assert.equal(adopted, 0);
 });

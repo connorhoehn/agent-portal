@@ -168,7 +168,7 @@ are the extra depth it must carry (`numbers`, `dialog`, `composer`,
 | `sme/work-write` | surface | `/iq/projects/p-auth-migration?tab=work` | default, dialog-open, row-open | — | write, dialog, reload | Change work: create a story, move its status, assign an owner, add a planning note, each read back after a reload, inside a scoped world |
 | `sme/runs` | surface | `/iq/runs`, `/iq/runs/:id` | default, filtered, filtered-empty, row-open, not-found, empty, error | Run, Brief | numbers | Agent runs: status and kind, search, open the run record and its brief, a missing run, the empty and error worlds |
 | `sme/bots` | surface | `/admin/bots`, `/admin/bots/:id` | default, filtered-empty, row-open, empty, error | Mission, Guardrails | — | Bots: the fleet, search, open a bot and its tabs held still (Live activity appears only while a run is in flight, so its absence is asserted), New bot gated by ManageBots, empty and error |
-| `sme/devbox` | surface | `/admin/devbox` | default, filtered-empty | — | — | The computer lab: the fleet, drive controls gated by ManageDevbox with the sentence for a viewer, a filter that finds nothing (the fleet is an in-memory registry no scope forks, so no empty or error world) |
+| `sme/devbox` | surface | `/admin/devbox` | default, filtered-empty | — | — | The computer lab: the fleet, drive controls gated by ManageDevbox with the sentence for a viewer, a filter that finds nothing; never a computer by name or count (computers are ephemeral) |
 | `sme/refusals` | refusals | `/iq/projects` | refused | — | — | The rail and palette as this role sees them, ⌘I quick switch, every gated /iq and /admin route it cannot reach (a deep link that lands on /iq/projects) and the APIs that answer 403 |
 | `sme/frames` | frames | `/iq/projects`, `/iq/projects/p-auth-migration`, `/iq/decisions`, `/iq/work`, `/iq/search`, `/settings` | default | — | — | The core pages at 1440 and 900 wide, light and dark: nothing clipped, no horizontal scroll, the audit clean in both themes |
 | `program-owner/initiatives` | surface | `/iq/projects` | default, filtered, filtered-empty, row-open, empty, error, long-text, many, loading | — | numbers, palette | Find an initiative: all and mine, search and status, a search that matches nothing, open one; the list under empty, error, long-text, many and loading worlds |
@@ -190,7 +190,7 @@ are the extra depth it must carry (`numbers`, `dialog`, `composer`,
 | `program-owner/work-write` | surface | `/iq/projects/p-auth-migration?tab=work` | default, dialog-open, row-open | — | write, dialog, reload | Change work: create a story, move its status, assign an owner, add a planning note, each read back after a reload, inside a scoped world |
 | `program-owner/runs` | surface | `/iq/runs`, `/iq/runs/:id` | default, filtered, filtered-empty, row-open, not-found, empty, error | Run, Brief | numbers | Agent runs: status and kind, search, open the run record and its brief, a missing run, the empty and error worlds |
 | `program-owner/bots` | surface | `/admin/bots`, `/admin/bots/:id` | default, filtered-empty, row-open, empty, error | Mission, Guardrails | — | Bots: the fleet, search, open a bot and its tabs held still (Live activity appears only while a run is in flight, so its absence is asserted), New bot gated by ManageBots, empty and error |
-| `program-owner/devbox` | surface | `/admin/devbox` | default, filtered-empty | — | — | The computer lab: the fleet, drive controls gated by ManageDevbox with the sentence for a viewer, a filter that finds nothing (the fleet is an in-memory registry no scope forks, so no empty or error world) |
+| `program-owner/devbox` | surface | `/admin/devbox` | default, filtered-empty | — | — | The computer lab: the fleet, drive controls gated by ManageDevbox with the sentence for a viewer, a filter that finds nothing; never a computer by name or count (computers are ephemeral) |
 | `program-owner/budgets` | surface | `/admin/budgets` | default, filtered, filtered-empty, empty, error, dialog-open | — | numbers, dialog, write | Budgets: allocations and sprint envelopes, search, set an allocation read back after a reload, Remove allocation asks first and Escape keeps it, empty and error |
 | `program-owner/changes-review` | surface | `/admin/changes` | default | Review queue | — | Code review as a program owner: App.tsx lets the role open the page, but `GET /api/sdlc/changes` needs ManageDevbox, which program-owner lacks — the map proves the page says so (one tab, the denial sentence, the 403); an open decision below |
 | `program-owner/refusals` | refusals | `/iq/projects` | refused | — | — | The rail and palette as this role sees them, ⌘I quick switch, every gated /iq and /admin route it cannot reach (a deep link that lands on /iq/projects) and the APIs that answer 403 |
@@ -214,7 +214,7 @@ are the extra depth it must carry (`numbers`, `dialog`, `composer`,
 | `org-leader/work-write` | surface | `/iq/projects/p-auth-migration?tab=work` | default, dialog-open, row-open | — | write, dialog, reload | Change work: create a story, move its status, assign an owner, add a planning note, each read back after a reload, inside a scoped world |
 | `org-leader/runs` | surface | `/iq/runs`, `/iq/runs/:id` | default, filtered, filtered-empty, row-open, not-found, empty, error | Run, Brief | numbers | Agent runs: status and kind, search, open the run record and its brief, a missing run, the empty and error worlds |
 | `org-leader/bots` | surface | `/admin/bots`, `/admin/bots/:id` | default, filtered-empty, row-open, empty, error | Mission, Guardrails | — | Bots: the fleet, search, open a bot and its tabs held still (Live activity appears only while a run is in flight, so its absence is asserted), New bot gated by ManageBots, empty and error |
-| `org-leader/devbox` | surface | `/admin/devbox` | default, filtered-empty | — | — | The computer lab: the fleet, drive controls gated by ManageDevbox with the sentence for a viewer, a filter that finds nothing (the fleet is an in-memory registry no scope forks, so no empty or error world) |
+| `org-leader/devbox` | surface | `/admin/devbox` | default, filtered-empty | — | — | The computer lab: the fleet, drive controls gated by ManageDevbox with the sentence for a viewer, a filter that finds nothing; never a computer by name or count (computers are ephemeral) |
 | `org-leader/budgets` | surface | `/admin/budgets` | default, filtered, filtered-empty, empty, error, dialog-open | — | numbers, dialog, write | Budgets: allocations and sprint envelopes, search, set an allocation read back after a reload, Remove allocation asks first and Escape keeps it, empty and error |
 | `org-leader/scores` | surface | `/iq/scores`, `/iq/scores/cohorts`, `/iq/scores/compare` | default, row-open, empty, error | — | numbers | Expertise scores: people by score, cohorts, compare two people by name, no scores, an error |
 | `org-leader/observability` | surface | `/admin/observability/summary`, `/admin/observability/invocations`, `/admin/observability/tools` | default, filtered-empty, row-open | — | — | Observability: health, invocations and tool calls, a search that finds nothing, open an invocation |
@@ -241,7 +241,7 @@ are the extra depth it must carry (`numbers`, `dialog`, `composer`,
 | `hr-admin/local-compute` | surface | `/iq/local-compute`, `/iq/local-compute/configuration` | default, empty, error | Skills, Hooks, Settings | — | Local compute: machines, pairing gated by ConnectLocalCompute, the configuration tabs held still, no machines, an error |
 | `hr-admin/runs` | surface | `/iq/runs`, `/iq/runs/:id` | default, filtered, filtered-empty, row-open, not-found, empty, error | Run, Brief | numbers | Agent runs: status and kind, search, open the run record and its brief, a missing run, the empty and error worlds |
 | `hr-admin/bots` | surface | `/admin/bots`, `/admin/bots/:id` | default, filtered-empty, row-open, empty, error | Mission, Guardrails | — | Bots: the fleet, search, open a bot and its tabs held still (Live activity appears only while a run is in flight, so its absence is asserted), New bot gated by ManageBots, empty and error |
-| `hr-admin/devbox` | surface | `/admin/devbox` | default, filtered-empty | — | — | The computer lab: the fleet, drive controls gated by ManageDevbox with the sentence for a viewer, a filter that finds nothing (the fleet is an in-memory registry no scope forks, so no empty or error world) |
+| `hr-admin/devbox` | surface | `/admin/devbox` | default, filtered-empty | — | — | The computer lab: the fleet, drive controls gated by ManageDevbox with the sentence for a viewer, a filter that finds nothing; never a computer by name or count (computers are ephemeral) |
 | `hr-admin/budgets` | surface | `/admin/budgets` | default, filtered, filtered-empty, empty, error, dialog-open | — | numbers, dialog, write | Budgets: allocations and sprint envelopes, search, set an allocation read back after a reload, Remove allocation asks first and Escape keeps it, empty and error |
 | `hr-admin/changes-review` | surface | `/admin/changes` | default, row-open, empty | Review queue, Policies | — | Code review: the queue and policies tabs held still, open a change, an empty queue |
 | `hr-admin/scores` | surface | `/iq/scores`, `/iq/scores/cohorts`, `/iq/scores/compare` | default, row-open, empty, error | — | numbers | Expertise scores: people by score, cohorts, compare two people by name, no scores, an error |
@@ -280,8 +280,13 @@ in the crowded worlds, the composer policy for a few admin pages, and four
 page-owned rows (AgentFlowPage row height, RolesPage matrix width, the KB
 registry actions column, the browser JourneyTab stability).
 
-Known shared-state leaks no scope forks yet: the Computer Lab fleet
-registry (a dispatch in a scoped world adds computers every walk then sees)
-and its fleet poll's `POST /api/devbox/boxes` from read-only pages. The live
-agent-run relay was scoped on 2026-10-16. The 34 orgiq routes no map visits
+Computers are ephemeral (decision 2026-10-16): walks never create, drive or
+depend on a Computer Lab machine. A dispatch inside a scoped mock world
+registers no fleet box and stays claimed and running (`lib/bot-runner.ts`
+`simulateMarketplaceDispatch`), the lab's fleet poll no longer re-adopts cached
+computers with `POST /api/devbox/boxes` on view (`localMachines.ts`), and the
+`*/devbox` maps assert only the frame, the viewer sentence, the views' counts
+agreeing and the find box's empty sentence, never a computer by name or count.
+Known shared-state leaks no scope forks yet: none. The live agent-run relay was
+scoped on 2026-10-16. The 34 orgiq routes no map visits
 yet are mostly observability sub-pages (coverage.md lists them).
