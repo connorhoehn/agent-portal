@@ -27,7 +27,7 @@ jest.mock('../../providers/projects.js', () => ({
   getProject: jest.fn(async (id: string) => jest.requireActual('./runbook-world').PROJECTS[id] ?? null),
 }));
 jest.mock('../../providers/work-items.js', () => ({
-  getWorkItem: jest.fn(async (id: string) => (id === 'wi-auth-1' ? { id, projectId: 'p-auth' } : null)),
+  getWorkItem: jest.fn(async (id: string) => ({ 'wi-auth-1': 'p-auth', 'wi-other-1': 'p-other' } as Record<string, string>)[id] ? { id, projectId: ({ 'wi-auth-1': 'p-auth', 'wi-other-1': 'p-other' } as Record<string, string>)[id] } : null),
   getProjectDecisions: jest.fn(async () => []),
 }));
 
@@ -41,7 +41,7 @@ import { createRunbooksRouter } from '../runbooks.js';
 import { createSessionBriefsRouter } from '../session-briefs.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { assembleBrief, briefLibraryOf, loadSkillLibrary, renderSkill, type RunbookStore } from '../../lib/runbooks/index.js';
-import { USERS, seededStore, type TestUser } from './runbook-world.js';
+import { NEW_MD, USERS, seededStore, type TestUser } from './runbook-world.js';
 import { cdpWebsocketDoc, bundleFiles, CDP_RUNBOOK_ID } from '../../mock/runbook-bundles.js';
 
 const SECRET = 'lab-secret';
@@ -190,6 +190,56 @@ describe('reviewing and accepting', () => {
     expect(d2.body.files_diff.files.every((f: { status: string }) => f.status === 'deleted')).toBe(true);
     // Without its script, the procedure's commands point at nothing: lint says so.
     expect(drop.body.proposal.lint.map((f: { rule: string }) => f.rule)).toContain('R-command-real');
+  });
+});
+
+describe('a proposer cannot choose the area that chooses their reviewer', () => {
+  const personProposes = (user: TestUser, workItem: string, md = skillMd(), withFiles = true) =>
+    request(appAs(user)).post('/api/runbooks/proposals').send({ kind: 'new', skill_md: md, ...(withFiles ? { files: files() } : {}), rationale: 'Mine.', source: { work_item_id: workItem } });
+  const accept = (user: TestUser, pid: string, body: Record<string, unknown> = {}) =>
+    request(appAs(user)).post(`/api/runbooks/proposals/${pid}/accept`).send(body);
+
+  it('an outsider naming someone else\'s work item gets no area: that initiative\'s SME is refused, only the org-leader accepts', async () => {
+    // member (p-300) is on neither initiative and names a work item on p-auth.
+    const pid = (await personProposes(USERS.member!, 'wi-auth-1')).body.proposal.id;
+    const detail = await request(appAs(USERS.smeAuth!)).get(`/api/runbooks/proposals/${pid}`);
+    expect(detail.body.can_review).toBe(false);
+    const sme = await accept(USERS.smeAuth!, pid);
+    expect([sme.status, sme.body.code]).toEqual([403, 'OUT_OF_SCOPE']);
+    const ok = await accept(USERS.leader!, pid);
+    expect(ok.status).toBe(201);
+    expect(ok.body.runbook.area).toBeUndefined();
+  });
+
+  it('a cooperative SME on another initiative cannot accept via a work item the proposer chose there', async () => {
+    // smeAuth (p-101, on p-auth only) routes a skill to p-other's SME by naming p-other's work item.
+    const pid = (await personProposes(USERS.smeAuth!, 'wi-other-1')).body.proposal.id;
+    expect((await accept(USERS.smeOther!, pid)).status).toBe(403);
+    // Nor by the reviewer naming their own initiative as the scope (a draft without files).
+    const plain = (await personProposes(USERS.member!, 'wi-other-1', NEW_MD, false)).body.proposal.id;
+    const named = await accept(USERS.smeOther!, plain, { scope: { kind: 'initiative', ref: 'p-other' } });
+    expect([named.status, named.body.code]).toEqual([403, 'OUT_OF_SCOPE']);
+    expect(await store.getProposal(plain)).toEqual(expect.objectContaining({ status: 'open' }));
+  });
+
+  it('a contributor\'s own work item does carry the area, but they still cannot accept their own proposal', async () => {
+    const pid = (await personProposes(USERS.proposer!, 'wi-auth-1')).body.proposal.id; // p-103 contributes to p-auth
+    expect((await accept(USERS.proposer!, pid)).body.code).toBe('SELF_ACCEPT');
+    expect((await accept(USERS.smeOther!, pid)).status).toBe(403);
+    const ok = await accept(USERS.smeAuth!, pid);
+    expect(ok.status).toBe(201);
+    expect(ok.body.runbook.area).toBe('p-auth');
+  });
+
+  it('a run\'s area is its own work item from the brief, never the body; its dispatcher still cannot accept', async () => {
+    await freeze('job-area-1', 'p-103', 'wi-auth-1');
+    const res = await boxProposes('job-area-1', { source: { run_ref: 'job-area-1', work_item_id: 'wi-other-1', lab_experience_ids: [] } });
+    expect(res.status).toBe(201);
+    expect(res.body.proposal.source.work_item_id).toBe('wi-auth-1');
+    const pid = res.body.proposal.id;
+    expect((await accept(USERS.smeOther!, pid)).status).toBe(403);
+    expect((await accept(USERS.proposer!, pid)).body.code).toBe('SELF_ACCEPT');
+    expect((await accept(USERS.smeAuth!, pid)).status).toBe(201);
   });
 });
 

@@ -305,7 +305,8 @@ describe('deciding: who may accept', () => {
   });
 
   it('accepting a NEW proposal: the reviewer names the scope and is checked against it', async () => {
-    const created = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD, rationale: 'Worth keeping.', source: { work_item_id: 'wi-auth-1' } });
+    // The proposer contributes to p-auth, so their work item there counts (an outsider's would not: runbook-files.test.ts).
+    const created = await request(appAs(USERS.proposer!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD, rationale: 'Worth keeping.', source: { work_item_id: 'wi-auth-1' } });
     const id = created.body.proposal.id;
     // No scope named and the work item resolves to p-auth: an SME on p-auth may accept it.
     const sme = await accept(USERS.smeAuth!, id, {});

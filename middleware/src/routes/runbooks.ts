@@ -43,7 +43,8 @@ import { rateLimit } from '../lib/rate-limit.js';
 import { LAB_CALLBACK_SERVICE_AUTH, hasServiceAuth, requireServiceAuth } from '../lib/service-auth.js';
 import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
 import type { Session } from '../lib/session.js';
-import { actorId, mayReviewRunbook, type ReviewVerdict } from '../lib/runbook-review.js';
+import { REVIEW_OVERRIDE_ROLES, actorId, mayReviewRunbook, type ReviewVerdict } from '../lib/runbook-review.js';
+import { personOnInitiative } from '../lib/initiative-scope.js';
 import { unifiedDiff } from '../lib/unified-diff.js';
 import { loadCandidates } from '../lib/session-brief-preview.js';
 import { clock } from '../mock/core/clock.js';
@@ -543,17 +544,29 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       newScope = parseScope(body['scope']);
       // A captured tool (a draft carrying files) is a cross-project skill: org scope unless the reviewer says otherwise.
       if (!newScope && peek.proposed_files?.length) newScope = { kind: 'org', ref: null };
-      if (!newScope && peek.source.work_item_id) {
-        try {
-          const { getWorkItem } = await import('../providers/work-items.js');
-          const wi = await getWorkItem(peek.source.work_item_id);
-          if (wi?.projectId) newScope = { kind: 'initiative', ref: wi.projectId };
-        } catch { /* fall through to the 400 below */ }
+      if (!newScope) {
+        const inferred = await newProposalScope(peek);
+        if (inferred.kind === 'initiative') newScope = inferred;
       }
       if (!newScope) throw new ValidationError('a new runbook needs a `scope` ({ kind, ref }) — it names who may review it');
     }
 
     const area = peek?.kind === 'new' ? await proposalArea(peek) : null;
+    // A new runbook's initiative is where it came from, not where a reviewer would like it: naming an
+    // initiative other than the proposal's area would let any SME make themselves its steward. Only an
+    // override role (org-leader, admin) places a new runbook on an initiative it did not come from.
+    if (peek?.kind === 'new' && newScope?.kind === 'initiative' && newScope.ref !== area) {
+      const sess0 = resolveSession(req);
+      if (!sess0 || !(REVIEW_OVERRIDE_ROLES as readonly string[]).includes(sess0.role)) {
+        res.status(403).json({
+          error: area
+            ? `this proposal came from ${area}; only an org-leader can place it on ${newScope.ref}`
+            : `this proposal has no area (no work item on an initiative its proposer works on); only an org-leader can place it on ${newScope.ref}`,
+          code: 'OUT_OF_SCOPE', action: 'ReviewRunbook',
+        });
+        return;
+      }
+    }
     const d = await decidable(req, res, s, newScope ? { scope: newScope, owner: null, area } : undefined);
     if (!d) return;
     const { p, target, actor } = d;
@@ -662,25 +675,30 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     res.json({ proposal });
   }));
 
-  /** R8: the initiative a proposal came from (its work item's), the "area" whose SMEs steward a cross-project skill. */
+  /**
+   * R8: the initiative a proposal came from, the "area" whose SMEs steward a cross-project skill.
+   * The proposer must not be able to pick it (that would pick their reviewer):
+   *   - a run proposal's work item came from the run's frozen brief (the POST ignores the body's), so it stands;
+   *   - a person's work item counts only on an initiative the proposer owns or contributes to
+   *     (lib/initiative-scope.ts, the one "mine" rule); otherwise the proposal has no area and
+   *     only an org-leader (or admin) decides it.
+   */
   async function proposalArea(p: RunbookProposal): Promise<string | null> {
     if (!p.source.work_item_id) return null;
+    let initiative: string | null = null;
     try {
       const { getWorkItem } = await import('../providers/work-items.js');
-      return (await getWorkItem(p.source.work_item_id))?.projectId ?? null;
+      initiative = (await getWorkItem(p.source.work_item_id))?.projectId ?? null;
     } catch { return null; }
+    if (!initiative) return null;
+    if (p.source.kind === 'run') return initiative;
+    return (await personOnInitiative(p.source.person_id, initiative)) ? initiative : null;
   }
 
   async function newProposalScope(p: RunbookProposal): Promise<RunbookScope> {
     if (p.proposed_files?.length) return { kind: 'org', ref: null };
-    if (p.source.work_item_id) {
-      try {
-        const { getWorkItem } = await import('../providers/work-items.js');
-        const wi = await getWorkItem(p.source.work_item_id);
-        if (wi?.projectId) return { kind: 'initiative', ref: wi.projectId };
-      } catch { /* org-wide reviewers only */ }
-    }
-    return { kind: 'org', ref: null };
+    const area = await proposalArea(p);
+    return area ? { kind: 'initiative', ref: area } : { kind: 'org', ref: null };
   }
 
   router.post('/proposals/:pid/merge', ...reviewGate, handler(async (req, res) => {

@@ -61,12 +61,29 @@ export async function stewardsInitiative(
     const { getUser, getProject } = await providers();
     const personId = (await getUser(session.sub))?.personId ?? null;
     if (!personId) return false;
+    return await personOnInitiative(personId, initiativeId);
+  } catch (err) {
+    console.warn(`[initiative-scope] could not resolve steward for ${initiativeId}:`, (err as Error).message);
+    return false;
+  }
+}
+
+/**
+ * The same "mine" rule for a person id with no session in hand and NO role
+ * bypass: owner or contributor, nothing else. Used where the question is about
+ * a recorded person (a proposal's author), not the caller. A lookup failure or
+ * an unknown initiative resolves to NOT attached.
+ */
+export async function personOnInitiative(personId: string | null | undefined, initiativeId: string): Promise<boolean> {
+  if (!personId) return false;
+  try {
+    const { getProject } = await providers();
     const project = await getProject(initiativeId);
     if (!project) return false;
     if (project.ownerId === personId) return true;
     return project.contributors.some((c) => c.personId === personId);
   } catch (err) {
-    console.warn(`[initiative-scope] could not resolve steward for ${initiativeId}:`, (err as Error).message);
+    console.warn(`[initiative-scope] could not resolve membership of ${personId} on ${initiativeId}:`, (err as Error).message);
     return false;
   }
 }
