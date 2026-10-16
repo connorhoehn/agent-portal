@@ -1,2 +1,2 @@
-import { surfaceMap } from '../_shared.ts';
-export default surfaceMap('sme', 'work-write');
+import { olWorkWrite } from '../_ol.ts';
+export default olWorkWrite('sme');

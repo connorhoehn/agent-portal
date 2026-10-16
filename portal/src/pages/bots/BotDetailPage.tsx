@@ -465,7 +465,7 @@ export default function BotDetailPage() {
                     <TableTd className="text-text-tertiary whitespace-nowrap" title={new Date(r.startedAt).toLocaleString()}>
                       {relativeTime(r.startedAt)}
                     </TableTd>
-                    <TableTd className="max-w-[28rem]">
+                    <TableTd className="max-w-[22rem]">
                       <Inline gap="sm" wrap={false} title={o.summary}>
                         {o.reason && (
                           r.status === 'failed'

@@ -130,12 +130,13 @@ export const olSprints = (): JourneyMap => {
 };
 
 // ── work-write ──────────────────────────────────────────────────────────────
-// The composer opens in Agent mode for this role on a work item whose job card is up (the sme's opens in Chat), and /comment
-// is a Chat command: the planning note is typed after switching the mode from the composer's own menu.
-export const olWorkWrite = (): JourneyMap => {
-  const base = surfaceMap('org-leader', 'work-write');
+// The composer opens in Agent mode on a work item whose job card is up for the org-leader, and for the sme since the seeded agent
+// question waiting for an answer takes the composer's focus (answersFocus); /comment is a Chat command: the planning note is
+// typed after switching the mode from the composer's own menu.
+export const olWorkWrite = (role: 'org-leader' | 'sme' = 'org-leader'): JourneyMap => {
+  const base = surfaceMap(role, 'work-write');
   const at = base.steps.findIndex((s) => s.name.startsWith('Type a planning note'));
-  if (at < 0) throw new Error('org-leader/work-write: the shared steps no longer type a planning note');
+  if (at < 0) throw new Error(`${role}/work-write: the shared steps no longer type a planning note`);
   const mode = { css: '[data-testid="initiative-composer"] button:has-text("Agent")', nth: 0 } as const;
   const toChat: Step[] = [
     click(mode, 'Open the composer mode menu: this composer is in Agent mode here, and Chat is the other mode', { visible: [{ role: 'menuitem', name: /^Chat/ }, { role: 'menuitem', name: /^Agent/ }] }, { state: 'dialog-open', proves: 'keyboard' }),
