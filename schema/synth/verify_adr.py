@@ -40,7 +40,7 @@ FIXTURE_GRAPH = {
         {
             "id": "d-aurora",
             "title": "Adopt Aurora over Neptune",
-            "summary": "Picked Aurora PostgreSQL + relational graph over Neptune Analytics for cost + latency reasons.",
+            "summary": "The org graph needs graph-shaped questions (who worked with whom, paths across teams) joined to projects and decisions. Neptune Analytics answered the graph questions well but meant a second database, a second query language and a separate backup story. Aurora PostgreSQL with relational edge tables and recursive CTEs answered every query we had under 200 ms p95 on the full graph. We gave up native graph algorithms, so centrality scores run as a nightly batch job instead of a query.",
             "decided_at": "2026-03-12",
         }
     ],

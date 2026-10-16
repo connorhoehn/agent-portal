@@ -70,62 +70,69 @@ export const decisionRows = defineFixture<DecisionRow>({
     default: () => [
   { id: 'd-aurora', topic: 'Adopt Aurora over Neptune',
     summary:
-      'Picked Aurora PostgreSQL + relational graph over Neptune Analytics for cost + latency reasons.',
+      'The org graph needs graph-shaped questions (who worked with whom, paths across teams) joined to projects and decisions. Neptune Analytics answered the graph questions well but meant a second database, a second query language and a separate backup story. Aurora PostgreSQL with relational edge tables and recursive CTEs answered every query we had under 200 ms p95 on the full graph. We gave up native graph algorithms, so centrality scores run as a nightly batch job instead of a query.',
     status: 'resolved', projectId: null, requiredRole: null,
     decidedAt: D(147).slice(0, 10), escalatedAt: null, workItemId: null },
   { id: 'd-k8s', topic: 'Migrate to Kubernetes from ECS',
     summary:
-      'Standardize compute layer on EKS for portability and ecosystem.',
+      'Twelve teams ran services on ECS through three different deployment pipelines, and the autoscalers, operators and mesh they wanted were Kubernetes-native. We standardised on EKS with one golden-path Helm chart and Karpenter for node provisioning. The cost is a cluster to operate: a version upgrade every quarter and a platform rotation on call for it. Batch jobs that need no mesh stay on ECS.',
     status: 'resolved', projectId: null, requiredRole: null,
     decidedAt: D(183).slice(0, 10), escalatedAt: null, workItemId: null },
   { id: 'd-nova', topic: 'Standardize on Nova Pro',
     summary:
-      'Use amazon.nova-pro-v1 as primary inference model across all agents.',
+      'Each agent team had picked its own model, so guardrails, evaluation and cost reporting differed per team. We made Nova Pro the default for every agent, with Nova Lite allowed for routing and classification steps that pass the same golden set. One default means some tasks overpay, so the model stays a per-agent override reviewed against the golden set, not a hard rule.',
     status: 'resolved', projectId: 'p-llm-platform', requiredRole: null,
     decidedAt: D(107).slice(0, 10), escalatedAt: null, workItemId: null },
   { id: 'd-legacy-auth', topic: 'Sunset legacy auth service',
     summary:
-      'Move every remaining service off the v1 auth gateway; the SAML shim is deleted once the last tenant has cut over to Cognito.',
+      'The v1 auth gateway kept sessions in memory, could not rotate its signing key without signing everyone out, and failed its last penetration test on session fixation. We decided to move every service to Cognito with the BFF holding tokens server-side. The SAML shim is deleted once the last tenant has cut over, not kept as a fallback, because a fallback means patching two login paths indefinitely.',
     status: 'resolved', projectId: 'p-auth-migration', requiredRole: null,
     decidedAt: D(188).slice(0, 10), escalatedAt: null, workItemId: null },
   { id: 'd-otel', topic: 'Adopt OpenTelemetry',
     summary:
-      'Replace ad-hoc tracing with OTLP + AWS X-Ray for unified observability.',
+      'Services traced with three different libraries, and no trace crossed a service boundary intact. We adopted OpenTelemetry SDKs with W3C trace context everywhere, using the AWS distribution where the runtime expects it, and export OTLP to X-Ray and the metrics backend. The cost is a migration per service and a collector fleet to run. The payoff is one trace from the browser to the database.',
     status: 'resolved', projectId: 'p-observability', requiredRole: null,
     decidedAt: D(134).slice(0, 10), escalatedAt: null, workItemId: null },
   { id: 'd-react-19', topic: 'React 19 upgrade timeline',
     summary:
-      'Roll out React 19 across portal + design system in stages, design system first.',
+      'React 19 removes legacy context and string refs, and nine design-system components still used them. The design system upgrades first and publishes on its next channel, then each app moves once its test suite passes against it. Apps stay on React 18 with the previous design-system major until then, so two majors are supported for one quarter.',
     status: 'resolved', projectId: 'p-design-v3', requiredRole: null,
     decidedAt: D(126).slice(0, 10), escalatedAt: null, workItemId: null },
   { id: 'd-vectordb', topic: 'Vector DB vendor selection',
     summary:
-      'Chose pgvector inside Aurora over standalone vector DBs to keep ops surface small.',
+      'Retrieval needs about 2 million 1,024-dimension embeddings filtered by team and document type. A standalone vector database was faster at 50 million vectors but meant another service, another copy of access control and a sync job. pgvector with an HNSW index inside Aurora returns the top 10 in about 30 ms at our size and keeps embeddings in the same transaction as their documents. We revisit above 20 million vectors.',
     status: 'resolved', projectId: 'p-rag-search', requiredRole: null,
     decidedAt: D(141).slice(0, 10), escalatedAt: null, workItemId: null },
-    // schema/seed_program.sql, `decisions` — the four an initiative raised.
+    // schema/seed_program.sql, `decisions` — the five the initiatives raised.
     // Relative dates, because the generator writes them as
     // `NOW() - INTERVAL 'n days'` so the demo never goes stale.
   { id: 'd-otel-vendor', topic: 'Self-hosted OTel collectors over vendor agents',
     summary:
-      'Vendor agents priced per-host at 3x our infra cost; the collector fleet is ours to tune and the escape hatch stays open.',
+      'Vendor APM agents were quoted per host at about three times the cost of running our own collectors, and each shipped sampling we could not tune. We chose self-hosted OpenTelemetry collectors in an agent and gateway topology, exporting OTLP to the current backend. The cost is owning the fleet: upgrades, memory tuning and the burst OOM are ours to fix. Switching backends stays a config change, not a re-instrumentation.',
     status: 'resolved', projectId: 'p-observability', requiredRole: null,
     decidedAt: D(6).slice(0, 10), escalatedAt: null, workItemId: 'wi-obs-e1' },
   { id: 'd-cognito-cutover', topic: 'Cutover order for legacy SSO tenants',
     summary:
-      'Smallest tenant first vs. riskiest first. Riskiest-first surfaces unknowns while rollback is cheap, but a failed first cutover is loud.',
+      'Twelve customer tenants remain on the SAML shim, and each moves with the single-tenant cutover runbook. Smallest first keeps the blast radius low while the team learns the runbook. Riskiest first moves the two tenants with custom SAML attribute mappings while the shim is still warm and rollback is a route flip, but a failure there is loud and customer-visible. The order decides who is warned and when, so it is a release call.',
     status: 'escalated', projectId: 'p-auth-migration', requiredRole: 'org-leader',
     decidedAt: null, escalatedAt: D(2), workItemId: 'wi-auth-e2' },
   { id: 'd-eval-judge-model', topic: 'Judge model for canary evaluation',
     summary:
-      'Nova Pro judges cost ~6x Nova Lite but agree with human labels 11 points more often on the current rubric. Sample-rate tuning could fund the gap.',
+      'The canary judge scores every sampled answer, so its model sets both the evaluation bill and how far the scores can be trusted. On the 120-question pilot set Nova Pro agrees with human labels 82 percent of the time and Nova Lite 71 percent, at about six times the cost per judged answer. Halving the sample rate from 20 to 10 percent would fund Nova Pro at the current spend. Open until the final rubric weights have run on both.',
     status: 'open', projectId: 'p-llm-platform', requiredRole: null,
     decidedAt: null, escalatedAt: null, workItemId: 'wi-llm-e1' },
   { id: 'd-iceberg', topic: 'Iceberg over Delta for the lakehouse table format',
     summary:
-      'Engine-neutral catalog support and snapshot isolation fit the multi-engine roadmap; Delta\'s tighter Spark coupling was the deciding cost.',
+      'The lakehouse is read by Spark, Trino and Flink, so the table format had to work well in all three. Iceberg\'s engine-neutral catalog, hidden partitioning and snapshot isolation fit that roadmap. Delta was faster under Spark in our benchmark but weaker in the other two engines. The consequence: compaction and snapshot expiry are a job we run, not a feature we buy.',
     status: 'resolved', projectId: 'p-data-lake', requiredRole: null,
     decidedAt: D(13).slice(0, 10), escalatedAt: null, workItemId: 'wi-lake-e1' },
+  // The Inference Platform's open call (generate_program_seed.py extra_decisions):
+  // the warm floor the cold-start bug wi-inf-e1-b3 waits on.
+  { id: 'd-inference-warm-floor', topic: 'Warm floor or scale-to-zero for tier-1 models',
+    summary:
+      'Tier-1 models scale to zero after 15 minutes idle, and the next request pays a 40 to 90 second cold start against a 2.5-second p99 SLO. A warm floor of one replica per tier-1 model removes the cold start at about $380 a month per model. Baking weights into the image cuts the load to about 20 seconds at no standing cost, but still breaches the SLO. Open until the teams that own the SLO agree what a breach costs them.',
+    status: 'open', projectId: 'p-inference-platform', requiredRole: null,
+    decidedAt: null, escalatedAt: null, workItemId: 'wi-inf-e1' },
     ],
     empty: () => [],
   },
@@ -135,7 +142,7 @@ export const decisionParticipantRows = defineFixture<DecisionParticipantRow>({
   key: 'graph-decision-participants',
   scenarios: {
     // schema/seed.sql, `decision_participants` — all 67 rows, then the
-    // twelve schema/seed_program.sql emits for the four decisions its
+    // rows schema/seed_program.sql emits for the five decisions its
     // initiatives raised (owner decides, SMEs contribute).
     default: () => [
   { decisionId: 'd-aurora', personId: 'p-046', role: 'decider', weight: 1.0 },
@@ -220,6 +227,9 @@ export const decisionParticipantRows = defineFixture<DecisionParticipantRow>({
   { decisionId: 'd-iceberg', personId: 'p-025', role: 'decider', weight: 1.0 },
   { decisionId: 'd-iceberg', personId: 'p-017', role: 'contributor', weight: 1.0 },
   { decisionId: 'd-iceberg', personId: 'p-015', role: 'contributor', weight: 1.0 },
+  { decisionId: 'd-inference-warm-floor', personId: 'p-049', role: 'decider', weight: 1.0 },
+  { decisionId: 'd-inference-warm-floor', personId: 'p-013', role: 'contributor', weight: 1.0 },
+  { decisionId: 'd-inference-warm-floor', personId: 'p-043', role: 'contributor', weight: 1.0 },
     ],
     // No decisions, so no participants — the two fixtures stay consistent.
     empty: () => [],

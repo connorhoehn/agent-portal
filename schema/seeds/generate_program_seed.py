@@ -130,8 +130,11 @@ INITIATIVES = [
                          'broken panels, and file anything risky as a bug with evidence.',
                  per_run=0.50, per_day=2.00, runs=10),
         decision=('d-otel-vendor', 'Self-hosted OTel collectors over vendor agents',
-                  'Vendor agents priced per-host at 3x our infra cost; the collector fleet is '
-                  'ours to tune and the escape hatch stays open.', 'resolved', None, 'e1'),
+                  'Vendor APM agents were quoted per host at about three times the cost of running our own '
+                  'collectors, and each shipped sampling we could not tune. We chose self-hosted OpenTelemetry '
+                  'collectors in an agent and gateway topology, exporting OTLP to the current backend. The cost '
+                  'is owning the fleet: upgrades, memory tuning and the burst OOM are ours to fix. Switching '
+                  'backends stays a config change, not a re-instrumentation.', 'resolved', None, 'e1'),
     ),
     dict(
         id='p-auth-migration', slug='auth', repo='orgiq-auth-service', tier='flagship',
@@ -177,8 +180,11 @@ INITIATIVES = [
                          'keep the OIDC conformance tests green.',
                  per_run=0.40, per_day=1.50, runs=8),
         decision=('d-cognito-cutover', 'Cutover order for legacy SSO tenants',
-                  'Smallest tenant first vs. riskiest first. Riskiest-first surfaces unknowns '
-                  'while rollback is cheap, but a failed first cutover is loud.', 'escalated', 'org-leader', 'e2',
+                  'Twelve customer tenants remain on the SAML shim, and each moves with the single-tenant '
+                  'cutover runbook. Smallest first keeps the blast radius low while the team learns the runbook. '
+                  'Riskiest first moves the two tenants with custom SAML attribute mappings while the shim is '
+                  'still warm and rollback is a route flip, but a failure there is loud and customer-visible. '
+                  'The order decides who is warned and when, so it is a release call.', 'escalated', 'org-leader', 'e2',
                   # Escalated BY the owner (Vera) TO the release manager: Sienna
                   # Garcia (p-005, u-release) decides it, not the person who
                   # raised it (docs/demo-content-audit.md, Work story-breaker 4).
@@ -225,8 +231,11 @@ INITIATIVES = [
                          'any dimension regresses beyond threshold.',
                  per_run=0.80, per_day=3.00, runs=9),
         decision=('d-eval-judge-model', 'Judge model for canary evaluation',
-                  'Nova Pro judges cost ~6x Nova Lite but agree with human labels 11 points '
-                  'more often on the current rubric. Sample-rate tuning could fund the gap.', 'open', None, 'e1'),
+                  'The canary judge scores every sampled answer, so its model sets both the evaluation bill and '
+                  'how far the scores can be trusted. On the 120-question pilot set Nova Pro agrees with human '
+                  'labels 82 percent of the time and Nova Lite 71 percent, at about six times the cost per judged '
+                  'answer. Halving the sample rate from 20 to 10 percent would fund Nova Pro at the current spend. '
+                  'Open until the final rubric weights have run on both.', 'open', None, 'e1'),
     ),
     dict(
         id='p-cost-opt', slug='cost', repo='orgiq-finops', tier='flagship',
@@ -310,8 +319,10 @@ INITIATIVES = [
         budget=10,
         bot=None,  # planning-stage initiative: no repo activity to maintain yet
         decision=('d-iceberg', 'Iceberg over Delta for the lakehouse table format',
-                  'Engine-neutral catalog support and snapshot isolation fit the multi-engine '
-                  'roadmap; Delta\'s tighter Spark coupling was the deciding cost.', 'resolved', None, 'e1'),
+                  'The lakehouse is read by Spark, Trino and Flink, so the table format had to work well in all '
+                  'three. Iceberg\'s engine-neutral catalog, hidden partitioning and snapshot isolation fit that '
+                  'roadmap. Delta was faster under Spark in our benchmark but weaker in the other two engines. '
+                  'The consequence: compaction and snapshot expiry are a job we run, not a feature we buy.', 'resolved', None, 'e1'),
     ),
     dict(
         id='p-feature-store', slug='fs', repo='orgiq-feature-store', tier='standard',
@@ -479,6 +490,15 @@ INITIATIVES = [
                          'deltas against the previous build, rollback recommendation on breach.',
                  per_run=0.40, per_day=1.50, runs=7),
         decision=None,
+        # Open, so it draws nothing from the RNG (see the decision loop in main()).
+        extra_decisions=[
+            ('d-inference-warm-floor', 'Warm floor or scale-to-zero for tier-1 models',
+             'Tier-1 models scale to zero after 15 minutes idle, and the next request pays a 40 to 90 second '
+             'cold start against a 2.5-second p99 SLO. A warm floor of one replica per tier-1 model removes the '
+             'cold start at about $380 a month per model. Baking weights into the image cuts the load to about '
+             '20 seconds at no standing cost, but still breaches the SLO. Open until the teams that own the SLO '
+             'agree what a breach costs them.', 'open', None, 'e1'),
+        ],
     ),
     dict(
         id='p-zero-trust', slug='zt', repo='orgiq-zero-trust', tier='standard',
@@ -525,11 +545,27 @@ FIXED_AGE_COMMENTS = [
     ('obs', 'e1-s4', 'p-011', 'Keep the bridge available until dashboard parity is verified.', 1),
 ]
 
+# Engineers arguing on tickets (docs/demo-content-engineering-brief.md): the
+# repros, profiles and review asks behind the five arcs. Fixed ages, emitted
+# after the planning notes, so no RNG draw moves and wic-prog-1…10 keep their ids.
+TICKET_COMMENTS = [
+    ('auth', 'e1-b4', 'p-002', 'Agreed with Simone. Answer 401 with error="invalid_token" and a session_revoked reason, and the client signs out once. Every other 401 stays retryable with backoff.', 7),
+    ('auth', 'e1-b4', 'p-004', 'Repro is in the PR: revoke the grant, leave the tab open, count refresh calls. Before the fix 31 calls in the first minute, after it exactly one, then the sign-in page.', 3),
+    ('auth', 'e2-s2', 'p-051', 'Looking at the callback-list step now. One ask: make it fail closed. If describe-user-pool-client does not list the tenant origin under CallbackURLs, the flip does not start.', 1),
+    ('obs', 'e2-b4', 'p-011', 'The dependency map is about 60 percent derivable from traces: 212 service-to-service edges seen in the last 7 days. The rest are batch jobs and queues that emit no spans, and their owners have to declare them before grouping can trust the map.', 1),
+    ('inf', 'e1-b3', 'p-013', 'Profiled one cold start on the embedding model: 11 s pulling the image, 52 s loading weights from S3, 6 s warming the CUDA graphs. Baking the weights into the image removes most of the 52 s, but the image grows from 4 GB to 11 GB.', 4),
+    ('inf', 'e1-b3', 'p-049', 'Even baked, a cold start is around 20 s against a 2.5 s p99. I have written the warm floor up as a decision so the standing cost is on record before anyone turns it on.', 3),
+    ('llm', 'e1-b3', 'p-042', 'Seen it after every deploy: 43 replicas, 43 GetPrompt calls in the same second, 12 of them throttled. Jitter alone fixes the deploy case. Stale-while-revalidate covers the store being slow.', 5),
+    ('cost', 'e1-s2', 'p-011', 'Checked the encryption keys: the three quiet collections each use their own KMS key, which is why they cannot share OCUs. Re-keying means a reindex, about 40 minutes per collection.', 2),
+    ('rta', 'e1-b3', 'p-019', 'Raising allowed lateness to 5 minutes would hold window state ten times longer. A side output for late events plus an hourly correction job is cheaper and keeps the aggregates honest.', 4),
+]
+
 # Acceptance-criteria checklists. Each entry is
 # (initiative slug, work-item key, [(text, done, created_days_ago, updated_days_ago), ...]).
-# wi-obs-e1-s4 is the flagship example the design mockup names; the other three
-# are open Observability stories seeded so the initiative's board is not a
-# one-item demo.
+# wi-obs-e1-s4 is the flagship example the design mockup names (its three lines
+# are asserted by the criteria tests); the rest are the in-flight and blocked
+# items of the five arcs in docs/demo-content-engineering-brief.md, written as
+# a reviewer would check them: a number, a command or an observable state.
 CRITERIA = [
     ('obs', 'e1-s4', [
         ('Route metrics through the collector', False, 5, 5),
@@ -537,28 +573,99 @@ CRITERIA = [
         ('Keep a rollback path during migration', False, 5, 5),
     ]),
     ('obs', 'e3-s1', [
-        ('Define per-service label cardinality budgets', True, 10, 3),
-        ('Add a CI check that fails a PR exceeding budget', False, 10, 10),
-        ('Document the exemption process for legitimate spikes', False, 10, 10),
+        ('Every service has an active-series budget in the service catalog', True, 10, 3),
+        ('CI fails a pull request that adds a label with unbounded values (user_id, request_id, raw path)', False, 10, 10),
+        ('An exemption needs an owner, a reason and an expiry date', False, 10, 10),
     ]),
     ('obs', 'e3-s2', [
-        ('Classify log levels into debug/info/audit tiers', True, 12, 6),
-        ('Configure the sampling rate for the debug tier', True, 12, 4),
-        ('Confirm audit logs bypass sampling entirely', False, 12, 12),
+        ('Log levels classified into debug, info and audit tiers', True, 12, 6),
+        ('Debug tier sampled at 1 in 20 at the agent collector', True, 12, 4),
+        ('Audit logs bypass sampling: a replay of 10,000 audit lines arrives with 10,000 lines', False, 12, 12),
     ]),
     ('obs', 'e2-s3', [
-        ('Wire one dashboard panel per team', False, 4, 4),
-        ('Add drill-down to the underlying SLO burn', False, 4, 4),
+        ('One panel per team showing budget remaining over the 30-day window', False, 4, 4),
+        ('Each panel links to the burn-rate alert and the owning team', False, 4, 4),
     ]),
-    # Auth Migration's two in-flight stories (the Work demo story).
+    ('obs', 'e1-b5', [
+        ('memory_limiter is the first processor in every gateway pipeline', True, 6, 2),
+        ('Exporter sending_queue bounded at 5,000 batches', True, 6, 2),
+        ('40k spans/s burst replay for 90 s: zero OOM kills on the gateway pods', False, 6, 1),
+        ('Error spans kept at 100 percent during the burst, measured by the tail-sampling decision counter', False, 6, 6),
+    ]),
+    ('obs', 'e1-s3', [
+        ('Route labels templated (/users/{id}), never raw paths', True, 9, 3),
+        ('RED panels for checkout and search match the StatsD dashboards within 2 percent for a week', False, 9, 9),
+        ('Active series from the connector stay under 50,000', False, 9, 9),
+    ]),
+    ('obs', 'e2-s2', [
+        ('Page at 14.4x burn over 1 hour, confirmed by a 5-minute window', True, 8, 4),
+        ('Ticket at 6x burn over 6 hours, confirmed by a 30-minute window', True, 8, 4),
+        ('Backtest over 30 days pages for both real incidents and nothing else', False, 8, 8),
+    ]),
+    # Auth Migration (the Work demo story).
     ('auth', 'e2-s2', [
-        ('Rehearse the cutover on both internal tenants', False, 9, 1),
+        ('Rehearse the cutover on both internal tenants with zero forced logouts', False, 9, 1),
+        ('Pre-flight: the tenant origin is in the Cognito app client CallbackURLs before the flip', False, 1, 1),
         ('Record the decided tenant order and the reason for it', False, 9, 9),
-        ('Give every tenant a rollback that answers within two minutes', False, 9, 9),
+        ('Every tenant has a rollback that restores the shim route within two minutes', False, 9, 9),
     ]),
     ('auth', 'e1-s3', [
         ('Re-mint the session cookie on every tenant and role switch', True, 20, 6),
-        ('The pre-switch cookie stops working within the refresh window', False, 20, 20),
+        ('A copy of the pre-switch cookie is refused within 120 seconds', False, 20, 20),
+        ('Masquerade sessions do not bump the epoch of the impersonated user', False, 20, 20),
+    ]),
+    ('auth', 'e1-b4', [
+        ('Refresh answers 401 with a session_revoked reason when a grant is revoked', True, 8, 3),
+        ('Client signs out once on session_revoked and makes no further refresh calls', False, 8, 8),
+        ('Regression test revokes a grant mid-session and asserts exactly one refresh call', False, 8, 8),
+    ]),
+    ('auth', 'e2-b3', [
+        ('Logout redirects through the shim single-logout endpoint while the shim exists', False, 6, 6),
+        ('After logout, the next visit lands on the Cognito hosted UI', False, 6, 6),
+    ]),
+    # LLM Application Platform.
+    ('llm', 'e1-s2', [
+        ('Rubric weights grounding 0.4, completeness 0.3, tone 0.15, latency 0.15 stored in config, not code', True, 14, 5),
+        ('Judge agreement with human labels reported on the 120-question pilot set', True, 14, 3),
+        ('Judge model chosen and recorded in the decision', False, 14, 14),
+    ]),
+    ('llm', 'e1-b3', [
+        ('Prompt cache TTL jittered by 0 to 15 seconds per replica', False, 5, 5),
+        ('Stale prompt served while one refresh runs', False, 5, 5),
+        ('50 replicas restarted at once: zero throttled GetPrompt calls', False, 5, 5),
+    ]),
+    ('llm', 'e2-s1', [
+        ('Each agent has 30 to 60 golden questions with expected facts', True, 16, 4),
+        ('Baseline file records the golden-set version it was scored against', False, 16, 2),
+        ('A merge fails when any rubric dimension drops more than 0.03', False, 16, 16),
+    ]),
+    # Cost Optimization.
+    ('cost', 'e1-s2', [
+        ('Every OpenSearch Serverless collection listed with its KMS key and last-7-day query count', True, 9, 2),
+        ('Collections under 100 queries a week moved onto the shared key group', False, 9, 9),
+        ('Old collections deleted after 7 days of zero queries', False, 9, 9),
+    ]),
+    ('cost', 'e2-s1', [
+        ('CDK synthesis fails when a taggable resource lacks initiative and owner tags', True, 11, 3),
+        ('Untagged resources created in the last day appear in the daily sweep', True, 11, 4),
+        ('Every exemption names the resource type and why it cannot carry tags', False, 11, 11),
+    ]),
+    # Inference Platform.
+    ('inf', 'e1-s1', [
+        ('Router publishes in-flight requests per model every 10 seconds', True, 10, 2),
+        ('Scale out at 4 in-flight per replica sustained for 30 seconds, scale in after 10 minutes', False, 10, 10),
+        ('Replay of the last traffic peak keeps p99 queue wait under 500 ms', False, 10, 10),
+    ]),
+    ('inf', 'e1-b3', [
+        ('Cold-start time broken down: image pull, weight load, warm-up', True, 7, 4),
+        ('Warm-floor decision recorded with its monthly cost', False, 7, 7),
+        ('p99 under 2.5 s for the first request after 30 minutes idle, measured by the canary', False, 7, 7),
+    ]),
+    # Real-time Analytics Pipeline.
+    ('rta', 'e1-s1', [
+        ('Incremental RocksDB checkpoints enabled', True, 12, 5),
+        ('Checkpoint interval 30 seconds with under 10 seconds of alignment', False, 12, 12),
+        ('Killing one task manager recovers in under 60 seconds with no duplicate output', False, 12, 12),
     ]),
 ]
 
@@ -583,64 +690,227 @@ CRITERIA = [
 # RNG call is made for any of this — the RNG sequence drives every assignee,
 # date and cost above, and one extra draw would reshuffle the whole seed.
 #
+# middleware/src/mock/work-items.ts mirrors this table as SEEDED_BRIEFS.
+#
 # Semicolons are kept out of this copy on purpose: schema/apply-work-items.sh
 # splits statements on `;` at paren depth 0 and would cut a string in two.
 BRIEFS: dict[str, dict[str, str]] = {
+    # ── Observability Platform ──
     'wi-obs-e2-b4': dict(
         summary='One failing dependency can trigger forty pages.',
-        description='When one shared dependency fails, it can trigger forty separate pages. '
-                    'Fixing this should help the on-call engineer identify the root problem '
-                    'without sorting through duplicate alerts.',
+        description='When the shared Postgres connection proxy failed last month, 41 services paged '
+                    'separately within 6 minutes and the on-call engineer spent the first 20 minutes '
+                    'acknowledging duplicates. Alerts should group by the failing dependency, with the '
+                    'affected services listed inside one page.',
         blocked_reason='Waiting on the dependency map.',
         next_step='Confirm the dependency map with Eli Garcia.',
         next_step_detail='The team needs this before choosing how to group duplicate alerts.',
     ),
     'wi-obs-e1-s4': dict(
         summary='Move remaining service metrics to OpenTelemetry.',
+        description='Nine services still push StatsD through the bridge, which drops packets under load '
+                    'because it is UDP with a 64 KB receive buffer. Each service moves to OTLP through the '
+                    'collector, and every alert that read a StatsD metric reads its OpenTelemetry '
+                    'equivalent before the bridge is switched off.',
+        next_step='Move billing and notifications first.',
+        next_step_detail='Neither has a paging alert on a StatsD metric. Keep the bridge running until '
+                         'dashboard parity is verified for both.',
+    ),
+    'wi-obs-e1-s3': dict(
+        summary='Derive rate, errors and duration for every service from its spans.',
+        description='The span-metrics connector turns every server span into a call counter and a duration '
+                    'histogram per service and route, so dashboards cover services that never wrote a '
+                    'metric. Cardinality is the risk: route labels must be templated, never raw paths.',
+        next_step='Enable the connector for checkout and search behind an allow-list.',
+        next_step_detail='Compare their RED panels against the StatsD dashboards for a week, then widen the list.',
+    ),
+    'wi-obs-e1-b5': dict(
+        summary='A 90-second ingest burst kills the gateway collectors because nothing bounds the export queue.',
+        description='At 40k spans/s for 90 seconds the gateway pods reach their 2 GiB limit inside 4 minutes '
+                    'and are OOM-killed, dropping every span in flight, errors included. With memory_limiter '
+                    'first in the pipeline and a bounded sending queue the collector refuses data under '
+                    'pressure instead of dying.',
+        next_step='Replay the burst against the fixed config in staging.',
+        next_step_detail='Pass means no OOM kill, the exporter queue stays under capacity, and tail sampling '
+                         'still keeps every error span.',
+    ),
+    'wi-obs-e2-s2': dict(
+        summary='Alert on how fast the error budget burns, not on raw error counts.',
+        description='Fast burn pages, slow burn tickets. Page when 2 percent of the 30-day budget burns in '
+                    '1 hour (14.4x) and ticket at 5 percent in 6 hours (6x), each confirmed by a short '
+                    'window. Thresholds come from the SLO, not from a feel for the error rate.',
+        next_step='Backtest the recording rules over 30 days of checkout traffic.',
+        next_step_detail='They must page for the two real incidents in that window and stay quiet otherwise.',
     ),
     'wi-obs-e2-s3': dict(
         summary="Make each team's remaining error budget visible.",
-        description='One panel per team: budget remaining, burn over the window, and who owns the service.',
+        description='One panel per team: budget remaining, burn over the window, and who owns the service. '
+                    'When a budget is spent, feature work on that service waits for reliability work, and '
+                    'the panel is what makes that conversation short.',
     ),
     'wi-obs-e3-s1': dict(
         summary='Define limits before new metrics increase storage costs.',
+        description='One team added a user_id label and created 1.2 million active series in a day, '
+                    'doubling the metrics bill for the month. Every service gets a series budget, and CI '
+                    'fails a pull request that adds an unbounded label.',
     ),
-    'wi-obs-e2-s2': dict(
-        description='Fast burn pages, slow burn tickets. Thresholds derived from the SLO, not hand-picked.',
+    'wi-obs-e3-s2': dict(
+        description='Debug logs are 70 percent of log volume and almost never read. Debug is sampled at '
+                    '1 in 20, info is kept for 14 days, and audit logs bypass sampling entirely because '
+                    'compliance needs every line.',
     ),
-    'wi-obs-e3-s2': dict(),
-    # Auth Migration, the Work demo story (docs/demo-content-audit.md): the
+    # ── Auth Migration, the Work demo story (docs/demo-content-audit.md): the
     # runbook story is blocked on the escalated cutover-order decision, which
     # the release manager decides, not the owner who escalated it.
     'wi-auth-e2-s2': dict(
-        summary='Sequence the remaining customer tenants off the SAML shim, each with a five-minute way back.',
-        description='Each tenant already moves with the single-tenant cutover runbook. This story '
-                    'writes the order the remaining tenants move in and the rollback for each, '
-                    'which waits on the escalated decision "Cutover order for legacy SSO tenants".',
+        summary='Sequence the remaining customer tenants off the SAML shim, each with a two-minute way back.',
+        description='Each tenant already moves with the single-tenant cutover runbook: pre-flight the '
+                    'Cognito app client, flip the IdP route, watch the login error rate for 15 minutes, and '
+                    'roll back by restoring the shim route. This story writes the order the 12 remaining '
+                    'customer tenants move in and the rollback for each, which waits on the escalated '
+                    'decision "Cutover order for legacy SSO tenants".',
         blocked_reason='Blocked on "Cutover order for legacy SSO tenants", escalated to Sienna Garcia.',
         next_step='Sienna Garcia decides the cutover order.',
         next_step_detail='She decides once the second internal rehearsal passes. Review the proposed '
                          'callback-list step for the cutover runbook first, so the retry can run.',
     ),
     'wi-auth-e1-s1': dict(
-        description='Every sign-in goes through the BFF with the authorization-code flow and PKCE, so no token ever reaches the browser.',
+        description='The BFF runs the authorization-code flow with PKCE (S256) against the Cognito hosted UI '
+                    'and keeps the tokens server-side. The browser only holds an HttpOnly, SameSite=Lax '
+                    'session cookie, so a script injected into the page cannot lift a bearer token.',
     ),
     'wi-auth-e1-s2': dict(
-        description='Tokens are verified against the published JWKS, and a signing-key rotation signs nobody out.',
+        description='Access tokens are verified against the cached JWKS by key id. An unknown kid triggers one '
+                    'rate-limited refetch, at most once a minute, before the token is rejected, so a '
+                    'signing-key rotation signs nobody out and a forged kid cannot hammer the endpoint.',
     ),
     'wi-auth-e2-s1': dict(
-        description='Every service and customer tenant still on the SAML shim, each with an owner, so the cutover order has a list to order.',
+        description='Every consumer still on the SAML shim, each with an owner: 14 tenants (12 customer, 2 '
+                    'internal), two of them with custom SAML attribute mappings, plus one internal search '
+                    'callback still pointed at the shim. The cutover order needs this list to order.',
     ),
     'wi-auth-e1-s3': dict(
         summary='A switched tenant or role stops honouring the old cookie within the refresh window.',
-        description='Re-mint on every tenant and role switch. The pre-switch cookie stops working within the refresh window.',
+        description='Every tenant or role switch re-mints the cookie and bumps the session epoch. A copy of '
+                    'the pre-switch cookie on another device is refused at its next grants refresh, at most '
+                    '120 seconds later, without adding a server-side session store.',
+        next_step='Simone Chang reviews the epoch comparison in the session middleware.',
+        next_step_detail='The server-side max-age is in the same pull request behind a flag, which flips '
+                         'after the cutover window closes.',
     ),
     'wi-auth-e1-b4': dict(
         summary='A revoked grant must sign the session out once, not loop on refresh.',
+        description='When a grant is revoked mid-session the refresh endpoint answers 403, and the client '
+                    'treats every 403 as retryable, so it refreshes every 2 seconds until the tab closes. '
+                    'One revoked user produced 1,800 refresh calls in an hour. Revocation must answer 401 '
+                    'with a reason the client treats as terminal.',
+        next_step='Return 401 with a session_revoked reason from the refresh endpoint.',
+        next_step_detail='Then the client signs out once on that reason. A regression test revokes a grant '
+                         'mid-session and asserts exactly one refresh call.',
     ),
     'wi-auth-e2-b3': dict(
         summary='Signing out must also clear the SAML shim cookie.',
-        description='Signing out clears the OrgIQ session and not the SAML shim cookie, so the next visit silently re-authenticates.',
+        description='Signing out clears the BFF session but not the shim session cookie on the legacy '
+                    'domain, so the next visit silently re-authenticates through the shim. Logout has to '
+                    'pass through the shim single-logout endpoint until the shim is deleted.',
+        next_step='Add the shim single-logout redirect to the BFF logout handler.',
+        next_step_detail='Verify in a fresh browser profile that the visit after logout lands on the Cognito '
+                         'hosted UI, not straight back in.',
+    ),
+    # ── LLM Application Platform ──
+    'wi-llm-e1-s2': dict(
+        summary='Score every canary answer on a weighted rubric so a prompt change is judged, not eyeballed.',
+        description='The judge scores grounding, completeness, tone and latency against the retrieved '
+                    'context. On the 120-question pilot set it agrees with human labels 82 percent of the '
+                    'time. Which model judges is the open decision "Judge model for canary evaluation".',
+        next_step='Nina Rivera decides the judge model.',
+        next_step_detail='Run both candidates over the pilot set with the final weights and report agreement '
+                         'and cost per 1,000 judged answers side by side.',
+    ),
+    'wi-llm-e1-b3': dict(
+        summary='Every replica refetches its prompt in the same second when the cache expires.',
+        description='Replicas cache each prompt for exactly 60 seconds from boot, so after a deploy they '
+                    'expire together and the prompt store throttles at about 40 requests a second. '
+                    'Jittering the TTL and serving the stale prompt while one refresh runs removes the stampede.',
+        next_step='Add TTL jitter and stale-while-revalidate to the prompt cache.',
+        next_step_detail='Load test with 50 replicas restarted at once: zero throttled fetches.',
+    ),
+    'wi-llm-e2-s1': dict(
+        summary='Gate every prompt and model change on a versioned golden set per agent.',
+        description='Each agent has 30 to 60 golden questions with expected facts, versioned with the prompt '
+                    'they test. A change merges only when no rubric dimension drops more than 0.03 against '
+                    'the current baseline.',
+        next_step='Katya Petrov records the golden-set version in the baseline file.',
+        next_step_detail='Without it, a score cannot be compared with the one before it.',
+    ),
+    'wi-llm-e2-s2': dict(
+        summary='Run the guardrail regression set on every pull request that touches a prompt or a guardrail.',
+        description='The set holds 200 prompts that must be blocked (prompt injection, PII exfiltration, '
+                    'off-topic requests) and 200 that must pass. A regression in either direction fails the '
+                    'build, because a guardrail that blocks good questions is also broken.',
+    ),
+    'wi-llm-e3-s1': dict(
+        summary='Move nightly summarisation and re-embedding off the interactive endpoint.',
+        description='Non-interactive jobs share the on-demand quota with users and cause throttling every '
+                    'night around 02:00 UTC. A batch queue with its own concurrency limit takes them off the '
+                    'interactive path.',
+    ),
+    # ── Cost Optimization ──
+    'wi-cost-e1-s2': dict(
+        summary='Justify or merge every OpenSearch Serverless collection holding its own capacity floor.',
+        description='Collections share capacity only when they share an encryption key, so each key group '
+                    'bills its own 2-OCU floor whether or not anyone queries it. Three of five collections '
+                    'served fewer than 100 queries last week. Merging them onto the shared key saves about '
+                    '$350 a month per group.',
+        next_step='Reindex the three quiet collections onto the shared key group.',
+        next_step_detail='Switch readers, then delete the old collections after 7 days of zero queries.',
+    ),
+    'wi-cost-e2-s1': dict(
+        summary='Refuse a deploy that creates an untagged resource.',
+        description='Showback is only as good as the tags. A CDK aspect fails synthesis when a taggable '
+                    'resource lacks initiative and owner tags, and the daily sweep lists anything created '
+                    'outside CDK without them.',
+        next_step='Layla Hassan reviews the exemption list.',
+        next_step_detail='Only resources that cannot carry tags are exempt, each with a reason.',
+    ),
+    'wi-cost-e2-s2': dict(
+        summary='One view per initiative: infrastructure, model tokens and the bot baseline.',
+        description='Infrastructure cost comes from tags, model spend from invocation logs and bot spend '
+                    'from the run ledger. Joining the three per initiative per day shows what an initiative '
+                    'actually costs, with the maintenance-bot baseline shown as a floor rather than mixed '
+                    'into interactive work.',
+    ),
+    # ── Inference Platform ──
+    'wi-inf-e1-s1': dict(
+        summary='Scale replicas on in-flight requests per replica instead of CPU.',
+        description='GPU-bound replicas sit at 30 percent CPU while requests queue for seconds, so CPU-based '
+                    'scaling never fires. Target tracking on queue depth reacts to the load users actually '
+                    'feel: 4 in flight per replica, out after 30 seconds sustained, in after 10 minutes.',
+        next_step='Publish the in-flight metric from the router.',
+        next_step_detail='Emit in-flight requests per model every 10 seconds, switch the staging policy over, '
+                         'and replay the last traffic peak.',
+    ),
+    'wi-inf-e1-b3': dict(
+        summary='The first request after scale-to-zero waits 40 to 90 seconds for the model to load.',
+        description='Models idle for 15 minutes scale to zero, and the next request pays the container start '
+                    'plus a 7 GB weight load. p99 on the embedding model reached 74 seconds against a '
+                    '2.5-second SLO. The fix is a warm floor on tier-1 models or a faster load path.',
+        next_step='Paolo Mancini decides the warm floor for tier-1 models.',
+        next_step_detail='A warm replica costs about $380 a month per model on the current instance type. '
+                         'The decision "Warm floor or scale-to-zero for tier-1 models" holds the comparison.',
+    ),
+    # ── Real-time Analytics Pipeline ──
+    'wi-rta-e1-s1': dict(
+        summary='Recover from a task failure in under 60 seconds.',
+        description='Checkpoints take 3 to 4 minutes because the job snapshots 180 GB of keyed state in full '
+                    'each time. Incremental RocksDB checkpoints, plus unaligned checkpoints under '
+                    'backpressure, bring the interval to 30 seconds and recovery under a minute.',
+    ),
+    'wi-rta-e1-b3': dict(
+        summary='Events arriving after the watermark are silently dropped from the hourly aggregates.',
+        description='Mobile clients batch events and deliver them up to 4 minutes late, but the watermark '
+                    'allows 30 seconds of lateness, so about 0.6 percent of events miss their window. Late '
+                    'events should go to a side output and be merged by a correction job, not vanish.',
     ),
 }
 BRIEF_FIELDS = ('summary', 'description', 'blocked_reason', 'next_step', 'next_step_detail')
@@ -847,8 +1117,11 @@ def main() -> None:
         #
         # work_item_id can only be written from THIS file: the epic it names is
         # emitted a few lines above, and does not exist when seed.sql runs.
-        if ini['decision']:
-            (did, topic, summary, status, req_role, dec_ekey, *rest) = ini['decision']
+        # The decisions this initiative raised: its headline `decision`, then any
+        # `extra_decisions`. An extra one is `open` (no RNG draw), so adding it
+        # never reshuffles the dates and costs drawn after it.
+        for dec in ([ini['decision']] if ini['decision'] else []) + ini.get('extra_decisions', []):
+            (did, topic, summary, status, req_role, dec_ekey, *rest) = dec
             # An escalated decision names who decides it; the owner who raised
             # it is then a contributor, never the decider of their own escalation.
             decider = rest[0] if rest else ini['owner']
@@ -1015,9 +1288,20 @@ def main() -> None:
             "ON CONFLICT (id) DO NOTHING"
         )
 
+    # Ticket threads on the five arcs (fixed ages, no RNG draw).
+    L.append('')
+    L.append('-- Ticket threads on the five engineering arcs (fixed ages).')
+    base = len(COMMENTS) + len(FIXED_AGE_COMMENTS)
+    for ti, (slug, key, author, body, age) in enumerate(TICKET_COMMENTS, start=1):
+        emit(
+            "INSERT INTO work_item_comments (id, work_item_id, author_id, body, is_system, created_at) "
+            f"VALUES ('wic-prog-{base + ti}', 'wi-{slug}-{key}', '{author}', '{q(body)}', FALSE, {days(age)}) "
+            "ON CONFLICT (id) DO NOTHING"
+        )
+
     # Acceptance-criteria checklists.
     L.append('')
-    L.append('-- Acceptance-criteria checklists on select Observability and Auth Migration items.')
+    L.append('-- Acceptance-criteria checklists on the in-flight items of the engineering arcs.')
     for slug, key, items in CRITERIA:
         for i, (text, done, created_age, updated_age) in enumerate(items):
             cid = f'wicr-{slug}-{key}-{i + 1}'

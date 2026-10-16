@@ -50,7 +50,7 @@ const ago = (days: number): string => clock.daysAgo(days);
 /** An observation with the two fields most of them share filled in. */
 function obs(over: Pick<Observation, 'id' | 'kind' | 'title' | 'body' | 'sessionId'> & Partial<Observation>): Observation {
   return {
-    repo: 'aws-agentcore', initiativeId: null, createdAt: ago(3),
+    repo: 'orgiq-data-platform', initiativeId: null, createdAt: ago(3),
     ...over,
   };
 }

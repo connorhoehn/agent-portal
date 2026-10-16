@@ -5,19 +5,19 @@
       "seconds": 212
     },
     {
-      "reason": "quarantined 1 flaky pipeline test (the collector-restart case) and linked the bug",
+      "reason": "quarantined collector_restart_test.go::TestGatewayRestartKeepsQueue (failed 3 of 20 reruns, passes alone) and linked the bug",
       "seconds": 168
     },
     {
-      "reason": "linted 31 dashboards; 2 panels still read the retired StatsD bridge, filed",
+      "reason": "linted 31 dashboards; 2 checkout panels still query statsd_bridge_* series, filed against the StatsD decommission",
       "seconds": 301
     },
     {
-      "reason": "bumped 3 SDK dependencies in the span-metrics connector; tests green",
+      "reason": "bumped go.opentelemetry.io/otel 1.30.0 to 1.31.0 in the span-metrics connector; make test green",
       "seconds": 187
     },
     {
-      "reason": "collector config lint could not reach the staging gateway before the timeout",
+      "reason": "collector config lint timed out after 480 s waiting on the staging gateway health endpoint",
       "status": "failed",
       "seconds": 480
     },
@@ -34,7 +34,7 @@
       "seconds": 273
     },
     {
-      "reason": "bumped the OTLP exporter patch version across 6 services",
+      "reason": "bumped the OTLP exporter from 1.27.0 to 1.27.1 across 6 services; no config changes needed",
       "seconds": 141
     }
   ],
@@ -44,7 +44,7 @@
       "seconds": 238
     },
     {
-      "reason": "flagged an advisory in a dependency of the legacy SAML shim as critical and attached the evidence",
+      "reason": "flagged the xml-crypto signature-wrapping advisory under the legacy SAML shim as critical and attached the advisory",
       "seconds": 197
     },
     {
@@ -57,11 +57,11 @@
       "seconds": 3
     },
     {
-      "reason": "bumped the cookie-signing dependency; session tests green",
+      "reason": "bumped cookie-signature 1.2.1 to 1.2.2; 48 session tests green",
       "seconds": 211
     },
     {
-      "reason": "conformance suite failed against a rotated test key, so the bump was left unmerged",
+      "reason": "OIDC conformance suite failed: 3 tests still pin the signing key from before the last JWKS rotation, so the bump was left unmerged",
       "status": "failed",
       "seconds": 356
     },
@@ -70,13 +70,13 @@
       "seconds": 79
     },
     {
-      "reason": "bumped 2 patch versions in the BFF; opened no bugs",
+      "reason": "bumped openid-client and jose patch versions in the BFF; conformance suite 61 of 61, no bugs opened",
       "seconds": 166
     }
   ],
   "llm-maint": [
     {
-      "reason": "golden sets re-run on the live prompts: 41 of 42 pass, the judge-rubric case regressed 0.04",
+      "reason": "golden sets re-run on the live prompts: 41 of 42 pass; the judge-rubric case lost 0.04 on grounding",
       "seconds": 612
     },
     {
@@ -92,7 +92,7 @@
       "seconds": 531
     },
     {
-      "reason": "the eval harness lost its Bedrock session midway, 29 of 42 cases ran",
+      "reason": "eval harness lost its Bedrock session after 29 of 42 cases (ExpiredTokenException); partial results discarded",
       "status": "failed",
       "seconds": 702
     },
@@ -115,11 +115,11 @@
   ],
   "inf-maint": [
     {
-      "reason": "canaried the new serving build: p95 latency flat, error rate flat",
+      "reason": "canaried serving build 412 against 411 on 4 models: p95 within 2 percent, error rate 0.04 percent both sides",
       "seconds": 187
     },
     {
-      "reason": "p95 up 11 percent on the embedding model; recommended holding the rollout",
+      "reason": "p95 up 11 percent on the embedding model (182 ms to 202 ms); recommended holding the rollout",
       "seconds": 243
     },
     {
@@ -127,7 +127,7 @@
       "seconds": 164
     },
     {
-      "reason": "could not reach the canary endpoint to start the comparison",
+      "reason": "canary endpoint returned 503 for 10 minutes while the router scaled from zero; comparison never started",
       "status": "failed",
       "seconds": 61
     },
@@ -136,7 +136,7 @@
       "seconds": 290
     },
     {
-      "reason": "canary clean; queue depth steady at the new autoscaling target",
+      "reason": "canary clean; queue depth held at 3 to 4 in flight per replica under the new autoscaling target",
       "seconds": 176
     },
     {
@@ -147,11 +147,11 @@
   ],
   "cost-maint": [
     {
-      "reason": "spend by service within 6 percent of the 7-day baseline; 3 untagged resources listed",
+      "reason": "spend by service within 6 percent of the 7-day baseline; 3 untagged EBS volumes listed with their creators",
       "seconds": 142
     },
     {
-      "reason": "flagged a 34 percent jump in NAT gateway cost and listed the 5 resources behind it",
+      "reason": "flagged a 34 percent jump in NAT gateway data processing ($41 a day) and traced it to 5 tasks pulling images over the NAT instead of the VPC endpoint",
       "seconds": 208
     },
     {

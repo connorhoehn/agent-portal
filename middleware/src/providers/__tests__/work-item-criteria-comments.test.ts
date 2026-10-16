@@ -59,7 +59,7 @@ describe('listWorkItemCriteria', () => {
   });
 
   it('answers empty for a work item with no checklist', async () => {
-    expect(await listWorkItemCriteria('wi-obs-e2-s2')).toEqual([]);
+    expect(await listWorkItemCriteria('wi-obs-e1-s1')).toEqual([]);
   });
 });
 
@@ -77,7 +77,7 @@ describe('createWorkItemCriterion', () => {
   });
 
   it('starts a fresh work item at position 0', async () => {
-    const created = await createWorkItemCriterion('wi-obs-e2-s2', 'First criterion');
+    const created = await createWorkItemCriterion('wi-obs-e1-s1', 'First criterion');
     expect(created.position).toBe(0);
   });
 });
@@ -180,7 +180,7 @@ describe('listWorkItemComments', () => {
   });
 
   it('answers empty for a work item with no comments', async () => {
-    expect(await listWorkItemComments('wi-obs-e2-b4')).toEqual({ comments: [], total: 0 });
+    expect(await listWorkItemComments('wi-obs-e1-s1')).toEqual({ comments: [], total: 0 });
   });
 
   it('the two fixed-age planning notes on wi-obs-e1-s4 are Nora and Eli', async () => {

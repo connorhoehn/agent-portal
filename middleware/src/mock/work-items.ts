@@ -94,8 +94,9 @@ type EstimateFields =
 
 // The brief fields (schema/orgiq_work_items_schema.sql, "The work item's
 // brief") are optional on a seed the same way: the program seed writes a brief
-// for six p-observability items only, and every other row is null in the seed
-// too — restating four nulls on ~100 rows would be noise, not parity.
+// for the in-flight items of the engineering arcs only (SEEDED_BRIEFS below),
+// and every other row is null in the seed too — restating four nulls on ~100
+// rows would be noise, not parity.
 type BriefFields = 'summary' | 'blockedReason' | 'nextStep' | 'nextStepDetail';
 
 type MockSeed = Omit<WorkItem, 'projectName' | 'sprintId' | 'estimatedCostUsd' | 'childCount' | 'childDoneCount' | EstimateFields | BriefFields>
@@ -220,18 +221,18 @@ const MOCK_WORK_ITEM_SEEDS: MockSeed[] = [
   { id: 'wi-obs-e1-s1', projectId: 'p-observability', parentId: 'wi-obs-e1', type: 'story', title: 'Roll out collector fleet with gateway + agent topology', description: null, status: 'done', priority: 'critical', assigneeId: 'p-008', assigneeName: 'Layla Hassan', assigneeDept: 'Platform Engineering', labels: ['otel', 'infra'], storyPoints: 8, estimatedCostUsd: 10.47, sprintId: 'spr-obs-s1', prUrl: 'https://github.com/connorhoehnslalom/orgiq-observability/pull/27', prStatus: 'merged', createdAt: D(55), updatedAt: D(5), completedAt: D(12) },
   { id: 'wi-obs-e1-s2', projectId: 'p-observability', parentId: 'wi-obs-e1', type: 'story', title: 'Tail-sampling policy: errors + p99 latency always kept', description: null, status: 'done', priority: 'high', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['otel', 'sampling'], storyPoints: 5, estimatedCostUsd: 6.05, sprintId: 'spr-obs-s1', prUrl: 'https://github.com/connorhoehnslalom/orgiq-observability/pull/29', prStatus: 'merged', createdAt: D(46), updatedAt: D(0), completedAt: D(13) },
   { id: 'wi-obs-e1-s3', projectId: 'p-observability', parentId: 'wi-obs-e1', type: 'story', title: 'Span-metrics connector feeding RED dashboards', description: null, status: 'in_progress', priority: 'high', assigneeId: 'p-008', assigneeName: 'Layla Hassan', assigneeDept: 'Platform Engineering', labels: ['otel', 'metrics'], storyPoints: 8, estimatedCostUsd: 10.77, sprintId: 'spr-obs-s3', prUrl: null, prStatus: null, createdAt: D(47), updatedAt: D(0), completedAt: null },
-  { id: 'wi-obs-e1-s4', projectId: 'p-observability', parentId: 'wi-obs-e1', type: 'story', title: 'Decommission the legacy StatsD bridge', summary: 'Move remaining service metrics to OpenTelemetry.', description: null, status: 'open', priority: 'medium', assigneeId: 'p-008', assigneeName: 'Layla Hassan', assigneeDept: 'Platform Engineering', labels: ['decom'], storyPoints: 5, estimatedCostUsd: 5.77, sprintId: 'spr-obs-s3', prUrl: null, prStatus: null, createdAt: D(69), updatedAt: D(2), completedAt: null },
+  { id: 'wi-obs-e1-s4', projectId: 'p-observability', parentId: 'wi-obs-e1', type: 'story', title: 'Decommission the legacy StatsD bridge', description: null, status: 'open', priority: 'medium', assigneeId: 'p-008', assigneeName: 'Layla Hassan', assigneeDept: 'Platform Engineering', labels: ['decom'], storyPoints: 5, estimatedCostUsd: 5.77, sprintId: 'spr-obs-s3', prUrl: null, prStatus: null, createdAt: D(69), updatedAt: D(2), completedAt: null },
   { id: 'wi-obs-e1-b5', projectId: 'p-observability', parentId: 'wi-obs-e1', type: 'bug', title: 'Collector OOMs under burst ingest when queue is unbounded', description: null, status: 'in_progress', priority: 'critical', assigneeId: 'p-011', assigneeName: 'Eli Garcia', assigneeDept: 'Platform Engineering', labels: ['otel', 'stability'], storyPoints: 3, estimatedCostUsd: 3.92, sprintId: 'spr-obs-s3', prUrl: null, prStatus: null, createdAt: D(49), updatedAt: D(4), completedAt: null },
   { id: 'wi-obs-e3', projectId: 'p-observability', parentId: null, type: 'epic', title: 'Cost-aware telemetry', description: 'Telemetry spend is budgeted like compute: cardinality and retention have owners.', status: 'open', priority: 'medium', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['finops'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(2), completedAt: null },
-  { id: 'wi-obs-e3-s1', projectId: 'p-observability', parentId: 'wi-obs-e3', type: 'story', title: 'Metric cardinality budgets', summary: 'Define limits before new metrics increase storage costs.', description: null, status: 'open', priority: 'medium', assigneeId: 'p-011', assigneeName: 'Eli Garcia', assigneeDept: 'Platform Engineering', labels: ['finops', 'metrics'], storyPoints: 5, estimatedCostUsd: 5.28, prUrl: null, prStatus: null, createdAt: D(60), updatedAt: D(0), completedAt: null },
+  { id: 'wi-obs-e3-s1', projectId: 'p-observability', parentId: 'wi-obs-e3', type: 'story', title: 'Metric cardinality budgets', description: null, status: 'open', priority: 'medium', assigneeId: 'p-011', assigneeName: 'Eli Garcia', assigneeDept: 'Platform Engineering', labels: ['finops', 'metrics'], storyPoints: 5, estimatedCostUsd: 5.28, prUrl: null, prStatus: null, createdAt: D(60), updatedAt: D(0), completedAt: null },
   { id: 'wi-obs-e3-s2', projectId: 'p-observability', parentId: 'wi-obs-e3', type: 'story', title: 'Tiered log sampling', description: null, status: 'open', priority: 'medium', assigneeId: 'p-008', assigneeName: 'Layla Hassan', assigneeDept: 'Platform Engineering', labels: ['finops', 'logs'], storyPoints: 3, estimatedCostUsd: 3.52, prUrl: null, prStatus: null, createdAt: D(51), updatedAt: D(2), completedAt: null },
 
   // ── p-observability — SLOs and error budgets (Nora owns this initiative) ──
   { id: 'wi-obs-e2', projectId: 'p-observability', parentId: null, type: 'epic', title: 'SLOs and error budgets', description: 'Every tier-1 service has an SLO, a burn-rate alert, and an owner.', status: 'in_progress', priority: 'high', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['slo'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(5), completedAt: null },
   { id: 'wi-obs-e2-s1', projectId: 'p-observability', parentId: 'wi-obs-e2', type: 'story', title: 'SLO definitions in the service catalog with owners', description: null, status: 'done', priority: 'high', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['slo'], storyPoints: 5, estimatedCostUsd: 5.22, sprintId: 'spr-obs-s2', prUrl: 'https://github.com/connorhoehnslalom/orgiq-observability/pull/35', prStatus: 'merged', createdAt: D(65), updatedAt: D(0), completedAt: D(5) },
-  { id: 'wi-obs-e2-s2', projectId: 'p-observability', parentId: 'wi-obs-e2', type: 'story', title: 'Multi-window burn-rate alerts', description: 'Fast burn pages, slow burn tickets. Thresholds derived from the SLO, not hand-picked.', status: 'in_review', priority: 'high', assigneeId: 'p-008', assigneeName: 'Layla Hassan', assigneeDept: 'Platform Engineering', labels: ['slo', 'alerting'], storyPoints: 5, prUrl: 'https://github.com/connorhoehnslalom/orgiq-observability/pull/38', prStatus: 'open', createdAt: D(21), updatedAt: D(6), completedAt: null },
-  { id: 'wi-obs-e2-s3', projectId: 'p-observability', parentId: 'wi-obs-e2', type: 'story', title: 'Error-budget dashboard per team', summary: 'Make each team\'s remaining error budget visible.', description: 'One panel per team: budget remaining, burn over the window, and who owns the service.', status: 'open', priority: 'medium', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['slo', 'dashboards'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(33), updatedAt: D(2), completedAt: null },
-  { id: 'wi-obs-e2-b4', projectId: 'p-observability', parentId: 'wi-obs-e2', type: 'bug', title: 'Stop duplicate alerts during a dependency outage', summary: 'One failing dependency can trigger forty pages.', description: 'When one shared dependency fails, it can trigger forty separate pages. Fixing this should help the on-call engineer identify the root problem without sorting through duplicate alerts.', blockedReason: 'Waiting on the dependency map.', nextStep: 'Confirm the dependency map with Eli Garcia.', nextStepDetail: 'The team needs this before choosing how to group duplicate alerts.', status: 'open', priority: 'high', assigneeId: 'p-011', assigneeName: 'Eli Garcia', assigneeDept: 'Platform Engineering', labels: ['alerting', 'blocked'], storyPoints: 2, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(4), completedAt: null },
+  { id: 'wi-obs-e2-s2', projectId: 'p-observability', parentId: 'wi-obs-e2', type: 'story', title: 'Multi-window burn-rate alerts', description: null, status: 'in_review', priority: 'high', assigneeId: 'p-008', assigneeName: 'Layla Hassan', assigneeDept: 'Platform Engineering', labels: ['slo', 'alerting'], storyPoints: 5, prUrl: 'https://github.com/connorhoehnslalom/orgiq-observability/pull/38', prStatus: 'open', createdAt: D(21), updatedAt: D(6), completedAt: null },
+  { id: 'wi-obs-e2-s3', projectId: 'p-observability', parentId: 'wi-obs-e2', type: 'story', title: 'Error-budget dashboard per team', description: null, status: 'open', priority: 'medium', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['slo', 'dashboards'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(33), updatedAt: D(2), completedAt: null },
+  { id: 'wi-obs-e2-b4', projectId: 'p-observability', parentId: 'wi-obs-e2', type: 'bug', title: 'Stop duplicate alerts during a dependency outage', description: null, status: 'open', priority: 'high', assigneeId: 'p-011', assigneeName: 'Eli Garcia', assigneeDept: 'Platform Engineering', labels: ['alerting', 'blocked'], storyPoints: 2, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(4), completedAt: null },
 
   // ── p-auth-migration — Nora is an SME here, not the owner ────────────────
   //
@@ -242,14 +243,14 @@ const MOCK_WORK_ITEM_SEEDS: MockSeed[] = [
   // than the seed gives it. (An epic's childCount/childDoneCount are counted
   // from its children when the rows are built — see deriveChildCounts.)
   { id: 'wi-auth-e1', projectId: 'p-auth-migration', parentId: null, type: 'epic', title: 'Cognito consolidation', description: 'One IdP, one session mint path, verified JWKS everywhere.', status: 'in_progress', priority: 'critical', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['oidc'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(3), completedAt: null },
-  { id: 'wi-auth-e1-s1', projectId: 'p-auth-migration', parentId: 'wi-auth-e1', type: 'story', title: 'BFF authorization-code + PKCE flow behind the middleware', description: 'Every sign-in goes through the BFF with the authorization-code flow and PKCE, so no token ever reaches the browser.', status: 'done', priority: 'critical', assigneeId: 'p-051', assigneeName: 'Simone Chang', assigneeDept: 'Security', labels: ['oidc', 'bff'], storyPoints: 8, estimatedCostUsd: 9.16, sprintId: 'spr-auth-s1', prUrl: 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/39', prStatus: 'merged', createdAt: D(64), updatedAt: D(1), completedAt: D(14) },
-  { id: 'wi-auth-e1-s2', projectId: 'p-auth-migration', parentId: 'wi-auth-e1', type: 'story', title: 'JWKS verification with kid-rotation handling', description: 'Tokens are verified against the published JWKS, and a signing-key rotation signs nobody out.', status: 'done', priority: 'critical', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['oidc', 'jwt'], storyPoints: 5, estimatedCostUsd: 5.92, sprintId: 'spr-auth-s1', prUrl: 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/43', prStatus: 'merged', createdAt: D(59), updatedAt: D(4), completedAt: D(10) },
-  { id: 'wi-auth-e1-s3', projectId: 'p-auth-migration', parentId: 'wi-auth-e1', type: 'story', title: 'Session cookie hardening: max-age, rotation on switch', description: 'Re-mint on every tenant and role switch. The pre-switch cookie stops working within the refresh window.', summary: 'A switched tenant or role stops honouring the old cookie within the refresh window.', status: 'in_review', priority: 'high', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['session'], storyPoints: 5, prUrl: 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/49', prStatus: 'open', createdAt: D(30), updatedAt: D(5), completedAt: null },
-  { id: 'wi-auth-e1-b4', projectId: 'p-auth-migration', parentId: 'wi-auth-e1', type: 'bug', title: 'Refresh loop when a grant is revoked mid-session', description: null, summary: 'A revoked grant must sign the session out once, not loop on refresh.', status: 'in_progress', priority: 'critical', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['session'], storyPoints: 3, estimatedCostUsd: 2.91, sprintId: 'spr-auth-s2', prUrl: null, prStatus: null, createdAt: D(48), updatedAt: D(1), completedAt: null },
+  { id: 'wi-auth-e1-s1', projectId: 'p-auth-migration', parentId: 'wi-auth-e1', type: 'story', title: 'BFF authorization-code + PKCE flow behind the middleware', description: null, status: 'done', priority: 'critical', assigneeId: 'p-051', assigneeName: 'Simone Chang', assigneeDept: 'Security', labels: ['oidc', 'bff'], storyPoints: 8, estimatedCostUsd: 9.16, sprintId: 'spr-auth-s1', prUrl: 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/39', prStatus: 'merged', createdAt: D(64), updatedAt: D(1), completedAt: D(14) },
+  { id: 'wi-auth-e1-s2', projectId: 'p-auth-migration', parentId: 'wi-auth-e1', type: 'story', title: 'JWKS verification with kid-rotation handling', description: null, status: 'done', priority: 'critical', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['oidc', 'jwt'], storyPoints: 5, estimatedCostUsd: 5.92, sprintId: 'spr-auth-s1', prUrl: 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/43', prStatus: 'merged', createdAt: D(59), updatedAt: D(4), completedAt: D(10) },
+  { id: 'wi-auth-e1-s3', projectId: 'p-auth-migration', parentId: 'wi-auth-e1', type: 'story', title: 'Session cookie hardening: max-age, rotation on switch', description: null, status: 'in_review', priority: 'high', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['session'], storyPoints: 5, prUrl: 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/49', prStatus: 'open', createdAt: D(30), updatedAt: D(5), completedAt: null },
+  { id: 'wi-auth-e1-b4', projectId: 'p-auth-migration', parentId: 'wi-auth-e1', type: 'bug', title: 'Refresh loop when a grant is revoked mid-session', description: null, status: 'in_progress', priority: 'critical', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['session'], storyPoints: 3, estimatedCostUsd: 2.91, sprintId: 'spr-auth-s2', prUrl: null, prStatus: null, createdAt: D(48), updatedAt: D(1), completedAt: null },
   { id: 'wi-auth-e2', projectId: 'p-auth-migration', parentId: null, type: 'epic', title: 'Legacy SSO decommission', description: 'The SAML shim serves zero tenants and is deleted, not paused.', status: 'open', priority: 'high', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['decom'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(6), completedAt: null },
-  { id: 'wi-auth-e2-s1', projectId: 'p-auth-migration', parentId: 'wi-auth-e2', type: 'story', title: 'Inventory every consumer still on the SAML shim', description: 'Every service and customer tenant still on the SAML shim, each with an owner, so the cutover order has a list to order.', status: 'done', priority: 'medium', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['decom'], storyPoints: 3, estimatedCostUsd: 3.42, sprintId: 'spr-auth-s1', prUrl: 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/54', prStatus: 'merged', createdAt: D(73), updatedAt: D(4), completedAt: D(12) },
-  { id: 'wi-auth-e2-s2', projectId: 'p-auth-migration', parentId: 'wi-auth-e2', type: 'story', title: 'Tenant-by-tenant cutover runbook with rollback', description: 'Each tenant already moves with the single-tenant cutover runbook. This story writes the order the remaining tenants move in and the rollback for each, which waits on the escalated decision "Cutover order for legacy SSO tenants".', summary: 'Sequence the remaining customer tenants off the SAML shim, each with a five-minute way back.', blockedReason: 'Blocked on "Cutover order for legacy SSO tenants", escalated to Sienna Garcia.', nextStep: 'Sienna Garcia decides the cutover order.', nextStepDetail: 'She decides once the second internal rehearsal passes. Review the proposed callback-list step for the cutover runbook first, so the retry can run.', status: 'open', priority: 'high', assigneeId: 'p-051', assigneeName: 'Simone Chang', assigneeDept: 'Security', labels: ['decom', 'runbook', 'blocked'], storyPoints: 5, prUrl: null, prStatus: null, createdAt: D(44), updatedAt: D(2), completedAt: null },
-  { id: 'wi-auth-e2-b3', projectId: 'p-auth-migration', parentId: 'wi-auth-e2', type: 'bug', title: 'Logout leaves the legacy shim cookie alive', description: 'Signing out clears the OrgIQ session and not the SAML shim cookie, so the next visit silently re-authenticates.', summary: 'Signing out must also clear the SAML shim cookie.', status: 'open', priority: 'medium', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['session', 'decom'], storyPoints: 2, prUrl: null, prStatus: null, createdAt: D(39), updatedAt: D(4), completedAt: null },
+  { id: 'wi-auth-e2-s1', projectId: 'p-auth-migration', parentId: 'wi-auth-e2', type: 'story', title: 'Inventory every consumer still on the SAML shim', description: null, status: 'done', priority: 'medium', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['decom'], storyPoints: 3, estimatedCostUsd: 3.42, sprintId: 'spr-auth-s1', prUrl: 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/54', prStatus: 'merged', createdAt: D(73), updatedAt: D(4), completedAt: D(12) },
+  { id: 'wi-auth-e2-s2', projectId: 'p-auth-migration', parentId: 'wi-auth-e2', type: 'story', title: 'Tenant-by-tenant cutover runbook with rollback', description: null, status: 'open', priority: 'high', assigneeId: 'p-051', assigneeName: 'Simone Chang', assigneeDept: 'Security', labels: ['decom', 'runbook', 'blocked'], storyPoints: 5, prUrl: null, prStatus: null, createdAt: D(44), updatedAt: D(2), completedAt: null },
+  { id: 'wi-auth-e2-b3', projectId: 'p-auth-migration', parentId: 'wi-auth-e2', type: 'bug', title: 'Logout leaves the legacy shim cookie alive', description: null, status: 'open', priority: 'medium', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['session', 'decom'], storyPoints: 2, prUrl: null, prStatus: null, createdAt: D(39), updatedAt: D(4), completedAt: null },
 
   // ── The remaining seven initiatives (member defect #14) ───────────────────
   //
@@ -314,6 +315,208 @@ const MOCK_WORK_ITEM_SEEDS: MockSeed[] = [
   { id: 'wi-dsapi-e1-s2', projectId: 'p-design-system-api', parentId: 'wi-dsapi-e1', type: 'story', title: 'Versioned release channels (stable/next)', description: null, status: 'done', priority: 'high', assigneeId: 'p-038', assigneeName: 'Isabel Vasquez', assigneeDept: 'Design Systems', labels: ['releases'], storyPoints: 5, estimatedCostUsd: 4.27, sprintId: 'spr-dsapi-s1', prUrl: 'https://github.com/connorhoehnslalom/orgiq-design-system-api/pull/57', prStatus: 'merged', createdAt: D(36), updatedAt: D(4), completedAt: D(9) },
   { id: 'wi-dsapi-e1-b3', projectId: 'p-design-system-api', parentId: 'wi-dsapi-e1', type: 'bug', title: 'Breaking prop rename slipped past the semver gate', description: null, status: 'open', priority: 'high', assigneeId: 'p-038', assigneeName: 'Isabel Vasquez', assigneeDept: 'Design Systems', labels: ['semver'], storyPoints: 3, estimatedCostUsd: 3.85, sprintId: 'spr-dsapi-s1', prUrl: null, prStatus: null, createdAt: D(32), updatedAt: D(1), completedAt: null },
 ];
+
+/**
+ * The work-item briefs, mirroring schema/seeds/generate_program_seed.py's
+ * BRIEFS row for row (the seed writes them as UPDATEs after the inserts, and
+ * the parity harness compares every field). An item listed here takes all five
+ * fields from this table, nulls included, exactly as the seed's UPDATE states
+ * the whole brief; an item not listed keeps whatever its seed row says, which
+ * for every such row is null. The in-flight and blocked items of the five arcs
+ * in docs/demo-content-engineering-brief.md carry one.
+ */
+type SeededBrief = Pick<WorkItem, 'summary' | 'description' | 'blockedReason' | 'nextStep' | 'nextStepDetail'>;
+const SEEDED_BRIEFS: Partial<Record<string, SeededBrief>> = {
+  'wi-obs-e2-b4': {
+    summary: 'One failing dependency can trigger forty pages.',
+    description: 'When the shared Postgres connection proxy failed last month, 41 services paged separately within 6 minutes and the on-call engineer spent the first 20 minutes acknowledging duplicates. Alerts should group by the failing dependency, with the affected services listed inside one page.',
+    blockedReason: 'Waiting on the dependency map.',
+    nextStep: 'Confirm the dependency map with Eli Garcia.',
+    nextStepDetail: 'The team needs this before choosing how to group duplicate alerts.',
+  },
+  'wi-obs-e1-s4': {
+    summary: 'Move remaining service metrics to OpenTelemetry.',
+    description: 'Nine services still push StatsD through the bridge, which drops packets under load because it is UDP with a 64 KB receive buffer. Each service moves to OTLP through the collector, and every alert that read a StatsD metric reads its OpenTelemetry equivalent before the bridge is switched off.',
+    blockedReason: null,
+    nextStep: 'Move billing and notifications first.',
+    nextStepDetail: 'Neither has a paging alert on a StatsD metric. Keep the bridge running until dashboard parity is verified for both.',
+  },
+  'wi-obs-e1-s3': {
+    summary: 'Derive rate, errors and duration for every service from its spans.',
+    description: 'The span-metrics connector turns every server span into a call counter and a duration histogram per service and route, so dashboards cover services that never wrote a metric. Cardinality is the risk: route labels must be templated, never raw paths.',
+    blockedReason: null,
+    nextStep: 'Enable the connector for checkout and search behind an allow-list.',
+    nextStepDetail: 'Compare their RED panels against the StatsD dashboards for a week, then widen the list.',
+  },
+  'wi-obs-e1-b5': {
+    summary: 'A 90-second ingest burst kills the gateway collectors because nothing bounds the export queue.',
+    description: 'At 40k spans/s for 90 seconds the gateway pods reach their 2 GiB limit inside 4 minutes and are OOM-killed, dropping every span in flight, errors included. With memory_limiter first in the pipeline and a bounded sending queue the collector refuses data under pressure instead of dying.',
+    blockedReason: null,
+    nextStep: 'Replay the burst against the fixed config in staging.',
+    nextStepDetail: 'Pass means no OOM kill, the exporter queue stays under capacity, and tail sampling still keeps every error span.',
+  },
+  'wi-obs-e2-s2': {
+    summary: 'Alert on how fast the error budget burns, not on raw error counts.',
+    description: 'Fast burn pages, slow burn tickets. Page when 2 percent of the 30-day budget burns in 1 hour (14.4x) and ticket at 5 percent in 6 hours (6x), each confirmed by a short window. Thresholds come from the SLO, not from a feel for the error rate.',
+    blockedReason: null,
+    nextStep: 'Backtest the recording rules over 30 days of checkout traffic.',
+    nextStepDetail: 'They must page for the two real incidents in that window and stay quiet otherwise.',
+  },
+  'wi-obs-e2-s3': {
+    summary: 'Make each team\'s remaining error budget visible.',
+    description: 'One panel per team: budget remaining, burn over the window, and who owns the service. When a budget is spent, feature work on that service waits for reliability work, and the panel is what makes that conversation short.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+  'wi-obs-e3-s1': {
+    summary: 'Define limits before new metrics increase storage costs.',
+    description: 'One team added a user_id label and created 1.2 million active series in a day, doubling the metrics bill for the month. Every service gets a series budget, and CI fails a pull request that adds an unbounded label.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+  'wi-obs-e3-s2': {
+    summary: null,
+    description: 'Debug logs are 70 percent of log volume and almost never read. Debug is sampled at 1 in 20, info is kept for 14 days, and audit logs bypass sampling entirely because compliance needs every line.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+  'wi-auth-e2-s2': {
+    summary: 'Sequence the remaining customer tenants off the SAML shim, each with a two-minute way back.',
+    description: 'Each tenant already moves with the single-tenant cutover runbook: pre-flight the Cognito app client, flip the IdP route, watch the login error rate for 15 minutes, and roll back by restoring the shim route. This story writes the order the 12 remaining customer tenants move in and the rollback for each, which waits on the escalated decision "Cutover order for legacy SSO tenants".',
+    blockedReason: 'Blocked on "Cutover order for legacy SSO tenants", escalated to Sienna Garcia.',
+    nextStep: 'Sienna Garcia decides the cutover order.',
+    nextStepDetail: 'She decides once the second internal rehearsal passes. Review the proposed callback-list step for the cutover runbook first, so the retry can run.',
+  },
+  'wi-auth-e1-s1': {
+    summary: null,
+    description: 'The BFF runs the authorization-code flow with PKCE (S256) against the Cognito hosted UI and keeps the tokens server-side. The browser only holds an HttpOnly, SameSite=Lax session cookie, so a script injected into the page cannot lift a bearer token.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+  'wi-auth-e1-s2': {
+    summary: null,
+    description: 'Access tokens are verified against the cached JWKS by key id. An unknown kid triggers one rate-limited refetch, at most once a minute, before the token is rejected, so a signing-key rotation signs nobody out and a forged kid cannot hammer the endpoint.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+  'wi-auth-e2-s1': {
+    summary: null,
+    description: 'Every consumer still on the SAML shim, each with an owner: 14 tenants (12 customer, 2 internal), two of them with custom SAML attribute mappings, plus one internal search callback still pointed at the shim. The cutover order needs this list to order.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+  'wi-auth-e1-s3': {
+    summary: 'A switched tenant or role stops honouring the old cookie within the refresh window.',
+    description: 'Every tenant or role switch re-mints the cookie and bumps the session epoch. A copy of the pre-switch cookie on another device is refused at its next grants refresh, at most 120 seconds later, without adding a server-side session store.',
+    blockedReason: null,
+    nextStep: 'Simone Chang reviews the epoch comparison in the session middleware.',
+    nextStepDetail: 'The server-side max-age is in the same pull request behind a flag, which flips after the cutover window closes.',
+  },
+  'wi-auth-e1-b4': {
+    summary: 'A revoked grant must sign the session out once, not loop on refresh.',
+    description: 'When a grant is revoked mid-session the refresh endpoint answers 403, and the client treats every 403 as retryable, so it refreshes every 2 seconds until the tab closes. One revoked user produced 1,800 refresh calls in an hour. Revocation must answer 401 with a reason the client treats as terminal.',
+    blockedReason: null,
+    nextStep: 'Return 401 with a session_revoked reason from the refresh endpoint.',
+    nextStepDetail: 'Then the client signs out once on that reason. A regression test revokes a grant mid-session and asserts exactly one refresh call.',
+  },
+  'wi-auth-e2-b3': {
+    summary: 'Signing out must also clear the SAML shim cookie.',
+    description: 'Signing out clears the BFF session but not the shim session cookie on the legacy domain, so the next visit silently re-authenticates through the shim. Logout has to pass through the shim single-logout endpoint until the shim is deleted.',
+    blockedReason: null,
+    nextStep: 'Add the shim single-logout redirect to the BFF logout handler.',
+    nextStepDetail: 'Verify in a fresh browser profile that the visit after logout lands on the Cognito hosted UI, not straight back in.',
+  },
+  'wi-llm-e1-s2': {
+    summary: 'Score every canary answer on a weighted rubric so a prompt change is judged, not eyeballed.',
+    description: 'The judge scores grounding, completeness, tone and latency against the retrieved context. On the 120-question pilot set it agrees with human labels 82 percent of the time. Which model judges is the open decision "Judge model for canary evaluation".',
+    blockedReason: null,
+    nextStep: 'Nina Rivera decides the judge model.',
+    nextStepDetail: 'Run both candidates over the pilot set with the final weights and report agreement and cost per 1,000 judged answers side by side.',
+  },
+  'wi-llm-e1-b3': {
+    summary: 'Every replica refetches its prompt in the same second when the cache expires.',
+    description: 'Replicas cache each prompt for exactly 60 seconds from boot, so after a deploy they expire together and the prompt store throttles at about 40 requests a second. Jittering the TTL and serving the stale prompt while one refresh runs removes the stampede.',
+    blockedReason: null,
+    nextStep: 'Add TTL jitter and stale-while-revalidate to the prompt cache.',
+    nextStepDetail: 'Load test with 50 replicas restarted at once: zero throttled fetches.',
+  },
+  'wi-llm-e2-s1': {
+    summary: 'Gate every prompt and model change on a versioned golden set per agent.',
+    description: 'Each agent has 30 to 60 golden questions with expected facts, versioned with the prompt they test. A change merges only when no rubric dimension drops more than 0.03 against the current baseline.',
+    blockedReason: null,
+    nextStep: 'Katya Petrov records the golden-set version in the baseline file.',
+    nextStepDetail: 'Without it, a score cannot be compared with the one before it.',
+  },
+  'wi-llm-e2-s2': {
+    summary: 'Run the guardrail regression set on every pull request that touches a prompt or a guardrail.',
+    description: 'The set holds 200 prompts that must be blocked (prompt injection, PII exfiltration, off-topic requests) and 200 that must pass. A regression in either direction fails the build, because a guardrail that blocks good questions is also broken.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+  'wi-llm-e3-s1': {
+    summary: 'Move nightly summarisation and re-embedding off the interactive endpoint.',
+    description: 'Non-interactive jobs share the on-demand quota with users and cause throttling every night around 02:00 UTC. A batch queue with its own concurrency limit takes them off the interactive path.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+  'wi-cost-e1-s2': {
+    summary: 'Justify or merge every OpenSearch Serverless collection holding its own capacity floor.',
+    description: 'Collections share capacity only when they share an encryption key, so each key group bills its own 2-OCU floor whether or not anyone queries it. Three of five collections served fewer than 100 queries last week. Merging them onto the shared key saves about $350 a month per group.',
+    blockedReason: null,
+    nextStep: 'Reindex the three quiet collections onto the shared key group.',
+    nextStepDetail: 'Switch readers, then delete the old collections after 7 days of zero queries.',
+  },
+  'wi-cost-e2-s1': {
+    summary: 'Refuse a deploy that creates an untagged resource.',
+    description: 'Showback is only as good as the tags. A CDK aspect fails synthesis when a taggable resource lacks initiative and owner tags, and the daily sweep lists anything created outside CDK without them.',
+    blockedReason: null,
+    nextStep: 'Layla Hassan reviews the exemption list.',
+    nextStepDetail: 'Only resources that cannot carry tags are exempt, each with a reason.',
+  },
+  'wi-cost-e2-s2': {
+    summary: 'One view per initiative: infrastructure, model tokens and the bot baseline.',
+    description: 'Infrastructure cost comes from tags, model spend from invocation logs and bot spend from the run ledger. Joining the three per initiative per day shows what an initiative actually costs, with the maintenance-bot baseline shown as a floor rather than mixed into interactive work.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+  'wi-inf-e1-s1': {
+    summary: 'Scale replicas on in-flight requests per replica instead of CPU.',
+    description: 'GPU-bound replicas sit at 30 percent CPU while requests queue for seconds, so CPU-based scaling never fires. Target tracking on queue depth reacts to the load users actually feel: 4 in flight per replica, out after 30 seconds sustained, in after 10 minutes.',
+    blockedReason: null,
+    nextStep: 'Publish the in-flight metric from the router.',
+    nextStepDetail: 'Emit in-flight requests per model every 10 seconds, switch the staging policy over, and replay the last traffic peak.',
+  },
+  'wi-inf-e1-b3': {
+    summary: 'The first request after scale-to-zero waits 40 to 90 seconds for the model to load.',
+    description: 'Models idle for 15 minutes scale to zero, and the next request pays the container start plus a 7 GB weight load. p99 on the embedding model reached 74 seconds against a 2.5-second SLO. The fix is a warm floor on tier-1 models or a faster load path.',
+    blockedReason: null,
+    nextStep: 'Paolo Mancini decides the warm floor for tier-1 models.',
+    nextStepDetail: 'A warm replica costs about $380 a month per model on the current instance type. The decision "Warm floor or scale-to-zero for tier-1 models" holds the comparison.',
+  },
+  'wi-rta-e1-s1': {
+    summary: 'Recover from a task failure in under 60 seconds.',
+    description: 'Checkpoints take 3 to 4 minutes because the job snapshots 180 GB of keyed state in full each time. Incremental RocksDB checkpoints, plus unaligned checkpoints under backpressure, bring the interval to 30 seconds and recovery under a minute.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+  'wi-rta-e1-b3': {
+    summary: 'Events arriving after the watermark are silently dropped from the hourly aggregates.',
+    description: 'Mobile clients batch events and deliver them up to 4 minutes late, but the watermark allows 30 seconds of lateness, so about 0.6 percent of events miss their window. Late events should go to a side output and be merged by a correction job, not vanish.',
+    blockedReason: null,
+    nextStep: null,
+    nextStepDetail: null,
+  },
+};
 
 /** Sprint membership + dollar estimate for the seeds that carry one. */
 const MOCK_PROGRAM_FIELDS: Record<string, { sprintId?: string; estimatedCostUsd?: number }> = {
@@ -420,6 +623,7 @@ function buildSeed(seed: MockSeed, idOverride?: { id: string; parentId: string |
     nextStep: null,
     nextStepDetail: null,
     ...seed,
+    ...SEEDED_BRIEFS[seed.id],
     ...MOCK_PROGRAM_FIELDS[seed.id],
     ...(idOverride ?? {}),
     createdAt: onClock(seed.createdAt),
