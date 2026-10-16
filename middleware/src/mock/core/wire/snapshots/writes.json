@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-15T15:59:52.073Z",
-  "serverHandlerSha": "6e566083db2f0a56ad0c8f298513d24abfc58afb43d6568c0f1c3cf40f41798b",
+  "capturedAt": "2026-10-16T17:22:22.274Z",
+  "serverHandlerSha": "b83d615871ccf97af7c8a5d642a033803b5ab7b4f7c485c32280e104d999c0b6",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -780,6 +780,28 @@
         "runbooksDemo.proposalId": "null",
         "runbooksDemo.second": "null",
         "runbooksDemo.startedAt": "null",
+        "runbooksToolsDemo": "object",
+        "runbooksToolsDemo.beatMs": "number",
+        "runbooksToolsDemo.boxSkills": "array",
+        "runbooksToolsDemo.errors": "array",
+        "runbooksToolsDemo.finishedAt": "null",
+        "runbooksToolsDemo.first": "null",
+        "runbooksToolsDemo.harnessOutput": "null",
+        "runbooksToolsDemo.libraryAfter": "null",
+        "runbooksToolsDemo.libraryBefore": "null",
+        "runbooksToolsDemo.milestones": "object",
+        "runbooksToolsDemo.milestones.accepted": "boolean",
+        "runbooksToolsDemo.milestones.firstBrief": "boolean",
+        "runbooksToolsDemo.milestones.installed": "boolean",
+        "runbooksToolsDemo.milestones.kept": "boolean",
+        "runbooksToolsDemo.milestones.libraryChanged": "boolean",
+        "runbooksToolsDemo.milestones.proposed": "boolean",
+        "runbooksToolsDemo.milestones.ranHarness": "boolean",
+        "runbooksToolsDemo.phase": "string",
+        "runbooksToolsDemo.proposalId": "null",
+        "runbooksToolsDemo.proposedFiles": "array",
+        "runbooksToolsDemo.second": "null",
+        "runbooksToolsDemo.startedAt": "null",
         "scenario": "string",
         "scopes": "number"
       },
@@ -794,6 +816,9 @@
           "default"
         ],
         "runbooksDemo.phase": [
+          "idle"
+        ],
+        "runbooksToolsDemo.phase": [
           "idle"
         ],
         "scenario": [
@@ -2351,6 +2376,7 @@
           "answer",
           "artifact",
           "decision",
+          "option",
           "problem",
           "question",
           "revision"
@@ -2414,6 +2440,7 @@
         "posts[].kind": [
           "analysis",
           "artifact",
+          "option",
           "problem",
           "question"
         ],
@@ -2486,7 +2513,7 @@
         "grant.allocatedUsd": "number",
         "grant.endsOn": "string",
         "grant.grantedBy": "string",
-        "grant.granteeName": "null",
+        "grant.granteeName": "string",
         "grant.granteePersonId": "string",
         "grant.id": "string",
         "grant.initiativeSpendInWindowUsd": "number",
@@ -2873,6 +2900,12 @@
     },
     "POST /api/local-compute/jobs/:jobId/log": {
       "skipped": "no body: a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"
+    },
+    "POST /api/local-compute/jobs/:jobId/skills": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/local-compute/jobs/:jobId/start": {
       "skipped": "no body: a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"
@@ -3495,6 +3528,9 @@
         "proposal.proposed.preconditions[]": "string",
         "proposal.proposed.rollback": "array",
         "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].command": "object",
+        "proposal.proposed.rollback[].command.lang": "string",
+        "proposal.proposed.rollback[].command.text": "string",
         "proposal.proposed.rollback[].do": "string",
         "proposal.proposed.steps": "array",
         "proposal.proposed.steps[]": "object",
@@ -3562,6 +3598,9 @@
         "version.doc.preconditions[]": "string",
         "version.doc.rollback": "array",
         "version.doc.rollback[]": "object",
+        "version.doc.rollback[].command": "object",
+        "version.doc.rollback[].command.lang": "string",
+        "version.doc.rollback[].command.text": "string",
         "version.doc.rollback[].do": "string",
         "version.doc.steps": "array",
         "version.doc.steps[]": "object",
@@ -3655,6 +3694,9 @@
         "merged.proposed.preconditions[]": "string",
         "merged.proposed.rollback": "array",
         "merged.proposed.rollback[]": "object",
+        "merged.proposed.rollback[].command": "object",
+        "merged.proposed.rollback[].command.lang": "string",
+        "merged.proposed.rollback[].command.text": "string",
         "merged.proposed.rollback[].do": "string",
         "merged.proposed.steps": "array",
         "merged.proposed.steps[]": "object",
@@ -3716,6 +3758,9 @@
         "proposal.proposed.preconditions[]": "string",
         "proposal.proposed.rollback": "array",
         "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].command": "object",
+        "proposal.proposed.rollback[].command.lang": "string",
+        "proposal.proposed.rollback[].command.text": "string",
         "proposal.proposed.rollback[].do": "string",
         "proposal.proposed.steps": "array",
         "proposal.proposed.steps[]": "object",
@@ -3808,6 +3853,9 @@
         "proposal.proposed.preconditions[]": "string",
         "proposal.proposed.rollback": "array",
         "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].command": "object",
+        "proposal.proposed.rollback[].command.lang": "string",
+        "proposal.proposed.rollback[].command.text": "string",
         "proposal.proposed.rollback[].do": "string",
         "proposal.proposed.steps": "array",
         "proposal.proposed.steps[]": "object",

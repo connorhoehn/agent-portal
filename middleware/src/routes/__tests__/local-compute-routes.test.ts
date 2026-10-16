@@ -179,6 +179,7 @@ describe('auth floor: machine routes without a token, browser routes without a s
     expect((await request(anon()).post('/api/local-compute/claim').send({})).status).toBe(401);
     expect((await request(anon()).post('/api/local-compute/jobs/job-x/start').send({})).status).toBe(401);
     expect((await request(anon()).post('/api/local-compute/jobs/job-x/heartbeat').send({})).status).toBe(401);
+    expect((await request(anon()).post('/api/local-compute/jobs/job-x/skills').send({})).status).toBe(401);
     expect((await request(anon()).post('/api/local-compute/jobs/job-x/complete').send({})).status).toBe(401);
     expect((await request(anon()).post('/api/local-compute/jobs/job-x/log').send({})).status).toBe(401);
     expect((await request(anon()).post('/api/local-compute/log').send({})).status).toBe(401);

@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-15T15:59:50.417Z",
-  "serverHandlerSha": "6e566083db2f0a56ad0c8f298513d24abfc58afb43d6568c0f1c3cf40f41798b",
+  "capturedAt": "2026-10-16T17:22:19.127Z",
+  "serverHandlerSha": "b83d615871ccf97af7c8a5d642a033803b5ab7b4f7c485c32280e104d999c0b6",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -105,6 +105,28 @@
         "runbooksDemo.proposalId": "null",
         "runbooksDemo.second": "null",
         "runbooksDemo.startedAt": "null",
+        "runbooksToolsDemo": "object",
+        "runbooksToolsDemo.beatMs": "number",
+        "runbooksToolsDemo.boxSkills": "array",
+        "runbooksToolsDemo.errors": "array",
+        "runbooksToolsDemo.finishedAt": "null",
+        "runbooksToolsDemo.first": "null",
+        "runbooksToolsDemo.harnessOutput": "null",
+        "runbooksToolsDemo.libraryAfter": "null",
+        "runbooksToolsDemo.libraryBefore": "null",
+        "runbooksToolsDemo.milestones": "object",
+        "runbooksToolsDemo.milestones.accepted": "boolean",
+        "runbooksToolsDemo.milestones.firstBrief": "boolean",
+        "runbooksToolsDemo.milestones.installed": "boolean",
+        "runbooksToolsDemo.milestones.kept": "boolean",
+        "runbooksToolsDemo.milestones.libraryChanged": "boolean",
+        "runbooksToolsDemo.milestones.proposed": "boolean",
+        "runbooksToolsDemo.milestones.ranHarness": "boolean",
+        "runbooksToolsDemo.phase": "string",
+        "runbooksToolsDemo.proposalId": "null",
+        "runbooksToolsDemo.proposedFiles": "array",
+        "runbooksToolsDemo.second": "null",
+        "runbooksToolsDemo.startedAt": "null",
         "scenario": "string",
         "scopes": "number"
       },
@@ -116,6 +138,9 @@
           "default"
         ],
         "runbooksDemo.phase": [
+          "idle"
+        ],
+        "runbooksToolsDemo.phase": [
           "idle"
         ],
         "scenario": [
@@ -914,7 +939,7 @@
         "projects[].defaultBranch": "string",
         "projects[].id": "string",
         "projects[].orgProjectId": "string",
-        "projects[].orgProjectName": "null",
+        "projects[].orgProjectName": "string",
         "projects[].owners": "array",
         "projects[].repoFullName": "string",
         "projects[].runs": "array",
@@ -2261,8 +2286,14 @@
         "briefs[].sections[].reason": "string",
         "briefs[].sections[].ref": "null|string",
         "briefs[].sections[].tokens": "number",
-        "briefs[].sections[].version": "number",
         "briefs[].sha256": "string",
+        "briefs[].skill_library": "object",
+        "briefs[].skill_library.dir": "string",
+        "briefs[].skill_library.sha256": "string",
+        "briefs[].skill_library.skills": "array",
+        "briefs[].skill_library.skills[]": "object",
+        "briefs[].skill_library.skills[].name": "string",
+        "briefs[].skill_library.skills[].version": "number",
         "briefs[].used_tokens": "number",
         "briefs[].work_item_id": "null",
         "next": "null"
@@ -2272,7 +2303,7 @@
           "framing",
           "how_to_report",
           "initiative",
-          "runbook"
+          "skill_library"
         ]
       }
     },
@@ -2866,6 +2897,7 @@
         "posts[].kind": [
           "analysis",
           "artifact",
+          "option",
           "problem",
           "question"
         ],
@@ -2906,7 +2938,6 @@
       "values": {
         "boxes[].status": [
           "idle",
-          "provisioning",
           "running",
           "waiting"
         ]
@@ -3279,7 +3310,7 @@
         "$[].childDoneCount": "number",
         "$[].completedAt": "null",
         "$[].createdAt": "string",
-        "$[].description": "null|string",
+        "$[].description": "string",
         "$[].estimateForecast": "null",
         "$[].estimateModel": "null",
         "$[].estimateReviewedAt": "null",
@@ -3293,8 +3324,8 @@
         "$[].key": "string",
         "$[].labels": "array",
         "$[].labels[]": "string",
-        "$[].nextStep": "null",
-        "$[].nextStepDetail": "null",
+        "$[].nextStep": "null|string",
+        "$[].nextStepDetail": "null|string",
         "$[].parentId": "null|string",
         "$[].prStatus": "null",
         "$[].prUrl": "null",
@@ -3721,27 +3752,26 @@
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
+          "ORG-DS-1",
           "ORG-DS-3",
           "ORG-DS-4",
           "ORG-DSAPI-1",
           "ORG-DSAPI-2",
+          "ORG-DSAPI-3",
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
+          "ORG-FS-4",
           "ORG-INF-1",
-          "ORG-INF-2",
-          "ORG-INF-3",
-          "ORG-INF-4",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
           "ORG-LLM-1",
           "ORG-LLM-10",
+          "ORG-LLM-2",
           "ORG-LLM-3",
           "ORG-LLM-4",
           "ORG-LLM-5",
-          "ORG-LLM-7",
-          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
@@ -3758,6 +3788,7 @@
           "ORG-RTA-2",
           "ORG-RTA-3",
           "ORG-RTA-5",
+          "ORG-SOC2-1",
           "ORG-SOC2-2",
           "ORG-SOC2-3",
           "ORG-SOC2-4",
@@ -4731,7 +4762,7 @@
         "consults[].context": "null|string",
         "consults[].createdAt": "string",
         "consults[].id": "string",
-        "consults[].initiativeId": "null|string",
+        "consults[].initiativeId": "string",
         "consults[].question": "string",
         "consults[].repo": "string",
         "consults[].sessionId": "string",
@@ -5714,7 +5745,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -6091,7 +6122,7 @@
         "events[].kind": "string",
         "events[].memoryEventId": "string",
         "events[].memoryId": "string",
-        "events[].queryText": "null|string",
+        "events[].queryText": "string",
         "events[].resultCount": "null|number",
         "events[].retrievedSummary": "null|string",
         "events[].sessionId": "string",
@@ -6956,10 +6987,24 @@
         "runbooks[].runbook.candidateStatus": "string",
         "runbooks[].runbook.dryRunCount": "number",
         "runbooks[].runbook.dryRunRunId": "null",
-        "runbooks[].runbook.lastDryRun": "null",
+        "runbooks[].runbook.lastDryRun": "null|object",
+        "runbooks[].runbook.lastDryRun.contextTenant": "string",
+        "runbooks[].runbook.lastDryRun.costUsd": "number",
+        "runbooks[].runbook.lastDryRun.definitionId": "string",
+        "runbooks[].runbook.lastDryRun.error": "null",
+        "runbooks[].runbook.lastDryRun.estimateUsd": "number",
+        "runbooks[].runbook.lastDryRun.finishedAt": "string",
+        "runbooks[].runbook.lastDryRun.id": "string",
+        "runbooks[].runbook.lastDryRun.jobId": "null",
+        "runbooks[].runbook.lastDryRun.model": "null",
+        "runbooks[].runbook.lastDryRun.runKind": "string",
+        "runbooks[].runbook.lastDryRun.startedAt": "string",
+        "runbooks[].runbook.lastDryRun.status": "string",
+        "runbooks[].runbook.lastDryRun.triggeredBy": "string",
         "runbooks[].runbook.promotionToSkill": "object",
         "runbooks[].runbook.promotionToSkill.ok": "boolean",
         "runbooks[].runbook.promotionToSkill.reason": "string",
+        "runbooks[].runbook.promotionToSkill.runId": "string",
         "runbooks[].runbook.proposedKind": "string",
         "runbooks[].source": "object",
         "runbooks[].source.id": "string",
@@ -6982,6 +7027,9 @@
       "values": {
         "runbooks[].kind": [
           "runbook"
+        ],
+        "runbooks[].runbook.lastDryRun.status": [
+          "completed"
         ],
         "runbooks[].tenant": [
           "pipelines"
@@ -7469,7 +7517,7 @@
         "runbooks[].owner_person_id": "string",
         "runbooks[].scope": "object",
         "runbooks[].scope.kind": "string",
-        "runbooks[].scope.ref": "string",
+        "runbooks[].scope.ref": "null|string",
         "runbooks[].sha256": "string",
         "runbooks[].status": "string",
         "runbooks[].summary": "string",
@@ -7484,6 +7532,7 @@
         ],
         "runbooks[].scope.kind": [
           "initiative",
+          "org",
           "repo",
           "tool"
         ],
@@ -7697,6 +7746,12 @@
         "proposals[].proposed.verify[].command": "object",
         "proposals[].proposed.verify[].command.lang": "string",
         "proposals[].proposed.verify[].command.text": "string",
+        "proposals[].proposed_files": "array",
+        "proposals[].proposed_files[]": "object",
+        "proposals[].proposed_files[].mode": "string",
+        "proposals[].proposed_files[].path": "string",
+        "proposals[].proposed_files[].sha256": "string",
+        "proposals[].proposed_files[].size": "number",
         "proposals[].rationale": "string",
         "proposals[].runbook_id": "null|string",
         "proposals[].similar": "array",
@@ -7705,6 +7760,7 @@
         "proposals[].similar[].runbook_id": "string",
         "proposals[].similar[].score": "number",
         "proposals[].source": "object",
+        "proposals[].source.dispatched_by": "string",
         "proposals[].source.kind": "string",
         "proposals[].source.lab_experience_ids": "array",
         "proposals[].source.person_id": "string",
@@ -7717,6 +7773,10 @@
         "proposals[].kind": [
           "edit",
           "new"
+        ],
+        "proposals[].proposed_files[].mode": [
+          "644",
+          "755"
         ],
         "proposals[].source.kind": [
           "person",
@@ -7738,6 +7798,11 @@
         "diff.added": "number",
         "diff.removed": "number",
         "diff.text": "string",
+        "files_diff": "object",
+        "files_diff.added": "number",
+        "files_diff.files": "array",
+        "files_diff.removed": "number",
+        "files_diff.text": "string",
         "proposal": "object",
         "proposal.base_version": "number",
         "proposal.created_at": "string",
@@ -7761,6 +7826,9 @@
         "proposal.proposed.preconditions[]": "string",
         "proposal.proposed.rollback": "array",
         "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].command": "object",
+        "proposal.proposed.rollback[].command.lang": "string",
+        "proposal.proposed.rollback[].command.text": "string",
         "proposal.proposed.rollback[].do": "string",
         "proposal.proposed.steps": "array",
         "proposal.proposed.steps[]": "object",
@@ -7799,6 +7867,7 @@
         "proposal.source.session_id": "string",
         "proposal.source.work_item_id": "string",
         "proposal.status": "string",
+        "proposed_files": "array",
         "proposed_markdown": "string",
         "runbook": "object",
         "runbook.created_at": "string",
@@ -8021,6 +8090,39 @@
     },
     "GET /api/runs/:ref/runbooks/:id": {
       "skipped": "no value found for :id under /api/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb/runbooks (orgiq/admin); no value found for :id under /api/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb/runbooks (assessment/admin); no value found for :ref under /api/runs (anonymous)"
+    },
+    "GET /api/runs/:ref/skills": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "bytes": "number",
+        "files": "array",
+        "files[]": "object",
+        "files[].content": "string",
+        "files[].mode": "string",
+        "files[].path": "string",
+        "files[].sha256": "string",
+        "files[].size": "number",
+        "format": "string",
+        "sha256": "string",
+        "skills": "array",
+        "skills[]": "object",
+        "skills[].description": "string",
+        "skills[].files": "number",
+        "skills[].name": "string",
+        "skills[].scope_label": "string",
+        "skills[].sha256": "string",
+        "skills[].title": "string",
+        "skills[].version": "number",
+        "skipped": "array"
+      },
+      "values": {
+        "files[].mode": [
+          "644",
+          "755"
+        ]
+      }
     },
     "GET /api/saved-searches": {
       "persona": "orgiq/admin",
@@ -8328,7 +8430,6 @@
         "related[].updatedAt": "string",
         "results": "array",
         "results[]": "object|object(dictionary)",
-        "results[].avatarUrl": "string",
         "results[].description": "string",
         "results[].href": "string",
         "results[].id": "string",
@@ -8724,6 +8825,37 @@
     },
     "GET /api/sessions/:sessionId/events": {
       "skipped": "no value found for :sessionId under /api/sessions (orgiq/admin); no value found for :sessionId under /api/sessions (assessment/admin); no value found for :sessionId under /api/sessions (anonymous)"
+    },
+    "GET /api/skill-library": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "bytes": "number",
+        "files": "array",
+        "files[]": "object",
+        "files[].mode": "string",
+        "files[].path": "string",
+        "files[].sha256": "string",
+        "files[].size": "number",
+        "sha256": "string",
+        "skills": "array",
+        "skills[]": "object",
+        "skills[].description": "string",
+        "skills[].files": "number",
+        "skills[].name": "string",
+        "skills[].scope_label": "string",
+        "skills[].sha256": "string",
+        "skills[].title": "string",
+        "skills[].version": "number",
+        "skipped": "array"
+      },
+      "values": {
+        "files[].mode": [
+          "644",
+          "755"
+        ]
+      }
     },
     "GET /api/social/bindings": {
       "persona": "orgiq/admin",
@@ -10084,6 +10216,8 @@
         "migration",
         "ms_forms_export",
         "new",
+        "option",
+        "org",
         "person",
         "policy-updated",
         "problem",
@@ -10099,6 +10233,7 @@
         "run",
         "runbook",
         "skill",
+        "skill_library",
         "sod-blocked",
         "step-approved",
         "step-rejected",
@@ -10120,6 +10255,8 @@
     "mode": {
       "open": false,
       "values": [
+        "644",
+        "755",
         "browser",
         "browser_spa",
         "fetch",
