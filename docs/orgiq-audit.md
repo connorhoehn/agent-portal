@@ -1,8 +1,9 @@
 # The orgiq audit — what changed and why
 
 The org tenant was audited surface by surface as the real seed users
-(`docs/orgiq-journeys/`, one log per role × surface from `MATRIX.txt`, one
-`RAIL.md` per role) and de-hand-rolled directory by directory. The judge is
+(first by hand in `docs/orgiq-journeys/`; since 2026-10-16 by executable
+maps, `docs/work-journeys/` — one log per role × surface from `MATRIX.txt`
+and one `refusals` log per role, docs/work-journeys-goal.md) and de-hand-rolled directory by directory. The judge is
 `scripts/validate-orgiq-audit.sh`; this page is the narrative behind its
 numbers.
 
@@ -313,10 +314,12 @@ broken" that was wrong.
 
 ## Reading the journey logs
 
-`docs/orgiq-journeys/<role>/<surface>.md` — `verdict`, `console errors`,
+`docs/work-journeys/<role>/<surface>.md`, written by
+`scripts/journeys/run-maps.mjs` from the maps — `verdict`, `console errors`,
 `layout` (measured, with `first-row-top` on list surfaces), `keyboard`,
-`empty-state`, `role-gating`, `pages` (the page directories the surface
-renders from; a log is stale once any `.tsx` in them is newer than it).
-`DEFECTS.md` per role: `## Open` must be empty before the goal is done —
+`empty-state`, `role-gating`, `story-facts`, `tab-stability`, `pages`; a log
+is stale when a walked route's rendered contract moved (docs/journeys.md).
+The hand-walked logs were retired; `DEFECTS.md` per role in
+`docs/orgiq-journeys/` remains as the record those walks left: `## Open` must be empty before the goal is done —
 every item is Closed with what was observed after the fix, or moved to a
 follow-up section with a reason.

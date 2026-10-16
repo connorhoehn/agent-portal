@@ -11,7 +11,7 @@ part they all share: **freshness and sealing**. One implementation backs it:
 
 | family | judge | logs judged |
 |---|---|---|
-| `orgiq-journeys` | `validate-orgiq-audit.sh` | the MATRIX.txt surface × role logs |
+| `work-journeys` | `validate-work-journeys.sh`, `validate-orgiq-audit.sh` | every map log; the orgiq-audit judge reads its MATRIX.txt cells and refusals logs (the hand-walked `orgiq-journeys` logs were retired 2026-10-16; only their DEFECTS.md records remain) |
 | `assessment-journeys` | `validate-assessment-tenant.sh` | role × surface, isolation, stretch, the review |
 | `social-journeys` | `validate-social-tenant.sh` | every log |
 | `pipelines-journeys` | `validate-pipelines-tenant.sh` | every log but fixtures |
