@@ -192,7 +192,7 @@ are the extra depth it must carry (`numbers`, `dialog`, `composer`,
 | `program-owner/bots` | surface | `/admin/bots`, `/admin/bots/:id` | default, filtered-empty, row-open, empty, error | Mission, Guardrails | — | Bots: the fleet, search, open a bot and its tabs held still (Live activity appears only while a run is in flight, so its absence is asserted), New bot gated by ManageBots, empty and error |
 | `program-owner/devbox` | surface | `/admin/devbox` | default, filtered-empty | — | — | The computer lab: the fleet, drive controls gated by ManageDevbox with the sentence for a viewer, a filter that finds nothing (the fleet is an in-memory registry no scope forks, so no empty or error world) |
 | `program-owner/budgets` | surface | `/admin/budgets` | default, filtered, filtered-empty, empty, error, dialog-open | — | numbers, dialog, write | Budgets: allocations and sprint envelopes, search, set an allocation read back after a reload, Remove allocation asks first and Escape keeps it, empty and error |
-| `program-owner/changes-review` | surface | `/admin/changes` | default, row-open, empty | Review queue, Policies | — | Code review: the queue and policies tabs held still, open a change, an empty queue |
+| `program-owner/changes-review` | surface | `/admin/changes` | default | Review queue | — | Code review as a program owner: App.tsx lets the role open the page, but `GET /api/sdlc/changes` needs ManageDevbox, which program-owner lacks — the map proves the page says so (one tab, the denial sentence, the 403); an open decision below |
 | `program-owner/refusals` | refusals | `/iq/projects` | refused | — | — | The rail and palette as this role sees them, ⌘I quick switch, every gated /iq and /admin route it cannot reach (a deep link that lands on /iq/projects) and the APIs that answer 403 |
 | `program-owner/frames` | frames | `/iq/projects`, `/iq/projects/p-auth-migration`, `/iq/decisions`, `/iq/work`, `/iq/search`, `/settings` | default | — | — | The core pages at 1440 and 900 wide, light and dark: nothing clipped, no horizontal scroll, the audit clean in both themes |
 | `org-leader/initiatives` | surface | `/iq/projects` | default, filtered, filtered-empty, row-open, empty, error, long-text, many, loading | — | numbers, palette | Find an initiative: all and mine, search and status, a search that matches nothing, open one; the list under empty, error, long-text, many and loading worlds |
@@ -256,5 +256,11 @@ are the extra depth it must carry (`numbers`, `dialog`, `composer`,
 | `hr-admin/frames` | frames | `/iq/projects`, `/iq/projects/p-auth-migration`, `/iq/decisions`, `/iq/work`, `/iq/search`, `/settings` | default | — | — | The core pages at 1440 and 900 wide, light and dark: nothing clipped, no horizontal scroll, the audit clean in both themes |
 
 ## Status
+
+Open decision (found by the program-owner walk, 2026-10-16): `/admin/changes` is
+routed to program-owner (App.tsx `RequireRole`, the Automate "Code review"
+link) but its API is gated on ManageDevbox, which program-owner does not hold,
+so the role reaches a page that can only refuse it. Either grant program-owner
+read on the change queue (Cedar) or stop routing the role there.
 
 Phase 1 written 2026-10-15. Coverage before: 18 of 82 Work routes, 4 of 5 roles, 25 route × role cells, 25 states (all `default`).

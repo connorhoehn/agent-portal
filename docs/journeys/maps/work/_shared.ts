@@ -171,7 +171,7 @@ export function initiatives(role: Role): Step[] {
     scoped({ scenario: 'empty', fixture: 'initiatives' }, '/iq/projects?scope=mine', 'In the same world My initiatives says no initiative lists this person and offers All initiatives', 'empty', { visible: [seen('No initiatives are linked to you yet.'), seen('Browse all initiatives')] }),
     scoped({ scenario: 'error', fixture: 'initiatives' }, '/iq/projects?scope=all', 'When the initiatives read fails, the list says it could not load them rather than showing an empty one', 'error', { visible: [seen('Could not load initiatives'), { role: 'button', name: 'Try again' }], count: [{ target: rowsOf, eq: 0 }] }, { expectConsole: /500 \(Internal Server Error\)/ }),
     scoped('long-text', '/iq/projects?scope=all', 'With very long names the list keeps every row on one line and the page scrolls no wider', 'long-text', { visible: [seen(/with a deliberately long value/)], count: [{ target: rowsOf, min: 10 }] }),
-    scoped('many', '/iq/projects?scope=mine', 'With many initiatives the list grows downward and its count agrees with its rows', 'many', { count: [{ target: rowsOf, min: 14 }], numbers: [role === 'member' ? { of: railCount, eqCount: rowsOf } : { of: railCount, eqNumberOf: { testId: 'datatable-page-summary' }, reOther: /· (\d+) total/ }] }),
+    scoped('many', '/iq/projects?scope=mine', 'With many initiatives the list grows downward and its count agrees with its rows', 'many', { count: [{ target: rowsOf, min: 14 }], numbers: [role === 'member' || role === 'program-owner' ? { of: railCount, eqCount: rowsOf } : { of: railCount, eqNumberOf: { testId: 'datatable-page-summary' }, reOther: /· (\d+) total/ }] }),
     scoped({ scenario: 'loading', delayMs: 2500 }, '/iq/projects?scope=all', 'While the list loads it says so (Loading initiatives…), not an empty table', 'loading', { visible: [{ text: 'Loading initiatives…' }], count: [{ target: rowsOf, eq: 0 }] }, { noSettle: true }),
   ];
 }
@@ -438,8 +438,8 @@ export function automate(role: Role): Step[] {
     click({ role: 'button', name: /^Failed/ }, 'Filter to the failed (dead-letter) jobs: the badge agrees with the rows', { url: /[?&]status=failed/, numbers: [{ of: { role: 'button', name: /^Failed/ }, re: /(\d+)/, eqCount: openLinks }], visible: [seen('inference-canary-nightly')] }, { state: 'filtered' }),
     fill(search('Search runs'), 'zzzzqq', 'Search zzzzqq among the failed jobs: the table says nothing is dead-lettered', { visible: [seen('No loaded run matches this search.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
     clear('Search runs'),
-    click({ css: '[data-shell-nav] a[href="/iq/work/findings"]' }, 'Open Findings: the dead-letter queue and the open findings by sweep', { url: '/iq/work/findings', visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions')], ...(c.devbox ? { visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions'), { role: 'button', name: /requeue/i, nth: 0 }, { role: 'button', name: 'Run sweeps now', nth: 0 }] } : { absent: [{ role: 'button', name: /requeue/i }] }) }, { proves: ['tab-stability', 'story-facts', 'role-gating'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
-    fill(search('Search findings'), 'zzzzqq', 'Search zzzzqq: the findings list says nothing is open', { url: /[?&]q=zzzzqq/, visible: [seen(c.devbox ? /Nothing open\. Sweeps run every 6 hours, or run one now\./ : /Nothing open\. Sweeps run automatically every 6 hours\./)] }, { state: 'filtered-empty', proves: 'empty-state' }),
+    click({ css: '[data-shell-nav] a[href="/iq/work/findings"]' }, 'Open Findings: the dead-letter queue and the open findings by sweep', { url: '/iq/work/findings', visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions')], ...(c.devbox ? { visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions'), { role: 'button', name: /requeue/i, nth: 0 }, { role: 'button', name: 'Run sweeps now', nth: 0 }] } : c.dispatch ? { visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions'), { role: 'button', name: 'Run sweeps now', nth: 0 }], absent: [{ role: 'button', name: /requeue/i }] } : { absent: [{ role: 'button', name: /requeue/i }] }) }, { proves: ['tab-stability', 'story-facts', 'role-gating'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
+    fill(search('Search findings'), 'zzzzqq', 'Search zzzzqq: the findings list says nothing is open', { url: /[?&]q=zzzzqq/, visible: [seen(c.dispatch ? /Nothing open\. Sweeps run every 6 hours, or run one now\./ : /Nothing open\. Sweeps run automatically every 6 hours\./)] }, { state: 'filtered-empty', proves: 'empty-state' }),
     clear('Search findings'),
     click({ css: '[data-shell-nav] a[href="/iq/work/changes"]' }, 'Open Graph updates: what agents proposed to the org graph and who decided it', { url: '/iq/work/changes', visible: [heading('Graph updates'), seen('Linked a document to an entity'), seen('Rachel Kowalski')], ...(c.devbox ? {} : { absent: [{ role: 'button', name: /^(Approve|Reject)( |$)/ }] }), noText: LEAKS }, { proves: ['tab-stability', 'story-facts'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
     click({ role: 'button', name: /^applied/ }, 'Filter to the applied changes: three of them, each decided by a named person', { visible: [seen('decided by Rachel Kowalski')] }, { state: 'filtered' }),
@@ -677,7 +677,7 @@ export function localCompute(role: Role): Step[] {
     fill(search('Search skills'), 'zzzzqq', 'Search zzzzqq among the skills: none match', { visible: [seen('No skill matches the search or availability')] }, { state: 'filtered-empty', proves: 'empty-state' }),
     press('ArrowRight', 'ArrowRight moves focus along the tab strip to Hooks', { focused: tabNamed('Hooks', lcTabs) }, { target: tabNamed('Skills', lcTabs), proves: 'keyboard' }),
     tabWalk(6),
-    scoped({ scenario: 'empty', fixture: 'compute-nodes' }, '/iq/local-compute', 'In a world with no machines the page says no paired machines and how pairing goes', 'empty', { visible: [seen('No paired machines'), seen(/Pair a machine and it appears here/)] }),
+    scoped({ scenario: 'empty', fixture: 'compute-nodes' }, '/iq/local-compute', 'In a world with no machines the page says no paired machines and how pairing goes', 'empty', { visible: [seen('No paired machines'), seen(c.localCompute ? /Pair a machine and it appears here/ : /Pairing a machine needs machine-pairing access/)] }),
     scoped({ scenario: 'error', fixture: 'compute-nodes' }, '/iq/local-compute', 'When the machines cannot be read the page says so instead of showing none', 'error', { visible: [seen('Could not load your paired machines'), { role: 'button', name: 'Try again' }] }, { expectConsole: /500 \(Internal Server Error\)/ }),
   ];
 }
@@ -700,8 +700,8 @@ export const QUICK_SWITCH: Record<Role, 'denied' | 'lists' | 'create'> = { membe
 export const API_403: Record<Role, string[]> = {
   member: ['/api/bots', '/api/budgets', '/api/devbox/boxes', '/api/identity/users', '/api/scores'],
   sme: ['/api/budgets', '/api/identity/users', '/api/scores'],
-  'program-owner': ['/api/devbox/boxes', '/api/identity/users', '/api/scores'],
-  'org-leader': ['/api/devbox/boxes', '/api/identity/users'],
+  'program-owner': ['/api/sdlc/changes', '/api/identity/users', '/api/scores'],
+  'org-leader': ['/api/identity/users'],
   'hr-admin': [],
 };
 

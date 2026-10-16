@@ -213,7 +213,7 @@ export function devbox(role: Role): Step[] {
     tabClick(agents, 'Click the Agents view (the Lab has no filter box, so the view switch is the stability check): the running agents list by work item and the header stays put', {
       ...selected(agents), ...(role === 'hr-admin' ? { visible: [seen(agentLine)] } : { visible: [seen(/\d+ computers · \d+ agents/)], numbers: [{ of: agents, re: /(\d+)/, eqNumberOf: seen(/\d+ computers · \d+ agents/), reOther: /· (\d+) agents/ }] }),
     }, [STILL.header, fleet], { proves: ['tab-stability', 'story-facts'], state: 'filtered' }),
-    tabClick(computers, 'Click the Computers view: the fleet is back, grouped by initiative', { ...selected(computers), visible: [seen('Auth Migration'), seen('auth-migration-2')] }, [STILL.header, fleet]),
+    tabClick(computers, 'Click the Computers view: the fleet is back, grouped by initiative', { ...selected(computers), visible: c.devbox ? [seen('Auth Migration'), seen('auth-migration-2')] : [seen('auth-migration-2'), seen('observability-1')] }, [STILL.header, fleet]),
     press('Enter', 'Enter on the Agents tab (focused by the key press) selects it', { ...selected(agents), focused: agents }, { target: agents, proves: 'keyboard' }),
     click(computers, 'Back to the Computers view with the mouse', { ...selected(computers), visible: [seen(scratch.name)] }),
     fill({ placeholder: 'Find computer or agent…' }, 'zzzzqq', 'Find zzzzqq: the lab says nothing matches instead of an empty rail', { visible: [seen('Nothing matches.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
@@ -271,7 +271,7 @@ export function observability(_role: Role): Step[] {
     fill(search('Search runs'), 'zzzzqq', 'Search zzzzqq: the list says no invocation matches and offers Clear filters', { visible: [seen('No invocations match'), seen(/No invocations match the current filters/), btn('Clear filters')] }, { state: 'filtered-empty', proves: 'empty-state' }),
     fill(search('Search runs'), 'kubernetes', 'Search kubernetes: the supervisor question about it stays', { visible: [seen('Who knows Kubernetes best on the platform team?')], count: [{ target: rows, min: 1, max: 5 }] }, { state: 'filtered', proves: 'empty-state' }),
     fill(search('Search runs'), '', 'Clear the search: the whole list is back', { count: [{ target: rows, min: 20 }] }),
-    press('Enter', 'Enter on the first invocation\'s time link opens its trace', { url: /^\/admin\/observability\/invocations\/[^/]+$/, visible: [h1('Supervisor'), seen(/tool calls/i), seen('Who knows Kubernetes best on the platform team?')] }, { target: { css: 'main tbody tr a', nth: 0 }, state: 'row-open', proves: 'keyboard' }),
+    press('Enter', 'Enter on the Kubernetes invocation\'s time link opens its trace (the list\'s newest rows come from live runs, whose traces are not stored)', { url: /^\/admin\/observability\/invocations\/[^/]+$/, visible: [h1('Supervisor'), seen(/tool calls/i), seen('Who knows Kubernetes best on the platform team?')] }, { target: { css: 'main tbody tr:has-text("Who knows Kubernetes best on the platform team?") a', nth: 0 }, state: 'row-open', proves: 'keyboard' }),
     back('Browser Back returns to the list', { url: '/admin/observability/invocations', visible: [h1('Runs')] }),
     open('/admin/observability/tools', 'Open Tool Calls: each tool with its calls, latency and error rate', {
       url: '/admin/observability/tools', visible: [h1('Tool Calls'), seen('route_to_agent'), seen(/\d+ tools · \d+ calls/)],
@@ -289,8 +289,8 @@ export function knowledge(role: Role): Step[] {
   const kb = 'OrgIQ Knowledge Base';
   return [
     open('/admin/knowledge', 'Open Knowledge: each knowledge base checked against the live account, the broken one flagged', {
-      url: '/admin/knowledge', visible: [h1('Knowledge'), seen(kb), seen('OrgIQ Legacy Docs'), seen('in sync'), seen(/^\d+ of \d+ knowledge bases$/)],
-      count: [{ target: tableRows, eq: 3 }], numbers: [{ of: seen(/^\d+ of \d+ knowledge bases$/), re: /^(\d+)/, eqCount: tableRows }],
+      url: '/admin/knowledge', visible: [h1('Knowledge'), seen(kb), seen('OrgIQ Legacy Docs'), seen('in sync'), seen(/^\d+ of \d+ knowledge bases/)],
+      count: [{ target: tableRows, eq: 3 }], numbers: [{ of: seen(/^\d+ of \d+ knowledge bases/), re: /^(\d+)/, eqCount: tableRows }],
       ...(w ? { visible: [h1('Knowledge'), seen(kb), seen('OrgIQ Legacy Docs'), btn('Sync now')] } : { absent: [btn('Sync now')] }),
     }, { facts: true, proves: ['story-facts', 'role-gating'] }),
     api('/api/admin/kb-registry', 200, 'This role may read the registry: GET /api/admin/kb-registry answers 200'),
@@ -325,10 +325,10 @@ export function capabilities(role: Role): Step[] {
     open('/admin/capabilities/browser', 'Open Browser: diagnostics for the browser capability, the stale profile named', {
       url: '/admin/capabilities/browser', visible: [h1('Browser'), qa, journey, sessions, seen(/Browser profile/)], ...selected(qa),
     }, { facts: true }),
-    tabClick(journey, 'Click Journey Recorder: the recorder shows and the header, tab strip and title stay put', { ...selected(journey), visible: [seen('Start journey')] }, [STILL.header, browserTabs, h1('Browser')]),
+    tabClick(journey, 'Click Journey Recorder: the recorder shows and the header, tab strip and title stay put', { ...selected(journey), ...(c.devbox ? { visible: [seen('Start journey')] } : { visible: [seen(/Viewing only — your role can't start a journey/), seen('Open sessions below can still be replayed.')], absent: [btn('Start journey')] }) }, [STILL.header, browserTabs, h1('Browser')]),
     tabClick(sessions, 'Click Sessions: the open browser sessions list by label and status', { ...selected(sessions), visible: [seen(/Open sessions/), seen('ACTIVE')] }, [STILL.header, browserTabs, h1('Browser')]),
     press('ArrowLeft', 'ArrowLeft on the Sessions tab moves back to Journey Recorder', { ...selected(journey) }, { target: sessions, proves: 'keyboard' }),
-    tabClick(qa, 'Click Web Q&A: the question form is back', { ...selected(qa), visible: [seen('Ask a webpage'), btn('Ask the page')] }, [STILL.header, browserTabs, h1('Browser')]),
+    tabClick(qa, 'Click Web Q&A: the question form is back', { ...selected(qa), ...(c.devbox ? { visible: [seen('Ask a webpage'), btn('Ask the page')] } : { visible: [seen('Ask a webpage'), seen(/Viewing only — your role can't drive the browser/)], absent: [btn('Ask the page')] }) }, [STILL.header, browserTabs, h1('Browser')]),
     tabWalk(8),
   ];
 }

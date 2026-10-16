@@ -28,6 +28,7 @@ import {
   Inline,
   Link as ExternalLink,
   LoadingState,
+  PageHeader,
   PageSection,
   RailLayout,
   SectionLabel,
@@ -120,13 +121,20 @@ export default function ChangeReviewPage() {
 
   if (isLoading && !c) return <LoadingState label="Loading change…" />;
   if (error || !c) {
+    // A denial is not a missing change: reading a change request needs ManageDevbox, the same gate as the queue.
+    const denied = error != null && /\b(401|403)\b|forbidden|unauthor/i.test(error);
     return (
-      <EmptyState
-        title="Could not load this change"
-        body={error ?? 'No such change request.'}
-        actionLabel="Back to the queue"
-        onAction={() => navigate('/admin/changes')}
-      />
+      <Stack gap="md">
+        <PageHeader density="compact" title="Change review" />
+        <EmptyState
+          title={denied ? 'You cannot review this change' : 'Could not load this change'}
+          body={denied
+            ? 'Reading change requests requires computer access, which this role does not hold. Switch to HR Admin from the identity menu, or ask an admin for the grant.'
+            : (error ?? 'No such change request.')}
+          actionLabel="Back to the queue"
+          onAction={() => navigate('/admin/changes')}
+        />
+      </Stack>
     );
   }
 

@@ -28,6 +28,7 @@ import { getSprint } from './sprints.js';
 // The one clock. A created grant's id carries an instant, and a fixture instant
 // is read through the clock so a frozen test freezes it too.
 import { clock } from '../mock/core/index.js';
+import { mockPeople } from '../mock/people.js';
 
 // Re-exported so existing test imports (`_resetMockGrants` from this module)
 // keep working now that the overlay itself lives next door.
@@ -81,8 +82,9 @@ function withDerivedWindowSpend(row: Omit<GrantRow, 'initiativeSpendInWindowUsd'
 
 async function mockGrantRowFor(input: CreateGrantInput, id: string): Promise<GrantRow> {
   // Pull the sprint's initiative/date labels through getSprint so a created
-  // grant reads consistently with the sprint it funds. granteeName is unknown
-  // in mock (no people join) and left null — honest, not fabricated.
+  // grant reads consistently with the sprint it funds. granteeName is the
+  // people-table name of the grantee (the join `budgetsListGrants` does on
+  // Aurora), so a new envelope reads "Nora DaSilva", not "p-004".
   const sprint = await getSprint(input.sprintId);
   return withDerivedWindowSpend({
     id,
@@ -90,7 +92,8 @@ async function mockGrantRowFor(input: CreateGrantInput, id: string): Promise<Gra
     orgProjectName: sprint?.orgProjectName
       ?? MOCK_BUDGETS.find((b) => b.id === input.orgProjectId)?.name ?? null,
     granteePersonId: input.granteePersonId,
-    granteeName: sprint?.stewardPersonId === input.granteePersonId ? sprint?.stewardName ?? null : null,
+    granteeName: mockPeople.find((p) => p.id === input.granteePersonId)?.name
+      ?? (sprint?.stewardPersonId === input.granteePersonId ? sprint?.stewardName ?? null : null),
     sprintId: input.sprintId,
     sprintName: sprint?.name ?? null,
     startsOn: sprint?.startsOn ?? null,
