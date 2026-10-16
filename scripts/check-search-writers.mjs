@@ -24,12 +24,40 @@ const MODULES = [
   'middleware/src/providers/graph-proposals.ts', // person (skills, title, collaborations)
   'middleware/src/providers/org-teams.ts',       // team
   'middleware/src/providers/aurora.ts',          // person
+  // S2 lanes: one block per tenant, each lane edits only its own block.
+  'middleware/src/providers/assessment.ts',      // assessment: team, dimension, exception, feedback, run, submission, story, document
+  // [assessment modules]
+  'middleware/src/providers/social-channels.ts', // social channel
+  'middleware/src/providers/social-platform.ts', // social room, team, recording
+  'middleware/src/lib/social-chat.ts',           // social message, pin, dm, channel (membership)
+  // [pipelines modules]
+  'middleware/src/providers/pipeline-definitions.ts', // pipelines: definition, runbook, approval, run
+  'middleware/src/providers/bots.ts',                 // pipelines: bot, run
+  'middleware/src/providers/access.ts',          // access: request, catalog, policy, event, review, review-item, delegation
 ];
 const WRITER_NAME = /^(create|update|upsert|delete|remove|add|set|link|unlink|record|publish|apply|decide|answer|signoff|approve|reject|rename|merge|assign|reassign|move|archive|retire|insert|put|save|write|import|promote|dismiss|compute)[A-Z_]/;
+/** Per-tenant table names whose INSERT/UPDATE/DELETE marks a function as a writer (S2 lanes extend their own entry). */
+const TENANT_TABLE_WRITES = [
+  // [assessment tables]
+  /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+social_channels\b/i,
+  // [pipelines tables]
+  /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:orgiq\.)?access_(requests|request_steps|events|catalog_items|policies|reviews|review_items|delegations)\b/i,
+];
 const INDEXED_TABLE_WRITE = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:orgiq\.)?(projects|project_contributions|work_items|decisions|decision_participants|people|person_skills|collaborations|teams|team_memberships)\b/i;
 const HOOK = /\bnoteSearchWrite(?:Soon)?\(/;
 /** `module:function` → why it changes no searchable field. */
 const EXEMPT = {
+  // ── social (S2): who changes what, and why a writer is exempt ──
+  'social-platform.ts:setTeamFavorite': 'a personal pin on a team is not a searchable field',
+  'social-chat.ts:createMemorySocialChatBackend': 'builds the store; every write goes through the store the watcher patches (watchChatForWorkGraph), which indexes it',
+  'social-chat.ts:createSocialChatBackend': 'builds the store; every write goes through the store the watcher patches (watchChatForWorkGraph), which indexes it',
+  'social-chat.ts:setSocialChatBackend': 'wires the backend and patches its stores with the indexing watcher (watchChatForWorkGraph)',
+  'social-chat.ts:setThreadLiveAppend': 'wires the live broadcast; the thread message itself is written by the patched store',
+  // [pipelines exempt]
+  'pipeline-definitions.ts:setDefaultApproverRole': 'the default approver role is tenant configuration; no indexed pipelines doc carries it',
+  'assessment.ts:createKnowledgeComment': 'knowledge-doc comments are not part of the document doc (title and body only)',
+  'assessment.ts:deleteKnowledgeComment': 'knowledge-doc comments are not part of the document doc (title and body only)',
+  'assessment.ts:updateSubmissionLink': 'evidence links on an envelope are not indexed (title, submitter, team, status are)',
   'work-items.ts:decideStatusTransition': 'a pure transition rule; it writes nothing',
   'work-items.ts:decideDecisionLink': 'a pure link rule; it writes nothing',
   'design-reviews.ts:decideApproval': 'a pure approval rule; it writes nothing',
@@ -86,7 +114,7 @@ for (const rel of MODULES) {
   let src;
   try { src = readFileSync(resolve(ROOT, rel), 'utf8'); } catch { failures.push(`${rel}: missing`); continue; }
   for (const fn of functions(src)) {
-    const writes = WRITER_NAME.test(fn.name) || INDEXED_TABLE_WRITE.test(fn.body);
+    const writes = WRITER_NAME.test(fn.name) || INDEXED_TABLE_WRITE.test(fn.body) || TENANT_TABLE_WRITES.some((re) => re.test(fn.body));
     if (!writes) continue;
     const key = `${file}:${fn.name}`;
     const hooked = HOOK.test(fn.body);

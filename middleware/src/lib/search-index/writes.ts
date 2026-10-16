@@ -18,33 +18,40 @@
 // Writers (providers/projects.ts, work-items.ts…) import this module, and the
 // projection imports those providers back: the projection and registry are
 // loaded on first use, never at import, so the providers' load order is untouched.
-import type { OrgiqDocType } from './orgiq.js';
+import type { IndexedTenant } from './tenants.js';
 import { docKey } from './types.js';
 
-export interface SearchWriteRef { type: OrgiqDocType; id: string }
+/** A changed record. `tenant` defaults to orgiq; the other tenants name theirs (lib/search-index/<tenant>.ts types). */
+export interface SearchWriteRef { type: string; id: string; tenant?: IndexedTenant }
 
 export async function noteSearchWrite(...refs: Array<SearchWriteRef | null | undefined>): Promise<void> {
-  const wanted = [...new Map(refs.filter((r): r is SearchWriteRef => !!r && !!r.id).map(r => [docKey(r.type, r.id), r])).values()];
+  const wanted = [...new Map(refs.filter((r): r is SearchWriteRef => !!r && !!r.id).map(r => [`${r.tenant ?? 'orgiq'}|${docKey(r.type, r.id)}`, r])).values()];
   if (!wanted.length) return;
   let registry: typeof import('./registry.js');
   try { registry = await import('./registry.js'); } catch { return; } // no index in this process (a unit test's module graph)
   const { isIndexed, partitionFor, searchIndex } = registry;
-  const partition = partitionFor('orgiq');
-  try {
-    if (!(await isIndexed('orgiq'))) return;
-    const { projectOrgiqRecord } = await import('./orgiq.js');
-    const index = searchIndex();
-    for (const ref of wanted) {
-      const doc = await projectOrgiqRecord(partition, ref.type, ref.id);
-      if (doc) await index.put(doc); else await index.remove(partition, docKey(ref.type, ref.id));
-    }
-  } catch (error) {
-    console.warn(`[search-index] update after write failed for ${wanted.map(r => docKey(r.type, r.id)).join(', ')} in ${partition}; marking the partition for rebuild:`, error instanceof Error ? error.message : error);
+  const tenants = [...new Set(wanted.map(r => r.tenant ?? 'orgiq'))];
+  for (const tenant of tenants) {
+    const mine = wanted.filter(r => (r.tenant ?? 'orgiq') === tenant);
+    const partition = partitionFor(tenant);
     try {
+      if (!(await isIndexed(tenant))) continue;
+      const project = tenant === 'orgiq'
+        ? (await import('./orgiq.js')).projectOrgiqRecord as (p: string, type: string, id: string) => Promise<import('./types.js').SearchDoc | null>
+        : (await (await import('./tenants.js')).tenantSpec(tenant)).project;
       const index = searchIndex();
-      const meta = await index.getMeta(partition);
-      if (meta) await index.setMeta(partition, { ...meta, retryAfter: new Date().toISOString() });
-    } catch { /* the next read rebuilds when it can */ }
+      for (const ref of mine) {
+        const doc = await project(partition, ref.type, ref.id);
+        if (doc) await index.put(doc); else await index.remove(partition, docKey(ref.type, ref.id));
+      }
+    } catch (error) {
+      console.warn(`[search-index] update after write failed for ${mine.map(r => docKey(r.type, r.id)).join(', ')} in ${partition}; marking the partition for rebuild:`, error instanceof Error ? error.message : error);
+      try {
+        const index = searchIndex();
+        const meta = await index.getMeta(partition);
+        if (meta) await index.setMeta(partition, { ...meta, retryAfter: new Date().toISOString() });
+      } catch { /* the next read rebuilds when it can */ }
+    }
   }
 }
 

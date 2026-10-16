@@ -16,7 +16,7 @@
 // and old generations are dropped as they are noticed.
 //
 // BUILD. The first read of a partition with no meta builds it from the
-// providers (lib/search-index/orgiq.ts) once — concurrent readers share the
+// providers (lib/search-index/orgiq.ts, or the tenant's spec in lib/search-index/<tenant>.ts) once — concurrent readers share the
 // build — and records what was windowed or unreadable. A partition whose build
 // hit an unreadable source is rebuilt after RETRY_MS. After that, writers keep
 // it current (./writes.ts).
@@ -26,9 +26,10 @@ import { currentMockScope, getMockScope, mockWorldGeneration } from '../../mock/
 import { MemorySearchIndex } from './memory.js';
 import { KvSearchIndex, createKvIndexClient, ensureKvIndexTable, kvIndexConfig } from './kv.js';
 import { buildOrgiqDocs } from './orgiq.js';
+import { tenantSpec, type IndexedTenant, type TenantBuild } from './tenants.js';
 import type { IndexMeta, SearchIndex } from './types.js';
 
-export type IndexedTenant = 'orgiq';
+export type { IndexedTenant };
 const RETRY_MS = 30_000;
 
 export function searchIndexStore(env: NodeJS.ProcessEnv = process.env): 'memory' | 'kv' {
@@ -71,8 +72,12 @@ function prune(index: SearchIndex, current: string): void {
 
 const building = new Map<string, Promise<IndexMeta>>();
 
-async function build(index: SearchIndex, partition: string): Promise<IndexMeta> {
-  const result = await buildOrgiqDocs(partition);
+async function buildTenant(tenant: IndexedTenant, partition: string): Promise<TenantBuild> {
+  return tenant === 'orgiq' ? buildOrgiqDocs(partition) : (await tenantSpec(tenant)).build(partition);
+}
+
+async function build(index: SearchIndex, tenant: IndexedTenant, partition: string): Promise<IndexMeta> {
+  const result = await buildTenant(tenant, partition);
   await index.clear(partition);
   await index.putMany(result.docs);
   const meta: IndexMeta = { builtAt: new Date().toISOString(), partial: result.partial, retryAfter: result.failed ? new Date(Date.now() + RETRY_MS).toISOString() : null };
@@ -90,7 +95,7 @@ export async function ensureIndexed(tenant: IndexedTenant): Promise<{ index: Sea
   if (meta && !(meta.retryAfter && Date.parse(meta.retryAfter) <= Date.now())) return { index, partition, meta };
   let pending = building.get(partition);
   if (!pending) {
-    pending = build(index, partition).finally(() => building.delete(partition));
+    pending = build(index, tenant, partition).finally(() => building.delete(partition));
     building.set(partition, pending);
   }
   return { index, partition, meta: await pending };

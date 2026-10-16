@@ -20,6 +20,8 @@ import { savedSearchesRouter } from './routes/saved-searches.js';
 import { graphRouter } from './routes/graph.js';
 import { meGroupsRouter } from './routes/me-groups.js';
 import { searchRouter } from './routes/search.js';
+import { tenantSearchRouter } from './routes/tenant-search.js';
+import { socialGate } from './lib/social-authority.js';
 import { rosterRouter } from './routes/roster.js';
 import { scoresRouter } from './routes/scores.js';
 import { decisionsRouter } from './routes/decisions.js';
@@ -264,6 +266,7 @@ app.use('/api/drop', dropRouter);
 // POST /runs/:runId/complete callback (sessionless, self-gated by a service
 // secret) the same way harnessRouter exempts /trace. Mounting requireTenant
 // here would 401 that callback before the router ever saw the request.
+app.use('/api/assessment/search', requireTenant('assessment'), requireAction('ViewAssessment'), tenantSearchRouter('assessment'));
 app.use('/api/assessment', assessmentRouter);
 // The third and fourth tenants (docs/social-tenant-design.md §4, §5). Neither
 // has a machine callback, so the tenant gate sits at the mount: a session
@@ -276,6 +279,7 @@ app.use('/api/assessment', assessmentRouter);
 app.use('/api/people', peopleRouter);
 // Page discussions with new messages for the active tenant's rail and palette (session floor; per-thread read gate).
 app.use('/api/discussions', discussionsRouter);
+app.use('/api/social/search', requireTenant('social'), socialGate('ViewSocial'), tenantSearchRouter('social'));
 app.use('/api/social', socialEmbedRouter);
 // The Social application plane in orgiq/assessment/pipelines (Communication): the tenant router's own handlers, each
 // gated on the caller's CURRENT Social grants (live-principal.ts) instead of the session's tenant (routes/social-plane.ts).
@@ -309,9 +313,11 @@ app.use('/api/uploads', createUploadsRouter(
 app.use('/api/calls', callPagesRouter);
 app.use('/api/calls', callChatRouter);
 app.use('/api/social', requireTenant('social'), socialRouter);
+app.use('/api/pipelines/search', requireTenant('pipelines'), requireAction('ViewPipelines'), tenantSearchRouter('pipelines'));
 app.use('/api/pipelines', requireTenant('pipelines'), pipelinesRouter);
 // The access tenant (docs/access-tenant-design.md): requests, approvals, SoD policies, audit.
 // At the mount — no machine callback of its own; every route adds its Cedar action.
+app.use('/api/access/search', requireTenant('access'), requireAction('ViewAccess'), tenantSearchRouter('access'));
 app.use('/api/access', requireTenant('access'), accessRouter);
 // The in-tenant quick request (routes/access-requests-quick.ts): a session
 // floor, NOT requireTenant('access') — a Work reader asks for the budgets tier
