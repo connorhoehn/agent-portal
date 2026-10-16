@@ -38,9 +38,9 @@ export function runs(_role: Role): Step[] {
     click(btn('Filters'), 'Open Filters again to clear them', { visible: [btn('Clear filters')] }),
     click(btn('Clear filters'), 'Clear filters: every run is back and the header count is in the hundreds again', { visible: [seen(/^\d{3} runs$/)], count: [{ target: tableRows, min: 20 }] }),
     fill(search('Search loaded run titles'), 'auth-rotation', 'Search auth-rotation: the ADR summaries stay', { visible: [seen('Summarize the auth-rotation ADR for the exec review')], count: [{ target: tableRows, min: 1 }] }, { state: 'filtered', proves: 'empty-state' }),
-    fill(search('Search loaded run titles'), '', 'Clear the search: the rows come back', { count: [{ target: tableRows, min: 20 }] }),
-    press('Enter', 'Enter on the first run opens its record', { url: /^\/iq\/runs\/[^/]+$/, visible: [h1('Run')] }, { target: firstRow, state: 'row-open', proves: 'keyboard' }),
-    back('Browser Back returns to the ledger', { url: '/iq/runs', visible: [h1('Runs')] }),
+    // Enter while the search holds the seeded ADR runs: a live relayed run at the top of the full ledger keeps ticking, so its record never measures still.
+    press('Enter', 'Enter on the first auth-rotation run opens its record', { url: /^\/iq\/runs\/[^/]+$/, visible: [h1('Run'), seen(/auth-rotation/)] }, { target: firstRow, state: 'row-open', proves: 'keyboard' }),
+    back('Browser Back returns to the ledger', { url: /^\/iq\/runs(?:\?.*)?$/, visible: [h1('Runs')] }),
     open('/iq/runs/job:job-obs-maint-1', 'Open the nightly maintenance run: who ran it, what it cost and its steps, by name', {
       url: '/iq/runs/job:job-obs-maint-1', visible: [h1('Run'), seen('Obs nightly maintenance'), seen('completed'), tabNamed('Run'), tabNamed('Brief'), seen('Steps')],
       count: [{ target: tableRows, min: 5 }], ...selected(tabNamed('Run')),

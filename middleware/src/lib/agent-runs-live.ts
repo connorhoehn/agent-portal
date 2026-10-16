@@ -18,6 +18,7 @@
 // one process's view is the whole view.
 
 import type { AgentStepRecord, LiveAgentRunSource } from './pipeline-runs.js';
+import { currentMockScope } from '../mock/core/scope.js';
 
 const MAX_RUNS = 200;
 
@@ -94,7 +95,15 @@ export class AguiStepRecorder {
 interface LiveRun {
   source: Omit<LiveAgentRunSource, 'steps'>;
   recorder: AguiStepRecorder;
+  /** The dev:mock scope the run started in (null outside one, and always in production). */
+  scope: string | null;
 }
+
+// A run relayed inside a request-scoped mock world belongs to that world: the
+// shared mock never lists it and another scope never sees it (a scoped walk's
+// /comment run used to appear under an empty scope's "no runs" —
+// docs/work-journeys-goal.md). Outside dev:mock there is no scope, so nothing changes.
+const scopeNow = (): string | null => currentMockScope()?.id ?? null;
 
 const runs = new Map<string, LiveRun>();
 
@@ -108,6 +117,7 @@ export function openAgentRun(init: {
     source: { ...init, prompt: init.prompt ? init.prompt.slice(0, 500) : null,
       startedAt: init.startedAt ?? new Date().toISOString(), status: 'running', finishedAt: null, error: null },
     recorder: new AguiStepRecorder(),
+    scope: scopeNow(),
   });
   while (runs.size > MAX_RUNS) {
     const oldest = runs.keys().next().value;
@@ -131,7 +141,8 @@ export function closeAgentRun(runId: string, outcome: 'completed' | 'failed', er
 
 /** The relayed runs, newest first, for the projection. */
 export function liveAgentRuns(): LiveAgentRunSource[] {
-  return [...runs.values()].reverse().map((r) => ({ ...r.source, steps: r.recorder.snapshot() }));
+  const scope = scopeNow();
+  return [...runs.values()].filter((r) => r.scope === scope).reverse().map((r) => ({ ...r.source, steps: r.recorder.snapshot() }));
 }
 
 /** Tests only. */

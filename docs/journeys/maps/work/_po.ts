@@ -35,7 +35,7 @@ export function poChangesReview(): JourneyMap {
     tabClick(queue, 'Click the Review queue tab (the only tab this role has): it stays selected and the header and tab strip stay put', { ...selected(queue), visible: [DENIED] }, strip(), { proves: ['tab-stability', 'role-gating'] }),
     { do: 'wait', target: { role: 'tablist' }, name: 'There is no Policies tab for this role: governance rules need ManageDevbox', proves: 'role-gating', expect: { absent: [tabNamed('Policies')], visible: [queue] } } as Step,
     open('/admin/changes/00000000-0000-0000-0000-000000000000', 'A change opened by its link is refused too: the page says this role cannot review it, with no diff and no Approve or Reject', { visible: [h1('Change review'), seen('You cannot review this change'), { role: 'button', name: 'Back to the queue' }], absent: [{ role: 'button', name: 'Approve' }, { role: 'button', name: 'Reject' }] }, { state: 'row-open', proves: 'empty-state', expectConsole: /403|404|Forbidden|Not Found/ }),
-    press('Enter', 'Enter on Back to the queue returns to the queue page', { url: '/admin/changes', visible: [h1('Changes'), DENIED] }, { target: { role: 'button', name: 'Back to the queue' }, proves: 'keyboard' }),
+    press('Enter', 'Enter on Back to the queue returns to the queue page', { url: '/admin/changes', visible: [h1('Changes'), DENIED] }, { target: { role: 'button', name: 'Back to the queue' }, proves: 'keyboard', expectConsole: /403|Forbidden/ }),
     tabWalk(6),
     scoped({ scenario: 'empty', fixture: 'sdlc-changes' }, '/admin/changes', 'In a world with no changes the page still says the queue is unreadable: the denial comes before the data', 'empty', { visible: [DENIED] }, { expectConsole: /403|Forbidden/ }),
   ]);

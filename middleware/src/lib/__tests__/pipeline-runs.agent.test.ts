@@ -258,3 +258,17 @@ describe('normalizeAgentSteps — the bundle is agent output, checked not truste
     expect(normalizeAgentSteps(JSON.stringify(STEPS))).toHaveLength(2);
   });
 });
+
+describe('the live relay and mock scopes', () => {
+  it('lists a run only in the scope it started in (the shared world never sees a scoped run)', async () => {
+    const live = await import('../agent-runs-live.js');
+    const scopeMod = await import('../../mock/core/scope.js');
+    live._resetLiveAgentRunsForTest();
+    const scope = scopeMod.createMockScope({ scenario: 'empty' } as never);
+    scopeMod.runInMockScope(scope, () => live.openAgentRun({ runId: 'r-scoped', threadId: null, agentId: 'a', agentName: 'A', userId: null, tenant: 'orgiq', prompt: null }));
+    live.openAgentRun({ runId: 'r-shared', threadId: null, agentId: 'a', agentName: 'A', userId: null, tenant: 'orgiq', prompt: null });
+    expect(live.liveAgentRuns().map((r) => r.runId)).toEqual(['r-shared']);
+    expect(scopeMod.runInMockScope(scope, () => live.liveAgentRuns().map((r) => r.runId))).toEqual(['r-scoped']);
+    live._resetLiveAgentRunsForTest();
+  });
+});
