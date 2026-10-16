@@ -25,6 +25,7 @@
 // route makes (`reviewJob`, `decideChange`, `answerConsult`).
 
 import { config } from '../config.js';
+import { noteSearchWrite } from '../lib/search-index/writes.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import {
   deriveDefinitions, effectiveApproverRoles, projectApprovals, latestDryRun, runStatusForJob,
@@ -107,6 +108,13 @@ export async function listStoredDefinitions(): Promise<StoredDefinition[]> {
 
 /** Record an author's version: the approver roles, one version up. */
 export async function recordApproverRoles(def: Definition, roles: string[], by: string | null): Promise<StoredDefinition> {
+  const stored = await recordApproverRolesRow(def, roles, by);
+  // Search (docs/user-search-goal.md): the definition's page record is unchanged in words, but re-read it so the projection stays the registry's mirror.
+  await noteSearchWrite({ tenant: 'pipelines', type: def.kind === 'runbook' ? 'runbook' : 'definition', id: def.id });
+  return stored;
+}
+
+async function recordApproverRolesRow(def: Definition, roles: string[], by: string | null): Promise<StoredDefinition> {
   // The derived definition is version 1; each recorded change is one more.
   const nextVersion = def.version + 1;
   if (config.mock.aurora) {
@@ -161,6 +169,11 @@ export async function getPipelinesConfig(): Promise<PipelinesConfig> {
 }
 
 export async function setDefaultApproverRole(role: string, by: string | null): Promise<PipelinesConfig> {
+  // Not a search write: the default approver role is configuration, no indexed doc carries it (check-search-writers EXEMPT).
+  return setDefaultApproverRoleRow(role, by);
+}
+
+async function setDefaultApproverRoleRow(role: string, by: string | null): Promise<PipelinesConfig> {
   if (config.mock.aurora) {
     const rows = pipelineConfigRows.rows();
     const row = rows.find((r) => r.key === 'default_approver_role');
@@ -410,6 +423,19 @@ export async function startDryRun(input: {
   budgetPerRunUsd?: number | null;
   confirm: { runBudget: boolean; allocation: boolean; envelope: boolean };
 }): Promise<DryRunResult> {
+  const out = await startDryRunRow(input);
+  // A dry run changes whether the runbook "needs a dry run", and adds a run.
+  if (out.ok) await noteSearchWrite({ tenant: 'pipelines', type: 'runbook', id: input.definitionId }, { tenant: 'pipelines', type: 'run', id: out.run.id });
+  return out;
+}
+
+async function startDryRunRow(input: {
+  definitionId: string;
+  sub: string | undefined;
+  model?: string;
+  budgetPerRunUsd?: number | null;
+  confirm: { runBudget: boolean; allocation: boolean; envelope: boolean };
+}): Promise<DryRunResult> {
   const def = await getDefinition(input.definitionId);
   if (!def) return { ok: false, status: 404, body: { error: `No definition ${input.definitionId}` } };
   if (def.kind !== 'runbook') {
@@ -539,6 +565,15 @@ export type DecideResult =
 export async function decideApproval(id: string, decision: 'approve' | 'reject', opts: {
   role: string | undefined; sub: string | undefined; note?: string | null;
 }): Promise<DecideResult> {
+  const out = await decideApprovalRow(id, decision, opts);
+  // The decision moves the approval out of the inbox and its source's run/change with it.
+  if (out.ok) await noteSearchWrite({ tenant: 'pipelines', type: 'approval', id });
+  return out;
+}
+
+async function decideApprovalRow(id: string, decision: 'approve' | 'reject', opts: {
+  role: string | undefined; sub: string | undefined; note?: string | null;
+}): Promise<DecideResult> {
   const { approvals } = await listApprovals();
   const approval = approvals.find((a) => a.id === id);
   if (!approval) return { ok: false, status: 404, error: `No approval ${id} is waiting — it may already be decided.` };
@@ -576,6 +611,12 @@ export async function decideApproval(id: string, decision: 'approve' | 'reject',
  * executors.
  */
 export async function cancelRun(runId: string, actorId?: string | null): Promise<{ ok: true; status: string } | { ok: false; status: number; error: string }> {
+  const out = await cancelRunRow(runId, actorId);
+  if (out.ok) await noteSearchWrite({ tenant: 'pipelines', type: 'run', id: runId });
+  return out;
+}
+
+async function cancelRunRow(runId: string, actorId?: string | null): Promise<{ ok: true; status: string } | { ok: false; status: number; error: string }> {
   const { loadProjection } = await import('./pipeline-runs.js');
   const run = (await loadProjection()).runs.find((r) => r.id === runId);
   if (!run) return { ok: false, status: 404, error: `No run ${runId}` };

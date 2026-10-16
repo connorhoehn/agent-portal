@@ -12,6 +12,7 @@
 import { randomUUID } from 'node:crypto';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
+import { noteSearchWrite } from '../lib/search-index/writes.js';
 import { hasColumns } from './column-probe.js';
 // The vocabulary for "who served this inference". Imported rather than
 // re-declared: bot_runs.model_provider and agent_project_runs.model_provider
@@ -537,7 +538,13 @@ export async function getBot(id: string): Promise<Bot | null> {
   return rows[0] ? rowToBot(rows[0]) : null;
 }
 
-export async function createBot(input: {
+export async function createBot(input: Parameters<typeof createBotRow>[0]): Promise<Bot | null> {
+  const bot = await createBotRow(input);
+  if (bot) await noteSearchWrite({ tenant: 'pipelines', type: 'bot', id: bot.id });
+  return bot;
+}
+
+async function createBotRow(input: {
   name: string; template: BotTemplate; prompt: string; model: string; trigger: BotTrigger;
   cronExpr?: string | null; agentProjectId?: string | null; orgProjectId?: string | null;
   enabled?: boolean; budgetPerRunUsd?: number | null; budgetPerDayUsd?: number | null;
@@ -627,6 +634,12 @@ export interface BotPatch {
 }
 
 export async function updateBot(id: string, patch: BotPatch): Promise<Bot | null> {
+  const bot = await updateBotRow(id, patch);
+  if (bot) await noteSearchWrite({ tenant: 'pipelines', type: 'bot', id });
+  return bot;
+}
+
+async function updateBotRow(id: string, patch: BotPatch): Promise<Bot | null> {
   if (config.mock.aurora) {
     // Mutates the shared MOCK_BOTS singleton in place — the same array
     // listBots()/getBot() read — so a toggle persists for the life of the
@@ -674,6 +687,12 @@ export async function updateBot(id: string, patch: BotPatch): Promise<Bot | null
 }
 
 export async function deleteBot(id: string): Promise<boolean> {
+  const gone = await deleteBotRow(id);
+  if (gone) await noteSearchWrite({ tenant: 'pipelines', type: 'bot', id });
+  return gone;
+}
+
+async function deleteBotRow(id: string): Promise<boolean> {
   if (config.mock.aurora || !isUuid(id)) return false;
   const rows = await exec(`DELETE FROM bots WHERE id = :id::uuid RETURNING id`, [s('id', id)]);
   return rows.length > 0;
@@ -681,6 +700,11 @@ export async function deleteBot(id: string): Promise<boolean> {
 
 /** Set (or clear, with null) the self-pause. Cleared on resume. */
 export async function setPausedReason(id: string, reason: string | null): Promise<void> {
+  await setPausedReasonRow(id, reason);
+  await noteSearchWrite({ tenant: 'pipelines', type: 'bot', id });
+}
+
+async function setPausedReasonRow(id: string, reason: string | null): Promise<void> {
   if (config.mock.aurora) {
     // Same fix as updateBot above: mutate the MOCK_BOTS singleton instead of
     // returning early. Before this, POST /:id/pause acknowledged a change it
@@ -699,6 +723,11 @@ export async function setPausedReason(id: string, reason: string | null): Promis
 }
 
 export async function markBotRan(id: string): Promise<void> {
+  await markBotRanRow(id);
+  await noteSearchWrite({ tenant: 'pipelines', type: 'bot', id });
+}
+
+async function markBotRanRow(id: string): Promise<void> {
   if (config.mock.aurora || !isUuid(id)) return;
   await exec(`UPDATE bots SET last_run_at = NOW(), updated_at = NOW() WHERE id = :id::uuid`, [s('id', id)]);
 }
@@ -941,13 +970,17 @@ function emitBotRunChange(change: BotRunChange): void {
 
 export async function createBotRun(input: Parameters<typeof insertBotRun>[0]): Promise<BotRun | null> {
   const run = await insertBotRun(input);
-  if (run) emitBotRunChange({ runId: run.id, botId: run.botId, workItemId: run.workItemId });
+  if (run) {
+    emitBotRunChange({ runId: run.id, botId: run.botId, workItemId: run.workItemId });
+    await noteSearchWrite({ tenant: 'pipelines', type: 'run', id: `bot-run:${run.id}` }, run.botId ? { tenant: 'pipelines', type: 'bot', id: run.botId } : null);
+  }
   return run;
 }
 
 export async function finalizeBotRun(id: string, result: Parameters<typeof settleBotRun>[1]): Promise<void> {
   await settleBotRun(id, result);
   emitBotRunChange({ runId: id, botId: null, workItemId: null });
+  await noteSearchWrite({ tenant: 'pipelines', type: 'run', id: `bot-run:${id}` });
 }
 
 async function insertBotRun(input: {

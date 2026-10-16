@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
+import { noteSearchWrite } from '../lib/search-index/writes.js';
 import { hasColumns, _resetColumnProbes } from './column-probe.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 // Every timestamp the mock queue writes comes from here, never `new Date()`:
@@ -276,7 +277,13 @@ function mockOrder(a: AgentJob, b: AgentJob): number {
   return b.createdAt.localeCompare(a.createdAt);
 }
 
-export async function enqueueJob(input: {
+export async function enqueueJob(...a: Parameters<typeof enqueueJobRow>): Promise<AgentJob | null> {
+  const out = await enqueueJobRow(...a);
+  if (out) await noteSearchWrite({ tenant: 'pipelines', type: 'run', id: `job:${out.id}` });
+  return out;
+}
+
+async function enqueueJobRow(input: {
   kind: string;
   title: string;
   payload?: Record<string, unknown>;
@@ -342,7 +349,13 @@ export async function enqueueJob(input: {
  * payload; the portal never re-supplies a prompt it may not even see) and
  * records where it came from in created_by.
  */
-export async function requeueJob(id: string, requeuedBy?: string): Promise<AgentJob | null> {
+export async function requeueJob(...a: Parameters<typeof requeueJobRow>): Promise<AgentJob | null> {
+  const out = await requeueJobRow(...a);
+  if (out) await noteSearchWrite({ tenant: 'pipelines', type: 'run', id: `job:${out.id}` });
+  return out;
+}
+
+async function requeueJobRow(id: string, requeuedBy?: string): Promise<AgentJob | null> {
   const dead = await getJob(id);
   if (!dead) return null;
   if (dead.status !== 'failed' && dead.status !== 'cancelled') return null;
@@ -839,7 +852,13 @@ export async function markRunning(id: string, claimToken?: string): Promise<bool
  * already terminal. Callers that hold no token (the dispatcher) get the old
  * unguarded behaviour and can keep ignoring the result.
  */
-export async function completeJob(id: string, opts: {
+export async function completeJob(...a: Parameters<typeof completeJobRow>): Promise<boolean> {
+  const out = await completeJobRow(...a);
+  if (out) await noteSearchWrite({ tenant: 'pipelines', type: 'run', id: `job:${a[0]}` });
+  return out;
+}
+
+async function completeJobRow(id: string, opts: {
   status: 'awaiting_review' | 'done' | 'failed';
   result?: Record<string, unknown>;
   error?: string;
@@ -923,7 +942,13 @@ export async function completeJob(id: string, opts: {
 }
 
 /** Human accepted or rejected the artifact an awaiting_review job produced. */
-export async function reviewJob(id: string, decision: 'accept' | 'reject', note?: string): Promise<AgentJob | null> {
+export async function reviewJob(...a: Parameters<typeof reviewJobRow>): Promise<AgentJob | null> {
+  const out = await reviewJobRow(...a);
+  if (out) await noteSearchWrite({ tenant: 'pipelines', type: 'run', id: `job:${out.id}` });
+  return out;
+}
+
+async function reviewJobRow(id: string, decision: 'accept' | 'reject', note?: string): Promise<AgentJob | null> {
   if (config.mock.aurora) {
     const job = mockJobs.find((j) => j.id === id && j.status === 'awaiting_review');
     if (!job) return null;
@@ -950,7 +975,13 @@ export async function reviewJob(id: string, decision: 'accept' | 'reject', note?
   return job;
 }
 
-export async function cancelJob(id: string): Promise<boolean> {
+export async function cancelJob(...a: Parameters<typeof cancelJobRow>): Promise<boolean> {
+  const out = await cancelJobRow(...a);
+  if (out) await noteSearchWrite({ tenant: 'pipelines', type: 'run', id: `job:${a[0]}` });
+  return out;
+}
+
+async function cancelJobRow(id: string): Promise<boolean> {
   if (config.mock.aurora) {
     const job = mockJobs.find((j) => j.id === id && (j.status === 'queued' || j.status === 'claimed'));
     if (!job) return false;

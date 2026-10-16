@@ -27,6 +27,8 @@ import { findInitiative } from '../mock/initiatives.js';
 import { getUser, listUsers } from './identity.js';
 import type { AccessDirectory } from '../lib/access/types.js';
 import { invalidateAll, invalidateChannel } from '../lib/gateway/authority-invalidation.js';
+import { noteSearchWriteSoon } from '../lib/search-index/writes.js';
+import { isOpen } from '../lib/access/status.js';
 
 /** `access:req:<id>` (lib/access/thread.ts ACCESS_THREAD_PREFIX; not imported, that module imports this one). */
 const ACCESS_THREAD = 'access:req:';
@@ -57,6 +59,11 @@ export function listSteps(requestId?: string): AccessStepRow[] {
   return copy(requestId ? rows.filter((s) => s.requestId === requestId) : rows);
 }
 export function listEvents(): AccessEventRow[] { store(); return copy(accessEventsFixture.rows()); }
+
+// Search refs (lib/search-index/access.ts): the docs a write changes. A request's audit events change with it.
+const sref = (type: string, id: string) => ({ tenant: 'access' as const, type, id });
+const requestRefs = (id: string) => [sref('request', id), ...accessEventsFixture.rows().filter((e) => e.requestId === id).map((e) => sref('event', e.id))];
+const openRequestRefs = () => accessRequestsFixture.rows().filter((r) => isOpen(r.status)).map((r) => sref('request', r.id));
 
 const nextId = (prefix: string, ids: readonly string[]): string => {
   const n = ids.reduce((max, id) => {
@@ -93,6 +100,7 @@ export function insertReview(
     all.push(row);
     out.push(structuredClone(row));
   }
+  noteSearchWriteSoon(sref('review', id), ...out.map((i) => sref('review-item', i.id)));
   return { review: structuredClone(stored), items: out };
 }
 
@@ -108,6 +116,7 @@ export function casReviewItem(id: string, when: { decided: AccessReviewItemRow['
   const row = accessReviewItemsFixture.rows().find((i) => i.id === id);
   if (!row || row.decision !== when.decided) return null;
   Object.assign(row, structuredClone(patch));
+  noteSearchWriteSoon(sref('review-item', row.id), sref('review', row.reviewId));
   return structuredClone(row);
 }
 
@@ -121,6 +130,7 @@ export function closeReviewIfDecided(id: string, at: string): AccessReviewRow | 
     row.status = 'closed';
     row.closedAt = at;
   }
+  noteSearchWriteSoon(sref('review', id));
   return structuredClone(row);
 }
 
@@ -156,6 +166,7 @@ export function casStep(
   appendEvents(requestId, actorId, events, at);
   // An escalation changes who may decide the step, i.e. who reads the thread.
   invalidateChannel(`${ACCESS_THREAD}${requestId}`, 'access-step');
+  noteSearchWriteSoon(...requestRefs(requestId));
   return structuredClone(row);
 }
 
@@ -177,6 +188,7 @@ export function insertDelegation(row: Omit<AccessDelegationRow, 'id'>, reason: s
   appendDelegationEvent(stored.id, stored.delegatorId, 'delegated', reason, stored.createdAt);
   // A delegation moves eligibility across every open request it touches.
   invalidateAll('access-delegation');
+  noteSearchWriteSoon(sref('delegation', stored.id), ...accessEventsFixture.rows().filter((e) => e.delegationId === stored.id).map((e) => sref('event', e.id)), ...openRequestRefs());
   return structuredClone(stored);
 }
 
@@ -189,6 +201,7 @@ export function endDelegation(id: string, actorId: string, reason: string, at: s
   row.endedBy = actorId;
   appendDelegationEvent(row.id, actorId, 'delegation-ended', reason, at);
   invalidateAll('access-delegation');
+  noteSearchWriteSoon(sref('delegation', row.id), ...accessEventsFixture.rows().filter((e) => e.delegationId === row.id).map((e) => sref('event', e.id)), ...openRequestRefs());
   return structuredClone(row);
 }
 
@@ -199,6 +212,7 @@ export function insertRequest(request: AccessRequestRow, steps: readonly AccessS
   accessStepsFixture.rows().push(...steps.map((s) => structuredClone(s)));
   appendEvents(request.id, actorId, events, request.submittedAt);
   invalidateChannel(`${ACCESS_THREAD}${request.id}`, 'access-request');
+  noteSearchWriteSoon(...requestRefs(request.id));
 }
 
 /** Replace a request and its steps with a transition's result, and append its events. */
@@ -216,6 +230,7 @@ export function saveTransition(request: AccessRequestRow, steps: readonly Access
   appendEvents(request.id, actorId, events, at);
   // A decision, withdrawal or close can end someone's read of the thread.
   invalidateChannel(`${ACCESS_THREAD}${request.id}`, 'access-request');
+  noteSearchWriteSoon(...requestRefs(request.id));
 }
 
 /** One request row by id (a copy), or null. */
@@ -251,6 +266,7 @@ export function casRequest(
   Object.assign(row, structuredClone(patch));
   appendEvents(id, actorId, events, at);
   invalidateChannel(`${ACCESS_THREAD}${id}`, 'access-request');
+  noteSearchWriteSoon(...requestRefs(id));
   return structuredClone(row);
 }
 
@@ -263,6 +279,7 @@ export function updateCatalogItem(id: string, patch: { defaultDuration?: AccessC
   if (patch.sensitive !== undefined) row.sensitive = patch.sensitive;
   // The item's sensitivity shapes every open request's decider chain.
   invalidateAll('access-catalog');
+  noteSearchWriteSoon(sref('catalog', row.id), ...openRequestRefs());
   return structuredClone(row);
 }
 
@@ -285,6 +302,7 @@ export function updatePolicy(id: string, patch: { severity?: AccessPolicyRow['se
     beforeStatus: before.severity, afterStatus: row.severity,
     reason: reasonChanged ? `${row.title}: reason now “${row.reason}” (was “${before.reason}”)` : `${row.title}: reason unchanged`,
   });
+  noteSearchWriteSoon(sref('policy', row.id), ...events.filter((e) => e.policyId === row.id).map((e) => sref('event', e.id)));
   return structuredClone(row);
 }
 

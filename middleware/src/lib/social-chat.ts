@@ -57,6 +57,7 @@ import { clock } from '../mock/core/index.js';
 import { TENANTS } from './session.js';
 import { emitSocialWorkGraphEvent, socialConversationOrNull } from './work-graph/social-events.js';
 import { ownsRecord } from './record-owner.js';
+import { noteSearchWrite } from './search-index/writes.js';
 
 // ── Names ────────────────────────────────────────────────────────────────────
 
@@ -516,6 +517,7 @@ function watchChatForWorkGraph(next: SocialChatBackend): void {
     const put = store.putMessage.bind(store);
     store.putMessage = async (message) => {
       await put(message);
+      void noteSocialChatWrite(message.channel, message.id);
       const conversationId = socialConversationOrNull(message.channel);
       if (conversationId) emitSocialWorkGraphEvent({ conversationId, cause: 'message' });
     };
@@ -523,6 +525,7 @@ function watchChatForWorkGraph(next: SocialChatBackend): void {
       const update = store.updateMessage.bind(store);
       store.updateMessage = async (channel, id, patch) => {
         const result = await update(channel, id, patch);
+        void noteSocialChatWrite(channel, id);
         const conversationId = socialConversationOrNull(channel);
         if (conversationId) emitSocialWorkGraphEvent({ conversationId, cause: 'message' });
         return result;
@@ -533,10 +536,19 @@ function watchChatForWorkGraph(next: SocialChatBackend): void {
   if (members && typeof members.onCommittedWrite === 'function' && !members[WATCHED]) {
     members[WATCHED] = true;
     members.onCommittedWrite(channel => {
+      void noteSocialChatWrite(channel);
       const conversationId = socialConversationOrNull(channel);
       if (conversationId) emitSocialWorkGraphEvent({ conversationId, cause: 'membership' });
     });
   }
+}
+
+/**
+ * Search (docs/user-search-goal.md, S2): a chat write on a Social channel or DM updates the index after it
+ * committed — the message, and the conversation row (its members or its last message). Never fails the write.
+ */
+function noteSocialChatWrite(channel: string, messageId?: string): Promise<void> {
+  return import('./search-index/social.js').then(m => m.noteChatWrite(channel, messageId)).catch(() => undefined);
 }
 
 /** Wired by attachRealtimeGateway; `null` resets to the lazy memory default. */
@@ -550,6 +562,8 @@ export function setSocialChatBackend(next: SocialChatBackend | null, onReset: ((
 
 /** A durable write has succeeded; a missed live hint is repaired on reload/reconnect. */
 export function notifySocialPinsChanged(channel: string): void {
+  // The pin rows the index holds for this channel follow the store (a pin, an unpin).
+  void import('./search-index/social.js').then(async m => noteSearchWrite(...await m.pinWriteRefs(channel))).catch(() => undefined);
   try { publishPins?.(channel); } catch (error) { console.warn('[social-pins] live refresh failed', error); }
 }
 

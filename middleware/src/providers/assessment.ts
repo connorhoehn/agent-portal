@@ -16,6 +16,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { assertLegacyDocumentWritable } from './document-legacy-write.js';
 import { config } from '../config.js';
+import { noteSearchWrite } from '../lib/search-index/writes.js';
 import { clock } from '../mock/core/index.js';
 import * as M from '../mock/assessment.js';
 import { assessmentBroker } from '../lib/assessment-broker.js';
@@ -222,6 +223,9 @@ export interface DimensionIndexEntry {
 export interface DimensionIndexResponse {
   teams: Array<{ id: string; dimensions: DimensionIndexEntry[] }>;
 }
+
+/** Update on write (lib/search-index/assessment.ts): the writers below re-project what they changed after their commit. */
+const searchRefs = () => import('../lib/search-index/assessment-refs.js');
 
 export const WORKFLOW_STEP_LABELS = ['Intake', 'Classify', 'Score', 'Review', 'Publish', 'Follow-up'] as const;
 
@@ -442,7 +446,13 @@ export async function listTeams(): Promise<TeamSummary[]> {
   return teams.map((team) => teamSummaryFromDims(team, dimsByTeam.get(team.id) ?? {}, cfg.target_level));
 }
 
-export async function createTeam(input: { name: string; cohort: Cohort; assessment_lead?: string }): Promise<M.MockTeam> {
+export async function createTeam(...a: Parameters<typeof createTeamImpl>): ReturnType<typeof createTeamImpl> {
+  const result = await createTeamImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs([result.id])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function createTeamImpl(input: { name: string; cohort: Cohort; assessment_lead?: string }): Promise<M.MockTeam> {
   if (config.mock.aurora) {
     const id = M.nextTeamId();
     // The fixture's clock, not the wall clock — this row joins the same
@@ -693,7 +703,13 @@ export async function getDimensionIndex(): Promise<DimensionIndexResponse> {
   };
 }
 
-export async function patchTeam(
+export async function patchTeam(...a: Parameters<typeof patchTeamImpl>): ReturnType<typeof patchTeamImpl> {
+  const result = await patchTeamImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs([a[0]])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function patchTeamImpl(
   id: string, patch: Partial<Pick<M.MockTeam, 'name' | 'cohort' | 'assessment_lead' | 'status'>>,
 ): Promise<M.MockTeam | null> {
   if (!config.mock.aurora) return A.patchTeamRow(id, patch);
@@ -711,7 +727,13 @@ export async function patchTeam(
   return { ...team, status: M.teamStatus(team.id) };
 }
 
-export async function deleteTeam(id: string): Promise<boolean> {
+export async function deleteTeam(...a: Parameters<typeof deleteTeamImpl>): ReturnType<typeof deleteTeamImpl> {
+  const result = await deleteTeamImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs([a[0]])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function deleteTeamImpl(id: string): Promise<boolean> {
   // One call, so a seventh team-keyed fixture can never be forgotten here.
   const deleted = config.mock.aurora ? M.dropTeam(id) : await A.deleteTeamRow(id);
   // The team page's discussion, cursors and lobby admit only an existing team.
@@ -719,7 +741,13 @@ export async function deleteTeam(id: string): Promise<boolean> {
   return deleted;
 }
 
-export async function resetAssessment(id: string): Promise<boolean> {
+export async function resetAssessment(...a: Parameters<typeof resetAssessmentImpl>): ReturnType<typeof resetAssessmentImpl> {
+  const result = await resetAssessmentImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs([a[0]])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function resetAssessmentImpl(id: string): Promise<boolean> {
   if (!config.mock.aurora) return A.resetTeamAssessment(id);
   const dims = M.scoresFor(id);
   if (!dims) return false;
@@ -979,7 +1007,13 @@ const SELF_APPROVAL_REASON = 'cannot approve or deny an exception you requested 
  * or one opened before this field existed) is never blocked — there is
  * nothing to compare against.
  */
-export async function patchException(
+export async function patchException(...a: Parameters<typeof patchExceptionImpl>): ReturnType<typeof patchExceptionImpl> {
+  const result = await patchExceptionImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs([a[0]])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function patchExceptionImpl(
   teamId: string, dimensionId: string,
   patch: { status: 'approved' | 'denied'; approved_by: string; override?: boolean },
 ): Promise<PatchExceptionResult> {
@@ -1441,7 +1475,13 @@ function computeScoreEntry(
 // completion (mock timer / Aurora completeRun). It's only ever recorded onto
 // a freshly-opened exception (`requested_by`); never sent by the caller as
 // part of the payload itself, so an agent's own output can't forge it.
-export async function applyScores(
+export async function applyScores(...a: Parameters<typeof applyScoresImpl>): ReturnType<typeof applyScoresImpl> {
+  const result = await applyScoresImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs([a[0]])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function applyScoresImpl(
   teamId: string, payload: ApplyScoresPayload, requestedBy?: string,
 ): Promise<ApplyScoresResult | null> {
   if (!config.mock.aurora) return A.withTeamTransaction(teamId, () => A.auroraApplyScores(teamId, payload, computeScoreEntry, requestedBy));
@@ -1488,7 +1528,13 @@ export async function applyScores(
  * follow-up draft (lib/assessment-drafts.ts); the text is the stored draft's,
  * never the request's. Returns null when the team or dimension is unknown.
  */
-export async function addFollowUps(
+export async function addFollowUps(...a: Parameters<typeof addFollowUpsImpl>): ReturnType<typeof addFollowUpsImpl> {
+  const result = await addFollowUpsImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs([a[0]])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function addFollowUpsImpl(
   teamId: string, dimensionId: string, texts: readonly string[],
 ): Promise<{ created: M.FollowUpQuestion[]; skipped: string[] } | null> {
   if (!M.DIMENSION_IDS.includes(dimensionId)) return null;
@@ -1623,7 +1669,13 @@ function findVirtualFollowUp(
   return null;
 }
 
-export async function createFeedback(payload: {
+export async function createFeedback(...a: Parameters<typeof createFeedbackImpl>): ReturnType<typeof createFeedbackImpl> {
+  const result = await createFeedbackImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs(result.team_id ? [result.team_id] : [], [(await searchRefs()).assessmentFeedbackRef(result.task_id)])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function createFeedbackImpl(payload: {
   team_id?: string | null; kind: string; question: string; dimension_id?: string | null;
 }): Promise<M.FeedbackTask> {
   const task: M.FeedbackTask = {
@@ -1636,7 +1688,13 @@ export async function createFeedback(payload: {
   return task;
 }
 
-export async function resolveFeedback(taskId: string, response: string): Promise<M.FeedbackTask | null> {
+export async function resolveFeedback(...a: Parameters<typeof resolveFeedbackImpl>): ReturnType<typeof resolveFeedbackImpl> {
+  const result = await resolveFeedbackImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs(result?.team_id ? [result.team_id] : [], [(await searchRefs()).assessmentFeedbackRef(a[0])])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function resolveFeedbackImpl(taskId: string, response: string): Promise<M.FeedbackTask | null> {
   if (!config.mock.aurora) {
     if (taskId.startsWith('virtual-')) {
       const q = await A.findFollowUpQuestion(taskId.slice('virtual-'.length));
@@ -1670,7 +1728,13 @@ export async function resolveFeedback(taskId: string, response: string): Promise
   return task;
 }
 
-export async function dismissFeedback(taskId: string): Promise<M.FeedbackTask | null> {
+export async function dismissFeedback(...a: Parameters<typeof dismissFeedbackImpl>): ReturnType<typeof dismissFeedbackImpl> {
+  const result = await dismissFeedbackImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs(result?.team_id ? [result.team_id] : [], [(await searchRefs()).assessmentFeedbackRef(a[0])])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function dismissFeedbackImpl(taskId: string): Promise<M.FeedbackTask | null> {
   if (!config.mock.aurora) {
     if (taskId.startsWith('virtual-')) {
       const q = await A.findFollowUpQuestion(taskId.slice('virtual-'.length));
@@ -1909,7 +1973,13 @@ export async function getRun(runId: string): Promise<M.MockRun | null> {
   return M.runs().find((r) => r.id === runId) ?? null;
 }
 
-export async function createRunRecord(payload: {
+export async function createRunRecord(...a: Parameters<typeof createRunRecordImpl>): ReturnType<typeof createRunRecordImpl> {
+  const result = await createRunRecordImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs(result.team_id ? [result.team_id] : [], [(await searchRefs()).assessmentRunRef(result.id)])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function createRunRecordImpl(payload: {
   command: string; team_id?: string | null; status?: M.RunStatus; summary?: string; args?: Record<string, unknown>;
 }): Promise<M.MockRun> {
   const now = clock.nowIso();
@@ -1949,7 +2019,13 @@ export type LaunchRunResult =
  * so duplicate/cap checks are atomic across middleware replicas. A background
  * worker claims persisted runs and records real agent output or failure.
  */
-export async function launchRun(
+export async function launchRun(...a: Parameters<typeof launchRunImpl>): ReturnType<typeof launchRunImpl> {
+  const result = await launchRunImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs(a[2] ? [a[2]] : [], result.ok ? [(await searchRefs()).assessmentRunRef(result.run_id)] : [])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function launchRunImpl(
   command: string, args: Record<string, unknown>, teamId: string | null,
   // Who launched it — the session sub the route resolved, never the body
   // (same attribution rule as bot_runs.dispatched_by). Persisted on Aurora;
@@ -2073,6 +2149,7 @@ export async function launchRun(
           + `${noEvidence} low-confidence with no evidence; ${followUpsOpened} follow-up${followUpsOpened === 1 ? '' : 's'} opened.`;
       }
       assessmentBroker.publish({ type: 'run.completed', run_id: id, command, team_id: teamId, summary: r.summary, ts: finishedAt });
+      try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs(teamId ? [teamId] : [], [(await searchRefs()).assessmentRunRef(id)])); } catch { /* the index never fails the run */ }
     })();
   }, MOCK_RUN_DURATION_MS);
   timer.unref?.();
@@ -2120,7 +2197,13 @@ export type StopRunResult = { ok: true; run: M.MockRun } | { ok: false; status: 
  * rather than being silently rewritten, because the record is the truth of
  * what happened and "stopped" must never overwrite "completed".
  */
-export async function stopRun(runId: string): Promise<StopRunResult> {
+export async function stopRun(...a: Parameters<typeof stopRunImpl>): ReturnType<typeof stopRunImpl> {
+  const result = await stopRunImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentRunRefs(a[0])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function stopRunImpl(runId: string): Promise<StopRunResult> {
   if (!config.mock.aurora) {
     const result = await A.withRunTransaction<StopRunResult>(runId, async () => {
     const run = await A.fetchRun(runId);
@@ -2168,7 +2251,13 @@ export type CompleteRunResult = { ok: true; run: M.MockRun } | { ok: false; stat
  * duplicate/late callback (agent retry, or the mock's fake timer racing a
  * real caller) must never double-apply a scoring log.
  */
-export async function completeRun(
+export async function completeRun(...a: Parameters<typeof completeRunImpl>): ReturnType<typeof completeRunImpl> {
+  const result = await completeRunImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentRunRefs(a[0])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function completeRunImpl(
   runId: string,
   patch: {
     status: 'completed' | 'failed'; summary?: string; error?: string;
@@ -2364,7 +2453,13 @@ export async function getConfiguration(): Promise<M.AssessmentConfiguration> {
   return M.configuration();
 }
 
-export async function updateConfiguration(patch: { target_level?: number; motions?: M.MotionConfig[] }): Promise<M.AssessmentConfiguration> {
+export async function updateConfiguration(...a: Parameters<typeof updateConfigurationImpl>): ReturnType<typeof updateConfigurationImpl> {
+  const result = await updateConfigurationImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentAllTeamRefs()); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function updateConfigurationImpl(patch: { target_level?: number; motions?: M.MotionConfig[] }): Promise<M.AssessmentConfiguration> {
   if (!config.mock.aurora) return A.upsertConfiguration(patch);
   const cfg = M.configuration();
   if (patch.target_level !== undefined) cfg.target_level = patch.target_level;
@@ -2449,7 +2544,13 @@ export async function getSubmissionDetail(teamId: string, envelopeId: string): P
   return { ...env, status: wireSubmissionStatus(env, dims, M.scoringLogsFor(teamId)) };
 }
 
-export async function deleteSubmission(teamId: string, envelopeId: string): Promise<boolean> {
+export async function deleteSubmission(...a: Parameters<typeof deleteSubmissionImpl>): ReturnType<typeof deleteSubmissionImpl> {
+  const result = await deleteSubmissionImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentTeamRefs([a[0]])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function deleteSubmissionImpl(teamId: string, envelopeId: string): Promise<boolean> {
   if (!config.mock.aurora) return A.deleteSubmissionRow(teamId, envelopeId);
   return M.removeSubmission(teamId, envelopeId);
 }
@@ -2805,7 +2906,13 @@ export interface ParseSubmissionResult {
   rows: Array<ParsedSubmissionRow | ParsedFormsRow>;
 }
 
-export async function parseSubmission(
+export async function parseSubmission(...a: Parameters<typeof parseSubmissionImpl>): ReturnType<typeof parseSubmissionImpl> {
+  const result = await parseSubmissionImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentAllTeamRefs()); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function parseSubmissionImpl(
   payload:
     | { rows: Array<{ team_name_raw: string; team_id?: string }> }
     | { source_file?: string; records: Array<Record<string, string>> },
@@ -2894,7 +3001,13 @@ export interface CommitResultRow {
   conflict?: boolean;
 }
 
-export async function commitSubmissions(
+export async function commitSubmissions(...a: Parameters<typeof commitSubmissionsImpl>): ReturnType<typeof commitSubmissionsImpl> {
+  const result = await commitSubmissionsImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentAllTeamRefs()); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function commitSubmissionsImpl(
   payload:
     | { team_id: string; envelope_ids: string[] }
     | { staging_token: string; selections: Array<{ row_index: number; team_id: string }> },
@@ -3050,7 +3163,13 @@ export async function commitSubmissions(
   return { committed, results };
 }
 
-export async function clearSubmissions(
+export async function clearSubmissions(...a: Parameters<typeof clearSubmissionsImpl>): ReturnType<typeof clearSubmissionsImpl> {
+  const result = await clearSubmissionsImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentAllTeamRefs()); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function clearSubmissionsImpl(
   payload: { targets: Array<{ team_id: string; envelope_id: string }>; reset?: boolean },
 ): Promise<{ cleared: number }> {
   if (!config.mock.aurora) {
@@ -3161,7 +3280,13 @@ export async function getKnowledgeDoc(id: string): Promise<M.KnowledgeDoc | null
   return M.findKnowledgeDoc(id) ?? (id.startsWith('page:') ? syncedPageDoc(id) : null);
 }
 
-export async function putKnowledgeDoc(
+export async function putKnowledgeDoc(...a: Parameters<typeof putKnowledgeDocImpl>): ReturnType<typeof putKnowledgeDocImpl> {
+  const result = await putKnowledgeDocImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentDocumentRefs([a[0]])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function putKnowledgeDocImpl(
   id: string, markdown: string, opts: { label?: string | null; actor?: string } = {},
 ): Promise<{ ok: boolean; updated_at: string } | null> {
   await assertLegacyDocumentWritable(id);
@@ -3206,7 +3331,13 @@ export async function getKnowledgeDocVersion(id: string, stamp: string): Promise
   return version ? M.docVersionOut(version) : null;
 }
 
-export async function restoreKnowledgeDocVersion(
+export async function restoreKnowledgeDocVersion(...a: Parameters<typeof restoreKnowledgeDocVersionImpl>): ReturnType<typeof restoreKnowledgeDocVersionImpl> {
+  const result = await restoreKnowledgeDocVersionImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentDocumentRefs([a[0]])); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function restoreKnowledgeDocVersionImpl(
   id: string, stamp: string, actor = 'unknown',
 ): Promise<{ ok: boolean; updated_at: string } | null> {
   await assertLegacyDocumentWritable(id);
@@ -3257,7 +3388,13 @@ export type PullSectionResult = { ok: true } | { ok: false; status: 404 | 409 | 
  * published after KNOWLEDGE_PULL_DELAY_MS, which is what the portal's Pull
  * button actually waits on via the SSE stream, not this response.
  */
-export async function pullKnowledgeSection(sectionKey: string): Promise<PullSectionResult> {
+export async function pullKnowledgeSection(...a: Parameters<typeof pullKnowledgeSectionImpl>): ReturnType<typeof pullKnowledgeSectionImpl> {
+  const result = await pullKnowledgeSectionImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentDocumentRefs()); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function pullKnowledgeSectionImpl(sectionKey: string): Promise<PullSectionResult> {
   if (sourceConfigured()) return {ok:false,status:409,reason:'Pull individual source pages so collaborative changes can be reviewed before replacement'};
   if (!config.mock.aurora) return {ok:false,status:503,reason:'Document source is not configured'};
   const section = M.knowledgeSections().find((s) => s.key === sectionKey && s.kind === 'synced');
@@ -3312,7 +3449,13 @@ export type MoveNodeResult =
  * is a splice rather than a `position` column to keep in step; the Aurora path
  * does carry a real `position` and renumbers the destination's children.
  */
-export async function moveKnowledgeNode(
+export async function moveKnowledgeNode(...a: Parameters<typeof moveKnowledgeNodeImpl>): ReturnType<typeof moveKnowledgeNodeImpl> {
+  const result = await moveKnowledgeNodeImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentDocumentRefs()); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function moveKnowledgeNodeImpl(
   id: string, targetParentId: string | null, position: number, actor = 'unknown',
 ): Promise<MoveNodeResult> {
   if (!Number.isInteger(position) || position < 0) {
@@ -3383,7 +3526,13 @@ export type RenameNodeResult =
  * up sharing a title without colliding. It is still refused: a rail with two
  * identically-named rows is unreadable even when it is unambiguous underneath.
  */
-export async function renameKnowledgeNode(
+export async function renameKnowledgeNode(...a: Parameters<typeof renameKnowledgeNodeImpl>): ReturnType<typeof renameKnowledgeNodeImpl> {
+  const result = await renameKnowledgeNodeImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentDocumentRefs()); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function renameKnowledgeNodeImpl(
   id: string, rawTitle: string, actor = 'unknown',
 ): Promise<RenameNodeResult> {
   const title = String(rawTitle ?? '').trim();
@@ -3471,7 +3620,13 @@ function checkMove(
  * since there's no real Confluence to push to. Re-publishing the same doc
  * updates its existing page in place and increments its version.
  */
-export async function publishKnowledgeDoc(id: string, actor = 'unknown'): Promise<PublishDocResult> {
+export async function publishKnowledgeDoc(...a: Parameters<typeof publishKnowledgeDocImpl>): ReturnType<typeof publishKnowledgeDocImpl> {
+  const result = await publishKnowledgeDocImpl(...a);
+  try { await noteSearchWrite(...await (await searchRefs()).assessmentDocumentRefs()); } catch { /* the index never fails the write it follows */ }
+  return result;
+}
+
+async function publishKnowledgeDocImpl(id: string, actor = 'unknown'): Promise<PublishDocResult> {
   if (sourceConfigured()) return {ok:false,status:409,reason:'Preview and explicitly publish the acknowledged document version through source workflows'};
   if (!config.mock.aurora) return {ok:false,status:503,reason:'Document source is not configured'};
   const doc = M.findKnowledgeDoc(id);

@@ -9,6 +9,7 @@ import { config } from '../config.js';
 import { clock } from '../mock/core/index.js';
 import { socialChannelsFixture, type SocialChannelPrivacy, type SocialChannelRow } from '../mock/social-channels.js';
 import { exec } from './aurora.js';
+import { noteSearchWrite } from '../lib/search-index/writes.js';
 
 export type { SocialChannelPrivacy, SocialChannelRow };
 
@@ -65,6 +66,7 @@ export async function createChannel(input: { slug: string; name: string; descrip
     if (rows.some((r) => r.slug === input.slug)) throw new DuplicateChannelError(input.slug);
     const row: SocialChannelRow = { tenant: 'social', ...input, createdAt: clock.nowIso() };
     rows.push(row);
+    await noteSearchWrite({ tenant: 'social', type: 'channel', id: row.slug });
     return structuredClone(row);
   }
   const rows = await exec(
@@ -75,5 +77,6 @@ export async function createChannel(input: { slug: string; name: string; descrip
     [str('slug', input.slug), str('name', input.name), str('description', input.description), str('privacy', input.privacy), str('createdBy', input.createdBy)],
   );
   if (!rows[0]) throw new DuplicateChannelError(input.slug);
+  await noteSearchWrite({ tenant: 'social', type: 'channel', id: input.slug });
   return fromRow(rows[0]);
 }

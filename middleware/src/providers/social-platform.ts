@@ -43,6 +43,7 @@ import {
   type SocialCallLogRow, type SocialRecordingRow, type SocialRoomRow, type SocialTeamMemberRow, type SocialTeamRow,
 } from '../mock/social-platform.js';
 import { invalidateAll, invalidateForUser } from '../lib/gateway/authority-invalidation.js';
+import { noteSearchWrite } from '../lib/search-index/writes.js';
 
 export type { SocialCallLogRow, SocialRecordingRow, SocialRoomRow, SocialTeamRow } from '../mock/social-platform.js';
 
@@ -221,6 +222,12 @@ export async function listRooms(session: Session): Promise<SocialRoomView[]> {
 export interface CreateRoomInput { name: string; description?: string; visibility: 'org' | 'private' }
 
 export async function createRoom(session: Session, input: CreateRoomInput): Promise<SocialRoomView> {
+  const room = await createRoomRow(session, input);
+  await noteSearchWrite({ tenant: 'social', type: 'room', id: room.slug });
+  return room;
+}
+
+async function createRoomRow(session: Session, input: CreateRoomInput): Promise<SocialRoomView> {
   const backend = socialPlatformBackend();
   if (backend === 'platform') {
     const body = await platformRequest<{ room?: SocialRoomRow } | SocialRoomRow>(session, 'POST', '/api/rooms', input);
@@ -383,6 +390,12 @@ export async function setTeamFavorite(session: Session, teamId: string, favorite
 export interface CreateTeamInput { name: string; description?: string; visibility: 'org' | 'private'; byName?: string }
 
 export async function createTeam(session: Session, input: CreateTeamInput): Promise<SocialTeamView> {
+  const team = await createTeamRow(session, input);
+  await noteSearchWrite({ tenant: 'social', type: 'team', id: team.teamId });
+  return team;
+}
+
+async function createTeamRow(session: Session, input: CreateTeamInput): Promise<SocialTeamView> {
   const backend = socialPlatformBackend();
   if (backend === 'platform') {
     const body = await platformRequest<{ team: SocialTeamRow; channels?: SocialRoomRow[] }>(session, 'POST', '/api/teams', input);
@@ -412,6 +425,12 @@ export async function createTeam(session: Session, input: CreateTeamInput): Prom
 }
 
 export async function addTeamMember(session: Session, teamId: string, userId: string, displayName?: string): Promise<SocialTeamMemberView> {
+  const member = await addTeamMemberRow(session, teamId, userId, displayName);
+  await noteSearchWrite({ tenant: 'social', type: 'team', id: teamId });
+  return member;
+}
+
+async function addTeamMemberRow(session: Session, teamId: string, userId: string, displayName?: string): Promise<SocialTeamMemberView> {
   const backend = socialPlatformBackend();
   if (backend === 'platform') {
     const body = await platformRequest<{ member: SocialTeamMemberRow }>(session, 'POST', `/api/teams/${encodeURIComponent(teamId)}/members`, {
@@ -437,6 +456,11 @@ export async function addTeamMember(session: Session, teamId: string, userId: st
 }
 
 export async function removeTeamMember(session: Session, teamId: string, userId: string): Promise<void> {
+  await removeTeamMemberRow(session, teamId, userId);
+  await noteSearchWrite({ tenant: 'social', type: 'team', id: teamId });
+}
+
+async function removeTeamMemberRow(session: Session, teamId: string, userId: string): Promise<void> {
   const backend = socialPlatformBackend();
   const detail = backend === 'platform' ? await readPlatformTeam(session, teamId) : await getTeam(session, teamId);
   if (detail.team.orgId !== SOCIAL_PARTITION || detail.team.state !== 'active') throw new NotFoundError(`no team ${teamId}`);
@@ -550,6 +574,11 @@ export async function shareRecording(session: Session, recordingId: string): Pro
 }
 
 export async function deleteRecording(session: Session, recordingId: string): Promise<void> {
+  await deleteRecordingRow(session, recordingId);
+  await noteSearchWrite({ tenant: 'social', type: 'recording', id: recordingId });
+}
+
+async function deleteRecordingRow(session: Session, recordingId: string): Promise<void> {
   const backend = socialPlatformBackend();
   if (backend === 'platform') {
     await platformRequest<unknown>(session, 'DELETE', `/api/recordings/${encodeURIComponent(recordingId)}`);
