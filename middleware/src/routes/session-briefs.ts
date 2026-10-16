@@ -29,7 +29,7 @@ import { LAB_CALLBACK_SERVICE_AUTH, hasServiceAuth } from '../lib/service-auth.j
 import { previewBrief } from '../lib/session-brief-preview.js';
 import { liveBundleSkills, loadWorkContext } from '../lib/run-brief.js';
 import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
-import { loadSkillLibrary, type RunbookStore } from '../lib/runbooks/index.js';
+import { loadSkillLibrary, skillDescription, type RunbookStore, type SessionBrief } from '../lib/runbooks/index.js';
 import { clock } from '../mock/core/clock.js';
 
 export interface SessionBriefDeps {
@@ -49,6 +49,36 @@ const unlessMachine = (human: RequestHandler): RequestHandler => (req, res, next
 };
 
 const briefLimit = rateLimit('session-brief', 240, 60_000);
+
+/** One skill a brief's run received, as a person reads it on the Brief page. */
+export interface BriefSkillDetail {
+  name: string;
+  /** The version the run received (the brief's record), and what that version says about itself. */
+  version: number;
+  title: string | null;
+  description: string | null;
+  /** The runbook's version now, so the page can say a skill has moved on since the run. */
+  current_version: number | null;
+}
+
+/**
+ * R8: the skills a brief's run received — every skill in the library the brief recorded, at the
+ * version it recorded — with the title and SKILL.md description of THAT version. A sibling of
+ * `brief` in the JSON response: the frozen record stays exactly as it was stored.
+ */
+async function briefSkillDetails(store: RunbookStore, brief: Pick<SessionBrief, 'skill_library'>): Promise<BriefSkillDetail[]> {
+  const lib = brief.skill_library;
+  if (!lib) return [];
+  return Promise.all(lib.skills.map(async (k) => {
+    const [v, rb] = await Promise.all([store.getVersion(k.name, k.version), store.getRunbook(k.name)]);
+    return {
+      name: k.name, version: k.version,
+      title: v?.doc.title ?? null,
+      description: v ? skillDescription(v.doc) : null,
+      current_version: rb?.current_version ?? null,
+    };
+  }));
+}
 
 function refuseRunToken(res: Response): void {
   res.status(403).json({ error: `a box reads only its own run: present ${RUN_TOKEN_HEADER} for this run`, code: 'RUN_TOKEN' });
@@ -91,7 +121,7 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
         res.type('text/markdown; charset=utf-8').send(brief.markdown);
         return;
       }
-      res.json({ brief });
+      res.json({ brief, skills: await briefSkillDetails(s, brief) });
     }));
 
   // `lab runbook <id>`: a runbook the run's brief named but did not include in full ("Also
@@ -155,14 +185,15 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
       // The same context reading and the same skills a dispatched devbox run gets (lib/run-brief.ts).
       const ctx = await loadWorkContext(id);
       if (!ctx) { res.status(404).json({ error: 'work item not found' }); return; }
+      const store = await deps.store();
       const brief = await previewBrief({
-        store: await deps.store(),
+        store,
         ...ctx,
         pinned: [],
         nowIso: clock.nowIso(),
         skills: await liveBundleSkills(),
       });
-      res.json({ brief, stored: false });
+      res.json({ brief, stored: false, skills: await briefSkillDetails(store, brief) });
     }));
 
   return router;

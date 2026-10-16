@@ -2423,3 +2423,53 @@ describe('the node operational log', () => {
     });
   });
 });
+
+// R8 follow-up: a local run gets the org's skill library as project skills in its checkout.
+// The worker says so on the claim (`projectSkills: true`), the brief then points at
+// ./.claude/skills, and the library comes over the fenced work-loop door.
+describe('skills for a local run (R8)', () => {
+  it('a worker that installs project skills, on a job with a repo, gets a brief that says so', async () => {
+    const node = await readyWorker();
+    await queueLocal('with repo', { prompt: 'Fix it.', repo: 'https://github.com/x/y' });
+    const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({ projectSkills: true });
+    expect(res.status).toBe(200);
+    expect(res.body.skillLibrary).toMatchObject({ dir: './.claude/skills' });
+    expect(res.body.job.payload.prompt).toContain('installed in `./.claude/skills`');
+  });
+
+  it('an older worker, or a job with no repo, is told the skills are not on this machine', async () => {
+    const node = await readyWorker();
+    await queueLocal('old worker', { prompt: 'Fix it.', repo: 'https://github.com/x/y' });
+    const old = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(old.status).toBe(200);
+    expect(old.body.skillLibrary?.dir ?? null).toBeNull();
+    expect(old.body.job.payload.prompt).not.toContain('installed in `');
+
+    await queueLocal('no repo', { prompt: 'What is 10+10?' });
+    const bare = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({ projectSkills: true });
+    expect(bare.status).toBe(200);
+    expect(bare.body.skillLibrary?.dir ?? null).toBeNull();
+  });
+
+  it('serves the library to the claim holder only, and 304s the sha it already has', async () => {
+    const node = await readyWorker();
+    await queueLocal('skills', { prompt: 'Fix it.', repo: 'https://github.com/x/y' });
+    const c = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({ projectSkills: true });
+    const path = `${BASE}/jobs/${c.body.job.id}/skills`;
+
+    const lib = await request(anon()).post(path).set(bearer(node.nodeToken)).send({ claimToken: c.body.claimToken });
+    expect(lib.status).toBe(200);
+    expect(lib.body.format).toBe('orgiq-skill-library/1');
+    expect(lib.headers['x-skill-library-sha256']).toBe(lib.body.sha256);
+    expect(Array.isArray(lib.body.files)).toBe(true);
+
+    const same = await request(anon()).post(path).set(bearer(node.nodeToken)).send({ claimToken: c.body.claimToken, have: lib.body.sha256 });
+    expect(same.status).toBe(304);
+
+    expect((await request(anon()).post(path).set(bearer(node.nodeToken)).send({ claimToken: 'clm_deadbeef' })).status).toBe(409);
+    expect((await request(anon()).post(path).set(bearer(node.nodeToken)).send({})).status).toBe(400);
+    expect((await request(anon()).post(path).send({ claimToken: c.body.claimToken })).status).toBe(401);
+    const other = await readyWorker({ sub: 'u-raj', label: 'raj-mbp' });
+    expect((await request(anon()).post(path).set(bearer(other.nodeToken)).send({ claimToken: c.body.claimToken })).status).toBe(404);
+  });
+});

@@ -232,6 +232,43 @@ squeeze into the brief.
 - Demo: `runbooks-tools-demo` reaches `done` with every milestone.
 - Journeys: `author/capture-tool` and `consumer/box-tools` maps exist and walk.
 
+### R8 follow-up — local workers and the brief page (2026-10-15)
+
+- **Local workers install the library as project skills.** The local-compute
+  worker runs on the operator's own machine, so it never writes their
+  personal `~/.claude/skills`. `tools/local-compute-skills.mjs` installs the
+  same library into the run's checkout, `<workdir>/.claude/skills/<rb-id>/`,
+  with the box's checks (every file's sha, every path, the caps, the set sha
+  in body and header) and a state file recording what it installed. Claude
+  Code discovers `.claude/skills/` from the cwd `claude -p` starts in, and `-p`
+  skips the workspace-trust dialog, so no flag is needed (checked against
+  claude 2.1.299; `--setting-sources` stays at its default, which includes
+  `project`). It installs only into a checkout under `REPOS_DIR`, never the
+  directory the worker was started from; refuses a symlinked `.claude` or
+  `.claude/skills`; never overwrites or removes a skill it did not install,
+  or one it installed that has since been edited; and lists what it installed
+  in `.git/info/exclude` (never `.gitignore`), so nothing is committable and
+  `git clean -fd` between runs keeps it for the next run's 304 skip.
+  `LOCAL_SKILLS=off` turns it off.
+- **The brief says it honestly.** The worker claims with `projectSkills:
+  true`; only then, and only for a job with a repo, does the frozen brief
+  point at `./.claude/skills`. An older worker or a repo-less job gets "not
+  installed on this machine". The library comes over the fenced work-loop
+  door (`POST /api/local-compute/jobs/:id/skills`, node token + live claim
+  token, 304 on the held sha). When the install fails after the brief
+  promised skills, or succeeds when it did not, the worker tells the run
+  through `--append-system-prompt`; the brief's bytes stay as frozen.
+- **The brief page lists the skills.** `GET /api/runs/:ref/brief` and the
+  brief preview return `skills` beside `brief`: each skill the brief recorded
+  with its title and SKILL.md description at the version the run received,
+  and the runbook's current version. The page (`BriefSkills.tsx`, DataTable +
+  Link) shows name (linking to the runbook), one-line description and
+  version, says where the library went, and shows the library sha.
+- Judge: section `tools`, "local workers and the brief page" checks;
+  `local-skills-install` (install, unchanged skip, tamper refusal, foreign and
+  edited skills untouched, symlink refusal), the R8 route tests in
+  `local-compute-routes`, and `briefSkills` in the portal.
+
 ## Lanes
 
 | Lane | Work | Model | Why |

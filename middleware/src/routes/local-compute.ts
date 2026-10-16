@@ -10,6 +10,7 @@
 //   POST   /api/local-compute/jobs/:id/start      claimed → running (machine, fenced)
 //   POST   /api/local-compute/jobs/:id/heartbeat  still working (machine, fenced)
 //   POST   /api/local-compute/jobs/:id/complete   terminal state + cost (machine, fenced)
+//   POST   /api/local-compute/jobs/:id/skills     R8: the org's skill library for this run (machine, fenced)
 //   POST   /api/local-compute/jobs/:id/log        ship a chunk of run output (machine, fenced)
 //   GET    /api/local-compute/jobs/:id/log        read the run log (browser session, owner-scoped)
 //   GET    /api/local-compute/jobs/:id/log/stream tail the run log, as SSE (browser session, owner-scoped)
@@ -497,7 +498,7 @@ async function fencedJob(
   return { job, claimToken };
 }
 
-localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (_req, res, node) => {
+localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (req, res, node) => {
   const boxId = localBoxId(node.id);
   // Counted against the DATABASE, not against what the worker thinks it holds —
   // a worker that crashed and restarted has forgotten its claims; the rows have
@@ -543,7 +544,9 @@ localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (_req, r
 
   // The session brief freezes at claim — the one chokepoint every locally run
   // job passes through — and rides INSIDE the framing (lib/local-work.ts).
-  const brief = await briefForClaim(claim.job);
+  // R8: a worker that installs the org's skill library as project skills says so on the claim
+  // (`projectSkills: true`); an older worker does not, and its brief says the skills are not here.
+  const brief = await briefForClaim(claim.job, { projectSkills: (req.body as { projectSkills?: unknown } | undefined)?.projectSkills === true });
 
   res.json({
     // The prompt the worker runs is framed here rather than stored framed, so
@@ -568,6 +571,8 @@ localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (_req, r
     },
     claimToken: claim.claimToken,
     sessionId,
+    // What the frozen brief told the run about the org's skills (null: no brief froze).
+    skillLibrary: brief?.skill_library ?? null,
     heartbeatIntervalS: LOCAL_HEARTBEAT_INTERVAL_S,
     staleMinutes: STALE_MINUTES,
     slots: { held: liveJobs + 1, limit: verdict.limit },
@@ -606,6 +611,32 @@ localComputeRouter.post('/jobs/:jobId/heartbeat', workLoopLimit, requireNodeToke
     return;
   }
   res.json({ ok: true, jobId: held.job.id });
+}));
+
+// R8 — the org's skill library, for a local run. The same whole set, the same bytes and the same
+// content-addressed sha a devbox gets from GET /api/runs/:ref/skills; only the door differs: a
+// laptop holds a node token and this job's claim token, not the lab envelope. The worker
+// (tools/local-compute-skills.mjs) verifies every file and the set sha exactly as `lab skills`
+// does, and installs it as project skills in the run's checkout. `have` (or If-None-Match) is the
+// sha the checkout already holds; a match is a 304 and no copy.
+localComputeRouter.post('/jobs/:jobId/skills', workLoopLimit, requireNodeToken(async (req, res, node) => {
+  const held = await fencedJob(req, res, node);
+  if (!held) return;
+  // Only while the claim is live: a requeued or cancelled run is not this machine's to equip.
+  if (!(await heartbeatJob(held.job.id, held.claimToken))) {
+    res.status(409).json({ error: 'this claim is no longer live — it was requeued or cancelled; abandon the run', gate: 'claim_lost' });
+    return;
+  }
+  const { loadSkillLibrary, LIBRARY_FORMAT } = await import('../lib/runbooks/library.js');
+  const { runbookStore } = await import('../lib/runbooks/store-select.js');
+  const lib = await loadSkillLibrary(await runbookStore());
+  res.setHeader('ETag', `"${lib.sha256}"`);
+  res.setHeader('X-Skill-Library-Sha256', lib.sha256);
+  res.setHeader('Cache-Control', 'private, no-cache');
+  const have = (req.body as { have?: unknown } | undefined)?.have;
+  const inm = String(req.headers['if-none-match'] ?? '').split(',').map((x) => x.trim().replace(/^"|"$/g, ''));
+  if ((typeof have === 'string' && have === lib.sha256) || inm.includes(lib.sha256)) { res.status(304).end(); return; }
+  res.json({ format: LIBRARY_FORMAT, sha256: lib.sha256, bytes: lib.bytes, skills: lib.skills, files: lib.files, skipped: lib.skipped });
 }));
 
 const TERMINAL: readonly string[] = ['done', 'failed', 'awaiting_review'];

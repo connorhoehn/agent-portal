@@ -360,6 +360,41 @@ if [ "$QUICK" = 0 ]; then
   if [ -n "${RUNBOOK_DYNAMODB_ENDPOINT:-}" ]; then jest_named tools 'DynamoRunbookStore.*R8: files' "store contract with files against DynamoRunbookStore ($RUNBOOK_DYNAMODB_ENDPOINT)"
   else skip "store contract with files against DynamoRunbookStore (RUNBOOK_DYNAMODB_ENDPOINT unset)"; fi
 fi
+
+section "tools: local workers and the brief page (R8 follow-up)"
+LS=tools/local-compute-skills.mjs
+exists "$LS" "the local worker's skills installer"
+needF "PROJECT_SKILLS_REL = '.claude/skills'" "$LS" "local: installs project skills into the run's checkout (<workdir>/.claude/skills)"
+check "! grep -nE \"homedir\\(|HOME|~/\\.claude/skills'\" $LS" "local: never resolves the operator's home or personal ~/.claude/skills"
+needF "info/exclude" "$LS" "local: installed paths go in .git/info/exclude"
+check "! grep -nF '.gitignore' $LS | grep -v '^[0-9]*: *//' | grep -vF 'never the repo' | grep -q ." "local: never writes the repo's .gitignore"
+needF "the set does not match its sha256" "$LS" "local: the same set-sha verification as lab skills"
+needF "O_NOFOLLOW" "$LS" "local: writes without following links"
+needF "is a symlink" "$LS" "local: a symlinked .claude/skills is refused"
+needF "syncProjectSkills" tools/local-compute-worker.mjs "the worker installs the library before claude -p"
+needF "projectSkills: true" tools/local-compute-worker.mjs "the worker says on the claim that it installs project skills"
+needF "--append-system-prompt" tools/local-compute-worker.mjs "the worker corrects the run when the install and the brief disagree"
+needF "'/jobs/:jobId/skills'" $MW/src/routes/local-compute.ts "POST /api/local-compute/jobs/:id/skills (fenced library door)"
+needF "PROJECT_SKILLS_DIR" $MW/src/lib/local-work.ts "the local brief points at ./.claude/skills only when the worker installs them"
+needF "briefSkillDetails" $MW/src/routes/session-briefs.ts "the brief response carries each received skill's description at its version"
+exists portal/src/pages/runbooks/BriefSkills.tsx "portal: the brief page's skills list"
+needF "<BriefSkills" portal/src/pages/runbooks/BriefDocument.tsx "portal: BriefDocument lists the skills the box received"
+needF "'Skill library'" portal/src/pages/runbooks/BriefDocument.tsx "portal: the brief page shows the library hash"
+needF "runbookHref(k.name)" portal/src/pages/runbooks/BriefSkills.tsx "portal: each skill links to its runbook"
+check "! grep -nE 'style=\\{\\{|dangerouslySetInnerHTML' portal/src/pages/runbooks/BriefSkills.tsx" "portal: the skills list has no inline styles or raw HTML"
+needF "R8 follow-up" docs/distillation-runbooks-goal.md "goal doc has the R8 follow-up note"
+if [ "$QUICK" = 0 ]; then
+  if jest_run localskills src/lib/__tests__/local-skills-install.test.ts src/routes/__tests__/local-compute-routes.test.ts -t 'local worker skills|what the run is told|skills for a local run'; then ok "jest: local skills suites pass"; else
+    fail "jest: local skills suites fail"; grep -E '✕|●' "$SCRATCH/localskills.log" | head -8 | sed 's/^/        /'; fi
+  jest_named localskills 'installs every file at its sha, leaves the operator' "local: install verifies every file, keeps the operator's skill, nothing committable"
+  jest_named localskills 'skips the copy when the installed sha is unchanged' "local: an unchanged library is skipped (304)"
+  jest_named localskills 'refuses a tampered library and writes nothing' "local: a tampered library is refused whole"
+  jest_named localskills 'never overwrites an rb- skill it did not install' "local: a foreign or edited skill is never overwritten or removed"
+  jest_named localskills "refuses a .claude/skills that is a symlink" "local: a symlinked skills dir is refused"
+  jest_named localskills 'gets a brief that says so' "local: the brief says installed only when the worker installs them"
+  jest_named localskills 'serves the library to the claim holder only' "local: the library door is fenced to the claim holder"
+  check "(cd portal && node --test src/pages/runbooks/__tests__/briefSkills.test.ts)" "portal: the brief page lists name, description, version and where the library went"
+fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

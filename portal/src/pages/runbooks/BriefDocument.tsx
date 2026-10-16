@@ -1,5 +1,6 @@
 // A session brief as a person reads it: the sha and token count, the sections it was assembled from
-// with the reason each was included, what was left out, and the exact markdown the box received.
+// with the reason each was included, what was left out, the org skills the box received (R8: name,
+// description, version, the library sha) and the exact markdown the box received.
 // Shared by Runbooks → Briefs, the run page's Brief tab and the work item's Brief preview.
 import { useState } from 'react';
 import { KeyValue } from '@connorhoehnslalom/ui-components';
@@ -9,9 +10,10 @@ import { SafeMarkdown } from './SafeMarkdown';
 import { briefTaskTitle } from './runbookNames';
 import { SECTION_KIND_LABEL, runbookHref } from './runbooksModel';
 import { useRunbookNames } from './useRunbookNames';
-import type { Brief, BriefSection } from './types';
+import { BriefSkills } from './BriefSkills';
+import type { Brief, BriefSection, BriefSkillDetail } from './types';
 
-export function BriefDocument({ brief, frozen, onOpen }: { brief: Brief; frozen: boolean; onOpen: (href: string) => void }) {
+export function BriefDocument({ brief, frozen, onOpen, skills }: { brief: Brief; frozen: boolean; onOpen: (href: string) => void; skills?: BriefSkillDetail[] }) {
   const [copied, setCopied] = useState(false);
   const names = useRunbookNames();
   const task = briefTaskTitle(brief.markdown);
@@ -43,6 +45,7 @@ export function BriefDocument({ brief, frozen, onOpen }: { brief: Brief; frozen:
           ...(brief.work_item_id ? [{ label: 'Work item', value: task ?? 'The work item', title: brief.work_item_id }] : []),
           ...(brief.initiative_id ? [{ label: 'Initiative', value: names.initiative(brief.initiative_id), title: brief.initiative_id }] : []),
           ...(brief.repo ? [{ label: 'Repository', value: brief.repo }] : []),
+          ...(brief.skill_library ? [{ label: 'Skill library', value: brief.skill_library.sha256, mono: true, title: `${brief.skill_library.sha256}${brief.skill_library.dir ? ` in ${brief.skill_library.dir}` : ''}` }] : []),
         ]}
       />
       {!frozen && (
@@ -58,6 +61,7 @@ export function BriefDocument({ brief, frozen, onOpen }: { brief: Brief; frozen:
       <DetailSection variant="heading" first title="Sections" hint={`${brief.sections.length}`}>
         <DataTable data={brief.sections} columns={columns} keyField={(s) => `${s.kind}:${s.ref ?? ""}:${s.reason}`} frameless emptyMessage="No sections." onRowClick={(s) => { if (s.kind === 'runbook' && s.ref) onOpen(runbookHref(s.ref)); }} data-testid="brief-sections" />
       </DetailSection>
+      {brief.skill_library && <BriefSkills library={brief.skill_library} skills={skills} frozen={frozen} onOpen={onOpen} />}
       <DetailSection
         variant="heading"
         title={frozen ? 'The exact text the box received' : 'The text a box would receive'}

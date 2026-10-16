@@ -2352,6 +2352,11 @@
     },
     {
       "method": "POST",
+      "path": "/api/local-compute/jobs/:jobId/skills",
+      "source": "src/routes/local-compute.ts:622"
+    },
+    {
+      "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/start",
       "source": "src/routes/local-compute.ts:577"
     },

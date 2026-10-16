@@ -211,7 +211,17 @@ export function frameLocalPrompt(task: string, reviewed: boolean, brief?: Framed
 }
 
 /** The frozen session brief, as the framing carries it. */
-export interface FramedBrief { id: string; sha256: string; markdown: string }
+export interface FramedBrief {
+  id: string;
+  sha256: string;
+  markdown: string;
+  /**
+   * R8: the skill library the brief points at, and where the worker was told to install it
+   * (`dir` null: not on this machine). The worker compares this with what it actually installed
+   * and tells the run when they differ, so the run is never told about skills it does not have.
+   */
+  skill_library?: { sha256: string; dir: string | null; skills: number } | null;
+}
 
 export const BRIEF_BEGIN = '----- BEGIN SESSION BRIEF -----';
 export const BRIEF_END = '----- END SESSION BRIEF -----';
@@ -227,7 +237,7 @@ export const BRIEF_END = '----- END SESSION BRIEF -----';
  */
 function briefBlock(b: FramedBrief): string[] {
   return [
-    `Below is the session brief for this run (${b.id}, sha256 ${b.sha256}): the project context, the decisions that bind the work and the runbooks selected for it. Follow a runbook where it fits the task.`,
+    `Below is the session brief for this run (${b.id}, sha256 ${b.sha256}): the project context, the decisions that bind the work, and where the org's skills are. Follow a skill where it fits the task.`,
     'This machine has no `lab` command. Where the brief says to run one, write that line, as written, at the end of your final message instead.',
     '',
     BRIEF_BEGIN,
@@ -244,8 +254,27 @@ function briefBlock(b: FramedBrief): string[] {
  */
 export async function briefForClaim(
   job: { id: string; title: string; payload: Record<string, unknown>; createdBy: string | null },
+  opts: { projectSkills?: boolean } = {},
 ): Promise<FramedBrief | null> {
   const { freezeJobBrief } = await import('./run-brief.js');
-  const frozen = await freezeJobBrief(job, 'local');
-  return frozen ? { id: frozen.brief.id, sha256: frozen.brief.sha256, markdown: frozen.brief.markdown } : null;
+  const { PROJECT_SKILLS_DIR } = await import('./runbooks/library.js');
+  const frozen = await freezeJobBrief(job, 'local', { skillsDir: localSkillsDir(job, opts.projectSkills === true) ? PROJECT_SKILLS_DIR : null });
+  if (!frozen) return null;
+  const lib = frozen.brief.skill_library;
+  return {
+    id: frozen.brief.id, sha256: frozen.brief.sha256, markdown: frozen.brief.markdown,
+    skill_library: lib ? { sha256: lib.sha256, dir: lib.dir, skills: lib.skills.length } : null,
+  };
+}
+
+/**
+ * R8: does this local run get the org's skills installed? Only when the worker said it installs
+ * project skills (claim body `projectSkills: true`, tools/local-compute-skills.mjs) AND the job
+ * names a repo: the worker installs into the checkout it owns under REPOS_DIR, never into the
+ * directory it was started from (which may be the operator's home, where `.claude/skills` IS
+ * their personal skills folder).
+ */
+export function localSkillsDir(job: { payload: Record<string, unknown> }, projectSkills: boolean): boolean {
+  const repo = job.payload['repo'];
+  return projectSkills && typeof repo === 'string' && repo.trim() !== '';
 }

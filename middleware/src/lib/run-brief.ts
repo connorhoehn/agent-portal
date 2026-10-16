@@ -32,6 +32,13 @@ export interface RunTarget {
   run_ref: string;
   /** devbox runs carry the live bundle's skills; a local machine does not have them. */
   box: 'devbox' | 'local';
+  /**
+   * R8, local runs only: where the worker installs the org's skill library for this run
+   * (`PROJECT_SKILLS_DIR`, project skills in the run's checkout), or null when it does not
+   * (an older worker, or a job with no repo to install into). A devbox always installs into
+   * `~/.claude/skills`.
+   */
+  skills_dir?: string | null;
   work_item_id?: string | null;
   /** Used when there is no work item (a bot's job names its initiative). */
   initiative_id?: string | null;
@@ -103,8 +110,9 @@ export async function composeRunBrief(target: RunTarget, opts: { store?: Runbook
     decisions: ctx?.decisions ?? [],
     pinned: [],
     nowIso: opts.nowIso ?? clock.nowIso(),
-    // R8: a devbox syncs the org's skill library into ~/.claude/skills at boot; a local machine does not.
-    ...(target.box === 'devbox' ? { skills: await liveBundleSkills() } : { skillsDir: null }),
+    // R8: a devbox syncs the org's skill library into ~/.claude/skills at boot; a local worker
+    // installs it as project skills in the run's checkout when it says it will (skills_dir).
+    ...(target.box === 'devbox' ? { skills: await liveBundleSkills() } : { skillsDir: target.skills_dir ?? null }),
     ...(!ctx && target.task ? { task: target.task } : {}),
     ...(!ctx && target.repo ? { repo: target.repo } : {}),
   });
@@ -164,11 +172,12 @@ export function jobDispatcher(job: Pick<AgentJob, 'createdBy'>): string | null {
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
 /** A queue job's run target: the job id is the run ref. */
-export function jobRunTarget(job: Pick<AgentJob, 'id' | 'title' | 'payload' | 'createdBy'>, box: RunTarget['box']): RunTarget {
+export function jobRunTarget(job: Pick<AgentJob, 'id' | 'title' | 'payload' | 'createdBy'>, box: RunTarget['box'], skillsDir: string | null = null): RunTarget {
   const p = job.payload;
   return {
     run_ref: job.id,
     box,
+    ...(box === 'local' ? { skills_dir: skillsDir } : {}),
     work_item_id: str(p['workItemId']),
     initiative_id: str(p['initiativeId']),
     repo: str(p['repo']),
@@ -186,10 +195,11 @@ export function jobRunTarget(job: Pick<AgentJob, 'id' | 'title' | 'payload' | 'c
 export async function freezeJobBrief(
   job: Pick<AgentJob, 'id' | 'title' | 'payload' | 'createdBy'>,
   box: RunTarget['box'],
-  opts: { store?: RunbookStore } = {},
+  opts: { store?: RunbookStore; skillsDir?: string | null } = {},
 ): Promise<{ brief: SessionBrief; run: LabRunContext } | null> {
   try {
-    const brief = await freezeBrief(jobRunTarget(job, box), opts);
+    const { skillsDir = null, ...storeOpts } = opts;
+    const brief = await freezeBrief(jobRunTarget(job, box, skillsDir), storeOpts);
     if (job.payload['brief_id'] !== brief.id || job.payload['brief_sha'] !== brief.sha256) {
       const { stampJobPayload } = await import('../providers/agent-jobs.js');
       await stampJobPayload(job.id, { brief_id: brief.id, brief_sha: brief.sha256 });

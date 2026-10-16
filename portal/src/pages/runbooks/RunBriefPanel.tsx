@@ -5,15 +5,15 @@ import { EmptyState, LoadingState } from '@connorhoehnslalom/ui-components/share
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { BriefDocument } from './BriefDocument';
-import type { Brief } from './types';
+import type { Brief, BriefSkillDetail } from './types';
 
 export function RunBriefPanel({ runRef }: { runRef: string }) {
   const navigate = useNavigate();
-  const feed = useFetch<{ brief: Brief }>(`/api/runs/${encodeURIComponent(runRef)}/brief`, 0);
+  const feed = useFetch<{ brief: Brief; skills?: BriefSkillDetail[] }>(`/api/runs/${encodeURIComponent(runRef)}/brief`, 0);
   if (feed.error && /no brief|404|NO_BRIEF/i.test(feed.error)) {
     return <EmptyState align="start" title="No brief was frozen for this run" description="Runs started before runbooks existed, and runs that are not agent jobs, were given no brief." data-testid="run-brief-none" />;
   }
   if (feed.error) return <UnavailableNotice error={feed.error} what="this run’s brief" source="Briefs are read from the runbook store" onRetry={feed.refresh} />;
   if (!feed.data) return <LoadingState label="Loading brief…" />;
-  return <BriefDocument brief={feed.data.brief} frozen onOpen={(href) => navigate(href)} />;
+  return <BriefDocument brief={feed.data.brief} frozen skills={feed.data.skills} onOpen={(href) => navigate(href)} />;
 }

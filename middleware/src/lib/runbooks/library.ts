@@ -51,6 +51,13 @@ export interface SkillLibrary {
 export const LIBRARY_FORMAT = 'orgiq-skill-library/1';
 /** Where a devbox installs the library: Claude Code's personal skills folder under the box user's HOME (main.py points HOME at the workspace). */
 export const BOX_SKILLS_DIR = '~/.claude/skills';
+/**
+ * Where a local-compute worker installs it: PROJECT skills in the run's checkout
+ * (tools/local-compute-skills.mjs). The worker runs on the operator's own machine, so it never
+ * writes their personal ~/.claude/skills; Claude Code discovers `.claude/skills/` from the cwd
+ * `claude -p` starts in. Relative on purpose: it is read against the run's working directory.
+ */
+export const PROJECT_SKILLS_DIR = './.claude/skills';
 
 const scopeLabel = (r: Runbook): string => (r.scope.kind === 'org' ? 'org-wide' : `${r.scope.kind} ${r.scope.ref ?? ''}`.trim());
 

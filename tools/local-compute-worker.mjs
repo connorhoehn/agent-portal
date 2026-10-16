@@ -54,6 +54,9 @@
 //                          claude-sonnet-4-5-20250929).
 //   POLL_INTERVAL_S        how often to poll /claim when idle (default: 10)
 //   REPOS_DIR              where to clone/update repos (default: ~/repos-worker)
+//   LOCAL_SKILLS           "off" to stop installing the org's skill library (R8) into each
+//                          run's checkout as project skills (default: on; see
+//                          local-compute-skills.mjs — never touches ~/.claude/skills)
 //   ORGIQ_PRESENCE_CONFIG  path of the pairing file to read instead of the
 //                          default — for running a second worker (or a mock-mode
 //                          audit with MOCK_NODE_TOKEN) without touching the real one
@@ -64,6 +67,7 @@
 
 import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, createWriteStream } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
+import { syncProjectSkills, describeSync, skillsNote, BODY_MAX } from './local-compute-skills.mjs';
 import { join, basename, dirname } from 'node:path';
 import { homedir, hostname, platform, arch, loadavg, cpus, totalmem, freemem, uptime } from 'node:os';
 
@@ -105,12 +109,14 @@ const LOCAL_MODELS = (process.env.LOCAL_MODELS
 const JOB_KINDS = (process.env.JOB_KINDS ?? 'local:task')
   .split(',').map((s) => s.trim()).filter(Boolean);
 const MAX_CONCURRENCY = Math.max(1, parseInt(process.env.MAX_CONCURRENCY ?? '2', 10) || 2);
+// R8: install the org's skill library into each run's checkout as project skills.
+const LOCAL_SKILLS = (process.env.LOCAL_SKILLS ?? 'on').toLowerCase() !== 'off';
 
 // Bumped by hand when this file's behaviour changes in a way worth seeing on
 // the fleet view (a job kind added, a claim-loop fix). Reported in
 // `metrics.workerVersion` — informational only, nothing server-side gates on
 // it today.
-const WORKER_VERSION = '1.1.0';
+const WORKER_VERSION = '1.2.0';
 
 // ─── Logging ─────────────────────────────────────────────────────────────────
 //
@@ -493,7 +499,9 @@ async function waitForAcceptJobs(config, why) {
 const held = new Map();
 
 async function claim(config) {
-  const res = await post(config, '/api/local-compute/claim', {}, authHeaders(config));
+  // `projectSkills`: this worker installs the org's skill library into the run's checkout, so the
+  // frozen brief may say so (only for a job with a repo; see local-compute-skills.mjs).
+  const res = await post(config, '/api/local-compute/claim', LOCAL_SKILLS ? { projectSkills: true } : {}, authHeaders(config));
 
   if (res.status === 204) return null; // empty queue
   if (res.status === 429) {
@@ -535,6 +543,8 @@ async function claim(config) {
     sessionId: body.sessionId,
     title: body.job.title ?? body.job.id,
     repo: body.job.payload?.repo ?? null,
+    // What the frozen brief told the run about the org's skills (dir null: "not on this machine").
+    skillLibrary: body.skillLibrary ?? null,
     startedAt: Date.now(),
     child: null,
     logSeq: 0,
@@ -682,7 +692,35 @@ function ensureRepo(repoUrl) {
 
 // ─── Run ─────────────────────────────────────────────────────────────────────
 
-function runTask(config, jobId, cwd, prompt) {
+// ─── Skills (R8) ─────────────────────────────────────────────────────────────
+
+/** The org's skill library for this run, over the fenced work-loop door. */
+async function fetchSkills(config, jobId, claimToken, have) {
+  const res = await post(config, `/api/local-compute/jobs/${encodeURIComponent(jobId)}/skills`,
+    { claimToken, ...(have ? { have } : {}) }, authHeaders(config));
+  const len = Number(res.headers.get('content-length') ?? '0');
+  if (res.status === 200 && len > BODY_MAX) return { status: 413, body: '', sha: '' };
+  return {
+    status: res.status,
+    body: res.status === 200 ? await res.text() : '',
+    sha: res.headers.get('x-skill-library-sha256') ?? '',
+  };
+}
+
+/**
+ * Install the library into the run's checkout (never ~/.claude/skills) and return the line the
+ * run is told when that disagrees with its frozen brief, or null.
+ */
+async function equipRun(config, jobId, cwd) {
+  const h = held.get(jobId);
+  const briefDir = h?.skillLibrary?.dir ?? null;
+  if (!LOCAL_SKILLS) return skillsNote({ status: 'refused', why: 'LOCAL_SKILLS=off on this worker' }, briefDir);
+  const r = await syncProjectSkills({ workdir: cwd, fetchLibrary: (have) => fetchSkills(config, jobId, h.claimToken, have) });
+  log[r.status === 'installed' || r.status === 'unchanged' ? 'info' : 'warn'](describeSync(r), 1);
+  return skillsNote(r, briefDir);
+}
+
+function runTask(config, jobId, cwd, prompt, systemNote = null) {
   const started = Date.now();
   // Loopback only. In anthropic mode NO settings block is passed: `claude -p`
   // resolves auth and model exactly as it would for the operator at a terminal,
@@ -730,6 +768,8 @@ function runTask(config, jobId, cwd, prompt) {
     ...(ANTHROPIC_MODEL ? ['--model', ANTHROPIC_MODEL] : []),
     '--dangerously-skip-permissions',
     ...(settingsOverride ? ['--settings', settingsOverride] : []),
+    // R8: only when the skills install and the frozen brief disagree (the brief's bytes stay as frozen).
+    ...(systemNote ? ['--append-system-prompt', systemNote] : []),
   ];
   const inferenceLabel = INFERENCE === 'loopback' ? ANTHROPIC_BASE_URL : 'anthropic (this machine\'s Claude Code login)';
   const modelLabel = ANTHROPIC_MODEL ?? 'account default';
@@ -918,7 +958,12 @@ async function runJob(config, claim) {
     }
 
     const cwd = ensureRepo(repoUrl);
-    const outcome = await runTask(config, job.id, cwd, prompt);
+    // Skills go only into a checkout this worker owns (REPOS_DIR/<repo>), never the directory it
+    // was started from, which may be the operator's home.
+    const note = repoUrl
+      ? await equipRun(config, job.id, cwd)
+      : skillsNote(null, held.get(job.id)?.skillLibrary?.dir ?? null);
+    const outcome = await runTask(config, job.id, cwd, prompt, note);
 
     log[outcome.exitCode === 0 ? 'ok' : 'warn'](`finished in ${(outcome.durationMs / 1000).toFixed(1)}s · exit ${outcome.exitCode}`, 1);
     // `payload.requiresReview` is the same field the push-side dispatcher honours

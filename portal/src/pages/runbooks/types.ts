@@ -124,3 +124,5 @@ export interface BriefSummary {
 }
 export interface SkillLibrary { sha256: string; dir: string | null; skills: Array<{ name: string; version: number }> }
 export interface Brief extends BriefSummary { markdown: string; skill_library?: SkillLibrary }
+/** R8: one skill a brief's run received, at the version it received (GET /api/runs/:ref/brief `skills`). */
+export interface BriefSkillDetail { name: string; version: number; title: string | null; description: string | null; current_version: number | null }
