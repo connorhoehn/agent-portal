@@ -9,7 +9,7 @@
 // It used to be one ~200px card per question — the same boilerplate sentence
 // twenty-five times under "Dim 4" — with the answer form pushing everything
 // below it down the page (docs/assessment-ux-goal.md, slice 2).
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Chip,
@@ -37,6 +37,8 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { feedbackCommandAdapter } from './assessmentCollectionCommands';
+import { useAnswerScope } from '../../components/collections/useAnswerScope';
+import type { TenantAnswerFact } from '../../lib/tenantAnswer';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
@@ -193,6 +195,8 @@ function QuestionRecord({
   );
 }
 
+const FEEDBACK_ANSWERS = ['assessment:open-exceptions', 'assessment:answered-question'];
+
 export default function FeedbackPage() {
   // Filters live in the URL — `?status=&team=&q=` — so a filtered feedback
   // queue is a shareable link and survives a reload.
@@ -238,17 +242,34 @@ export default function FeedbackPage() {
   const teamNameOf = (task: FeedbackTask): string =>
     task.team_name ?? (task.team_id ? nameById.get(task.team_id) : undefined) ?? task.team_id ?? 'No team';
 
+  // A fixed-fact answer about exceptions or answered questions narrows the queue to the records it cites;
+  // an answered question lives under another status, so the answer widens the status until it is dismissed.
+  const scope = useAnswerScope(FEEDBACK_ANSWERS);
+  const statusBeforeAnswer = useRef<HitlStatus | 'ALL' | null>(null);
+  const showAnswer = (answer: TenantAnswerFact | null) => {
+    scope.showAnswer(answer);
+    if (answer?.intent === 'assessment:answered-question') {
+      statusBeforeAnswer.current ??= status;
+      setStatus('ALL');
+    } else if (statusBeforeAnswer.current !== null) {
+      const before = statusBeforeAnswer.current;
+      statusBeforeAnswer.current = null;
+      setStatus(before);
+    }
+  };
+
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return tasks.filter((t) => {
       if (team !== 'all' && t.team_id !== team) return false;
+      if (scope.keys && !scope.keys.has(`feedback:${t.task_id}`) && !(t.kind === 'exception_review' && scope.keys.has(`exception:${t.team_id}:${t.dimension_id}`))) return false;
       if (!q) return true;
       const dim = dimOf(t);
       return t.question.toLowerCase().includes(q) || dimensionLabel(t, dim).toLowerCase().includes(q) || teamNameOf(t).toLowerCase().includes(q);
     });
     // dimOf/teamNameOf close over `index`/`nameById`, listed below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, team, search, index, nameById]);
+  }, [tasks, team, search, index, nameById, scope.keys]);
 
   // A `follow_up` is a question the TEAM owes the assessment — the thing this
   // page's own title, description and "click a row to answer it" hint all
@@ -273,6 +294,7 @@ export default function FeedbackPage() {
     clearTeam: () => setTeam('all'),
     refresh: load,
     openQuestion,
+    showAnswer,
   });
 
   useCrumbLabel(selectedId ?? undefined, selected ? dimensionLabel(selected, dimOf(selected)) : null);

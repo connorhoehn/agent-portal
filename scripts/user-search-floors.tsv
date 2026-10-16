@@ -6,7 +6,7 @@
 # Columns: tenant, pass_floor, max_wrong_best, due (the phase target's date, or -), note.
 tenant	pass_floor	max_wrong_best	due	note
 orgiq	1	0	-	S4 probe (2026-10-16): 23/23 supported, 0 wrong on best; o-single-threaded answered from the bus-factor findings
-assessment	0.78	0	-	S4 probe: 14/18 supported, 4 partial, 0 unsupported or wrong; fixed-fact answers in the command box (lib/tenant-answers)
+assessment	1	0	-	S5 probe (2026-10-16): 18/18 supported; a fixed-fact answer also narrows the page's table to the records it cites (useAnswerScope)
 social	1	0	-	S4 probe: 18/18 supported; s-presence states the roster tally
 pipelines	1	0	-	S4 probe: 16/16 supported, 0 wrong on best (the p-def-owner miss was a stale owner in the catalog)
-access	0.83	0	-	S4 probe: 10/12 supported, 2 partial; fixed-fact answers in the command box
+access	1	0	-	S5 probe (2026-10-16): 16/16 supported (the four requester intents no longer clone-blind: a clone stands in for its persona), 0 wrong on best

@@ -5,6 +5,7 @@
 // needs more declares it explicitly through `extra` phrases with their own
 // handlers, and says so in its help and scope note.
 import type { CollectionCommandAdapter, CollectionCommandResult } from './CollectionCommandHost.tsx';
+import type { TenantAnswerFact } from '../../lib/tenantAnswer.ts';
 
 export type CollectionCommand = { kind: 'help' | 'refresh' | 'reset' }
   | { kind: 'open'; target: string } | { kind: 'search'; query: string } | { kind: 'filter'; value: string } | { kind: 'extra'; phrase: string };
@@ -62,6 +63,8 @@ export interface CollectionControls {
   open?(target: string): string;
   /** Handle a page-specific phrase declared in `grammar.extra`. */
   extra?(phrase: string): CollectionCommandResult | Promise<CollectionCommandResult>;
+  /** Narrow the page's rows to the records a fixed-fact answer cites (null restores them). */
+  showAnswer?(answer: TenantAnswerFact | null): void;
   /** Shown as the composer's label; defaults to the capitalised noun. */
   label?: string;
   id?: string;
@@ -80,6 +83,7 @@ export function collectionCommandAdapter(grammar: CollectionGrammar, controls: C
   ];
   return {
     id: controls.id ?? `${noun.replace(/\s+/g, '-')}-commands`, label, examples, scopeNote: controls.scopeNote,
+    ...(controls.showAnswer ? { showAnswer: controls.showAnswer } : {}),
     placeholder: `Search ${noun}${Object.keys(filters).length ? ', filter' : ''}${controls.open ? ', open a record' : ''}, or refresh…`,
     async execute(text) {
       const command = parseCollectionCommand(text, grammar);
@@ -89,7 +93,7 @@ export function collectionCommandAdapter(grammar: CollectionGrammar, controls: C
           return { message: controls.open(command.target) };
         case 'help': return { message: `Supported: ${examples.join('; ')}. ${controls.scopeNote}` };
         case 'refresh': controls.refresh(); return { message: `Refreshing ${noun}.` };
-        case 'reset': controls.setQuery(''); controls.setFilter?.(''); return { message: 'Search and filters cleared. Sorting is unchanged.' };
+        case 'reset': controls.showAnswer?.(null); controls.setQuery(''); controls.setFilter?.(''); return { message: 'Search and filters cleared. Sorting is unchanged.' };
         case 'search': controls.setQuery(command.query); return { message: `Searching loaded ${noun} for “${command.query}”. Other filters and sorting are unchanged.` };
         case 'filter':
           if (!controls.setFilter) throw new Error('This table has no filter to apply. No changes were made.');

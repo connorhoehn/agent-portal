@@ -33,6 +33,7 @@ import {
   type ItemsResponse,
 } from '../../lib/accessRequests';
 import { accessCollectionAdapter, resolveAccessTarget } from './accessCollectionCommands';
+import { useAnswerScope } from '../../components/collections/useAnswerScope';
 import { ACCESS_SURFACES } from './accessSurfaces';
 
 const TENANT_OPTIONS = [
@@ -76,12 +77,14 @@ export default function CatalogPage() {
   const [query, setQuery] = useState('');
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<CatalogItem>>(`${ACCESS_API}/catalog`, 60_000);
   const all = data?.items ?? [];
-  const rows = filterCatalog(all, query, tenant);
+  // "Which roles are sensitive" answers as a fact; the catalog then lists the items it cites.
+  const scope = useAnswerScope(['access:sensitive-items']);
+  const rows = filterCatalog(all, query, tenant).filter((i) => !scope.keys || scope.keys.has(`catalog:${i.id}`));
   const mayRequest = ready && can('RequestAccess');
   const startRequest = (item: CatalogItem) => navigate(requestHref(item));
 
   const adapter = accessCollectionAdapter('catalog', {
-    setQuery, setFilter: setTenant, refresh,
+    setQuery, setFilter: setTenant, refresh, showAnswer: scope.showAnswer,
     open(target) {
       if (!data || error) throw new Error('Wait for the catalog to load before opening an item.');
       const item = resolveAccessTarget(target, rows);

@@ -28,6 +28,7 @@ import { RecordLink } from '../../decisions/RecordLink';
 import { CollectionCommandHost } from '../../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../../components/collections/CollectionCommandPage';
 import { teamsCommandAdapter } from '../assessmentCollectionCommands';
+import { useAnswerScope } from '../../../components/collections/useAnswerScope';
 import { Can } from '../../../lib/capabilities';
 import {
   contributorAvatars,
@@ -94,7 +95,12 @@ export function AssessorDesk({
 
   const inMotion = useMemo(() => teamsForCohort(teams, cohort), [teams, cohort]);
   const statuses = useMemo(() => statusOptions(inMotion), [inMotion]);
-  const rows = useMemo(() => filterAndSortTeams(inMotion, { search, status }), [inMotion, search, status]);
+  // "Which teams have no lead" answers as a fact (possibly "none"); the desk then lists the teams it cites.
+  const scope = useAnswerScope(['assessment:unassigned-teams']);
+  const rows = useMemo(
+    () => filterAndSortTeams(inMotion, { search, status }).filter((t) => !scope.keys || scope.keys.has(`team:${t.id}`)),
+    [inMotion, search, status, scope.keys],
+  );
   const summary = useMemo(() => deskSummary(rows), [rows]);
   const adapter = teamsCommandAdapter(rows, {
     setQuery: setSearch,
@@ -102,6 +108,7 @@ export function AssessorDesk({
     clearStatus: () => setStatus(ALL),
     refresh: onRetry,
     openTeam: onSelectTeam,
+    showAnswer: scope.showAnswer,
   });
   const hasFilters = search.trim() !== '' || status !== ALL;
 

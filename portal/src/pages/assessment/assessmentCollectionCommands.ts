@@ -5,6 +5,7 @@
 // publishes or hands text to an agent.
 import type { CollectionCommandAdapter } from '../../components/collections/CollectionCommandHost.tsx';
 import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands.ts';
+import type { TenantAnswerFact } from '../../lib/tenantAnswer.ts';
 
 type Cohort = 'white_glove' | 'self_service' | 'general';
 type FeedbackStatus = 'OPEN' | 'RESOLVED' | 'DISMISSED' | 'ALL';
@@ -22,10 +23,12 @@ export function teamsCommandAdapter(rows: ReadonlyArray<{ id: string; name: stri
   clearStatus(): void;
   refresh(): void;
   openTeam(id: string): void;
+  showAnswer?(answer: TenantAnswerFact | null): void;
 }): CollectionCommandAdapter {
   return collectionCommandAdapter({ noun: 'teams', filters: TEAM_MOTION_FILTERS }, {
     id: 'assessment-teams-commands',
     setQuery: controls.setQuery,
+    ...(controls.showAnswer ? { showAnswer: controls.showAnswer } : {}),
     setFilter(value) {
       if (value === '') { controls.setMotion('all'); controls.clearStatus(); return; }
       controls.setMotion(value as Cohort);
@@ -40,10 +43,11 @@ export function teamsCommandAdapter(rows: ReadonlyArray<{ id: string; name: stri
   });
 }
 
-export function submissionsCommandAdapter(controls: { setQuery(value: string): void; refresh(): void }): CollectionCommandAdapter {
+export function submissionsCommandAdapter(controls: { setQuery(value: string): void; refresh(): void; showAnswer?(answer: TenantAnswerFact | null): void }): CollectionCommandAdapter {
   return collectionCommandAdapter({ noun: 'submissions' }, {
     id: 'assessment-submissions-commands',
     setQuery: controls.setQuery,
+    ...(controls.showAnswer ? { showAnswer: controls.showAnswer } : {}),
     refresh: controls.refresh,
     scopeNote: 'Search matches loaded submissions by team, form, envelope, submitter and status. Commands never add, delete or clear submissions.',
   });
@@ -73,10 +77,12 @@ export function feedbackCommandAdapter(rows: ReadonlyArray<{ task_id: string; qu
   clearTeam(): void;
   refresh(): void;
   openQuestion(id: string): void;
+  showAnswer?(answer: TenantAnswerFact | null): void;
 }): CollectionCommandAdapter {
   return collectionCommandAdapter({ noun: 'questions', filters: FEEDBACK_STATUS_FILTERS }, {
     id: 'assessment-feedback-commands',
     setQuery: controls.setQuery,
+    ...(controls.showAnswer ? { showAnswer: controls.showAnswer } : {}),
     setFilter(value) {
       if (value === '') { controls.setStatus('OPEN'); controls.clearTeam(); return; }
       controls.setStatus(value as FeedbackStatus);

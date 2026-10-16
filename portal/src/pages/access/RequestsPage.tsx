@@ -22,6 +22,8 @@ import {
   type ItemsResponse,
 } from '../../lib/accessRequests';
 import { accessCollectionAdapter, resolveAccessTarget } from './accessCollectionCommands';
+import { useAnswerScope } from '../../components/collections/useAnswerScope';
+import type { TenantAnswerFact } from '../../lib/tenantAnswer';
 import { REQUEST_COLUMNS } from './accessColumns';
 import { ACCESS_SURFACES } from './accessSurfaces';
 
@@ -52,14 +54,22 @@ function RequestsWorkspace() {
   // `?status=open` (the palette's "Open requests") preselects the status filter.
   const [status, setStatus] = useState(() => REQUEST_STATUS_FILTERS.some((f) => f.value === params.get('status')) ? params.get('status')! : '');
   const [query, setQuery] = useState('');
-  const effectiveScope: Scope = decides ? scope : 'mine';
+  // "What has Rhea asked for" or "my rejected requests" answers as a fact; the table then lists the requests it
+  // cites (a report's in the reports' view) until the answer is dismissed.
+  const answered = useAnswerScope(['access:report-requests', 'access:my-requests']);
+  const [answerView, setAnswerView] = useState<Scope | null>(null);
+  const showAnswer = (answer: TenantAnswerFact | null) => {
+    answered.showAnswer(answer);
+    setAnswerView(answer?.intent === 'access:report-requests' && decides ? 'reports' : null);
+  };
+  const effectiveScope: Scope = decides ? (answerView ?? scope) : 'mine';
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<AccessRequest>>(`${ACCESS_API}/requests?scope=${effectiveScope}`, 30_000);
   const all = data?.items ?? [];
-  const rows = filterRequests(all, query, status);
+  const rows = filterRequests(all, query, status).filter((r) => !answered.keys || answered.keys.has(`request:${r.id}`));
   const open = (r: AccessRequest) => navigate(requestHref(r.id));
 
   const adapter = accessCollectionAdapter('requests', {
-    setQuery, setFilter: setStatus, refresh,
+    setQuery, setFilter: setStatus, refresh, showAnswer,
     open(target) {
       if (!data || error) throw new Error('Wait for requests to load before opening one.');
       const r = resolveAccessTarget(target, rows.map((row) => ({ ...row, title: requestTitle(row) })));
@@ -83,7 +93,7 @@ function RequestsWorkspace() {
             search: { value: query, onChange: setQuery, placeholder: 'Search requests', 'aria-label': 'Search requests' },
             filters: [
               ...(decides ? [{
-                id: 'scope', label: 'Whose', value: scope, emptyValue: 'mine', onChange: (v: string) => setScope((v || 'mine') as Scope),
+                id: 'scope', label: 'Whose', value: effectiveScope, emptyValue: 'mine', onChange: (v: string) => { setAnswerView(null); setScope((v || 'mine') as Scope); },
                 options: [{ value: 'mine', label: 'Mine' }, { value: 'reports', label: 'My reports’' }, { value: 'all', label: 'Everyone’s' }],
               }] : []),
               { id: 'status', label: 'Status', value: status, onChange: setStatus, options: STATUS_OPTIONS },

@@ -7,7 +7,7 @@ import { ConfirmDialog, IconButton, InlinePopover, InfoIcon, Stack, T, Tooltip }
 import type { ComposerPrompt } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { ConversationComposer } from '../../lib/conversationComposer';
 import { useSession } from '../../lib/auth';
-import { askTenantAnswer, tenantAnswers } from '../../lib/tenantAnswer';
+import { askTenantAnswer, tenantAnswers, type TenantAnswerFact } from '../../lib/tenantAnswer';
 
 export interface CollectionCommandResult {
   message: string;
@@ -20,6 +20,8 @@ export interface CollectionCommandAdapter {
   scopeNote: string;
   placeholder: string;
   execute(text: string): CollectionCommandResult | Promise<CollectionCommandResult>;
+  /** A page whose rows are the records a fixed-fact answer cites narrows its table to them; null puts the rows back. */
+  showAnswer?(answer: TenantAnswerFact | null): void;
 }
 
 /** A page with no declared adapter must omit the host and document why in its
@@ -53,6 +55,7 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts, inPl
   const submit = async (text: string) => {
     if (disabled || locked.current || pending) return false;
     locked.current = true; setBusy(true);
+    adapter.showAnswer?.(null);
     try {
       const result = await adapter.execute(text);
       setNotice({ text: result.message, tone: 'info' });
@@ -63,7 +66,7 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts, inPl
       // A phrase the page's bounded commands do not know may be a question its workspace can answer from its own
       // records (docs/user-search-goal.md S4); only a rejection asks, and a failed ask keeps the rejection.
       const answer = answering && /not recognized|no matching record/i.test(message) ? await askTenantAnswer(session?.tenant, text) : null;
-      if (answer) { setNotice({ text: answer, tone: 'info', answer: true }); return true; }
+      if (answer) { adapter.showAnswer?.(answer); setNotice({ text: answer.text, tone: 'info', answer: true }); return true; }
       setNotice({ text: message, tone: 'danger' });
       return false;
     } finally { locked.current = false; setBusy(false); }
@@ -90,7 +93,7 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts, inPl
             <T size="xs" tone="secondary">{adapter.scopeNote}</T>
           </Stack>
         </InlinePopover></>}
-      status={notice ? { text: notice.text, tone: notice.tone, onDismiss: () => setNotice(null), 'data-testid': notice.answer ? 'collection-command-answer' : 'collection-command-result' } : null} />
+      status={notice ? { text: notice.text, tone: notice.tone, onDismiss: () => { if (notice.answer) adapter.showAnswer?.(null); setNotice(null); }, 'data-testid': notice.answer ? 'collection-command-answer' : 'collection-command-result' } : null} />
     <ConfirmDialog open={!!pending} title={pending?.title ?? 'Confirm operation'} body={pending?.body ?? ''}
       confirmLabel={pending?.label ?? 'Confirm'} cancelLabel="Keep it" tone="destructive"
       onCancel={() => { setPending(undefined); setNotice({ text: 'Operation dismissed. Nothing was changed.', tone: 'info' }); }}

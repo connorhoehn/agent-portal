@@ -63,7 +63,10 @@ for (const p of data.probes) {
   bySurface.set(k, [...(bySurface.get(k) ?? []), p]);
 }
 for (const ps of bySurface.values()) {
-  const shown = ps.filter((p) => p.verdict !== 'unsupported' && p.evidence?.rowsAfter > 0 && !p.evidence?.url);
+  // Rows that are the page unchanged: a box that changed the table (fewer or other rows than it started with)
+  // responded to the query even when every phrasing of one intent leads to the same records.
+  const shown = ps.filter((p) => p.verdict !== 'unsupported' && p.evidence?.rowsAfter > 0 && !p.evidence?.url
+    && !(p.evidence?.rowsBefore > 0 && p.evidence.rowsAfter !== p.evidence.rowsBefore));
   const sigs = new Set(shown.map((p) => `${p.evidence.rowsAfter}|${(p.evidence.firstRows ?? []).join('|')}`));
   const distinctQueries = new Set(shown.map((p) => p.phrasing.toLowerCase())).size;
   if (shown.length >= 3 && distinctQueries >= 3 && sigs.size === 1) {

@@ -82,6 +82,8 @@ partial. Access excludes four requester intents marked **clone-blind**: access
 requests are "mine" by `session.sub` (`isParty`, `middleware/src/lib/access/rules.ts`
 via `routes/access.ts:292`), so a clone of `u-rhea` owns none of Rhea's
 requests. That is itself gap G7 below; the seed persona would see them.
+(Update 2026-10-16: a clone now stands in for its persona, the marker is removed and
+the four intents count; see the goal's S5 section.)
 
 How to read orgiq's 75%: it is almost all **direct record lookup** on the
 Results tab (a named initiative, a decision title, a skill that is a literal

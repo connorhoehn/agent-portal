@@ -6,7 +6,7 @@
 import type { SearchDoc } from '../search-index/types.js';
 import { words } from '../search-index/tokens.js';
 import type { AnswerIntent, TenantAnswer } from './types.js';
-import { listing, plural, str, toRecords } from './util.js';
+import { hasAll, listing, plural, str, toRecords, topicWords } from './util.js';
 
 const mk = (intent: string, text: string, docs: SearchDoc[], sources: string[]): TenantAnswer =>
   ({ intent: `access:${intent}`, text, records: toRecords(docs), rows: docs.map(d => ({ key: `${d.type}:${d.id}`, title: d.title })), sources });
@@ -58,6 +58,60 @@ const reportRequests: AnswerIntent = {
   },
 };
 
+// ── my requests: pending, rejected, withdrawn, one by id or by what it asks for ──
+const REQ_ID_RE = /\breq-\d+\b/g;
+const FIRST_PERSON_RE = /\b(?:my|mine|me|i|i've|am i)\b/;
+const WHO_RE = /\bwho\b/;
+const OPEN_WORDS = /\b(?:pending|open|waiting|outstanding|in progress|unanswered|undecided)\b/;
+const STATUS_WORDS: ReadonlyArray<readonly [RegExp, string, string]> = [
+  [/\b(?:withdrawn|withdrew|withdraw)\b/, 'withdrawn', 'withdrawn'],
+  [/\b(?:rejected|denied|turned down|declined)\b/, 'rejected', 'rejected'],
+  [/\bapproved\b/, 'approved', 'approved'],
+];
+/** Words that say which requests, not what they ask for. */
+const REQUEST_CUES = ['access', 'request', 'requests', 'requested', 'pending', 'open', 'waiting', 'outstanding', 'rejected', 'denied', 'withdrawn', 'withdrew', 'withdraw', 'approved', 'status', 'closed', 'turned', 'down', 'am', 'still', 'been', 'got', 'get', 'any', 'all'];
+
+const myRequests: AnswerIntent = {
+  id: 'my-requests',
+  async answer(c) {
+    if (WHO_RE.test(c.q)) return null;
+    const ids: string[] = c.q.match(REQ_ID_RE) ?? [];
+    const asksOpen = OPEN_WORDS.test(c.q);
+    const statusWord = STATUS_WORDS.find(([re]) => re.test(c.q));
+    const mine = FIRST_PERSON_RE.test(c.q);
+    const about = /\brequests?\b/.test(c.q) || (/\bwaiting on\b/.test(c.q) && mine);
+    if (!ids.length && !about) return null;
+    if (!ids.length && !mine && !statusWord && !asksOpen) return null;
+    const own = mine || c.reader.principal.role === 'requester';
+    const pool0 = await c.docs(['request'], own ? { party: [c.reader.userId] } : undefined);
+    let pool = ids.length ? pool0.filter(d => ids.includes(d.id.toLowerCase())) : pool0;
+    if (ids.length && !pool.length) return mk('my-requests', `No request ${listing(ids)} is one you can open.`, [], ['request rows you may open']);
+    if (statusWord) pool = pool.filter(d => (d.facets['status'] ?? []).includes(statusWord[1]));
+    else if (asksOpen) pool = pool.filter(d => (d.facets['open'] ?? []).includes('true'));
+    // What the request asks for ("auth migration", "org leader"): every remaining word must be in one request's item.
+    const terms = topicWords(c.q.replace(REQ_ID_RE, ' '), REQUEST_CUES);
+    if (terms.length) {
+      const kept = pool.filter(d => hasAll(str(d, 'item') || d.title, terms));
+      if (!kept.length) return null;
+      pool = kept;
+    }
+    const sorted = [...pool].sort((a, b) => a.id.localeCompare(b.id));
+    const label = statusWord ? statusWord[2] : asksOpen ? 'open' : '';
+    if (sorted.length === 1) {
+      const d = sorted[0]!;
+      // The row's own words: who it waits on while open, and the deciding step's comment once a step decided.
+      const waiting = str(d, 'subtitle').split(' · ').find(bit => bit.startsWith('waiting on'));
+      const decision = /^(?:Approved|Rejected) by /.test(str(d, 'description')) && str(d, 'status') !== 'withdrawn' ? str(d, 'description') : '';
+      return mk('my-requests', `${str(d, 'item') || d.title} (${d.id}) is ${str(d, 'status') || 'open'}${waiting ? `, ${waiting}` : ''}${decision ? `. ${decision.replace(/[.\s]+$/, '')}` : ''}.`, sorted, ['request rows you may open (status, steps)']);
+    }
+    const noun = `${label ? `${label} ` : ''}request`;
+    const text = sorted.length
+      ? `${own ? 'You have' : 'There are'} ${plural(sorted.length, noun)}: ${listing(sorted.slice(0, 8).map(line))}${sorted.length > 8 ? ` and ${sorted.length - 8} more` : ''}.`
+      : `${own ? 'You have' : 'There are'} no ${noun}s that you can open.`;
+    return mk('my-requests', text, sorted.slice(0, 8), ['request rows you may open']);
+  },
+};
+
 const policyOverrides: AnswerIntent = {
   id: 'policy-overrides',
   async answer(c) {
@@ -71,4 +125,4 @@ const policyOverrides: AnswerIntent = {
   },
 };
 
-export const ACCESS_INTENTS: readonly AnswerIntent[] = [policyOverrides, sensitiveItems, reportRequests];
+export const ACCESS_INTENTS: readonly AnswerIntent[] = [policyOverrides, sensitiveItems, reportRequests, myRequests];

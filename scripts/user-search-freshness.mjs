@@ -14,6 +14,8 @@ export const WATCHED = [
   'middleware/src/providers/search.ts',
   'middleware/src/lib/search-index',
   'middleware/src/lib/local-answers',
+  'middleware/src/lib/tenant-answers',
+  'portal/src/lib/tenantAnswer.ts',
   'middleware/src/mock/responses.ts',
   'portal/src/pages/search',
   'portal/src/components/collections',

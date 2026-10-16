@@ -46,6 +46,7 @@ import { RecordLink } from '../decisions/RecordLink';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { submissionsCommandAdapter } from './assessmentCollectionCommands';
+import { useAnswerScope } from '../../components/collections/useAnswerScope';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { useRowSearch } from '../../hooks/useRowSearch';
@@ -204,6 +205,8 @@ function SubmissionRecord({ group, canManage, onDelete }: {
   );
 }
 
+const SUBMISSION_ANSWERS = ['assessment:staged-submissions'] as const;
+
 export default function SubmissionsPage() {
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageSubmissions');
@@ -250,6 +253,10 @@ export default function SubmissionsPage() {
     g.teamId, g.teamName, g.submittedTeamName ?? '', g.formId ? `Form #${g.formId}` : 'Manual submission',
     g.current.envelope_id, g.current.submitter_name ?? '', g.processed ? 'Processed' : 'Unprocessed',
   ].join(' '));
+
+  // "Which submissions are staged" answers as a fact; the table then lists the submissions it cites.
+  const scope = useAnswerScope(SUBMISSION_ANSWERS);
+  const shown = scope.keys ? search.rows.filter((g) => scope.keys!.has(`submission:${g.current.envelope_id}`)) : search.rows;
 
   function goToAdd() {
     setParams((p) => { p.set('view', 'add'); return p; });
@@ -310,7 +317,7 @@ export default function SubmissionsPage() {
     );
   }
 
-  const adapter = submissionsCommandAdapter({ setQuery: search.setQuery, refresh: load });
+  const adapter = submissionsCommandAdapter({ setQuery: search.setQuery, refresh: load, showAnswer: scope.showAnswer });
 
   const confirmations = (
     <>
@@ -350,10 +357,10 @@ export default function SubmissionsPage() {
           {...(data ? { count: groups.length } : {})}
           search={{ value: search.query, onChange: search.setQuery, placeholder: 'Find a submission' }}
           groups={[
-            { id: 'unprocessed', title: 'Unprocessed', count: search.rows.filter((g) => !g.processed).length },
-            { id: 'processed', title: 'Processed', count: search.rows.filter((g) => g.processed).length },
+            { id: 'unprocessed', title: 'Unprocessed', count: shown.filter((g) => !g.processed).length },
+            { id: 'processed', title: 'Processed', count: shown.filter((g) => g.processed).length },
           ]}
-          rows={search.rows.map((g) => ({
+          rows={shown.map((g) => ({
             id: g.key,
             groupId: g.processed ? 'processed' : 'unprocessed',
             title: g.teamName,
@@ -413,7 +420,7 @@ export default function SubmissionsPage() {
       <CollectionToolbar
         label="Submission filters"
         search={{ value: search.query, onChange: search.setQuery, placeholder: 'Search submissions', 'aria-label': 'Search submissions' }}
-        summary={data ? `${search.rows.length} of ${groups.length} submissions` : undefined}
+        summary={data ? `${shown.length} of ${groups.length} submissions` : undefined}
         onRefresh={load}
         refreshing={loading}
         {...(canManage ? {
@@ -452,7 +459,7 @@ export default function SubmissionsPage() {
         />
       ) : (
         <DataTable<SubmissionRevisionGroup>
-          data={search.rows}
+          data={shown}
           keyField={(g) => g.key}
           striped
           loading={loading && !data}

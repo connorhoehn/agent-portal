@@ -212,3 +212,29 @@ so a clone of a persona searches as that persona.
   were stale against the content lane's fixtures and were re-derived; `expected.derived`
   marks facts (a count, an absence, a live tally) that no single seed row carries.
 
+
+## Built (2026-10-16): S5, every tenant at 100%
+
+- **Why four assessment and two access intents read partial.** Their command-box
+  answers were right, but the table under the box did not change, and the report's
+  "the box ignored the query" cap (same rows for every phrasing) graded them down.
+  The fix is in the product: a fixed-fact answer now also narrows the page's table
+  to the records it cites (`portal/src/components/collections/useAnswerScope.ts`;
+  `CollectionCommandAdapter.showAnswer`; dismissing the answer, or `reset filters`,
+  puts the rows back). Wired on the assessor's desk (teams without a lead),
+  question queue (open exceptions; an answered question widens the status),
+  submissions (staged), access catalog (sensitive) and requests (a report's
+  requests switch the view to the reports'; my requests). The report's cap now
+  skips a box whose rows differ from the unfiltered page (`scripts/user-search-report.mjs`),
+  because narrowing to the same cited records for every phrasing is the answer, not
+  an ignored query.
+- **Access requester intents.** The four marked clone-blind (x-my-pending,
+  x-request-status, x-why-rejected, x-withdrawn) were stale: a clone has stood in for
+  its persona since `b060f172`/`b9a4471e`, and the palette already found Rhea's
+  requests. The marker is removed (they count in the rate) and
+  `lib/tenant-answers/access.ts` answers them (`access:my-requests`: pending, rejected,
+  withdrawn, one request by id or by what it asks for).
+- **Measured** (2026-10-16 full probe): orgiq, assessment, social, pipelines, access
+  all 100% (18/18, 16/16 for access), wrong on the best surface 0. The best surface
+  of a-answered and x-reports-requests is the page's list search, which still does not
+  surface them; the command box does.

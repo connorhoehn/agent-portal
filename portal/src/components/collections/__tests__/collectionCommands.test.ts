@@ -52,3 +52,16 @@ test('resolveCollectionTarget: exact id, unique title, never fuzzy or bulk', () 
   assert.throws(() => resolveCollectionTarget('billing', rows), /multiple/);
   assert.throws(() => resolveCollectionTarget('Auth*', rows), /No matching/);
 });
+
+test('a page that narrows its rows to an answer gets the hook, and reset puts the rows back', async () => {
+  const seen: Array<string | null> = [];
+  const adapter = collectionCommandAdapter({ noun: 'teams' }, {
+    setQuery: () => undefined, refresh: () => undefined, scopeNote: 'Loaded rows.',
+    showAnswer: (answer) => { seen.push(answer ? answer.intent : null); },
+  });
+  adapter.showAnswer?.({ text: 'Every team has a lead.', intent: 'assessment:unassigned-teams', records: [] });
+  await adapter.execute('reset filters');
+  assert.deepEqual(seen, ['assessment:unassigned-teams', null]);
+  const plain = collectionCommandAdapter({ noun: 'teams' }, { setQuery: () => undefined, refresh: () => undefined, scopeNote: 'Loaded rows.' });
+  assert.equal(plain.showAnswer, undefined);
+});

@@ -115,3 +115,26 @@ describe('access', () => {
     expect(await ask('access', priya, '')).toBeNull();
   });
 });
+
+describe('access: my requests', () => {
+  test('a requester asks about her own requests by state, id and item; the facts are the request rows', async () => {
+    const open = await ask('access', rhea, 'what am I waiting on');
+    expect(open?.intent).toBe('access:my-requests');
+    expect(open!.records.length).toBeGreaterThan(0);
+    for (const q of ['my pending access requests', 'my open requests']) expect((await ask('access', rhea, q))!.records.map(r => r.id)).toEqual(open!.records.map(r => r.id));
+    const rejected = await ask('access', rhea, 'why was my org leader request rejected');
+    expect(rejected!.records).toHaveLength(1);
+    expect(rejected!.text).toMatch(/rejected/i);
+    expect((await ask('access', rhea, 'rejected requests'))!.records.map(r => r.id)).toEqual(rejected!.records.map(r => r.id));
+    const withdrawn = await ask('access', rhea, 'requests I withdrew');
+    expect(withdrawn!.records.length).toBeGreaterThan(0);
+    expect((await ask('access', rhea, 'my moderator request'))!.records.map(r => r.id)).toEqual(withdrawn!.records.map(r => r.id));
+    const one = await ask('access', rhea, `status of ${open!.records[0]!.id}`);
+    expect(one!.records.map(r => r.id)).toEqual([open!.records[0]!.id]);
+    expect((await ask('access', rhea, 'where is my auth migration request'))!.records).toHaveLength(1);
+  });
+
+  test('an id the reader cannot open is said so, never guessed', async () => {
+    expect((await ask('access', rhea, 'status of req-9999'))!.text).toMatch(/No request req-9999/);
+  });
+});
