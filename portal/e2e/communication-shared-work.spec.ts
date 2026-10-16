@@ -218,8 +218,10 @@ test('an unbound group opens its page discussion inside the plane', async ({ bro
   const pane = page.getByTestId('plane-group-pane');
   await expect(pane.getByTestId('scope-discussion-panel')).toBeVisible({ timeout: 20_000 });
   await expect(pane.getByTestId('plane-group-open-page')).toBeVisible();
-  // A participant without ManageChannels is told nothing is bound; Bind is a moderator's.
-  await expect(pane.getByTestId('plane-group-binding')).toContainText('No Social channel bound');
+  // A participant without ManageChannels gets no binding strip at all (PlaneGroupPane draws it only for a bound channel or a
+  // moderator who can bind one); the pane names where the discussion lives instead.
+  await expect(pane.getByTestId('plane-group-binding')).toHaveCount(0);
+  await expect(pane.getByTestId('plane-group-destination')).toBeVisible();
   expect(theo.social.filter((p) => !ALLOWED_SOCIAL.test(p))).toEqual([]);
   expect(theo.errors, 'page errors').toEqual([]);
   await theo.context.close();

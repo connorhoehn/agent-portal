@@ -342,7 +342,8 @@ export async function socialDirectMessages(userId: string, names: Map<string, st
 socialRouter.get('/dms', socialGate('ViewSocial'), socialHandler('get /dms', asyncHandler(async (req, res) => {
   const directory = await listUsers();
   const names = new Map(directory.map((u) => [u.id, u.displayName]));
-  const conversations = await socialDirectMessages(me(req), names);
+  // Direct messages are listed under the session's own id: a clone reads its copies of its persona's (lib/clone-dms.ts).
+  const conversations = await socialDirectMessages(req.session?.sub ?? '', names);
   res.json({ conversations: withPeerAvatars(conversations, await userAvatars(directory)) });
 })));
 
@@ -355,7 +356,7 @@ function withPeerAvatars<Row extends { peers: Array<{ userId: string; displayNam
 
 socialEmbedRouter.post('/dms/read', socialGate('ViewSocial'), asyncHandler(async (req, res) => {
   const session = sessionOf(req);
-  const userId = recordUserId(session.sub);
+  const userId = session.sub; // a clone's DMs are its own copies (lib/clone-dms.ts)
   const channel = typeof (req.body as { channel?: unknown } | undefined)?.channel === 'string' ? String((req.body as { channel: string }).channel) : '';
   const ids = dmMembers(channel);
   if (!ids || new Set(ids).size < 2 || dmChannelFor(ids) !== channel) throw new ValidationError('name a sorted, distinct DM (channel: social:dm:<ids>)');
@@ -545,7 +546,7 @@ socialEmbedRouter.get('/embedded', socialGate('ViewSocial'), asyncHandler(async 
       .sort((a, b) => a.displayName.localeCompare(b.displayName) || a.userId.localeCompare(b.userId));
     await socialChat().ready;
     const bounds = { hasMore: false };
-    const conversations = await socialDirectMessages(recordUserId(gate.session.sub), names, 50, fences, bounds);
+    const conversations = await socialDirectMessages(gate.session.sub, names, 50, fences, bounds);
     // Directory/chat reads can outlive revocation. No roster or message preview
     // escapes unless the requesting source/actor and read action remain current.
     const current = await currentSocialActionSession(gate.session, 'ViewSocial');
@@ -595,7 +596,7 @@ socialEmbedRouter.get('/share-destinations', socialGate(['ViewSocial', 'PostMess
   const fences = new Set<SocialMembershipProof>();
   let dms;
   try {
-    dms = await socialDirectMessages(userId, names, 50, fences, { hasMore: false });
+    dms = await socialDirectMessages(gate.session.sub, names, 50, fences, { hasMore: false });
     const allowed = new Set([...fences].filter(proof => proof.allows()).map(proof => proof.channel));
     dms = dms.filter(row => allowed.has(row.channel));
   } finally { for (const proof of fences) proof.dispose(); }
@@ -679,7 +680,7 @@ socialEmbedRouter.delete('/bindings', socialGate('ManageChannels', { grantIn: co
 // route gave. The DM itself is only ever read and written in the social shell.
 socialEmbedRouter.post('/dms', socialGate('PostMessage'), asyncHandler(async (req, res) => {
   const gate = { session: sessionOf(req) };
-  const userId = recordUserId(gate.session.sub);
+  const userId = gate.session.sub; // a clone opens its own DMs (lib/clone-dms.ts)
   const target = typeof (req.body as { userId?: unknown } | undefined)?.userId === 'string' ? String((req.body as { userId: string }).userId).trim() : '';
   if (!target) throw new ValidationError('name the person to message (userId)');
   if (target === userId) throw new ValidationError('a direct message needs someone other than you');

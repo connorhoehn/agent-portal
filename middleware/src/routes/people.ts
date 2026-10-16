@@ -21,7 +21,7 @@ import { listUsers } from '../providers/identity.js';
 import { userAvatars } from '../providers/user-avatars.js';
 import { socialChat } from '../lib/social-chat.js';
 import { unreadFor } from '../mock/social-channels.js';
-import { recordUserId } from '../lib/record-owner.js';
+import { mirrorCloneDms } from '../lib/clone-dms.js';
 
 export const peopleRouter = Router();
 
@@ -70,8 +70,9 @@ peopleRouter.get('/conversations', requireSession('SharedPeopleConversations'), 
   const session = await currentLiveSession(signed);
   const tenant = session.tenant;
   const prefix = `${tenant}:dm:`;
-  // A clone lists its persona's conversations (lib/record-owner.ts).
-  const self = recordUserId(session.sub);
+  // A clone lists its own copies of its persona's conversations (lib/clone-dms.ts).
+  const self = session.sub;
+  await mirrorCloneDms(self);
   const chat = socialChat();
   let directory; let rows;
   try {

@@ -36,7 +36,7 @@ import {
   socialTeamMembersFixture, socialTeamsFixture,
 } from '../../mock/social-platform.js';
 import { socialChannelMessagesFixture } from '../../mock/social-channels.js';
-import { channelForSlug, dmMembers, SOCIAL_CHANNEL_PREFIX, SOCIAL_DM_PREFIX, slugForChannel, socialChat } from '../social-chat.js';
+import { channelForSlug, dmMembers, namesForeignClone, SOCIAL_CHANNEL_PREFIX, SOCIAL_DM_PREFIX, slugForChannel, socialChat } from '../social-chat.js';
 import type { ChatMessage, PinnedMessage } from '@connorhoehnslalom/realtime-modules/chat';
 import { isoOrNull } from './orgiq.js';
 import { noteSearchWrite } from './writes.js';
@@ -248,7 +248,7 @@ export async function buildSocialDocs(partition: string): Promise<TenantBuild> {
   }
   // DMs: every direct-message channel the chat store knows (mock: the registered rows; the durable store lists them per person as they are written).
   if (config.mock.aurora) {
-    for (const m of socialChannelMessagesFixture.rows()) if (m.channel.startsWith(SOCIAL_DM_PREFIX)) conversations.set(m.channel, true);
+    for (const m of socialChannelMessagesFixture.rows()) if (m.channel.startsWith(SOCIAL_DM_PREFIX) && !namesForeignClone(m.channel, '')) conversations.set(m.channel, true); // a clone's DM copies are its own (lib/clone-dms.ts)
   } else partial.push('Direct messages are indexed as they are written, not backfilled');
 
   for (const [channel, isPrivate] of conversations) {

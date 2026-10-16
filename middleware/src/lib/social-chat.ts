@@ -109,6 +109,15 @@ export function tenantDmMembers(channel: string): string[] | null {
   return parsed?.kind === 'dm' ? parsed.members : null;
 }
 
+/**
+ * A DM copy made for an identity clone (lib/clone-dms.ts) is named for the clone. It belongs to that clone alone: the
+ * persona and the peer must not list it, index it or be offered it, so a conversation naming a clone id is hidden from
+ * every viewer but that clone.
+ */
+export function namesForeignClone(channel: string, viewer: string): boolean {
+  return (tenantDmMembers(channel) ?? []).some(id => id !== viewer && id.includes('-clone-'));
+}
+
 // ── Config ───────────────────────────────────────────────────────────────────
 
 export interface SocialChatConfig {
@@ -406,7 +415,7 @@ export function rowsConversations(
       }
       // A DM opened but not yet written to still lists (Dynamo's recordJoin row).
       for (const j of joins.rows()) if (j.userId === userId && tenantDmMembers(j.channel)?.includes(userId)) channels.add(j.channel);
-      return [...channels].map((channel) => {
+      return [...channels].filter((channel) => !namesForeignClone(channel, userId)).map((channel) => {
         const last = latestMessage(messages(), channel);
         return {
           channel,
@@ -649,7 +658,7 @@ export function createSocialChatBackend(cfg: SocialChatConfig = socialChatConfig
   const membershipStore = new MirroredMembershipStore(() => mirror, store.members,
     client instanceof DynamoDispatchQueue ? read => client.dispatchMembershipRead(read) : undefined);
   const conversations: SocialConversations = {
-    listForUser: async (userId) => (await store.conversations.listForUser(userId)).map((r) => ({
+    listForUser: async (userId) => (await store.conversations.listForUser(userId)).filter((r) => !namesForeignClone(r.channel, userId)).map((r) => ({
       channel: r.channel, peers: r.peers, lastMessageAt: r.lastMessageAt || null,
       lastMessagePreview: r.lastMessagePreview || null, lastMessageUserId: r.lastMessageUserId,
     })),

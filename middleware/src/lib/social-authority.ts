@@ -33,6 +33,7 @@ import type { Request, RequestHandler } from 'express';
 import { AppError, asyncHandler, SessionInvalidError } from './async-handler.js';
 import { currentLiveSession, socialActionRole } from './live-principal.js';
 import type { Session } from './session.js';
+import { mirrorCloneDms } from './clone-dms.js';
 
 export const SOCIAL_GATE_REFUSAL = 'Your Social grants do not allow this action';
 
@@ -104,6 +105,7 @@ export function socialGate(action: SocialGateAction, opts: SocialGateOptions = {
       }
       throw error;
     }
+    await mirrorCloneDms(req.session.sub); // a clone's copies of its persona's DMs exist before any handler reads them
     next();
   });
 }

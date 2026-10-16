@@ -29,7 +29,9 @@ export function directMessageMembers(channel: string): string[] {
   return members;
 }
 async function membership(channel: string, session: Session) {
-  const self = recordUserId(session.sub); // a clone is in its persona's DMs (lib/record-owner.ts)
+  // A clone is in its own copies of its persona's DMs (lib/clone-dms.ts), and still in the persona's.
+  const members = directMessageMembers(channel);
+  const self = members.includes(session.sub) ? session.sub : recordUserId(session.sub);
   if (!directMessageMembers(channel).includes(self)) throw new AppError(403, 'Not a member of this direct message');
   const proof = await currentSocialMembershipProof(channel, self);
   if (!proof.allows()) { proof.dispose(); throw new AppError(403, 'Not a member of this direct message'); }
