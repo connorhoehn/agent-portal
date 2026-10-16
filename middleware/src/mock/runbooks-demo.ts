@@ -12,9 +12,10 @@
 //   3  Vera Green, who owns the runbook, opens the edit and accepts it with a
 //      note — over HTTP as Vera, through the real `ReviewRunbook` gate, the
 //      real stale-base check and the real store.
-//   4  Nora sends Cleo at the refresh-loop bug. The brief frozen for Cleo's run
-//      carries the SSO runbook at v2, new step included. The director checks
-//      that, and says so in its state.
+//   4  Nora sends Cleo at the refresh-loop bug. Cleo's box is given the org's
+//      skill library with the SSO skill at v2, new step included (R8: procedures
+//      reach a box only as skills; the brief records the library). The director
+//      checks that, and says so in its state.
 //
 // WHAT IT WRITES, AND HOW. Briefs go through freezeBrief, the proposal through
 // the store with the same lint and attribution the route gives a run's proposal
@@ -31,7 +32,7 @@ import { randomUUID } from 'node:crypto';
 import { clock } from './core/index.js';
 import { freezeBrief } from '../lib/run-brief.js';
 import { runbookStore } from '../lib/runbooks/store-select.js';
-import { findSimilar, lintRunbook, type RunbookProposal, type SessionBrief } from '../lib/runbooks/index.js';
+import { findSimilar, lintRunbook, loadSkillLibrary, type RunbookProposal, type SessionBrief } from '../lib/runbooks/index.js';
 import { repoLintContext } from '../lib/runbooks/repo-context.js';
 import {
   ADDED_STEP_DO, BEATS, CAST, FIRST_RUN, RATIONALE, REVIEW_NOTE, RUNBOOK_ID, SECOND_RUN, beatMs, proposedDoc, type DemoRun,
@@ -176,9 +177,12 @@ class Client {
 
 // ─── The story ──────────────────────────────────────────────────────────────
 
-function sso(brief: SessionBrief): { version: number | null; text: string } {
-  const sec = brief.sections.find((s) => s.kind === 'runbook' && s.ref === RUNBOOK_ID);
-  return { version: sec?.version ?? null, text: brief.markdown };
+/** R8: which version of the SSO skill the run's box was given (the library its brief recorded), and that skill's text. */
+async function sso(brief: SessionBrief): Promise<{ version: number | null; text: string }> {
+  const version = brief.skill_library?.skills.find((k) => k.name === RUNBOOK_ID)?.version ?? null;
+  const lib = await loadSkillLibrary(runbookStore());
+  const skill = lib.files.find((f) => f.path === `${RUNBOOK_ID}/SKILL.md`);
+  return { version, text: skill?.content ?? '' };
 }
 
 async function dispatch(run: DemoRun): Promise<SessionBrief> {
@@ -195,7 +199,7 @@ async function tell(baseUrl: string, signal: Signal): Promise<void> {
   await sleepUntilBeat(FIRST_RUN.startBeat, t0, signal);
   if (signal.cancelled) return;
   const first = await dispatch(FIRST_RUN);
-  const firstSso = sso(first);
+  const firstSso = await sso(first);
   if (firstSso.version === null) throw new Error(`runbooks demo: ${FIRST_RUN.agent}'s brief does not carry ${RUNBOOK_ID}`);
   state.first = { runRef: first.run_ref, sha256: first.sha256, runbookVersion: firstSso.version };
   state.milestones.firstBrief = true;
@@ -247,7 +251,7 @@ async function tell(baseUrl: string, signal: Signal): Promise<void> {
   await sleepUntilBeat(SECOND_RUN.startBeat, t0, signal);
   if (signal.cancelled) return;
   const second = await dispatch(SECOND_RUN);
-  const secondSso = sso(second);
+  const secondSso = await sso(second);
   state.second = { runRef: second.run_ref, sha256: second.sha256, runbookVersion: secondSso.version };
   state.milestones.secondBrief = true;
   state.milestones.secondBriefCarriesAccepted = secondSso.version !== null

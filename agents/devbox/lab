@@ -20,7 +20,22 @@
 #       a person reads on the run (same sha256, checked here).
 #
 #   lab runbook <runbook-id>
-#       Print a runbook the brief listed under "Also available".
+#       Print one of the org's skills (a runbook) as markdown, at the version
+#       this run was given.
+#
+#   lab skills
+#       Sync the org's skill library into ~/.claude/skills (LAB_SKILLS_DIR):
+#       every published runbook as <id>/SKILL.md + scripts/ + data/. One copy,
+#       skipped when the library's sha is unchanged; every file's sha256, the
+#       set's sha and every path are verified before anything is replaced.
+#       `lab brief` runs it first. Never overwrites a skill it did not install.
+#
+#   lab keep [--dry-run]
+#       Propose each tool you kept in .lab/keep/<rb-name>/ (SKILL.md + scripts/
+#       + data/) as a new skill, or an edit of an installed one, with its
+#       files. The SessionEnd hook runs it. A person reviews every proposal;
+#       nothing reaches the library until they accept it. --dry-run prints the
+#       proposal bodies and sends nothing.
 #
 #   lab applied <runbook-id> <followed|followed_with_deviation|failed|not_used> [--step N] ["note"]
 #       Say whether you followed a runbook from your brief. A run that failed
@@ -48,10 +63,12 @@
 #                       that proves it (brief, applied, propose, runbook); set by
 #                       main.py from the invoke payload, absent outside a run
 #   LAB_SESSION_ID / LAB_BOX_ID / LAB_REPO / LAB_INITIATIVE_ID / LAB_WORK_ITEM_ID  attribution
+#   LAB_SKILLS_DIR      where `lab skills` installs (default ~/.claude/skills)
+#   LAB_KEEP_DIR        where `lab keep` looks (default .lab/keep)
 set -euo pipefail
 
 BASE="${LAB_API_BASE:-}"
-if [ -z "$BASE" ]; then
+if [ -z "$BASE" ] && ! { [ "${1:-}" = "keep" ] && [ "${2:-}" = "--dry-run" ]; }; then
   echo "lab: LAB_API_BASE is not set — the lab loop is not wired in this environment." >&2
   exit 0   # soft: a missing loop must never fail an agent's bash step
 fi
@@ -118,6 +135,106 @@ get() { # $1=path+query
   curl -sS --max-time 15 ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} "$BASE$1"
 }
 
+SKILLS_DIR="${LAB_SKILLS_DIR:-${HOME:-/tmp}/.claude/skills}"
+
+# lab skills: one copy of the org's skill library, verified, skipped when unchanged.
+sync_skills() { # $1 = --quiet
+  local quiet="${1:-}" tmp code have=""
+  mkdir -p "$SKILLS_DIR"
+  have=$(python3 -I -c 'import json,sys
+try: print(json.load(open(sys.argv[1]))["sha256"])
+except Exception: print("")' "$SKILLS_DIR/.orgiq-library.json")
+  tmp=$(mktemp -d)
+  local target="/api/runs/$(urlq "$LAB_RUN_REF")/skills"
+  sign GET "$PREFIX$target" ""
+  # --max-filesize: the library is capped at 8 MiB of content; a response far past that is refused unread.
+  code=$(curl -sS --max-time 30 --max-filesize 33554432 -o "$tmp/body" -D "$tmp/head" -w '%{http_code}' \
+    ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} ${have:+-H "If-None-Match: \"$have\""} "$BASE$target" || echo 000)
+  if [ "$code" = "304" ]; then
+    [ -n "$quiet" ] || echo "skills: library ${have:0:12} unchanged in $SKILLS_DIR"
+    rm -rf "$tmp"; return 0
+  fi
+  if [ "$code" != "200" ]; then
+    echo "skills: could not fetch the org's skill library (HTTP $code); the skills already in $SKILLS_DIR stay."
+    rm -rf "$tmp"; return 0
+  fi
+  python3 -I - "$tmp/body" "$tmp/head" "$SKILLS_DIR" <<'PY'
+import hashlib, json, os, re, shutil, sys, tempfile
+body_path, head_path, skills_dir = sys.argv[1:4]
+FMT = "orgiq-skill-library/1"
+NAME = re.compile(r"^rb-[a-z0-9][a-z0-9-]{1,60}$")
+SEG = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
+FILE_MAX, LIB_MAX = 32 * 1024, 8 * 1024 * 1024
+def refuse(why):
+    print(f"skills: REFUSED the library ({why}); the skills already in {skills_dir} stay.")
+    sys.exit(0)
+raw = open(body_path, "rb").read()
+if len(raw) > 4 * LIB_MAX: refuse("response too large")
+lib = json.loads(raw)
+want = ""
+for line in open(head_path, encoding="latin-1"):
+    k, _, v = line.partition(":")
+    if k.strip().lower() == "x-skill-library-sha256": want = v.strip()
+if lib.get("format") != FMT: refuse("unknown format")
+total = 0
+lines = []
+by_skill = {}
+for f in lib.get("files", []):
+    path, content, mode, sha = f.get("path", ""), f.get("content", ""), f.get("mode"), f.get("sha256", "")
+    parts = path.split("/")
+    # <rb-name>/SKILL.md, or <rb-name>/(scripts|data)/<safe segments>: nothing absolute, nothing that climbs.
+    ok = (len(parts) >= 2 and NAME.match(parts[0]) and
+          ((len(parts) == 2 and parts[1] == "SKILL.md") or
+           (len(parts) >= 3 and parts[1] in ("scripts", "data") and all(SEG.match(p) for p in parts[2:]))))
+    if not ok: refuse(f"unsafe path {path!r}")
+    if mode not in ("644", "755"): refuse(f"bad mode on {path}")
+    data = content.encode("utf-8")
+    if len(data) > FILE_MAX: refuse(f"{path} is over {FILE_MAX} bytes")
+    if hashlib.sha256(data).hexdigest() != sha: refuse(f"{path} does not match its sha256")
+    total += len(data)
+    lines.append(f"{path} {mode} {sha}")
+    by_skill.setdefault(parts[0], []).append((parts[1:], data, mode))
+if total > LIB_MAX: refuse("library over its size cap")
+got = hashlib.sha256(("\n".join([FMT] + sorted(lines)) + "\n").encode()).hexdigest()
+if got != lib.get("sha256") or (want and got != want): refuse("the set does not match its sha256")
+state_path = os.path.join(skills_dir, ".orgiq-library.json")
+try: prev = set(json.load(open(state_path))["skills"])
+except Exception: prev = set()
+stage = tempfile.mkdtemp(prefix=".orgiq-stage-", dir=skills_dir)
+installed, skipped = [], []
+try:
+    for name in sorted(by_skill):
+        root = os.path.join(stage, name)
+        for parts, data, mode in by_skill[name]:
+            dest = os.path.join(root, *parts)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), int(mode, 8))
+            with os.fdopen(fd, "wb") as fh: fh.write(data)
+        target = os.path.join(skills_dir, name)
+        if os.path.lexists(target) and name not in prev:
+            skipped.append(name)  # someone else's skill of that name: never overwrite it
+            continue
+        if os.path.islink(target) or os.path.isfile(target): os.unlink(target)
+        elif os.path.isdir(target): shutil.rmtree(target)
+        os.rename(root, target)
+        installed.append(name)
+    removed = sorted(n for n in prev - set(by_skill) if NAME.match(n))
+    for name in removed:
+        t = os.path.join(skills_dir, name)
+        if os.path.isdir(t) and not os.path.islink(t): shutil.rmtree(t)
+finally:
+    shutil.rmtree(stage, ignore_errors=True)
+with open(state_path + ".tmp", "w") as fh:
+    json.dump({"sha256": got, "skills": installed}, fh, sort_keys=True)
+os.replace(state_path + ".tmp", state_path)
+msg = f"skills: installed the org's library {got[:12]}: {len(installed)} skill(s) in {skills_dir}"
+if removed: msg += f", {len(removed)} retired removed"
+if skipped: msg += f"; skipped {', '.join(skipped)} (a skill of that name is already there and is not the library's)"
+print(msg)
+PY
+  rm -rf "$tmp"
+}
+
 common_fields() {
   printf '"sessionId":%s,"boxId":%s,"repo":%s,"initiativeId":%s' \
     "$(json_escape "${LAB_SESSION_ID:-}")" "$(json_escape "${LAB_BOX_ID:-}")" \
@@ -143,6 +260,8 @@ case "$cmd" in
       echo "No session brief: this session was not started by a dispatched run."
       exit 0   # soft: an interactive session has no brief, and SessionStart must not fail
     fi
+    # The org's skills first (one verified copy, skipped when unchanged), then the brief that points at them.
+    sync_skills
     tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
     target="/api/runs/$(urlq "$LAB_RUN_REF")/brief?format=markdown"
     sign GET "$PREFIX$target" ""
@@ -165,6 +284,109 @@ got = hashlib.sha256(body).hexdigest()
 if want and got != want:
     print(f"lab: WARNING the brief bytes do not match their sha ({got} != {want})", file=sys.stderr)
 ' "$tmp/body" "$tmp/head"
+    ;;
+  skills)
+    need_run "sync"
+    sync_skills "${1:-}"
+    ;;
+  keep)
+    dry=""; [ "${1:-}" = "--dry-run" ] && dry=1
+    keep_dir="${LAB_KEEP_DIR:-.lab/keep}"
+    [ -d "$keep_dir" ] || { [ -n "$dry" ] || echo "lab: nothing kept ($keep_dir does not exist)."; exit 0; }
+    bodies=$(LAB_SKILLS_DIR="$SKILLS_DIR" python3 -I - "$keep_dir" "${LAB_RUN_REF:-}" "${LAB_SESSION_ID:-}" <<'PY'
+import json, os, re, stat, sys
+keep, run_ref, session = sys.argv[1:4]
+skills_dir = os.environ["LAB_SKILLS_DIR"]
+NAME = re.compile(r"^rb-[a-z0-9][a-z0-9-]{1,60}$")
+SEG = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
+FILE_MAX, BUNDLE_MAX, MAX_FILES = 32 * 1024, 80 * 1024, 24
+try:
+    installed = set(json.load(open(os.path.join(skills_dir, ".orgiq-library.json")))["skills"])
+except Exception:
+    installed = set()
+for name in sorted(os.listdir(keep)):
+    base = os.path.join(keep, name)
+    if os.path.islink(base) or not os.path.isdir(base):
+        continue
+    problems = []
+    if not NAME.match(name):
+        problems.append("the folder name must look like rb-some-name (it becomes the skill's name)")
+    skill_md = os.path.join(base, "SKILL.md")
+    if os.path.islink(skill_md) or not os.path.isfile(skill_md):
+        problems.append("no SKILL.md")
+    files = []
+    total = 0
+    for root_name in ("scripts", "data"):
+        top = os.path.join(base, root_name)
+        if not os.path.exists(top):
+            continue
+        for dirpath, dirnames, filenames in os.walk(top, followlinks=False):
+            for d in dirnames:
+                if os.path.islink(os.path.join(dirpath, d)):
+                    problems.append(f"{os.path.relpath(os.path.join(dirpath, d), base)} is not a regular file (links are not carried)")
+            dirnames[:] = sorted(d for d in dirnames if not os.path.islink(os.path.join(dirpath, d)))
+            for fn in sorted(filenames):
+                full = os.path.join(dirpath, fn)
+                rel = os.path.relpath(full, base).replace(os.sep, "/")
+                st = os.lstat(full)
+                # Never follow a link: a kept "file" that points at ~/.ssh would ship a key.
+                if not stat.S_ISREG(st.st_mode):
+                    problems.append(f"{rel} is not a regular file (links are not carried)")
+                    continue
+                if not all(SEG.match(p) for p in rel.split("/")[1:]):
+                    problems.append(f"{rel}: a name outside [A-Za-z0-9._-] or starting with . or -")
+                    continue
+                if st.st_size > FILE_MAX:
+                    problems.append(f"{rel} is {st.st_size} bytes (max {FILE_MAX})")
+                    continue
+                raw = open(full, "rb").read()
+                if b"\0" in raw:
+                    problems.append(f"{rel} is binary (only text is carried)")
+                    continue
+                try:
+                    text = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    problems.append(f"{rel} is not UTF-8 text")
+                    continue
+                total += len(raw)
+                files.append({"path": rel, "content": text, "mode": "755" if (st.st_mode & 0o111) else "644"})
+    if len(files) > MAX_FILES:
+        problems.append(f"{len(files)} files (max {MAX_FILES})")
+    if total > BUNDLE_MAX:
+        problems.append(f"the files total {total} bytes (max {BUNDLE_MAX})")
+    if problems:
+        print(json.dumps({"name": name, "problems": problems}))
+        continue
+    edit = name in installed
+    body = {
+        "kind": "edit" if edit else "new",
+        "skill_md": open(skill_md, encoding="utf-8").read(),
+        "files": files,
+        "rationale": f"Kept by run {run_ref or '(no run)'} in .lab/keep/{name}: a tool this run built and wants every box to have.",
+        "source": {"run_ref": run_ref, "session_id": session, "lab_experience_ids": []},
+    }
+    if edit:
+        body["runbook_id"] = name
+    print(json.dumps({"name": name, "body": body}, sort_keys=True))
+PY
+)
+    if [ -n "$dry" ]; then printf '%s\n' "$bodies"; exit 0; fi
+    need_run "propose"
+    [ -n "$bodies" ] || { echo "lab: nothing kept in $keep_dir."; exit 0; }
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      name=$(printf '%s' "$line" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["name"])')
+      problems=$(printf '%s' "$line" | python3 -I -c 'import json,sys; d=json.load(sys.stdin); print("; ".join(d.get("problems", [])))')
+      if [ -n "$problems" ]; then echo "not proposed: $name — $problems"; continue; fi
+      body=$(printf '%s' "$line" | python3 -I -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["body"]))')
+      post /api/runbooks/proposals "$body" | python3 -I -c 'import json,sys
+r=json.load(sys.stdin); p=r.get("proposal"); n=sys.argv[1]
+if p:
+    errs=[f for f in p.get("lint",[]) if f.get("severity")=="error"]
+    print("proposed: " + n + " as " + p["id"] + " with " + str(len(p.get("proposed_files") or [])) + " file(s) — a person reviews it" + (f"; {len(errs)} lint error(s) to fix first" if errs else ""))
+else:
+    print("not proposed: " + n + " — " + str(r.get("error")) + "".join("\n  " + str(x) for x in r.get("problems", [])))' "$name"
+    done <<<"$bodies"
     ;;
   runbook)
     need_run "fetch"
@@ -254,7 +476,7 @@ except Exception: print("pending")')
     exit 0   # soft: an unanswered consult must not fail the run
     ;;
   *)
-    sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,70p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

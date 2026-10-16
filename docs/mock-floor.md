@@ -235,7 +235,7 @@ fixtures through the scope, across awaits and timers the handler starts). No
 other request sees it. `{ scenario }` scopes every fixture;
 `{ scenario, fixture }` only that one (the rest of the scope is `default`);
 `{ fixtures: { key: scenario }, scenario? }` several over an optional base.
-`demo` and `runbooks-demo` are refused: their directors are process-wide.
+`demo`, `runbooks-demo` and `runbooks-tools-demo` are refused: their directors are process-wide.
 
 **Copy-on-write.** The first read of a fixture inside a scope materializes the
 scope's own rows — a `structuredClone` of the shared rows of that scenario if
@@ -286,7 +286,7 @@ than half-scoped:
 - **Identity** — the grant-writes and clone fixtures are `scoped: false`
   (`FixtureSpec.scoped`): the session middleware reads them before any scope is
   entered, and a directory forked per scope would let a scope mint grants.
-- **The demo directors** (`demo`, `runbooks-demo`) and anything their
+- **The demo directors** (`demo`, `runbooks-demo`, `runbooks-tools-demo`) and anything their
   timers write; the restart snapshot (scopes are memory-only and die with the
   process).
 - **Module-level state that is not a registered fixture** — the same set

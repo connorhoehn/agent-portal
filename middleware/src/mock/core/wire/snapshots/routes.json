@@ -3,57 +3,57 @@
     {
       "method": "POST",
       "path": "/api/__mock/identity/clone",
-      "source": "src/routes/mock-control.ts:755"
+      "source": "src/routes/mock-control.ts:768"
     },
     {
       "method": "DELETE",
       "path": "/api/__mock/identity/clone/:id",
-      "source": "src/routes/mock-control.ts:774"
+      "source": "src/routes/mock-control.ts:787"
     },
     {
       "method": "GET",
       "path": "/api/__mock/identity/clones",
-      "source": "src/routes/mock-control.ts:770"
+      "source": "src/routes/mock-control.ts:783"
     },
     {
       "method": "POST",
       "path": "/api/__mock/reset",
-      "source": "src/routes/mock-control.ts:488"
+      "source": "src/routes/mock-control.ts:499"
     },
     {
       "method": "POST",
       "path": "/api/__mock/scenario",
-      "source": "src/routes/mock-control.ts:394"
+      "source": "src/routes/mock-control.ts:396"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scenarios",
-      "source": "src/routes/mock-control.ts:372"
+      "source": "src/routes/mock-control.ts:374"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scope",
-      "source": "src/routes/mock-control.ts:731"
+      "source": "src/routes/mock-control.ts:744"
     },
     {
       "method": "POST",
       "path": "/api/__mock/scope",
-      "source": "src/routes/mock-control.ts:667"
+      "source": "src/routes/mock-control.ts:680"
     },
     {
       "method": "DELETE",
       "path": "/api/__mock/scope/:id",
-      "source": "src/routes/mock-control.ts:741"
+      "source": "src/routes/mock-control.ts:754"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scope/:id",
-      "source": "src/routes/mock-control.ts:735"
+      "source": "src/routes/mock-control.ts:748"
     },
     {
       "method": "GET",
       "path": "/api/__mock/state",
-      "source": "src/routes/mock-control.ts:535"
+      "source": "src/routes/mock-control.ts:548"
     },
     {
       "method": "GET",
@@ -1013,7 +1013,7 @@
     {
       "method": "GET",
       "path": "/api/briefs",
-      "source": "src/routes/session-briefs.ts:60"
+      "source": "src/routes/session-briefs.ts:62"
     },
     {
       "method": "GET",
@@ -3153,72 +3153,72 @@
     {
       "method": "GET",
       "path": "/api/runbooks",
-      "source": "src/routes/runbooks.ts:244"
+      "source": "src/routes/runbooks.ts:265"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id",
-      "source": "src/routes/runbooks.ts:304"
+      "source": "src/routes/runbooks.ts:331"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id/applications",
-      "source": "src/routes/runbooks.ts:340"
+      "source": "src/routes/runbooks.ts:367"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/:id/applications",
-      "source": "src/routes/runbooks.ts:689"
+      "source": "src/routes/runbooks.ts:753"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id/diff",
-      "source": "src/routes/runbooks.ts:327"
+      "source": "src/routes/runbooks.ts:354"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/:id/retire",
-      "source": "src/routes/runbooks.ts:662"
+      "source": "src/routes/runbooks.ts:726"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id/versions",
-      "source": "src/routes/runbooks.ts:319"
+      "source": "src/routes/runbooks.ts:346"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/proposals",
-      "source": "src/routes/runbooks.ts:266"
+      "source": "src/routes/runbooks.ts:287"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals",
-      "source": "src/routes/runbooks.ts:350"
+      "source": "src/routes/runbooks.ts:377"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/proposals/:pid",
-      "source": "src/routes/runbooks.ts:281"
+      "source": "src/routes/runbooks.ts:302"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/accept",
-      "source": "src/routes/runbooks.ts:485"
+      "source": "src/routes/runbooks.ts:533"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/merge",
-      "source": "src/routes/runbooks.ts:622"
+      "source": "src/routes/runbooks.ts:686"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/reject",
-      "source": "src/routes/runbooks.ts:575"
+      "source": "src/routes/runbooks.ts:629"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/withdraw",
-      "source": "src/routes/runbooks.ts:591"
+      "source": "src/routes/runbooks.ts:645"
     },
     {
       "method": "GET",
@@ -3243,12 +3243,17 @@
     {
       "method": "GET",
       "path": "/api/runs/:ref/brief",
-      "source": "src/routes/session-briefs.ts:74"
+      "source": "src/routes/session-briefs.ts:76"
     },
     {
       "method": "GET",
       "path": "/api/runs/:ref/runbooks/:id",
-      "source": "src/routes/session-briefs.ts:98"
+      "source": "src/routes/session-briefs.ts:100"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs/:ref/skills",
+      "source": "src/routes/session-briefs.ts:128"
     },
     {
       "method": "GET",
@@ -3464,6 +3469,11 @@
       "method": "GET",
       "path": "/api/sessions/:sessionId/events",
       "source": "src/routes/sessions.ts:71"
+    },
+    {
+      "method": "GET",
+      "path": "/api/skill-library",
+      "source": "src/routes/session-briefs.ts:143"
     },
     {
       "method": "DELETE",
@@ -3818,7 +3828,7 @@
     {
       "method": "GET",
       "path": "/api/work-items/:id/brief-preview",
-      "source": "src/routes/session-briefs.ts:118"
+      "source": "src/routes/session-briefs.ts:152"
     },
     {
       "method": "GET",

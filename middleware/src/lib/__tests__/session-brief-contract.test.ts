@@ -87,14 +87,15 @@ interface Case {
 }
 
 const CASES: Record<string, Case> = {
-  'wi-auth-e2-s2': { path: 'dispatch', work_item_id: 'wi-auth-e2-s2', why: 'Auth Migration: the cutover runbook story; rb-tenant-cutover leads (drifting, with its warning)' },
-  'wi-auth-e2-b3': { path: 'dispatch', work_item_id: 'wi-auth-e2-b3', why: 'Auth Migration: the logout-cookie bug; the auth-service PR gate leads' },
-  'wi-obs-e2-b4': { path: 'dispatch', work_item_id: 'wi-obs-e2-b4', why: 'Observability: one repo-scoped runbook' },
-  'wi-inf-e1-b3': { path: 'dispatch', work_item_id: 'wi-inf-e1-b3', why: 'Inference platform: no runbook matches — "No runbooks matched this work."' },
+  // R8: every case's procedures arrive as the org's skill library; the brief is the run's context plus one pointer.
+  'wi-auth-e2-s2': { path: 'dispatch', work_item_id: 'wi-auth-e2-s2', why: 'Auth Migration: the cutover runbook story, two decisions binding; the skill library pointer' },
+  'wi-auth-e2-b3': { path: 'dispatch', work_item_id: 'wi-auth-e2-b3', why: 'Auth Migration: the logout-cookie bug' },
+  'wi-obs-e2-b4': { path: 'dispatch', work_item_id: 'wi-obs-e2-b4', why: 'Observability: another initiative gets the same library (same sha) as Auth Migration' },
+  'wi-inf-e1-b3': { path: 'dispatch', work_item_id: 'wi-inf-e1-b3', why: 'Inference platform: the same library again — scope never gates a skill' },
   'task-fargate-arm64': {
     path: 'claim',
     task: { title: 'Fix the collector crash loop on Fargate', prompt: 'The collector image built on a Mac crash-loops on Fargate with exec format error. Rebuild it for arm64 and redeploy the task definition.' },
-    why: 'Infra/Fargate on a paired workstation, from a free-form task: the tool-scoped Fargate runbook, inside the local framing',
+    why: 'Infra/Fargate on a paired workstation, from a free-form task, inside the local framing: the library is named but not installed on this machine',
   },
 };
 
@@ -301,42 +302,45 @@ describe('injection contracts', () => {
     expect((second['lab'] as Record<string, string>)['brief_id']).toBe((first['lab'] as Record<string, string>)['brief_id']);
     const after = (await runbookStore().getBrief(runRef('wi-auth-e2-s2')))!;
     expect(after.sha256).toBe(frozen.sha256);
-    expect(after.markdown).toContain('(rb-tenant-cutover v1)');
+    // The frozen record still names the library its box synced, retired skill included.
+    expect(after.skill_library?.skills.some((k) => k.name === 'rb-tenant-cutover')).toBe(true);
   });
 
-  it('a retired runbook is never selected for a new run', async () => {
+  it('a retired runbook leaves the skill library, so a new run is not given it', async () => {
     const store = runbookStore();
+    const before = await freezeBrief({ run_ref: 'job-before-retire', box: 'devbox', work_item_id: 'wi-auth-e2-s2' });
     const rb = (await store.getRunbook('rb-tenant-cutover'))!;
     await store.putRunbook({ ...rb, status: 'retired', updated_at: CLOCK, retired: { at: CLOCK, by: 'p-002', reason: 'superseded', superseded_by: null } }, rb.updated_at);
     const brief = await freezeBrief({ run_ref: 'job-after-retire', box: 'devbox', work_item_id: 'wi-auth-e2-s2' });
-    expect(brief.sections.some((s) => s.ref === 'rb-tenant-cutover')).toBe(false);
-    expect(brief.omitted.some((o) => o.runbook_id === 'rb-tenant-cutover')).toBe(false);
-    expect(brief.markdown).not.toContain('rb-tenant-cutover v');
+    expect(brief.skill_library?.skills.some((k) => k.name === 'rb-tenant-cutover')).toBe(false);
+    expect(brief.skill_library?.sha256).not.toBe(before.skill_library?.sha256);
+    expect(brief.markdown).not.toContain('rb-tenant-cutover');
   });
 
-  it('the budget is respected and runbooks are whole or absent', async () => {
+  it('one library for every box: two initiatives\' runs record the same skill set and sha', async () => {
+    const a = await freezeBrief({ run_ref: 'job-lib-auth', box: 'devbox', work_item_id: 'wi-auth-e2-s2' });
+    const b = await freezeBrief({ run_ref: 'job-lib-obs', box: 'devbox', work_item_id: 'wi-obs-e2-b4' });
+    expect(a.initiative_id).not.toBe(b.initiative_id);
+    expect(b.skill_library).toEqual(a.skill_library);
+    expect(a.skill_library!.skills.map((k) => k.name)).toEqual(expect.arrayContaining(['rb-ws-cdp-debug', 'rb-gateway-presence-client', 'rb-tenant-cutover']));
+  });
+
+  it('the budget is respected and the brief carries no procedure text', async () => {
     process.env['BRIEF_BUDGET_TOKENS'] = '1700';
     const small = await freezeBrief({ run_ref: 'job-small-budget', box: 'devbox', work_item_id: 'wi-auth-e2-s2' });
     expect(small.budget_tokens).toBe(1700);
     expect(small.used_tokens).toBeLessThanOrEqual(1700);
     expect(estimateTokens(small.markdown)).toBe(small.used_tokens);
-    expect(small.omitted.length).toBeGreaterThan(0);
     delete process.env['BRIEF_BUDGET_TOKENS'];
     const full = await freezeBrief({ run_ref: 'job-full-budget', box: 'devbox', work_item_id: 'wi-auth-e2-s2' });
     expect(full.used_tokens).toBeLessThanOrEqual(6000);
 
     const store = runbookStore();
     for (const b of [small, full]) {
-      for (const s of b.sections.filter((x) => x.kind === 'runbook')) {
-        const v = (await store.getVersion(s.ref!, s.version!))!;
-        // Every included runbook's canonical markdown is in the brief verbatim.
-        expect(b.markdown).toContain(v.markdown.trimEnd());
-      }
-      for (const o of b.omitted) {
-        const rb = (await store.getRunbook(o.runbook_id))!;
-        const v = (await store.getVersion(rb.id, rb.current_version))!;
-        // An omitted runbook is listed by name, and none of its steps leak in.
-        expect(b.markdown).toContain(`lab runbook ${o.runbook_id}`);
+      expect(b.sections.some((x) => x.kind === 'runbook')).toBe(false);
+      for (const k of b.skill_library!.skills) {
+        const v = (await store.getVersion(k.name, k.version))!;
+        // No step of any skill leaks into the brief: procedures arrive as skills only.
         expect(b.markdown).not.toContain(v.markdown.split('\n').find((l) => l.startsWith('1. '))!);
       }
     }

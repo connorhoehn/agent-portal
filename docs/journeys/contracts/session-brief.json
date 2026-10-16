@@ -5,7 +5,7 @@
   "cases": {
     "wi-auth-e2-s2": {
       "path": "dispatch",
-      "why": "Auth Migration: the cutover runbook story; rb-tenant-cutover leads (drifting, with its warning)",
+      "why": "Auth Migration: the cutover runbook story, two decisions binding; the skill library pointer",
       "run_ref": "job-contract-wi-auth-e2-s2",
       "sections": [
         {
@@ -25,19 +25,8 @@
           "ref": "skill-cold-start-aurora,skill-flaky-test-triage,skill-pr-review-scoped"
         },
         {
-          "kind": "runbook",
-          "ref": "rb-tenant-cutover",
-          "version": 1
-        },
-        {
-          "kind": "runbook",
-          "ref": "rb-auth-pr-csrf-gate",
-          "version": 1
-        },
-        {
-          "kind": "runbook",
-          "ref": "rb-sso-new-origin",
-          "version": 1
+          "kind": "skill_library",
+          "ref": "e9a6f4bbce29250c10eb51be3075a213942bed4a3e736aa36eb474a143ca82f1"
         },
         {
           "kind": "how_to_report",
@@ -45,12 +34,12 @@
         }
       ],
       "omitted": [],
-      "used_tokens": 2695,
-      "sha256": "43e3dc5f206e238c34afc2459ac96b70263e2f3832d70003ec13c4f997c33ea0"
+      "used_tokens": 548,
+      "sha256": "effd6bc57fa94bc5dbd5e14a02d98edd67238ed4d92578c034c56b4f98b66710"
     },
     "wi-auth-e2-b3": {
       "path": "dispatch",
-      "why": "Auth Migration: the logout-cookie bug; the auth-service PR gate leads",
+      "why": "Auth Migration: the logout-cookie bug",
       "run_ref": "job-contract-wi-auth-e2-b3",
       "sections": [
         {
@@ -70,19 +59,8 @@
           "ref": "skill-cold-start-aurora,skill-flaky-test-triage,skill-pr-review-scoped"
         },
         {
-          "kind": "runbook",
-          "ref": "rb-auth-pr-csrf-gate",
-          "version": 1
-        },
-        {
-          "kind": "runbook",
-          "ref": "rb-tenant-cutover",
-          "version": 1
-        },
-        {
-          "kind": "runbook",
-          "ref": "rb-sso-new-origin",
-          "version": 1
+          "kind": "skill_library",
+          "ref": "e9a6f4bbce29250c10eb51be3075a213942bed4a3e736aa36eb474a143ca82f1"
         },
         {
           "kind": "how_to_report",
@@ -90,12 +68,12 @@
         }
       ],
       "omitted": [],
-      "used_tokens": 2672,
-      "sha256": "316810dc06fa6b63719589024c5eca9e4b7603f5be8e37cc6ef9c3c08bb3f5ab"
+      "used_tokens": 515,
+      "sha256": "0cb72d164a81fcfdb4d59e06cb6df6ab7cc0405dcc9c0ad430c266400ff3d00a"
     },
     "wi-obs-e2-b4": {
       "path": "dispatch",
-      "why": "Observability: one repo-scoped runbook",
+      "why": "Observability: another initiative gets the same library (same sha) as Auth Migration",
       "run_ref": "job-contract-wi-obs-e2-b4",
       "sections": [
         {
@@ -115,9 +93,8 @@
           "ref": "skill-cold-start-aurora,skill-flaky-test-triage,skill-pr-review-scoped"
         },
         {
-          "kind": "runbook",
-          "ref": "rb-flaky-test-rerun-diff",
-          "version": 1
+          "kind": "skill_library",
+          "ref": "e9a6f4bbce29250c10eb51be3075a213942bed4a3e736aa36eb474a143ca82f1"
         },
         {
           "kind": "how_to_report",
@@ -125,12 +102,12 @@
         }
       ],
       "omitted": [],
-      "used_tokens": 1341,
-      "sha256": "9f1ef133282a765e015d16b50f8621942cb16f3b68c6b1f586be2875090cd41d"
+      "used_tokens": 523,
+      "sha256": "56956e4bd5dcd4c13a3c6fdac0e7f932658618e6b1a10fa27a2e5751440eab23"
     },
     "wi-inf-e1-b3": {
       "path": "dispatch",
-      "why": "Inference platform: no runbook matches — \"No runbooks matched this work.\"",
+      "why": "Inference platform: the same library again — scope never gates a skill",
       "run_ref": "job-contract-wi-inf-e1-b3",
       "sections": [
         {
@@ -146,23 +123,8 @@
           "ref": "skill-cold-start-aurora,skill-flaky-test-triage,skill-pr-review-scoped"
         },
         {
-          "kind": "how_to_report",
-          "ref": null
-        }
-      ],
-      "omitted": [],
-      "used_tokens": 350,
-      "sha256": "e119b65e56909050db3df95ddbacfd1fcf6571894ff65a7358a818cccc1eb726"
-    },
-    "task-fargate-arm64": {
-      "path": "claim",
-      "why": "Infra/Fargate on a paired workstation, from a free-form task: the tool-scoped Fargate runbook, inside the local framing",
-      "run_ref": "job-contract-task-fargate-arm64",
-      "sections": [
-        {
-          "kind": "runbook",
-          "ref": "rb-fargate-arm64-image",
-          "version": 1
+          "kind": "skill_library",
+          "ref": "e9a6f4bbce29250c10eb51be3075a213942bed4a3e736aa36eb474a143ca82f1"
         },
         {
           "kind": "how_to_report",
@@ -170,8 +132,26 @@
         }
       ],
       "omitted": [],
-      "used_tokens": 1031,
-      "sha256": "ca871a4833221a6e53cc5e78ddb5c15a902d212a90d34f7e86bfffc56e358f30"
+      "used_tokens": 437,
+      "sha256": "f640065df6321ff9bd8b743c9baca8c67f5cd193813fa5194c1285aeaa5e51e5"
+    },
+    "task-fargate-arm64": {
+      "path": "claim",
+      "why": "Infra/Fargate on a paired workstation, from a free-form task, inside the local framing: the library is named but not installed on this machine",
+      "run_ref": "job-contract-task-fargate-arm64",
+      "sections": [
+        {
+          "kind": "skill_library",
+          "ref": "e9a6f4bbce29250c10eb51be3075a213942bed4a3e736aa36eb474a143ca82f1"
+        },
+        {
+          "kind": "how_to_report",
+          "ref": null
+        }
+      ],
+      "omitted": [],
+      "used_tokens": 238,
+      "sha256": "702606ed47b5cfbbe291c612731188bd54cf82f9644b5530ada97d42f34347c1"
     }
   }
 }

@@ -14,12 +14,13 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
 import { RunbookDocView } from './RunbookDocView';
+import { RunbookFiles } from './RunbookFiles';
 import { useRunbookNames } from './useRunbookNames';
 import {
-  KIND_LABEL, PROPOSAL_STATUS_LABEL, PROPOSAL_STATUS_TONE, lintCounts, proposalAuthor, proposalTitle, refusalMessage, runPageHref, runbookHref,
+  KIND_LABEL, PROPOSAL_STATUS_LABEL, PROPOSAL_STATUS_TONE, filesDiffSummary, lintCounts, proposalAuthor, proposalTitle, refusalMessage, runPageHref, runbookHref,
   viewerDiff,
 } from './runbooksModel';
-import type { LintFinding, Proposal, RunbookRow, ScopeKind } from './types';
+import type { FilesDiff, LintFinding, Proposal, RunbookFile, RunbookRow, ScopeKind } from './types';
 
 interface ProposalResponse {
   proposal: Proposal;
@@ -28,6 +29,8 @@ interface ProposalResponse {
   base_markdown: string | null;
   proposed_markdown: string | null;
   diff: { text: string; added: number; removed: number } | null;
+  proposed_files?: RunbookFile[];
+  files_diff?: FilesDiff | null;
   can_review: boolean;
 }
 
@@ -198,6 +201,18 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
               ? <DiffViewer diff={viewerDiff(data.diff.text, `${title}.md`)} data-testid="proposal-diff" />
               : <T size="sm" tone="secondary">The proposal has no textual change.</T>}
           </DetailSection>
+        )}
+
+        {data.files_diff?.text && (
+          <DetailSection variant="heading" title="Files this proposal carries" hint={filesDiffSummary(data.files_diff)}>
+            <DiffViewer diff={data.files_diff.text} defaultCollapsed={data.files_diff.files.length > 3} data-testid="proposal-files-diff" />
+          </DetailSection>
+        )}
+
+        {data.proposed_files && data.proposed_files.length > 0 && (
+          <Disclosure summary={`Read the proposed files (${data.proposed_files.length})`} variant="plain" density="compact" data-testid="proposal-files">
+            <RunbookFiles files={data.proposed_files} testId="proposal-files-list" />
+          </Disclosure>
         )}
 
         {p.lint.length > 0 && (

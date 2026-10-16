@@ -28,9 +28,8 @@ import { LAB_CALLBACK_SERVICE_AUTH, SERVICE_NONCE_HEADER, captureRawBody, resetS
 import { RUN_TOKEN_HEADER, mintRunToken } from '../../lib/run-token.js';
 import { createRunbooksRouter } from '../runbooks.js';
 import { errorHandler } from '../../lib/async-handler.js';
-import { assembleBrief, selectRunbooks, runbookHealth, type RunbookStore } from '../../lib/runbooks/index.js';
-import { loadCandidates } from '../../lib/session-brief-preview.js';
-import { EDIT_MD, EDIT_MD_ALT, NEW_MD, USERS, seededStore, type TestUser } from './runbook-world.js';
+import { briefLibraryOf, loadSkillLibrary, assembleBrief, runbookHealth, type RunbookStore } from '../../lib/runbooks/index.js';
+import { EDIT_MD, EDIT_MD_ALT, NEW_MD, NEW_MD_OTHER, USERS, seededStore, type TestUser } from './runbook-world.js';
 
 const SECRET = 'lab-secret';
 let store: RunbookStore;
@@ -167,7 +166,7 @@ describe('proposing', () => {
   });
 
   it('a box proposes with a signed lab envelope as a RUN; without one it is refused', async () => {
-    await store.putBrief(assembleBrief({ run_ref: 'job-0042', assembled_at: '2026-10-14T00:00:00.000Z', framing: '', work_item: null, initiative: null, decisions: [], runbooks: [] }));
+    await store.putBrief(assembleBrief({ run_ref: 'job-0042', assembled_at: '2026-10-14T00:00:00.000Z', framing: '', work_item: null, initiative: null, decisions: [] }));
     const token = await mintRunToken('job-0042');
     const body = JSON.stringify({ kind: 'edit', runbook_id: 'rb-tenant-cutover', markdown: EDIT_MD, rationale: 'The run skipped step 2.', source: { run_ref: 'job-0042', session_id: 's-1', lab_experience_ids: ['exp-1'] } });
     const anon = appAs(null);
@@ -315,14 +314,15 @@ describe('deciding: who may accept', () => {
     expect(sme.body.runbook.scope).toEqual({ kind: 'initiative', ref: 'p-auth' });
 
     // An SME cannot mint an org-wide runbook; ownership does not authorise creating one.
-    const second = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD, rationale: 'Again.' });
+    // (A different runbook: the same one twice would collide with the skill just accepted — R-skill-collision.)
+    const second = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD_OTHER, rationale: 'Again.' });
     const org = await accept(USERS.smeAuth!, second.body.proposal.id, { scope: { kind: 'org' }, id: 'rb-org-wide' });
     expect(org.status).toBe(403);
     expect((await accept(USERS.leader!, second.body.proposal.id, { scope: { kind: 'org' }, id: 'rb-org-wide', owner_person_id: 'p-002' })).status).toBe(201);
     expect((await store.getRunbook('rb-org-wide'))!.owner_person_id).toBe('p-002');
 
     // No scope and nothing to infer it from.
-    const third = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD, rationale: 'Third.' });
+    const third = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD_OTHER, rationale: 'Third.' });
     expect((await accept(USERS.leader!, third.body.proposal.id, {})).status).toBe(400);
     expect((await accept(USERS.leader!, third.body.proposal.id, { scope: { kind: 'org' }, id: 'rb-org-wide' })).status).toBe(409); // id taken
   });
@@ -386,9 +386,7 @@ describe('retire and applications', () => {
   });
 
   async function freezeBrief(runRef: string) {
-    const candidates = await loadCandidates(store, Date.parse('2026-10-14T00:00:00Z'));
-    const selected = selectRunbooks({ id: 'wi-1', title: 'Cut over tenant to Cognito', description: 'tenant cutover saml cognito', labels: ['cutover'], repo: null, initiative_id: 'p-auth', pinned_runbook_ids: ['rb-tenant-cutover'] }, candidates).selected;
-    await store.putBrief({ ...assembleBrief({ run_ref: runRef, assembled_at: '2026-10-14T00:00:00.000Z', framing: '', work_item: null, initiative: null, decisions: [], runbooks: selected }), run_ref: runRef });
+    await store.putBrief({ ...assembleBrief({ run_ref: runRef, assembled_at: '2026-10-14T00:00:00.000Z', framing: '', work_item: null, initiative: null, decisions: [], skill_library: briefLibraryOf(await loadSkillLibrary(store)) }), run_ref: runRef });
   }
 
   it('a box reports on a runbook it was given; health follows; a repeat is idempotent', async () => {
@@ -429,7 +427,13 @@ describe('retire and applications', () => {
       const body = JSON.stringify(payload);
       return request(anon).post(path).set(boxHeaders('POST', path, body, await mintRunToken(String(payload['run_ref'] ?? '')))).send(body);
     };
-    expect((await post('/api/runbooks/rb-sso-new-origin/applications', { run_ref: 'job-8', outcome: 'followed' })).body.code).toBe('NOT_GIVEN');
+    // R8: a run is given every skill in the library its brief recorded — not one published after it froze.
+    const base = (await store.getVersion('rb-sso-new-origin', 1))!;
+    await store.createRunbook(
+      { id: 'rb-later', scope: { kind: 'org', ref: null }, owner_person_id: 'p-100', status: 'published', current_version: 1, created_at: '2026-10-15T00:00:00.000Z', updated_at: '2026-10-15T00:00:00.000Z' },
+      { ...base, runbook_id: 'rb-later' },
+    );
+    expect((await post('/api/runbooks/rb-later/applications', { run_ref: 'job-8', outcome: 'followed' })).body.code).toBe('NOT_GIVEN');
     expect((await post('/api/runbooks/rb-tenant-cutover/applications', { run_ref: 'job-none', outcome: 'followed' })).status).toBe(409);
     expect((await post('/api/runbooks/rb-tenant-cutover/applications', { run_ref: 'job-8', outcome: 'followed', version: 5 })).body.code).toBe('VERSION_MISMATCH');
     expect((await post('/api/runbooks/rb-tenant-cutover/applications', { run_ref: 'job-8', outcome: 'maybe' })).status).toBe(400);

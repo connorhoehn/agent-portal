@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   briefGroups, briefRefOfRun, briefRows, distillationRedirect, libraryCommandAdapter, libraryGroups, libraryRows, parseTab,
-  proposalGroups, proposalRows, refusalMessage, stepMarkers, viewerDiff,
+  proposalGroups, proposalRows, fileLanguageLabel, fileModeLabel, filesDiffSummary, formatBytes, shortSha, SECTION_KIND_LABEL, refusalMessage, stepMarkers, viewerDiff,
 } from '../runbooksModel.ts';
 import { briefTaskTitle, buildNames } from '../runbookNames.ts';
 import type { BriefSummary, Proposal, RunbookApplication, RunbookRow } from '../types.ts';
@@ -129,4 +129,21 @@ test('a brief row is titled by its run, grouped by day, and still found by its r
 test('the task title comes from the brief markdown', () => {
   assert.equal(briefTaskTitle('# Brief\n\n## Your task\n**Tenant-by-tenant cutover** (story, 3 pts)\nbody'), 'Tenant-by-tenant cutover');
   assert.equal(briefTaskTitle('## The project\n**Auth**'), null);
+});
+
+test('file helpers format sizes, modes, languages and the diff summary', () => {
+  assert.equal(formatBytes(0), '0 B');
+  assert.equal(formatBytes(812), '812 B');
+  assert.equal(formatBytes(1536), '1.5 KB');
+  assert.equal(formatBytes(2 * 1024 * 1024), '2.0 MB');
+  assert.equal(formatBytes(-1), '0 B');
+  assert.equal(fileModeLabel('755'), 'script');
+  assert.equal(fileModeLabel('644'), 'file');
+  assert.equal(fileLanguageLabel('scripts/run.sh'), 'Shell');
+  assert.equal(fileLanguageLabel('SKILL.md'), 'Markdown');
+  assert.equal(fileLanguageLabel('Makefile'), 'Text');
+  assert.equal(shortSha('a'.repeat(64)).length, 12);
+  assert.equal(SECTION_KIND_LABEL['skill_library'], 'Org skills');
+  assert.equal(filesDiffSummary({ added: 12, removed: 3, files: [{ status: 'added' }, { status: 'modified' }, { status: 'unchanged' }] }), '+12 −3 · 2 files (1 added, 1 modified)');
+  assert.equal(filesDiffSummary({ added: 1, removed: 0, files: [{ status: 'added' }] }), '+1 −0 · 1 file (1 added)');
 });

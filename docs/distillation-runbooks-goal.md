@@ -53,6 +53,7 @@ Each phase ends with its judge section green and a commit on main.
 | **R5 Portal** | `/iq/runbooks` (Library / Proposals / Briefs), the run's Brief tab, the work item's "Brief preview", all on library composites in the layout cascade. Old `/iq/distillation/*` routes redirect. | `portal`, `discipline`, `ia` |
 | **R6 Journeys + demo** | Executable maps for author / reviewer / consumer and the injection contract; the demo scenario `runbooks-demo`; journey logs sealed. | `journeys`, `contracts`, `demo` |
 | **R7 Deletion** | The distillation tier machinery and pages listed below are removed; `validate-distillation.sh` and its docs retired to `docs/history/`. | `deleted` |
+| **R8 Tools as skills** | Runbooks carry scripts and data; every published runbook is a Claude Code skill in one org-wide library every box syncs at boot; a run's kept tool is captured as a proposal with its files; the brief is project context plus one pointer. See "R8" below. | `tools` |
 
 ## Judge outline: `scripts/validate-distillation-runbooks.sh`
 
@@ -66,6 +67,7 @@ Every line is mechanical. `--quick` skips the Playwright sections.
   with the expected rule id.
 - `selectRunbooks` and `assembleBrief` are pure: the test runs each twice on
   the same input and compares sha256.
+- R8: the brief carries no procedure text (`brief: no procedure text`).
 
 **store**
 - The shared contract suite passes against `RowsRunbookStore`.
@@ -104,7 +106,7 @@ Every line is mechanical. `--quick` skips the Playwright sections.
 - `agents/devbox/managed-settings.json` SessionStart runs `lab brief`, not
   `lab recall`; `agents/devbox/lab` has `brief` and `propose` subcommands;
   the local worker's prompt builder test shows the brief inside the framing.
-- No brief exceeds its budget; no runbook in a brief is cut mid-step.
+- No brief exceeds its budget. (R8: the budget is spent on project context; procedures arrive as skills.)
 
 **portal / discipline / ia**
 - `portal` tsc, `node --test` over `pages/runbooks/__tests__`, vite build.
@@ -127,6 +129,108 @@ Every line is mechanical. `--quick` skips the Playwright sections.
 **deleted**
 - The files listed under "Deleted" below are absent, and no source file
   imports them.
+
+## R8 — runbooks carry tools, and reach a box as skills
+
+**Status: built 2026-10-15** (local-first; RowsRunbookStore in dev:mock, the
+Dynamo store persists the same rows; nothing here needs Aurora or a repository).
+
+### The outcome
+
+A run builds side tools mid-session — "how do you debug a websocket app with
+CDP", a client for an undocumented API — and used to lose them when the
+workspace was wiped. Now a runbook is a self-contained bundle (procedure +
+`scripts/` + `data/`), and every published runbook is a **Claude Code skill**
+in ONE org-wide library that every box receives at boot, whatever initiative,
+repo or work item it runs for. Claude Code keeps only each skill's name and
+description in context and loads a body when it fits, so procedures no longer
+squeeze into the brief.
+
+### Decisions taken (user, 2026-10-15)
+
+1. **Session brief: project context only.** Procedures reach a box only as
+   skills; the brief carries no procedure text and no per-runbook selection.
+   One path for every box: the run's context (framing, task, project,
+   decisions, the session bundle's skills) plus one line saying the org's
+   established skills are installed (`~/.claude/skills`, library sha). The
+   6,000-token budget applies to the project context. The brief records the
+   library it pointed at (`SessionBrief.skill_library`: sha, dir, every skill's
+   version) as metadata; `lab applied` and `lab runbook` are checked against it.
+   Assembler version 2; briefs frozen before R8 keep their v1 bytes.
+2. **Skill steward.** Anyone with `ReviewRunbook` at org scope accepts a skill
+   into the org-wide library: the org-leader (and admin), plus any SME (or
+   program-owner) for skills in their area — the initiative the skill was
+   captured on (`Runbook.area`, a label set at accept). A run's own proposal is
+   never accepted by that run or its dispatcher. No new Cedar action:
+   `ReviewRunbook` is already in `CAPABILITY_ACTIONS` and the sme,
+   program-owner and org-leader seeds.
+3. **One library, scope is a label.** Every box gets every published skill; a
+   runbook's scope shows in the portal and never gates delivery. A captured
+   tool defaults to org scope.
+4. **Delivered as Claude Code skills.** `<runbook-id>/SKILL.md` (frontmatter
+   `name` = the `rb-` id, `description` = summary + "Use when" + "Not for";
+   body = the canonical runbook markdown, so the RunbookDoc stays the source of
+   truth and round-trips) with `scripts/` and `data/` beside it. The `rb-`
+   prefix keeps library skills clear of any other skill in the flat
+   `~/.claude/skills`; `lab skills` never overwrites a directory it did not
+   install. The whole set is versioned by one content hash; a box whose hash
+   matches skips the copy.
+
+### What was built
+
+- **Model** (`lib/runbooks/`): `RunbookFile` (`path`, `content`, `mode`,
+  `sha256`, `size`) on `RunbookVersion.files`, hashed into
+  `bundle_sha256`; `files.ts` (path rules, caps: 32 KiB a file, 80 KiB a
+  bundle — under the BFF's 100 KB body limit — 24 files, 8 MiB the library);
+  `skill.ts` (`renderSkill`/`parseSkill`, Claude Code's name and description
+  rules); `library.ts` (`buildSkillLibrary`, content-addressed set sha);
+  `keep.ts` (the TypeScript reading of `.lab/keep`, held to `lab keep` by a
+  parity test); `files-diff.ts` (git-style multi-file diff for review).
+- **Lint**: R-command-real accepts bundle paths the bundle carries; new rules
+  R-file-path, R-file-size, R-file-unreferenced, R-file-missing,
+  R-script-header (runtime + deps declared in the header), R-bundle-verify (a
+  bundle with scripts has a Verify command that runs one against bundled data),
+  R-skill-description, R-skill-collision; R-secrets reads file contents.
+- **Stores**: both persist files with the version (the contract suite covers a
+  version and a proposal with files).
+- **API**: proposals take `files` and a SKILL.md-shaped `skill_md`; files are
+  checked before anything is parsed (422 `FILES`); the proposal detail serves
+  `files_diff` and the proposed files; accept writes the files into the version;
+  `GET /api/runs/:ref/skills` (lab envelope + this run's token; ETag = set sha,
+  304 when unchanged); `GET /api/skill-library` (manifest, no bytes, for people).
+- **Box**: `lab skills` (verifies every file's sha, the set sha and every path,
+  stages then swaps, removes retired skills, never overwrites a foreign skill;
+  `lab brief` runs it first at SessionStart); `lab keep` (SessionEnd: every
+  `.lab/keep/<rb-name>/` folder becomes a proposal with its files; links,
+  binaries, bad names and oversize files are not carried).
+- **Portal**: the runbook record lists its files read-only (Disclosure +
+  CodeBlock, always `language="text"`), the proposal review shows the file diff
+  (DiffViewer) and the proposed files.
+- **Seed**: `rb-ws-cdp-debug` (watch a page's websocket frames over CDP; replays
+  a recorded capture offline) and `rb-gateway-presence-client` (the client for
+  the gateway's undocumented presence API; replays a recorded response), both
+  org-wide, both real (`mock/runbook-bundles/`), plus an open run proposal that
+  changes the presence client's files (`prop-presence-busy`).
+- **Demo** `runbooks-tools-demo`: a run on Auth Migration keeps the CDP harness,
+  the capture path proposes it with its files, an SME on Auth Migration accepts
+  it, the library hash moves, and a box running Observability work installs the
+  new skill and runs the harness from it (also through the real `lab skills`).
+
+### Judge section `tools`
+
+- Model: files, skill and library modules exist; jest `model-bundle` passes
+  (one failing and one passing fixture per R8 lint rule, path rejection, caps,
+  SKILL.md round-trip, library sha).
+- Store: the contract suite has a version-with-files and proposal-with-files test.
+- Capture and delivery: `lab-cli-skills` passes (install, 304 skip, retire,
+  foreign-skill guard, six tampered libraries refused, keep parity and
+  untrusted-folder rules); `runbook-files` route suite passes.
+- Brief: no procedure text and one pointer (`model-brief`, the injection
+  contract re-recorded with the pointer in every case).
+- Seed: the two bundles lint clean and their Verify commands pass offline.
+- Portal: the files viewer renders a hostile file as text (`runbookFilesSafety`).
+- Demo: `runbooks-tools-demo` reaches `done` with every milestone.
+- Journeys: `author/capture-tool` and `consumer/box-tools` maps exist and walk.
 
 ## Lanes
 

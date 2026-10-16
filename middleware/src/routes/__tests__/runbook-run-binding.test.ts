@@ -31,8 +31,7 @@ import { RUN_TOKEN_HEADER, mintRunToken, verifyRunToken } from '../../lib/run-to
 import { createRunbooksRouter } from '../runbooks.js';
 import { createSessionBriefsRouter } from '../session-briefs.js';
 import { errorHandler } from '../../lib/async-handler.js';
-import { assembleBrief, selectRunbooks, type RunbookStore } from '../../lib/runbooks/index.js';
-import { loadCandidates } from '../../lib/session-brief-preview.js';
+import { briefLibraryOf, loadSkillLibrary, assembleBrief, type RunbookStore } from '../../lib/runbooks/index.js';
 import { EDIT_MD, USERS, seededStore, type TestUser } from './runbook-world.js';
 
 const SECRET = 'lab-secret';
@@ -64,9 +63,7 @@ function box(method: string, target: string, body = '', runToken?: string): Reco
 
 /** Freeze a brief for `runRef` that gives rb-tenant-cutover, dispatched by `by`. */
 async function freeze(runRef: string, by: string | null = null) {
-  const candidates = await loadCandidates(store, Date.parse('2026-10-14T00:00:00Z'));
-  const selected = selectRunbooks({ id: 'wi-auth-1', title: 'Cut one tenant over from SAML to Cognito', description: 'tenant cutover saml cognito', labels: ['cutover'], repo: null, initiative_id: 'p-auth', pinned_runbook_ids: ['rb-tenant-cutover'] }, candidates).selected;
-  const brief = { ...assembleBrief({ run_ref: runRef, assembled_at: '2026-10-14T00:00:00.000Z', framing: '', work_item: null, initiative: null, decisions: [], runbooks: selected }), dispatched_by: by };
+  const brief = { ...assembleBrief({ run_ref: runRef, assembled_at: '2026-10-14T00:00:00.000Z', framing: '', work_item: null, initiative: null, decisions: [], skill_library: briefLibraryOf(await loadSkillLibrary(store)) }), dispatched_by: by };
   await store.putBrief(brief);
   return brief;
 }
@@ -123,7 +120,8 @@ describe('GET /api/runs/:ref/runbooks/:id — `lab runbook`', () => {
     const ok = await request(anon).get(p).set(box('GET', p, '', tokenA));
     expect(ok.status).toBe(200);
     expect(ok.text).toContain('# Cut one tenant over');
-    const notNamed = '/api/runs/job-a/runbooks/rb-sso-new-origin';
+    // R8: the run was given every skill in its recorded library — not one that never existed for it.
+    const notNamed = '/api/runs/job-a/runbooks/rb-not-in-the-library';
     expect((await request(anon).get(notNamed).set(box('GET', notNamed, '', tokenA))).body.code).toBe('NOT_GIVEN');
     const other = '/api/runs/job-b/runbooks/rb-tenant-cutover';
     expect((await request(anon).get(other).set(box('GET', other, '', tokenA))).body.code).toBe('RUN_TOKEN');

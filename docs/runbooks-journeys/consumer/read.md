@@ -4,8 +4,8 @@ user: u-theo (Theo Chang)
 url: /iq/runbooks; /iq/runbooks/rb-tenant-cutover; /iq/runbooks/rb-tenant-cutover?tab=runs; /iq/runbooks/rb-tenant-cutover?tab=history
 map: docs/journeys/maps/runbooks/consumer/read.ts
 pages: portal/src/pages/runbooks, middleware/src/routes/runbooks.ts
-audited: 2026-10-15 11:44–11:44 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-c7fc1e0f), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.0
-session: /api/session/me sub u-theo-clone-c7fc1e0f, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
+audited: 2026-10-15 21:06–21:06 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-955043e4), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-theo-clone-955043e4, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
 screenshot: read.jpg
 verdict: pass
 console errors: 0

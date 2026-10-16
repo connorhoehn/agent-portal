@@ -15,7 +15,7 @@ afterEach(() => fixtureRegistry.resetAll('default'));
 describe('runbook fixtures', () => {
   it('registers all five and declares empty, large and the demo world', () => {
     for (const k of KEYS) expect(fixtureRegistry.get(k)).toBeDefined();
-    for (const f of fixtures) expect([...declaredScenariosFor(f)].sort()).toEqual(['default', 'empty', 'large', 'runbooks-demo']);
+    for (const f of fixtures) expect([...declaredScenariosFor(f)].sort()).toEqual(['default', 'empty', 'large', 'runbooks-demo', 'runbooks-tools-demo']);
   });
 
   it('default is populated and self-consistent: every version belongs to a runbook, current_version exists', () => {
@@ -23,9 +23,10 @@ describe('runbook fixtures', () => {
     expect(runbooks.length).toBeGreaterThan(0);
     for (const r of runbooks) expect(runbookVersionsFixture.rows().some((v) => v.runbook_id === r.id && v.version === r.current_version)).toBe(true);
     for (const v of runbookVersionsFixture.rows()) expect(runbooks.some((r) => r.id === v.runbook_id)).toBe(true);
-    // Lane C's seeded proposals (mock/runbooks.seed.ts): a run's edit, a run's new runbook, a person's near-duplicate.
+    // Lane C's seeded proposals (mock/runbooks.seed.ts): a run's edit, a run's new runbook, a person's near-duplicate;
+    // and R8's run edit that changes a tool's files (mock/runbook-bundles.ts).
     expect(fixtureRegistry.get('runbook-proposals')!.rows().map((p) => (p as { id: string }).id).sort())
-      .toEqual(['prop-flaky-quarantine-check', 'prop-judge-rubric-weights', 'prop-tenant-cutover-callback']);
+      .toEqual(['prop-flaky-quarantine-check', 'prop-judge-rubric-weights', 'prop-presence-busy', 'prop-tenant-cutover-callback']);
   });
 
   it('default carries one frozen brief on a done Auth Migration job, and the runbook application that names it', () => {
@@ -33,7 +34,8 @@ describe('runbook fixtures', () => {
     expect(briefs.map((b) => b.run_ref)).toEqual(['job-auth-maint-1']);
     const [brief] = briefs;
     expect(brief!.initiative_id).toBe('p-auth-migration');
-    expect(brief!.sections.some((x) => x.kind === 'runbook' && x.ref === 'rb-auth-pr-csrf-gate')).toBe(true);
+    // R8: the brief records the org's skill library its box synced, the CSRF-gate skill in it.
+    expect(brief!.skill_library?.skills.some((k) => k.name === 'rb-auth-pr-csrf-gate')).toBe(true);
     const app = runbookApplicationsFixture.rows().find((a) => a.run_ref === 'job-auth-maint-1');
     expect(app?.brief_id).toBe(brief!.id);
     expect(Date.parse(app!.at)).toBeGreaterThan(Date.parse(brief!.assembled_at));

@@ -18,6 +18,7 @@ import { writeJson } from '../../lib/writeJson';
 import { RunbookDocView } from './RunbookDocView';
 import { useRunbookNames } from './useRunbookNames';
 import type { Names } from './runbookNames';
+import { RunbookFiles } from './RunbookFiles';
 import { SafeMarkdown } from './SafeMarkdown';
 import {
   HEALTH_LABEL, HEALTH_TONE, OUTCOME_LABEL, RECORD_TABS, briefHref, parseTab, proposalHref, refusalMessage, runPageHref,
@@ -120,10 +121,19 @@ function ReadTab({ runbook, version, names, onOpen }: { runbook: RunbookRow; ver
           {runbook.health.warning ?? runbook.health.reason}
         </Banner>
       )}
+      {runbook.area && <T size="xs" tone="tertiary" data-testid="runbook-area">{`Area: ${names.initiative(runbook.area)}`}</T>}
       <T size="xs" tone="tertiary" data-testid="runbook-health">{runbook.health.reason}</T>
       {version.doc
         ? <RunbookDocView doc={version.doc} markdown={version.markdown} sha256={version.sha256} />
         : <SafeMarkdown markdown={version.markdown} scale="md" testId="runbook-markdown" />}
+      {version.files && version.files.length > 0 && (
+        <DetailSection variant="heading" title="Files" hint={`${version.files.length}`} description={`Skill name: ${runbook.id}. Every box receives this runbook as a skill in ~/.claude/skills.`}>
+          <Stack gap="sm">
+            <T size="xs" tone="tertiary" className="font-mono" data-testid="runbook-bundle-sha">{`bundle sha256 ${version.bundle_sha256 ? shortSha(version.bundle_sha256) : 'not recorded'}`}</T>
+            <RunbookFiles files={version.files} />
+          </Stack>
+        </DetailSection>
+      )}
       <DetailSection variant="heading" title="Where it came from" hint={`v${version.version}`}>
         <Stack gap="sm">
           <T size="xs" tone="tertiary" className="font-mono">{`sha256 ${shortSha(version.sha256)}${version.accepted_at ? ` · accepted ${relativeTime(version.accepted_at)}${version.accepted_by ? ` by ${names.person(version.accepted_by)}` : ''}` : ''}`}</T>

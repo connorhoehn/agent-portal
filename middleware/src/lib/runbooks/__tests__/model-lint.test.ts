@@ -8,6 +8,7 @@ import { repoLintContext } from '../repo-context.js';
 import { BAD_EXAMPLES, DERIVED_COMMAND_REAL, DERIVED_SECRETS } from './fixtures/bad.js';
 import { GOOD_DOCS, flakyRerunDiff, ssoNewOrigin, tenantCutoverV1, tenantCutoverV2 } from './fixtures/good.js';
 import { seedDocs } from './fixtures/seeds.js';
+import { BUNDLE_RULES } from './fixtures/bundles.js';
 
 const ctx = repoLintContext();
 const rulesOf = (doc: RunbookDoc) => [...new Set(lintRunbook(doc, ctx).map((f) => f.rule))].sort();
@@ -27,7 +28,8 @@ describe('the ten bad examples (design §1.4, verbatim)', () => {
 });
 
 // Which fixture proves each rule fires, and which proves it can pass.
-const FAILING: Record<LintRuleId, RunbookDoc> = {
+// R0's ten rules; the R8 bundle and skill rules have their own table (model-bundle.test.ts).
+const FAILING: Partial<Record<LintRuleId, RunbookDoc>> = {
   'R-imperative': BAD_EXAMPLES[0]!.doc,
   'R-joined': BAD_EXAMPLES[5]!.doc,
   'R-generated': BAD_EXAMPLES[9]!.doc,
@@ -39,7 +41,7 @@ const FAILING: Record<LintRuleId, RunbookDoc> = {
   'R-length': BAD_EXAMPLES[0]!.doc,
   'R-secrets': DERIVED_SECRETS,
 };
-const PASSING: Record<LintRuleId, RunbookDoc> = {
+const PASSING: Partial<Record<LintRuleId, RunbookDoc>> = {
   'R-imperative': tenantCutoverV1,
   'R-joined': tenantCutoverV2,
   'R-generated': ssoNewOrigin,
@@ -54,12 +56,12 @@ const PASSING: Record<LintRuleId, RunbookDoc> = {
 };
 
 describe('each rule has a failing and a passing fixture', () => {
-  it('covers exactly the design table', () => {
-    expect(LINT_RULES.map((r) => r.id).sort()).toEqual(Object.keys(FAILING).sort());
+  it('covers exactly the design table (with the R8 rules in model-bundle.test.ts)', () => {
+    expect(LINT_RULES.map((r) => r.id).filter((id) => !BUNDLE_RULES.includes(id)).sort()).toEqual(Object.keys(FAILING).sort());
   });
-  for (const { id } of LINT_RULES) {
-    it(`lint rule ${id}: fails its bad fixture`, () => expect(rulesOf(FAILING[id])).toContain(id));
-    it(`lint rule ${id}: passes its good fixture`, () => expect(rulesOf(PASSING[id])).not.toContain(id));
+  for (const id of Object.keys(FAILING) as LintRuleId[]) {
+    it(`lint rule ${id}: fails its bad fixture`, () => expect(rulesOf(FAILING[id]!)).toContain(id));
+    it(`lint rule ${id}: passes its good fixture`, () => expect(rulesOf(PASSING[id]!)).not.toContain(id));
   }
 });
 

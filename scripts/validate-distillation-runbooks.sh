@@ -8,7 +8,7 @@
 #   ./scripts/validate-distillation-runbooks.sh --section model   # one section (repeatable)
 #
 # Sections: model store migration api injection portal discipline ia journeys
-# contracts demo deleted. A check that cannot run in this environment (the
+# contracts demo deleted tools. A check that cannot run in this environment (the
 # Dynamo leg without RUNBOOK_DYNAMODB_ENDPOINT) prints SKIP, never PASS.
 set -u
 cd "$(dirname "$0")/.."
@@ -92,7 +92,7 @@ if [ -d "$LIB/__tests__" ]; then
   jest_named model 'pure: selectRunbooks' "selectRunbooks is pure (same input twice → same sha256)"
   jest_named model 'pure: assembleBrief' "assembleBrief is pure (same input twice → same sha256)"
   jest_named model 'brief: never exceeds its budget' "no brief exceeds its budget"
-  jest_named model 'brief: whole runbooks only' "no runbook in a brief is cut mid-step"
+  jest_named model 'brief: no procedure text' "the brief carries no procedure text, only the pointer at the org's skills (R8)"
 else
   fail "no tests under $LIB/__tests__"
 fi
@@ -264,7 +264,7 @@ fi
 if want demo; then
 section "demo (runbooks-demo)"
 check "grep -rqF \"'runbooks-demo'\" $MW/src/mock" "scenario runbooks-demo registered"
-DT=$(grep -rlE 'runbooks-demo' $MW/src --include='*.test.ts' 2>/dev/null | head -1)
+DT=$(grep -rlE 'startRunbooksDemo\(' $MW/src --include='*.test.ts' 2>/dev/null | head -1)
 [ -n "$DT" ] && ok "demo test ($DT)" || fail "no jest test drives runbooks-demo"
 if [ "$QUICK" = 0 ] && [ -n "$DT" ]; then
   if (cd $MW && DEMO_PACE_MS=200 node node_modules/.bin/jest --config jest.config.cjs "${DT#$MW/}" >/dev/null 2>&1); then ok "runbooks-demo reaches done and the second brief carries the accepted version"; else fail "runbooks-demo test fails"; fi
@@ -286,6 +286,80 @@ none "from ['\"][./]*(providers|lib|mock)/distillation(-store|-queue|-realtime|-
 none "pages/distillation/|useDistillationChannel|DistillationProvenance" portal/src "no portal import of a deleted distillation module"
 none "distillation(_ops)?_schema" schema/load_schema.py "load_schema.py no longer registers the distillation schemas"
 check "! grep -qF 'validate-distillation.sh' CLAUDE.md" "CLAUDE.md docs map no longer names validate-distillation.sh"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+if want tools; then
+section "tools (R8 · runbooks carry scripts and data, and reach every box as skills)"
+for f in files skill library keep files-diff; do exists "$LIB/$f.ts" "lib/runbooks/$f.ts"; done
+need "interface RunbookFile" "$LIB/types.ts" "RunbookFile on the model"
+need "files\?: RunbookFile\[\]" "$LIB/types.ts" "RunbookVersion carries files"
+need "bundle_sha256" "$LIB/version.ts" "files hash into the version (bundle_sha256)"
+none "aurora\.js|client-rds-data|Math\.random|Date\.now\(|new Date\(\)" $LIB/files.ts $LIB/skill.ts $LIB/library.ts "files/skill/library modules: no SQL, no clock, no randomness"
+for r in R-file-path R-file-size R-file-unreferenced R-file-missing R-script-header R-bundle-verify R-skill-description R-skill-collision; do
+  needF "'$r'" "$LIB/lint.ts" "lint rule $r is in the table"
+done
+needF "!inBundle(" "$LIB/lint.ts" "R-command-real accepts a bundle-relative path the bundle carries"
+need "SKILL_LIMITS = \{ name: 64, description: 1024 \}" "$LIB/skill.ts" "skill name/description held to Claude Code's limits"
+needF "orgiq-skill-library/1" "$LIB/library.ts" "the library is versioned as a whole (content-addressed set sha)"
+exists "$MW/src/mock/runbook-bundles/rb-ws-cdp-debug/scripts/cdp-ws-frames.mjs" "seed: the CDP websocket harness script"
+exists "$MW/src/mock/runbook-bundles/rb-ws-cdp-debug/data/sample-frames.jsonl" "seed: the recorded CDP frame sample"
+exists "$MW/src/mock/runbook-bundles/rb-gateway-presence-client/scripts/presence-client.mjs" "seed: the captured presence API client"
+exists "$MW/src/mock/runbook-bundles/rb-gateway-presence-client/data/presence-snapshot.json" "seed: the recorded presence response"
+check "node scripts/runbooks/pack-bundles.mjs --check" "seed: the packed bundles match the files on disk"
+check "grep -q 'Network.webSocketFrameReceived' $MW/src/mock/runbook-bundles/rb-ws-cdp-debug/scripts/cdp-ws-frames.mjs" "the harness listens to Network.webSocketFrameSent/Received over CDP"
+check "(cd $MW/src/mock/runbook-bundles/rb-ws-cdp-debug && node scripts/cdp-ws-frames.mjs --replay data/sample-frames.jsonl | tail -1 | diff -q - data/expected-summary.txt)" "the CDP harness replays its bundled capture offline"
+check "(cd $MW/src/mock/runbook-bundles/rb-gateway-presence-client && node scripts/presence-client.mjs snapshot social:general --fixture data/presence-snapshot.json | diff -q - data/expected-output.txt)" "the presence client replays its recorded response offline"
+needF '/runs/:ref/skills' $MW/src/routes/session-briefs.ts "GET /api/runs/:ref/skills (the box's library sync)"
+needF "runTokenMatches(req, ref)" $MW/src/routes/session-briefs.ts "the library sync is bound to the run token"
+needF "if-none-match" $MW/src/routes/session-briefs.ts "an unchanged library is a 304 (no copy)"
+needF "code: 'FILES'" $MW/src/routes/runbooks.ts "proposal files are checked as untrusted input (422 FILES)"
+needF "files_diff" $MW/src/routes/runbooks.ts "proposal review serves the file diff"
+needF "library-steward" $MW/src/lib/runbook-review.ts "the org-wide skill's steward rule (org-leader, or an SME of its area)"
+needF "'ReviewRunbook'" $MW/src/lib/authz.ts "ReviewRunbook is in CAPABILITY_ACTIONS"
+need "skills\)" agents/devbox/lab "lab has a skills subcommand"
+need "keep\)" agents/devbox/lab "lab has a keep subcommand"
+needF "sync_skills" agents/devbox/lab "lab brief syncs the skill library first"
+needF "O_NOFOLLOW" agents/devbox/lab "lab skills writes without following links"
+needF '"SessionEnd"' agents/devbox/managed-settings.json "devbox SessionEnd runs lab keep"
+needF "lab keep" agents/devbox/managed-settings.json "devbox SessionEnd command is lab keep"
+needF 'language="text"' portal/src/pages/runbooks/RunbookFiles.tsx "portal file viewer renders contents as text only"
+needF "DiffViewer" portal/src/pages/runbooks/ProposalReview.tsx "portal proposal review shows the file diff"
+check "! grep -qE 'dangerouslySetInnerHTML *[=:{]' portal/src/pages/runbooks/RunbookFiles.tsx" "portal file viewer sets no raw HTML"
+check "grep -q \"'runbooks-tools-demo'\" $MW/src/mock/core/fixture.ts" "scenario runbooks-tools-demo registered"
+for m in author/capture-tool consumer/box-tools; do check "ls docs/journeys/maps/runbooks/$m.* >/dev/null 2>&1" "map runbooks/$m"; done
+needF "## R8 — runbooks carry tools" docs/distillation-runbooks-goal.md "goal doc has the R8 section"
+needF "Decisions taken (user, 2026-10-15)" docs/distillation-runbooks-goal.md "goal doc records the 2026-10-15 decisions"
+if [ "$QUICK" = 0 ]; then
+  if jest_run tools src/lib/runbooks/__tests__/model-bundle.test.ts src/lib/runbooks/__tests__/runbook-store.test.ts src/lib/__tests__/lab-cli-skills.test.ts src/routes/__tests__/runbook-files.test.ts src/mock/__tests__/runbook-bundles.test.ts src/mock/__tests__/runbooks-tools-demo.test.ts; then ok "jest: R8 suites pass"; else
+    fail "jest: R8 suites fail"; grep -E '✕|●' "$SCRATCH/tools.log" | head -8 | sed 's/^/        /'; fi
+  for r in R-file-path R-file-size R-file-unreferenced R-file-missing R-script-header R-bundle-verify R-skill-description R-skill-collision; do
+    jest_named tools "lint rule $r: fails its bad fixture" "lint rule $r has a failing fixture"
+    jest_named tools "lint rule $r: passes its good fixture" "lint rule $r has a passing fixture"
+  done
+  jest_named tools 'lint: R-command-real accepts a bundle-relative script' "R-command-real accepts a bundle-relative script the bundle carries"
+  jest_named tools 'lint: R-secrets reads file contents' "R-secrets reads file contents"
+  jest_named tools 'files: rejects path' "paths with .., absolute paths and hidden files are rejected"
+  jest_named tools 'files: caps a file, a bundle and the count' "per-file, per-bundle and count caps"
+  jest_named tools 'model: a version with files' "files hash into the version"
+  jest_named tools 'skill: round-trip' "SKILL.md round-trips to the RunbookDoc for every seed runbook"
+  jest_named tools 'library: one org-wide set' "one org-wide library, scope only a label"
+  jest_named tools 'store: a version with files' "store contract: a version keeps its files"
+  jest_named tools 'store: a proposal carries its files' "store contract: a proposal's files reach the accepted version"
+  jest_named tools 'box: installs the whole library' "box: lab skills installs and verifies the library, skips an unchanged copy"
+  jest_named tools 'box: refuses' "box: a tampered or path-escaping library is refused whole"
+  jest_named tools "box: another run's token" "box: another run's token gets nothing"
+  jest_named tools 'capture: lab keep --dry-run and the TypeScript reader agree' "capture: lab keep and lib/runbooks/keep.ts agree"
+  jest_named tools 'capture: links, binaries' "capture: links, binaries, bad names and oversize files are not carried"
+  jest_named tools 'capture: lab keep files a new-skill proposal' "capture: a kept tool becomes a proposal with its files, nothing reaches the library unreviewed"
+  jest_named tools 'stewards: an SME on the area accepts' "stewards: an SME of the area accepts; an SME elsewhere and the dispatcher cannot"
+  jest_named tools 'review: the detail shows the file diff' "review: the proposal shows a file diff"
+  jest_named tools 'verify steps run offline and pass' "seed: every bundle's Verify runs offline and passes"
+  jest_named tools 'demo: reaches done' "demo: a kept CDP harness is accepted and another initiative's box runs it"
+  check "(cd portal && node --test src/pages/runbooks/__tests__/runbookFilesSafety.test.ts)" "portal: a hostile file renders as escaped text"
+  if [ -n "${RUNBOOK_DYNAMODB_ENDPOINT:-}" ]; then jest_named tools 'DynamoRunbookStore.*R8: files' "store contract with files against DynamoRunbookStore ($RUNBOOK_DYNAMODB_ENDPOINT)"
+  else skip "store contract with files against DynamoRunbookStore (RUNBOOK_DYNAMODB_ENDPOINT unset)"; fi
+fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

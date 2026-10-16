@@ -58,3 +58,12 @@ export const NEW_MD = renderRunbook({
   title: 'Rerun a flaky test against its own diff',
   summary: 'Rerun a flaky test with the diff that introduced it applied so you can tell a flake from a regression.',
 });
+
+/** R8: a second new runbook whose skill description does not collide with NEW_MD's (R-skill-collision). */
+export const NEW_MD_OTHER = renderRunbook({
+  ...flakyRerunDiff,
+  title: 'Quarantine a flaky test until its owner fixes it',
+  summary: 'Move a test that flips between runs into quarantine so the pipeline stays green while its owner investigates.',
+  use_when: ['A test fails and passes on the same commit and blocks merges for everyone.'],
+  not_for: ['A test that fails every time (that is a regression, not a flake).'],
+});

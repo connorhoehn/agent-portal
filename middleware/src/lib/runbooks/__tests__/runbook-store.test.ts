@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import type { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import type { Runbook, RunbookApplication, RunbookProposal, SessionBrief } from '../types.js';
 import { versionOf } from '../version.js';
+import { fileOf } from '../files.js';
 import { assembleBrief } from '../brief.js';
 import { RowsRunbookStore, privateRowSources } from '../store-rows.js';
 import { DynamoRunbookStore, createRunbookDynamoClient, dropRunbookTable, ensureRunbookTable, runbookStoreConfig } from '../store-dynamo.js';
@@ -32,7 +33,7 @@ const app = (id: string, at: string, over: Partial<RunbookApplication> = {}): Ru
   id, runbook_id: 'rb-a', version: 1, run_ref: `run-${id}`, brief_id: `brief-run-${id}`, outcome: 'followed', failed_at_step: null, note: null, at, ...over,
 });
 const brief = (runRef: string, at = T0, framing = ''): SessionBrief =>
-  assembleBrief({ run_ref: runRef, assembled_at: at, framing, work_item: null, initiative: null, repo: null, decisions: [], runbooks: [] });
+  assembleBrief({ run_ref: runRef, assembled_at: at, framing, work_item: null, initiative: null, repo: null, decisions: [] });
 
 jest.setTimeout(30_000); // the Dynamo leg creates a table per test
 
@@ -60,6 +61,33 @@ describe.each(backends)('$name (RunbookStore contract)', ({ open }) => {
   let close: () => Promise<void>;
   beforeEach(async () => { ({ store, close } = await open()); });
   afterEach(async () => { await close(); });
+
+  describe('R8: files', () => {
+    const files = [
+      fileOf({ path: 'scripts/count.mjs', content: '#!/usr/bin/env node\n// runtime: node >=20\n// deps: none\nconsole.log(1);\n' }),
+      fileOf({ path: 'data/sample.csv', content: 'a,b\n1,2\n' }),
+    ];
+    it('store: a version with files keeps them, its bundle sha and an area label, byte for byte', async () => {
+      const v1 = versionOf({ runbook_id: 'rb-f', version: 1, doc: tenantCutoverV1, author: { kind: 'person', id: 'p-001' }, files });
+      await store.createRunbook(runbook('rb-f', { scope: { kind: 'org', ref: null }, area: 'p-auth-migration' }), v1);
+      const got = (await store.getVersion('rb-f', 1))!;
+      expect(got.files).toEqual(v1.files);
+      expect(got.bundle_sha256).toBe(v1.bundle_sha256);
+      expect((await store.getRunbook('rb-f'))!.area).toBe('p-auth-migration');
+      got.files![0]!.content = 'mutated';
+      expect((await store.getVersion('rb-f', 1))!.files![0]!.content).toBe(v1.files![0]!.content);
+    });
+    it('store: a proposal carries its files, and accepting it writes them into the version', async () => {
+      await store.createRunbook(runbook('rb-a'), v('rb-a', 1));
+      await store.putProposal(proposal('prop-f', { proposed_files: files, proposed_id: 'rb-a' }));
+      expect((await store.getProposal('prop-f'))!.proposed_files).toEqual(files);
+      const version = versionOf({ runbook_id: 'rb-a', version: 2, doc: tenantCutoverV2, author: { kind: 'person', id: 'p-002' }, files });
+      const out = await store.acceptProposal({ proposal_id: 'prop-f', decided_by: 'p-001', at: T1, version });
+      expect(out.version!.files).toEqual(version.files);
+      expect(out.version!.files!.map((f) => f.path)).toEqual(['data/sample.csv', 'scripts/count.mjs']);
+      expect((await store.getVersion('rb-a', 2))!.bundle_sha256).toBe(version.bundle_sha256);
+    });
+  });
 
   describe('runbooks and versions', () => {
     it('creates a runbook with its v1 and reads both back as copies', async () => {

@@ -7,8 +7,8 @@
 // deterministic for a given world but can never collide with a real run's.
 import type { RunbookStore } from './runbooks/store.js';
 import {
-  assembleBrief, briefBudget, runbookHealth, selectRunbooks,
-  type BriefDecision, type BriefSkill, type RunbookCandidate, type SessionBrief,
+  assembleBrief, briefBudget, runbookHealth, loadSkillLibrary, BOX_SKILLS_DIR,
+  type BriefDecision, type BriefSkill, type BriefSkillLibrary, type RunbookCandidate, type SessionBrief,
 } from './runbooks/index.js';
 
 export interface PreviewWork {
@@ -50,6 +50,12 @@ function decisionLine(d: PreviewDecision): BriefDecision {
  * then freezes the result — ONE assembly path, so a preview and the brief a
  * run receives differ only in what the run ref and the clock make differ.
  */
+/** The org's skill library as a brief records it: its sha, where this box installs it, every skill's version. */
+async function libraryOf(store: RunbookStore, dir: string | null): Promise<BriefSkillLibrary> {
+  const lib = await loadSkillLibrary(store);
+  return { sha256: lib.sha256, dir, skills: lib.skills.map((k) => ({ name: k.name, version: k.version })) };
+}
+
 export async function previewBrief(input: {
   store: RunbookStore;
   work: PreviewWork | null;
@@ -67,20 +73,15 @@ export async function previewBrief(input: {
   task?: { title: string; text: string } | null;
   /** Overrides the project's repo (a governed run's checkout). */
   repo?: string | null;
+  /**
+   * R8: where this run's box installs the org's skill library — `~/.claude/skills` on a devbox
+   * (the default), null on a machine that does not sync it (a local worker).
+   */
+  skillsDir?: string | null;
 }): Promise<SessionBrief> {
   const { work, project } = input;
   const runRef = input.run_ref ?? `preview-${work?.id ?? 'task'}`;
   const repo = input.repo ?? project?.repoFullName ?? null;
-  const candidates = await loadCandidates(input.store, Date.parse(input.nowIso));
-  const selection = selectRunbooks(work
-    ? {
-      id: work.id, title: work.title, description: work.description ?? '', labels: work.labels,
-      repo, initiative_id: project?.id ?? null, pinned_runbook_ids: input.pinned,
-    }
-    : {
-      id: runRef, title: input.task?.title ?? '', description: input.task?.text ?? '', labels: [],
-      repo, initiative_id: project?.id ?? null, pinned_runbook_ids: input.pinned,
-    }, candidates);
   return assembleBrief({
     run_ref: runRef,
     assembled_at: input.nowIso,
@@ -95,8 +96,8 @@ export async function previewBrief(input: {
     initiative: project ? { id: project.id, name: project.name, repo: project.repoFullName } : null,
     repo,
     decisions: input.decisions.map(decisionLine),
-    runbooks: selection.selected,
     ...(input.skills?.length ? { skills: input.skills } : {}),
+    skill_library: await libraryOf(input.store, input.skillsDir === undefined ? BOX_SKILLS_DIR : input.skillsDir),
     budget_tokens: briefBudget(input.env ?? process.env),
   });
 }

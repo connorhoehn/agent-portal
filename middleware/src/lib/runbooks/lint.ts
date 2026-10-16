@@ -6,14 +6,28 @@
 // Pure: the only outside knowledge (which /api routes exist, which repo
 // scripts exist) arrives in LintContext; repo-context.ts builds one from the
 // tree. Without it R-command-real checks nothing and says so in no finding.
-import type { LintFinding, LintRuleId, RunbookCommand, RunbookDoc } from './types.js';
-import { tokens } from './similarity.js';
+import type { LintFinding, LintRuleId, RunbookCommand, RunbookDoc, RunbookFile } from './types.js';
+import { similarity, tokens } from './similarity.js';
+import { FILE_LIMITS, checkFilePath } from './files.js';
+import { checkSkillDescription, checkSkillName, skillDescription } from './skill.js';
 
 export interface LintContext {
   /** Mounted routes, e.g. from mock/core/wire/snapshots/routes.json. */
   routes?: ReadonlyArray<{ method: string; path: string }>;
   /** Whether a repo-relative path exists ("scripts/validate-mock-floor.sh"). */
   pathExists?: (repoRelativePath: string) => boolean;
+  /**
+   * R8: the files this version carries. When given, the bundle rules run
+   * (R-file-*, R-script-header, R-bundle-verify) and a command's scripts/… or
+   * data/… path is real when the bundle holds it, repository or not.
+   */
+  files?: readonly RunbookFile[];
+  /**
+   * R8: the skill this runbook becomes — its name (the runbook id, or the
+   * proposed one) and the other skills already in the library or on a box,
+   * for R-skill-collision. Without it the description is still checked.
+   */
+  skill?: { name: string | null; others?: ReadonlyArray<{ name: string; description: string }> };
 }
 
 export interface LintRule { id: LintRuleId; severity: 'error' | 'warning'; summary: string; example: string }
@@ -29,7 +43,16 @@ export const LINT_RULES: readonly LintRule[] = [
   { id: 'R-single-subject', severity: 'warning', summary: 'more than half the steps share no term with the title and "use when"', example: 'examples 1, 2, 4, 5 (three clusters chunked into one procedure)' },
   { id: 'R-command-real', severity: 'error', summary: 'a command calls an /api route or repo script that does not exist', example: 'invented commands (example 3 given a made-up route)' },
   { id: 'R-length', severity: 'error', summary: 'title > 80, summary > 200, or a step > 160 characters', example: 'examples 1, 4 (summaries of 500+ characters)' },
-  { id: 'R-secrets', severity: 'error', summary: 'text carries something shaped like a credential', example: 'leaked tokens' },
+  { id: 'R-secrets', severity: 'error', summary: 'text or a carried file carries something shaped like a credential', example: 'leaked tokens' },
+  // R8 — a runbook carries scripts and data like a skill does, and becomes one.
+  { id: 'R-file-path', severity: 'error', summary: 'a carried file is not at a safe bundle path under scripts/ or data/', example: 'a captured tool at ../../.ssh/config or /etc/passwd' },
+  { id: 'R-file-size', severity: 'error', summary: `a carried file is over ${FILE_LIMITS.file_bytes} bytes, or all of them over ${FILE_LIMITS.bundle_bytes}`, example: 'a recorded HAR pasted whole into data/' },
+  { id: 'R-file-unreferenced', severity: 'error', summary: 'a carried file is never named by a step, a verify check or a roll-back step', example: 'scratch files a run left in its keep folder' },
+  { id: 'R-file-missing', severity: 'error', summary: 'a command names scripts/… or data/… that neither the bundle nor the repository holds', example: 'node scripts/replay.mjs data/frames.jsonl with no data/frames.jsonl' },
+  { id: 'R-script-header', severity: 'error', summary: 'a script does not declare its runtime and dependencies in its header', example: 'a .mjs that needs Node 22 global WebSocket and says nothing' },
+  { id: 'R-bundle-verify', severity: 'error', summary: 'a runbook with scripts has no Verify command that runs one against bundled data', example: 'a CDP harness nobody can check offline' },
+  { id: 'R-skill-description', severity: 'error', summary: "the skill name or description breaks Claude Code's rules, or never says when to use it", example: 'no "Use when", or a description over 1,024 characters' },
+  { id: 'R-skill-collision', severity: 'error', summary: "the skill's name or description collides with another skill's", example: 'two "debug websocket" skills Claude cannot tell apart' },
 ];
 const SEVERITY = new Map(LINT_RULES.map((r) => [r.id, r.severity]));
 
@@ -75,7 +98,7 @@ const SECRETS: ReadonlyArray<[string, RegExp]> = [
   ['a private key', /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
   ['a JWT', /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/],
   ['a bearer token', /\bBearer\s+(?!\$)[A-Za-z0-9._~+/-]{24,}=*/],
-  ['a literal password', /\b(password|passwd|secret|token)\s*[=:]\s*(?!\$|<|\{|\*)["']?[^\s"'$<{]{8,}/i],
+  ['a literal password', /\b(password|passwd|secret|token)\s*[=:]\s*(?!\$|<|\{|\*|process\.env\b|os\.environ\b|(?:os\.)?getenv\b)["']?[^\s"'$<{]{8,}/i],
 ];
 
 /** Things a step mentions that only a command can make exact (R-commandless). */
@@ -89,6 +112,13 @@ const NEEDS_COMMAND: ReadonlyArray<[string, RegExp]> = [
   ['an identifier', /\b[a-z]+[A-Z][A-Za-z0-9]*\b/],
   ['an environment variable', /\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/],
 ];
+
+/** A bundle-relative path in text: scripts/x.mjs, data/frames.jsonl. */
+const BUNDLE_PATH = /(?:^|[\s"'=(`])(?:\.\/)?((?:scripts|data)\/[A-Za-z0-9_][A-Za-z0-9._/-]*[A-Za-z0-9_])/g;
+/** Collision: descriptions this alike (token Jaccard) cannot be told apart by a model choosing a skill. */
+export const SKILL_COLLISION_THRESHOLD = 0.8;
+/** How far into a script its header may run. */
+const HEADER_LINES = 15;
 
 const ROUTE_IN_COMMAND = /\/api\/[A-Za-z0-9_\-/:.$%{}<>]*/g;
 const REPO_PATH_IN_COMMAND = /(?:^|[\s"'=(])(?:\.\/)?((?:scripts|tools|agents|infra|middleware|portal|schema|docs)\/[A-Za-z0-9_./-]+\.(?:sh|mjs|cjs|js|ts|py|sql|json))\b/g;
@@ -215,9 +245,10 @@ export function lintRunbook(doc: RunbookDoc, ctx: LintContext = {}): LintFinding
         if (!ctx.routes.some((r) => routeMatches(r.path, used))) add('R-command-real', path, `calls ${used}, which no mounted route serves`);
       }
     }
+    const inBundle = (p: string) => !!ctx.files?.some((f) => f.path === p);
     if (ctx.pathExists) {
       for (const m of command.text.matchAll(REPO_PATH_IN_COMMAND)) {
-        if (!ctx.pathExists(m[1]!)) add('R-command-real', path, `runs ${m[1]}, which is not in the repository`);
+        if (!inBundle(m[1]!) && !ctx.pathExists(m[1]!)) add('R-command-real', path, ctx.files?.length ? `runs ${m[1]}, which is neither in this runbook's files nor in the repository` : `runs ${m[1]}, which is not in the repository`);
       }
     }
   }
@@ -235,7 +266,99 @@ export function lintRunbook(doc: RunbookDoc, ctx: LintContext = {}): LintFinding
     if (hit) add('R-secrets', path, `contains what looks like ${hit[0]} — use an environment variable or a secret reference`);
   }
 
+  lintBundle(doc, ctx, add);
+  lintSkill(doc, ctx, add);
   return findings;
+}
+
+type Add = (rule: LintRuleId, path: string, message: string) => void;
+
+/** Bundle-relative paths a text names. */
+export function bundlePaths(text: string): string[] {
+  return [...text.matchAll(BUNDLE_PATH)].map((m) => m[1]!.replace(/[.,;:)]+$/, ''));
+}
+
+/** Every text a step, verify check or roll-back step carries — where a file must be named to count as used. */
+function procedureTexts(doc: RunbookDoc): string[] {
+  return [
+    ...doc.steps.flatMap((s) => [s.do, s.command?.text ?? '', s.expect ?? '']),
+    ...doc.verify.flatMap((v) => [v.check, v.command?.text ?? '']),
+    ...doc.rollback.flatMap((r) => [r.do, r.command?.text ?? '']),
+  ];
+}
+
+/** Does a script's header say what it runs on and what it needs? */
+export function declaresRuntime(content: string): boolean {
+  const head = content.split('\n').slice(0, HEADER_LINES).join('\n');
+  return /\bruntime\s*:/i.test(head) && /\b(deps|dependencies|requires)\s*:/i.test(head);
+}
+
+function lintBundle(doc: RunbookDoc, ctx: LintContext, add: Add): void {
+  const files = ctx.files;
+  // R-file-missing — a data/ or scripts/ path a command names must exist somewhere.
+  if (files !== undefined) {
+    for (const { path, command } of commands(doc)) {
+      for (const p of bundlePaths(command.text)) {
+        if (files.some((f) => f.path === p)) continue;
+        if (p.startsWith('scripts/') && ctx.pathExists) continue; // R-command-real already judged repo scripts
+        if (ctx.pathExists?.(p)) continue;
+        add('R-file-missing', path, `names ${p}, which this runbook does not carry${ctx.pathExists ? ' and the repository does not have' : ''}`);
+      }
+    }
+  }
+  if (!files || files.length === 0) return;
+
+  let total = 0;
+  for (const f of files) {
+    const at = `files[${f.path}]`;
+    const bad = checkFilePath(f.path);
+    if (bad) add('R-file-path', at, bad);
+    const size = Buffer.byteLength(f.content, 'utf8');
+    total += size;
+    if (size > FILE_LIMITS.file_bytes) add('R-file-size', at, `${size} bytes, over the ${FILE_LIMITS.file_bytes}-byte limit per file`);
+    // R-secrets over contents: a script ships to every box in the org.
+    const hit = SECRETS.find(([, re]) => re.test(f.content));
+    if (hit) add('R-secrets', at, `contains what looks like ${hit[0]} — read it from an environment variable at run time`);
+    if (f.path.startsWith('scripts/') && !declaresRuntime(f.content)) {
+      add('R-script-header', at, 'declare the runtime and dependencies in the first lines, e.g. "// runtime: node >=22" and "// deps: none (node built-ins)"');
+    }
+  }
+  if (total > FILE_LIMITS.bundle_bytes) add('R-file-size', 'files', `the files total ${total} bytes, over the ${FILE_LIMITS.bundle_bytes}-byte limit per runbook`);
+
+  // R-file-unreferenced — every carried file earns its place in the procedure.
+  const named = new Set(procedureTexts(doc).flatMap(bundlePaths));
+  for (const f of files) {
+    if (!named.has(f.path)) add('R-file-unreferenced', `files[${f.path}]`, `${f.path} is carried but no step, verify check or roll-back step names it — use it or drop it`);
+  }
+
+  // R-bundle-verify — a bundle with scripts proves itself offline: a Verify command runs a bundled script against bundled data.
+  const scripts = files.filter((f) => f.path.startsWith('scripts/')).map((f) => f.path);
+  if (scripts.length > 0) {
+    const data = new Set(files.filter((f) => f.path.startsWith('data/')).map((f) => f.path));
+    const proves = doc.verify.some((v) => {
+      const used = v.command ? bundlePaths(v.command.text) : [];
+      return used.some((p) => scripts.includes(p)) && used.some((p) => data.has(p));
+    });
+    if (!proves) add('R-bundle-verify', 'verify', `the runbook carries ${scripts.join(', ')} but no Verify command runs one against a bundled data/ file — add an offline check`);
+  }
+}
+
+function lintSkill(doc: RunbookDoc, ctx: LintContext, add: Add): void {
+  const description = skillDescription(doc);
+  const bad = checkSkillDescription(description);
+  if (bad) add('R-skill-description', 'description', bad);
+  if (doc.use_when.length === 0) add('R-skill-description', 'use_when', 'say when to use it: Claude picks a skill by its description, and "Use when" is that half');
+  const name = ctx.skill?.name ?? null;
+  if (name) {
+    const nameBad = checkSkillName(name);
+    if (nameBad) add('R-skill-description', 'name', nameBad);
+    for (const o of ctx.skill?.others ?? []) {
+      if (o.name === name) continue; // the runbook's own current version
+      if (o.name.toLowerCase() === name.toLowerCase()) { add('R-skill-collision', 'name', `another skill is already named ${o.name}`); continue; }
+      const score = similarity(description, o.description);
+      if (score >= SKILL_COLLISION_THRESHOLD) add('R-skill-collision', 'description', `reads like ${o.name} (similarity ${score.toFixed(2)}) — say what makes this one different, or propose an edit to ${o.name}`);
+    }
+  }
 }
 
 export function lintErrors(findings: readonly LintFinding[]): LintFinding[] {

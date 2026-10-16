@@ -93,10 +93,13 @@ describe('the Runbooks demo director', () => {
     // The first brief was frozen BEFORE the review and still says v1; the second carries v2.
     const first = await store.getBrief(FIRST_RUN.runRef);
     const second = await store.getBrief(SECOND_RUN.runRef);
-    expect(first?.sections.find((x) => x.ref === RUNBOOK_ID)?.version).toBe(1);
-    expect(first?.markdown).not.toContain(ADDED_STEP_DO);
-    expect(second?.sections.find((x) => x.ref === RUNBOOK_ID)?.version).toBe(2);
-    expect(second?.markdown).toContain(ADDED_STEP_DO);
+    // R8: the briefs record the skill library each box synced; the procedure arrives as the skill, not in the brief.
+    expect(first?.skill_library?.skills.find((k) => k.name === RUNBOOK_ID)?.version).toBe(1);
+    expect(second?.skill_library?.skills.find((k) => k.name === RUNBOOK_ID)?.version).toBe(2);
+    expect(second?.skill_library?.sha256).not.toBe(first?.skill_library?.sha256);
+    expect(second?.markdown).not.toContain(ADDED_STEP_DO);
+    const v2 = await runbookStore().getVersion(RUNBOOK_ID, 2);
+    expect(v2?.markdown).toContain(ADDED_STEP_DO);
     expect(second?.sha256).not.toBe(first?.sha256);
     expect(s.second?.sha256).toBe(second?.sha256);
   });

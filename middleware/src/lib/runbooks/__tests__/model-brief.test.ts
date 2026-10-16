@@ -1,9 +1,11 @@
 // selectRunbooks + assembleBrief + runbookHealth + similarity: the
-// deterministic selection rule (design §3.2), the 6,000-token whole-runbook
-// budget (decisions 2026-10-14) and the brief's bytes.
+// deterministic selection rule (design §3.2), the brief's bytes and its
+// 6,000-token budget. R8 (decision 2026-10-15): procedures reach a box only as
+// skills, so the brief is project context plus one pointer at the org's skill
+// library — no procedure text, one path for every box.
 import {
-  assembleBrief, CONTEXT_CAP_TOKENS, DEFAULT_BRIEF_BUDGET, estimateTokens, findSimilar, MAX_FULL_RUNBOOKS, runbookHealth,
-  selectRunbooks, sha256Hex, similarity, versionOf, briefBudget,
+  assembleBrief, DEFAULT_BRIEF_BUDGET, estimateTokens, findSimilar, runbookHealth,
+  selectRunbooks, sha256Hex, similarity, versionOf, briefBudget, renderRunbook,
 } from '../index.js';
 import type { AssembleBriefInput, RunbookCandidate, WorkItemContext } from '../index.js';
 import type { RunbookApplication, RunbookDoc, RunbookHealth } from '../types.js';
@@ -47,6 +49,11 @@ const WI: WorkItemContext = {
   pinned_runbook_ids: [],
 };
 
+const LIB = {
+  sha256: 'a'.repeat(64), dir: '~/.claude/skills',
+  skills: [{ name: 'rb-sso-new-origin', version: 1 }, { name: 'rb-tenant-cutover', version: 2 }, { name: 'rb-ws-cdp-debug', version: 1 }],
+};
+
 const briefInput = (over: Partial<AssembleBriefInput> = {}): AssembleBriefInput => ({
   run_ref: 'job-0001',
   assembled_at: '2026-10-14T09:00:00.000Z',
@@ -57,7 +64,7 @@ const briefInput = (over: Partial<AssembleBriefInput> = {}): AssembleBriefInput 
     { id: 'd-legacy-auth', title: 'Sunset legacy auth service', status_line: 'resolved 2026-01-30: migrate remaining services off the v1 auth gateway before Q3 2026.', at: '2026-01-30T00:00:00.000Z' },
     { id: 'd-cognito-cutover', title: 'Cutover order for legacy SSO tenants', status_line: 'escalated to an org-leader 2 days ago; not decided. Do not choose an order; write the runbook so the order is a parameter.', at: '2026-10-12T00:00:00.000Z' },
   ],
-  runbooks: selectRunbooks(WI, CANDIDATES).selected,
+  skill_library: LIB,
   ...over,
 });
 
@@ -106,24 +113,41 @@ describe('selectRunbooks', () => {
 });
 
 describe('assembleBrief', () => {
-  it('assembles task, project, decisions newest first, runbooks whole and how to report back', () => {
+  it('assembles task, project, decisions newest first, the skills pointer and how to report back', () => {
     const b = assembleBrief(briefInput());
     expect(b.sections.map((s) => [s.kind, s.ref, s.version ?? null])).toEqual([
       ['framing', null, null], ['work_item', 'wi-auth-e2-s2', null], ['initiative', 'p-auth-migration', null],
       ['decisions', 'd-cognito-cutover,d-legacy-auth', null],
-      ['runbook', 'rb-tenant-cutover', 1], ['runbook', 'rb-sso-new-origin', 1], ['how_to_report', null, null],
+      ['skill_library', LIB.sha256, null], ['how_to_report', null, null],
     ]);
     expect(b.omitted).toEqual([]);
     expect(b.id).toBe('brief-job-0001');
+    expect(b.assembler_version).toBe('2');
     expect(b.used_tokens).toBe(estimateTokens(b.markdown));
     expect(b.sha256).toBe(sha256Hex(b.markdown));
     expect(b.markdown).toContain(`> Assembled 2026-10-14 for run job-0001 · ${b.used_tokens.toLocaleString('en-US')} of 6,000 tokens · brief-job-0001`);
     expect(b.markdown).toContain('**Tenant-by-tenant cutover runbook with rollback** (story, 5 pts, Auth Migration)');
     expect(b.markdown).toContain('Parent epic: Legacy SSO decommission ("The SAML shim serves zero tenants and is deleted, not paused").');
     expect(b.markdown.indexOf('Cutover order for legacy SSO tenants')).toBeLessThan(b.markdown.indexOf('Sunset legacy auth service'));
-    expect(b.markdown).toContain('### 1. Cut one tenant over from SAML to Cognito (rb-tenant-cutover v1)');
-    expect(b.markdown).toContain('⚠ Last run failed at step 2: sign-in still pointed to the old service');
-    expect(b.markdown).toContain('`lab applied rb-tenant-cutover followed`');
+    expect(b.markdown).toContain("## The org's skills\nThe org's 3 established skills are installed in `~/.claude/skills` (library aaaaaaaaaaaa); Claude Code loads one when its description fits the task.");
+    expect(b.markdown).toContain('`.lab/keep/<rb-name>/`');
+    expect(b.skill_library).toEqual(LIB);
+  });
+
+  it('brief: no procedure text — the brief carries no runbook body, only the pointer', () => {
+    const b = assembleBrief(briefInput());
+    for (const doc of [tenantCutoverV1, tenantCutoverV2, ssoNewOrigin]) {
+      expect(b.markdown).not.toContain(renderRunbook(doc).split('\n').slice(0, 3).join('\n'));
+      expect(b.markdown).not.toContain(doc.steps[0]!.do);
+    }
+    expect(b.markdown).not.toMatch(/^## Runbooks/m);
+    expect(b.sections.some((s) => s.kind === 'runbook')).toBe(false);
+    expect(b.markdown.match(/^## The org's skills$/gm)).toHaveLength(1);
+  });
+
+  it('brief: one path — a machine that does not sync the library is told so, an empty library says so', () => {
+    expect(assembleBrief(briefInput({ skill_library: { ...LIB, dir: null } })).markdown).toContain("The org's 3 established skills are in the org's library (aaaaaaaaaaaa) but not installed on this machine.");
+    expect(assembleBrief(briefInput({ skill_library: null })).markdown).toContain("## The org's skills\nThe org has no established skills yet.");
   });
 
   it('pure: assembleBrief — same input twice → same sha256', () => {
@@ -131,70 +155,28 @@ describe('assembleBrief', () => {
     expect(JSON.stringify(assembleBrief(briefInput()))).toBe(JSON.stringify(assembleBrief(briefInput())));
   });
 
-  it('brief: never exceeds its budget — at the default, at a tight budget, and with sixty candidates', () => {
-    const many: RunbookCandidate[] = Array.from({ length: 60 }, (_, k) => cand(`rb-gen-${String(k).padStart(2, '0')}`, { ...tenantCutoverV2, title: `Cut tenant ${k} over from SAML to Cognito` }, { kind: 'initiative', ref: 'p-auth-migration' }, PROVEN));
+  it('brief: never exceeds its budget — at the default, at a tight budget, with a huge task and eighty decisions', () => {
+    const decisions = Array.from({ length: 80 }, (_, k) => ({ id: `d-${String(k).padStart(2, '0')}`, title: `Decision ${k}`, status_line: 'resolved: keep the per-tenant flag until the last tenant is cut over, then delete the shim.', at: `2026-0${1 + (k % 9)}-${String(1 + (k % 28)).padStart(2, '0')}T00:00:00.000Z` }));
+    const huge = { ...briefInput().work_item!, description: 'The cutover order matters. '.repeat(3_000) };
     for (const input of [
       briefInput(),
       briefInput({ budget_tokens: 1_200 }),
-      briefInput({ runbooks: selectRunbooks(WI, many).selected }),
-      briefInput({ runbooks: selectRunbooks(WI, many).selected, budget_tokens: 3_000 }),
+      briefInput({ decisions }),
+      briefInput({ decisions, work_item: huge }),
+      briefInput({ decisions, work_item: huge, budget_tokens: 2_000 }),
     ]) {
       const b = assembleBrief(input);
       expect(b.used_tokens).toBeLessThanOrEqual(b.budget_tokens);
       expect(estimateTokens(b.markdown)).toBe(b.used_tokens);
-      expect(b.sections.filter((s) => s.kind === 'runbook').length).toBeLessThanOrEqual(MAX_FULL_RUNBOOKS);
-      expect(b.sections.filter((s) => s.kind === 'runbook').length + b.omitted.length).toBe(input.runbooks.length);
     }
-    expect(assembleBrief(briefInput({ runbooks: selectRunbooks(WI, many).selected })).sections.filter((s) => s.kind === 'runbook')).toHaveLength(MAX_FULL_RUNBOOKS);
+    expect(assembleBrief(briefInput({ decisions, work_item: huge })).markdown).toContain('(truncated; the full description is on the work item)');
   });
 
-  it('brief: whole runbooks only — an included runbook is verbatim, an omitted one is a pointer', () => {
-    const input = briefInput({ budget_tokens: 1_200 });
-    const b = assembleBrief(input);
-    for (const r of input.runbooks) {
-      const included = b.sections.some((s) => s.kind === 'runbook' && s.ref === r.runbook_id);
-      if (included) expect(b.markdown).toContain(r.markdown.trimEnd());
-      else {
-        expect(b.markdown).not.toContain(r.markdown.split('\n')[0]!);
-        expect(b.markdown).toContain(`- ${r.title} — \`lab runbook ${r.runbook_id}\``);
-        expect(b.omitted).toContainEqual({ runbook_id: r.runbook_id, reason: 'budget' });
-      }
-    }
-    expect(b.omitted.length).toBeGreaterThan(0);
-  });
-
-  it('a runbook exactly at the boundary is included; one token less and it is not', () => {
-    const one = briefInput({ runbooks: briefInput().runbooks.slice(0, 1) });
-    // The header prints the budget, so measure at a budget of the same width.
-    let exact = assembleBrief({ ...one, budget_tokens: 100_000 }).used_tokens;
-    exact = assembleBrief({ ...one, budget_tokens: exact }).used_tokens;
-    const at = assembleBrief({ ...one, budget_tokens: exact });
-    expect(at.omitted).toEqual([]);
-    expect(at.used_tokens).toBe(exact);
-    const under = assembleBrief({ ...one, budget_tokens: exact - 1 });
-    expect(under.omitted).toEqual([{ runbook_id: 'rb-tenant-cutover', reason: 'budget' }]);
-  });
-
-  it('a pinned runbook too large for the budget is listed, and a later smaller one still fits', () => {
-    const big = cand('rb-big', { ...tenantCutoverV2, notes: 'Background.\n\n' + 'Long context line about the cutover. '.repeat(200).trim() }, { kind: 'org', ref: null }, PROVEN);
-    const runbooks = selectRunbooks({ ...WI, pinned_runbook_ids: ['rb-big'] }, [...CANDIDATES, big]).selected;
-    expect(runbooks[0]!.runbook_id).toBe('rb-big');
-    const b = assembleBrief(briefInput({ runbooks, budget_tokens: 2_600 }));
-    expect(b.omitted.map((o) => o.runbook_id)).toContain('rb-big');
-    expect(b.sections.some((s) => s.kind === 'runbook')).toBe(true);
-  });
-
-  it('an empty selection says so', () => {
-    const b = assembleBrief(briefInput({ runbooks: [] }));
-    expect(b.markdown).toContain('## Runbooks for this work\n\nNo runbooks matched this work.');
-    expect(b.sections.some((s) => s.kind === 'runbook')).toBe(false);
-  });
-
-  it('context is capped at 1,800 tokens: decisions are dropped whole, oldest first, and the drop is stated', () => {
-    const decisions = Array.from({ length: 80 }, (_, k) => ({ id: `d-${String(k).padStart(2, '0')}`, title: `Decision ${k}`, status_line: 'resolved: keep the per-tenant flag until the last tenant is cut over, then delete the shim.', at: `2026-0${1 + (k % 9)}-${String(1 + (k % 28)).padStart(2, '0')}T00:00:00.000Z` }));
+  it('the budget is spent on project context: decisions are dropped whole, oldest first, and the drop is stated', () => {
+    const decisions = Array.from({ length: 400 }, (_, k) => ({ id: `d-${String(k).padStart(3, '0')}`, title: `Decision ${k}`, status_line: 'resolved: keep the per-tenant flag until the last tenant is cut over, then delete the shim.', at: `2026-0${1 + (k % 9)}-${String(1 + (k % 28)).padStart(2, '0')}T00:00:00.000Z` }));
     const b = assembleBrief(briefInput({ decisions }));
-    const ctx = b.sections.filter((s) => ['framing', 'work_item', 'initiative', 'decisions'].includes(s.kind)).reduce((n, s) => n + s.tokens, 0);
-    expect(ctx).toBeLessThanOrEqual(CONTEXT_CAP_TOKENS);
+    expect(b.used_tokens).toBeLessThanOrEqual(DEFAULT_BRIEF_BUDGET);
+    expect(b.used_tokens).toBeGreaterThan(DEFAULT_BRIEF_BUDGET - 200); // context fills the budget, not a 1,800 cap
     expect(b.markdown).toMatch(/- \(\d+ older decisions not shown; see the work item\.\)/);
   });
 

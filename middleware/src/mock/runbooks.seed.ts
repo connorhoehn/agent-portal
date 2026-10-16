@@ -23,7 +23,8 @@ import type {
   Runbook, RunbookApplication, RunbookDoc, RunbookHeader, RunbookProposal, RunbookScope, RunbookStatus, RunbookVersion, SessionBrief,
 } from '../lib/runbooks/index.js';
 import { findSimilar, lintRunbook, versionOf } from '../lib/runbooks/index.js';
-import { assembleBrief } from '../lib/runbooks/brief.js';
+import { assembleBrief, type BriefSkillLibrary } from '../lib/runbooks/brief.js';
+import { BOX_SKILLS_DIR } from '../lib/runbooks/library.js';
 import { clock } from './core/clock.js';
 
 // ─── Cast and places ─────────────────────────────────────────────────────────
@@ -972,10 +973,16 @@ export const FROZEN_RUN = { runRef: 'job-auth-maint-1', briefId: 'brief-job-auth
 const frozenRunStartMs = () => Date.parse(clock.hoursAgo(FROZEN_RUN.startedHoursAgo, { keepWithinToday: true }));
 const frozenRunFinishedAt = () => new Date(Math.min(frozenRunStartMs() + FROZEN_RUN.seconds * 1000, Date.parse(clock.nowIso()))).toISOString();
 
-/** The briefs frozen on seeded runs: assembled when the job was claimed, a few seconds before it started. */
-export function seedBriefs(): SessionBrief[] {
-  const rb = seedRunbooks().find((x) => x.runbook.id === 'rb-auth-pr-csrf-gate')!;
-  const v = rb.versions[0]!;
+/**
+ * The briefs frozen on seeded runs: assembled when the job was claimed, a few seconds before it started.
+ * R8: a brief records the org's skill library its box synced (`library`, from the seam: every
+ * published runbook, tools included); without one, this module's own runbooks stand in.
+ */
+export function seedBriefs(library?: BriefSkillLibrary | null): SessionBrief[] {
+  const lib = library ?? {
+    sha256: '0'.repeat(64), dir: BOX_SKILLS_DIR,
+    skills: seedRunbooks().filter((x) => x.runbook.status === 'published').map((x) => ({ name: x.runbook.id, version: x.runbook.current_version })).sort((p, q) => (p.name < q.name ? -1 : 1)),
+  };
   return [assembleBrief({
     run_ref: FROZEN_RUN.runRef,
     brief_id: FROZEN_RUN.briefId,
@@ -985,11 +992,7 @@ export function seedBriefs(): SessionBrief[] {
     initiative: { id: 'p-auth-migration', name: 'Auth Migration', repo: REPO.AUTH },
     repo: REPO.AUTH,
     decisions: [],
-    runbooks: [{
-      runbook_id: rb.runbook.id, version: v.version, title: v.doc?.title ?? rb.runbook.id, markdown: v.markdown, pinned: false, score: 3,
-      reasons: ['repo orgiq-auth-service'],
-      health: { status: 'proven', reason: 'Followed by its last run.', warning: null },
-    }],
+    skill_library: lib,
   })];
 }
 

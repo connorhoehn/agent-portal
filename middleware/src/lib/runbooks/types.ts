@@ -68,6 +68,12 @@ export interface Runbook {
   owner_person_id: string;
   status: RunbookStatus;
   current_version: number;
+  /**
+   * R8: the initiative a cross-project skill came from — a label (shown in the
+   * portal, never a delivery gate) that names whose SMEs steward it alongside
+   * the org-leader. Set when a captured tool is accepted.
+   */
+  area?: string | null;
   retired?: { at: string; by: string; reason: string; superseded_by: string | null };
   created_at: string;
   updated_at: string;
@@ -83,6 +89,23 @@ export interface RunbookProvenance {
   source_artifact_ids: string[];
 }
 
+/**
+ * A file a runbook carries (R8): a script it runs or the data its verify step
+ * replays. Lives at a bundle-relative path under scripts/ or data/ and ships
+ * beside the runbook's SKILL.md in the skill library (skill.ts, library.ts).
+ * Text only (UTF-8, no NUL); sha256/size are of the UTF-8 bytes and are always
+ * derived (files.ts fileOf), never trusted from a caller.
+ */
+export interface RunbookFile {
+  /** "scripts/cdp-ws-frames.mjs" | "data/sample-frames.jsonl" — validated by files.ts checkFilePath. */
+  path: string;
+  content: string;
+  /** '755' for an executable script, else '644'. */
+  mode: '644' | '755';
+  sha256: string;
+  size: number;
+}
+
 export interface RunbookVersion {
   runbook_id: string;
   version: number;
@@ -91,6 +114,14 @@ export interface RunbookVersion {
   markdown: string;
   /** sha256 hex of `markdown`. */
   sha256: string;
+  /** R8: the scripts and data the runbook carries, sorted by path. Absent/[] for a procedure-only runbook. */
+  files?: RunbookFile[];
+  /**
+   * R8: sha256 over the markdown's sha and every file (files.ts bundleSha) — the
+   * version's identity once files are part of it. Equals `sha256` semantics
+   * extended: a change to any file is a new bundle sha.
+   */
+  bundle_sha256?: string;
   author: { kind: 'person' | 'run' | 'migration'; id: string };
   /** The proposal that produced it (null for v1 of a hand-authored one). */
   proposal_id: string | null;
@@ -122,7 +153,10 @@ export interface RunbookApplication {
 
 export type LintRuleId =
   | 'R-imperative' | 'R-joined' | 'R-generated' | 'R-commandless' | 'R-verify'
-  | 'R-rollback' | 'R-single-subject' | 'R-command-real' | 'R-length' | 'R-secrets';
+  | 'R-rollback' | 'R-single-subject' | 'R-command-real' | 'R-length' | 'R-secrets'
+  // R8 — bundles (files) and the skill each runbook becomes.
+  | 'R-file-path' | 'R-file-size' | 'R-file-unreferenced' | 'R-file-missing' | 'R-script-header' | 'R-bundle-verify'
+  | 'R-skill-description' | 'R-skill-collision';
 
 export interface LintFinding {
   rule: LintRuleId;
@@ -141,6 +175,14 @@ export interface RunbookProposal {
   base_version: number | null;
   /** null for 'retire'. */
   proposed: RunbookDoc | null;
+  /**
+   * R8: the files the proposed version carries (the WHOLE set, not a delta:
+   * omitted means "no files", so an edit that keeps the base's files repeats
+   * them). Absent on proposals that predate R8.
+   */
+  proposed_files?: RunbookFile[];
+  /** R8: a 'new' proposal's skill name from its SKILL.md draft (`.lab/keep/<name>`); the accept uses it as the id unless the reviewer names one. */
+  proposed_id?: string;
   rationale: string;
   source: {
     kind: 'run' | 'person';
@@ -174,7 +216,8 @@ export interface RunbookHealth {
   warning: string | null;
 }
 
-export type BriefSectionKind = 'framing' | 'work_item' | 'initiative' | 'decisions' | 'skills' | 'runbook' | 'how_to_report';
+/** 'runbook' only in briefs frozen before R8 (assembler v1); v2 briefs carry 'skill_library' instead. */
+export type BriefSectionKind = 'framing' | 'work_item' | 'initiative' | 'decisions' | 'skills' | 'runbook' | 'skill_library' | 'how_to_report';
 
 export interface BriefSection {
   kind: BriefSectionKind;
@@ -213,4 +256,10 @@ export interface SessionBrief {
    * by no person (a scheduled bot) and for briefs assembled outside a run.
    */
   dispatched_by?: string | null;
+  /**
+   * R8 (assembler v2): the org-wide skill library at freeze time — its sha, where
+   * the box installs it, and every skill's version. Not rendered beyond the
+   * one-line pointer; `lab applied` / `lab runbook` are checked against it.
+   */
+  skill_library?: { sha256: string; dir: string | null; skills: Array<{ name: string; version: number }> };
 }

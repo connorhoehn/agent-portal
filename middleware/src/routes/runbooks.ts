@@ -48,13 +48,15 @@ import { unifiedDiff } from '../lib/unified-diff.js';
 import { loadCandidates } from '../lib/session-brief-preview.js';
 import { clock } from '../mock/core/clock.js';
 import {
-  findSimilar, lintErrors, lintRunbook, runbookHealth, tryParseRunbook, versionOf,
+  findSimilar, lintErrors, lintRunbook, runbookHealth, versionOf,
   AlreadyExistsError, InvalidWriteError, NotFoundError as StoreNotFound, ProposalClosedError, RunbookStoreError,
   SelfAcceptError, VersionConflictError, RetiredRunbookError,
   type LintContext, type LintFinding, type Runbook, type RunbookApplication, type RunbookDoc, type RunbookProposal,
   type RunbookScope, type RunbookStore, type RunbookVersion,
 } from '../lib/runbooks/index.js';
 import { repoLintContext } from '../lib/runbooks/repo-context.js';
+import { RunbookFileError, filesOf, fileManifest, parseSkill, skillDescription, type RunbookFile } from '../lib/runbooks/index.js';
+import { filesUnifiedDiff } from '../lib/runbooks/files-diff.js';
 
 export interface RunbooksDeps {
   store: () => RunbookStore | Promise<RunbookStore>;
@@ -232,11 +234,30 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
   }
 
   function proposalView(p: RunbookProposal, extra: Record<string, unknown> = {}) {
+    // A list shows what files a proposal carries, not their bytes; the detail route adds the diff.
+    const { proposed_files: files, ...rest } = p;
     return {
-      ...p,
-      lint: p.proposed ? lintRunbook(p.proposed, lintCtx()) : [],
+      ...rest,
+      ...(files ? { proposed_files: fileManifest(files) } : {}),
+      lint: p.proposed ? lintRunbook(p.proposed, lintFor(files, p.runbook_id ?? p.proposed_id ?? null)) : [],
       ...extra,
     };
+  }
+
+  /** The lint context for a proposal: the tree, its files, and the skill it becomes (its name; collisions are judged at write time). */
+  function lintFor(files: readonly RunbookFile[] | undefined, name: string | null, others?: Array<{ name: string; description: string }>): LintContext {
+    return { ...(lintCtx() ?? {}), files: files ?? [], skill: { name, ...(others ? { others } : {}) } };
+  }
+
+  /** Every skill a new one must not collide with: the library's (published runbooks) and the box's own (the live session bundle). */
+  async function otherSkills(s: RunbookStore): Promise<Array<{ name: string; description: string }>> {
+    const lib = (await loadCandidates(s, Date.parse(now()))).map((c) => ({ name: c.runbook.id, description: skillDescription(c.version.doc) }));
+    let box: Array<{ name: string; description: string }> = [];
+    try {
+      const { liveBundleSkills } = await import('../lib/run-brief.js');
+      box = (await liveBundleSkills()).map((k) => ({ name: k.id, description: k.description }));
+    } catch { box = []; }
+    return [...lib, ...box];
   }
 
   // ── Reads ──────────────────────────────────────────────────────────────────
@@ -288,15 +309,21 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const diff = p.kind === 'retire' ? null
       : unifiedDiff(base?.markdown ?? '', proposedMd, { from: base ? `${target!.id} v${base.version}` : '/dev/null', to: 'proposed' });
     const s0 = session(req);
-    const verdict = await mayReviewRunbook(s0, target?.scope ?? { kind: 'org', ref: null }, target?.owner_person_id ?? null);
+    const verdict = await mayReviewRunbook(s0, target?.scope ?? (p.kind === 'new' ? await newProposalScope(p) : { kind: 'org', ref: null }), target?.owner_person_id ?? null, target ? (target.area ?? null) : await proposalArea(p));
     const { actor, personId } = await actorId(s0);
     const mine = p.source.person_id !== undefined && (p.source.person_id === actor || p.source.person_id === personId);
+    // R8: what the proposal does to the files the runbook carries, as text (the portal never executes it).
+    const baseFiles = base?.files ?? [];
+    const proposedFiles = p.proposed_files ?? (p.kind === 'retire' ? [] : baseFiles);
+    const fd = p.kind === 'retire' ? null : filesUnifiedDiff(baseFiles, proposedFiles);
     res.json({
       proposal: proposalView(p),
       runbook: target,
       base_markdown: base?.markdown ?? null,
       proposed_markdown: p.proposed ? proposedMd : null,
       diff,
+      proposed_files: p.kind === 'retire' ? [] : proposedFiles,
+      files_diff: fd,
       can_review: verdict.ok && !mine && p.status === 'open' && (await isAllowed(s0, 'ReviewRunbook')),
     });
   }));
@@ -308,7 +335,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const v = await currentVersion(s, r);
     const open = (await s.listProposals({ status: ['open'], runbook_id: r.id, limit: 200 })).items.length;
     const s0 = session(req);
-    const verdict = await mayReviewRunbook(s0, r.scope, r.owner_person_id);
+    const verdict = await mayReviewRunbook(s0, r.scope, r.owner_person_id, r.area ?? null);
     res.json({
       runbook: await runbookRow(s, r, open),
       current: v,
@@ -321,7 +348,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const id = String(req.params['id']);
     if (!(await s.getRunbook(id))) { res.status(404).json({ error: 'runbook not found' }); return; }
     const versions = await s.listVersions(id);
-    res.json({ versions: versions.map(({ doc: _doc, ...v }) => v) });
+    res.json({ versions: versions.map(({ doc: _doc, files, ...v }) => ({ ...v, ...(files ? { files: fileManifest(files) } : {}) })) });
   }));
 
   router.get('/:id/diff', ...readGate, handler(async (req, res) => {
@@ -405,23 +432,42 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     }
 
     let proposed: RunbookDoc | null = null;
+    let proposedFiles: RunbookFile[] | undefined;
+    let proposedId: string | undefined;
     if (kind !== 'retire') {
-      const md = typeof body['markdown'] === 'string' ? body['markdown'] : undefined;
-      if (!md || !md.trim()) throw new ValidationError('`markdown` is required for a new runbook or an edit');
+      // Either canonical runbook markdown (`lab propose`) or a SKILL.md-shaped draft (`lab keep`, R8):
+      // frontmatter name + description, then the same canonical body.
+      // Files first, before any parsing — they are untrusted input: safe paths only, text only, capped per file and per bundle (lib/runbooks/files.ts).
+      if (body['files'] !== undefined) {
+        try { proposedFiles = filesOf(body['files']); } catch (e) {
+          if (e instanceof RunbookFileError) { res.status(422).json({ error: 'the files are not acceptable', code: 'FILES', problems: e.problems }); return; }
+          throw e;
+        }
+      }
+      const md = typeof body['markdown'] === 'string' ? body['markdown'] : typeof body['skill_md'] === 'string' ? body['skill_md'] : undefined;
+      if (!md || !md.trim()) throw new ValidationError('`markdown` (or `skill_md`) is required for a new runbook or an edit');
       if (md.length > 200_000) throw new ValidationError('`markdown` is too long');
-      const parsed = tryParseRunbook(md);
+      const parsed = parseSkill(md);
       if (!parsed.ok) { res.status(422).json({ error: 'the runbook markdown does not parse', code: 'PARSE', problems: parsed.errors }); return; }
       proposed = parsed.doc;
+      if (kind === 'new' && parsed.name) {
+        if (!RUNBOOK_ID.test(parsed.name)) throw new ValidationError('the draft\'s `name` must look like rb-some-name (lowercase letters, digits, hyphens)');
+        proposedId = parsed.name;
+      }
       if (kind === 'edit') {
         const base = await s.getVersion(target!.id, baseVersion!);
-        if (base && versionOf({ runbook_id: target!.id, version: base.version, doc: proposed, author: { kind: 'person', id: '-' } }).sha256 === base.sha256) {
+        // An edit that sends no `files` keeps the base's; `files: []` removes them.
+        if (proposedFiles === undefined && base?.files?.length) proposedFiles = base.files;
+        const next = versionOf({ runbook_id: target!.id, version: baseVersion!, doc: proposed, author: { kind: 'person', id: '-' }, files: proposedFiles ?? [] });
+        if (base && (next.bundle_sha256 ?? next.sha256) === (base.bundle_sha256 ?? base.sha256)) {
           res.status(422).json({ error: 'the proposal changes nothing from the base version', code: 'NO_CHANGE' });
           return;
         }
       }
     }
 
-    const lint: LintFinding[] = proposed ? lintRunbook(proposed, lintCtx()) : [];
+    const others = proposed ? await otherSkills(s) : [];
+    const lint: LintFinding[] = proposed ? lintRunbook(proposed, lintFor(proposedFiles, runbookId ?? proposedId ?? slug(proposed.title), others)) : [];
     const similar = kind === 'new' && proposed
       ? findSimilar(proposed, { kind: 'org', ref: null }, (await loadCandidates(s, Date.parse(now()))).map((c) => ({ runbook_id: c.runbook.id, scope: c.runbook.scope, doc: c.version.doc })))
       : [];
@@ -429,6 +475,8 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const proposal: RunbookProposal = {
       id: `prop-${randomUUID().slice(0, 12)}`,
       kind, runbook_id: runbookId, base_version: baseVersion, proposed, rationale, source,
+      ...(proposedFiles ? { proposed_files: proposedFiles } : {}),
+      ...(proposedId ? { proposed_id: proposedId } : {}),
       lint, similar, status: 'open', decided_by: null, decided_at: null, note: null, merged_into: null, created_at: now(),
     };
     await s.putProposal(proposal);
@@ -438,7 +486,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
   // ── Deciding ───────────────────────────────────────────────────────────────
 
   /** Load an OPEN proposal and prove the caller may decide it; sends the refusal and returns null otherwise. */
-  async function decidable(req: Request, res: Response, s: RunbookStore, scopeOverride?: { scope: RunbookScope; owner: string | null }) {
+  async function decidable(req: Request, res: Response, s: RunbookStore, scopeOverride?: { scope: RunbookScope; owner: string | null; area?: string | null }) {
     if (refuseMasquerade(req, res)) return null;
     const sess = session(req);
     const p = await s.getProposal(String(req.params['pid']));
@@ -461,10 +509,10 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const target = await proposalTarget(s, p);
     if (p.kind !== 'new' && !target) { res.status(404).json({ error: `runbook ${p.runbook_id} not found` }); return null; }
     if (scopeOverride) {
-      const v = await mayReviewRunbook(sess, scopeOverride.scope, scopeOverride.owner);
+      const v = await mayReviewRunbook(sess, scopeOverride.scope, scopeOverride.owner, scopeOverride.area ?? null);
       if (!v.ok) { deny(res, v); return null; }
     } else if (target) {
-      const v = await mayReviewRunbook(sess, target.scope, target.owner_person_id);
+      const v = await mayReviewRunbook(sess, target.scope, target.owner_person_id, target.area ?? null);
       if (!v.ok) { deny(res, v); return null; }
     }
     return { sess, p, target, actor };
@@ -493,6 +541,8 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     let newScope: RunbookScope | null = null;
     if (peek && peek.kind === 'new') {
       newScope = parseScope(body['scope']);
+      // A captured tool (a draft carrying files) is a cross-project skill: org scope unless the reviewer says otherwise.
+      if (!newScope && peek.proposed_files?.length) newScope = { kind: 'org', ref: null };
       if (!newScope && peek.source.work_item_id) {
         try {
           const { getWorkItem } = await import('../providers/work-items.js');
@@ -503,7 +553,8 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       if (!newScope) throw new ValidationError('a new runbook needs a `scope` ({ kind, ref }) — it names who may review it');
     }
 
-    const d = await decidable(req, res, s, newScope ? { scope: newScope, owner: null } : undefined);
+    const area = peek?.kind === 'new' ? await proposalArea(peek) : null;
+    const d = await decidable(req, res, s, newScope ? { scope: newScope, owner: null, area } : undefined);
     if (!d) return;
     const { p, target, actor } = d;
     const provenance = {
@@ -547,11 +598,13 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       return;
     }
     const doc = p.proposed!;
-    const blocking = lintErrors(lintRunbook(doc, lintCtx()));
+    const files = p.proposed_files ?? (p.kind === 'edit' ? (await s.getVersion(target!.id, target!.current_version))?.files ?? [] : []);
+    const acceptName = p.kind === 'edit' ? target!.id : (str(body['id']) ?? p.proposed_id ?? slug(doc.title));
+    const blocking = lintErrors(lintRunbook(doc, lintFor(files, acceptName, await otherSkills(s))));
     if (blocking.length) { res.status(422).json({ error: 'the proposal has lint errors', code: 'LINT', findings: blocking }); return; }
 
     if (p.kind === 'edit') {
-      const version = versionOf({ runbook_id: target!.id, version: target!.current_version + 1, doc, author, provenance });
+      const version = versionOf({ runbook_id: target!.id, version: target!.current_version + 1, doc, author, provenance, files });
       const result = await s.acceptProposal({ proposal_id: p.id, decided_by: actor, at, note, version });
       noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
       res.json({ proposal: result.proposal, runbook: result.runbook, version: result.version });
@@ -560,13 +613,14 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
 
     const ownerId = str(body['owner_person_id']);
     if (ownerId && !await personExists(ownerId)) throw new ValidationError('`owner_person_id` does not name a person');
-    const id = str(body['id']) ?? slug(doc.title);
+    const id = acceptName;
     if (!RUNBOOK_ID.test(id)) throw new ValidationError('`id` must look like rb-some-name (lowercase letters, digits, hyphens)');
     const runbook: Runbook = {
       id, scope: newScope!, owner_person_id: ownerId ?? actor, status: 'published',
+      ...(newScope!.kind !== 'initiative' && area ? { area } : {}),
       current_version: 1, created_at: at, updated_at: at,
     };
-    const version = versionOf({ runbook_id: id, version: 1, doc, author, provenance });
+    const version = versionOf({ runbook_id: id, version: 1, doc, author, provenance, files });
     const result = await s.acceptProposal({ proposal_id: p.id, decided_by: actor, at, note, runbook, version });
     noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
     res.status(201).json({ proposal: result.proposal, runbook: result.runbook, version: result.version });
@@ -578,8 +632,8 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     if (!note) throw new ValidationError('a rejection needs a `note` saying why');
     const peek = await s.getProposal(String(req.params['pid']));
     // A `new` proposal has no scope yet: only the org-wide reviewers (or the initiative of its work item) may reject it.
-    let override: { scope: RunbookScope; owner: string | null } | undefined;
-    if (peek?.kind === 'new') override = { scope: await newProposalScope(peek), owner: null };
+    let override: { scope: RunbookScope; owner: string | null; area?: string | null } | undefined;
+    if (peek?.kind === 'new') override = { scope: await newProposalScope(peek), owner: null, area: await proposalArea(peek) };
     const d = await decidable(req, res, s, override);
     if (!d) return;
     const proposal = await s.decideProposal({ proposal_id: d.p.id, decision: 'rejected', decided_by: d.actor, at: now(), note });
@@ -608,7 +662,17 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     res.json({ proposal });
   }));
 
+  /** R8: the initiative a proposal came from (its work item's), the "area" whose SMEs steward a cross-project skill. */
+  async function proposalArea(p: RunbookProposal): Promise<string | null> {
+    if (!p.source.work_item_id) return null;
+    try {
+      const { getWorkItem } = await import('../providers/work-items.js');
+      return (await getWorkItem(p.source.work_item_id))?.projectId ?? null;
+    } catch { return null; }
+  }
+
   async function newProposalScope(p: RunbookProposal): Promise<RunbookScope> {
+    if (p.proposed_files?.length) return { kind: 'org', ref: null };
     if (p.source.work_item_id) {
       try {
         const { getWorkItem } = await import('../providers/work-items.js');
@@ -628,14 +692,14 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     if (!dest) { res.status(404).json({ error: `runbook ${into} not found` }); return; }
     if (dest.status !== 'published') { res.status(409).json({ error: `${dest.id} is ${dest.status}; merge into a published runbook`, code: 'NOT_PUBLISHED' }); return; }
     // The reviewer must be able to review the TARGET, whatever the source says.
-    const d = await decidable(req, res, s, { scope: dest.scope, owner: dest.owner_person_id });
+    const d = await decidable(req, res, s, { scope: dest.scope, owner: dest.owner_person_id, area: dest.area ?? null });
     if (!d) return;
     const { p, actor, target: source } = d;
     // Merging closes the proposal on its own target, so it is a decision about THAT
     // runbook too: without this, a reviewer of any published runbook could close any
     // edit anywhere by merging it into their own.
     if (source) {
-      const v = await mayReviewRunbook(d.sess, source.scope, source.owner_person_id);
+      const v = await mayReviewRunbook(d.sess, source.scope, source.owner_person_id, source.area ?? null);
       if (!v.ok) { deny(res, v); return; }
     }
     if (p.kind === 'retire' || !p.proposed) { res.status(409).json({ error: 'a retire proposal cannot be merged', code: 'NOT_MERGEABLE' }); return; }
@@ -647,7 +711,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       id: `prop-${randomUUID().slice(0, 12)}`,
       kind: 'edit', runbook_id: dest.id, base_version: dest.current_version,
       rationale: `Merged from ${p.id}${p.runbook_id ? ` (was aimed at ${p.runbook_id})` : ' (a new runbook)'}: ${p.rationale}`,
-      lint: lintRunbook(p.proposed, lintCtx()), similar: [],
+      lint: lintRunbook(p.proposed, lintFor(p.proposed_files, dest.id)), similar: [],
       status: 'open', decided_by: null, decided_at: null, note: null, merged_into: null, created_at: at,
     };
     const merged = await s.decideProposal({
@@ -665,7 +729,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const sess = session(req);
     const r = await s.getRunbook(String(req.params['id']));
     if (!r) { res.status(404).json({ error: 'runbook not found' }); return; }
-    const verdict = await mayReviewRunbook(sess, r.scope, r.owner_person_id);
+    const verdict = await mayReviewRunbook(sess, r.scope, r.owner_person_id, r.area ?? null);
     if (!verdict.ok) { deny(res, verdict); return; }
     if (r.status === 'retired') { res.status(409).json({ error: `${r.id} is already retired`, code: 'RETIRED' }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -703,13 +767,17 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
 
     // Health counts runs that were GIVEN this runbook; a report from a run whose frozen brief
     // does not include it would let anyone move another runbook's health.
+    // R8: a v2 brief records the org's skill library the run's box synced (every published skill
+    // and its version); a v1 brief named the runbooks it inlined.
     const brief = await s.getBrief(runRef);
-    const given = brief?.sections.find((sec) => sec.kind === 'runbook' && sec.ref === r.id);
-    if (!brief || !given) {
+    const given = brief?.skill_library
+      ? brief.skill_library.skills.find((k) => k.name === r.id)?.version
+      : brief?.sections.find((sec) => sec.kind === 'runbook' && sec.ref === r.id)?.version;
+    if (!brief || given === undefined) {
       res.status(409).json({ error: `run ${runRef} was not given ${r.id}`, code: 'NOT_GIVEN' });
       return;
     }
-    const version = given.version ?? r.current_version;
+    const version = given;
     const claimed = int(body['version']);
     if (claimed !== undefined && claimed !== version) {
       res.status(409).json({ error: `run ${runRef} was given ${r.id} v${version}, not v${claimed}`, code: 'VERSION_MISMATCH' });

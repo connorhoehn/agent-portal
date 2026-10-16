@@ -72,6 +72,7 @@ import { rehydrateMockNotifications } from '../lib/notification-store.js';
 import { rehydrateMockSocialChat } from '../lib/social-chat.js';
 import { getDemoState, resetDemoDirector, startDemoDirector, stopDemoDirector } from '../mock/demo-director.js';
 import { getRunbooksDemoState, resetRunbooksDemo, startRunbooksDemo, stopRunbooksDemo } from '../mock/runbooks-demo.js';
+import { getRunbooksToolsDemoState, resetRunbooksToolsDemo, startRunbooksToolsDemo, stopRunbooksToolsDemo } from '../mock/runbooks-tools-demo.js';
 import { invalidateAll } from '../lib/gateway/authority-invalidation.js';
 
 export const mockControlRouter = Router();
@@ -336,6 +337,7 @@ function readState(registry: FixtureRegistry): {
   registryLoaded: boolean;
   demo: ReturnType<typeof getDemoState>;
   runbooksDemo: ReturnType<typeof getRunbooksDemoState>;
+  runbooksToolsDemo: ReturnType<typeof getRunbooksToolsDemoState>;
   scopes: number;
   clones: number;
 } {
@@ -357,7 +359,7 @@ function readState(registry: FixtureRegistry): {
   // `runbooksDemo` is the same for the Runbooks demo (mock/runbooks-demo.ts).
   return {
     enabled: true, scenario: globalScenario, fixtures, registryLoaded: fixtures.length > 0,
-    demo: getDemoState(), runbooksDemo: getRunbooksDemoState(),
+    demo: getDemoState(), runbooksDemo: getRunbooksDemoState(), runbooksToolsDemo: getRunbooksToolsDemoState(),
     scopes: listMockScopes().length, clones: listIdentityClones().length,
   };
 }
@@ -427,6 +429,7 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
     // (rehydrateAll), so a demo story cannot survive it — say so by stopping.
     stopDemoDirector();
     stopRunbooksDemo();
+    stopRunbooksToolsDemo();
     pin(fixture, scenario);
     // See rehydrateMockFleet's doc comment: the microVM fleet lives in an
     // in-memory Map, not in fixture rows, so pinning `devbox-boxes` to `empty`
@@ -441,6 +444,7 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
 
   resetDemoDirector();
   resetRunbooksDemo();
+  resetRunbooksToolsDemo();
   unpinAll(registry);
   // Clones survive a world switch: another auditor asking for `empty` must not
   // sign this run out. Only a full reset (below) removes them.
@@ -473,6 +477,13 @@ mockControlRouter.post('/api/__mock/scenario', ...gate, (req, res) => {
       ...(typeof raw.paceMs === 'number' && raw.paceMs >= 0 ? { paceMs: raw.paceMs } : {}),
     });
   }
+  // The skills demo (R8): a run's kept tool becomes a skill another initiative's box runs.
+  if (scenario === 'runbooks-tools-demo') {
+    const raw = req.body as { paceMs?: unknown };
+    void startRunbooksToolsDemo(`http://127.0.0.1:${req.socket.localPort}`, {
+      ...(typeof raw.paceMs === 'number' && raw.paceMs >= 0 ? { paceMs: raw.paceMs } : {}),
+    });
+  }
   res.json({ applied: { scenario, fixture: null }, ...readState(registry) });
 });
 
@@ -498,6 +509,7 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
     if (!fixture) return;
     stopDemoDirector();
     stopRunbooksDemo();
+    stopRunbooksToolsDemo();
     unpin(fixture);
     fixture.reset();
     rehydrateAll();
@@ -508,6 +520,7 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
 
   resetDemoDirector();
   resetRunbooksDemo();
+  resetRunbooksToolsDemo();
   unpinAll(registry);
   // The dev-pairing file as well as the rows: without this, a machine paired
   // by hand reappears on the next boot and `reset` silently means "reset most
@@ -596,7 +609,7 @@ export const MOCK_SCOPE_COOKIE = 'orgiq.mock-scope';
 export const MOCK_SCOPE_HEADER = 'x-mock-scope';
 
 /** Story scenarios run a process-wide director; they cannot be one context's. */
-const GLOBAL_ONLY: ReadonlySet<string> = new Set(['demo', 'runbooks-demo']);
+const GLOBAL_ONLY: ReadonlySet<string> = new Set(['demo', 'runbooks-demo', 'runbooks-tools-demo']);
 
 function isScopeScenario(value: unknown): value is ScopeScenario {
   return (isScenarioName(value) || isDataState(value)) && !GLOBAL_ONLY.has(value as string);
@@ -818,4 +831,5 @@ export function __resetMockControlState(): void {
   identityClonesFixture.reset();
   resetDemoDirector();
   resetRunbooksDemo();
+  resetRunbooksToolsDemo();
 }

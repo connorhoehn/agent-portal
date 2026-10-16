@@ -1,0 +1,15 @@
+{
+  "request": { "method": "GET", "path": "/api/realtime/presence/social%3Ageneral" },
+  "status": 200,
+  "body": {
+    "ch": "social:general",
+    "ts": 1791969120000,
+    "members": {
+      "u-vera":  { "n": "Vera Green",   "st": "on",   "ls": 1791969118000 },
+      "u-nora":  { "n": "Nora DaSilva", "st": "on",   "ls": 1791969111000 },
+      "u-omar":  { "n": "Omar Haddad",  "st": "dnd",  "ls": 1791969108000 },
+      "u-priya": { "n": "Priya Raman",  "st": "on",   "ls": 1791969060000 },
+      "u-rhea":  { "n": "Rhea Kapoor",  "st": "idle", "ls": 1791968700000 }
+    }
+  }
+}

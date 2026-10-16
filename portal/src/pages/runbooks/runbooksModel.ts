@@ -195,6 +195,35 @@ export function refusalMessage(status: number, code: string | undefined, fallbac
 
 export const shortSha = (sha: string) => sha.slice(0, 12);
 
+/** 0 B, 812 B, 1.4 KB, 2.0 MB: the unit a reader expects, one decimal above bytes. */
+export function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '0 B';
+  if (n < 1024) return `${Math.round(n)} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let v = n / 1024; let i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+  return `${v.toFixed(1)} ${units[i]}`;
+}
+
+/** 'script' for an executable (755) file, else 'file'. */
+export const fileModeLabel = (mode: string) => (mode === '755' ? 'script' : 'file');
+
+/** The label for what kind of file this is, from its extension. Display only; the viewer always renders as text. */
+export function fileLanguageLabel(path: string): string {
+  const ext = /\.([A-Za-z0-9]+)$/.exec(path)?.[1]?.toLowerCase() ?? '';
+  const map: Record<string, string> = { md: 'Markdown', sh: 'Shell', bash: 'Shell', py: 'Python', js: 'JavaScript', mjs: 'JavaScript', ts: 'TypeScript', json: 'JSON', yml: 'YAML', yaml: 'YAML', sql: 'SQL', txt: 'Text', toml: 'TOML' };
+  return map[ext] ?? (ext ? ext.toUpperCase() : 'Text');
+}
+
+/** "+12 −3 · 2 files (1 added, 1 modified)" for the proposal's file diff. */
+export function filesDiffSummary(d: { added: number; removed: number; files: ReadonlyArray<{ status: string }> }): string {
+  const by = new Map<string, number>();
+  for (const f of d.files) if (f.status !== 'unchanged') by.set(f.status, (by.get(f.status) ?? 0) + 1);
+  const n = [...by.values()].reduce((a, b) => a + b, 0);
+  const parts = [...by.entries()].map(([k, c]) => `${c} ${k}`).join(', ');
+  return `+${d.added} −${d.removed} · ${n} ${n === 1 ? 'file' : 'files'}${parts ? ` (${parts})` : ''}`;
+}
+
 export interface BriefRow { id: string; groupId: string; title: string; subline: string }
 export function briefRows(briefs: readonly BriefSummary[], q = '', names: Names = NO_NAMES): BriefRow[] {
   const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -227,7 +256,7 @@ export function briefsCommandAdapter(rows: readonly { id: string; title: string 
 }
 
 export const SECTION_KIND_LABEL: Record<string, string> = {
-  framing: 'Framing', work_item: 'The task', initiative: 'The project', decisions: 'Decisions', runbook: 'Runbook', how_to_report: 'How to report back',
+  framing: 'Framing', work_item: 'The task', initiative: 'The project', decisions: 'Decisions', runbook: 'Runbook', skill_library: 'Org skills', how_to_report: 'How to report back',
 };
 
 // ── Markdown from people and boxes ───────────────────────────────────────────

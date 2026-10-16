@@ -34,8 +34,7 @@ import { LAB_CALLBACK_SERVICE_AUTH, SERVICE_NONCE_HEADER, captureRawBody, resetS
 import { createSessionBriefsRouter } from '../session-briefs.js';
 import { RUN_TOKEN_HEADER, mintRunToken } from '../../lib/run-token.js';
 import { errorHandler } from '../../lib/async-handler.js';
-import { assembleBrief, selectRunbooks, type RunbookStore } from '../../lib/runbooks/index.js';
-import { loadCandidates } from '../../lib/session-brief-preview.js';
+import { briefLibraryOf, loadSkillLibrary, assembleBrief, type RunbookStore } from '../../lib/runbooks/index.js';
 import { USERS, seededStore, type TestUser } from './runbook-world.js';
 
 const SECRET = 'lab-secret';
@@ -64,12 +63,10 @@ function boxHeaders(method: string, target: string, over: { secret?: string; non
 }
 
 async function freeze(runRef: string) {
-  const candidates = await loadCandidates(store, Date.parse('2026-10-14T00:00:00Z'));
-  const selected = selectRunbooks({ id: 'wi-auth-1', title: 'Cut one tenant over from SAML to Cognito', description: 'tenant cutover saml cognito', labels: ['cutover'], repo: null, initiative_id: 'p-auth', pinned_runbook_ids: [] }, candidates).selected;
   const brief = assembleBrief({
     run_ref: runRef, assembled_at: '2026-10-14T00:00:00.000Z', framing: '',
     work_item: { id: 'wi-auth-1', title: 'Cut one tenant over', description: 'x', labels: [] },
-    initiative: { id: 'p-auth', name: 'Auth Migration' }, decisions: [], runbooks: selected,
+    initiative: { id: 'p-auth', name: 'Auth Migration' }, decisions: [], skill_library: briefLibraryOf(await loadSkillLibrary(store)),
   });
   await store.putBrief(brief);
   return brief;
@@ -96,7 +93,7 @@ describe('GET /api/runs/:ref/brief', () => {
     const jsonTarget = '/api/runs/job-1/brief';
     const json = await request(appAs(null)).get(jsonTarget).set(boxHeaders('GET', jsonTarget, { runToken }));
     expect(json.body.brief.sha256).toBe(brief.sha256);
-    expect(json.body.brief.sections.some((s: { kind: string; ref: string }) => s.kind === 'runbook')).toBe(true);
+    expect(json.body.brief.sections.some((s: { kind: string; ref: string }) => s.kind === 'skill_library')).toBe(true);
   });
 
   it('a box without a valid envelope is refused: none, wrong secret, wrong target, replayed', async () => {
@@ -179,21 +176,20 @@ describe('GET /api/work-items/:id/brief-preview', () => {
     expect(brief.markdown).toContain('Cutover order'); // the settled project decision binds
     expect(brief.markdown).not.toContain('Unrelated'); // another work item's open decision does not
     expect(brief.markdown).toContain('Retire the SAML shim'); // the parent epic
-    const runbooks = brief.sections.filter((s: { kind: string }) => s.kind === 'runbook');
-    expect(runbooks.map((s: { ref: string }) => s.ref)).toContain('rb-tenant-cutover');
+    // R8: no procedure text — one pointer at the org's skill library, which the brief records.
+    expect(brief.sections.some((s: { kind: string }) => s.kind === 'runbook')).toBe(false);
+    expect(brief.markdown).toContain('installed in `~/.claude/skills`');
+    expect(brief.skill_library.skills.map((k: { name: string }) => k.name)).toContain('rb-tenant-cutover');
     expect(await store.getBrief('preview-wi-auth-1')).toBeNull();
     // Deterministic for the same world.
     const again = await request(appAs(USERS.member!)).get('/api/work-items/wi-auth-1/brief-preview');
     expect(again.body.brief.sha256).toBe(brief.sha256);
   });
 
-  it('?pin= previews a pinned runbook first; a malformed pin is a 400', async () => {
-    const res = await request(appAs(USERS.smeAuth!)).get('/api/work-items/wi-auth-1/brief-preview?pin=rb-flaky-test-rerun-diff');
-    expect(res.status).toBe(200);
-    expect(res.body.pinned).toEqual(['rb-flaky-test-rerun-diff']);
-    const refs = res.body.brief.sections.filter((s: { kind: string }) => s.kind === 'runbook').map((s: { ref: string }) => s.ref);
-    expect(refs[0]).toBe('rb-flaky-test-rerun-diff');
-    expect((await request(appAs(USERS.member!)).get('/api/work-items/wi-auth-1/brief-preview?pin=../etc')).status).toBe(400);
+  it('every published skill reaches every box: the preview records the whole library, whatever the work item', async () => {
+    const res = await request(appAs(USERS.smeAuth!)).get('/api/work-items/wi-auth-1/brief-preview');
+    const published = (await store.listRunbooks({ status: ['published'], limit: 200 })).items.map((r) => r.id).sort();
+    expect(res.body.brief.skill_library.skills.map((k: { name: string }) => k.name).sort()).toEqual(published);
   });
 
   it('404s an unknown work item; refuses an anonymous caller, a box envelope, and a role without ViewSessionBrief', async () => {

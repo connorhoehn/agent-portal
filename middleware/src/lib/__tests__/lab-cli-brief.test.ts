@@ -20,8 +20,7 @@ import { createSessionBriefsRouter } from '../../routes/session-briefs.js';
 import { createRunbooksRouter } from '../../routes/runbooks.js';
 import { errorHandler } from '../async-handler.js';
 import { mintRunToken } from '../run-token.js';
-import { assembleBrief, renderRunbook, selectRunbooks, type RunbookStore } from '../runbooks/index.js';
-import { loadCandidates } from '../session-brief-preview.js';
+import { briefLibraryOf, loadSkillLibrary, assembleBrief, renderRunbook, type RunbookStore } from '../runbooks/index.js';
 import { seededStore } from '../../routes/__tests__/runbook-world.js';
 import { tenantCutoverV2 } from '../runbooks/__tests__/fixtures/good.js';
 
@@ -33,7 +32,7 @@ let base = '';
 
 function lab(args: string[], env: Record<string, string>): Promise<{ code: number; out: string; err: string }> {
   return new Promise((resolve) => {
-    const p = spawn('bash', [LAB, ...args], { env: { PATH: process.env['PATH'] ?? '', HOME: tmpdir(), LAB_API_BASE: base, LAB_CALLBACK_SECRET: SECRET, SERVICE_AUTH_LEGACY_HEADERS: 'refuse', ...env } });
+    const p = spawn('bash', [LAB, ...args], { env: { PATH: process.env['PATH'] ?? '', HOME: tmpdir(), LAB_SKILLS_DIR: mkdtempSync(join(tmpdir(), 'lab-skills-')), LAB_API_BASE: base, LAB_CALLBACK_SECRET: SECRET, SERVICE_AUTH_LEGACY_HEADERS: 'refuse', ...env } });
     let out = '', err = '';
     p.stdout.on('data', (d) => { out += String(d); });
     p.stderr.on('data', (d) => { err += String(d); });
@@ -42,9 +41,7 @@ function lab(args: string[], env: Record<string, string>): Promise<{ code: numbe
 }
 
 async function freeze(runRef: string) {
-  const candidates = await loadCandidates(store, Date.parse('2026-10-14T00:00:00Z'));
-  const selected = selectRunbooks({ id: 'wi-1', title: 'Cut one tenant over from SAML to Cognito', description: 'tenant cutover saml cognito', labels: ['cutover'], repo: null, initiative_id: 'p-auth', pinned_runbook_ids: ['rb-tenant-cutover'] }, candidates).selected;
-  const b = assembleBrief({ run_ref: runRef, assembled_at: '2026-10-14T00:00:00.000Z', framing: '', work_item: null, initiative: null, decisions: [], runbooks: selected });
+  const b = assembleBrief({ run_ref: runRef, assembled_at: '2026-10-14T00:00:00.000Z', framing: '', work_item: null, initiative: null, decisions: [], skill_library: briefLibraryOf(await loadSkillLibrary(store)) });
   await store.putBrief(b);
   return b;
 }
@@ -73,7 +70,10 @@ describe('lab brief (the SessionStart hook)', () => {
     const b = await freeze('job-cli-1');
     const r = await lab(['brief'], { LAB_RUN_REF: 'job-cli-1', LAB_RUN_TOKEN: await mintRunToken('job-cli-1') });
     expect(r.code).toBe(0);
-    expect(r.out).toBe(b.markdown);
+    // R8: the org's skills sync first (one line), then the brief's bytes exactly.
+    const [first, ...rest] = r.out.split('\n');
+    expect(first).toMatch(/^skills: installed the org's library [0-9a-f]{12}: \d+ skill\(s\) in /);
+    expect(rest.join('\n')).toBe(b.markdown);
     expect(r.err).not.toContain('WARNING');
   });
 

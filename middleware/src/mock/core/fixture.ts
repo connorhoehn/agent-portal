@@ -86,6 +86,10 @@ export const SCENARIOS: Record<ScenarioName, Scenario> = {
     name: 'runbooks-demo',
     describes: 'The Runbooks demo: an agent run hits a gap in the SSO runbook and proposes the missing step, the runbook\'s owner reviews and accepts it, and the next run\'s session brief carries the new version. Starts a ~3-minute director; reset or any other scenario stops it.',
   },
+  'runbooks-tools-demo': {
+    name: 'runbooks-tools-demo',
+    describes: 'The skills demo (R8): a run on Auth Migration builds a websocket-over-CDP harness and keeps it, the proposal carries its script and data, an SME on Auth Migration accepts it into the org\'s skill library, the library hash changes, and a box running Observability work receives the new skill and runs the harness from it. Starts a ~2-minute director; reset or any other scenario stops it.',
+  },
 };
 
 export const SCENARIO_NAMES: ScenarioName[] = Object.keys(SCENARIOS) as ScenarioName[];

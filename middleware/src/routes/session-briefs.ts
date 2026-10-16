@@ -4,6 +4,8 @@
 //   GET /api/runs/:ref/brief                the FROZEN brief a run was given
 //   GET /api/runs/:ref/runbooks/:id         a runbook that brief named (`lab runbook <id>`), as markdown
 //   GET /api/work-items/:id/brief-preview   what a run would be given now (assembled, never stored)
+//   GET /api/runs/:ref/skills               R8: the WHOLE skill library, files included, for a box to sync
+//   GET /api/skill-library                  R8: the library's manifest (no file bytes), for people
 //
 // Mounted at /api with NO blanket gate: the first is read by two kinds of caller —
 // a box (devbox `lab brief`, a signed LAB_CALLBACK_SERVICE_AUTH envelope, no cookie)
@@ -27,7 +29,7 @@ import { LAB_CALLBACK_SERVICE_AUTH, hasServiceAuth } from '../lib/service-auth.j
 import { previewBrief } from '../lib/session-brief-preview.js';
 import { liveBundleSkills, loadWorkContext } from '../lib/run-brief.js';
 import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
-import type { RunbookStore } from '../lib/runbooks/index.js';
+import { loadSkillLibrary, type RunbookStore } from '../lib/runbooks/index.js';
 import { clock } from '../mock/core/clock.js';
 
 export interface SessionBriefDeps {
@@ -104,10 +106,12 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
       if (res.locals['machine'] && !(await runTokenMatches(req, ref))) { refuseRunToken(res); return; }
       const s = await deps.store();
       const brief = await s.getBrief(ref);
-      const named = brief && (brief.sections.some((x) => x.kind === 'runbook' && x.ref === id) || brief.omitted.some((o) => o.runbook_id === id));
+      // R8: a v2 brief's run was given every skill in the library it recorded, at that version.
+      const fromLibrary = brief?.skill_library?.skills.find((k) => k.name === id)?.version;
+      const named = brief && (fromLibrary !== undefined || brief.sections.some((x) => x.kind === 'runbook' && x.ref === id) || brief.omitted.some((o) => o.runbook_id === id));
       if (!brief || !named) { res.status(404).json({ error: `run ${ref} was not given ${id}`, code: 'NOT_GIVEN' }); return; }
       const rb = await s.getRunbook(id);
-      const given = brief.sections.find((x) => x.kind === 'runbook' && x.ref === id)?.version;
+      const given = fromLibrary ?? brief.sections.find((x) => x.kind === 'runbook' && x.ref === id)?.version;
       const version = rb ? await s.getVersion(id, given ?? rb.current_version) : null;
       if (!rb || !version || (given === undefined && rb.status !== 'published')) { res.status(404).json({ error: `${id} is not available`, code: 'NOT_AVAILABLE' }); return; }
       res.setHeader('X-Runbook-Version', String(version.version));
@@ -115,23 +119,50 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
       res.type('text/markdown; charset=utf-8').send(version.markdown);
     }));
 
+  // R8 — the skill library a box syncs at boot (`lab skills`, run by `lab brief` at SessionStart).
+  // ONE org-wide set: every published runbook as <id>/SKILL.md + scripts/ + data/, whatever the
+  // run's initiative. A box presents the lab envelope AND this run's token, like the brief: the
+  // fleet secret alone fetches nothing. The set is content-addressed (`sha256`); a box sends it
+  // back as If-None-Match and gets a 304 when nothing changed, so an unchanged library is no copy.
+  // Only ACCEPTED versions are in it — a run's captured tool reaches it only through a person's accept.
+  router.get('/runs/:ref/skills', briefLimit, machineMark,
+    unlessMachine(requireTenant('orgiq')), unlessMachine(requireAction('ViewSessionBrief')),
+    asyncHandler(async (req, res) => {
+      const ref = String(req.params['ref']);
+      if (res.locals['machine'] && !(await runTokenMatches(req, ref))) { refuseRunToken(res); return; }
+      const lib = await loadSkillLibrary(await deps.store());
+      const etag = `"${lib.sha256}"`;
+      res.setHeader('ETag', etag);
+      res.setHeader('X-Skill-Library-Sha256', lib.sha256);
+      res.setHeader('Cache-Control', 'private, no-cache');
+      const inm = String(req.headers['if-none-match'] ?? '').split(',').map((x) => x.trim());
+      if (inm.includes(etag) || inm.includes(lib.sha256)) { res.status(304).end(); return; }
+      res.json({ format: 'orgiq-skill-library/1', sha256: lib.sha256, bytes: lib.bytes, skills: lib.skills, files: lib.files, skipped: lib.skipped });
+    }));
+
+  router.get('/skill-library', briefLimit, requireTenant('orgiq'), requireAction('ViewSessionBrief'),
+    asyncHandler(async (_req, res) => {
+      const lib = await loadSkillLibrary(await deps.store());
+      res.json({
+        sha256: lib.sha256, bytes: lib.bytes, skills: lib.skills, skipped: lib.skipped,
+        files: lib.files.map(({ content: _c, ...f }) => f),
+      });
+    }));
+
   router.get('/work-items/:id/brief-preview', briefLimit, requireTenant('orgiq'), requireAction('ViewSessionBrief'),
     asyncHandler(async (req, res) => {
       const id = String(req.params['id']);
-      const pinned = String(req.query['pin'] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
-      for (const p of pinned) if (!RUNBOOK_ID.test(p)) throw new ValidationError(`pin: "${p}" is not a runbook id`);
-
       // The same context reading and the same skills a dispatched devbox run gets (lib/run-brief.ts).
       const ctx = await loadWorkContext(id);
       if (!ctx) { res.status(404).json({ error: 'work item not found' }); return; }
       const brief = await previewBrief({
         store: await deps.store(),
         ...ctx,
-        pinned,
+        pinned: [],
         nowIso: clock.nowIso(),
         skills: await liveBundleSkills(),
       });
-      res.json({ brief, stored: false, pinned });
+      res.json({ brief, stored: false });
     }));
 
   return router;

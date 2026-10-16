@@ -7,11 +7,23 @@ export type RunbookStatus = 'draft' | 'published' | 'retired';
 export type HealthStatus = 'proven' | 'drifting' | 'unproven';
 export interface RunbookHealth { status: HealthStatus; reason: string; warning: string | null }
 
+export type RunbookFileMode = '644' | '755';
+/** One file of a runbook's skill bundle. Content is untrusted: render as text only. */
+export interface RunbookFile { path: string; content: string; mode: RunbookFileMode; sha256: string; size: number }
+export interface RunbookFileManifestEntry { path: string; mode?: RunbookFileMode; sha256?: string | null; size?: number }
+export type FilesDiffStatus = 'added' | 'deleted' | 'modified' | 'unchanged';
+export interface FilesDiff {
+  text: string; added: number; removed: number;
+  files: Array<{ path: string; status: FilesDiffStatus; size: number; sha256: string | null }>;
+}
+
 export interface RunbookRow {
   id: string;
   scope: RunbookScope;
   owner_person_id: string;
   status: RunbookStatus;
+  /** The initiative a cross-project skill came from; a label. */
+  area?: string | null;
   current_version: number;
   created_at: string;
   updated_at: string;
@@ -54,6 +66,8 @@ export interface RunbookVersion {
   accepted_at: string | null;
   provenance: RunbookProvenance;
   doc?: RunbookDoc;
+  files?: RunbookFile[];
+  bundle_sha256?: string;
 }
 
 export type ApplicationOutcome = 'followed' | 'followed_with_deviation' | 'failed' | 'not_used';
@@ -77,6 +91,9 @@ export interface Proposal {
   runbook_id: string | null;
   base_version: number | null;
   proposed: RunbookDoc | null;
+  /** A manifest (no content) in lists; the detail response carries the files. */
+  proposed_files?: RunbookFileManifestEntry[];
+  proposed_id?: string;
   rationale: string;
   source: { kind: 'run' | 'person'; run_ref?: string; session_id?: string; work_item_id?: string; person_id?: string; lab_experience_ids: string[] };
   lint: LintFinding[];
@@ -105,4 +122,5 @@ export interface BriefSummary {
   omitted: BriefOmission[];
   sha256: string;
 }
-export interface Brief extends BriefSummary { markdown: string }
+export interface SkillLibrary { sha256: string; dir: string | null; skills: Array<{ name: string; version: number }> }
+export interface Brief extends BriefSummary { markdown: string; skill_library?: SkillLibrary }

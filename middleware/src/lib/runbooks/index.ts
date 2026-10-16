@@ -4,17 +4,17 @@
 export type {
   ApplicationOutcome, BriefOmission, BriefSection, BriefSectionKind, CommandLang, HealthStatus, LintFinding, LintRuleId,
   Runbook, RunbookApplication, RunbookCommand, RunbookDoc, RunbookHealth, RunbookProposal, RunbookProvenance, RunbookScope,
-  RunbookScopeKind, RunbookStatus, RunbookStep, RunbookTriggers, RunbookVersion, SessionBrief,
+  RunbookFile, RunbookScopeKind, RunbookStatus, RunbookStep, RunbookTriggers, RunbookVersion, SessionBrief,
 } from './types.js';
 export { COMMAND_LANGS } from './types.js';
 export { renderRunbook, formatProblems, RunbookFormatError, HEADINGS, type RunbookHeader } from './render.js';
 export { parseRunbook, tryParseRunbook, RunbookParseError, type ParseError, type ParseResult } from './parse.js';
-export { lintRunbook, lintErrors, LINT_RULES, LIMITS, IMPERATIVE_VERBS, MUTATING_VERBS, changesState, type LintContext, type LintRule } from './lint.js';
+export { lintRunbook, lintErrors, bundlePaths, declaresRuntime, SKILL_COLLISION_THRESHOLD, LINT_RULES, LIMITS, IMPERATIVE_VERBS, MUTATING_VERBS, changesState, type LintContext, type LintRule } from './lint.js';
 export { similarity, tokens, sharedTokens, runbookTerms, scopesOverlap, findSimilar, DEDUPE_THRESHOLD, type SimilarRunbook } from './similarity.js';
 export { selectRunbooks, SCOPE_WEIGHT, type WorkItemContext, type RunbookCandidate, type SelectedRunbook, type Selection } from './select.js';
 export {
-  assembleBrief, briefBudget, ASSEMBLER_VERSION, DEFAULT_BRIEF_BUDGET, CONTEXT_CAP_TOKENS, MAX_FULL_RUNBOOKS,
-  type AssembleBriefInput, type BriefWorkItem, type BriefInitiative, type BriefDecision, type BriefSkill,
+  assembleBrief, briefBudget, skillsPointer, ASSEMBLER_VERSION, DEFAULT_BRIEF_BUDGET,
+  type AssembleBriefInput, type BriefSkillLibrary, type BriefWorkItem, type BriefInitiative, type BriefDecision, type BriefSkill,
 } from './brief.js';
 export { estimateTokens, sha256Hex } from './tokens.js';
 export { runbookHealth, PROVEN_TTL_DAYS } from './health.js';
@@ -22,3 +22,6 @@ export { versionOf } from './version.js';
 export * from './store.js';
 export { RowsRunbookStore, privateRowSources, type RunbookRowSources } from './store-rows.js';
 export { DynamoRunbookStore, runbookStoreConfig, ensureRunbookTable, dropRunbookTable, createRunbookDynamoClient, type RunbookStoreConfig } from './store-dynamo.js';
+export { FILE_LIMITS, FILE_ROOTS, RunbookFileError, checkFilePath, fileOf, filesOf, sortFiles, bundleSha, fileManifest, byteLength } from './files.js';
+export { renderSkill, parseSkill, skillDescription, checkSkillName, checkSkillDescription, SKILL_LIMITS, SKILL_NAME, type SkillParse } from './skill.js';
+export { buildSkillLibrary, loadSkillLibrary, librarySha, briefLibraryOf, LIBRARY_FORMAT, BOX_SKILLS_DIR, type SkillLibrary, type LibrarySkill, type LibraryFile } from './library.js';

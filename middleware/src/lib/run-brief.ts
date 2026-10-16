@@ -103,7 +103,8 @@ export async function composeRunBrief(target: RunTarget, opts: { store?: Runbook
     decisions: ctx?.decisions ?? [],
     pinned: [],
     nowIso: opts.nowIso ?? clock.nowIso(),
-    ...(target.box === 'devbox' ? { skills: await liveBundleSkills() } : {}),
+    // R8: a devbox syncs the org's skill library into ~/.claude/skills at boot; a local machine does not.
+    ...(target.box === 'devbox' ? { skills: await liveBundleSkills() } : { skillsDir: null }),
     ...(!ctx && target.task ? { task: target.task } : {}),
     ...(!ctx && target.repo ? { repo: target.repo } : {}),
   });

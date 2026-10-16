@@ -1,0 +1,1 @@
+summary: 1 socket(s), 8 sent, 13 received, 1 error(s); message types: chat.message=3, presence=3, ping=2, pong=2, subscribe=2, auth=1, authenticated=1, chat.send=1, chat.typing=1, error=1, presence.update=1, reaction=1, reaction.add=1, subscribed=1
