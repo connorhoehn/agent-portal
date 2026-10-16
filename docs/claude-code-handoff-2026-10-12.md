@@ -286,3 +286,21 @@ new dist. Keep sibling builds/pack/install under one owner; do not edit node_mod
 5. Recording/realtime/cloud follow-ups have separate historical evidence under
    `docs/demos/work-huddles/`. Re-establish current health before making claims;
    this UI pass did not revalidate media or production capacity.
+
+## Continuation 2026-10-16 (evening)
+
+Open, in order:
+1. The user-search lane is pushing assessment (0.78) and access (0.83) to 1.00. Its edits sit uncommitted in portal/src/components/collections/*, portal/src/lib/tenantAnswer.ts, portal/src/pages/access/CatalogPage.tsx, middleware/src/lib/tenant-answers/* and portal/e2e/user-search-catalog.ts, waiting on a full probe. If they're still uncommitted, re-run the probe, ratchet scripts/user-search-floors.tsv and commit.
+2. A peer session lands the meeting wiring after that commit: pins ui-components 2.478.0 and realtime-modules 0.134.0, plus BFF, portal and specs, with the UI behind VITE_MEETING_ROOMS (off).
+3. Then run one consolidated pass:
+   - Fix the mock-clone DM gap: /api/social/embedded returns persona-keyed DMs while source.userId is the clone, so member and org-leader clones read "This conversation is not yours".
+   - Run scripts/journeys/measure.sh once.
+   - Walk and seal all five Work roles, the communication-plane maps and the 17 user-search maps.
+   - Regenerate docs/journeys/coverage.md.
+   - Run every validator sequentially.
+   - communication-shared-work.spec.ts still asserts "No Social channel bound", which PlaneGroupPane no longer draws (likely stale).
+4. User decisions owed:
+   - Program-owner read access to /admin/changes.
+   - Renaming the real GitHub org in the seed.
+   - Acceptance criteria on completed items.
+5. Machines (Computer Lab) are ephemeral; walks never create or depend on one.
