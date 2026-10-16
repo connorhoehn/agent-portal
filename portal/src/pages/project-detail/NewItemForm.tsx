@@ -52,7 +52,9 @@ export function NewItemForm({
   // title box and the points box (as the hand-rolled version did) means an
   // Enter that bubbles fires `save` twice and creates the item twice.
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') save();
+    // preventDefault: closing the dialog hands focus back to the button that opened it, and the same Enter would
+    // otherwise reach that button as a keypress and open its menu again.
+    if (e.key === 'Enter') { if ((e.target as HTMLElement).tagName === 'INPUT') e.preventDefault(); save(); }
     if (e.key === 'Escape') onCancel();
   };
 

@@ -147,6 +147,17 @@ function seedAgentJobs(): AgentJob[] {
   return jobs;
 }
 
+function seedLiveAgentJobs(): AgentJob[] {
+  const seeded = seedAgentJobs();
+  const base = seeded[0];
+  if (!base) return seeded;
+  const live = (id: string, status: JobStatus): AgentJob => ({
+    ...base, id, status, attempts: status === 'queued' ? 0 : 1, result: null, error: null,
+    claimedAt: status === 'queued' ? null : base.claimedAt, startedAt: status === 'queued' ? null : base.startedAt, finishedAt: null,
+  });
+  return [live('job-live-queued', 'queued'), live('job-live-review', 'awaiting_review'), ...seeded];
+}
+
 /**
  * The queue. `empty` — no history, no queued work: the state a Work page's
  * empty-queue copy is written for, and the one a seeded board can never show.
@@ -155,6 +166,11 @@ export const agentJobs = defineFixture<AgentJob>({
   key: 'agent-jobs',
   scenarios: {
     default: seedAgentJobs,
+    // The seeded history is all finished (done / failed), so the controls a job offers while it is live (Cancel on a
+    // queued or claimed one, Accept and Reject on one awaiting review) cannot be reached in the default world. `large`
+    // is a busier queue: that history plus one job in each of those states, minted off the first seeded job so its bot, model and
+    // prompt provenance stay real.
+    large: seedLiveAgentJobs,
     empty: () => [],
     // The queue is the Automate surface's whole subject, and "no jobs" and
     // "we could not read the jobs" are opposite facts a reader must be able

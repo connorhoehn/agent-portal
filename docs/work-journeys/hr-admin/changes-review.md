@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /admin/changes; /admin/changes/9f2c17a0-5b64-4de1-8a03-6c1de4f27b58
 map: docs/journeys/maps/work/hr-admin/changes-review.ts
 pages: portal/src/pages/admin/ChangesPage.tsx, portal/src/pages/admin/ChangeReviewPage.tsx
-audited: 2026-10-15 22:40–22:40 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-568d5a07), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-rachel-clone-568d5a07, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 00:51–00:51 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-8e62ef5e), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-rachel-clone-8e62ef5e, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: changes-review.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Each child in a list should have a unique "key" prop.%s%s See https://react.dev/)

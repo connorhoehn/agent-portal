@@ -1179,8 +1179,8 @@ export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkIte
     status: data.status ?? 'open',
     priority: data.priority ?? 'medium',
     assigneeId: data.assigneeId ?? null,
-    assigneeName: null,
-    assigneeDept: null,
+    assigneeName: data.assigneeId ? mockPeople.find((p) => p.id === data.assigneeId)?.name ?? null : null,
+    assigneeDept: data.assigneeId ? mockPeople.find((p) => p.id === data.assigneeId)?.department ?? null : null,
     labels: data.labels ?? [],
     storyPoints: data.storyPoints ?? null,
     summary: null,
@@ -1237,7 +1237,13 @@ export async function updateWorkItem(id: string, patch: UpdateWorkItemPatch): Pr
   if (patch.storyPoints !== undefined) item.storyPoints = patch.storyPoints;
   if (patch.sprintId !== undefined) item.sprintId = patch.sprintId;
   if (patch.estimatedCostUsd !== undefined) item.estimatedCostUsd = patch.estimatedCostUsd;
-  if (patch.assigneeId !== undefined) item.assigneeId = patch.assigneeId;
+  if (patch.assigneeId !== undefined) {
+    // The Aurora read joins `people` for the name and team, so a reassignment must read back named, not as "Unassigned".
+    const person = patch.assigneeId ? mockPeople.find((p) => p.id === patch.assigneeId) : undefined;
+    item.assigneeId = patch.assigneeId;
+    item.assigneeName = person?.name ?? null;
+    item.assigneeDept = person?.department ?? null;
+  }
   if (patch.prUrl !== undefined) item.prUrl = patch.prUrl;
   if (patch.prStatus !== undefined) item.prStatus = patch.prStatus;
   item.updatedAt = clock.nowIso();

@@ -131,7 +131,8 @@ function DevboxBoxCommand({ box, onGo }: { box: Computer; onGo: (box: Computer) 
   useRegisterCommand(useMemo<Command>(() => ({
     id: `devbox:go:${box.id}`,
     label: box.label,
-    hint: `…${box.sessionId.slice(-10)} · ${new Date(box.createdAt).toLocaleDateString()}`,
+    // The state and the creation date tell two boxes apart; a session-id tail is an opaque digit run the reader cannot use.
+    hint: `${box.status ?? 'computer'} · created ${new Date(box.createdAt).toLocaleDateString()}`,
     group: 'Devbox',
     keywords: [box.sessionId, box.label],
     run: () => onGo(box),

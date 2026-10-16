@@ -5,7 +5,7 @@
 // portal/src/App.tsx. Helpers come from _shared.ts (owned by the member lane; never edited here).
 import type { Expect, JourneyMap, Step, Target, Text } from '../../../../scripts/journeys/journey-map.ts';
 import {
-  CAPS, LEAKS, PERSONA, STILL, back, click, dialog, fill, firstRow, open, press, reload, scoped, search, seen, tabClick,
+  CAPS, LEAKS, PERSONA, readOnlyPostsFor, STILL, back, click, dialog, fill, firstRow, open, press, reload, scoped, search, seen, tabClick,
   tabNamed, tabWalk, tableRows, api, type Role,
 } from './_shared.ts';
 
@@ -200,6 +200,9 @@ export function devbox(role: Role): Step[] {
   const computers = tabNamed(/^Computers/);
   const agents = tabNamed(/^Agents/);
   const VIEWER = /You can see the fleet but not drive it/;
+  // The fleet each persona's clone sees: hr-admin's has her scratch computer, an sme's is the initiatives she sits on.
+  const scratch = role === 'hr-admin' ? { name: 'rachel-scratch', query: 'rachel' } : { name: 'auth-migration-2', query: 'migration-2' };
+  const agentLine = role === 'hr-admin' ? /running · / : /needs you/;
   return [
     open('/admin/devbox', 'Open the Computer Lab: the fleet grouped by initiative with each computer named, its spend against the initiative budget', {
       url: '/admin/devbox', visible: [computers, agents, seen('Observability Platform'), seen('observability-1'), seen(/\d+ computers/)],
@@ -208,14 +211,14 @@ export function devbox(role: Role): Step[] {
     }, { facts: true, proves: ['story-facts', 'role-gating'] }),
     api('/api/devbox/boxes', 200, 'This role may read the fleet: GET /api/devbox/boxes answers 200'),
     tabClick(agents, 'Click the Agents view (the Lab has no filter box, so the view switch is the stability check): the running agents list by work item and the header stays put', {
-      ...selected(agents), visible: [seen(/running · /)],
+      ...selected(agents), ...(role === 'hr-admin' ? { visible: [seen(agentLine)] } : { visible: [seen(/\d+ computers · \d+ agents/)], numbers: [{ of: agents, re: /(\d+)/, eqNumberOf: seen(/\d+ computers · \d+ agents/), reOther: /· (\d+) agents/ }] }),
     }, [STILL.header, fleet], { proves: ['tab-stability', 'story-facts'], state: 'filtered' }),
     tabClick(computers, 'Click the Computers view: the fleet is back, grouped by initiative', { ...selected(computers), visible: [seen('Auth Migration'), seen('auth-migration-2')] }, [STILL.header, fleet]),
     press('Enter', 'Enter on the Agents tab (focused by the key press) selects it', { ...selected(agents), focused: agents }, { target: agents, proves: 'keyboard' }),
-    click(computers, 'Back to the Computers view with the mouse', { ...selected(computers), visible: [seen('rachel-scratch')] }),
+    click(computers, 'Back to the Computers view with the mouse', { ...selected(computers), visible: [seen(scratch.name)] }),
     fill({ placeholder: 'Find computer or agent…' }, 'zzzzqq', 'Find zzzzqq: the lab says nothing matches instead of an empty rail', { visible: [seen('Nothing matches.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
-    fill({ placeholder: 'Find computer or agent…' }, 'rachel', 'Find rachel: only the scratch computer stays', { visible: [seen('rachel-scratch')], absent: [{ text: 'observability-1', exact: true }] }, { state: 'filtered' }),
-    fill({ placeholder: 'Find computer or agent…' }, '', 'Clear the find box: the whole fleet is back', { visible: [seen('observability-1'), seen('rachel-scratch')] }),
+    fill({ placeholder: 'Find computer or agent…' }, scratch.query, `Find ${scratch.query}: only ${scratch.name} stays`, { visible: [seen(scratch.name)], absent: [{ text: 'observability-1', exact: true }] }, { state: 'filtered' }),
+    fill({ placeholder: 'Find computer or agent…' }, '', 'Clear the find box: the whole fleet is back', { visible: [seen('observability-1'), seen(scratch.name)] }),
     tabWalk(10),
   ];
 }
@@ -486,7 +489,7 @@ export function adminMap(role: Role, journey: string, opts: Partial<JourneyMap> 
   const writes = WRITING.has(journey) && CAPS[role].budgets;
   return {
     family: 'work', log: `${role}/${journey}`, kind: 'surface', persona: PERSONA[role], identity: 'clone',
-    scenario: writes ? { scope: 'default' } : 'shared', ...(writes ? { writes: true } : {}),
+    scenario: writes ? { scope: 'default' } : 'shared', ...(writes ? { writes: true } : readOnlyPostsFor(role)),
     viewport: { width: 1440, height: 900 },
     goal: `${PERSONA[role].name}: ${GOAL[journey]}`,
     fields: { surface: journey, pages: PAGE_FILES[journey] ?? 'portal/src/pages' },

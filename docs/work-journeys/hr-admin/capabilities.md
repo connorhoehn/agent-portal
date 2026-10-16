@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /admin/capabilities/guardrails; /admin/capabilities/code-interpreter; /admin/capabilities/browser
 map: docs/journeys/maps/work/hr-admin/capabilities.ts
 pages: portal/src/pages/capabilities/GuardrailsPage.tsx, portal/src/pages/capabilities/CodeInterpreterPage.tsx, portal/src/pages/capabilities/BrowserPage.tsx
-audited: 2026-10-15 22:39–22:39 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-e2a71b6b), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-rachel-clone-e2a71b6b, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 00:51–00:51 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-42ddc958), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-rachel-clone-42ddc958, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: capabilities.jpg
 verdict: pass
 console errors: 0

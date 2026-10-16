@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /admin/projects; /admin/projects?project=340cfae2-476d-533d-a291-49d29d3f1496
 map: docs/journeys/maps/work/hr-admin/codebases.ts
 pages: portal/src/pages/admin/AgentProjectsPage.tsx
-audited: 2026-10-15 22:37–22:37 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-881c81be), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-rachel-clone-881c81be, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 00:51–00:51 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-7e92087d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-rachel-clone-7e92087d, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: codebases.jpg
 verdict: pass
 console errors: 0

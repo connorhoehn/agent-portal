@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /admin/identity/users; /admin/identity/users/u-theo; /admin/identity/roles; /admin/identity/policies
 map: docs/journeys/maps/work/hr-admin/identity.ts
 pages: portal/src/pages/identity/UsersPage.tsx, portal/src/pages/identity/RolesPage.tsx, portal/src/pages/identity/PoliciesPage.tsx
-audited: 2026-10-15 22:37–22:37 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-0342d0f7), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-rachel-clone-0342d0f7, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 00:53–00:53 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-cd3c235f), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-rachel-clone-cd3c235f, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: identity.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 503 (Service Unav)

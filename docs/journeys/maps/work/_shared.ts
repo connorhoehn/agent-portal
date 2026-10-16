@@ -171,7 +171,7 @@ export function initiatives(role: Role): Step[] {
     scoped({ scenario: 'empty', fixture: 'initiatives' }, '/iq/projects?scope=mine', 'In the same world My initiatives says no initiative lists this person and offers All initiatives', 'empty', { visible: [seen('No initiatives are linked to you yet.'), seen('Browse all initiatives')] }),
     scoped({ scenario: 'error', fixture: 'initiatives' }, '/iq/projects?scope=all', 'When the initiatives read fails, the list says it could not load them rather than showing an empty one', 'error', { visible: [seen('Could not load initiatives'), { role: 'button', name: 'Try again' }], count: [{ target: rowsOf, eq: 0 }] }, { expectConsole: /500 \(Internal Server Error\)/ }),
     scoped('long-text', '/iq/projects?scope=all', 'With very long names the list keeps every row on one line and the page scrolls no wider', 'long-text', { visible: [seen(/with a deliberately long value/)], count: [{ target: rowsOf, min: 10 }] }),
-    scoped('many', '/iq/projects?scope=mine', 'With many initiatives the list grows downward and its count agrees with its rows', 'many', { count: [{ target: rowsOf, min: 14 }], numbers: [{ of: railCount, eqCount: rowsOf }] }),
+    scoped('many', '/iq/projects?scope=mine', 'With many initiatives the list grows downward and its count agrees with its rows', 'many', { count: [{ target: rowsOf, min: 14 }], numbers: [role === 'member' ? { of: railCount, eqCount: rowsOf } : { of: railCount, eqNumberOf: { testId: 'datatable-page-summary' }, reOther: /· (\d+) total/ }] }),
     scoped({ scenario: 'loading', delayMs: 2500 }, '/iq/projects?scope=all', 'While the list loads it says so (Loading initiatives…), not an empty table', 'loading', { visible: [{ text: 'Loading initiatives…' }], count: [{ target: rowsOf, eq: 0 }] }, { noSettle: true }),
   ];
 }
@@ -249,7 +249,61 @@ const DECK: Target = { css: '[data-composer-prompt-deck="expanded"]' };
 const DECK_OPTION: Target = { css: '[data-composer-prompt-option]' };
 const READ_ONLY_JOB = 'An SME with a sprint grant on this initiative, or a release manager, authorizes jobs.';
 
+/** The roles that dispatch: their prepare-job and work-write maps write (inside `scenario: { scope: 'default' }`). */
+const writesJob = (role: Role): boolean => CAPS[role].dispatch;
+/** An item that is sized and up next, on the initiative where the sme holds her grant (bg-auth-3), and one on an initiative where she holds none. */
+const DISPATCH = {
+  granted: { item: 'wi-auth-e2-b3', title: AUTH.other, initiative: AUTH.id },
+  ungranted: { item: 'wi-zt-e1-s2', title: 'mTLS rollout plan with break-glass procedure', initiative: 'p-zero-trust' },
+};
+const deckOption = (name: Text): Target => ({ role: 'button', name, within: DECK });
+const SPRINT_ENVELOPE_GATE = /Over your sprint envelope|Over the run cap you set|Over the initiative.s monthly allocation/;
+
+/** A dispatcher's card: the numbered options, the composer keys, the soft brakes and the refusal where no grant is held. */
+function prepareJobDispatcher(role: Role): Step[] {
+  const granted = DISPATCH.granted;
+  const url = `/iq/projects/${granted.initiative}?item=${granted.item}`;
+  const menu = { testId: 'initiative-header-menu-trigger' } as Target;
+  const openDeck = (name: string): Step[] => [
+    click(menu, `Open the item's header menu: it offers Prepare job`, { visible: [{ role: 'menuitem', name: 'Prepare job' }] }, { proves: 'role-gating' }),
+    click({ role: 'menuitem', name: 'Prepare job' }, name, { visible: [DECK, { text: 'Prepare job' }], focused: DECK, count: [{ target: DECK_OPTION, min: 4 }] }, { state: 'dialog-open', proves: 'role-gating' }),
+  ];
+  return [
+    open(url, `Open ${granted.title}: a sized item that is up next, where this sme holds a sprint grant`, { url, visible: [heading(granted.title), seen('Vera Green')], noText: LEAKS }, { facts: true }),
+    tabClick(tabNamed('Docs'), 'Click the Docs tab of the work item: it opens and the item header, tab strip and side pane stay where they were', selected(tabNamed('Docs')), itemStill(), { proves: 'tab-stability', state: 'row-open' }),
+    itemTab('Brief', {}),
+    ...openDeck('Prepare job shows the job with its numbered options: Dispatch, Change model, Change cap, Edit instruction'),
+    { do: 'wait', target: DECK, name: 'The card is the dispatcher\'s: it names the options and the sprint envelope this person spends from', proves: 'role-gating', expect: { visible: [deckOption(/Dispatch/), deckOption(/Change model/), deckOption(/Change cap/), deckOption(/Edit instruction/)], absent: [{ text: 'Needs dispatch rights' }] } } as Step,
+    press('2', 'Key 2 picks Change model: the card asks which model runs the job', { visible: [DECK, seen(/Which model runs/)] }, { proves: 'keyboard' }),
+    press('Enter', 'Enter keeps the current model and returns to the job', { visible: [DECK, deckOption(/Change model/)] }, { proves: 'keyboard' }),
+    press('3', 'Key 3 picks Change cap: the card asks for a dollar amount', { visible: [DECK, seen(/Cap this run at how many dollars/)] }, { proves: 'keyboard' }),
+    press('Enter', 'Enter keeps no cap and returns to the job', { visible: [DECK, deckOption(/Change cap/)] }, { proves: 'keyboard' }),
+    press('4', 'Key 4 picks Edit instruction: the card shows the derived instruction', { visible: [DECK, seen(/Type the instruction in the composer/)] }, { proves: 'keyboard' }),
+    press('Enter', 'Enter keeps the instruction and returns to the job', { visible: [DECK, deckOption(/Edit instruction/)] }, { proves: 'keyboard' }),
+    press('Escape', 'Escape folds the card and the work item stays open', { hidden: [DECK], url }, { proves: 'keyboard' }),
+    ...openDeck('Open the card again from the menu'),
+    press('3', 'Key 3 picks Change cap again', { visible: [DECK, seen(/Cap this run at how many dollars/)] }, { proves: 'keyboard' }),
+    fill({ css: 'main [contenteditable="true"]', nth: 0 }, '0.01', 'Type a one-cent cap, far under the forecast', { visible: [DECK] }, { proves: 'keyboard' }),
+    press('Enter', 'Enter sets the cap: the card shows it beside the forecast', { visible: [DECK, { text: '$0.01', within: DECK }] }, { proves: 'keyboard' }),
+    click(deckOption(/^(1 )?Dispatch$/), 'Dispatch: the cap is under the forecast, so the card stops and asks (Over the run cap you set)', { visible: [DECK, { text: 'Over the run cap you set', within: DECK }, deckOption('Dispatch anyway'), deckOption('Back to the job')] }, { state: 'dialog-open', expectConsole: /409/ }),
+    click(deckOption('Back to the job'), 'Back to the job keeps nothing: the card is the job again and the item is still up next', { visible: [DECK, { text: 'Dispatch with these settings?', within: DECK }, { text: /Over the run cap you set: not dispatched/ }] }),
+    click(deckOption(/^(1 )?Dispatch$/), 'Dispatch asks again', { visible: [{ text: 'Over the run cap you set', within: DECK }] }, { expectConsole: /409/ }),
+    click(deckOption('Dispatch anyway'), 'Dispatch anyway confirms the brake: the job is sent and the card says so', { hidden: [DECK], visible: [{ text: /Dispatched/ }] }, { writes: true }),
+    reload('Reload: the item is In progress, read back from the server', { visible: [heading(granted.title), { role: 'combobox', name: 'Status' }], attr: [{ target: { role: 'combobox', name: 'Status' }, name: 'data-value', value: 'in_progress' }] }),
+    ...openDeck('Open the card again: the work is under way'),
+    { do: 'wait', target: DECK, name: 'The job is running: the card says so and Dispatch is off until it is up next again', proves: 'role-gating', expect: { visible: [{ text: 'A job is already running for this item. Dispatch another with these settings?', within: DECK }], disabled: [deckOption(/^(1 )?Dispatch$/)] } } as Step,
+    press('Escape', 'Escape folds the card', { hidden: [DECK] }, { proves: 'keyboard' }),
+    open(`/iq/projects/${DISPATCH.ungranted.initiative}?item=${DISPATCH.ungranted.item}`, 'Open a work item on an initiative where this sme holds no grant', { visible: [heading(DISPATCH.ungranted.title)], noText: LEAKS }, { facts: true }),
+    ...openDeck('Prepare job opens the card; its envelope field says there is no grant here'),
+    { do: 'wait', target: DECK, name: 'The card says No sprint grant here', proves: 'role-gating', expect: { visible: [{ text: 'No sprint grant here', within: DECK }] } } as Step,
+    press('1', 'Key 1 dispatches: the server refuses, with its sentence, and nothing runs', { visible: [seen(/no active sprint grant/i)] }, { state: 'refused', proves: 'role-gating', expectConsole: /403|Forbidden/ }),
+    tabWalk(10),
+    open(`/iq/projects/${granted.initiative}?item=wi-nope`, 'A work item that is not in the list says so and sends the reader to the rail', { visible: [seen('Work item unavailable'), seen('This item is not in the current work list.')] }, { state: 'not-found', proves: 'empty-state' }),
+  ];
+}
+
 export function prepareJob(role: Role): Step[] {
+  if (CAPS[role].dispatch) return prepareJobDispatcher(role);
   const c = CAPS[role];
   const url = `/iq/projects/${AUTH.id}?item=${AUTH.item}`;
   const entry = c.dispatch ? 'Prepare job' : 'View job setup';
@@ -276,26 +330,92 @@ export function prepareJob(role: Role): Step[] {
   ];
 }
 
+// ── work-write ──────────────────────────────────────────────────────────────
+const NEW_STORY = 'Draft the shim cookie purge checklist';
+const NEW_EPIC_TITLE = 'Retire the SAML metadata endpoint';
+const PLANNING_NOTE = 'Purge the shim cookie in the logout request';
+
+/** Create, move, assign and annotate work as a role that holds DispatchAgentRun, each read back after a reload (a scoped world, so nothing leaks). */
+export function workWrite(role: Role): Step[] {
+  const c = CAPS[role];
+  if (!c.dispatch) throw new Error(`${role} cannot dispatch; work-write is not its journey`);
+  const w = DISPATCH.granted;
+  const url = `/iq/projects/${w.initiative}?item=${w.item}`;
+  const menu = { testId: 'initiative-header-menu-trigger' } as Target;
+  const status = { role: 'combobox', name: 'Status' } as Target;
+  const priority = { role: 'combobox', name: 'Priority' } as Target;
+  const created: Target = { role: 'button', name: new RegExp(`^Open ${NEW_STORY}`) };
+  const newWork = dialog('New work in Legacy SSO decommission');
+  const openNewStory: Step[] = [
+    click(menu, 'Open the header menu: it offers a new story in this item\'s epic', { visible: [{ role: 'menuitem', name: 'New story in Legacy SSO decommission' }, { role: 'menuitem', name: 'New epic' }] }, { proves: 'role-gating' }),
+    click({ role: 'menuitem', name: 'New story in Legacy SSO decommission' }, 'New story opens its dialog, named for the epic', { visible: [newWork, { label: 'Title' }] }, { state: 'dialog-open', proves: 'keyboard' }),
+  ];
+  return [
+    open(url, `Open ${w.title}: this role may edit, so the brief offers Add context and the header menu offers new work`, { url, visible: [heading(w.title), { role: 'button', name: /Add context/ }], enabled: [{ role: 'button', name: /Add context/ }], noText: LEAKS }, { facts: true, proves: ['story-facts', 'role-gating'] }),
+    ...openNewStory,
+    press('Escape', 'Escape closes the dialog and nothing is created', { hidden: [newWork], absent: [created] }, { proves: 'keyboard' }),
+    ...openNewStory,
+    { do: 'wait', target: newWork, name: 'With no title typed the dialog will not create anything: Create is disabled', proves: 'empty-state', expect: { disabled: [{ role: 'button', name: 'Create' }] } } as Step,
+    fill({ label: 'Title' }, NEW_STORY, 'Type the story title', { visible: [newWork], focused: { label: 'Title' } }),
+    press('Enter', 'Enter creates the story: the dialog closes and the header menu stays shut', { hidden: [newWork, { role: 'menuitem', name: 'New epic' }] }, { writes: true, proves: 'keyboard' }),
+    reload('Reload the page: this item is where it was', { visible: [heading(w.title)], hidden: [newWork] }),
+    open(`/iq/projects/${w.initiative}?tab=work`, 'Open the Work tab: the new story is listed in its epic, read back from the server', { url: `/iq/projects/${w.initiative}?tab=work`, visible: [created], noText: LEAKS }, { facts: true }),
+    click(created, 'Open the new story: its header names it', { url: /[?&]item=wi-/, visible: [heading(NEW_STORY)] }, { state: 'row-open' }),
+    click(status, 'Open the status list of the new story', { visible: [{ role: 'option', name: 'In progress' }, { role: 'option', name: 'Done' }] }, { state: 'dialog-open' }),
+    click({ role: 'option', name: 'In progress' }, 'Choose In progress: the story moves', { attr: [{ target: status, name: 'data-value', value: 'in_progress' }] }, { writes: true }),
+    reload('Reload: the story is still In progress', { attr: [{ target: status, name: 'data-value', value: 'in_progress' }], visible: [heading(NEW_STORY)] }, {}),
+    click(priority, 'Open the priority list of the story', { visible: [{ role: 'option', name: 'Critical priority' }] }, { state: 'dialog-open' }),
+    click({ role: 'option', name: 'Critical priority' }, 'Choose Critical priority', { attr: [{ target: priority, name: 'data-value', value: 'critical' }] }, { writes: true }),
+    reload('Reload: the priority is still Critical', { attr: [{ target: priority, name: 'data-value', value: 'critical' }], visible: [heading(NEW_STORY)] }, {}),
+    click({ role: 'button', name: /^Owner: .*Change owner/ }, 'Open the owner picker of the story: it searches the initiative\'s people', { visible: [{ placeholder: /Search people/ }] }, { state: 'dialog-open' }),
+    fill({ placeholder: /Search people/ }, 'Nora', 'Search Nora: the picker narrows to her', { visible: [{ placeholder: /Search people/ }] }),
+    click({ role: 'button', name: /Nora DaSilva/, within: { testId: 'work-owner-picker' } }, 'Pick Nora DaSilva: she owns the story', { visible: [{ role: 'button', name: /^Owner: Nora DaSilva/ }] }, { writes: true }),
+    tabClick(tabNamed('Activity'), 'Click Activity: the change is in the story\'s history', { ...selected(tabNamed('Activity')), visible: [{ role: 'button', name: /^Owner: Nora DaSilva/ }] }, itemStill(), { proves: 'tab-stability' }),
+    reload('Reload: Nora DaSilva still owns it', { visible: [{ role: 'button', name: /^Owner: Nora DaSilva/ }, heading(NEW_STORY)] }),
+    tabClick(tabNamed('Brief'), 'Click Brief: the story\'s brief and the composer are back', { ...selected(tabNamed('Brief')), visible: [heading(NEW_STORY)] }, itemStill(), { proves: 'tab-stability' }),
+    fill({ css: 'main [contenteditable="true"]', nth: 0 }, `/comment ${PLANNING_NOTE}`, 'Type a planning note into the composer with /comment', { visible: [heading(NEW_STORY)] }),
+    press('Enter', 'Enter posts the note to the story: Activity opens with it', { ...selected(tabNamed('Activity')), visible: [seen(PLANNING_NOTE)] }, { writes: true, proves: 'keyboard' }),
+    reload('Reload and read the note back: the story\'s Activity still holds it', { visible: [heading(NEW_STORY)] }),
+    tabClick(tabNamed('Activity'), 'Click Activity: the planning note is there, by its author', { ...selected(tabNamed('Activity')), visible: [seen(PLANNING_NOTE), seen('Nora DaSilva')], noText: LEAKS }, itemStill(), { proves: 'tab-stability' }),
+    click(menu, 'Open the header menu again for a new epic', { visible: [{ role: 'menuitem', name: 'New epic' }] }),
+    click({ role: 'menuitem', name: 'New epic' }, 'New epic opens its dialog', { visible: [dialog('New epic')] }, { state: 'dialog-open' }),
+    press('Escape', 'Escape closes it', { hidden: [dialog('New epic')] }, { proves: 'keyboard' }),
+    tabWalk(10),
+  ];
+}
+
 // ── sprints ─────────────────────────────────────────────────────────────────
-const SPRINT = { name: 'Sprint 7 — Contracts', steward: 'Ben Okafor', initiative: 'Design System API' };
+const SPRINT_OF: Partial<Record<Role, { name: string; steward: string; initiative: string; search: string; work: string }>> = {
+  sme: { name: 'Sprint 10 — Session hygiene', steward: 'Simone Chang', initiative: 'Auth Migration', search: 'Session', work: 'Session cookie hardening: max-age, rotation on switch' },
+};
+const SPRINT_DEFAULT = { name: 'Sprint 7 — Contracts', steward: 'Ben Okafor', initiative: 'Design System API', search: 'Contracts', work: 'Breaking prop rename slipped past the semver gate' };
 const sprintTabs: Target = { role: 'tablist', name: 'Sprint detail sections' };
 const sprintStill = (): Target[] => [STILL.header, sprintTabs];
 const SPRINT_NUMBERS = { of: seen(/^\d+ sprints?$/), eqCount: tableRows };
 
 export function sprints(role: Role): Step[] {
   const c = CAPS[role];
+  const SPRINT = SPRINT_OF[role] ?? SPRINT_DEFAULT;
   const url = '/iq/projects?lens=sprints';
   const sprintTab = (name: string, expect: Expect) =>
     tabClick(tabNamed(name, sprintTabs), `Click ${name} on the sprint: it opens and the header and tab strip stay where they were`, { ...selected(tabNamed(name, sprintTabs)), ...expect }, sprintStill());
   return [
     open(url, `Open Sprints: whose sprint, which initiative and steward, and which window`, { url, visible: [heading('Sprints'), seen(SPRINT.name), seen(SPRINT.steward), seen(/^\d+ sprints?$/)], numbers: [SPRINT_NUMBERS], count: [{ target: tableRows, min: 1 }], ...(c.sprints ? { visible: [heading('Sprints'), seen(SPRINT.name), seen(SPRINT.steward), { role: 'button', name: /New sprint/ }] } : { absent: [{ role: 'button', name: /New sprint/ }] }) }, { facts: true, proves: ['story-facts', 'role-gating'] }),
     fill(search('Search sprints'), 'zzzzqq', 'Search zzzzqq: the table says which search matched no sprint', { visible: [seen('No sprint matches “zzzzqq”.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
-    fill(search('Search sprints'), 'Contracts', 'Search Contracts: the sprint stays', { visible: [seen(SPRINT.name)], count: [{ target: tableRows, eq: 1 }] }, { state: 'filtered' }),
+    fill(search('Search sprints'), SPRINT.search, `Search ${SPRINT.search}: the sprint stays`, { visible: [seen(SPRINT.name)], count: [{ target: tableRows, eq: 1 }] }, { state: 'filtered' }),
     press('Enter', 'Enter on the sprint row opens it: its steward, window and points, by name', { url: /[?&]sprint=spr-/, visible: [seen(SPRINT.name), seen(`Steward: ${SPRINT.steward}`), seen('points done')], noText: LEAKS }, { target: { role: 'button', name: new RegExp(`^Open sprint ${SPRINT.name}`) }, state: 'row-open', proves: ['story-facts', 'keyboard'] }),
     sprintTab('Money', { visible: [seen(/envelope granted/)] }),
-    sprintTab('Work', { visible: [seen('Breaking prop rename slipped past the semver gate')] }),
+    sprintTab('Work', { visible: [seen(SPRINT.work)] }),
     ...(c.budgets ? [sprintTab('Envelopes', {})] : [{ do: 'wait', target: sprintTabs, name: 'The sprint has no Envelopes tab for this role: envelopes are granted by a release manager', proves: 'role-gating', expect: { absent: [tabNamed('Envelopes')], visible: [tabNamed('Money', sprintTabs)] } } as Step]),
     back('Browser Back leaves the sprint and returns to the sprints table', { url, visible: [seen(SPRINT.name)] }),
+    ...(c.sprints ? [
+      click({ role: 'button', name: /New sprint/ }, 'New sprint opens its form and asks for the initiative, name and window (nothing is created)', { visible: [dialog('New sprint'), { text: 'Initiative', within: dialog('New sprint') }] }, { state: 'dialog-open', proves: 'role-gating' }),
+      closeDialog('New sprint', { role: 'button', name: /New sprint/ }),
+    ] : []),
+    ...(c.dispatch ? [
+      click({ role: 'button', name: /my envelope/i }, `The "My envelope" tile opens Your sprint envelopes, naming the grant on ${SPRINT.initiative}`, { visible: [dialog(/Your sprint envelopes/), { text: SPRINT.name, within: dialog(/Your sprint envelopes/) }] }, { state: 'dialog-open', proves: 'role-gating' }),
+      closeDialog(/Your sprint envelopes/),
+    ] : []),
     tabWalk(8),
     scoped({ scenario: 'empty', fixture: 'sprints' }, url, 'In a world with no sprints the page says no sprint is yours', 'empty', { visible: [seen('No sprints of yours'), seen(/No sprint currently has your stewardship/)], count: [{ target: tableRows, eq: 0 }] }),
   ];
@@ -314,14 +434,14 @@ export function automate(role: Role): Step[] {
       : { do: 'wait', target: seen('Needs your attention'), name: 'Answering and reviewing need ManageDevbox: the inbox says so and offers no answer', proves: 'role-gating', expect: { visible: [seen(/need the ManageDevbox capability; you can read these but not decide them/)] } } as Step,
     press('Enter', 'Enter on the first recent run opens its record', { url: /^\/iq\/work\/job-/ }, { target: firstRow, state: 'row-open', proves: 'keyboard' }),
     back('Browser Back returns to the Inbox', { url: '/iq/work', visible: [heading('Inbox')] }),
-    click(rail('Runs'), 'Open Runs: every job by state, with the dispatched runs running outside the queue named by work item', { url: '/iq/work/queue', visible: [heading('Runs'), seen('Running now outside the queue'), seen('Span-metrics connector feeding RED dashboards')], count: [{ target: tableRows, min: 10 }] }, { proves: ['tab-stability', 'story-facts'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
+    click({ css: '[data-shell-nav] a[href="/iq/work/queue"]' }, 'Open Runs: every job by state, with the dispatched runs running outside the queue named by work item', { url: '/iq/work/queue', visible: [heading('Runs'), seen('Running now outside the queue'), seen('Span-metrics connector feeding RED dashboards')], count: [{ target: tableRows, min: 10 }] }, { proves: ['tab-stability', 'story-facts'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
     click({ role: 'button', name: /^Failed/ }, 'Filter to the failed (dead-letter) jobs: the badge agrees with the rows', { url: /[?&]status=failed/, numbers: [{ of: { role: 'button', name: /^Failed/ }, re: /(\d+)/, eqCount: openLinks }], visible: [seen('inference-canary-nightly')] }, { state: 'filtered' }),
     fill(search('Search runs'), 'zzzzqq', 'Search zzzzqq among the failed jobs: the table says nothing is dead-lettered', { visible: [seen('No loaded run matches this search.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
     clear('Search runs'),
-    click(rail('Findings'), 'Open Findings: the dead-letter queue and the open findings by sweep', { url: '/iq/work/findings', visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions')], ...(c.devbox ? {} : { absent: [{ role: 'button', name: /requeue/i }] }) }, { proves: ['tab-stability', 'story-facts'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
-    fill(search('Search findings'), 'zzzzqq', 'Search zzzzqq: the findings list says nothing is open', { url: /[?&]q=zzzzqq/, visible: [seen(/Nothing open\. Sweeps run automatically every 6 hours\./)] }, { state: 'filtered-empty', proves: 'empty-state' }),
+    click({ css: '[data-shell-nav] a[href="/iq/work/findings"]' }, 'Open Findings: the dead-letter queue and the open findings by sweep', { url: '/iq/work/findings', visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions')], ...(c.devbox ? { visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions'), { role: 'button', name: /requeue/i, nth: 0 }, { role: 'button', name: 'Run sweeps now', nth: 0 }] } : { absent: [{ role: 'button', name: /requeue/i }] }) }, { proves: ['tab-stability', 'story-facts', 'role-gating'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
+    fill(search('Search findings'), 'zzzzqq', 'Search zzzzqq: the findings list says nothing is open', { url: /[?&]q=zzzzqq/, visible: [seen(c.devbox ? /Nothing open\. Sweeps run every 6 hours, or run one now\./ : /Nothing open\. Sweeps run automatically every 6 hours\./)] }, { state: 'filtered-empty', proves: 'empty-state' }),
     clear('Search findings'),
-    click(rail('Changes'), 'Open Graph updates: what agents proposed to the org graph and who decided it', { url: '/iq/work/changes', visible: [heading('Graph updates'), seen('Linked a document to an entity'), seen('Rachel Kowalski')], ...(c.devbox ? {} : { absent: [{ role: 'button', name: /^(Approve|Reject)( |$)/ }] }), noText: LEAKS }, { proves: ['tab-stability', 'story-facts'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
+    click({ css: '[data-shell-nav] a[href="/iq/work/changes"]' }, 'Open Graph updates: what agents proposed to the org graph and who decided it', { url: '/iq/work/changes', visible: [heading('Graph updates'), seen('Linked a document to an entity'), seen('Rachel Kowalski')], ...(c.devbox ? {} : { absent: [{ role: 'button', name: /^(Approve|Reject)( |$)/ }] }), noText: LEAKS }, { proves: ['tab-stability', 'story-facts'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
     click({ role: 'button', name: /^applied/ }, 'Filter to the applied changes: three of them, each decided by a named person', { visible: [seen('decided by Rachel Kowalski')] }, { state: 'filtered' }),
     fill(search('Search graph updates'), 'zzzzqq', 'Search zzzzqq: no graph update matches', { visible: [seen('No loaded graph update matches this search.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
     tabWalk(10),
@@ -344,7 +464,7 @@ export function job(role: Role): Step[] {
   return [
     open(url, 'Open one agent run: who scheduled it, how long it took, what it cost and what it concluded', { url, visible: [heading(JOB.title), seen('Completed'), seen(JOB.outcome), seen(/Scheduled by auth-dep-watch/)], noText: LEAKS }, { facts: true }),
     c.devbox
-      ? { do: 'wait', target: heading(JOB.title), name: 'This role holds ManageDevbox: the run offers Open computer', proves: 'role-gating', expect: { visible: [{ role: 'button', name: /Open computer/ }] } } as Step
+      ? { do: 'wait', target: heading(JOB.title), name: 'This role holds ManageDevbox, but this maintenance run ran on no computer, so there is no Open computer to offer, and a finished run has no Cancel, Accept or Reject', proves: 'role-gating', expect: { visible: [seen('Completed')], absent: [{ role: 'button', name: /^(Open computer|Cancel|Accept|Reject)/ }] } } as Step
       : { do: 'wait', target: heading(JOB.title), name: 'This role cannot drive a computer: the run offers no Open computer, Cancel, Accept or Reject', proves: 'role-gating', expect: { absent: [{ role: 'button', name: /^(Open computer|Cancel|Accept|Reject)/ }] } } as Step,
     jobTab('Activity', 'activity', { visible: [seen('Activity unavailable')] }),
     jobTab('Outputs', 'outputs', { visible: [seen('Recorded result'), seen('git_commit')] }, { proves: ['tab-stability', 'story-facts'] }),
@@ -353,6 +473,12 @@ export function job(role: Role): Step[] {
     press('ArrowRight', 'ArrowRight moves focus along the tab strip to Activity', { focused: tabNamed('Activity', jobTabs) }, { target: tabNamed('Summary', jobTabs), proves: 'keyboard' }),
     tabWalk(8),
     open('/iq/work/job-missing', 'A run that does not exist says so and offers the way back to the runs', { visible: [seen('Job not found'), seen('No job with id job-missing — it may have been pruned.')] }, { state: 'not-found', proves: 'empty-state', expectConsole: /404/ }),
+    ...(c.devbox ? [
+      scoped({ scenario: 'large', fixture: 'agent-jobs' }, '/iq/work/job-live-queued', 'In the demo world a queued run is live: this role may Cancel it', 'default', { visible: [{ role: 'button', name: 'Cancel' }], absent: [{ role: 'button', name: /^(Accept|Reject)/ }] }, { proves: 'role-gating' }),
+      click({ role: 'button', name: 'Cancel' }, 'Cancel asks first and names the state of the run (nothing is cancelled)', { visible: [dialog('Cancel this run?')] }, { state: 'dialog-open', proves: 'role-gating' }),
+      closeDialog('Cancel this run?', { role: 'button', name: 'Cancel' }),
+      scoped({ scenario: 'large', fixture: 'agent-jobs' }, '/iq/work/job-live-review', 'A run awaiting review offers Accept and Reject to this role', 'default', { visible: [{ role: 'button', name: 'Accept' }, { role: 'button', name: 'Reject' }] }, { proves: 'role-gating' }),
+    ] : []),
   ];
 }
 
@@ -367,7 +493,7 @@ export function decisions(role: Role): Step[] {
     click(rail('Waiting'), 'Filter to the decisions still waiting: two, and the count agrees with the rows', { url: /[?&]status=waiting/, numbers: [decisionNumbers], visible: [seen(DECISION.title), seen('Judge model for canary evaluation')], count: [{ target: tableRows, eq: 2 }] }, { state: 'filtered', proves: 'tab-stability', stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
     fill(search('Search decisions'), 'zzzzqq', 'Search zzzzqq: the list says no loaded decision matches', { visible: [seen('No decisions'), seen('No loaded decision matches this search.')], count: [{ target: tableRows, eq: 0 }] }, { state: 'filtered-empty', proves: 'empty-state' }),
     fill(search('Search decisions'), '', 'Clear the search: the waiting decisions come back', { count: [{ target: tableRows, eq: 2 }] }),
-    click(rail('All decisions'), 'Back to all decisions: eleven', { url: /[?&]status=all|^\/iq\/decisions$/, numbers: [decisionNumbers], count: [{ target: tableRows, min: 8 }] }),
+    click(rail('All decisions'), 'Back to all decisions: eleven', { url: /[?&]status=all|^\/iq\/decisions$/, visible: [seen('11 decisions')], numbers: [decisionNumbers], count: [{ target: tableRows, min: 8 }] }),
     press('Enter', 'Enter on the first decision opens its record', { url: /^\/iq\/decisions\/d-/ }, { target: firstRow, state: 'row-open', proves: 'keyboard' }),
     open(`/iq/decisions/${DECISION.id}`, 'Read the decision: who decides, what it needs, the question, the people involved and its history, by name', { url: `/iq/decisions/${DECISION.id}`, visible: [seen(DECISION.title), seen(DECISION.decider), seen('The question'), seen('Nora DaSilva'), seen('Simone Chang'), seen('Auth Migration')], absent: [{ role: 'button', name: /^(Decide|Approve|Reject|Escalate)( |$)/ }], noText: LEAKS }, { facts: true, state: 'row-open', proves: ['story-facts', 'role-gating'] }),
     tabWalk(8),
@@ -433,7 +559,7 @@ export function designs(role: Role): Step[] {
     fill(search('Search designs'), '', 'Clear the search: the approved design comes back', { count: [{ target: tableRows, eq: 1 }] }),
     click(rail('All designs'), 'Back to all designs: three', { count: [{ target: tableRows, min: 3 }] }),
     press('Enter', 'Enter on the first design opens its thread', { url: /^\/iq\/designs\/des-/ }, { target: firstRow, state: 'row-open', proves: 'keyboard' }),
-    open(`/iq/designs/${DESIGN.id}`, 'Read the thread: who posted what, by name, and who may sign off', { url: `/iq/designs/${DESIGN.id}`, visible: [seen(DESIGN.title), seen('Vera Green'), seen('Simone Chang'), seen('Nora DaSilva'), seen('PROBLEM STATEMENT')], absent: [{ role: 'button', name: /^(Answer|Sign off|Approve|Request changes)( |$)/ }], noText: LEAKS }, { facts: true, state: 'row-open', proves: ['story-facts', 'role-gating'] }),
+    open(`/iq/designs/${DESIGN.id}`, CAPS[role].dispatch ? 'Read the thread: who posted what, by name, with Answer, Approve and Reject for this role' : 'Read the thread: who posted what, by name, and who may sign off', { url: `/iq/designs/${DESIGN.id}`, visible: [seen(DESIGN.title), seen('Vera Green'), seen('Simone Chang'), seen('Nora DaSilva'), seen('PROBLEM STATEMENT')], ...(CAPS[role].dispatch ? { visible: [seen(DESIGN.title), { role: 'button', name: /^Answer( |$)/, nth: 0 }, { role: 'button', name: 'Approve' }, { role: 'button', name: 'Reject' }, seen('Vera Green'), seen('Simone Chang'), seen('Nora DaSilva'), seen('PROBLEM STATEMENT')], absent: [{ role: 'button', name: /^(Sign off|Request changes)( |$)/ }] } : { absent: [{ role: 'button', name: /^(Answer|Sign off|Approve|Request changes)( |$)/ }] }), noText: LEAKS }, { facts: true, state: 'row-open', proves: ['story-facts', 'role-gating'] }),
     tabWalk(8),
     open('/iq/designs/des-nope', 'A design that does not exist says so and offers the way back', { visible: [seen('Design not found')] }, { state: 'not-found', proves: 'empty-state', expectConsole: /404/ }),
     scoped({ scenario: 'empty', fixture: 'design-reviews' }, '/iq/designs', 'In a world with no design threads the page says no initiative has opened one', 'empty', { visible: [seen('No design reviews'), seen('No initiative has opened a design thread yet.')], count: [{ target: tableRows, eq: 0 }] }),
@@ -568,7 +694,7 @@ export const RAIL: Record<Role, string[]> = {
 /** Every rail item any role has, so a role's missing ones are asserted absent. */
 const ALL_RAIL = [...new Set(Object.values(RAIL).flat())];
 /** Options in the command palette on open, and what ⌘I does (denied, lists or create), per role. The member's are walked; the other roles' are confirmed by their own walks. */
-export const PALETTE_COUNT: Record<Role, number> = { member: 19, sme: 30, 'program-owner': 24, 'org-leader': 72, 'hr-admin': 82 };
+export const PALETTE_COUNT: Record<Role, number> = { member: 19, sme: 28, 'program-owner': 24, 'org-leader': 72, 'hr-admin': 64 };
 export const QUICK_SWITCH: Record<Role, 'denied' | 'lists' | 'create'> = { member: 'denied', sme: 'lists', 'program-owner': 'denied', 'org-leader': 'denied', 'hr-admin': 'lists' };
 /** APIs that answer 403 for the role (the Cedar action it lacks), probed with the role's own session. */
 export const API_403: Record<Role, string[]> = {
@@ -595,6 +721,8 @@ export function refusals(role: Role): Step[] {
   const missing = ALL_RAIL.filter((x) => !rail_.includes(x));
   const absentRail: Target[] = missing.map((x) => ({ role: 'link', name: new RegExp(`^${escapeRe(x)}(?: \\d+)?$`), within: { css: '[data-shell-nav]' } }));
   const qs = QUICK_SWITCH[role];
+  // The shared Computer Lab fleet (an in-memory registry no scope forks) puts one palette entry per computer a ManageDevbox role can see.
+  const fleetInPalette = CAPS[role].devbox && role !== 'hr-admin';
   const qsText = { denied: 'You don’t have access to computers', lists: 'Jump to a computer, or create one', create: 'Jump to a computer, or create one' }[qs];
   const refused = refusedRoutes(role).map((r): Step => ({
     do: 'navigate', url: r.url, name: `Type ${r.url}: the route sends this role back to its Work home, Initiatives`, state: 'refused', proves: 'hidden-surfaces-direct-route',
@@ -605,7 +733,9 @@ export function refusals(role: Role): Step[] {
   return [
     open('/iq/projects', `The rail for ${role}: ${rail_.join(', ')}${missing.length ? '' : ''}`, { url: '/iq/projects', visible: rail_.map(rail), absent: absentRail }, { proves: 'rail-items' }),
     openPalette(null),
-    { do: 'wait', target: PALETTE, name: `The palette lists ${PALETTE_COUNT[role]} entries for this role`, proves: 'palette-entries', expect: { count: [{ target: { role: 'option', within: PALETTE }, eq: PALETTE_COUNT[role] }] } } as Step,
+    fleetInPalette
+      ? { do: 'wait', target: PALETTE, name: `The palette lists ${PALETTE_COUNT[role]} entries for this role, and one more for each computer in the fleet it can see`, proves: 'palette-entries', expect: { count: [{ target: { role: 'option', within: PALETTE }, min: PALETTE_COUNT[role], max: PALETTE_COUNT[role] + 16 }] } } as Step
+      : { do: 'wait', target: PALETTE, name: `The palette lists ${PALETTE_COUNT[role]} entries for this role`, proves: 'palette-entries', expect: { count: [{ target: { role: 'option', within: PALETTE }, eq: PALETTE_COUNT[role] }] } } as Step,
     closeDialog('Command palette', undefined, null),
     press('ControlOrMeta+i', qs === 'denied' ? '⌘I quick switch says this role has no access to computers' : '⌘I quick switch lists the computers and offers to create one', { visible: [PALETTE, { text: qsText }] }, { proves: 'quick-switch', state: 'dialog-open' }),
     closeDialog('Command palette', undefined, null),
@@ -653,6 +783,7 @@ const PAGE_FILES: Record<string, string> = {
   automate: 'portal/src/pages/work, portal/src/pages/work/QueuePage.tsx',
   sprints: 'portal/src/pages/projects/SprintsLens.tsx, portal/src/pages/sprints',
   'prepare-job': 'portal/src/pages/project-detail/usePrepareJobDeck.ts, portal/src/pages/project-detail/prepareJobModel.ts, portal/src/pages/ProjectDetailPage.tsx',
+  'work-write': 'portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/project-detail/NewItemForm.tsx, portal/src/pages/project-detail/BriefDialogs.tsx, portal/src/pages/project-detail/WorkItemDetail.tsx',
   'work-items': 'portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/project-detail',
   initiative: 'portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/projects, portal/src/pages/project-detail',
   initiatives: 'portal/src/pages/ProjectsPage.tsx, portal/src/pages/initiatives',
@@ -671,13 +802,27 @@ const GOAL: Record<string, string> = {
   automate: 'Automate: the inbox, runs, findings and graph changes; filter each, open a run, the empty and error worlds; review and requeue gated by ManageDevbox',
   sprints: 'Sprints: whose and which window, a search that matches nothing, open a sprint and its tabs, no sprints at all',
   'prepare-job': 'The prepare-job card: what a job would run with, the composer keys 1-5 and Enter, Escape; who may dispatch and the sentence that says who can when this role cannot',
+  'work-write': 'Change work: create a story, move its status, assign an owner, add a planning note, each read back after a reload, inside a scoped world',
   'work-items': 'Find and read work: search and facets, a filter that matches nothing, open an item and every item tab, the list empty and crowded; edit controls absent or explained by role',
   initiative: 'Read one initiative: every tab and the side pane held still, the header menu and Escape, owner and SMEs by name, a missing initiative',
   initiatives: 'Find an initiative: all and mine, search and status, a search that matches nothing, open one; the list under empty, error, long-text, many and loading worlds',
 };
 const SURFACE_STEPS: Record<string, (role: Role) => Step[]> = {
-  initiatives, initiative, 'work-items': workItems, 'prepare-job': prepareJob, sprints, automate, job, decisions, search: searchSurface, documents, designs, library, runbooks, social, settings, 'local-compute': localCompute,
+  initiatives, initiative, 'work-items': workItems, 'prepare-job': prepareJob, 'work-write': workWrite, sprints, automate, job, decisions, search: searchSurface, documents, designs, library, runbooks, social, settings, 'local-compute': localCompute,
 };
+
+/** The journeys that write for a role that dispatches: they run inside a scoped world. */
+const writesJourney = (role: Role, journey: string): boolean => writesJob(role) && (journey === 'work-write' || journey === 'prepare-job');
+
+/**
+ * A role that holds ManageDevbox mounts the app-wide fleet poll. When a scoped mock world lists no computers the library's
+ * `readopt` re-registers the ones cached in localStorage (POST /api/devbox/boxes, ui-components ComputeContext `useComputeFleet`),
+ * which is not something the person did; it lands in the copy-on-write scope. hr-admin's clone owns a computer in every world and never sends it.
+ */
+export const readOnlyPostsFor = (role: Role): Partial<JourneyMap> =>
+  CAPS[role].devbox && role !== 'hr-admin'
+    ? { readOnlyPosts: [{ path: '/api/devbox/boxes', reason: 'POST /api/devbox/boxes is the library fleet poll re-adopting its cached computers after a scoped world lists none (ComputeContext readopt); the scope is copy-on-write and the person wrote nothing' }] }
+    : {};
 
 /** The map a role walks for one surface: `docs/journeys/maps/work/<role>/<journey>.ts` is one line of this. */
 export function surfaceMap(role: Role, journey: string, opts: Partial<JourneyMap> = {}): JourneyMap {
@@ -685,6 +830,7 @@ export function surfaceMap(role: Role, journey: string, opts: Partial<JourneyMap
   if (!steps) throw new Error(`no surface steps for ${journey}`);
   return {
     family: 'work', log: `${role}/${journey}`, kind: 'surface', persona: PERSONA[role], scenario: 'shared', identity: 'clone',
+    ...(writesJourney(role, journey) ? { scenario: { scope: 'default' }, writes: true } : readOnlyPostsFor(role)),
     viewport: { width: 1440, height: 900 },
     goal: `${PERSONA[role].name}: ${GOAL[journey]}`,
     fields: { surface: journey, pages: PAGE_FILES[journey] ?? 'portal/src/pages' },
