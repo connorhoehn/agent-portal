@@ -35,15 +35,17 @@ const EMOJI = ['👍', '❤️', '😂', '🎉'];
 // unchanged: everyone still shows as active. SOCIAL_SIM_POST_CHANNELS=slug,slug
 // widens it ("" posts nothing).
 const POST_CHANNELS = new Set((process.env.SOCIAL_SIM_POST_CHANNELS ?? 'random').split(',').map((s) => s.trim()).filter(Boolean));
+// #random lines: engineers' off-topic, timeless, nothing a seeded thread can
+// contradict (no status of any incident, cutover or release). No fallback pool:
+// a user without lines only reacts.
 const LINES = {
-  'u-lena': ['Tea count today: three. I regret nothing.', 'Someone left a very good umbrella in the lobby. It is waiting for you.'],
-  'u-sana': ['Current favorite: a podcast about bridges. Yes, bridges.', 'My headset arrived. I can hear myself think, which is mixed news.'],
+  'u-lena': ['Tea count today: three. The kettle has better uptime than my laptop.', 'Someone left a very good umbrella in the lobby. It is waiting for you.'],
+  'u-sana': ['Current favourite: a podcast about bridges, specifically the ones that oscillate. Yes, bridges.', 'My new headset does noise cancelling well enough that I missed a fire drill. Mixed news.'],
   'u-asha': ['Ran the loop by the river this morning, the light was ridiculous.', 'Hot take: the best desk plant is the one you forget to water.'],
-  'u-jonas': ['Rewatching an old chess documentary. Nothing is as dramatic as a draw.', 'The loud keyboard has a fan club of exactly one.'],
-  'u-nora': ['The office plant is on its fourth new leaf. Respect.', 'Small win: my coffee stayed hot until the bottom of the cup.'],
-  'u-rachel': ['Lunch idea: leftover noodles with a fried egg. Highly recommended.', 'Spotted a heron by the car park. It looked unbothered.'],
+  'u-jonas': ['Rewatching an old chess documentary. Nothing is as dramatic as a draw.', 'The loud keyboard now has a fan club of exactly one, and a dampening ring order in transit.'],
+  'u-nora': ['The sourdough dashboard caught a late peak overnight. It was the kitchen being cold, not the starter.', 'Small win: my coffee stayed hot until the bottom of the cup.'],
+  'u-rachel': ['Off-call this week. I keep reaching for a pager that is not there.', 'Spotted a heron by the car park. It looked unbothered, like a good incident commander.'],
 };
-const GENERIC = ['Anyone read anything good lately?', 'Cannot recommend the new corner bakery enough.'];
 const used = new Set();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -145,7 +147,7 @@ class Bot {
       this.send({ service: 'reactions', action: 'send', channel: c.channel, emoji, targetId: pick(known) });
       log(this.id, `reacted ${emoji} in #${c.slug}`);
     } else if (c) {
-      const text = [...(LINES[this.id] ?? GENERIC)].find((t) => !used.has(`${this.id}:${t}`));
+      const text = [...(LINES[this.id] ?? [])].find((t) => !used.has(`${this.id}:${t}`));
       if (text) {
         used.add(`${this.id}:${text}`);
         this.send({ service: 'chat', action: 'send', channel: c.channel, message: text });

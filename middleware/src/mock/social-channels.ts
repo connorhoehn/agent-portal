@@ -54,8 +54,8 @@ const ch = (slug: string) => `social:ch:${slug}`;
 
 function seedChannels(): SocialChannelRow[] {
   return [
-    { tenant: 'social', slug: 'general', name: 'General', description: 'Announcements and anything that does not have a home yet.', privacy: 'public', createdBy: 'u-mira', createdAt: clock.daysAgo(21) },
-    { tenant: 'social', slug: 'design-reviews', name: 'Design reviews', description: 'Post a design, get eyes on it.', privacy: 'public', createdBy: 'u-lena', createdAt: clock.daysAgo(14) },
+    { tenant: 'social', slug: 'general', name: 'General', description: 'Release trains, change freezes, office hours and new runbooks. Questions without a home start here.', privacy: 'public', createdBy: 'u-mira', createdAt: clock.daysAgo(21) },
+    { tenant: 'social', slug: 'design-reviews', name: 'Design reviews', description: 'Design docs and UI reviews: say the decision you need, by when, and tag one reviewer.', privacy: 'public', createdBy: 'u-lena', createdAt: clock.daysAgo(14) },
     { tenant: 'social', slug: 'moderators', name: 'Moderators', description: 'Moderation calls and escalations.', privacy: 'private', createdBy: 'u-lena', createdAt: clock.daysAgo(10) },
     { tenant: 'social', slug: 'auth-migration', name: 'Auth migration', description: 'Customer tenants moving off the legacy SAML shim to Cognito, one at a time. Bound to the Auth Migration initiative in Work.', privacy: 'public', createdBy: 'u-vera', createdAt: clock.daysAgo(8) },
     // The demo history's extra channels (mock/social-history.ts).
@@ -138,11 +138,11 @@ function seedMessages(): ChatMessage[] {
   const dmLenaMira = 'social:dm:u-lena:u-mira';
   return [
     msg('seed-general-1', ch('general'), 'u-mira', 'Mira Okafor', 'Welcome to the community workspace. Channels are where we talk in the open; DMs are for everything else.', clock.daysAgo(21)),
-    msg('seed-general-3', ch('general'), 'u-theo', 'Theo Chang', 'Is the Thursday community call still on?', clock.hoursAgo(6)),
-    msg('seed-general-4', ch('general'), 'u-mira', 'Mira Okafor', 'Yes — same time, same room.', clock.hoursAgo(5)),
-    msg('seed-design-1', ch('design-reviews'), 'u-lena', 'Lena Brandt', 'First pass at the onboarding flow is up. Comments by Friday, please.', clock.daysAgo(2)),
-    msg('seed-design-2', ch('design-reviews'), 'u-farah', 'Farah Osei', 'The empty state on step two reads well. The progress bar feels heavy.', clock.hoursAgo(20)),
-    msg('seed-mods-1', ch('moderators'), 'u-mira', 'Mira Okafor', 'Two reports on the same thread overnight — Lena, can you take a look?', clock.hoursAgo(9)),
+    msg('seed-general-3', ch('general'), 'u-theo', 'Theo Chang', 'Is the Thursday community call still on? I would like ten minutes on the transcript postmortem.', clock.hoursAgo(6)),
+    msg('seed-general-4', ch('general'), 'u-mira', 'Mira Okafor', 'Yes, same time, same room. You are on right after the calendar item.', clock.hoursAgo(5)),
+    msg('seed-design-1', ch('design-reviews'), 'u-lena', 'Lena Brandt', 'First pass at the moderation queue redesign is up: bulk actions, a keyboard path through every row, and the reason shown before the action. Comments by Friday, please.', clock.daysAgo(2)),
+    msg('seed-design-2', ch('design-reviews'), 'u-farah', 'Farah Osei', 'Keyboard path works end to end. The focus ring on a selected row is 2.4:1 against the selection colour; non-text contrast needs 3:1, so it needs the strong ring token.', clock.hoursAgo(20)),
+    msg('seed-mods-1', ch('moderators'), 'u-mira', 'Mira Okafor', 'Two reports on the same thread overnight, both about a pasted access token. Lena, can you hide the message and ask them to rotate it?', clock.hoursAgo(9)),
     msg('seed-dm-ls-1', dmLenaSana, 'u-lena', 'Lena Brandt', 'Your lightning talk slot is confirmed for the community call, right after Asha. Five minutes.', clock.daysAgo(1)),
     msg('seed-dm-ls-2', dmLenaSana, 'u-sana', 'Sana Iqbal', 'Thanks Lena, will do.', clock.hoursAgo(22)),
     msg('seed-dm-lm-1', dmLenaMira, 'u-mira', 'Mira Okafor', 'Can you cover the Thursday call if I run late?', clock.hoursAgo(4)),

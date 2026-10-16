@@ -120,7 +120,7 @@ function seedNotifications(): MockNotificationRow[] {
     {
       id: 'mock-notif-missed-vera', userId: 'u-vera', tenant: 'orgiq', type: 'call-missed',
       title: 'Missed call from Nora DaSilva',
-      body: 'Nobody answered — on Auth Migration.',
+      body: 'About the second rehearsal rollback and the callback-list step for the cutover runbook. Nobody answered — on Auth Migration.',
       href: '/iq/projects/p-auth-migration', actionLabel: 'Open the initiative',
       timestamp: clock.hoursAgo(1),
       extra: { kind: 'call-missed', callerId: 'u-nora', callerName: 'Nora DaSilva', reason: 'no-answer', channel: 'initiative:p-auth-migration' },
