@@ -55,7 +55,7 @@ export const link = (name: Text): Target => ({ role: 'link', name, within: { css
 /** Why a mapped intent is not walked yet: the phase that gives the tenant the surface. */
 export const HOLD = {
   palette: 'S3 (U8): the palette has no record group yet, so a record cannot be reached from it; the map is walked once the ui-components record-results section is pinned and wired',
-  tenantSearch: 'S2: this tenant has no server search yet (/api/<tenant>/search behind requireTenant); walked 2026-10-15 on its list page instead and the row did not open its record, so the map is walked again once the tenant index lands',
+  tenantSearch: 'S2 landed the tenant index, but the page does not yet answer on screen: re-walked 2026-10-16 and the list search does not surface the record, or the row does not link to its record page (no catalog/queue/run/team record routes in the tenant); the map is walked once the S3 list-page server-search fallback and record links land',
 };
 
 /** The palette path (U8): open it on a tenant page, type the question, take the record option. */
