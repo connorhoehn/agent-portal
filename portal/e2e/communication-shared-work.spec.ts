@@ -182,7 +182,7 @@ test('u-vera’s org context: Active now with the plane’s facts, My initiative
   await theo.page.goto('/iq/projects');
   const vera = await person(browser, 'u-vera');
   const { page } = vera;
-  await page.goto('/iq/communication');
+  await page.goto('/iq/communication?group=initiative%3Ap-auth-migration'); // a named view keeps the full rail (the bare path opens her default conversation)
   const grid = rail(page).getByTestId('social-active-now');
   await expect(grid.getByTestId('social-active-now-person-u-mira')).toBeVisible({ timeout: 30_000 });
   await expect(grid.getByTestId('social-active-now-person-u-theo')).toBeVisible();
@@ -200,7 +200,9 @@ test('u-vera’s org context: Active now with the plane’s facts, My initiative
   await auth.click();
   await expect(page).toHaveURL(/\/iq\/communication\/channels\/auth-migration$/);
 
-  // My org teams: her org-graph team; the row opens the team view with the roster and presence.
+  // My org teams: her org-graph team; the row opens the team view with the roster and presence. The channel just opened is a
+  // sub-route (one section), so go back to the home, whose rail keeps every section.
+  await page.goto('/iq/communication?group=initiative%3Ap-auth-migration');
   const mine = await page.evaluate(async () => (await fetch('/api/me/groups?kind=org-team', { credentials: 'include' })).json());
   const teamName = (mine.items as Array<{ name: string }>)[0]?.name ?? '';
   expect(teamName, 'u-vera’s linked person is on an org team').not.toBe('');
@@ -220,9 +222,10 @@ test('an unbound group opens its page discussion inside the plane', async ({ bro
   test.setTimeout(90_000);
   const theo = await person(browser, 'u-theo');
   const { page } = theo;
-  await page.goto('/iq/communication');
+  await page.goto('/iq/communication?person=u-theo'); // a named view keeps the full rail (the bare path opens his default conversation)
   const row = rail(page).getByTestId('plane-groups').getByTestId('conversation-row').first();
-  await expect(row).toContainText('no Social channel', { timeout: 20_000 });
+  // An unbound group's row names where its discussion lives (groupRowPreview), not a missing channel.
+  await expect(row).toContainText('Initiative discussion', { timeout: 20_000 });
   await row.click();
   await expect(page).toHaveURL(/\/iq\/communication\?group=initiative%3A/);
   const pane = page.getByTestId('plane-group-pane');

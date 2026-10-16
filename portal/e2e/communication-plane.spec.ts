@@ -208,7 +208,8 @@ test('the assessment plane as u-asha, the pipelines plane as u-tomas (granted) a
   await oneSectionRail(asha.page, null);
   // The plane's home: the full rail with the assessment groups section, which lists the teams the assessor is on
   // (GET /api/me/groups?kind=assessment-team), not every team.
-  await asha.page.goto('/assessment/communication');
+  // (The bare path opens her default conversation, a sub-route; naming a team keeps the home's full rail.)
+  await asha.page.goto('/assessment/communication?group=team%3ATEAM-001');
   await fullRail(asha.page, ['My teams', 'Channels']);
   await expect(asha.page.getByTestId('plane-groups-section').getByRole('button', { name: /^My teams/ })).toBeVisible();
   await expect(asha.page.getByTestId('plane-groups').locator('[data-testid="conversation-row"]').first()).toBeVisible({ timeout: 20_000 });
