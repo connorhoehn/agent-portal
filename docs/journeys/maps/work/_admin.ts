@@ -38,8 +38,9 @@ export function runs(_role: Role): Step[] {
     click(btn('Filters'), 'Open Filters again to clear them', { visible: [btn('Clear filters')] }),
     click(btn('Clear filters'), 'Clear filters: every run is back and the header count is in the hundreds again', { visible: [seen(/^\d{3} runs$/)], count: [{ target: tableRows, min: 20 }] }),
     fill(search('Search loaded run titles'), 'auth-rotation', 'Search auth-rotation: the ADR summaries stay', { visible: [seen('Summarize the auth-rotation ADR for the exec review')], count: [{ target: tableRows, min: 1 }] }, { state: 'filtered', proves: 'empty-state' }),
-    // Enter while the search holds the seeded ADR runs: a live relayed run at the top of the full ledger keeps ticking, so its record never measures still.
-    press('Enter', 'Enter on the first auth-rotation run opens its record', { url: /^\/iq\/runs\/[^/]+$/, visible: [h1('Run'), seen(/auth-rotation/)] }, { target: firstRow, state: 'row-open', proves: 'keyboard' }),
+    // Enter on a seeded run: relayed agent runs (other walks' summaries) sort first, also under a title search, and a live one keeps ticking, so its record never measures still.
+    fill(search('Search loaded run titles'), 'nightly maintenance', 'Search nightly maintenance: the scheduled maintenance runs', { visible: [seen(/nightly maintenance/i)], count: [{ target: tableRows, min: 1 }] }, { state: 'filtered' }),
+    press('Enter', 'Enter on the first maintenance run opens its record', { url: /^\/iq\/runs\/job[^/]+$/, visible: [h1('Run'), seen(/nightly maintenance/i), seen('Steps')], count: [{ target: tableRows, min: 5 }] }, { target: firstRow, state: 'row-open', proves: 'keyboard' }),
     back('Browser Back returns to the ledger', { url: /^\/iq\/runs(?:\?.*)?$/, visible: [h1('Runs')] }),
     open('/iq/runs/job:job-obs-maint-1', 'Open the nightly maintenance run: who ran it, what it cost and its steps, by name', {
       url: '/iq/runs/job:job-obs-maint-1', visible: [h1('Run'), seen('Obs nightly maintenance'), seen('completed'), tabNamed('Run'), tabNamed('Brief'), seen('Steps')],
@@ -202,7 +203,6 @@ export function devbox(role: Role): Step[] {
   const VIEWER = /You can see the fleet but not drive it/;
   // The fleet each persona's clone sees: hr-admin's has her scratch computer, an sme's is the initiatives she sits on.
   const scratch = role === 'hr-admin' ? { name: 'rachel-scratch', query: 'rachel' } : { name: 'auth-migration-2', query: 'migration-2' };
-  const agentLine = role === 'hr-admin' ? /running · / : /needs you/;
   return [
     open('/admin/devbox', 'Open the Computer Lab: the fleet grouped by initiative with each computer named, its spend against the initiative budget', {
       url: '/admin/devbox', visible: [computers, agents, seen('Observability Platform'), seen('observability-1'), seen(/\d+ computers/)],
@@ -211,7 +211,8 @@ export function devbox(role: Role): Step[] {
     }, { facts: true, proves: ['story-facts', 'role-gating'] }),
     api('/api/devbox/boxes', 200, 'This role may read the fleet: GET /api/devbox/boxes answers 200'),
     tabClick(agents, 'Click the Agents view (the Lab has no filter box, so the view switch is the stability check): the running agents list by work item and the header stays put', {
-      ...selected(agents), ...(role === 'hr-admin' ? { visible: [seen(agentLine)] } : { visible: [seen(/\d+ computers · \d+ agents/)], numbers: [{ of: agents, re: /(\d+)/, eqNumberOf: seen(/\d+ computers · \d+ agents/), reOther: /· (\d+) agents/ }] }),
+      // The fleet is one in-memory registry no scope forks (dispatching walks add computers), so the agents view is judged by its counts agreeing, for every role.
+      ...selected(agents), visible: [seen(/\d+ computers? · \d+ agents?/)], numbers: [{ of: agents, re: /(\d+)/, eqNumberOf: seen(/\d+ computers? · \d+ agents?/), reOther: /· (\d+) agents?/ }],
     }, [STILL.header, fleet], { proves: ['tab-stability', 'story-facts'], state: 'filtered' }),
     tabClick(computers, 'Click the Computers view: the fleet is back, grouped by initiative', { ...selected(computers), visible: c.devbox ? [seen('Auth Migration'), seen('auth-migration-2')] : [seen('auth-migration-2'), seen('observability-1')] }, [STILL.header, fleet]),
     press('Enter', 'Enter on the Agents tab (focused by the key press) selects it', { ...selected(agents), focused: agents }, { target: agents, proves: 'keyboard' }),

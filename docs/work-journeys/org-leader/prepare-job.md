@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/projects/p-auth-migration?item=wi-auth-e2-b3; /iq/projects/p-auth-migration?item=wi-auth-e2-b3&view=docs; /iq/projects/p-zero-trust?item=wi-zt-e1-s2; /iq/projects/p-auth-migration?item=wi-nope
 map: docs/journeys/maps/work/org-leader/prepare-job.ts
 pages: portal/src/pages/project-detail/usePrepareJobDeck.ts, portal/src/pages/project-detail/prepareJobModel.ts, portal/src/pages/ProjectDetailPage.tsx
-audited: 2026-10-16 04:11–04:19 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-3fc01442), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.458.2
-session: /api/session/me sub u-vera-clone-3fc01442, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 07:31–07:39 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-3fa09f7e), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-vera-clone-3fa09f7e, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: prepare-job.jpg
 verdict: pass
 console errors: 0 unexpected; 3 expected by the map (Failed to load resource: the server responded with a status of 409 (Conflict) | Failed to load resource: the server responded with a status of 429 (Too Many Req)

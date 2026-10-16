@@ -156,6 +156,10 @@ export const OBSERVED_ROUTES: readonly ParamRoute[] = [
   { tenant: 'assessment', pattern: '/assessment/communication/channels/:slug', template: '/assessment/communication/channels/:id?view=shared', id: 'general' },
   { tenant: 'pipelines', pattern: '/pipelines/communication/channels/:slug', template: '/pipelines/communication/channels/:id?view=shared', id: 'general' },
   { tenant: 'orgiq', pattern: '/admin/identity/roles', template: '/admin/identity/:id', id: 'roles' },
+  // The Work journeys walk the capability pages (docs/work-journeys-goal.md, org-leader and hr-admin capabilities).
+  { tenant: 'orgiq', pattern: '/admin/capabilities/guardrails', template: '/admin/capabilities/guardrails', id: 'guardrails' },
+  { tenant: 'orgiq', pattern: '/admin/capabilities/code-interpreter', template: '/admin/capabilities/code-interpreter', id: 'code-interpreter' },
+  { tenant: 'orgiq', pattern: '/admin/capabilities/browser', template: '/admin/capabilities/browser', id: 'browser' },
   { tenant: 'orgiq', pattern: '/admin/bots/:id', template: '/admin/bots/:id', id: '32970d0a-e28e-5100-8fb0-a5cbb87dac99' },
   { tenant: 'social', pattern: '/social/dms/:lobby', template: '/social/dms/:id', id: 'social:dm:u-operator:u-sana' },
   // The same seeded DM on each tenant's Communication plane: the conversation is the page's one header.

@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "4d35f2b2516a2529e8e2466a0ef28069fb91be97b9f3d99608334bbc4b325232",
-  "at": "2026-10-15T16:47:45.526Z"
+  "sourceDigest": "42de5255000863d4a1d8a396e0808aa25508325bedbc12cde4c2bb30f3ca7cfd",
+  "at": "2026-10-16T10:42:44.915Z"
  },
  "routes": {
   "/access": {
@@ -136,6 +136,29 @@
     "offenders": []
    },
    "changedAt": "2026-10-13T12:08:14.363Z"
+  },
+  "/admin/capabilities/browser": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-16T10:42:44.915Z"
+  },
+  "/admin/capabilities/code-interpreter": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-10-16T10:42:44.915Z"
+  },
+  "/admin/capabilities/guardrails": {
+   "value": {
+    "title": null,
+    "offenders": [
+     "scale content 16/600"
+    ]
+   },
+   "changedAt": "2026-10-16T10:42:44.915Z"
   },
   "/admin/changes": {
    "value": {

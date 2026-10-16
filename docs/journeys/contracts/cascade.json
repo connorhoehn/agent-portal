@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "4d35f2b2516a2529e8e2466a0ef28069fb91be97b9f3d99608334bbc4b325232",
-  "at": "2026-10-15T16:41:35.922Z"
+  "sourceDigest": "42de5255000863d4a1d8a396e0808aa25508325bedbc12cde4c2bb30f3ca7cfd",
+  "at": "2026-10-16T10:36:31.984Z"
  },
  "routes": {
   "/access": {
@@ -136,6 +136,27 @@
     "lands": null
    },
    "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/admin/capabilities/browser": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-16T10:36:31.984Z"
+  },
+  "/admin/capabilities/code-interpreter": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-16T10:36:31.984Z"
+  },
+  "/admin/capabilities/guardrails": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-10-16T10:36:31.984Z"
   },
   "/admin/changes": {
    "value": {

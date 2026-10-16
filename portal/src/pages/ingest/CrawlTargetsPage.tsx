@@ -162,11 +162,9 @@ function CrawlTargetsPage() {
           </InlineAlert>
         )}
 
-        <ConnectedSources />
-
-        <SiteSurveyPanel onTargetCreated={refreshTargets} />
-
-        {/* Crawl Targets */}
+        {/* Crawl Targets — the page's list comes first (the table-first density rule:
+            docs/work-journeys-goal.md; the hr-admin ingest walk measured its first row at
+            696px under the connected sources and the survey form). */}
         <Card padding="md">
           {canManage && (
             <Inline justify="end" className="mb-3">
@@ -203,6 +201,10 @@ function CrawlTargetsPage() {
             />
           )}
         </Card>
+
+        <ConnectedSources />
+
+        <SiteSurveyPanel onTargetCreated={refreshTargets} />
 
         {/* Active Crawls — only when something is running */}
         {activeCrawls.length > 0 && (

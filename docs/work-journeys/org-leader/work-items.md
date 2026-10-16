@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/projects/p-auth-migration?tab=work; /iq/projects/p-auth-migration?tab=work&wq=logout; /iq/projects/p-auth-migration?tab=work&wq=zzzzqq; /iq/projects/p-auth-migration?tab=work&item=wi-auth-e2-s2; /iq/projects/p-auth-migration?tab=work&item=wi-auth-e2-s2&view=docs; /iq/projects/p-auth-migration?tab=work&item=wi-auth-e2-s2&view=history
 map: docs/journeys/maps/work/org-leader/work-items.ts
 pages: portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/project-detail
-audited: 2026-10-16 04:29–04:30 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-13d6d1be), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-13d6d1be, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-16 07:41–07:42 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-ad09ef89), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-vera-clone-ad09ef89, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: work-items.jpg
 verdict: pass
 console errors: 0
