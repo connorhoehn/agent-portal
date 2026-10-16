@@ -22,6 +22,7 @@ import { getProjectWorkItems } from '../../../providers/work-items.js';
 import { listSprints } from '../../../providers/sprints.js';
 import { getMaintenance30d } from '../../../providers/budgets.js';
 import { fixtureRegistry } from '../../../mock/core/index.js';
+import { listFindings } from '../../../providers/org-sweeps.js';
 
 type Who = Parameters<typeof answerLocally>[0]['session'];
 const leader = { sub: 'u-release', tenant: 'orgiq', role: 'org-leader' } as Who;
@@ -220,4 +221,16 @@ describe('sprints', () => {
 it('a question no intent matches is not answered locally', async () => {
   expect(await ask('who knows auth best?')).toBeNull();
   expect(await ask('summarize the auth migration postmortem')).toBeNull();
+});
+
+describe('single-threaded — the open bus-factor findings', () => {
+  it.each(['where are we single-threaded', 'bus factor risks', 'knowledge held by only one person'])('%s', async q => {
+    expect(matchIntent(q, null, false)?.intent).toBe('single-threaded');
+    const open = await listFindings({ status: 'open', sweep: 'bus_factor', limit: 100 });
+    const a = await ask(q);
+    expect(a?.intent).toBe('single-threaded');
+    expect(a!.rows).toHaveLength(open.length);
+    expect(a!.text).toMatch(/single-threaded|bus-factor/i);
+    for (const f of open) expect(a!.text).toContain(f.title);
+  });
 });

@@ -18,6 +18,7 @@
 import { listProjects, getProject, type ProjectSummary } from '../../providers/projects.js';
 import { getProjectWorkItems, getWorkItem, type WorkItem } from '../../providers/work-items.js';
 import { listSprints } from '../../providers/sprints.js';
+import { listFindings } from '../../providers/org-sweeps.js';
 import { getMaintenance30d, type Maintenance30d } from '../../providers/budgets.js';
 import { mineViewer } from '../mine.js';
 import { canReadBudgets } from '../budget-read-tier.js';
@@ -84,6 +85,10 @@ export async function answerLocally(input: {
     const personId = wide ? null : (await mineViewer(session as Session)).personId;
     intentInput.sprints = await listSprints({ personId, mineOnly: !wide, limit: 500 });
     intentInput.sprintsMineOnly = !wide;
+  }
+  if (match.intent === 'single-threaded') {
+    // The Findings route's own floor is a signed-in orgiq session (`requireSession('ViewWork')`), which this path already holds.
+    intentInput.findings = await listFindings({ status: 'open', sweep: 'bus_factor', limit: 100 });
   }
   if (match.intent === 'owners' && focus.length) {
     const details = await Promise.all(focus.map(async p => [p.id, (await getProject(p.id))?.contributors ?? []] as const));

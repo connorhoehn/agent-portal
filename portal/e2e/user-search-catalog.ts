@@ -46,6 +46,8 @@ export interface Intent {
     text: RegExp[];
     /** the answer asserts something false. */
     wrong?: RegExp[];
+    /** Set when the fact is computed from rows (a count, an absence, a live tally) so no single seed row carries `text`: says which rows it is computed from. */
+    derived?: string;
   };
   /** Set when a clone cannot see the answer because the server keys it on the user id, not the person (reported apart from the pass rate). */
   cloneBlind?: string;
@@ -230,7 +232,7 @@ export const ASSESSMENT = tenantOf('assessment')([
     best: 'teams list row (lead column)', surfaces: [S('palette', { route: AS_TEAMS }), S('list-search', { route: AS_TEAMS, placeholder: 'Search by team name or ID…', keyword: 'Data Platform' }), S('composer', { route: AS_TEAMS, grammar: 'search Data Platform' })] },
   { id: 'a-unassigned', role: 'program-lead', intent: 'Teams without a lead',
     phrasings: ['teams without a lead', 'unassigned teams', 'which teams have no lead'],
-    expected: { summary: 'TEAM-006 Fraud Detection ML and TEAM-007 Internal Tools', text: [/Fraud Detection ML|Internal Tools/] },
+    expected: { summary: 'the teams whose lead column is empty — or, when every team has a lead (today\'s seed: 7 of 7), the statement that none is unassigned', text: [/Every team has an assessment lead|no assessment lead/i], derived: 'the team rows\' lead column: the answer counts the teams whose lead is empty, so "none" is a fact too' },
     best: 'teams composer filter', surfaces: [S('composer', { route: AS_TEAMS, grammar: 'show unassigned teams' }), S('palette', { route: AS_TEAMS })] },
   { id: 'a-white-glove', role: 'program-lead', intent: 'Teams in a motion',
     phrasings: ['white glove teams', 'show white glove teams', 'which teams are white-glove'],
@@ -258,7 +260,7 @@ export const ASSESSMENT = tenantOf('assessment')([
     best: 'feedback composer ("show open")', surfaces: [S('composer', { route: '/assessment/feedback', grammar: 'show open' }), S('list-search', { route: '/assessment/feedback', placeholder: 'Search questions, dimensions or teams…', keyword: 'exception' })] },
   { id: 'a-who-approved-exception', role: 'program-lead', intent: 'Who approved an exception',
     phrasings: ['who approved the security testing exception for Northstar', 'who approved the TEAM-001 N/A', 'approver of Northstar dimension 6 exception'],
-    expected: { summary: 'lead-assessor:priya approved TEAM-001 dimension 6 (internal-tooling-no-deploy)', text: [/priya/i] },
+    expected: { summary: 'Jonas Lindqvist approved the TEAM-001 Northstar Payments dimension 6 (Security Testing) N/A exception', text: [/Jonas Lindqvist/] },
     best: 'team record (exceptions tab) reachable from search', surfaces: [S('composer', { route: '/assessment/feedback', grammar: 'search Northstar' }), S('palette', { route: AS_TEAMS })] },
   { id: 'a-answered', role: 'lead-assessor', intent: 'Find an answered question',
     phrasings: ['rolling deploys', 'what did Sam Okafor confirm', 'answered questions about deploys'],
@@ -279,7 +281,7 @@ export const ASSESSMENT = tenantOf('assessment')([
   { id: 'a-standard-doc', role: 'assessor', intent: 'Find a standards document',
     phrasings: ['N/A exception policy', 'what counts as evidence', 'CI/CD standards'],
     expected: { summary: 'Knowledge docs "N/A Exception Policy", "What Counts as Evidence", "CI/CD Standards"', text: [/Exception Policy|Counts as Evidence|CI\/CD Standards/i] },
-    best: 'workspace document search', surfaces: [S('list-search', { route: '/assessment/workspace', placeholder: 'Search documents and files', keyword: 'evidence' }), S('palette', { route: AS_TEAMS })] },
+    best: 'workspace document search', surfaces: [S('list-search', { route: '/assessment/workspace', placeholder: 'Search documents and files', keyword: 'evidence' }), S('composer', { route: AS_TEAMS, grammar: 'what counts as evidence' }), S('palette', { route: AS_TEAMS })] },
   { id: 'a-recording', role: 'lead-assessor', intent: 'Find a recorded huddle',
     phrasings: ['huddle about Northstar', 'recordings mentioning CI', 'Northstar call recording'],
     expected: { summary: 'Team huddle on assessment:team:TEAM-001 (Asha + Jonas, 22 min, 4h ago)', text: [/huddle|Northstar/i] },
@@ -303,7 +305,7 @@ export const SOCIAL = tenantOf('social')([
     best: 'palette person jump + contacts', surfaces: [S('palette', { route: CH }), S('list-search', { route: '/social/contacts', placeholder: 'Find a person', keyword: 'Lena' }), S('composer', { route: '/social/contacts', grammar: 'search contacts for Lena' })] },
   { id: 's-presence', role: 'participant', intent: "Who's around right now",
     phrasings: ["who's online now", 'who is here', 'show away contacts'],
-    expected: { summary: 'Contacts by presence (here/away/offline)', text: [/Here|Away|Online/i] },
+    expected: { summary: 'the presence tally of the loaded roster: how many are here now, away, offline', text: [/Here now: \d+/i], derived: 'live presence of the loaded contact roster (connected and active, connected and idle, offline); no fixture row holds it' },
     best: 'contacts composer ("show away")', surfaces: [S('composer', { route: '/social/contacts', grammar: 'show away' }), S('palette', { route: CH })] },
   { id: 's-message-community-call', role: 'participant', intent: 'Find a message by what it said',
     phrasings: ['when is the community call', 'community call time', 'community call Thursday'],
@@ -396,7 +398,7 @@ export const PIPELINES = tenantOf('pipelines')([
     best: 'palette record jump', surfaces: [S('palette', { route: RUNS }), S('composer', { route: '/pipelines/commands', grammar: 'search commands for score' }), S('list-search', { route: '/pipelines/definitions', placeholder: 'Search definitions', keyword: 'score' })] },
   { id: 'p-def-owner', role: 'author', intent: 'Who owns a definition',
     phrasings: ['who owns draw-diagram', 'owner of the draw-diagram command', 'draw-diagram'],
-    expected: { summary: 'orgiq-assessment-drafter owns assessment:draw-diagram', text: [/drafter/i] },
+    expected: { summary: 'Ines Moreau owns assessment:draw-diagram (the definition row\'s owner column)', text: [/Ines Moreau|drafter/i] },
     best: 'definitions list row (owner column)', surfaces: [S('list-search', { route: '/pipelines/definitions', placeholder: 'Search definitions', keyword: 'draw-diagram' }), S('palette', { route: RUNS })] },
   { id: 'p-paused-bots', role: 'pipeline-admin', intent: 'Which bots are paused',
     phrasings: ['which bots are paused', 'disabled bots', 'show paused bots'],
@@ -473,7 +475,7 @@ export const ACCESS = tenantOf('access')([
     best: 'approvals page via palette', surfaces: [S('palette', { route: REQ }), S('composer', { route: '/access/approvals', grammar: 'search approvals for req-0001' }), S('list-search', { route: '/access/approvals', placeholder: 'Search approvals', keyword: 'Rhea' })] },
   { id: 'x-reports-requests', role: 'approver', intent: "My reports' requests",
     phrasings: ["Rhea's requests", 'requests from my reports', 'what has Rhea asked for'],
-    expected: { summary: 'req-0001, req-0002, req-0005, req-0006', text: [/req-000[1256]/] },
+    expected: { summary: 'Rhea Castellanos (a report of the approver): req-0001, req-0002, req-0005, req-0006', text: [/req-000[1256]/] },
     best: 'requests search by requester', surfaces: [S('list-search', { route: REQ, placeholder: 'Search requests', keyword: 'Rhea' }), S('composer', { route: REQ, grammar: 'search Rhea' }), S('api', { path: '/api/access/requests?scope=reports&q=Rhea' })] },
   { id: 'x-delegation', role: 'approver', intent: 'Who covers my approvals',
     phrasings: ["who covers my approvals while I'm away", 'delegations', 'my delegate'],
@@ -511,7 +513,7 @@ export const CATALOG: Intent[] = [...ORGIQ, ...ASSESSMENT, ...SOCIAL, ...PIPELIN
 export function serializeIntents(intents: Intent[] = CATALOG) {
   return intents.map((i) => ({
     id: i.id, tenant: i.tenant, role: i.role, persona: i.persona, intent: i.intent, phrasings: i.phrasings, best: i.best, bestSurface: i.bestSurface, map: !!i.map,
-    expected: { summary: i.expected.summary, keys: i.expected.keys ?? [], text: i.expected.text.map((r) => ({ source: r.source, flags: r.flags })), wrong: (i.expected.wrong ?? []).map((r) => ({ source: r.source, flags: r.flags })) },
+    expected: { summary: i.expected.summary, keys: i.expected.keys ?? [], text: i.expected.text.map((r) => ({ source: r.source, flags: r.flags })), wrong: (i.expected.wrong ?? []).map((r) => ({ source: r.source, flags: r.flags })), derived: i.expected.derived ?? null },
     surfaces: i.surfaces, cloneBlind: i.cloneBlind ?? null,
   }));
 }

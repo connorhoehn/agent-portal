@@ -61,7 +61,7 @@ for (const i of CATALOG as Intent[]) {
   const user = users.find((u: { id: string }) => u.id === i.persona);
   if (!user?.grants?.[i.tenant]?.includes(i.role)) problems.push(`persona ${i.persona} does not hold ${i.tenant}:${i.role}`);
   for (const k of i.expected.keys ?? []) { const id = k.slice(k.indexOf(':') + 1); if (!haystack.includes(`"${id}"`)) problems.push(`key ${k} is in no fixture row`); }
-  if (!i.expected.text.some((r: RegExp) => new RegExp(r.source, r.flags.replace('g', '')).test(haystack))) problems.push(`no text pattern matches a fixture row (${i.expected.text.map((r: RegExp) => `/${r.source}/`).join(' ')})`);
+  if (!i.expected.derived && !i.expected.text.some((r: RegExp) => new RegExp(r.source, r.flags.replace('g', '')).test(haystack))) problems.push(`no text pattern matches a fixture row (${i.expected.text.map((r: RegExp) => `/${r.source}/`).join(' ')})`);
   if (problems.length) { bad++; fail(`intent ${i.id}: ${problems.join('; ')}`); }
 }
 if (!bad) ok(`${CATALOG.length} intents: ≥ 3 phrasings, a best surface, a persona holding the role, keys and answers present in the seed`);

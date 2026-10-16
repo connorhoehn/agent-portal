@@ -4,8 +4,8 @@ user: u-theo (Theo Chang)
 url: /iq/search?q=Aurora+Neptune+decision&tab=results; /iq/decisions/d-aurora
 map: docs/journeys/maps/user-search/orgiq/member/o-adr.ts
 pages: portal/src/pages/search, middleware/src/providers/search.ts, middleware/src/lib/search-index
-audited: 2026-10-16 10:12–10:12 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-4fef18b8), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-theo-clone-4fef18b8, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
+audited: 2026-10-16 13:03–13:03 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-c55380c4), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-theo-clone-c55380c4, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
 screenshot: member-o-adr.jpg
 verdict: pass
 console errors: 0

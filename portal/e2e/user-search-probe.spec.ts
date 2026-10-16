@@ -291,9 +291,12 @@ async function probeComposer(page: Page, intent: Intent, q: string, route: strin
   await input.click();
   await input.fill(q);
   await input.press('Enter');
-  const result = page.getByTestId('collection-command-result');
+  // The command box answers in one of two voices: the page's own command result, or — when no command
+  // recognises the phrase — the workspace's fixed-fact answer (data-testid collection-command-answer).
+  const result = page.locator('[data-testid="collection-command-result"], [data-testid="collection-command-answer"]').first();
   await result.waitFor({ timeout: 5_000 }).catch(() => undefined);
   await settle(page, 700);
+  const answered = (await page.getByTestId('collection-command-answer').count().catch(() => 0)) > 0;
   const feedback = (await result.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
   const after = await rowsOf(page);
   const urlChanged = page.url() !== url;
@@ -307,6 +310,18 @@ async function probeComposer(page: Page, intent: Intent, q: string, route: strin
     await input.press('Enter').catch(() => undefined);
     await settle(page, 500);
     if ((await rowsOf(page)).length !== before.length) dirty(page);
+  }
+  if (answered && !urlChanged) {
+    // A fixed-fact answer is graded on what it says, like the Ask tab's: the expected fact, no false one.
+    const said = { ...evidence, answered: true };
+    if (intent.expected.wrong && matchesAny(feedback, intent.expected.wrong)) return { verdict: 'wrong' as Verdict, reason: 'the command box answered with a false fact', latencyMs, clicks: null, evidence: said };
+    return matchesAny(feedback, intent.expected.text)
+      ? { verdict: 'supported' as Verdict, reason: 'the command box answered with the expected fact', latencyMs, clicks: null, evidence: said }
+      : { verdict: 'wrong' as Verdict, reason: 'the command box answered without the expected fact', latencyMs, clicks: null, evidence: said };
+  }
+  // A derived fact (a tally, an absence) the page's own command states in its result line is graded on what it says.
+  if (intent.expected.derived && !urlChanged && !/not recognized|No changes were made/i.test(feedback) && matchesAny(feedback, intent.expected.text)) {
+    return { verdict: 'supported' as Verdict, reason: 'the command box stated the expected derived fact', latencyMs, clicks: null, evidence: { ...evidence, stated: true } };
   }
   if (/not recognized|No changes were made/i.test(feedback) && !urlChanged) return { verdict: 'unsupported' as Verdict, reason: 'composer rejected the phrase', latencyMs, clicks: null, evidence };
   const graded = gradeList(intent, before, after, text, urlChanged);

@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { resolveSession } from '../lib/authz.js';
 import { searchTenant } from '../lib/search-index/tenant-query.js';
+import { answerTenant } from '../lib/tenant-answers/index.js';
 import type { IndexedTenant } from '../lib/search-index/tenants.js';
 
 export function tenantSearchRouter(tenant: Exclude<IndexedTenant, 'orgiq'>): Router {
@@ -19,6 +20,14 @@ export function tenantSearchRouter(tenant: Exclude<IndexedTenant, 'orgiq'>): Rou
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new ValidationError('limit must be an integer between 1 and 50');
     const type = String(req.query['type'] ?? 'all');
     res.json(await searchTenant(tenant, resolveSession(req)!, { q, limit, type }));
+  }));
+  // The same gate and projection answer a question as one fixed fact (docs/user-search-goal.md S4);
+  // `answer: null` means no intent recognised the question, never "no".
+  router.get('/answer', asyncHandler(async (req, res) => {
+    const q = String(req.query['q'] ?? '').trim();
+    if (!q) throw new ValidationError('q is required');
+    if (q.length > 500) throw new ValidationError('q must be 500 characters or fewer');
+    res.json({ query: q, answer: await answerTenant(tenant, resolveSession(req)!, q) });
   }));
   return router;
 }

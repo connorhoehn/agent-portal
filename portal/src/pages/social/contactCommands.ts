@@ -1,6 +1,6 @@
 import type { ContactRow } from './socialPlatform.ts';
 
-export type ContactPresence = 'all' | 'here' | 'away' | 'offline';
+export type ContactPresence = 'all' | 'here' | 'online' | 'away' | 'offline';
 export interface ContactFilters { query: string; presence: ContactPresence }
 export type ContactCommand =
   | { kind: 'search'; query: string }
@@ -18,8 +18,14 @@ export function parseContactCommand(text: string): ContactCommand {
   if (/^(?:help|commands|what can i do)$/.test(simple)) return { kind: 'help' };
   if (/^(?:refresh|reload)(?: (?:the )?(?:contacts|people|table))?$/.test(simple)) return { kind: 'refresh' };
   if (/^(?:reset(?: filters)?|clear (?:all )?filters|show all (?:people|contacts))$/.test(simple)) return { kind: 'reset' };
-  const presence = /^(?:(?:show|status)\s+)?(here(?: now)?|away|offline|all)(?:\s+(?:people|contacts))?$/.exec(simple)
-    ?? /^show (?:people|contacts) (here(?: now)?|away|offline)$/.exec(simple);
+  // A question about who is around: "who's online now", "who is here", "who is away".
+  const asked = /^who(?:'s|\s+is|\s+are)?\s+(?:(?:currently|right now)\s+)?(here|online|around|available|on(?:\s*line)?|away|idle|offline|not here)(?:\s+(?:now|right now|today))?$/.exec(simple);
+  if (asked) {
+    const w = asked[1]!;
+    return { kind: 'presence', presence: w === 'here' || w === 'available' ? 'here' : w === 'away' || w === 'idle' ? 'away' : w === 'offline' || w === 'not here' ? 'offline' : 'online' };
+  }
+  const presence = /^(?:(?:show|status)\s+)?(here(?: now)?|online|away|offline|all)(?:\s+(?:people|contacts))?$/.exec(simple)
+    ?? /^show (?:people|contacts) (here(?: now)?|online|away|offline)$/.exec(simple);
   if (presence) return { kind: 'presence', presence: presence[1].startsWith('here') ? 'here' : presence[1] as ContactPresence };
   const search = /^(?:search (?:contacts|people)(?: for)?|search for|find (?:person|people|contacts) named)\s+(.+)$/i.exec(raw);
   if (search) {
@@ -42,7 +48,15 @@ export function filterContacts(rows: readonly ContactRow[], filters: ContactFilt
   const query = filters.query.toLowerCase().trim();
   return rows.filter(row => (!query || row.displayName.toLowerCase().includes(query) || row.userId.toLowerCase().includes(query))
     && (filters.presence === 'all' || (filters.presence === 'here' ? row.online && !row.idle
-      : filters.presence === 'away' ? row.online && row.idle : !row.online)));
+      : filters.presence === 'away' ? row.online && row.idle : filters.presence === 'online' ? row.online : !row.online)));
+}
+
+/** The presence tally of the loaded roster, as one sentence: who is here now, how many are away or offline. */
+export function presenceTally(rows: readonly ContactRow[], selfId: string): string {
+  const name = (r: ContactRow) => (r.userId === selfId ? `${r.displayName} (you)` : r.displayName);
+  const here = rows.filter(r => r.online && !r.idle), away = rows.filter(r => r.online && r.idle), off = rows.filter(r => !r.online);
+  const some = (list: readonly ContactRow[]) => (list.length ? ` (${list.slice(0, 4).map(name).join(', ')}${list.length > 4 ? `, and ${list.length - 4} more` : ''})` : '');
+  return `Here now: ${here.length}${some(here)}. Away: ${away.length}${some(away)}. Offline: ${off.length} of ${rows.length} people.`;
 }
 
 /** Target resolution uses only the current filtered table. Opening a DM does
@@ -60,7 +74,7 @@ export function resolveContactTarget(target: string, rows: readonly ContactRow[]
 }
 
 export function contactCommandExamples(mayMessage: boolean): string[] {
-  return ['show here contacts', 'show away contacts', 'show offline contacts', 'show all contacts',
+  return ['show here contacts', 'show away contacts', 'show offline contacts', 'show all contacts', 'who is online',
     'search contacts for "Farah"', 'reset filters', 'refresh',
     ...(mayMessage ? ['open <name or user ID>', 'message <name or user ID> — opens the conversation; sends no text'] : [])];
 }

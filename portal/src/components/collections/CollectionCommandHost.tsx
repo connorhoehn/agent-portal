@@ -6,6 +6,8 @@ import { ColumnDock } from '@connorhoehnslalom/ui-components';
 import { ConfirmDialog, IconButton, InlinePopover, InfoIcon, Stack, T, Tooltip } from '@connorhoehnslalom/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { ConversationComposer } from '../../lib/conversationComposer';
+import { useSession } from '../../lib/auth';
+import { askTenantAnswer, tenantAnswers } from '../../lib/tenantAnswer';
 
 export interface CollectionCommandResult {
   message: string;
@@ -40,7 +42,9 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts, inPl
    *  would span the column and cut the list rail short of the content height. */
   inPlace?: boolean;
 }) {
-  const [notice, setNotice] = useState<{ text: string; tone: 'info' | 'danger' } | null>(null);
+  const { session } = useSession();
+  const answering = tenantAnswers(session?.tenant);
+  const [notice, setNotice] = useState<{ text: string; tone: 'info' | 'danger'; answer?: boolean } | null>(null);
   const [pending, setPending] = useState<CollectionCommandResult['confirmation']>();
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
@@ -55,7 +59,12 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts, inPl
       setPending(result.confirmation);
       return true;
     } catch (error) {
-      setNotice({ text: error instanceof Error ? error.message : 'The command could not be completed.', tone: 'danger' });
+      const message = error instanceof Error ? error.message : 'The command could not be completed.';
+      // A phrase the page's bounded commands do not know may be a question its workspace can answer from its own
+      // records (docs/user-search-goal.md S4); only a rejection asks, and a failed ask keeps the rejection.
+      const answer = answering && /not recognized|no matching record/i.test(message) ? await askTenantAnswer(session?.tenant, text) : null;
+      if (answer) { setNotice({ text: answer, tone: 'info', answer: true }); return true; }
+      setNotice({ text: message, tone: 'danger' });
       return false;
     } finally { locked.current = false; setBusy(false); }
   };
@@ -76,11 +85,12 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts, inPl
           aria-label={`Available ${adapter.label.toLowerCase()} commands`} className="max-w-md p-4">
           <Stack gap="sm"><T size="sm" weight="semibold">Table commands</T>
             <T size="xs" tone="secondary">Filter, search or refresh this table. Use the phrases below for available actions.</T>
+            {answering && <T size="xs" tone="secondary">A question about this workspace's records that no command covers, such as who approved something or what is waiting, is answered from the same rows. Nothing is changed.</T>}
             <Stack as="ul" gap="xs">{adapter.examples.map(example => <li key={example}><T size="sm">{example}</T></li>)}</Stack>
             <T size="xs" tone="secondary">{adapter.scopeNote}</T>
           </Stack>
         </InlinePopover></>}
-      status={notice ? { ...notice, onDismiss: () => setNotice(null), 'data-testid': 'collection-command-result' } : null} />
+      status={notice ? { text: notice.text, tone: notice.tone, onDismiss: () => setNotice(null), 'data-testid': notice.answer ? 'collection-command-answer' : 'collection-command-result' } : null} />
     <ConfirmDialog open={!!pending} title={pending?.title ?? 'Confirm operation'} body={pending?.body ?? ''}
       confirmLabel={pending?.label ?? 'Confirm'} cancelLabel="Keep it" tone="destructive"
       onCancel={() => { setPending(undefined); setNotice({ text: 'Operation dismissed. Nothing was changed.', tone: 'info' }); }}

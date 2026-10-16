@@ -4,8 +4,8 @@ user: u-priya (Priya Venkataraman)
 url: /access/policies; /access/policies/sod-001
 map: docs/journeys/maps/user-search/access/access-admin/x-sod.ts
 pages: portal/src/pages/access
-audited: 2026-10-16 10:11–10:11 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-priya-clone-28ad0ce8), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-priya-clone-28ad0ce8, tenant access, role access-admin, grants {"access":["access-admin"]}
+audited: 2026-10-16 13:02–13:02 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-priya-clone-44b9c1fa), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-priya-clone-44b9c1fa, tenant access, role access-admin, grants {"access":["access-admin"]}
 screenshot: access-admin-x-sod.jpg
 verdict: pass
 console errors: 0

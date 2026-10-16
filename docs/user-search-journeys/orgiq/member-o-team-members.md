@@ -4,8 +4,8 @@ user: u-theo (Theo Chang)
 url: /iq/search?q=who+is+on+the+platform+team&tab=results; /iq/search?tab=connections&selection=person%3Ap-009
 map: docs/journeys/maps/user-search/orgiq/member/o-team-members.ts
 pages: portal/src/pages/search, middleware/src/providers/search.ts, middleware/src/lib/search-index
-audited: 2026-10-16 10:12–10:12 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-07b9ad0a), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-theo-clone-07b9ad0a, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
+audited: 2026-10-16 13:03–13:03 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-abe2b1cc), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-theo-clone-abe2b1cc, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
 screenshot: member-o-team-members.jpg
 verdict: pass
 console errors: 0

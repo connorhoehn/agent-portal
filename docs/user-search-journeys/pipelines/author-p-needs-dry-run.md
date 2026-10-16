@@ -4,8 +4,8 @@ user: u-ines (Ines)
 url: /pipelines/runbooks; /pipelines/definitions/runbook%3Apromo-custodian-sg-drift
 map: docs/journeys/maps/user-search/pipelines/author/p-needs-dry-run.ts
 pages: portal/src/pages/pipelines
-audited: 2026-10-16 10:12–10:12 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-ca85b2ff), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-ines-clone-ca85b2ff, tenant pipelines, role author, grants {"pipelines":["author"]}
+audited: 2026-10-16 13:03–13:03 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-a77c8314), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-ines-clone-a77c8314, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: author-p-needs-dry-run.jpg
 verdict: pass
 console errors: 0

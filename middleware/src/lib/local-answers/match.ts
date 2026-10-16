@@ -9,7 +9,7 @@
 
 import type { AnswerScope } from './scope.js';
 
-export type LocalIntent = 'budget' | 'spend' | 'status' | 'owners' | 'work' | 'sprints';
+export type LocalIntent = 'budget' | 'spend' | 'status' | 'owners' | 'work' | 'sprints' | 'single-threaded';
 
 export interface IntentMatch {
   intent: LocalIntent;
@@ -26,6 +26,8 @@ export function localAnswersEnabled(env: NodeJS.ProcessEnv = process.env): boole
 // composer asks advise-only, and these never become a local read-out.
 const IMPERATIVE_RE = /^\s*(?:please\s+)?(?:create|add|move|assign|reassign|change|update|edit|delete|remove|dispatch|start|run|approve|set|allocate|grant|cancel|close|reopen|draft|write)\b/i;
 
+/** Where knowledge is held by too few people: the open bus-factor findings (the Work page's Findings). */
+const SINGLE_THREADED_RE = /\bsingle[- ]threaded\b|\bbus[- ]?factor\b|\bsingle points? of failure\b|\b(?:held|known|owned) by (?:only|just) (?:one|a single|1)\b|\bonly one person\b/i;
 const MONEY_RE = /\b(?:budgets?|allocat(?:ion|ions|ed)|over\s*spen[dt]|overspen(?:d|t|ding)|unbudgeted|unallocated|maintenance floor)\b/i;
 const MONEY_SHAPE_RE = /\b(?:over|overruns?|under|near(?:ly)?|close to|within|exceed(?:s|ed|ing)?|above|blown|burn(?:ed|t|ing)?)\b|\bunbudgeted\b|\bno (?:budget|allocation)\b|\bmaintenance\b/i;
 const SPEND_RE = /\bspen(?:d|t|ding)\b|\bburn(?:ed|t)?\b|\bcost (?:so far|this month|mtd)\b/i;
@@ -52,6 +54,8 @@ export function matchIntent(question: string, scope: AnswerScope | null, hasEnti
   const scoped = scope != null;
   const subject = hasEntity || (scope != null && scope.kind !== 'initiatives');
   const programWide = PROGRAM_NOUN_RE.test(q) || scope?.kind === 'initiatives';
+
+  if (SINGLE_THREADED_RE.test(q)) return { intent: 'single-threaded', facets };
 
   if (MONEY_RE.test(q) && (MONEY_SHAPE_RE.test(q) || programWide || subject)) return { intent: 'budget', facets };
   if (SPRINT_RE.test(q)) return { intent: 'sprints', facets };

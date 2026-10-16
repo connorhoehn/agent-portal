@@ -4,8 +4,8 @@ user: u-dara (Dara)
 url: /pipelines/bots; /pipelines/definitions/bot%3A4448041c-0350-5d7f-930e-7dbcd87a149f
 map: docs/journeys/maps/user-search/pipelines/pipeline-admin/p-bot-last-run.ts
 pages: portal/src/pages/pipelines
-audited: 2026-10-16 10:12–10:13 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-dara-clone-1c8f0e6f), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-dara-clone-1c8f0e6f, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
+audited: 2026-10-16 13:03–13:03 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-dara-clone-8700231b), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-dara-clone-8700231b, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
 screenshot: pipeline-admin-p-bot-last-run.jpg
 verdict: pass
 console errors: 0

@@ -89,7 +89,7 @@ export function teamDoc(tenant: string, f: TeamFacts): SearchDoc {
     people: f.members.map(m => m.userId),
     updatedAt: isoOrNull(s.updated_at),
     record: {
-      kind: 'Team', status: s.status.toLowerCase().replace(/_/g, ' '), href: hrefTeam(s.id),
+      kind: 'Team', status: s.status.toLowerCase().replace(/_/g, ' '), href: hrefTeam(s.id), lead: lead || undefined,
       subtitle: [s.id, lead ? `Lead: ${lead}` : 'No lead', s.contributors.length ? `With ${s.contributors.slice(0, 3).map(x => x.name).join(', ')}` : '', s.cohort_label, level != null ? `Level ${level}` : 'Not yet assessed'].filter(Boolean).join(' · '),
       description: c.headline,
     },
@@ -121,7 +121,8 @@ export function exceptionDoc(tenant: string, team: Pick<TeamSummary, 'id' | 'nam
     edges: [edge(teamKey(team.id), docKey('exception', `${team.id}:${x.dimension_id}`), 'exception')],
     updatedAt: isoOrNull(x.approved_at),
     record: {
-      kind: 'Exception', status: x.status, href: hrefTeam(team.id),
+      kind: 'Exception', status: x.status, href: hrefTeam(team.id), teamId: team.id, teamName: team.name, dimensionId: x.dimension_id, dimension: title,
+      approvedBy: decided ? x.approved_by : undefined,
       subtitle: `${team.id} dimension ${x.dimension_id} · ${x.status}${decided && x.approved_by ? ` by ${x.approved_by}` : ''}`, description: x.reason,
     },
   });
@@ -139,6 +140,7 @@ export function feedbackDoc(tenant: string, t: M.FeedbackTask & { virtual?: bool
     updatedAt: isoOrNull(t.resolved_at ?? t.created_at),
     record: {
       kind: review ? 'Exception review' : 'Feedback', status: t.status.toLowerCase(), href: `/assessment/feedback/${enc(t.task_id)}`,
+      question: t.question, response: t.response ?? undefined, teamId: t.team_id ?? undefined, teamName: teamName ?? undefined, dimensionId: t.dimension_id ?? undefined, dimension: dim || undefined, taskKind: t.kind,
       subtitle: [t.team_id, t.dimension_id ? `dimension ${t.dimension_id}${dim ? ` (${dim})` : ''}` : '', t.kind.replace(/_/g, ' '), t.status.toLowerCase()].filter(Boolean).join(' · '),
       description: t.response ?? undefined,
     },
@@ -164,7 +166,7 @@ export function submissionDoc(tenant: string, e: M.SubmissionEnvelope & { team_i
     facets: { status: [e.status], team: [e.team_id] },
     edges: [edge(teamKey(e.team_id), docKey('submission', e.envelope_id), 'submission')],
     updatedAt: isoOrNull(e.ingested_at),
-    record: { kind: 'Submission', status: e.status, href: `/assessment/submissions/${enc(e.envelope_id)}`, subtitle: [e.team_id, `from ${who}`, e.status].join(' · '), description: e.dimension_hints.map(h => h.dimension_id).length ? `${e.dimension_hints.length} dimension hints` : undefined },
+    record: { kind: 'Submission', status: e.status, submitter: e.submitter.name || undefined, teamId: e.team_id, teamName: teamName ?? undefined, href: `/assessment/submissions/${enc(e.envelope_id)}`, subtitle: [e.team_id, `from ${who}`, e.status].join(' · '), description: e.dimension_hints.map(h => h.dimension_id).length ? `${e.dimension_hints.length} dimension hints` : undefined },
   });
 }
 

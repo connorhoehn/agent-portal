@@ -49,7 +49,7 @@ import { CollectionRecordFrame } from '../../components/collections/CollectionRe
 import { PersonSharedWork } from '../../components/communication/PersonSharedWork';
 import { RecordNotFound } from '../../components/UnavailableNotice';
 import { useCrumbLabel } from '../../lib/crumbLabels';
-import { contactCommandExamples, filterContacts, parseContactCommand, resolveContactTarget, type ContactFilters, type ContactPresence } from './contactCommands';
+import { contactCommandExamples, filterContacts, parseContactCommand, presenceTally, resolveContactTarget, type ContactFilters, type ContactPresence } from './contactCommands';
 
 export default function ContactsPage() {
   const { session } = useSession();
@@ -116,7 +116,8 @@ function ContactsWorkspace() {
       if (command.kind === 'reset') { setFilters({ query: '', presence: 'all' }); return { message: 'Contact search and presence filters cleared. Sorting is unchanged.' }; }
       if (command.kind === 'presence') {
         setFilters(current => ({ ...current, presence: command.presence }));
-        return { message: `Presence filter: ${command.presence}. Your name search and sorting are unchanged.` };
+        const shown = filterContacts(rows, { query: '', presence: command.presence }).length;
+        return { message: `${presenceTally(rows, me)} Presence filter: ${command.presence} (${shown} shown). Your name search and sorting are unchanged.` };
       }
       if (command.kind === 'search') {
         setFilters(current => ({ ...current, query: command.query }));

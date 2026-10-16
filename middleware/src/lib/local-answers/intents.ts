@@ -12,6 +12,7 @@ import type { ProjectSummary } from '../../providers/projects.js';
 import type { WorkItem } from '../../providers/work-items.js';
 import type { SprintRow } from '../../providers/sprints.js';
 import type { Maintenance30d } from '../../providers/budgets.js';
+import type { Finding } from '../../providers/org-sweeps.js';
 import type { LocalIntent, IntentMatch } from './match.js';
 import { usd, pct, sumUsd, monthLabel, monthName, plural, listing } from './format.js';
 import { BUDGET_READ_ITEM_ID } from '../budget-read-tier.js';
@@ -62,6 +63,8 @@ export interface IntentInput {
   /** True when `sprints` is the caller's own (mine) view rather than the whole board. */
   sprintsMineOnly?: boolean;
   contributors?: Map<string, Contributor[]>;
+  /** The open bus-factor findings, for the single-threaded intent. */
+  findings?: Finding[];
 }
 
 // ─── Citations ───────────────────────────────────────────────────────────────
@@ -373,6 +376,31 @@ export function sprintsAnswer(input: IntentInput): LocalAnswer {
     sources: [input.sprintsMineOnly ? 'your sprints' : 'sprints'] };
 }
 
+// ─── single-threaded: where knowledge is held by too few people ──────────────
+
+const holderCount = (f: Finding): number | null => (typeof f.evidence['holders'] === 'number' ? f.evidence['holders'] : null);
+const holderNames = (f: Finding): string[] => (Array.isArray(f.evidence['holderNames']) ? (f.evidence['holderNames'] as unknown[]).filter((x): x is string => typeof x === 'string') : []);
+
+export function singleThreadedAnswer(input: IntentInput): LocalAnswer {
+  const c = new Citations();
+  const found = [...(input.findings ?? [])].sort((a, b) => (holderCount(a) ?? Infinity) - (holderCount(b) ?? Infinity) || a.title.localeCompare(b.title));
+  const byId = new Map(input.initiatives.map(p => [p.id, p]));
+  const rows = found.map(f => ({ findingId: f.id, title: f.title, severity: f.severity, holders: holderCount(f), holderNames: holderNames(f), initiatives: f.evidence['initiatives'] ?? [] }));
+  if (!found.length) {
+    return { intent: 'single-threaded', text: 'No open bus-factor finding: the last sweep found no skill, document or decision held by too few people.', records: [], edges: [], rows, sources: ['findings (bus-factor sweep, open)'] };
+  }
+  const lines = found.slice(0, 8).map(f => {
+    const names = holderNames(f);
+    const initiatives = (Array.isArray(f.evidence['initiatives']) ? f.evidence['initiatives'] as unknown[] : [])
+      .map(id => (typeof id === 'string' ? byId.get(id) : undefined)).filter((p): p is ProjectSummary => !!p);
+    return `- ${f.title}${names.length ? ` (${listing(names)})` : ''}${initiatives.length ? ` — backs ${listing(initiatives.map(p => `${p.name} ${c.initiative(p)}`))}` : ''}`;
+  });
+  const head = `We are single-threaded in ${plural(found.length, 'place')} — ${plural(found.length, 'open bus-factor finding')} from the sweep:`;
+  return { intent: 'single-threaded', text: `${head}\n${lines.join('\n')}${found.length > 8 ? `\n- …and ${found.length - 8} more on the Findings page` : ''}\n\n_A bus-factor finding means one departure leaves a single point of failure; the Findings page lists each with its evidence._`,
+    records: c.records, edges: [], rows, sources: ['findings (bus-factor sweep, open)'] };
+}
+
 export const INTENTS: Record<LocalIntent, (input: IntentInput) => LocalAnswer> = {
   budget: budgetAnswer, spend: spendAnswer, status: statusAnswer, owners: ownersAnswer, work: workAnswer, sprints: sprintsAnswer,
+  'single-threaded': singleThreadedAnswer,
 };

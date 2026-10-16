@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { contactCommandExamples, filterContacts, parseContactCommand, resolveContactTarget } from '../contactCommands.ts';
+import { contactCommandExamples, filterContacts, parseContactCommand, presenceTally, resolveContactTarget } from '../contactCommands.ts';
 import type { ContactRow } from '../socialPlatform.ts';
 
 const rows: ContactRow[] = [
@@ -25,6 +25,11 @@ for (const [phrase, expected] of [
   ['open Mira Okafor', { kind: 'open', target: 'Mira Okafor' }],
   ['message u-mira', { kind: 'open', target: 'u-mira' }],
   ['help', { kind: 'help' }],
+  ["who's online now", { kind: 'presence', presence: 'online' }],
+  ['who is here', { kind: 'presence', presence: 'here' }],
+  ['Who is away?', { kind: 'presence', presence: 'away' }],
+  ['who is offline', { kind: 'presence', presence: 'offline' }],
+  ['show online contacts', { kind: 'presence', presence: 'online' }],
 ] as const) test(`interprets ${phrase}`, () => assert.deepEqual(parseContactCommand(phrase), expected));
 
 for (const phrase of ['show not offline contacts', 'show here contacts from yesterday', 'show here and away contacts',
@@ -72,4 +77,11 @@ test('read-only help omits message/open actions; every help variant omits call',
   assert.ok(contactCommandExamples(true).some(example => example.startsWith('message')));
   assert.ok(!contactCommandExamples(false).some(example => /^(?:message|open)/.test(example)));
   assert.ok(!contactCommandExamples(true).some(example => example.startsWith('call')));
+});
+
+test('online is here plus away; the tally counts the loaded roster, never a fixed number', () => {
+  assert.deepEqual(filterContacts(rows, { query: '', presence: 'online' }).map(row => row.userId), ['u-me', 'u-farah', 'u-mira']);
+  assert.equal(presenceTally(rows, 'u-me'), 'Here now: 2 (Theo Chang (you), Farah Osei). Away: 1 (Mira Okafor). Offline: 1 of 4 people.');
+  assert.equal(presenceTally([], 'u-me'), 'Here now: 0. Away: 0. Offline: 0 of 0 people.');
+  assert.match(presenceTally(rows.filter(r => !r.online || r.idle), 'u-me'), /^Here now: 0\. Away: 1 \(Mira Okafor\)\. Offline: 1 of 2 people\.$/);
 });

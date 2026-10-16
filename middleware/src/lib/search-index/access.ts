@@ -122,6 +122,7 @@ export function requestDoc(tenant: string, w: World, r: AccessRequestRow): Searc
       subtitle: [r.id, status, duration, ...bits].join(' · '),
       description: last?.comment ? `${last.status === 'rejected' ? 'Rejected' : 'Approved'} by ${name(w, last.decidedBy)}: ${last.comment}` : r.justification.split('\n')[0],
       status: r.status, href: `/access/requests/${enc(r.id)}`, vis: { request: vis } satisfies Vis,
+      item: itemTitle, beneficiary: who || undefined, requester: asker || undefined,
     },
   });
 }

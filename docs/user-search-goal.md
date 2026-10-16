@@ -190,3 +190,25 @@ so a clone of a persona searches as that persona.
 - **Open:** team records are not drawn by the portal until the library's
   `RecordResultType` has `team` (`docs/ui-components-queue.md`); the palette
   record group (ui-components 2.457.0 `searchRecords`) is not pinned or wired (S3).
+
+## Built (2026-10-16): S3 pages and S4 answers
+
+- **S3 page work.** The eleven maps held for "the list search does not surface the
+  record, or the row has no record route" walk: run, runbook, queue, bot/agent/command,
+  policy, catalog-item, team and submitter cells are record links; the assessment run
+  list follows the status set in the command box; the submissions list no longer repeats
+  the team name; the request form's preview does not send the signed-in user's own id.
+  Eight maps that start from the palette stay held (the record group is not wired).
+- **S4 answers.** `middleware/src/lib/tenant-answers` answers assessment and access
+  aggregate/edge questions as one fixed fact from the reader's SearchIndex projection
+  (`GET /api/<tenant>/search/answer`); orgiq's `single-threaded` intent reads the open
+  bus-factor findings; Social's contact command answers "who is online" with the roster
+  tally. **No tenant but orgiq has an Ask tab**, so the answers surface in the page
+  command box (`collection-command-answer`) when no command recognises the phrase; an
+  answer card is queued in `docs/ui-components-queue.md`.
+- **Measured** (S4 probe, 2026-10-16): orgiq 100%, assessment 78%, social 100%,
+  pipelines 100%, access 83%; wrong on the best surface 0 everywhere. The catalog's
+  expected answers for a-team-lead, a-unassigned, a-who-approved-exception, p-def-owner
+  were stale against the content lane's fixtures and were re-derived; `expected.derived`
+  marks facts (a count, an absence, a live tally) that no single seed row carries.
+

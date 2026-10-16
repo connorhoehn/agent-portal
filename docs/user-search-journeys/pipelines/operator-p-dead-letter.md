@@ -4,8 +4,8 @@ user: u-kofi (Kofi Mensah)
 url: /pipelines/queues; /pipelines/queues?queue=ingest-landing-dlq
 map: docs/journeys/maps/user-search/pipelines/operator/p-dead-letter.ts
 pages: portal/src/pages/pipelines
-audited: 2026-10-16 10:12–10:12 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-3c006f54), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-kofi-clone-3c006f54, tenant pipelines, role operator, grants {"pipelines":["operator"]}
+audited: 2026-10-16 13:03–13:03 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-b1f5286f), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-kofi-clone-b1f5286f, tenant pipelines, role operator, grants {"pipelines":["operator"]}
 screenshot: operator-p-dead-letter.jpg
 verdict: pass
 console errors: 0

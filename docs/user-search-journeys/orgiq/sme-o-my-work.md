@@ -4,8 +4,8 @@ user: u-nora (Nora DaSilva)
 url: /iq/search?q=what+am+I+working+on&tab=results; /iq/projects/p-observability?tab=work&item=wi-obs-e3
 map: docs/journeys/maps/user-search/orgiq/sme/o-my-work.ts
 pages: portal/src/pages/search, middleware/src/providers/search.ts, middleware/src/lib/search-index
-audited: 2026-10-16 10:12–10:12 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-0d6fe5c2), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-nora-clone-0d6fe5c2, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-10-16 13:03–13:03 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-7c82c13d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
+session: /api/session/me sub u-nora-clone-7c82c13d, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: sme-o-my-work.jpg
 verdict: pass
 console errors: 0
