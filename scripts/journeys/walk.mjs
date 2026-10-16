@@ -11,6 +11,7 @@
 //     focusWalk(page, { count }) -> { total, steps },   // the skill's probe
 //     api?(context, { method, url, body }) -> status,   // default: the context's own APIRequestContext (its cookies)
 //     scoped: boolean,                                   // open() puts the context under a request-scoped mock scenario (lane M)
+//     setScope?(context, scope) -> { dispose },          // a `scope` step: move this context into another scoped mock world
 //   }
 import fs from 'node:fs';
 import path from 'node:path';
@@ -103,8 +104,36 @@ export async function checkExpect(page, e = {}, ctx = {}) {
     const ok = a.value === null ? got === null : a.value instanceof RegExp ? a.value.test(got ?? '') : got === a.value;
     if (!ok) f.push(`${describe(a.target)} [${a.name}] is ${JSON.stringify(got)} (expected ${a.value})`);
   }
+  for (const n of asList(e.numbers)) {
+    // A number on screen agrees with another: the count of visible rows, another element's number, or a constant.
+    const read = async (t, re) => { const txt = await locate(page, t).first().innerText({ timeout: T.expect }).catch(() => null); if (txt == null) return null; const m = txt.replace(/,/g, '').match(re ?? /-?\d+(?:\.\d+)?/); return m ? Number(m[1] ?? m[0]) : null; };
+    const got = await read(n.of, n.re);
+    const want = n.eq != null ? n.eq : n.eqCount ? await visibleCount(locate(page, n.eqCount)) : n.eqNumberOf ? await read(n.eqNumberOf, n.reOther) : undefined;
+    if (got == null || want == null || got !== want) f.push(`number in ${describe(n.of)} is ${got ?? 'missing'} (expected ${n.eq != null ? n.eq : `${want ?? 'missing'}, ${n.eqCount ? `the visible count of ${describe(n.eqCount)}` : `the number in ${describe(n.eqNumberOf)}`}`})`);
+  }
   if (e.status != null && ctx.status != null && !asList(e.status).includes(ctx.status)) f.push(`status ${ctx.status} (expected ${asList(e.status).join(' or ')})`);
   if (e.minVisited != null && ctx.keyboard && ctx.keyboard.visited < e.minVisited) f.push(`Tab visited ${ctx.keyboard.visited} visible controls (expected ≥ ${e.minVisited})`);
+  return f;
+}
+
+/** Bounding boxes of the first visible match of each target (null when none is visible). */
+export async function rects(page, targets) {
+  const out = [];
+  for (const t of targets) {
+    const box = await locate(page, t).first().boundingBox({ timeout: 1000 }).catch(() => null);
+    out.push(box ? { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) } : null);
+  }
+  return out;
+}
+/** Tab stability: each target's box after the step equals its box before (±1px), so nothing shifted, grew or was pushed. */
+export function shifted(targets, before, after) {
+  const f = [];
+  targets.forEach((t, i) => {
+    const a = before[i]; const b = after[i];
+    if (!a || !b) { f.push(`stable: ${describe(t)} not visible ${!a ? 'before' : 'after'} the step`); return; }
+    const moved = ['x', 'y', 'width', 'height'].filter((k) => Math.abs(a[k] - b[k]) > 1);
+    if (moved.length) f.push(`stable: ${describe(t)} moved (${moved.map((k) => `${k} ${a[k]}→${b[k]}`).join(', ')})`);
+  });
   return f;
 }
 
@@ -147,14 +176,27 @@ export async function walkMap(browser, map, ctx) {
     // Failed HTTP responses, per step: the console only says "403 (Forbidden)", the log names the URL.
     page.on('response', (r) => { if (r.status() >= 400 && current) current.http.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`); });
     page.on('response', (r) => { if ([401, 410].includes(r.status()) && new URL(r.url()).pathname.startsWith('/api/')) result.authLost = `${r.status()} ${new URL(r.url()).pathname}`; });
+    let scopeHandle = null;
     let shotStep = map.steps.findIndex((s) => s.screenshot === 'log');
     if (shotStep < 0) shotStep = map.steps.findIndex((s) => s.do === 'navigate');
     for (const [i, step] of map.steps.entries()) {
-      const s = { index: i + 1, do: step.do, name: step.name, state: step.state ?? (step.do === 'navigate' ? 'default' : undefined), proves: step.proves, url: step.do === 'navigate' ? step.url : undefined, failures: [], console: [], blocked: [], http: [], auditReason: step.auditReason };
+      const s = { index: i + 1, do: step.do, name: step.name, state: step.state ?? (step.do === 'navigate' ? 'default' : undefined), proves: step.proves, url: step.do === 'navigate' || (step.do === 'scope' && step.url) ? step.url : undefined, failures: [], console: [], blocked: [], http: [], auditReason: step.auditReason };
       current = s;
       let status = null;
+      const before = step.stable?.length ? await rects(page, step.stable) : null;
       try {
         switch (step.do) {
+          case 'reload': await page.reload({ waitUntil: 'domcontentloaded', timeout: T.settle }); break;
+          case 'viewport': await page.setViewportSize({ width: step.width, height: step.height }); s.viewport = { width: step.width, height: step.height }; break;
+          case 'theme': await page.evaluate((v) => { localStorage.setItem('theme', v); document.documentElement.dataset.theme = v; }, step.value); s.theme = step.value; break;
+          case 'scope': {
+            if (!ctx.setScope) throw new Error('this runner cannot switch mock scopes');
+            await scopeHandle?.dispose?.();
+            scopeHandle = await ctx.setScope(context, step.scope);
+            s.scope = typeof step.scope === 'string' ? step.scope : JSON.stringify(step.scope);
+            if (step.url) await page.goto(step.url, { waitUntil: 'domcontentloaded', timeout: T.settle });
+            break;
+          }
           case 'navigate': await page.goto(step.url, { waitUntil: 'domcontentloaded', timeout: T.settle }); break;
           case 'click': await locate(page, step.target).first().click({ timeout: T.action }); break;
           case 'press': if (step.target) await locate(page, step.target).first().press(step.key, { timeout: T.action }); else await page.keyboard.press(step.key); break;
@@ -178,11 +220,12 @@ export async function walkMap(browser, map, ctx) {
           default: throw new Error(`unknown action ${step.do}`);
         }
       } catch (e) { s.failures.push(`${step.do} failed: ${String(e.message).split('\n')[0]}`); }
-      if (step.do !== 'api') await settle(page);
+      if (step.do !== 'api' && !step.noSettle) await settle(page);
+      if (before) { s.stable = await rects(page, step.stable); s.failures.push(...shifted(step.stable, before, s.stable)); }
       s.failures.push(...await checkExpect(page, step.expect, { status, keyboard: s.keyboard }).catch((e) => [`expectation error: ${e.message.split('\n')[0]}`]));
       const u = new URL(page.url());
       s.landed = u.pathname + u.search;
-      const pageStep = step.do !== 'api' && step.do !== 'tab-walk';
+      const pageStep = step.do !== 'api' && step.do !== 'tab-walk' && !(step.do === 'scope' && !step.url);
       if (pageStep) {
         s.facts = await layoutFacts(page).catch(() => null);
         if (step.expect?.noHscroll !== false && s.facts && s.facts.scrollWidth > s.facts.innerWidth) s.failures.push(`horizontal scroll (${s.facts.scrollWidth} > ${s.facts.innerWidth})`);
@@ -211,6 +254,7 @@ export async function walkMap(browser, map, ctx) {
       result.steps.push(s);
     }
     current = null;
+    await scopeHandle?.dispose?.();
   } catch (e) {
     result.error = `setup failed: ${String(e.message).split('\n')[0]}`;
   } finally {

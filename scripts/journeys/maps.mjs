@@ -42,6 +42,17 @@ export const PROFILES = {
   // the person asks the catalog's question where they would, the answer is on screen (answers-question) and
   // the record it names opens in at most two clicks (record-open).
   'user-search': { intent: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'answers-question', 'record-open', 'dom-audit', 'notes'] },
+  // docs/work-journeys/PROTOCOL.md (docs/work-journeys-goal.md): the Work tenant (orgiq) walked per role. A
+  // `surface` log carries the orgiq-audit fields (keyboard, empty-state, role-gating — validate-orgiq-audit.sh
+  // reads them) plus `story-facts` (names instead of ids, numbers that agree) and `tab-stability` (every tab
+  // clicked, the header and panes did not move). A `refusals` log is the role's rail and palette and every
+  // route and API it must not reach (the old RAIL.md fields). A `frames` log is the role's core pages at 1440
+  // and 900, light and dark.
+  work: {
+    surface: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'keyboard', 'empty-state', 'role-gating', 'story-facts', 'tab-stability', 'dom-audit', 'notes'],
+    refusals: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'rail-items', 'hidden-surfaces-direct-route', 'palette-entries', 'quick-switch', 'api-refused', 'dom-audit', 'notes'],
+    frames: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'widths', 'themes', 'story-facts', 'dom-audit', 'notes'],
+  },
 };
 export const BUILTIN = new Set(['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'dom-audit', 'notes']);
 /** Built-ins a map supplies itself (static facts the walk does not measure). */
@@ -85,7 +96,12 @@ export function validateMap(map, file = '(map)') {
   steps.forEach((s, i) => {
     const n = `step ${i + 1}`;
     if (!s.name) at(`${n} has no name`);
-    if (!['navigate', 'click', 'press', 'fill', 'back', 'wait', 'tab-walk', 'api'].includes(s.do)) at(`${n}: unknown action ${s.do}`);
+    if (!['navigate', 'click', 'press', 'fill', 'back', 'wait', 'tab-walk', 'api', 'reload', 'viewport', 'theme', 'scope'].includes(s.do)) at(`${n}: unknown action ${s.do}`);
+    if (s.do === 'viewport' && !(s.width > 0 && s.height > 0)) at(`${n}: viewport needs width and height`);
+    if (s.do === 'theme' && !['light', 'dark'].includes(s.value)) at(`${n}: theme is light or dark`);
+    if (s.do === 'scope' && !(typeof s.scope === 'string' || (s.scope && typeof s.scope === 'object'))) at(`${n}: scope needs a scope request (a scenario name or { scenario, fixture, fixtures })`);
+    if (s.do === 'scope' && s.url != null && !/^\//.test(s.url)) at(`${n}: scope's url must be a same-origin path`);
+    if (s.stable != null && !(Array.isArray(s.stable) && s.stable.length)) at(`${n}: stable lists the targets whose boxes must not move`);
     if (s.do === 'navigate' && !/^\//.test(s.url ?? '')) at(`${n}: navigate needs a same-origin path`);
     if (['click', 'fill', 'wait'].includes(s.do) && !s.target) at(`${n}: ${s.do} needs a target`);
     if (s.do === 'fill' && typeof s.value !== 'string') at(`${n}: fill needs a value`);
@@ -148,6 +164,10 @@ export function stepSentence(s) {
   if (s.api) extra.push(`${s.api.method} ${s.api.url} → ${s.api.status}`);
   if (s.keyboard) extra.push(`Tab visited ${s.keyboard.visited} distinct visible controls of ${s.keyboard.total} focusable${s.keyboard.lost ? `, focus lost ${s.keyboard.lost}×` : ''}${s.keyboard.invisible ? `, ${s.keyboard.invisible} invisible stop(s)` : ''}`);
   if (s.do === 'navigate' && s.landed && s.landed !== s.url) extra.push(`${s.url} → ${s.landed}`);
+  if (s.viewport) extra.push(`viewport ${s.viewport.width}x${s.viewport.height}`);
+  if (s.theme) extra.push(`theme ${s.theme}`);
+  if (s.scope) extra.push(`mock scope ${s.scope}`);
+  if (s.stable) extra.push(`${s.stable.length} box(es) held still`);
   return `${s.name.replace(/[.\s]+$/, '')}${extra.length ? ` (${extra.join('; ')})` : ''}`;
 }
 
@@ -249,13 +269,13 @@ export const EXPECTED_STATES = {
 export function stepRoutes(map, routeKey) {
   let at = null; const out = [];
   for (const s of map.steps) {
-    if (s.do === 'navigate') at = s.url;
+    if (s.do === 'navigate' || (s.do === 'scope' && s.url)) at = s.url;
     if (typeof s.expect?.url === 'string') at = s.expect.url;
-    if (s.do === 'api' || s.do === 'tab-walk') continue;
+    if (s.do === 'api' || s.do === 'tab-walk' || (s.do === 'scope' && !s.url)) continue;
     const key = at ? routeKey(at) : null;
     if (!key) continue;
     const refused = s.expect?.urlNot && s.expect.urlNot.test(at);
-    const state = refused ? 'refused' : s.state ?? (s.do === 'navigate' ? 'default' : null);
+    const state = refused ? 'refused' : s.state ?? (s.do === 'navigate' || s.do === 'scope' ? 'default' : null);
     if (state) out.push({ key, state });
   }
   return out;

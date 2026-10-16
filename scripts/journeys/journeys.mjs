@@ -66,6 +66,9 @@ const FAMILIES = {
   'docs/demo-journeys': ['^verdict: *pass', '^story-facts: *pass', '^cross-links: *pass'],
   // The runbook loop (docs/distillation-runbooks-goal.md R6): what each page shows, and what each role may do there.
   'docs/runbooks-journeys': ['^verdict: *pass', '^shows: *pass', '^gating: *pass'],
+  // The Work tenant per role (docs/work-journeys-goal.md): surface, refusals and frames logs share these;
+  // validate-work-journeys.sh checks each kind's own fields.
+  'docs/work-journeys': ['^surface: *\\S', '^role: *\\S', '^user: *\\S', '^url: *\\S', '^verdict: *pass', '^console errors: *0', '^layout: *pass', '^dom-audit: *0 failing'],
 };
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');

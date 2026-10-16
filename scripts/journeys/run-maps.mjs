@@ -38,10 +38,12 @@ function args(argv) {
     else if (a === '--allow-persona') o.allowPersona = true;
     else if (a === '--role') o.role = argv[++i];
     else if (!a.startsWith('--') && !o.family) o.family = a; // `check runbooks`, `walk runbooks --role author`
-    else if (['--family', '--only', '--out', '--wait'].includes(a)) o[a.slice(2)] = argv[++i];
+    else if (['--family', '--only', '--out', '--wait', '--video'].includes(a)) o[a.slice(2)] = argv[++i];
     else throw new Error(`unknown argument ${a}`);
   }
   o.out = path.resolve(ROOT, o.out ?? '.scratch/journeys');
+  // --video <dir>: record each walk as a watchable video, slowed down; writes no logs and seals nothing.
+  if (o.video) { o.video = path.resolve(ROOT, o.video); o.noSeal = true; }
   return o;
 }
 
@@ -145,16 +147,17 @@ async function measure(page, step) {
   const brief = (i) => ({ rule: i.rule, selector: i.selector, property: i.property, expected: i.expected, actual: i.actual });
   return { routeKey: key, findings: gating.length, rules: count(gating), recorded: owed.length, recordedRules: count(owed), issues: gating.slice(0, 12).map(brief), recordedIssues: owed.slice(0, 6).map(brief), unclassified: second.coverage.filter((c) => c.status === 'unclassified').length };
 }
+const VIDEO = (map, size) => (${JSON.stringify(o.video ?? null)} ? { recordVideo: { dir: path.join(${JSON.stringify(o.video ?? '')}, map.family, map.log), size } } : {});
 async function open(browser, map, { viewport }) {
   const persona = map.persona;
   const opts = { ...(persona.switchTenant ? { tenant: persona.tenant } : { expectTenant: persona.tenant }), ...(persona.switchRole ? { role: persona.role } : { expectRole: persona.role }) };
   const scope = typeof map.scenario === 'object' ? map.scenario.scope : null;
   if (LANE_M.clones && (map.identity ?? 'clone') === 'clone') {
     // Lane M: a clone of the persona (same grants and person link, its own id and epoch), in the map's scope when it has one.
-    const person = await rs.openAsClone(browser, persona.user, { ...opts, viewport, baseURL: ${JSON.stringify(BASE)}, landing: null, label: 'run-maps ' + map.family + '/' + map.log, contextOptions: { reducedMotion: 'reduce' }, ...(scope ? { scope } : {}) });
+    const person = await rs.openAsClone(browser, persona.user, { ...opts, viewport, baseURL: ${JSON.stringify(BASE)}, landing: null, label: 'run-maps ' + map.family + '/' + map.log, contextOptions: { reducedMotion: 'reduce', ...VIDEO(map, viewport) }, ...(scope ? { scope } : {}) });
     return { context: person.context, principal: person.principal, clone: person.cloneId, close: person.close };
   }
-  const context = await browser.newContext({ baseURL: ${JSON.stringify(BASE)}, viewport, reducedMotion: 'reduce' });
+  const context = await browser.newContext({ baseURL: ${JSON.stringify(BASE)}, viewport, reducedMotion: 'reduce', ...VIDEO(map, viewport) });
   let handle = null;
   try {
     if (scope) handle = await rs.withMockScope(context, scope);
@@ -166,7 +169,7 @@ test.describe.configure({ mode: 'serial' });
 for (const e of ENTRIES) test(e.title, async ({ browser }) => {
   test.setTimeout(10 * 60_000);
   const map = (await import(e.file)).default;
-  const ctx = { baseURL: ${JSON.stringify(BASE)}, outDir: e.out, open, measure, focusWalk: probes.focusWalk, scoped: LANE_M.scopes && typeof map.scenario === 'object' };
+  const ctx = { baseURL: ${JSON.stringify(BASE)}, outDir: e.out, open, measure, focusWalk: probes.focusWalk, scoped: LANE_M.scopes && typeof map.scenario === 'object', setScope: LANE_M.scopes ? (context, scope) => rs.withMockScope(context, scope) : undefined };
   let result = await walkMap(browser, map, ctx);
   // A BFF reload (Tilt restarts it on any middleware edit) drops in-memory clones and scopes: re-mint and walk once more.
   if (result.authLost || /^setup failed/.test(result.error ?? '')) {
@@ -183,7 +186,7 @@ for (const e of ENTRIES) test(e.title, async ({ browser }) => {
   fs.writeFileSync(path.join(e.out, 'result.json'), JSON.stringify(result, null, 1));
 });
 `);
-  fs.writeFileSync(path.join(dir, 'playwright.config.cjs'), `module.exports = { testDir: ${JSON.stringify(dir)}, testMatch: 'journeys.spec.ts', timeout: 600000, workers: 1, retries: 0, reporter: 'line', outputDir: ${JSON.stringify(path.join(o.out, 'playwright'))}, use: { browserName: 'chromium', headless: true } };\n`);
+  fs.writeFileSync(path.join(dir, 'playwright.config.cjs'), `module.exports = { testDir: ${JSON.stringify(dir)}, testMatch: 'journeys.spec.ts', timeout: 600000, workers: 1, retries: 0, reporter: 'line', outputDir: ${JSON.stringify(path.join(o.out, 'playwright'))}, use: { browserName: 'chromium', headless: true${o.video ? ", launchOptions: { slowMo: 350 }" : ''} } };\n`);
   return path.join(path.dirname(testModule), 'cli.js');
 }
 
@@ -312,6 +315,7 @@ async function main() {
       if (r.status !== 0) console.error(`the Playwright run exited ${r.status} — logs are written for every map that produced a result`);
     } finally { release(); fs.rmSync(dir, { recursive: true, force: true }); }
   }
+  if (o.video) { console.log(`videos under ${path.relative(ROOT, o.video)} (no logs written, nothing sealed)`); process.exit(0); }
   const { written, skipped } = writeLogs(o, maps);
   for (const w of written) console.log(`  ${w.verdict === 'pass' ? '✓' : '✗'} ${w.log}${w.failed.length ? ` — ${w.failed.slice(0, 2).join('; ')}` : ''}`);
   for (const s of skipped) console.log(`  · ${s}`);

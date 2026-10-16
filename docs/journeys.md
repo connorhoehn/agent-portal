@@ -35,6 +35,7 @@ node scripts/journeys/run-maps.mjs walk --family access        # walk, write log
 node scripts/journeys/run-maps.mjs walk --only requester/ --no-seal
 node scripts/journeys/run-maps.mjs coverage [--check]          # docs/journeys/coverage.md
 node scripts/journeys/run-maps.mjs burndown --family access    # route × rule pairs the last walk found, not yet owned
+node scripts/journeys/run-maps.mjs walk work --role member --video .scratch/videos-work   # slowed walks recorded as video; no logs, no seal
 node --test scripts/journeys/tests/*.test.mjs                  # the runner's own tests
 ```
 
@@ -61,7 +62,14 @@ only where the separation of duties says they must.
 A step is one of `navigate {url}`, `click {target}`, `press {key, target?}`,
 `fill {target, value}` (a UI-local control: search, filter, palette, command
 composer), `back`, `wait {target}`, `tab-walk {max?}` (the skill's
-`focusWalk` probe) and `api {url, method?, body?}`. Targets are by role and
+`focusWalk` probe), `api {url, method?, body?}`, `reload`, `viewport {width,
+height}`, `theme {value}` (light or dark, the way Settings stores it) and
+`scope {scope, url?}` (move the context into a fresh request-scoped mock world —
+`empty`, `error`, `long-text`, `many`, `loading`, or per fixture — and
+optionally navigate there). A step's `stable: [targets]` reads their boxes
+before the action and after it settles and fails if any moved or resized (the
+tab-stability check); `noSettle` judges a step before the page settles (a
+loading state). Targets are by role and
 accessible name first (`{ role, name, level?, within? }`), then `testId`,
 `label`, `placeholder`, `text` or `css`. Each step carries `name` (a plain
 sentence written into the log), `state` (the coverage state it shows:
@@ -69,7 +77,9 @@ sentence written into the log), `state` (the coverage state it shows:
 `dialog-open`, …), `proves` (the protocol fields it is evidence for) and
 `expect`: `url`, `urlNot`, `visible`, `absent` (not in the DOM at all),
 `hidden`, `text`, `noText`, `disabled`, `enabled`, `focused`, `count`, `attr`,
-`status` (api), `minVisited` (tab-walk), `firstRowTopMax` (the density rule)
+`status` (api), `minVisited` (tab-walk), `numbers` (a number on screen equals
+a constant, the visible count of a target, or another element's number),
+`firstRowTopMax` (the density rule)
 and `noHscroll` (on by default). `expectConsole` names console errors a step
 expects (a 404 lookup); any other console error fails the step.
 

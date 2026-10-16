@@ -118,3 +118,19 @@ test('every map in the tree validates', async () => {
   assert.deepEqual(problems, []);
   assert.ok(maps.length >= 40);
 });
+
+test('the work family: its surface kind adds story-facts and tab-stability; new steps validate', () => {
+  assert.deepEqual(claimFields('work', 'surface'), ['keyboard', 'empty-state', 'role-gating', 'story-facts', 'tab-stability']);
+  assert.ok(claimFields('work', 'refusals').includes('palette-entries'));
+  const m = surface({ family: 'work', log: 'member/x', steps: [
+    ...surface().steps,
+    { do: 'scope', scope: 'empty', url: '/access/catalog', name: 'Empty world', state: 'empty', proves: 'story-facts' },
+    { do: 'click', target: { role: 'tab', name: 'Work' }, name: 'Work tab', stable: [{ css: '.shell-header' }], proves: 'tab-stability' },
+    { do: 'viewport', width: 900, height: 900, name: 'Narrow' }, { do: 'theme', value: 'dark', name: 'Dark' }, { do: 'reload', name: 'Reload' },
+  ] });
+  assert.deepEqual(validateMap(m), []);
+  const bad = surface({ family: 'work', log: 'member/x', steps: [...m.steps, { do: 'theme', value: 'sepia', name: 'x' }, { do: 'viewport', name: 'y' }, { do: 'click', target: { role: 'tab' }, name: 'z', stable: [] }] });
+  const p = validateMap(bad).join('\n');
+  assert.match(p, /theme is light or dark/); assert.match(p, /viewport needs width and height/); assert.match(p, /stable lists the targets/);
+  assert.deepEqual(stepRoutes(m, (u) => u.split('?')[0]).filter((x) => x.state === 'empty'), [{ key: '/access/catalog', state: 'empty' }]);
+});

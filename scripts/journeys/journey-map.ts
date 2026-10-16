@@ -47,6 +47,11 @@ export interface Expect {
   minVisited?: number;
   /** The first data row (table body row, grid row, list item) starts at or above this many px (the density rule). */
   firstRowTopMax?: number;
+  /**
+   * Numbers that must agree: the first number in `of` (or `re`'s first group) equals a constant (`eq`), the
+   * visible count of `eqCount` (a badge equals its rows), or the number in `eqNumberOf` (a header equals a stat).
+   */
+  numbers?: Array<{ of: Target; re?: RegExp; eq?: number; eqCount?: Target; eqNumberOf?: Target; reOther?: RegExp }>;
   /** Page steps check `scrollWidth <= innerWidth` unless this is false. */
   noHscroll?: boolean;
 }
@@ -73,6 +78,13 @@ interface StepBase {
   screenshot?: 'log';
   /** This step writes business state: the map must run under a mock scope or clone (lane M). */
   writes?: boolean;
+  /**
+   * Tab stability: each target's bounding box is read before the action and after it settles, and must not
+   * move or resize (±1px) — the header, the tab strip and the panes stay put when a tab is clicked.
+   */
+  stable?: Target[];
+  /** Judge the step without waiting for the page to settle (a `loading` scope's skeleton is only there while it loads). */
+  noSettle?: boolean;
 }
 
 export type Step = StepBase & (
@@ -85,6 +97,17 @@ export type Step = StepBase & (
   | { do: 'wait'; target: Target }
   /** Tab through the page from the top (the skill's focusWalk probe); proves keyboard reach. */
   | { do: 'tab-walk'; max?: number }
+  /** Reload the page (a write read back after reload). */
+  | { do: 'reload' }
+  /** Resize the viewport mid-walk (the 1440/900 frames). */
+  | { do: 'viewport'; width: number; height: number }
+  /** Switch the colour theme the way Settings stores it (localStorage `theme` + html[data-theme]). */
+  | { do: 'theme'; value: 'light' | 'dark' }
+  /**
+   * Move this context into a fresh request-scoped mock world (`withMockScope`): `empty`, `error`, `long-text`,
+   * `many`, `loading`, or per fixture. With `url`, navigate there in the new world (the step is then a page step).
+   */
+  | { do: 'scope'; scope: ScopeRequest; url?: string }
   /**
    * An API call on the walker's session. A non-GET call in a read-only map must
    * be a refusal probe: `refusal` says why it cannot write even if the gate were

@@ -21,6 +21,10 @@ const PAGES = {
     <button id="save" onclick="fetch('/api/save',{method:'POST'})">Save</button></main>`,
   '/record': '<main><h1>Record</h1></main>',
   '/gone': '<script>location.replace("/list")</script>',
+  '/tabs': `<header class="shell-header" style="height:40px">h</header><main><h1>Tabs</h1><p id="n">3 items</p>
+    <div role="tablist" id="tl"><button role="tab" onclick="document.getElementById('p').style.height='10px'">Calm</button>
+    <button role="tab" onclick="document.getElementById('tl').style.paddingTop='6px'">Jumpy</button></div>
+    <ul id="p"><li>a</li><li>b</li><li>c</li></ul></main>`,
 };
 
 async function harness(t) {
@@ -41,8 +45,10 @@ async function harness(t) {
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'walk-test-'));
   t.after(() => fs.rmSync(outDir, { recursive: true, force: true }));
   const api = async (_c, { method, url }) => { writes.push(`${method} ${url}`); return url === '/api/forbidden' ? 403 : url === '/api/me' ? 410 : 200; };
-  const ctx = { baseURL: BASE, outDir, open, api, measure: async () => ({ findings: 0, rules: {}, recorded: 0, recordedRules: {}, issues: [] }), focusWalk: async () => ({ total: 3, steps: [{ lost: false, visible: true, selector: 'input', name: 'Search' }, { lost: false, visible: true, selector: 'tr', name: 'row' }] }), scoped: false };
-  return { browser, ctx, writes };
+  const scopes = [];
+  const setScope = async (_c, scope) => { scopes.push(scope); return { dispose: async () => { scopes.push(`disposed ${scope}`); } }; };
+  const ctx = { baseURL: BASE, outDir, open, api, setScope, measure: async () => ({ findings: 0, rules: {}, recorded: 0, recordedRules: {}, issues: [] }), focusWalk: async () => ({ total: 3, steps: [{ lost: false, visible: true, selector: 'input', name: 'Search' }, { lost: false, visible: true, selector: 'tr', name: 'row' }] }), scoped: false };
+  return { browser, ctx, writes, scopes };
 }
 const map = (steps, over = {}) => ({ family: 'access', log: 'r/s', kind: 'surface', scenario: 'shared', persona: { user: 'u-x', tenant: 'access', role: 'requester' }, goal: 'g', steps, ...over });
 
@@ -106,4 +112,35 @@ test('a session that answers 401 or 410 marks the walk for a retry', async (t) =
   const h = await harness(t); if (!h) return;
   const r = await walkMap(h.browser, map([{ do: 'navigate', url: '/list', name: 'open' }, { do: 'api', url: '/api/me', name: 'me' }]), h.ctx);
   assert.equal(r.authLost, '410 /api/me');
+});
+
+test('a tab click that moves the tab strip fails its stability check; a calm one passes', async (t) => {
+  const h = await harness(t); if (!h) return;
+  const still = [{ css: 'header' }, { role: 'tablist' }];
+  const r = await walkMap(h.browser, map([
+    { do: 'navigate', url: '/tabs', name: 'open' },
+    { do: 'click', target: { role: 'tab', name: 'Calm' }, name: 'calm', stable: still },
+    { do: 'click', target: { role: 'tab', name: 'Jumpy' }, name: 'jumpy', stable: still },
+  ]), h.ctx);
+  assert.deepEqual(r.steps.map((s) => s.status), ['pass', 'pass', 'fail'], JSON.stringify(r.steps.map((s) => s.failures)));
+  assert.match(r.steps[2].failures[0], /stable: tablist moved \(height /);
+});
+
+test('numbers agree with the rows they count; reload, viewport, theme and scope act', async (t) => {
+  const h = await harness(t); if (!h) return;
+  const r = await walkMap(h.browser, map([
+    { do: 'navigate', url: '/tabs', name: 'open', expect: { numbers: [{ of: { css: '#n' }, eqCount: { css: '#p li' } }] } },
+    { do: 'navigate', url: '/tabs', name: 'wrong', expect: { numbers: [{ of: { css: '#n' }, eq: 4 }] } },
+    { do: 'viewport', width: 900, height: 800, name: 'narrow' },
+    { do: 'theme', value: 'dark', name: 'dark', expect: { attr: [{ target: { css: 'html' }, name: 'data-theme', value: 'dark' }] } },
+    { do: 'reload', name: 'reload', expect: { url: '/tabs' } },
+    { do: 'scope', scope: 'empty', url: '/list', name: 'empty world', state: 'empty', expect: { url: '/list' } },
+    { do: 'scope', scope: 'error', name: 'error world' },
+  ]), h.ctx);
+  assert.deepEqual(r.steps.map((s) => s.status), ['pass', 'fail', 'pass', 'pass', 'pass', 'pass', 'pass'], JSON.stringify(r.steps.map((s) => s.failures)));
+  assert.match(r.steps[1].failures[0], /number in #n is 3 \(expected 4\)/);
+  assert.deepEqual(r.steps[2].viewport, { width: 900, height: 800 });
+  assert.deepEqual(h.scopes, ['empty', 'disposed empty', 'error', 'disposed error']);
+  assert.equal(r.steps[5].landed, '/list');
+  assert.equal(r.steps[6].audit, undefined, 'a scope switch with no url is not a page step');
 });
