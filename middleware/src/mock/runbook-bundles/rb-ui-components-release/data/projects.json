@@ -1,0 +1,25 @@
+{
+  "aws-agentcore": {
+    "repo": "~/Projects/aws-agentcore",
+    "libraries": {
+      "ui-components": {
+        "package": "@connorhoehnslalom/ui-components",
+        "repo": "~/Projects/ui-components",
+        "remote": "git@github.com:connorhoehnslalom/ui-components.git",
+        "vendor": "portal/vendor",
+        "consumers": ["portal"],
+        "doc": "CLAUDE.md",
+        "devRestart": "rm -rf portal/node_modules/.vite && tilt trigger portal"
+      },
+      "realtime-modules": {
+        "package": "@connorhoehnslalom/realtime-modules",
+        "repo": "~/Projects/realtime-modules",
+        "remote": "git@github.com:connorhoehn/realtime-modules.git",
+        "vendor": "portal/vendor",
+        "consumers": ["portal", "middleware"],
+        "doc": "CLAUDE.md",
+        "devRestart": "rm -rf portal/node_modules/.vite && tilt trigger portal && tilt trigger middleware"
+      }
+    }
+  }
+}

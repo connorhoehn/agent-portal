@@ -1,0 +1,9 @@
+family work: 8 logs — 4 fresh, 2 stale, 1 unsealed, 1 unswept
+contracts: NOT measured on the current source (cascade: measured 2026-10-16T10:36 on an older source; type-scale: measured 2026-10-16T10:42 on an older source)
+plan:
+  1. Finish every portal/src edit and every library pin move first: the contracts are keyed on the source digest, so a later edit unmeasures them again.
+  2. Run scripts/journeys/measure.sh (about 15 minutes; one sweep: measure.sh rail|cascade|type-scale).
+  3. Rerun this plan: the stale list below is provisional until the contracts are measured.
+  4. Add the route to OBSERVED_ROUTES in portal/e2e/route-inventory.ts, then measure, then walk: docs/work-journeys/hr-admin/capabilities.md (walks /admin/capabilities/:id, which no sweep measures — add it to portal/e2e/route-inventory.ts)
+  5. Walk the whole member directory so it can be sealed: node scripts/journeys/run-maps.mjs walk work --role member  — owed: decisions.md (stale: type-scale /iq/decisions; spec portal/e2e/decisions.spec.ts); search.md (stale: cascade /iq/search)
+  6. Walk the whole sme directory so it can be sealed: node scripts/journeys/run-maps.mjs walk work --role sme  — owed: dispatch.md (unsealed)

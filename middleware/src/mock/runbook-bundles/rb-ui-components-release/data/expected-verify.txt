@@ -1,0 +1,7 @@
+OK   installed @acme/ui is 1.4.0
+OK   package-lock.json resolves file:vendor/acme-ui-1.4.0.tgz
+OK   @acme/ui exports MeetingToolbar (function)
+OK   @acme/ui/video exports useConsentDismissal (function)
+OK   popoverLabel is declared in dist/index.d.ts
+FAIL reactionPicker is in no shipped .d.ts: the release does not carry it, whatever its CHANGELOG says
+FAIL node_modules/.vite predates the install: rm -rf it and restart the dev server

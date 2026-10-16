@@ -1,0 +1,13 @@
+{
+  "files": {
+    "package.json": { "name": "portal", "type": "module", "dependencies": { "@acme/ui": "file:vendor/acme-ui-1.4.0.tgz" } },
+    "package-lock.json": { "name": "portal", "lockfileVersion": 3, "packages": { "node_modules/@acme/ui": { "version": "1.4.0", "resolved": "file:vendor/acme-ui-1.4.0.tgz" } } },
+    "node_modules/@acme/ui/package.json": { "name": "@acme/ui", "version": "1.4.0", "type": "module", "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }, "./video": { "types": "./dist/video.d.ts", "import": "./dist/video.js" } } },
+    "node_modules/@acme/ui/dist/index.js": "export function MeetingToolbar(props) { return props.items; }\n",
+    "node_modules/@acme/ui/dist/index.d.ts": "export interface MeetingToolbarItem { id: string; popover?: (close: () => void) => unknown; popoverLabel?: string }\nexport declare function MeetingToolbar(props: { items: MeetingToolbarItem[] }): unknown;\n",
+    "node_modules/@acme/ui/dist/video.js": "export function useConsentDismissal(key) { return { dismissed: false, key }; }\n",
+    "node_modules/@acme/ui/dist/video.d.ts": "export declare function useConsentDismissal(key: string | null): { dismissed: boolean };\n",
+    "node_modules/.vite/deps/_metadata.json": { "hash": "f00d", "optimized": { "@acme/ui": { "file": "@acme_ui.js" } } }
+  },
+  "ages": { "node_modules/.vite/deps/_metadata.json": 86400000, "node_modules/.vite/deps": 86400000, "node_modules/.vite": 86400000 }
+}

@@ -1,0 +1,15 @@
+tarball: @acme/ui@1.4.0 (portal/vendor/acme-ui-1.4.0.tgz)
+pinned middleware/package.json devDependencies: file:../portal/vendor/acme-ui-1.3.2.tgz -> file:../portal/vendor/acme-ui-1.4.0.tgz
+pinned portal/package.json dependencies: file:vendor/acme-ui-1.3.2.tgz -> file:vendor/acme-ui-1.4.0.tgz
+CLAUDE.md: 1 pin line(s) 1.3.2 -> 1.4.0
+next: (cd middleware && npm install --prefer-offline --no-audit --no-fund)
+next: (cd portal && npm install --prefer-offline --no-audit --no-fund)
+--- portal/package.json
+    "@acme/ui": "file:vendor/acme-ui-1.4.0.tgz",
+--- middleware/package.json
+    "@acme/ui": "file:../portal/vendor/acme-ui-1.4.0.tgz"
+--- infra/package.json
+    "@acme/ui": "^1.3.0"
+--- CLAUDE.md
+- Pins: portal consumes `@acme/ui`
+  **1.4.0** and `@acme/realtime` **0.9.0** from tracked tarballs.

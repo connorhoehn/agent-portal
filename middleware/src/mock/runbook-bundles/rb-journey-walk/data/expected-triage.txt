@@ -1,0 +1,28 @@
+PASS work/hr-admin/budgets
+FAIL work/member/initiative — 1 problem(s)
+     step 4 [tab-moved] stable: role=tablist moved (y 214→96, height 48→40)
+FAIL work/member/search — 3 problem(s)
+     note: the runner re-minted the clone and walked twice (a BFF reload mid-walk); the second walk is the record
+     step 1 [audit] 2 ui-dom-audit finding(s): rail.item-label ×2
+     step 3 [landed-elsewhere] expected url /tab=connections/, on /iq/search?q=kubernetes
+     step 3 [http-error] console: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/admin...
+FAIL work/sme/dispatch — 3 problem(s)
+     step 2 [target-missing] click failed: locator.click: Timeout 10000ms exceeded.
+     step 2 [blocked-write] the action tried to write (blocked): POST /api/bots/dispatch-work
+     step 5 [numbers] number in testId=queue-badge is 4 (expected the visible count of role=row, 3)
+FAIL work/sme/library — 1 problem(s)
+     step 1 [audit] 1 ui-dom-audit finding(s): rail.item-label ×1
+
+causes, most frequent first:
+  2 × audit: a page defect the DOM audit measured: fix the page (or the library, then move the pin); only a person may own it in docs/journeys/audit-burndown.tsv (candidates: run-maps.mjs burndown <family>)
+  1 × blocked-write: a read-only map (scenario: shared) clicked something that writes: run it under scenario: { scope: "default" } with writes: true, or the target is the wrong control
+  1 × http-error: an API answered 4xx/5xx: if the step means it (a refusal probe, a not-found), add expectConsole: /403|404/ to that step; otherwise the page called something it may not
+  1 × landed-elsewhere: navigation went somewhere else: a gate refused, a redirect changed, or a row opened a different record; compare with the route gate in App.tsx
+  1 × numbers: two numbers on the page disagree (a badge vs its rows, a header vs the table): a story-facts defect in the page or the fixture, never in the map
+  1 × tab-moved: a tab click moved the header, tab strip or pane: keep one header density for every tab; never drop the stable target to pass
+  1 × target-missing: the target never became actionable: wrong role/name, covered by a popover, or not rendered for this role; open the step screenshot and prefer role+name targets
+
+seal readiness (a directory seals only when every log in it passed in one run):
+  hr-admin: ready — 1 map(s) passed
+  member: NOT ready — fix 2 map(s), iterate with --only <log> --no-seal, then walk the whole directory once more
+  sme: NOT ready — fix 2 map(s), iterate with --only <log> --no-seal, then walk the whole directory once more

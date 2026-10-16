@@ -1,0 +1,9 @@
+MEASURED	unmeasured	cascade: measured 2026-10-16T10:36 on an older source; type-scale: measured 2026-10-16T10:42 on an older source
+docs/work-journeys/member/automate.md	fresh	contract
+docs/work-journeys/member/decisions.md	stale	type-scale /iq/decisions; spec portal/e2e/decisions.spec.ts
+docs/work-journeys/member/initiative.md	fresh	contract
+docs/work-journeys/member/search.md	stale	cascade /iq/search
+docs/work-journeys/sme/dispatch.md	unsealed	contract
+docs/work-journeys/sme/library.md	fresh	contract
+docs/work-journeys/hr-admin/capabilities.md	unswept	walks /admin/capabilities/:id, which no sweep measures — add it to portal/e2e/route-inventory.ts
+docs/work-journeys/org-leader/budgets.md	fresh	contract

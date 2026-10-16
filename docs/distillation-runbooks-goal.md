@@ -210,7 +210,15 @@ squeeze into the brief.
   a recorded capture offline) and `rb-gateway-presence-client` (the client for
   the gateway's undocumented presence API; replays a recorded response), both
   org-wide, both real (`mock/runbook-bundles/`), plus an open run proposal that
-  changes the presence client's files (`prop-presence-busy`).
+  changes the presence client's files (`prop-presence-busy`). Two
+  established procedures sit beside them (`mock/runbook-bundles-established.ts`,
+  2026-10-16): `rb-journey-walk` (write a journey map, walk it as a clone,
+  triage, seal; helpers `walk-plan.mjs` over the freshness judge and
+  `walk-triage.mjs` over the runner's results) and `rb-ui-components-release`
+  (release a packed-tarball library and move every consumer pin;
+  `release-preflight.sh`, `pin-tarball.mjs`, `verify-installed.mjs` against the
+  installed dist, this project's values in `data/projects.json`). Both lint
+  clean and their Verify commands replay bundled fixtures offline.
 - **Demo** `runbooks-tools-demo`: a run on Auth Migration keeps the CDP harness,
   the capture path proposes it with its files, an SME on Auth Migration accepts
   it, the library hash moves, and a box running Observability work installs the

@@ -19,7 +19,7 @@ Labels: alerting, blocked.
 - **Review a PR diff-scoped** (skill-pr-review-scoped v1) — Use when reviewing a pull request. Comments only on changed lines and posts one risk summary.
 
 ## The org's skills
-The org's 10 established skills are installed in `~/.claude/skills` (library e9a6f4bbce29); Claude Code loads one when its description fits the task.
+The org's 12 established skills are installed in `~/.claude/skills` (library 5f7be950a7f9); Claude Code loads one when its description fits the task.
 
 ## How to report back
 - When you finish, say which skills you followed: `lab applied <skill> followed` (or `lab applied <skill> failed --step 2 "why"`).

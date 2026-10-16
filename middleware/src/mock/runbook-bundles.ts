@@ -1,6 +1,7 @@
-// The two seeded runbooks that carry tools (R8): procedures a run built
-// mid-session and would otherwise lose when the workspace is wiped. Neither
-// needs a repository — each is self-contained (procedure + scripts/ + data/)
+// The seeded runbooks that carry tools (R8): two procedures a run built
+// mid-session and would otherwise lose when the workspace is wiped, plus the
+// established procedures in runbook-bundles-established.ts (the journey walk,
+// the packed-library release). Each is self-contained (procedure + scripts/ + data/)
 // and ships to every box as a Claude Code skill (lib/runbooks/library.ts).
 //
 //   rb-ws-cdp-debug             watch a page's websocket frames over the Chrome
@@ -14,6 +15,9 @@
 import type { RunbookDoc, RunbookFile } from '../lib/runbooks/types.js';
 import { filesOf } from '../lib/runbooks/files.js';
 import { BUNDLE_FILES } from './runbook-bundles.generated.js';
+import { JOURNEY_WALK_RUNBOOK_ID, LIBRARY_RELEASE_RUNBOOK_ID, journeyWalkDoc, libraryReleaseDoc } from './runbook-bundles-established.js';
+
+export { JOURNEY_WALK_RUNBOOK_ID, LIBRARY_RELEASE_RUNBOOK_ID } from './runbook-bundles-established.js';
 
 export const CDP_RUNBOOK_ID = 'rb-ws-cdp-debug';
 export const PRESENCE_RUNBOOK_ID = 'rb-gateway-presence-client';
@@ -165,4 +169,7 @@ export function bundleFiles(id: string): RunbookFile[] {
 export const SEEDED_BUNDLES: ReadonlyArray<{ id: string; doc: RunbookDoc }> = [
   { id: CDP_RUNBOOK_ID, doc: cdpWebsocketDoc },
   { id: PRESENCE_RUNBOOK_ID, doc: presenceClientDoc },
+  // Established procedures with their helpers (runbook-bundles-established.ts).
+  { id: JOURNEY_WALK_RUNBOOK_ID, doc: journeyWalkDoc },
+  { id: LIBRARY_RELEASE_RUNBOOK_ID, doc: libraryReleaseDoc },
 ];

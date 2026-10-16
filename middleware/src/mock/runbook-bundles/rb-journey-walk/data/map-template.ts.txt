@@ -1,0 +1,50 @@
+// A journey map to copy: docs/journeys/maps/<family>/<dir>/<surface>.ts (types: scripts/journeys/journey-map.ts).
+// One surface, one role, walked headless as a clone by scripts/journeys/run-maps.mjs. Every step that changes
+// the UI asserts the state it produced; every step proves the PROTOCOL fields it is evidence for. This one is
+// the Work family's member walk of Decisions, written out without the family's shared helpers so every
+// step kind is visible; in a family with a _shared.ts, write the surface there once per role instead.
+import type { JourneyMap, Target } from '../../../../../scripts/journeys/journey-map.ts';
+
+const rows: Target = { css: 'main table tbody tr' };
+const count: Target = { text: /^\d+ decisions?$/ };
+const header: Target = { css: 'main header' };
+const LEAKS = [/\bp-\d{3}\b/, /\b\d{4}-\d{2}-\d{2}T/, /\bundefined\b/]; // ids, raw ISO, broken bindings
+
+export default {
+  family: 'work', log: 'member/decisions', kind: 'surface',
+  persona: { user: 'u-theo', name: 'Theo Chang', tenant: 'orgiq', role: 'member' },
+  identity: 'clone', // the default: a fresh clone (own id and epoch), safe beside other walks
+  scenario: 'shared', // read-only: every non-GET the page sends is blocked and fails its step
+  viewport: { width: 1440, height: 900 },
+  goal: 'Theo Chang: see who decides each call and which initiative it holds up',
+  fields: { surface: 'decisions', pages: 'portal/src/pages/DecisionsPage.tsx' },
+  steps: [
+    { do: 'navigate', url: '/iq/decisions', name: 'Open Decisions: every call, who decides it and the initiative it holds up', proves: 'story-facts',
+      expect: { url: '/iq/decisions', visible: [{ role: 'heading', name: 'Decisions', level: 1 }, { text: 'Auth Migration' }], noText: LEAKS,
+        numbers: [{ of: count, eqCount: rows }], count: [{ target: rows, min: 8 }], firstRowTopMax: 640 } },
+    { do: 'click', target: { role: 'link', name: /^Waiting/, within: { css: '[data-shell-nav]' } }, state: 'filtered', proves: 'tab-stability',
+      name: 'Filter to the waiting decisions: the count agrees with the rows and nothing on the page moves',
+      stable: [header, { css: '[data-shell-nav] aside' }],
+      expect: { url: /[?&]status=waiting/, numbers: [{ of: count, eqCount: rows }] } },
+    { do: 'fill', target: { placeholder: /Search decisions/ }, value: 'zzzzqq', state: 'filtered-empty', proves: 'empty-state',
+      name: 'Search for nothing: the list says no loaded decision matches', expect: { count: [{ target: rows, eq: 0 }], text: ['No decisions'] } },
+    { do: 'fill', target: { placeholder: /Search decisions/ }, value: '', name: 'Clear the search: the waiting decisions come back', expect: { count: [{ target: rows, min: 1 }] } },
+    { do: 'press', key: 'Enter', target: { css: 'main table tbody tr a' }, state: 'row-open', proves: 'keyboard',
+      name: 'Enter on the first decision opens its record', expect: { url: /^\/iq\/decisions\/d-/ } },
+    { do: 'wait', target: { role: 'heading', level: 1 }, proves: 'role-gating', name: 'A member reads the record but holds no decide control',
+      expect: { absent: [{ role: 'button', name: /^(Decide|Approve|Reject|Escalate)( |$)/ }] } },
+    { do: 'reload', name: 'Reload the record: it comes back as it was', expect: { url: /^\/iq\/decisions\/d-/ } },
+    { do: 'tab-walk', max: 8, proves: 'keyboard', name: 'Tab from the top: focus reaches the page controls in order', expect: { minVisited: 6 } },
+    { do: 'navigate', url: '/iq/decisions/d-nope', state: 'not-found', proves: 'empty-state', expectConsole: /404/,
+      name: 'A decision that does not exist says so and offers the way back', expect: { text: ['Decision not found'] } },
+    { do: 'scope', scope: { scenario: 'empty', fixture: 'graph-decisions' }, url: '/iq/decisions', state: 'empty', proves: 'empty-state',
+      name: 'In a world with no decisions the page says nothing is recorded yet', expect: { count: [{ target: rows, eq: 0 }] } },
+    { do: 'scope', scope: 'loading', url: '/iq/decisions', state: 'loading', noSettle: true, audit: false, auditReason: 'a skeleton is judged while it loads, not measured',
+      name: 'While the decisions load the page shows its skeleton, not an empty state', expect: { noText: ['No decisions'] } },
+    { do: 'viewport', width: 900, height: 900, name: 'Narrow to 900 wide: no sideways scroll', expect: { noHscroll: true } },
+    { do: 'theme', value: 'dark', name: 'Switch to dark: the page keeps its frame' },
+    { do: 'api', method: 'POST', url: '/api/decisions/d-nope/decide', body: {}, proves: 'role-gating', expect: { status: [403, 404] },
+      refusal: 'a member holds no decide grant, and the body names no outcome, so the route writes nothing even if the gate were open',
+      name: 'Deciding through the API is refused for a member' },
+  ],
+} satisfies JourneyMap;

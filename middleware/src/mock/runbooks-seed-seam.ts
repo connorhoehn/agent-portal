@@ -13,7 +13,7 @@ import { clock } from './core/index.js';
 import { runbookSeedWorld, seedBriefs } from './runbooks.seed.js';
 import { buildSkillLibrary, BOX_SKILLS_DIR } from '../lib/runbooks/library.js';
 import { flakyRerunDiff, ssoNewOrigin, tenantCutoverV1 } from '../lib/runbooks/__tests__/fixtures/good.js';
-import { CDP_RUNBOOK_ID, PRESENCE_BUSY_PROPOSAL, PRESENCE_RUNBOOK_ID, SEEDED_BUNDLES, bundleFiles } from './runbook-bundles.js';
+import { CDP_RUNBOOK_ID, JOURNEY_WALK_RUNBOOK_ID, LIBRARY_RELEASE_RUNBOOK_ID, PRESENCE_BUSY_PROPOSAL, PRESENCE_RUNBOOK_ID, SEEDED_BUNDLES, bundleFiles } from './runbook-bundles.js';
 import { lintRunbook } from '../lib/runbooks/lint.js';
 
 export interface RunbookSeedRows {
@@ -63,13 +63,15 @@ export function runbookToolsDemoRows(): RunbookSeedRows {
   return withTools(runbookSeedWorld(), toolRunbookRows([CDP_RUNBOOK_ID]));
 }
 
-/** Who owns each seeded tool runbook: both are org-wide skills (scope is a label; every box gets them). */
+/** Who owns each seeded tool runbook: all are org-wide skills (scope is a label; every box gets them). */
 const TOOL_OWNERS: Record<string, { owner: string; created_h: number }> = {
   [CDP_RUNBOOK_ID]: { owner: 'p-011', created_h: 52 },
   [PRESENCE_RUNBOOK_ID]: { owner: 'p-008', created_h: 30 },
+  [JOURNEY_WALK_RUNBOOK_ID]: { owner: 'p-004', created_h: 20 },
+  [LIBRARY_RELEASE_RUNBOOK_ID]: { owner: 'p-011', created_h: 18 },
 };
 
-/** R8: the two runbooks that carry scripts and data (mock/runbook-bundles.ts), as org-scope v1 rows. */
+/** R8: the runbooks that carry scripts and data (mock/runbook-bundles.ts), as org-scope v1 rows. */
 export function toolRunbookRows(exclude: readonly string[] = []): Pick<RunbookSeedRows, 'runbooks' | 'versions'> {
   const out: Pick<RunbookSeedRows, 'runbooks' | 'versions'> = { runbooks: [], versions: [] };
   for (const { id, doc } of SEEDED_BUNDLES) {
