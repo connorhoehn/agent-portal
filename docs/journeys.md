@@ -305,6 +305,14 @@ surface, so most of this is real; the coarse part is spec coverage — a spec
 that only passes through a route to start a huddle still counts as covering
 it. The judges are the source of truth after this.
 
+## Calls with meeting rooms
+
+`docs/journeys/maps/work/{org-leader,sme}/call-rooms.ts` walk an initiative
+huddle with breakout rooms (organizer and participant). They are held until
+the runner can seat more than one walker in a call, and the meeting UI is off
+unless `VITE_MEETING_ROOMS` is on (`docs/meeting-rooms-app-goal.md`); with the
+flag off the call stage renders as before and no map asserts anything new.
+
 ## Records that are not walks
 
 A file in a journey directory with no `verdict:` line is a record (a code

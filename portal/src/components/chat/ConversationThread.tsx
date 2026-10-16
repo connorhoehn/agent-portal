@@ -161,10 +161,14 @@ export interface ConversationThreadProps {
   /** Say above the thread when the gateway is offline and when this reader may only read (`<id>-offline`, `<id>-read-only`). */
   notices?: boolean;
   emptyState?: ReactNode;
+  /** WrappedChatPanel `dock`, pinned above the input (the meeting chat's: which chat this is, the organizer's "To" switch). */
+  dock?: ReactNode;
+  /** WrappedChatPanel `transformMessages` (the meeting chat's `withAnnouncements`); must be cheap. */
+  transformMessages?: WrappedChatPanelProps['transformMessages'];
   'data-testid'?: string;
 }
 
-export function ConversationThread({ conversation, title, readOnlyReason = null, pins, attachments = false, includeFiles = true, reactions = false, editable = true, renderMessageReferences, typingUsers, fill = true, input = 'own', composer, placeholder, notices = false, emptyState, 'data-testid': testId }: ConversationThreadProps) {
+export function ConversationThread({ conversation, title, readOnlyReason = null, pins, attachments = false, includeFiles = true, reactions = false, editable = true, renderMessageReferences, typingUsers, fill = true, input = 'own', composer, placeholder, notices = false, emptyState, dock, transformMessages, 'data-testid': testId }: ConversationThreadProps) {
   const { channel, chat: originalChat, receipts, quote, connected, readState, maySend, userId, displayName, summarize } = conversation;
   const messages = useMessagePortraits(originalChat.messages);
   const chat = { ...originalChat, messages };
@@ -217,7 +221,8 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
   const thread = waitingState || (emptyState && noMessages)
     ? <Stack gap="none" className="min-h-0 flex-1">
         <Stack gap="none" className="min-h-0 flex-1 overflow-auto">{waitingState ?? emptyState}</Stack>
-        {!readError && <Stack gap="none" className="shrink-0">{field}</Stack>}
+        {/* No panel draws here yet, so the dock stands over the input itself. */}
+        {!readError && <Stack gap="none" className="shrink-0">{dock}{field}</Stack>}
       </Stack> : (
     <WrappedChatPanel key={channel} chat={pinned.chat} attachmentSrc={a => srcFor(a)} {...(reactions && canWrite ? { reactions: conversation.reactions } : {})}
       {...(pinned.messagePins ? { pins: pinned.messagePins } : {})} currentUserId={userId} displayName={displayName}
@@ -226,7 +231,8 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
       threaded {...(unreadFrom ? { unreadFrom } : {})} readReceipts={receipts.receipts} readReceiptsEnabled={receipts.enabled} disabled={!connected}
       onReply={input === 'below' ? undefined : elsewhere ? (elsewhere.replies ? message => { quote.start(message); owner.focus(true); } : undefined) : quote.start}
       {...(renderMessageReferences ? { renderMessageReferences } : {})} typingUsers={typingUsers ?? chat.typingUsers}
-      flushComposer={input !== 'below' && !elsewhere} composer={field} />
+      flushComposer={input !== 'below' && !elsewhere} composer={field}
+      {...(dock ? { dock } : {})} {...(transformMessages ? { transformMessages } : {})} />
   );
   return (
     <Stack gap="sm" className={fill ? 'min-h-0 flex-1' : 'min-h-[16rem]'} data-testid={testId}>

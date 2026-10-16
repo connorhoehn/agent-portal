@@ -2,7 +2,7 @@
 // step 7, deploy-plan risk #2 — the gateway half): COMPOSITION ONLY.
 //
 //   ws(s)://<middleware>/ws     Sec-WebSocket-Protocol: bearer-token-v1, <jwt>
-//   features: chat, presence, cursor, calls, reactions, uploads, activity,
+//   features: chat, presence, cursor, calls, meeting, reactions, uploads, activity,
 //             pipeline, work-graph, notifications (+ the library's built-in subscribe)
 //
 // Why here and not realtime-examples' gateway container: that server verifies
@@ -20,6 +20,7 @@
 //                                  (`lobbyGuard`, `channelGuard`) and every
 //                                  fresh-per-request `admit*` decision
 //   lib/gateway/calls.ts           the calls feature, invites, missed calls
+//   lib/gateway/meeting.ts         raised hands and breakout rooms on a call
 //   lib/gateway/notify-plugins.ts  DM / channel / mention producers, page-thread unread options
 //   lib/gateway/stats.ts           the load line
 //   lib/gateway/env.ts             the tuning knobs
@@ -55,6 +56,7 @@ import { hostname } from 'node:os';
 import { RedisPresenceStore } from '@connorhoehnslalom/realtime-modules/presence';
 import { attachRealtime, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withAuthorityCache, withPrincipalRevalidation, type AuthorityVerdictCache, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehnslalom/realtime-modules/server';
 import { RedisCallStateStore, InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
+import { MeetingService } from '@connorhoehnslalom/realtime-modules/meeting';
 import { createOrgiqWorkGraphStream, isWorkGraphStreamPublisher } from './work-graph/stream.js';
 import { tenantCursor } from './gateway-cursor.js';
 import { CallPageRuntime, MemoryCallPageStore, RedisCallPageStore, observeCallPageLifecycle, setCallPageRuntime, isCallPageSnapshot } from './call-pages.js';
@@ -73,10 +75,11 @@ import { createSocialChatBackend, setSocialChatBackend, setThreadLiveAppend, typ
 import { createReactionStore, gatewayUploadConfig, uploadFeatureOptions } from './gateway-attachments.js';
 import { tenantActivity, tenantPipeline } from './gateway-run-feed.js';
 import { directRecipientFilter } from './direct-recipient.js';
-import { admitChannel, admitPrincipal, callGuards, channelGuards, lobbyGuard, verdictCacheable } from './gateway/authority.js';
+import { admitChannel, admitMeetingRoomSync, admitPrincipal, bindMeetingRooms, callGuards, channelGuards, lobbyGuard, verdictCacheable } from './gateway/authority.js';
 import { applyChannel, authorityEpoch, bindAuthorityCache } from './gateway/authority-invalidation.js';
 import { authenticateGatewayUpgrade } from './gateway/auth.js';
 import { socketContext, tenantCalls } from './gateway/calls.js';
+import { tenantMeeting } from './gateway/meeting.js';
 import { channelNotifyPlugin, dmNotifyPlugin, pageCursorChatOptions, tenantMentionNotifyPlugin } from './gateway/notify-plugins.js';
 import { startStatsLine, statsIntervalMs, type RealtimeGatewayStore } from './gateway/stats.js';
 import { authorityCacheEnabled, authorityCacheMaxAgeMs, inboundRateLimit, peerOperationLingerMs, publishProofMaxAgeMs, realtimeGatewayRouting } from './gateway/env.js';
@@ -355,6 +358,13 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
           void chatRuntime?.finish(summary.callId, summary.participantClientIds).catch(error => console.warn('[call-chat] terminal cleanup failed', error));
         },
       }),
+      // Raised hands and breakout rooms (docs/meeting-rooms-app-goal.md B1).
+      // Meeting state is shared through the gateway's Redis only when the
+      // gateway routes as a cluster (decision 6), like presence; one task
+      // keeps it in memory.
+      tenantMeeting({ calls: baseStateStore, getCtx,
+        ...(clusterRouter && redis ? { redis, namespace: process.env['REALTIME_GATEWAY_NAMESPACE'] || 'orgiq-gateway',
+          ...(redis instanceof GatewayRedis ? { subscriber: { subscribe: (topic: string, receive: (message: string) => void) => redis.cluster.subscribe(topic, receive) } } : {}) } : {}) }),
       // Reactions follow chat's channel authority (the router's `authorize`
       // strips `reactions:`); targeted ones persist in Redis or memory.
       reactions({ store: createReactionStore(redis ? { command: (...args) => redis.command(...args) } : null,
@@ -383,6 +393,10 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   const workGraphService = handle.services['work-graph'];
   if (!isWorkGraphStreamPublisher(workGraphService)) throw new Error('work-graph feature did not register its stream service');
   const stopWorkGraph = workGraphStream.attach(workGraphService, clusterRouter?.peerEvents ?? null);
+  // The room rules (lib/gateway/authority.ts) ask this service who sits in which room.
+  const meetingService = handle.services['meeting'];
+  if (!(meetingService instanceof MeetingService)) throw new Error('meeting feature did not register its service');
+  bindMeetingRooms({ service: meetingService, lobbyOfCall: getLobby });
   // The invalidation seam drives this cache; with Redis routing its user,
   // channel and global events also reach the peers (`orgiq:authority`).
   const unbindAuthority = verdicts ? bindAuthorityCache(verdicts.cache, { peers: clusterRouter?.peerEvents ?? null }) : null;
@@ -393,7 +407,7 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   pageRuntime = new CallPageRuntime({ calls: baseStateStore, pages: redis ? new RedisCallPageStore(redis) : new MemoryCallPageStore(), router: handle.router, lobbyAllowed: lobbyGuard });
   setCallPageRuntime(pageRuntime);
   chatRuntime = new CallChatRuntime({ calls: baseStateStore, state: redis ? new RedisCallChatStateStore(redis) : new MemoryCallChatStateStore(),
-    messages: chatBackend.chatStore, router: handle.router, lobbyAllowed: lobbyGuard });
+    messages: chatBackend.chatStore, router: handle.router, lobbyAllowed: lobbyGuard, meetingRoom: admitMeetingRoomSync });
   setCallChatRuntime(chatRuntime);
   setCallMediaProofRuntime(new CallMediaProofRuntime({ calls: baseStateStore, router: handle.router, lobbyAllowed: lobbyGuard }));
   setNotificationSink(handle.services.notification ?? null);
@@ -417,7 +431,7 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   status = { gateway: 'on', store };
   ready = clusterRouter ? () => clusterRouter.isReady() : null;
   const where = redis ? (redisUrl ? `redis (${redisUrl.replace(/\/\/[^@/]*@/, '//***@')})` : 'redis (provided connection)') : 'memory';
-  console.log(`[realtime-gateway] serving ${REALTIME_GATEWAY_PATH} (chat, presence, cursor, calls, notifications, work-graph); call state + inbox: ${where}; chat store: ${chatBackend.kind}`);
+  console.log(`[realtime-gateway] serving ${REALTIME_GATEWAY_PATH} (chat, presence, cursor, calls, meeting, notifications, work-graph); call state + inbox: ${where}; chat store: ${chatBackend.kind}`);
   if (redis) {
     void redis.ping().catch((err: unknown) => {
       console.warn(`[realtime-gateway] REDIS_URL is set but Redis did not answer (${(err as Error).message}); call frames will fail until it does`);
@@ -434,6 +448,8 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
       // Keep feature runtimes/ports live until socket disconnect hooks finish.
       try { await baseDispose(); } finally {
         stopWorkGraph();
+        bindMeetingRooms(null);
+        meetingService.dispose();
         stopMembershipWrites?.();
         unbindAuthority?.();
         pageRuntime?.dispose();

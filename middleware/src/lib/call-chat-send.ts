@@ -1,13 +1,14 @@
 // The huddle send contract, composed around the library chat service for the
-// `orgiq:huddle:<callId>` namespace only (every other channel is untouched).
+// `orgiq:huddle:<callId>` namespace only (every other channel is untouched),
+// a meeting room's chat `orgiq:huddle:<callId>~breakout~<roomId>` included:
+// the same contract, with the room's seat check (CallChatRuntime.assertRoomSeat).
 // Authority is CallChatRuntime's (call-chat.ts); this adds what a huddle send
 // promises beyond the library's own persisted acknowledgement.
 import { defineFeature, type RealtimeFeature } from '@connorhoehnslalom/realtime-modules/server';
 import { AppError } from './async-handler.js';
 import { canonicalCallPage, type CallPageDescriptor } from './call-pages.js';
 import { dmPageDescriptor } from './dm-page-references.js';
-import { huddleCallId } from './live-principal.js';
-import { inCallChatNamespace, METADATA_KEYS, type CallChatRuntime } from './call-chat.js';
+import { huddleChatOf, inCallChatNamespace, METADATA_KEYS, type CallChatRuntime } from './call-chat.js';
 
 /** What a client may do on a huddle channel through the chat service. */
 const HUDDLE_ACTIONS: ReadonlySet<string> = new Set(['join', 'leave', 'send', 'history', 'typing', 'read', 'receipts']);
@@ -66,7 +67,7 @@ export function withHuddleChat(feature: RealtimeFeature, current: () => CallChat
     const sendToClient = service.sendToClient.bind(service);
     service.sendToClient = (clientId, message) => {
       const frame = message as Record<string, unknown> | null;
-      if (frame?.type === 'chat' && frame.action === 'sent' && typeof frame.channel === 'string' && huddleCallId(frame.channel)
+      if (frame?.type === 'chat' && frame.action === 'sent' && typeof frame.channel === 'string' && huddleChatOf(frame.channel)
         && typeof frame.messageId === 'string') acknowledged.add(`${clientId}\0${frame.messageId}`);
       sendToClient(clientId, message);
     };
@@ -84,8 +85,9 @@ export function withHuddleChat(feature: RealtimeFeature, current: () => CallChat
     service.handleAction = async (clientId, action, data) => {
       const channel = typeof data?.channel === 'string' ? data.channel : '';
       if (!inCallChatNamespace(channel)) return handle(clientId, action, data);
-      const callId = huddleCallId(channel);
-      if (!callId || !HUDDLE_ACTIONS.has(action)) return refuse(clientId, action, channel, 'This is not offered in a huddle conversation');
+      const ref = huddleChatOf(channel);
+      if (!ref || !HUDDLE_ACTIONS.has(action)) return refuse(clientId, action, channel, 'This is not offered in a huddle conversation');
+      const { callId, roomId } = ref;
       if (action !== 'send') return handle(clientId, action, data);
       const input = huddleSendInput(data);
       if (typeof input === 'string') return refuse(clientId, action, channel, input, 400);
@@ -95,12 +97,12 @@ export function withHuddleChat(feature: RealtimeFeature, current: () => CallChat
         const owner = current();
         try {
           if (!owner || !userId) throw new AppError(503, 'Huddle chat is unavailable');
-          await owner.assertSeat(callId, clientId, true);
+          await (roomId ? owner.assertRoomSeat(callId, roomId, clientId, true) : owner.assertSeat(callId, clientId, true));
           if (input.page) {
             if (!await owner.pageReferencesAllowed(callId)) throw new AppError(403, 'This huddle does not carry page references');
             await canonicalCallPage(input.page);
           }
-          await owner.assertSeat(callId, clientId, true);
+          await (roomId ? owner.assertRoomSeat(callId, roomId, clientId, true) : owner.assertSeat(callId, clientId, true));
           if (context.router.getClientData?.(clientId)?.userContext !== captured) return;
           const find = async () => (await owner.messages.listMessages(channel, 200)).find(message => message.userId === userId
             && message.metadata?.['clientDeliveryId'] === input.deliveryId && !message.deletedAt && message.metadata?.['deleted'] !== true) ?? null;

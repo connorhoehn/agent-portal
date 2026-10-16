@@ -16,8 +16,10 @@ import { callLogEvents, reportCallLogEvents, type CallLogEventBody } from '../..
 import { isPageCallLobby, pageHuddleLogBodies, startPageHuddleTracker, type PageHuddleTracker } from '../../lib/pageCalls';
 import { roomSlugFromLobby } from '../../pages/social/socialPlatform';
 import { acceptedCallHref, callPeopleHref, callScopeKey, shellCallDockTestId } from './callShellModel';
-import { HuddleChatProvider, HuddleChatPanel, HuddleReactionOverlay, useHuddleChat } from './HuddleChat';
+import { HuddleChatProvider, HuddleChatPanel, HuddleReactionOverlay, useHuddleChat, useHuddleChatToggle, useHuddleReact } from './HuddleChat';
 import { PostCallRecordingMonitor } from '../recordings/PostCallRecording';
+import { SHELL_MEETING } from '../../lib/meetingRooms';
+import { CallMeetingProvider, MeetingStageHeader } from './CallMeeting';
 
 const getToken = async () => (await realtimeTokenSource.get()).token;
 /** The pre-join choices were remembered under this key before the call host moved into the library. */
@@ -158,12 +160,14 @@ export function ShellCallHost({ children, onDialogueChange }: { children: ReactN
   return <CallHostProvider scopeKey={callScopeKey(session)} self={self} tenant={session?.tenant ?? null}
     platformApiUrl={platformApiUrl} getIdToken={getToken} videoUrl={videoUrl}
     gateway={frames.gateway} gatewayConfigured={frames.configured} connectionState={frames.connectionState}
-    onAccept={onAccept} onCallEvent={onCallEvent} preJoinStorageKey={PRE_JOIN_KEY}>
+    onAccept={onAccept} onCallEvent={onCallEvent} preJoinStorageKey={PRE_JOIN_KEY}
+    // The meeting rides only the lobbies lib/meetingRooms.ts names (initiative huddles, behind VITE_MEETING_ROOMS).
+    meeting={SHELL_MEETING}>
     <BoundCallWorkspace channel={boundChannel} />
     <CallSessionMonitor />
     <RoomCallLog report={onCallEvent} />
     <PageHuddleCallLog report={reportBodies} />
-    <HuddleChatProvider><HuddleDialogueMonitor onChange={onDialogueChange} />{children}</HuddleChatProvider>
+    <CallMeetingProvider><HuddleChatProvider><HuddleDialogueMonitor onChange={onDialogueChange} />{children}</HuddleChatProvider></CallMeetingProvider>
   </CallHostProvider>;
 }
 
@@ -173,10 +177,15 @@ export function ShellCallHost({ children, onDialogueChange }: { children: ReactN
  * the right pane's media panel — else stays collapsed in the footer. This app
  * says where People and a document chip go, and draws the in-call reactions.
  */
+/** The stage header's meeting toolbar, with this shell's chat toggle and huddle reactions. */
+function ShellMeetingStage() {
+  return <MeetingStageHeader chat={useHuddleChatToggle()} react={useHuddleReact()} />;
+}
+
 export function ShellCallMedia({ id }: { id?: string }) {
   const navigate = useNavigate();
   return <>
-    <CallMediaOutlet {...(id ? { id } : {})} overlay={<HuddleReactionOverlay />}
+    <CallMediaOutlet {...(id ? { id } : {})} overlay={<HuddleReactionOverlay />} header={<ShellMeetingStage />}
       onOpenPeople={(lobby, tenant) => { const href = callPeopleHref(lobby.channel, tenant); if (href) navigate(href); }}
       onOpenDocument={doc => { if (doc.href) navigate(doc.href); }}
       dockTestId={(lobby, tenant) => shellCallDockTestId(lobby.channel, tenant)} />

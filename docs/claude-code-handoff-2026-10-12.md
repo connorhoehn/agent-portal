@@ -304,3 +304,15 @@ Open, in order:
    - Renaming the real GitHub org in the seed.
    - Acceptance criteria on completed items.
 5. Machines (Computer Lab) are ephemeral; walks never create or depend on one.
+
+## Meeting rooms on calls (2026-10-16)
+
+Pins moved to ui-components **2.478.0** and realtime-modules **0.134.0** for
+`docs/meeting-rooms-app-goal.md` (judge `scripts/validate-meeting-rooms-app.sh`).
+Initiative huddles carry raise hand, reactions and breakout rooms behind
+`VITE_MEETING_ROOMS` (default off). Owed: the real-media acceptance record
+(E2, needs the SFU and platform-api with `LOBBY_AUTHORITY_REQUIRED=true`), the
+LVS `streamKey` read hole fixed by its owner (X2), the remaining surfaces
+(social, document, assessment, pipelines) and the user's decisions listed in
+the goal.
+

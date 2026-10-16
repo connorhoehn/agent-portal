@@ -104,7 +104,10 @@ export interface TenantChannelFamily extends ChannelFamily<ChannelAuthority> {
   cursors?: true;
 }
 
-const RID = '\\S{1,256}';
+// An id: up to 256 non-space characters, never a meeting room's suffix, so
+// `<lobby>~breakout~<room>` can never read as an id of the family (decision 2,
+// docs/meeting-rooms-app-goal.md; the authority facade splits rooms first).
+const RID = '(?:(?!~breakout~)\\S){1,256}';
 const ALL: ReadonlySet<ChannelService> = new Set(['chat', 'presence', 'typing', 'cursor', 'reactions', 'activity', 'pins']);
 const DISCUSSION: ReadonlySet<ChannelService> = new Set(['chat', 'presence', 'typing', 'reactions']);
 // A discussion whose page also shows a shared canvas (the work graph): pointers ride

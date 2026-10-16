@@ -2,7 +2,7 @@
 // immutable participant binding. This neither creates a seat nor grants access.
 import { AppError } from './async-handler.js';
 import { activeCallParticipant, currentCallChatGrant, type CallAuthority, type CallAccessOptions } from './call-access.js';
-import { admitLobbyRead } from './gateway/authority.js';
+import { admitLobbyRead, admitMeetingRoom, splitMeetingRoom } from './gateway/authority.js';
 import { currentLiveSession, sessionGatewayContext } from './live-principal.js';
 import type { Session } from './session.js';
 import { assessmentSourceFromCallChannel, readAssessmentDocument } from './assessment-document-context.js';
@@ -20,7 +20,18 @@ export class CallMediaProofRuntime {
     if (/^orgiq:dm:[^:]+(?::[^:]+)+$/.test(lobbyName)) return currentCallChatGrant(session, authority, 'ViewSocial', lobbyName);
     return await admitLobbyRead(sessionGatewayContext(session), lobbyName) === 'ok';
   }
+  /**
+   * The seat proof for `lobbyName`, which is the call's own lobby or one of
+   * its meeting rooms (`<call lobby>~breakout~<room>`, docs/meeting-rooms-app-goal.md
+   * B3): a room's media leg is the same call's seat, so every check below
+   * runs on the call's lobby, and the room must admit this user now at each
+   * re-read. The proof names the lobby asked for, the one the leg is in.
+   */
   async get(session: Session, callId: string, lobbyName: string, clientId: string, documentSourceId?: string): Promise<CallMediaSeatProof> {
+    const room = splitMeetingRoom(lobbyName);
+    if (room === false) throw new AppError(403, 'Accepted call seat required');
+    const callLobby = room ? room.base : lobbyName;
+    const roomAllowed = async (userId: string): Promise<boolean> => !room || admitMeetingRoom(userId, lobbyName);
     const isDocument = lobbyName.startsWith('assessment:doc:');
     if (isDocument !== (documentSourceId !== undefined)) throw new AppError(403, 'Verified document call source required');
     const seatOptions = { allowAssessmentDocument: isDocument };
@@ -31,20 +42,22 @@ export class CallMediaProofRuntime {
     const accepted = this.options.calls.isAccepted;
     if (!accepted || !await accepted.call(this.options.calls, callId)) throw new AppError(403, 'Accepted call seat required');
     const first = await activeCallParticipant(this.options, callId, current, seatOptions);
-    if (first.call.lobbyName !== lobbyName || !first.clientIds.includes(clientId)
-      || !await this.hostAllowed(current, first.authority, lobbyName)
+    if (first.call.lobbyName !== callLobby || !first.clientIds.includes(clientId)
+      || !await this.hostAllowed(current, first.authority, callLobby)
+      || !await roomAllowed(current.sub)
       || !await documentAllowed(first.call.channel)) throw new AppError(403, 'Accepted call seat required');
     // Directory/resource I/O can outlive leaving, socket replacement, a tenant
     // switch or a terminal call. Re-read all proofs immediately before reply.
     current = await currentLiveSession(current);
     const latest = await activeCallParticipant(this.options, callId, current, seatOptions);
-    if (latest.call.lobbyName !== lobbyName || !latest.clientIds.includes(clientId)
+    if (latest.call.lobbyName !== callLobby || !latest.clientIds.includes(clientId)
       || !await accepted.call(this.options.calls, callId)
-      || !await this.hostAllowed(current, latest.authority, lobbyName)
+      || !await this.hostAllowed(current, latest.authority, callLobby)
+      || !await roomAllowed(current.sub)
       || !await documentAllowed(latest.call.channel)) throw new AppError(403, 'Accepted call seat required');
     current = await currentLiveSession(current);
     const final = await activeCallParticipant(this.options, callId, current, seatOptions);
-    if (final.call.lobbyName !== lobbyName || !final.clientIds.includes(clientId)
+    if (final.call.lobbyName !== callLobby || !final.clientIds.includes(clientId)
       || !await accepted.call(this.options.calls, callId)
       || (isDocument && assessmentSourceFromCallChannel(final.call.channel) !== documentSourceId)) throw new AppError(403, 'Accepted call seat required');
     return { allowed: true, callId, lobbyName, clientId, userId: current.sub, tenant: current.tenant, epoch: current.epoch ?? 0,

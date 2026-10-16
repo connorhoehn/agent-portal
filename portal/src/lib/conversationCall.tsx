@@ -4,6 +4,7 @@
 // pre-join device check, the one media sink and `useCallBlock(channel)` for a
 // composer's `callBlock` slot (the dock and the ring toast are drawn by the host).
 import * as video from '@connorhoehnslalom/realtime-modules/client/video';
+import { useMeeting } from '@connorhoehnslalom/realtime-modules/client/meeting';
 import { createElement } from 'react';
 import { createCallBlockHost } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { StreamVideo } from '@connorhoehnslalom/ui-components/video';
@@ -24,10 +25,12 @@ const useConversationCall: typeof video.useConversationCall = opts => video.useC
   // This is only a hint: native authority checks the stored channel and source.
   documentSourceId: documentRecordingNavigation(opts.lobbyName, opts.channel)?.documentSourceId,
 });
-export const calls = createCallBlockHost({ ...video, useConversationCall, conversationCallDockProps });
+// `useMeeting` (realtime-modules 0.134) lets the host run a meeting beside the
+// call when ShellCallHost turns it on for the lobby (lib/meetingRooms.ts).
+export const calls = createCallBlockHost({ ...video, useConversationCall, conversationCallDockProps, useMeeting });
 export const {
   CallHostProvider, CallMediaOutlet, CallBlock,
   useCallHost, useCallBlock, useCallLobby, useCallMediaPanel, useCallBlockPlacement, useCallBlockPageClaimed, useClaimCallBlock,
 } = calls;
 export { callCounts, callDrawn } from '@connorhoehnslalom/ui-components/integrations/realtime';
-export type { CallLobby, OnCallHostEvent } from '@connorhoehnslalom/ui-components/integrations/realtime';
+export type { CallHostMeeting, CallLobby, OnCallHostEvent } from '@connorhoehnslalom/ui-components/integrations/realtime';

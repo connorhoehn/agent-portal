@@ -12,8 +12,14 @@
 //     call-chat-send.ts (`withHuddleChat`);
 //   - `filterFrame`, which resolves page references per reader;
 //   - `get`, the resolver behind GET /api/calls/:callId/chat.
+// A meeting room's chat (`orgiq:huddle:<callId>~breakout~<roomId>`,
+// docs/meeting-rooms-app-goal.md decision 1) is the same call's huddle, scoped
+// to the room: its members are the call's current members who are in that
+// room now (the meeting's own rule, `meetingRoom`), sends carry the same
+// contract, and the call's terminal cleanup finishes it with the huddle.
 import type { ChatMember, ChatMembershipStore, ChatMessage, ChatStore } from '@connorhoehnslalom/realtime-modules/chat';
 import type { ActiveCallStateView } from '@connorhoehnslalom/realtime-modules/call';
+import { breakoutChannel, breakoutLobbyName, parseBreakoutChannel } from '@connorhoehnslalom/realtime-modules/meeting';
 import { AppError } from './async-handler.js';
 import { activeCallParticipant, callProvenance, connectedCallSession as connectedAnyCallSession, resolveConnectedCallSession as resolveAnyCallSession,
   currentCallChatGrant, currentCallAuthority, huddleLobbyTenant, HUDDLE_CHAT_TENANTS,
@@ -30,6 +36,14 @@ export const CALL_CHAT_PREFIX = 'orgiq:huddle:';
 /** Also reserves malformed variants, so they cannot fall through tenant auth. */
 export function inCallChatNamespace(channel: string): boolean { return channel === 'orgiq:huddle' || channel.startsWith(CALL_CHAT_PREFIX); }
 export function callChatChannel(callId: string): string { return `${CALL_CHAT_PREFIX}${callId}`; }
+/** Room `roomId`'s chat in call `callId`'s huddle. */
+export function roomChatChannel(callId: string, roomId: string): string { return breakoutChannel(callChatChannel(callId), roomId); }
+/** A bare huddle chat name → its call and, for a meeting room's chat, the room; null for anything else (a room of a room included). */
+export function huddleChatOf(channel: string): { callId: string; roomId: string | null } | null {
+  const room = parseBreakoutChannel(channel);
+  const callId = huddleCallId(room ? room.base : channel);
+  return callId ? { callId, roomId: room?.roomId ?? null } : null;
+}
 // The namespace keeps its `orgiq:` name for every huddle; an assessment team
 // page's huddle (`assessment:team:<id>`) has one too. Seats resolve in either
 // tenant, and activeCallParticipant pins each to its lobby's tenant.
@@ -46,7 +60,9 @@ export interface CallChatSnapshot {
 export type CallChatPageReference = ({ status: 'available' } & CanonicalCallPage) | ({ status: 'unavailable' } & CallPageDescriptor);
 interface Seat { clientId: string; session: Session; authority: CallAuthority }
 interface Control { generation: number; ended: boolean; departed: Set<string>; seats: Map<string, number>; users: Map<string, string>;
-  lobbyName: string | null; provenance: Map<string, string>; until: number }
+  lobbyName: string | null; provenance: Map<string, string>; until: number;
+  /** Meeting rooms whose chat this call has admitted someone to: finished with the huddle. */
+  rooms: Set<string> }
 class CallMembershipChanged extends AppError {
   constructor() { super(409, 'Call membership changed. Refresh the conversation.'); }
 }
@@ -56,12 +72,20 @@ export interface CallChatRuntimeOptions extends CallAccessOptions {
   grant?: typeof currentCallChatGrant;
   now?: () => number;
   maintenanceIntervalMs?: number;
+  /**
+   * Is `userId` in this meeting room now (`<call lobby>~breakout~<roomId>`):
+   * its members and the meeting's organizers, or anyone while rooms are
+   * self-select (lib/gateway/authority.ts `admitMeetingRoomSync`). Absent:
+   * no room chat at all.
+   */
+  meetingRoom?: (userId: string, roomLobby: string) => boolean;
 }
 const clone = <T>(value: T): T => structuredClone(value);
 /** What a huddle message may carry. Anything else is dropped on send and never rendered. */
 export const METADATA_KEYS = ['displayName', 'clientDeliveryId', 'replyTo', 'attachments', 'summaryOf'] as const;
 const REST_CLIENT = /^(http|rest:[a-z-]+)$/;
 const NOT_JOINED = 'Join this call before opening its conversation';
+const NOT_IN_ROOM = 'Join this breakout room before opening its conversation';
 /** A removed row for nobody: keeps the namespace closed when there is no current roster. */
 const closedRow = (channel: string): ChatMember => ({ channel, userId: '', role: 'member', addedBy: '', addedAt: new Date(0).toISOString(),
   historyFrom: new Date(0).toISOString(), removedAt: new Date(0).toISOString() });
@@ -86,7 +110,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
     let control = this.controls.get(callId);
     if (!control || control.until <= this.now()) {
       control = { generation: 0, ended: false, departed: new Set(), seats: new Map(), users: new Map(),
-        lobbyName: null, provenance: new Map(), until: 0 };
+        lobbyName: null, provenance: new Map(), until: 0, rooms: new Set() };
       this.controls.set(callId, control);
     }
     control.until = this.now() + 4 * 60 * 60 * 1000;
@@ -180,10 +204,27 @@ export class CallChatRuntime implements CallLifecycleObserver {
       control.seats.set(clientId, (control.seats.get(clientId) ?? 0) + 1);
       const session = connectedCallSession(this.opts.router, clientId);
       if (session) control.users.set(clientId, session.sub);
-      for (const channel of [callChatChannel(callId), `reactions:${callChatChannel(callId)}`]) {
+      for (const channel of this.chatChannels(callId)) {
         void Promise.resolve(this.opts.router.unsubscribeFromChannel?.(clientId, channel)).catch(() => undefined);
       }
     }
+  }
+  /** Every router channel of this call's conversation: the huddle and each room's chat, with their reactions. */
+  private chatChannels(callId: string): string[] {
+    const names = [callChatChannel(callId), ...[...(this.controls.get(callId)?.rooms ?? [])].map(roomId => roomChatChannel(callId, roomId))];
+    return names.flatMap(name => [name, `reactions:${name}`]);
+  }
+  /**
+   * Is `userId` in room `roomId` of this live huddle call now? Asked of the
+   * meeting on the call's stored lobby, never a name the client supplied.
+   */
+  private async inRoom(callId: string, roomId: string, userId: string): Promise<boolean> {
+    if (!userId || !this.opts.meetingRoom) return false;
+    this.check(callId);
+    const call = await this.opts.calls.getCall(callId); this.check(callId);
+    if (!call || !huddleLobby(call.lobbyName) || !this.opts.meetingRoom(userId, breakoutLobbyName(call.lobbyName, roomId))) return false;
+    this.control(callId).rooms.add(roomId);
+    return true;
   }
   async registered(callId: string, clientId: string, preserveHistory = false) {
     return this.lifecycle(() => this.registeredCurrent(callId, clientId, preserveHistory));
@@ -267,7 +308,8 @@ export class CallChatRuntime implements CallLifecycleObserver {
     return !!call && huddleLobbyTenant(call.lobbyName) === 'orgiq';
   }
   /** One reader's view of a stored message: allowlisted metadata, the page reference resolved now. */
-  async render(callId: string, message: ChatMessage, pages = new Map<string, Promise<CallChatPageReference>>()): Promise<ChatMessage> {
+  async render(callId: string, message: ChatMessage, pages = new Map<string, Promise<CallChatPageReference>>(),
+    channel = callChatChannel(callId)): Promise<ChatMessage> {
     const metadata: Record<string, unknown> = {};
     for (const key of METADATA_KEYS) if (message.metadata?.[key] !== undefined) metadata[key] = clone(message.metadata[key]);
     const page = dmPageDescriptor(message.metadata?.['pageReference']);
@@ -281,7 +323,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
       metadata['pageReference'] = await pages.get(key)!;
     }
     return { id: message.id, clientId: message.clientId, ...(message.userId ? { userId: message.userId } : {}),
-      channel: callChatChannel(callId), message: message.message, timestamp: message.timestamp, metadata };
+      channel, message: message.message, timestamp: message.timestamp, metadata };
   }
   /** The chat service's strictly-after membership rule, plus deletions. */
   private visible(message: ChatMessage, member: CallChatMember) {
@@ -317,6 +359,12 @@ export class CallChatRuntime implements CallLifecycleObserver {
     const actor = await this.participant(callId, session, write);
     if (!actor.clientIds.includes(clientId) || !actor.state.members[session.sub]?.active || !current()) throw new AppError(403, NOT_JOINED);
   }
+  /** `assertSeat`, and the seat's person is in room `roomId` now: a room chat's join, read and send. */
+  async assertRoomSeat(callId: string, roomId: string, clientId: string, write = false): Promise<void> {
+    await this.assertSeat(callId, clientId, write);
+    const session = await resolveConnectedCallSession(this.opts.router, clientId);
+    if (!session || !await this.inRoom(callId, roomId, session.sub)) throw new AppError(403, NOT_IN_ROOM);
+  }
   /** Gateway or REST caller: a connection id names its seat, a REST label asks for the session. */
   async assertChannelAccess(callId: string, clientId: string, session: Session, write: boolean): Promise<void> {
     if (REST_CLIENT.test(clientId)) return this.assertMember(callId, session, write);
@@ -339,6 +387,21 @@ export class CallChatRuntime implements CallLifecycleObserver {
       const rows = Object.entries(state.members).map(([userId, member]): ChatMember => ({ channel, userId, role: 'member', addedBy: userId,
         addedAt: member.historyFrom, historyFrom: member.historyFrom, removedAt: member.active ? null : member.historyFrom }));
       return rows.length ? rows : [closedRow(channel)];
+    } catch { return [closedRow(channel)]; }
+  }
+  /**
+   * A room chat's membership rows: the huddle's active members who are in
+   * that room now, under the room's channel name. The huddle's join boundary
+   * is the floor, so a room's history is what was said in it since the
+   * reader joined the call. Closed with the call, like the huddle's.
+   */
+  async roomMemberRows(callId: string, roomId: string): Promise<ChatMember[]> {
+    const channel = roomChatChannel(callId, roomId);
+    try {
+      const rows = await this.memberRows(callId);
+      const inRoom = await Promise.all(rows.map(row => row.removedAt == null && this.inRoom(callId, roomId, row.userId)));
+      const kept = rows.filter((_, index) => inRoom[index]).map(row => ({ ...row, channel }));
+      return kept.length ? kept : [closedRow(channel)];
     } catch { return [closedRow(channel)]; }
   }
   /** The reader's join boundary (ms), or +Infinity for someone who is not an active member. */
@@ -379,15 +442,22 @@ export class CallChatRuntime implements CallLifecycleObserver {
   async filterFrame(clientId: string, frame: Record<string, unknown>): Promise<unknown | null> {
     if (this.disposed) return null;
     if (frame.type === 'chat') {
-      const callId = typeof frame.channel === 'string' ? huddleCallId(frame.channel) : null;
+      const channel = typeof frame.channel === 'string' ? frame.channel : '';
+      const ref = huddleChatOf(channel);
+      const callId = ref?.callId ?? null;
       const control = callId ? this.controls.get(callId) : undefined;
-      if (!callId || !control || control.ended || control.departed.has(clientId)) return null;
+      if (!ref || !callId || !control || control.ended || control.departed.has(clientId)) return null;
+      // A room's chat reaches only someone in that room now (a reassignment moves them out).
+      if (ref.roomId) {
+        const session = await resolveConnectedCallSession(this.opts.router, clientId);
+        if (!session || !await this.inRoom(callId, ref.roomId, session.sub)) return null;
+      }
       const pages = new Map<string, Promise<CallChatPageReference>>();
       if ((frame.action === 'message' || frame.action === 'messageUpdated') && frame.message && typeof frame.message === 'object') {
-        return { ...frame, message: await this.render(callId, frame.message as ChatMessage, pages) };
+        return { ...frame, message: await this.render(callId, frame.message as ChatMessage, pages, channel) };
       }
       if (frame.action === 'history' && Array.isArray(frame.messages)) {
-        return { ...frame, messages: await Promise.all((frame.messages as ChatMessage[]).map(message => this.render(callId, message, pages))) };
+        return { ...frame, messages: await Promise.all((frame.messages as ChatMessage[]).map(message => this.render(callId, message, pages, channel))) };
       }
       return frame;
     }
@@ -434,8 +504,10 @@ export class CallChatRuntime implements CallLifecycleObserver {
   async finish(callId: string, participantClientIds: string[] = []) {
     const control = this.control(callId); control.ended = true; control.generation += 1;
     invalidateChannel(callChatChannel(callId), 'huddle-ended');
+    for (const roomId of control.rooms) invalidateChannel(roomChatChannel(callId, roomId), 'huddle-ended');
+    // The rooms' chats end with the call: every seat leaves them too.
     for (const clientId of participantClientIds) {
-      for (const channel of [callChatChannel(callId), `reactions:${callChatChannel(callId)}`]) {
+      for (const channel of this.chatChannels(callId)) {
         void Promise.resolve(this.opts.router.unsubscribeFromChannel?.(clientId, channel)).catch(() => undefined);
       }
     }
@@ -466,9 +538,10 @@ export function callChatRuntime(): CallChatRuntime {
  */
 export function huddleMembershipStore(base: ChatMembershipStore, current: () => CallChatRuntime | null): ChatMembershipStore {
   const rows = async (channel: string): Promise<ChatMember[]> => {
-    const callId = huddleCallId(channel);
+    const ref = huddleChatOf(channel);
     const owner = current();
-    return callId && owner ? owner.memberRows(callId) : [closedRow(channel)];
+    if (!ref || !owner) return [closedRow(channel)];
+    return ref.roomId ? owner.roomMemberRows(ref.callId, ref.roomId) : owner.memberRows(ref.callId);
   };
   return {
     listMembers: (channel, opts) => inCallChatNamespace(channel) ? rows(channel) : base.listMembers(channel, opts),

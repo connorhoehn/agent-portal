@@ -30,7 +30,8 @@ import { useGatewayFrames } from '../../lib/gatewayFrames';
 import { callCounts, callDrawn, useCallBlockPlacement, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
 import { CallPageSharing } from './CallPageSharing';
 import { EmbeddedSocialEntry } from './EmbeddedSocial';
-import { HuddleReactionBar, useHuddleChatToggle } from './HuddleChat';
+import { HuddleReactionBar, useHuddleChatToggle, useHuddleReact } from './HuddleChat';
+import { useMeetingBarItems } from './CallMeeting';
 import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, hasJoinedCall } from './callShellModel';
 import './socialFooter.css';
@@ -62,6 +63,11 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
   const { session } = useSession();
   const frames = useGatewayFrames();
   const chat = useHuddleChatToggle();
+  // On a call that carries a meeting (lib/meetingRooms.ts): Raise, React,
+  // People and Rooms as the bar's meeting items; React then replaces the
+  // footer's own reaction row (same send, same channel). While the stage is
+  // expanded its MeetingToolbar carries them, so the footer stays the status.
+  const meetingItems = useMeetingBarItems(useHuddleReact());
   // A conversation composer on this page carries the full call bar and the
   // tiles; the footer stays the compact status and offers no second video panel.
   const placement = useCallBlockPlacement();
@@ -108,11 +114,12 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
       : call.phase === 'calling' ? { statusLabel: `Calling ${host.lobby.title}…` } : {})}
     extras={<>
       {failureMessage && <span role="alert" title={failureMessage} className="max-w-[180px] truncate text-xs text-danger" data-testid="shell-call-error">{failureMessage}</span>}
-      {joined && !over && <HuddleReactionBar />}
+      {joined && !over && !meetingItems && <HuddleReactionBar />}
       
       {call.phase === 'failed' && <Button variant="secondary" size="sm" onClick={() => void call.rejoin()} data-testid="shell-footer-rejoin">Rejoin</Button>}
       {!barShown && <DeviceSettings onClick={host.checkDevices} />}
     </>}
+    {...(meetingItems && joined && !over && !barShown ? { meetingItems } : {})}
     {...(barShown && !over ? {} : { onLeave: () => void call.leave(), leaveLabel })}
     className="shell-collaboration-bar min-w-0 flex-1 border-l border-border"
     data-testid="shell-call-dock"

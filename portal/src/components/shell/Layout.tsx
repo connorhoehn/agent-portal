@@ -68,6 +68,7 @@ import { CallBlock } from '../../lib/conversationCall';
 import { EmbeddedSocialProvider } from './EmbeddedSocial';
 import { SocialFooter } from './SocialFooter';
 import { HuddleChatSplit } from './HuddleChat';
+import { MeetingRoomBanner } from './CallMeeting';
 import { healthFailed, healthPending, type DependencyHealth } from '../../lib/healthStatus';
 
 interface Health {
@@ -625,6 +626,8 @@ function ShellLayout() {
                     <DockedColumn bodyClassName="flex flex-col outline-none" bodyProps={{ id: 'main-content', tabIndex: -1 }}>
                       <Outlet />
                     </DockedColumn>
+                    {/* In a breakout room: which room, its timer and Return to main (CallMeeting.tsx). */}
+                    <MeetingRoomBanner />
                     {/* The call bar and tiles for a call no on-screen composer carries, docked under the page. */}
                     <CallBlock placement="block" />
                   </Stack>

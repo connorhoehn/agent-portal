@@ -15,7 +15,7 @@ the claim here is a bug.
 Durable facts the handoff does not repeat:
 
 - Pins: portal and middleware consume `@connorhoehnslalom/ui-components`
-  **2.460.1** and `@connorhoehnslalom/realtime-modules` **0.120.1** from
+  **2.478.0** and `@connorhoehnslalom/realtime-modules` **0.134.0** from
   tracked tarballs in `portal/vendor/` (`file:` deps, both lockfiles); middleware
   pins `@connorhoehn/service-runtime` 0.4.1 and `distributed-core` 0.48.0
   (`077d7594`) by full sha; infra consumes
@@ -228,7 +228,7 @@ were public until 2026-09-29 because nothing in this tree creates them.
 Features follow goal-doc + validator: `docs/<feature>-goal.md` is the
 definition of done and `scripts/validate-<feature>.sh` is the only judge (most
 take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
-(23 validators).
+(24 validators).
 
 | Doc | What it is | Judge |
 |-----|------------|-------|
@@ -251,6 +251,7 @@ take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
 | `work-journeys-goal.md`, `work-journeys/PROTOCOL.md` | Deep, executable Work-tenant (orgiq) journeys per role: the catalog, maps under `docs/journeys/maps/work/`, logs in `docs/work-journeys/`, ratcheting route × role × state floors (`scripts/work-journeys-floors.tsv`), refusals of every gated route; replaces the `docs/orgiq-journeys` hand logs | `validate-work-journeys.sh` |
 | `user-search-goal.md`, `user-search-intents.md` | User search per tenant: the intent catalog and clone probe (`portal/e2e/user-search-catalog.ts`, `user-search-probe.spec.ts`), the storage-agnostic search index (`middleware/src/lib/search-index`, memory + DynamoDB-wire, updated on write), ratcheting per-tenant floors (`scripts/user-search-floors.tsv`), search journey maps | `validate-user-search.sh` |
 | `upstream-refinement-goal.md`, `upstream-refinement-plan-2026-10-14.md` | The realtime chain under the app: one distributed-core, realtime-modules owns its seams and capacity, apps on the chain, the consumer on the canonical name | `validate-upstream-refinement.sh` |
+| `meeting-rooms-app-goal.md` | Teams-style meetings on the app's calls: raise hand, reactions, breakout rooms (media and chat follow the room), announcements; library side in realtime-modules `docs/design/meeting-rooms-goal.md`; behind `VITE_MEETING_ROOMS` | `validate-meeting-rooms-app.sh` |
 | `agent-eval-goal.md` | Golden sets + `golden_runner.py` | `validate-agent-eval.sh` |
 | `agentcore-preview-surface.md`, `agentcore-preview-plan.md` | Preview API research, callback runbook (§6a) | — |
 | `audit/2026-10-07-audit-plan.md` | Structural duplication audit and its "stop doing" list | — |

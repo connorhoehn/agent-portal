@@ -11,7 +11,7 @@ export function useHuddleComposerRecipient(page?: CallPageDescriptor | null) {
   const chat = useHuddleChat();
   const selectedPage = page === undefined ? chat?.page ?? null : page;
   const recipient = useMemo<ConversationRecipient | null>(() => chat?.callId ? {
-    id: `huddle:${chat.callId}`, label: `${chat.title} · Huddle`, channel: huddleChannel(chat.callId),
+    id: `huddle:${chat.callId}`, label: `${chat.title} · Huddle`, channel: chat.channel ?? huddleChannel(chat.callId),
     placeholder: 'Message this huddle…', carriesReference: !!selectedPage, claim: true,
     unavailableReason: chat.unavailableReason, error: chat.state.error,
     onSelect: () => { chat.openPane({ page: selectedPage, focus: false }); },

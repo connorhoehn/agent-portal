@@ -184,7 +184,7 @@ function DockedComposer({
           listen: gateway.onMessage, sendMessage: conversation.chat.sendMessage, newId: () => crypto.randomUUID() });
       }, openDiscussion) },
     ...(huddle && currentHuddle ? [{
-      id: currentHuddle, label: `${huddle.title ?? 'Current huddle'} · Huddle`, channel: huddleChannel(huddle.callId!), placeholder: 'Message this huddle…',
+      id: currentHuddle, label: `${huddle.title ?? 'Current huddle'} · Huddle`, channel: huddle.channel ?? huddleChannel(huddle.callId!), placeholder: 'Message this huddle…',
       carriesReference: !!reference.page, unavailableReason: huddle.unavailableReason, error: huddle.state.error, claim: true,
       onSelect: () => { huddle.openPane({ page, focus: false }); },
       send: async out => deliver(`${huddle.title ?? 'Current huddle'} · Huddle`, async () => {

@@ -31,10 +31,15 @@
 // facade contract (lib/gateway/__tests__/authority-facade.test.ts) pins both.
 
 import {
-  baseChannel, createChannelAuthority, defineChannelFamilies,
+  baseChannel, createChannelAuthority, defineChannelFamilies, normalizeCallPayload,
   type AuthorityScope, type CallStep, type ChannelStep, type GuardAuth as LibraryGuardAuth, type LobbyVerdict,
 } from '@connorhoehnslalom/realtime-modules/server';
 import type { FileUploadRow } from '@connorhoehnslalom/realtime-modules/fileupload';
+import {
+  BREAKOUT_LOBBY_SEPARATOR, MEETING_CHANNEL_PREFIX, breakoutLobbyName, parseBreakoutChannel, type MeetingService,
+} from '@connorhoehnslalom/realtime-modules/meeting';
+import { isAllowed } from '../authz.js';
+import { stewardsInitiative } from '../initiative-scope.js';
 import { inCallChatNamespace } from '../call-chat.js';
 import { inFlowRunNamespace, parseFlowRunChannel } from '../flow-runs/channel.js';
 import { inSocialDeckNamespace, parseSocialDeckChannel, socialDeckPresenceChannel } from '../social-deck-channel.js';
@@ -76,6 +81,55 @@ type GatewayFamily = Omit<TenantChannelFamily, 'channelResource'> & { channelRes
 const GATEWAY_FAMILY_TABLE: readonly GatewayFamily[] = TENANT_CHANNEL_FAMILIES
   .map(family => family.id === 'orgiq:deck' ? { ...family, channelResource: INITIATIVE_DECK } : family);
 
+// ── Meeting rooms (docs/meeting-rooms-app-goal.md, decisions 1–3) ────────────
+
+/**
+ * A breakout room is named after its call: the media lobby
+ * `<lobby>~breakout~<roomId>`, the chat `orgiq:huddle:<callId>~breakout~<roomId>`.
+ * Every rule here splits the suffix off before any family sees the name,
+ * because the families' `\S` ids would read it as part of an initiative id or
+ * of a DM's last member (decision 2). `null`: an ordinary name. `false`: the
+ * name carries the separator but is not one well-formed room of an ordinary
+ * name (a bad room id, a room of a room); it is always refused.
+ */
+export function splitMeetingRoom(name: string): { base: string; roomId: string } | null | false {
+  if (typeof name !== 'string' || !name.includes(BREAKOUT_LOBBY_SEPARATOR)) return null;
+  const parsed = parseBreakoutChannel(name);
+  return parsed && !parsed.base.includes(BREAKOUT_LOBBY_SEPARATOR) ? parsed : false;
+}
+/** A router channel (service prefix and all) without its room suffix. */
+const withoutRoom = (channel: string, roomId: string): string => channel.slice(0, -(BREAKOUT_LOBBY_SEPARATOR.length + roomId.length));
+
+/** The `meeting()` service the room rules ask, and the gateway's stored-call lobby read. */
+export interface MeetingRooms {
+  service: Pick<MeetingService, 'admitsBreakoutLobby' | 'admitsBreakoutLobbySync'>;
+  /** The active call's lobby, or null once it ended. */
+  lobbyOfCall(callId: string): Promise<string | null>;
+}
+let meetingRooms: MeetingRooms | null = null;
+/** lib/realtime-gateway.ts binds its meeting service here (null on dispose). Unbound, every room name is refused. */
+export function bindMeetingRooms(rooms: MeetingRooms | null): void { meetingRooms = rooms; }
+/** The meeting's last-known rooms in this process, for the synchronous guards and the room chat's fan-out. */
+const roomSeatSync = (userId: string, lobby: string): boolean => {
+  try { return !!userId && meetingRooms?.service.admitsBreakoutLobbySync(userId, lobby) === true; } catch { return false; }
+};
+
+/** `admitMeetingRoom` from the meeting's in-process mirror, for synchronous and per-frame callers (the room chat's membership). */
+export function admitMeetingRoomSync(userId: string, lobby: string): boolean {
+  return !!splitMeetingRoom(lobby) && roomSeatSync(userId, lobby);
+}
+
+/**
+ * May `userId` sit in breakout lobby `lobby` NOW, read from the meeting store:
+ * that room's members and the meeting's organizers, or anyone while rooms are
+ * self-select; never a closed room, an unknown room or a meeting with no rooms
+ * open. Only the room half: callers ask the call's own lobby separately.
+ */
+export async function admitMeetingRoom(userId: string, lobby: string): Promise<boolean> {
+  if (!userId || !splitMeetingRoom(lobby) || !meetingRooms) return false;
+  try { return await meetingRooms.service.admitsBreakoutLobby(userId, lobby) === true; } catch { return false; }
+}
+
 /** `social:team:<team slug>:<channel>` — a team's chat channel (design §4.3). */
 const TEAM_CHANNEL = /^social:team:([^:]+):[^:]+$/;
 const str = (value: unknown): string => typeof value === 'string' ? value : '';
@@ -87,6 +141,9 @@ const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
  * claim lists (E5); `<p>:dm:<a>:<b>…` admits only its ids (`dmLobbyAdmits`);
  * then, in order:
  *   - host namespaces (decided before the table; never call lobbies):
+ *     any name carrying `~breakout~` (only a meeting room's huddle chat passes,
+ *     by the huddle's own shape; `lobbyGuard` judges room lobbies itself),
+ *     `meeting:<lobby>` (subscribe only, on a name that is a call lobby),
  *     `orgiq:huddle:<callId>` chat (exact name or `reactions:`, a token holding
  *     orgiq or assessment — the SEAT is asked by the engine every time),
  *     `<tenant>:flowrun:<runId>` (a plain subscribe in a held partition),
@@ -99,17 +156,28 @@ const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
  *     (default deny, 2026-10-05);
  *   - any other `social:` name passes the shape (live Social actions decide it).
  */
+/** A huddle's chat (exact name or `reactions:`) for a token holding orgiq or assessment; the SEAT is the engine's question. */
+function huddleChatShape(auth: LibraryGuardAuth, channel: string, bare: string): boolean {
+  const org = str(auth.org); const tenants = list(auth.tenants);
+  return !!huddleCallId(bare) && (channel === bare || channel === `reactions:${bare}`) && !!str(auth.userId)
+    && ['orgiq', 'assessment'].some(tenant => org === tenant || tenants.includes(tenant));
+}
+
 const GATEWAY_FAMILIES = defineChannelFamilies<ChannelAuthority, GatewayFamily>(GATEWAY_FAMILY_TABLE, {
   partitions: TENANT_PARTITIONS,
   // Matchers are arrows, not the imported functions themselves: call-chat.ts
   // reaches this module through call-access.ts, so its exports may not be
   // initialised yet while this table is built.
   namespaces: [
-    { id: 'call-chat', match: name => inCallChatNamespace(name), guard: (auth, channel, _kind, bare) => {
-      const org = str(auth.org); const tenants = list(auth.tenants);
-      return !!huddleCallId(bare) && (channel === bare || channel === `reactions:${bare}`) && !!str(auth.userId)
-        && ['orgiq', 'assessment'].some(tenant => org === tenant || tenants.includes(tenant));
+    // First, so no family, partition or DM rule ever reads a room's name.
+    { id: 'meeting-room', match: name => name.includes(BREAKOUT_LOBBY_SEPARATOR), guard: (auth, channel, _kind, bare) => {
+      const room = splitMeetingRoom(bare);
+      return !!room && inCallChatNamespace(room.base) && huddleChatShape(auth, withoutRoom(channel, room.roomId), room.base);
     } },
+    // The meeting service publishes on its channel; clients only listen.
+    { id: 'meeting', match: name => name.startsWith(MEETING_CHANNEL_PREFIX), guard: (auth, channel, kind, bare): boolean =>
+      kind === 'subscribe' && channel === bare && GATEWAY_FAMILIES.lobbyGuard(auth, bare.slice(MEETING_CHANNEL_PREFIX.length)) },
+    { id: 'call-chat', match: name => inCallChatNamespace(name), guard: (auth, channel, _kind, bare) => huddleChatShape(auth, channel, bare) },
     { id: 'flow-run', match: name => inFlowRunNamespace(name), guard: (auth, channel, kind, bare) => {
       const ref = parseFlowRunChannel(bare);
       return !!ref && kind === 'subscribe' && channel === bare && !!str(auth.userId)
@@ -133,9 +201,18 @@ const GATEWAY_FAMILIES = defineChannelFamilies<ChannelAuthority, GatewayFamily>(
 
 // ── The synchronous shape guards ─────────────────────────────────────────────
 
-/** May this connection use `lobbyName` as a call lobby (the shape, before any I/O)? */
+/**
+ * May this connection use `lobbyName` as a call lobby (the shape, before any
+ * I/O)? A meeting room's lobby: its call's lobby by the same shape, then the
+ * room's members as this process last saw the meeting (`admitCall` asks the
+ * store). The room's participant is the socket's own user, never its record owner.
+ */
 export function lobbyGuard(auth: GuardAuth, lobbyName: string): boolean {
-  return GATEWAY_FAMILIES.lobbyGuard(asRecordOwner(auth) as LibraryGuardAuth, lobbyName);
+  const room = splitMeetingRoom(lobbyName);
+  if (room === false) return false;
+  const owner = asRecordOwner(auth) as LibraryGuardAuth;
+  if (!room) return GATEWAY_FAMILIES.lobbyGuard(owner, lobbyName);
+  return GATEWAY_FAMILIES.lobbyGuard(owner, room.base) && roomSeatSync(str(auth.userId), lobbyName);
 }
 
 /** May this connection subscribe to / publish on `channel` (the shape, before any I/O)? */
@@ -190,6 +267,10 @@ const AUTHORITY = createChannelAuthority<LiveGatewayPrincipal, ChannelAuthority,
     ? initiativeDeckVisible(name, principal.session)
     : use === 'channel' ? pageResourceVisible(kind as PageResourceKind, name, principal.session.sub) : pageResourceVisible(kind as PageResourceKind, name),
   namespaces: [
+    // A meeting room's chat: the room's members, then a current seat of the call's huddle.
+    { id: 'meeting-room', match: base => base.includes(BREAKOUT_LOBBY_SEPARATOR), channel: args => admitRoomChat(args, args.base) },
+    // A meeting's channel: exactly when its lobby admits a call join.
+    { id: 'meeting', match: base => base.startsWith(MEETING_CHANNEL_PREFIX), channel: args => admitMeetingChannel(args, args.base) },
     // A flow run's private channel has exactly one reader: the run's requester (the durable row, now).
     { id: 'flow-run', match: base => inFlowRunNamespace(base), channel: args => authorizeFlowRunChannel(args, args.base, engineGuards) },
     // A Social deck's presence channel: owner or a current member of the source conversation.
@@ -206,6 +287,28 @@ const AUTHORITY = createChannelAuthority<LiveGatewayPrincipal, ChannelAuthority,
   channelSteps: [socialChannelStep],
   callSteps: [workGraphLobbyStep, socialCallStep],
 });
+
+/** `meeting:<lobby>`: the shape (a subscribe, on a call lobby), then the call join decision on that lobby, asked now. */
+async function admitMeetingChannel(args: LiveChannelAuthorization, base: string): Promise<boolean> {
+  if (!channelGuard(args.ctx as GuardAuth | null, args.channel, args.kind)) return false;
+  return admitCall(args.ctx, 'join', { lobbyName: base.slice(MEETING_CHANNEL_PREFIX.length) }, callGuards(noStoredCall));
+}
+
+/**
+ * `orgiq:huddle:<callId>~breakout~<room>`: the huddle chat's shape, the room's members (the meeting's
+ * mirror: this runs on every fan-out), on the stored call's lobby, then the
+ * huddle's own rule on the call's chat name, last so its reload follows every
+ * read above. A call that ended has no lobby and no room chat.
+ */
+async function admitRoomChat(args: LiveChannelAuthorization, base: string): Promise<boolean> {
+  const room = splitMeetingRoom(base);
+  const callId = room ? huddleCallId(room.base) : null;
+  if (!room || !callId || !meetingRooms || !channelGuard(args.ctx as GuardAuth | null, args.channel, args.kind)) return false;
+  const lobby = await meetingRooms.lobbyOfCall(callId);
+  if (!lobby || splitMeetingRoom(lobby) !== null) return false;
+  if (!roomSeatSync(str(args.ctx?.['userId']), breakoutLobbyName(lobby, room.roomId))) return false;
+  return authorizeHuddleChannel({ ...args, channel: withoutRoom(args.channel, room.roomId) }, room.base, engineGuards);
+}
 
 // ── The guard pairs the live-principal primitives take ───────────────────────
 
@@ -268,8 +371,39 @@ export function admitCursor(ctx: Context, channel: string, kind: ChannelKind, op
  * identity on invite (`verifyCaller`), the lobby's shape, the family's REST
  * read, Social StartCall + membership, the page resource, a second reload.
  */
-export function admitCall(ctx: Context, action: string, payload: Record<string, unknown>, guards: LiveCallGuards): Promise<boolean> {
-  return AUTHORITY.authorizeCall(ctx, action, payload, { getLobby: guards.getLobby });
+export async function admitCall(ctx: Context, action: string, payload: Record<string, unknown>, guards: LiveCallGuards): Promise<boolean> {
+  const flat = normalizeCallPayload(payload);
+  const lobby = typeof flat['lobbyName'] === 'string' ? flat['lobbyName'] : '';
+  const room = splitMeetingRoom(lobby);
+  if (room === null) return AUTHORITY.authorizeCall(ctx, action, payload, { getLobby: guards.getLobby });
+  // A meeting room's media (decision 2). Only a `join`: the room is the same
+  // call (decision 1), so no frame creates, rings or answers a call in it. The
+  // room admits this user now, then the call's own lobby admits the join by
+  // today's rules; the engine's reload is the last read.
+  if (room === false || action !== 'join' || !await admitMeetingRoom(str(ctx?.['userId']), lobby)) return false;
+  return AUTHORITY.authorizeCall(ctx, action, { ...flat, lobbyName: room.base }, { getLobby: guards.getLobby });
+}
+
+/**
+ * Who organizes a meeting (decision 3): opens rooms, sets timers, announces,
+ * lowers others' hands. The call's caller (`call`, the stored call in the
+ * meeting's lobby, when the asker sits in it); any holder of ManageChannels in
+ * the lobby's tenant; on an initiative call, its stewards (the sprint routes'
+ * rule, lib/initiative-scope.ts). Everyone else is a participant. The
+ * principal is reloaded here; any failure is "participant".
+ */
+export async function meetingOrganizer(ctx: Context, meetingId: string, call: { callerId: string; lobbyName: string } | null): Promise<boolean> {
+  try {
+    if (splitMeetingRoom(meetingId) !== null) return false;
+    const { session } = await getLivePrincipal(ctx);
+    if (call && call.lobbyName === meetingId && call.callerId === session.sub) return true;
+    const tenant = meetingId.slice(0, Math.max(0, meetingId.indexOf(':')));
+    for (const role of session.grants[tenant as keyof typeof session.grants] ?? []) {
+      if (await isAllowed({ sub: session.sub, tenant, role }, 'ManageChannels')) return true;
+    }
+    const initiative = /^orgiq:initiative:(\S+)$/.exec(meetingId)?.[1];
+    return !!initiative && session.tenant === 'orgiq' && await stewardsInitiative(session, initiative);
+  } catch { return false; }
 }
 
 /** A call frame about to be DELIVERED to this socket: the recipient's own fresh authority. */
@@ -379,11 +513,16 @@ export function holdsFamilyAuthority(session: Session, channel: string, kind: Ch
  *   - `social:deck:<id>` presence: the deck row's owner or the CURRENT members
  *     of the conversation the deck was built from;
  *   - `<tenant>:flowrun:<runId>`: the run row's requester plus, for Social and
- *     summarize runs, the run's conversation membership.
- * Both are low-rate (one presence channel per open deck, a subscribe per run),
- * so they are asked fresh every time, exactly as before the cache.
+ *     summarize runs, the run's conversation membership;
+ *   - `meeting:<lobby>`: the call admission of ANOTHER name (the lobby);
+ *   - a meeting room's chat: the room's members, which move on every assign.
+ * The first three are low-rate (a presence channel per open deck, a subscribe
+ * per run, a meeting's few frames). A room's chat is not, but no invalidation
+ * is keyed by a room's members, so its fan-out asks the meeting's in-process
+ * mirror instead of a cache.
  */
 export function verdictCacheable(channel: string): boolean {
   const base = baseChannel(channel);
-  return !inSocialDeckNamespace(base) && !inFlowRunNamespace(base);
+  return !inSocialDeckNamespace(base) && !inFlowRunNamespace(base)
+    && !base.includes(BREAKOUT_LOBBY_SEPARATOR) && !base.startsWith(MEETING_CHANNEL_PREFIX);
 }
