@@ -6,7 +6,8 @@
 #   ./scripts/validate-user-search.sh            # everything; the journey logs are judged as last walked
 #   ./scripts/validate-user-search.sh --quick    # no browser, no journey logs: catalog, freshness, floors, guard, parity
 #   ./scripts/validate-user-search.sh --walk     # walk the search journey maps first (needs Vite :5183 + middleware :3001)
-#   ./scripts/validate-user-search.sh --probe    # re-run the probe first, as clones (needs the stack; ~1 h; one probe at a time)
+#   ./scripts/validate-user-search.sh --probe    # re-run the probe first, as clones, one worker per walker (USER_SEARCH_WORKERS, default 4;
+#                                                USER_SEARCH_ONLY=access re-probes named tenants; needs the stack; one probe run at a time)
 set -u
 cd "$(dirname "$0")/.."
 QUICK=0; WALK=0; PROBE=0
@@ -35,7 +36,7 @@ relay < <(cd middleware && npx tsx ../scripts/user-search-catalog.mts check 2>/d
 # ── 2 probe freshness ───────────────────────────────────────────────────────
 section "2 probe freshness"
 if [ "$PROBE" = 1 ]; then
-  (cd portal && npx playwright test e2e/user-search-probe.spec.ts --workers=1 --reporter=line) >/dev/null 2>&1 || note "the probe run reported failures (judged from the results below)"
+  (cd portal && npx playwright test e2e/user-search-probe.spec.ts --workers=${USER_SEARCH_WORKERS:-4} --reporter=line) >/dev/null 2>&1 || note "the probe run reported failures (judged from the results below)"
 fi
 now=$(node scripts/user-search-freshness.mjs)
 was=$(node -e "const r=require('./$RESULTS');process.stdout.write(String(r.watchedDigest??''))")

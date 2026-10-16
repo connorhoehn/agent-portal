@@ -103,6 +103,11 @@ Mechanical, like the other validators; `--quick` skips the browser.
    older than the last change under `middleware/src/providers/search*`,
    `middleware/src/lib/local-answers/`, `portal/src/pages/search/`,
    `portal/src/components/collections/` or `portal/src/components/shell/portalCommands.ts`.
+   The probe shards by walker (`--workers=4`, one clone and one mock scope per `tenant:role`)
+   and saves through `scripts/user-search-results.mjs`, which records each persona's digest;
+   the file's top-level digest is the one every catalog persona agrees on, so
+   `USER_SEARCH_ONLY=access` re-probes one tenant without ever making a stale file read fresh
+   (it stays stale until every tenant is re-probed on the changed tree).
 3. **Pass-rate floors per tenant** (`node scripts/user-search-report.mjs --check
    orgiq=…,assessment=…,…`): floors live in `scripts/user-search-floors.tsv`, one
    row per tenant with a due date, ratchet up only (the burn-down pattern of
@@ -137,8 +142,8 @@ Mechanical, like the other validators; `--quick` skips the browser.
 | L10 Judge + maps | Sonnet | `validate-user-search.sh`, floors TSV, journey maps per intent family | Mechanical once the outline is agreed |
 
 Serialize: L1 before L4–L6; L2 before L6; L7 needs one ui-components release
-(batch it; see the release-cadence note). Live probes run one process per
-tenant group at most, as clones only.
+(batch it; see the release-cadence note). Live probes run one worker per
+`tenant:role` group at most, as clones only.
 
 ## Open questions for review
 

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -8,6 +8,8 @@ import { openAsClone } from './realSession';
 import { CATALOG, serializeIntents, type Intent, type Surface } from './user-search-catalog';
 // @ts-ignore a plain .mjs module shared with the judge (no types)
 import { watchedDigest } from '../../scripts/user-search-freshness.mjs';
+// @ts-ignore a plain .mjs module shared with the judge (no types)
+import { mergeGroups } from '../../scripts/user-search-results.mjs';
 
 // The user-search probe (docs/user-search-intents.md, docs/user-search-goal.md).
 //
@@ -24,13 +26,19 @@ import { watchedDigest } from '../../scripts/user-search-freshness.mjs';
 // the read agents' invoke endpoint (an ask, not a write). Sign-in and the clone
 // itself go through realSession's API requests, which page routes do not see.
 //
-//   cd portal && npx playwright test e2e/user-search-probe.spec.ts --workers=1 --reporter=line
+//   cd portal && npx playwright test e2e/user-search-probe.spec.ts --workers=4 --reporter=line
 //   USER_SEARCH_ONLY=access (tenant), access:requester (persona) or a comma list narrows the run;
 //   results merge into docs/user-search-probe-results.json by persona.
 //
+// Parallel by walker: each `tenant:role` group is its own test, its own clone and its own mock scope, so
+// workers share nothing but the BFF. Every group saves through scripts/user-search-results.mjs, which holds
+// a lock and replaces only the groups it names; the file's top-level digest is the one the whole catalog
+// agrees on, so a partial re-probe never makes stale results look fresh.
+//
 // Hardened for the judge (scripts/validate-user-search.sh):
 //   - clones only: a session whose subject is not `<persona>-clone-…` aborts the group (never a seed persona);
-//   - one probe at a time: a pid lock in the OS temp dir refuses a second concurrent run;
+//   - one probe RUN at a time: a lock in the OS temp dir names the runner's pid (its workers share it) and
+//     refuses a second concurrent run;
 //   - the results carry `watchedDigest` (scripts/user-search-freshness.mjs — every search/answer/palette/composer
 //     source file and the catalog) and the catalog's intents with their best surface, so the judge can tell
 //     results of this tree from stale ones and grade "wrong on the best surface";
@@ -59,18 +67,20 @@ for (const intent of CATALOG) {
   groups.set(key, [...(groups.get(key) ?? []), intent]);
 }
 
-// One probe at a time (two would race the shared mock and the results file).
+// One probe RUN at a time (two would race the shared mock): the lock names the Playwright runner, which is the
+// parent of every worker, so the workers of one run share it and a second run is refused.
 const LOCK = join(tmpdir(), 'user-search-probe.lock');
 function takeLock() {
+  const owner = process.ppid;
   if (existsSync(LOCK)) {
     const pid = Number(readFileSync(LOCK, 'utf8'));
-    let alive = false; try { process.kill(pid, 0); alive = pid !== process.pid; } catch { /* stale */ }
+    let alive = false; try { process.kill(pid, 0); alive = pid !== owner && pid !== process.pid; } catch { /* stale */ }
     if (alive) throw new Error(`another user-search probe is running (pid ${pid}); one probe run at a time`);
   }
-  writeFileSync(LOCK, String(process.pid));
+  writeFileSync(LOCK, String(owner));
 }
 test.beforeAll(() => takeLock());
-test.afterAll(() => { try { if (readFileSync(LOCK, 'utf8') === String(process.pid)) rmSync(LOCK); } catch { /* gone */ } });
+// The lock is left for the next run to find stale (its runner pid is gone): a worker that finishes early must not free it for a second run.
 
 const run = {
   generatedAt: new Date().toISOString(),
@@ -81,21 +91,14 @@ const run = {
   probes: [] as ProbeRow[],
 };
 
+const CATALOG_KEYS = [...new Set(CATALOG.map((i) => `${i.tenant}:${i.role}`))];
+const INTENTS = serializeIntents(CATALOG);
 function save() {
-  const prior = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : null;
-  const ran = new Set(Object.keys(run.personas));
-  const keep = (prior?.probes ?? []).filter((p: ProbeRow) => !ran.has(`${p.tenant}:${p.role}`));
-  const intents = serializeIntents(CATALOG);
-  const thisRun = { generatedAt: run.generatedAt, gitHead: run.gitHead, watchedDigest: run.watchedDigest, personas: Object.keys(run.personas) };
-  const runs = [...(prior?.runs ?? []).filter((r: { generatedAt: string }) => r.generatedAt !== run.generatedAt), thisRun];
-  // A partial run (USER_SEARCH_ONLY) keeps the other personas' probes, which were measured on an older tree:
-  // the digest is this run's only when every persona in the catalog was re-probed now.
-  const all = new Set(CATALOG.map((i) => `${i.tenant}:${i.role}`));
-  const complete = [...all].every((k) => ran.has(k));
-  writeFileSync(OUT, JSON.stringify({
-    ...run, watchedDigest: complete ? run.watchedDigest : (prior?.watchedDigest ?? null), runs,
-    personas: { ...(prior?.personas ?? {}), ...run.personas }, intents, probes: [...keep, ...run.probes],
-  }, null, 1) + '\n');
+  const groups: Record<string, { persona: unknown; probes: ProbeRow[] }> = {};
+  for (const key of Object.keys(run.personas)) {
+    groups[key] = { persona: run.personas[key], probes: run.probes.filter((p) => `${p.tenant}:${p.role}` === key) };
+  }
+  mergeGroups(OUT, { generatedAt: run.generatedAt, gitHead: run.gitHead, watchedDigest: run.watchedDigest, baseURL: run.baseURL, pid: process.pid }, groups, CATALOG_KEYS, INTENTS);
 }
 
 const clip = (s: string, n = 600) => (s.length > n ? `${s.slice(0, n)}…` : s);
@@ -389,6 +392,7 @@ const INFRA = /no command composer|no ".*" box|no \/api\/search response|palette
 
 // ── the run ──────────────────────────────────────────────────────────────────
 test.use({ actionTimeout: 15_000, navigationTimeout: 30_000 });
+test.describe.configure({ mode: 'parallel' });
 test.afterAll(() => save());
 
 for (const [key, intents] of groups) {
