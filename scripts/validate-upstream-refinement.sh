@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The judge for docs/upstream-refinement-goal.md — the realtime chain under
 # this app (distributed-core → service-runtime/event-catalog/message-queue →
-# realtime-modules → platform-api/realtime-examples → aws-agentcore).
+# realtime-modules → platform-api/realtime-examples/live-video-streaming → aws-agentcore).
 # Exits 0 only when every check passes; prints every failing line.
 #
 #   ./scripts/validate-upstream-refinement.sh --quick   # static checks only
@@ -12,6 +12,7 @@ ROOT=$(pwd)
 P=${UPSTREAM_PROJECTS:-$HOME/Projects}
 DC=$P/distributed-core RM=$P/realtime-modules RX=$P/realtime-examples
 MQ=$P/message-queue SR=$P/service-runtime EC=$P/event-catalog PA=$P/platform-api
+LV=$P/live-video-streaming
 
 QUICK=0
 for arg in "$@"; do case "$arg" in --quick) QUICK=1 ;; esac; done
@@ -108,9 +109,16 @@ absent middleware/src/lib/gateway-redis.ts "C3 gateway Redis → createBoundedRe
 absent middleware/src/lib/redis-lite.ts "C1 hand-written Redis client deleted"
 check "grep -qE 'verifyServiceRequest|verifyEnvelope' middleware/src/lib/service-auth.ts" "C4 machine callbacks verify signed envelopes"
 
+section "U5 · the SFU on the chain"
+check "dc_pin_ok '$LV'" "V1 live-video-streaming pins distributed-core ⊇ v0.48.0 at a full sha"
+absent "$LV/src/cluster/RedisLeaseStore.js" "V1 hand-rolled lease store replaced by the fenced lease"
+check "grep -rqE 'FencedLease|fencedLease|createFencedLease' '$LV/src/cluster'" "V1 room ownership uses the library's fenced lease"
+check "ls '$LV'/test/*.test.js 2>/dev/null | xargs grep -liE 'fenced' 2>/dev/null | xargs grep -lE 'kill|crash|failover' 2>/dev/null | xargs grep -lE 'pipe' 2>/dev/null | grep -q ." "V1 multi-node test: owner killed, ownership moves, pipes rebuilt"
+check "lane_logged '$LV' V1 || grep -rq '(lane V1)' '$LV/docs'" "V1 change logged (lane V1)"
+
 if [ "$QUICK" = 0 ]; then
   section "suites (each repo, run alone)"
-  for r in "$DC" "$SR" "$EC" "$MQ" "$RM" "$PA" "$RX"; do
+  for r in "$DC" "$SR" "$EC" "$MQ" "$RM" "$PA" "$RX" "$LV"; do
     n=$(basename "$r")
     check "(cd '$r' && npm test --silent)" "$n tests"
     check "(cd '$r' && (npm run -s typecheck 2>/dev/null || npx tsc --noEmit -p .))" "$n typecheck"
