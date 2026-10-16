@@ -89,7 +89,9 @@ test('the rail: one inset, a search button, one shelf row, Teams and Rooms folde
   test.setTimeout(120_000);
   const vera = await person(browser, 'u-vera');
   const { page } = vera;
-  await page.goto('/iq/communication');
+  // /iq/communication alone opens the user's default conversation (the landing, b5aa9239), a sub-route that shows one
+  // section; the full rail is the home with a view named, here her initiative's group.
+  await page.goto('/iq/communication?group=initiative%3Ap-auth-migration');
   await expect(rail(page)).toBeVisible({ timeout: 20_000 });
   await expect(rail(page).getByTestId('plane-groups-section')).toBeVisible({ timeout: 20_000 });
 
@@ -97,7 +99,9 @@ test('the rail: one inset, a search button, one shelf row, Teams and Rooms folde
   const expanded = async (testId: string) => rail(page).getByTestId(testId).first().getAttribute('aria-expanded');
   expect(await expanded('social-team-tree-heading-toggle')).toBe('false');
   expect(await expanded('rooms-section-header-toggle')).toBe('false');
-  for (const label of ['Active now', 'My initiatives', 'My org teams']) {
+  // Active now is the rail's fixed first heading (not a fold: it draws no toggle); the org-context sections open.
+  await expect(rail(page).getByTestId('rail-section-header').filter({ hasText: /^Active now/i })).toBeVisible();
+  for (const label of ['My initiatives', 'My org teams']) {
     await expect(rail(page).getByRole('button', { name: new RegExp(`^${label}`) })).toHaveAttribute('aria-expanded', 'true');
   }
 
@@ -132,17 +136,23 @@ test('the rail: one inset, a search button, one shelf row, Teams and Rooms folde
   console.log('rail insets (px from the rail edge):', JSON.stringify(measured));
   const values = Object.entries(measured).filter((e): e is [string, number] => e[1] !== null);
   expect(values.length, JSON.stringify(measured)).toBeGreaterThanOrEqual(10);
-  const anchor = measured['heading Active now']!;
+  // Active now draws no caret now (a fixed heading), so the first fold's caret is the inset every other edge must match.
+  const anchor = measured['heading My initiatives']!;
   for (const [what, x] of values) expect(Math.abs(x - anchor), `${what} at ${x}px vs ${anchor}px`).toBeLessThanOrEqual(1);
 
-  // Arrange sections: the order is the reader's, on this device.
+  // Arrange sections: the order is the reader's, on this device. The default is dms-first (Direct messages, Active now,
+  // the org context, Teams, Rooms, Channels), so one step up puts Channels where Rooms was.
+  const HEADS = '[data-testid="rail-section-header"], [data-testid="social-team-tree-heading-toggle"], [data-testid="rooms-section-header-toggle"], [data-testid="conversation-section-toggle"]';
+  const sectionNames = () => rail(page).evaluate((r, sel) => [...r.querySelectorAll(sel)].map((h) => (h.textContent ?? '').replace(/\d+/g, '').trim()).filter((t, i, all) => t && all.indexOf(t) === i), HEADS);
+  const before = await sectionNames();
+  expect(before.indexOf('Direct messages'), `default order ${before}`).toBe(0);
   await rail(page).getByTestId('social-chat-rail-options').click();
   await page.getByTestId('social-chat-rail-arrange').click();
   await rail(page).getByTestId('social-chat-rail-arrange-channels-up').click();
   await page.getByTestId('social-chat-rail-options').click();
   await page.getByTestId('social-chat-rail-arrange').click();
-  const order = await rail(page).evaluate((r) => ['Direct messages', 'Channels'].map((label) => [...r.querySelectorAll('[data-testid="conversation-section-toggle"]')].findIndex((b) => b.textContent?.includes(label))));
-  expect(order[1], 'Channels moved above Direct messages').toBeLessThan(order[0]!);
+  const after = await sectionNames();
+  expect(after.indexOf('Channels'), `Channels moved up one place: ${before} -> ${after}`).toBe(before.indexOf('Channels') - 1);
   await page.getByTestId('social-chat-rail-options').click();
   await page.getByTestId('social-chat-rail-reset-layout').click();
 

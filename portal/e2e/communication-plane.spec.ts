@@ -89,7 +89,8 @@ test('an org-leader finds Communication in rail, trail and palette — the full 
   await expect(nav.getByRole('link', { name: /^Communication/ })).toBeVisible();
   await expect(nav.getByRole('link', { name: /^Calls$/ })).toHaveCount(0);
   const crumbs = page.getByTestId('section-crumbs');
-  await expect(crumbs).toContainText('Work'); await expect(crumbs).toContainText('Communication');
+  // The trail is the section's (Engage › Communication, b02f3d85); the tenant is in the header switcher, not the trail.
+  await expect(crumbs).toContainText('Engage'); await expect(crumbs).toContainText('Communication');
   // …/calls is a shelf destination: Active now and no section (one section per route).
   await oneSectionRail(page, null);
   // Calls: this tenant's page huddles (the former Calls page), then the Social call log.
@@ -114,10 +115,11 @@ test('an org-leader finds Communication in rail, trail and palette — the full 
 
   // The plane's home keeps the full rail: the org context (docs/communication-plane-goal.md §1.3–1.4), her
   // initiatives and her org teams between Active now and Teams, then Rooms, Direct messages, Channels.
-  await page.goto('/iq/communication');
+  // The bare path opens her default conversation (the landing, b5aa9239); the home with a view named keeps the full rail.
+  await page.goto('/iq/communication?group=initiative%3Ap-auth-migration');
   await fullRail(page, ['My initiatives', 'My org teams', 'Direct messages', 'Channels']);
   const sectionOrder = await page.getByTestId('social-chat-rail').evaluate((r) => ['Active now', 'My initiatives', 'My org teams', 'Teams']
-    .map((label) => [...r.querySelectorAll('button[aria-expanded]')].findIndex((b) => (b.textContent ?? '').trim().startsWith(label))));
+    .map((label) => [...r.querySelectorAll('[data-testid="rail-section-header"], button[aria-expanded]')].findIndex((b) => (b.textContent ?? '').trim().startsWith(label))));
   expect(sectionOrder.every((i, n) => i >= 0 && (n === 0 || i > sectionOrder[n - 1]!)), `rail order ${sectionOrder}`).toBe(true);
   await expect(page.getByTestId('plane-groups').getByTestId('conversation-row').filter({ hasText: 'Auth Migration' })).toContainText('#auth-migration', { timeout: 15_000 });
   // Each sub-route: its own section only.
