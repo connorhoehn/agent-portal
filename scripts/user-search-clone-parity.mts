@@ -16,6 +16,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { CATALOG } = await import(resolve(ROOT, 'portal/e2e/user-search-catalog.ts'));
 const { searchRecords } = await import(resolve(ROOT, 'middleware/src/providers/search.ts'));
 const { answerFromIndex } = await import(resolve(ROOT, 'middleware/src/lib/search-index/answers.ts'));
+const { searchTenant } = await import(resolve(ROOT, 'middleware/src/lib/search-index/tenant-query.ts'));
 const { cloneIdentity, deleteIdentityClone } = await import(resolve(ROOT, 'middleware/src/providers/identity.ts'));
 
 const MINE = /\b(?:my|me|i|i'm|mine)\b/i;
@@ -24,14 +25,17 @@ let checked = 0;
 for (const intent of CATALOG) {
   const mine = intent.phrasings.filter((p: string) => MINE.test(p));
   if (!mine.length) continue;
-  if (intent.tenant !== 'orgiq') { out.push(`note\t${intent.id} (${intent.tenant}): "mine"-scoped; its tenant has no index yet (S2) — parity is judged when it does`); continue; }
   const clone = cloneIdentity(intent.persona, { label: 'user-search clone parity' });
   try {
     for (const q of mine) {
       const as = (sub: string) => ({ sub, tenant: intent.tenant, role: intent.role });
-      const [p, c] = await Promise.all([searchRecords(as(intent.persona), { q, limit: 10 }), searchRecords(as(clone.id), { q, limit: 10 })]);
+      // The Work tenant reads /api/search; the other four read their own tenant index (docs/user-search-goal.md S2).
+      const find = (sub: string) => (intent.tenant === 'orgiq' ? searchRecords(as(sub), { q, limit: 10 }) : searchTenant(intent.tenant, as(sub), { q, limit: 10 }));
+      const [p, c] = await Promise.all([find(intent.persona), find(clone.id)]);
       const keys = (r: { results: Array<{ type: string; id: string }> }) => r.results.map((x) => `${x.type}:${x.id}`).join(',');
-      const [pa, ca] = await Promise.all([answerFromIndex({ question: q, session: as(intent.persona) }), answerFromIndex({ question: q, session: as(clone.id) })]);
+      const [pa, ca] = intent.tenant === 'orgiq'
+        ? await Promise.all([answerFromIndex({ question: q, session: as(intent.persona) }), answerFromIndex({ question: q, session: as(clone.id) })])
+        : [null, null];
       checked++;
       if (keys(p) !== keys(c)) out.push(`fail\t${intent.id} "${q}": search differs for ${intent.persona} and its clone`);
       else if ((pa?.text ?? null) !== (ca?.text ?? null)) out.push(`fail\t${intent.id} "${q}": the answer differs for ${intent.persona} and its clone`);
