@@ -4,8 +4,8 @@ user: u-kofi (Kofi Mensah, pipelines operator)
 url: /pipelines/runs; /pipelines/approvals; /pipelines/definitions; /pipelines/bots
 map: docs/journeys/maps/demo/pipelines/story.ts
 pages: portal/src/pages/pipelines
-audited: 2026-10-15 22:32–22:32 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-73110faf), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-kofi-clone-73110faf, tenant pipelines, role operator, grants {"pipelines":["operator"]}
+audited: 2026-10-15 22:51–22:51 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-9d882f0e), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-kofi-clone-9d882f0e, tenant pipelines, role operator, grants {"pipelines":["operator"]}
 screenshot: story.jpg
 verdict: pass
 console errors: 0

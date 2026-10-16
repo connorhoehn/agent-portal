@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/projects/p-auth-migration; /iq/decisions/d-cognito-cutover; /iq/projects/p-auth-migration?item=wi-auth-e2-s2; /iq/designs/des-auth-rotation; /iq/communication/channels/auth-migration?view=chat; /iq/runs
 map: docs/journeys/maps/demo/orgiq/story.ts
 pages: portal/src/pages/project-detail, portal/src/pages/decisions, portal/src/pages/designs, portal/src/pages/runs
-audited: 2026-10-15 22:32–22:32 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-0792a2e8), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-vera-clone-0792a2e8, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-15 22:50–22:51 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-aa1609b3), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-vera-clone-aa1609b3, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: story.jpg
 verdict: pass
 console errors: 0

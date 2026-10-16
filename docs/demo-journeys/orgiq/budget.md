@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /admin/budgets; /iq/projects/p-auth-migration; /iq/projects?lens=sprints
 map: docs/journeys/maps/demo/orgiq/budget.ts
 pages: portal/src/pages/admin/budgets, portal/src/pages/project-detail
-audited: 2026-10-15 22:32–22:32 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-ac73d52f), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-mia-clone-ac73d52f, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-15 22:50–22:50 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-8b8fa95d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-mia-clone-8b8fa95d, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: budget.jpg
 verdict: pass
 console errors: 0

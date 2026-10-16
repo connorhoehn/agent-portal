@@ -4,8 +4,8 @@ user: u-rhea (Rhea Castellanos)
 url: /access/requests; /access/requests/req-0001
 map: docs/journeys/maps/demo/access/requester.ts
 pages: portal/src/pages/access
-audited: 2026-10-15 22:31–22:31 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rhea-clone-0a61d4fd), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-rhea-clone-0a61d4fd, tenant access, role requester, grants {"access":["requester"]}
+audited: 2026-10-15 22:50–22:50 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rhea-clone-d2b29fdb), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-rhea-clone-d2b29fdb, tenant access, role requester, grants {"access":["requester"]}
 screenshot: requester.jpg
 verdict: pass
 console errors: 0

@@ -4,8 +4,8 @@ user: u-jonas (Jonas Lindqvist, lead assessor)
 url: /assessment/teams; /assessment/teams/TEAM-001; /assessment/feedback; /assessment/runs; /assessment/reports
 map: docs/journeys/maps/demo/assessment/story.ts
 pages: portal/src/pages/assessment
-audited: 2026-10-15 22:31–22:32 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-jonas-clone-2f981166), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-jonas-clone-2f981166, tenant assessment, role lead-assessor, grants {"assessment":["lead-assessor","assessor"],"social":["participant"]}
+audited: 2026-10-15 22:50–22:50 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-jonas-clone-0e329fc9), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-jonas-clone-0e329fc9, tenant assessment, role lead-assessor, grants {"assessment":["lead-assessor","assessor"],"social":["participant"]}
 screenshot: story.jpg
 verdict: pass
 console errors: 0

@@ -4,8 +4,8 @@ user: u-omar (Omar Haddad, Rhea’s manager)
 url: /access/approvals; /access/requests/req-0001
 map: docs/journeys/maps/demo/access/approver.ts
 pages: portal/src/pages/access
-audited: 2026-10-15 22:31–22:31 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-omar-clone-2056451d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-omar-clone-2056451d, tenant access, role approver, grants {"access":["approver"]}
+audited: 2026-10-15 22:50–22:50 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-omar-clone-476d0674), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-omar-clone-476d0674, tenant access, role approver, grants {"access":["approver"]}
 screenshot: approver.jpg
 verdict: pass
 console errors: 0

@@ -4,8 +4,8 @@ user: u-priya (Priya Venkataraman)
 url: /access/reviews/rev-0001; /access/policies; /access/audit
 map: docs/journeys/maps/demo/access/admin.ts
 pages: portal/src/pages/access
-audited: 2026-10-15 22:31–22:31 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-priya-clone-81a19a2a), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
-session: /api/session/me sub u-priya-clone-81a19a2a, tenant access, role access-admin, grants {"access":["access-admin"]}
+audited: 2026-10-15 22:50–22:50 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-priya-clone-a21c9e58), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.457.1
+session: /api/session/me sub u-priya-clone-a21c9e58, tenant access, role access-admin, grants {"access":["access-admin"]}
 screenshot: admin.jpg
 verdict: pass
 console errors: 0
