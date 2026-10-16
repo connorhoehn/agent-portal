@@ -373,7 +373,7 @@ function UserRecord({ user, isSelf, tenants, rolesForTenant, canManage, busy, er
       <DetailHeader
         title={user.displayName}
         badge={isSelf ? <Chip size="xs">you</Chip> : undefined}
-        description={user.id}
+        description={user.email}
         aside={canSignInAs ? (
           <Inline justify="end">
             {/* Become this user — a rare administrative act, hidden when a

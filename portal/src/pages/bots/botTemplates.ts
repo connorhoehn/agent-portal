@@ -62,7 +62,7 @@ export const BOT_STARTERS: BotStarter[] = [
   {
     id: 'debt-hunter',
     label: 'Tech-debt hunter',
-    blurb: 'Dead code, unused deps, TODO rot — small reviewable PRs.',
+    blurb: 'Dead code, unused deps, stale to-do comments — small reviewable PRs.',
     template: 'bug',
     mission: 'Hunt down dead code, unused dependencies and stale TODO comments. Prefer many small, reviewable changes over one sweeping one; one theme per PR. Never touch generated files or public API signatures.',
     trigger: 'cron', cronExpr: '30 6 * * 2,4',

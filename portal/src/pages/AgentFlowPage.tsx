@@ -525,12 +525,13 @@ function FleetList({
         r.tools.length === 0
           ? <T size="xs" className="text-text-tertiary">—</T>
           : (
-            <Inline wrap gap="xs">
-              {r.tools.slice(0, 3).map((t) => (
+            // One line per row (the 44px list step): the first two tools, the rest counted, all of them in the title.
+            <Inline wrap={false} gap="xs" className="min-w-0 overflow-hidden" title={r.tools.join(', ')}>
+              {r.tools.slice(0, 2).map((t) => (
                 <Chip key={t} size="xs" tone="neutral" mono>{t}</Chip>
               ))}
-              {r.tools.length > 3 && (
-                <T size="xs" className="text-text-tertiary">+{r.tools.length - 3}</T>
+              {r.tools.length > 2 && (
+                <T size="xs" className="text-text-tertiary">+{r.tools.length - 2}</T>
               )}
             </Inline>
           )

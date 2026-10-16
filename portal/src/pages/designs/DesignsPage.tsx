@@ -64,7 +64,7 @@ export default function DesignsPage() {
     {
       key: 'title', header: 'Design', sortable: true,
       render: (r) => (
-        <Inline gap="sm" wrap={false} className="min-w-0">
+        <Inline gap="sm" wrap={false} className="min-w-0 max-w-[420px]">
           {/* A real Link, not just the row's onClick: DataTable's row-click is
               a bare <tr onClick> with no keyboard access, so this is the one
               focusable, Enter-activatable control in the row. */}

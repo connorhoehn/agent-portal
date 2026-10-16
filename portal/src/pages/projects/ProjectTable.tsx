@@ -50,7 +50,7 @@ export function ProjectTable({
         <Link
           to={hrefOf(p)}
           onClick={(e) => e.stopPropagation()}
-          className="block truncate text-sm font-semibold text-text-primary no-underline hover:underline"
+          className="block max-w-[360px] truncate text-sm font-semibold text-text-primary no-underline hover:underline"
           title={p.name}
         >
           {p.name}

@@ -131,7 +131,7 @@ function RolesPage() {
       <Inline gap="md" wrap className="mt-4">
         {data.map(role => (
           <Card key={role.id} className="w-[280px]">
-            <CardHeader title={role.label} subtitle={role.id} />
+            <CardHeader title={role.label} {...(role.id.replace(/-/g, ' ').toLowerCase() === role.label.toLowerCase() ? {} : { subtitle: role.id })} />
             <Stack gap="sm" className="mt-2">
               <T as="p" size="xs" tone="secondary" className="m-0">{role.summary}</T>
               <Inline gap="xs" wrap>

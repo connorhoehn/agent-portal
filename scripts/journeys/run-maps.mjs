@@ -167,8 +167,9 @@ async function open(browser, map, { viewport }) {
 }
 test.describe.configure({ mode: 'serial' });
 for (const e of ENTRIES) test(e.title, async ({ browser }) => {
-  test.setTimeout(10 * 60_000);
   const map = (await import(e.file)).default;
+  // 10 minutes, or 20 s a step for a map with many (the work family's refusals maps walk ~70 refused deep links).
+  test.setTimeout(Math.max(10 * 60_000, map.steps.length * 20_000));
   const ctx = { baseURL: ${JSON.stringify(BASE)}, outDir: e.out, open, measure, focusWalk: probes.focusWalk, scoped: LANE_M.scopes && typeof map.scenario === 'object', setScope: LANE_M.scopes ? (context, scope) => rs.withMockScope(context, scope) : undefined };
   let result = await walkMap(browser, map, ctx);
   // A BFF reload (Tilt restarts it on any middleware edit) drops in-memory clones and scopes: re-mint and walk once more.

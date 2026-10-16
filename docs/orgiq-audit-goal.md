@@ -22,10 +22,12 @@ decoration; the first data row sits above the fold.
 
 ## The matrix
 
-`docs/orgiq-journeys/MATRIX.txt` — 23 surfaces × the roles that can see
-each (member, sme, program-owner, org-leader, hr-admin), 79 role×surface
-logs in total, plus one `RAIL.md` per role proving the rail, the palette
-and direct routes hide what the role must not see.
+`docs/work-journeys/MATRIX.txt` — the Work tenant's surfaces × the roles
+that walk each (member, sme, program-owner, org-leader, hr-admin), plus one
+`refusals` log per role proving the rail, the palette and direct routes hide
+what the role must not see. Since 2026-10-15 every cell is the log of an
+executable journey map (docs/work-journeys-goal.md); the hand-walked
+`docs/orgiq-journeys/` logs (stale, naming deleted surfaces) were retired.
 
 ## Definition of done (what the validator checks)
 
@@ -38,14 +40,14 @@ and direct routes hide what the role must not see.
    native `<select>/<input>/<textarea>` and zero raw `<button>` in pages;
    queued composites ≤ 12 raw elements.
    The validator prints the worst files so the next slice is obvious.
-3. **Journey logs**: `docs/orgiq-journeys/<role>/<surface>.md` + screenshot
+3. **Journey logs**: `docs/work-journeys/<role>/<surface>.md` + screenshot
    for every cell of the matrix, protocol fields (`verdict: pass`, `console
    errors: 0`, `layout: pass` with numbers, `keyboard: pass`, `empty-state:
    pass|n/a`, `role-gating:`), `first-row-top: <n>px` ≤ 640 on `L` surfaces,
    a `pages:` line naming the page directories the surface renders from —
-   freshness is per surface: the log must be newer than the newest `.tsx`
-   in those directories.
-4. **Rail isolation per role**: `docs/orgiq-journeys/<role>/RAIL.md` with
+   freshness is the rendered-contract rule (docs/journeys.md): sealed, and
+   no walked route's contract moved since.
+4. **Rail isolation per role**: `docs/work-journeys/<role>/refusals.md` with
    `rail-items:` (verbatim), `hidden-surfaces-direct-route:` (each surface
    the role must not see → redirect|403|not-found), `palette-entries:`
    count, `verdict: pass`.

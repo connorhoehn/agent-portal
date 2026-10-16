@@ -62,7 +62,7 @@ export function KbRegistryTable({
               </Inline>
             </TableTd>
 
-            <TableTd><T as="span" size="xs" tone="secondary">{kb.purpose}</T></TableTd>
+            <TableTd className="max-w-[24rem]"><T as="span" size="xs" tone="secondary" className="block truncate" title={kb.purpose}>{kb.purpose}</T></TableTd>
 
             <TableTd>
               <Inline gap="sm" align="center" wrap={false}>

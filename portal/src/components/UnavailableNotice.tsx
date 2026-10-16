@@ -87,15 +87,17 @@ export function UnavailableNotice({
  * naming the kind of record, then "Initiative not found" + "← Back to
  * Initiatives"). `heading` is that h1, so the page keeps exactly one.
  */
-export function RecordNotFound({ heading, title, body, backLabel, onBack }: {
+export function RecordNotFound({ heading, title, body, backLabel, onBack, size }: {
   heading: string;
+  /** `md` where the page already has its own h1 (a record inside a list page): the heading is then an h2, so the page keeps exactly one h1. */
+  size?: 'lg' | 'md' | 'sm';
   title: string;
   body: string;
   backLabel: string;
   onBack: () => void;
 }) {
   return (
-    <PageSection title={heading} data-testid="record-not-found">
+    <PageSection title={heading} size={size} data-testid="record-not-found">
       <ErrorState
         title={title}
         body={body}

@@ -135,8 +135,12 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
         onCancel={() => setConfirming(false)}
       />
       {(realtime || briefRef !== null) && (
-        <Tabs idPrefix="run" aria-label="Run views" size="sm" value={onActivity ? 'activity' : onBrief ? 'brief' : 'run'} onValueChange={setRunTab}
-          items={[{ id: 'run', label: 'Run' }, ...(realtime ? [{ id: 'activity', label: 'Activity' }] : []), ...(briefRef !== null ? [{ id: 'brief', label: 'Brief' }] : [])]} />
+        // shrink-0: the tab strip clips its own overflow, so as a flex child of this h-full column it was squeezed to 1px
+        // (the tabs existed but could not be seen or clicked) whenever the sections below were taller than the pane.
+        <Stack gap="none" className="shrink-0">
+          <Tabs idPrefix="run" aria-label="Run views" size="sm" value={onActivity ? 'activity' : onBrief ? 'brief' : 'run'} onValueChange={setRunTab}
+            items={[{ id: 'run', label: 'Run' }, ...(realtime ? [{ id: 'activity', label: 'Activity' }] : []), ...(briefRef !== null ? [{ id: 'brief', label: 'Brief' }] : [])]} />
+        </Stack>
       )}
       {onBrief && briefRef !== null && (
         <Stack gap="none" data-testid="pipeline-run-brief"><RunBriefPanel runRef={briefRef} /></Stack>

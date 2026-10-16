@@ -31,6 +31,7 @@ import {
   MetaLine,
   SegmentedControl,
   Stack,
+  VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch.js';
@@ -112,6 +113,8 @@ export function KBDetailPage() {
 
   return (
     <Stack gap="lg" as="section">
+      {/* The page's one h1 (the DetailHeader below is an h2 and the breadcrumb is a nav landmark). */}
+      <VisuallyHidden as="h1">{kb.name}</VisuallyHidden>
       <DetailHeader
         title={kb.name}
         badge={<Chip tone={eff.tone} size="xs" dot="static">{eff.label}</Chip>}

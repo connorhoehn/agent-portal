@@ -66,8 +66,12 @@ q_over=""; for f in $QUEUED_FILES; do [ -f "$f" ] || continue; c=$(raw_in_file "
 [ -z "$q_over" ] && ok "queued composites ≤ 12 raw elements each" || fail "queued composite over cap:$q_over"
 
 # ─────────────────────────────────────────────────────────────────────────────
-section "journey audit (docs/orgiq-journeys, matrix-driven)"
-JDIR=docs/orgiq-journeys
+section "journey audit (docs/work-journeys map logs, matrix-driven)"
+# The hand-walked docs/orgiq-journeys logs were retired on 2026-10-15
+# (docs/work-journeys-goal.md): every cell is now the log a journey map writes
+# (docs/journeys/maps/work/<role>/<surface>.ts → docs/work-journeys/<role>/<surface>.md),
+# judged by the same fields, the same first-row-top rule and the same freshness rule.
+JDIR=docs/work-journeys
 MATRIX=$JDIR/MATRIX.txt
 [ -f "$MATRIX" ] || { fail "$MATRIX missing"; }
 jmissing=0; jbad=0; jtotal=0
@@ -108,9 +112,9 @@ done < "$MATRIX"
 jr_freshness "$JDIR" $walked
 jr_report
 
-section "rail isolation per role"
+section "rail isolation per role (the refusals map log)"
 for r in member sme program-owner org-leader hr-admin; do
-  f="$JDIR/$r/RAIL.md"
+  f="$JDIR/$r/refusals.md"
   if [ ! -f "$f" ]; then fail "$f missing"; continue; fi
   bad=""
   grep -qiE '^rail-items: *\S' "$f" || bad="$bad rail-items"
@@ -119,12 +123,12 @@ for r in member sme program-owner org-leader hr-admin; do
   grep -qiE '^quick-switch: *(denied|lists|create)' "$f" || bad="$bad quick-switch(⌘I must deny with a reason, list, or offer create)"
   grep -qiE '^verdict: *pass' "$f" || bad="$bad verdict"
   grep -qiE 'TODO|unverified|placeholder' "$f" && bad="$bad TODO"
-  [ -z "$bad" ] && ok "$r rail isolation" || fail "$r RAIL.md fails:$bad"
+  [ -z "$bad" ] && ok "$r rail isolation" || fail "$r refusals.md fails:$bad"
 done
 
 section "defects and docs"
 open_defects=0
-for f in $(find "$JDIR" -name 'DEFECTS.md' 2>/dev/null); do
+for f in $(find "$JDIR" docs/orgiq-journeys -name 'DEFECTS.md' 2>/dev/null); do
   n=$(awk '/^## *Open/{o=1;next} /^## /{o=0} o && /^[0-9]+\./{c++} END{print c+0}' "$f"); open_defects=$((open_defects+n))
 done
 [ "$open_defects" = 0 ] && ok "no defect left under an Open heading" || fail "$open_defects defect(s) still listed under '## Open' in DEFECTS.md files"

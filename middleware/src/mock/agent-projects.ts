@@ -21,15 +21,15 @@
 //      relative order they encoded is real and is preserved; the instants come
 //      from the clock.
 //
-// WHAT IS STILL DELIBERATELY THIN. `orgProjectName` is null (the Aurora path
-// LEFT JOINs `projects` for it) and `owners` is empty (it fans out to
-// `project_contributions`). Neither is read by the dispatch preflight, and
-// filling them here would mean a second, drift-prone copy of
-// providers/projects.ts's cast table.
+// WHAT IS STILL DELIBERATELY THIN. `owners` is empty (it fans out to
+// `project_contributions`); filling it here would mean a second, drift-prone
+// copy of providers/projects.ts's cast table. `orgProjectName` is derived from
+// the initiatives fixture (2026-10-15, the work-journeys lane: Codebases must say what each repository delivers).
 
 import { randomUUID } from 'node:crypto';
 import { clock, defineFixture } from './core/index.js';
 import type { AgentProject } from '../providers/agent-projects.js';
+import { findInitiative } from './initiatives.js';
 
 /**
  * The seeded fleet, in the order `schema/seed_program.sql` links them.
@@ -64,7 +64,9 @@ function seedRow(s: (typeof SEEDED)[number]): AgentProject {
     id: s.id,
     repoFullName: s.repoFullName,
     orgProjectId: s.orgProjectId,
-    orgProjectName: null,
+    // Derived from the initiatives fixture at read time (what the Aurora path's LEFT JOIN on `projects` returns), so Codebases
+    // can say what each repository delivers; `owners` stays empty (it fans out to project_contributions).
+    orgProjectName: findInitiative(s.orgProjectId)?.name ?? null,
     owners: [],
     defaultBranch: 'main',
     // Every seeded repository is private (flipped 2026-09-29) and linked

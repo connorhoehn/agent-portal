@@ -94,7 +94,7 @@ export default function DesignThreadPage() {
   }
 
   if (error && isNotFoundError(error)) {
-    return <RecordNotFound heading="Design" title="Design not found" body={`No design review has the id "${id}".`} backLabel="All designs" onBack={() => navigate('/iq/designs')} />;
+    return <RecordNotFound heading="Design" size="md" title="Design not found" body={`No design review has the id "${id}".`} backLabel="All designs" onBack={() => navigate('/iq/designs')} />;
   }
   if (error) return <UnavailableNotice error={error} what="this design" source={DESIGNS_SOURCE} onRetry={refresh} />;
   if (isLoading || !thread) return <LoadingState label="Loading design review…" />;

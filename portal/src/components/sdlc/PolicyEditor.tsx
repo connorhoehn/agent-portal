@@ -324,7 +324,7 @@ export function PolicyEditor() {
               title={p.enabled ? 'Disable policy' : 'Enable policy'}
               onClick={() => toggle(p)}
             >
-              <Chip size="xs" tone={p.enabled ? 'success' : 'neutral'}>
+              <Chip size="md" tone={p.enabled ? 'success' : 'neutral'}>
                 {p.enabled ? 'enabled' : 'disabled'}
               </Chip>
             </Button>

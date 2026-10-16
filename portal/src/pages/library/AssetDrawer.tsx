@@ -22,11 +22,21 @@ import {
 } from './libraryFormat';
 import type { AssetDetail } from './types';
 
+/** The design review that ratified the asset, by its title (the id only while the title loads or cannot be read). */
+function RatifyingDesign({ id }: { id: string }) {
+  const { data } = useFetch<{ title?: string }>(`/api/designs/${encodeURIComponent(id)}`);
+  return (
+    <Link to={`/iq/designs/${id}`} className="text-primary no-underline hover:underline">
+      {data?.title ?? 'its design review'}
+    </Link>
+  );
+}
+
 export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAsset: (id: string) => void; onBack: () => void }) {
   const { data, isLoading, error, refresh } = useFetch<AssetDetail>(`/api/library/${encodeURIComponent(id)}`, 0);
 
   if (error && isNotFoundError(error)) {
-    return <RecordNotFound heading="Asset" title="Asset not found" body={`No library asset has the id "${id}".`} backLabel="All assets" onBack={onBack} />;
+    return <RecordNotFound heading="Asset" size="md" title="Asset not found" body={`No library asset has the id "${id}".`} backLabel="All assets" onBack={onBack} />;
   }
   if (error) return <UnavailableNotice error={error} what="this asset" source={LIBRARY_SOURCE} onRetry={refresh} />;
   if (isLoading || !data) return <LoadingState label="Loading…" />;
@@ -111,9 +121,7 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
           {a.designReviewId && (
             <T size="xs" as="div" className="mt-2 text-text-tertiary">
               Ratified by&nbsp;
-              <Link to={`/iq/designs/${a.designReviewId}`} className="text-primary no-underline hover:underline">
-                {a.designReviewId}
-              </Link>
+              <RatifyingDesign id={a.designReviewId} />
             </T>
           )}
         </DetailSection>

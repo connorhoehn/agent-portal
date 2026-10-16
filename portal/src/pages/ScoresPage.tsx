@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Button, CollapsibleSection, EmptyState, ErrorState, LoadingState, PageSection, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, CollapsibleSection, EmptyState, ErrorState, LoadingState, PageSection, Stack, T, VisuallyHidden } from '@connorhoehnslalom/ui-components/shared';
 import { CollectionCommandHost } from '../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter, resolveCollectionTarget } from '../components/collections/collectionCommands';
 import { scoreTargets, scoresGrammar } from './scoresCommands';
@@ -183,23 +183,27 @@ function ScoresPage() {
   if (error) {
     if (isLeaderboardForbiddenError(error)) return <LeaderboardAccessNeeded />;
     return (
-      <ErrorState
-        title="Could not load scores"
-        description={<>Scores come from Aurora. {error}</>}
-        actionLabel="Try again"
-        onAction={refresh}
-      />
+      <>
+        <VisuallyHidden as="h1">Scores</VisuallyHidden>
+        <ErrorState
+          title="Could not load scores"
+          description={<>Scores come from Aurora. {error}</>}
+          actionLabel="Try again"
+          onAction={refresh}
+        />
+      </>
     );
   }
   if (!data) return null;
   if (data.entries.length === 0) {
     return (
-      <EmptyState
-        title="No scored people yet"
-        description={
-          <>Run <code>python schema/seed.py</code> to populate Aurora, or invoke the scoring agent to compute scores.</>
-        }
-      />
+      <>
+        <VisuallyHidden as="h1">Scores</VisuallyHidden>
+        <EmptyState
+          title="No scored people yet"
+          description="Scores are computed by the scoring agent from the org graph. Ask it to score the organization, or ingest documents first."
+        />
+      </>
     );
   }
 

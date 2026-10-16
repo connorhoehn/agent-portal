@@ -358,9 +358,9 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                       return (
                         <SelectableCard key={t.id} selected={active} onSelect={() => applyStarter(t)} padding="sm" className="text-left">
                           <Stack gap="xs">
-                            <Inline as="span" gap="none" className={active ? 'text-primary' : 'text-text-primary'}>
+                            <T as="span" size="sm" tone="inherit" className={active ? 'text-primary' : 'text-text-primary'}>
                               {t.label}
-                            </Inline>
+                            </T>
                             <MetaLine size="xs" tone="tertiary" items={[t.blurb]} />
                           </Stack>
                         </SelectableCard>
@@ -405,9 +405,9 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                           }}
                         >
                           <Stack gap="xs">
-                            <Inline as="span" gap="none" className={active ? 'text-primary' : 'text-text-primary'}>
+                            <T as="span" size="sm" tone="inherit" className={active ? 'text-primary' : 'text-text-primary'}>
                               {t.label}
-                            </Inline>
+                            </T>
                             <MetaLine size="xs" tone="tertiary" items={[t.blurb]} />
                           </Stack>
                         </SelectableCard>

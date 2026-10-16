@@ -27,7 +27,7 @@ import {
   TableTd,
   TableTh,
   Textarea,
-  useToast, T,
+  useToast, T, VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
@@ -177,6 +177,8 @@ function GuardrailsPage() {
   return (
     <>
     <Stack gap="lg" data-testid="guardrails-page">
+      {/* The page's one h1: the breadcrumb is a nav landmark, and the three sections below are h2s (PageSection size="md"). */}
+      <VisuallyHidden as="h1">Guardrails</VisuallyHidden>
       {/* Naming it matters. Three role guardrails exist (member, org leader,
           HR admin) and all three rows on Capabilities drill in HERE, but this
           editor reads and writes the single configured GUARDRAIL_ID — so
@@ -217,7 +219,7 @@ function GuardrailsPage() {
         </Card>
 
         {/* PII Filters */}
-        <PageSection title="PII Filters" description="Per-entity action (BLOCK | ANONYMIZE | NONE) and on/off toggle.">
+        <PageSection size="md" title="PII Filters" description="Per-entity action (BLOCK | ANONYMIZE | NONE) and on/off toggle.">
           <Card padding="md" data-testid="pii-filters-card">
             <Table>
               <TableHead>
@@ -271,7 +273,7 @@ function GuardrailsPage() {
             yet (middleware/src/providers/guardrails.ts only ships getGuardrail
             here). When a mutation is added, replace this chip strip with a
             Switch column mirroring the PII filter table. */}
-        <PageSection title="Content Policy" description="View-only. Mutation API not yet available.">
+        <PageSection size="md" title="Content Policy" description="View-only. Mutation API not yet available.">
           <Card padding="md" data-testid="content-policy-card">
             <Inline gap="sm" wrap>
               {Object.entries(guardrail.contentPolicy).map(([key, enabled]) => (
@@ -288,7 +290,7 @@ function GuardrailsPage() {
         </PageSection>
 
         {/* Denied Topics */}
-        <PageSection title="Denied Topics" description="Topics the guardrail will refuse to discuss.">
+        <PageSection size="md" title="Denied Topics" description="Topics the guardrail will refuse to discuss.">
           <Card padding="md" data-testid="denied-topics-card">
             {canEdit && (
               <Card padding="sm" className="mb-4 bg-surface-hover" data-testid="topic-add-form">

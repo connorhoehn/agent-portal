@@ -31,7 +31,7 @@ export default function DecisionRecordPage() {
   useCrumbLabel(id, decision?.topic);
 
   if (error && isNotFoundError(error)) {
-    return <RecordNotFound heading="Decision" title="Decision not found" body="No decision has this id." backLabel="All decisions" onBack={() => navigate('/iq/decisions')} />;
+    return <RecordNotFound heading="Decision" size="md" title="Decision not found" body="No decision has this id." backLabel="All decisions" onBack={() => navigate('/iq/decisions')} />;
   }
   if (error) return <UnavailableNotice error={error} what="this decision" source={DECISIONS_SOURCE} onRetry={refresh} />;
   if (isLoading || !decision) return <LoadingState label="Loading decision…" />;

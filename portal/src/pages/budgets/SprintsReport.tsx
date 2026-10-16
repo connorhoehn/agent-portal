@@ -63,13 +63,15 @@ export interface SprintsReportProps {
  *  link, not an action that would need somewhere to POST. */
 function GrantEnvelopeLink() {
   return (
-    <Link
-      to="/iq/sprints"
-      className="shrink-0 text-primary no-underline hover:underline"
-      title="Granting envelopes is done from Sprints, not from this report"
-    >
-      <T size="xs" weight="medium">Grant envelope →</T>
-    </Link>
+    <T as="span" size="xs" weight="medium" className="shrink-0">
+      <Link
+        to="/iq/sprints"
+        className="text-primary no-underline hover:underline"
+        title="Granting envelopes is done from Sprints, not from this report"
+      >
+        Grant envelope →
+      </Link>
+    </T>
   );
 }
 
@@ -81,9 +83,11 @@ const GRANT_COLUMNS: DataTableColumn<GrantRow>[] = [
     key: 'initiative',
     header: 'Initiative',
     render: (g) => (
-      <Link to={`/iq/projects/${encodeURIComponent(g.orgProjectId)}`} className="text-primary no-underline hover:underline">
-        {g.orgProjectName ?? g.orgProjectId}
-      </Link>
+      <T as="span">
+        <Link to={`/iq/projects/${encodeURIComponent(g.orgProjectId)}`} className="text-primary no-underline hover:underline">
+          {g.orgProjectName ?? g.orgProjectId}
+        </Link>
+      </T>
     ),
   },
   {
@@ -170,7 +174,7 @@ export function SprintsReport({ grants: allGrants, error, hasData, canManage, re
       />
       {(hidden > 0 || showAll) && (
         <Stack gap="none" className="px-3 py-2 border-t border-border">
-          <Button variant="link" onClick={() => setShowAll((v) => !v)}>
+          <Button variant="link" size="sm" onClick={() => setShowAll((v) => !v)}>
             {showAll
               ? `Show fewer — collapse ${rest.length - CLOSED_PREVIEW} closed ${rest.length - CLOSED_PREVIEW === 1 ? 'sprint' : 'sprints'}`
               : `Show ${hidden} more closed ${hidden === 1 ? 'sprint' : 'sprints'}`}

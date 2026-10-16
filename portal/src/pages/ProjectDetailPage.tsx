@@ -455,12 +455,17 @@ function ProjectDetailPage() {
   // 1–4 / Enter work at once.
   useEffect(() => {
     if (!prepareJobRequest) return;
-    // Two frames: the request re-renders the deck (its hook's effect) before it is focusable.
-    let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => {
+    // The request re-renders the deck (its hook's effect) before it is focusable; a deck that was folded takes a few
+    // more frames to open again, so look for it for up to ~20 frames instead of exactly two.
+    let frame = 0; let tries = 0;
+    const focusDeck = () => {
       const deck = document.querySelector('[data-testid="initiative-central-composer"] [data-composer-prompt-deck="expanded"]');
-      (deck?.querySelector<HTMLElement>('[data-composer-prompt-option][data-default]:not(:disabled)')
-        ?? deck?.querySelector<HTMLElement>('[data-composer-prompt-option]:not(:disabled), [data-testid$="-hide"]'))?.focus();
-    }); });
+      const target = deck?.querySelector<HTMLElement>('[data-composer-prompt-option][data-default]:not(:disabled)')
+        ?? deck?.querySelector<HTMLElement>('[data-composer-prompt-option]:not(:disabled), [data-testid$="-hide"]');
+      if (target) { target.focus(); return; }
+      if (++tries < 20) frame = requestAnimationFrame(focusDeck);
+    };
+    frame = requestAnimationFrame(() => { frame = requestAnimationFrame(focusDeck); });
     return () => cancelAnimationFrame(frame);
   }, [prepareJobRequest]);
 
@@ -762,7 +767,11 @@ function ProjectDetailPage() {
           ? "No work yet — ingest this initiative's documents or add an epic"
           : "No work yet — it arrives when this initiative's documents are ingested",
   };
-  const workTable = <WorkTableView {...workListProps} groupColors={{ done: 'var(--color-success)' }} data-testid="initiative-work-list" />;
+  // WorkTableView does not contain its own width: a very long title grows the table past the pane and scrolls the
+  // whole document sideways, so the table scrolls inside this wrapper instead.
+  const workTable = <Stack gap="none" className="relative min-w-0 max-w-full overflow-x-auto">
+    <WorkTableView {...workListProps} groupColors={{ done: 'var(--color-success)' }} data-testid="initiative-work-list" />
+  </Stack>;
   const workRail = <WorkListView {...workListProps} groups={WORK_GROUPS.map(group => ({ ...group, defaultOpen: true }))}
     chrome="embedded" metaStyle="text" pointsLabel="points" data-testid="initiative-work-rail" />;
   const workRailHeader = <Stack gap="sm" data-testid="focused-work-navigation">

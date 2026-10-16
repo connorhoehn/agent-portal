@@ -30,6 +30,7 @@ import {
   TableTh,
   Tabs,
   Textarea,
+  T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -464,12 +465,12 @@ export default function BotDetailPage() {
                     <TableTd className="text-text-tertiary whitespace-nowrap" title={new Date(r.startedAt).toLocaleString()}>
                       {relativeTime(r.startedAt)}
                     </TableTd>
-                    <TableTd>
+                    <TableTd className="max-w-[28rem]">
                       <Inline gap="sm" wrap={false} title={o.summary}>
                         {o.reason && (
                           r.status === 'failed'
                             ? <Chip tone="danger" size="xs">{o.reason}</Chip>
-                            : o.reason
+                            : <T as="span" tone="inherit" className="min-w-0 truncate">{o.reason}</T>
                         )}
                         {o.changeId && (
                           <Link to="/admin/changes" className="text-primary no-underline hover:underline">

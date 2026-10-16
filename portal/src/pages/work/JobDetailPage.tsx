@@ -28,6 +28,7 @@ import { usd } from '../../lib/format';
 import { BOTS_ROLES, DEVBOX_ROLES } from './automateNav';
 import { useSession } from '../../lib/auth';
 import { KeyValue } from '../../components/KeyValue';
+import { RecordNotFound } from '../../components/UnavailableNotice';
 import { isNotFoundFetchError } from './jobFetchStatus';
 import { JobConversation } from './JobConversation';
 import { callScopeKey } from '../../components/shell/callShellModel';
@@ -286,14 +287,9 @@ function JobDetailContent() {
     // infinite spinner.
     if (error && isNotFoundFetchError(error)) {
       return (
-        <Stack gap="none" className={RUN_GUTTER}><PageSection title={crumbLabel(jobId) ?? 'Job'}>
-          <EmptyState
-            title="Job not found"
-            description={<>No job with id <code>{jobId}</code> — it may have been pruned.</>}
-            actionLabel="← Back to runs"
-            onAction={() => navigate('/iq/work/queue')}
-          />
-        </PageSection></Stack>
+        <Stack gap="none" className={RUN_GUTTER}>
+          <RecordNotFound heading={crumbLabel(jobId) ?? 'Job'} title="Job not found" body={`No job with id ${jobId} — it may have been pruned.`} backLabel="Back to runs" onBack={() => navigate('/iq/work/queue')} />
+        </Stack>
       );
     }
     if (error) {
@@ -360,10 +356,14 @@ function JobDetailContent() {
         { label: 'Turns', value: job.result?.turns ?? '—' },
         { label: 'Trigger', value: job.botTrigger === 'cron' ? 'Scheduled' : job.botTrigger ?? 'Manual' },
       ]} />
-      <Tabs value={tab} onValueChange={changeTab} aria-label="Run details" items={[
-        { id: 'summary', label: 'Summary' }, { id: 'activity', label: 'Activity' },
-        { id: 'outputs', label: 'Outputs' }, { id: 'changes', label: 'Changes', badge: proposalCount || undefined },
-      ]} />
+      {/* shrink-0: the tab strip clips its own overflow, so in this scrolling column it is the one child
+          a long summary squeezes to its 1px border. */}
+      <Stack gap="none" className="shrink-0">
+        <Tabs value={tab} onValueChange={changeTab} aria-label="Run details" items={[
+          { id: 'summary', label: 'Summary' }, { id: 'activity', label: 'Activity' },
+          { id: 'outputs', label: 'Outputs' }, { id: 'changes', label: 'Changes', badge: proposalCount || undefined },
+        ]} />
+      </Stack>
       {tab === 'summary' && <Stack gap="lg">
         <PageSection size="sm" title="Outcome">
           <T wrap className={`text-sm ${job.error ? 'text-danger' : 'text-text-primary'}`}>

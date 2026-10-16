@@ -138,7 +138,7 @@ export default function BudgetsPage() {
             },
             {
               label: summary.totalAllocatedUsd - summary.totalSpentThisPeriodUsd < 0 ? 'over allocation' : 'remaining',
-              value: usd(summary.totalAllocatedUsd - summary.totalSpentThisPeriodUsd),
+              value: usd(Math.abs(summary.totalAllocatedUsd - summary.totalSpentThisPeriodUsd)),
               ...(summary.totalAllocatedUsd - summary.totalSpentThisPeriodUsd < 0
                 ? { tone: 'danger' as const } : {}),
               title: `${remainingHint(summary.totalAllocatedUsd - summary.totalSpentThisPeriodUsd)}. ${remainingTitle(summary.totalMaintenanceUsd, summary.totalSpentThisPeriodUsd, MONTH_LABEL)}`,

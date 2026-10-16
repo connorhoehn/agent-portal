@@ -152,7 +152,9 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   const evidence=useMemo(()=>api.messages.flatMap(m=>readSearchEvidence(m.toolCalls)),[api.messages]);
   const allGraphRecords=useMemo(()=>{
     const records=new Map<string,SearchRecord>();
-    for(const r of [...(resolved?.records??[]),...evidence,...(data?.results??[]),...(data?.related??[])]) records.set(recordKey(r),r);
+    // The search index also returns teams, which the record graph has no node kind for (its palette would throw); a
+    // team is drawn by the people it connects, not as a node.
+    for(const r of [...(resolved?.records??[]),...evidence,...(data?.results??[]),...(data?.related??[])]) if((r.type as string)!=='team') records.set(recordKey(r),r);
     return [...records.values()];
   },[data,evidence,resolved]);
   const lastAssistant=api.messages.filter(m=>m.role==='assistant').at(-1);

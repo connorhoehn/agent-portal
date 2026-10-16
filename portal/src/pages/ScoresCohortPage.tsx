@@ -1,4 +1,4 @@
-import { CatalogGrid, EmptyState, ErrorState, LoadingState, PageSection } from '@connorhoehnslalom/ui-components/shared';
+import { CatalogGrid, EmptyState, ErrorState, LoadingState, PageSection, VisuallyHidden } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
 import { CohortCard, type CohortStats } from '../components/scores/CohortCard';
@@ -28,16 +28,13 @@ function ScoresCohortPage() {
 
   if (!data || data.length === 0) {
     return (
-      <EmptyState
-        title="No department data yet"
-        description={
-          <>
-            Run <code>python schema/seed.py</code> to populate Aurora with
-            people and scores, then this page will show per-department
-            analytics automatically.
-          </>
-        }
-      />
+      <>
+        <VisuallyHidden as="h1">Score Cohorts</VisuallyHidden>
+        <EmptyState
+          title="No department data yet"
+          description="Once people have been scored, each department's median, spread and brokers appear here automatically."
+        />
+      </>
     );
   }
 

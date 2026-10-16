@@ -137,12 +137,13 @@ export function toWorkListItem(
   if (item.type === 'bug' && opts.metaStyle !== 'text') chips.push({ label: 'Bug', tone: 'danger' });
   if (item.priority === 'critical') chips.push({ label: 'Critical', tone: 'danger' });
   if (item.status === 'cancelled') chips.push({ label: 'Cancelled', tone: 'neutral' });
-  if (item.key && isBlocked(item) && item.status !== 'done' && item.status !== 'cancelled') chips.push({ label: 'Blocked', tone: 'danger' });
 
   let signal: WorkListItem['signal'] = null;
   if (run?.status === 'running') signal = { state: 'running', label: 'Agent running' };
   else if (item.status === 'in_review') signal = { state: 'review', label: 'Awaiting review' };
   else if (item.key && isBlocked(item) && item.status !== 'done' && item.status !== 'cancelled') signal = { state: 'blocked', label: 'Blocked' };
+  // The blocked signal already says it: a second red "Blocked" beside it reads twice in a row.
+  if (item.key && isBlocked(item) && item.status !== 'done' && item.status !== 'cancelled' && signal?.state !== 'blocked') chips.push({ label: 'Blocked', tone: 'danger' });
 
   return {
     id: item.id,

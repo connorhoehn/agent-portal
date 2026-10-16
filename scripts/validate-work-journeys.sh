@@ -77,8 +77,10 @@ gating=$(grep -lE '^dom-audit: *[1-9][0-9]* failing' docs/work-journeys/*/*.md 2
 
 # ── 8 the old hand logs ─────────────────────────────────────────────────────
 section "8 the orgiq hand logs are retired; validate-orgiq-audit.sh judges the map logs"
-hand=$(find docs/orgiq-journeys -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
-[ "$hand" = 0 ] && ok "docs/orgiq-journeys holds no hand-walked logs" || fail "docs/orgiq-journeys still holds $hand hand-walked log(s): regenerate them as maps or retire them"
+# A walk log carries a verdict: line; the DEFECTS.md ledgers are records code comments still cite, and stay.
+hand=$(grep -rlE '^verdict:' docs/orgiq-journeys 2>/dev/null | wc -l | tr -d ' ')
+rest=$(find docs/orgiq-journeys -type f ! -name DEFECTS.md 2>/dev/null | wc -l | tr -d ' ')
+[ "$hand" = 0 ] && [ "$rest" = 0 ] && ok "docs/orgiq-journeys holds no hand-walked logs, screenshots or rail files (only the DEFECTS.md records)" || fail "docs/orgiq-journeys still holds $hand hand-walked log(s) and $rest non-record file(s): regenerate them as maps or retire them"
 if grep -q 'docs/work-journeys' scripts/validate-orgiq-audit.sh && ! grep -q 'JDIR=docs/orgiq-journeys' scripts/validate-orgiq-audit.sh; then ok "validate-orgiq-audit.sh reads the work map logs"; else fail "validate-orgiq-audit.sh still reads docs/orgiq-journeys"; fi
 if [ "$QUICK" = 0 ]; then
   if bash scripts/validate-orgiq-audit.sh --quick >/tmp/work-journeys-orgiq.$$ 2>&1; then ok "validate-orgiq-audit.sh --quick passes"; else fail "validate-orgiq-audit.sh --quick fails: $(grep -m3 '✗' /tmp/work-journeys-orgiq.$$ | cut -c1-160 | tr '\n' ' ')"; fi

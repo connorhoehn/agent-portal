@@ -2,6 +2,7 @@ import { useParams } from 'react-router';
 import { Button, KeyValue, LoadingState, PageSection, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { useFetch } from '../../hooks/useFetch';
+import { absoluteTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { documentSourceHref, readDocumentRecord, type DocumentRecord } from '../../lib/workDocuments';
 
@@ -21,7 +22,7 @@ function Document({ id }: { id: string }) {
     {error ? <UnavailableNotice error={error} what="this document record" onRetry={read.refresh} /> : !doc ? <LoadingState /> : <Stack gap="md">
       <T>This is the ingested document record. Source content and editing remain governed by the source's permissions.</T>
       <KeyValue items={[{ label: 'Document ID', value: doc.id, mono: true }, { label: 'Source', value: doc.source ?? 'Unknown' },
-        { label: 'Ingested', value: doc.ingestedAt ?? 'Unknown' }, { label: 'Source location', value: doc.sourceUri ?? 'Unavailable', mono: true }]} />
+        { label: 'Ingested', value: doc.ingestedAt ? absoluteTime(doc.ingestedAt) : 'Unknown' }, { label: 'Source location', value: doc.sourceUri ?? 'Unavailable', mono: true }]} />
       {sourceHref ? <Button size="sm" variant="secondary" onClick={() => window.open(sourceHref, '_blank', 'noopener,noreferrer')}>Open source</Button>
         : <T className="text-sm text-text-secondary">This source has no supported web link. Access the source location through its authorized client.</T>}
     </Stack>}

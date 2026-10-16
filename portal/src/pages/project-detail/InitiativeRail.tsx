@@ -137,7 +137,7 @@ export function InitiativeRail({
       render: (r) => (
         <Inline gap="xs" wrap>
           <StatusPill variant="text" tone={pillTone(runStateChip(r.run.status).tone)} label={r.run.status} className="shrink-0" />
-          {r.outcome && <T size="xs" tone="secondary">{r.outcome}</T>}
+          {r.outcome && <T size="xs" tone="secondary" className="block max-w-[280px] truncate" title={r.outcome}>{r.outcome}</T>}
           {r.run.outcome?.prUrl && <ExternalLink href={r.run.outcome.prUrl} external>PR</ExternalLink>}
         </Inline>
       ),

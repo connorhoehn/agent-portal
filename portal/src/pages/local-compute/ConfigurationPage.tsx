@@ -75,7 +75,7 @@ export function ConfigurationContents({ bundle, library, view, onViewChange, onR
     setQuery: setSkillQuery, setAvailability, refresh: onRefresh, showView: onViewChange,
   }) : null;
   const columns: DataTableColumn<BundledSkill>[] = [
-    { key: 'name', header: 'Skill', render: (skill) => <Inline gap="sm" wrap={false} className="min-w-0" title={skill.description}><Text className="text-sm font-medium">{skill.name}</Text><Text className="truncate text-xs text-text-secondary">{skill.description}</Text></Inline> },
+    { key: 'name', header: 'Skill', render: (skill) => <Inline gap="sm" wrap={false} className="min-w-0 max-w-[420px]" title={skill.description}><Text className="shrink-0 text-sm font-medium">{skill.name}</Text><Text className="truncate text-xs text-text-secondary">{skill.description}</Text></Inline> },
     { key: 'version', header: 'In configuration', render: (skill) => <Text className="whitespace-nowrap font-mono text-xs">{versionLabel(skill.version)}</Text> },
     { key: 'library', header: 'Library version', render: (skill) => {
       const asset = library?.assets.find((asset) => asset.id === skill.id);
