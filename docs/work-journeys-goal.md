@@ -263,4 +263,25 @@ link) but its API is gated on ManageDevbox, which program-owner does not hold,
 so the role reaches a page that can only refuse it. Either grant program-owner
 read on the change queue (Cedar) or stop routing the role there.
 
-Phase 1 written 2026-10-15. Coverage before: 18 of 82 Work routes, 4 of 5 roles, 25 route × role cells, 25 states (all `default`).
+Phase 1 written 2026-10-15; phases 2 and 3 done 2026-10-16.
+
+| | before (2026-10-15) | after (2026-10-16) |
+|---|---|---|
+| Work routes walked by an orgiq-role map | 18 of 82 | 57 (all five roles) |
+| orgiq roles walked | 4 of 5 (no hr-admin) | 5 of 5 |
+| route × role cells / states | 25 / 25 (all `default`) | 177 / 571 (floors file: 169 / 558) |
+| maps / steps | — | 123 maps, every step measured |
+| hand-walked logs | 92, all stale | retired (DEFECTS.md records kept) |
+
+Still owned in `docs/journeys/audit-burndown.tsv`: the deep a11y rules
+(contrast, landmarks, heading order — the lane D theme and shell work), the
+DiffViewer/Chip 10px controls and code surfaces, WorkTableView row geometry
+in the crowded worlds, the composer policy for a few admin pages, and four
+page-owned rows (AgentFlowPage row height, RolesPage matrix width, the KB
+registry actions column, the browser JourneyTab stability).
+
+Known shared-state leaks no scope forks yet: the Computer Lab fleet
+registry (a dispatch in a scoped world adds computers every walk then sees)
+and its fleet poll's `POST /api/devbox/boxes` from read-only pages. The live
+agent-run relay was scoped on 2026-10-16. The 34 orgiq routes no map visits
+yet are mostly observability sub-pages (coverage.md lists them).
