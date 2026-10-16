@@ -11,6 +11,7 @@ import {
   type SubNavItem,
   SkipLink,
   type Command,
+  type PaletteRecord,
   activeNavItemClassName,
   inactiveNavItemClassName,
   RAIL_CURRENT_FILL,
@@ -53,6 +54,7 @@ import { FleetIndicator } from './FleetIndicator';
 import { ActivityBell } from './ActivityBell';
 import { useOrgiqShellPolls, useRefreshSessionOnDeny } from './orgiqShellPolls';
 import { usePortalCommands, usePortalDynamicCommands, groupRank } from './portalCommands';
+import { createPaletteRecordSearch, isAppPath } from '../../lib/paletteRecords';
 import { useDiscussionUnread } from './useDiscussionUnread';
 import { useSharedNotifications } from './SharedNotifications';
 import { navigationActivity } from './navActivity';
@@ -364,6 +366,9 @@ function ShellLayout() {
   // pre-filtered to a group". Devbox's own commands are registered directly
   // into the palette via useRegisterCommand, so they're untouched by this.
   const [paletteScope, setPaletteScope] = useState<PaletteScope>('all');
+  // The record section (ui-components 2.457.0): one search per tenant, a stable reference per tenant.
+  const recordSearch = useMemo(() => createPaletteRecordSearch(session?.tenant ?? 'orgiq'), [session?.tenant]);
+  const openRecord = useCallback((record: PaletteRecord) => { if (isAppPath(record.href)) navigate(record.href); }, [navigate]);
   const scopeCommand = useCallback(
     (c: Command): Command => ({
       ...c,
@@ -634,6 +639,7 @@ function ShellLayout() {
             overlay; it also holds the call's single media sink. */}
         <SocialFooter />
         <CommandPalette
+          {...(paletteScope === 'devbox' ? {} : { searchRecords: recordSearch, onOpenRecord: openRecord })}
           placeholder={
             paletteScope === 'devbox'
               ? DEVBOX_PALETTE_PLACEHOLDER
