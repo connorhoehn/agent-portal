@@ -498,10 +498,12 @@ function ProjectDetailPage() {
   // The pane's tabs (Discussion | Details | Docs | a run's Log…): the library pane contract, `?pane=` / `?paneRecord=`.
   const paneControl = useInitiativePane(project?.id ?? null);
   const agentPanel = useRef<InitiativeAgentHandle | null>(null);
-  // The header's density (library `useHeaderDensity`): the Activity graph is
-  // rich content and gets the one-row compact header; the other tabs keep the
-  // full header. The chevron folds it into the trail, remembered per device.
-  const headerDensity = useHeaderDensity({ contentKind: tab === 'activity' ? 'graph' : 'detail', headerId: 'initiative' });
+  // The header's density (library `useHeaderDensity`): one density for every
+  // tab, so clicking a tab never moves the header, the tab strip or the pane
+  // (docs/work-journeys-goal.md, tab stability — the Activity tab used to
+  // compact it 214→96px). The chevron still folds it into the trail, remembered
+  // per device.
+  const headerDensity = useHeaderDensity({ contentKind: 'detail', headerId: 'initiative' });
 
   if (projLoading) {
     return <PageSection title="Initiative"><LoadingState label="Loading initiative…" /></PageSection>;

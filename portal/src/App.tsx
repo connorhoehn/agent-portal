@@ -4,8 +4,8 @@ import { Layout } from './components/shell/Layout';
 import { RequireRole, RequireTenant } from './lib/auth';
 import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
-import { ACCESS_ENABLED, ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED } from './lib/features';
-import { CHOOSER, resolveHome } from './lib/tenantHome';
+import { ACCESS_ENABLED, ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED, tenantEnabled } from './lib/features';
+import { CHOOSER, resolveHome, tenantHome } from './lib/tenantHome';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
 import { SharedNotificationsProvider } from './components/shell/SharedNotifications';
 // Eager: a redirect has nothing to lazy-load and must not flash a spinner.
@@ -220,7 +220,11 @@ function HomeRedirect() {
   const { session, isLoading } = useSession();
   const { pathname } = useLocation();
   if (isLoading) return <Loading />;
-  const home = resolveHome(session);
+  // A route this role may not open (a RequireRole/RequireTenant fallback) keeps the person in the
+  // workspace they are already in — the tenant's front door, not the workspace chooser
+  // (docs/work-journeys-goal.md, refusals). The root and a signed-out visit still resolve as before.
+  const inTenant = !!session?.tenant && pathname !== '/' && tenantEnabled(session.tenant) && tenantHome(session.tenant) !== CHOOSER;
+  const home = inTenant ? tenantHome(session!.tenant) : resolveHome(session);
   if (home === pathname) return <Page element={<NotFoundPage />} />;
   return <Navigate to={home} replace />;
 }

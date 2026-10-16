@@ -237,11 +237,11 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   const nameOf=(key:string)=>allRecords.get(key)?.title ?? orgGraph.data?.nodes.find(n=>`person:${n.id}`===key)?.name;
   const selectionLabel=selected.length===1?nameOf(selected[0]!) ?? null:selected.length>1?`${selected.length} selected`:null;
 
-  // The header's density (library useHeaderDensity): Connections is a graph
-  // and Answer a conversation — rich content, the compact 40px row with a
-  // 14/600 title; Results is a list and keeps the full row. The chevron folds
-  // the controls away, remembered per device.
-  const headerDensity=useHeaderDensity({contentKind:tab==='connections'?'graph':tab==='answer'?'conversation':'list',headerId:'search'});
+  // The header's density (library useHeaderDensity): one density for every
+  // tab, so switching Results / Answer / Connections never moves the header or
+  // the tab strip (docs/work-journeys-goal.md, tab stability). The chevron still
+  // folds the controls away, remembered per device.
+  const headerDensity=useHeaderDensity({contentKind:'list',headerId:'search'});
   // ── Pane header: ONE row (decision 9) ──────────────────────────────────────
   // Crumbs › title on the left; the view tabs, then the compact chips, on the
   // right. No hero field — the composer issues queries.

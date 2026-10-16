@@ -201,8 +201,8 @@ export function initiative(role: Role): Step[] {
     pageTab('Decisions', 'decisions', { visible: [seen(AUTH.escalated)], numbers: [{ of: tabNamed('Decisions'), re: /(\d+)/, eqCount: tableRows }], noText: LEAKS }, { proves: ['tab-stability', 'story-facts'] }),
     pageTab('Agents', 'agents', { visible: [seen(/agent spend over \d+ runs/)] }),
     pageTab('Contributors', 'contributors', { visible: [seen(AUTH.owner), seen('Nora DaSilva')], numbers: [{ of: tabNamed('Contributors'), re: /(\d+)/, eqCount: tableRows }], noText: LEAKS }, { proves: ['tab-stability', 'story-facts'] }),
-    pageTab('Activity', 'activity', { visible: [seen('Recorded huddles')] }, { expectConsole: ARRIVED, stable: [STILL.header, STILL.pane] }),
-    pageTab('Overview', '', { visible: [seen(AUTH.stuck)] }, { stable: [STILL.header, STILL.pane] }),
+    pageTab('Activity', 'activity', { visible: [seen('Recorded huddles')] }, { expectConsole: ARRIVED }),
+    pageTab('Overview', '', { visible: [seen(AUTH.stuck)] }),
     press('Shift+I', 'Shift+I opens the Details pane from the keyboard', { url: /[?&]pane=details\b/ }, { proves: 'keyboard' }),
     paneTab('Discussion', NO_PANE, c.composerPost ? {} : { visible: [seen(/Your current role cannot post/)] }),
     click({ testId: 'initiative-header-menu-trigger' }, `Open the header menu: ${c.dispatch ? 'Prepare job and' : 'View job setup and'} the initiative's own entries`, { visible: [{ role: 'menuitem', name: 'Initiative details' }, { role: 'menuitem', name: 'Contributors' }] }, { state: 'dialog-open', proves: 'role-gating' }),
@@ -378,8 +378,8 @@ export function decisions(role: Role): Step[] {
 
 // ── search ──────────────────────────────────────────────────────────────────
 const searchTabs = STILL.tablist(/ views$/);
-// The header compacts on the Answer and Connections tabs (useHeaderDensity: a conversation and a graph take the room), so the tab strip itself changes height; only the shell header is held.
-const searchStill = (): Target[] => [STILL.header];
+// One header density for every Search tab (SearchPage useHeaderDensity), so the shell header and the tab strip are both held.
+const searchStill = (): Target[] => [STILL.header, { role: 'tablist' }];
 
 export function searchSurface(role: Role): Step[] {
   const sTab = (name: string, url: RegExp, expect: Expect) =>
@@ -597,8 +597,8 @@ export function refusals(role: Role): Step[] {
   const qs = QUICK_SWITCH[role];
   const qsText = { denied: 'You don’t have access to computers', lists: 'Jump to a computer, or create one', create: 'Jump to a computer, or create one' }[qs];
   const refused = refusedRoutes(role).map((r): Step => ({
-    do: 'navigate', url: r.url, name: `Type ${r.url}: the route sends this role to the workspace chooser`, state: 'refused', proves: 'hidden-surfaces-direct-route',
-    expect: { urlNot: new RegExp(`^${escapeRe(r.url.split('?')[0]!)}`), url: '/workspaces', visible: [heading('Choose a workspace')] },
+    do: 'navigate', url: r.url, name: `Type ${r.url}: the route sends this role back to its Work home, Initiatives`, state: 'refused', proves: 'hidden-surfaces-direct-route',
+    expect: { urlNot: new RegExp(`^${escapeRe(r.url.split('?')[0]!)}`), url: '/iq/projects', visible: [rail('Initiatives')] },
   }));
   const probes = API_403[role].map((u) => api(u, 403, `GET ${u} answers 403: this role lacks the action behind it`, 'api-refused'));
   const post: Step[] = CAPS[role].dispatch ? [] : [api('/api/bots/dispatch-work', 403, 'POST /api/bots/dispatch-work is refused: dispatching needs DispatchAgentRun', 'api-refused', { method: 'POST', body: {}, refusal: 'the empty body names no work item, which the route rejects even past the gate' })];
