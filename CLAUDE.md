@@ -15,7 +15,7 @@ the claim here is a bug.
 Durable facts the handoff does not repeat:
 
 - Pins: portal and middleware consume `@connorhoehnslalom/ui-components`
-  **2.457.1** and `@connorhoehnslalom/realtime-modules` **0.120.1** from
+  **2.458.2** and `@connorhoehnslalom/realtime-modules` **0.120.1** from
   tracked tarballs in `portal/vendor/` (`file:` deps, both lockfiles); middleware
   pins `@connorhoehn/service-runtime` 0.4.1 and `distributed-core` 0.48.0
   (`077d7594`) by full sha; infra consumes
