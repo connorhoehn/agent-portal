@@ -20,7 +20,19 @@ export interface SavedSearch extends SavedSearchInput {
 export interface SearchOwner { sub: string; tenant: string }
 interface StoredSearch extends SavedSearch { ownerSub: string; tenant: string }
 export const savedSearchesFixture = defineFixture<StoredSearch>({
-  key: 'saved-searches', scenarios: { default: () => [], empty: () => [], fresh: () => [] },
+  key: 'saved-searches',
+  scenarios: {
+    // Vera Green (org-leader) has two searches she keeps coming back to. Rows are
+    // keyed by the persona's user id, which a clone resolves to (lib/record-owner.ts),
+    // so a demo from a clone sees them; every other persona starts with none.
+    default: () => [
+      { id: '5d1c7e2a-3b0f-4a8e-9c61-0a7f2d4e8b11', name: 'Auth Migration cutover decisions', query: 'legacy SSO cutover order', scope: 'workspace',
+        types: ['decision'], tab: 'results', selectedKeys: [], createdAt: clock.daysAgo(9), updatedAt: clock.daysAgo(2), ownerSub: 'u-vera', tenant: 'orgiq' },
+      { id: '9a3e4b60-71c2-4d5f-8e0a-6c2b1f9d3a27', name: 'Cedar policy authoring experts', query: 'who has Cedar policy authoring experience', scope: 'workspace',
+        types: ['person'], tab: 'results', selectedKeys: [], createdAt: clock.daysAgo(21), updatedAt: clock.daysAgo(6), ownerSub: 'u-vera', tenant: 'orgiq' },
+    ],
+    empty: () => [], fresh: () => [],
+  },
 });
 const str = (name: string, value: string) => ({ name, value: { stringValue: value } });
 const ownerParams = (owner: SearchOwner) => [str('owner', owner.sub), str('tenant', owner.tenant)];

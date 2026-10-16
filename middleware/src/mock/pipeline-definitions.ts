@@ -14,10 +14,9 @@
 //                          that runs each. The parity entity
 //                          'pipeline_definitions' pins it.
 //   pipelines.runs         `pipeline_runs` — runs this tenant started (the
-//                          runbook dry-run). Seeded EMPTY on purpose: no dry-run
-//                          has ever been recorded, and inventing one would put
-//                          a run id on a promotion verdict that no job ever ran.
-//                          The first row arrives when someone presses Dry-run.
+//                          runbook dry-run). Seeded with one completed dry-run, Ines's
+//                          rehearsal of the quarantine runbook; the other runbooks
+//                          have none until someone presses Dry-run.
 //   pipelines.config       `pipeline_config` — the default approver role.
 //
 // No counts are stored anywhere here (mock contract rule 1): a definition's
@@ -66,7 +65,15 @@ export const pipelineDefinitionRows = defineFixture<StoredDefinition>({
 export const pipelineRunRecords = defineFixture<PipelineRunRecord>({
   key: 'pipelines.runs',
   scenarios: {
-    default: () => [],
+    // One completed dry-run: Ines's rehearsal of the quarantine runbook, the one the
+    // ladder already shows promoted to a skill ("dry-run verified"). It has no job
+    // behind it (a terminal record is never reconciled against one), and the
+    // candidate's own stored `dryRunRunId` stays null, as that file explains.
+    default: () => [{
+      id: 'job:dry-quarantine-batch', definitionId: 'runbook:promo-arm64-fargate', contextTenant: 'orgiq', runKind: 'runbook:dry-run',
+      status: 'completed', jobId: null, triggeredBy: 'u-ines', model: null, estimateUsd: 0.08, costUsd: 0.06, error: null,
+      startedAt: clock.hoursAgo(26), finishedAt: clock.hoursAgo(25.8),
+    }],
     empty: () => [],
     error: () => { throw new Error('pipeline_runs unavailable: relation does not exist'); },
   },

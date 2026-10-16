@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler, AppError, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { requireAction, requireTenant, resolveSession } from '../lib/authz.js';
+import { recordUserId } from '../lib/record-owner.js';
 import { createSavedSearch, deleteSavedSearch, listSavedSearches, updateSavedSearch, type SavedSearchInput } from '../providers/saved-searches.js';
 
 export const savedSearchesRouter = Router();
@@ -42,7 +43,8 @@ function validate(raw: unknown, partial = false): Partial<SavedSearchInput> {
 function owner(req: Parameters<typeof resolveSession>[0]) {
   const session = resolveSession(req);
   if (!session) throw new AppError(401, 'Unauthenticated');
-  return { sub: session.sub, tenant: session.tenant };
+  // A clone's saved searches are its persona's (lib/record-owner.ts).
+  return { sub: recordUserId(session.sub), tenant: session.tenant };
 }
 savedSearchesRouter.get('/', asyncHandler(async (req, res) => res.json({ searches: await listSavedSearches(owner(req)) })));
 savedSearchesRouter.post('/', asyncHandler(async (req, res) => res.status(201).json({ search: await createSavedSearch(owner(req), validate(req.body) as SavedSearchInput) })));

@@ -47,6 +47,14 @@ const TENANT_FILTERS = ['', 'orgiq', 'assessment', 'social', 'pipelines'] as con
 const DECISION_FILTERS = ['', 'ALLOW', 'DENY'] as const;
 const MAX_EVENTS = 500;
 
+/** A request path as words: `/people/p-030` reads "people record" (the id stays one hover away). */
+function readablePath(path: string): string {
+  const parts = path.split('?')[0]!.split('/').filter((seg) => seg && seg !== 'api');
+  const isId = (seg: string) => /\d/.test(seg) || seg.split('-').length > 3 || /^(?:wi|des|d|p|u)-[a-z]/.test(seg);
+  const words = parts.filter((seg) => !isId(seg)).map((seg) => seg.replace(/[-_]+/g, ' '));
+  return parts.some(isId) ? [...words, 'record'].join(' ') : words.join(' ');
+}
+
 function AuthzLogPage() {
   const [events, setEvents] = useState<AuthzEvent[]>([]);
   const [decision, setDecision] = useState<typeof DECISION_FILTERS[number]>('');
@@ -226,7 +234,7 @@ function AuthzLogPage() {
                 <TableTd className="text-text-secondary"><T className="font-mono">{e.tenant ?? ''}</T></TableTd>
                 <TableTd><T className="font-mono">{e.role}</T></TableTd>
                 <TableTd>{e.action}</TableTd>
-                <TableTd className="text-text-secondary"><T className="font-mono">{e.path ?? ''}</T></TableTd>
+                <TableTd className="text-text-secondary"><T title={e.path ?? ''}>{e.path ? readablePath(e.path) : ''}</T></TableTd>
                 <TableTd className="text-text-tertiary">{e.reason ?? ''}</TableTd>
               </TableRow>
             ))}

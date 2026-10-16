@@ -19,6 +19,10 @@ export const RENDERED_RULES = [
   { rule: 'raw-id', letter: 'd', re: /\b(?:p-\d{3}|u-(?:operator|theo|vera|hr|release|rachel|mia|nora|eli|layla|caleb|asha|jonas|farah|mira|lena|sana|ines|kofi|dara|tomas|rhea|omar|priya)(?:-clone-[0-9a-f]+)?|wi-[a-z0-9]+(?:-[a-z0-9]+)+|TEAM-\d{3}|des-[a-z]+(?:-[a-z]+)+|d-[a-z]{4,}(?:-[a-z]+)*|p-[a-z]+(?:-[a-z]+)+|(?:job|run|req|rev|sod|art|bot|deck)-[a-z0-9]{3,}(?:-[a-z0-9]+)*)\b/g },
   { rule: 'raw-id', letter: 'd', re: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/g },
   { rule: 'raw-id', letter: 'd', re: /\b(?:social|orgiq|assessment|pipelines):(?:ch|dm|lobby|team):[\w:-]+/g },
+  // timestamped or hash-suffixed run ids (run-20261015T164002Z-draft-review-deck-0ccaf2011b06, run-1760…, …-0ccaf2011b06): a run is shown by title, never by its ledger key
+  { rule: 'raw-run-id', letter: 'd', re: /\b(?:run|job|req|rev)-\d{8}T?\d{0,6}Z?(?:-[a-z0-9]+)*\b/gi },
+  { rule: 'raw-run-id', letter: 'd', re: /\b[a-z]{3,}(?:-[a-z]{2,})*-(?=\d*[a-f])[0-9a-f]{10,12}\b/g },
+  { rule: 'raw-run-id', letter: 'd', re: /\b(?:run|job|exec|trace)[-_][0-9a-f]{8,}\b/gi },
   { rule: 'iso-time', letter: 'd', re: /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?Z?\b/g },
   { rule: 'iso-time', letter: 'd', re: /\b20\d{2}-[01]\d-[0-3]\d\b(?!T)/g },
   // (c) numbers that cannot be right

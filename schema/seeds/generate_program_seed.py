@@ -25,6 +25,9 @@ from pathlib import Path
 OUT = Path(__file__).resolve().parent.parent / 'seed_program.sql'
 WORK_KEYS = json.loads((Path(__file__).resolve().parent / 'work_item_keys.json').read_text())['items']
 RNG = random.Random(20260821)
+# SMEs on an initiative's roster who are not assigned seeded work items (their work lives in other tenants):
+# Rhea (Security) contributes to Auth Migration, and keeping her out of the draw keeps every item's assignee stable.
+ROSTER_ONLY_SMES = {'p-rhea'}
 
 # Who created each maintenance bot (obs-nightly-maintenance is u-tomas, the pipelines author who also holds Social:
 # the Communication plane's "My pipelines" walker). middleware/src/mock/bots.ts mirrors this; bots not listed are u-rachel's.
@@ -132,7 +135,7 @@ INITIATIVES = [
     ),
     dict(
         id='p-auth-migration', slug='auth', repo='orgiq-auth-service', tier='flagship',
-        owner='p-002', smes=['p-051', 'p-004'],
+        owner='p-002', smes=['p-051', 'p-004', 'p-rhea'],
         sponsor='p-052',
         description='Consolidate every login path onto Cognito + BFF OIDC and retire the '
                     'legacy SAML shim, tenant by tenant, with zero forced logouts.',
@@ -799,7 +802,7 @@ def main() -> None:
             for ci, (ctype, ctitle, cstatus, cpri, pts, labels, skey) in enumerate(children, start=1):
                 cid = f'wi-{slug}-{ekey}-{"b" if ctype == "bug" else "s"}{ci}'
                 TITLES[cid] = ctitle
-                assignee = RNG.choice([ini['owner']] + ini['smes'])
+                assignee = RNG.choice([ini['owner']] + [m for m in ini['smes'] if m not in ROSTER_ONLY_SMES])
                 labels_sql = "ARRAY[" + ','.join(f"'{lb}'" for lb in labels) + "]" if labels else 'NULL'
                 sprint_sql = f"'{sprint_ids[skey]}'" if skey and skey in sprint_ids else 'NULL'
                 est = cost_for(pts)

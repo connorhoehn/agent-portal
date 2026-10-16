@@ -75,7 +75,7 @@ function seededInitiatives(): MockInitiative[] {
       summary: 'Centralize telemetry, reduce alert noise, and control retention costs.\nFocus: actionable alerts, team error budgets, and OpenTelemetry.',
       repo: 'connorhoehnslalom/orgiq-observability', priority: 'critical' },
     { id: 'p-auth-migration', name: 'Auth Migration', status: 'in_progress', createdAt: createdOn(6, 5),
-      owner: 'p-002', smes: ['p-051', 'p-004'], sponsor: 'p-052',
+      owner: 'p-002', smes: ['p-051', 'p-004', 'p-rhea'], sponsor: 'p-052',
       summary: 'Consolidate every login path onto Cognito + BFF OIDC and retire the legacy SAML shim, tenant by tenant, with zero forced logouts.',
       repo: 'connorhoehnslalom/orgiq-auth-service', priority: 'critical' },
     { id: 'p-llm-platform', name: 'LLM Application Platform', status: 'in_progress', createdAt: createdOn(6, 19),

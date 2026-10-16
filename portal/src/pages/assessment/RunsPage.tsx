@@ -39,6 +39,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { commandTitle, runTitle } from './assessmentFormat';
 import { useTeams } from './dashboard/useTeams';
 import { useAssessmentEvents } from './knowledge/useAssessmentEvents';
 import { applyRunEvent, formatDuration, formatRelativeTime, launchResponseMessage, RUN_STATUS_PILL_STATE } from './secondaryFormat';
@@ -87,7 +88,7 @@ function RunACommandPanel({ onLaunched }: { onLaunched: () => void }) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       const outcome = launchResponseMessage(res.status, body.error);
       if (outcome.ok) {
-        toastSuccess(null, 'Run started', `${command} for ${teams.find((t) => t.id === teamId)?.name ?? 'the team'}.`);
+        toastSuccess(null, 'Run started', `${commandTitle(command)} for ${teams.find((t) => t.id === teamId)?.name ?? 'the team'}.`);
         setPreparing(null);
         onLaunched();
       } else {
@@ -233,7 +234,7 @@ export default function RunsPage() {
     }
   }
 
-  useCrumbLabel(detailId ?? undefined, detail ? `${detail.command} · ${detail.team_id ? teams.find((t) => t.id === detail.team_id)?.name ?? detail.team_id : 'no team'}` : null);
+  useCrumbLabel(detailId ?? undefined, detail ? runTitle(detail, teams) : null);
   if (detailId) {
     const statuses = [...new Set(runs.map((r) => r.status))];
     return (
@@ -243,7 +244,7 @@ export default function RunsPage() {
         listLabel="runs"
         {...(runsResp ? { count: runs.length } : {})}
         groups={statuses.map((st) => ({ id: st, title: st, count: runs.filter((r) => r.status === st).length }))}
-        rows={runs.map((r) => ({ id: r.id, groupId: r.status, title: r.command, subline: `${r.team_id ?? 'no team'} · ${formatRelativeTime(r.started_at)}` }))}
+        rows={runs.map((r) => ({ id: r.id, groupId: r.status, title: commandTitle(r.command), subline: `${r.team_id ? teams.find((t) => t.id === r.team_id)?.name ?? 'Unknown team' : 'No team'} · ${formatRelativeTime(r.started_at)}` }))}
         currentId={detail?.id ?? null}
         onOpen={openRun}
         loading={loading && !runsResp}
@@ -254,16 +255,16 @@ export default function RunsPage() {
         {detail ? (
           <Stack gap="md" data-testid="assessment-run-record">
             <DetailHeader
-              title={detail.command}
+              title={runTitle(detail, teams)}
               badge={<StatusPill state={RUN_STATUS_PILL_STATE[detail.status]} label={detail.status} size="sm" />}
-              description={detail.id}
+              description={`Started ${formatRelativeTime(detail.started_at)}`}
               {...(canStop && detail.status === 'running' ? {
                 aside: <Button variant="danger" size="sm" disabled={stopping} onClick={() => void stop(detail)}>{stopping ? 'Stopping…' : 'Stop'}</Button>,
                 asideWidth: 120,
               } : {})}
             />
             <Stack gap="sm">
-              <KeyValue layout="row" label="Team" value={detail.team_id ?? '—'} mono />
+              <KeyValue layout="row" label="Team" value={detail.team_id ? teams.find((t) => t.id === detail.team_id)?.name ?? 'Unknown team' : '—'} />
               <KeyValue layout="row" label="Started" value={formatRelativeTime(detail.started_at)} />
               <KeyValue layout="row" label="Duration" value={formatDuration(detail.started_at, detail.finished_at)} mono />
               {detail.progress?.phase && (
@@ -280,7 +281,7 @@ export default function RunsPage() {
         ) : loading || !runsResp ? (
           <EmptyState title="Loading run…" />
         ) : (
-          <RecordNotFound heading="Run" title="Run not found" body={`No run has the id "${detailId}".`}
+          <RecordNotFound heading="Run" title="Run not found" body="This run is no longer in the ledger."
             backLabel="Activity" onBack={() => navigate('/assessment/runs')} />
         )}
       </CollectionRecordFrame>
@@ -351,10 +352,9 @@ export default function RunsPage() {
               header: 'Run',
               // DataTable rows with onRowClick are keyboard-reachable on
               // their own now, so this is plain text, not a Button.
-              render: (r) => <T size="sm" tabular>{r.id}</T>,
+              render: (r) => <T size="sm" title={r.id}>{runTitle(r, teams)}</T>,
             },
-            { key: 'command', header: 'Command', render: (r) => r.command },
-            { key: 'team', header: 'Team', render: (r) => (r.team_id ? teams.find((t) => t.id === r.team_id)?.name ?? r.team_id : '—') },
+            { key: 'team', header: 'Team', render: (r) => (r.team_id ? teams.find((t) => t.id === r.team_id)?.name ?? 'Unknown team' : '—') },
             {
               key: 'status',
               header: 'Status',

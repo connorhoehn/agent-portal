@@ -68,11 +68,10 @@ export function PipelineRunSummary({ run }: { run: PipelineRun }) {
           { label: 'Run', value: run.context.title, title: run.id },
           { label: 'Definition', value: run.definitionId, mono: true, title: run.definitionId },
           { label: 'Workspace', value: run.context.tenant },
-          { label: 'Source', value: `${sourceLabel(run.context.table)} ${run.context.id}`, mono: true },
+          { label: 'Source', value: sourceLabel(run.context.table), title: run.context.id },
           { label: 'Source status', value: run.context.sourceStatus.replace(/_/g, ' ') },
           { label: 'Triggered by', value: run.triggeredByName ?? run.triggeredBy ?? 'not recorded', muted: run.triggeredBy == null },
           { label: 'Cost', value: run.costUsd != null ? usd(run.costUsd, { precision: 4 }) : 'not recorded', muted: run.costUsd == null },
-          ...(run.context.aguiRunId ? [{ label: 'AG-UI run', value: `${run.context.aguiRunId.slice(0, 8)}…`, mono: true, title: run.context.aguiRunId }] : []),
           {
             label: 'Folds',
             // A relayed agent run has no row yet: its trace closes it later.

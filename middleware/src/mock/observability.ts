@@ -1527,7 +1527,8 @@ function derivedMemoryOps(scenario?: ScenarioName): MemoryOp[] {
         agentId: trace.agent_id,
         sessionId: trace.session_id,
         kind: 'write',
-        queryText: null,
+        // The turn the agent saved, so the feed reads as what was remembered.
+        queryText: `Saved turn: ${trace.prompt_snippet.slice(0, 100)}`,
         retrieved: [],
         durationMs: 9 + (hash32(`${trace.invocation_id}:mw`) % 60),
         errored: false,

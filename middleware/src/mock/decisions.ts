@@ -211,6 +211,7 @@ export const decisionParticipantRows = defineFixture<DecisionParticipantRow>({
   // Escalated by its owner (Vera, p-002) to the release manager (Sienna, p-005), who decides it.
   { decisionId: 'd-cognito-cutover', personId: 'p-005', role: 'decider', weight: 1.0 },
   { decisionId: 'd-cognito-cutover', personId: 'p-002', role: 'contributor', weight: 1.0 },
+  { decisionId: 'd-cognito-cutover', personId: 'p-rhea', role: 'contributor', weight: 1.0 },
   { decisionId: 'd-cognito-cutover', personId: 'p-051', role: 'contributor', weight: 1.0 },
   { decisionId: 'd-cognito-cutover', personId: 'p-004', role: 'contributor', weight: 1.0 },
   { decisionId: 'd-eval-judge-model', personId: 'p-047', role: 'decider', weight: 1.0 },

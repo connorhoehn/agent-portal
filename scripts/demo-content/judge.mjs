@@ -108,7 +108,7 @@ function rendered() {
     }
   }
   const RULES = [['filler', 'b', 'filler words and numbered stand-ins'], ['more-leak', 'b', '"(+N more)" leaks'], ['glued', 'b', 'glued sentences'], ['junk-literal', 'b', 'undefined / NaN / null on screen'],
-    ['repeated-line', 'b', 'the same line repeated more than five times on a page'], ['raw-id', 'd', 'raw ids and slugs where a name belongs'], ['iso-time', 'd', 'ISO timestamps where a relative time belongs'],
+    ['repeated-line', 'b', 'the same line repeated more than five times on a page'], ['raw-id', 'd', 'raw ids and slugs where a name belongs'], ['raw-run-id', 'd', 'timestamped or hash-suffixed run ids where a run title belongs'], ['iso-time', 'd', 'ISO timestamps where a relative time belongs'],
     ['bad-number', 'c', 'impossible numbers (>100%, negative money or ages)'], ['dev-copy', 'g', 'developer copy on a customer page']];
   for (const [rule, letter, label] of RULES) {
     const e = by.get(rule);

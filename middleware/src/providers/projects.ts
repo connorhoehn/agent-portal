@@ -204,6 +204,7 @@ const CAST: Record<string, CastMember> = {
   'p-012': { personId: 'p-012', name: 'Rachel Kowalski', title: 'Principal Engineer' },
   'p-011': { personId: 'p-011', name: 'Eli Garcia',      title: 'Senior SRE' },
   'p-013': { personId: 'p-013', name: 'Caleb Turner',    title: 'Senior Engineer' },
+  'p-rhea': { personId: 'p-rhea', name: 'Rhea Castellanos', title: 'Security Engineer' },
   'p-015': { personId: 'p-015', name: 'Raj Mehta',       title: 'Data Engineer' },
   'p-017': { personId: 'p-017', name: 'Daniel Chang',    title: 'Staff Data Engineer' },
   'p-019': { personId: 'p-019', name: 'Camille Dubois',     title: 'Senior Data Engineer' },

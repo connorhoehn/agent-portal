@@ -663,3 +663,17 @@ export const railTracks = (dimension: DimensionTrackInput): { claimed: string; v
     claimOpen: cert ? hasOpenClaim(cert) : false,
   };
 };
+
+// ─── Run titles ─────────────────────────────────────────────────────────────
+
+/** "draft-review-deck" -> "Draft review deck": the verb of a ledger run, as a sentence. */
+export function commandTitle(command: string): string {
+  const words = command.replace(/[-_]+/g, ' ').trim();
+  return words ? `${words.charAt(0).toUpperCase()}${words.slice(1)}` : 'Run';
+}
+
+/** A run as a peer reads it: "Draft review deck · Northstar Payments". The ledger key (run-<stamp>-<command>-<hex>) never renders. */
+export function runTitle(run: { command: string; team_id?: string | null }, teams: ReadonlyArray<{ id: string; name: string }>): string {
+  const team = run.team_id ? teams.find((t) => t.id === run.team_id)?.name : undefined;
+  return `${commandTitle(run.command)} · ${run.team_id ? team ?? 'Unknown team' : 'All teams'}`;
+}

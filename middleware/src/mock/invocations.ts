@@ -401,7 +401,9 @@ function corpus(scale: { rows: number; errors: number }): MockInvocation[] {
         i < authoredErrors.length
           ? base
           : {
-              ...base,
+              // A failure after the authored ones is a new question that failed,
+              // not the same authored prompt failing again.
+              ...variantFor(base, i + authoredClean.length + 37),
               responseSnippet: '',
               tokensOut: 0,
               durationMs: 1500 + ((i * 137) % 4000),
