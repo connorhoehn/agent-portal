@@ -26,6 +26,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { RecordLink } from '../decisions/RecordLink';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { RecordNotFound } from '../../components/UnavailableNotice';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -38,7 +39,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { ACCESS_API, TENANT_LABELS, filterPolicies, roleLabel, type AccessPolicy, type AccessTenant, type ItemsResponse, type SodSeverity } from '../../lib/accessRequests';
+import { ACCESS_API, TENANT_LABELS, filterPolicies, policyHref, roleLabel, type AccessPolicy, type AccessTenant, type ItemsResponse, type SodSeverity } from '../../lib/accessRequests';
 import { accessCollectionAdapter, resolveAccessTarget } from './accessCollectionCommands';
 import { ACCESS_SURFACES } from './accessSurfaces';
 
@@ -53,7 +54,7 @@ const severityChip = (s: SodSeverity) => <Chip tone={s === 'block' ? 'danger' : 
 
 const COLUMNS: DataTableColumn<AccessPolicy>[] = [
   { key: 'title', header: 'Policy', sortable: true, compare: (a, b) => a.title.localeCompare(b.title),
-    render: (p) => <T size="sm" title={p.title} className="block max-w-[18rem] truncate">{p.title}</T> },
+    render: (p) => <RecordLink to={policyHref(p.id)}><T size="sm" title={p.title} className="block max-w-[18rem] truncate">{p.title}</T></RecordLink> },
   { key: 'left', header: 'Holding', render: (p) => pair(p.left) },
   { key: 'right', header: 'Must not hold', render: (p) => pair(p.right) },
   { key: 'severity', header: 'Severity', width: '104px', render: (p) => severityChip(p.severity) },

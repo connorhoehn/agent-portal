@@ -17,6 +17,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { RecordLink } from '../decisions/RecordLink';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
 import { useFetch } from '../../hooks/useFetch';
@@ -56,7 +57,7 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
     noun: 'agents',
     empty: 'No agents in the fleet registry.',
     columns: [
-      { key: 'title', header: 'Agent', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (d) => d.title },
+      { key: 'title', header: 'Agent', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (d) => <RecordLink to={definitionHref(d.id)}>{d.title}</RecordLink> },
       { key: 'id', header: 'Runtime', render: (d) => <T size="xs" tone="tertiary">{d.source.id}</T> },
       { key: 'workspace', header: 'Workspace', render: (d) => <Chip tone="neutral" size="xs">{d.contextTenant}</Chip> },
       { key: 'model', header: 'Model', render: (d) => str(d.meta['model']) },
@@ -73,7 +74,7 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
     columns: [
       {
         key: 'title', header: 'Bot', sortable: true, compare: (a, b) => a.title.localeCompare(b.title),
-        render: (d) => d.title,
+        render: (d) => <RecordLink to={definitionHref(d.id)}>{d.title}</RecordLink>,
       },
       { key: 'state', header: 'State', width: '96px', render: (d) => (d.enabled ? <Chip tone="success" size="xs">active</Chip> : <Chip tone="neutral" size="xs">paused</Chip>) },
       { key: 'trigger', header: 'Trigger', render: (d) => (d.meta['cronExpr'] ? `${triggerSummary(d.triggers)} · ${String(d.meta['cronExpr'])}` : triggerSummary(d.triggers)) },
@@ -88,7 +89,7 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
     noun: 'commands',
     empty: 'No assessment commands are registered.',
     columns: [
-      { key: 'title', header: 'Command', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (d) => d.title },
+      { key: 'title', header: 'Command', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (d) => <RecordLink to={definitionHref(d.id)}>{d.title}</RecordLink> },
       { key: 'summary', header: 'What it does', render: (d) => d.description ?? '—' },
       { key: 'owner', header: 'Runs as', render: (d) => <T size="xs" tone="tertiary">{d.ownerName ?? d.owner ?? '—'}</T> },
       ...RUNS,

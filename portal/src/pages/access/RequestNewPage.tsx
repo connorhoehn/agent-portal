@@ -74,20 +74,20 @@ function RequestLink({ id, children }: { id: string; children: ReactNode }) {
 }
 
 /** The preview for the current choice, refreshed as it changes; stale answers are dropped. */
-function usePreview(itemId: string, beneficiaryId: string, duration: AccessDuration | '', enabled: boolean) {
+function usePreview(itemId: string, beneficiaryId: string, selfId: string, duration: AccessDuration | '', enabled: boolean) {
   const [state, setState] = useState<{ key: string; data: AccessRequestPreview | null; error: string | null } | null>(null);
   const key = `${itemId}|${beneficiaryId}|${duration}`;
   useEffect(() => {
     if (!enabled || !itemId || !beneficiaryId) return undefined;
     let live = true;
     void writeJson<AccessRequestPreview>(`${ACCESS_API}/requests/preview`, 'POST', {
-      itemId, beneficiaryId, ...(duration ? { duration } : {}),
+      itemId, ...(beneficiaryId !== selfId ? { beneficiaryId } : {}), ...(duration ? { duration } : {}),
     }).then((res) => {
       if (!live) return;
       setState({ key, data: res.ok ? res.data : null, error: res.ok ? null : (res.error ?? `HTTP ${res.status}`) });
     });
     return () => { live = false; };
-  }, [key, itemId, beneficiaryId, duration, enabled]);
+  }, [key, itemId, beneficiaryId, selfId, duration, enabled]);
   const current = state?.key === key ? state : null;
   return { preview: current?.data ?? null, error: current?.error ?? null, loading: enabled && !!itemId && !!beneficiaryId && !current };
 }
@@ -115,7 +115,7 @@ export default function RequestNewPage() {
   const duration: AccessDuration | '' = draft.duration || item?.defaultDuration || '';
   const effective: RequestDraft = { ...draft, beneficiaryId, duration };
   const problems = sectionProblems(effective, item);
-  const { preview, error: previewError, loading: previewLoading } = usePreview(item?.id ?? '', beneficiaryId, duration, mayRequest);
+  const { preview, error: previewError, loading: previewLoading } = usePreview(item?.id ?? '', beneficiaryId, selfId, duration, mayRequest);
   const blocked = !!preview?.refusal || preview?.sod.verdict === 'block';
 
   async function submit() {

@@ -51,6 +51,8 @@ export const result = (title: Text): Target => ({
   within: { css: typeof title === 'string' ? `main [data-record-key]:has-text(${JSON.stringify(title)})` : `main [data-record-key]:has(:text-matches(${JSON.stringify(title.source)}, "i"))` },
 });
 export const link = (name: Text): Target => ({ role: 'link', name, within: { css: 'main' } });
+/** The first record link in a list page's table (the page's row-title link), for answers whose row text is content the fixtures own. */
+export const firstRowLink = (tableTestId: string): Target => ({ css: `main [data-testid="${tableTestId}"] a`, nth: 0 });
 
 /** Why a mapped intent is not walked yet: the phase that gives the tenant the surface. */
 export const HOLD = {

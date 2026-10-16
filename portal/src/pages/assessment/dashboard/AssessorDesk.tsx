@@ -24,6 +24,7 @@ import {
   type ChipTone,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
+import { RecordLink } from '../../decisions/RecordLink';
 import { CollectionCommandHost } from '../../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../../components/collections/CollectionCommandPage';
 import { teamsCommandAdapter } from '../assessmentCollectionCommands';
@@ -181,9 +182,8 @@ export function AssessorDesk({
             key: 'name',
             header: 'Team',
             sortable: true,
-            // DataTable rows with onRowClick are keyboard-reachable on their
-            // own now (tabIndex + Enter/Space), so the name cell is plain text.
-            render: (t) => <T size="sm" weight="medium">{t.name}</T>,
+            // The name is the team's link (`/assessment/teams/:id`); the row also opens it.
+            render: (t) => <RecordLink to={`/assessment/teams/${encodeURIComponent(t.id)}`}><T size="sm" weight="medium">{t.name}</T></RecordLink>,
           },
           {
             key: 'lead',

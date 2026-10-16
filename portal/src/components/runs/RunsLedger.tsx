@@ -11,8 +11,9 @@ import {
   type CollectionAction,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { RecordLink } from '../../pages/decisions/RecordLink';
 import { useFetch } from '../../hooks/useFetch';
 import { showingLabel, usd } from '../../lib/format';
 import {
@@ -36,9 +37,12 @@ import { writeJson } from '../../lib/writeJson';
 import { CollectionCommandHost, type CollectionCommandAdapter } from '../collections/CollectionCommandHost';
 import { EMPTY_RUN_FILTERS, parseRunCommand, resolveRunCommand, runCommandExamples, type RunFilters } from './runCommands';
 
-function columns(showWorkspace: boolean): DataTableColumn<PipelineRun>[] {
+function columns(showWorkspace: boolean, detailBase: string | null): DataTableColumn<PipelineRun>[] {
   return [
-    { key: 'title', header: 'Run', render: (r) => <T size="sm" title={r.context.title} className="block max-w-[32rem] truncate">{r.context.title}</T>, sortable: true, compare: (a, b) => a.context.title.localeCompare(b.context.title) },
+    { key: 'title', header: 'Run', render: (r) => {
+      const title = <T size="sm" title={r.context.title} className="block max-w-[32rem] truncate">{r.context.title}</T>;
+      return detailBase ? <RecordLink to={runHref(detailBase, r.id)}>{title}</RecordLink> : title;
+    }, sortable: true, compare: (a, b) => a.context.title.localeCompare(b.context.title) },
     {
       key: 'status', header: 'Status', width: '128px', sortable: true,
       render: (r) => (
@@ -68,17 +72,20 @@ export interface RunsLedgerProps {
   /** The ledger spans workspaces (the pipelines tenant): show the Workspace column and filter. */
   showWorkspace?: boolean;
   pageSize?: number;
+  /** Told the status filter whenever it changes, so a page that shows its own run list above this ledger can narrow that list the same way. */
+  onStatusChange?: (status: string) => void;
   /** Full-page ledgers keep their shared command input below the scrolling rows. */
   fill?: boolean;
   'data-testid': string;
 }
 
-export function RunsLedger({ actions, endpoint, detailBase, showWorkspace = false, pageSize = 25, fill = false, 'data-testid': testId }: RunsLedgerProps) {
+export function RunsLedger({ actions, endpoint, detailBase, showWorkspace = false, pageSize = 25, onStatusChange, fill = false, 'data-testid': testId }: RunsLedgerProps) {
   const navigate = useNavigate();
   const { can } = useCapabilities();
   const { session } = useSession();
   const [filters, setFilters] = useState<RunFilters>({ ...EMPTY_RUN_FILTERS });
   const { status, kind, contextTenant, title } = filters;
+  useEffect(() => { onStatusChange?.(status); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   const setFilter = (key: keyof RunFilters, value: string) => setFilters(current => ({ ...current, [key]: value }));
   const { data, error, isLoading, refresh } = useFetch<RunListResponse>(
     `${endpoint}${runsQuery({ status, kind, contextTenant: showWorkspace ? contextTenant : '', limit: 200 })}`, 30_000,
@@ -152,7 +159,7 @@ export function RunsLedger({ actions, endpoint, detailBase, showWorkspace = fals
         <DataTable
           data-testid={testId}
           data={runs}
-          columns={columns(showWorkspace)}
+          columns={columns(showWorkspace, detailBase)}
           keyField={(r) => r.id}
           loading={isLoading && !data}
           pageSize={pageSize}

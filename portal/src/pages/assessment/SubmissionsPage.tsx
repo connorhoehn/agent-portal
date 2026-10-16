@@ -42,6 +42,7 @@ import {
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { useCrumbLabel } from '../../lib/crumbLabels';
+import { RecordLink } from '../decisions/RecordLink';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { submissionsCommandAdapter } from './assessmentCollectionCommands';
@@ -496,19 +497,7 @@ export default function SubmissionsPage() {
                   ),
                 }]
               : []),
-            { key: 'team', header: 'Team', render: (g) => <T size="sm" weight="medium">{g.teamName}</T> },
-            {
-              key: 'name',
-              header: 'Team name',
-              // teamName is the matched team's real name (resolveTeamName in
-              // secondaryFormat.ts); a hand-matched row's differing submitted
-              // text is the cell's tooltip, not a second line.
-              render: (g) => (
-                <T size="sm" title={g.submittedTeamName ? `submitted as “${g.submittedTeamName}”` : undefined}>
-                  {g.teamName}
-                </T>
-              ),
-            },
+            { key: 'team', header: 'Team', render: (g) => <T size="sm" weight="medium" title={g.submittedTeamName ? `submitted as “${g.submittedTeamName}”` : undefined}>{g.teamName}</T> },
             { key: 'submission', header: 'Submission', render: (g) => (g.formId ? `Form #${g.formId}` : 'Manual submission') },
             {
               key: 'revision',
@@ -526,7 +515,7 @@ export default function SubmissionsPage() {
                 </Chip>
               ),
             },
-            { key: 'submitter', header: 'Submitter', render: (g) => g.current.submitter_name || '—' },
+            { key: 'submitter', header: 'Submitter', render: (g) => (g.current.submitter_name ? <RecordLink to={submissionHref(g.key)}>{g.current.submitter_name}</RecordLink> : '—') },
             {
               key: 'received',
               header: 'Received',

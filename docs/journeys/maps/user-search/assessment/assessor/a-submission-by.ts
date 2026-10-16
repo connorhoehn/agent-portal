@@ -6,9 +6,8 @@ export default {
   family: 'user-search', log: 'assessment/assessor-a-submission-by', kind: 'intent', persona: P.asha, scenario: 'shared', identity: 'clone',
   goal: "Find Jordan Lee's submission from the submissions list",
   fields: { surface: "list search", pages: "portal/src/pages/assessment" },
-  hold: HOLD.tenantSearch,
   steps: [
     ...listSearch("/assessment/submissions", "Search submissions", "jordan", [/jordan.lee/]),
-    open(link(/jordan.lee/), /^\/assessment\//, 'The row opens its record'),
+    open(link(/jordan.lee/i), /^\/assessment\/submissions\//, 'The row opens its record'),
   ],
 } satisfies JourneyMap;

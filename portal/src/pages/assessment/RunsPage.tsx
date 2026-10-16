@@ -31,6 +31,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useNavigate, useParams } from 'react-router';
 import { KeyValue } from '../../components/KeyValue';
+import { RecordLink } from '../decisions/RecordLink';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { RecordNotFound } from '../../components/UnavailableNotice';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -199,6 +200,9 @@ export default function RunsPage() {
   const openRun = (id: string) => navigate(`/assessment/runs/${encodeURIComponent(id)}`);
   const [stopping, setStopping] = useState(false);
   const detail = runs.find((r) => r.id === detailId) ?? null;
+  // The command box under the page narrows the pipeline-runs ledger; the run list above follows its status filter.
+  const [statusFilter, setStatusFilter] = useState('');
+  const shown = statusFilter ? runs.filter((r) => r.status === statusFilter) : runs;
 
   // Reactive to its own launches: the same GET /events stream the Workspace
   // explorer subscribes to (./knowledge/useAssessmentEvents.ts) carries
@@ -337,8 +341,10 @@ export default function RunsPage() {
       ) : !(loading && !runsResp) && runs.length === 0 ? (
         <EmptyState title="No activity yet" />
       ) : (
+        <>
+        {statusFilter && <T size="xs" tone="secondary">{`Showing ${shown.length} of ${runs.length} runs with status ${statusFilter}. Clear the status in the pipeline runs command box to see them all.`}</T>}
         <DataTable<RunRecord>
-          data={runs}
+          data={shown}
           keyField={(r) => r.id}
           striped
           onRowClick={(r) => openRun(r.id)}
@@ -352,7 +358,7 @@ export default function RunsPage() {
               header: 'Run',
               // DataTable rows with onRowClick are keyboard-reachable on
               // their own now, so this is plain text, not a Button.
-              render: (r) => <T size="sm" title={r.id}>{runTitle(r, teams)}</T>,
+              render: (r) => <RecordLink to={`/assessment/runs/${encodeURIComponent(r.id)}`}><T size="sm" title={r.id}>{runTitle(r, teams)}</T></RecordLink>,
             },
             { key: 'team', header: 'Team', render: (r) => (r.team_id ? teams.find((t) => t.id === r.team_id)?.name ?? 'Unknown team' : '—') },
             {
@@ -363,7 +369,9 @@ export default function RunsPage() {
             { key: 'started', header: 'Started', numeric: true, render: (r) => formatRelativeTime(r.started_at) },
             { key: 'duration', header: 'Duration', numeric: true, render: (r) => formatDuration(r.started_at, r.finished_at) },
           ]}
+          emptyMessage={statusFilter ? `No run has status ${statusFilter}.` : 'No runs recorded yet.'}
         />
+        </>
       )}
 
       <RunACommandPanel onLaunched={load} />
@@ -379,7 +387,7 @@ export default function RunsPage() {
         title="Pipeline runs"
         description="Each command above, as a run of the pipelines ledger — its status, kind and cost."
       >
-        <RunsLedger endpoint="/api/assessment/pipeline-runs" detailBase={null} pageSize={10} data-testid="assessment-pipeline-runs" />
+        <RunsLedger endpoint="/api/assessment/pipeline-runs" detailBase={null} pageSize={10} onStatusChange={setStatusFilter} data-testid="assessment-pipeline-runs" />
       </PageSection>
 
     </Stack>

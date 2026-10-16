@@ -3,6 +3,7 @@ import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
 import { Banner, BranchIcon, Chip, CollapsibleSection, CollectionToolbar, DataTable, IconButton, Inline, KeyValue, ListIcon, PageSection, Stack, StatStrip, T, Tooltip, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { RecordLink } from '../decisions/RecordLink';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { pipelineCollectionAdapter, filterQueues } from './pipelineCollectionCommands';
@@ -12,7 +13,7 @@ import { queueTotal, type PipelineQueue, type PipelineQueuesResponse } from '../
 
 const count = (value: number | null | undefined) => value == null ? '—' : value.toLocaleString();
 const columns: DataTableColumn<PipelineQueue>[] = [
-  { key: 'name', header: 'Queue', sortable: true, compare: (a, b) => a.name.localeCompare(b.name), render: row => <Stack gap="none"><T size="sm" weight="medium">{row.name}</T><T size="xs" tone="secondary">{row.purpose}</T></Stack> },
+  { key: 'name', header: 'Queue', sortable: true, compare: (a, b) => a.name.localeCompare(b.name), render: row => <Stack gap="none"><RecordLink to={`/pipelines/queues?queue=${encodeURIComponent(row.name)}`}><T size="sm" weight="medium">{row.name}</T></RecordLink><T size="xs" tone="secondary">{row.purpose}</T></Stack> },
   { key: 'state', header: 'Status', render: row => <Chip size="xs" tone={row.state === 'unavailable' ? 'danger' : row.state === 'missing' || (row.deadLetter && (row.snapshot?.ready ?? 0) > 0) ? 'warning' : 'neutral'}>{row.state === 'available' ? row.deadLetter ? 'Dead-letter queue' : 'Available' : row.state === 'missing' ? 'Not created' : 'Unavailable'}</Chip> },
   { key: 'ready', header: 'Ready', numeric: true, render: row => count(row.snapshot?.ready) },
   { key: 'inFlight', header: 'In flight', numeric: true, render: row => count(row.snapshot?.inFlight) },

@@ -19,6 +19,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { RecordLink } from '../decisions/RecordLink';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { pipelineCollectionAdapter, filterRunbooks } from './pipelineCollectionCommands';
@@ -39,7 +40,7 @@ import { useDryRun } from './useDryRun';
 interface RunbooksResponse { runbooks: RunbookRow[]; total: number; unavailable: Array<{ source: string; error: string }> }
 
 const BASE_COLUMNS: DataTableColumn<RunbookRow>[] = [
-  { key: 'title', header: 'Runbook', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (r) => r.title },
+  { key: 'title', header: 'Runbook', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (r) => <RecordLink to={definitionHref(r.id)}>{r.title}</RecordLink> },
   { key: 'rung', header: 'Rung', render: (r) => rungLabel(r.runbook) },
   { key: 'steps', header: 'Steps', numeric: true, render: (r) => r.steps.length },
   {

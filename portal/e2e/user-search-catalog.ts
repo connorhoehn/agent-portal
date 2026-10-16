@@ -226,7 +226,7 @@ export const ASSESSMENT = tenantOf('assessment')([
     best: 'teams list "mine" filter', surfaces: [S('palette', { route: AS_TEAMS }), S('composer', { route: AS_TEAMS, grammar: 'show mine' })] },
   { id: 'a-team-lead', role: 'assessor', intent: 'Who leads a team',
     phrasings: ['who leads Data Platform', 'Data Platform lead', 'team lead for TEAM-004'],
-    expected: { summary: 'Elena Marsh leads TEAM-004 Data Platform', text: [/Elena Marsh/] },
+    expected: { summary: 'Farah Osei leads TEAM-004 Data Platform', text: [/Farah Osei/] },
     best: 'teams list row (lead column)', surfaces: [S('palette', { route: AS_TEAMS }), S('list-search', { route: AS_TEAMS, placeholder: 'Search by team name or ID…', keyword: 'Data Platform' }), S('composer', { route: AS_TEAMS, grammar: 'search Data Platform' })] },
   { id: 'a-unassigned', role: 'program-lead', intent: 'Teams without a lead',
     phrasings: ['teams without a lead', 'unassigned teams', 'which teams have no lead'],

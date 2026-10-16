@@ -17,6 +17,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { RecordLink } from '../decisions/RecordLink';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -49,10 +50,16 @@ function policyChip(item: CatalogItem) {
   );
 }
 
-const COLUMNS: DataTableColumn<CatalogItem>[] = [
+const requestHref = (i: CatalogItem) => `/access/requests/new?item=${encodeURIComponent(i.id)}`;
+
+/** An item has no page of its own: for a role that may request, its name links to the request form for it. */
+const columns = (mayRequest: boolean): DataTableColumn<CatalogItem>[] => [
   {
     key: 'title', header: 'Item', sortable: true, compare: (a, b) => a.title.localeCompare(b.title),
-    render: (i) => <T size="sm" title={`${i.title} — ${i.description}`} className="block max-w-[26rem] truncate">{i.title}</T>,
+    render: (i) => {
+      const name = <T size="sm" title={`${i.title} — ${i.description}`} className="block max-w-[26rem] truncate">{i.title}</T>;
+      return mayRequest ? <RecordLink to={requestHref(i)}>{name}</RecordLink> : name;
+    },
   },
   { key: 'kind', header: 'Kind', render: (i) => KIND_LABELS[i.kind] ?? i.kind },
   { key: 'tenant', header: 'Workspace', width: '120px', render: (i) => <Chip tone="neutral" size="xs">{TENANT_LABELS[i.tenant] ?? i.tenant}</Chip> },
@@ -71,7 +78,7 @@ export default function CatalogPage() {
   const all = data?.items ?? [];
   const rows = filterCatalog(all, query, tenant);
   const mayRequest = ready && can('RequestAccess');
-  const startRequest = (item: CatalogItem) => navigate(`/access/requests/new?item=${encodeURIComponent(item.id)}`);
+  const startRequest = (item: CatalogItem) => navigate(requestHref(item));
 
   const adapter = accessCollectionAdapter('catalog', {
     setQuery, setFilter: setTenant, refresh,
@@ -103,7 +110,7 @@ export default function CatalogPage() {
             <DataTable
               data-testid="access-catalog-table"
               data={rows}
-              columns={COLUMNS}
+              columns={columns(mayRequest)}
               keyField={(i) => i.id}
               loading={isLoading && !data}
               pageSize={25}
