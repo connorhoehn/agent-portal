@@ -183,7 +183,7 @@ S supported · P partial · W wrong · U unsupported · — surface not offered.
 | `p-runbook` Find a runbook | author | — | — | U 0/3 | P 0/3 (g:S) | P 0/3 (g:S) | **partial** | 0/3 |
 | `p-needs-dry-run` Runbooks that still need a dry run | author | — | — | — | S 1/3 | — | **supported** | 1/3 |
 | `p-dead-letter` Dead-letter queue | operator | — | — | P 0/3 | S 1/3 | S 1/3 (g:U) | **supported** | 2/3 |
-| `p-compaction-retry` Was a failed compaction retried | operator | — | — | U 0/3 | U 0/3 (g:W) | — | **unsupported** | 0/3 |
+| `p-run-failure-reason` Why did the token-verifier run fail | operator | — | — | U 0/3 | U 0/3 (g:W) | — | **unsupported** | 0/3 |
 | `p-assessment-runs` Runs from another workspace | operator | — | — | W 0/3 | U 0/3 | — | **wrong** | 0/3 |
 | `p-transcript-artifacts` Artifacts of a kind | author | — | — | W 0/3 | P 0/3 | — | **partial** | 0/3 |
 | `p-run-cost` Most expensive runs | pipeline-admin | — | — | U 0/3 | U 0/3 (g:U) | — | **unsupported** | 0/3 |
@@ -416,7 +416,7 @@ copy. Personas are cloned, never signed in directly.
 | `o-initiative-status` | org-leader (u-vera) | Status of a named initiative | "status of LLM Application Platform" · "how is the LLM platform going" · "LLM platform progress" | p-llm-platform (owner Nina Rivera, priority high) | search initiative row + answer |
 | `o-failed-runs` | sme (u-nora) | Which agent runs failed this week | "which runs failed this week" · "failed runs" · "show failed runs" | project run "Migrate the token verifier off the deprecated JWKS client" — npm test failed (2 days ago) | composer on /iq/runs ("show failed runs") |
 | `o-my-work` | sme (u-nora) | My open work | "what am I working on" · "my open work items" · "work assigned to me" | Nora DaSilva's items, e.g. wi-auth-e1-s1 "BFF authorization-code + PKCE flow" and wi-obs-e3 "Cost-aware telemetry" | search with an implicit "me" (assignee = signed-in person) or /iq/work composer |
-| `o-knowledge` | member (u-theo) | Find a how-to in the knowledge base | "how do I warm the Aurora Data API after idle" · "Aurora cold start" · "first Data API call fails" | knowledge cl-021 "First Aurora Data API call after idle needs a warm SELECT 1 and retry" | search Knowledge |
+| `o-knowledge` | member (u-theo) | Find a how-to in the knowledge base | "how do I warm the Aurora Data API after idle" · "Aurora cold start" · "first Data API call fails" | runbook rb-aurora-cold-start-retry "Wake a cold Aurora Data API and retry the first call" | search Knowledge (runbooks) |
 | `o-single-threaded` | org-leader (u-vera) | Where are we single-threaded (bus factor) | "where are we single-threaded" · "bus factor risks" · "knowledge held by only one person" | Open bus_factor findings (/iq/work/findings?sweep=bus_factor) | answer over findings + palette to /iq/work/findings |
 
 ### Assessment — 18 intents
@@ -480,7 +480,7 @@ copy. Personas are cloned, never signed in directly.
 | `p-runbook` | author (u-ines) | Find a runbook | "security group runbook" · "custodian runbook" · "allow-list for security groups" | runbook:promo-custodian-sg-drift "Custodian revokes open security-group ingress…" | runbooks search |
 | `p-needs-dry-run` | author (u-ines) | Runbooks that still need a dry run | "runbooks needing a dry run" · "never dry-run" · "show needs dry-run runbooks" | promo-custodian-sg-drift (candidate, no dry runs) | runbooks composer filter |
 | `p-dead-letter` | operator (u-kofi) | Dead-letter queue | "dead letter queue" · "failed distillation deliveries" · "show dead-letter queues" | Compaction DLQ "Failed distillation deliveries" | queues composer filter |
-| `p-compaction-retry` | operator (u-kofi) | Was a failed compaction retried | "was comp-104 retried" · "compaction failures" · "comp-104" | comp-104 failed (EventBus consumer lost its offset), retried by comp-105 | run record with retry link, reachable from palette |
+| `p-run-failure-reason` | operator (u-kofi) | Why did the token-verifier run fail | "why did the token verifier run fail" · "token verifier failure" · "JWKS rotation test failure" | the token-verifier project run failed: 3 tests still expect the signing key from before the last JWKS rotation | run record with its error, reachable from palette |
 | `p-assessment-runs` | operator (u-kofi) | Runs from another workspace | "assessment runs" · "show assessment runs" · "runs from the assessment workspace" | assessment command runs (score-dimensions running; two failed) | runs composer (workspace filter) |
 | `p-transcript-artifacts` | author (u-ines) | Artifacts of a kind | "transcript artifacts" · "show transcript artifacts" · "transcripts" | Artifacts with kind transcript | artifacts composer filter |
 | `p-run-cost` | pipeline-admin (u-dara) | Most expensive runs | "most expensive runs" · "run cost this week" · "what did runs cost today" | JWKS run $0.81; obs-nightly-maintenance $0.16 + $0.10 today | runs ledger sort by cost |
