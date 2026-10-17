@@ -53,7 +53,7 @@ check "[ \"\$(node -p \"require('./portal/package.json').dependencies['$RMPKG']\
 # The Pins sentence wraps across lines; read it as one.
 pins_ok() {
   local pins; pins=$(tr '\n' ' ' < CLAUDE.md | grep -oE 'Pins: .{0,240}' | head -1)
-  echo "$pins" | grep -qE 'ui-components` +\*\*2\.4(7[8-9]|[89][0-9])' && echo "$pins" | grep -qE 'realtime-modules` +\*\*0\.1(3[4-9]|[4-9][0-9])'
+  echo "$pins" | grep -qE 'ui-components` +\*\*2\.4(7[8-9]|[89][0-9])' && echo "$pins" | grep -qE 'realtime-modules`[^*]*\*\*0\.1(3[4-9]|[4-9][0-9])'
 }
 check pins_ok "P0 CLAUDE.md pins line names the new versions"
 check "exports middleware '$RMPKG/meeting' meeting MeetingService RedisMeetingStateStore" "P0 installed dist: realtime-modules/meeting (server)"
