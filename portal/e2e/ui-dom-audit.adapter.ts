@@ -288,6 +288,9 @@ export default {
       const huddle = (q: Page) => q.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' });
       await expect(huddle(p)).toBeEnabled({ timeout: 30_000 });
       await huddle(p).click();
+      // The sweep user has no remembered devices: the pre-join step asks once; join with its defaults.
+      const join = p.getByRole('dialog', { name: /Start a huddle|Join/ }).getByRole('button', { name: 'Join', exact: true });
+      if (await join.isVisible({ timeout: 5_000 }).catch(() => false)) await join.click();
       const stage = p.getByTestId('huddle-meeting-stage');
       await expect(stage).toBeVisible({ timeout: 30_000 });
       const browser = p.context().browser();
