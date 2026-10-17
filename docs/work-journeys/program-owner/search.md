@@ -4,13 +4,13 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/search; /iq/search?tab=answer; /iq/search?tab=connections; /iq/search?tab=results; /iq/search?q=Nora; /iq/search?q=auth; /iq/search?q=auth&type=decision; /iq/decisions/d-cognito-cutover; /iq/search?q=zzzzqq; /iq/search?tab=connections&type=person; /iq/projects; /iq/decisions
 map: docs/journeys/maps/work/program-owner/search.ts
 pages: portal/src/pages/search
-audited: 2026-10-16 07:18–07:18 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-835ff5a1), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-mia-clone-835ff5a1, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-16 19:34–19:35 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-0c2e2a5e), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
+session: /api/session/me sub u-mia-clone-0c2e2a5e, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: search.jpg
 verdict: pass
 console errors: 0
 layout: pass — ui-dom-audit 0 failing findings at 14 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/search: no horizontal scroll (1440/1440), 1 h1 "Search" 20/600 at 488/86, first-row-top: 100px, composer at y 793–851 of 900
-keyboard: pass — ControlOrMeta+K opens the command palette over the page; Tab from the top of the page: the controls take focus in turn (Tab visited 40 distinct visible controls of 63 focusable)
+keyboard: pass — ControlOrMeta+K opens the command palette over the page; Tab from the top of the page: the controls take focus in turn (Tab visited 40 distinct visible controls of 65 focusable)
 empty-state: pass — Search zzzzqq: the page says no records match and offers another phrase
 role-gating: pass — Search Nora: the person is found with her title and team, and the count agrees
 story-facts: pass — Open Search: every kind of record, counted by type, people first; Search Nora: the person is found with her title and team, and the count agrees; Search auth: people, the initiative and its decisions are all found; The people graph: fifty-nine people and their relationships, by name
@@ -36,4 +36,4 @@ notes: Mia Singh, program owner: Search and the palette: find a person, an initi
 | 12 | ControlOrMeta+K opens the command palette over the page | dialog-open | pass | 0 finding(s) | /iq/projects |
 | 13 | Type "decisions" into the palette: the Decisions page is offered |  | pass | 0 finding(s) | /iq/projects |
 | 14 | Pick Decisions: the palette jumps to the page and closes |  | pass | 0 finding(s) | /iq/decisions |
-| 15 | Tab from the top of the page: the controls take focus in turn (Tab visited 40 distinct visible controls of 63 focusable) |  | pass | — | /iq/decisions |
+| 15 | Tab from the top of the page: the controls take focus in turn (Tab visited 40 distinct visible controls of 65 focusable) |  | pass | — | /iq/decisions |

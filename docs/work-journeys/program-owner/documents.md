@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/projects/p-auth-migration?tab=docs; /iq/documents/adr-d-vectordb; /iq/search; /iq/documents/doc-missing
 map: docs/journeys/maps/work/program-owner/documents.ts
 pages: portal/src/pages/iq/DocumentRecordPage.tsx, portal/src/lib/workDocuments.ts
-audited: 2026-10-16 07:05–07:05 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-819e3a30), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-mia-clone-819e3a30, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-16 19:21–19:21 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-a7297390), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
+session: /api/session/me sub u-mia-clone-a7297390, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: documents.jpg
 verdict: pass
 console errors: 0 unexpected; 2 expected by the map (Failed to load resource: net::ERR_CONNECTION_REFUSED | Failed to load resource: the server responded with a status of 404 (Not Found))

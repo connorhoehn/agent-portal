@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/local-compute; /iq/local-compute/configuration; /iq/local-compute/configuration?contents=hooks; /iq/local-compute/configuration?contents=settings
 map: docs/journeys/maps/work/program-owner/local-compute.ts
 pages: portal/src/pages/local-compute
-audited: 2026-10-16 07:07–07:08 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-5d7810e6), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-mia-clone-5d7810e6, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-16 19:23–19:24 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-6398fa59), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
+session: /api/session/me sub u-mia-clone-6398fa59, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: local-compute.jpg
 verdict: pass
 console errors: 0 unexpected; 5 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

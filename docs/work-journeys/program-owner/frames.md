@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/projects; /iq/projects/p-auth-migration; /iq/decisions; /iq/work; /iq/search; /settings
 map: docs/journeys/maps/work/program-owner/frames.ts
 pages: portal/src/pages/ProjectsPage.tsx, portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/decisions, portal/src/pages/work, portal/src/pages/search, portal/src/pages/SettingsPage.tsx
-audited: 2026-10-16 07:05–07:07 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-83b62868), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-mia-clone-83b62868, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-16 19:21–19:23 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-81628269), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
+session: /api/session/me sub u-mia-clone-81628269, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: frames.jpg
 verdict: pass
 console errors: 0

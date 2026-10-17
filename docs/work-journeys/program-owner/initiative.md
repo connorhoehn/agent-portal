@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/projects/p-auth-migration; /iq/projects/p-auth-migration?scope=all&tab=work; /iq/projects/p-auth-migration?scope=all&tab=work&pane=details; /iq/projects/p-auth-migration?scope=all&tab=work&pane=agent; /iq/projects/p-auth-migration?scope=all; /iq/projects/p-auth-migration?scope=all&tab=docs; /iq/projects/p-auth-migration?scope=all&tab=decisions; /iq/projects/p-auth-migration?scope=all&tab=agents; /iq/projects/p-auth-migration?scope=all&tab=contributors; /iq/projects/p-auth-migration?scope=all&tab=activity; /iq/projects/p-auth-migration?scope=all&pane=details; /iq/projects/p-nope
 map: docs/journeys/maps/work/program-owner/initiative.ts
 pages: portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/projects, portal/src/pages/project-detail
-audited: 2026-10-16 07:07–07:07 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-f2933dbf), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-mia-clone-f2933dbf, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-16 19:23–19:23 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-8f2d90a5), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
+session: /api/session/me sub u-mia-clone-8f2d90a5, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: initiative.jpg
 verdict: pass
 console errors: 0 unexpected; 5 expected by the map (Failed to load resource: net::ERR_CONNECTION_REFUSED | Failed to load resource: the server responded with a status of 404 (Not Found))
