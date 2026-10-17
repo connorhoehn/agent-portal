@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
-import { cloneIdentity, signIn, withMockScope, type MockScopeScenario } from './realSession';
+import { cloneIdentity, openAsClone, signIn, withMockScope, type MockScopeScenario } from './realSession';
 import { selectAuditRoutes, matchesAuditLocation, auditAliasTarget } from './ui-dom-audit.routes';
 import { pipelineComposerPolicy, tenantComposerPolicy } from './ui-dom-audit.policies';
 import { staticInventory, paramInventory, PARAM_ROUTES, OBSERVED_ROUTES, resolveParam, SWEEP_USER, sourceDigest, type InventoryRoute } from './route-inventory';
@@ -278,6 +278,41 @@ export default {
       await expect(panel).toBeVisible();
       await expect(panel.getByRole('tab', { name: /^Unread/ })).toHaveAttribute('aria-selected', 'true');
       await expect(panel.locator(selectors.emptyStates)).toBeVisible();
+    } });
+    // A call open with its Rooms pane (docs/meeting-rooms-app-goal.md E3): the sweep user starts the page's
+    // huddle (the caller organizes it), two peer clones join so Rooms is offered (decision 4: three people),
+    // the organizer drafts rooms (a draft keeps Rooms after the peers leave), and the pane is audited.
+    // Opt in with AUDIT_CALL_STATES=1 against a portal built with VITE_MEETING_ROOMS=true: it starts a real
+    // huddle on the page, so a routine sweep never does.
+    if (process.env.AUDIT_CALL_STATES === '1' && /^\/iq\/projects\/p-[a-z0-9-]+$/.test(pathname)) states.push({ name: 'call-rooms-pane', enter: async p => {
+      const huddle = (q: Page) => q.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' });
+      await expect(huddle(p)).toBeEnabled({ timeout: 30_000 });
+      await huddle(p).click();
+      const stage = p.getByTestId('huddle-meeting-stage');
+      await expect(stage).toBeVisible({ timeout: 30_000 });
+      const browser = p.context().browser();
+      if (!browser) throw new Error('The rooms state needs the browser to seat peer clones');
+      const baseURL = new URL(p.url()).origin;
+      const peers = [];
+      try {
+        for (const persona of ['u-nora', 'u-caleb']) {
+          const peer = await openAsClone(browser, persona, { baseURL, label: 'audit-call-rooms', preJoin: 'remembered', url: pathname });
+          peers.push(peer);
+          await expect(huddle(peer.page)).toBeEnabled({ timeout: 30_000 });
+          await huddle(peer.page).click();
+        }
+        const rooms = stage.getByTestId('meeting-toolbar-rooms');
+        await expect(rooms).toBeVisible({ timeout: 30_000 });
+        await rooms.click();
+        const pane = p.getByTestId('huddle-breakout-rooms');
+        await expect(pane).toBeVisible();
+        await pane.getByTestId('breakout-create-count').fill('2');
+        await pane.getByTestId('breakout-create-submit').click();
+        await expect(pane.getByTestId('breakout-room')).toHaveCount(2, { timeout: 15_000 });
+      } finally {
+        for (const peer of peers) await peer.page.context().close().catch(() => {});
+      }
+      await expect(p.getByTestId('huddle-breakout-rooms')).toBeVisible();
     } });
     // board.lane-surface / board.lane-columns: the Sprints lens with its first sprint's board open.
     if (pathname === '/iq/projects') states.push({ name: 'sprint-board', navigates: true, required: [...SHELL_REQUIRED, '$boardLanes'], enter: async p => {
