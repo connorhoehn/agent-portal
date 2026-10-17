@@ -11,7 +11,7 @@ import { CallHostProvider, CallMediaOutlet, useCallHost, type OnCallHostEvent } 
 import { realtimeTokenSource } from '../../lib/realtimeToken';
 import { useRealtimeEndpoints } from '../../lib/useRealtimeEndpoints';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
-import { useSelfAvatar } from '../../hooks/usePageCalls';
+import { useSelfAvatar, usePeopleDirectory } from '../../hooks/usePageCalls';
 import { callLogEvents, reportCallLogEvents, type CallLogEventBody } from '../../pages/social/socialCallLog';
 import { isPageCallLobby, pageHuddleLogBodies, startPageHuddleTracker, type PageHuddleTracker } from '../../lib/pageCalls';
 import { roomSlugFromLobby } from '../../pages/social/socialPlatform';
@@ -140,6 +140,8 @@ export function ShellCallHost({ children, onDialogueChange }: { children: ReactN
   const frames = useGatewayFrames();
   // Your tile's fallback face (the library draws it when video is off); none → initials.
   const selfAvatar = useSelfAvatar(!!session);
+  // Names and portraits for people the call knows only by id (a page huddle rings nobody).
+  const nameFor = usePeopleDirectory(!!session);
   const reporter = useRef({ baseUrl: platformApiUrl, selfId: session?.sub, selfName: session?.name ?? '' });
   reporter.current = { baseUrl: platformApiUrl, selfId: session?.sub, selfName: session?.name ?? '' };
   const onCallEvent = useCallback<OnCallHostEvent>((kind, event, ctx) => {
@@ -167,7 +169,7 @@ export function ShellCallHost({ children, onDialogueChange }: { children: ReactN
   return <CallHostProvider scopeKey={callScopeKey(session)} self={self} tenant={session?.tenant ?? null}
     platformApiUrl={platformApiUrl} getIdToken={getToken} videoUrl={videoUrl}
     gateway={frames.gateway} gatewayConfigured={frames.configured} connectionState={frames.connectionState}
-    onAccept={onAccept} onCallEvent={onCallEvent} preJoinStorageKey={PRE_JOIN_KEY}
+    onAccept={onAccept} onCallEvent={onCallEvent} nameFor={nameFor} preJoinStorageKey={PRE_JOIN_KEY}
     // The meeting rides only the lobbies lib/meetingRooms.ts names (initiative huddles, behind VITE_MEETING_ROOMS).
     meeting={SHELL_MEETING}>
     <BoundCallWorkspace channel={boundChannel} />

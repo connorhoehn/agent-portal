@@ -43,3 +43,18 @@ export function usePeopleNames(enabled = true): NameOf {
     return people?.people.find(p => p.userId === userId)?.displayName ?? userId;
   }, [people]);
 }
+
+/**
+ * The call host's directory (`CallHostProvider nameFor`): a person's name and portrait from the shared
+ * directory, or null for someone it does not know (the call keeps its own name, then the id).
+ */
+export function usePeopleDirectory(enabled = true): (userId: string) => { displayName: string; avatarUrl?: string } | null {
+  const fetched = useFetch<unknown>(enabled ? '/api/people/shared' : null, 120_000, { share: true });
+  const people = useMemo(() => readSharedPeople(fetched.data), [fetched.data]);
+  return useCallback((userId: string) => {
+    const person = people?.me.userId === userId ? people.me : people?.people.find(p => p.userId === userId);
+    if (!person?.displayName || person.displayName === userId) return null;
+    return { displayName: person.displayName, ...(person.avatarUrl ? { avatarUrl: person.avatarUrl } : {}) };
+  }, [people]);
+}
+

@@ -142,6 +142,23 @@ function FooterIdle() {
     : lobby.startBlockedReason ?? (host?.startBound ? undefined : 'This page cannot start a huddle');
   const messageReason = !lobby ? 'No huddle here to message'
     : composerMounted || pane.registered ? undefined : 'Start the huddle to message it, or open a page with a conversation';
+  // A huddle already live on this page (the host watches the lobby, realtime-modules 0.136): who is in it, and Join.
+  const live = lobby && host?.call.phase === 'idle' ? host.call.call : null;
+  const inLive = (live?.participants ?? []).filter(p => !p.isLocal && (p.state === 'in-call' || p.state === 'reconnecting'));
+  if (live && inLive.length > 0) return <HuddleBar
+    name={lobby!.title}
+    showContext={false}
+    phase="joinable"
+    liveParticipants={inLive.map(p => ({ id: p.userId, displayName: p.displayName, ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}) }))}
+    participantCount={inLive.length}
+    onJoin={() => { void host!.call.rejoin(); }}
+    onToggleChat={() => { pane.reveal(); focus.request({ mode: 'chat', target: { kind: 'discussion' } }); }}
+    chatLabel="Message"
+    {...(messageReason ? { chatDisabledReason: messageReason } : {})}
+    extras={<DeviceSettings onClick={() => host?.checkDevices()} disabled={!host} />}
+    className="shell-collaboration-bar min-w-0 flex-1 border-l border-border"
+    data-testid="shell-footer-context"
+  />;
   return <HuddleBar
     name={lobby?.title ?? 'Huddle actions'}
     showContext={false}
