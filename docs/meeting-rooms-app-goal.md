@@ -86,6 +86,15 @@ platform-api.
 | M5 — proof | E1, E2, E3 | **E1** fixture e2e (`portal/e2e/meeting-rooms.spec.ts`, two clones): raise hands and see the queue on both, organizer creates and opens rooms, the participant's stage moves (banner, room chat line), an announcement reaches the room chat, end returns both; light and dark; **E2** real-media acceptance `portal/e2e/huddle-breakout-real.spec.ts` under `REAL_MEDIA_ACCEPTANCE=1` (SFU, platform-api, fake devices): producers move to the room lobby and back, a forged room join is refused at the token mint; the run is recorded in `docs/realtime-validation/<date>/meeting-breakout.md`; **E3** journeys: a call-with-rooms map per surface shipped in U5 (organizer and participant), walked and sealed; the ui-dom-audit adapter gains a "call open, rooms pane" state for those routes with 0 findings |
 | M6 — docs | D1 | `CLAUDE.md` docs-map row and validator count; `docs/journeys.md`; the handoff doc names the pins and what is owed |
 
+## Status of the cross-repo items (2026-10-16)
+
+- X1 proved end to end: `docs/realtime-validation/2026-10-16/meeting-breakout.md` (E2, pass) — platform-api
+  asks the BFF for every OrgIQ lobby (`LOBBY_AUTHORITY_REQUIRED=true` on the local media stack) and refuses
+  a forged room join at the mint.
+- X2 fixed in live-video-streaming `11b2a6f`: `GET /api/channels/:arn` no longer returns `streamKey` to an
+  unauthenticated reader (the admin token still sees it; test `test/api-channel-read-streamkey.test.js`).
+  Running SFUs pick it up on their next restart; a deployed stack needs the new image.
+
 ## Rules
 
 Upstream first: a missing seam is a library change and a release, never host
