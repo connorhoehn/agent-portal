@@ -252,6 +252,8 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   const baseStateStore = redis ? new RedisCallStateStore(redis) : new InMemoryCallStateStore();
   let pageRuntime: CallPageRuntime | null = null;
   let chatRuntime: CallChatRuntime | null = null;
+  // The meeting feature's service, bound after attach (below), for the call-ended hook.
+  let meetingService: MeetingService | null = null;
   const stateStore = observeCallPageLifecycle(baseStateStore, () => pageRuntime, () => chatRuntime);
   const inbox = createGatewayNotificationStore(redis);
   const chatBackend = opts.socialChat ?? createSocialChatBackend();
@@ -356,6 +358,8 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
         onCallEnded: summary => {
           void pageRuntime?.finish(summary.callId, summary.participantClientIds).catch(error => console.warn('[call-page] terminal cleanup failed', error));
           void chatRuntime?.finish(summary.callId, summary.participantClientIds).catch(error => console.warn('[call-chat] terminal cleanup failed', error));
+          // A meeting is its call (decision 1): the next call in this lobby starts with no hands, rooms or announcements.
+          void meetingService?.resetMeeting(summary.lobbyName).catch(error => console.warn('[meeting] terminal cleanup failed', error));
         },
       }),
       // Raised hands and breakout rooms (docs/meeting-rooms-app-goal.md B1).
@@ -394,9 +398,10 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   if (!isWorkGraphStreamPublisher(workGraphService)) throw new Error('work-graph feature did not register its stream service');
   const stopWorkGraph = workGraphStream.attach(workGraphService, clusterRouter?.peerEvents ?? null);
   // The room rules (lib/gateway/authority.ts) ask this service who sits in which room.
-  const meetingService = handle.services['meeting'];
-  if (!(meetingService instanceof MeetingService)) throw new Error('meeting feature did not register its service');
-  bindMeetingRooms({ service: meetingService, lobbyOfCall: getLobby });
+  const registeredMeeting = handle.services['meeting'];
+  if (!(registeredMeeting instanceof MeetingService)) throw new Error('meeting feature did not register its service');
+  meetingService = registeredMeeting;
+  bindMeetingRooms({ service: registeredMeeting, lobbyOfCall: getLobby });
   // The invalidation seam drives this cache; with Redis routing its user,
   // channel and global events also reach the peers (`orgiq:authority`).
   const unbindAuthority = verdicts ? bindAuthorityCache(verdicts.cache, { peers: clusterRouter?.peerEvents ?? null }) : null;
@@ -449,7 +454,8 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
       try { await baseDispose(); } finally {
         stopWorkGraph();
         bindMeetingRooms(null);
-        meetingService.dispose();
+        registeredMeeting.dispose();
+        meetingService = null;
         stopMembershipWrites?.();
         unbindAuthority?.();
         pageRuntime?.dispose();

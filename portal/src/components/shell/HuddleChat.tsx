@@ -27,10 +27,10 @@ import { useSession } from '../../lib/auth';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
 import { sendAndWaitForSocialChatAck } from '../../pages/social/socialChatDelivery';
 import { HuddleRoster, createHuddleRosterReader, huddleScopeKey, type HuddleParticipant } from '../../lib/huddleRoster';
-import { huddleChatChannelFor, isBreakoutChat } from '../../lib/meetingRooms';
+import { INERT_MEETING, announceInstead, huddleChatChannelFor, isBreakoutChat } from '../../lib/meetingRooms';
 import { MeetingPane, useCallMeeting } from './CallMeeting';
 import { currentCallPage, readCallChatPageReference, type CallPageDescriptor } from '../../lib/callPages';
-import { useCallBlockPageClaimed, useCallHost, useCallMediaPanel, useClaimCallBlock, type CallHostMeeting } from '../../lib/conversationCall';
+import { useCallBlockPageClaimed, useCallHost, useCallMediaPanel, useClaimCallBlock } from '../../lib/conversationCall';
 import { useMeetingChat, type MeetingChatBinding } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { callScopeKey, hasJoinedCall, huddleChatScopeTenant } from './callShellModel';
 import { CallReactionPlayback } from '../../lib/callReactionPlayback';
@@ -89,6 +89,13 @@ export interface HuddleChatContextValue {
    */
   openPane(request?: HuddlePaneRequest): boolean;
   refresh(): void;
+  /**
+   * The call meeting's chat binding (ui-components `useMeetingChat`), run ONCE here so every
+   * composer that sends to the huddle — this pane's, the initiative composer's, the presentation
+   * dock's — shares one "To" target: while an organizer has "To: All rooms" chosen, `send`
+   * announces through the binding's `onSend` and posts nothing to the chat. Null without a meeting.
+   */
+  meetingChat: MeetingChatBinding | null;
 }
 export interface HuddlePaneRequest {
   /** Text to carry into the pane's composer. The pane owns it from here. */
@@ -276,7 +283,22 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
     return true;
   }, [current, setDraft, setPage]);
   const sendRef = useRef<(text: string, page: CallPageDescriptor | null, extra: Record<string, unknown>) => Promise<boolean>>(async () => false);
+  // One meeting chat binding for the shell (see `meetingChat` above); a source on every render.
+  const meetingSource = host?.meeting ?? null;
+  const binding = useMeetingChat(meetingSource ?? INERT_MEETING, { send: content => { void sendRef.current(content, null, {}); } });
+  const announcements = binding.withAnnouncements([]).length;
+  const meetingChat = useMemo(() => (meetingSource ? binding : null),
+    // The binding is rebuilt every render; expose a new one only when what it draws or routes changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [!!meetingSource, binding.target, binding.title, announcements, meetingSource?.isOrganizer, meetingSource?.breakout.phase, meetingSource?.myRoom?.id, meetingSource?.ready]);
+  const meetingChatRef = useRef(meetingChat);
+  meetingChatRef.current = meetingSource ? binding : null;
   const send = useCallback(async (text: string, sendPage: CallPageDescriptor | null = null, extra: Record<string, unknown> = {}, submittedDraft?: RichChatDraft): Promise<boolean> => {
+    // "To: All rooms": every composer's send becomes the meeting's announcement, never a chat post.
+    if (announceInstead(meetingChatRef.current, text)) {
+      if (submittedDraft && sameDraftScope()) setDraft(settleHuddleDraft(draftRef.current, submittedDraft, true, EMPTY_DRAFT));
+      return true;
+    }
     const live = store.get();
     if (!live || !ready || unavailableReason || inFlight.current) return false;
     const trimmed = text.trim();
@@ -321,8 +343,8 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
     openMessage: () => { if (current) { setView(v => v === 'floating' ? v : 'pane'); setFocusRequest(n => n + 1); } },
     popOut: () => { if (current) setView('floating'); }, closeMessage: () => setView('closed'),
     draft, setDraft, retiredDrafts, updateRetiredDraft, discardRetiredDraft, page, setPage, focusRequest, send, openPane,
-    refresh: () => { setSendError(null); void confirm(true); },
-  }), [paneOwners, registerPaneOwner, current, callId, channel, actorId, host?.lobby?.title, state, unavailableReason, pending, view, draft, setDraft, retiredDrafts, updateRetiredDraft, discardRetiredDraft, page, setPage, focusRequest, send, openPane, confirm]);
+    refresh: () => { setSendError(null); void confirm(true); }, meetingChat,
+  }), [meetingChat, paneOwners, registerPaneOwner, current, callId, channel, actorId, host?.lobby?.title, state, unavailableReason, pending, view, draft, setDraft, retiredDrafts, updateRetiredDraft, discardRetiredDraft, page, setPage, focusRequest, send, openPane, confirm]);
   const publish = useCallback((next: HuddleChannelRuntime | null) => {
     if (next || store.get()) store.set(next);
   }, [store]);
@@ -426,25 +448,9 @@ export function useHuddleChatToggle(): { open: boolean; toggle(): void } | null 
   } };
 }
 
-/**
- * The meeting's chat binding (ui-components `useMeetingChat`): announcements
- * merged into the thread and marked, the which-chat line and the organizer's
- * "To: All rooms" switch. A component, so the hook runs only while the call
- * carries a meeting.
- */
-function MeetingChatBinder({ meeting, send, renderMessageReferences, children }: {
-  meeting: CallHostMeeting; send(content: string): void;
-  renderMessageReferences: (message: { metadata?: Record<string, unknown> }) => ReactNode;
-  children(binding: MeetingChatBinding): ReactNode;
-}) {
-  const binding = useMeetingChat(meeting, { send, renderMessageReferences });
-  return <>{children(binding)}</>;
-}
-
 /** The huddle conversation: ConversationThread on the call's channel (a room's inside one), with the page reference and participant mentions. */
 export function HuddleChatBody() {
   const chat = useHuddleChat();
-  const host = useCallHost();
   const runtime = useHuddleChannel();
   const location = useLocation();
   const navigate = useNavigate();
@@ -504,9 +510,11 @@ export function HuddleChatBody() {
       {!state.error && <T size="sm" tone="tertiary" className="m-3" wrap data-testid="huddle-chat-loading">{chat.unavailableReason ?? 'Loading the huddle conversation…'}</T>}
     </Stack>;
   }
-  const thread = (meetingChat: MeetingChatBinding | null) => {
-    const announcing = meetingChat?.target === 'rooms';
-    return <ConversationThread editable={false} conversation={runtime.conversation} title={chat.title} data-testid="huddle-thread"
+  // The shell's meeting chat binding: announcements merged and marked, the which-chat line and the
+  // organizer's "To" switch; its target routes chat.send (HuddleChatProvider), from this pane or any composer.
+  const meetingChat = chat.meetingChat;
+  const announcing = meetingChat?.target === 'rooms';
+  const thread = <ConversationThread editable={false} conversation={runtime.conversation} title={chat.title} data-testid="huddle-thread"
       input={input.owner === 'composer' ? 'below' : undefined}
       includeFiles={input.owner !== 'composer'}
       // An empty room chat with announcements draws the panel, so they show.
@@ -515,20 +523,13 @@ export function HuddleChatBody() {
       // A room's chat is gateway-only: pins and files (REST on the call's channel) stay with the main huddle.
       reactions={!chat.unavailableReason} {...(inRoom ? {} : { pins: { canPin: !chat.unavailableReason } })} attachments={!chat.unavailableReason && !inRoom}
       readOnlyReason={chat.unavailableReason} placeholder={announcing ? 'Announce to every room…' : 'Message this huddle…'} typingUsers={runtime.conversation.chat.typingUsers}
-      renderMessageReferences={meetingChat ? meetingChat.renderMessageReferences : references}
+      renderMessageReferences={meetingChat ? (message => meetingChat.renderMessageReferences(message) ?? references(message)) : references}
       {...(meetingChat ? { transformMessages: meetingChat.withAnnouncements, ...(meetingChat.dock ? { dock: meetingChat.dock } : {}) } : {})}
       composer={{
         // The huddle's confirmed send: one in flight, the delivery id, the page the draft carries.
         recipients: [{ id: 'huddle', label: chat.title, channel: runtime.channel, attachments: true,
           send: out => {
             if (pending || chat.unavailableReason) return false;
-            // An organizer's "To: All rooms" goes to the meeting, not this chat.
-            if (meetingChat?.target === 'rooms') {
-              if (!out.text.trim()) return false;
-              meetingChat.onSend(out.text);
-              chat.setDraft(EMPTY_DRAFT, chat.draft);
-              return true;
-            }
             if (!out.text.trim() && !draftPage) return false;
             const { displayName: _name, ...extra } = out.metadata;
             return confirmed(out.text.trim(), draftPage, extra);
@@ -552,13 +553,9 @@ export function HuddleChatBody() {
             onClick={() => chat.setPage(currentPage)} data-testid="huddle-chat-attach-page" /> : null}
         </Inline>,
       }} />;
-  };
-  const meeting = host?.meeting ?? null;
   return <Stack gap="none" className="min-h-0 flex-1">
     {error}
-    {meeting
-      ? <MeetingChatBinder meeting={meeting} send={text => { void chat.send(text, null); }} renderMessageReferences={references}>{thread}</MeetingChatBinder>
-      : thread(null)}
+    {thread}
     {chat.unavailableReason && input.owner !== 'composer' && <T size="xs" tone="tertiary" className="px-3 pb-2" wrap>{chat.unavailableReason}</T>}
   </Stack>;
 }

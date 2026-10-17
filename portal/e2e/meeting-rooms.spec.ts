@@ -32,7 +32,8 @@ import { chooseOption } from './selectOption';
 const INITIATIVE_URL = '/iq/projects/p-auth-migration';
 const FAKE_PLATFORM = 'http://meeting-media.test';
 const MEETING_ROOMS_ON = process.env.VITE_MEETING_ROOMS === 'true' || process.env.VITE_MEETING_ROOMS === '1';
-const ANNOUNCEMENT = 'Five minutes left, then back to the main huddle';
+// Unique per run: the gateway keeps a meeting's announcement history per lobby, past the call.
+const ANNOUNCEMENT = `Five minutes left, then back to the main huddle (${Date.now().toString(36)})`;
 
 test.use({
   ...(process.env.PARITY_BASE_URL ? { baseURL: process.env.PARITY_BASE_URL } : {}),
@@ -56,9 +57,11 @@ async function fakeMedia(context: BrowserContext, label: string) {
   });
 }
 
-async function clone(browser: Browser, persona: string, theme: 'light' | 'dark'): Promise<Clone> {
+// `baseURL` is passed through: openAsClone otherwise falls back to the CONFIG project's baseURL
+// (test.info().project.use), which ignores this file's test.use and lands on the shared portal.
+async function clone(browser: Browser, baseURL: string | undefined, persona: string, theme: 'light' | 'dark'): Promise<Clone> {
   return openAsClone(browser, persona, {
-    label: 'meeting-rooms-e1', preJoin: 'remembered', url: INITIATIVE_URL,
+    ...(baseURL ? { baseURL } : {}), label: 'meeting-rooms-e1', preJoin: 'remembered', url: INITIATIVE_URL,
     contextOptions: { colorScheme: theme },
     prepare: context => fakeMedia(context, persona),
   });
@@ -85,14 +88,31 @@ const rooms = (page: Page) => page.getByTestId('huddle-breakout-rooms');
 const banner = (page: Page) => page.getByTestId('breakout-banner');
 const chatPane = (page: Page) => page.getByTestId('huddle-chat-panel');
 
-/** A page with no call composer: the dock collapses into the footer and the huddle chat opens in the right pane. */
-async function toSettings(page: Page) {
-  await page.getByRole('link', { name: 'Settings', exact: true }).first().click();
+/**
+ * Another page, reached in-app so the call stays up: the breadcrumb's Initiatives (the rail is
+ * folded three levels deep, so it offers no Settings link). The huddle chat opens in the right pane.
+ */
+async function toList(page: Page) {
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Initiatives', exact: true }).click();
+  await expect(page).toHaveURL(/\/iq\/projects(\?|$)/);
   await expect(page.getByTestId('shell-call-dock')).toBeVisible();
 }
 async function openChat(page: Page) {
   if (!await chatPane(page).isVisible()) await page.getByTestId('shell-call-dock-chat').click();
   await expect(chatPane(page)).toBeVisible();
+}
+async function endLeftoverRooms(page: Page) {
+  // Ending open rooms leaves them drafted (closed); Delete rooms returns the panel to Create.
+  // Each step is a server round trip, so poll until Create shows.
+  const create = rooms(page).getByTestId('breakout-create');
+  await expect.poll(async () => {
+    if (await create.isVisible()) return true;
+    for (const id of ['breakout-end', 'breakout-delete']) {
+      const control = rooms(page).getByTestId(id);
+      if (await control.isVisible()) { await control.click(); break; }
+    }
+    return create.isVisible();
+  }, { timeout: 20_000, intervals: [500, 1_000, 2_000] }).toBe(true);
 }
 async function leave(page: Page) {
   const button = page.getByTestId(/^(shell-)?call-dock-leave$/).first();
@@ -100,18 +120,21 @@ async function leave(page: Page) {
 }
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`meeting rooms on an initiative huddle: hands, rooms, room chat, announcement, end (${theme})`, async ({ browser, request }, testInfo) => {
+  test(`meeting rooms on an initiative huddle: hands, rooms, room chat, announcement, end (${theme})`, async ({ browser, request, baseURL }, testInfo) => {
     test.setTimeout(180_000);
     test.skip(!await gatewayOn(request), 'the middleware is unreachable or its /ws gateway is off (GET /api/health realtime.gateway)');
     const people: Clone[] = [];
     try {
-      const vera = await clone(browser, 'u-vera', theme); people.push(vera);
-      const nora = await clone(browser, 'u-nora', theme); people.push(nora);
-      const rachel = await clone(browser, 'u-rachel', theme); people.push(rachel);
+      const vera = await clone(browser, baseURL, 'u-vera', theme); people.push(vera);
+      const nora = await clone(browser, baseURL, 'u-nora', theme); people.push(nora);
+      const rachel = await clone(browser, baseURL, 'u-rachel', theme); people.push(rachel);
       if (theme === 'dark') for (const p of people) await expect(p.page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
       // Vera starts the page huddle (she is its caller, so its organizer); the others join it.
-      for (const p of [vera, nora, rachel]) {
+      // Each joiner reloads first so the lobby's `status` discovery already names Vera's call:
+      // a Huddle pressed before discovery answers starts a second call in the same lobby.
+      for (const [i, p] of [vera, nora, rachel].entries()) {
+        if (i > 0) await p.page.reload();
         await expect(huddle(p.page)).toBeEnabled({ timeout: 30_000 });
         await huddle(p.page).click();
         await expect(p.page.getByTestId('shell-call-dock')).toBeVisible({ timeout: 30_000 });
@@ -137,6 +160,9 @@ for (const theme of ['light', 'dark'] as const) {
       // ── rooms: create two, assign, open ───────────────────────────────────
       await stageItem(vera.page, 'rooms').click();
       await expect(rooms(vera.page)).toBeVisible();
+      // The gateway keeps a meeting's rooms per lobby, past the call that made them: a run that
+      // stopped mid-way leaves them open for the next call here. End them so this run starts clean.
+      await endLeftoverRooms(vera.page);
       await rooms(vera.page).getByTestId('breakout-create-count').fill('2');
       await rooms(vera.page).getByTestId('breakout-create-submit').click();
       await expect(rooms(vera.page).getByTestId('breakout-room')).toHaveCount(2, { timeout: 15_000 });
@@ -153,22 +179,28 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(banner(vera.page)).toHaveCount(0); // the organizer stays in the main meeting
       await testInfo.attach(`stage-in-room-${theme}`, { body: await nora.page.screenshot(), contentType: 'image/png' });
 
-      // On a page with no call composer the stage collapses; the banner sits under the page.
-      await toSettings(nora.page);
-      await expect(stage(nora.page)).toHaveCount(0);
+      // Away from the initiative the banner follows: in the stage where a page holds the dock,
+      // else under the page — exactly once either way.
+      await toList(nora.page);
+      await expect(banner(nora.page)).toHaveCount(1);
       await expect(banner(nora.page)).toContainText('Room 1');
       await openChat(nora.page);
       await expect(chatPane(nora.page).getByTestId('meeting-chat-context')).toContainText('Room 1 chat', { timeout: 15_000 });
 
-      // ── the organizer announces to every room from the chat ───────────────
-      await toSettings(vera.page);
-      await openChat(vera.page);
-      const target = chatPane(vera.page).getByTestId('meeting-chat-target');
+      // ── the organizer announces to every room from the initiative composer ─
+      // Vera stays on the initiative page, whose composer claims the huddle: the "To" switch is in
+      // the huddle thread beside it, and the composer's send must announce, not post to the chat.
+      const target = vera.page.getByTestId('meeting-chat-target');
       await expect(target).toBeVisible({ timeout: 15_000 });
       await target.getByText('All rooms', { exact: true }).click();
-      await chatPane(vera.page).getByTestId('rich-chat-composer-input').fill(ANNOUNCEMENT);
-      await expect(chatPane(vera.page).getByTestId('rich-chat-composer-send')).toBeEnabled();
-      await chatPane(vera.page).getByTestId('rich-chat-composer-send').click();
+      const composer = vera.page.getByTestId('initiative-workspace').getByTestId('initiative-composer');
+      await expect(composer.getByRole('combobox', { name: 'Chat recipient' })).toHaveAttribute('data-value', /^huddle:/);
+      await composer.getByRole('textbox', { name: 'Message' }).fill(ANNOUNCEMENT);
+      await composer.getByRole('button', { name: /^Send/ }).click();
+      // Vera's own thread shows it once, as the marked announcement — no ordinary chat copy.
+      const veraThread = vera.page.getByTestId('huddle-thread');
+      await expect(veraThread.getByText(ANNOUNCEMENT, { exact: true })).toHaveCount(1, { timeout: 20_000 });
+      await expect(veraThread.getByTestId('meeting-chat-announcement-note')).toHaveCount(1);
       // Nora's room chat carries it, marked; her banner shows it too.
       const announced = chatPane(nora.page).getByText(ANNOUNCEMENT, { exact: true });
       await expect(announced).toBeVisible({ timeout: 20_000 });
@@ -177,7 +209,8 @@ for (const theme of ['light', 'dark'] as const) {
       await testInfo.attach(`room-chat-announcement-${theme}`, { body: await nora.page.screenshot(), contentType: 'image/png' });
 
       // ── the organizer ends the rooms; everyone is back ────────────────────
-      await footerItem(vera.page, 'rooms').click();
+      // Rooms is still open in the right column; else reopen it from whichever bar carries it here.
+      if (!await rooms(vera.page).isVisible()) await stageItem(vera.page, 'rooms').or(footerItem(vera.page, 'rooms')).first().click();
       await expect(rooms(vera.page)).toBeVisible();
       await rooms(vera.page).getByTestId('breakout-end').click();
       for (const p of [nora, rachel]) await expect(banner(p.page)).toHaveCount(0, { timeout: 20_000 });
@@ -187,6 +220,9 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(stage(nora.page).getByTestId('breakout-banner')).toHaveCount(0);
       for (const p of people) expect(p.errors, `${p.cloneId} page errors`).toEqual([]);
     } finally {
+      // Best effort: never leave rooms open on the shared lobby for the next run.
+      const organizer = people[0];
+      if (organizer && await rooms(organizer.page).isVisible().catch(() => false)) await endLeftoverRooms(organizer.page).catch(() => undefined);
       for (const p of people) await leave(p.page);
       await Promise.all(people.map(p => p.close()));
     }

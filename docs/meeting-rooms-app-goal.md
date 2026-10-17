@@ -48,6 +48,8 @@ platform-api.
 
 - **Drafted, not merged (2026-10-16):** M2 on `plan/meeting-rooms-app` (`1359876b` B1–B4, `5767cd75` room chat end to end: membership, sends, frame filter, teardown; 31 new middleware tests) and M3 for initiative huddles on `plan/meeting-rooms-portal` (footer meeting items, stage header with `MeetingToolbar` + room banner via `CallMediaOutlet header`, hands from the host, room chat following `activeChat` with announcements via `transformMessages` and the dock, `VITE_MEETING_ROOMS` + `enabledFor` gate). Both wait for M0 (pins) and land then. Open from the drafts: pins and summarize refuse room chats; `GET /api/calls/:callId/chat` returns only the main huddle; a room's history starts at the call join; no recording signal yet for `RecordingConsentNotice`.
 
+- **Landed (2026-10-16):** `e04ab23a` — pins (ui-components 2.478.0, realtime-modules 0.134.0), BFF (M2), portal for initiative huddles (M3, behind `VITE_MEETING_ROOMS`), proof drafts and docs. **Follow-up** (lands after the journey seal): realtime-modules **0.135.0** `resetMeeting` (L8) called from the call-ended hook, so a new call in a lobby starts clean; announcements from every huddle composer (not only the chat pane); names instead of ids in the rooms and People panes; the E1 spec reaches the flag-on portal and passes light and dark (5 of 6 runs; one failure right after Vite started, cause unknown). Assumes one call per lobby.
+
 ## Decisions this goal makes (change them here, not in code)
 
 1. **A meeting is a call.** `meetingId` is the call's LVS lobby name. A

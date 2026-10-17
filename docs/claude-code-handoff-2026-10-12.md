@@ -307,7 +307,7 @@ Open, in order:
 
 ## Meeting rooms on calls (2026-10-16)
 
-Pins moved to ui-components **2.478.0** and realtime-modules **0.134.0** for
+Pins moved to ui-components **2.478.0** and realtime-modules **0.135.0** for
 `docs/meeting-rooms-app-goal.md` (judge `scripts/validate-meeting-rooms-app.sh`).
 Initiative huddles carry raise hand, reactions and breakout rooms behind
 `VITE_MEETING_ROOMS` (default off). Owed: the real-media acceptance record

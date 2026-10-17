@@ -119,6 +119,13 @@ function HuddleDialogueMonitor({ onChange }: { onChange?: (open: boolean) => voi
   return null;
 }
 
+/** The meeting panes' provider, named from the huddle's seat roster (the BFF resolves those names). */
+function MeetingSeats({ children }: { children: ReactNode }) {
+  const chat = useHuddleChat();
+  return <CallMeetingProvider seats={chat?.participants ?? NO_SEATS}>{children}</CallMeetingProvider>;
+}
+const NO_SEATS: readonly { userId: string; displayName: string }[] = [];
+
 function BoundCallWorkspace({ channel }: { channel: MutableRefObject<string | null> }) {
   const host = useCallHost();
   const current = host?.lobby?.channel ?? null;
@@ -167,7 +174,7 @@ export function ShellCallHost({ children, onDialogueChange }: { children: ReactN
     <CallSessionMonitor />
     <RoomCallLog report={onCallEvent} />
     <PageHuddleCallLog report={reportBodies} />
-    <CallMeetingProvider><HuddleChatProvider><HuddleDialogueMonitor onChange={onDialogueChange} />{children}</HuddleChatProvider></CallMeetingProvider>
+    <HuddleChatProvider><MeetingSeats><HuddleDialogueMonitor onChange={onDialogueChange} />{children}</MeetingSeats></HuddleChatProvider>
   </CallHostProvider>;
 }
 

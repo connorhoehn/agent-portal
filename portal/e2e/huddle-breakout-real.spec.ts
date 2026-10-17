@@ -80,10 +80,11 @@ const playingRemote = (page: Page) => page.locator('[data-testid="shell-call-med
     return stream?.getAudioTracks().some(track => track.readyState === 'live') && !media.muted && !media.paused;
   }).length);
 
-async function clone(browser: Browser, persona: string): Promise<Clone> {
+// `baseURL` is passed through (see meeting-rooms.spec.ts): openAsClone's fallback is the config project's.
+async function clone(browser: Browser, baseURL: string | undefined, persona: string): Promise<Clone> {
   const sessions: Clone['sessions'] = [];
   const person = await openAsClone(browser, persona, {
-    label: 'meeting-breakout-e2', preJoin: 'remembered', url: INITIATIVE_URL,
+    ...(baseURL ? { baseURL } : {}), label: 'meeting-breakout-e2', preJoin: 'remembered', url: INITIATIVE_URL,
     contextOptions: { permissions: ['camera', 'microphone'] },
     prepare: async context => {
       await recordPeers(context);
@@ -108,18 +109,19 @@ const huddle = (page: Page) => page.getByTestId('shell-footer-context').getByRol
 const rooms = (page: Page) => page.getByTestId('huddle-breakout-rooms');
 const stageItem = (page: Page, id: string) => page.getByTestId('huddle-meeting-stage').getByTestId(`meeting-toolbar-${id}`);
 
-test('a breakout room moves real media to its lobby and back; a forged room join is refused at the mint', async ({ browser }, testInfo) => {
+test('a breakout room moves real media to its lobby and back; a forged room join is refused at the mint', async ({ browser, baseURL }, testInfo) => {
   test.setTimeout(240_000);
   const people: Clone[] = [];
   try {
-    const vera = await clone(browser, 'u-vera'); people.push(vera);
-    const nora = await clone(browser, 'u-nora'); people.push(nora);
-    const rachel = await clone(browser, 'u-rachel'); people.push(rachel);
+    const vera = await clone(browser, baseURL, 'u-vera'); people.push(vera);
+    const nora = await clone(browser, baseURL, 'u-nora'); people.push(nora);
+    const rachel = await clone(browser, baseURL, 'u-rachel'); people.push(rachel);
     const endpoints = await token(nora.page);
     expect(endpoints.videoUrl).toBe(process.env.MEDIA_SFU_URL ?? 'http://127.0.0.1:3902');
     if (process.env.MEDIA_PLATFORM_URL) expect(endpoints.platformApiUrl).toBe(process.env.MEDIA_PLATFORM_URL);
 
-    for (const p of people) {
+    for (const [i, p] of people.entries()) {
+      if (i > 0) await p.page.reload(); // discovery names Vera's call before the next Huddle (one call, not two)
       await expect(huddle(p.page)).toBeEnabled({ timeout: 30_000 });
       await huddle(p.page).click();
       await expect.poll(async () => (await inbound(p.page)).audioSamples, { timeout: 45_000 }).toBeGreaterThan(0);

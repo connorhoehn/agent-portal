@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { meetingToolbarItems } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import {
-  ROOMS_MIN_PARTICIPANTS, SHELL_MEETING, huddleChatChannelFor, isBreakoutChat, meetingBarItems, meetingEnabledFor, meetingRoomsFlag, meetingStageItems,
+  INERT_MEETING, ROOMS_MIN_PARTICIPANTS, SHELL_MEETING, announceInstead, meetingPeople, huddleChatChannelFor, isBreakoutChat, meetingBarItems, meetingEnabledFor, meetingRoomsFlag, meetingStageItems,
   roomsAllowed, stageHoldsMeeting,
 } from '../meetingRooms.ts';
 
@@ -100,4 +100,43 @@ test("the conversation follows the meeting's activeChat into a room, never into 
     'orgiq:huddle:call-2~breakout~r2', 'orgiq:huddle:call-10', 'orgiq:huddle:call-1~breakout~', 'orgiq:huddle:call-1~breakout~a~breakout~b',
     'orgiq:huddle:call-1~breakout~has space', 'meeting:orgiq:initiative:p-a', 'orgiq:initiative:p-a',
   ]) assert.equal(huddleChatChannelFor('call-1', forged), 'orgiq:huddle:call-1', forged);
+});
+
+test('"To: All rooms" turns any huddle send into the meeting announcement, never a chat post', () => {
+  const announced: string[] = [];
+  const binding = (target: 'chat' | 'rooms') => ({ target, onSend: (text: string) => { announced.push(text); } });
+  // The organizer chose All rooms: the send is the binding's onSend, and the caller posts nothing.
+  assert.equal(announceInstead(binding('rooms'), 'Five minutes left'), true);
+  assert.deepEqual(announced, ['Five minutes left']);
+  // This chat, no meeting, or nothing to say: the ordinary confirmed chat send goes on.
+  assert.equal(announceInstead(binding('chat'), 'hello'), false);
+  assert.equal(announceInstead(null, 'hello'), false);
+  assert.equal(announceInstead(binding('rooms'), '   '), false);
+  assert.deepEqual(announced, ['Five minutes left']);
+  // The stand-in source the shell's one binding runs on without a meeting can never announce.
+  assert.equal(INERT_MEETING.ready, false);
+  assert.equal(INERT_MEETING.isOrganizer, false);
+  assert.equal(INERT_MEETING.breakout.phase, 'none');
+});
+
+test('meeting people show names: a participant known only by id takes the seat roster name', () => {
+  const people = meetingPeople([
+    { userId: 'u-vera-clone-1', displayName: 'Vera Green', avatarUrl: '/a/vera.png' },
+    { userId: 'u-nora-clone-2', displayName: 'u-nora-clone-2' }, // the media layer had no name
+    { userId: 'u-rachel-clone-3', displayName: null },
+    { userId: 'u-vera-clone-1', displayName: 'Vera Green' }, // listed twice
+  ], [
+    { userId: 'u-nora-clone-2', displayName: 'Nora DaSilva' },
+    { userId: 'u-rachel-clone-3', displayName: 'Rachel Kowalski' },
+    { userId: 'u-sana-clone-4', displayName: 'Sana Iqbal' }, // seated, not yet on media
+  ]);
+  assert.deepEqual(people, [
+    { userId: 'u-vera-clone-1', displayName: 'Vera Green', avatarUrl: '/a/vera.png' },
+    { userId: 'u-nora-clone-2', displayName: 'Nora DaSilva' },
+    { userId: 'u-rachel-clone-3', displayName: 'Rachel Kowalski' },
+    { userId: 'u-sana-clone-4', displayName: 'Sana Iqbal' },
+  ]);
+  for (const person of people) assert.notEqual(person.displayName, person.userId, person.userId);
+  // With no roster name either, the id is the last resort (never an empty label).
+  assert.deepEqual(meetingPeople([{ userId: 'u-x' }], []), [{ userId: 'u-x', displayName: 'u-x' }]);
 });

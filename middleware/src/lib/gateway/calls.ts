@@ -65,7 +65,7 @@ export interface CallsFeatureOptions {
   /** The leased peer router's cross-node call pub/sub (REALTIME_GATEWAY_ROUTER=redis). */
   crossNodePubSub?: CallCrossNodePubSub;
   /** Terminal cleanup for the call-page and huddle-chat runtimes. */
-  onCallEnded: (summary: { callId: string; participantClientIds: string[] }) => void;
+  onCallEnded: (summary: { callId: string; lobbyName: string; participantClientIds: string[] }) => void;
 }
 
 /** The library's calls feature under this host's admission. */

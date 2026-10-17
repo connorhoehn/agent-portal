@@ -16,6 +16,7 @@
 //   Raise and React only), but stays while rooms exist so they can be closed.
 // - Decision 1: a room's chat is the call's huddle channel with the
 //   `~breakout~<roomId>` suffix; the meeting reports it as `activeChat`.
+import type { RMMeetingSource } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { huddleChannel } from './huddleRoster.ts';
 
 const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
@@ -104,3 +105,53 @@ export function huddleChatChannelFor(callId: string, activeChat: string | null |
 /** The conversation is a room's, not the call's: pins and files (REST, base channel only) stay off. */
 export const isBreakoutChat = (callId: string, channel: string | null | undefined): boolean =>
   !!channel && channel !== huddleChannel(callId) && huddleChatChannelFor(callId, channel) === channel;
+
+const noop = () => {};
+/**
+ * A meeting that is not there: the huddle chat runs ui-components `useMeetingChat` once, in the
+ * shell (so every composer that sends to the huddle shares its "To" target), and the hook needs a
+ * source on every render. Never ready, never an organizer: its target stays `chat`, no dock.
+ */
+export const INERT_MEETING: RMMeetingSource = {
+  ready: false, isOrganizer: false, hands: [], myHandPosition: null, myRoom: null, error: null,
+  breakout: { phase: 'none', mode: 'assigned', rooms: [], returned: [], endsAt: null, announcement: null, settings: { allowReturnToMain: true } },
+  state: { announcement: null },
+  toggleHand: noop, lowerHand: noop, lowerAllHands: noop, configureBreakouts: noop, assign: noop, autoAssign: noop,
+  openRooms: noop, closeRooms: noop, setTimer: noop, broadcast: noop, joinRoom: noop, returnToMain: noop,
+  endBreakouts: noop, dismissAnnouncement: noop,
+};
+
+/**
+ * Every huddle send passes here first: while an organizer has "To: All rooms" chosen, the text
+ * goes to the meeting through the binding's own `onSend` (an announcement) and never to the chat.
+ * True when it was announced (the caller settles its draft as sent).
+ */
+export function announceInstead(binding: { target: 'chat' | 'rooms'; onSend(content: string): void } | null, text: string): boolean {
+  if (binding?.target !== 'rooms' || !text.trim()) return false;
+  binding.onSend(text);
+  return true;
+}
+
+/** A person in the call as the meeting panes show them. */
+export interface MeetingPersonView { userId: string; displayName: string; avatarUrl?: string }
+
+/**
+ * Everyone in the meeting, by name: the call's participants (who is connected) merged with the
+ * huddle's seat roster (GET /api/calls/:callId/chat, BFF-resolved names). A participant the media
+ * layer only knows by id takes the roster's name; nobody is shown by their raw id when a name exists.
+ */
+export function meetingPeople(
+  participants: readonly { userId: string; displayName?: string | null; avatarUrl?: string | null }[],
+  roster: readonly { userId: string; displayName: string }[],
+): MeetingPersonView[] {
+  const names = new Map(roster.filter(r => r.displayName && r.displayName !== r.userId).map(r => [r.userId, r.displayName]));
+  const named = (userId: string, name: string | null | undefined) =>
+    name && name !== userId ? name : names.get(userId) ?? name ?? userId;
+  const out = new Map<string, MeetingPersonView>();
+  for (const p of participants) {
+    if (!p.userId || out.has(p.userId)) continue;
+    out.set(p.userId, { userId: p.userId, displayName: named(p.userId, p.displayName), ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}) });
+  }
+  for (const r of roster) if (r.userId && !out.has(r.userId)) out.set(r.userId, { userId: r.userId, displayName: named(r.userId, r.displayName) });
+  return [...out.values()];
+}

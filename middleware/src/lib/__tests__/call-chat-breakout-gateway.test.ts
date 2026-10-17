@@ -18,6 +18,7 @@ import { CallChatRuntime, callChatRuntime, roomChatChannel } from '../call-chat.
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';
 import { getUser } from '../../providers/identity.js';
 import type { Session } from '../session.js';
+import type { MeetingService } from '@connorhoehnslalom/realtime-modules/meeting';
 
 const SECRET = 'huddle-breakout-test-secret';
 type Frame = Record<string, unknown>; type Client = { ws: WebSocket; frames: Frame[]; user: string };
@@ -141,4 +142,33 @@ it('after the call ends the room channels are gone', async () => {
   expect(rows.every(row => row.removedAt !== null)).toBe(true);
   expect(errorCode(await refusal(bob, () => out(bob, { service: 'chat', action: 'join', channel: r1 })))).toMatch(NOT_ADMITTED);
   expect(errorCode(await refusal(bob, () => send(bob, r1, 'After the end', 'after-end')))).toBe('HUDDLE_CHAT_DENIED');
+}, 30000);
+
+it('the call\'s end resets its meeting: the next call in the lobby starts with no rooms, hands or announcements', async () => {
+  const { alice, bob, charlie } = await callWithRooms();
+  const meeting = handle.services['meeting'] as MeetingService;
+  out(bob, { service: 'meeting', action: 'hand.raise', meetingId: lobbyName });
+  out(alice, { service: 'meeting', action: 'breakout.broadcast', meetingId: lobbyName, message: 'Five minutes left' });
+  await until(() => bob.frames.some(frame => frame.type === 'meeting' && frame.action === 'breakout.announcement'));
+  await until(() => meetingFrames(alice, 'hands.changed').some(frame => (frame.data as { hands: unknown[] }).hands.length === 1));
+  const before = (await meeting.getState(lobbyName))!;
+  expect(before.breakout.phase).toBe('open');
+  expect(before.breakout.announcements).toHaveLength(1);
+
+  for (const [client, userId] of [[bob, 'bob'], [charlie, 'charlie'], [alice, 'alice']] as const) {
+    out(client, { service: 'call', action: 'user-status', callId, lobbyName, callerId: userId, userId, status: 'left', targetUserIds: [] });
+    out(client, { service: 'call', action: 'ended', callId, lobbyName, callerId: userId, targetUserIds: [userId] });
+  }
+  await until(() => !!meetingFrames(alice, 'breakout.changed').some(frame => (frame.data as { breakout: { phase: string } }).breakout.phase === 'none'));
+  const after = (await meeting.getState(lobbyName))!;
+  expect(after.version).toBeGreaterThan(before.version);
+  expect(after).toMatchObject({ createdBy: before.createdBy, hands: [],
+    breakout: { phase: 'none', rooms: [], announcement: null, announcements: [], endsAt: null } });
+
+  // A new call in the same lobby: a fresh follower's snapshot has nothing of the last one.
+  const follower = await connect('charlie');
+  out(follower, { service: 'meeting', action: 'subscribe', meetingId: lobbyName });
+  await until(() => meetingFrames(follower, 'meeting.snapshot').length > 0);
+  expect(meetingFrames(follower, 'meeting.snapshot')[0]!.data).toMatchObject({ hands: [], breakout: { phase: 'none', rooms: [], announcements: [] } });
+  expect(await meeting.admitsBreakoutLobby('bob', `${lobbyName}~breakout~r1`)).toBe(false);
 }, 30000);

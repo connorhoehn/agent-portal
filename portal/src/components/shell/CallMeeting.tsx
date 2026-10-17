@@ -19,16 +19,22 @@ import {
   meetingRosterProps, meetingToolbarItems, WrappedBreakoutRoomBanner, WrappedBreakoutRoomsPanel, type RMMeetingPerson,
 } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { callCounts, useCallBlockPlacement, useCallHost, type CallHostMeeting } from '../../lib/conversationCall';
-import { meetingBarItems, meetingStageItems, roomsAllowed, stageHoldsMeeting } from '../../lib/meetingRooms';
+import { meetingBarItems, meetingPeople, meetingStageItems, roomsAllowed, stageHoldsMeeting } from '../../lib/meetingRooms';
 
 export type MeetingPaneView = 'rooms' | 'people';
-interface PaneState { pane: MeetingPaneView | null; toggle(view: MeetingPaneView): void; close(): void }
+interface PaneState { pane: MeetingPaneView | null; toggle(view: MeetingPaneView): void; close(): void; seats: readonly MeetingSeat[] }
+/** A seat of the call as the huddle's roster names it (HuddleChat `participants`, BFF-resolved). */
+export interface MeetingSeat { userId: string; displayName: string }
+const NO_SEATS: readonly MeetingSeat[] = [];
 const PaneContext = createContext<PaneState | null>(null);
 const noop = () => {};
 const inCall = (p: { state: string }) => p.state === 'in-call' || p.state === 'reconnecting';
 
-/** Which meeting pane (Rooms or People) is open; closes itself when the meeting goes. */
-export function CallMeetingProvider({ children }: { children: ReactNode }) {
+/**
+ * Which meeting pane (Rooms or People) is open; closes itself when the meeting goes. `seats` is
+ * the huddle's roster, so a participant the media layer knows only by id still shows by name.
+ */
+export function CallMeetingProvider({ seats = NO_SEATS, children }: { seats?: readonly MeetingSeat[]; children: ReactNode }) {
   const host = useCallHost();
   const on = !!host?.meeting;
   const [pane, setPane] = useState<MeetingPaneView | null>(null);
@@ -37,7 +43,8 @@ export function CallMeetingProvider({ children }: { children: ReactNode }) {
     pane: on ? pane : null,
     toggle: view => setPane(current => current === view ? null : view),
     close: () => setPane(null),
-  }), [on, pane]);
+    seats,
+  }), [on, pane, seats]);
   return <PaneContext.Provider value={value}>{children}</PaneContext.Provider>;
 }
 
@@ -58,14 +65,17 @@ export function useCallMeeting(): CallMeetingView | null {
   const host = useCallHost();
   const pane = useContext(PaneContext);
   const participants = host?.call.call?.participants;
+  const seats = pane?.seats ?? NO_SEATS;
   const present = useMemo(() => (participants ?? []).filter(inCall), [participants]);
-  const people = useMemo<RMMeetingPerson[]>(() => present.map(p => ({
-    userId: p.userId, displayName: p.displayName, ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}),
-  })), [present]);
-  const roster = useMemo<RosterParticipant[]>(() => present.map(p => ({
-    id: p.userId, displayName: p.displayName, isLocal: p.isLocal, isMuted: !p.audioOn, isScreenSharing: p.screenSharing,
-    ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}),
-  })), [present]);
+  // Names from the call's participants, filled from the huddle's seat roster (lib/meetingRooms.ts `meetingPeople`).
+  const people = useMemo<RMMeetingPerson[]>(() => meetingPeople(present, seats), [present, seats]);
+  const roster = useMemo<RosterParticipant[]>(() => {
+    const named = new Map(people.map(p => [p.userId, p.displayName]));
+    return present.map(p => ({
+      id: p.userId, displayName: named.get(p.userId) ?? p.displayName, isLocal: p.isLocal, isMuted: !p.audioOn, isScreenSharing: p.screenSharing,
+      ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}),
+    }));
+  }, [present, people]);
   const meeting = host?.meeting ?? null;
   if (!meeting || !host?.lobby) return null;
   const rooms = roomsAllowed({ lobbyName: host.lobby.lobbyName, joined: callCounts(host.call.call).joined, breakoutPhase: meeting.breakout.phase });
