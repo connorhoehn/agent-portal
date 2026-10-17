@@ -13,7 +13,7 @@
 // has no live "this call records" signal to open on.
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ChatSidePanelFrame } from '@connorhoehnslalom/ui-components';
-import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { MeetingToolbar, RosterPanel, type MeetingToolbarItem, type RosterParticipant } from '@connorhoehnslalom/ui-components/video';
 import {
   meetingRosterProps, meetingToolbarItems, WrappedBreakoutRoomBanner, WrappedBreakoutRoomsPanel, type RMMeetingPerson,
@@ -130,7 +130,11 @@ type HuddleReact = { send(emoji: string): void; emojis: string[] } | null;
 export function MeetingStageHeader({ chat, react }: { chat: { open: boolean; toggle(): void } | null; react: HuddleReact }) {
   const placement = useCallBlockPlacement();
   const call = useCallMeeting();
-  if (!call || !stageHoldsMeeting(placement)) return null;
+  const host = useCallHost();
+  // The recording note is the host's (one dismissal per session); a drawn stage holds it, in the toolbar's row.
+  const note = host?.recordingNote ?? null;
+  if (!call) return null;
+  if (!stageHoldsMeeting(placement)) return note ? <Inline gap="none" className="px-2" data-testid="huddle-recording-row">{note}</Inline> : null;
   const items = meetingToolbarItems(call.meeting, {
     roomsOpen: call.pane === 'rooms',
     onToggleRooms: () => call.toggle('rooms'),
@@ -141,7 +145,7 @@ export function MeetingStageHeader({ chat, react }: { chat: { open: boolean; tog
   return <Stack gap="none" data-testid="huddle-meeting-stage">
     <WrappedBreakoutRoomBanner meeting={call.meeting} />
     {/* No onLeave: the dock's own bar keeps mic, camera and the one Leave (2.478 draws none here). */}
-    <MeetingToolbar items={meetingStageItems(items, { rooms: call.rooms })} data-testid="huddle-meeting-toolbar" />
+    <MeetingToolbar items={meetingStageItems(items, { rooms: call.rooms })} {...(note ? { start: note } : {})} data-testid="huddle-meeting-toolbar" />
   </Stack>;
 }
 

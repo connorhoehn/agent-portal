@@ -516,7 +516,7 @@ export function HuddleChatBody() {
   // organizer's "To" switch; its target routes chat.send (HuddleChatProvider), from this pane or any composer.
   const meetingChat = chat.meetingChat;
   const announcing = meetingChat?.target === 'rooms';
-  const thread = <ConversationThread editable={false} conversation={runtime.conversation} title={chat.title} data-testid="huddle-thread"
+  const thread = <ConversationThread editable={false} conversation={runtime.conversation} title={chat.title} data-testid="huddle-thread" postRhythm="chat"
       input={input.owner === 'composer' ? 'below' : undefined}
       includeFiles={input.owner !== 'composer'}
       // An empty room chat with announcements draws the panel, so they show.

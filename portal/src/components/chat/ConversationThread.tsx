@@ -165,10 +165,12 @@ export interface ConversationThreadProps {
   dock?: ReactNode;
   /** WrappedChatPanel `transformMessages` (the meeting chat's `withAnnouncements`); must be cheap. */
   transformMessages?: WrappedChatPanelProps['transformMessages'];
+  /** ChatPanel `postRhythm`: `chat` groups a person's consecutive posts (a call's huddle), `channel` (default) keeps posts apart. */
+  postRhythm?: 'channel' | 'chat';
   'data-testid'?: string;
 }
 
-export function ConversationThread({ conversation, title, readOnlyReason = null, pins, attachments = false, includeFiles = true, reactions = false, editable = true, renderMessageReferences, typingUsers, fill = true, input = 'own', composer, placeholder, notices = false, emptyState, dock, transformMessages, 'data-testid': testId }: ConversationThreadProps) {
+export function ConversationThread({ conversation, title, readOnlyReason = null, pins, attachments = false, includeFiles = true, reactions = false, editable = true, renderMessageReferences, typingUsers, fill = true, input = 'own', composer, placeholder, notices = false, emptyState, dock, transformMessages, postRhythm, 'data-testid': testId }: ConversationThreadProps) {
   const { channel, chat: originalChat, receipts, quote, connected, readState, maySend, userId, displayName, summarize } = conversation;
   const messages = useMessagePortraits(originalChat.messages);
   const chat = { ...originalChat, messages };
@@ -228,7 +230,7 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
       {...(pinned.messagePins ? { pins: pinned.messagePins } : {})} currentUserId={userId} displayName={displayName}
       editable={editable && canWrite && connected} {...(forward.onForwardMessage && canWrite ? { onForwardMessage: forward.onForwardMessage } : {})}
       {...(fill ? { fill: true } : {})} showHeader={false} contentAlign={input === 'below' || elsewhere ? 'start' : 'end'} {...(summarize.localMessages.length ? { localMessages: summarize.localMessages } : {})}
-      threaded {...(unreadFrom ? { unreadFrom } : {})} readReceipts={receipts.receipts} readReceiptsEnabled={receipts.enabled} disabled={!connected}
+      threaded {...(postRhythm ? { postRhythm } : {})} {...(unreadFrom ? { unreadFrom } : {})} readReceipts={receipts.receipts} readReceiptsEnabled={receipts.enabled} disabled={!connected}
       onReply={input === 'below' ? undefined : elsewhere ? (elsewhere.replies ? message => { quote.start(message); owner.focus(true); } : undefined) : quote.start}
       {...(renderMessageReferences ? { renderMessageReferences } : {})} typingUsers={typingUsers ?? chat.typingUsers}
       flushComposer={input !== 'below' && !elsewhere} composer={field}
