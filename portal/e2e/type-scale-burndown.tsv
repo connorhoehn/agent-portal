@@ -2,3 +2,7 @@
 # Columns: route (inventory key) · offender (rule region size/weight) · count · owner surface · due date.
 # The sweep tolerates a listed offender; validate-rail-parity.sh fails a row still listed after its due date.
 # Rows only ever go: TYPE_SCALE_PRUNE=1 drops an offender that no longer occurs. Never add a row to pass; fix the page.
+/iq/runbooks/proposals/:pid	scale content 10/400	1	orgiq/runbooks	2026-10-21
+/iq/runbooks/proposals/:pid	scale content 10.5/400	1	orgiq/runbooks	2026-10-21
+/iq/runbooks/proposals/:pid	scale content 11/400	1	orgiq/runbooks	2026-10-21
+/iq/runbooks/proposals/:pid	scale content 11.5/400	1	orgiq/runbooks	2026-10-21

@@ -74,6 +74,8 @@ const selectors = {
   panels: '[role="dialog"], [role="alertdialog"], dialog[open], [data-ui-dialog]', emptyStates: '[data-ui-empty]',
   // section.empty-row: page sections (PageSection's data-ui-section, ui-components 2.449.0).
   sections: '[data-shell-nav] [data-ui-section]',
+  // consistency.fingerprint: the page title (PageHeader's h1, or a list-rail header's) and section headings.
+  pageTitles: '[data-shell-nav] h1', sectionHeadings: '[data-shell-nav] h2',
 };
 /** Body rows of a collection that has not declared its rows static (see `collectionTables`). */
 const collectionRows = ':is([data-shell-nav] [data-collection-table], [data-shell-nav] [data-collection-page]) table:not([role="presentation"]):not([data-collection-rows="static"] table) > tbody > tr:not(:has([colspan])):not([data-testid="datatable-loading-row"])';
@@ -132,6 +134,21 @@ async function ready(page: Page, spec: InventoryRoute & { required?: string[] })
 export default {
   assertRoute,
   baseURL: process.env.UI_AUDIT_BASE_URL ?? 'http://127.0.0.1:5183', selectors,
+  // Deep audit (ui-components skill references/deep-audit.md). Data states rewrite this audit
+  // context's own GET /api/* responses (empty, error, loading, long text, many rows); the shared
+  // mock and its scenarios are never switched. Session, realtime and mock-control routes pass
+  // through untouched; `denied` rewrites only the capabilities read so every action is false.
+  dataApi: {
+    include: '/api/',
+    exclude: ['^/api/session', '^/api/auth', '^/api/realtime', '^/api/__mock', '^/api/health', '^/api/tenants?$', '^/api/me$'],
+    permissions: '^/api/session/capabilities$',
+  },
+  deep: {
+    // Shell chrome a tab switch must leave alone, and where shell-wide triggers live (audited once per actor).
+    chrome: ['.shell-header', '[data-testid="shell-footer"]', '[data-shell-nav] > div > aside', '[data-column-dock]', '[data-floating-composer-dock]', '[data-testid="page-conversation-pane"]'],
+    panes: 'aside, [role="complementary"], [data-column], [data-column-dock], [data-floating-composer-dock], [data-testid="page-conversation-pane"], [data-testid$="-pane-column"], [data-testid$="-pane"]',
+    chromeTriggers: '.shell-header, [data-testid="shell-footer"], [data-shell-nav] > div > aside:first-child',
+  },
   revision: () => ({ uiComponents: JSON.parse(readFileSync(new URL('../node_modules/@connorhoehnslalom/ui-components/package.json', import.meta.url), 'utf8')).version, commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sourceDigest: sourceDigest(), dirty: Boolean(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim()) }),
   async cases(options: { tenant?: string; path?: string; all?: boolean }) {
     let routes: InventoryRoute[] = [...staticInventory(), ...paramInventory(), ...OBSERVED_ROUTES.map(r => ({ tenant: r.tenant, path: r.template.replace(':id', encodeURIComponent(r.id ?? r.fallback ?? 'missing')), pattern: r.pattern, source: 'param' as const, kind: /communication|social\/dms/.test(r.pattern) ? 'chat' as const : 'record' as const }))];
