@@ -197,6 +197,29 @@ describe('the meeting channel `meeting:<lobby>` follows the base lobby (B2)', ()
   });
 });
 
+describe('a lobby\'s occupancy `call-lobby:<lobby>` follows the lobby read (live huddle on a page)', () => {
+  const sub = (who: string, channel: string, kind: 'subscribe' | 'publish' = 'subscribe', tenant?: string) =>
+    admitChannel({ kind, clientId: `c-${who}`, channel, ctx: ctx(who, tenant) });
+  it('admitted exactly when the page lobby may be read now', async () => {
+    expect(await sub('dan', `call-lobby:${LOBBY}`)).toBe(true);
+    expect(await sub('pat', `call-lobby:${LOBBY}`)).toBe(false);
+    visible.delete(LOBBY);
+    expect(await sub('dan', `call-lobby:${LOBBY}`)).toBe(false);
+  });
+  it('subscribe only; never a non-lobby, a room, a malformed or a prefixed name', async () => {
+    expect(await sub('dan', `call-lobby:${LOBBY}`, 'publish')).toBe(false);
+    expect(await sub('dan', 'call-lobby:orgiq:work:w-1')).toBe(false);
+    expect(await sub('dan', 'call-lobby:')).toBe(false);
+    expect(await sub('bob', `call-lobby:${room('r1')}`)).toBe(false);
+    expect(await sub('dan', `presence:call-lobby:${LOBBY}`)).toBe(false);
+  });
+  it('a DM lobby\'s occupancy admits only the DM\'s ids; never a cached verdict', async () => {
+    expect(await sub('bob', 'call-lobby:orgiq:dm:bob:dan')).toBe(true);
+    expect(await sub('carol', 'call-lobby:orgiq:dm:bob:dan')).toBe(false);
+    expect(verdictCacheable(`call-lobby:${LOBBY}`)).toBe(false);
+  });
+});
+
 describe('a room\'s chat `orgiq:huddle:<callId>~breakout~<room>` (B2)', () => {
   const chat = (who: string, roomId = 'r1', kind: 'subscribe' | 'publish' = 'subscribe', prefix = '') =>
     admitChannel({ kind, clientId: `c-${who}`, channel: `${prefix}orgiq:huddle:${CALL}~breakout~${roomId}`, ctx: ctx(who) });

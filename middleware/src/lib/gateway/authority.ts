@@ -38,6 +38,7 @@ import type { FileUploadRow } from '@connorhoehn/realtime-modules/fileupload';
 import {
   BREAKOUT_LOBBY_SEPARATOR, MEETING_CHANNEL_PREFIX, breakoutLobbyName, parseBreakoutChannel, type MeetingService,
 } from '@connorhoehn/realtime-modules/meeting';
+import { CALL_LOBBY_CHANNEL_PREFIX, lobbyForCallLobbyChannel } from '@connorhoehn/realtime-modules/call';
 import { isAllowed } from '../authz.js';
 import { stewardsInitiative } from '../initiative-scope.js';
 import { inCallChatNamespace } from '../call-chat.js';
@@ -183,6 +184,12 @@ const GATEWAY_FAMILIES = defineChannelFamilies<ChannelAuthority, GatewayFamily>(
     // The meeting service publishes on its channel; clients only listen.
     { id: 'meeting', match: name => name.startsWith(MEETING_CHANNEL_PREFIX), guard: (auth, channel, kind, bare): boolean =>
       kind === 'subscribe' && channel === bare && GATEWAY_FAMILIES.lobbyGuard(auth, bare.slice(MEETING_CHANNEL_PREFIX.length)) },
+    // A lobby's occupancy (realtime-modules 0.136 `watch`): the call service publishes, clients only listen,
+    // and only on a name that is a call lobby.
+    { id: 'call-lobby', match: name => name.startsWith(CALL_LOBBY_CHANNEL_PREFIX), guard: (auth, channel, kind, bare): boolean => {
+      const lobby = lobbyForCallLobbyChannel(bare);
+      return !!lobby && kind === 'subscribe' && channel === bare && GATEWAY_FAMILIES.lobbyGuard(auth, lobby);
+    } },
     { id: 'call-chat', match: name => inCallChatNamespace(name), guard: (auth, channel, _kind, bare) => huddleChatShape(auth, channel, bare) },
     { id: 'flow-run', match: name => inFlowRunNamespace(name), guard: (auth, channel, kind, bare) => {
       const ref = parseFlowRunChannel(bare);
@@ -276,6 +283,8 @@ const AUTHORITY = createChannelAuthority<LiveGatewayPrincipal, ChannelAuthority,
     { id: 'meeting-room', match: base => base.includes(BREAKOUT_LOBBY_SEPARATOR), channel: args => admitRoomChat(args, args.base) },
     // A meeting's channel: exactly when its lobby admits a call join.
     { id: 'meeting', match: base => base.startsWith(MEETING_CHANNEL_PREFIX), channel: args => admitMeetingChannel(args, args.base) },
+    // Who is in a page's call: exactly whoever may read that page's lobby now (GET /api/calls' rule).
+    { id: 'call-lobby', match: base => base.startsWith(CALL_LOBBY_CHANNEL_PREFIX), channel: args => admitCallLobbyChannel(args, args.base) },
     // A flow run's private channel has exactly one reader: the run's requester (the durable row, now).
     { id: 'flow-run', match: base => inFlowRunNamespace(base), channel: args => authorizeFlowRunChannel(args, args.base, engineGuards) },
     // A Social deck's presence channel: owner or a current member of the source conversation.
@@ -292,6 +301,16 @@ const AUTHORITY = createChannelAuthority<LiveGatewayPrincipal, ChannelAuthority,
   channelSteps: [socialChannelStep],
   callSteps: [workGraphLobbyStep, socialCallStep],
 });
+
+/** `call-lobby:<lobby>`: the shape (a subscribe, on a call lobby), then the page lobby's read decision (a lobby no page owns: the call join decision), asked now. */
+async function admitCallLobbyChannel(args: LiveChannelAuthorization, base: string): Promise<boolean> {
+  const lobby = lobbyForCallLobbyChannel(base);
+  if (!lobby || !channelGuard(args.ctx as GuardAuth | null, args.channel, args.kind)) return false;
+  const read = await AUTHORITY.authorizeLobby(args.ctx, lobby, 'read');
+  if (read === 'ok') return true;
+  // A DM or other call lobby no page owns: whoever may join its call may see who is in it.
+  return read === 'not-a-lobby' && admitCall(args.ctx, 'join', { lobbyName: lobby }, callGuards(noStoredCall));
+}
 
 /** `meeting:<lobby>`: the shape (a subscribe, on a call lobby), then the call join decision on that lobby, asked now. */
 async function admitMeetingChannel(args: LiveChannelAuthorization, base: string): Promise<boolean> {
@@ -529,5 +548,5 @@ export function holdsFamilyAuthority(session: Session, channel: string, kind: Ch
 export function verdictCacheable(channel: string): boolean {
   const base = baseChannel(channel);
   return !inSocialDeckNamespace(base) && !inFlowRunNamespace(base)
-    && !base.includes(BREAKOUT_LOBBY_SEPARATOR) && !base.startsWith(MEETING_CHANNEL_PREFIX);
+    && !base.includes(BREAKOUT_LOBBY_SEPARATOR) && !base.startsWith(MEETING_CHANNEL_PREFIX) && !base.startsWith(CALL_LOBBY_CHANNEL_PREFIX);
 }
