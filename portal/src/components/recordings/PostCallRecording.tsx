@@ -41,7 +41,9 @@ function Monitor({ actorId, tenant }: { actorId: string; tenant: string }) {
     // the active call. Wait for the call to clear before claiming it ended.
     if (!callId && ['ended', 'idle', 'failed'].includes(phase) && joined.current) { setEnded(joined.current); joined.current = null; }
   }, [phase, callId, lobby, title, channel, actorId, tenant, host?.self?.userId, host?.tenant, binding?.callId, binding?.status]);
-  return ended ? <PostCallRecording key={`${ended.callId}:${ended.lobby}`} ended={ended} onDismiss={() => setEnded(null)} /> : null;
+  // Post-call only: a strip from an earlier huddle waits while another call is live.
+  const live = !!callId && ['joining', 'live', 'reconnecting'].includes(phase);
+  return ended && !live ? <PostCallRecording key={`${ended.callId}:${ended.lobby}`} ended={ended} onDismiss={() => setEnded(null)} /> : null;
 }
 export function PostCallRecording({ ended, onDismiss }: { ended: EndedCall; onDismiss(): void }) {
   const navigate = useNavigate();
@@ -68,7 +70,7 @@ export function PostCallRecording({ ended, onDismiss }: { ended: EndedCall; onDi
   }, [ended.lobby, observed.refresh]);
   const pending = !observed.error && !observed.timedOut && (!row || recordingIsProcessing(row));
   const partial = row?.transcriptStatus === 'failed' || row?.summaryStatus === 'failed' || row?.composeStatus === 'failed';
-  const label = observed.error ? 'Recording access could not be confirmed' : observed.timedOut ? 'Recording is not ready yet'
+  const label = observed.error ? 'Recording status is unavailable right now' : observed.timedOut ? 'Recording is not ready yet'
     : row ? recordingProcessingLabel(row) : 'Waiting for the recording from this call';
   const href = recordingHref(ended.lobby, row?.recordingId, ended.document);
   return <Stack gap="xs" className="border-b border-border bg-surface px-4 py-2" data-testid="postcall-recording" data-call-id={ended.callId}>
@@ -84,6 +86,6 @@ export function PostCallRecording({ ended, onDismiss }: { ended: EndedCall; onDi
       participants={(row.participants ?? []).map(person => ({ id: person.userId, name: person.displayName ?? person.userId }))}
       stage={recordingStage(row)} transcriptReady={row.transcriptStatus === 'ready'} summaryReady={row.summaryStatus === 'ready'}
       onOpen={() => { if (href) navigate(href); }} onOpenTranscript={() => { if (href) navigate(href); }} />}
-    {(observed.error || observed.timedOut || partial || (expanded && !row && ended.bindingUnavailable)) && <InlineAlert tone="warning">{observed.error ?? (observed.timedOut ? 'No exact recording association is ready. Retry or open recorded huddles; another call has not been substituted.' : partial ? 'One processing step failed. Available saved artifacts can still be opened.' : 'The native call could not confirm its recording association. No other call has been substituted. Retry or check recorded huddles.')}</InlineAlert>}
+    {(observed.timedOut || partial || (expanded && !row && ended.bindingUnavailable)) && <InlineAlert tone="warning">{(observed.timedOut ? 'No exact recording association is ready. Retry or open recorded huddles; another call has not been substituted.' : partial ? 'One processing step failed. Available saved artifacts can still be opened.' : 'The native call could not confirm its recording association. No other call has been substituted. Retry or check recorded huddles.')}</InlineAlert>}
   </Stack>;
 }

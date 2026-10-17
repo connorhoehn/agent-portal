@@ -272,3 +272,12 @@ export class CallPageSession {
     }
   }
 }
+
+/**
+ * The reference names the page the call itself is about (an initiative's huddle carrying that
+ * initiative): the conversation already says so, so its card is not drawn on every message.
+ */
+export function isCallContextReference(reference: CallPageDescriptor | null | undefined, lobbyName: string | null | undefined): boolean {
+  return !!reference && !!lobbyName && reference.kind === 'initiative' && lobbyName === `orgiq:initiative:${reference.id}`;
+}
+

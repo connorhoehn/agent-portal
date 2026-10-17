@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CallPageRequestError, CallPageSession, canonicalCallPageHref, canStopSharingCallPage, createCallPageClient,
-  currentCallPage, readCallPageSnapshot, readCallChatPageReference, reconcileCallPage,
+  currentCallPage, isCallContextReference, readCallPageSnapshot, readCallChatPageReference, reconcileCallPage,
   type CallPageClient, type CallPageSnapshot, type SharedCallPage,
 } from '../callPages.ts';
 
@@ -237,3 +237,12 @@ test('an older replay cannot erase a failed save explanation', async () => {
   assert.equal(session.getSnapshot().error, 'Could not save');
   assert.deepEqual(session.getSnapshot().snapshot, snapshot(2));
 });
+
+test('isCallContextReference: an initiative huddle does not repeat its own initiative as a card', () => {
+  assert.equal(isCallContextReference({ kind: 'initiative', id: 'p-auth-migration' }, 'orgiq:initiative:p-auth-migration'), true);
+  assert.equal(isCallContextReference({ kind: 'initiative', id: 'p-auth-migration' }, 'orgiq:initiative:p-observability'), false);
+  assert.equal(isCallContextReference({ kind: 'work-item', id: 'p-auth-migration' }, 'orgiq:initiative:p-auth-migration'), false);
+  assert.equal(isCallContextReference({ kind: 'initiative', id: 'p-auth-migration' }, null), false);
+  assert.equal(isCallContextReference(null, 'orgiq:initiative:p-auth-migration'), false);
+});
+

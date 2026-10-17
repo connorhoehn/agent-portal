@@ -29,7 +29,7 @@ import { sendAndWaitForSocialChatAck } from '../../pages/social/socialChatDelive
 import { HuddleRoster, createHuddleRosterReader, huddleScopeKey, type HuddleParticipant } from '../../lib/huddleRoster';
 import { INERT_MEETING, announceInstead, huddleChatChannelFor, isBreakoutChat } from '../../lib/meetingRooms';
 import { MeetingPane, useCallMeeting } from './CallMeeting';
-import { currentCallPage, readCallChatPageReference, type CallPageDescriptor } from '../../lib/callPages';
+import { currentCallPage, isCallContextReference, readCallChatPageReference, type CallPageDescriptor } from '../../lib/callPages';
 import { useCallBlockPageClaimed, useCallHost, useCallMediaPanel, useClaimCallBlock } from '../../lib/conversationCall';
 import { useMeetingChat, type MeetingChatBinding } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { callScopeKey, hasJoinedCall, huddleChatScopeTenant } from './callShellModel';
@@ -469,11 +469,13 @@ export function HuddleChatBody() {
     else composer.current?.focus();
   }, [focusRequest]);
   // Each message's reference arrives resolved by the BFF for this reader.
+  const host = useCallHost();
+  const callLobby = host?.lobby?.lobbyName ?? null;
   const references = useCallback((message: { metadata?: Record<string, unknown> }) => {
     const reference = readCallChatPageReference(message.metadata?.['pageReference']);
-    return reference ? <PageReferenceCard reference={reference} onOpen={target => navigate(target.href)}
+    return reference && !isCallContextReference(reference, callLobby) ? <PageReferenceCard reference={reference} onOpen={target => navigate(target.href)}
       openTestId="huddle-chat-reference-open" unavailableTestId="huddle-chat-reference-unavailable" /> : null;
-  }, [navigate]);
+  }, [navigate, callLobby]);
   if (!chat?.callId) return null;
   const { state } = chat;
   const inRoom = isBreakoutChat(chat.callId, runtime?.channel ?? chat.channel);

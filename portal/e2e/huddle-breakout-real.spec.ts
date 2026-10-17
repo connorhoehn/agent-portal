@@ -45,6 +45,8 @@ const INITIATIVE = process.env.BREAKOUT_INITIATIVE ?? DEFAULT_INITIATIVE;
 const INITIATIVE_URL = '/iq/projects/p-auth-migration'.replace(DEFAULT_INITIATIVE, INITIATIVE);
 const LOBBY = `orgiq:initiative:${INITIATIVE}`;
 const breakoutLobby = (roomId: string) => `${LOBBY}~breakout~${roomId}`;
+// Another meeting's lobby for the forged-join check: never this run's own initiative.
+const OTHER_LOBBY = `orgiq:initiative:${INITIATIVE === 'p-observability' ? DEFAULT_INITIATIVE : 'p-observability'}`;
 
 type Clone = Awaited<ReturnType<typeof openAsClone>> & { sessions: Array<{ lobbyName: string; status: number }> };
 
@@ -124,8 +126,9 @@ test('a breakout room moves real media to its lobby and back; a forged room join
       if (i > 0) await p.page.reload(); // discovery names Vera's call before the next Huddle (one call, not two)
       await expect(huddle(p.page)).toBeEnabled({ timeout: 30_000 });
       await huddle(p.page).click();
-      await expect.poll(async () => (await inbound(p.page)).audioSamples, { timeout: 45_000 }).toBeGreaterThan(0);
     }
+    // The first to join has nobody to hear until the second does: check inbound once all three are in.
+    for (const p of people) await expect.poll(async () => (await inbound(p.page)).audioSamples, { timeout: 45_000 }).toBeGreaterThan(0);
     await expect.poll(() => playingRemote(vera.page), { timeout: 30_000 }).toBe(2);
     for (const p of people) expect(p.sessions.some(s => s.lobbyName === LOBBY && s.status < 300), `${p.cloneId} joined the base lobby`).toBe(true);
 
@@ -165,7 +168,7 @@ test('a breakout room moves real media to its lobby and back; a forged room join
       headers: { Authorization: `Bearer ${(await token(nora.page)).token}` }, data: { lobbyName, findOrCreate: true },
     })).status();
     expect(await mint(breakoutLobby(room2)), "Room 2's lobby, which Nora is not in").toBe(403);
-    expect(await mint(`orgiq:initiative:p-observability~breakout~${room1}`), "another meeting's room").toBe(403);
+    expect(await mint(`${OTHER_LOBBY}~breakout~${room1}`), "another meeting's room").toBe(403);
     expect(await mint(`${LOBBY}~breakout~no-such-room`), 'an unknown room').toBe(403);
 
     // ── and back ────────────────────────────────────────────────────────────

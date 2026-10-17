@@ -34,7 +34,7 @@ export function useRecordingRead<T>(key: string | null, load: (signal: AbortSign
         if (nextDelay !== null) timer = setTimeout(() => { void read(); }, nextDelay); else clearTimeout(deadline);
       } catch (error) {
         clearTimeout(deadline);
-        if (!abort.signal.aborted) setState(current => ({ ...current, loading: false, error: error instanceof Error ? error.message : 'The recording could not be read.' }));
+        if (!abort.signal.aborted) setState(current => ({ ...current, loading: false, error: readableRecordingError(error) }));
       } finally {
         inFlight = false;
         if (dirty && !abort.signal.aborted) { dirty = false; clearTimeout(timer); void read(); }
@@ -51,3 +51,12 @@ export function useRecordingRead<T>(key: string | null, load: (signal: AbortSign
   const visible = state.key === key && state.revision === revision ? state : { value: null, loading: !!key, error: null, timedOut: false };
   return { ...visible, refresh, recheck };
 }
+
+/** What a failed read says to a person: never a transport's raw text ("Failed to fetch"). */
+export function readableRecordingError(error: unknown): string {
+  if (error instanceof TypeError || (error instanceof Error && /failed to fetch|networkerror|load failed/i.test(error.message))) {
+    return 'The recording service is not reachable right now.';
+  }
+  return error instanceof Error && error.message ? error.message : 'The recording could not be read.';
+}
+
