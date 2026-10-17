@@ -93,7 +93,9 @@ check "grep -rqE '<MeetingToolbar' portal/src" "U3 MeetingToolbar on the expande
 check "grep -rqE '<CallMediaOutlet' portal/src && grep -qE 'handFor' portal/node_modules/$UIPKG/dist/integrations/realtime.d.ts" "U3 hands on tiles"
 check "grep -rqE 'meetingRosterProps\\(' portal/src" "U3 hands queue in People"
 check "grep -rqE 'WrappedBreakoutRoomsPanel' portal/src && grep -rqE 'WrappedBreakoutRoomBanner' portal/src" "U3 rooms pane and in-room banner"
-check "grep -rqE '<RecordingConsentNotice' portal/src" "U3 recording consent when the call records"
+# The library's CallMediaOutlet draws RecordingConsentNotice from the call's recording state
+# (ui-components 2.480.1 over realtime-modules 0.137.0); the shell must not turn it off.
+check "grep -qE 'recordingConsent' portal/node_modules/$UIPKG/dist/integrations/realtime.d.ts && grep -qE 'recording\\?:' portal/node_modules/$RMPKG/dist/client/video/useConversationCall.d.ts && ! grep -rqE 'recordingConsent=\\{false\\}' portal/src" "U3 recording consent when the call records"
 check "grep -rqE 'useMeetingChat\\(' portal/src" "U4 call chat bound with useMeetingChat"
 # A surface is on when lib/meetingRooms.ts's meetingEnabledFor admits its lobby family (decision 5:
 # initiative huddles, then social rooms, then document calls); a sample lobby of each family asks it.
