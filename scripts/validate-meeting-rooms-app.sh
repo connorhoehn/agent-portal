@@ -115,7 +115,7 @@ section "M5 · proof"
 check "[ -f portal/e2e/meeting-rooms.spec.ts ]" "E1 fixture e2e: two clones, hands, rooms, announcement, return"
 check "[ -f portal/e2e/huddle-breakout-real.spec.ts ]" "E2 real-media spec exists (REAL_MEDIA_ACCEPTANCE=1)"
 check "ls docs/realtime-validation/*/meeting-breakout.md 2>/dev/null | grep -q ." "E2 dated real-media acceptance record"
-check "ls docs/journeys/maps 2>/dev/null | xargs -I{} sh -c 'ls docs/journeys/maps/{}' 2>/dev/null | grep -qiE 'meeting|breakout'" "E3 journey maps for calls with rooms"
+check "[ -n \"\$(find docs/journeys/maps -name 'call-rooms.ts' -path '*org-leader*')\" ] && [ -n \"\$(find docs/journeys/maps -name 'call-rooms.ts' -path '*sme*')\" ]" "E3 journey maps for calls with rooms (organizer and participant)"
 check "grep -qE 'rooms pane|meeting' portal/e2e/ui-dom-audit.adapter.ts" "E3 ui-dom-audit has a call-open, rooms-pane state"
 
 section "M6 · docs"
