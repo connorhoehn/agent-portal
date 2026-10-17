@@ -6,8 +6,8 @@ import { chooseOption } from './selectOption';
 // Real media follows a breakout room (docs/meeting-rooms-app-goal.md E2):
 // three clones on the Auth Migration huddle with Chrome's fake devices over
 // the real SFU and platform-api. Vera (organizer) stays in the main meeting;
-// Nora and Rachel go to Room 1. What it proves:
-//   move      Nora's and Rachel's pages open a media session on
+// Nora and Caleb go to Room 1. What it proves:
+//   move      Nora's and Caleb's pages open a media session on
 //             `<lobby>~breakout~<roomId>` (the call host's mediaLobby, same
 //             callId), platform-api reports that lobby live AND verified (the
 //             SFU's producers, `GET /api/video/sessions/by-lobby/:lobby`), the
@@ -45,8 +45,9 @@ const INITIATIVE = process.env.BREAKOUT_INITIATIVE ?? DEFAULT_INITIATIVE;
 const INITIATIVE_URL = '/iq/projects/p-auth-migration'.replace(DEFAULT_INITIATIVE, INITIATIVE);
 const LOBBY = `orgiq:initiative:${INITIATIVE}`;
 const breakoutLobby = (roomId: string) => `${LOBBY}~breakout~${roomId}`;
-// Another meeting's lobby for the forged-join check: never this run's own initiative.
-const OTHER_LOBBY = `orgiq:initiative:${INITIATIVE === 'p-observability' ? DEFAULT_INITIATIVE : 'p-observability'}`;
+// Another meeting's lobby for the forged-join check: one with no meeting at all, so a room id from this
+// meeting must not open a same-named room there.
+const OTHER_LOBBY = `orgiq:initiative:${INITIATIVE}-elsewhere`;
 
 type Clone = Awaited<ReturnType<typeof openAsClone>> & { sessions: Array<{ lobbyName: string; status: number }> };
 
@@ -117,7 +118,7 @@ test('a breakout room moves real media to its lobby and back; a forged room join
   try {
     const vera = await clone(browser, baseURL, 'u-vera'); people.push(vera);
     const nora = await clone(browser, baseURL, 'u-nora'); people.push(nora);
-    const rachel = await clone(browser, baseURL, 'u-rachel'); people.push(rachel);
+    const caleb = await clone(browser, baseURL, 'u-caleb'); people.push(caleb);
     const endpoints = await token(nora.page);
     expect(endpoints.videoUrl).toBe(process.env.MEDIA_SFU_URL ?? 'http://127.0.0.1:3902');
     if (process.env.MEDIA_PLATFORM_URL) expect(endpoints.platformApiUrl).toBe(process.env.MEDIA_PLATFORM_URL);
@@ -132,7 +133,7 @@ test('a breakout room moves real media to its lobby and back; a forged room join
     await expect.poll(() => playingRemote(vera.page), { timeout: 30_000 }).toBe(2);
     for (const p of people) expect(p.sessions.some(s => s.lobbyName === LOBBY && s.status < 300), `${p.cloneId} joined the base lobby`).toBe(true);
 
-    // Vera opens two rooms and puts Nora and Rachel in Room 1.
+    // Vera opens two rooms and puts Nora and Caleb in Room 1.
     await stageItem(vera.page, 'rooms').click();
     await rooms(vera.page).getByTestId('breakout-create-count').fill('2');
     await rooms(vera.page).getByTestId('breakout-create-submit').click();
@@ -140,44 +141,54 @@ test('a breakout room moves real media to its lobby and back; a forged room join
     const roomIds = await rooms(vera.page).getByTestId('breakout-room').evaluateAll(rows => rows.map(row => row.getAttribute('data-room-id') ?? ''));
     const [room1, room2] = roomIds as [string, string];
     expect(room1 && room2 && room1 !== room2).toBeTruthy();
-    for (const p of [nora, rachel]) {
+    for (const p of [nora, caleb]) {
       await chooseOption(rooms(vera.page).locator(`[data-testid="breakout-unassigned-person"][data-user-id="${p.cloneId}"]`).getByTestId('breakout-move'), { label: 'Room 1' });
     }
     await rooms(vera.page).getByTestId('breakout-open-all').click();
 
     // ── the move ────────────────────────────────────────────────────────────
-    for (const p of [nora, rachel]) {
+    for (const p of [nora, caleb]) {
       await expect.poll(() => p.sessions.some(s => s.lobbyName === breakoutLobby(room1) && s.status < 300), { timeout: 30_000 }).toBe(true);
     }
-    const inRoom = await nora.page.request.get(`${endpoints.platformApiUrl}/api/video/sessions/by-lobby/${encodeURIComponent(breakoutLobby(room1))}`,
-      { headers: { Authorization: `Bearer ${(await token(nora.page)).token}` } });
-    expect(inRoom.status()).toBe(200);
-    expect(await inRoom.json()).toMatchObject({ live: true, verified: true });
-    // Nora and Rachel hear and see each other in the room.
-    for (const me of [nora, rachel]) {
+    // The room's producers come up a moment after its session: poll until the SFU reports them.
+    await expect.poll(async () => {
+      const inRoom = await nora.page.request.get(`${endpoints.platformApiUrl}/api/video/sessions/by-lobby/${encodeURIComponent(breakoutLobby(room1))}`,
+        { headers: { Authorization: `Bearer ${(await token(nora.page)).token}` } });
+      if (inRoom.status() !== 200) return `status ${inRoom.status()}`;
+      const body = await inRoom.json() as { live?: boolean; verified?: boolean };
+      return body.live === true && body.verified === true ? 'live' : JSON.stringify(body);
+    }, { timeout: 30_000 }).toBe('live');
+    // Nora and Caleb hear and see each other in the room.
+    for (const me of [nora, caleb]) {
       const before = await inbound(me.page);
       await expect.poll(async () => (await inbound(me.page)).audioSamples, { timeout: 30_000 }).toBeGreaterThan(before.audioSamples);
       await expect.poll(async () => (await inbound(me.page)).videoFrames, { timeout: 30_000 }).toBeGreaterThan(before.videoFrames);
       await expect.poll(() => playingRemote(me.page), { timeout: 30_000 }).toBe(1);
     }
-    // Vera is alone in the main meeting now: nothing of Nora's or Rachel's plays on her page.
+    // Vera is alone in the main meeting now: nothing of Nora's or Caleb's plays on her page.
     await expect.poll(() => playingRemote(vera.page), { timeout: 45_000 }).toBe(0);
 
     // ── a forged room join is refused at the token mint ─────────────────────
-    const mint = async (lobbyName: string) => (await nora.page.request.post(`${endpoints.platformApiUrl}/api/video/sessions`, {
-      headers: { Authorization: `Bearer ${(await token(nora.page)).token}` }, data: { lobbyName, findOrCreate: true },
+    // The forger must be a participant, not an organizer: an initiative's owner and contributors, and the
+    // org-wide roles (org-leader, hr-admin), organize its meeting and may enter any open room (decision 3).
+    // Caleb (an SME) is in Room 1 and not on BREAKOUT_INITIATIVE's default here, p-observability (owner Nora).
+    const forger = caleb;
+    const mint = async (lobbyName: string) => (await forger.page.request.post(`${endpoints.platformApiUrl}/api/video/sessions`, {
+      headers: { Authorization: `Bearer ${(await token(forger.page)).token}` }, data: { lobbyName, findOrCreate: true },
     })).status();
-    expect(await mint(breakoutLobby(room2)), "Room 2's lobby, which Nora is not in").toBe(403);
-    expect(await mint(`${OTHER_LOBBY}~breakout~${room1}`), "another meeting's room").toBe(403);
-    expect(await mint(`${LOBBY}~breakout~no-such-room`), 'an unknown room').toBe(403);
+    // platform-api refuses a lobby it will not admit with 404 (it does not say the lobby exists) or 403.
+    const refused = (status: number) => status === 403 || status === 404 ? 'refused' : `admitted (${status})`;
+    expect(refused(await mint(breakoutLobby(room2))), "Room 2's lobby, which Caleb is not in").toBe('refused');
+    expect(refused(await mint(`${OTHER_LOBBY}~breakout~${room1}`)), "another meeting's room").toBe('refused');
+    expect(refused(await mint(`${LOBBY}~breakout~no-such-room`)), 'an unknown room').toBe('refused');
 
     // ── and back ────────────────────────────────────────────────────────────
     const baseJoins = (p: Clone) => p.sessions.filter(s => s.lobbyName === LOBBY && s.status < 300).length;
-    const joinedBefore = [baseJoins(nora), baseJoins(rachel)];
+    const joinedBefore = [baseJoins(nora), baseJoins(caleb)];
     if (!await rooms(vera.page).isVisible()) await stageItem(vera.page, 'rooms').click();
     await rooms(vera.page).getByTestId('breakout-end').click();
     await expect.poll(() => baseJoins(nora), { timeout: 30_000 }).toBeGreaterThan(joinedBefore[0]!);
-    await expect.poll(() => baseJoins(rachel), { timeout: 30_000 }).toBeGreaterThan(joinedBefore[1]!);
+    await expect.poll(() => baseJoins(caleb), { timeout: 30_000 }).toBeGreaterThan(joinedBefore[1]!);
     await expect.poll(() => playingRemote(vera.page), { timeout: 45_000 }).toBe(2);
 
     const summary = testInfo.outputPath('meeting-breakout-summary.json');
