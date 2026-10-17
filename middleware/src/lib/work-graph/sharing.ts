@@ -27,8 +27,8 @@ import {
   type DisclosureDecision, type DisclosureLevel, type InternalWorkEdge, type InternalWorkNode, type SharingTransition, type ViewerWorkEdge, type ViewerWorkNode,
   type WorkGraphPolicyInput, type WorkGraphQueryScope, type WorkGraphSnapshot, type WorkGraphSnapshotV2, type WorkHistoryGrant, type WorkProjectionState,
   type WorkSharingGrant,
-} from '@connorhoehnslalom/realtime-modules/work-graph';
-import type { DynamoCommandClient } from '@connorhoehnslalom/realtime-modules/server/stores/dynamo';
+} from '@connorhoehn/realtime-modules/work-graph';
+import type { DynamoCommandClient } from '@connorhoehn/realtime-modules/server/stores/dynamo';
 import { randomUUID } from 'node:crypto';
 import { config } from '../../config.js';
 import { clock } from '../../mock/core/index.js';

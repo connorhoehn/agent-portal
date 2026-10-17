@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { GatewayContext, useGateway } from '@connorhoehnslalom/realtime-modules/client';
-import { useGateway as useSocketGateway } from '@connorhoehnslalom/realtime-modules/client/ws';
+import { GatewayContext, useGateway } from '@connorhoehn/realtime-modules/client';
+import { useGateway as useSocketGateway } from '@connorhoehn/realtime-modules/client/ws';
 import { AuthenticatedGatewaySocket, OptionalGatewayProvider, TokenResolvedGateway, offlineGateway, tokenGatewayUrl, gatewayWebSocketUrl } from '../OptionalGatewayProvider.ts';
 import type { RealtimeTokenSource } from '../../lib/realtimeToken.ts';
 

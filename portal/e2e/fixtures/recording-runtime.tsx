@@ -2,7 +2,7 @@
 // call, recording, message or job mutation is implemented by this fixture.
 import { useSyncExternalStore } from 'react';
 import { createCallBlockHost, type CallBlockCall, type CallBlockModules } from '@connorhoehnslalom/ui-components/integrations/realtime';
-import { conversationCallDockProps } from '@connorhoehnslalom/realtime-modules/client/video';
+import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
 let phase: 'idle' | 'live' | 'failed' | 'reconnecting' = 'idle';
 const listeners = new Set<() => void>();
 const prohibited = () => { throw new Error('Inert recording fixture forbids actions.'); };

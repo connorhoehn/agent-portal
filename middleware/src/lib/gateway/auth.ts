@@ -14,7 +14,7 @@
 // upgrade; the portal re-fetches on drops.
 
 import type { IncomingMessage } from 'node:http';
-import { bearerSubprotocolAuth } from '@connorhoehnslalom/realtime-modules/server';
+import { bearerSubprotocolAuth } from '@connorhoehn/realtime-modules/server';
 import { isAllowedBrowserOrigin } from '../browser-origin.js';
 import { upgradeScheme } from '../trusted-proxy.js';
 import { claimableAvatarUrl, realtimeSigningSecret, verifyRealtimeToken, type RealtimeTokenClaims } from '../realtime-token.js';

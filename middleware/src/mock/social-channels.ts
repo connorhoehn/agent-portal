@@ -29,7 +29,7 @@
 //   DM Lena ↔ Sana, DM Lena ↔ Mira — so the DMs page opens on something.
 // Timestamps come from the mock clock at read time (contract rule 3).
 
-import type { ChatMember, ChatMessage, ChatReadReceipt, PinnedMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMember, ChatMessage, ChatReadReceipt, PinnedMessage } from '@connorhoehn/realtime-modules/chat';
 import { clock, defineFixture } from './core/index.js';
 import { CAST, EXTRA_CHANNELS, EXTRA_MEMBERS, HISTORY, INITIATIVE_THREAD, PINS, TEAM_THREAD } from './social-history.js';
 import { workItemComments, type WorkItemCommentRow } from './work-item-comments.js';

@@ -4,7 +4,7 @@ import '../../src/app.css';
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Route, Routes } from 'react-router';
-import { GatewayContext, type GatewayContextValue } from '@connorhoehnslalom/realtime-modules/client';
+import { GatewayContext, type GatewayContextValue } from '@connorhoehn/realtime-modules/client';
 import { Stack } from '@connorhoehnslalom/ui-components/shared';
 import { SessionProvider, useSession } from '../../src/lib/auth';
 import { realtimeTokenSource } from '../../src/lib/realtimeToken';

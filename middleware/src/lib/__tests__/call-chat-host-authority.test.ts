@@ -3,9 +3,9 @@ jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
 jest.mock('../page-resources.js', () => ({ pageResourceVisible: jest.fn() }));
 
-import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import { InMemoryChatStore, type ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
-import type { RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
+import { InMemoryChatStore, type ChatMessage } from '@connorhoehn/realtime-modules/chat';
+import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 import { pageResourceVisible } from '../page-resources.js';

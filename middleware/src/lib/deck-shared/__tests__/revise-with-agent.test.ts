@@ -6,7 +6,7 @@ import { agentcore } from '../../../providers/index.js';
 import { reviseWithAgent } from '../service.js';
 import { buildReviseInput } from '../narrative.js';
 import type { DeckFacts } from '../plan.js';
-import type { DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 
 const spec: DeckSpec = { title: 'T', slides: [{ id: 's1', layout: 'bullets', title: 'Status', bullets: ['Progress is 62%.', 'Two items blocked.'] }] } as DeckSpec;
 const facts = {

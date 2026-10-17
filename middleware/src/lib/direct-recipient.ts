@@ -1,6 +1,6 @@
 // User-addressed frames do not pass through a channel subscription. Keep
 // stored inbox data intact and recheck each socket before it receives data.
-import type { ClientMessageFilter } from '@connorhoehnslalom/realtime-modules/server';
+import type { ClientMessageFilter } from '@connorhoehn/realtime-modules/server';
 import { isAllowed } from './authz.js';
 import { currentSocialMembershipProof, getLivePrincipal, type LiveCallGuards, type SocialMembershipProof } from './live-principal.js';
 import { admitCallRecipient } from './gateway/authority.js';

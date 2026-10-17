@@ -16,7 +16,7 @@
 
 import { findClone } from '../mock/identity-clones.js';
 import { socialChat, tenantDmMembers } from './social-chat.js';
-import { dmLobbyName } from '@connorhoehnslalom/realtime-modules/call';
+import { dmLobbyName } from '@connorhoehn/realtime-modules/call';
 
 const HISTORY_CAP = 500;
 const pending = new Map<string, Promise<void>>();

@@ -8,7 +8,7 @@ jest.mock('../../../config.js', () => ({ config: { mock: { aurora: true, agentco
 
 import * as M from '../../../mock/assessment.js';
 import { dimensionCertification, getTeamDeckSource, teamCertification, type TeamDeckSource } from '../../../providers/assessment.js';
-import { validateDeckSpec, type DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { buildDeckFacts, type DeckFacts } from '../facts.js';
 import { acceptNarrative, buildDraftInput, buildReviseInput, mergeDraft, mergeRevise, mockDraftResult, mockReviseResult } from '../narrative.js';
 

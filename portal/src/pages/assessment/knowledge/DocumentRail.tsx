@@ -24,7 +24,7 @@ import {
   type StackedRailGroup,
   type StackedRailRow,
 } from '@connorhoehnslalom/ui-components/shared';
-import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { usePresence } from '@connorhoehn/realtime-modules/client';
 import { relativeTime } from '../../../lib/relativeTime';
 import { useCapabilities } from '../../../lib/capabilities';
 import { sendJson } from '../../../lib/writeJson';

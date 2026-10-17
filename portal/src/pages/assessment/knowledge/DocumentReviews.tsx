@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { DocumentReviewPanel, type DocumentReviewEntry } from '@connorhoehnslalom/ui-components/doc-editor';
-import { useGateway } from '@connorhoehnslalom/realtime-modules/client';
+import { useGateway } from '@connorhoehn/realtime-modules/client';
 import { useFetch } from '../../../hooks/useFetch';
 import { sendJson } from '../../../lib/writeJson';
 

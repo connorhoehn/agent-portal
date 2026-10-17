@@ -17,14 +17,14 @@
 // to the room: its members are the call's current members who are in that
 // room now (the meeting's own rule, `meetingRoom`), sends carry the same
 // contract, and the call's terminal cleanup finishes it with the huddle.
-import type { ChatMember, ChatMembershipStore, ChatMessage, ChatStore } from '@connorhoehnslalom/realtime-modules/chat';
-import type { ActiveCallStateView } from '@connorhoehnslalom/realtime-modules/call';
-import { breakoutChannel, breakoutLobbyName, parseBreakoutChannel } from '@connorhoehnslalom/realtime-modules/meeting';
+import type { ChatMember, ChatMembershipStore, ChatMessage, ChatStore } from '@connorhoehn/realtime-modules/chat';
+import type { ActiveCallStateView } from '@connorhoehn/realtime-modules/call';
+import { breakoutChannel, breakoutLobbyName, parseBreakoutChannel } from '@connorhoehn/realtime-modules/meeting';
 import { AppError } from './async-handler.js';
 import { activeCallParticipant, callProvenance, connectedCallSession as connectedAnyCallSession, resolveConnectedCallSession as resolveAnyCallSession,
   currentCallChatGrant, currentCallAuthority, huddleLobbyTenant, HUDDLE_CHAT_TENANTS,
   type CallAccessOptions, type CallAuthority } from './call-access.js';
-import type { RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { canonicalCallPage, type CallPageDescriptor, type CanonicalCallPage, type CallLifecycleObserver } from './call-pages.js';
 import { dmPageDescriptor } from './dm-page-references.js';
 import { huddleCallId } from './live-principal.js';

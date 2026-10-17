@@ -27,7 +27,7 @@ import { Router, type Request } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { deckWriteAuthority, makeDeckHandlers, sendFail as fail } from '../lib/deck-shared/index.js';
 import { canonicalCallPage } from '../lib/call-pages.js';
-import type { DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import type { DeckFacts } from '../lib/deck-shared/plan.js';
 import { buildConversationDeckFacts, citedPagesOf } from '../lib/social-deck/facts.js';
 import { parseDeckArgs, deckTitleFrom } from '../lib/social-deck/args.js';

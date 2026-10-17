@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   applyWorkGraphSnapshotV2, createClientWorkGraphState, reduceWorkGraphStream,
-} from '@connorhoehnslalom/realtime-modules/client';
-import type { WorkGraphSnapshotV2 } from '@connorhoehnslalom/realtime-modules/work-graph';
+} from '@connorhoehn/realtime-modules/client';
+import type { WorkGraphSnapshotV2 } from '@connorhoehn/realtime-modules/work-graph';
 import {
   createWorkGraphTransport, isWorkGraphHint, workGraphHeading, workGraphNodeHref, workGraphPresentation, workGraphQueryString, workNodeKindStatus,
   workGraphSubjectKey, workGraphSnapshotPath, workGraphViewState, workGraphQueryWindow, calendarDay,

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { asyncHandler } from '../lib/async-handler.js';
 import { normalizeRuntimeSessionId } from '../lib/runtime-session.js';
-import { agentStreamMiddleware, type AgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming';
+import { agentStreamMiddleware, type AgentStream } from '@connorhoehn/realtime-modules/agent-streaming';
 import type { Request as ExpressRequest } from 'express';
 import { agentcore } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
@@ -123,7 +123,7 @@ function deriveSessionId(req: { body?: Record<string, unknown> }): string {
   return r._canonicalSessionId;
 }
 
-// AG-UI streaming route — adopts @connorhoehnslalom/realtime-modules/agent-streaming
+// AG-UI streaming route — adopts @connorhoehn/realtime-modules/agent-streaming
 // for SSE framing, heartbeat (~25s), RUN_STARTED / RUN_FINISHED / RUN_ERROR
 // lifecycle, and dev-mode AG-UI taxonomy validation. OrgIQ business logic
 // (selection enrichment, AgentCore invoke, intervention detection, Memory

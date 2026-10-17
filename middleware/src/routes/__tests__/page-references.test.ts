@@ -11,7 +11,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
 import WebSocket from 'ws';
-import type { RealtimeHandle } from '@connorhoehnslalom/realtime-modules/server';
+import type { RealtimeHandle } from '@connorhoehn/realtime-modules/server';
 import { pageReferencesRouter } from '../page-references.js';
 import { attachRealtimeGateway } from '../../lib/realtime-gateway.js';
 import { errorHandler } from '../../lib/async-handler.js';

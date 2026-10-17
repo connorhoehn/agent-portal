@@ -20,7 +20,7 @@ import { errorHandler } from '../../lib/async-handler.js';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../../lib/authz.js';
 import type { Session } from '../../lib/session.js';
-import { workDayWindow, validateWorkGraphSnapshotV2 } from '@connorhoehnslalom/realtime-modules/work-graph';
+import { workDayWindow, validateWorkGraphSnapshotV2 } from '@connorhoehn/realtime-modules/work-graph';
 import { clock, freezeClock, unfreezeClock } from '../../mock/core/index.js';
 import { stopWorkGraphLiveHints } from '../../lib/work-graph/live.js';
 import { loadProjection } from '../../providers/pipeline-runs.js';

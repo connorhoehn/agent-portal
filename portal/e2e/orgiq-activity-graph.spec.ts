@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test';
-import { workDayWindow } from '@connorhoehnslalom/realtime-modules/work-graph';
+import { workDayWindow } from '@connorhoehn/realtime-modules/work-graph';
 import { loginAs } from './realSession';
 import { chooseOption } from './selectOption';
 

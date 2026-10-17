@@ -24,8 +24,8 @@
 import {
   MAX_BULLET_CHARS, MAX_NOTES_CHARS, validateDeckSpec,
   type DeckSlide, type DeckSpec,
-} from '@connorhoehnslalom/realtime-modules/deck';
-import { checkConstraints, parseConstraints } from '@connorhoehnslalom/realtime-modules/deck';
+} from '@connorhoehn/realtime-modules/deck';
+import { checkConstraints, parseConstraints } from '@connorhoehn/realtime-modules/deck';
 import { NARRATIVE_KINDS, clip, slideWithProse, type DeckEvidence, type DeckFacts, type FactValue, type SlidePlan } from './plan.js';
 
 export interface SourceSpan { evidenceId: string; text: string }

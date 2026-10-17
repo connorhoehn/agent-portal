@@ -1,8 +1,8 @@
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
 
-import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import { InMemoryChatStore } from '@connorhoehnslalom/realtime-modules/chat';
-import { LocalRealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
+import { InMemoryChatStore } from '@connorhoehn/realtime-modules/chat';
+import { LocalRealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { CallChatRuntime } from '../call-chat.js';
 import { MemoryCallChatStateStore } from '../call-chat-state.js';
 import type { Session } from '../session.js';

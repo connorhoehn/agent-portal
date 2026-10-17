@@ -10,8 +10,8 @@
 
 import type { Request, RequestHandler, Response } from 'express';
 import { asyncHandler, NotFoundError } from '../async-handler.js';
-import { PPTX_CONTENT_TYPE } from '@connorhoehnslalom/realtime-modules/deck';
-import type { DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import { PPTX_CONTENT_TYPE } from '@connorhoehn/realtime-modules/deck';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import type { DeckReviseOut } from './revise.js';
 import type { DeckPreviewOut, DeckRevisionSummary, Result } from './types.js';
 

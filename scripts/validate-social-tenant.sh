@@ -468,9 +468,9 @@ fi
 # ═════════════════════════════════════════════════════════════════════════════
 if want S1; then
 section "S1 · the library's DynamoChatStore"
-rmv=$(cd "$MW" && node -p "require('./node_modules/@connorhoehnslalom/realtime-modules/package.json').version" 2>/dev/null)
+rmv=$(cd "$MW" && node -p "require('./node_modules/@connorhoehn/realtime-modules/package.json').version" 2>/dev/null)
 if [ -n "$rmv" ] && node -e "const [a,b,c]=process.argv[1].split('.').map(Number); process.exit(a>0||b>99||(b===99&&c>=0)?0:1)" "$rmv"; then ok "middleware realtime-modules $rmv ≥ 0.99.0"; else fail "design E2 middleware realtime-modules is ${rmv:-unreadable}; DynamoChatStore needs ≥ 0.99.0 (full 40-char sha pin)"; fi
-has "import[^;]*DynamoChatStore" "$CHAT_BACKEND" && has "@connorhoehnslalom/realtime-modules" "$CHAT_BACKEND" && ok "social-chat.ts imports the library's DynamoChatStore (the store factory, audit D3/D12)" || fail "design §4.4 $CHAT_BACKEND does not import DynamoChatStore from the library"
+has "import[^;]*DynamoChatStore" "$CHAT_BACKEND" && has "@connorhoehn/realtime-modules" "$CHAT_BACKEND" && ok "social-chat.ts imports the library's DynamoChatStore (the store factory, audit D3/D12)" || fail "design §4.4 $CHAT_BACKEND does not import DynamoChatStore from the library"
 tr '\n' ' ' < "$GATEWAY" 2>/dev/null | grep -qE "chat\(\{[^}]*chatStore" && ok "chat({ chatStore }) wired" || fail "design §4.4 $GATEWAY: chat() takes no chatStore"
 local_store=$(grep -rlE "class DynamoChatStore" "$MW/src" 2>/dev/null | head -3)
 [ -z "$local_store" ] && ok "no middleware-local DynamoChatStore" || fail "design §4.4 the middleware writes its own DynamoChatStore ($local_store) — consume the library's"
@@ -496,7 +496,7 @@ spec_check portal/e2e/social-channels.spec.ts "S1 walk" \
   "a direct message round trip" \
   "a forged cross-tenant subscribe is refused with AUTHZ_CHANNEL_DENIED"
 section "S1 · shared message pins (design §4.4)"
-if (cd "$MW" && node -e "const d=require('@connorhoehnslalom/realtime-modules/server/stores/dynamo'); const m=require('@connorhoehnslalom/realtime-modules/chat'); process.exit(typeof d.DynamoChatPinsStore==='function' && typeof m.MemoryChatPinsStore==='function' ? 0 : 1)") >"$TMP/pin-stores.log" 2>&1; then ok "installed library exports Dynamo and memory pin stores"; else fail "design §4.4 the installed library lacks chat pin stores"; fi
+if (cd "$MW" && node -e "const d=require('@connorhoehn/realtime-modules/server/stores/dynamo'); const m=require('@connorhoehn/realtime-modules/chat'); process.exit(typeof d.DynamoChatPinsStore==='function' && typeof m.MemoryChatPinsStore==='function' ? 0 : 1)") >"$TMP/pin-stores.log" 2>&1; then ok "installed library exports Dynamo and memory pin stores"; else fail "design §4.4 the installed library lacks chat pin stores"; fi
 hasF "DynamoChatPinsStore" "$CHAT_BACKEND" && hasF "usePins" "$SP/SocialConversation.tsx" && hasF "chatPinsRouter" "$INDEX" && ok "library pin state wired through BFF and conversation" || fail "design §4.4 shared pin state is not wired end to end"
 [ -f "$RTESTS/chat-pins.test.ts" ] && ok "pin route access and persistence tests exist" || fail "chat pin routes lack tests"
 spec_check portal/e2e/social-pins.spec.ts "S1 pins walk" \

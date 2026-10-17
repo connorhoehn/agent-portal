@@ -7,7 +7,7 @@
 // pass the library's own reader validators (what useWorkGraph runs).
 import {
   validateWorkGraphSnapshot, validateWorkGraphSnapshotV2, workDayWindow, intervalOverlapsWorkDay,
-} from '@connorhoehnslalom/realtime-modules/work-graph';
+} from '@connorhoehn/realtime-modules/work-graph';
 import { projectWorkGraph, nodeIdFor, isoInstant, type ProjectionInput, type WorkItemRow, type RunRow } from '../projection.js';
 import type { SprintGraphRow, DecisionGraphRow, FlowRunGraphRow } from '../projection.js';
 import { assembleWorkGraphSnapshot, parseWorkGraphQuery, policyRevisionFor } from '../snapshot.js';

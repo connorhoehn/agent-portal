@@ -19,8 +19,8 @@
 // as `historical`. Theo and Mia, members of that channel, see both; Sana, who
 // is not, sees nothing of it.
 
-import type { WorkHistoryGrant, WorkSharingGrant } from '@connorhoehnslalom/realtime-modules/work-graph';
-import { WORK_GRAPH_SCHEMA_VERSION } from '@connorhoehnslalom/realtime-modules/work-graph';
+import type { WorkHistoryGrant, WorkSharingGrant } from '@connorhoehn/realtime-modules/work-graph';
+import { WORK_GRAPH_SCHEMA_VERSION } from '@connorhoehn/realtime-modules/work-graph';
 import { clock, defineFixture } from './core/index.js';
 
 /** Who a grant is for, resolved fresh at read time. */

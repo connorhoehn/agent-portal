@@ -1,8 +1,8 @@
 // Pinned initiative/work references are application state, separate from media
 // screen sharing. The existing authenticated call roster is the audience.
 import { emitSocialWorkGraphEvent, observeCall, observeCallEnded, observedCall, socialConversationOrNull } from './work-graph/social-events.js';
-import type { ActiveCallStateView, CallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import type { RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import type { ActiveCallStateView, CallStateStore } from '@connorhoehn/realtime-modules/call';
+import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { AppError } from './async-handler.js';
 import { currentCallAuthority, resolveConnectedCallSession, callProvenance as provenance, type CallAuthority } from './call-access.js';
 import { getProject } from '../providers/projects.js';

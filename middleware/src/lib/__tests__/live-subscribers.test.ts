@@ -1,5 +1,5 @@
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: {}, mock: { aurora: true } } }));
-import { liveUsersOnChannel, type AuthorityScope } from '@connorhoehnslalom/realtime-modules/server';
+import { liveUsersOnChannel, type AuthorityScope } from '@connorhoehn/realtime-modules/server';
 import { liveSubscribersForUsers } from '../realtime-gateway.js';
 
 /** A router whose `liveUsersOn` is the library's own probe over these connections. */
@@ -26,7 +26,7 @@ it('an unavailable lookup keeps conservative notification behavior', async () =>
 });
 
 it('passes an active operation scope to every readable-subscription probe, and never a closed one', async () => {
-  const { createAuthorityScope } = await import('@connorhoehnslalom/realtime-modules/server');
+  const { createAuthorityScope } = await import('@connorhoehn/realtime-modules/server');
   const seen: unknown[] = [];
   const router = routerOver([{ clientId: 'reading', userId: 'bob' }], async (_id, _channel, opts) => { seen.push(opts); return false; });
   const scope = createAuthorityScope('chat.send');

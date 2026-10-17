@@ -26,7 +26,7 @@ import { intervalOverlapsWorkDay } from './day-overlap.js';
 import {
   type ViewerWorkActivityDetail, type ViewerWorkEdge, type ViewerWorkNode, type ViewerWorkOperation,
   type WorkDayWindow, type WorkRelation, type WorkStatus,
-} from '@connorhoehnslalom/realtime-modules/work-graph';
+} from '@connorhoehn/realtime-modules/work-graph';
 import {
   clip, edgeIdFor, earliest, finishProjection, isoInstant, latest, part, RUN_LEASE_MS, words,
   type FlowRunGraphRow, type Projection,

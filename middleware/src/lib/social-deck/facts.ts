@@ -14,7 +14,7 @@
 // slide from them. Reference: realtime-examples deck-generate pipeline (the
 // spec comes from the transcript; every slide carries its sources).
 
-import { MAX_BULLETS_PER_SLIDE, MAX_SOURCES_PER_SLIDE, MAX_TITLE_CHARS, type DeckSource, type DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import { MAX_BULLETS_PER_SLIDE, MAX_SOURCES_PER_SLIDE, MAX_TITLE_CHARS, type DeckSource, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { clip, makePlan, type DeckEvidence, type DeckFacts, type FactValue, type SlidePlan } from '../deck-shared/plan.js';
 import type { DraftDeckInput } from '../deck-shared/narrative.js';
 import type { TranscriptLine } from '../social-summarize.js';

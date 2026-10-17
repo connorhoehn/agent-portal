@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { ConversationCallDockProps, ConversationCallDockState } from '@connorhoehnslalom/realtime-modules/client/video';
+import type { ConversationCallDockProps, ConversationCallDockState } from '@connorhoehn/realtime-modules/client/video';
 
 type Participant = NonNullable<ConversationCallDockState['call']>['participants'][number];
 

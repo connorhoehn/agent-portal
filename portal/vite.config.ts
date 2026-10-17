@@ -28,10 +28,6 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
-      // ui-components' integrations/realtime-modules entry imports the canonical
-      // `@connorhoehn/realtime-modules`; this portal installs the same library
-      // under the `@connorhoehnslalom` key. (Regex so subpaths map too.)
-      '@connorhoehn/realtime-modules': '@connorhoehnslalom/realtime-modules',
     },
     preserveSymlinks: true,
     dedupe: ['react', 'react-dom', 'yjs', 'y-protocols', 'lib0'],
@@ -40,12 +36,12 @@ export default defineConfig(async () => ({
   // Keep the CommonJS runtime optimized, while PM enters through native ESM.
   optimizeDeps: {
     include: [
-      '@connorhoehnslalom/realtime-modules/client',
+      '@connorhoehn/realtime-modules/client',
       // The /iq shell mounts the call host, so every /iq page imports it; left
       // to discovery, the first load re-optimizes mid-session and renders the
       // page against a second React copy ("Invalid hook call" in LVSProvider).
-      '@connorhoehnslalom/realtime-modules/client/video',
-      '@connorhoehnslalom/realtime-modules/adapters/tiptap',
+      '@connorhoehn/realtime-modules/client/video',
+      '@connorhoehn/realtime-modules/adapters/tiptap',
       'yjs', 'y-protocols/awareness', 'lib0/observable', '@tiptap/core', '@tiptap/react',
       'react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime',
       // The excluded UI package hides these CJS-containing graphs from scanning.

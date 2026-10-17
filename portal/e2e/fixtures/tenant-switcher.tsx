@@ -2,7 +2,7 @@ import '../../src/app.css';
 import { StrictMode, useEffect, useRef, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
-import { GatewayContext, type GatewayContextValue } from '@connorhoehnslalom/realtime-modules/client';
+import { GatewayContext, type GatewayContextValue } from '@connorhoehn/realtime-modules/client';
 import { Inline, Stack, SubNavLayout } from '@connorhoehnslalom/ui-components/shared';
 import { SessionProvider, useSession } from '../../src/lib/auth';
 import { TenantSwitcher } from '../../src/components/shell/TenantSwitcher';

@@ -16,7 +16,7 @@ import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import request from '../../test-support/http.js';
 import type { IncomingMessage } from 'node:http';
-import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
+import { baseChannel } from '@connorhoehn/realtime-modules/server';
 import { attachRealtimeGateway, authenticateGatewayUpgrade } from '../realtime-gateway.js';
 import { channelGuards } from '../gateway/authority.js';
 import { createUploadsRouter, gatewayUploadConfig, resetGatewayUploadBackendForTests } from '../gateway-attachments.js';

@@ -24,7 +24,7 @@ import { isAllowed } from '../../lib/authz.js';
 import type { Session } from '../../lib/session.js';
 import { getProjectWorkItems, mockReprojectedIso } from '../../providers/work-items.js';
 import { listBots, listBotRunsForBotsResult, listMarketplaceRuns } from '../../providers/bots.js';
-import { workDayWindow, validateWorkGraphSnapshotV2 } from '@connorhoehnslalom/realtime-modules/work-graph';
+import { workDayWindow, validateWorkGraphSnapshotV2 } from '@connorhoehn/realtime-modules/work-graph';
 import { intervalOverlapsWorkDay } from '../../lib/work-graph/day-overlap.js';
 import { clock, freezeClock, unfreezeClock } from '../../mock/core/index.js';
 import { stopWorkGraphLiveHints } from '../../lib/work-graph/live.js';

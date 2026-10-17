@@ -31,7 +31,7 @@ import { getProject } from './projects.js';
 import { getProjectWorkItems, getProjectDecisions } from './work-items.js';
 import { listSprints } from './sprints.js';
 import { getBudget, getMaintenance30d, listGrants } from './budgets.js';
-import { validateDeckSpec, type DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import * as shared from '../lib/deck-shared/index.js';
 import { createDeckStore } from '../lib/deck-shared/index.js';
 import { INITIATIVE_STATUS_DECK_MODE } from '../lib/deck-shared/narrative-modes.js';

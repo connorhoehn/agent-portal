@@ -8,7 +8,7 @@ answer is printed to stdout and saved by the caller as the report.
 - Frontend pages must use `@connorhoehnslalom/ui-components` shells and
   composites (AppShell, ChannelHeader, PageHeader, PresenceAvatars, Avatar,
   ChatPanel, NotificationCenter, FileUploadDrop, Breadcrumbs, HangoutLayout,
-  AppLayout, …), `@connorhoehnslalom/realtime-modules/client` hooks (useChat,
+  AppLayout, …), `@connorhoehn/realtime-modules/client` hooks (useChat,
   usePresence, useCRDT, useReactions, useActivity, useFileUpload,
   useVideoHangout, useNotifications, useCapability, useFeatureFlag,
   useChannel, useConversationCall, usePins, …) and the ui-components

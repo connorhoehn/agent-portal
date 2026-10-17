@@ -3,8 +3,8 @@
 // `createCallBlockHost`) — the shell's ONE `useConversationCall`, rings, the
 // pre-join device check, the one media sink and `useCallBlock(channel)` for a
 // composer's `callBlock` slot (the dock and the ring toast are drawn by the host).
-import * as video from '@connorhoehnslalom/realtime-modules/client/video';
-import { useMeeting } from '@connorhoehnslalom/realtime-modules/client/meeting';
+import * as video from '@connorhoehn/realtime-modules/client/video';
+import { useMeeting } from '@connorhoehn/realtime-modules/client/meeting';
 import { createElement } from 'react';
 import { createCallBlockHost } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { StreamVideo } from '@connorhoehnslalom/ui-components/video';

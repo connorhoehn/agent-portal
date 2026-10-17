@@ -8,7 +8,7 @@
 // editor works and presence stays hidden.
 
 import { useEffect, type ReactElement } from 'react';
-import { useGatewayOptional, usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { useGatewayOptional, usePresence } from '@connorhoehn/realtime-modules/client';
 import { EMPTY_DECK_PRESENCE, useDeckPresence, type DeckPresence } from '@connorhoehnslalom/ui-components/doc-editor';
 
 export { EMPTY_DECK_PRESENCE };

@@ -12,7 +12,7 @@ jest.mock('../../live-principal.js', () => {
   const actual = jest.requireActual('../../live-principal.js');
   return { ...actual, authorizeHuddleChannel: jest.fn() };
 });
-import { MeetingService, type MeetingRouter } from '@connorhoehnslalom/realtime-modules/meeting';
+import { MeetingService, type MeetingRouter } from '@connorhoehn/realtime-modules/meeting';
 import { getUser, type UserInfo } from '../../../providers/identity.js';
 import { isAllowed } from '../../authz.js';
 import { pageResourceVisible } from '../../page-resources.js';

@@ -3,7 +3,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { validateDeckSpec, type DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { config } from '../config.js';
 import { mockRestartArchive } from './restart-state.js';
 import { defineFixture } from './core/fixture.js';

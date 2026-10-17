@@ -39,7 +39,7 @@ import type { Session } from '../../lib/session.js';
 import { completeRun, getRun } from '../../providers/assessment.js';
 import { mockDeckRunResult } from '../../providers/assessment-decks.js';
 import { assessmentDecksFixture, assessmentDeckRevisionsFixture } from '../../mock/assessment-decks.js';
-import type { DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
 
 let restoreRelease: () => void;

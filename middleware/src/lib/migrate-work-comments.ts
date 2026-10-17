@@ -26,7 +26,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { legacyCommentMessage, type LegacyWorkComment } from './work-thread.js';
 
 /** The slice of a ChatStore the migration needs (DynamoChatStore, RowsChatStore). */
@@ -243,7 +243,7 @@ async function main(argv: string[]): Promise<void> {
   let target: ThreadTarget;
   if (cfg.store === 'dynamo') {
     const { DynamoDBClient } = await import('@aws-sdk/client-dynamodb');
-    const { DynamoChatStore } = await import('@connorhoehnslalom/realtime-modules/server/stores/dynamo');
+    const { DynamoChatStore } = await import('@connorhoehn/realtime-modules/server/stores/dynamo');
     const local = !!cfg.endpoint && process.env['NODE_ENV'] !== 'production';
     const client = new DynamoDBClient({ region: cfg.region, ...(cfg.endpoint ? { endpoint: cfg.endpoint } : {}),
       ...(local ? { credentials: { accessKeyId: 'local', secretAccessKey: 'local' } } : {}) });

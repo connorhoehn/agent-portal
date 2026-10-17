@@ -1,7 +1,7 @@
 // Native call layout with explicit inert call data. No SDK call, media,
 // message, gateway, device acquisition or platform endpoint is used.
 import { createCallBlockHost, type CallBlockCall, type CallBlockModules } from '@connorhoehnslalom/ui-components/integrations/realtime';
-import { conversationCallDockProps } from '@connorhoehnslalom/realtime-modules/client/video';
+import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
 export const runtime = { active: true, prohibitedActions: 0,
   session: { sub: 'fixture-reviewer', name: 'Alex Reviewer', tenant: 'orgiq', role: 'Member', masquerading: null },
   frames: { configured: false, connectionState: 'disconnected', gateway: { onMessage: () => () => {}, sessionEpoch: 0 } },

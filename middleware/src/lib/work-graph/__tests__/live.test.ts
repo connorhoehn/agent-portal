@@ -14,7 +14,7 @@ import { getUser, type UserInfo } from '../../../providers/identity.js';
 import { isAllowed } from '../../authz.js';
 
 import { channelGuard, lobbyGuard } from '../../realtime-gateway.js';
-import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
+import { baseChannel } from '@connorhoehn/realtime-modules/server';
 import { tenantChannelFamily } from '../../tenant-channels.js';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../../social-chat.js';
 import { resetGatewayRunFeed, tenantActivity } from '../../gateway-run-feed.js';

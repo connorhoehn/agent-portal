@@ -6,10 +6,10 @@
 
 import { config } from '../../config.js';
 import { agentcore } from '../../providers/index.js';
-import { validateDeckSpec, type DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
-import { previewDeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
-import { renderPptx } from '@connorhoehnslalom/realtime-modules/deck';
-import { SOURCES_SLIDE_ID } from '@connorhoehnslalom/realtime-modules/deck';
+import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
+import { previewDeckSpec } from '@connorhoehn/realtime-modules/deck';
+import { renderPptx } from '@connorhoehn/realtime-modules/deck';
+import { SOURCES_SLIDE_ID } from '@connorhoehn/realtime-modules/deck';
 import { clip, type DeckFacts } from './plan.js';
 import { mergeDraft, mockDraftResult, mockReviseResult, type ReviseDeckInput } from './narrative.js';
 import { DECK_REVISE_MODE_BY_TENANT, narrativeModeAllowed, reviseModeAllowed, type DeckReviseTenant } from './narrative-modes.js';

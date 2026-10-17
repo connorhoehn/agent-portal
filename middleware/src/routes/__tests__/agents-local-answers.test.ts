@@ -9,7 +9,7 @@ const mockStream = {
   toolCallStart: jest.fn(), toolCallArgs: jest.fn(), toolCallEnd: jest.fn(), toolCallResult: jest.fn(),
   textMessageStart: jest.fn(), textMessageContent: jest.fn(), textMessageEnd: jest.fn(), runFinished: jest.fn(),
 };
-jest.mock('@connorhoehnslalom/realtime-modules/agent-streaming', () => ({
+jest.mock('@connorhoehn/realtime-modules/agent-streaming', () => ({
   agentStreamMiddleware: (handler: (req: unknown, stream: unknown, signal: AbortSignal) => Promise<void>) =>
     (req: unknown, res: { json: (value: unknown) => void }, next: (error?: unknown) => void) => {
       handler(req, mockStream, new AbortController().signal).then(() => res.json({ ok: true }), next);

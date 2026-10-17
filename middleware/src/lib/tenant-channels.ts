@@ -69,7 +69,7 @@
 // (`presence:`, `typing:`, `cursor:`) publish under its read authority, so a
 // reader can still say "I am here" without being able to post.
 
-import { defineChannelFamilies, type ChannelFamilies, type ChannelFamily } from '@connorhoehnslalom/realtime-modules/server';
+import { defineChannelFamilies, type ChannelFamilies, type ChannelFamily } from '@connorhoehn/realtime-modules/server';
 import type { PageResourceKind } from './page-resources.js';
 
 /** `social` appears ONLY for the `social:workgraph` family (it is not a partition tenant: TENANT_PARTITIONS stays three, and every other `social:` name keeps its own rules). */

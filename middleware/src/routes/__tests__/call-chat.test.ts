@@ -13,9 +13,9 @@ jest.mock('../../lib/authz.js', () => ({ resolveSession: (req: { session?: unkno
 // lib/__tests__/call-chat-gateway.test.ts.
 import express from 'express';
 import request from '../../test-support/http.js';
-import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import { InMemoryChatStore, MemoryChatMembershipStore, type ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
-import type { RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
+import { InMemoryChatStore, MemoryChatMembershipStore, type ChatMessage } from '@connorhoehn/realtime-modules/chat';
+import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { callChatRouter } from '../call-chat.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { CallChatRuntime, callChatChannel, huddleMembershipStore, inCallChatNamespace, setCallChatRuntime } from '../../lib/call-chat.js';

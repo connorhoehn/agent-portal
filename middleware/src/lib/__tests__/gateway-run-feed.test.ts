@@ -8,7 +8,7 @@ import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 
 import { channelGuard } from '../realtime-gateway.js';
-import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
+import { baseChannel } from '@connorhoehn/realtime-modules/server';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import {
   pipelineFamilyChannel, publishChannelActivity, publishPipelineRunMove, resetGatewayRunFeed, tenantActivity, tenantPipeline,

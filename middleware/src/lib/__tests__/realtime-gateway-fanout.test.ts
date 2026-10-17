@@ -14,7 +14,7 @@ import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import { attachRealtimeGateway, REALTIME_GATEWAY_PATH } from '../realtime-gateway.js';
-import { RedisRealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { RedisRealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { GatewayRedis } from '../gateway-redis.js';
 import { createMemorySocialChatBackend, type SocialChatBackend } from '../social-chat.js';
 import { getUser, type UserInfo } from '../../providers/identity.js';

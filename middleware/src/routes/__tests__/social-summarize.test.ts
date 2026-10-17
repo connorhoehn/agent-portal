@@ -25,7 +25,7 @@ import { flowRunsFixture } from '../../mock/flow-runs.js';
 import { parseSummarizeRange } from '../../lib/social-summarize-range.js';
 import { acceptEnvelope, digestEnvelope, transcriptLines } from '../../lib/social-summarize.js';
 import type { Session } from '../../lib/session.js';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 
 const SECRET = 'summarize-api-test-secret';
 const previousSecret = process.env['REALTIME_JWT_SECRET'];

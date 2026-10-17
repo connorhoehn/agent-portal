@@ -5,7 +5,7 @@
 // numbers that could disagree with the scorecard. POST /api/__mock/reset
 // clears every deck and revision created during a session.
 
-import type { DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { defineFixture } from './core/fixture.js';
 
 export interface AssessmentDeckRow {

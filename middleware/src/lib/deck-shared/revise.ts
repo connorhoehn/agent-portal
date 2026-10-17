@@ -12,7 +12,7 @@
 // without asking the agent again — even though the head has moved on.
 
 import { createHash } from 'node:crypto';
-import type { DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import type { ArtifactRevisionStore } from '../flow-artifacts/index.js';
 import { clip, type DeckFacts } from './plan.js';
 import { buildReviseInput, mergeRevise } from './narrative.js';

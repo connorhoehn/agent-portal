@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { createGatewayClient, gatewayEndpoints } from '../../lib/gatewayEndpoint.ts';
 import { useSession } from '../../lib/auth';
 import { useRealtimeEndpoints } from '../../lib/useRealtimeEndpoints';
-import type { ConnectionState } from '@connorhoehnslalom/realtime-modules/client/ws';
-import { useGateway } from '@connorhoehnslalom/realtime-modules/client/ws';
+import type { ConnectionState } from '@connorhoehn/realtime-modules/client/ws';
+import { useGateway } from '@connorhoehn/realtime-modules/client/ws';
 import { Inline, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 import { nextPollDelay, isDocumentHidden } from '../../hooks/pollSchedule';
 

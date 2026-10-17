@@ -6,7 +6,7 @@
 import {
   MAX_BULLET_CHARS, MAX_TITLE_CHARS,
   type DeckSlide, type DeckSpec,
-} from '@connorhoehnslalom/realtime-modules/deck';
+} from '@connorhoehn/realtime-modules/deck';
 
 export type DeckSlideKind =
   | 'title' | 'executive-summary' | 'overview' | 'dimension' | 'not-applicable'

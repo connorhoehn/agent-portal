@@ -36,10 +36,10 @@ import {
   type ChatReadReceipt,
   type ChatReadReceiptStore,
   type ChatStore,
-} from '@connorhoehnslalom/realtime-modules/chat';
-import { dmLobbyName, dmLobbyPrefix, parseDmLobby } from '@connorhoehnslalom/realtime-modules/call';
-import { revokePublishProofs, type AuthorityScope } from '@connorhoehnslalom/realtime-modules/server';
-import { DynamoChatStore, DynamoChatPinsStore, type DynamoCommandClient } from '@connorhoehnslalom/realtime-modules/server/stores/dynamo';
+} from '@connorhoehn/realtime-modules/chat';
+import { dmLobbyName, dmLobbyPrefix, parseDmLobby } from '@connorhoehn/realtime-modules/call';
+import { revokePublishProofs, type AuthorityScope } from '@connorhoehn/realtime-modules/server';
+import { DynamoChatStore, DynamoChatPinsStore, type DynamoCommandClient } from '@connorhoehn/realtime-modules/server/stores/dynamo';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { config } from '../config.js';
 import { listChannels } from '../providers/social-channels.js';

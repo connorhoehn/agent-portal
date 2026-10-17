@@ -15,11 +15,11 @@
 // snapshot (`reset-required` / `gap`, which keeps the last authorized graph on
 // screen). No graph data ever rides the hint.
 
-import { workDayWindow } from '@connorhoehnslalom/realtime-modules/work-graph';
-import { createWorkGraphGatewayTransport } from '@connorhoehnslalom/realtime-modules/client';
+import { workDayWindow } from '@connorhoehn/realtime-modules/work-graph';
+import { createWorkGraphGatewayTransport } from '@connorhoehn/realtime-modules/client';
 import type {
   ClientWorkGraphState, WorkGraphClientTransport, WorkGraphGatewayConnection, WorkGraphSnapshotRequest, WorkGraphSocketRequest,
-} from '@connorhoehnslalom/realtime-modules/client';
+} from '@connorhoehn/realtime-modules/client';
 import { WORK_NODE_KIND_LABELS } from '@connorhoehnslalom/ui-components/graph';
 import type {
   WorkActivityNodeDetail, WorkActivityPresentation, WorkActivityView, WorkActivityWindow, WorkGraphNodeData, WorkGraphEdgeData,

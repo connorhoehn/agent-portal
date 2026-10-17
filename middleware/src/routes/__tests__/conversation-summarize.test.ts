@@ -10,9 +10,9 @@ jest.mock('../../lib/authz.js', () => ({ resolveSession: (req: { session?: unkno
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import { InMemoryChatStore, type ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
-import { baseChannel, type RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
+import { InMemoryChatStore, type ChatMessage } from '@connorhoehn/realtime-modules/chat';
+import { baseChannel, type RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { conversationSummarizeRouter, pendingConversationSummaries } from '../conversation-summarize.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { getUser, type UserInfo } from '../../providers/identity.js';

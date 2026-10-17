@@ -16,7 +16,7 @@ import {
   ProxyClientHttpError,
   ProxyClientNetworkError,
   ProxyClientTimeoutError,
-} from '@connorhoehnslalom/realtime-modules/proxy-client';
+} from '@connorhoehn/realtime-modules/proxy-client';
 
 import { classifyGatewayError } from '../gatewayMode.ts';
 

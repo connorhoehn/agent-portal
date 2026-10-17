@@ -6,7 +6,7 @@
 // Channel names are `social:ch:<slug>` and DM lobbies `social:dm:<sorted ids>`
 // (§4.3) — the server mints both; the portal only reads them back.
 
-import { dmLobbyPrefix, parseDmLobby } from '@connorhoehnslalom/realtime-modules/call';
+import { dmLobbyPrefix, parseDmLobby } from '@connorhoehn/realtime-modules/call';
 
 /** One channel as `GET /api/social/channels` lists it. */
 export interface SocialChannel {

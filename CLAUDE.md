@@ -15,7 +15,8 @@ the claim here is a bug.
 Durable facts the handoff does not repeat:
 
 - Pins: portal and middleware consume `@connorhoehnslalom/ui-components`
-  **2.479.0** and `@connorhoehnslalom/realtime-modules` **0.135.0** from
+  **2.479.0** and `@connorhoehn/realtime-modules` (its real
+  package name, no alias) **0.135.0** from
   tracked tarballs in `portal/vendor/` (`file:` deps, both lockfiles); middleware
   pins `@connorhoehn/service-runtime` 0.4.1 and `distributed-core` 0.48.0
   (`077d7594`) by full sha; infra consumes
@@ -187,7 +188,7 @@ histories. Check the remote the pin names before concluding a commit is gone.
   API against the installed `dist`, never the library's source or changelog.
   Queue missing composites in `docs/ui-components-queue.md`; that ledger is
   also the only exemption source for the component-discipline gate.
-- **realtime-modules** (`@connorhoehnslalom/realtime-modules` key, canonical
+- **realtime-modules** (installed under its own name `@connorhoehn/realtime-modules`, no alias; canonical
   repo `connorhoehn/realtime-modules`): gateway server, `/client/video`,
   `/deck`, `agent-streaming`. The portal's socket authenticates with the BFF's
   realtime token (`GET /api/session/realtime-token`, HS256, 10 min) sent as

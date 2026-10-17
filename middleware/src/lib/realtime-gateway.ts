@@ -53,10 +53,10 @@
 
 import type { Server } from 'node:http';
 import { hostname } from 'node:os';
-import { RedisPresenceStore } from '@connorhoehnslalom/realtime-modules/presence';
-import { attachRealtime, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withAuthorityCache, withPrincipalRevalidation, type AuthorityVerdictCache, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehnslalom/realtime-modules/server';
-import { RedisCallStateStore, InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import { MeetingService } from '@connorhoehnslalom/realtime-modules/meeting';
+import { RedisPresenceStore } from '@connorhoehn/realtime-modules/presence';
+import { attachRealtime, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withAuthorityCache, withPrincipalRevalidation, type AuthorityVerdictCache, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehn/realtime-modules/server';
+import { RedisCallStateStore, InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
+import { MeetingService } from '@connorhoehn/realtime-modules/meeting';
 import { createOrgiqWorkGraphStream, isWorkGraphStreamPublisher } from './work-graph/stream.js';
 import { tenantCursor } from './gateway-cursor.js';
 import { CallPageRuntime, MemoryCallPageStore, RedisCallPageStore, observeCallPageLifecycle, setCallPageRuntime, isCallPageSnapshot } from './call-pages.js';

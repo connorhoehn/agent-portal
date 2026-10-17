@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { portalGatewayRest } from '../gatewayRest.ts';
 import { createRealtimeTokenSource } from '../realtimeToken.ts';
-import type { createGatewayRest } from '@connorhoehnslalom/realtime-modules/client';
+import type { createGatewayRest } from '@connorhoehn/realtime-modules/client';
 
 test('HTTP pins refresh an expired handshake bearer without replacing the socket token', async () => {
   let now = 0;

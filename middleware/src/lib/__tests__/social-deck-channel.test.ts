@@ -9,7 +9,7 @@ import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 
 import { channelGuard, lobbyGuard } from '../realtime-gateway.js';
-import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
+import { baseChannel } from '@connorhoehn/realtime-modules/server';
 import { createMemorySocialChatBackend, setSocialChatBackend } from '../social-chat.js';
 import { socialChannelMembersFixture } from '../../mock/social-channels.js';
 import { socialDecksFixture } from '../../mock/social-decks.js';

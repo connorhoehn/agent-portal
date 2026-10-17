@@ -5,7 +5,7 @@ import '../../src/app.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router';
-import { GatewayContext, type GatewayContextValue } from '@connorhoehnslalom/realtime-modules/client';
+import { GatewayContext, type GatewayContextValue } from '@connorhoehn/realtime-modules/client';
 import { SessionProvider } from '../../src/lib/auth';
 import { SharedNotificationsProvider } from '../../src/components/shell/SharedNotifications';
 import { Layout } from '../../src/components/shell/Layout';

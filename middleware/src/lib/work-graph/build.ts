@@ -6,7 +6,7 @@
 
 import { clock } from '../../mock/core/index.js';
 import type { Session } from '../session.js';
-import type { WorkGraphSnapshot, WorkGraphSnapshotV2 } from '@connorhoehnslalom/realtime-modules/work-graph';
+import type { WorkGraphSnapshot, WorkGraphSnapshotV2 } from '@connorhoehn/realtime-modules/work-graph';
 import { assessmentWorkGraphViewer, confirmAssessmentWorkGraphViewer, confirmPipelinesWorkGraphViewer, confirmSocialWorkGraphViewer, confirmWorkGraphViewer, pipelinesWorkGraphViewer, socialWorkGraphViewer, workGraphViewer, type WorkGraphViewer } from './authority.js';
 import { loadSocialWorkGraphRows } from './social-sources.js';
 import { projectSocialWorkGraph } from './social-projection.js';

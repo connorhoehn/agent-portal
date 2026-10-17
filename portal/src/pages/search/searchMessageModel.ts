@@ -9,7 +9,7 @@
 // library's `dmLobbyName([you, them], { prefix: 'social:' })`, which is the
 // same sorted name the BFF answers from POST /api/social/dms.
 
-import { dmLobbyName } from '@connorhoehnslalom/realtime-modules/client/video';
+import { dmLobbyName } from '@connorhoehn/realtime-modules/client/video';
 import type { CallPerson, RosterUser } from '../../lib/conversationCallModel';
 
 export const SOCIAL_LOBBY_PREFIX = 'social:';

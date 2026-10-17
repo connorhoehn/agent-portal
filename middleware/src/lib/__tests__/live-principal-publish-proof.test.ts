@@ -6,8 +6,8 @@
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../authz.js', () => ({ isAllowed: jest.fn() }));
-import { createAuthorityScope, LocalRealtimeRouter, baseChannel } from '@connorhoehnslalom/realtime-modules/server';
-import type { ChatMember, ChatMembershipStore } from '@connorhoehnslalom/realtime-modules/chat';
+import { createAuthorityScope, LocalRealtimeRouter, baseChannel } from '@connorhoehn/realtime-modules/server';
+import type { ChatMember, ChatMembershipStore } from '@connorhoehn/realtime-modules/chat';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
 

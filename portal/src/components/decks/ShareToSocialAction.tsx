@@ -7,7 +7,7 @@
 // declared only once the channel echoes the message back.
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useChat, useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
+import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { Button, ChoiceRow, InlineAlert, Inline, Input, Modal, Prose, SectionLabel, ShareIcon, Spinner, Stack, T, FormField } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useChatAttachmentSend } from '../../lib/conversationComposer';

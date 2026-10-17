@@ -8,8 +8,8 @@ import { createHash } from 'node:crypto';
 import {
   workDayWindow, WORK_GRAPH_SCHEMA_VERSION,
   type WorkDayWindow, type WorkGraphQueryV2, type WorkGraphSnapshot, type WorkGraphSnapshotV2, type WorkSourceStatus,
-} from '@connorhoehnslalom/realtime-modules/work-graph';
-import { buildWorkGraphSnapshotV2, bucketWorkEvents, deriveWorkEfforts } from '@connorhoehnslalom/realtime-modules/work-graph/server';
+} from '@connorhoehn/realtime-modules/work-graph';
+import { buildWorkGraphSnapshotV2, bucketWorkEvents, deriveWorkEfforts } from '@connorhoehn/realtime-modules/work-graph/server';
 import { AppError, ValidationError } from '../async-handler.js';
 import type { Projection, ViewerReads } from './projection.js';
 import type { SourceHealth, WorkGraphSubject } from './sources.js';

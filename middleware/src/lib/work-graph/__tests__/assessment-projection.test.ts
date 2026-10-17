@@ -1,6 +1,6 @@
 // The assessment projection (assessment-projection.ts), pure: default deny, day membership and the
 // honesty of what is drawn (one node per row, the row's own figures, the documented edges only).
-import { workDayWindow } from '@connorhoehnslalom/realtime-modules/work-graph';
+import { workDayWindow } from '@connorhoehn/realtime-modules/work-graph';
 import { assessmentRunStatus, draftStatus, projectAssessmentWorkGraph, type AssessmentProjectionInput } from '../assessment-projection.js';
 import { policyRevisionFor, assessmentPolicyRevisionFor } from '../snapshot.js';
 

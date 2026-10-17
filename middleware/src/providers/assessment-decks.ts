@@ -26,7 +26,7 @@ import * as M from '../mock/assessment.js';
 import { exec } from './aurora.js';
 import { createArtifactRevisionStore } from '../lib/flow-artifacts/index.js';
 import { getRun, getTeamDeckSource, launchRun } from './assessment.js';
-import { validateDeckSpec, type DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import * as shared from '../lib/deck-shared/index.js';
 import { createDeckStore } from '../lib/deck-shared/index.js';
 import { str, maybe, json, parse, iso, summaryOf, type DeckPreviewOut, type DeckRevisionSummary, type Result } from '../lib/deck-shared/index.js';

@@ -18,7 +18,7 @@ import { CallChatRuntime, callChatRuntime, roomChatChannel } from '../call-chat.
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';
 import { getUser } from '../../providers/identity.js';
 import type { Session } from '../session.js';
-import type { MeetingService } from '@connorhoehnslalom/realtime-modules/meeting';
+import type { MeetingService } from '@connorhoehn/realtime-modules/meeting';
 
 const SECRET = 'huddle-breakout-test-secret';
 type Frame = Record<string, unknown>; type Client = { ws: WebSocket; frames: Frame[]; user: string };

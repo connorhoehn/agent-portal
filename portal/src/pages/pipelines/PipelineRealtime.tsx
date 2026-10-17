@@ -6,7 +6,7 @@
 
 import { useRef } from 'react';
 import { PresenceAvatars, Stack } from '@connorhoehnslalom/ui-components/shared';
-import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { usePresence } from '@connorhoehn/realtime-modules/client';
 import { useCapabilities } from '../../lib/capabilities';
 import { ConversationThread, useConversation } from '../../components/chat/ConversationThread';
 import { useCallBlock } from '../../lib/conversationCall';

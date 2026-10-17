@@ -8,7 +8,7 @@ import { BrowserRouter } from 'react-router';
 import { Button, ChatIcon, Inline, PresenceDot, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { SidePane, SidePaneProvider } from '@connorhoehnslalom/ui-components';
 import { CallDock } from '@connorhoehnslalom/ui-components/video';
-import { conversationCallDockProps } from '@connorhoehnslalom/realtime-modules/client/video';
+import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
 import { callCounts, callDrawn } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { SessionProvider } from '../../src/lib/auth';
 import { SocialFooter } from '../../src/components/shell/SocialFooter';

@@ -11,9 +11,9 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { ses
 
 import { randomBytes } from 'node:crypto';
 import { DynamoDBClient, DescribeTableCommand, QueryCommand, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
-import { RedisCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import { LocalRealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
-import { DynamoChatStore } from '@connorhoehnslalom/realtime-modules/server/stores/dynamo';
+import { RedisCallStateStore } from '@connorhoehn/realtime-modules/call';
+import { LocalRealtimeRouter } from '@connorhoehn/realtime-modules/server';
+import { DynamoChatStore } from '@connorhoehn/realtime-modules/server/stores/dynamo';
 import { RedisLite } from '../redis-lite.js';
 import { CallChatRuntime, callChatChannel } from '../call-chat.js';
 import { RedisCallChatStateStore } from '../call-chat-state.js';

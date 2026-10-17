@@ -1,7 +1,7 @@
 // Current call identity is shared by page pins and huddle chat. Token claims
 // establish provenance; directory epochs/grants establish current authority.
-import { parseDmLobby, type ActiveCallStateView, type CallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import type { RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { parseDmLobby, type ActiveCallStateView, type CallStateStore } from '@connorhoehn/realtime-modules/call';
+import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { AppError } from './async-handler.js';
 import { currentDocumentSessionEpoch, documentSessionId } from './document-session.js';
 import { getUser } from '../providers/identity.js';

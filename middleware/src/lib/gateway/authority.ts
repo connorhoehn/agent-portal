@@ -33,11 +33,11 @@
 import {
   baseChannel, createChannelAuthority, defineChannelFamilies, normalizeCallPayload,
   type AuthorityScope, type CallStep, type ChannelStep, type GuardAuth as LibraryGuardAuth, type LobbyVerdict,
-} from '@connorhoehnslalom/realtime-modules/server';
-import type { FileUploadRow } from '@connorhoehnslalom/realtime-modules/fileupload';
+} from '@connorhoehn/realtime-modules/server';
+import type { FileUploadRow } from '@connorhoehn/realtime-modules/fileupload';
 import {
   BREAKOUT_LOBBY_SEPARATOR, MEETING_CHANNEL_PREFIX, breakoutLobbyName, parseBreakoutChannel, type MeetingService,
-} from '@connorhoehnslalom/realtime-modules/meeting';
+} from '@connorhoehn/realtime-modules/meeting';
 import { isAllowed } from '../authz.js';
 import { stewardsInitiative } from '../initiative-scope.js';
 import { inCallChatNamespace } from '../call-chat.js';

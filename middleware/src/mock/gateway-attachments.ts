@@ -8,8 +8,8 @@
 // these rows when MOCK_AURORA is on). Upload blobs stay on local disk; with
 // their metadata row gone they are unreachable.
 
-import type { StoredReaction } from '@connorhoehnslalom/realtime-modules/reactions';
-import type { FileUploadRow } from '@connorhoehnslalom/realtime-modules/fileupload';
+import type { StoredReaction } from '@connorhoehn/realtime-modules/reactions';
+import type { FileUploadRow } from '@connorhoehn/realtime-modules/fileupload';
 import { defineFixture } from './core/index.js';
 
 export const gatewayReactionsFixture = defineFixture<StoredReaction>({

@@ -275,6 +275,6 @@ export const libraryReleaseDoc: RunbookDoc = {
     '',
     'The consumer is not done until the installed dist proves the API: a version string, a CHANGELOG line or the library source proves nothing about what the browser loads. A pin move also changes the consumer\'s source digest, so any journey contracts must be measured again afterwards.',
     '',
-    'This project (aws-agentcore, data/projects.json): ui-components is @connorhoehnslalom/ui-components from ~/Projects/ui-components (origin connorhoehnslalom), packed into portal/vendor and pinned only by the portal; realtime-modules is pinned by both the portal and the middleware (file:../portal/vendor/…), its tarball calls itself @connorhoehn/realtime-modules while the dependency key is @connorhoehnslalom/realtime-modules, and its canonical repository is connorhoehn/realtime-modules. Both pins are written on the Pins line of CLAUDE.md; the Tilt resources are portal and middleware.',
+    'This project (aws-agentcore, data/projects.json): ui-components is @connorhoehnslalom/ui-components from ~/Projects/ui-components (origin connorhoehnslalom), packed into portal/vendor and pinned only by the portal; realtime-modules is pinned by both the portal and the middleware (file:../portal/vendor/…), its tarball calls itself @connorhoehn/realtime-modules while the dependency key is @connorhoehn/realtime-modules, and its canonical repository is connorhoehn/realtime-modules. Both pins are written on the Pins line of CLAUDE.md; the Tilt resources are portal and middleware.',
   ].join('\n'),
 };

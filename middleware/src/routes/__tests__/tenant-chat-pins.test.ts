@@ -10,7 +10,7 @@ jest.mock('../../lib/authz.js', () => ({ resolveSession: (req: { session?: unkno
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { chatPinsRouter } from '../chat-pins.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { getUser, type UserInfo } from '../../providers/identity.js';

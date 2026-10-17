@@ -1,4 +1,4 @@
-import { GatewayProxyClient } from '@connorhoehnslalom/realtime-modules/proxy-client';
+import { GatewayProxyClient } from '@connorhoehn/realtime-modules/proxy-client';
 
 export function gatewayEndpoints(configuredUrl?: string): { http: string; websocket: string } | null {
   const value = configuredUrl?.trim();

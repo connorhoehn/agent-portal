@@ -22,7 +22,7 @@ import { flowRunStore, type FlowRunRow } from '../flow-runs/index.js';
 import type { Session } from '../session.js';
 import { firstLine } from '../upstream.js';
 import { intervalOverlapsWorkDay } from './day-overlap.js';
-import { type WorkDayWindow, type WorkSourceKind, type WorkSourceHealth } from '@connorhoehnslalom/realtime-modules/work-graph';
+import { type WorkDayWindow, type WorkSourceKind, type WorkSourceHealth } from '@connorhoehn/realtime-modules/work-graph';
 import {
   isoInstant, type BotRow, type DecisionGraphRow, type DocumentLinkRow, type FlowRunGraphRow, type InitiativeRow, type JobGraphRow, type RunRow,
   type SprintGraphRow, type ViewerReads, type WorkItemRow,

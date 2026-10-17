@@ -28,7 +28,7 @@ import { transcriptLines } from '../../lib/conversation-summarize.js';
 import { acceptArtifactEnvelope, diagramDigest, pageDigest, parseArtifactArgs, parseDiagram } from '../../lib/conversation-artifact.js';
 import { flowRunChannel } from '../../lib/flow-runs/index.js';
 import type { Session } from '../../lib/session.js';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 
 const SECRET = 'artifact-api-test-secret';
 const previousSecret = process.env['REALTIME_JWT_SECRET'];

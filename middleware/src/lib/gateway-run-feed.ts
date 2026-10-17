@@ -25,7 +25,7 @@
 // A producer only publishes to a channel some family in the allowlist names:
 // default-deny holds on the way out as well as in.
 
-import { pipeline, activity, defineFeature, type RealtimeFeature } from '@connorhoehnslalom/realtime-modules/server';
+import { pipeline, activity, defineFeature, type RealtimeFeature } from '@connorhoehn/realtime-modules/server';
 import { producerChannelAllowed } from './gateway/authority.js';
 import { flowRunChannel, flowRunTenant } from './flow-runs/channel.js';
 import { onFlowRunMove, type FlowRunMove } from './flow-runs/events.js';

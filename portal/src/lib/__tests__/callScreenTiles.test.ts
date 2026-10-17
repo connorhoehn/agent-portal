@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { ConversationCallDockProps, ConversationCallDockState } from '@connorhoehnslalom/realtime-modules/client/video';
+import type { ConversationCallDockProps, ConversationCallDockState } from '@connorhoehn/realtime-modules/client/video';
 import { separateCallScreenTiles } from '../callScreenTiles.ts';
 
 const state = (screenSharing: boolean, readyState = 'live') => ({

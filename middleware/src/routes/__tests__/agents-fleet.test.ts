@@ -51,7 +51,7 @@ jest.mock('../../lib/authz.js', () => ({
   isAllowed: jest.fn(async () => true),
   resolveSession: () => null,
 }));
-jest.mock('@connorhoehnslalom/realtime-modules/agent-streaming', () => ({
+jest.mock('@connorhoehn/realtime-modules/agent-streaming', () => ({
   agentStreamMiddleware: () => (_req: unknown, res: { json: (b: unknown) => void }) =>
     res.json({ streamed: true }),
 }));

@@ -16,8 +16,8 @@
 import path from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import type { IncomingMessage } from 'node:http';
-import { FileBlobStore, type FileUploadMetadataStore, type FileUploadRow, type FileUploadService } from '@connorhoehnslalom/realtime-modules/fileupload';
-import type { ReactionStore, StoredReaction } from '@connorhoehnslalom/realtime-modules/reactions';
+import { FileBlobStore, type FileUploadMetadataStore, type FileUploadRow, type FileUploadService } from '@connorhoehn/realtime-modules/fileupload';
+import type { ReactionStore, StoredReaction } from '@connorhoehn/realtime-modules/reactions';
 import { getUser } from '../providers/identity.js';
 import { decideLiveChannel, type LiveChannelGuards } from './live-principal.js';
 import { config as appConfig } from '../config.js';

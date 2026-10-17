@@ -1,4 +1,4 @@
-import { createGatewayRest, type GatewayRest } from '@connorhoehnslalom/realtime-modules/client';
+import { createGatewayRest, type GatewayRest } from '@connorhoehn/realtime-modules/client';
 import type { RealtimeTokenSource } from './realtimeToken.ts';
 
 /** The socket may outlive its handshake token. HTTP must use a fresh bearer

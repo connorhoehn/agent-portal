@@ -8,7 +8,7 @@
 // before the main hook's automatic read can advance it, and never moves while the thread is open.
 
 import { useEffect, useRef, useState } from 'react';
-import { useChatReadReceipts } from '@connorhoehnslalom/realtime-modules/client';
+import { useChatReadReceipts } from '@connorhoehn/realtime-modules/client';
 import { unreadBoundary, type BoundaryMessage } from './unreadBoundary';
 
 export function useUnreadBoundary(channel: string, viewerId: string, messages: readonly BoundaryMessage[]): string | undefined {

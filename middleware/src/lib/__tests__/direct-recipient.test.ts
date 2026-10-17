@@ -77,7 +77,7 @@ it('a full unread window shares current resource checks only inside that one rep
 });
 
 it('hydrates a cold peer resource before applying the synchronous recipient guard', async () => {
-  const channel = 'social:ch:remote-private', rows: import('@connorhoehnslalom/realtime-modules/chat').ChatMember[] = [];
+  const channel = 'social:ch:remote-private', rows: import('@connorhoehn/realtime-modules/chat').ChatMember[] = [];
   const member = { channel, userId: 'bob', role: 'member' as const, addedBy: 'alice', addedAt: '2026-10-05', historyFrom: null, removedAt: null };
   const read = jest.fn(async () => [structuredClone(member)]);
   const membershipStore = new MirroredMembershipStore(() => rows, { listMembers: read,

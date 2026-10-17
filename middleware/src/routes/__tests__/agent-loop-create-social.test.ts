@@ -34,7 +34,7 @@ import { pendingFlowRuns } from '../../lib/flow-runs/index.js';
 import { createDocumentStep, createMeetingStep } from '../agent-loop-create.js';
 import type { Request } from 'express';
 import type { Session } from '../../lib/session.js';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 
 const app = express();
 app.use(express.json());

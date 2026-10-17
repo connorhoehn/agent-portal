@@ -11,7 +11,7 @@ const { TaskItem } = require('@tiptap/extension-task-item') as typeof import('@t
 const { Image } = require('@tiptap/extension-image') as typeof import('@tiptap/extension-image', { with: { 'resolution-mode': 'require' } });
 const { TableKit } = require('@tiptap/extension-table') as typeof import('@tiptap/extension-table', { with: { 'resolution-mode': 'require' } });
 const { TextStyleKit } = require('@tiptap/extension-text-style') as typeof import('@tiptap/extension-text-style', { with: { 'resolution-mode': 'require' } });
-const { createCanvasExtensions, MacroNode, HeadingAnchor, MarkdownClipboard, Callout, CanvasTextAlign } = require('@connorhoehnslalom/realtime-modules/adapters/tiptap') as typeof import('@connorhoehnslalom/realtime-modules/adapters/tiptap');
+const { createCanvasExtensions, MacroNode, HeadingAnchor, MarkdownClipboard, Callout, CanvasTextAlign } = require('@connorhoehn/realtime-modules/adapters/tiptap') as typeof import('@connorhoehn/realtime-modules/adapters/tiptap');
 
 /** Same nodes as CanvasDocumentView; no DOM or editor instance. */
 export const documentCanvasSchema = getSchema([

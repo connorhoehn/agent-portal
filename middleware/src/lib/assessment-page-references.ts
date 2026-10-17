@@ -4,7 +4,7 @@
 // `{ kind: 'assessment-dimension', id: '<TEAM-id>:<dimensionId>' }`; the
 // title, trail and route are resolved on read under the READER's current
 // assessment authority (GET /api/page-references/resolve).
-import { defineFeature, type RealtimeFeature } from '@connorhoehnslalom/realtime-modules/server';
+import { defineFeature, type RealtimeFeature } from '@connorhoehn/realtime-modules/server';
 import { AppError, ValidationError } from './async-handler.js';
 import { currentLiveSession, getLivePrincipal } from './live-principal.js';
 import { holdsFamilyAuthority } from './gateway/authority.js';

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useMemo, useCallback, type ReactNode } from 'react';
 import { askScopeBody, type AskScope } from '../lib/askScope';
 import { useSearchParams, useNavigate, useLocation, Link } from 'react-router';
-import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
-import type { Message as AgentMessage } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
+import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import type { Message as AgentMessage } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import {
   Banner,
   Button,
@@ -41,7 +41,7 @@ import {
   sortPeople, buildMentionRegexes, findMentionedPeople, generateFollowUps,
   type GraphEntities, type GraphPerson,
 } from '../lib/orgMentions';
-import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { usePresence } from '@connorhoehn/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 import { deriveSources, extractSources } from '../components/chat/answerSources';
 import { useCapabilities } from '../lib/capabilities';

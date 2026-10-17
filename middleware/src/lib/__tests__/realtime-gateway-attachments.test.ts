@@ -18,7 +18,7 @@ import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import { attachRealtimeGateway, authenticateGatewayUpgrade, REALTIME_GATEWAY_PATH } from '../realtime-gateway.js';
 import { channelGuards } from '../gateway/authority.js';
-import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
+import { baseChannel } from '@connorhoehn/realtime-modules/server';
 import { createUploadsRouter, gatewayUploadConfig, resetGatewayUploadBackendForTests, uploadTypeAllowed } from '../gateway-attachments.js';
 import { rejectUnsupportedUpgrades } from '../unsupported-upgrades.js';
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';

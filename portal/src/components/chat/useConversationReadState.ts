@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
+import { useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { conversationReadFrame, type ConversationReadState } from './conversationReadState';
 
 /** Observe the existing gateway protocol; useChat still owns join, history

@@ -11,7 +11,7 @@
 // key. What this file adds is the position: only numeric {x,y} in the canvas /
 // freeform modes crosses, so nothing else a client typed rides the frame.
 
-import { cursor, defineFeature, type RealtimeFeature } from '@connorhoehnslalom/realtime-modules/server';
+import { cursor, defineFeature, type RealtimeFeature } from '@connorhoehn/realtime-modules/server';
 
 const MODES = new Set(['freeform', 'canvas']);
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);

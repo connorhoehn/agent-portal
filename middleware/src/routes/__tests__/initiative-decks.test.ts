@@ -43,7 +43,7 @@ import { listSprints } from '../../providers/sprints.js';
 import { getBudget, getMaintenance30d, listGrants } from '../../providers/budgets.js';
 import { buildInitiativeDeckFacts, money, isOpenItem } from '../../lib/initiative-deck/facts.js';
 import { loadInitiativeDeckSource } from '../../providers/initiative-decks.js';
-import type { DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { config } from '../../config.js';
 import { agentcore } from '../../providers/index.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';

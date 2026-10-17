@@ -21,7 +21,7 @@ import * as identity from '../../providers/identity.js';
 import { socialPinsFixture, socialChannelMembersFixture, socialChannelMessagesFixture } from '../../mock/social-channels.js';
 import { freezeClock, unfreezeClock } from '../../mock/core/index.js';
 import type { Session } from '../../lib/session.js';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 
 const SECRET = 'pin-api-test-secret';
 const previousSecret = process.env['REALTIME_JWT_SECRET'];

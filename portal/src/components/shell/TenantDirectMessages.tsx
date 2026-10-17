@@ -5,7 +5,7 @@
 // Social-granted sessions use the same overview with a direct Social entry.
 
 import { useEffect, useMemo, useState } from 'react';
-import { useGatewayOptional, usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { useGatewayOptional, usePresence } from '@connorhoehn/realtime-modules/client';
 import { useNavigate } from 'react-router';
 import { Button, ChatIcon, Inline, T } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';

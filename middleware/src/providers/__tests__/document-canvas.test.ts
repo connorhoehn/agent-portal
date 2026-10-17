@@ -1,4 +1,4 @@
-jest.mock('@connorhoehnslalom/realtime-modules/server', () => ({
+jest.mock('@connorhoehn/realtime-modules/server', () => ({
   createCanvasSeed: jest.fn(() => ({ snapshot: 'Yml0cw==', unsupported: [] })),
   createDocumentGrant: jest.fn(() => 'signed-grant'),
   exportCanvasProjection: jest.fn(() => ({ markdown: '# Acknowledged binary' })),
@@ -15,7 +15,7 @@ jest.mock('../document-mapping.js', () => ({
 import { WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { createCanvasSeed, createDocumentGrant } from '@connorhoehnslalom/realtime-modules/server';
+import { createCanvasSeed, createDocumentGrant } from '@connorhoehn/realtime-modules/server';
 import { connectDocumentCanvas, readDocumentCanvasProjection } from '../document-canvas.js';
 import { ensureDocumentMapping, markDocumentMappingReady } from '../document-mapping.js';
 import { currentDocumentSessionEpoch } from '../../lib/document-session.js';

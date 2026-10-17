@@ -8,7 +8,7 @@ import type { GatewayMode } from './gatewayMode.ts';
 import type {
   GatewayClusterInfo,
   GatewayMetricsResponse,
-} from '@connorhoehnslalom/realtime-modules/proxy-client';
+} from '@connorhoehn/realtime-modules/proxy-client';
 
 // The gateway's URL comes from the realtime-token response (`gatewayUrl`,
 // the middleware's REALTIME_GATEWAY_URL), with VITE_GATEWAY_URL as a local
@@ -28,7 +28,7 @@ interface UseGatewayInfoReturn {
 }
 
 /**
- * Second adoption of `@connorhoehnslalom/realtime-modules/proxy-client` in
+ * Second adoption of `@connorhoehn/realtime-modules/proxy-client` in
  * OrgIQ portal (after GatewayStatusBadge). Polls the gateway's
  * unauthenticated `/cluster` + `/metrics` endpoints so the Settings page
  * can render an "About > Gateway" panel (node count, active connections,

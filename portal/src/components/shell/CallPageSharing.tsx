@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { useLocation, useNavigate } from 'react-router';
 import { Button, Inline, InlineAlert, InlinePopover, Stack, StatusDot, T, WarningIcon } from '@connorhoehnslalom/ui-components/shared';
 import { MonitorIcon } from '@connorhoehnslalom/ui-components/video';
-import type { ConversationCallGateway } from '@connorhoehnslalom/realtime-modules/client/video';
+import type { ConversationCallGateway } from '@connorhoehn/realtime-modules/client/video';
 import { CallPageSession, callPageScopeKey, canStopSharingCallPage, createCallPageClient, currentCallPage } from '../../lib/callPages';
 
 export interface CallPageSharingProps {

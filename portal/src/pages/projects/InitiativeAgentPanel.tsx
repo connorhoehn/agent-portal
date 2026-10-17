@@ -1,6 +1,6 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { useNavigate } from 'react-router';
-import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
+import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import { Button, Chip, Inline, InlineAlert, MessageBubble, Stack, StatusDot, StatusPill, T } from '@connorhoehnslalom/ui-components/shared';
 import { Markdown } from '../../components/Markdown';
 import { agentInvokeFetch } from '../../components/chat/agentInvokeFetch';

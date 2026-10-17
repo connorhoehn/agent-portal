@@ -11,8 +11,8 @@ jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', aurora: 
 jest.mock('../../../providers/identity.js', () => ({ getUser: jest.fn(), listUsers: jest.fn(async () => []) }));
 jest.mock('../../authz.js', () => ({ isAllowed: jest.fn() }));
 jest.mock('../../page-resources.js', () => ({ pageResourceVisible: jest.fn() }));
-import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
-import type { FileUploadRow } from '@connorhoehnslalom/realtime-modules/fileupload';
+import { baseChannel } from '@connorhoehn/realtime-modules/server';
+import type { FileUploadRow } from '@connorhoehn/realtime-modules/fileupload';
 import { getUser, type UserInfo } from '../../../providers/identity.js';
 import { isAllowed } from '../../authz.js';
 import { pageResourceVisible } from '../../page-resources.js';

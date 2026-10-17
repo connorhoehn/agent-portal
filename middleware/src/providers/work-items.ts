@@ -7,7 +7,7 @@
 import { noteSearchWrite } from '../lib/search-index/writes.js';
 import { randomUUID } from 'node:crypto';
 import { displayNameForSubject, getUser } from './identity.js';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { restCommentMessage, workThreadChannel } from '../lib/work-thread.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from './aurora.js';

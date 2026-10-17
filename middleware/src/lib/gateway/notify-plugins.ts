@@ -16,8 +16,8 @@
 //     made by the chat service itself (realtime-modules 0.118 `unread`) on
 //     every post path; see `pageCursorChatOptions` and lib/page-thread-unread.ts.
 
-import type { AuthorityScope, RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
-import { parseChatPluginMessage, type ChatServiceOpts } from '@connorhoehnslalom/realtime-modules/chat';
+import type { AuthorityScope, RealtimeRouter } from '@connorhoehn/realtime-modules/server';
+import { parseChatPluginMessage, type ChatServiceOpts } from '@connorhoehn/realtime-modules/chat';
 import { conversationHref, notify, notifyTenantChannelMention, parseDmLobby, resolveMentions } from '../social-notify.js';
 import { currentPageReaders, pageCursorMode, pageThreadUnread } from '../page-thread-unread.js';
 import { socialChat, slugForChannel, type MirroredMembershipStore } from '../social-chat.js';

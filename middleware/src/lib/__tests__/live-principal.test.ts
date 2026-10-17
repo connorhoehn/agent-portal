@@ -6,9 +6,9 @@ import { isAllowed } from '../authz.js';
 import { currentLiveSession, getLivePrincipal } from '../live-principal.js';
 import { currentSocialActionSession } from '../social-authority.js';
 import { channelGuard, lobbyGuard } from '../realtime-gateway.js';
-import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
+import { baseChannel } from '@connorhoehn/realtime-modules/server';
 import type { Session } from '../session.js';
-import type { ChatMember, ChatMembershipStore } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMember, ChatMembershipStore } from '@connorhoehn/realtime-modules/chat';
 import { createMemorySocialChatBackend, MirroredMembershipStore, setSocialChatBackend, socialChat } from '../social-chat.js';
 import { admitCall, admitCallRecipient, admitChannel } from '../gateway/authority.js';
 

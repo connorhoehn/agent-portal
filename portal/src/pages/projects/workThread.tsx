@@ -8,7 +8,7 @@
 // messages and share the `/summarize` cards.
 
 import type { CommentListItem } from '@connorhoehnslalom/ui-components';
-import type { useChat } from '@connorhoehnslalom/realtime-modules/client';
+import type { useChat } from '@connorhoehn/realtime-modules/client';
 import type { ConversationRuntime } from '../../components/chat/ConversationThread';
 
 export type WorkThread = ConversationRuntime;

@@ -100,7 +100,7 @@ export async function pullSourcePage(source:CanvasSource,session:Session):Promis
     // the same canvas projection of the exact imported source before declaring
     // a conflict; never compare to a newer upstream body as the baseline.
     if(documentSourceRevision(source.markdown)!==saved.sourceRevision) throw new DocumentSourceError(409,'Source baseline changed; review before pulling');
-    const [{createCanvasSeed,exportCanvasProjection},{documentCanvasSchema}]=await Promise.all([import('@connorhoehnslalom/realtime-modules/server'),import('../lib/document-canvas-schema.js')]);
+    const [{createCanvasSeed,exportCanvasProjection},{documentCanvasSchema}]=await Promise.all([import('@connorhoehn/realtime-modules/server'),import('../lib/document-canvas-schema.js')]);
     const baselineSeed=createCanvasSeed(sourceMarkdownForCanvas(source.id,source.markdown),{schema:documentCanvasSchema});
     const baseline=canvasMarkdownForSource(source.id,exportCanvasProjection(baselineSeed.snapshot).markdown);
     if(saved.markdown!==baseline) throw new DocumentSourceError(409,'Document has collaborative edits; publish or review them before pulling');

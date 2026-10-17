@@ -263,7 +263,7 @@ export function SettingsPage() {
           />
         </Card>
 
-        {/* 7. Gateway (websocket-gateway via @connorhoehnslalom/realtime-modules)
+        {/* 7. Gateway (websocket-gateway via @connorhoehn/realtime-modules)
 
             Four dashes and a raw exception string is what this panel used to
             show, in every deployment, forever — see useGatewayInfo for the two

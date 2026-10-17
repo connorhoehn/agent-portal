@@ -35,11 +35,11 @@ mw_sha=$(grep -oE 'realtime-modules#[0-9a-f]{40}' middleware/package.json | cut 
 po_sha=$(grep -oE 'realtime-modules#[0-9a-f]{40}' portal/package.json | cut -d# -f2)
 if [ -n "$mw_sha" ] && [ "$mw_sha" = "$po_sha" ]; then ok "middleware and portal pin the same realtime-modules sha ($mw_sha)"
 else fail "middleware ($mw_sha) and portal ($po_sha) pin different realtime-modules shas"; fi
-installed=$(node -p "require('./middleware/node_modules/@connorhoehnslalom/realtime-modules/package.json').version" 2>/dev/null)
+installed=$(node -p "require('./middleware/node_modules/@connorhoehn/realtime-modules/package.json').version" 2>/dev/null)
 if [ -n "$installed" ] && [ "$(printf '%s\n%s\n' "$ENGINE_MIN_VERSION" "$installed" | sort -V | head -1)" = "$ENGINE_MIN_VERSION" ]; then
   ok "installed realtime-modules $installed carries the /deck engine (>= $ENGINE_MIN_VERSION)"
 else fail "installed realtime-modules ${installed:-none} is below $ENGINE_MIN_VERSION (no /deck engine)"; fi
-(cd middleware && node --input-type=module -e "import('@connorhoehnslalom/realtime-modules/deck').then(m=>{if(!Object.keys(m).length)process.exit(1)})" >/dev/null 2>&1) \
+(cd middleware && node --input-type=module -e "import('@connorhoehn/realtime-modules/deck').then(m=>{if(!Object.keys(m).length)process.exit(1)})" >/dev/null 2>&1) \
   && ok "realtime-modules/deck resolves from the middleware" || fail "realtime-modules/deck does not resolve from the middleware"
 grep -qiE 'deck engine|DeckSpec' docs/ui-components-queue.md \
   && ok "extracting the engine is queued in docs/ui-components-queue.md" \

@@ -4,7 +4,7 @@
 // it cannot replace this authorization path. The installed SDK has no
 // participant-index client. Storage, capture, compose and permissions remain
 // in platform-api/LVS; this adapter only adds initiative filtering and paging.
-import type { LVSRecording } from '@connorhoehnslalom/realtime-modules/client/video';
+import type { LVSRecording } from '@connorhoehn/realtime-modules/client/video';
 import type { RecordingListItem, TimedReaction, TranscriptSegment } from '@connorhoehnslalom/ui-components/video';
 import { realtimeEndpoints, realtimeTokenSource, type RealtimeTokenSource } from '../../lib/realtimeToken.ts';
 

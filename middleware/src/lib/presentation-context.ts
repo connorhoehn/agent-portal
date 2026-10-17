@@ -1,6 +1,6 @@
 // A presentation question resolves the exact version the reader selected.
 // The ordinary search selection must not substitute the initiative for a slide.
-import { deckSources, validateDeckSpec, type DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import { deckSources, validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { AppError, NotFoundError, ValidationError } from './async-handler.js';
 import type { Session } from './session.js';
 

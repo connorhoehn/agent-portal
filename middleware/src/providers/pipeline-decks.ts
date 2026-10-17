@@ -20,7 +20,7 @@ import {
 import { createArtifactRevisionStore } from '../lib/flow-artifacts/index.js';
 import { loadProjection } from './pipeline-runs.js';
 import { listApprovals } from './pipeline-definitions.js';
-import { validateDeckSpec, type DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import * as shared from '../lib/deck-shared/index.js';
 import { createDeckStore } from '../lib/deck-shared/index.js';
 import { PIPELINE_RUN_DECK_MODE } from '../lib/deck-shared/narrative-modes.js';

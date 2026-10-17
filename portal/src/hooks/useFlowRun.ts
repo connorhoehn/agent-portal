@@ -17,8 +17,8 @@
 // requester's socket is ever admitted. `onFinished` fires once per run id.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
-import { usePipelineRunStatus, type PipelineRunTransport } from '@connorhoehnslalom/realtime-modules/client/pipelines';
+import { useGatewayOptional } from '@connorhoehn/realtime-modules/client';
+import { usePipelineRunStatus, type PipelineRunTransport } from '@connorhoehn/realtime-modules/client/pipelines';
 import { isDocumentHidden } from './pollSchedule';
 import { createFlowRunFollower, isFlowRunAck, isFlowRunRefusal, isLiveFlowRunId, type FlowRunFollower } from './flowRunFollower';
 

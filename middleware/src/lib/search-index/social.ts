@@ -37,7 +37,7 @@ import {
 } from '../../mock/social-platform.js';
 import { socialChannelMessagesFixture } from '../../mock/social-channels.js';
 import { channelForSlug, dmMembers, namesForeignClone, SOCIAL_CHANNEL_PREFIX, SOCIAL_DM_PREFIX, slugForChannel, socialChat } from '../social-chat.js';
-import type { ChatMessage, PinnedMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage, PinnedMessage } from '@connorhoehn/realtime-modules/chat';
 import { isoOrNull } from './orgiq.js';
 import { noteSearchWrite } from './writes.js';
 import type { PhraseRule, TenantBuild, TenantIndexSpec, TenantSearchContext } from './tenants.js';

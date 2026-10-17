@@ -20,9 +20,9 @@ jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', auth: { 
 jest.mock('../../../providers/identity.js', () => ({ ...jest.requireActual('../../../providers/identity.js'), getUser: jest.fn() }));
 jest.mock('../../authz.js', () => ({ isAllowed: jest.fn() }));
 jest.mock('../../live-principal.js', () => ({ ...jest.requireActual('../../live-principal.js'), authorizeConversationChat: jest.fn(async () => true) }));
-import { LocalRealtimeRouter, WorkGraphStreamService, baseChannel } from '@connorhoehnslalom/realtime-modules/server';
-import { workDayWindow, validateWorkGraphSnapshotV2, type WorkGraphSnapshotV2 } from '@connorhoehnslalom/realtime-modules/work-graph';
-import { applyWorkGraphSnapshotV2, createClientWorkGraphState, reduceWorkGraphStream, type ClientWorkGraphState } from '@connorhoehnslalom/realtime-modules/client';
+import { LocalRealtimeRouter, WorkGraphStreamService, baseChannel } from '@connorhoehn/realtime-modules/server';
+import { workDayWindow, validateWorkGraphSnapshotV2, type WorkGraphSnapshotV2 } from '@connorhoehn/realtime-modules/work-graph';
+import { applyWorkGraphSnapshotV2, createClientWorkGraphState, reduceWorkGraphStream, type ClientWorkGraphState } from '@connorhoehn/realtime-modules/client';
 import { getUser, type UserInfo } from '../../../providers/identity.js';
 import { isAllowed } from '../../authz.js';
 

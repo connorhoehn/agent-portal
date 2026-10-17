@@ -22,7 +22,7 @@
 // hand-off instead; `input="below"` is a page whose composer sits right under
 // the thread (no input, no hand-off).
 
-import { useChat, useChatReadReceipts, useGatewayOptional, useReactions } from '@connorhoehnslalom/realtime-modules/client';
+import { useChat, useChatReadReceipts, useGatewayOptional, useReactions } from '@connorhoehn/realtime-modules/client';
 import { WrappedChatPanel, type WrappedChatPanelProps } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { Button, EmptyState, Inline, InlineAlert, LoadingState, LockIcon, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { ThreadInputHandoff, useThreadInput, type ConversationComposerProps } from '@connorhoehnslalom/ui-components/social/rich-composer';

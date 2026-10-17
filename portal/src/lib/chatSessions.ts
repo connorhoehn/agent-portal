@@ -9,7 +9,7 @@
 // Keys are per-surface ('invoke', 'explore', …) so each page resumes its own
 // last conversation independently.
 
-import type { Message, ToolCall } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
+import type { Message, ToolCall } from '@connorhoehn/realtime-modules/agent-streaming/client';
 
 const STORAGE_PREFIX = 'chat.session.';
 

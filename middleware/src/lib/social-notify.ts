@@ -23,8 +23,8 @@
 // `notify*` helpers below; the socket producers (row 4, DMs; row 6, missed
 // calls) live in the gateway, which is the only thing that sees those frames.
 
-import { parseDmLobby as parseDmLobbyName } from '@connorhoehnslalom/realtime-modules/call';
-import type { AuthorityScope } from '@connorhoehnslalom/realtime-modules/server';
+import { parseDmLobby as parseDmLobbyName } from '@connorhoehn/realtime-modules/call';
+import type { AuthorityScope } from '@connorhoehn/realtime-modules/server';
 import { getUser, listUsers } from '../providers/identity.js';
 
 /** What the library's `NotificationService.notifyUser` accepts (its `NotificationInput`). */

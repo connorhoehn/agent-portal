@@ -9,7 +9,7 @@
 // (`syncReads`), so the replayed unread set agrees on reconnect.
 
 import { createContext, useContext, type ReactNode } from 'react';
-import { useNotifications } from '@connorhoehnslalom/realtime-modules/client';
+import { useNotifications } from '@connorhoehn/realtime-modules/client';
 
 export type SharedNotificationsApi = ReturnType<typeof useNotifications>;
 

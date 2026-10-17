@@ -2,7 +2,7 @@ import '@connorhoehnslalom/ui-components/styles.css';
 import '../../src/app.css';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router';
-import { GatewayContext, type GatewayContextValue } from '@connorhoehnslalom/realtime-modules/client';
+import { GatewayContext, type GatewayContextValue } from '@connorhoehn/realtime-modules/client';
 import { DensityProvider } from '@connorhoehnslalom/ui-components/shared';
 import { SessionProvider } from '../../src/lib/auth';
 import DefinitionsPage from '../../src/pages/pipelines/DefinitionsPage';

@@ -16,7 +16,7 @@
 // slot — a read of the library's own back-reference, never a second editor.
 
 import { createElement, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
+import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import { ProposedEditStrip } from '@connorhoehnslalom/ui-components/doc-editor';
 import { Button, InlineAlert, MarkdownView, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../../lib/auth';

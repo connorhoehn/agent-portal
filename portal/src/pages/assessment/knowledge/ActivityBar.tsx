@@ -3,7 +3,7 @@
 // same feed, so neither invents an in-memory history of its own.
 
 import { ActivityFeed, InlinePlaceholder, RailSection } from '@connorhoehnslalom/ui-components/shared';
-import { useChannel } from '@connorhoehnslalom/realtime-modules/client';
+import { useChannel } from '@connorhoehn/realtime-modules/client';
 import { activityEventToFeedItem, channelForDoc, mergeFeeds, sseEventToActivityEvent, sseEventsForDoc } from './knowledgeFormat';
 import type { AssessmentSSEEvent, KnowledgeNode } from './types';
 

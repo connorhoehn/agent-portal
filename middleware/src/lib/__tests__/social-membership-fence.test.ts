@@ -1,5 +1,5 @@
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
-import type { ChatMember, ChatMembershipStore } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMember, ChatMembershipStore } from '@connorhoehn/realtime-modules/chat';
 import { MirroredMembershipStore } from '../social-chat.js';
 
 it('a delayed durable hydrate cannot revive membership after a newer successful local removal', async () => {

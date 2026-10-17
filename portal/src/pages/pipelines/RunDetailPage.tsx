@@ -22,7 +22,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { writeJson } from '../../lib/writeJson';
 import { isTerminalRun } from './runActions';
-import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
+import { useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { PipelineDiscussion, PipelinePresence } from './PipelineRealtime';
 import { useCallBlock } from '../../lib/conversationCall';
 import { PipelineRunLive } from './PipelineRunLive';

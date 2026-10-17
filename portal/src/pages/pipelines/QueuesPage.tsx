@@ -1,5 +1,5 @@
 import { useUrlState } from '../../lib/useUrlState';
-import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
+import { useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { Banner, BranchIcon, Chip, CollapsibleSection, CollectionToolbar, DataTable, IconButton, Inline, KeyValue, ListIcon, PageSection, Stack, StatStrip, T, Tooltip, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';

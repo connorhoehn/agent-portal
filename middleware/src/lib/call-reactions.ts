@@ -3,8 +3,8 @@
 // No client-supplied lobby/tenant is trusted. Chat reaction chips remain chat state.
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
-import type { CallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import type { Reaction } from '@connorhoehnslalom/realtime-modules/reactions';
+import type { CallStateStore } from '@connorhoehn/realtime-modules/call';
+import type { Reaction } from '@connorhoehn/realtime-modules/reactions';
 
 export interface RecordedCallReaction {
   tenant: string; reactionId: string; channel: string; lobbyName: string;

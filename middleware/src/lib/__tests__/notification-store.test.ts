@@ -7,7 +7,7 @@
 
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', aurora: {}, mock: { aurora: true } } }));
 
-import { RedisNotificationStore } from '@connorhoehnslalom/realtime-modules/notification';
+import { RedisNotificationStore } from '@connorhoehn/realtime-modules/notification';
 import {
   MemoryNotificationRedis, createGatewayNotificationStore, rehydrateMockNotifications,
   releaseGatewayNotificationStore, seedMockNotifications,

@@ -21,7 +21,7 @@
 
 import {
   MAX_BULLETS_PER_SLIDE, MAX_SOURCES_PER_SLIDE, MAX_TITLE_CHARS, type DeckSource,
-} from '@connorhoehnslalom/realtime-modules/deck';
+} from '@connorhoehn/realtime-modules/deck';
 import { clip, makePlan, type DeckEvidence, type DeckFacts, type FactValue, type SlidePlan } from '../deck-shared/plan.js';
 import type { DraftDeckInput } from '../deck-shared/narrative.js';
 import type { WorkItem, ProjectDecision } from '../../providers/work-items.js';

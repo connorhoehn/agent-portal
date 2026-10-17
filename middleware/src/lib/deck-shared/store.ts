@@ -8,7 +8,7 @@ import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { config } from '../../config.js';
 import { clock } from '../../mock/core/index.js';
 import { exec } from '../../providers/aurora.js';
-import type { DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import type { ArtifactRevision, ArtifactRevisionStore } from '../flow-artifacts/index.js';
 
 /** The minimum a deck row carries for the shared store. */

@@ -9,12 +9,12 @@
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 jest.mock('../../../providers/identity.js', () => ({ ...jest.requireActual('../../../providers/identity.js'), getUser: jest.fn() }));
 jest.mock('../../authz.js', () => ({ ...jest.requireActual('../../authz.js'), isAllowed: jest.fn() }));
-import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
+import { InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
 import { getUser, type UserInfo } from '../../../providers/identity.js';
 import { isAllowed } from '../../authz.js';
 
 import { channelGuard, lobbyGuard } from '../../realtime-gateway.js';
-import { baseChannel } from '@connorhoehnslalom/realtime-modules/server';
+import { baseChannel } from '@connorhoehn/realtime-modules/server';
 import { tenantChannelFamily } from '../../tenant-channels.js';
 import { createMemorySocialChatBackend, setSocialChatBackend, socialChat } from '../../social-chat.js';
 import { observeCallPageLifecycle } from '../../call-pages.js';

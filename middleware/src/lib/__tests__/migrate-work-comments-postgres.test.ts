@@ -20,7 +20,7 @@ jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn(async () => n
 
 import { execFile, execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { exec } from '../../providers/aurora.js';
 import { auroraCommentSource, migrateWorkComments } from '../migrate-work-comments.js';
 import { createMemorySocialChatBackend, RowsChatStore, setSocialChatBackend } from '../social-chat.js';

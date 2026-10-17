@@ -11,7 +11,7 @@
 // without a gateway; the feed and the graph's live refresh need one.
 // Without `graph`, nothing changes: no gateway, no section.
 
-import { useActivity, useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
+import { useActivity, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { WrappedActivityPanel } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { useMemo, type ComponentProps } from 'react';
 import { mergeActivity, type FeedEvent } from '../pages/pipelines/recordedEvents';

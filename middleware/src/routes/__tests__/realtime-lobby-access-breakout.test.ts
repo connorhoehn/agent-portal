@@ -10,9 +10,9 @@ jest.mock('../../lib/authz.js', () => ({ isAllowed: jest.fn(async () => false) }
 jest.mock('../../lib/page-resources.js', () => ({ pageResourceVisible: jest.fn() }));
 import express from 'express';
 import request from '../../test-support/http.js';
-import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import { MeetingService, type MeetingRouter } from '@connorhoehnslalom/realtime-modules/meeting';
-import type { RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
+import { MeetingService, type MeetingRouter } from '@connorhoehn/realtime-modules/meeting';
+import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { pageResourceVisible } from '../../lib/page-resources.js';
 import { CallMediaProofRuntime, setCallMediaProofRuntime } from '../../lib/call-media-proof.js';

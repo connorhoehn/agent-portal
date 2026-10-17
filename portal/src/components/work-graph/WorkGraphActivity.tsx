@@ -10,7 +10,7 @@
 
 import { useCallback, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useActivity, useCursor, useGatewayOptional, useWorkGraph } from '@connorhoehnslalom/realtime-modules/client';
+import { useActivity, useCursor, useGatewayOptional, useWorkGraph } from '@connorhoehn/realtime-modules/client';
 import {
   WorkGraph, type WorkActivityView, type WorkActivityWindow, type WorkGraphProps, type WorkGraphSelection, type WorkGraphViewport,
 } from '@connorhoehnslalom/ui-components/graph';

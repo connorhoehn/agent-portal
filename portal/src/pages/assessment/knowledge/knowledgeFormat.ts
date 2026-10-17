@@ -20,7 +20,7 @@ import type {
   KnowledgeSection,
   PresenceViewer,
 } from './types';
-import type { ActivityEvent, ChatMessage as RMChatMessage, Reaction } from '@connorhoehnslalom/realtime-modules/client';
+import type { ActivityEvent, ChatMessage as RMChatMessage, Reaction } from '@connorhoehn/realtime-modules/client';
 import type { ReactionSummary } from '@connorhoehnslalom/ui-components/social';
 
 // ─── Section selection ──────────────────────────────────────────────────────

@@ -3,8 +3,8 @@ import { CanvasDocumentView, DocumentHeader, DocumentLifecyclePill, DocumentOutl
 import { Button, Chip, ErrorState, Inline, InlineAlert, LoadingState, Stack, Modal, FileUploadDrop, ConfirmDialog } from '@connorhoehnslalom/ui-components/shared';
 import { useLocation, useSearchParams } from 'react-router';
 import { WrappedCursorOverlay } from '@connorhoehnslalom/ui-components/integrations/realtime';
-import { GatewaySocketProvider, useCanvasDocument, useCursor, useGateway, useYjsDoc, useFileUpload } from '@connorhoehnslalom/realtime-modules/client';
-import { createCanvasExtensions, MacroNode, HeadingAnchor, MarkdownClipboard, Callout, CanvasTextAlign } from '@connorhoehnslalom/realtime-modules/adapters/tiptap';
+import { GatewaySocketProvider, useCanvasDocument, useCursor, useGateway, useYjsDoc, useFileUpload } from '@connorhoehn/realtime-modules/client';
+import { createCanvasExtensions, MacroNode, HeadingAnchor, MarkdownClipboard, Callout, CanvasTextAlign } from '@connorhoehn/realtime-modules/adapters/tiptap';
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import { TableKit } from '@tiptap/extension-table';
 import Image from '@tiptap/extension-image';

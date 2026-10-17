@@ -15,8 +15,8 @@
 // one, and says so through `configured: false`.
 
 import { useContext, useMemo } from 'react';
-import { GatewayContext } from '@connorhoehnslalom/realtime-modules/client';
-import type { ConversationCallGateway } from '@connorhoehnslalom/realtime-modules/client/video';
+import { GatewayContext } from '@connorhoehn/realtime-modules/client';
+import type { ConversationCallGateway } from '@connorhoehn/realtime-modules/client/video';
 import { offlineGateway } from '../components/OptionalGatewayProvider';
 
 export interface GatewayFrames {

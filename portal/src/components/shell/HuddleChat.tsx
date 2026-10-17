@@ -16,7 +16,7 @@
 // delivery id, which the gateway answers with the original message.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { useGatewayOptional, type useReactions } from '@connorhoehnslalom/realtime-modules/client';
+import { useGatewayOptional, type useReactions } from '@connorhoehn/realtime-modules/client';
 import { composerDraftOf, useComposerFocus, useComposerFocusReveal, useThreadInput, type MentionCandidate, type RichChatComposerHandle, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { PageReferenceCard } from '../chat/PageReferenceCard';
 import { ConversationThread, useConversation, type ConversationRuntime } from '../chat/ConversationThread';

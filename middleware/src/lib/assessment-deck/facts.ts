@@ -16,7 +16,7 @@
 import {
   MAX_BULLETS_PER_SLIDE, MAX_BULLET_CHARS, MAX_SOURCES_PER_SLIDE, MAX_TITLE_CHARS,
   type DeckSlide, type DeckSource, type DeckSpec,
-} from '@connorhoehnslalom/realtime-modules/deck';
+} from '@connorhoehn/realtime-modules/deck';
 import {
   NARRATIVE_KINDS, clip, makePlan, slideFrame, slideWithProse,
   type DeckEvidence, type DeckFacts, type DeckSlideKind, type FactValue, type SlidePlan,

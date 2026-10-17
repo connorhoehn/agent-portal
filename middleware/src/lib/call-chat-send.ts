@@ -4,7 +4,7 @@
 // the same contract, with the room's seat check (CallChatRuntime.assertRoomSeat).
 // Authority is CallChatRuntime's (call-chat.ts); this adds what a huddle send
 // promises beyond the library's own persisted acknowledgement.
-import { defineFeature, type RealtimeFeature } from '@connorhoehnslalom/realtime-modules/server';
+import { defineFeature, type RealtimeFeature } from '@connorhoehn/realtime-modules/server';
 import { AppError } from './async-handler.js';
 import { canonicalCallPage, type CallPageDescriptor } from './call-pages.js';
 import { dmPageDescriptor } from './dm-page-references.js';

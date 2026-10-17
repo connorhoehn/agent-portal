@@ -1,8 +1,8 @@
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
 import { DynamoDispatchQueue } from '../dynamo-dispatch.js';
 import { MirroredMembershipStore } from '../social-chat.js';
-import type { ChatMember } from '@connorhoehnslalom/realtime-modules/chat';
-import { DynamoChatStore } from '@connorhoehnslalom/realtime-modules/server/stores/dynamo';
+import type { ChatMember } from '@connorhoehn/realtime-modules/chat';
+import { DynamoChatStore } from '@connorhoehn/realtime-modules/server/stores/dynamo';
 import { performance } from 'node:perf_hooks';
 
 function held<T = void>() {

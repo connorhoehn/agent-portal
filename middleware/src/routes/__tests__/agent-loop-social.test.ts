@@ -30,7 +30,7 @@ import { socialDeckRevisionsFixture, socialDecksFixture } from '../../mock/socia
 import { flowRunChannel, pendingFlowRuns } from '../../lib/flow-runs/index.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
 import type { Session } from '../../lib/session.js';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 
 const app = express();
 app.use(express.json());

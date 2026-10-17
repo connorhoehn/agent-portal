@@ -45,7 +45,7 @@ jest.mock('@aws-sdk/client-verifiedpermissions', () => ({
 
 // The streaming middleware is replaced by a terminal handler that just 200s —
 // reaching it means every gate passed, and no real agent runtime is touched.
-jest.mock('@connorhoehnslalom/realtime-modules/agent-streaming', () => ({
+jest.mock('@connorhoehn/realtime-modules/agent-streaming', () => ({
   agentStreamMiddleware: () => (req: unknown, res: { json: (b: unknown) => void }) =>
     res.json({ streamed: true }),
 }));

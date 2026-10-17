@@ -13,7 +13,7 @@
 // With REDIS_URL the store runs over lib/redis-lite.ts through
 // `notificationRedisClient`, on the connection that already backs call state.
 
-import { RedisNotificationStore } from '@connorhoehnslalom/realtime-modules/notification';
+import { RedisNotificationStore } from '@connorhoehn/realtime-modules/notification';
 import { config } from '../config.js';
 import { notificationRedisClient, type NotificationRedisLike, type GatewayRedisStore } from './redis-lite.js';
 import { holdsGrant, shapeNotification } from './social-notify.js';

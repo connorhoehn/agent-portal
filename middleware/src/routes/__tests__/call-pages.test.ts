@@ -5,8 +5,8 @@ jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn() }));
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import { InMemoryCallStateStore } from '@connorhoehnslalom/realtime-modules/call';
-import type { RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
+import { InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
+import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { callPagesRouter } from '../call-pages.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { CallPageRuntime, MemoryCallPageStore, observeCallPageLifecycle, setCallPageRuntime, canonicalCallPage, type RecoverableCallStateStore } from '../../lib/call-pages.js';

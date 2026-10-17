@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { useGatewayOptional, usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { useGatewayOptional, usePresence } from '@connorhoehn/realtime-modules/client';
 import { useSharedNotifications } from './SharedNotifications';
 import { WrappedNotificationBell } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { Button, ChatIcon, EmptyState, ExternalLinkIcon, IconButton, Inline, PresenceAvatars, PresenceDot, Stack, T } from '@connorhoehnslalom/ui-components/shared';

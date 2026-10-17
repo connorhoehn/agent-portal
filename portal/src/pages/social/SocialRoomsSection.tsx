@@ -13,7 +13,7 @@
 // room in the pane (`/social/rooms?room=<slug>`), where Join call is.
 
 import { useMemo } from 'react';
-import * as hangoutRooms from '@connorhoehnslalom/realtime-modules/client/hangout-rooms';
+import * as hangoutRooms from '@connorhoehn/realtime-modules/client/hangout-rooms';
 import {
   createHangoutRoomRow, createHangoutRoomsSection, createWrappedHangoutRoomsList, NewHangoutRoomDialog,
 } from '@connorhoehnslalom/ui-components/integrations/realtime';

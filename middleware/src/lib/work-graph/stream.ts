@@ -33,10 +33,10 @@ import * as identity from '../../providers/identity.js';
 import {
   validateWorkGraphDeltaBatch, WORK_GRAPH_LIMITS,
   type ViewerWorkEdge, type ViewerWorkNode, type WorkGraphDeltaOperation, type WorkGraphSnapshot, type WorkGraphSnapshotV2, type WorkSourceStatus,
-} from '@connorhoehnslalom/realtime-modules/work-graph';
+} from '@connorhoehn/realtime-modules/work-graph';
 import type {
   WorkGraphChannelContext, WorkGraphSource, WorkGraphStreamScope, WorkGraphStreamSubscription, WorkGraphStreamTrigger,
-} from '@connorhoehnslalom/realtime-modules/server';
+} from '@connorhoehn/realtime-modules/server';
 import { buildTenantWorkGraph, takeServedWorkGraph, viewerPolicyRevision } from './build.js';
 import { cursorPolicyRevision, parseWorkGraphQuery, workGraphCursor, type AnyWorkGraphSubject, type WorkGraphTenant } from './snapshot.js';
 

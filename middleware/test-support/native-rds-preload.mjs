@@ -70,7 +70,7 @@ function wrapMethod(proto, name, label) {
 }
 function instrumentSendStages() {
   const require = createRequire(import.meta.url);
-  const root = join(dirname(require.resolve('@connorhoehnslalom/realtime-modules/server')), '..');
+  const root = join(dirname(require.resolve('@connorhoehn/realtime-modules/server')), '..');
   const { ChatService } = require(join(root, 'chat/ChatService.js'));
   const access = require(join(root, 'server-ws/channelAccess.js'));
   const { LocalRealtimeRouter } = require(join(root, 'server/router.js'));
@@ -138,7 +138,7 @@ function family(channel) {
 const frameOf = new AsyncLocalStorage();
 function instrumentFrames() {
   const require = createRequire(import.meta.url);
-  const root = join(dirname(require.resolve('@connorhoehnslalom/realtime-modules/server')), '..');
+  const root = join(dirname(require.resolve('@connorhoehn/realtime-modules/server')), '..');
   const WebSocket = require(require.resolve('ws', { paths: [root] }));
   const states = new WeakMap(); const byClient = new Map();
   const stateOf = ws => { let st = states.get(ws); if (!st) { st = { fifo: [], log: [], joined: new Set(), clientId: null, connectedAt: performance.now(), current: null }; states.set(ws, st); } return st; };
@@ -316,7 +316,7 @@ function dynamoFamily(input) {
 }
 function instrumentOrigins() {
   const require = createRequire(import.meta.url);
-  const root = join(dirname(require.resolve('@connorhoehnslalom/realtime-modules/server')), '..');
+  const root = join(dirname(require.resolve('@connorhoehn/realtime-modules/server')), '..');
   const handlerModule = require(join(root, 'server-ws/createWsHandler.js'));
   const create = handlerModule.createWsHandler;
   handlerModule.createWsHandler = function(opts) {

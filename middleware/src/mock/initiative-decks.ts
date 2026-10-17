@@ -5,7 +5,7 @@
 // generation time, so a seeded spec would be a second copy of numbers that
 // could disagree with them. POST /api/__mock/reset clears every deck.
 
-import type { DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { defineFixture } from './core/fixture.js';
 
 export interface InitiativeDeckRow {

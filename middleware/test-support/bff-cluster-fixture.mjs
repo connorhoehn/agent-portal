@@ -12,8 +12,8 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import pg from 'pg';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoChatStore } from '@connorhoehnslalom/realtime-modules/server/stores/dynamo';
-import { RedisNotificationStore } from '@connorhoehnslalom/realtime-modules/notification';
+import { DynamoChatStore } from '@connorhoehn/realtime-modules/server/stores/dynamo';
+import { RedisNotificationStore } from '@connorhoehn/realtime-modules/notification';
 import { createClient } from 'redis';
 
 if (process.env.ORGIQ_BFF_CLUSTER_ACCEPTANCE !== '1' && process.env.ORGIQ_BFF_REDIS_FAILURE_ACCEPTANCE !== '1'

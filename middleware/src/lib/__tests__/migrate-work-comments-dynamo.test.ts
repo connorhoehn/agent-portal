@@ -16,9 +16,9 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { CreateTableCommand, DeleteTableCommand, DynamoDBClient, QueryCommand, waitUntilTableExists } from '@aws-sdk/client-dynamodb';
-import { ChatService } from '@connorhoehnslalom/realtime-modules/chat';
-import { LocalRealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
-import { DynamoChatStore } from '@connorhoehnslalom/realtime-modules/server/stores/dynamo';
+import { ChatService } from '@connorhoehn/realtime-modules/chat';
+import { LocalRealtimeRouter } from '@connorhoehn/realtime-modules/server';
+import { DynamoChatStore } from '@connorhoehn/realtime-modules/server/stores/dynamo';
 import { memoryCommentSource, migrateWorkComments } from '../migrate-work-comments.js';
 import type { LegacyWorkComment } from '../work-thread.js';
 

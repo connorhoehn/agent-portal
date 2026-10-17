@@ -16,13 +16,7 @@
     // because nothing is emitted: vite resolves app imports, tsc only checks.
     "allowImportingTsExtensions": true,
     "paths": {
-      "@/*": ["./src/*"],
-      // ui-components' integrations entry types its imports against the canonical
-      // package name; map the subpaths it uses onto the installed dist typings.
-      "@connorhoehn/realtime-modules/client": ["./node_modules/@connorhoehnslalom/realtime-modules/dist/client/index.d.ts"],
-      "@connorhoehn/realtime-modules/client/video": ["./node_modules/@connorhoehnslalom/realtime-modules/dist/client/video/index.d.ts"],
-      "@connorhoehn/realtime-modules/client/hangout-rooms": ["./node_modules/@connorhoehnslalom/realtime-modules/dist/client/hangout-rooms/index.d.ts"],
-      "@connorhoehn/realtime-modules/call": ["./node_modules/@connorhoehnslalom/realtime-modules/dist/call/index.d.ts"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"]

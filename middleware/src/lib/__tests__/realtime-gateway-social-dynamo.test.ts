@@ -24,7 +24,7 @@ jest.mock('../role-registry.js', () => ({ roleRegistry: () => [
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
-import { DynamoChatStore } from '@connorhoehnslalom/realtime-modules/server/stores/dynamo';
+import { DynamoChatStore } from '@connorhoehn/realtime-modules/server/stores/dynamo';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { attachRealtimeGateway, createSocialChatBackend, REALTIME_GATEWAY_PATH } from '../realtime-gateway.js';
 import { socialChatConfig, type SocialChatBackend } from '../social-chat.js';

@@ -18,7 +18,7 @@
 // toggle opens it as the participant grid in the right split pane and
 // collapses it back into the footer's hidden thumbnail strip.
 import { useId, useLayoutEffect, useRef } from 'react';
-import { conversationCallDockProps } from '@connorhoehnslalom/realtime-modules/client/video';
+import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
 import { Button, IconButton, Inline, Stack, Tooltip } from '@connorhoehnslalom/ui-components/shared';
 import { FooterTodayStrip } from './FooterTodayStrip';
 import { SettingsGearIcon } from '@connorhoehnslalom/ui-components';

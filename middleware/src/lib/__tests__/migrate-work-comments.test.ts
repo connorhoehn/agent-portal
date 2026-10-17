@@ -4,7 +4,7 @@
 // the DynamoDB half against DynamoDB Local in migrate-work-comments-dynamo.test.ts.
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: true } } }));
 
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { migrateWorkComments, memoryCommentSource } from '../migrate-work-comments.js';
 import { legacyCommentMessage, migratedMessageId, type LegacyWorkComment } from '../work-thread.js';
 import { RowsChatStore } from '../social-chat.js';

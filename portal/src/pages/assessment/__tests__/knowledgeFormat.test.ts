@@ -50,7 +50,7 @@ import {
 } from '../knowledge/knowledgeFormat.ts';
 import type { ActivityRun, AssessmentSSEEvent, CommentListItem, KnowledgeNode, KnowledgeSection, PresenceViewer } from '../knowledge/types.ts';
 import type { OwnSaveState } from '../knowledge/knowledgeFormat.ts';
-import type { ActivityEvent, Reaction } from '@connorhoehnslalom/realtime-modules/client';
+import type { ActivityEvent, Reaction } from '@connorhoehn/realtime-modules/client';
 
 /** Minimal node — only the fields the derivations read. */
 function node(partial: Partial<KnowledgeNode> & { id: string; title: string }): KnowledgeNode {

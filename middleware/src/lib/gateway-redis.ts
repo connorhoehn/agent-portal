@@ -2,7 +2,7 @@
 // library owns routing/lease semantics; this adapter owns TLS, connection
 // lifecycle and bounded commands. The subscriber never carries store traffic.
 import { createClient } from 'redis';
-import type { RealtimeClusterRedis } from '@connorhoehnslalom/realtime-modules/server';
+import type { RealtimeClusterRedis } from '@connorhoehn/realtime-modules/server';
 import type { GatewayRedisStore, RedisReply } from './redis-lite.js';
 
 function connection(url: string, timeoutMs: number) {

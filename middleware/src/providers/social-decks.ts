@@ -13,7 +13,7 @@ import { config } from '../config.js';
 import { socialDecksFixture, socialDeckRevisionsFixture, type SocialDeckRevisionRow, type SocialDeckRow } from '../mock/social-decks.js';
 import { exec } from './aurora.js';
 import { createArtifactRevisionStore } from '../lib/flow-artifacts/index.js';
-import { validateDeckSpec, type DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import * as shared from '../lib/deck-shared/index.js';
 import { createDeckStore } from '../lib/deck-shared/index.js';
 import { str, maybe, iso, summaryOf, type DeckPreviewOut, type DeckRevisionSummary, type Result } from '../lib/deck-shared/index.js';

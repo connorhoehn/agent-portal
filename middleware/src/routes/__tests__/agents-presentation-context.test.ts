@@ -4,7 +4,7 @@ const mockStream = { runId: 'deck-question-run', closed: false,
 };
 let mockSearchAllowed = true;
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true, agentcore: true, guardrails: true, cloudwatch: true } } }));
-jest.mock('@connorhoehnslalom/realtime-modules/agent-streaming', () => ({
+jest.mock('@connorhoehn/realtime-modules/agent-streaming', () => ({
   agentStreamMiddleware: (handler: (req: unknown, stream: unknown, signal: AbortSignal) => Promise<void>) =>
     (req: unknown, res: { json: (body: unknown) => void }, next: (error?: unknown) => void) => {
       handler(req, mockStream, new AbortController().signal).then(() => res.json({ ok: true }), next);

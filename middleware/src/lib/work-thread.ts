@@ -14,7 +14,7 @@
 // any free-text column is ever read as identity.
 
 import { createHash, randomBytes } from 'node:crypto';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 
 export const WORK_THREAD_PREFIX = 'orgiq:work:';
 export const MIGRATED_FROM = 'work_item_comments';

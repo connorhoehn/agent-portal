@@ -32,8 +32,8 @@ import {
   type CollaborationCapability,
   type ViewerWorkActivityDetail,
   type ViewerWorkOperation,
-} from '@connorhoehnslalom/realtime-modules/work-graph';
-import { detailsForDisclosedNodes } from '@connorhoehnslalom/realtime-modules/work-graph/server';
+} from '@connorhoehn/realtime-modules/work-graph';
+import { detailsForDisclosedNodes } from '@connorhoehn/realtime-modules/work-graph/server';
 import type { DecisionActivityRow } from '../../providers/decisions.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

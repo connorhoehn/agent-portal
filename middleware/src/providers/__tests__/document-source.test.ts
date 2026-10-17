@@ -1,5 +1,5 @@
 jest.mock('../document-drafts.js',()=>({recordDraftPublication:jest.fn(async()=>true)}));
-jest.mock('@connorhoehnslalom/realtime-modules/server', () => ({ createCanvasSeed: jest.fn(() => ({snapshot:'baseline'})), exportCanvasProjection: jest.fn(() => ({markdown:'base normalized'})) }));
+jest.mock('@connorhoehn/realtime-modules/server', () => ({ createCanvasSeed: jest.fn(() => ({snapshot:'baseline'})), exportCanvasProjection: jest.fn(() => ({markdown:'base normalized'})) }));
 jest.mock('../../lib/document-canvas-schema.js', () => ({ documentCanvasSchema:{} }));
 jest.mock('../../lib/authz.js', () => ({ isAllowed: jest.fn(async () => true) }));
 jest.mock('../document-canvas.js', () => ({ readDocumentCanvasProjection: jest.fn() }));

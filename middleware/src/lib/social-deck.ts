@@ -18,7 +18,7 @@
 import { config } from '../config.js';
 import { agentcore } from '../providers/index.js';
 import { previewSpec, saveGeneratedDeck } from '../providers/social-decks.js';
-import { validateDeckSpec, type DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { mergeDraft, mockDraftResult } from './deck-shared/narrative.js';
 import { SOCIAL_DECK_MODE, narrativeModeAllowed } from './deck-shared/narrative-modes.js';
 import { buildConversationDeckFacts, buildConversationDraftInput, type DeckPageFact } from './social-deck/facts.js';

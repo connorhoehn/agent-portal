@@ -1,5 +1,5 @@
 import { PresenceAvatars, type PresenceAvatarUser } from '@connorhoehnslalom/ui-components/shared';
-import type { PresenceEntry } from '@connorhoehnslalom/realtime-modules/client';
+import type { PresenceEntry } from '@connorhoehn/realtime-modules/client';
 
 interface PresenceAvatarGroupProps {
   peers: PresenceEntry[];

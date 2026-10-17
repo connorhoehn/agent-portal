@@ -1,6 +1,6 @@
 // DM references store only allowlisted resource identity. Titles and routes
 // are resolved on read under the recipient's current resource authority.
-import { defineFeature, type RealtimeFeature } from '@connorhoehnslalom/realtime-modules/server';
+import { defineFeature, type RealtimeFeature } from '@connorhoehn/realtime-modules/server';
 import { AppError, ValidationError } from './async-handler.js';
 import { canonicalCallPage, type CallPageDescriptor } from './call-pages.js';
 import { currentLiveSession, currentSocialMembershipProof, getLivePrincipal } from './live-principal.js';

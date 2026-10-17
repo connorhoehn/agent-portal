@@ -29,7 +29,7 @@
 // guard is the only change needed later), and its refusal lands as the
 // deterministic digest with `unavailable` naming why — the decks' rule.
 
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { config } from '../config.js';
 import { agentcore } from '../providers/index.js';
 import { flowRunStore, kickFlowRun, registerFlowExecutor, type FlowExecutionContext, type FlowRunRow, type FlowRunStep } from './flow-runs/index.js';

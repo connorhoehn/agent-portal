@@ -12,7 +12,7 @@
 // lib/conversationCallModel.ts.
 
 import { useMemo, useRef, type ReactNode } from 'react';
-import { dmLobbyName } from '@connorhoehnslalom/realtime-modules/client/video';
+import { dmLobbyName } from '@connorhoehn/realtime-modules/client/video';
 import { Button, Inline, PhoneIcon } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import {

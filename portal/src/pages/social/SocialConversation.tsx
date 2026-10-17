@@ -33,7 +33,7 @@ import {
 import { Button, DropdownMenu, InlineAlert, Inline, MoreIcon, PresenceAvatars, Stack, type DropdownMenuItem } from '@connorhoehnslalom/ui-components/shared';
 import { useUnreadBoundary } from '../../hooks/useUnreadBoundary';
 import { useMessagePortraits } from '../../hooks/useMessagePortraits';
-import { useChat, useChatMembers, useChatReadReceipts, useGatewayOptional, usePresence, useReactions } from '@connorhoehnslalom/realtime-modules/client';
+import { useChat, useChatMembers, useChatReadReceipts, useGatewayOptional, usePresence, useReactions } from '@connorhoehn/realtime-modules/client';
 import { presenceAvatarUsers } from '../assessment/knowledge/knowledgeFormat';
 import { sendAndWaitForSocialChatAck, socialChatError } from './socialChatDelivery';
 import type { EmbeddedSocialTransport } from '../../lib/embeddedSocial';

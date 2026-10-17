@@ -11,7 +11,7 @@
 // field names are the metric filter's contract (infra), and this file only
 // adds the line's `type` and the store.
 
-import type { RealtimeHandle, RealtimeStats } from '@connorhoehnslalom/realtime-modules/server';
+import type { RealtimeHandle, RealtimeStats } from '@connorhoehn/realtime-modules/server';
 
 export type RealtimeGatewayStore = 'redis' | 'memory';
 

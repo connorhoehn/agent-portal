@@ -15,8 +15,8 @@
 
 import {
   validateWorkGraphSnapshot, validateWorkGraphSnapshotV2, workDayWindow, type WorkGraphSnapshot, type WorkGraphSnapshotV2, type WorkSharingGrant,
-} from '@connorhoehnslalom/realtime-modules/work-graph';
-import type { FileUploadRow } from '@connorhoehnslalom/realtime-modules/fileupload';
+} from '@connorhoehn/realtime-modules/work-graph';
+import type { FileUploadRow } from '@connorhoehn/realtime-modules/fileupload';
 import { clock } from '../../mock/core/index.js';
 import { getUser, listUsers, type UserInfo } from '../../providers/identity.js';
 import { AppError } from '../async-handler.js';

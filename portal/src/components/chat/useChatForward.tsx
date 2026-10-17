@@ -4,7 +4,7 @@
 // (join, send, wait for the persisted ack) quoting the original with `metadata.forwardedFrom`, which
 // the library's ChatPanel shows as "Forwarded from …". The gateway still decides every send.
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
+import { useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { forwardAttributionLine, QuoteBlock, ConversationList, type ConversationItem } from '@connorhoehnslalom/ui-components/social';
 import { ChatIcon, EmptyState, PopoverForm, SearchInput, T } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';

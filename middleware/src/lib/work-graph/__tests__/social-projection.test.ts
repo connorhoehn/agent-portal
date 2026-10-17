@@ -1,6 +1,6 @@
 // The social projection (social-projection.ts), pure: default deny, day membership, the documented edges only,
 // and that nothing but a count and the people who posted is carried for a thread.
-import { workDayWindow } from '@connorhoehnslalom/realtime-modules/work-graph';
+import { workDayWindow } from '@connorhoehn/realtime-modules/work-graph';
 import { callStatus, projectSocialWorkGraph, recordingStatus, sNodeIdFor, type SocialProjectionInput } from '../social-projection.js';
 import { socialPolicyRevisionFor } from '../snapshot.js';
 

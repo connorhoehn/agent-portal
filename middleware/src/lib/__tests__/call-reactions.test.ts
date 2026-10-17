@@ -1,5 +1,5 @@
 import { captureCallReaction, configuredCallReactionCapture, recordedCallReactionItem, type RecordedCallReaction } from '../call-reactions.js';
-import type { Reaction } from '@connorhoehnslalom/realtime-modules/reactions';
+import type { Reaction } from '@connorhoehn/realtime-modules/reactions';
 
 const event: Reaction = { id: 'reaction-1', channel: 'orgiq:huddle:call-1', clientId: 'socket-1', userId: 'u-vera',
   displayName: 'Vera Green', emoji: '🎉', effect: 'float', position: null,

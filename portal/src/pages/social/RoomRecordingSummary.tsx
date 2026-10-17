@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FormField, InlineAlert, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
-import { useChat, useGatewayOptional } from '@connorhoehnslalom/realtime-modules/client';
+import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import ConversationSummaryCard from '../../components/chat/ConversationSummaryCard';
 import { inputWiring } from '../identity/identityFormat';
 import { sendAndWaitForSocialChatAck } from './socialChatDelivery';

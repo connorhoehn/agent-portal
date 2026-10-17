@@ -20,7 +20,7 @@
 // body fields beyond channel/messageId (text, author, pinnedBy, tenant, actor)
 // are never trusted.
 import { Router, type Request } from 'express';
-import { PIN_PREVIEW_MAX, type ChatMessage, type PinnedMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import { PIN_PREVIEW_MAX, type ChatMessage, type PinnedMessage } from '@connorhoehn/realtime-modules/chat';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { isAllowed } from '../lib/authz.js';
 import { admitConversationChat, admitSocialConversation } from '../lib/gateway/authority.js';

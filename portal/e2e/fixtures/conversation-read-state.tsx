@@ -1,7 +1,7 @@
 import '../../src/app.css';
 import { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GatewayContext, type GatewayMessage } from '@connorhoehnslalom/realtime-modules/client';
+import { GatewayContext, type GatewayMessage } from '@connorhoehn/realtime-modules/client';
 import { offlineGateway } from '../../src/components/OptionalGatewayProvider';
 import { ChannelThread } from '../../src/components/chat/ConversationThread';
 import { SessionProvider } from '../../src/lib/auth';

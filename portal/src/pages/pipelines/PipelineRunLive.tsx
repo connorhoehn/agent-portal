@@ -7,7 +7,7 @@
 // re-read it.
 
 import { useEffect, useRef } from 'react';
-import { usePipelineRunStatus } from '@connorhoehnslalom/realtime-modules/client/pipelines';
+import { usePipelineRunStatus } from '@connorhoehn/realtime-modules/client/pipelines';
 import { Chip, Inline, MetaLine } from '@connorhoehnslalom/ui-components/shared';
 import { phaseMoved, recordBehind } from './pipelinesRealtime';
 

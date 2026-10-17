@@ -17,8 +17,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CommentThreadNode, type GutterItem } from '@connorhoehnslalom/ui-components/doc-editor';
 import { Button, InlineAlert, Modal, Stack, Textarea, Inline, T } from '@connorhoehnslalom/ui-components/shared';
-import { CommentHighlight, createAnchor, plainRangeFromPm, pmRangesFromPlain, resolveAnchor, isCanvasAnchor, type CanvasAnchor, type CommentHighlightRef } from '@connorhoehnslalom/realtime-modules/adapters/tiptap';
-import { CANVAS_BODY_KEY } from '@connorhoehnslalom/realtime-modules/client';
+import { CommentHighlight, createAnchor, plainRangeFromPm, pmRangesFromPlain, resolveAnchor, isCanvasAnchor, type CanvasAnchor, type CommentHighlightRef } from '@connorhoehn/realtime-modules/adapters/tiptap';
+import { CANVAS_BODY_KEY } from '@connorhoehn/realtime-modules/client';
 import type { Editor } from '@tiptap/react';
 import type * as Y from 'yjs';
 import type { CommentThreadView } from './documentCommentsModel';

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { usePresence } from '@connorhoehn/realtime-modules/client';
 import { PresenceAvatars } from '@connorhoehnslalom/ui-components/shared';
 import { scopePresenceUsers } from './scopePresenceModel';
 

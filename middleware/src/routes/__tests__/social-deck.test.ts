@@ -28,7 +28,7 @@ import { buildConversationDeckFacts, topicChunks } from '../../lib/social-deck/f
 import { deckIdForRun } from '../../providers/social-decks.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
 import type { Session } from '../../lib/session.js';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 
 const SECRET = 'deck-api-test-secret';
 const previousSecret = process.env['REALTIME_JWT_SECRET'];

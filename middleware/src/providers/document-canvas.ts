@@ -1,7 +1,7 @@
 import { sourceMarkdownForCanvas } from './document-source-assets.js';
 import WebSocket from 'ws';
 import { randomUUID } from 'node:crypto';
-import { createCanvasSeed, createDocumentGrant, type DocumentOperation } from '@connorhoehnslalom/realtime-modules/server';
+import { createCanvasSeed, createDocumentGrant, type DocumentOperation } from '@connorhoehn/realtime-modules/server';
 import type { Session } from '../lib/session.js';
 import { currentDocumentSessionEpoch, documentSessionId } from '../lib/document-session.js';
 import { documentCanvasSchema } from '../lib/document-canvas-schema.js';
@@ -142,7 +142,7 @@ export async function readDocumentCanvasProjection(source: CanvasSource, session
     socket.on('error', () => finish(new Error('Document gateway unavailable')));
     socket.on('close', () => finish(new Error('Document gateway closed before version acknowledgement')));
   });
-  const { exportCanvasProjection } = await import('@connorhoehnslalom/realtime-modules/server');
+  const { exportCanvasProjection } = await import('@connorhoehn/realtime-modules/server');
   const projection = exportCanvasProjection(result.snapshot);
   return { markdown: projection.markdown, sourceRevision: grant.sourceRevision, documentId: grant.documentId, version: result.version };
 }

@@ -5,7 +5,7 @@
 // day it opens, so that one case is answered here; every other case is the
 // library's own rule.
 
-import { intervalOverlapsWorkDay as libraryOverlap, type WorkDayWindow } from '@connorhoehnslalom/realtime-modules/work-graph';
+import { intervalOverlapsWorkDay as libraryOverlap, type WorkDayWindow } from '@connorhoehn/realtime-modules/work-graph';
 
 export function intervalOverlapsWorkDay(startedAt: string, endedAt: string | undefined, window: Pick<WorkDayWindow, 'start' | 'end'>): boolean {
   if (endedAt !== undefined && Date.parse(startedAt) === Date.parse(window.start) && Date.parse(endedAt) === Date.parse(startedAt)) return true;

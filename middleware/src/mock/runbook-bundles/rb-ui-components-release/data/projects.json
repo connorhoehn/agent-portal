@@ -12,7 +12,7 @@
         "devRestart": "rm -rf portal/node_modules/.vite && tilt trigger portal"
       },
       "realtime-modules": {
-        "package": "@connorhoehnslalom/realtime-modules",
+        "package": "@connorhoehn/realtime-modules",
         "repo": "~/Projects/realtime-modules",
         "remote": "git@github.com:connorhoehn/realtime-modules.git",
         "vendor": "portal/vendor",

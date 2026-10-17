@@ -2,7 +2,7 @@
 // inside its HTTP-agent queue. This is a dispatch queue, never a result cache.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { performance } from 'node:perf_hooks';
-import type { DynamoCommandClient } from '@connorhoehnslalom/realtime-modules/server/stores/dynamo';
+import type { DynamoCommandClient } from '@connorhoehn/realtime-modules/server/stores/dynamo';
 
 type Permit = { active: boolean };
 type WaitingWork = { deadline: number; start: () => void; expire: () => void };

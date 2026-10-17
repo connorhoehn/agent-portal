@@ -32,8 +32,8 @@
 // stored before 0.118 (no `chatUnread` marker) are still recognised by
 // `payload.kind`.
 
-import type { AuthorityScope } from '@connorhoehnslalom/realtime-modules/server';
-import type { ChatUnreadOpts } from '@connorhoehnslalom/realtime-modules/chat';
+import type { AuthorityScope } from '@connorhoehn/realtime-modules/server';
+import type { ChatUnreadOpts } from '@connorhoehn/realtime-modules/chat';
 import { pageCursorFamily, channelService } from './tenant-channels.js';
 import { currentlyReadsTenantChannel, notificationInbox, tenantDiscussionLink } from './social-notify.js';
 import { holdsChannelAuthority } from './live-principal.js';

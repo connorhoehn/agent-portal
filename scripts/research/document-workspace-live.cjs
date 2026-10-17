@@ -30,7 +30,7 @@ function open(grant) {
  if(process.argv.includes('--verify')) {
   const proof=JSON.parse(require('node:fs').readFileSync(process.argv[process.argv.indexOf('--verify')+1],'utf8'));
   const settings=JSON.parse(require('node:fs').readFileSync(resolve(__dirname,'../../.scratch/document-workspace/settings.json'),'utf8'));
-  const {createDocumentGrant}=req('@connorhoehnslalom/realtime-modules/server');
+  const {createDocumentGrant}=req('@connorhoehn/realtime-modules/server');
   const sessionId=Buffer.from(JSON.stringify({role:'assessor',epoch:0,iat:Date.now()})).toString('base64url');
   const grant={documentId:proof.documentId,gatewayUrl:'ws://127.0.0.1:18081',token:createDocumentGrant({iss:settings.DOCUMENT_GRANT_ISSUER,sub:'u-asha',tenantId:'assessment',documentId:proof.documentId,operations:['read'],sessionId,sessionEpoch:0},{privateKey:settings.DOCUMENT_GRANT_PRIVATE_KEY,keyId:settings.DOCUMENT_GRANT_KEY_ID})};
   const client=open(grant);await client.ready;client.send('subscribe');const snapshot=await client.wait(m=>m.type==='crdt:snapshot');

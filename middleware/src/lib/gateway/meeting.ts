@@ -6,9 +6,9 @@
 // facade's (lib/gateway/authority.ts `admitMeetingRoom`, `lobbyGuard`, the
 // `meeting-room` namespace), which asks the service this feature registers.
 
-import { RedisMeetingStateStore, meeting, type MeetingConfig, type MeetingState, type MeetingStateSubscriber } from '@connorhoehnslalom/realtime-modules/meeting';
-import type { RealtimeFeature } from '@connorhoehnslalom/realtime-modules/server';
-import type { CallStateStore } from '@connorhoehnslalom/realtime-modules/call';
+import { RedisMeetingStateStore, meeting, type MeetingConfig, type MeetingState, type MeetingStateSubscriber } from '@connorhoehn/realtime-modules/meeting';
+import type { RealtimeFeature } from '@connorhoehn/realtime-modules/server';
+import type { CallStateStore } from '@connorhoehn/realtime-modules/call';
 import { meetingOrganizer } from './authority.js';
 import { publishChannelActivity } from '../gateway-run-feed.js';
 import type { GatewayRedisStore } from '../redis-lite.js';

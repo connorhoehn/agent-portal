@@ -126,16 +126,18 @@ done
 # ─────────────────────────────────────────────────────────────────────────────
 # The library entry that once broke the production build. ui-components'
 # integrations/realtime-modules imports the canonical `@connorhoehn/realtime-
-# modules` while this portal installs `@connorhoehnslalom/realtime-modules`;
-# vite.config.ts aliases the name and tsconfig paths map the typings, so the
-# entry is importable. This check asserts that bridge stays in place.
+# modules`. The portal used to install it under a different scope and bridge the
+# name with a vite alias and tsconfig paths; it now installs the package under
+# its real name, so the entry resolves with no bridge. This check asserts that.
 # ─────────────────────────────────────────────────────────────────────────────
-section "realtime-modules alias bridge"
-if grep -q "'@connorhoehn/realtime-modules': '@connorhoehnslalom/realtime-modules'" portal/vite.config.ts \
-   && grep -q '"@connorhoehn/realtime-modules/client"' portal/tsconfig.json; then
-  ok "vite alias + tsconfig paths map @connorhoehn/realtime-modules"
+section "realtime-modules installed under its own name"
+if node -e "const d=require('./portal/package.json').dependencies;process.exit(d['@connorhoehn/realtime-modules']?0:1)" 2>/dev/null \
+   && ! grep -qE "@connorhoehn[a-z]+/realtime-modules" portal/vite.config.ts portal/tsconfig.json \
+   && ! grep -q "'@connorhoehn/realtime-modules':" portal/vite.config.ts \
+   && ! grep -q '"@connorhoehn/realtime-modules/' portal/tsconfig.json; then
+  ok "portal installs @connorhoehn/realtime-modules under its own name (no alias, no tsconfig paths)"
 else
-  fail "alias for @connorhoehn/realtime-modules missing in portal/vite.config.ts or tsconfig.json (integrations/realtime-modules would not build)"
+  fail "portal must depend on @connorhoehn/realtime-modules directly, with no other-scope alias in vite.config.ts and no realtime-modules paths in tsconfig.json"
 fi
 
 section "raw typography on bare text nodes (ratchet)"

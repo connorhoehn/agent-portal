@@ -38,7 +38,7 @@ import { loadProjection } from '../../providers/pipeline-runs.js';
 import { pipelineDecksFixture, pipelineDeckRevisionsFixture } from '../../mock/pipeline-decks.js';
 import { buildRunDeckFacts, formatDuration } from '../../lib/pipeline-deck/facts.js';
 import { loadRunDeckSource } from '../../providers/pipeline-decks.js';
-import type { DeckSpec } from '@connorhoehnslalom/realtime-modules/deck';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { config } from '../../config.js';
 import { agentcore } from '../../providers/index.js';
 import { flowRunsFixture } from '../../mock/flow-runs.js';

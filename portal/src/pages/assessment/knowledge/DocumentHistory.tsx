@@ -2,7 +2,7 @@ import { useEffect, useState, type ComponentProps } from 'react';
 import { CanvasDocumentView, VersionHistoryPanel } from '@connorhoehnslalom/ui-components/doc-editor';
 import { useVersionHistory } from '@connorhoehnslalom/ui-components/hooks';
 import { Button, ConfirmDialog, InlineAlert, LoadingState, Modal, Stack } from '@connorhoehnslalom/ui-components/shared';
-import { useCanvasDocument, useGateway } from '@connorhoehnslalom/realtime-modules/client';
+import { useCanvasDocument, useGateway } from '@connorhoehn/realtime-modules/client';
 import type * as Y from 'yjs';
 
 function BinaryVersionPreview({ ydoc, extensions }: { ydoc: Y.Doc; extensions: ComponentProps<typeof CanvasDocumentView>['extensions'] }) {

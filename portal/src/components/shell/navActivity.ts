@@ -1,4 +1,4 @@
-import { parseDmLobby } from '@connorhoehnslalom/realtime-modules/call';
+import { parseDmLobby } from '@connorhoehn/realtime-modules/call';
 import type { DiscussionUnread } from './discussionUnreadModel';
 
 interface InboxNotice {

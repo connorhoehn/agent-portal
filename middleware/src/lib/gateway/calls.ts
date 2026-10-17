@@ -13,8 +13,8 @@
 //   - `onCallMissed` carries `targetUserIds` and `channel` (was the invite
 //     ledger `recordInvite`).
 
-import { calls, type RealtimeFeature, type RealtimeRouter } from '@connorhoehnslalom/realtime-modules/server';
-import type { CallCrossNodePubSub, CallStateStore } from '@connorhoehnslalom/realtime-modules/call';
+import { calls, type RealtimeFeature, type RealtimeRouter } from '@connorhoehn/realtime-modules/server';
+import type { CallCrossNodePubSub, CallStateStore } from '@connorhoehn/realtime-modules/call';
 import { conversationHref, notify, pageHuddleHref, parseDmLobby } from '../social-notify.js';
 import { admitCall, callGuards, lobbyGuard } from './authority.js';
 

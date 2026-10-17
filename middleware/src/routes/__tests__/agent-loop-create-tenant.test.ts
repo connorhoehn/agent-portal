@@ -8,7 +8,7 @@ jest.mock('../../lib/authz.js', () => ({ resolveSession: (req: { session?: unkno
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import type { ChatMessage } from '@connorhoehnslalom/realtime-modules/chat';
+import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { conversationAgentRouter } from '../agent-loop.js';
 import { conversationArtifactRouter } from '../conversation-artifact.js';
 import { conversationSummarizeRouter } from '../conversation-summarize.js';

@@ -58,7 +58,7 @@ import { socialRecordingSharesFixture } from '../../providers/social-platform.js
 import { socialWorkSharingFixture } from '../../mock/social-work-sharing.js';
 import { clock } from '../../mock/core/index.js';
 import { stopWorkGraphLiveHints } from '../../lib/work-graph/live.js';
-import { validateWorkGraphSnapshotV2 } from '@connorhoehnslalom/realtime-modules/work-graph';
+import { validateWorkGraphSnapshotV2 } from '@connorhoehn/realtime-modules/work-graph';
 import type { Session } from '../../lib/session.js';
 
 const FIXTURES = [socialRoomsFixture, socialRoomMembersFixture, socialTeamsFixture, socialTeamMembersFixture, socialRecordingsFixture,
