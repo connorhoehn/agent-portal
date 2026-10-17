@@ -103,8 +103,10 @@ surface_on() {
   node --input-type=module -e "const m = await import('./portal/src/lib/meetingRooms.ts'); process.exit(m.meetingEnabledFor(process.argv[1], true) ? 0 : 1)" "$1"
 }
 check "surface_on orgiq:initiative:p-auth-migration" "U5 surface wired: initiative"
-check "surface_on social:ch:general" "U5 surface wired: social"
-check "surface_on assessment:doc:d-1" "U5 surface wired: document"
+# Decision 5 (user, 2026-10-17): initiative huddles only for this goal. Every other surface stays off
+# until it ships whole; turning one on early fails here.
+check "! surface_on social:ch:general" "U5 social rooms stay off (decision 5: later)"
+check "! surface_on assessment:doc:d-1" "U5 document calls stay off (decision 5: later)"
 check "./scripts/validate-component-discipline.sh >/dev/null" "U component discipline holds (shell budget 0:0:0)"
 
 section "M4 · media admission across repos"

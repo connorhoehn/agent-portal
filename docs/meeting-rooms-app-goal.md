@@ -68,7 +68,10 @@ platform-api.
    show Raise and React but not Rooms.
 5. **Rollout order:** initiative huddles (orgiq) → social rooms → document
    calls → assessment team calls → the rest. Each surface ships whole (bar,
-   stage, rooms, chat, hands on tiles) or not at all.
+   stage, rooms, chat, hands on tiles) or not at all. **Decided by the user
+   2026-10-17: initiative huddles only for this goal.** Social rooms (which
+   first need BFF rules so a Social-only user can use a room's chat) and
+   document calls are a later decision, not part of done here.
 6. **One gateway.** The CDK pins the gateway to one task, so the meeting state
    is in memory; when `REDIS_URL` is set and routing is clustered, the gateway
    uses `RedisMeetingStateStore` on the existing gateway Redis, the same
@@ -108,8 +111,8 @@ you start. No deploys.
 
 ## Blocked or owed by the user
 
-- **Decisions:** confirm the organizer rule (decision 3) and the rollout order
-  (decision 5); whether Rooms shows on assessment and pipeline calls at all;
+- **Decisions:** confirm the organizer rule (decision 3); the rollout order
+  (decision 5) is decided: initiative huddles only for now (2026-10-17); whether Rooms shows on assessment and pipeline calls at all;
   the recording consent wording and its privacy link per tenant.
 - **Cloud:** any deploy; multi-replica acceptance of the Redis meeting store
   (the gateway stays one task until capacity is accepted); the LVS fix (X2) in
