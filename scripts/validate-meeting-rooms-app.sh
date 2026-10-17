@@ -50,7 +50,12 @@ check "vge '$(installed portal "$RMPKG")' 0.134.0" "P0 portal installs realtime-
 check "vge '$(installed middleware "$RMPKG")' 0.134.0" "P0 middleware installs realtime-modules ≥ 0.134.0 ($(installed middleware "$RMPKG"))"
 check "vge '$(installed portal "$UIPKG")' 2.478.0" "P0 portal installs ui-components ≥ 2.478.0 ($(installed portal "$UIPKG"))"
 check "[ \"\$(node -p \"require('./portal/package.json').dependencies['$RMPKG']\")\" = \"\$(node -p \"require('./middleware/package.json').dependencies['$RMPKG']\" | sed 's#\.\./portal/##')\" ]" "P0 portal and middleware pin the same realtime-modules tarball"
-check "grep -qE 'realtime-modules.*0\.1(3[4-9]|[4-9][0-9])' CLAUDE.md && grep -qE 'ui-components.*2\.4(7[8-9]|[89][0-9])' CLAUDE.md" "P0 CLAUDE.md pins line names the new versions"
+# The Pins sentence wraps across lines; read it as one.
+pins_ok() {
+  local pins; pins=$(tr '\n' ' ' < CLAUDE.md | grep -oE 'Pins: .{0,240}' | head -1)
+  echo "$pins" | grep -qE 'ui-components` +\*\*2\.4(7[8-9]|[89][0-9])' && echo "$pins" | grep -qE 'realtime-modules` +\*\*0\.1(3[4-9]|[4-9][0-9])'
+}
+check pins_ok "P0 CLAUDE.md pins line names the new versions"
 check "exports middleware '$RMPKG/meeting' meeting MeetingService RedisMeetingStateStore" "P0 installed dist: realtime-modules/meeting (server)"
 check "exports portal '$RMPKG/client/meeting' useMeeting useFollowMeetingLobby" "P0 installed dist: realtime-modules/client/meeting"
 check "exports portal '$UIPKG/integrations/realtime' meetingToolbarItems meetingRosterProps withMeetingHands useMeetingChat WrappedBreakoutRoomsPanel WrappedBreakoutRoomBanner" "P0 installed dist: ui-components meeting bindings"
@@ -65,34 +70,44 @@ check "grep -qE '\\(lane L2\\)' '$UI/CHANGELOG.md' && grep -qE '\\(lane L4\\)' '
 check "grep -qE '\\(lane L3\\)' '$RM/CHANGELOG.md' && grep -rqE 'export function (breakoutChannel|parseBreakoutChannel)' '$RM/src/meeting'" "L3 realtime-modules: breakoutChannel / parseBreakoutChannel (lane L3)"
 
 section "M2 · the BFF"
-check "grep -qE '\\bmeeting\\(' $GW/realtime-gateway.ts" "B1 meeting() registered in attachRealtime"
-check "grep -rqE 'meetingOrganizer' $GW/gateway/authority.ts && grep -qE 'isOrganizer' $GW/realtime-gateway.ts" "B1 isOrganizer is the facade's meetingOrganizer"
-check "grep -qE 'RedisMeetingStateStore' $GW/realtime-gateway.ts" "B1 Redis meeting store when clustered"
+# The library feature is built in lib/gateway/meeting.ts (tenantMeeting) and registered in the gateway.
+check "grep -qE 'tenantMeeting\\(' $GW/realtime-gateway.ts && grep -qE '(^|[^A-Za-z])meeting\\(\\{' $GW/gateway/meeting.ts" "B1 meeting() registered in attachRealtime"
+check "grep -qE 'export async function meetingOrganizer' $GW/gateway/authority.ts && grep -qE 'isOrganizer:.*' $GW/gateway/meeting.ts && grep -qE 'return meetingOrganizer\\(' $GW/gateway/meeting.ts" "B1 isOrganizer is the facade's meetingOrganizer"
+check "grep -qE 'opts\\.redis \\? \\{ store: new RedisMeetingStateStore' $GW/gateway/meeting.ts" "B1 Redis meeting store when clustered"
 check "grep -rqE 'parseBreakout(Lobby|Channel)' $GW/gateway/authority.ts $GW/tenant-channels.ts" "B2/B3 guards strip the breakout suffix before family matching"
 check "grep -qE 'admitsBreakoutLobby' middleware/src/routes/realtime-lobby-access.ts $GW/gateway/authority.ts" "B3 lobby-access and lobbyGuard ask admitsBreakoutLobby"
-check "grep -qE 'parseBreakoutLobby|breakout' middleware/src/routes/realtime-lobby-access.ts && grep -nE 'call-seat' middleware/src/routes/realtime-lobby-access.ts | grep -q ." "B3 /call-seat accepts a breakout lobby for its call"
+# /call-seat hands the seat to lib/call-media-proof.ts, which seats a call's room lobbies.
+check "grep -qE \"post\\('/call-seat'\" middleware/src/routes/realtime-lobby-access.ts && grep -qE 'callMediaProofRuntime' middleware/src/routes/realtime-lobby-access.ts && grep -qE 'admitMeetingRoom\\(userId' middleware/src/lib/call-media-proof.ts" "B3 /call-seat accepts a breakout lobby for its call"
 check "ls middleware/src/lib/gateway/__tests__/*meeting* middleware/src/routes/__tests__/*meeting* 2>/dev/null | grep -q ." "B2/B3 middleware tests for meeting admission exist"
 check "grep -rlE 'breakout' middleware/src/lib/gateway/__tests__ middleware/src/routes/__tests__ 2>/dev/null | xargs grep -lE 'forged|closed|non-member|RID|family' 2>/dev/null | grep -q ." "B3 tests cover forged, closed and family-collision breakout names"
 none "'/api/meeting" middleware/src/mock/core/wire/snapshots/routes.json "B no new REST route (meetings ride /ws; mock floor unchanged)"
 
 section "M3 · the portal"
-check "grep -rqE 'useMeeting\\(' $SHELL_UI portal/src/lib" "U1 the call host runs useMeeting"
-check "grep -rqE 'useFollowMeetingLobby\\(' $SHELL_UI portal/src/lib" "U1 the call follows the meeting's active lobby"
+# The library call host (ui-components 2.476+) runs useMeeting and follows the room's lobby itself;
+# the shell hands it the meeting option. Checked in the installed dist, not the library source.
+UIRT=portal/node_modules/$UIPKG/dist/integrations/realtime.js
+check "grep -qE 'meeting=\\{SHELL_MEETING\\}' $SHELL_UI/ShellCallHost.tsx && grep -rlqE 'useMeeting' portal/node_modules/$UIPKG/dist/integrations/ 2>/dev/null" "U1 the call host runs useMeeting"
+check "grep -qE 'mediaLobby' $UIRT && grep -qE 'activeLobby' portal/node_modules/$UIPKG/dist/integrations/realtime.d.ts" "U1 the call follows the meeting's active lobby"
 check "grep -rqE 'meetingToolbarItems\\(' $SHELL_UI portal/src" "U2/U3 toolbar items come from the binding"
 check "grep -rqE '<MeetingToolbar' portal/src" "U3 MeetingToolbar on the expanded stage"
-check "grep -rqE 'withMeetingHands\\(' portal/src" "U3 hands on tiles"
+check "grep -rqE '<CallMediaOutlet' portal/src && grep -qE 'handFor' portal/node_modules/$UIPKG/dist/integrations/realtime.d.ts" "U3 hands on tiles"
 check "grep -rqE 'meetingRosterProps\\(' portal/src" "U3 hands queue in People"
 check "grep -rqE 'WrappedBreakoutRoomsPanel' portal/src && grep -rqE 'WrappedBreakoutRoomBanner' portal/src" "U3 rooms pane and in-room banner"
 check "grep -rqE '<RecordingConsentNotice' portal/src" "U3 recording consent when the call records"
 check "grep -rqE 'useMeetingChat\\(' portal/src" "U4 call chat bound with useMeetingChat"
-for surface in initiative social document; do
-  check "grep -rlE 'meeting' portal/src/pages | grep -qi '$surface'" "U5 surface wired: $surface"
-done
+# A surface is on when lib/meetingRooms.ts's meetingEnabledFor admits its lobby family (decision 5:
+# initiative huddles, then social rooms, then document calls); a sample lobby of each family asks it.
+surface_on() {
+  node --input-type=module -e "const m = await import('./portal/src/lib/meetingRooms.ts'); process.exit(m.meetingEnabledFor(process.argv[1], true) ? 0 : 1)" "$1"
+}
+check "surface_on orgiq:initiative:p-auth-migration" "U5 surface wired: initiative"
+check "surface_on social:ch:general" "U5 surface wired: social"
+check "surface_on assessment:doc:d-1" "U5 surface wired: document"
 check "./scripts/validate-component-discipline.sh >/dev/null" "U component discipline holds (shell budget 0:0:0)"
 
 section "M4 · media admission across repos"
 check "grep -rqE 'breakout' '$PA/src' 2>/dev/null || grep -rqE 'breakout' docs/realtime-validation 2>/dev/null" "X1 platform-api admits breakout lobbies (its test or the E2 record)"
-check "grep -qE 'LOBBY_AUTHORITY_REQUIRED[:=] *\"?true' docker-compose.yml" "X1 the local stack runs platform-api with LOBBY_AUTHORITY_REQUIRED=true (breakouts are guarded by the BFF)"
+check "grep -qE 'LOBBY_AUTHORITY_REQUIRED[:=] *(\"?true|\\\$\\{[A-Z_]+:-true\\})' docker-compose.yml" "X1 the local stack runs platform-api with LOBBY_AUTHORITY_REQUIRED=true (breakouts are guarded by the BFF)"
 check "grep -rqE 'lobbyAuthority|LOBBY_AUTHORITY' portal/src 2>/dev/null || grep -rqE 'breakoutsEnabled|meetingRooms' middleware/src/routes 2>/dev/null" "X1 Rooms is offered only where lobby authority is on"
 check "grep -qE 'X2.*(fixed|closed).*[0-9a-f]{7}' docs/meeting-rooms-app-goal.md" "X2 the LVS streamKey read hole is closed by its owner (commit recorded)"
 
