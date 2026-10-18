@@ -6,8 +6,8 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Meeting rooms on calls (accepted 2026-10-17)”
-and “Closeout — 2026-10-18” at the end of this document. The
+**Latest checkpoint:** read “Redis checkpoint and pause — 2026-10-18” and
+“Closeout — 2026-10-18” at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
 
@@ -528,3 +528,58 @@ was left running; portal `5183` and middleware `3001` both returned HTTP 200.
 The pre-existing ui-components `package-lock.json` edit was preserved.
 Cloud deployment, Aurora changes, production capacity and the previously
 recorded user decisions remain outside this closeout.
+
+## Redis checkpoint and pause — 2026-10-18
+
+The user again asked to wrap up. Work is paused; the broader goal is **not
+complete**. The Redis follow-up is saved separately from main on branch
+`fix/handoff-redis-20261018`, in worktree
+`/tmp/aws-agentcore-redis-20261018`, based on `cbd6d08a`. Main retains the
+previously committed application state; the migration has not been merged.
+
+- `d2ee71b2` replaces `redis-lite.ts`, `gateway-redis.ts`, and the application
+  ownership polling loop with the installed realtime-modules bounded Redis
+  transport and `LeaseGroup`. A small `redis-store.ts` adapter preserves the
+  application store shapes. Startup awaits Redis readiness even for local
+  routing; fleet operations preserve conservative peer detection and close
+  their transport on stop. Dependency pins are unchanged.
+- `4b9d820b` updates two stale assertions: Pipelines has an intentional seeded
+  rehearsal, and persona clones address their DMs under their own identity.
+  Both changed test suites pass.
+
+Verification is partial, not acceptance:
+
+- Middleware TypeScript checking and `git diff --check` passed.
+- Eight focused suites passed **69 tests**, including real disposable Redis
+  coverage of fleet locks/cleanup, gateway fanout, lease-group retirement on
+  connection loss, bounded stalled commands, notification persistence, and
+  call-chat/page stores, plus the two fixture corrections.
+- That focused command exited 1 because it also selected the durable-chat
+  Redis/DynamoDB suite with only its Redis endpoint configured. Its explicit
+  setup guard rejected the incomplete configuration. With both integration
+  endpoints unset, the durable-chat and call-feature-cluster suites correctly
+  skipped all **eight tests**. Their real DynamoDB integration is unverified.
+- The full middleware run was interrupted at the wrap-up request (exit 130),
+  after **149 passing suites and five failing suites** had reported. The
+  Pipelines and Social failures are corrected and rerun above. Remaining
+  failures are `session-brief-contract.test.ts` (old skill-library hash),
+  `realtime-gateway-tenants.test.ts` (platform team-membership setup), and
+  `access-provision.test.ts` (Rhea is already in the seeded initiative SME
+  list). Their fixes and the rest of the full sweep remain unfinished.
+
+Logs are local under `.scratch/redis-migration-2026-10-18/` in the main
+worktree: `full-tests.log`, `closeout-targeted.log`,
+`closeout-unconfigured-integration.log`, and `typecheck-final.log`.
+
+Before merging the branch: resolve the remaining suite failures, review any
+session-brief contract regeneration, run the missing integration checks,
+smoke-test application startup, recapture the mock wire snapshots against
+the changed handler source, and run the mock-floor/upstream-refinement judges.
+C1/C3 is implemented on the branch but is **not accepted**. The journey,
+search, meeting, demo-content, and validator debt listed in the preceding
+closeout remains open; no stale records were sealed during this follow-up.
+
+All owned validation processes have stopped, including disposable Redis on
+port `6384`. The shared Tilt stack remains running: portal `5183` and
+middleware `3001/health` both returned HTTP 200. The pre-existing
+ui-components `package-lock.json` edit was preserved.
