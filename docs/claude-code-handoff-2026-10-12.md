@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Redis checkpoint and pause — 2026-10-18” and
+**Latest checkpoint:** read “Redis acceptance resumed — 2026-10-18” and
 “Closeout — 2026-10-18” at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -583,3 +583,47 @@ All owned validation processes have stopped, including disposable Redis on
 port `6384`. The shared Tilt stack remains running: portal `5183` and
 middleware `3001/health` both returned HTTP 200. The pre-existing
 ui-components `package-lock.json` edit was preserved.
+
+## Redis acceptance resumed — 2026-10-18
+
+The user resumed work with the Redis checkpoint above as the active goal.
+The migration is still on `fix/handoff-redis-20261018` and has not been merged
+into main. The pre-merge requirements above remain in force.
+
+- `182f5612` fixes the remaining three known suite failures. The platform
+  membership test explicitly selects its platform backend; the Access
+  insertion test establishes an absent membership before provisioning and
+  verifies reset restores the real seed. The session-brief contract was
+  regenerated and reviewed: only the library pointer and derived hashes
+  changed, following the earlier canonical-package rename. All three suites
+  pass: **36 tests**.
+- The durable-chat and call-feature-cluster integration suites now ran
+  against real isolated stores and pass **8/8 tests**. The dedicated
+  DynamoDB Local container is `orgiq-redis-migration-dynamodb-20261018`
+  (host port `18064`), and Redis is on `6384`, logical database `13`.
+  Existing shared containers were not restarted or changed.
+- `1e9efc24` corrects stale acceptance checks for the current Social tenant
+  description, shared grant SQL and transaction test, Search's result-list
+  adapter and tracked tarball, and Feedback's URL-addressed record layout.
+  The latter follows the existing collection-record amendment in
+  `docs/layout-cascade.md`; the Assessment UX doc now reflects that amendment.
+  Journey freshness checks and the scorecard confidence requirement remain.
+  The grant-proof freshness check also follows the shared SQL owner now.
+- The upstream-refinement **quick** judge passes every static check. Its
+  dependency scan now follows a worktree's top-level `node_modules` symlink
+  while still requiring exactly one installed distributed-core.
+
+The full middleware suite is running alone with the isolated Redis/DynamoDB
+endpoints enabled. Do not start a second test suite while that run is live.
+No complete-suite result, refreshed wire snapshot, startup smoke result, or
+full-validator pass is claimed yet. The follow-up logs are under
+`.scratch/redis-acceptance-2026-10-18/` in the main worktree:
+`failures-recheck.log`, `brief-update.log`, `durable-integration.log`,
+`full-tests.log`, and `upstream-quick.log`.
+
+After the full run: resolve any further failures; run the application startup
+smoke and wire capture; run the mock-floor and full upstream judges; refresh
+the outstanding PostgreSQL proof and evaluate the corrected tenant checks;
+then merge only with the resulting evidence recorded. Stop the owned Redis
+and DynamoDB acceptance services when their checks are complete. The older
+journey, search, meeting and demo-content debt remains open.
