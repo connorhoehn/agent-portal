@@ -36,6 +36,28 @@ export function withResultsLock(out, fn) {
   try { return fn(); } finally { rmSync(lock, { recursive: true, force: true }); }
 }
 
+/** Keep parallel workers under one runner; serialize reading and publishing its PID. */
+export function takeProbeRunLock(file, owner = process.ppid) {
+  if (!Number.isSafeInteger(owner) || owner <= 0) throw new Error('probe runner PID must be positive');
+  return withResultsLock(file, () => {
+    if (existsSync(file)) {
+      const pid = Number(readFileSync(file, 'utf8'));
+      if (pid === owner) return;
+      if (Number.isSafeInteger(pid) && pid > 0) {
+        let alive = true;
+        try { process.kill(pid, 0); } catch (error) {
+          if (error.code === 'ESRCH') alive = false;
+          else if (error.code !== 'EPERM') throw error;
+        }
+        if (alive) throw new Error(`another user-search probe is running (pid ${pid}); one probe run at a time`);
+      }
+    }
+    const tmp = `${file}.${process.pid}.tmp`;
+    writeFileSync(tmp, String(owner));
+    renameSync(tmp, file);
+  });
+}
+
 /**
  * Fold `groups` into the results file. `run` is { generatedAt, gitHead, watchedDigest, baseURL };
  * `groups` is { 'tenant:role': { persona: <entry>, probes: [...] } }; `catalogKeys` every group in the

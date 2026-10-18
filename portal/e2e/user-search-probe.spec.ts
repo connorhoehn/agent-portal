@@ -1,4 +1,3 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -9,7 +8,7 @@ import { CATALOG, serializeIntents, type Intent, type Surface } from './user-sea
 // @ts-ignore a plain .mjs module shared with the judge (no types)
 import { watchedDigest } from '../../scripts/user-search-freshness.mjs';
 // @ts-ignore a plain .mjs module shared with the judge (no types)
-import { mergeGroups } from '../../scripts/user-search-results.mjs';
+import { mergeGroups, takeProbeRunLock } from '../../scripts/user-search-results.mjs';
 
 // The user-search probe (docs/user-search-intents.md, docs/user-search-goal.md).
 //
@@ -73,16 +72,7 @@ for (const intent of CATALOG) {
 // One probe RUN at a time (two would race the shared mock): the lock names the Playwright runner, which is the
 // parent of every worker, so the workers of one run share it and a second run is refused.
 const LOCK = join(tmpdir(), 'user-search-probe.lock');
-function takeLock() {
-  const owner = process.ppid;
-  if (existsSync(LOCK)) {
-    const pid = Number(readFileSync(LOCK, 'utf8'));
-    let alive = false; try { process.kill(pid, 0); alive = pid !== owner && pid !== process.pid; } catch { /* stale */ }
-    if (alive) throw new Error(`another user-search probe is running (pid ${pid}); one probe run at a time`);
-  }
-  writeFileSync(LOCK, String(owner));
-}
-test.beforeAll(() => takeLock());
+test.beforeAll(() => takeProbeRunLock(LOCK));
 // The lock is left for the next run to find stale (its runner pid is gone): a worker that finishes early must not free it for a second run.
 
 const run = {
