@@ -78,10 +78,10 @@ n_hdr_sp=$(grep -rnoE "<(PageSection|PageHeader)[^>]*className=\"[^\"]*\b[mp][tb
 B=portal/src/components/shell/Breadcrumbs.tsx
 # The shell's trail is `<Breadcrumbs />` (no props); the assessment explorer's
 # `<Breadcrumbs items=…>` is the library's in-page crumb, a different thing.
-# The nested pane was a second <main> until ui-components 2.273.0 (SubNavLayout
-# contentAs="section"); the reset now targets the pane's own class. Either
-# spelling satisfies the rule: the pane must inherit the shell's one padding.
-grep -qE '\[data-shell-nav\] > div > main (main|\.flex-1\.min-w-0\.overflow-auto\.p-6)' "$CSS" && ok "nested section layouts inherit the shell's one content padding" || fail "app.css must reset the nested SubNavLayout pane's padding ([data-shell-nav] > div > main main, or its content-pane class) so nested titles sit at the plain-page offset"
+# SubNavLayout exposes a stable content marker regardless of contentAs or
+# utility classes. Check its reset value too: a selector alone proves nothing.
+nested_padding=$(awk '/^\[data-shell-nav\] > div > main \[data-subnav-content\] *\{/{f=1;next} f&&/^\}/{f=0} f' "$CSS")
+echo "$nested_padding" | grep -qE '^[[:space:]]*padding:[[:space:]]*0 0 0 var\(--ui-page-gutter\);' && ok "nested section layouts inherit the shell's one content padding" || fail "app.css must reset [data-subnav-content] inside the shell main to padding: 0 0 0 var(--ui-page-gutter)"
 grep -qE 'mb-4' "$B" && [ "$(grep -rhoE '<Breadcrumbs */>' portal/src | wc -l | tr -d ' ')" = 1 ] && grep -q '<Breadcrumbs />' "$L" && ok "shell breadcrumbs rendered once, by Layout.tsx, with one spacing rule" || fail "the shell's <Breadcrumbs /> must be rendered once by Layout.tsx with its spacing set in Breadcrumbs.tsx"
 grep -qE 'className="h-full( flex flex-col)? bg-bg"' "$L" && ! grep -q 'fullBleed' "$L" && ok "the shell's content column adds no padding of its own (SubNavLayout's is the one)" || fail "Layout.tsx content column must not pad (no p-6, no fullBleed list) — SubNavLayout's content-pane padding is the single one"
 

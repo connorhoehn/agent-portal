@@ -65,8 +65,12 @@ logs retain these errors, and the matcher includes the exact status and path.
 Other failures still fail the walk. The unsupported breakout approval poll
 was fixed rather than classified as expected.
 
-The separate branding validator still reports its nested-pane padding selector
-check and four stale branding journey records. This theme update also changes
-their theme fingerprint. These are outside the meeting acceptance; no branding
-baseline or unrelated journey seal was changed. The optional realtime-examples
-rail comparison was skipped because that server was not running on `:15174`.
+The separate branding follow-up now passes the full validator. Its static
+padding check uses the current `data-subnav-content` marker and verifies the
+reset value. All four branding journeys were re-walked and sealed: eight
+surfaces per tenant/theme, 16px title spacing, zero console errors, measured
+Card surfaces, and primary-button contrast from 6.29:1 to 9.59:1. The records
+now name every sampled route and include separate Card screenshots. No product
+source or dependency pin changed in this follow-up. The optional
+realtime-examples rail comparison was skipped because that server was not
+running on `:15174`.

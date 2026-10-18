@@ -7,11 +7,31 @@ same width, same cast, after the fixes below landed. Numbers are computed
 styles and `getBoundingClientRect()` values from the live page; each item
 names the log that carries the measurement.
 
-## Open
+## Rechecked 2026-10-17
+
+The four refreshed journey logs on ui-components **2.480.3** close the two
+historical findings below. Page titles, including Reports, measure **16px**
+below the breadcrumb trail at **20px/600** on all eight sampled surfaces per
+tenant. Primary buttons now use the theme's `text-on-primary` foreground;
+the measured controls meet 4.5:1 in all four cells:
+
+| tenant | theme | control | measured text contrast |
+|---|---|---|---|
+| orgiq | light | Pair a machine | 6.29:1 |
+| orgiq | dark | Pair a machine | 6.45:1 |
+| assessment | light | New team | 6.76:1 |
+| assessment | dark | New team | 9.59:1 |
+
+The logs record the actual foreground/background colors and include separate
+Settings screenshots for rendered Cards. The explorer/FollowModeBar observations
+below were not part of this walk. The following cause notes describe the older
+behavior, not the current button or title implementation.
+
+## Historical findings
 
 None open. (7, `/iq/promotions` title 8px under the trail, closed 2026-10-08: `PromotionsPage` no longer hangs the Agent library link in the trail band, which is what put the title at the hung band's 8px; it now measures 16px like the other distillation tabs. The same hang still puts the Knowledge tab's title at 8px; `SectionContent`'s band is in `components/shell/`, outside this lane.)
 
-### 2. Primary buttons fail WCAG AA in three of four tenant x theme cells
+### 2. Primary button contrast — rechecked closed 2026-10-17
 
 Measured 2026-09-18 on live primary buttons at 12px/400, where AA requires
 4.5:1 for normal text:
@@ -43,7 +63,7 @@ docs/ui-components-queue.md.
 but fixing it means restyling a brand nobody asked to change; it belongs with
 the library fix rather than as a unilateral repaint.
 
-### 1. `PageHeader` breaks the vertical rhythm by 6px — Reports is the only surface using it
+### 1. `PageHeader` vertical rhythm — rechecked closed 2026-10-17
 
 Measured 2026-09-17 23:05 at 1600px, in BOTH themes (which is what rules out a
 theme cause): the breadcrumb-to-title gap is **16px on every surface in both
