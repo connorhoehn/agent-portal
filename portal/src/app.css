@@ -14,8 +14,8 @@
      One family per tenant, set on [data-tenant] below. --color-primary is
      an alias so the ~60 existing consumers (and the component library)
      pick the tenant's accent up without being touched. */
-  --color-brand: #6366f1;
-  --color-brand-hover: #4f46e5;
+  --color-brand: #4f46e5;
+  --color-brand-hover: #4338ca;
   --color-brand-ink: #1e1b4b;
   --color-brand-soft: #eef2ff;
   --background-image-brand-gradient: linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #ec4899 100%);
@@ -24,7 +24,7 @@
 
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
-  --color-text-tertiary: #64748b;
+  --color-text-tertiary: #5b6b82;
 
   /* ── Surface layers ─────────────────────────────────────────────────
      Four distinct tones, so a card reads as a card and a rail as a rail.
@@ -49,12 +49,16 @@
 
   --color-success: #16a34a;
   --color-success-bg: #dcfce7;
+  --color-success-fg: #166534;
   --color-warning: #d97706;
   --color-warning-bg: #fef3c7;
-  --color-danger: #dc2626;
+  --color-warning-fg: #92400e;
+  --color-danger: #b91c1c;
   --color-danger-bg: #fef2f2;
+  --color-danger-fg: #b91c1c;
   --color-info: #2563eb;
   --color-info-bg: #dbeafe;
+  --color-info-fg: #1d4ed8;
   --color-info-border: #93c5fd;
 
   --radius-sm: 4px;
@@ -180,15 +184,19 @@ html[data-theme="dark"] {
 
   --color-success: #22c55e;
   --color-success-bg: #052e16;
+  --color-success-fg: #6ee7b7;
   --color-success-border: #166534;
   --color-warning: #fbbf24;
   --color-warning-bg: #422006;
+  --color-warning-fg: #fcd34d;
   --color-warning-border: #a16207;
   --color-danger: #f87171;
   --color-danger-bg: #450a0a;
+  --color-danger-fg: #fca5a5;
   --color-danger-border: #b91c1c;
   --color-info: #60a5fa;
   --color-info-bg: #172554;
+  --color-info-fg: #7dd3fc;
   --color-info-border: #1d4ed8;
   --color-optimize: #a78bfa;
   --color-optimize-hover: #c4b5fd;
@@ -211,13 +219,13 @@ html[data-theme="dark"] {
    primary family with its own values (the journeys caught teal nav beside
    indigo buttons). */
 [data-tenant="orgiq"] {
-  --color-brand: #6366f1;            /* indigo */
-  --color-brand-hover: #4f46e5;
+  --color-brand: #4f46e5;            /* indigo */
+  --color-brand-hover: #4338ca;
   --color-brand-ink: #1e1b4b;
   --color-brand-soft: #eef2ff;
   --background-image-brand-gradient: linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #ec4899 100%);
-  --color-primary: #6366f1;
-  --color-primary-hover: #4f46e5;
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
   --color-primary-soft: #eef2ff;
 }
 html[data-theme="dark"][data-tenant="orgiq"],

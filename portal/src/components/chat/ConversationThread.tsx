@@ -40,6 +40,7 @@ import type { ConversationReadState } from './conversationReadState';
 import { useChatForward } from './useChatForward';
 import { useChatPins } from './useChatPins';
 import { useConversationReadState } from './useConversationReadState';
+import { conversationChatCommands } from './chatCommandRegistry';
 import { useConversationSummarize, type ConversationSummarize } from './useConversationSummarize';
 import { useMentionCandidates } from './useMentionCandidates';
 
@@ -108,7 +109,7 @@ export function useConversation(channel: string, { maySend, post, confirmHistory
   const quote = useQuoteReply(channel);
   const postRef = useRef(post);
   postRef.current = post;
-  const summarize = useConversationSummarize({ channel, userId, displayName, maySend,
+  const summarize = useConversationSummarize({ channel, userId, displayName, maySend, commands: conversationChatCommands(channel),
     post: async (message) => {
       if (!connected) throw new Error(OFFLINE_REASON);
       if (postRef.current) return postRef.current(message.text, message.metadata);

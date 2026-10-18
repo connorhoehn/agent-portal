@@ -10,6 +10,7 @@
 //
 // Pure: no React, so node:test can assert the registry.
 
+import { parseBreakoutChannel } from '@connorhoehn/realtime-modules/client/meeting';
 import type { ChatCommand } from '@connorhoehnslalom/ui-components/social';
 import { conversationSummarizeCommand } from './conversationSummarize.ts';
 import { artifactCommand, conversationArtifactApi, socialArtifactApi } from './conversationArtifact.ts';
@@ -26,6 +27,12 @@ export const conversationAgentCommand: ChatCommand = agentCommand(conversationAg
 
 /** Tenant discussions and huddles. */
 export const CONVERSATION_CHAT_COMMANDS: readonly ChatCommand[] = [conversationSummarizeCommand, tenantDeckCommand, conversationDiagramCommand, conversationDocCommand, conversationAgentCommand];
+
+// Breakout chat is gateway-only. The conversation REST commands (including
+// agent approval polling) accept the main huddle, not its room channels.
+const NO_COMMANDS: readonly ChatCommand[] = [];
+export const conversationChatCommands = (channel: string): readonly ChatCommand[] =>
+  parseBreakoutChannel(channel) ? NO_COMMANDS : CONVERSATION_CHAT_COMMANDS;
 
 /** `/agent` plans AND starts flows, so only a reader who may post is offered it (the BFF refuses the rest too). */
 export const withoutAgent = (commands: readonly ChatCommand[]): ChatCommand[] => commands.filter(c => c.trigger !== '/agent');

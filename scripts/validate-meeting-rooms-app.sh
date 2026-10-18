@@ -116,11 +116,11 @@ check "grep -rqE 'lobbyAuthority|LOBBY_AUTHORITY' portal/src 2>/dev/null || grep
 check "grep -qE 'X2.*(fixed|closed).*[0-9a-f]{7}' docs/meeting-rooms-app-goal.md" "X2 the LVS streamKey read hole is closed by its owner (commit recorded)"
 
 section "M5 · proof"
-check "[ -f portal/e2e/meeting-rooms.spec.ts ]" "E1 fixture e2e: two clones, hands, rooms, announcement, return"
+check "[ -f portal/e2e/meeting-rooms.spec.ts ]" "E1 fixture e2e: three clones, hands, rooms, announcement, return"
 check "[ -f portal/e2e/huddle-breakout-real.spec.ts ]" "E2 real-media spec exists (REAL_MEDIA_ACCEPTANCE=1)"
 check "ls docs/realtime-validation/*/meeting-breakout.md 2>/dev/null | grep -q ." "E2 dated real-media acceptance record"
-check "[ -n \"\$(find docs/journeys/maps -name 'call-rooms.ts' -path '*org-leader*')\" ] && [ -n \"\$(find docs/journeys/maps -name 'call-rooms.ts' -path '*sme*')\" ]" "E3 journey maps for calls with rooms (organizer and participant)"
-check "grep -qE 'rooms pane|meeting' portal/e2e/ui-dom-audit.adapter.ts" "E3 ui-dom-audit has a call-open, rooms-pane state"
+
+check "node scripts/meeting-rooms-proof.mjs" "E3 current strict Rooms audit and passing, sealed organizer/participant journeys"
 
 section "M6 · docs"
 check "grep -qE 'meeting' docs/journeys.md" "D1 journeys doc names the meeting walks"
@@ -131,6 +131,7 @@ if [ "$QUICK" = 0 ]; then
   check "(cd middleware && npm run -s typecheck)" "middleware typecheck"
   check "(cd middleware && npx jest src/lib/gateway src/routes/__tests__/realtime-lobby-access --silent)" "middleware gateway + lobby-access tests"
   check "(cd portal && npx tsc --noEmit -p .)" "portal typecheck"
+  check "(cd portal && npm test)" "portal unit tests"
   check "(cd portal && npx playwright test e2e/meeting-rooms.spec.ts)" "E1 fixture e2e"
 fi
 

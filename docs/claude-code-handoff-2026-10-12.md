@@ -305,14 +305,19 @@ Open, in order:
    - Acceptance criteria on completed items.
 5. Machines (Computer Lab) are ephemeral; walks never create or depend on one.
 
-## Meeting rooms on calls (2026-10-16)
+## Meeting rooms on calls (accepted 2026-10-17)
 
-Pins moved to ui-components **2.478.0** and realtime-modules **0.135.0** for
-`docs/meeting-rooms-app-goal.md` (judge `scripts/validate-meeting-rooms-app.sh`).
-Initiative huddles carry raise hand, reactions and breakout rooms behind
-`VITE_MEETING_ROOMS` (default off). Owed: the real-media acceptance record
-(E2, needs the SFU and platform-api with `LOBBY_AUTHORITY_REQUIRED=true`), the
-LVS `streamKey` read hole fixed by its owner (X2), the remaining surfaces
-(social, document, assessment, pipelines) and the user's decisions listed in
-the goal.
+Current pins: ui-components **2.480.3**, realtime-modules **0.137.0**.
+Initiative huddles carry raise hand, reactions, rooms, room chat and
+announcements behind `VITE_MEETING_ROOMS` (default off).
 
+E2 and X1 are recorded in `docs/realtime-validation/2026-10-16/meeting-breakout.md`;
+X2 is fixed in live-video-streaming `11b2a6f`. E3 is complete: both 27-step
+organizer/participant journeys passed and are sealed, and the strict UI audit
+passed all 20 cases (including Rooms at both widths and themes), with zero
+findings. `docs/realtime-validation/2026-10-17/meeting-ui.md` records the exact
+checks, fixture boundary and separate branding-validator debt. The meeting
+judge now requires current audit evidence and sealed walks.
+
+Scope remains initiative huddles only, as decided by the user. Other call
+surfaces and cloud deployment remain later work; nothing was deployed here.

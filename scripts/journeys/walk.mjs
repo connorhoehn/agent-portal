@@ -146,41 +146,49 @@ export async function walkMap(browser, map, ctx) {
     return { ...result, endedAt: new Date().toISOString(), skipped: 'needs-scope', error: 'the map writes and no mock scope / clone is available (lane M)' };
   }
   fs.mkdirSync(ctx.outDir, { recursive: true });
-  let context; let opened;
+  const actors = new Map();
   try {
-    opened = await ctx.open(browser, map, { viewport });
-    context = opened.context;
-    const principal = opened.principal;
-    result.session = principal;
-    result.clone = opened.clone;
-    if (principal && (principal.tenant !== map.persona.tenant || principal.role !== map.persona.role)) {
-      result.error = `signed in as ${principal.sub} ${principal.tenant}/${principal.role}, the map wants ${map.persona.tenant}/${map.persona.role}`;
-      return result;
-    }
-    // Read-only: the page may not write. Every non-GET it sends is aborted and recorded.
     let current = null;
-    if (readOnly) await context.route('**/*', (route) => {
-      const r = route.request();
-      if (SAFE.has(r.method())) return route.fallback();
-      if ((map.readOnlyPosts ?? []).some((p) => new URL(r.url()).pathname === p.path)) return route.fallback();
-      const what = `${r.method()} ${new URL(r.url()).pathname}`;
-      result.blockedWrites.push(what);
-      current?.blocked.push(what);
-      return route.abort('blockedbyclient');
-    });
-    const page = await context.newPage();
-    page.setDefaultTimeout(T.action);
-    page.on('console', (m) => { if (m.type() === 'error' && !/favicon/.test(m.text())) current?.console.push(m.text()); });
-    page.on('pageerror', (e) => current?.console.push(`pageerror: ${e.message}`));
-    // A BFF reload drops lane M's in-memory clones and scopes: the session then answers 401 (clone gone) or 410 (scope gone).
-    // Failed HTTP responses, per step: the console only says "403 (Forbidden)", the log names the URL.
-    page.on('response', (r) => { if (r.status() >= 400 && current) current.http.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`); });
-    page.on('response', (r) => { if ([401, 410].includes(r.status()) && new URL(r.url()).pathname.startsWith('/api/')) result.authLost = `${r.status()} ${new URL(r.url()).pathname}`; });
-    let scopeHandle = null;
+    for (const [name, persona] of [['main', map.persona], ...Object.entries(map.peers ?? {})]) {
+      const actorMap = { ...map, persona };
+      const person = await ctx.open(browser, actorMap, { viewport });
+      const actor = { ...person, page: null, scopeHandle: null };
+      actors.set(name, actor);
+      if (name === 'main') {
+        result.session = person.principal; result.clone = person.clone;
+      }
+      const principal = person.principal;
+      if (principal && (principal.tenant !== persona.tenant || principal.role !== persona.role)) {
+        result.error = `actor ${name} signed in as ${principal.sub} ${principal.tenant}/${principal.role}, the map wants ${persona.tenant}/${persona.role}`;
+        return result;
+      }
+      if (readOnly || map.scenario?.realtime === 'meeting') await person.context.route('**/*', (route) => {
+        const r = route.request();
+        if (SAFE.has(r.method())) return route.fallback();
+        if ((ctx.fixtureOrigins ?? []).includes(new URL(r.url()).origin)) return route.fallback();
+        // The gateway owns call state outside mock scopes. Only the call's page binding
+        // may write over HTTP in a meeting walk; business-record writes stay blocked.
+        if (map.scenario?.realtime === 'meeting' && /^(PUT|DELETE)$/.test(r.method()) && /^\/api\/calls\/[^/]+\/page$/.test(new URL(r.url()).pathname)) return route.fallback();
+        if ((map.readOnlyPosts ?? []).some((p) => new URL(r.url()).pathname === p.path)) return route.fallback();
+        const what = `${r.method()} ${new URL(r.url()).pathname}`;
+        result.blockedWrites.push(what); current?.blocked.push(what);
+        return route.abort('blockedbyclient');
+      });
+      const page = await person.context.newPage(); actor.page = page;
+      page.setDefaultTimeout(T.action);
+      page.on('console', (m) => { if (m.type() === 'error' && !/favicon/.test(m.text())) current?.console.push(m.text()); });
+      page.on('pageerror', (e) => current?.console.push(`pageerror: ${e.message}`));
+      page.on('response', (r) => { if (r.status() >= 400 && current) current.http.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`); });
+      page.on('response', (r) => { if ([401, 410].includes(r.status()) && new URL(r.url()).pathname.startsWith('/api/')) result.authLost = `${r.status()} ${new URL(r.url()).pathname}`; });
+    }
     let shotStep = map.steps.findIndex((s) => s.screenshot === 'log');
     if (shotStep < 0) shotStep = map.steps.findIndex((s) => s.do === 'navigate');
     for (const [i, step] of map.steps.entries()) {
       const s = { index: i + 1, do: step.do, name: step.name, state: step.state ?? (step.do === 'navigate' ? 'default' : undefined), proves: step.proves, url: step.do === 'navigate' || (step.do === 'scope' && step.url) ? step.url : undefined, failures: [], console: [], blocked: [], http: [], auditReason: step.auditReason };
+      const actor = actors.get(step.actor ?? 'main');
+      if (!actor) throw new Error(`unknown peer ${step.actor}`);
+      const { page, context } = actor;
+      if (step.actor) s.actor = step.actor;
       current = s;
       let status = null;
       const before = step.stable?.length ? await rects(page, step.stable) : null;
@@ -191,8 +199,8 @@ export async function walkMap(browser, map, ctx) {
           case 'theme': await page.evaluate((v) => { localStorage.setItem('theme', v); document.documentElement.dataset.theme = v; }, step.value); s.theme = step.value; break;
           case 'scope': {
             if (!ctx.setScope) throw new Error('this runner cannot switch mock scopes');
-            await scopeHandle?.dispose?.();
-            scopeHandle = await ctx.setScope(context, step.scope);
+            await actor.scopeHandle?.dispose?.();
+            actor.scopeHandle = await ctx.setScope(context, step.scope);
             s.scope = typeof step.scope === 'string' ? step.scope : JSON.stringify(step.scope);
             if (step.url) await page.goto(step.url, { waitUntil: 'domcontentloaded', timeout: T.settle });
             break;
@@ -244,22 +252,25 @@ export async function walkMap(browser, map, ctx) {
       // A user action in a read-only map that tried to write is a map/page defect, not a pass.
       if (s.blocked.length && step.do !== 'navigate' && step.do !== 'back') s.failures.push(`the action tried to write (blocked): ${[...new Set(s.blocked)].join(', ')}`);
       const blockedNoise = (m) => /ERR_BLOCKED_BY_CLIENT|net::ERR_FAILED/.test(m) && s.blocked.length;
+      // Chromium resource errors omit URLs. Attach this step's failed responses
+      // before matching narrow, documented expected errors in the map.
+      if (s.http.length) s.console = s.console.map((m) => /Failed to load resource/.test(m) ? `${m} [${[...new Set(s.http)].join(', ')}]` : m);
       s.expectedConsole = s.console.filter((m) => (step.expectConsole && step.expectConsole.test(m)) || blockedNoise(m));
       s.unexpectedConsole = s.console.filter((m) => !s.expectedConsole.includes(m));
-      // A resource error in the console names no URL: attach the failed responses of this step.
-      if (s.unexpectedConsole.some((m) => /Failed to load resource/.test(m)) && s.http.length) s.unexpectedConsole = s.unexpectedConsole.map((m) => /Failed to load resource/.test(m) ? `${m} [${[...new Set(s.http)].join(', ')}]` : m);
       if (!s.http.length) delete s.http;
       s.status = s.failures.length || s.unexpectedConsole.length ? 'fail' : 'pass';
       delete s.console;
       result.steps.push(s);
     }
     current = null;
-    await scopeHandle?.dispose?.();
   } catch (e) {
     result.error = `setup failed: ${String(e.message).split('\n')[0]}`;
   } finally {
     result.endedAt = new Date().toISOString();
-    try { await (opened?.close ? opened.close() : context?.close()); } catch { /* already closed */ }
+    for (const actor of [...actors.values()].reverse()) {
+      try { await actor.scopeHandle?.dispose?.(); } catch { /* already disposed */ }
+      try { await (actor.close ? actor.close() : actor.context?.close()); } catch { /* already closed */ }
+    }
   }
   return result;
 }

@@ -2,14 +2,14 @@
 // Executable journey maps (docs/journeys.md "Journey maps"): walk each map
 // headlessly, measure every step with the ui-dom-audit, write the family's
 // journey log in its PROTOCOL's format with an honest verdict, and seal a
-// directory through scripts/journeys/seal.sh only when every map in it passed.
+// walked log through scripts/journeys/seal.sh only when that map passed.
 //
 //   node scripts/journeys/run-maps.mjs check [--family access]            # validate maps, no browser
 //   node scripts/journeys/run-maps.mjs walk  [--family access] [--only requester/] [--no-seal] [--wait 30]
 //   node scripts/journeys/run-maps.mjs write [--family access] [--only …]  # recompose logs from the last walk's results
 //   node scripts/journeys/run-maps.mjs coverage [--check]                  # docs/journeys/coverage.md
 //
-// Needs the shared stack (Vite :5183, middleware :3001) for `walk`. Identity
+// Needs the dev stack (JOURNEY_BASE_URL or Vite :5183, middleware :3001) for `walk`. Identity
 // rules: a run refuses (or waits, --wait <minutes>) while a ui-dom-audit run
 // (`pgrep -f audit.mjs`) holds the browser, unless lane M's identity clones are
 // available (portal/e2e/realSession.ts `openAsClone`); two runs never walk as
@@ -104,6 +104,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as rs from ${JSON.stringify(path.join(PORTAL, 'e2e/realSession.ts'))};
 import adapter from ${JSON.stringify(path.join(PORTAL, 'e2e/ui-dom-audit.adapter.ts'))};
+import { fakeMeetingMedia } from ${JSON.stringify(path.join(PORTAL, 'e2e/meetingMedia.ts'))};
 import * as inv from ${JSON.stringify(path.join(PORTAL, 'e2e/route-inventory.ts'))};
 import { measureDOM } from ${imp(path.join(SKILL, 'scripts/measure.mjs'))};
 import { probes } from ${imp(path.join(SKILL, 'scripts/probes.mjs'))};
@@ -154,8 +155,15 @@ async function open(browser, map, { viewport }) {
   const scope = typeof map.scenario === 'object' ? map.scenario.scope : null;
   if (LANE_M.clones && (map.identity ?? 'clone') === 'clone') {
     // Lane M: a clone of the persona (same grants and person link, its own id and epoch), in the map's scope when it has one.
-    const person = await rs.openAsClone(browser, persona.user, { ...opts, viewport, baseURL: ${JSON.stringify(BASE)}, landing: null, label: 'run-maps ' + map.family + '/' + map.log, contextOptions: { reducedMotion: 'reduce', ...VIDEO(map, viewport) }, ...(scope ? { scope } : {}) });
-    return { context: person.context, principal: person.principal, clone: person.cloneId, close: person.close };
+    const person = await rs.openAsClone(browser, persona.user, { ...opts, viewport, baseURL: ${JSON.stringify(BASE)}, landing: null, label: 'run-maps ' + map.family + '/' + map.log, contextOptions: { reducedMotion: 'reduce', ...VIDEO(map, viewport) }, ...(scope ? { scope } : {}), ...(map.media === 'meeting-fixture' ? { preJoin: 'remembered', prepare: context => fakeMeetingMedia(context, persona.user) } : {}) });
+    return { context: person.context, principal: person.principal, clone: person.cloneId, close: async () => {
+      try {
+        if (map.media === 'meeting-fixture') for (const page of person.context.pages()) {
+          const leave = page.getByTestId(/^(shell-)?call-dock-leave$/).first();
+          if (await leave.isVisible()) await leave.click();
+        }
+      } finally { await person.close(); }
+    } };
   }
   const context = await browser.newContext({ baseURL: ${JSON.stringify(BASE)}, viewport, reducedMotion: 'reduce', ...VIDEO(map, viewport) });
   let handle = null;
@@ -170,7 +178,7 @@ for (const e of ENTRIES) test(e.title, async ({ browser }) => {
   const map = (await import(e.file)).default;
   // 10 minutes, or 20 s a step for a map with many (the work family's refusals maps walk ~70 refused deep links).
   test.setTimeout(Math.max(10 * 60_000, map.steps.length * 20_000));
-  const ctx = { baseURL: ${JSON.stringify(BASE)}, outDir: e.out, open, measure, focusWalk: probes.focusWalk, scoped: LANE_M.scopes && typeof map.scenario === 'object', setScope: LANE_M.scopes ? (context, scope) => rs.withMockScope(context, scope) : undefined };
+  const ctx = { baseURL: ${JSON.stringify(BASE)}, outDir: e.out, fixtureOrigins: map.media === 'meeting-fixture' ? ['http://meeting-media.test'] : [], open, measure, focusWalk: probes.focusWalk, scoped: (LANE_M.scopes && !!map.scenario?.scope) || (LANE_M.clones && map.scenario?.realtime === 'meeting'), setScope: LANE_M.scopes ? (context, scope) => rs.withMockScope(context, scope) : undefined };
   let result = await walkMap(browser, map, ctx);
   // A BFF reload (Tilt restarts it on any middleware edit) drops in-memory clones and scopes: re-mint and walk once more.
   if (result.authLost || /^setup failed/.test(result.error ?? '')) {
@@ -192,7 +200,7 @@ for (const e of ENTRIES) test(e.title, async ({ browser }) => {
 }
 
 function stackLine() {
-  try { const v = JSON.parse(fs.readFileSync(path.join(PORTAL, 'node_modules/@connorhoehnslalom/ui-components/package.json'), 'utf8')).version; return `middleware dev:mock :3001, Vite :5183, ui-components ${v}`; } catch { return 'middleware dev:mock :3001, Vite :5183'; }
+  try { const v = JSON.parse(fs.readFileSync(path.join(PORTAL, 'node_modules/@connorhoehnslalom/ui-components/package.json'), 'utf8')).version; return `middleware dev:mock :3001, Vite ${BASE}, ui-components ${v}`; } catch { return `middleware dev:mock :3001, Vite ${BASE}`; }
 }
 
 /** Compose and write each walked map's log (and its screenshot) into the family directory. */
@@ -205,7 +213,7 @@ function writeLogs(o, maps) {
     const result = JSON.parse(fs.readFileSync(f, 'utf8'));
     if (result.skipped) { skipped.push(`${map.family}/${map.log}: skipped — ${result.error}`); continue; }
     if (result.error && !result.steps?.length) { skipped.push(`${map.family}/${map.log}: no walk happened (${result.error}) — the log is left as it was`); continue; }
-    result.scenario = result.map.scenario === 'shared' ? 'scenario: the shared mock, read-only (every non-GET the page sent was blocked)' : `scenario: scope ${result.map.scenario.scope}`;
+    result.scenario = result.map.scenario?.realtime === 'meeting' ? 'scenario: shared meeting gateway, clone identities, signalling media fixture; HTTP business writes blocked' : result.map.scenario === 'shared' ? 'scenario: the shared mock, read-only (every non-GET the page sent was blocked)' : `scenario: scope ${result.map.scenario.scope}`;
     result.stack = stackLine();
     const target = path.join(ROOT, familyDir(map.family), `${map.log}.md`);
     const shotName = `${path.basename(map.log)}.jpg`;
@@ -219,22 +227,13 @@ function writeLogs(o, maps) {
   return { written, skipped };
 }
 
-/** Seal each directory whose every walk log was written by this run and passed. */
+/** Seal only the logs this run walked; preserve every unrelated seal. */
 function sealDirs(written) {
-  const byDir = new Map();
-  for (const w of written) { const d = path.dirname(w.log); if (!byDir.has(d)) byDir.set(d, []); byDir.get(d).push(w); }
-  const out = [];
-  for (const [d, ws] of byDir) {
-    const logs = fs.readdirSync(path.join(ROOT, d)).filter((n) => n.endsWith('.md') && !['PROTOCOL.md', 'DEFECTS.md', 'MATRIX.md', 'RAIL.md'].includes(n) && /^verdict:/m.test(fs.readFileSync(path.join(ROOT, d, n), 'utf8'))).map((n) => path.join(d, n));
-    const ours = new Set(ws.map((w) => w.log));
-    const notOurs = logs.filter((l) => !ours.has(l));
-    const failed = ws.filter((w) => w.verdict !== 'pass');
-    if (failed.length) { out.push(`${d}: not sealed — ${failed.length} walk(s) failed (${failed.map((w) => path.basename(w.log)).join(', ')})`); continue; }
-    if (notOurs.length) { out.push(`${d}: not sealed — ${notOurs.length} log(s) in it have no map in this run (${notOurs.map((l) => path.basename(l)).join(', ')})`); continue; }
-    const r = spawnSync('bash', [path.join(ROOT, 'scripts/journeys/seal.sh'), d], { cwd: ROOT, encoding: 'utf8' });
-    out.push(`${d}: ${(r.stdout + r.stderr).trim()}`);
-  }
-  return out;
+  return written.map(w => {
+    if (w.verdict !== 'pass') return `${w.log}: not sealed — walk failed`;
+    const r = spawnSync('bash', [path.join(ROOT, 'scripts/journeys/seal.sh'), w.log], { cwd: ROOT, encoding: 'utf8' });
+    return `${w.log}: ${(r.stdout + r.stderr).trim()}`;
+  });
 }
 
 async function main() {

@@ -9,6 +9,6 @@
 # changed — a log can only be sealed by a walk.
 set -u
 cd "$(dirname "$0")/../.."
-[ $# -eq 1 ] || { echo "usage: $0 docs/<family>-journeys/<dir>   (one directory per seal)" >&2; exit 2; }
-[ -d "$1" ] || { echo "no such directory: $1" >&2; exit 2; }
+[ $# -eq 1 ] || { echo "usage: $0 docs/<family>-journeys/<dir>   (one directory or log per seal)" >&2; exit 2; }
+[ -d "$1" ] || [ -f "$1" ] || { echo "no such directory or log: $1" >&2; exit 2; }
 exec node scripts/journeys/journeys.mjs seal "$1"

@@ -308,10 +308,20 @@ it. The judges are the source of truth after this.
 ## Calls with meeting rooms
 
 `docs/journeys/maps/work/{org-leader,sme}/call-rooms.ts` walk an initiative
-huddle with breakout rooms (organizer and participant). They are held until
-the runner can seat more than one walker in a call, and the meeting UI is off
-unless `VITE_MEETING_ROOMS` is on (`docs/meeting-rooms-app-goal.md`); with the
-flag off the call stage renders as before and no map asserts anything new.
+huddle with three clone identities. A step's optional `actor` selects a named
+`peers` entry; every peer retains its page and is closed on success or failure.
+Vera organizes and Caleb participates (Nora is an initiative steward and has
+organizer rights). The portal needs `VITE_MEETING_ROOMS=true`.
+
+These maps declare `scenario: { realtime: 'meeting' }`: gateway call state
+is shared and cannot be copied into a mock scope. Clone identities keep sessions
+separate, only a call's page binding may mutate over HTTP, and cleanup leaves
+every call and removes the clones. `media: 'meeting-fixture'` uses E1's signalling
+fixture; E2 remains the proof of actual SFU media. Run meeting walks serially.
+
+`seal.sh` accepts a single log as well as a directory. A partial map run seals
+only its passing logs, with the same current-contract and fresh-screenshot
+checks; existing seals for other logs are preserved.
 
 ## Records that are not walks
 

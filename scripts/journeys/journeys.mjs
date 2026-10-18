@@ -229,12 +229,14 @@ function judge(fam, logs) {
 }
 
 function seal(dir) {
-  const d = rel(dir);
+  const target = rel(dir);
+  const one = target.endsWith('.md') ? target : null;
+  const d = one ? path.dirname(one) : target;
   const fam = familyOf(d);
   if (!fam || !FAMILIES[fam]) return { ok: false, msg: `refusing: ${d} is not under a known docs/*-journeys family` };
   const c = contracts();
   if (c.problems.length) return { ok: false, msg: `refusing: the rendered contracts are not measured on the current source (${c.problems.join('; ')}) — run scripts/journeys/measure.sh, then seal` };
-  const logs = fs.readdirSync(path.join(ROOT, d)).filter((n) => n.endsWith('.md') && !['PROTOCOL.md', 'DEFECTS.md', 'MATRIX.md', 'RAIL.md'].includes(n)).map((n) => path.join(d, n)).sort();
+  const logs = one ? [one] : fs.readdirSync(path.join(ROOT, d)).filter((n) => n.endsWith('.md') && !['PROTOCOL.md', 'DEFECTS.md', 'MATRIX.md', 'RAIL.md'].includes(n)).map((n) => path.join(d, n)).sort();
   if (!logs.length) return { ok: false, msg: `refusing: no logs under ${d}` };
   const seals = readSeals(fam);
   const next = {}; const refusals = []; const skippedFail = []; let unchanged = 0;
@@ -267,7 +269,7 @@ function seal(dir) {
     next[f] = { digest: k.digest, sealedAt: new Date().toISOString(), basis: `walk/${k.basis}`, parts: k.parts };
   }
   if (refusals.length) return { ok: false, msg: `refusing to seal ${d} (nothing written):\n${refusals.map((r) => `  ${r}`).join('\n')}` };
-  for (const f of Object.keys(seals)) if (path.dirname(f) !== d) next[f] = seals[f];
+  for (const f of Object.keys(seals)) if (!logs.includes(f)) next[f] = seals[f];
   writeSeals(fam, next);
   return { ok: true, msg: `sealed ${logs.length - unchanged - skippedFail.length} log(s) under ${d} (${unchanged} already fresh${skippedFail.length ? `; ${skippedFail.length} failed walk(s) left unsealed: ${skippedFail.map((f) => path.basename(f)).join(', ')}` : ''})` };
 }

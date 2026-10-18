@@ -1,83 +1,57 @@
-// The call-with-rooms walk on an initiative huddle (docs/meeting-rooms-app-goal.md E3), organizer and participant.
-// Not a map: the two maps beside each role import this. Both are HELD: the walk needs two more people in the call
-// at the same time (Rooms needs three, decision 4) and the map format has one walker; the meeting's state lives in the
-// gateway's memory, which no mock scope reaches; and the portal must be built with VITE_MEETING_ROOMS=true. The
-// executable proof today is portal/e2e/meeting-rooms.spec.ts (E1). Unhold once the runner can seat peer clones.
+// Three clone identities walk the same huddle in order. The gateway and meeting state are real;
+// media uses the E1 signalling fixture. The real SFU move is proved by E2.
 import type { JourneyMap, Step, Target } from '../../../../scripts/journeys/journey-map.ts';
 import { LEAKS, PERSONA } from './_shared.ts';
 
-export const CALL_ROOMS_HOLD = 'needs two peer clones seated in the same huddle while the walker acts (the map format has one walker), the meeting state is gateway memory no mock scope reaches, and the target portal must be built with VITE_MEETING_ROOMS=true; portal/e2e/meeting-rooms.spec.ts is the proof until the runner can seat peers';
-
+const PARTICIPANT = { user: 'u-caleb', name: 'Caleb Turner', tenant: 'orgiq', role: 'sme' };
+// Initial reads can precede call.join registration; the call controllers retry
+// these two endpoints. A different status/path still fails the walk.
+const REGISTRATION_RETRY = /^Failed to load resource:.*404.*\[404 GET \/api\/calls\/[^/ ,]+\/(?:page|chat)(?:, 404 GET \/api\/calls\/[^/ ,]+\/(?:page|chat))*\]$/;
 const URL = '/iq/projects/p-auth-migration';
 const huddle: Target = { role: 'button', name: 'Huddle', within: { testId: 'shell-footer-context' } };
 const stage: Target = { testId: 'huddle-meeting-stage' };
 const item = (id: string): Target => ({ testId: `meeting-toolbar-${id}`, within: stage });
-const roomsPanel: Target = { testId: 'huddle-breakout-rooms' };
+const panel: Target = { testId: 'huddle-breakout-rooms' };
 const banner: Target = { testId: 'breakout-banner' };
-const chatPane: Target = { testId: 'huddle-chat-panel' };
 const PAGES = 'portal/src/components/shell/CallMeeting.tsx, portal/src/components/shell/HuddleChat.tsx, portal/src/components/shell/SocialFooter.tsx, portal/src/lib/meetingRooms.ts';
 
-const join: Step[] = [
-  { do: 'navigate', url: URL, name: 'Open Auth Migration: the footer offers its huddle', expect: { visible: [huddle] } },
-  { do: 'click', target: huddle, name: 'Join the huddle: the stage over the composer carries the meeting toolbar with Chat, People, Raise and React', writes: true,
-    expect: { visible: [stage, item('chat'), item('people'), item('raise'), item('react')] }, screenshot: 'log' },
-  { do: 'tab-walk', name: 'Tab reaches the stage toolbar and the call controls from the top of the page', proves: 'keyboard', expect: { minVisited: 6 } },
-];
-
-function organizer(): Step[] {
-  return [
-    ...join,
-    { do: 'wait', target: item('rooms'), name: 'With three people in the call the toolbar adds Rooms', expect: { visible: [item('rooms')] } },
-    { do: 'click', target: item('people'), name: 'People opens the hands queue: Nora DaSilva\'s raised hand is first, by name, with Lower', state: 'pane-open',
-      stable: [stage], proves: ['tab-stability', 'story-facts'],
-      expect: { visible: [{ testId: 'roster-raised-hand' }, { testId: 'roster-lower-hand' }], text: ['Nora DaSilva'], noText: LEAKS } },
-    { do: 'click', target: { testId: 'roster-lower-hand' }, name: 'Lower clears that hand', writes: true, expect: { absent: [{ testId: 'roster-raised-hand' }] } },
-    { do: 'click', target: item('rooms'), name: 'Rooms opens the breakout panel; with no rooms yet the organizer is offered how many to create', state: 'empty',
-      stable: [stage], proves: ['empty-state', 'role-gating'], expect: { visible: [roomsPanel, { testId: 'breakout-create' }] } },
-    { do: 'fill', target: { testId: 'breakout-create-count' }, value: '2', name: 'Ask for two rooms', expect: { visible: [{ testId: 'breakout-create-submit' }] } },
-    { do: 'click', target: { testId: 'breakout-create-submit' }, name: 'Create them: two rooms and the people not in one are listed', writes: true,
-      expect: { count: [{ target: { testId: 'breakout-room' }, eq: 2 }], visible: [{ testId: 'breakout-unassigned' }] } },
-    { do: 'click', target: { testId: 'breakout-auto-assign' }, name: 'Assign automatically: nobody is left outside a room', writes: true, expect: { absent: [{ testId: 'breakout-unassigned-person' }] } },
-    { do: 'click', target: { testId: 'breakout-open-all' }, name: 'Open the rooms: the panel says they are open and the organizer stays in the main meeting', writes: true,
-      expect: { attr: [{ target: roomsPanel, name: 'data-phase', value: 'open' }], absent: [banner] } },
-    { do: 'navigate', url: '/settings', name: 'On a page with no call composer the dock folds into the footer, which keeps Rooms', expect: { visible: [{ testId: 'shell-call-dock-meeting-rooms' }] } },
-    { do: 'click', target: { testId: 'shell-call-dock-chat' }, name: 'The huddle chat offers the organizer "To: This chat | All rooms"', state: 'pane-open',
-      expect: { visible: [chatPane, { testId: 'meeting-chat-target' }] } },
-    { do: 'click', target: { text: 'All rooms', exact: true, within: { testId: 'meeting-chat-target' } }, name: 'All rooms turns the next message into an announcement', expect: { text: ['Every room sees this as an announcement.'] } },
-    { do: 'click', target: { testId: 'shell-call-dock-meeting-rooms' }, name: 'Rooms from the footer reopens the panel', expect: { visible: [roomsPanel] } },
-    { do: 'click', target: { testId: 'breakout-end' }, name: 'End breakout rooms: everyone is back in the main meeting', writes: true, expect: { absent: [banner, { testId: 'breakout-room' }] } },
-  ];
-}
-
-function participant(): Step[] {
-  return [
-    ...join,
-    { do: 'click', target: item('rooms'), name: 'Rooms before the organizer opens any says so, and a participant is offered nothing to create', state: 'empty',
-      stable: [stage], proves: ['empty-state', 'role-gating', 'tab-stability'],
-      expect: { visible: [{ testId: 'huddle-breakout-rooms-empty' }], text: ['No breakout rooms yet. The organizer will open them.'], absent: [{ testId: 'breakout-create' }, { testId: 'breakout-open-all' }] } },
-    { do: 'click', target: item('raise'), name: 'Raise puts a hand up and says where it is in the queue', writes: true,
-      expect: { attr: [{ target: item('raise'), name: 'aria-pressed', value: 'true' }] } },
-    { do: 'wait', target: { testId: 'breakout-banner', within: stage }, name: 'When the organizer opens the rooms, the stage says which room this is, with its timer and Return to main',
-      state: 'in-room', expect: { visible: [{ testId: 'breakout-banner', within: stage }] } },
-    { do: 'navigate', url: '/settings', name: 'Away from the call composer the room banner sits under the page', state: 'in-room', expect: { visible: [banner], absent: [stage] } },
-    { do: 'click', target: { testId: 'shell-call-dock-chat' }, name: 'The huddle chat is the room\'s: "Room 1 chat · Only people in Room 1 see these messages."', state: 'in-room',
-      proves: 'story-facts', expect: { visible: [chatPane, { testId: 'meeting-chat-context' }], text: [/Room \d+ chat/], noText: LEAKS } },
-    { do: 'wait', target: { testId: 'meeting-chat-announcement-note' }, name: 'The organizer\'s announcement arrives in the room chat, marked "Announcement to every room", and on the banner',
-      expect: { visible: [{ testId: 'meeting-chat-announcement-note' }, { testId: 'breakout-banner-announcement' }] } },
-    { do: 'click', target: { testId: 'breakout-banner-return' }, name: 'Return to main leaves the room: no banner and no room chat line', writes: true,
-      expect: { absent: [banner, { testId: 'meeting-chat-context' }] } },
-  ];
-}
-
 export function callRoomsMap(role: 'org-leader' | 'sme'): JourneyMap {
-  const organizerWalk = role === 'org-leader';
+  const isOrganizer = role === 'org-leader';
+  const host = isOrganizer ? undefined : 'organizer';
+  const member = isOrganizer ? 'participant' : undefined;
+  const steps: Step[] = [];
+  const add = (actor: string | undefined, step: Step) => steps.push({ ...step, ...(actor ? { actor } : {}) });
+  // The primary walk opens first; Vera always starts the call, so Caleb remains a participant.
+  add(undefined, { do: 'navigate', url: URL, name: 'Open Auth Migration as the primary walker', expect: { visible: [huddle] } });
+  for (const [actor, name] of [[host, 'Vera'], [member, 'Caleb'], ['extra', 'Theo']] as const) {
+    add(actor, { do: 'navigate', url: URL, name: `${name} opens the initiative with a fresh clone session`, expect: { visible: [huddle] } });
+    add(actor, { do: 'click', target: huddle, writes: true, expectConsole: REGISTRATION_RETRY, name: `${name} joins the initiative huddle`, expect: { visible: [stage, item('raise')] } });
+  }
+  add(undefined, { do: 'tab-walk', name: 'The primary walker reaches the meeting controls by keyboard', proves: 'keyboard', expect: { minVisited: 6 } });
+  add(member, { do: 'click', target: item('rooms'), name: 'Caleb sees an empty participant pane without organizer actions', state: 'empty', proves: ['empty-state', 'role-gating'], expect: { visible: [{ testId: 'huddle-breakout-rooms-empty' }], absent: [{ testId: 'breakout-create' }] } });
+  add(member, { do: 'click', target: item('raise'), writes: true, name: 'Caleb raises his hand', expect: { attr: [{ target: item('raise'), name: 'aria-pressed', value: 'true' }] } });
+  add(host, { do: 'click', target: item('people'), name: 'Vera sees Caleb by name in the hands queue', state: 'pane-open', proves: ['story-facts', 'tab-stability'], stable: [stage], expect: { visible: [{ testId: 'roster-raised-hand' }, { testId: 'roster-lower-hand' }], text: ['Caleb Turner'], noText: LEAKS } });
+  add(host, { do: 'click', target: { testId: 'roster-lower-hand' }, writes: true, name: 'Vera lowers the raised hand', expect: { hidden: [{ testId: 'roster-raised-hand' }] } });
+  add(member, { do: 'wait', target: item('raise'), name: 'Caleb sees the lowered hand reflected on his toolbar', expect: { attr: [{ target: item('raise'), name: 'aria-pressed', value: 'false' }] } });
+  add(host, { do: 'click', target: item('rooms'), name: 'Vera opens Rooms and is offered Create', state: 'empty', proves: ['empty-state', 'role-gating'], expect: { visible: [panel, { testId: 'breakout-create' }] } });
+  add(host, { do: 'fill', target: { testId: 'breakout-create-count' }, value: '2', name: 'Vera asks for two rooms' });
+  add(host, { do: 'click', target: { testId: 'breakout-create-submit' }, writes: true, name: 'Vera creates two rooms', expect: { count: [{ target: { testId: 'breakout-room' }, eq: 2 }] }, ...(isOrganizer ? { screenshot: 'log' as const } : {}) });
+  add(host, { do: 'click', target: { testId: 'breakout-auto-assign' }, writes: true, name: 'Vera assigns the participants automatically', expect: { count: [{ target: { testId: 'breakout-unassigned-person' }, max: 1 }] } });
+  add(host, { do: 'click', target: { testId: 'breakout-open-all' }, writes: true, name: 'Vera opens both rooms and stays in the main meeting', expect: { attr: [{ target: panel, name: 'data-phase', value: 'open' }], hidden: [banner] } });
+  add(member, { do: 'wait', target: banner, name: 'Caleb sees his room banner on the stage', state: 'in-room', expect: { visible: [banner], text: [/Room \d+/] }, ...(!isOrganizer ? { screenshot: 'log' as const } : {}) });
+  add(member, { do: 'click', target: item('chat'), name: 'Caleb opens his room chat from the stage', state: 'in-room', proves: 'story-facts', expect: { visible: [{ testId: 'meeting-chat-context' }], text: [/Room \d+ chat/], noText: LEAKS } });
+  add(host, { do: 'click', target: { text: 'All rooms', exact: true, within: { testId: 'meeting-chat-target' } }, name: 'Vera selects All rooms for the announcement' });
+  add(host, { do: 'fill', target: { role: 'textbox', name: 'Message', within: { testId: 'initiative-composer' } }, value: 'Journey check: return to the main huddle shortly.', name: 'Vera writes a meeting announcement' });
+  add(host, { do: 'click', target: { role: 'button', name: /^Send/, within: { testId: 'initiative-composer' } }, writes: true, name: 'Vera sends the announcement to every room' });
+  add(member, { do: 'wait', target: { testId: 'meeting-chat-announcement-note' }, name: 'Caleb reads the marked announcement in his room chat and banner', expect: { visible: [{ testId: 'meeting-chat-announcement-note' }, { testId: 'breakout-banner-announcement' }], text: ['Journey check: return to the main huddle shortly.'] } });
+  add(host, { do: 'click', target: { testId: 'breakout-end' }, writes: true, name: 'Vera ends the rooms', expect: { attr: [{ target: panel, name: 'data-phase', value: 'draft' }] } });
+  add(member, { do: 'wait', target: { testId: 'shell-call-dock' }, name: 'Caleb is back in the main meeting', expect: { hidden: [banner, { testId: 'meeting-chat-context' }] } });
+  add(host, { do: 'click', target: { testId: 'breakout-delete' }, writes: true, name: 'Vera removes the closed room drafts', expect: { visible: [{ testId: 'breakout-create' }] } });
   return {
-    family: 'work', log: `${role}/call-rooms`, kind: 'surface', persona: PERSONA[role], identity: 'clone',
-    scenario: { scope: 'default' }, writes: true, hold: CALL_ROOMS_HOLD, viewport: { width: 1440, height: 900 },
-    goal: organizerWalk
-      ? `${PERSONA[role].name}: run the Auth Migration huddle as its organizer — see and lower a raised hand, create, fill and open two breakout rooms, announce to every room from the chat, and end the rooms`
-      : `${PERSONA[role].name}: take part in the Auth Migration huddle — raise a hand, be moved into a room and know it (banner, room chat), read the organizer's announcement and return to the main meeting`,
-    fields: { surface: 'call-rooms', pages: PAGES },
-    steps: organizerWalk ? organizer() : participant(),
+    family: 'work', log: `${role}/call-rooms`, kind: 'surface', persona: isOrganizer ? PERSONA[role] : PARTICIPANT, identity: 'clone',
+    peers: { ...(isOrganizer ? { participant: PARTICIPANT } : { organizer: PERSONA['org-leader'] }), extra: PERSONA.member },
+    scenario: { realtime: 'meeting' }, writes: true, media: 'meeting-fixture', viewport: { width: 1440, height: 900 },
+    goal: `${isOrganizer ? PERSONA[role].name : PARTICIPANT.name}: ${isOrganizer ? 'organize' : 'participate in'} a huddle with raised hands, breakout rooms and announcements`,
+    fields: { surface: 'call-rooms', pages: PAGES }, steps,
   };
 }

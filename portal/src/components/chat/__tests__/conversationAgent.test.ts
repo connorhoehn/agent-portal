@@ -7,7 +7,7 @@ import {
   AGENT_PIPELINE_ID, CONVERSATION_AGENT_BASE, approvalExpiryNote, canDecideApproval, isWaitingApproval, SOCIAL_AGENT_BASE, agentApi, agentCommand, agentRunStatusOf, canDecide, canStop, conversationAgentApi,
   isAgentPipeline, isSettled, planMarkdown, stepLinkView, type AgentPlan, type AgentRunStatusBody,
 } from '../conversationAgent.ts';
-import { CONVERSATION_CHAT_COMMANDS, socialChatCommands, withoutAgent } from '../chatCommandRegistry.ts';
+import { CONVERSATION_CHAT_COMMANDS, conversationChatCommands, socialChatCommands, withoutAgent } from '../chatCommandRegistry.ts';
 import { isLiveFlowRunId } from '../../../hooks/flowRunFollower.ts';
 
 const plan = (over: Partial<AgentPlan> = {}): AgentPlan => ({
@@ -188,4 +188,11 @@ test('the expiry note counts down to the server\'s 24 h deadline', () => {
 
 test('the plan lists an approval step by its own label', () => {
   assert.match(planMarkdown(paused().plan!), /\*\*Approval\*\*: Check first/);
+});
+test('breakout chats offer no REST commands or agent approval polling; main huddles keep them', () => {
+  assert.deepEqual(conversationChatCommands('orgiq:huddle:call-123~breakout~room-1'), []);
+  for (const channel of ['orgiq:huddle:call-123', 'orgiq:initiative:p-auth']) {
+    assert.equal(conversationChatCommands(channel), CONVERSATION_CHAT_COMMANDS);
+    assert.ok(conversationChatCommands(channel).some(c => c.trigger === '/agent'));
+  }
 });

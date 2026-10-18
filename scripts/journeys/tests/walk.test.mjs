@@ -19,6 +19,8 @@ const PAGES = {
     <p id="e" hidden>No catalog item matches.</p>
     <table><tbody><tr tabindex="0" onkeydown="if(event.key==='Enter')location.href='/record'"><td>row</td></tr></tbody></table>
     <button id="save" onclick="fetch('/api/save',{method:'POST'})">Save</button></main>`,
+  '/call-start': `<main><h1>Call</h1><script>fetch('/api/calls/call-test/chat')</script></main>`,
+  '/other-error': `<main><h1>Call</h1><script>fetch('/api/unrelated')</script></main>`,
   '/record': '<main><h1>Record</h1></main>',
   '/gone': '<script>location.replace("/list")</script>',
   '/tabs': `<header class="shell-header" style="height:40px">h</header><main><h1>Tabs</h1><p id="n">3 items</p>
@@ -37,7 +39,7 @@ async function harness(t) {
     const context = await b.newContext({ baseURL: BASE, viewport });
     await context.route(`${BASE}/**`, (route) => {
       const u = new URL(route.request().url());
-      if (u.pathname.startsWith('/api/')) { writes.push(`${route.request().method()} ${u.pathname}`); return route.fulfill({ status: u.pathname === '/api/forbidden' ? 403 : 200, body: '{}' }); }
+      if (u.pathname.startsWith('/api/')) { writes.push(`${route.request().method()} ${u.pathname}`); return route.fulfill({ status: u.pathname === '/api/forbidden' ? 403 : ['/api/calls/call-test/chat', '/api/unrelated'].includes(u.pathname) ? 404 : 200, body: '{}' }); }
       return route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><title>t</title>${PAGES[u.pathname] ?? '<main><h1>404</h1></main>'}` });
     });
     return { context, principal: { sub: `${map.persona.user}-clone-1`, tenant: map.persona.tenant, role: map.persona.role }, clone: `${map.persona.user}-clone-1`, close: () => context.close() };
@@ -143,4 +145,52 @@ test('numbers agree with the rows they count; reload, viewport, theme and scope 
   assert.deepEqual(h.scopes, ['empty', 'disposed empty', 'error', 'disposed error']);
   assert.equal(r.steps[5].landed, '/list');
   assert.equal(r.steps[6].audit, undefined, 'a scope switch with no url is not a page step');
+});
+
+
+test('peer steps keep distinct pages and close every context after a failed step', async (t) => {
+  const h = await harness(t); if (!h) return;
+  const originalOpen = h.ctx.open;
+  const closed = [];
+  h.ctx.open = async (...args) => {
+    const person = await originalOpen(...args);
+    return { ...person, close: async () => { closed.push(args[1].persona.user); await person.close(); } };
+  };
+  h.ctx.scoped = true;
+  const result = await walkMap(h.browser, map([
+    { do: 'navigate', url: '/list', name: 'primary list' },
+    { do: 'navigate', actor: 'peer', url: '/record', name: 'peer record' },
+    { do: 'wait', target: { role: 'heading', name: 'Catalog' }, name: 'primary page persists', expect: { url: '/list' } },
+    { do: 'wait', actor: 'peer', target: { role: 'heading', name: 'Record' }, name: 'peer page persists', expect: { url: '/record', text: ['missing expectation'] } },
+  ], { writes: true, scenario: { scope: 'default' }, peers: { peer: { user: 'u-peer', tenant: 'access', role: 'approver' } } }), h.ctx);
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.steps.map(s => s.status), ['pass', 'pass', 'pass', 'fail']);
+  assert.equal(result.steps[1].actor, 'peer');
+  assert.deepEqual(closed.sort(), ['u-peer', 'u-x']);
+});
+
+
+test('shared meeting walks still block HTTP business writes', async (t) => {
+  const h = await harness(t); if (!h) return;
+  h.ctx.scoped = true;
+  const r = await walkMap(h.browser, map([
+    { do: 'navigate', url: '/list', name: 'open' },
+    { do: 'click', target: { role: 'button', name: 'Save' }, writes: true, name: 'business write' },
+  ], { writes: true, scenario: { realtime: 'meeting' } }), h.ctx);
+  assert.deepEqual(h.writes.filter(w => w.includes('/api/save')), []);
+  assert.deepEqual(r.blockedWrites, ['POST /api/save']);
+  assert.equal(r.steps[1].status, 'fail');
+});
+
+test('expected console failures match HTTP paths and cannot hide an unrelated 404', async (t) => {
+  const h = await harness(t); if (!h) return;
+  const expectConsole = /^Failed to load resource:.*404.*\[404 GET \/api\/calls\/[^/]+\/chat\]$/;
+  const r = await walkMap(h.browser, map([
+    { do: 'navigate', url: '/call-start', name: 'registration retry', expectConsole },
+    { do: 'navigate', url: '/other-error', name: 'unrelated failure', expectConsole },
+  ]), h.ctx);
+  assert.equal(r.steps[0].status, 'pass');
+  assert.equal(r.steps[0].expectedConsole.length, 1);
+  assert.equal(r.steps[1].status, 'fail');
+  assert.match(r.steps[1].unexpectedConsole[0], /404 GET \/api\/unrelated/);
 });

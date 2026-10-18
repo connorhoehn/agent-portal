@@ -35,7 +35,7 @@ Set per tenant on `[data-tenant]`; `--color-primary` aliases
 
 | tenant | brand | gradient |
 |---|---|---|
-| Org (`orgiq`) | indigo `#6366f1` | indigo → violet → pink |
+| Org (`orgiq`) | indigo `#4f46e5` | indigo → violet → pink |
 | Assessment (`assessment`) | teal `#0d9488` | teal → cyan → blue |
 
 ## Where the shell applies them
@@ -112,3 +112,5 @@ blocks with the five brand tokens. Nothing else: the layers are shared.
   the validator counts them.
 - No hex literals in pages: chart series take `var(--color-…)`; the budget
   in `scripts/branding-hex-budget.txt` only goes down.
+
+The Org light theme uses indigo `#4f46e5` for links and primary controls, slate `#5b6b82` for tertiary labels, and danger foreground `#b91c1c`. These retain at least 4.5:1 contrast on the soft surfaces exercised by the meeting audit; the decorative gradient keeps its lighter indigo.

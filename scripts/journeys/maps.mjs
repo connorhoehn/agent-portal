@@ -80,9 +80,16 @@ export function validateMap(map, file = '(map)') {
   if (!/^[\w-]+\/[\w-]+$/.test(map.log ?? '')) at(`log must be <dir>/<name> (got ${map.log})`);
   if (!map.persona?.user || !map.persona?.tenant || !map.persona?.role) at('persona needs user, tenant and role');
   if (!map.goal) at('goal is required');
-  if (map.scenario !== 'shared' && !(map.scenario && map.scenario.scope && ['string', 'object'].includes(typeof map.scenario.scope))) at("scenario is 'shared' or { scope }");
+  if (map.scenario !== 'shared' && map.scenario?.realtime !== 'meeting' && !(map.scenario && map.scenario.scope && ['string', 'object'].includes(typeof map.scenario.scope))) at("scenario is 'shared', { scope }, or { realtime: 'meeting' }");
   if (map.identity && !['clone', 'persona'].includes(map.identity)) at("identity is 'clone' or 'persona'");
   if (map.identity === 'persona' && !map.identityReason) at("identity: 'persona' needs an identityReason (why a clone cannot walk it)");
+  if (map.scenario?.realtime === 'meeting' && (map.identity !== 'clone' || !Object.keys(map.peers ?? {}).length || map.media !== 'meeting-fixture' || !map.writes)) at('meeting scenarios require clone peers, writes and the meeting media fixture');
+  if (map.media && map.media !== 'meeting-fixture') at('unknown media fixture');
+  if (map.peers && (map.identity === 'persona' || !map.writes || map.scenario === 'shared')) at('peer walks require clone identities and a scoped write scenario');
+  for (const [name, persona] of Object.entries(map.peers ?? {})) {
+    if (!/^[a-z][a-z0-9-]*$/.test(name) || name === 'main') at('peer names must be lowercase identifiers other than main');
+    if (!persona?.user || !persona?.tenant || !persona?.role) at(`peer ${name} needs user, tenant and role`);
+  }
   const steps = map.steps ?? [];
   if (!steps.length) at('no steps');
   else if (steps[0].do !== 'navigate') at('the first step must navigate');
@@ -96,6 +103,7 @@ export function validateMap(map, file = '(map)') {
   steps.forEach((s, i) => {
     const n = `step ${i + 1}`;
     if (!s.name) at(`${n} has no name`);
+    if (s.actor && !Object.hasOwn(map.peers ?? {}, s.actor)) at(`${n}: unknown peer ${s.actor}`);
     if (!['navigate', 'click', 'press', 'fill', 'back', 'wait', 'tab-walk', 'api', 'reload', 'viewport', 'theme', 'scope'].includes(s.do)) at(`${n}: unknown action ${s.do}`);
     if (s.do === 'viewport' && !(s.width > 0 && s.height > 0)) at(`${n}: viewport needs width and height`);
     if (s.do === 'theme' && !['light', 'dark'].includes(s.value)) at(`${n}: theme is light or dark`);

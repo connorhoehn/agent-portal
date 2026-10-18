@@ -57,9 +57,9 @@ const SURFACES: Surface[] = [
     calls: SEAM,
     exempt: {
       mirrorAdd: 'adds a member to the roster mirror: a grant, which the cache never needs told about (refusals are not cached)',
-      createTeam: 'a new team and its creator: no verdict on its channels can exist yet',
+      createTeamRow: 'a new team and its creator: no verdict on its channels can exist yet',
     },
-    known: ['getTeam', 'addTeamMember', 'removeTeamMember', 'resetSocialTeamMirror'],
+    known: ['getTeam', 'addTeamMemberRow', 'removeTeamMemberRow', 'resetSocialTeamMirror'],
   },
   {
     file: 'src/lib/social-chat.ts',
@@ -88,7 +88,7 @@ const SURFACES: Surface[] = [
     file: 'src/providers/assessment.ts',
     sites: /deleteTeamRow\(|dropTeam\(/,
     calls: SEAM,
-    known: ['deleteTeam'],
+    known: ['deleteTeamImpl'],
   },
   {
     file: 'src/lib/authz.ts',

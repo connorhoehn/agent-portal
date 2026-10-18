@@ -134,3 +134,11 @@ test('the work family: its surface kind adds story-facts and tab-stability; new 
   assert.match(p, /theme is light or dark/); assert.match(p, /viewport needs width and height/); assert.match(p, /stable lists the targets/);
   assert.deepEqual(stepRoutes(m, (u) => u.split('?')[0]).filter((x) => x.state === 'empty'), [{ key: '/access/catalog', state: 'empty' }]);
 });
+
+test('shared meeting walks require cloned peers and the media fixture', () => {
+  const m = surface({ identity: 'clone', writes: true, scenario: { realtime: 'meeting' }, media: 'meeting-fixture', peers: { peer: { user: 'u-y', tenant: 'access', role: 'requester' } } });
+  assert.deepEqual(validateMap(m), []);
+  assert.match(validateMap({ ...m, identity: 'persona' }).join(' '), /meeting scenarios require clone peers/);
+  assert.match(validateMap({ ...m, media: undefined }).join(' '), /meeting scenarios require clone peers/);
+  assert.match(validateMap({ ...m, steps: [...m.steps, { do: 'navigate', actor: 'missing', url: '/access/catalog', name: 'unknown peer' }] }).join(' '), /unknown peer missing/);
+});

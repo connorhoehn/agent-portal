@@ -60,6 +60,8 @@ export interface Expect {
 export type Field = string;
 
 interface StepBase {
+  /** A named peer in this map; omitted means the primary walker. */
+  actor?: string;
   /** One plain sentence: what this step does and shows. It is written into the log. */
   name: string;
   /** The UI state this step shows, for the coverage map (default, filtered-empty, not-found, dialog-open, refused, row-open, …). Navigate defaults to `default`. */
@@ -140,15 +142,19 @@ export interface JourneyMap {
   /** The family profile's log kind (surface, isolation-inbound, isolation-outbound). */
   kind: string;
   persona: Persona;
+  /** Additional clone identities kept open while the ordered steps switch between actors. */
+  peers?: Record<string, Persona>;
+  /** Signalling-only media for meeting UI walks; the separate E2 acceptance proves real media. */
+  media?: 'meeting-fixture';
   /** What the persona is trying to do on this surface. */
   goal: string;
   /**
    * The data state the walk runs under. `shared` = the shared dev:mock as it
    * is, read-only (every non-GET the page sends is blocked). `{ scope }` = a
-   * request-scoped mock scenario (lane M's withMockScope), required for any map
-   * that writes.
+   * request-scoped mock scenario (lane M's withMockScope). `{ realtime: meeting }`
+   * uses cloned peers on the gateway, with HTTP business writes blocked.
    */
-  scenario: 'shared' | { scope: ScopeRequest };
+  scenario: 'shared' | { scope: ScopeRequest } | { realtime: 'meeting' };
   /**
    * Who signs in. `clone` (the default once lane M's clones exist): a fresh
    * clone of the persona — same grants and person link, its own id and session
@@ -160,7 +166,7 @@ export interface JourneyMap {
   identity?: 'clone' | 'persona';
   /** Why the map needs the seed persona (required with identity: 'persona'). */
   identityReason?: string;
-  /** True when any step writes; requires a scoped scenario. */
+  /** True when any step writes; requires a scoped or cloned meeting scenario. */
   writes?: boolean;
   /**
    * Non-GET requests a read-only walk lets through because the route writes

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
 import { cloneIdentity, openAsClone, signIn, withMockScope, type MockScopeScenario } from './realSession';
+import { fakeMeetingMedia } from './meetingMedia';
 import { selectAuditRoutes, matchesAuditLocation, auditAliasTarget } from './ui-dom-audit.routes';
 import { pipelineComposerPolicy, tenantComposerPolicy } from './ui-dom-audit.policies';
 import { staticInventory, paramInventory, PARAM_ROUTES, OBSERVED_ROUTES, resolveParam, SWEEP_USER, sourceDigest, type InventoryRoute } from './route-inventory';
@@ -91,7 +92,7 @@ type Probes = { activateRow: (page: Page, o: { rows: string }) => Promise<unknow
 /** The footer's NotificationBell (shell chrome, the same on every route — so it is opened on one list route per tenant). */
 const FOOTER_BELL = '[data-testid="shell-footer"] [data-notification-bell] button[aria-haspopup="dialog"]';
 const BELL_STATE_ROUTES = /^\/(iq\/projects|assessment\/runs|pipelines\/runs|social\/contacts|access\/requests)$/;
-type AuditState = { name: string; enter: (p: Page, ctx: { probes: Probes }) => Promise<unknown>; required?: string[]; navigates?: boolean; composerExpectation?: { mode: 'exempt'; reason: string } };
+type AuditState = { name: string; enter: (p: Page, ctx: { probes: Probes }) => Promise<unknown>; after?: () => Promise<void>; required?: string[]; navigates?: boolean; composerExpectation?: { mode: 'exempt'; reason: string } };
 /** The shell regions every page keeps, including the record a probe navigated to. */
 const SHELL_REQUIRED = ['$header', '$footer', '$shellColumns'];
 /** After a probe navigated or opened something, wait (bounded) for its loading rows to settle. */
@@ -177,6 +178,10 @@ export default {
   // the actor's context in a scoped dev:mock world (docs/mock-floor.md § Scopes and clones).
   authenticate: async (context: Parameters<typeof signIn>[0], spec: InventoryRoute) => {
     const persona = spec.user ?? SWEEP_USER;
+    if (process.env.AUDIT_CALL_STATES === '1') {
+      if (process.env.UI_DOM_AUDIT_CLONES !== '1') throw new Error('Call audits require UI_DOM_AUDIT_CLONES=1');
+      await fakeMeetingMedia(context, 'audit-organizer');
+    }
     if (process.env.UI_DOM_AUDIT_CLONES !== '1') return signIn(context, persona, { tenant: spec.tenant });
     const clone = await cloneIdentity(context.request, persona, 'ui-dom-audit');
     if (process.env.UI_DOM_AUDIT_SCOPE) await withMockScope(context, process.env.UI_DOM_AUDIT_SCOPE as MockScopeScenario);
@@ -281,42 +286,55 @@ export default {
     } });
     // A call open with its Rooms pane (docs/meeting-rooms-app-goal.md E3): the sweep user starts the page's
     // huddle (the caller organizes it), two peer clones join so Rooms is offered (decision 4: three people),
-    // the organizer drafts rooms (a draft keeps Rooms after the peers leave), and the pane is audited.
+    // the organizer drafts rooms and all three stay seated while the pane is audited.
+    // Media uses the E1 signalling fixture; the gateway and meeting state remain real. E2 proves media.
     // Opt in with AUDIT_CALL_STATES=1 against a portal built with VITE_MEETING_ROOMS=true: it starts a real
     // huddle on the page, so a routine sweep never does.
-    if (process.env.AUDIT_CALL_STATES === '1' && /^\/iq\/projects\/p-[a-z0-9-]+$/.test(pathname)) states.push({ name: 'call-rooms-pane', enter: async p => {
-      const huddle = (q: Page) => q.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' });
-      await expect(huddle(p)).toBeEnabled({ timeout: 30_000 });
-      await huddle(p).click();
-      // The sweep user has no remembered devices: the pre-join step asks once; join with its defaults.
-      const join = p.getByRole('dialog', { name: /Start a huddle|Join/ }).getByRole('button', { name: 'Join', exact: true });
-      if (await join.isVisible({ timeout: 5_000 }).catch(() => false)) await join.click();
-      const stage = p.getByTestId('huddle-meeting-stage');
-      await expect(stage).toBeVisible({ timeout: 30_000 });
-      const browser = p.context().browser();
-      if (!browser) throw new Error('The rooms state needs the browser to seat peer clones');
-      const baseURL = new URL(p.url()).origin;
-      const peers = [];
-      try {
+    if (process.env.AUDIT_CALL_STATES === '1' && /^\/iq\/projects\/p-[a-z0-9-]+$/.test(pathname)) {
+      const peers: Awaited<ReturnType<typeof openAsClone>>[] = [];
+      states.push({ name: 'call-rooms-pane', required: [...SHELL_REQUIRED, '[data-testid="huddle-meeting-stage"]', '[data-testid="huddle-breakout-rooms"]'], after: async () => {
+        try {
+          for (const p of [...peers.map(peer => peer.page), page]) {
+            const leave = p.getByTestId(/^(shell-)?call-dock-leave$/).first();
+            if (await leave.isVisible()) await leave.click();
+          }
+        } finally { await Promise.allSettled(peers.map(peer => peer.close())); }
+      }, enter: async p => {
+        const huddle = (q: Page) => q.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' });
+        await expect(huddle(p)).toBeEnabled({ timeout: 30_000 });
+        await huddle(p).click();
+        // Wait for either outcome; isVisible itself never waits for a delayed pre-join dialog.
+        const join = p.getByRole('dialog', { name: /Start a huddle|Join/ }).getByRole('button', { name: 'Join', exact: true });
+        const stage = p.getByTestId('huddle-meeting-stage');
+        await expect(join.or(stage)).toBeVisible({ timeout: 30_000 });
+        if (await join.isVisible()) await join.click();
+        await expect(stage).toBeVisible({ timeout: 30_000 });
+        const browser = p.context().browser();
+        if (!browser) throw new Error('The rooms state needs the browser to seat peer clones');
+        const baseURL = new URL(p.url()).origin;
         for (const persona of ['u-nora', 'u-caleb']) {
-          const peer = await openAsClone(browser, persona, { baseURL, label: 'audit-call-rooms', preJoin: 'remembered', url: pathname });
+          const peer = await openAsClone(browser, persona, { baseURL, label: 'audit-call-rooms', preJoin: 'remembered', url: pathname, prepare: context => fakeMeetingMedia(context, persona) });
           peers.push(peer);
           await expect(huddle(peer.page)).toBeEnabled({ timeout: 30_000 });
           await huddle(peer.page).click();
+          await expect(peer.page.getByTestId('huddle-meeting-stage')).toBeVisible({ timeout: 30_000 });
         }
+        // The shared toolbar folds Rooms into More at narrow widths.
         const rooms = stage.getByTestId('meeting-toolbar-rooms');
-        await expect(rooms).toBeVisible({ timeout: 30_000 });
-        await rooms.click();
+        const more = stage.getByTestId('meeting-toolbar-more');
+        await expect(rooms.or(more)).toBeVisible({ timeout: 30_000 });
+        if (await rooms.isVisible()) await rooms.click();
+        else {
+          await more.click();
+          await p.getByTestId('meeting-toolbar-more-rooms').click();
+        }
         const pane = p.getByTestId('huddle-breakout-rooms');
         await expect(pane).toBeVisible();
         await pane.getByTestId('breakout-create-count').fill('2');
         await pane.getByTestId('breakout-create-submit').click();
         await expect(pane.getByTestId('breakout-room')).toHaveCount(2, { timeout: 15_000 });
-      } finally {
-        for (const peer of peers) await peer.page.context().close().catch(() => {});
-      }
-      await expect(p.getByTestId('huddle-breakout-rooms')).toBeVisible();
-    } });
+      } });
+    }
     // board.lane-surface / board.lane-columns: the Sprints lens with its first sprint's board open.
     if (pathname === '/iq/projects') states.push({ name: 'sprint-board', navigates: true, required: [...SHELL_REQUIRED, '$boardLanes'], enter: async p => {
       // The user's own active sprint, else (a role that reads every sprint) any active one; the lens opens in the matching scope.

@@ -1,6 +1,7 @@
-import { test, expect, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { openAsClone } from './realSession';
 import { chooseOption } from './selectOption';
+import { fakeMeetingMedia } from './meetingMedia';
 
 // Meeting rooms on an initiative huddle (docs/meeting-rooms-app-goal.md E1),
 // with three clones on Auth Migration: Vera Green (org-leader, the call's
@@ -30,7 +31,6 @@ import { chooseOption } from './selectOption';
 // and skips again if the target's stage shows no meeting toolbar.
 
 const INITIATIVE_URL = '/iq/projects/p-auth-migration';
-const FAKE_PLATFORM = 'http://meeting-media.test';
 const MEETING_ROOMS_ON = process.env.VITE_MEETING_ROOMS === 'true' || process.env.VITE_MEETING_ROOMS === '1';
 // Unique per run: the gateway keeps a meeting's announcement history per lobby, past the call.
 const ANNOUNCEMENT = `Five minutes left, then back to the main huddle (${Date.now().toString(36)})`;
@@ -44,26 +44,13 @@ test.skip(!MEETING_ROOMS_ON, 'the target portal must be built with VITE_MEETING_
 
 type Clone = Awaited<ReturnType<typeof openAsClone>>;
 
-/** Media is signalling-only: one shared fake session, every join answered. */
-async function fakeMedia(context: BrowserContext, label: string) {
-  await context.route('**/api/session/realtime-token', async route => {
-    const response = await route.fetch(), body = await response.json();
-    await route.fulfill({ response, json: { ...body, platformApiUrl: FAKE_PLATFORM, videoUrl: null } });
-  });
-  await context.route(`${FAKE_PLATFORM}/**`, async route => {
-    const path = new URL(route.request().url()).pathname;
-    await route.fulfill({ status: 200, json: path.endsWith('/join') ? { participantId: `participant-${label}`, token: null }
-      : path.endsWith('/end') ? { ok: true } : { sessionId: 'meeting-signalling-only' } });
-  });
-}
-
 // `baseURL` is passed through: openAsClone otherwise falls back to the CONFIG project's baseURL
 // (test.info().project.use), which ignores this file's test.use and lands on the shared portal.
 async function clone(browser: Browser, baseURL: string | undefined, persona: string, theme: 'light' | 'dark'): Promise<Clone> {
   return openAsClone(browser, persona, {
     ...(baseURL ? { baseURL } : {}), label: 'meeting-rooms-e1', preJoin: 'remembered', url: INITIATIVE_URL,
     contextOptions: { colorScheme: theme },
-    prepare: context => fakeMedia(context, persona),
+    prepare: context => fakeMeetingMedia(context, persona),
   });
 }
 
@@ -86,11 +73,12 @@ const footerItem = (page: Page, id: string) => page.getByTestId(`shell-call-dock
 const pane = (page: Page) => page.getByTestId('huddle-meeting-pane');
 const rooms = (page: Page) => page.getByTestId('huddle-breakout-rooms');
 const banner = (page: Page) => page.getByTestId('breakout-banner');
-const chatPane = (page: Page) => page.getByTestId('huddle-chat-panel');
+const chatPane = (page: Page) => page.getByTestId('huddle-thread');
 
 /**
  * Another page, reached in-app so the call stays up: the breadcrumb's Initiatives (the rail is
- * folded three levels deep, so it offers no Settings link). The huddle chat opens in the right pane.
+ * folded three levels deep, so it offers no Settings link). The same huddle thread can be held
+ * by the side pane or by the initiative's composer after following the call's shared page.
  */
 async function toList(page: Page) {
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Initiatives', exact: true }).click();
@@ -98,7 +86,7 @@ async function toList(page: Page) {
   await expect(page.getByTestId('shell-call-dock')).toBeVisible();
 }
 async function openChat(page: Page) {
-  if (!await chatPane(page).isVisible()) await page.getByTestId('shell-call-dock-chat').click();
+  await page.getByTestId('shell-call-dock-chat').click();
   await expect(chatPane(page)).toBeVisible();
 }
 async function endLeftoverRooms(page: Page) {
@@ -215,7 +203,8 @@ for (const theme of ['light', 'dark'] as const) {
       await rooms(vera.page).getByTestId('breakout-end').click();
       for (const p of [nora, rachel]) await expect(banner(p.page)).toHaveCount(0, { timeout: 20_000 });
       await expect(chatPane(nora.page).getByTestId('meeting-chat-context')).toHaveCount(0);
-      await nora.page.goBack();
+      if (new URL(nora.page.url()).pathname !== INITIATIVE_URL) await nora.page.goBack();
+      await expect(nora.page).toHaveURL(/\/iq\/projects\/p-auth-migration/);
       await expect(stage(nora.page)).toBeVisible();
       await expect(stage(nora.page).getByTestId('breakout-banner')).toHaveCount(0);
       for (const p of people) expect(p.errors, `${p.cloneId} page errors`).toEqual([]);
