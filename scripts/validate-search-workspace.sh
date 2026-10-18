@@ -50,9 +50,14 @@ grep -q '"d3-force"' portal/package.json && fail "portal/package.json still depe
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "library ownership (docs/search-workspace-goal.md ownership map)"
-for c in ExplorerLayout RailSection RailNavList RecordResultList CitedRecordList RecordGraph OrgGraph; do
+for c in ExplorerLayout RailSection RailNavList CitedRecordList RecordGraph OrgGraph; do
   grep -qE "\b$c\b" "$PAGE" 2>/dev/null && ok "SearchPage uses $c" || fail "SearchPage.tsx does not use $c"
 done
+if grep -q '<SearchResults' "$PAGE" && grep -q "from './SearchResults'" "$PAGE" \
+  && grep -q '<RecordResultList' "$PAGES/SearchResults.tsx" \
+  && grep -q "from '@connorhoehnslalom/ui-components'" "$PAGES/SearchResults.tsx"; then
+  ok "SearchPage renders the library RecordResultList through SearchResults"
+else fail "SearchPage must render SearchResults backed by the library RecordResultList"; fi
 grep -q "SubNavLayout" "$PAGE" 2>/dev/null && fail "SearchPage.tsx still uses SubNavLayout (the Search rail is ExplorerLayout + RailNavList)" || ok "no SubNavLayout"
 grep -q "RichChatComposer" "$PAGES/SearchComposer.tsx" 2>/dev/null && ok "composer is RichChatComposer" || fail "SearchComposer.tsx is not on RichChatComposer"
 # 2.439: the one composer is the library ConversationComposer (ContextComposer underneath; AgentComposerDock before 2.407).
@@ -72,7 +77,27 @@ if [ -d "$LIB/dist" ]; then
   for c in RecordResultList CitedRecordList RecordGraph OrgGraph Highlight AgentComposerDock RecordGraphCard; do
     grep -qE "export .*\b$c\b" "$LIB/dist/index.d.ts" "$LIB/dist/shared.d.ts" 2>/dev/null && ok "installed library exports $c" || fail "installed ui-components does not export $c (release + bump the pin)"
   done
-  grep -qE '"github:connorhoehnslalom/ui-components#[0-9a-f]{40}"' portal/package.json && ok "portal pins ui-components by full sha" || fail "portal/package.json ui-components pin is not a full 40-char github sha"
+  if node <<'NODE'
+const fs = require('node:fs');
+const path = require('node:path');
+const { createHash } = require('node:crypto');
+const { execFileSync } = require('node:child_process');
+const name = '@connorhoehnslalom/ui-components';
+const pkg = JSON.parse(fs.readFileSync('portal/package.json', 'utf8'));
+const lock = JSON.parse(fs.readFileSync('portal/package-lock.json', 'utf8'));
+const spec = pkg.dependencies[name];
+if (lock.packages[''].dependencies[name] !== spec) process.exit(1);
+if (/^github:connorhoehnslalom\/ui-components#[0-9a-f]{40}$/.test(spec)) process.exit(0);
+if (!/^file:vendor\/[^/]+\.tgz$/.test(spec)) process.exit(1);
+const archive = path.join('portal', spec.slice(5));
+execFileSync('git', ['ls-files', '--error-unmatch', archive], { stdio: 'ignore' });
+const entry = lock.packages[`node_modules/${name}`];
+const installed = JSON.parse(fs.readFileSync(`portal/node_modules/${name}/package.json`, 'utf8'));
+const integrity = `sha512-${createHash('sha512').update(fs.readFileSync(archive)).digest('base64')}`;
+process.exit(entry.resolved === spec && entry.integrity === integrity && entry.version === installed.version ? 0 : 1);
+NODE
+  then ok "portal pins ui-components by full sha or tracked tarball matching its lock and installed version"
+  else fail "portal ui-components pin must be a full sha or a tracked tarball matching its lock and installed version"; fi
 else fail "ui-components not installed under portal/node_modules"; fi
 
 # ─────────────────────────────────────────────────────────────────────────────

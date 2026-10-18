@@ -165,9 +165,11 @@ if [ -f "$PAGES/dashboard/AssessorDesk.tsx" ] && grep -q "header: 'Next action'"
    && [ ! -f "$PAGES/dashboard/CohortLanding.tsx" ] && [ ! -f "$PAGES/dashboard/TeamList.tsx" ]; then
   ok "slice 1 — the dashboard is the assessor's desk (one DataTable with a Next action column; the cohort landing and per-cohort list are gone)"
 else fail "slice 1 — dashboard/AssessorDesk.tsx must carry a 'Next action' column and CohortLanding.tsx / TeamList.tsx must be gone"; fi
-if grep -q "DataTable" "$PAGES/FeedbackPage.tsx" && grep -q "<Drawer" "$PAGES/FeedbackPage.tsx" && ! grep -q "<Card" "$PAGES/FeedbackPage.tsx"; then
-  ok "slice 2 — feedback is a DataTable + Drawer, no per-question Card"
-else fail "slice 2 — FeedbackPage.tsx must render a DataTable and a Drawer and no <Card"; fi
+if grep -q '<DataTable' "$PAGES/FeedbackPage.tsx" && grep -q '<CollectionRecordFrame' "$PAGES/FeedbackPage.tsx" \
+   && grep -q '<QuestionRecord' "$PAGES/FeedbackPage.tsx" && grep -q 'path="feedback/:taskId"' portal/src/App.tsx \
+   && ! grep -qE '<(Card|Drawer|Modal)\b' "$PAGES/FeedbackPage.tsx"; then
+  ok "slice 2 — feedback is a DataTable with URL-addressed question records, no per-question Card or popout"
+else fail "slice 2 — FeedbackPage must render a DataTable and CollectionRecordFrame/QuestionRecord at feedback/:taskId, without Card/Drawer/Modal"; fi
 if grep -q 'data-testid="maturity-heatmap"' "$PAGES/ReportsPage.tsx" && grep -q 'data-verified=' "$PAGES/ReportsPage.tsx" && grep -q 'data-claimed=' "$PAGES/ReportsPage.tsx"; then
   ok "slice 3 — reports carries the maturity heatmap (teams × dimensions, cells with data-verified / data-claimed)"
 else fail "slice 3 — ReportsPage.tsx must render data-testid=\"maturity-heatmap\" with data-verified / data-claimed cells"; fi

@@ -261,7 +261,17 @@ for f in $RTESTS/social*.test.ts; do
 done
 [ -n "$gate_test" ] && ok "tenant gate pinned by a test ($gate_test)" || fail "A.4#8 no $RTESTS/social*.test.ts asserts an orgiq/assessment role gets 403 on /api/social/*"
 ok "A.4#9 agent↔tenant map: n/a — the social tenant has no agents"
-range "name: 'tenants'," "describes:" "$ENTITIES" | grep -qi "three tenants" && ok "parity entity 'tenants' describes three tenants" || fail "A.4#10 $ENTITIES: the 'tenants' entity still describes two tenants (\"The two tenants the BFF serves\")"
+if node - "$SESSION" "$ENTITIES" <<'NODE'
+const fs = require('node:fs');
+const session = fs.readFileSync(process.argv[2], 'utf8');
+const entities = fs.readFileSync(process.argv[3], 'utf8');
+const declaration = session.match(/export const TENANTS = \[([^\]]+)\]/)?.[1];
+const tenants = [...(declaration ?? '').matchAll(/'([^']+)'/g)].map(m => m[1]);
+const description = entities.match(/name: 'tenants',\s*describes: '([^']+)'/)?.[1] ?? '';
+process.exit(tenants.length && tenants.every(tenant => new RegExp(`\\b${tenant}\\b`).test(description)) ? 0 : 1);
+NODE
+then ok "parity entity 'tenants' describes every declared tenant"
+else fail "A.4#10 $ENTITIES: the 'tenants' description must name every tenant in TENANTS"; fi
 
 section "S0 · 11–13 portal tenant type, front door, flag"
 has "^export type Tenant = [^;]*'social'" "$AUTH_TSX" && ok "auth.tsx Tenant includes 'social'" || fail "A.4#11 $AUTH_TSX: export type Tenant lacks 'social'"

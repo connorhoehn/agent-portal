@@ -64,7 +64,7 @@ check "dc_pin_ok '$RM'"               "realtime-modules pins distributed-core �
 check "dc_pin_ok middleware"          "middleware pins distributed-core ⊇ v0.48.0"
 SRPIN=$(depspec middleware @connorhoehn/service-runtime)
 check "[ \"\${SRPIN##*#}\" != 7a0e3387 ] && contains_tag '$SR' '$SRPIN' v0.4.1" "S1 middleware service-runtime pin ⊇ v0.4.1 at a full sha"
-NDC=$(find middleware/node_modules -path '*/distributed-core/package.json' -not -path '*/distributed-core/node_modules/*' 2>/dev/null | wc -l | tr -d ' ')
+NDC=$(find -H middleware/node_modules -path '*/distributed-core/package.json' -not -path '*/distributed-core/node_modules/*' 2>/dev/null | wc -l | tr -d ' ')
 check "[ '$NDC' = 1 ]" "middleware installs exactly one distributed-core ($NDC)"
 check "! grep -q 'distributed-core/' middleware/tsconfig.test.json" "middleware tsconfig.test.json has no distributed-core paths workaround"
 
