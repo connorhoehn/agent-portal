@@ -4,12 +4,12 @@ user: u-asha (Asha)
 url: /assessment/runs; /assessment/runs/run-20261017T141900Z-score-dimensions-cc10aa77ff02
 map: docs/journeys/maps/user-search/assessment/assessor/a-running.ts
 pages: portal/src/pages/assessment/RunsPage.tsx
-audited: 2026-10-17 22:18–22:18 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-asha-clone-22110b95), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.3
-session: /api/session/me sub u-asha-clone-22110b95, tenant assessment, role assessor, grants {"assessment":["assessor"],"social":["participant"]}
+audited: 2026-10-18 10:28–10:28 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-asha-clone-3974c10a), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.4
+session: /api/session/me sub u-asha-clone-3974c10a, tenant assessment, role assessor, grants {"assessment":["assessor"],"social":["participant"]}
 screenshot: assessor-a-running.jpg
 verdict: pass
 console errors: 0
-layout: pass — ui-dom-audit 0 failing findings at 1 measured step(s) (burn-down findings are listed under dom-audit:); at /assessment/runs: no horizontal scroll (1680/1680), 1 h1 "Activity" 20/600 at 224/111, table body rows 44px ×34, first-row-top: 215px, composer at y 809–867 of 940
+layout: pass — ui-dom-audit 0 failing findings at 1 measured step(s) (burn-down findings are listed under dom-audit:); at /assessment/runs: no horizontal scroll (1680/1680), 1 h1 "Activity" 20/600 at 224/111, table body rows 44px ×35, first-row-top: 215px, composer at y 809–867 of 940
 answers-question: pass — Open the list page; Run the command
 record-open: pass — The row opens its record
 dom-audit: 0 failing finding(s) at 1 measured step(s); 6 more owed by docs/journeys/audit-burndown.tsv (a11y.contrast ×6) — ui-dom-audit measureDOM, contract Work shared UI compact layout d2d16ad077a348fe

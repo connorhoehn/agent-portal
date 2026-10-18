@@ -4,8 +4,8 @@ user: u-rhea (Rhea Castellanos)
 url: /access/catalog; /access/requests/new?item=capability%3Aorgiq%3Abudgets-read
 map: docs/journeys/maps/user-search/access/requester/x-find-entitlement.ts
 pages: portal/src/pages/access
-audited: 2026-10-17 22:18–22:18 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rhea-clone-6a8475c9), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.3
-session: /api/session/me sub u-rhea-clone-6a8475c9, tenant access, role requester, grants {"access":["requester"]}
+audited: 2026-10-18 10:28–10:28 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rhea-clone-9d8fc559), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.4
+session: /api/session/me sub u-rhea-clone-9d8fc559, tenant access, role requester, grants {"access":["requester"]}
 screenshot: requester-x-find-entitlement.jpg
 verdict: pass
 console errors: 0

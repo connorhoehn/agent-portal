@@ -4,8 +4,8 @@ user: u-kofi (Kofi Mensah)
 url: /pipelines/runs; /pipelines/runs/agent-run%3Aa4ee74ac-a5ee-463f-a6ee-77d2a7ee7965
 map: docs/journeys/maps/user-search/pipelines/operator/p-failed-runs.ts
 pages: portal/src/components/runs
-audited: 2026-10-17 22:19–22:19 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-a3153bcd), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.3
-session: /api/session/me sub u-kofi-clone-a3153bcd, tenant pipelines, role operator, grants {"pipelines":["operator"]}
+audited: 2026-10-18 10:30–10:30 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-a1d5f48c), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.4
+session: /api/session/me sub u-kofi-clone-a1d5f48c, tenant pipelines, role operator, grants {"pipelines":["operator"]}
 screenshot: operator-p-failed-runs.jpg
 verdict: pass
 console errors: 0

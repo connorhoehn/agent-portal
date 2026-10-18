@@ -7,7 +7,7 @@ release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
 **Latest checkpoint:** read “Meeting rooms on calls (accepted 2026-10-17)”
-and “Follow-up — 2026-10-18” at the end of this document. The
+and “Closeout — 2026-10-18” at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
 
@@ -450,3 +450,81 @@ work also includes demo-content probe freshness, older Assessment static
 composition checks if still failing on a fresh run, and C1/C3 extraction of
 Redis/node ownership to the upstream libraries. The original cloud and user
 decision exclusions still apply.
+
+## Closeout — 2026-10-18
+
+The user asked to wrap up. This closes the current pass; the broader
+outstanding-work goal is **not complete**. Application fixes are pushed in
+`0565826f`; the search-probe run-lock repair is pushed in `d7dd5f7f`.
+UI **2.480.4** and realtime **0.137.0** remain the installed pins.
+
+Completed evidence:
+
+- Rendered contracts were remeasured on source `bcde1c0398b7`: rail checks
+  passed on 19 routes, layout cascade passed on all 143 inventoried routes,
+  and typography passed on the same 143 routes with no new offenders beyond
+  the existing burn-down. Contract values were unchanged; measurement
+  metadata is current. The optional realtime-examples comparison on `15174`
+  was skipped because that app was not running.
+- The repaired member `frames` and `prepare-job` walks both pass and their
+  rendered-contract seals are fresh. No older directory was blanket-sealed.
+- All **17 runnable user-search journeys pass and are individually sealed**;
+  eight held maps remain held. The first sweep passed 16/17, with an Assessment
+  failed-runs walk reporting a missing command result and
+  `ERR_NETWORK_IO_SUSPENDED`. That unchanged map passed a fresh retry with
+  zero console errors. Its original failure remains in the local sweep log.
+- The full user-search validator confirms the 17 seals, memory and DynamoDB-wire
+  search-index suites, 40 hooked writers with zero failures, and clone parity
+  for 24 “mine” phrasings. Overall search acceptance still fails as below.
+- The probe run-lock now serializes worker claims and publishes the runner PID
+  atomically. Five results/lock regression tests pass, including eight real
+  concurrent workers, refusal of a second live runner, stale-owner recovery,
+  and the empty-file regression. The affected Work probe groups were not
+  successfully rerun during this closeout.
+
+The isolated full search probe **did not complete successfully**: nine role
+groups passed, four failed and four did not run. Work's member group hit the
+old startup lock race (`pid 0`), skipping the other four Work groups; Social
+participant/moderator and Access requester hit browser timeouts. The process
+finished with exit 1 before the attempted interrupt. Its incomplete capture
+is preserved locally as
+`.scratch/handoff-followup-2026-10-18/user-search-probe-incomplete.json`.
+`docs/user-search-probe-results.json` retains the last complete committed
+capture; incomplete results were not promoted to acceptance. The full judge
+therefore still reports three failures: Social's mock-provider proof is
+unrecorded, its pass rate is **0.89** against **1.00**, and it has **five wrong
+results on the best surface** against a maximum of zero. Rerun on an isolated
+mock-backed portal with the repaired lock. Live-platform room/call indexing
+remains a separate, unverified gap.
+
+After the current contract measurements, **12 of 23 quick validators passed**.
+User-search was then run in full mode and failed only the three checks above.
+Logs for this final sweep are under
+`.scratch/handoff-followup-2026-10-18/closeout-current/`; quick-mode passes are
+not full acceptance. Remaining findings include:
+
+- Stale journey records: Work 38/125, legacy OrgIQ 34/113, Communication 21/24,
+  Assessment 60/61, Access 34/34, Pipelines 55/56, Social 48/48, and Search
+  workspace 10/10. The fresh user-search family is separate from Search workspace.
+- Meeting E3 needs the current strict Rooms audit and reruns of the revised
+  organizer/participant maps. Demo-content's probe remains stale.
+- Assessment still has Feedback/scorecard composition-check failures. Access
+  checks still expect a local `GRANT_ROLE_SQL` declaration and an old
+  delete-and-reinsert test; the implementation now re-exports the SQL and tests
+  transaction-based grant edits. Its PostgreSQL proof also needs refreshing.
+- Search-workspace checks still expect `RecordResultList` directly in
+  `SearchPage.tsx` and a Git-SHA dependency instead of the tracked tarball.
+  Social's validator still reports the old tenant-description condition and
+  four incomplete recording journeys, plus the Assessment dependency failures.
+  Inspect these checks against current code before treating each as a product bug.
+- Upstream refinement C1/C3 still requires replacing `redis-lite.ts`,
+  `gateway-redis.ts`, and `realtime-node-ownership.ts` with the installed
+  library's bounded Redis and lease-group APIs. No part of that replacement
+  was implemented here; its empty temporary worktree and branch were removed.
+
+All validation processes from this pass have finished. The owned isolated
+middleware (`3012`) and portal (`5184`) were stopped. The shared Tilt stack
+was left running; portal `5183` and middleware `3001` both returned HTTP 200.
+The pre-existing ui-components `package-lock.json` edit was preserved.
+Cloud deployment, Aurora changes, production capacity and the previously
+recorded user decisions remain outside this closeout.

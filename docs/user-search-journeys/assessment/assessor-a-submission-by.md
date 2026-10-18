@@ -4,8 +4,8 @@ user: u-asha (Asha)
 url: /assessment/submissions; /assessment/submissions/sub-20260918T112500Z-form5-jordan-lee
 map: docs/journeys/maps/user-search/assessment/assessor/a-submission-by.ts
 pages: portal/src/pages/assessment
-audited: 2026-10-17 22:18–22:18 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-asha-clone-c15e4e12), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.3
-session: /api/session/me sub u-asha-clone-c15e4e12, tenant assessment, role assessor, grants {"assessment":["assessor"],"social":["participant"]}
+audited: 2026-10-18 10:28–10:28 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-asha-clone-e2f3cb69), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.4
+session: /api/session/me sub u-asha-clone-e2f3cb69, tenant assessment, role assessor, grants {"assessment":["assessor"],"social":["participant"]}
 screenshot: assessor-a-submission-by.jpg
 verdict: pass
 console errors: 0
