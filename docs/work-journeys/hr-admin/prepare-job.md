@@ -4,13 +4,13 @@ user: u-rachel (Rachel Kowalski)
 url: /iq/projects/p-auth-migration?item=wi-auth-e2-b3; /iq/projects/p-auth-migration?item=wi-auth-e2-b3&view=docs; /iq/projects/p-auth-migration?item=wi-nope
 map: docs/journeys/maps/work/hr-admin/prepare-job.ts
 pages: portal/src/pages/project-detail/usePrepareJobDeck.ts, portal/src/pages/project-detail/prepareJobModel.ts, portal/src/pages/ProjectDetailPage.tsx
-audited: 2026-10-16 09:42–09:45 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-4f957940), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-4f957940, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:09–10:12 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-a8ba3ad5), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-a8ba3ad5, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: prepare-job.jpg
 verdict: pass
 console errors: 0
-layout: pass — ui-dom-audit 0 failing findings at 14 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/projects/p-auth-migration?item=wi-auth-e2-b3: no horizontal scroll (1440/1440), 1 h1 "Logout leaves the legacy shim cookie alive" 20/600 at 104/115, first-row-top: 115px, composer at y 485–851 of 900
-keyboard: pass — Key 2 picks Change model: the card asks which model runs the job; Enter keeps the current model and returns to the job; Key 3 picks Change cap: the card asks for a dollar amount; Enter keeps no cap and returns to the job; Key 4 picks Edit instruction: the card shows the derived instruction; Enter keeps the instruction and returns to the job; Escape folds the card and the work item stays open; Tab from the top of the page: the controls take focus in turn (Tab visited 34 distinct visible controls of 103 focusable, focus lost 1×)
+layout: pass — ui-dom-audit 0 failing findings at 14 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/projects/p-auth-migration?item=wi-auth-e2-b3: no horizontal scroll (1440/1440), 1 h1 "Logout leaves the legacy shim cookie alive" 20/600 at 104/115, first-row-top: 115px, composer at y 447–851 of 900
+keyboard: pass — Key 2 picks Change model: the card asks which model runs the job; Enter keeps the current model and returns to the job; Key 3 picks Change cap: the card asks for a dollar amount; Enter keeps no cap and returns to the job; Key 4 picks Edit instruction: the card shows the derived instruction; Enter keeps the instruction and returns to the job; Escape folds the card and the work item stays open; Tab from the top of the page: the controls take focus in turn (Tab visited 34 distinct visible controls of 105 focusable, focus lost 1×)
 empty-state: pass — A work item that is not in the list says so and sends the reader to the rail
 role-gating: pass — Open the item's header menu: it offers Prepare job; Prepare job shows the job with its numbered options: Dispatch, Change model, Change cap, Edit instruction; The card is the dispatcher's: it names the options, and its envelope line says no sprint envelope brakes this role
 story-facts: pass — Open a sized item that is up next on Auth Migration: the card will be this role's, held globally through DispatchAgentRun
@@ -35,5 +35,5 @@ notes: Rachel Kowalski: The prepare-job card: what a job would run with, the com
 | 11 | Key 4 picks Edit instruction: the card shows the derived instruction |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 12 | Enter keeps the instruction and returns to the job |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 13 | Escape folds the card and the work item stays open |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 14 | Tab from the top of the page: the controls take focus in turn (Tab visited 34 distinct visible controls of 103 focusable, focus lost 1×) |  | pass | — | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 14 | Tab from the top of the page: the controls take focus in turn (Tab visited 34 distinct visible controls of 105 focusable, focus lost 1×) |  | pass | — | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 15 | A work item that is not in the list says so and sends the reader to the rail | not-found | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-nope |

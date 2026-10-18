@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /admin/knowledge; /admin/knowledge/registry/a0000001-0000-4000-8000-000000000001
 map: docs/journeys/maps/work/hr-admin/knowledge.ts
 pages: portal/src/pages/knowledge/KnowledgeHomePage.tsx, portal/src/pages/admin/KBDetailPage.tsx, portal/src/pages/admin/KBRegistryPage.tsx
-audited: 2026-10-16 08:03–08:03 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-3e2fe996), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-3e2fe996, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:08–10:08 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-d5ab25f8), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-d5ab25f8, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: knowledge.jpg
 verdict: pass
 console errors: 0

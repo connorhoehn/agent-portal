@@ -4,8 +4,8 @@ user: u-theo (Theo Chang)
 url: /iq/search?q=who+owns+the+auth+migration&tab=results; /iq/search?tab=connections&selection=person%3Ap-002
 map: docs/journeys/maps/user-search/orgiq/member/o-owner-initiative.ts
 pages: portal/src/pages/search, middleware/src/providers/search.ts, middleware/src/lib/search-index
-audited: 2026-10-16 13:03–13:03 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-020579a1), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-theo-clone-020579a1, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
+audited: 2026-10-17 22:19–22:19 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-a7a0d7ee), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.3
+session: /api/session/me sub u-theo-clone-a7a0d7ee, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
 screenshot: member-o-owner-initiative.jpg
 verdict: pass
 console errors: 0

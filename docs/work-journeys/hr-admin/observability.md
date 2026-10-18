@@ -4,12 +4,12 @@ user: u-rachel (Rachel Kowalski)
 url: /admin/observability/summary; /admin/observability/invocations; /admin/observability/invocations/mock-inv-0; /admin/observability/tools
 map: docs/journeys/maps/work/hr-admin/observability.ts
 pages: portal/src/pages/observability/SummaryPage.tsx, portal/src/pages/observability/InvocationsPage.tsx, portal/src/pages/observability/InvocationDetailPage.tsx, portal/src/pages/observability/ToolCallsPage.tsx
-audited: 2026-10-16 08:04–08:04 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-264c0624), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-264c0624, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:09–10:09 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-bd46c38d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-bd46c38d, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: observability.jpg
 verdict: pass
 console errors: 0
-layout: pass — ui-dom-audit 0 failing findings at 10 measured step(s) (burn-down findings are listed under dom-audit:); at /admin/observability/summary: no horizontal scroll (1440/1440), 1 h1 "Overview" 20/600 at 444/88, first-row-top: 1268px
+layout: pass — ui-dom-audit 0 failing findings at 10 measured step(s) (burn-down findings are listed under dom-audit:); at /admin/observability/summary: no horizontal scroll (1440/1440), 1 h1 "Overview" 20/600 at 444/88, first-row-top: 1192px
 keyboard: pass — Enter on the Kubernetes invocation's time link opens its trace (the list's newest rows come from live runs, whose traces are not stored); Tab from the top of the page: the controls take focus in turn (Tab visited 39 distinct visible controls of 88 focusable, focus lost 1×)
 empty-state: pass — Search zzzzqq: the list says no invocation matches and offers Clear filters; Search kubernetes: the supervisor question about it stays; Filter zzzzqq: the table says no tool matches and how to widen it
 role-gating: pass — This role may read observability: GET /api/observability/recent-invocations answers 200 (GET /api/observability/recent-invocations?limit=1 → 200)

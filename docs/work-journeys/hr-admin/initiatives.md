@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /iq/projects; /iq/projects?scope=all; /iq/projects?scope=all&status=in_progress; /iq/projects?scope=all&status=in_progress&q=auth; /iq/projects?scope=all&status=in_progress&q=zzzzqq; /iq/projects/p-observability?scope=all&status=in_progress; /iq/projects?scope=mine
 map: docs/journeys/maps/work/hr-admin/initiatives.ts
 pages: portal/src/pages/ProjectsPage.tsx, portal/src/pages/initiatives
-audited: 2026-10-16 08:03–08:03 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-6b8c1ff6), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-6b8c1ff6, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:08–10:08 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-849ab7b6), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-849ab7b6, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: initiatives.jpg
 verdict: pass
 console errors: 0 unexpected; 2 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

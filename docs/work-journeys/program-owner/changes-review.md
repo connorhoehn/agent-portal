@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /admin/changes; /admin/changes/00000000-0000-0000-0000-000000000000
 map: docs/journeys/maps/work/program-owner/changes-review.ts
 pages: portal/src/pages/admin/ChangesPage.tsx
-audited: 2026-10-16 19:21–19:21 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-1aa545aa), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
-session: /api/session/me sub u-mia-clone-1aa545aa, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-17 08:58–08:58 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-26a54d97), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-mia-clone-26a54d97, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: changes-review.jpg
 verdict: pass
 console errors: 0 unexpected; 4 expected by the map (Failed to load resource: the server responded with a status of 403 (Forbidden))

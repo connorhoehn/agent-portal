@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/projects/p-auth-migration?tab=work; /iq/projects/p-auth-migration?tab=work&wq=logout; /iq/projects/p-auth-migration?tab=work&wq=zzzzqq; /iq/projects/p-auth-migration?tab=work&item=wi-auth-e2-s2; /iq/projects/p-auth-migration?tab=work&item=wi-auth-e2-s2&view=docs; /iq/projects/p-auth-migration?tab=work&item=wi-auth-e2-s2&view=history
 map: docs/journeys/maps/work/program-owner/work-items.ts
 pages: portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/project-detail
-audited: 2026-10-16 19:35–19:36 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-de6cbb56), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
-session: /api/session/me sub u-mia-clone-de6cbb56, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-17 09:12–09:13 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-fb47ff51), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-mia-clone-fb47ff51, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: work-items.jpg
 verdict: pass
 console errors: 0

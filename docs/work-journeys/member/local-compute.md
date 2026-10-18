@@ -4,8 +4,8 @@ user: u-theo (Theo Chang)
 url: /iq/local-compute; /iq/local-compute/configuration; /iq/local-compute/configuration?contents=hooks; /iq/local-compute/configuration?contents=settings
 map: docs/journeys/maps/work/member/local-compute.ts
 pages: portal/src/pages/local-compute
-audited: 2026-10-16 04:51–04:52 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-64edc848), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-theo-clone-64edc848, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
+audited: 2026-10-17 10:18–10:18 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-6dfcf6f1), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-theo-clone-6dfcf6f1, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
 screenshot: local-compute.jpg
 verdict: pass
 console errors: 0 unexpected; 4 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /iq/scores; /iq/scores?person=p-002; /iq/scores/compare?ids=p-002,p-004; /iq/scores/cohorts
 map: docs/journeys/maps/work/hr-admin/scores.ts
 pages: portal/src/pages/ScoresPage.tsx, portal/src/pages/ScoresCohortPage.tsx, portal/src/pages/ScoresComparePage.tsx
-audited: 2026-10-16 08:08–08:08 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-e35d5aad), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-e35d5aad, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:13–10:13 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-064c10b5), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-064c10b5, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: scores.jpg
 verdict: pass
 console errors: 0 unexpected; 3 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) | Failed to load resource: the server responded with a status of 500 (Internal Ser)

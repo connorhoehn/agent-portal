@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/library; /iq/library?kind=evaluator; /iq/library?q=csrf; /iq/library?q=zzzzqq; /iq/library/skill-pr-review-scoped; /iq/library/lib-csrf-check; /iq/library/lib-nope
 map: docs/journeys/maps/work/program-owner/library.ts
 pages: portal/src/pages/library
-audited: 2026-10-16 19:23–19:23 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-7c5625e7), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
-session: /api/session/me sub u-mia-clone-7c5625e7, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-17 09:00–09:01 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-970c8fff), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-mia-clone-970c8fff, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: library.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found))

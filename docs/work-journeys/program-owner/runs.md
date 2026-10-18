@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/runs; /iq/runs/job%3Ajob-obs-maint-1; /iq/runs/job:job-obs-maint-1; /iq/runs/job:job-obs-maint-1?tab=brief; /iq/runs/nope
 map: docs/journeys/maps/work/program-owner/runs.ts
 pages: portal/src/pages/iq/RunsPage.tsx, portal/src/components/runs/RunsLedger.tsx, portal/src/pages/pipelines/RunDetailPage.tsx
-audited: 2026-10-16 19:34–19:34 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-bdd39c59), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
-session: /api/session/me sub u-mia-clone-bdd39c59, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-17 09:11–09:11 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-17d02d05), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-mia-clone-17d02d05, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: runs.jpg
 verdict: pass
 console errors: 0 unexpected; 5 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) | Failed to load resource: the server responded with a status of 500 (Internal Ser)

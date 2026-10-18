@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /iq/designs; /iq/designs?status=approved; /iq/designs?status=all; /iq/designs/des-auth-rotation?status=all; /iq/designs/des-auth-rotation; /iq/designs/des-nope
 map: docs/journeys/maps/work/hr-admin/designs.ts
 pages: portal/src/pages/designs
-audited: 2026-10-16 08:00–08:01 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-48b5791d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-48b5791d, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:05–10:05 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-0bbf2471), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-0bbf2471, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: designs.jpg
 verdict: pass
 console errors: 0 unexpected; 2 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) | Failed to load resource: the server responded with a status of 500 (Internal Ser)

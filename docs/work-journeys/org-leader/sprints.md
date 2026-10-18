@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/projects?lens=sprints; /iq/projects?lens=sprints&sprint=spr-dsapi-s1
 map: docs/journeys/maps/work/org-leader/sprints.ts
 pages: portal/src/pages/projects/SprintsLens.tsx, portal/src/pages/sprints
-audited: 2026-10-16 11:16–11:16 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-023e27db), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-023e27db, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 09:56–09:57 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-c4748efb), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-vera-clone-c4748efb, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: sprints.jpg
 verdict: pass
 console errors: 0

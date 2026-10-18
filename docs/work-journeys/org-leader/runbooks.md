@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/runbooks; /iq/runbooks/rb-tenant-cutover; /iq/runbooks/rb-tenant-cutover?tab=history; /iq/runbooks/rb-tenant-cutover?tab=runs; /iq/runbooks/rb-tenant-cutover?tab=suggest; /iq/runbooks/proposals; /iq/runbooks/proposals/prop-tenant-cutover-callback; /iq/runbooks/briefs; /iq/runbooks/rb-missing
 map: docs/journeys/maps/work/org-leader/runbooks.ts
 pages: portal/src/pages/runbooks
-audited: 2026-10-16 11:14–11:14 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-ac233d16), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-ac233d16, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 09:55–09:55 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-4082f69e), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-vera-clone-4082f69e, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: runbooks.jpg
 verdict: pass
 console errors: 0 unexpected; 2 expected by the map (Each child in a list should have a unique "key" prop.%s%s See https://react.dev/ | Failed to load resource: the server responded with a status of 404 (Not Found))

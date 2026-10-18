@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /iq/projects; /iq/projects/p-auth-migration; /iq/decisions; /iq/work; /iq/search; /settings
 map: docs/journeys/maps/work/hr-admin/frames.ts
 pages: portal/src/pages/ProjectsPage.tsx, portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/decisions, portal/src/pages/work, portal/src/pages/search, portal/src/pages/SettingsPage.tsx
-audited: 2026-10-16 08:01–08:02 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-f1a571ba), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-f1a571ba, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:06–10:07 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-f5fc528c), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-f5fc528c, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: frames.jpg
 verdict: pass
 console errors: 0

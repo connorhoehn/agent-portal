@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/projects?lens=sprints; /iq/projects?lens=sprints&sprint=spr-dsapi-s1
 map: docs/journeys/maps/work/program-owner/sprints.ts
 pages: portal/src/pages/projects/SprintsLens.tsx, portal/src/pages/sprints
-audited: 2026-10-16 19:35–19:35 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-fd1e39e8), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
-session: /api/session/me sub u-mia-clone-fd1e39e8, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-17 09:12–09:12 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-7e4f1edc), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-mia-clone-7e4f1edc, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: sprints.jpg
 verdict: pass
 console errors: 0

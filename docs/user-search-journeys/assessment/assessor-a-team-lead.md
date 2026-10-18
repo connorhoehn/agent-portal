@@ -4,8 +4,8 @@ user: u-asha (Asha)
 url: /assessment/teams; /assessment/teams/TEAM-004
 map: docs/journeys/maps/user-search/assessment/assessor/a-team-lead.ts
 pages: portal/src/pages/assessment
-audited: 2026-10-16 13:03–13:03 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-asha-clone-804a95ac), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-asha-clone-804a95ac, tenant assessment, role assessor, grants {"assessment":["assessor"],"social":["participant"]}
+audited: 2026-10-17 22:18–22:18 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-asha-clone-33ae9586), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.3
+session: /api/session/me sub u-asha-clone-33ae9586, tenant assessment, role assessor, grants {"assessment":["assessor"],"social":["participant"]}
 screenshot: assessor-a-team-lead.jpg
 verdict: pass
 console errors: 0

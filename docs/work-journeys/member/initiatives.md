@@ -4,8 +4,8 @@ user: u-theo (Theo Chang)
 url: /iq/projects; /iq/projects?scope=all; /iq/projects?scope=all&status=in_progress; /iq/projects?scope=all&status=in_progress&q=auth; /iq/projects?scope=all&status=in_progress&q=zzzzqq; /iq/projects/p-observability?scope=all&status=in_progress; /iq/projects?scope=mine
 map: docs/journeys/maps/work/member/initiatives.ts
 pages: portal/src/pages/ProjectsPage.tsx, portal/src/pages/initiatives
-audited: 2026-10-16 04:51–04:51 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-60875a09), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-theo-clone-60875a09, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
+audited: 2026-10-17 10:17–10:18 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-3c74c19a), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-theo-clone-3c74c19a, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
 screenshot: initiatives.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

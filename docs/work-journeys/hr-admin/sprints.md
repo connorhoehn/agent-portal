@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /iq/projects?lens=sprints; /iq/projects?lens=sprints&sprint=spr-dsapi-s1
 map: docs/journeys/maps/work/hr-admin/sprints.ts
 pages: portal/src/pages/projects/SprintsLens.tsx, portal/src/pages/sprints
-audited: 2026-10-16 08:09–08:09 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-77302eca), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-77302eca, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:14–10:14 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-30ea2bdf), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-30ea2bdf, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: sprints.jpg
 verdict: pass
 console errors: 0

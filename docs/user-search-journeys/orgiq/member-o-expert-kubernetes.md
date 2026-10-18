@@ -4,8 +4,8 @@ user: u-theo (Theo Chang)
 url: /iq/search?q=who+knows+Kubernetes&tab=results; /iq/search?tab=connections&selection=person%3Ap-014
 map: docs/journeys/maps/user-search/orgiq/member/o-expert-kubernetes.ts
 pages: portal/src/pages/search, middleware/src/providers/search.ts, middleware/src/lib/search-index
-audited: 2026-10-16 13:03–13:03 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-ccb24b8a), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-theo-clone-ccb24b8a, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
+audited: 2026-10-17 22:19–22:19 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-2cc8f74e), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.3
+session: /api/session/me sub u-theo-clone-2cc8f74e, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
 screenshot: member-o-expert-kubernetes.jpg
 verdict: pass
 console errors: 0

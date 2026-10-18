@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/projects; /iq/projects?scope=all; /iq/projects?scope=all&status=in_progress; /iq/projects?scope=all&status=in_progress&q=auth; /iq/projects?scope=all&status=in_progress&q=zzzzqq; /iq/projects/p-observability?scope=all&status=in_progress; /iq/projects?scope=mine
 map: docs/journeys/maps/work/program-owner/initiatives.ts
 pages: portal/src/pages/ProjectsPage.tsx, portal/src/pages/initiatives
-audited: 2026-10-16 19:23–19:23 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-777fe22a), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
-session: /api/session/me sub u-mia-clone-777fe22a, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-17 09:00–09:00 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-ed1b6de8), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-mia-clone-ed1b6de8, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: initiatives.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

@@ -4,8 +4,8 @@ user: u-nora (Nora DaSilva, SME on Auth Migration)
 url: /iq/work; /iq/work/job-inf-maint-1; /iq/work/queue; /iq/work/queue?status=failed; /iq/work/findings; /iq/work/findings?q=zzzzqq; /iq/work/changes
 map: docs/journeys/maps/work/sme/automate.ts
 pages: portal/src/pages/work, portal/src/pages/work/QueuePage.tsx
-audited: 2026-10-16 06:42–06:43 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-a56f08f7), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-nora-clone-a56f08f7, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-10-17 09:18–09:19 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-67d5cd85), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-nora-clone-67d5cd85, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: automate.jpg
 verdict: pass
 console errors: 0 unexpected; 4 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

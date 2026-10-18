@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /admin/budgets; /admin/budgets?report=sprints
 map: docs/journeys/maps/work/hr-admin/budgets.ts
 pages: portal/src/pages/budgets/BudgetsPage.tsx, portal/src/pages/budgets/InitiativesReport.tsx, portal/src/pages/budgets/SprintsReport.tsx
-audited: 2026-10-16 08:00–08:00 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-2b0db8e2), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-2b0db8e2, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:05–10:05 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-ebef5784), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-ebef5784, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: budgets.jpg
 verdict: pass
 console errors: 0 unexpected; 5 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

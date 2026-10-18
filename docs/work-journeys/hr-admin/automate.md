@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /iq/work; /iq/work/job-inf-maint-1; /iq/work/queue; /iq/work/queue?status=failed; /iq/work/findings; /iq/work/findings?q=zzzzqq; /iq/work/changes
 map: docs/journeys/maps/work/hr-admin/automate.ts
 pages: portal/src/pages/work, portal/src/pages/work/QueuePage.tsx
-audited: 2026-10-16 07:59–08:00 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-a2a82c16), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-a2a82c16, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:04–10:05 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-15789c92), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-15789c92, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: automate.jpg
 verdict: pass
 console errors: 0 unexpected; 4 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

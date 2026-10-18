@@ -4,8 +4,8 @@ user: u-nora (Nora DaSilva, SME on Auth Migration)
 url: /admin/devbox
 map: docs/journeys/maps/work/sme/devbox.ts
 pages: portal/src/pages/admin/DevboxPage.tsx, portal/src/components/compute/ComputeHost.tsx
-audited: 2026-10-16 09:20–09:20 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-94f12304), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-nora-clone-94f12304, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-10-17 09:19–09:19 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-0c3bcc85), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-nora-clone-0c3bcc85, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: devbox.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector)

@@ -4,8 +4,8 @@ user: u-nora (Nora DaSilva, SME on Auth Migration)
 url: /iq/projects; /iq/projects/p-auth-migration; /iq/decisions; /iq/work; /iq/search; /settings
 map: docs/journeys/maps/work/sme/frames.ts
 pages: portal/src/pages/ProjectsPage.tsx, portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/decisions, portal/src/pages/work, portal/src/pages/search, portal/src/pages/SettingsPage.tsx
-audited: 2026-10-16 06:44–06:45 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-b62e057b), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-nora-clone-b62e057b, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-10-17 09:20–09:21 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-c4a3ff81), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-nora-clone-c4a3ff81, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: frames.jpg
 verdict: pass
 console errors: 0

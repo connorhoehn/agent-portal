@@ -4,8 +4,8 @@ user: u-rachel (Rachel Kowalski)
 url: /iq/library; /iq/library?kind=evaluator; /iq/prompts?mode=create; /iq/library?q=csrf; /iq/library?q=zzzzqq; /iq/library/skill-pr-review-scoped; /iq/library/lib-csrf-check; /iq/library/lib-nope
 map: docs/journeys/maps/work/hr-admin/library.ts
 pages: portal/src/pages/library
-audited: 2026-10-16 08:03–08:04 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-d6d41352), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-rachel-clone-d6d41352, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 10:08–10:09 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-97820378), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-rachel-clone-97820378, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: library.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found))

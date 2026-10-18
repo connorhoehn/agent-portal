@@ -6,6 +6,11 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
+**Latest checkpoint:** read “Meeting rooms on calls (accepted 2026-10-17)”
+and “Final journey pass — 2026-10-17” at the end of this document. The
+“Current state” and verification sections immediately below describe the
+original October 12 handoff, not the current dependency pins or acceptance.
+
 ## Current state
 
 The user asked to prepare this handoff. No implementation or test process is
@@ -321,3 +326,77 @@ judge now requires current audit evidence and sealed walks.
 
 Scope remains initiative huddles only, as decided by the user. Other call
 surfaces and cloud deployment remain later work; nothing was deployed here.
+
+## Final journey pass — 2026-10-17
+
+The recovered session's Work walks finished with 116/123 passing before this
+closeout. The remaining failures included stale test assumptions: navigation
+accessible names put the unread-conversation/inbox marker before the count
+badge, and the work-item composer can already be in Chat mode. The maps now
+match that ordering and choose Chat through the named mode control.
+
+All **five permission/refusal walks** and **three work-write walks** were
+rerun successfully; their individual records are sealed. The Work catalog
+now contains **123 passing records and two failing records**, including the
+two meeting walks accepted separately. This is not a fresh full-matrix claim:
+some older passing records still need a walk after their covering specs changed.
+
+The Assessment and Pipelines `active-now` walks were repeated after the clone-DM
+fix. Both pass: Enter opens the clone's own DM, presence arrives without reload,
+the missing-person state is honest, and both browser contexts record zero
+console errors. Their individual records are sealed; they do not certify the
+older Communication records or give their whole directories fresh seals.
+
+The current journey runner/proof suite passes **26/26 tests**, all **204 maps**
+pass structural checks, and the generated coverage document is current.
+All **17 user-search content walks** pass. The generic seal engine does not
+register the `user-search` family and refused those seal attempts; these logs
+are not presented as sealed. Their protocol and search judge currently assess
+the passing answer/record-open fields separately from rendered-contract seals.
+
+The full search probe completed all **17 role groups / 91 questions** and its
+watched-source digest is current (`1e48f6ca2f7a86d4`). The content judge still
+fails: Work, Assessment, Pipelines and Access meet their 1.00 pass-rate / zero
+wrong-result thresholds, but **Social is 0.89 with five wrong results on the
+designated best surface**. These are palette results for `s-missed-calls`
+(“missed calls”, “call history”), `s-live-huddle` (“live calls now”), and
+`s-room` (“Design crit room”, “rooms”). The saved probe records the unrelated
+options returned. Thresholds were not lowered. Completion of the probe's
+Playwright tests does not mean the content acceptance checks passed.
+
+All 24 validators ran sequentially with `--quick` before the concurrent meeting
+acceptance merge. Eight passed: agent-eval, component-discipline,
+distillation-runbooks, honest-numbers, meeting-rooms-app, nav-parity,
+rail-parity, and route-coverage. Logs are local at
+`.scratch/wrap-up-2026-10-17/`; quick mode is not full acceptance.
+The subsequent branding cleanup (`a7a71991`) is merged; its quick validator
+now passes on the current tree, as does the meeting-specific validator.
+
+Outstanding findings are preserved, not waived:
+
+- Member `frames`: the narrow read-only composer leaves **More formatting**
+  enabled (`RichChatComposer`, ui-components).
+- Member `prepare-job`: the read-only composer audit flags the prompt deck's
+  **Show/Hide** controls. Its intended disclosure semantics need to be encoded
+  in the shared owner; the failed walk remains visible.
+- Older Work, Communication, Assessment, Access, Social, Pipelines and Search
+  records need their stale contracts re-walked. The directory seal
+  guard refused older Work records whose covering specs changed after their
+  walks. Only freshly re-walked passing records were sealed individually;
+  current spec results cannot seal old journey records.
+- Social search's five wrong palette results above remain open. Demo-content
+  probe evidence is still stale. The mock floor's
+  typecheck and fixture tests pass, but `wire.json` and `writes.json` need
+  recapture against the current handlers on an isolated mock server.
+- Other validator debt includes Git-sha pin assumptions despite tarball
+  dependencies, Assessment document composition checks, the retired-tenant
+  scan, Social's entity description/old logs,
+  upstream C1/C3 ownership, and the general Work judge's call-room map depth
+  assertions (the meeting-specific judge passes). Check the named validator's output before
+  treating a static failure as a runtime defect.
+
+The concurrent meeting acceptance merge updated the app to ui-components
+2.480.3 and refreshed rendered contracts with unchanged categorical values;
+its own acceptance record above is separate evidence. Cloud deployment,
+Aurora changes, production capacity and previously recorded user decisions
+remain outside this local closeout.

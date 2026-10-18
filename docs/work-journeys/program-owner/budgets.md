@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /admin/budgets; /admin/budgets?report=sprints
 map: docs/journeys/maps/work/program-owner/budgets.ts
 pages: portal/src/pages/budgets/BudgetsPage.tsx, portal/src/pages/budgets/InitiativesReport.tsx, portal/src/pages/budgets/SprintsReport.tsx
-audited: 2026-10-16 19:21–19:21 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-a8ed21fd), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
-session: /api/session/me sub u-mia-clone-a8ed21fd, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-17 08:58–08:58 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-60b0f6cd), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-mia-clone-60b0f6cd, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: budgets.jpg
 verdict: pass
 console errors: 0 unexpected; 3 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

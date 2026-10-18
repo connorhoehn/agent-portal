@@ -4,8 +4,8 @@ user: u-nora (Nora DaSilva, SME on Auth Migration)
 url: /admin/bots; /admin/bots/32970d0a-e28e-5100-8fb0-a5cbb87dac99
 map: docs/journeys/maps/work/sme/bots.ts
 pages: portal/src/pages/bots/BotsPage.tsx, portal/src/pages/bots/BotDetailPage.tsx
-audited: 2026-10-16 06:43–06:43 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-9b83a68c), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-nora-clone-9b83a68c, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-10-17 09:19–09:19 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-952284bf), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-nora-clone-952284bf, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: bots.jpg
 verdict: pass
 console errors: 0 unexpected; 2 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)

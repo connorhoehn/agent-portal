@@ -4,8 +4,8 @@ user: u-nora (Nora DaSilva, SME on Auth Migration)
 url: /iq/library; /iq/library?kind=evaluator; /iq/library?q=csrf; /iq/library?q=zzzzqq; /iq/library/skill-pr-review-scoped; /iq/library/lib-csrf-check; /iq/library/lib-nope
 map: docs/journeys/maps/work/sme/library.ts
 pages: portal/src/pages/library
-audited: 2026-10-16 06:46–06:46 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-6c82ea71), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-nora-clone-6c82ea71, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-10-17 09:22–09:22 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-9f828dcf), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-nora-clone-9f828dcf, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: library.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found))

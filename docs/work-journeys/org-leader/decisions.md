@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/decisions; /iq/decisions?status=waiting; /iq/decisions?status=all; /iq/decisions/d-cognito-cutover; /iq/decisions/d-nope
 map: docs/journeys/maps/work/org-leader/decisions.ts
 pages: portal/src/pages/decisions
-audited: 2026-10-16 11:00–11:00 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-ab9af289), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-ab9af289, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 09:42–09:42 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-ee5e1338), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-vera-clone-ee5e1338, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: decisions.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found))

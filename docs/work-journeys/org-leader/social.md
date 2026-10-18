@@ -4,12 +4,12 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/projects/p-auth-migration; /iq/communication/channels/auth-migration; /iq/communication/channels/auth-migration?view=documents; /iq/communication/channels/auth-migration?view=pins; /iq/communication/channels/auth-migration?view=calls; /iq/communication
 map: docs/journeys/maps/work/org-leader/social.ts
 pages: portal/src/pages/communication, portal/src/components/shell
-audited: 2026-10-16 11:55–11:55 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-e8adce49), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-e8adce49, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 09:56–09:56 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-f62c646f), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-vera-clone-f62c646f, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: social.jpg
 verdict: pass
 console errors: 0
-layout: pass — ui-dom-audit 0 failing findings at 13 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/projects/p-auth-migration: no horizontal scroll (1440/1440), 1 h1 "Auth Migration" 20/600 at 104/92, first-row-top: 92px, composer at y 708–851 of 900
+layout: pass — ui-dom-audit 0 failing findings at 13 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/projects/p-auth-migration: no horizontal scroll (1440/1440), 1 h1 "Auth Migration" 20/600 at 104/92, first-row-top: 92px, composer at y 670–851 of 900
 keyboard: pass — Open the activity bell: the notifications dialog opens over the page; Escape closes the dialog and focus returns to the bell; The Social button in the footer opens the conversations (the Communication page), on the initiative’s own channel; Tab from the top of the page: the controls take focus in turn (Tab visited 25 distinct visible controls of 164 focusable); Escape closes the dialog again
 empty-state: pass — In a world with no notifications the project page loads as before (mock scope {"scenario":"empty","fixture":"notifications"}); The bell dialog says there is nothing new and where activity will appear
 role-gating: pass — The initiative’s discussion lets this role post; The channel’s composer is there for this role: Social lets a participant post where the initiative’s discussion does not

@@ -4,8 +4,8 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/projects; /iq/projects/p-auth-migration; /iq/decisions; /iq/work; /iq/search; /settings
 map: docs/journeys/maps/work/org-leader/frames.ts
 pages: portal/src/pages/ProjectsPage.tsx, portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/decisions, portal/src/pages/work, portal/src/pages/search, portal/src/pages/SettingsPage.tsx
-audited: 2026-10-16 11:02–11:03 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-71dfda4d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.460.1
-session: /api/session/me sub u-vera-clone-71dfda4d, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-17 09:44–09:45 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-b724d479), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-vera-clone-b724d479, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: frames.jpg
 verdict: pass
 console errors: 0

@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/search; /iq/search?tab=answer; /iq/search?tab=connections; /iq/search?tab=results; /iq/search?q=Nora; /iq/search?q=auth; /iq/search?q=auth&type=decision; /iq/decisions/d-cognito-cutover; /iq/search?q=zzzzqq; /iq/search?tab=connections&type=person; /iq/projects; /iq/decisions
 map: docs/journeys/maps/work/program-owner/search.ts
 pages: portal/src/pages/search
-audited: 2026-10-16 19:34–19:35 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-0c2e2a5e), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
-session: /api/session/me sub u-mia-clone-0c2e2a5e, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-17 09:11–09:12 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-2bdef024), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-mia-clone-2bdef024, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: search.jpg
 verdict: pass
 console errors: 0

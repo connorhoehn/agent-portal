@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/projects/p-auth-migration?item=wi-auth-e2-b3; /iq/projects/p-auth-migration?item=wi-auth-e2-b3&view=docs; /iq/projects/p-zero-trust?item=wi-zt-e1-s2; /iq/projects/p-auth-migration?item=wi-nope
 map: docs/journeys/maps/work/program-owner/prepare-job.ts
 pages: portal/src/pages/project-detail/usePrepareJobDeck.ts, portal/src/pages/project-detail/prepareJobModel.ts, portal/src/pages/ProjectDetailPage.tsx
-audited: 2026-10-16 19:24–19:32 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-f41b4e93), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
-session: /api/session/me sub u-mia-clone-f41b4e93, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-17 09:01–09:09 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-dcda56ab), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-mia-clone-dcda56ab, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: prepare-job.jpg
 verdict: pass
 console errors: 0 unexpected; 2 expected by the map (Failed to load resource: the server responded with a status of 409 (Conflict))

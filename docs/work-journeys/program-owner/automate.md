@@ -4,8 +4,8 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/work; /iq/work/job-inf-maint-1; /iq/work/queue; /iq/work/queue?status=failed; /iq/work/findings; /iq/work/findings?q=zzzzqq; /iq/work/changes
 map: docs/journeys/maps/work/program-owner/automate.ts
 pages: portal/src/pages/work, portal/src/pages/work/QueuePage.tsx
-audited: 2026-10-16 19:20–19:21 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-e25b2bd9), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.478.0
-session: /api/session/me sub u-mia-clone-e25b2bd9, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-17 08:57–08:58 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-e950a19b), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
+session: /api/session/me sub u-mia-clone-e950a19b, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: automate.jpg
 verdict: pass
 console errors: 0 unexpected; 4 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)
