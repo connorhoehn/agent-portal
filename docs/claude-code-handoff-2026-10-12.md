@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Redis acceptance resumed — 2026-10-18” and
+**Latest checkpoint:** read “Redis acceptance stopping point — 2026-10-18” and
 “Closeout — 2026-10-18” at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -613,8 +613,8 @@ into main. The pre-merge requirements above remain in force.
   dependency scan now follows a worktree's top-level `node_modules` symlink
   while still requiring exactly one installed distributed-core.
 
-The full middleware suite is running alone with the isolated Redis/DynamoDB
-endpoints enabled. Do not start a second test suite while that run is live.
+At this checkpoint the full middleware suite was running alone with isolated
+Redis/DynamoDB endpoints enabled. It was subsequently stopped as recorded below.
 No complete-suite result, refreshed wire snapshot, startup smoke result, or
 full-validator pass is claimed yet. The follow-up logs are under
 `.scratch/redis-acceptance-2026-10-18/` in the main worktree:
@@ -627,3 +627,52 @@ the outstanding PostgreSQL proof and evaluate the corrected tenant checks;
 then merge only with the resulting evidence recorded. Stop the owned Redis
 and DynamoDB acceptance services when their checks are complete. The older
 journey, search, meeting and demo-content debt remains open.
+
+## Redis acceptance stopping point — 2026-10-18
+
+The user asked to find a stopping point. Work is **paused, not complete**.
+The Redis migration remains unmerged on `fix/handoff-redis-20261018`, in
+`/tmp/aws-agentcore-redis-20261018`. Main receives only this handoff update;
+its application code remains at the previously accepted state.
+
+- The full middleware run was interrupted with SIGINT (exit **130**) after
+  **465 passing suites and two failing suites** reported. This is not a
+  complete-suite pass. Both reported failures were then corrected and rerun
+  together: **2 suites, 10 tests passed** in 6.5 seconds.
+- `migrate-work-comments-dynamo.test.ts` initially could not resolve the
+  infra schema package from the worktree. Linking the worktree's
+  `infra/node_modules` to the existing main install fixed that environment
+  issue. The rerun explicitly enabled `PAGE_THREAD_TEST_DYNAMODB_ENDPOINT`
+  against the dedicated DynamoDB Local container; its two native tests passed.
+  The worktree also links its middleware and portal dependencies to main.
+- `9999d749` updates the document-comment import assertions for the existing
+  third seeded comment, including its nested parent edge. The seed and product
+  behavior are unchanged; all eight tests in that suite passed.
+- `a8bd113a` preserves per-repository test/typecheck output in the full
+  upstream validator through `UPSTREAM_LOG_DIR` (or a temporary directory),
+  with failure tails printed. Shell syntax and whitespace checks pass; the
+  modified full validator has not yet been exercised.
+
+Evidence remains in `.scratch/redis-acceptance-2026-10-18/` in the main
+worktree, including `full-tests.log` and `stopping-point-recheck.log`. The
+prepared `startup-smoke.mjs` is syntax-checked only and **has not run**.
+No startup smoke, refreshed wire snapshot, mock-floor result, PostgreSQL
+proof, full upstream-validator pass, or corrected tenant-validator pass is
+claimed. The earlier 36-test failure recheck, 8-test durable integration
+pass, and upstream quick-judge pass remain valid evidence for their scopes.
+
+Resume with a complete middleware run, alone, against fresh isolated Redis
+and DynamoDB stores. Preserve all integration endpoint settings from the test
+setup and include `PAGE_THREAD_TEST_DYNAMODB_ENDPOINT` for the migration
+suite. Then complete startup smoke, wire capture, mock-floor, full upstream
+validation, PostgreSQL proof, and the corrected tenant checks before deciding
+whether to merge. The broader journey, search, meeting, demo-content, and
+scorecard confidence debt remains open; no stale journey records were sealed.
+
+All owned validation processes have stopped. Disposable Redis on `6384`
+was shut down, and the dedicated containers
+`orgiq-redis-migration-dynamodb-20261018` and
+`orgiq-access-postgres-redis-20261018` were removed. The latter had reached
+readiness but had not run any proof. Shared services were left running:
+portal `5183` and middleware `3001/health` both returned HTTP **200** after
+cleanup. The pre-existing ui-components `package-lock.json` edit was preserved.
