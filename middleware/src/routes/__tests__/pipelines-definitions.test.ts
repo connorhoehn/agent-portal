@@ -230,13 +230,20 @@ describe('GET /api/pipelines/runbooks', () => {
     }
   });
 
-  it('lists runbook definitions with their rung and no dry-run yet', async () => {
+  it('lists the seeded rehearsal and leaves untested runbooks without a dry-run', async () => {
     const res = await request(ines()).get('/api/pipelines/runbooks');
     expect(res.status).toBe(200);
     expect(res.body.runbooks.length).toBeGreaterThan(0);
+    expect(res.body.runbooks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'runbook:promo-arm64-fargate' }),
+      expect.objectContaining({ id: RUNBOOK }),
+    ]));
     for (const r of res.body.runbooks) {
       expect(r.kind).toBe('runbook');
-      expect(r.runbook.lastDryRun).toBeNull();
+      if (r.id === 'runbook:promo-arm64-fargate') {
+        expect(r.runbook.lastDryRun).toMatchObject({ id: 'job:dry-quarantine-batch', definitionId: r.id,
+          runKind: 'runbook:dry-run', status: 'completed', triggeredBy: 'u-ines' });
+      } else expect(r.runbook.lastDryRun).toBeNull();
     }
   });
 });

@@ -241,7 +241,7 @@ describe('an identity clone acts as its persona for membership and DMs', () => {
   });
   afterEach(() => identityClonesFixture.reset());
 
-  it('a clone of Sana is in her channels and lists her DMs, but not in a moderator-only channel', async () => {
+  it('a clone of Sana reads her conversation fixtures under its own DM id, without moderator access', async () => {
     clone('u-sana-clone-1', 'u-sana', 'Sana Iqbal', { social: ['participant'] });
     const app = appAs('u-sana-clone-1', 'participant');
     const channels = await request(app).get('/api/social/channels');
@@ -249,7 +249,9 @@ describe('an identity clone acts as its persona for membership and DMs', () => {
     expect(general).toMatchObject({ joined: true });
     expect(channels.body.channels.map((c: { slug: string }) => c.slug)).not.toContain('moderators');
     const dms = await request(app).get('/api/social/dms');
-    expect(dms.body.conversations.map((c: { channel: string }) => c.channel)).toContain('social:dm:u-lena:u-sana');
+    const dmChannels = dms.body.conversations.map((c: { channel: string }) => c.channel);
+    expect(dmChannels).toContain('social:dm:u-lena:u-sana-clone-1');
+    expect(dmChannels).not.toContain('social:dm:u-lena:u-sana');
     expect(chatGuardMember('social:ch:general', 'u-sana-clone-1')).toBe(true);
   });
 
