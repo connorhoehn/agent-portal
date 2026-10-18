@@ -1,10 +1,10 @@
 // Opt in with CALL_CHAT_TEST_REDIS_URL. These tests execute real Redis Lua.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
-import { RedisLite } from '../redis-lite.js';
+import { openRedisStore } from '../redis-store.js';
 import { RedisCallChatStateStore } from '../call-chat-state.js';
 const url = process.env['CALL_CHAT_TEST_REDIS_URL']; const testRedis = url ? it : it.skip;
 testRedis('real Redis retains join floors, reconnect boundaries, TTL and terminal closure across two instances', async () => {
-  const one = new RedisLite(url!); const two = new RedisLite(url!);
+  const one = await openRedisStore(url!); const two = await openRedisStore(url!);
   const first = new RedisCallChatStateStore(one, 60); const second = new RedisCallChatStateStore(two, 60);
   const callId = `chat-test-${process.pid}-${Date.now()}`; const key = `orgiq:call-chat:${callId}`;
   try {

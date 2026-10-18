@@ -14,7 +14,7 @@ import { DynamoDBClient, DescribeTableCommand, QueryCommand, DeleteItemCommand }
 import { RedisCallStateStore } from '@connorhoehn/realtime-modules/call';
 import { LocalRealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { DynamoChatStore } from '@connorhoehn/realtime-modules/server/stores/dynamo';
-import { RedisLite } from '../redis-lite.js';
+import { openRedisStore } from '../redis-store.js';
 import { CallChatRuntime, callChatChannel } from '../call-chat.js';
 import { RedisCallChatStateStore } from '../call-chat-state.js';
 import { observeCallPageLifecycle } from '../call-pages.js';
@@ -32,7 +32,7 @@ const prefix = 'orgiq-chat-';
 const table = `${prefix}chat-messages`;
 const loopback = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
 
-type Bundle = ReturnType<typeof bundle>;
+type Bundle = Awaited<ReturnType<typeof bundle>>;
 let callId: string, lobby: string, clock: number;
 let sessions: Record<'alice' | 'bob' | 'charlie', Session>;
 let bundles: Bundle[];
@@ -43,8 +43,8 @@ function dynamo() {
   return new DynamoDBClient({ endpoint, region: 'us-east-1', maxAttempts: 2,
     credentials: { accessKeyId: 'local', secretAccessKey: 'local' }, requestHandler: new FetchHttpHandler({ requestTimeout: 5000 }) });
 }
-function bundle(generation: string) {
-  const redis = new RedisLite(redisUrl!, { commandTimeoutMs: 5000 });
+async function bundle(generation: string) {
+  const redis = await openRedisStore(redisUrl!, { timeoutMs: 5000 });
   const calls = new RedisCallStateStore(redis);
   const client = dynamo();
   const messages = new DynamoChatStore({ client, tablePrefix: prefix });
@@ -94,7 +94,7 @@ async function say(b: Bundle, person: keyof typeof sessions, text: string) {
 }
 async function restart(previous: Bundle, people: Array<keyof typeof sessions>) {
   previous.runtime.dispose(); previous.contexts.clear();
-  const fresh = bundle(`fresh-${bundles.length}`); bundles.push(fresh);
+  const fresh = await bundle(`fresh-${bundles.length}`); bundles.push(fresh);
   // A cold router recognizes only the new connection IDs. Resume must use
   // existing Redis seats and keep the members' boundaries.
   const old = (await fresh.calls.getCall(callId))!.participantClientIds;
@@ -110,7 +110,7 @@ suite('durable huddle membership over real Redis and DynamoDB Local', () => {
   beforeAll(async () => {
     if (new URL(endpoint!).protocol !== 'http:' || !loopback.has(new URL(endpoint!).hostname)
       || new URL(redisUrl!).protocol !== 'redis:' || !loopback.has(new URL(redisUrl!).hostname)) throw new Error('Durable huddle tests require explicit loopback stores');
-    const client = dynamo(); const redis = new RedisLite(redisUrl!);
+    const client = dynamo(); const redis = await openRedisStore(redisUrl!);
     try {
       expect(await redis.command('PING')).toBe('PONG');
       expect((await client.send(new DescribeTableCommand({ TableName: table }))).Table?.TableStatus).toBe('ACTIVE');
@@ -128,7 +128,7 @@ suite('durable huddle membership over real Redis and DynamoDB Local', () => {
     lobby = `orgiq:dm:${Object.values(sessions).map(session => session.sub).sort().join(':')}`;
     identities = new Map(Object.values(sessions).map(session => [session.sub, structuredClone(session)]));
     allClientIds = new Set(); bundles = [];
-    const first = bundle('old'); bundles.push(first);
+    const first = await bundle('old'); bundles.push(first);
     await register(first, 'alice'); await register(first, 'bob');
     await first.calls.registerLobbyCall(lobby, callId, 14400); await first.calls.markAccepted(callId, 14400);
   });
@@ -185,7 +185,7 @@ suite('durable huddle membership over real Redis and DynamoDB Local', () => {
     identities.get(sessions.bob.sub)!.grants.social = [];
     await expect(first.runtime.get(callId, sessions.bob)).rejects.toMatchObject({ status: 403 });
     await first.observed.forgetCall(callId);
-    const fresh = bundle('terminal'); bundles.push(fresh); fresh.connect('alice');
+    const fresh = await bundle('terminal'); bundles.push(fresh); fresh.connect('alice');
     expect((await fresh.state.get(callId)).ended).toBe(true);
     await expect(fresh.runtime.get(callId, sessions.alice)).rejects.toMatchObject({ status: 404 });
     expect(await fresh.runtime.memberRows(callId)).toEqual([expect.objectContaining({ userId: '', removedAt: expect.any(String) })]);
@@ -196,7 +196,7 @@ suite('durable huddle membership over real Redis and DynamoDB Local', () => {
     for (let index = 1; index <= 3; index++) await say(first, 'alice', `Old private history ${index}`);
     await first.redis.del(`orgiq:call-chat:${encodeURIComponent(callId)}`, `call:active:${callId}`, `call:active:${callId}:participants`);
     first.runtime.dispose();
-    const fresh = bundle('reused'); bundles.push(fresh);
+    const fresh = await bundle('reused'); bundles.push(fresh);
     clock += 60_000;
     await register(fresh, 'charlie'); await register(fresh, 'bob');
     expect(ids(await fresh.runtime.get(callId, sessions.charlie))).toEqual([]);

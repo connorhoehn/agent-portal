@@ -13,7 +13,7 @@ import { attachRealtime, chat as chatFeature, RedisRealtimeRouter, type Realtime
 import { MemoryChatMembershipStore } from '@connorhoehn/realtime-modules/chat';
 import { RedisCallStateStore } from '@connorhoehn/realtime-modules/call';
 import { DynamoChatStore } from '@connorhoehn/realtime-modules/server/stores/dynamo';
-import { RedisLite } from '../redis-lite.js';
+import { openRedisStore, type GatewayRedisStore } from '../redis-store.js';
 import { CallPageRuntime, RedisCallPageStore, observeCallPageLifecycle, type CanonicalCallPage } from '../call-pages.js';
 import { CallChatRuntime, callChatChannel, huddleMembershipStore } from '../call-chat.js';
 import { withHuddleChat } from '../call-chat-send.js';
@@ -43,7 +43,7 @@ async function eventually(predicate: () => boolean | Promise<boolean>) {
 }
 type Client = { ws: WebSocket; id: string; frames: any[] };
 type Node = { router: RedisRealtimeRouter; handle: RealtimeHandle; server: http.Server; url: string;
-  command: RedisClientType; subscriber: RedisClientType; redis: RedisLite; db: DynamoDBClient;
+  command: RedisClientType; subscriber: RedisClientType; redis: GatewayRedisStore; db: DynamoDBClient;
   calls: RedisCallStateStore; observed: ReturnType<typeof observeCallPageLifecycle>;
   pages: CallPageRuntime; chat: CallChatRuntime; state: RedisCallChatStateStore; directory: { available: boolean } };
 
@@ -70,7 +70,7 @@ suite('call pages and huddle chat across native gateway nodes', () => {
     const subscriber = command.duplicate(); subscriber.on('error', () => undefined);
     let chat!: CallChatRuntime;
     await Promise.all([command.connect(), subscriber.connect()]);
-    const redis = new RedisLite(redisUrl!, { commandTimeoutMs: 5000 });
+    const redis = await openRedisStore(redisUrl!, { timeoutMs: 5000 });
     const calls = new RedisCallStateStore(redis);
     const db = new DynamoDBClient({ endpoint, region: 'us-east-1', credentials: { accessKeyId: 'local', secretAccessKey: 'local' },
       requestHandler: new FetchHttpHandler({ requestTimeout: 5000 }), maxAttempts: 2 });

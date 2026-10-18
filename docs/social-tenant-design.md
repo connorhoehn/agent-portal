@@ -119,11 +119,12 @@ connect so a fresh tab gets its unread set. Persistence is Redis
 or nothing — with no client it delivers to live tabs only.
 
 The middleware's gateway (`middleware/src/lib/realtime-gateway.ts`) adds
-`notifications({ redisClient })` to its feature list. `lib/redis-lite.ts`
-grows the four sorted-set commands so the same `REDIS_URL` that backs call
-state backs notifications (the interface's `hSet`/`hGetAll`/`expire`/`del`
-already exist there under lower-case names; an adapter object maps the
-casing). Memory when `REDIS_URL` is unset — the honest local default, and
+`notifications()` to its feature list with the store from
+`lib/notification-store.ts`. The same library-owned `createBoundedRedis`
+transport backs call state and notifications. `lib/redis-store.ts` adapts
+the application's store methods and notification casing; connection
+lifecycle, TLS and command deadlines belong to the installed library.
+Memory when `REDIS_URL` is unset — the honest local default, and
 the reason the mock fixture in §3.5 exists.
 
 The client side is the library's `useNotifications()` inside the existing
@@ -551,7 +552,7 @@ running against the shared stack.
 |---|---|---|---|
 | **D** design + goals | this doc; `docs/social-tenant-goal.md` + `scripts/validate-social-tenant.sh`; `docs/pipelines-tenant-goal.md` + `scripts/validate-pipelines-tenant.sh`; `docs/activity-indicator-goal.md` folded into the social goal | the validators exist and fail honestly on an empty tree | — |
 | **L** library ∥ | ui-components: `BellIcon`, `NotificationBell`, `WrappedNotificationBell`; queue rows for `ChannelBinding` strip and anything §4.5 finds missing; release, full-sha pin, Vite restart | library suites; `snapshot:exports`; the pin's settling commands | — |
-| **N** activity indicator | `notifications()` in the gateway + redis-lite sorted sets; `lib/social-notify.ts` + grant rule; producers rows 1–4 and 8 of §3.4; `notifications` mock fixture + scenarios; `ActivityBell` in the header; `tenantCaches` key; e2e spec | §3.6 spec; mock floor; route coverage; middleware suite | L, and the walker finished |
+| **N** activity indicator | `notifications()` in the gateway + bounded Redis store adapter; `lib/social-notify.ts` + grant rule; producers rows 1–4 and 8 of §3.4; `notifications` mock fixture + scenarios; `ActivityBell` in the header; `tenantCaches` key; e2e spec | §3.6 spec; mock floor; route coverage; middleware suite | L, and the walker finished |
 | **S0** social registration ∥ | the 21 points of A.4 for `social`; cast; Cedar; brand tokens; empty-state pages; picker tile; isolation logs for the eight outside roles and three outbound walks | `validate-social-tenant.sh` phase-0 checks; assessment + newsroom-removal + nav-parity validators green | D |
 | **S1** channels + DMs | consume the library's `DynamoChatStore` (0.99.0 pin); `chat({ chatStore })`; membership in the guard; Channels and DMs pages; `POST /api/social/channels`, `/dms`; mock fixtures; two-context walk (post, read, DM, `AUTHZ_CHANNEL_DENIED` on a forged cross-tenant subscribe) | the walk + validator phase-1 checks | S0, N (the plugin reuses N's seam) |
 | **S2** rooms, teams, recordings | four tables added to `social-stack.ts`; platform-api `tenants` change (handed upstream); Rooms/Calls/Teams/Recordings pages on the library composites; room calls on `social:room:<slug>` through the existing call host | rooms created via REST are visible to a browser user in the tenant; recordings list | S0, upstream |

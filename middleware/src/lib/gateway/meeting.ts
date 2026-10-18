@@ -11,7 +11,7 @@ import type { RealtimeFeature } from '@connorhoehn/realtime-modules/server';
 import type { CallStateStore } from '@connorhoehn/realtime-modules/call';
 import { meetingOrganizer } from './authority.js';
 import { publishChannelActivity } from '../gateway-run-feed.js';
-import type { GatewayRedisStore } from '../redis-lite.js';
+import type { GatewayRedisStore } from '../redis-store.js';
 
 export interface MeetingFeatureOptions {
   /** The gateway's call state (the stored call's caller is an organizer). */
