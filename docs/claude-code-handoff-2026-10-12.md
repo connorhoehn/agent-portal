@@ -7,7 +7,7 @@ release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
 **Latest checkpoint:** read “Meeting rooms on calls (accepted 2026-10-17)”
-and “Final journey pass — 2026-10-17” at the end of this document. The
+and “Follow-up — 2026-10-18” at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
 
@@ -400,3 +400,53 @@ The concurrent meeting acceptance merge updated the app to ui-components
 its own acceptance record above is separate evidence. Cloud deployment,
 Aurora changes, production capacity and previously recorded user decisions
 remain outside this local closeout.
+
+## Follow-up — 2026-10-18
+
+The goal remains the outstanding local work in the October 17 final journey
+pass. It is not yet complete. Current UI pin: **2.480.4**; realtime remains
+**0.137.0**. The shared UI repair is pushed upstream in `645aaa37`, with the
+packed release built in `6b94314b`.
+
+- Both member failures now pass their actual browser walks on the installed
+  package: `frames` (28 steps, both widths/themes) and `prepare-job` (14 steps).
+  RichChatComposer disables the narrow formatting overflow with the editor.
+  ComposerPromptDeck marks only its local disclosure/navigation controls as
+  read-only-safe; prompt answers remain gated. Their seals await current
+  rendered-contract measurement.
+- Shared UI verification: **1,018 test files / 11,208 tests passed**, two tests
+  skipped; lint, build, packed-export tests, skill validation and the audit
+  mutation suite passed. The audit still rejects enabled formatting next to
+  an allowed prompt disclosure. Portal typecheck passed.
+- The mock wire/write snapshots were recaptured against a disposable offline
+  server on `3012`; the mock-floor quick validator now passes. Assessment deck,
+  Assessment document-parity and retired-tenant quick validators also pass.
+  Their stale checks now follow the same immutable tarball, parameterized
+  document title and call-host props, and ignore only a reference to the
+  retired-tenant validator's own script path.
+- Both meeting maps now assert all UI-changing steps and exercise Rooms with
+  Enter. **All 125 Work maps meet the depth rules**, all 204 maps validate,
+  the 26 runner/proof tests pass, and generated coverage is current. The
+  revised meeting maps still need their browser reruns and current E3 audit.
+- User-search is registered with the normal seal engine, and its full validator
+  now requires current rendered-contract seals as well as answer/record-open
+  passes. The 17 runnable maps must be re-walked and sealed; eight held maps
+  remain explicitly pending.
+- The October 17 Social search results used the live platform provider while
+  the catalog expected seeded mock rooms/calls. The probe now refuses that
+  mismatch and supports `USER_SEARCH_BASE_URL`; this refusal was verified
+  against the shared stack. The full probe is being rerun on an isolated mock
+  stack. An initial isolated run was interrupted after Vite could not resolve
+  a peer import from a cache outside `portal/node_modules`; the corrected
+  portal loads with zero page errors. Do not treat the intermediate results
+  as acceptance. Live platform room/call indexing remains a separate gap;
+  a green fixture probe cannot prove it works.
+
+Local logs: `.scratch/handoff-followup-2026-10-18/`. Current rendered-contract
+measurement and the full seeded search probe are in progress. After they
+finish, seal the freshly walked records, refresh the meeting audit, re-walk
+the stale tenant records, and rerun the validators sequentially. Remaining
+work also includes demo-content probe freshness, older Assessment static
+composition checks if still failing on a fresh run, and C1/C3 extraction of
+Redis/node ownership to the upstream libraries. The original cloud and user
+decision exclusions still apply.

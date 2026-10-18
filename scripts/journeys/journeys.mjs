@@ -57,6 +57,7 @@ const FAMILIES = {
   'docs/pipelines-journeys': ['^verdict: *pass'],
   'docs/access-journeys': ['^surface: *\\S', '^role: *\\S', '^user: *\\S', '^url: *\\S', '^verdict: *pass', '^console errors: *\\S', '^layout: *\\S', '^keyboard: *\\S', '^empty-state: *\\S', '^role-gating: *\\S'],
   'docs/search-journeys': ['^verdict: *pass', '^console errors: *0', '^layout: *pass', '^keyboard: *pass', '^empty-state: *(pass|n/a)'],
+  'docs/user-search-journeys': ['^surface: *\\S', '^role: *\\S', '^user: *\\S', '^url: *\\S', '^audited: *\\S', '^verdict: *pass', '^console errors: *0', '^answers-question: *pass', '^record-open: *pass'],
   // Social: a `limited` verdict with its reason is a complete, honest walk of a
   // surface this stack cannot fully show (the four recordings logs: platform-api
   // holds no recordings here). validate-social-tenant.sh's S2 check keeps them

@@ -16,7 +16,12 @@ PAT='newsroom|news-researcher|news-brief|news-headline|news_researcher|news_brie
 section "no surviving references (code, infra, schema, agents, scripts)"
 for area in middleware/src middleware/seeds portal/src agents infra/lib infra/bin infra/lambda infra/scripts schema/synth schema/load_schema.py schema/identity_schema.sql schema/seed_kb_registry.sql schema/orgiq_kb_registry_schema.sql scripts CLAUDE.md README.md CONSTITUTION.md; do
   [ -e "$area" ] || continue
-  hits=$(grep -rliE "$PAT" "$area" --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.venv 2>/dev/null | grep -v "validate-newsroom-removal.sh" | grep -v "schema/migrations/" || true)
+  # Other judges may invoke or inspect this judge. Ignore that exact script
+  # path, while still rejecting a retired tenant reference elsewhere on the
+  # same line or in the same file.
+  hits=$(grep -rliE "$PAT" "$area" --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.venv 2>/dev/null | grep -v "validate-newsroom-removal.sh" | grep -v "schema/migrations/" | while IFS= read -r file; do
+    if sed 's#scripts/validate-newsroom-removal\.sh##g' "$file" | grep -qiE "$PAT"; then printf '%s\n' "$file"; fi
+  done)
   if [ -z "$hits" ]; then ok "$area"; else
     n=$(printf '%s\n' "$hits" | wc -l | tr -d ' ')
     fail "$area: $n file(s) still mention the newsroom"

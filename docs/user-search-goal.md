@@ -9,6 +9,39 @@ are in `docs/user-search-intents.md`. The probe is
 `docs/user-search-probe-results.json`; `scripts/user-search-report.mjs` turns
 them into the gap matrix and is the seed of the judge below.
 
+## Running the seeded probe with the live-media stack up
+
+The catalog's expected rooms, calls and recordings come from dev:mock fixtures.
+A request scope does not replace a configured live platform-api provider. The
+probe now checks `/api/social/rooms` and refuses a non-mock `source` before
+grading Social. Set `USER_SEARCH_BASE_URL` to an isolated portal; the saved
+results record that URL and each Social persona's provider source.
+
+Use unused ports (3012 and 5184 here). Start the disposable middleware with the
+offline environment in `docs/mock-floor.md` under “Regenerating the snapshots”,
+plus `MOCK_QUEUE=true SOCIAL_PLATFORM_BACKEND=mock`. Do not load the shared
+Tilt environment or a restart snapshot. Start its portal separately:
+
+```sh
+cd portal
+API_PROXY_TARGET=http://127.0.0.1:3012 VITE_CACHE_DIR=node_modules/.vite-user-search \
+  npm run dev -- --port 5184 --strictPort
+```
+
+After the page loads, run from another shell:
+
+```sh
+cd portal
+USER_SEARCH_BASE_URL=http://localhost:5184 \
+  npx playwright test e2e/user-search-probe.spec.ts --workers=4 --reporter=line
+```
+
+Keep the optimized-dependency cache under `portal/node_modules` so excluded
+peer imports resolve. Stop these disposable servers after the probe. This
+proves the seeded catalog only: live platform search for rooms, teams,
+recordings and calls remains an explicit partial-index boundary in
+`middleware/src/lib/search-index/social.ts`.
+
 ## Baseline (probe of 2026-10-15, 704 probes)
 
 | tenant | pass | reach | phrasings answered |

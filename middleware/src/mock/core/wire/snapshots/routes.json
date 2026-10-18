@@ -3483,22 +3483,22 @@
     {
       "method": "DELETE",
       "path": "/api/social/bindings",
-      "source": "src/routes/social.ts:670"
+      "source": "src/routes/social.ts:671"
     },
     {
       "method": "GET",
       "path": "/api/social/bindings",
-      "source": "src/routes/social.ts:647"
+      "source": "src/routes/social.ts:648"
     },
     {
       "method": "PUT",
       "path": "/api/social/bindings",
-      "source": "src/routes/social.ts:652"
+      "source": "src/routes/social.ts:653"
     },
     {
       "method": "GET",
       "path": "/api/social/calls",
-      "source": "src/routes/social.ts:484"
+      "source": "src/routes/social.ts:485"
     },
     {
       "method": "GET",
@@ -3528,7 +3528,7 @@
     {
       "method": "GET",
       "path": "/api/social/conversations/:id/shared-work",
-      "source": "src/routes/social.ts:497"
+      "source": "src/routes/social.ts:498"
     },
     {
       "method": "GET",
@@ -3538,7 +3538,7 @@
     {
       "method": "POST",
       "path": "/api/social/dms",
-      "source": "src/routes/social.ts:680"
+      "source": "src/routes/social.ts:681"
     },
     {
       "method": "GET",
@@ -3548,17 +3548,17 @@
     {
       "method": "POST",
       "path": "/api/social/dms/read",
-      "source": "src/routes/social.ts:356"
+      "source": "src/routes/social.ts:357"
     },
     {
       "method": "GET",
       "path": "/api/social/embedded",
-      "source": "src/routes/social.ts:535"
+      "source": "src/routes/social.ts:536"
     },
     {
       "method": "GET",
       "path": "/api/social/people",
-      "source": "src/routes/social.ts:375"
+      "source": "src/routes/social.ts:376"
     },
     {
       "method": "GET",
@@ -3698,42 +3698,42 @@
     {
       "method": "GET",
       "path": "/api/social/recordings",
-      "source": "src/routes/social.ts:460"
+      "source": "src/routes/social.ts:461"
     },
     {
       "method": "DELETE",
       "path": "/api/social/recordings/:recordingId",
-      "source": "src/routes/social.ts:478"
+      "source": "src/routes/social.ts:479"
     },
     {
       "method": "GET",
       "path": "/api/social/recordings/:recordingId/playback",
-      "source": "src/routes/social.ts:465"
+      "source": "src/routes/social.ts:466"
     },
     {
       "method": "POST",
       "path": "/api/social/recordings/:recordingId/share",
-      "source": "src/routes/social.ts:474"
+      "source": "src/routes/social.ts:475"
     },
     {
       "method": "GET",
       "path": "/api/social/recordings/:recordingId/transcript",
-      "source": "src/routes/social.ts:469"
+      "source": "src/routes/social.ts:470"
     },
     {
       "method": "GET",
       "path": "/api/social/rooms",
-      "source": "src/routes/social.ts:395"
+      "source": "src/routes/social.ts:396"
     },
     {
       "method": "POST",
       "path": "/api/social/rooms",
-      "source": "src/routes/social.ts:401"
+      "source": "src/routes/social.ts:402"
     },
     {
       "method": "GET",
       "path": "/api/social/share-destinations",
-      "source": "src/routes/social.ts:581"
+      "source": "src/routes/social.ts:582"
     },
     {
       "method": "GET",
@@ -3743,32 +3743,32 @@
     {
       "method": "GET",
       "path": "/api/social/teams",
-      "source": "src/routes/social.ts:408"
+      "source": "src/routes/social.ts:409"
     },
     {
       "method": "POST",
       "path": "/api/social/teams",
-      "source": "src/routes/social.ts:413"
+      "source": "src/routes/social.ts:414"
     },
     {
       "method": "GET",
       "path": "/api/social/teams/:teamId",
-      "source": "src/routes/social.ts:423"
+      "source": "src/routes/social.ts:424"
     },
     {
       "method": "PATCH",
       "path": "/api/social/teams/:teamId/me",
-      "source": "src/routes/social.ts:433"
+      "source": "src/routes/social.ts:434"
     },
     {
       "method": "POST",
       "path": "/api/social/teams/:teamId/members",
-      "source": "src/routes/social.ts:444"
+      "source": "src/routes/social.ts:445"
     },
     {
       "method": "DELETE",
       "path": "/api/social/teams/:teamId/members/:userId",
-      "source": "src/routes/social.ts:454"
+      "source": "src/routes/social.ts:455"
     },
     {
       "method": "GET",

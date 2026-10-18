@@ -28,6 +28,10 @@ Log fields (the `intent` kind in `scripts/journeys/maps.mjs`): surface, role,
 user, url, map, pages, audited, session, screenshot, verdict, console errors,
 layout, answers-question, record-open, dom-audit, notes. A log counts only with
 `verdict: pass`, `answers-question: pass` and `record-open: pass`.
+Passing walks are sealed by `scripts/journeys/seal.sh` against the same
+rendered-route contracts as the other journey families. The full user-search
+validator requires those seals to be current; passing content fields alone
+do not certify an older walk after its route contract changes.
 
 Not `docs/search-journeys/`: that directory is the search workspace's own audit
 (`scripts/validate-search-workspace.sh`).

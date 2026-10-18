@@ -132,7 +132,7 @@ for c in PageHeader FilePickerButton DropdownMenu SearchInput FilterPopover Filt
   has "<$c\b" "$LIST" && ok "list page uses $c" || fail "$LIST does not render $c"
 done
 has "DataTable" "$LIST" && fail "$LIST still renders a DataTable (the reference list is DocumentResultList rows)" || ok "no DataTable on the list page"
-has 'title="All documents"' "$LIST" && has "label: 'Page'" "$LIST" && has "'Last changed'" "$LIST" && ok "All documents header, New ▾ Page, Last changed sort" || fail "$LIST: header / New ▾ / sort copy missing"
+has "title = 'All documents'" "$LIST" && has '<PageHeader title={title}' "$LIST" && has "label: 'Page'" "$LIST" && has "'Last changed'" "$LIST" && ok "All documents default header, New ▾ Page, Last changed sort" || fail "$LIST: header / New ▾ / sort copy missing"
 has "/api/assessment/knowledge/doc/create', 'POST', \{ title: uploadTitle\(file.name, markdown\), sectionKey: draftSectionKey, markdown \}" "$EXPLORER" \
   && ok "Upload creates a draft WITH its body" || fail "$EXPLORER: Upload does not post markdown to doc/create"
 grep -q "'markdown'" middleware/src/routes/assessment-document-source.ts && grep -q "input.markdown" middleware/src/providers/document-drafts.ts \
@@ -231,7 +231,7 @@ grep -q "useCallHost" "$CALL" && grep -q "lib/conversationCallModel'" "$CALL" &&
 grep -q "gutterLead={call.dock}" "$PANE" && grep -q "dock: null" "$CALL" && grep -q "<CallMediaOutlet" "$SHELLCALL" && ok "the call dock lives in the persistent shell (the gutter slot stays compatible and empty)" || fail "the call dock is neither in the gutter lead nor the shell"
 grep -q "{...call.headerProps}" "$PANE" && grep -q "onToggleVideoCall" "$CALL" && ok "Call in the shared DocumentHeader" || fail "no Call control on the DocumentHeader"
 grep -q "return \`\${prefix}doc:" "$MODEL" && grep -q "documentCallLobby(lobbyPrefix(tenant)" "$CALL" && ok "lobby is <tenant>:doc:<doc>, tenant-prefixed" || fail "document call lobby is not tenant-prefixed <tenant>:doc:<doc>"
-grep -q "<ShellCallHost>" portal/src/components/shell/Layout.tsx && grep -q "<Outlet />" portal/src/pages/assessment/AssessmentLayout.tsx \
+grep -qE '<ShellCallHost([[:space:]]|>)' portal/src/components/shell/Layout.tsx && grep -q "<Outlet />" portal/src/pages/assessment/AssessmentLayout.tsx \
   && ok "the authenticated Layout hosts calls for assessment routes; Accept opens the document" || fail "Layout does not host calls"
 grep -q "documentCommentsModel.test.ts" <(ls portal/src/pages/assessment/__tests__/) && ok "model tests: threads, groups, byline, lobby" || fail "no documentCommentsModel node tests"
 

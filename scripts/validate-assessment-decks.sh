@@ -23,7 +23,7 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 # The engine moved into realtime-modules at 0.112.0 (`/deck` subpath). The pin
 # keeps moving (0.113 the same day), so the check is "both consumers pin the
-# SAME realtime-modules sha, at or above 0.112.0, and the /deck subpath resolves
+# SAME immutable realtime-modules artifact, at or above 0.112.0, and /deck resolves
 # from the installed package" — not a frozen sha that goes red on every bump.
 ENGINE_MIN_VERSION=0.112.0
 LOG_DIR=${TMPDIR:-/tmp}
@@ -31,10 +31,27 @@ LOG_DIR=${TMPDIR:-/tmp}
 # ─────────────────────────────────────────────────────────────────────────────
 section "engine — realtime-modules /deck (no longer vendored)"
 if [ -d middleware/src/lib/deck ]; then fail "middleware/src/lib/deck still exists (engine is the library's /deck subpath)"; else ok "no vendored engine under middleware/src/lib/deck"; fi
-mw_sha=$(grep -oE 'realtime-modules#[0-9a-f]{40}' middleware/package.json | cut -d# -f2)
-po_sha=$(grep -oE 'realtime-modules#[0-9a-f]{40}' portal/package.json | cut -d# -f2)
-if [ -n "$mw_sha" ] && [ "$mw_sha" = "$po_sha" ]; then ok "middleware and portal pin the same realtime-modules sha ($mw_sha)"
-else fail "middleware ($mw_sha) and portal ($po_sha) pin different realtime-modules shas"; fi
+if pin_check=$(node --input-type=module 2>&1 <<'NODE'
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+const name = '@connorhoehn/realtime-modules';
+const json = path => JSON.parse(readFileSync(path, 'utf8'));
+const pin = dir => {
+  const spec = json(`${dir}/package.json`).dependencies[name];
+  if (/^file:.*\.tgz$/.test(spec)) return createHash('sha256').update(readFileSync(resolve(dir, spec.slice(5)))).digest('hex');
+  if (/^github:connorhoehn\/realtime-modules#[0-9a-f]{40}$/.test(spec)) return spec;
+  throw Error(`${dir} must pin a local tarball or a full Git commit`);
+};
+try {
+  const mw = pin('middleware'), portal = pin('portal');
+  if (mw !== portal) throw Error('middleware and portal pin different artifacts');
+  const versions = ['middleware', 'portal'].map(dir => json(`${dir}/node_modules/${name}/package.json`).version);
+  if (versions[0] !== versions[1]) throw Error(`installed versions differ: ${versions.join(' / ')}`);
+  console.log(`same immutable realtime-modules artifact (${mw}), installed ${versions[0]} in both consumers`);
+} catch (error) { console.error(error.message); process.exit(1); }
+NODE
+); then ok "$pin_check"; else fail "realtime-modules pin check: $pin_check"; fi
 installed=$(node -p "require('./middleware/node_modules/@connorhoehn/realtime-modules/package.json').version" 2>/dev/null)
 if [ -n "$installed" ] && [ "$(printf '%s\n%s\n' "$ENGINE_MIN_VERSION" "$installed" | sort -V | head -1)" = "$ENGINE_MIN_VERSION" ]; then
   ok "installed realtime-modules $installed carries the /deck engine (>= $ENGINE_MIN_VERSION)"

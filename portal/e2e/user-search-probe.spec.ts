@@ -29,6 +29,9 @@ import { mergeGroups } from '../../scripts/user-search-results.mjs';
 //   cd portal && npx playwright test e2e/user-search-probe.spec.ts --workers=4 --reporter=line
 //   USER_SEARCH_ONLY=access (tenant), access:requester (persona) or a comma list narrows the run;
 //   results merge into docs/user-search-probe-results.json by persona.
+//   USER_SEARCH_BASE_URL points at an isolated portal backed by dev:mock. Social's
+//   fixture catalog requires SOCIAL_PLATFORM_BACKEND=mock on that server; a mock
+//   scope alone does not replace a live platform-api provider.
 //
 // Parallel by walker: each `tenant:role` group is its own test, its own clone and its own mock scope, so
 // workers share nothing but the BFF. Every group saves through scripts/user-search-results.mjs, which holds
@@ -85,7 +88,7 @@ test.beforeAll(() => takeLock());
 const run = {
   generatedAt: new Date().toISOString(),
   watchedDigest: watchedDigest() as string,
-  baseURL: 'http://localhost:5183',
+  baseURL: process.env.USER_SEARCH_BASE_URL ?? 'http://localhost:5183',
   gitHead: (() => { try { return execSync('git rev-parse --short HEAD', { cwd: HERE }).toString().trim(); } catch { return null; } })(),
   personas: {} as Record<string, unknown>,
   probes: [] as ProbeRow[],
@@ -407,7 +410,7 @@ for (const [key, intents] of groups) {
     const open = async () => {
       for (let attempt = 1; attempt <= 4; attempt++) {
         try {
-          const p = await openAsClone(browser, persona, { tenant, role, label: 'user-search-probe', scope: { scenario: 'default', ttlMs: 3 * 60 * 60_000 }, viewport: { width: 1440, height: 900 }, prepare: (c) => guard(c, blocked) });
+          const p = await openAsClone(browser, persona, { baseURL: run.baseURL, tenant, role, label: 'user-search-probe', scope: { scenario: 'default', ttlMs: 3 * 60 * 60_000 }, viewport: { width: 1440, height: 900 }, prepare: (c) => guard(c, blocked) });
           p.page.on('response', (r) => {
             const u = new URL(r.url());
             if (u.pathname.startsWith('/api/') && r.status() >= 400) { const k = `${r.status()} ${u.pathname}`; statuses.set(k, (statuses.get(k) ?? 0) + 1); }
@@ -425,6 +428,14 @@ for (const [key, intents] of groups) {
     if (!person.principal || !String(person.principal.sub).startsWith(`${persona}-clone-`)) throw new Error(`refusing to probe as ${person.principal?.sub ?? 'no principal'}: not a clone of ${persona}`);
     run.personas[key] = { cloneOf: persona, principal: person.principal && { sub: person.principal.sub, tenant: person.principal.tenant, role: person.principal.role } };
     try {
+      if (tenant === 'social') {
+        const response = await person.context.request.get('/api/social/rooms');
+        const body = await response.json() as { source?: string };
+        run.personas[key] = { ...(run.personas[key] as object), socialPlatformSource: body.source ?? null };
+        if (!response.ok() || body.source !== 'mock') {
+          throw new Error(`Social's seeded search catalog requires the mock platform provider; got HTTP ${response.status()} / ${body.source ?? 'unknown'}. Use USER_SEARCH_BASE_URL with an isolated SOCIAL_PLATFORM_BACKEND=mock server.`);
+        }
+      }
       for (const intent of intents) {
         // A clone's session can lapse mid-run (scope expiry, an epoch bump): check, record, re-open.
         await healthy(person.page);

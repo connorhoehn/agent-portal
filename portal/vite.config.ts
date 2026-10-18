@@ -21,6 +21,9 @@ async function apiTarget(): Promise<string> {
 }
 
 export default defineConfig(async () => ({
+  // Parallel local stacks need independent optimized dependencies. Keep this
+  // under portal/node_modules so external peer imports still resolve there.
+  cacheDir: process.env.VITE_CACHE_DIR ?? 'node_modules/.vite',
   define: {
     global: 'globalThis',
   },

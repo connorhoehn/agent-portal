@@ -10,6 +10,7 @@
 #                                                USER_SEARCH_ONLY=access re-probes named tenants; needs the stack; one probe run at a time)
 set -u
 cd "$(dirname "$0")/.."
+source scripts/lib/journeys.sh
 QUICK=0; WALK=0; PROBE=0
 for a in "$@"; do case "$a" in --quick) QUICK=1;; --walk) WALK=1;; --probe) PROBE=1;; esac; done
 
@@ -45,6 +46,9 @@ if [ "$now" = "$was" ]; then ok "results ($when) were probed on this tree's sear
 else fail "results are stale: probed on $was, the tree is $now — a file under scripts/user-search-freshness.mjs WATCHED changed; re-probe (--probe)"; fi
 missing=$(node -e "const r=require('./$RESULTS');const ids=new Set(r.probes.map(p=>p.intent));const m=r.intents.filter(i=>!ids.has(i.id)).map(i=>i.id);process.stdout.write(m.join(' '))")
 if [ -z "$missing" ]; then ok "every catalog intent has probes"; else fail "intents never probed: $missing"; fi
+social_sources=$(node -e "const r=require('./$RESULTS');process.stdout.write(Object.entries(r.personas??{}).filter(([k,p])=>k.startsWith('social:')&&p.socialPlatformSource!=='mock').map(([k,p])=>k+'='+String(p.socialPlatformSource??'unrecorded')).join(' '))")
+if [ -z "$social_sources" ]; then ok "Social's seeded catalog was probed against the mock platform provider"
+else fail "Social probe provider does not establish the seeded fixture world: $social_sources — re-probe on an isolated SOCIAL_PLATFORM_BACKEND=mock server"; fi
 
 # ── 3 + 4 floors: pass rate up, wrong-on-best down ─────────────────────────
 section "3-4 per-tenant floors (scripts/user-search-floors.tsv): pass rate ≥ floor, wrong on the best surface ≤ max"
@@ -67,18 +71,20 @@ case "$chk" in *"0 problem"*) ok "maps valid: $chk";; *) fail "maps invalid: $ch
 mapped=$(node -e "const r=require('./$RESULTS');process.stdout.write(r.intents.filter(i=>i.map).map(i=>i.tenant+'/'+i.role+'/'+i.id).join(' '))")
 nomap=""; for k in $mapped; do [ -f "docs/journeys/maps/user-search/$k.ts" ] || nomap="$nomap $k"; done
 if [ -z "$nomap" ]; then ok "every mapped intent ($(echo $mapped | wc -w | tr -d ' ')) has a map"; else fail "mapped intents without a map:$nomap"; fi
-if [ "$WALK" = 1 ]; then node scripts/journeys/run-maps.mjs walk --family user-search --no-seal >/dev/null 2>&1 || note "the walk reported failures (judged from the logs below)"; fi
+if [ "$WALK" = 1 ]; then node scripts/journeys/run-maps.mjs walk --family user-search >/dev/null 2>&1 || note "the walk reported failures (judged from the logs below)"; fi
 if [ "$QUICK" = 0 ]; then
-  held=0; passed=0
+  held=0; passed=0; logs=()
   for k in $mapped; do
     tenant=${k%%/*}; rest=${k#*/}; role=${rest%%/*}; id=${rest#*/}
     file="docs/journeys/maps/user-search/$k.ts"; log="docs/user-search-journeys/$tenant/$role-$id.md"
     if grep -qE '^\s*hold:' "$file"; then held=$((held+1)); note "pending $k: $(grep -m1 -E '^\s*hold:' "$file" | sed 's/^ *hold: *//' | cut -c1-90)"; continue; fi
     if [ ! -f "$log" ]; then fail "map $k: never walked ($log missing — run with --walk)"; continue; fi
+    logs+=("$log")
     if grep -qE '^verdict: *pass' "$log" && grep -qE '^answers-question: *pass' "$log" && grep -qE '^record-open: *pass' "$log"; then passed=$((passed+1))
     else fail "map $k: $(grep -m1 -E '^(answers-question|record-open|verdict):.*fail' "$log" | cut -c1-160)"; fi
   done
   ok "$passed map(s) walked and passing; $held held for a later phase"
+  jr_freshness docs/user-search-journeys "${logs[@]}"; jr_report
 fi
 
 # ── 6 storage-agnostic guard ───────────────────────────────────────────────
