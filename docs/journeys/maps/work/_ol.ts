@@ -130,16 +130,15 @@ export const olSprints = (): JourneyMap => {
 };
 
 // ── work-write ──────────────────────────────────────────────────────────────
-// The composer opens in Agent mode on a work item whose job card is up for the org-leader, and for the sme since the seeded agent
-// question waiting for an answer takes the composer's focus (answersFocus); /comment is a Chat command: the planning note is
-// typed after switching the mode from the composer's own menu.
+// /comment is a Chat command. Select Chat explicitly from the mode menu;
+// the initial mode depends on whether a job card or agent question has focus.
 export const olWorkWrite = (role: 'org-leader' | 'sme' = 'org-leader'): JourneyMap => {
   const base = surfaceMap(role, 'work-write');
   const at = base.steps.findIndex((s) => s.name.startsWith('Type a planning note'));
   if (at < 0) throw new Error(`${role}/work-write: the shared steps no longer type a planning note`);
-  const mode = { css: '[data-testid="initiative-composer"] button:has-text("Agent")', nth: 0 } as const;
+  const mode = { role: 'button', name: /^Composer mode: (Chat|Agent)/, within: { testId: 'initiative-composer' } } as const;
   const toChat: Step[] = [
-    click(mode, 'Open the composer mode menu: this composer is in Agent mode here, and Chat is the other mode', { visible: [{ role: 'menuitem', name: /^Chat/ }, { role: 'menuitem', name: /^Agent/ }] }, { state: 'dialog-open', proves: 'keyboard' }),
+    click(mode, 'Open the composer mode menu: Chat and Agent are available', { visible: [{ role: 'menuitem', name: /^Chat/ }, { role: 'menuitem', name: /^Agent/ }] }, { state: 'dialog-open', proves: 'keyboard' }),
     click({ role: 'menuitem', name: /^Chat/ }, 'Choose Chat: the composer is now the discussion\'s, and its mode button says so', { visible: [{ role: 'button', name: /Composer mode: Chat/ }], hidden: [{ role: 'menuitem', name: /^Chat/ }] }),
   ];
   return { ...base, steps: [...base.steps.slice(0, at), ...toChat, ...base.steps.slice(at)] };

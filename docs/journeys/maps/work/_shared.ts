@@ -66,9 +66,10 @@ export const STILL = {
   pane: { testId: 'initiative-pane' } as Target,
   tablist: (name: Text): Target => ({ role: 'tablist', name }),
 };
-// A rail link's name is its label, then its count, then the unread marker's own label when the section has one
-// ("Communication 1 conversation with unread messages"): a clone stands in for its persona's DMs, so it carries them too.
-export const rail = (name: string): Target => ({ role: 'link', name: new RegExp(`^${name}(?: ?\\d+)?(?: ?\\d+ conversations? with unread messages)?$`), within: { css: '[data-shell-nav]' } });
+// The accessible name is the label, the activity marker, then the count badge:
+// "Communication 1 conversation with unread messages · 1 unread notice in this inbox 1".
+// navigationActivity keeps unread conversations and inbox notices as separate categories.
+export const rail = (name: string): Target => ({ role: 'link', name: new RegExp(`^${name}(?: ?(?:\\d+ conversations? with unread messages(?: · \\d+ unread notices? in this inbox)?|\\d+ unread notices? in this inbox))?(?: ?\\d+)?$`), within: { css: '[data-shell-nav]' } });
 export const search = (name: string): Target => ({ role: 'textbox', name, exact: true });
 export const tableRows: Target = { css: 'main tbody tr' };
 export const firstRow: Target = { css: 'main tbody tr', nth: 0 };
