@@ -118,15 +118,27 @@ check "lane_logged '$LV' V1 || grep -rq '(lane V1)' '$LV/docs'" "V1 change logge
 
 if [ "$QUICK" = 0 ]; then
   section "suites (each repo, run alone)"
+  SUITE_LOGS=${UPSTREAM_LOG_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/orgiq-upstream-refinement.XXXXXX")}
+  mkdir -p "$SUITE_LOGS" || exit 2
+  printf 'Suite logs: %s\n' "$SUITE_LOGS"
+  # These suites are expensive. Preserve their evidence and failure details
+  # so diagnosing a failed gate never requires repeating a completed run.
+  check_logged() {
+    local log="$SUITE_LOGS/$3.log"
+    if eval "$1" >"$log" 2>&1; then ok "$2"; else
+      fail "$2 ($log)"
+      tail -n 20 "$log"
+    fi
+  }
   for r in "$DC" "$SR" "$EC" "$MQ" "$RM" "$PA" "$RX" "$LV"; do
     n=$(basename "$r")
-    check "(cd '$r' && npm test --silent)" "$n tests"
-    check "(cd '$r' && (npm run -s typecheck 2>/dev/null || npx tsc --noEmit -p .))" "$n typecheck"
+    check_logged "(cd '$r' && npm test --silent)" "$n tests" "$n-tests"
+    check_logged "(cd '$r' && (npm run -s typecheck 2>/dev/null || npx tsc --noEmit -p .))" "$n typecheck" "$n-typecheck"
   done
-  check "(cd middleware && npm run -s typecheck)" "middleware typecheck"
-  check "(cd middleware && npx jest src/lib/gateway/__tests__/authority-facade.test.ts)" "consumer authority facade contract"
-  check "./scripts/validate-communication-plane.sh --quick" "communication plane (quick)"
-  check "./scripts/validate-social-tenant.sh --quick" "social tenant (quick)"
+  check_logged "(cd middleware && npm run -s typecheck)" "middleware typecheck" "middleware-typecheck"
+  check_logged "(cd middleware && npx jest src/lib/gateway/__tests__/authority-facade.test.ts)" "consumer authority facade contract" "authority-facade"
+  check_logged "./scripts/validate-communication-plane.sh --quick" "communication plane (quick)" "communication-plane-quick"
+  check_logged "./scripts/validate-social-tenant.sh --quick" "social tenant (quick)" "social-tenant-quick"
 fi
 
 printf '\n'
