@@ -127,6 +127,10 @@ describe('provisionAccess: a tenant role', () => {
 
 describe('provisionAccess: an initiative membership', () => {
   it('inserts the contribution through the writer; the membership rule reads it', async () => {
+    const initiative = findInitiative('p-auth-migration')!;
+    const seededSmes = [...initiative.smes];
+    // Model an unprovisioned membership independently of the demo roster.
+    initiative.smes = initiative.smes.filter(id => id !== 'p-rhea');
     expect(findInitiative('p-auth-migration')!.smes).not.toContain('p-rhea');
     approve('req-0002');
     const out = await provisionAccess({ id: 'req-0002' });
@@ -136,7 +140,7 @@ describe('provisionAccess: an initiative membership', () => {
     // Her grants are untouched: a membership is not a role.
     expect((await getUser('u-rhea'))!.grants).toEqual({ access: ['requester'] });
     initiatives.reset();
-    expect(findInitiative('p-auth-migration')!.smes).not.toContain('p-rhea');
+    expect(findInitiative('p-auth-migration')!.smes).toEqual(seededSmes);
   });
 
   it('a beneficiary with no linked person is refused before the row is claimed', async () => {
