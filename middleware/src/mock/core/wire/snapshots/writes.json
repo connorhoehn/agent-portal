@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-18T14:02:51.048Z",
-  "serverHandlerSha": "c771a123dd4f1b1a234954dc4f7ac22021f7c03623bc6441f2ce44d356383a3c",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-10-19T22:58:55.723Z",
+  "serverHandlerSha": "9cade41be4ad37d005daf261fbab28dc449e4c77bfc4379878735cc13cd3091a",
+  "baseUrl": "http://127.0.0.1:3013",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -149,14 +149,7 @@
       }
     },
     "DELETE /api/graph/work-items/:id/decisions/:decisionId": {
-      "persona": "orgiq/admin",
-      "status": 404,
-      "shape": {
-        "$": "object",
-        "error": "string"
-      },
-      "values": {},
-      "sent": []
+      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-rta-e1-s1/decisions (orgiq/admin)"
     },
     "DELETE /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
@@ -511,9 +504,9 @@
         "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
-        "completedAt": "string",
+        "completedAt": "null",
         "createdAt": "string",
-        "description": "null",
+        "description": "string",
         "estimateForecast": "null",
         "estimateModel": "null",
         "estimateReviewedAt": "null",
@@ -530,25 +523,25 @@
         "nextStep": "null",
         "nextStepDetail": "null",
         "parentId": "string",
-        "prStatus": "string",
-        "prUrl": "string",
+        "prStatus": "null",
+        "prUrl": "null",
         "priority": "string",
         "projectId": "string",
         "projectName": "string",
         "sprintId": "string",
         "status": "string",
         "storyPoints": "number",
-        "summary": "null",
+        "summary": "string",
         "title": "string",
         "type": "string",
         "updatedAt": "string"
       },
       "values": {
         "key": [
-          "ORG-LLM-10"
+          "ORG-RTA-2"
         ],
         "status": [
-          "done"
+          "in_progress"
         ],
         "type": [
           "story"
@@ -4608,25 +4601,7 @@
       }
     },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "escalatedAt": "null",
-        "id": "string",
-        "requiredRole": "null",
-        "status": "string",
-        "summary": "string",
-        "topic": "string",
-        "workItemId": "string",
-        "workItemTitle": "string"
-      },
-      "values": {
-        "status": [
-          "resolved"
-        ]
-      },
-      "sent": []
+      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-rta-e1-s1/decisions (orgiq/admin)"
     },
     "PUT /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
