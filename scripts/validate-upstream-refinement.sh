@@ -133,7 +133,13 @@ if [ "$QUICK" = 0 ]; then
   for r in "$DC" "$SR" "$EC" "$MQ" "$RM" "$PA" "$RX" "$LV"; do
     n=$(basename "$r")
     check_logged "(cd '$r' && npm test --silent)" "$n tests" "$n-tests"
-    check_logged "(cd '$r' && (npm run -s typecheck 2>/dev/null || npx tsc --noEmit -p .))" "$n typecheck" "$n-typecheck"
+    # A plain-JavaScript repo (live-video-streaming) has neither a typecheck
+    # script nor a tsconfig; npx would fetch an unrelated "tsc" package there.
+    if grep -q '"typecheck"' "$r/package.json" || [ -f "$r/tsconfig.json" ]; then
+      check_logged "(cd '$r' && (npm run -s typecheck 2>/dev/null || npx tsc --noEmit -p .))" "$n typecheck" "$n-typecheck"
+    else
+      ok "$n typecheck (JavaScript: no typecheck script or tsconfig)"
+    fi
   done
   check_logged "(cd middleware && npm run -s typecheck)" "middleware typecheck" "middleware-typecheck"
   check_logged "(cd middleware && npx jest src/lib/gateway/__tests__/authority-facade.test.ts)" "consumer authority facade contract" "authority-facade"
