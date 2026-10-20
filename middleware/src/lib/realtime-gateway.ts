@@ -25,8 +25,8 @@
 //   lib/gateway/stats.ts           the load line
 //   lib/gateway/env.ts             the tuning knobs
 //   lib/gateway-cursor.ts, gateway-run-feed.ts, gateway-attachments.ts,
-//   gateway-redis.ts               cursor, activity/pipeline, reactions/uploads,
-//                                  the leased Redis ports (unchanged)
+//   redis-store.ts                 cursor, activity/pipeline, reactions/uploads,
+//                                  application Redis store shapes
 //   lib/social-chat.ts             both chat store factories (memory, Dynamo)
 // Every name this file exported before the split is re-exported below, so no
 // importer moved.
@@ -35,7 +35,7 @@
 // production unless set, so the ECS task is unchanged until someone asks.
 //
 // Call state lives in Redis when REDIS_URL is set (realtime-modules'
-// RedisCallStateStore over lib/redis-lite.ts), in memory otherwise. The
+// RedisCallStateStore over lib/redis-store.ts), in memory otherwise. The
 // default routing is LocalRealtimeRouter. REALTIME_GATEWAY_ROUTER=redis opts
 // into the upstream leased peer router through startRealtimeGateway; its
 // connection/state ports are ready before the HTTP server listens. Keep the
@@ -54,7 +54,7 @@
 import type { Server } from 'node:http';
 import { hostname } from 'node:os';
 import { RedisPresenceStore } from '@connorhoehn/realtime-modules/presence';
-import { attachRealtime, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withAuthorityCache, withPrincipalRevalidation, type AuthorityVerdictCache, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehn/realtime-modules/server';
+import { attachRealtime, createBoundedRedis, type BoundedRedis, type RealtimeLeaseGroup, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withAuthorityCache, withPrincipalRevalidation, type AuthorityVerdictCache, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehn/realtime-modules/server';
 import { RedisCallStateStore, InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
 import { MeetingService } from '@connorhoehn/realtime-modules/meeting';
 import { createOrgiqWorkGraphStream, isWorkGraphStreamPublisher } from './work-graph/stream.js';
@@ -66,9 +66,7 @@ import { withHuddleChat } from './call-chat-send.js';
 import { withDmPageReferences } from './dm-page-references.js';
 import { withAssessmentPageReferences } from './assessment-page-references.js';
 import { MemoryCallChatStateStore, RedisCallChatStateStore } from './call-chat-state.js';
-import { RedisLite, type GatewayRedisStore } from './redis-lite.js';
-import { GatewayRedis } from './gateway-redis.js';
-import type { LeasedOwner } from './realtime-node-ownership.js';
+import { createRedisStore, type GatewayRedisStore } from './redis-store.js';
 import { createGatewayNotificationStore, releaseGatewayNotificationStore, seedMockNotifications } from './notification-store.js';
 import { admitTenantNotification, setNotificationSink } from './social-notify.js';
 import { createSocialChatBackend, setSocialChatBackend, setThreadLiveAppend, type SocialChatBackend } from './social-chat.js';
@@ -186,6 +184,9 @@ export interface AttachGatewayOptions {
   socialChat?: SocialChatBackend;
   /** Connected host-owned stores for the async cluster startup. */
   redisClient?: GatewayRedisStore;
+  redisSubscriber?: Pick<BoundedRedis, 'subscribe'>;
+  /** The host process owns the lease group and releases it at shutdown. */
+  leaseGroup?: RealtimeLeaseGroup;
   routerFactory?: (hooks: RouterHooks) => RedisRealtimeRouter;
   /** Override REALTIME_AUTHORITY_CACHE (tests). */
   authorityCache?: boolean;
@@ -201,23 +202,25 @@ export type GatewayHandle = RealtimeHandle & { store: RealtimeGatewayStore; redi
 
 /** Ready transport before the host starts accepting upgrades. The synchronous
  * attach function remains available to existing single-gateway callers. */
-export async function startRealtimeGateway(server: Server, opts: AttachGatewayOptions = {}): Promise<GatewayHandle & { ownership?: LeasedOwner }> {
+export async function startRealtimeGateway(server: Server, opts: AttachGatewayOptions = {}): Promise<GatewayHandle> {
   const routing = realtimeGatewayRouting();
-  if (routing === 'local') return attachRealtimeGateway(server, opts);
   const redisUrl = opts.redisUrl === undefined ? (process.env['REDIS_URL'] ?? '').trim() : opts.redisUrl;
+  if (routing === 'local' && (opts.redisClient || !redisUrl)) return attachRealtimeGateway(server, opts);
   if (!redisUrl) throw new Error('Redis peer routing requires REDIS_URL');
   const bound = (name: string, fallback: number) => {
     const value = Number(process.env[name] ?? fallback);
     if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} must be a positive integer`);
     return value;
   };
-  const redis = new GatewayRedis(redisUrl, bound('REDIS_COMMAND_TIMEOUT_MS', 2000));
-  await redis.open();
+  const transport = await createBoundedRedis(redisUrl, { timeoutMs: bound('REDIS_COMMAND_TIMEOUT_MS', 2000),
+    onError: (role, error) => console.warn('[realtime-gateway] Redis connection error', role, error instanceof Error ? error.name : 'unknown') });
+  const redis = createRedisStore(transport);
   let router: RedisRealtimeRouter | undefined;
   let handle: GatewayHandle | undefined;
   try {
-    handle = attachRealtimeGateway(server, { ...opts, redisClient: redis, routerFactory: hooks => {
-      router = new RedisRealtimeRouter({ ...hooks, redis: redis.cluster,
+    if (routing === 'local') return attachRealtimeGateway(server, { ...opts, redisClient: redis, redisSubscriber: transport });
+    handle = attachRealtimeGateway(server, { ...opts, redisClient: redis, redisSubscriber: transport, routerFactory: hooks => {
+      router = new RedisRealtimeRouter({ ...hooks, redis: transport, leaseGroup: opts.leaseGroup,
         namespace: process.env['REALTIME_GATEWAY_NAMESPACE'] || 'orgiq-gateway',
         nodeId: process.env['REALTIME_GATEWAY_NODE_ID'] || `${hostname()}:${process.pid}`,
         leaseMs: bound('REALTIME_GATEWAY_LEASE_MS', 30000),
@@ -230,7 +233,7 @@ export async function startRealtimeGateway(server: Server, opts: AttachGatewayOp
     } });
     await router!.start();
     console.log('[realtime-gateway] Redis peer routing ready', { nodeId: router!.nodeId });
-    return Object.assign(handle, { ownership: router! as LeasedOwner });
+    return handle;
   } catch (error) {
     if (handle) await handle.dispose(); else await redis.quit();
     throw error;
@@ -247,7 +250,10 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     throw new Error('Redis peer routing requires awaited startRealtimeGateway, not synchronous attachRealtimeGateway');
   }
   const redisUrl = opts.redisUrl === undefined ? (process.env['REDIS_URL'] ?? '').trim() || null : opts.redisUrl;
-  const redis = opts.redisClient ?? (redisUrl ? new RedisLite(redisUrl) : null);
+  if (redisUrl && !opts.redisClient) {
+    throw new Error('Redis storage requires awaited startRealtimeGateway or a connected redisClient');
+  }
+  const redis = opts.redisClient ?? null;
   const store: RealtimeGatewayStore = redis ? 'redis' : 'memory';
   const baseStateStore = redis ? new RedisCallStateStore(redis) : new InMemoryCallStateStore();
   let pageRuntime: CallPageRuntime | null = null;
@@ -368,7 +374,7 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
       // keeps it in memory.
       tenantMeeting({ calls: baseStateStore, getCtx,
         ...(clusterRouter && redis ? { redis, namespace: process.env['REALTIME_GATEWAY_NAMESPACE'] || 'orgiq-gateway',
-          ...(redis instanceof GatewayRedis ? { subscriber: { subscribe: (topic: string, receive: (message: string) => void) => redis.cluster.subscribe(topic, receive) } } : {}) } : {}) }),
+          ...(opts.redisSubscriber ? { subscriber: opts.redisSubscriber } : {}) } : {}) }),
       // Reactions follow chat's channel authority (the router's `authorize`
       // strips `reactions:`); targeted ones persist in Redis or memory.
       reactions({ store: createReactionStore(redis ? { command: (...args) => redis.command(...args) } : null,

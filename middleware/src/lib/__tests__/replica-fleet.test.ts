@@ -13,29 +13,17 @@
 //     answer that re-enables the destructive sweep;
 //   - the lock is held by exactly one caller, and released only by its owner.
 //
-// Redis tests are skipped unless a server is reachable, so the suite stays green
-// on a machine without one rather than failing for the wrong reason.
+// Redis cases require an explicit TEST_REDIS_URL to a disposable loopback
+// server. Never delete fleet keys from the shared development Redis by default.
 
-import net from 'node:net';
 import { createReplicaFleet } from '../replica-fleet.js';
-import { RedisLite } from '../redis-lite.js';
+import { openRedisStore, type GatewayRedisStore } from '../redis-store.js';
 
-const REDIS_URL = process.env['TEST_REDIS_URL'] ?? 'redis://127.0.0.1:6379';
-
-function reachable(url: string, timeoutMs = 300): Promise<boolean> {
-  const u = new URL(url);
-  return new Promise((resolve) => {
-    const sock = net.createConnection({ host: u.hostname, port: Number(u.port || 6379) });
-    const done = (ok: boolean): void => { sock.destroy(); resolve(ok); };
-    sock.setTimeout(timeoutMs);
-    sock.once('connect', () => done(true));
-    sock.once('error', () => done(false));
-    sock.once('timeout', () => done(false));
-  });
+const REDIS_URL = process.env['TEST_REDIS_URL'];
+const redisSuite = REDIS_URL ? describe : describe.skip;
+if (REDIS_URL && !['127.0.0.1', 'localhost', '[::1]', '::1'].includes(new URL(REDIS_URL).hostname)) {
+  throw new Error('TEST_REDIS_URL must name a dedicated loopback Redis');
 }
-
-let hasRedis = false;
-beforeAll(async () => { hasRedis = await reachable(REDIS_URL); });
 
 describe('replica fleet without Redis', () => {
   it('reports itself alone, so the single-task boot sweep is unchanged', async () => {
@@ -48,23 +36,20 @@ describe('replica fleet without Redis', () => {
   });
 });
 
-describe('replica fleet over Redis', () => {
+redisSuite('replica fleet over Redis', () => {
   const key = 'orgiq:replicas';
-  let redis: RedisLite;
+  let redis: GatewayRedisStore;
 
   beforeEach(async () => {
-    if (!hasRedis) return;
-    redis = new RedisLite(REDIS_URL);
+    redis = await openRedisStore(REDIS_URL!);
     await redis.del(key, 'orgiq:lock:boot-test');
   });
   afterEach(async () => {
-    if (!hasRedis) return;
     await redis.del(key, 'orgiq:lock:boot-test');
     await redis.quit();
   });
 
   it('sees a sibling replica as a peer, and itself as a member', async () => {
-    if (!hasRedis) return;
     const a = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-a' });
     const b = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-b' });
     await a.heartbeat();
@@ -79,7 +64,6 @@ describe('replica fleet over Redis', () => {
   });
 
   it('prunes a replica that stopped heartbeating, so a crash cannot block recovery forever', async () => {
-    if (!hasRedis) return;
     const a = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-a' });
     await a.heartbeat();
     // A sibling whose last heartbeat is older than the TTL (45s).
@@ -93,7 +77,6 @@ describe('replica fleet over Redis', () => {
   });
 
   it('leaves the fleet promptly on shutdown rather than waiting out the TTL', async () => {
-    if (!hasRedis) return;
     const a = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-a' });
     const b = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-b' });
     await a.heartbeat(); await b.heartbeat();
@@ -106,7 +89,6 @@ describe('replica fleet over Redis', () => {
   });
 
   it('grants the lock to exactly one replica, and the loser does not run the work', async () => {
-    if (!hasRedis) return;
     const a = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-a' });
     const b = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-b' });
     const order: string[] = [];
@@ -127,7 +109,6 @@ describe('replica fleet over Redis', () => {
   });
 
   it('does not release a lock it no longer owns', async () => {
-    if (!hasRedis) return;
     const a = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-a' });
     // A's lock expires mid-run and B legitimately takes it; A's release must not
     // delete B's lock, which would hand it to a third replica.
@@ -145,5 +126,30 @@ describe('replica fleet over Redis', () => {
     const a = createReplicaFleet({ redisUrl: 'redis://127.0.0.1:1', id: 'task-a' });
     expect((await a.peers()).length).toBeGreaterThan(0);
     a.stop();
+  });
+
+  it('keeps a healthy transport after failed application work, and closes it on stop', async () => {
+    const clients = async () => new Set(String(await redis.command('CLIENT', 'LIST')).trim().split('\n')
+      .map(line => line.match(/^id=(\d+)/)?.[1]).filter(Boolean));
+    const before = await clients();
+    const fleet = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-lifecycle' });
+    try {
+      await fleet.heartbeat();
+      const owned = [...await clients()].filter(id => !before.has(id));
+      expect(owned).toHaveLength(3);
+      await expect(fleet.withLock('boot-test', 5000, async () => { throw new Error('work failed'); })).rejects.toThrow('work failed');
+      await fleet.heartbeat();
+      const afterWork = await clients();
+      expect(owned.every(id => afterWork.has(id))).toBe(true);
+      expect(await redis.get('orgiq:lock:boot-test')).toBeNull();
+      fleet.stop();
+      await expect(fleet.heartbeat()).rejects.toThrow('stopped');
+      for (let attempt = 0; attempt < 50; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        const remaining = await clients();
+        if (owned.every(id => !remaining.has(id))) return;
+      }
+      throw new Error('stopped fleet retained Redis connections');
+    } finally { fleet.stop(); }
   });
 });

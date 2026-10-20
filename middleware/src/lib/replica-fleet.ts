@@ -29,7 +29,8 @@
 // Everything degrades to "I am alone" when REDIS_URL is unset, which is the
 // honest answer for a single task and preserves today's behaviour exactly.
 
-import { RedisLite, lockRedisClient } from './redis-lite.js';
+import { createBoundedRedis, type BoundedRedis } from '@connorhoehn/realtime-modules/server';
+import { createRedisStore } from './redis-store.js';
 
 const FLEET_KEY = 'orgiq:replicas';
 /** A replica silent this long is treated as gone. Must exceed the heartbeat. */
@@ -97,21 +98,37 @@ export function createReplicaFleet(opts: { redisUrl?: string | null; id?: string
   const url = opts.redisUrl === undefined ? (process.env['REDIS_URL'] ?? '').trim() || null : opts.redisUrl;
   if (!url) return soloFleet(id);
 
-  const redis = new RedisLite(url);
-  const locks = lockRedisClient(redis);
+  let connection: Promise<BoundedRedis> | null = null;
   let timer: NodeJS.Timeout | null = null;
   let stopped = false;
 
-  /** Prune first, then read: a dead replica must never be counted as a peer. */
-  const readMembers = async (): Promise<string[]> => {
-    await redis.command('ZREMRANGEBYSCORE', FLEET_KEY, '-inf', Date.now() - REPLICA_TTL_MS);
-    return redis.zrange(FLEET_KEY, 0, -1);
+  // The fleet API is synchronous, while each operation awaits the library's
+  // connection. Failed connections are discarded so a later heartbeat can
+  // recover; no failed read is ever interpreted as an empty fleet.
+  const withRedis = async <T>(operation: (redis: BoundedRedis) => Promise<T>): Promise<T> => {
+    if (stopped) throw new Error('Replica fleet is stopped');
+    const pending = connection ??= createBoundedRedis(url);
+    try {
+      const redis = await pending;
+      if (stopped) throw new Error('Replica fleet is stopped');
+      return await operation(redis);
+    } catch (error) {
+      if (connection === pending) connection = null;
+      await pending.then(redis => redis.quit()).catch(() => undefined);
+      throw error;
+    }
   };
+
+  /** Prune first, then read: a dead replica must never be counted as a peer. */
+  const readMembers = (): Promise<string[]> => withRedis(async redis => {
+    await redis.command('ZREMRANGEBYSCORE', FLEET_KEY, '-inf', Date.now() - REPLICA_TTL_MS);
+    return createRedisStore(redis).zrange(FLEET_KEY, 0, -1);
+  });
 
   const fleet: ReplicaFleet = {
     id,
     async heartbeat() {
-      await redis.zadd(FLEET_KEY, Date.now(), id);
+      await withRedis(redis => redis.command('ZADD', FLEET_KEY, Date.now(), id));
     },
     async members() {
       try { return await readMembers(); } catch {
@@ -125,12 +142,17 @@ export function createReplicaFleet(opts: { redisUrl?: string | null; id?: string
       return (await fleet.members()).filter((m) => m !== id);
     },
     async withLock<T>(name: string, ttlMs: number, fn: () => Promise<T>): Promise<T | null> {
-      // A plain SET NX PX, which is what distributed-core's RedisLockProvider
-      // builds its fencing on; the value names the holder so a stuck lock is
-      // attributable rather than anonymous.
       const key = `orgiq:lock:${name}`;
-      const won = await locks.set(key, id, 'NX', 'PX', ttlMs);
+      const { locks, won } = await withRedis(async redis => {
+        const locks = redis.lockClient();
+        // A plain SET NX PX, which is what distributed-core's RedisLockProvider
+        // builds its fencing on; the value names the holder so a stuck lock is
+        // attributable rather than anonymous.
+        const won = await locks.set(key, id, 'NX', 'PX', ttlMs);
+        return { locks, won };
+      });
       if (won !== 'OK') return null;
+      // A failure in application work must not discard a healthy transport.
       try { return await fn(); } finally {
         // Release only if still ours: if the TTL expired mid-run another
         // replica may legitimately hold it now, and deleting that would hand
@@ -142,12 +164,15 @@ export function createReplicaFleet(opts: { redisUrl?: string | null; id?: string
       }
     },
     async leave() {
-      try { await redis.command('ZREM', FLEET_KEY, id); } catch { /* TTL will do it */ }
+      try { await withRedis(redis => redis.command('ZREM', FLEET_KEY, id)); } catch { /* TTL will do it */ }
     },
     stop() {
       stopped = true;
       if (timer) clearInterval(timer);
       timer = null;
+      const pending = connection;
+      connection = null;
+      void pending?.then(redis => redis.quit()).catch(() => undefined);
     },
   };
 

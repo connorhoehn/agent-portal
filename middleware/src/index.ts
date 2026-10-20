@@ -6,7 +6,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { browserOrigin } from './lib/browser-origin.js';
 import cookieParser from 'cookie-parser';
 import { rejectUnsupportedUpgrades } from './lib/unsupported-upgrades.js';
-import { linkNodeOwnership, type LeasedOwner } from './lib/realtime-node-ownership.js';
+import { LeaseGroup } from '@connorhoehn/realtime-modules/server';
 import { startRealtimeGateway, realtimeGatewayEnabled, realtimeGatewayStatus, REALTIME_GATEWAY_PATH, authenticateGatewayUpgrade } from './lib/realtime-gateway.js';
 import { channelGuards } from './lib/gateway/authority.js';
 import { createUploadsRouter, gatewayUploadConfig } from './lib/gateway-attachments.js';
@@ -595,13 +595,10 @@ const server = createServer(app);
 // token over `Sec-WebSocket-Protocol` (lib/realtime-gateway.ts). Every other
 // upgrade is refused before a socket is accepted.
 const gatewayOn = realtimeGatewayEnabled();
-const gatewayHandle = gatewayOn ? await startRealtimeGateway(server) : null;
+const nodeLeases = new LeaseGroup({ logger: console });
+const gatewayHandle = gatewayOn ? await startRealtimeGateway(server, { leaseGroup: nodeLeases }) : null;
 if (mockRestartSnapshot()) { await fleetInitialization; assertMockRestartIdleDirectors(getDemoState()); completeMockRestartReplay(); }
 if (!gatewayHandle) console.log('[realtime-gateway] off (REALTIME_GATEWAY) — /ws upgrades are refused');
-// A node is one owner: the first leased router to fence retires the other
-// (lib/realtime-node-ownership.ts), so /health's 503 never leaves half a lease alive.
-const stopOwnershipLink = linkNodeOwnership([gatewayHandle?.ownership]
-  .filter((owner): owner is LeasedOwner => !!owner));
 rejectUnsupportedUpgrades(server, { allowPaths: gatewayOn ? [REALTIME_GATEWAY_PATH] : [] });
 server.listen(config.port, '0.0.0.0', () => {
   consumeMockRestartHandoff();
@@ -613,8 +610,8 @@ let closing = false;
 const shutdown = async () => {
   if (closing) return; closing = true;
   const deadline = setTimeout(() => process.exit(1), 10000); deadline.unref();
-  stopOwnershipLink();
   try {
+    await nodeLeases.release();
     await gatewayHandle?.dispose();
     await new Promise<void>(resolve => server.close(() => resolve()));
     process.exit(0);

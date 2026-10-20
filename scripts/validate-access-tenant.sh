@@ -189,14 +189,17 @@ if judged E; then
   # Native PostgreSQL contracts (2026-10-14): the cluster statements over the unmodified schema file.
   F=middleware/src/lib/access/sql.ts
   exists $F "lib/access/sql.ts (the cluster statements)"
-  for k in INSERT_REQUEST_SQL DECIDE_STEP_SQL PROVISION_CLAIM_SQL GRANT_ROLE_SQL END_GRANT_SQL WARN_EXPIRY_SQL ESCALATE_STEP_SQL END_DELEGATION_SQL; do need "export const $k" $F "statement $k"; done
+  for k in INSERT_REQUEST_SQL DECIDE_STEP_SQL PROVISION_CLAIM_SQL END_GRANT_SQL WARN_EXPIRY_SQL ESCALATE_STEP_SQL END_DELEGATION_SQL; do need "export const $k" $F "statement $k"; done
+  GRANTS_SQL=middleware/src/lib/identity-grants-sql.ts
+  needF "export { GRANT_ROLE_SQL, REVOKE_ROLE_SQL } from '../identity-grants-sql.js'" $F "grant statements re-exported from their owner"
+  need "export const GRANT_ROLE_SQL" $GRANTS_SQL "statement GRANT_ROLE_SQL"
   PGT=middleware/src/lib/access/__tests__/access-postgres.test.ts
   exists $PGT "native PostgreSQL contract suite"
-  for c in "twelve concurrent approvers" "nobody decides a request they submitted" "provisioning is idempotent" "expiry sweep is single-flight" "escalates once per level" "delete-and-reinsert does"; do needF "$c" $PGT "PG contract: $c"; done
+  for c in "twelve concurrent approvers" "nobody decides a request they submitted" "provisioning is idempotent" "expiry sweep is single-flight" "escalates once per level" "the whole-set editor applies a diff in one transaction and never erases a concurrent grant"; do needF "$c" $PGT "PG contract: $c"; done
   REC=$(ls -t docs/realtime-validation/*/access-postgres.md 2>/dev/null | head -1)
   if [ -n "$REC" ] && grep -qE "Tests: +[0-9]+ passed, [0-9]+ total" "$REC" && ! grep -qE "Tests: +[0-9]+ failed" "$REC"; then ok "PG contract record: $REC"; else fail "docs/realtime-validation/<date>/access-postgres.md missing or not all passing"; fi
-  if [ -n "$REC" ] && [ "$F" -nt "$REC" -o schema/access_schema.sql -nt "$REC" -o "$PGT" -nt "$REC" ] && [ "${ACCESS_PG_IGNORE_MTIME:-0}" != 1 ]; then
-    if git diff --quiet HEAD -- "$F" schema/access_schema.sql "$PGT" 2>/dev/null && git log -1 --format=%ct -- "$REC" >/dev/null 2>&1 && [ "$(git log -1 --format=%ct -- "$REC")" -ge "$(git log -1 --format=%ct -- "$F" schema/access_schema.sql "$PGT")" ]; then ok "PG contract record is as new as the statements it proves (git)"; else fail "PG contract record is older than lib/access/sql.ts, access_schema.sql or the suite — re-run it"; fi
+  if [ -n "$REC" ] && [ "$F" -nt "$REC" -o "$GRANTS_SQL" -nt "$REC" -o schema/access_schema.sql -nt "$REC" -o "$PGT" -nt "$REC" ] && [ "${ACCESS_PG_IGNORE_MTIME:-0}" != 1 ]; then
+    if git diff --quiet HEAD -- "$F" "$GRANTS_SQL" schema/access_schema.sql "$PGT" 2>/dev/null && git log -1 --format=%ct -- "$REC" >/dev/null 2>&1 && [ "$(git log -1 --format=%ct -- "$REC")" -ge "$(git log -1 --format=%ct -- "$F" "$GRANTS_SQL" schema/access_schema.sql "$PGT")" ]; then ok "PG contract record is as new as the statements it proves (git)"; else fail "PG contract record is older than the access/grant SQL, access_schema.sql or the suite — re-run it"; fi
   else ok "PG contract record is as new as the statements it proves"; fi
   # Run it live when the dedicated container is up (never another container; never Aurora).
   PGC=orgiq-access-postgres-acceptance

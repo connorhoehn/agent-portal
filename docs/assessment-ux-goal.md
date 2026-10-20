@@ -37,7 +37,7 @@ stale log a failing line.
    answer the question). The dashboard row and the report row carry it.
 3. **Table-first.** The table is above the fold; one filter row; StatStrips
    only where the numbers are the page (`feedback_table_first_density`).
-4. **Library composites, no hand-rolled chrome.** DataTable, Drawer,
+4. **Library composites, no hand-rolled chrome.** DataTable, CollectionRecordFrame,
    StatStrip, SegmentedControl, Chip, DotMeter, MasterDetail, WorkflowStepper,
    Tabs, DetailSection, MetaLine. The tenant's discipline gate stays at 0
    raw `<div className>` / `<button>` / `style=`.
@@ -56,8 +56,12 @@ stale log a failing line.
    three-card landing and the separate per-cohort list page are gone.
 2. **Question queue** (Feedback). A DataTable — team, dimension by name,
    question, raised by, age, status — with status and team filters, and a
-   Drawer that holds the full question, the dimension's two tracks, the
-   evidence on file, and Record answer / Dismiss / Add evidence.
+   URL-addressed question record at `/assessment/feedback/:taskId` that holds
+   the full question, the dimension's two tracks, the evidence on file, and
+   Record answer / Dismiss / Add evidence. The queue becomes the record's
+   list rail through `CollectionRecordFrame`. This follows the later
+   collection-record amendment in `docs/layout-cascade.md`; record detail
+   never opens in a Drawer or Modal.
 3. **Portfolio** (Reports). A maturity **heatmap**: teams × 17 dimensions,
    each cell the verified level, a claim-open marker where the claim is
    higher, N/A greyed; by-cohort table; where-to-start as a DataTable with
@@ -74,7 +78,8 @@ stale log a failing line.
 
 - Dashboard renders no cohort card grid and exactly one DataTable with a
   "Next action" column; `TeamList.tsx` and `CohortLanding.tsx` are gone.
-- Feedback renders a DataTable and a Drawer, no per-question Card.
+- Feedback renders a DataTable and a URL-addressed QuestionRecord inside
+  CollectionRecordFrame, with no per-question Card, Drawer or Modal.
 - Reports renders an element with `data-testid="maturity-heatmap"` whose
   cells carry `data-verified` and `data-claimed`.
 - Scorecard rail rows carry `data-claimed` / `data-verified`.

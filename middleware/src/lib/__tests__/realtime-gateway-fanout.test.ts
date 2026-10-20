@@ -14,8 +14,8 @@ import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import WebSocket from 'ws';
 import { attachRealtimeGateway, REALTIME_GATEWAY_PATH } from '../realtime-gateway.js';
-import { RedisRealtimeRouter } from '@connorhoehn/realtime-modules/server';
-import { GatewayRedis } from '../gateway-redis.js';
+import { RedisRealtimeRouter, createBoundedRedis, type BoundedRedis } from '@connorhoehn/realtime-modules/server';
+import { createRedisStore } from '../redis-store.js';
 import { createMemorySocialChatBackend, type SocialChatBackend } from '../social-chat.js';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../authz.js';
@@ -40,8 +40,8 @@ async function gateway(sharedRedis: string | null, nodeId = randomUUID()): Promi
   const server = http.createServer((_req, res) => { res.statusCode = 404; res.end(); });
   // Distinct node ids are mandatory: a shared id makes each replica discard the
   // other's frames as its own echo, and fan-out silently delivers nothing.
-  let redis: GatewayRedis | undefined, router: RedisRealtimeRouter | undefined;
-  if (sharedRedis) { redis = new GatewayRedis(sharedRedis); await redis.open(); }
+  let redis: BoundedRedis | undefined, router: RedisRealtimeRouter | undefined;
+  if (sharedRedis) { redis = await createBoundedRedis(sharedRedis); }
   // A channel row alone cannot authorize a Work-only identity. Include that
   // row in the negative fixture so the native router's tenant/grant fence is
   // exercised rather than stopping early at ChatService's membership gate.
@@ -49,8 +49,8 @@ async function gateway(sharedRedis: string | null, nodeId = randomUUID()): Promi
     addedAt: new Date().toISOString(), historyFrom: null, removedAt: null });
   const handle = attachRealtimeGateway(server, { redisUrl: null, pingIntervalMs: 0, statsIntervalMs: 0,
     socialChat: backend,
-    ...(redis ? { redisClient: redis, routerFactory: hooks => {
-      router = new RedisRealtimeRouter({ ...hooks, namespace, nodeId, redis: redis!.cluster, leaseMs: 10000, requestTimeoutMs: 3000 });
+    ...(redis ? { redisClient: createRedisStore(redis), redisSubscriber: redis, routerFactory: hooks => {
+      router = new RedisRealtimeRouter({ ...hooks, namespace, nodeId, redis: redis!, leaseMs: 10000, requestTimeoutMs: 3000 });
       return router;
     } } : {}),
   });

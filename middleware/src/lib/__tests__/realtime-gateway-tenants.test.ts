@@ -208,12 +208,19 @@ describe('over the socket', () => {
 
 describe('team membership on the platform-api backend (the in-process copy)', () => {
   const prevUrl = process.env['SOCIAL_PLATFORM_INTERNAL_URL'];
+  const prevBackend = process.env['SOCIAL_PLATFORM_BACKEND'];
   const realFetch = global.fetch;
-  beforeEach(() => { process.env['SOCIAL_PLATFORM_INTERNAL_URL'] = 'http://platform.invalid'; resetSocialTeamMirror(); });
+  beforeEach(() => {
+    process.env['SOCIAL_PLATFORM_INTERNAL_URL'] = 'http://platform.invalid';
+    process.env['SOCIAL_PLATFORM_BACKEND'] = 'platform';
+    resetSocialTeamMirror();
+  });
   afterEach(() => {
     global.fetch = realFetch;
     if (prevUrl === undefined) delete process.env['SOCIAL_PLATFORM_INTERNAL_URL'];
     else process.env['SOCIAL_PLATFORM_INTERNAL_URL'] = prevUrl;
+    if (prevBackend === undefined) delete process.env['SOCIAL_PLATFORM_BACKEND'];
+    else process.env['SOCIAL_PLATFORM_BACKEND'] = prevBackend;
     resetSocialTeamMirror();
   });
   const reply = (body: unknown) => jest.fn(async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch;

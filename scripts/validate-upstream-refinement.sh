@@ -64,7 +64,7 @@ check "dc_pin_ok '$RM'"               "realtime-modules pins distributed-core �
 check "dc_pin_ok middleware"          "middleware pins distributed-core ⊇ v0.48.0"
 SRPIN=$(depspec middleware @connorhoehn/service-runtime)
 check "[ \"\${SRPIN##*#}\" != 7a0e3387 ] && contains_tag '$SR' '$SRPIN' v0.4.1" "S1 middleware service-runtime pin ⊇ v0.4.1 at a full sha"
-NDC=$(find middleware/node_modules -path '*/distributed-core/package.json' -not -path '*/distributed-core/node_modules/*' 2>/dev/null | wc -l | tr -d ' ')
+NDC=$(find -H middleware/node_modules -path '*/distributed-core/package.json' -not -path '*/distributed-core/node_modules/*' 2>/dev/null | wc -l | tr -d ' ')
 check "[ '$NDC' = 1 ]" "middleware installs exactly one distributed-core ($NDC)"
 check "! grep -q 'distributed-core/' middleware/tsconfig.test.json" "middleware tsconfig.test.json has no distributed-core paths workaround"
 
@@ -118,15 +118,33 @@ check "lane_logged '$LV' V1 || grep -rq '(lane V1)' '$LV/docs'" "V1 change logge
 
 if [ "$QUICK" = 0 ]; then
   section "suites (each repo, run alone)"
+  SUITE_LOGS=${UPSTREAM_LOG_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/orgiq-upstream-refinement.XXXXXX")}
+  mkdir -p "$SUITE_LOGS" || exit 2
+  printf 'Suite logs: %s\n' "$SUITE_LOGS"
+  # These suites are expensive. Preserve their evidence and failure details
+  # so diagnosing a failed gate never requires repeating a completed run.
+  check_logged() {
+    local log="$SUITE_LOGS/$3.log"
+    if eval "$1" >"$log" 2>&1; then ok "$2"; else
+      fail "$2 ($log)"
+      tail -n 20 "$log"
+    fi
+  }
   for r in "$DC" "$SR" "$EC" "$MQ" "$RM" "$PA" "$RX" "$LV"; do
     n=$(basename "$r")
-    check "(cd '$r' && npm test --silent)" "$n tests"
-    check "(cd '$r' && (npm run -s typecheck 2>/dev/null || npx tsc --noEmit -p .))" "$n typecheck"
+    check_logged "(cd '$r' && npm test --silent)" "$n tests" "$n-tests"
+    # A plain-JavaScript repo (live-video-streaming) has neither a typecheck
+    # script nor a tsconfig; npx would fetch an unrelated "tsc" package there.
+    if grep -q '"typecheck"' "$r/package.json" || [ -f "$r/tsconfig.json" ]; then
+      check_logged "(cd '$r' && (npm run -s typecheck 2>/dev/null || npx tsc --noEmit -p .))" "$n typecheck" "$n-typecheck"
+    else
+      ok "$n typecheck (JavaScript: no typecheck script or tsconfig)"
+    fi
   done
-  check "(cd middleware && npm run -s typecheck)" "middleware typecheck"
-  check "(cd middleware && npx jest src/lib/gateway/__tests__/authority-facade.test.ts)" "consumer authority facade contract"
-  check "./scripts/validate-communication-plane.sh --quick" "communication plane (quick)"
-  check "./scripts/validate-social-tenant.sh --quick" "social tenant (quick)"
+  check_logged "(cd middleware && npm run -s typecheck)" "middleware typecheck" "middleware-typecheck"
+  check_logged "(cd middleware && npx jest src/lib/gateway/__tests__/authority-facade.test.ts)" "consumer authority facade contract" "authority-facade"
+  check_logged "./scripts/validate-communication-plane.sh --quick" "communication plane (quick)" "communication-plane-quick"
+  check_logged "./scripts/validate-social-tenant.sh --quick" "social tenant (quick)" "social-tenant-quick"
 fi
 
 printf '\n'

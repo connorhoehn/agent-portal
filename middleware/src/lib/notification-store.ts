@@ -10,12 +10,12 @@
 // under `tsx watch` every save is a restart — which is what the dev:mock seed
 // (mock/notifications.ts) is for.
 //
-// With REDIS_URL the store runs over lib/redis-lite.ts through
+// With REDIS_URL the store runs over lib/redis-store.ts through
 // `notificationRedisClient`, on the connection that already backs call state.
 
 import { RedisNotificationStore } from '@connorhoehn/realtime-modules/notification';
 import { config } from '../config.js';
-import { notificationRedisClient, type NotificationRedisLike, type GatewayRedisStore } from './redis-lite.js';
+import { notificationRedisClient, type NotificationRedisLike, type GatewayRedisStore } from './redis-store.js';
 import { holdsGrant, shapeNotification } from './social-notify.js';
 import { notificationsFixture } from '../mock/notifications.js';
 import { mockRestartMirror } from '../mock/restart-state.js';

@@ -71,17 +71,18 @@ describe('ensureLegacyCommentsImported (dev:mock)', () => {
   it('imports the seeded page:100002 thread once, records it, and then refuses legacy writes', async () => {
     expect(await legacyThreadMoved('page:100002')).toBe(false);
     const first = await ensureLegacyCommentsImported('page:100002', documentId);
-    expect(first).toMatchObject({ state: 'imported', imported: 2, legacy: 2 });
+    expect(first).toMatchObject({ state: 'imported', imported: 3, legacy: 3 });
     const rows = platformDocumentCommentsFixture.rows().filter(r => r.documentId === documentId);
     expect(rows.map(r => [r.commentId, r.userId, r.parentCommentId ?? null])).toEqual([
       ['kc-rubric-01', 'u-jonas', null], ['kc-rubric-02', 'u-farah', 'kc-rubric-01'],
+      ['kc-rubric-03', 'u-jonas', 'kc-rubric-02'],
     ]);
     expect(await legacyThreadMoved('page:100002')).toBe(true);
 
     // A second read is one ledger lookup: nothing is written twice.
     const second = await ensureLegacyCommentsImported('page:100002', documentId);
-    expect(second).toMatchObject({ state: 'imported', imported: 2, legacy: 2, importedAt: first.importedAt });
-    expect(platformDocumentCommentsFixture.rows().filter(r => r.documentId === documentId)).toHaveLength(2);
+    expect(second).toMatchObject({ state: 'imported', imported: 3, legacy: 3, importedAt: first.importedAt });
+    expect(platformDocumentCommentsFixture.rows().filter(r => r.documentId === documentId)).toHaveLength(3);
   });
 
   it('records a document with no legacy thread as done, with nothing to move', async () => {
@@ -92,7 +93,7 @@ describe('ensureLegacyCommentsImported (dev:mock)', () => {
   it('says so — and writes nothing — when platform-api is configured but the import table is not', async () => {
     process.env['DOCUMENT_PLATFORM_INTERNAL_URL'] = 'http://platform:3001';
     const status = await ensureLegacyCommentsImported('page:100002', documentId);
-    expect(status).toMatchObject({ state: 'unconfigured', imported: 0, legacy: 2 });
+    expect(status).toMatchObject({ state: 'unconfigured', imported: 0, legacy: 3 });
     expect(platformDocumentCommentsFixture.rows()).toHaveLength(0);
     expect(await legacyThreadMoved('page:100002')).toBe(false);
   });

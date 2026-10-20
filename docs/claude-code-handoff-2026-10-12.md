@@ -676,3 +676,93 @@ was shut down, and the dedicated containers
 readiness but had not run any proof. Shared services were left running:
 portal `5183` and middleware `3001/health` both returned HTTP **200** after
 cleanup. The pre-existing ui-components `package-lock.json` edit was preserved.
+
+## Redis acceptance — 2026-10-19
+
+Two Claude Code sessions worked `fix/handoff-redis-20261018` in the same
+worktree (`/private/tmp/aws-agentcore-redis-20261018`) this evening and
+split the pre-merge list between them. Evidence is under
+`.scratch/redis-acceptance-2026-10-19/` in the main checkout (the second
+session's logs under `opus/`). Isolated stores: disposable Redis on `6384`
+(password-protected, tests on logical db 13, the smoke on 14), DynamoDB
+Local container `orgiq-redis-migration-dynamodb-20261019` on `127.0.0.1:18064`
+with the five `orgiq-chat-` tables, and the 2026-10-14 PostgreSQL proof
+container `orgiq-access-postgres-acceptance` (colima had to be restarted; its
+host socket was dead).
+
+- **Full middleware suite** (`full-tests.log`, run alone 18:49–18:56 with the
+  Redis/Dynamo opt-ins and `PAGE_THREAD_TEST_DYNAMODB_ENDPOINT`): **545 suites
+  passed, 1 failed, 4 skipped; 7,482 tests passed.** The failure is
+  `envelope-read.test.ts` hitting its 5 s timeout under load; it passes 7/7
+  alone (`envelope-read-recheck.log`). Every Redis and DynamoDB integration
+  suite ran for real and passed. A second full run (`full-tests-c9.log`)
+  overlapped the first and carried two env vars — `RUNBOOK_DYNAMODB_ENDPOINT`
+  and `SEARCH_INDEX_DYNAMODB_ENDPOINT` — that are not test-only opt-ins: the
+  app's own store selection reads them, so six suites read an empty DynamoDB
+  instead of the seeded rows. Those eight suites were rerun alone with the
+  corrected `env.sh`: **8/8 suites, 231 tests passed** in 12 s
+  (`rerun-8-suites-c9.log`).
+- **Startup smoke** (`startup-smoke.mjs`, `startup-smoke.json`): the BFF on
+  `3012` with `REALTIME_GATEWAY_ROUTER=redis` reports `realtime.store: redis`,
+  `ready: true`, every mock on; killing its Redis clients turns `/health` to
+  **503 / ready: false** in 4 ms and it stays fenced while Redis itself still
+  answers; SIGTERM exits 0.
+- **Wire snapshots recaptured** against a throwaway server on `3013`
+  (`wire-capture.log`): 309/415 GET routes and 120/364 write routes captured,
+  `serverHandlerSha` now matches the branch's handler sources (`9cade41b…`).
+  The GET snapshot is unchanged apart from one clock-ordered id list. Two
+  write routes, `PUT`/`DELETE /api/graph/work-items/:id/decisions/:decisionId`,
+  moved from a captured 200/404 to a reasoned `skipped`: the sweep resolves the
+  work item to `wi-rta-e1-s1` (`p-realtime-analytics`), whose initiative has
+  no seeded decision — the same on the shared main server, so not a branch
+  change; the harness's own `bodyFrom` note anticipates it.
+- **Mock-floor judge** `--quick`: **ALL CHECKS PASS** on the branch with the
+  recaptured snapshots (`mock-floor-quick-c9.log`). The full-mode jest run is
+  the suite result above.
+- **PostgreSQL proofs** (dedicated containers, nothing on Aurora): access
+  contracts **11/11 alone** on the branch
+  (`docs/realtime-validation/2026-10-19/access-postgres.md`);
+  work-documents **6/6**; page-thread **7/7** after the second session
+  corrected the suite's schema list to follow `load_schema.py`'s order up to
+  `work_item_estimate_schema.sql` (`bd96c532`). An 18:58 run of the
+  access suite from both sessions at once against one container and one schema
+  name failed on duplicate keys; it is a collision, not a regression — alone it
+  passes.
+- **Upstream-refinement judge, full mode** (`opus/upstream-full.log`,
+  per-repo logs in `opus/upstream-full-repos/`): **89 checks pass, 6 fail**,
+  none caused by this branch. Every static C1/C3 check, middleware typecheck
+  and the consumer authority-facade contract are green. The six: message-queue
+  consumer-groups is a `socket hang up` flake (alone: fail, pass, pass);
+  platform-api `recordingAttendance.test.ts` fails 3/18 on that repo's clean
+  HEAD `db7b55f` (call binding `unresolved`, session null after end) — a real
+  break owned by platform-api, reported, not fixed here; live-video-streaming
+  `test/redis-pubsub-duplicate.test.js` hangs for good when nothing listens on
+  `localhost:6379` (`mesh.connect()` never returns, so its skip path never
+  runs) — a test bug owned by that repo; the whole LV suite passes (exit 0)
+  against the isolated Redis (`REDIS_URL=…6384 TEST_REDIS_DB=13 npm test`,
+  `opus/rerun-lv-tests.log`); its "typecheck" was a judge defect (plain-JS repo, `npx tsc`
+  hit the stub package) and the judge now skips typecheck for a repo with
+  neither a script nor a tsconfig (`bd96c532`, together with the page-thread
+  schema-list fix);
+  communication-plane and social quick judges are the stale-journey debt
+  (21/24 and 48/48 logs, four incomplete Social recordings). Nothing was
+  sealed.
+- **Corrected tenant validators** (quick mode, second session): the checks
+  corrected in `1e9efc24` pass (Social description, Access grant SQL and
+  transaction test, Search `RecordResultList` adapter and tracked tarball).
+  Remaining reds are the debt already listed: stale journey logs, four
+  incomplete Social recording logs, Assessment slice 4 (scorecard confidence).
+
+Two things learned the hard way, for the next pair of sessions: name log
+files per session (we both wrote `full-tests.log` and one run's output
+replaced the other's), and never run `access-postgres.test.ts` from two
+places — it owns its container's schema name.
+
+With the pre-merge list closed — suite, integration stores, startup smoke,
+wire capture, mock-floor judge, PostgreSQL proofs, full upstream judge,
+corrected tenant checks — C1/C3 is **accepted** and the branch is merged into
+`main`. Still open and unchanged by this work: the journey, search, meeting,
+demo-content and scorecard-confidence debt; the platform-api
+`recordingAttendance` break and the live-video-streaming hanging test
+(both in their own repos); cloud deployment, Aurora schema application,
+capacity, and the user decisions listed at the top of this file.

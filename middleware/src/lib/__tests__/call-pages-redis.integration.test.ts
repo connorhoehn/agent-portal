@@ -1,14 +1,14 @@
 // Opt in with CALL_PAGE_TEST_REDIS_URL=redis://127.0.0.1:<port>.
-// This executes the real Lua via RedisLite against two independent clients.
+// This executes the real Lua via the bounded Redis transport against two independent clients.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 
-import { RedisLite } from '../redis-lite.js';
+import { openRedisStore } from '../redis-store.js';
 import { RedisCallPageStore, type StoredCallPage } from '../call-pages.js';
 
 const url = process.env['CALL_PAGE_TEST_REDIS_URL'];
 const testRedis = url ? it : it.skip;
 testRedis('real Redis atomically selects one writer across two instances and retains clear revisions/TTL', async () => {
-  const one = new RedisLite(url!); const two = new RedisLite(url!);
+  const one = await openRedisStore(url!); const two = await openRedisStore(url!);
   const first = new RedisCallPageStore(one, 60); const second = new RedisCallPageStore(two, 60);
   const callId = `test-${process.pid}-${Date.now()}`;
   const key = `orgiq:call-page:${encodeURIComponent(callId)}`;
