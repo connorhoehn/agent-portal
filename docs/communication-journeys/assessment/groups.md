@@ -3,8 +3,8 @@ role: assessor
 user: u-asha
 url: /assessment/communication
 pages: portal/src/pages/communication/CommunicationPlane.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/lib/communicationPlane.ts
-audited: 2026-10-16 13:58–13:59 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-asha (u-asha-clone-e9567ea5) with seed persona u-mira as the second context, Tilt stack: Vite :5183 over middleware :3001 (dev:mock), mock NOT reset (shared stack)
-session: /api/session/me sub u-asha-clone-e9567ea5 (a clone of u-asha), tenant assessment, role assessor; grants assessment: assessor; social: participant
+audited: 2026-10-21 10:00–10:02 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-asha (u-asha-clone-4ca4b34b) with seed persona u-mira as the second context, Tilt stack: Vite :5183 over middleware :3001 (dev:mock), mock NOT reset (shared stack)
+session: /api/session/me sub u-asha-clone-4ca4b34b (a clone of u-asha), tenant assessment, role assessor; grants assessment: assessor; social: participant
 screenshot: groups.jpg
 verdict: pass
 console errors: 0

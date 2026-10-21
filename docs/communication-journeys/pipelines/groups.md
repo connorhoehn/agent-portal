@@ -3,8 +3,8 @@ role: author
 user: u-tomas
 url: /pipelines/communication
 pages: portal/src/pages/communication/CommunicationPlane.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/lib/communicationPlane.ts
-audited: 2026-10-16 13:59–14:00 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-tomas (u-tomas-clone-b9817ef3) with seed persona u-mira as the second context, Tilt stack: Vite :5183 over middleware :3001 (dev:mock), mock NOT reset (shared stack)
-session: /api/session/me sub u-tomas-clone-b9817ef3 (a clone of u-tomas), tenant pipelines, role author; grants pipelines: author; social: participant
+audited: 2026-10-21 10:04–10:06 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-tomas (u-tomas-clone-ee1aa51f) with seed persona u-mira as the second context, Tilt stack: Vite :5183 over middleware :3001 (dev:mock), mock NOT reset (shared stack)
+session: /api/session/me sub u-tomas-clone-ee1aa51f (a clone of u-tomas), tenant pipelines, role author; grants pipelines: author; social: participant
 screenshot: groups.jpg
 verdict: pass
 console errors: 0

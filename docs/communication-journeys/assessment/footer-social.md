@@ -3,8 +3,8 @@ role: assessor
 user: u-asha
 url: /assessment/teams (footer Social, every route)
 pages: portal/src/components/shell/SocialFooter.tsx,portal/src/pages/communication/CommunicationPlane.tsx
-audited: 2026-10-16 13:56–13:56 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-asha (u-asha-clone-9ea8fa44) with seed persona u-mira as the second context, Tilt stack: Vite :5183 over middleware :3001 (dev:mock), mock NOT reset (shared stack)
-session: /api/session/me sub u-asha-clone-9ea8fa44 (a clone of u-asha), tenant assessment, role assessor; grants assessment: assessor; social: participant
+audited: 2026-10-21 10:00–10:03 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-asha (u-asha-clone-4ca4b34b) with seed persona u-mira as the second context, Tilt stack: Vite :5183 over middleware :3001 (dev:mock), mock NOT reset (shared stack)
+session: /api/session/me sub u-asha-clone-4ca4b34b (a clone of u-asha), tenant assessment, role assessor; grants assessment: assessor; social: participant
 screenshot: footer-social.jpg
 verdict: pass
 console errors: 0
