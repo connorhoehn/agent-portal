@@ -25,14 +25,24 @@ export function stem(word: string): string {
   return word;
 }
 
+/**
+ * The verb or noun a "-tion" word is made from: "transcription" → "transcript", "connections" → "connect".
+ * Posted beside the word so a query for "transcripts" (stem "transcript") finds a message about the
+ * transcription queue. Only long words: "action" and "nation" stay whole. Query terms are not rooted.
+ */
+export function tionRoot(word: string): string | null {
+  return word.length >= 8 && /tions?$/.test(word) && !/\d/.test(word) ? word.replace(/ions?$/, '') : null;
+}
+
 /** Every posting key a doc with this title and text is filed under. */
 export function docTokens(title: string, text: string): Set<string> {
   const out = new Set<string>();
   for (const w of words(title)) {
     out.add(w); out.add(stem(w));
+    const titleRoot = tionRoot(w); if (titleRoot) out.add(titleRoot);
     for (let n = MIN_PREFIX; n <= Math.min(MAX_PREFIX, w.length - 1); n++) out.add(w.slice(0, n));
   }
-  for (const w of words(text)) { out.add(w); out.add(stem(w)); }
+  for (const w of words(text)) { out.add(w); out.add(stem(w)); const root = tionRoot(w); if (root) out.add(root); }
   return out;
 }
 

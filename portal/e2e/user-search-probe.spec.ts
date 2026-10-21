@@ -340,6 +340,16 @@ async function probeListSearch(page: Page, intent: Intent, q: string, surface: S
   const state = await ensureList(page, route, 'list');
   let box = page.getByPlaceholder(placeholder, { exact: true }).first();
   let found = await box.waitFor({ timeout: surface.boxTestId ? 3_000 : 8_000 }).then(() => true).catch(() => false);
+  if (!found) {
+    // A ConversationRail keeps its find field behind a header button named for the field (ui-components
+    // 2.432.0: "the field shows only once toggled"), so a reader presses it first — as a person would.
+    const toggle = page.getByRole('button', { name: placeholder, exact: true })
+      .or(page.locator('[data-testid$="-search-toggle"]')).first();
+    if (await toggle.isVisible().catch(() => false)) {
+      if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+      found = await box.waitFor({ timeout: 3_000 }).then(() => true).catch(() => false);
+    }
+  }
   if (!found && surface.boxTestId) {
     const host = page.getByTestId(surface.boxTestId).first();
     const inner = host.locator('input, textarea, [contenteditable="true"]').first();
@@ -400,7 +410,10 @@ for (const [key, intents] of groups) {
     const open = async () => {
       for (let attempt = 1; attempt <= 4; attempt++) {
         try {
-          const p = await openAsClone(browser, persona, { baseURL: run.baseURL, tenant, role, label: 'user-search-probe', scope: { scenario: 'default', ttlMs: 3 * 60 * 60_000 }, viewport: { width: 1440, height: 900 }, prepare: (c) => guard(c, blocked) });
+          // `url` reloads the app AFTER the sign-in: openAs loads the landing page before it logs in, and the
+          // probe's in-page navigation (go) would otherwise keep that pre-login session — its tenant's palette
+          // pages and record search (Social's palette asked the orgiq /api/search and got 403s, 2026-10-21).
+          const p = await openAsClone(browser, persona, { baseURL: run.baseURL, tenant, role, url: '/', label: 'user-search-probe', scope: { scenario: 'default', ttlMs: 3 * 60 * 60_000 }, viewport: { width: 1440, height: 900 }, prepare: (c) => guard(c, blocked) });
           p.page.on('response', (r) => {
             const u = new URL(r.url());
             if (u.pathname.startsWith('/api/') && r.status() >= 400) { const k = `${r.status()} ${u.pathname}`; statuses.set(k, (statuses.get(k) ?? 0) + 1); }

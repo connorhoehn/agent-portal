@@ -766,3 +766,37 @@ demo-content and scorecard-confidence debt; the platform-api
 `recordingAttendance` break and the live-video-streaming hanging test
 (both in their own repos); cloud deployment, Aurora schema application,
 capacity, and the user decisions listed at the top of this file.
+
+## User search — 2026-10-21
+
+The full user-search probe ran to completion on an isolated `dev:mock` stack
+(middleware `3014` with `SOCIAL_PLATFORM_BACKEND=mock`, portal `5194`): all
+**17 role groups passed**, and every tenant meets its floor, **100% of intents
+with zero wrong answers on the best surface** (orgiq 23/23, assessment 18/18,
+social 18/18, pipelines 16/16, access 16/16). Social's provider proof is now
+recorded as `mock` for all three personas. Logs:
+`.scratch/user-search-2026-10-21/` (`full-probe-2-c9.log`,
+`validate-user-search-full-c9.log`).
+
+Social's earlier 0.89 and five wrong results came from two probe defects and
+one product gap:
+
+- The probe signed in after loading `/` and then navigated in-page, so the app
+  kept the pre-login session. On Social the palette offered orgiq pages and
+  queried `/api/search` (403). The probe now reloads once after sign-in.
+- The probe never pressed the chat rail's "Find a chat" button, which hides the
+  field since ui-components 2.432.0, and graded every rail phrasing as a missing
+  box.
+- The rail's find field matched conversation names only, so message text was
+  searchable only through the palette. It now also lists message and pin hits
+  from `/api/social/search` in a "Messages" rail section while two or more
+  characters are typed (Social tenant only; the embedded Communication plane
+  has no search route). At rest the page is unchanged.
+- The search index now also posts long "-tion" words under their root and the
+  scorer accepts a term's plural-stripped stem, so "why were transcripts
+  delayed" finds the root-cause message about "the transcription queue". A
+  persisted DynamoDB-wire index needs a rebuild to gain the new postings.
+
+The full validator's only remaining failure is that rendered contracts must be
+remeasured on the current source (`scripts/journeys/measure.sh`). Live-platform
+room/call indexing remains a separate, unverified gap.

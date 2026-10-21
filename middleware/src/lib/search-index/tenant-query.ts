@@ -14,7 +14,7 @@ import type { Session } from '../session.js';
 import { ensureIndexed } from './registry.js';
 import { STOPWORDS } from './question.js';
 import { tenantSpec, type IndexedTenant, type TenantIndexSpec, type TenantSearchContext } from './tenants.js';
-import { words } from './tokens.js';
+import { stem, words } from './tokens.js';
 import type { SearchDoc } from './types.js';
 
 /** Words that say what is wanted, not what it is about (every tenant). */
@@ -93,7 +93,9 @@ const lower = (s: string) => s.toLowerCase();
 
 function scoreDoc(doc: SearchDoc, parsed: ParsedTenantQuery): number {
   const title = lower(doc.title), body = lower(`${doc.title} ${doc.text} ${String(doc.record['subtitle'] ?? '')}`);
-  const hits = parsed.terms.filter(t => body.includes(t));
+  // A term is found as written or as its plural-stripped stem ("transcripts" in "the transcription queue"), the
+  // same keys the postings answered under (tokens.ts termKeys); the title bonuses below stay exact.
+  const hits = parsed.terms.filter(t => body.includes(t) || body.includes(stem(t)));
   let s = 1;
   if (parsed.terms.length) {
     // Most of the words must be found: one word of five is a coincidence, not an answer.

@@ -151,3 +151,24 @@ test('one section per route: each Social rail page shows Active now and only its
   assert.equal(ROUTE_RAIL_CAPTION.calls, null);
   assert.equal(ROUTE_RAIL_CAPTION.recordings, null);
 });
+
+test('the find field lists message and pin hits as rail rows, each opening its own in-app link', async () => {
+  const { messageHitRailItems } = await import('../socialChat.ts');
+  const { items, hrefs } = messageHitRailItems([
+    { type: 'message', id: 'social:ch:general|g01', title: 'The community call moves to Thursdays at 3pm', href: '/social/channels/general', subtitle: '#general · Mira Okafor' },
+    { type: 'pin', id: 'social:ch:events|e01', title: 'Quarterly community call is booked', href: '/social/channels/events', subtitle: 'Pinned in #events by Mira Okafor' },
+    { type: 'message', id: 'social:ch:general|g01', title: 'duplicate', href: '/social/channels/general', subtitle: '#general · Mira Okafor' },
+    { type: 'message', id: 'social:dm:u-lena:u-sana|d1', title: 'Your lightning talk slot is confirmed', href: '/social/dms/social%3Adm%3Au-lena%3Au-sana', subtitle: 'DM Lena Brandt, Sana Iqbal · Lena Brandt' },
+    { type: 'channel', id: 'social:ch:general', title: '#general', href: '/social/channels/general' },
+    { type: 'message', id: 'x', title: 'off-site', href: '//evil.example/p' },
+    { type: 'message', id: 'y', title: '', href: '/social/channels/general' },
+  ]);
+  assert.deepEqual(items.map((i) => [i.channel, i.kind, i.name, i.lastMessagePreview]), [
+    ['search:message:social:ch:general|g01', 'channel', 'general · Mira Okafor', 'The community call moves to Thursdays at 3pm'],
+    ['search:pin:social:ch:events|e01', 'channel', 'Pinned in #events by Mira Okafor', 'Quarterly community call is booked'],
+    ['search:message:social:dm:u-lena:u-sana|d1', 'group', undefined, 'Your lightning talk slot is confirmed'],
+  ]);
+  assert.deepEqual(items[2]!.peers.map((p) => p.displayName), ['Lena Brandt', 'Sana Iqbal']);
+  assert.equal(hrefs.get('search:pin:social:ch:events|e01'), '/social/channels/events');
+  assert.equal(hrefs.size, 3);
+});

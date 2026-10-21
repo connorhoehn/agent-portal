@@ -45,6 +45,14 @@ test('missed calls are the reader\'s own', async () => {
   expect(await keys('u-theo', 'missed calls')).toEqual([]);
 });
 
+test('a question in other word forms finds the message that answers it ("transcripts" → "the transcription queue")', async () => {
+  const hits = (await searchTenant('social', as('u-lena'), { q: 'why were transcripts delayed', limit: 8 })).results;
+  expect(hits.some(r => r.type === 'message' && /sized for 30-minute calls/.test(r.title))).toBe(true);
+  // A short "-tion" word is not rooted: "action" does not stand in for "act".
+  const { tionRoot } = await import('../tokens.js');
+  expect([tionRoot('transcription'), tionRoot('connections'), tionRoot('action'), tionRoot('nation')]).toEqual(['transcript', 'connect', null, null]);
+});
+
 test('a recording is found by its transcript by a participant, not by an outsider', async () => {
   expect(await keys('u-sana', 'event calendar goes live on Friday')).toContain('recording:mock-rec-town-hall-1');
   expect(await keys('u-theo', 'event calendar goes live on Friday')).not.toContain('recording:mock-rec-town-hall-1');

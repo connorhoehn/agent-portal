@@ -215,6 +215,47 @@ export function activeNow(here: ReadonlyArray<{ id: string; name: string; idle?:
 }
 
 /** A row matches the rail's find box by its channel name or a person's name. */
+/** One hit from `GET /api/social/search` (middleware/src/lib/search-index/social.ts). */
+export interface SocialSearchHit {
+  type: string;
+  id: string;
+  title: string;
+  kind?: string;
+  href?: string;
+  subtitle?: string;
+}
+
+/** The rail section the find field's message hits fill (shown only while a search is typed). */
+export const MESSAGE_HITS_SECTION = 'messages';
+
+/** The shortest query the rail's find field sends to message search (one letter matches everything). */
+export const MESSAGE_SEARCH_MIN = 2;
+
+/**
+ * The rail's find field also searches what was said (docs/user-search-intents.md: names matched,
+ * message text was searchable nowhere). Message and pin hits become the library rail's own rows —
+ * the text as the preview, where it was said as the name — keyed by the hit id, with the in-app
+ * link each one opens. Other hit types (channels, rooms, calls) already have their own rail rows.
+ */
+export function messageHitRailItems(hits: readonly SocialSearchHit[]): { items: SocialRailItem[]; hrefs: Map<string, string> } {
+  const items: SocialRailItem[] = [];
+  const hrefs = new Map<string, string>();
+  for (const hit of hits) {
+    if ((hit.type !== 'message' && hit.type !== 'pin') || !hit.title || typeof hit.href !== 'string' || !/^\/(?![/\\])/.test(hit.href)) continue;
+    const key = `search:${hit.type}:${hit.id}`;
+    if (hrefs.has(key)) continue;
+    hrefs.set(key, hit.href);
+    const where = (hit.subtitle ?? hit.kind ?? hit.type).replace(/^#/, '');
+    // A DM hit ("DM Lena Brandt, Sana Iqbal · Lena Brandt") draws as the DM's own row: its members, no '#'.
+    const dm = hit.href.startsWith('/social/dms/') ? /^DM (.+?)(?: · .*)?$/.exec(where) : null;
+    const peers = dm ? dm[1]!.split(/,\s*/).filter(Boolean).map((displayName) => ({ userId: `name:${displayName}`, displayName })) : [];
+    items.push(peers.length
+      ? { channel: key, kind: peers.length > 1 ? 'group' : 'dm', peers, lastMessagePreview: hit.title }
+      : { channel: key, kind: 'channel', name: where, peers: [], lastMessagePreview: hit.title });
+  }
+  return { items, hrefs };
+}
+
 export function matchesRailFilter(item: SocialRailItem, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;

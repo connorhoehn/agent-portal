@@ -64,9 +64,11 @@ import RoomPane from './RoomPane';
 import SocialRoomsSection, { RoomCreateDialog, useRoomsModel, type RoomsResponse } from './SocialRoomsSection';
 import {
   CHANNEL_PREFIX, DM_PREFIX, activeNow, railSectionsFor, channelHref, channelRailItems, dmCandidates, dmHref, dmPeers, dmRailItems, dmTitle,
-  conversationRecordings, matchesRailFilter, mentionItems, privacyForApi, slugFromChannel, socialInbox, withPresence,
-  type SocialActivePerson, type SocialChannel, type SocialDm, type SocialPeer, type SocialPerson,
+  conversationRecordings, matchesRailFilter, mentionItems, messageHitRailItems, privacyForApi, slugFromChannel, socialInbox, withPresence,
+  MESSAGE_HITS_SECTION, MESSAGE_SEARCH_MIN,
+  type SocialActivePerson, type SocialChannel, type SocialDm, type SocialPeer, type SocialPerson, type SocialSearchHit,
 } from './socialChat';
+import { createDebouncer } from '../../hooks/debounce';
 import type { SharedWorkMessage } from './SharedWorkView';
 import { newMessageChannels } from './socialRailLive';
 import {
@@ -306,6 +308,15 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     ...(showDms ? dmRailItems(conversations, lobby, me, roster) : []),
     ...(showChannels ? channelRailItems(channels) : []),
   ], online).filter((item) => matchesRailFilter(item, query)), [conversations, lobby, me, roster, channels, online, query, showDms, showChannels]);
+  // The find field also searches what was said (docs/user-search-intents.md, s-message-community-call and its
+  // siblings): message and pin hits from the tenant's search, debounced, as the rail's own rows. The embedded
+  // Communication plane has no search route, so only the Social tenant's chat searches messages.
+  const [messageQuery, setMessageQuery] = useState('');
+  const messageDebounce = useMemo(() => createDebouncer<string>(setMessageQuery, 250), []);
+  useEffect(() => { messageDebounce.trigger(query.trim()); return () => messageDebounce.cancel(); }, [query, messageDebounce]);
+  const searchMessages = !plane.embedded && (showDms || showChannels) && messageQuery.length >= MESSAGE_SEARCH_MIN && query.trim().length >= MESSAGE_SEARCH_MIN;
+  const messageFetch = useFetch<{ results: SocialSearchHit[] }>(searchMessages ? `${api}/search?${new URLSearchParams({ q: messageQuery, limit: '8' })}` : null);
+  const messageHits = useMemo(() => messageHitRailItems(searchMessages ? messageFetch.data?.results ?? [] : []), [searchMessages, messageFetch.data]);
   // Controlled: the tree mounts before the teams load, and an uncontrolled
   // tree takes its open set from the first render (none). Open unless folded.
   const tree = useMemo(() => teamTreeItems(teams).map((t) => ({ ...t, expanded: !rail.collapsedSections[`team:${t.teamId}`] })), [teams, rail.collapsedSections]);
@@ -456,6 +467,12 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   const railContext: WorkspaceRailContext = { query, online, here };
   const teamsReadPending = !teamsFetch.data && (teamsFetch.isLoading || !!teamsFetch.error);
   const sections: ConversationRailSection[] = [
+    ...(searchMessages ? [{
+      id: MESSAGE_HITS_SECTION, label: 'Messages', count: messageHits.items.length, rows: messageHits.items, maxVisible: 8,
+      onSelectRow: (key: string) => { const href = messageHits.hrefs.get(key); if (href) navigate(href); },
+      emptyLabel: messageFetch.isLoading && !messageFetch.data ? 'Searching messages…' : messageFetch.error ? 'Message search is unavailable.' : 'No message says that.',
+      'data-testid': 'social-message-hits',
+    } satisfies ConversationRailSection] : []),
     {
       // Presence is always visible, independent of persisted disclosure state.
       id: 'active-now', label: 'Active now', 'data-testid': 'social-active-now',
@@ -527,7 +544,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       // arranged order (social.chatRail.layout) applies where Arrange is offered — the plane's home.
       sectionLayout={(allSections ? rail.railProps.sectionLayout : null) ?? ['dms', ...sections.map(section => section.id), 'channels']}
       // The library hides every other section, caption and row, and offers no Arrange on a one-section view.
-      showSections={allSections ? null : railSectionsFor(route)}
+      showSections={allSections ? null : [...(searchMessages ? [MESSAGE_HITS_SECTION] : []), ...railSectionsFor(route)]}
       maxVisible={8}
       selected={embedding?.pane ? null : selected}
       onSelect={(selection) => {
