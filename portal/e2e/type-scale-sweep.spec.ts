@@ -156,7 +156,8 @@ async function walk(page: Page, withPrimary: boolean): Promise<Walk> {
     };
     // An icon drawn as a glyph ("⋯", "✓", "⬤", "−", an emoji) is sized to its control, not set as type: symbols only, no letters or digits.
     const glyphOf = (text: string) => /^[\p{S}\p{Extended_Pictographic}\u200d\ufe0f\s]+$/u.test(text);
-    const canvasOf = (e: Element) => !!e.closest('.ProseMirror, .tiptap, [contenteditable="true"], [data-testid="deck-editor"], [data-testid^="doc-editor"]');
+    // The canvas document editor (sheet, ruler, toolbar, comment gutter) is the library's own surface, like the deck editor.
+    const canvasOf = (e: Element) => !!e.closest('.ProseMirror, .tiptap, [contenteditable="true"], [data-testid="deck-editor"], [data-testid^="doc-editor"], [data-testid^="canvas-document"], [data-testid="document-ruler"], [data-testid="document-toolbar"]');
 
     // The page title: the first visible h1 in the content column.
     const title = [...main.querySelectorAll('h1')].find((h) => visible(h) && regionOf(h)?.region === 'content') ?? null;
@@ -217,7 +218,7 @@ async function walk(page: Page, withPrimary: boolean): Promise<Walk> {
     const siblings: SiblingGroup[] = [];
     for (const root of [...roots.map((r) => r.el), main]) {
       for (const p of [root, ...root.querySelectorAll('*')]) {
-        if (p.childElementCount < 2) continue;
+        if (p.childElementCount < 2 || canvasOf(p)) continue;
         const where = regionOf(p);
         if (!where || (root === main && where.region !== 'content')) continue;
         const hs = [...p.children].map(lead).filter((h): h is Element => !!h && h !== title && visible(h) && regionOf(h)?.region === where.region);

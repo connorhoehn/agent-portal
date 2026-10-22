@@ -361,7 +361,7 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
   const shell = (editor: ReactNode) => <DocumentShell {...frame} headActions={headActions} saveState={saveState}
     participants={people.participants} onParticipantClick={people.onParticipantClick}
     onFollowParticipant={people.onFollowParticipant} followingParticipantId={people.following}
-    {...(lifecycle ? { statusPill: <DocumentLifecyclePill status={lifecycle.status} variant="tag" /> } : {})}
+    {...(lifecycle ? { statusPill: <DocumentLifecyclePill status={lifecycle.status} /> } : {})}
     editor={<>{notices}<Stack gap="none" className="min-h-0 flex-1" data-testid="document-canvas-slot"><WrappedCursorOverlay cursor={cursor} className="flex min-h-0 flex-1 flex-col">{editor}</WrappedCursorOverlay></Stack></>}
     versions={<DocumentHistory documentId={grant.documentId} onClose={() => frame.onTab('editor')}
       extensions={EXTENSIONS} pending={doc.pendingUpdateCount > 0 || !online}
