@@ -1,7 +1,9 @@
 // Both certification tracks are explicit; confidence describes the assessment,
-// never its eligibility. railTracks remains the source of the domain values.
-import { Chip, Inline, T } from '@connorhoehnslalom/ui-components/shared';
-import { railTracks } from '../assessmentFormat';
+// never its eligibility, and reads as a three-dot meter rather than a word
+// (docs/assessment-ux-goal.md slice 4). railTracks remains the source of the
+// domain values.
+import { Chip, DotMeter, Inline, T } from '@connorhoehnslalom/ui-components/shared';
+import { confidenceValue, railTracks } from '../assessmentFormat';
 import type { Dimension } from '../types';
 import { LevelBadge } from './LevelBadge';
 
@@ -35,9 +37,8 @@ export function DimensionRailSubline({ dimension }: { dimension: Dimension }) {
       : !assessed && !tracks.claimed ? <T as="span" size="xs" tone="secondary">Not yet assessed</T>
         : <>
           <DimensionRailBadges dimension={dimension} />
-          {assessed && <T as="span" size="xs" tone="secondary" className="dimension-rail-confidence">
-            {confidenceLabel(dimension.confidence)} confidence
-          </T>}
+          {assessed && <DotMeter className="dimension-rail-confidence" tone="surface" segments={3} showPercent={false}
+            label={`${confidenceLabel(dimension.confidence)} confidence`} value={confidenceValue(dimension.confidence)} />}
         </>}
   </Inline>;
 }
