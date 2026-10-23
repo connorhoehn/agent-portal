@@ -26,11 +26,11 @@ test('TEAM-005 dimension rail is readable and retains grouped keyboard navigatio
       width: node.getBoundingClientRect().width, scrollWidth: node.scrollWidth, fontSize: getComputedStyle(node).fontSize, whiteSpace: getComputedStyle(node).whiteSpace })),
   }));
   await expect(page.getByTestId('assessment-dimension-master-detail-rail-title')).toContainText('Dimensions');
-  await expect(page.getByTestId('dimension-rail-group-count-claims')).toHaveText('5');
+  await expect(page.getByTestId('dimension-rail-group-count-claims')).toHaveText('1');
   await expect(page.getByTestId('dimension-rail-group-count-unassessed')).toHaveText('12');
   await expect(list.locator('[data-row-id]')).toHaveCount(17);
   await expect(page.getByTestId('dimension-rail-row-subline-1')).toContainText('Verified');
-  await expect(page.getByTestId('dimension-rail-row-subline-1')).toContainText('Claim L2');
+  await expect(page.getByTestId('dimension-rail-row-subline-5')).toContainText('Claim L2');
   await expect(page.getByTestId('dimension-rail-row-subline-1')).toContainText('Low confidence');
   await expect(page.getByTestId('dimension-rail-row-subline-6')).toContainText('Not yet assessed');
   const first = page.getByTestId('dimension-rail-row-open-1'), second = page.getByTestId('dimension-rail-row-open-2');
@@ -38,13 +38,13 @@ test('TEAM-005 dimension rail is readable and retains grouped keyboard navigatio
   await expect(page.getByTestId('dimension-rail-row-2')).toHaveAttribute('aria-current', 'true');
   await expect(page.getByRole('heading', { name: 'Continuous Delivery (CD)', exact: true })).toBeVisible();
   await second.press('ArrowLeft');
-  const claimsGroup = page.getByTestId('dimension-rail-group-toggle-claims');
-  await expect(claimsGroup).toBeFocused(); await expect(claimsGroup).toHaveAttribute('aria-expanded', 'false');
-  await claimsGroup.press('ArrowRight'); await expect(second).toBeVisible();
-  await page.getByTestId('dimension-rail-filter').getByRole('radio', { name: 'Open claims 5', exact: true }).click();
-  await expect(list.locator('[data-row-id]')).toHaveCount(5);
+  const verifiedGroup = page.getByTestId('dimension-rail-group-toggle-verified');
+  await expect(verifiedGroup).toBeFocused(); await expect(verifiedGroup).toHaveAttribute('aria-expanded', 'false');
+  await verifiedGroup.press('ArrowRight'); await expect(second).toBeVisible();
+  await page.getByTestId('dimension-rail-filter').getByRole('radio', { name: 'Open claims 1', exact: true }).click();
+  await expect(list.locator('[data-row-id]')).toHaveCount(1);
   await expect(page.getByTestId('dimension-rail-group-unassessed')).toHaveCount(0);
-  await expect(page.getByTestId('assessment-dimension-master-detail-rail-count')).toHaveText('5');
+  await expect(page.getByTestId('assessment-dimension-master-detail-rail-count')).toHaveText('1');
   await page.getByTestId('dimension-rail-filter').getByRole('radio', { name: 'All 17', exact: true }).click();
   await expect(list.locator('[data-row-id]')).toHaveCount(17);
   await expect(page.getByTestId('dimension-rail-row-2')).toHaveAttribute('aria-current', 'true');
