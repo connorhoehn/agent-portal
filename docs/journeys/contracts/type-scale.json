@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "61b047e676a6b20de1bc8d9f8dc3422981d773250cfe71c10d36549d68d58e6b",
-  "at": "2026-10-21T19:08:51.215Z"
+  "sourceDigest": "f3bbee93596389659cf30014ef7b7d3561d4397ec108ff08e4d639ba7425152e",
+  "at": "2026-10-23T04:12:40.203Z"
  },
  "routes": {
   "/access": {
@@ -410,7 +410,7 @@
     "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-14T23:48:56.930Z"
+   "changedAt": "2026-10-23T04:12:40.203Z"
   },
   "/assessment/communication/channels/:slug": {
    "value": {
@@ -443,14 +443,9 @@
   "/assessment/enterprise": {
    "value": {
     "title": "20/700",
-    "offenders": [
-     "scale content 10/400",
-     "scale content 13/500",
-     "scale content 16/600",
-     "siblings content 40|22"
-    ]
+    "offenders": []
    },
-   "changedAt": "2026-10-21T19:08:51.215Z"
+   "changedAt": "2026-10-22T23:10:35.610Z"
   },
   "/assessment/feedback": {
    "value": {
@@ -462,17 +457,9 @@
   "/assessment/prompts": {
    "value": {
     "title": "20/700",
-    "offenders": [
-     "scale content 10/400",
-     "scale content 11/400",
-     "scale content 13/400",
-     "scale content 13/500",
-     "scale content 13/600",
-     "scale content 16/600",
-     "siblings content 40|22|22|22"
-    ]
+    "offenders": []
    },
-   "changedAt": "2026-10-21T19:08:51.215Z"
+   "changedAt": "2026-10-22T23:10:35.610Z"
   },
   "/assessment/reports": {
    "value": {
@@ -484,13 +471,9 @@
   "/assessment/rules": {
    "value": {
     "title": "20/700",
-    "offenders": [
-     "scale content 10/400",
-     "scale content 13/500",
-     "scale content 16/600"
-    ]
+    "offenders": []
    },
-   "changedAt": "2026-10-21T19:08:51.215Z"
+   "changedAt": "2026-10-22T23:10:35.610Z"
   },
   "/assessment/runs": {
    "value": {
@@ -530,14 +513,9 @@
   "/assessment/workspace": {
    "value": {
     "title": "20/700",
-    "offenders": [
-     "scale content 10/400",
-     "scale content 13/500",
-     "scale content 16/600",
-     "siblings content 40|22|22|22"
-    ]
+    "offenders": []
    },
-   "changedAt": "2026-10-21T19:08:51.215Z"
+   "changedAt": "2026-10-22T23:10:35.610Z"
   },
   "/assessment/workspace?view=library": {
    "value": {
@@ -586,7 +564,7 @@
     "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-14T23:48:56.930Z"
+   "changedAt": "2026-10-23T04:12:40.203Z"
   },
   "/iq/communication · no grant (u-hr)": {
    "value": {
@@ -941,7 +919,7 @@
     "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-14T23:48:56.930Z"
+   "changedAt": "2026-10-23T04:12:40.203Z"
   },
   "/pipelines/communication · no grant (u-kofi)": {
    "value": {

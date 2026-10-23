@@ -3,14 +3,14 @@ role: moderator
 user: u-lena
 url: /social/configuration
 pages: portal/src/pages/social/ConfigurationPage.tsx
-audited: 2026-09-30 12:40Z → 12:42Z, Chromium 1672×941 (Playwright headless, one fresh context per user — not the shared Chrome tab), middleware dev:mock:social on :3001 with the `social` compose profile up (platform-api, DynamoDB Local, host SFU), Vite :5183
-session: /api/session/me sub u-lena, tenant social, role moderator
+audited: 2026-10-22 23:39–23:39 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-lena (u-lena-clone-d73835fb), second context none (nothing on the page is live); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
+session: /api/session/me sub u-lena-clone-d73835fb (a clone of u-lena), tenant social, role moderator
 screenshot: configuration.jpg
 verdict: pass
 console errors: 0
-layout: pass — content col left 224px w 1424px (an ordinary page: the shell's 24px ring and crumbs); no horizontal scroll (scrollWidth 1672 = innerWidth 1672); the capability table (one library DataTable) is 1424px wide at x=224 — the full content width — its label column 1263px, rows 45px, so every label sits on one line; the table starts at y 311, above the fold
-keyboard: pass — 0 Tab stops in main against 0 visible controls: the page is read-only and says so
+layout: pass — content column x=224px, width 1432px; the capability table is 1432px wide at x=224, top y=261, rows 44px; scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940
+keyboard: pass — 0 distinct Tab stops against 0 visible interactive controls (first stops: ); the controls in main are none: the page is read-only and says so
 empty-state: n/a — the page always has the viewer's own role and grant to show
 realtime: n/a — nothing on it is live
-role-gating: no ManageSocialConfig: "Only a community admin can change this workspace's configuration. You can see how it is set up."; columns CAPABILITY, MODERATOR (YOU) — the other roles' columns come from the Cedar-derived role registry, which this role may not read: "This is what your role may do. The other roles' permissions are shown to people who manage this workspace's users."
-notes: Rows: Read channels, rooms, teams and recordings Yes | Post in channels and direct messages Yes | Start and join calls Yes | Create channels and rooms Yes | Create teams and change who is on them Yes | Share and delete recordings Yes | Change this workspace's configuration No. People: People13 Participant · 10 people Moderator · 1 person Community admin · 1 person Admin · 1 person. Where the data lives: Where the data lives Rooms platform-api Teams platform-api Recordings platform-api Call log platform-api. Fixed on this walk: the capability list was a KeyValue whose ~220px label column wrapped each label onto three lines.
+role-gating: no ManageSocialConfig: "Only a community admin can change this workspace's configuration. You can see how it is set up."; columns CAPABILITY, MODERATOR (YOU); "This is what your role may do. The other roles' permissions are shown to people who manage this workspace's users."
+notes: Rows: Read channels, rooms, teams and recordings Yes | Post in channels and direct messages Yes | Start and join calls Yes | Create channels and rooms Yes | Create teams and change who is on them Yes | Share and delete recordings Yes | Change this workspace's configuration No. People 17 Participant · 14 people Moderator · 1 person Community admin · 1 person Admin · 1 person. Where the data lives Rooms platform-api Teams platform-api Recordings platform-api Call log platform-api.

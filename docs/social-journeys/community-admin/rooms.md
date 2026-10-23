@@ -1,19 +1,20 @@
 surface: rooms
 role: community-admin
-user: u-mira
+user: u-mira (walked as its clone u-mira-clone-b8e242fe)
 url: /social/rooms
 pages: portal/src/pages/social/RoomsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialRoomsSection.tsx,portal/src/pages/social/RoomPane.tsx,portal/src/pages/social/useSocialCall.ts
-audited: 2026-10-07 02:55Z → 02:59Z, Chromium 1680×940, Playwright headless, a separate signed-in context per user (second context u-sana); Tilt stack: Vite :5183 over middleware :3001 (mock providers) with the real SFU :3902 and platform-api :23001
-session: /api/session/me sub u-mira, tenant social, role community-admin
+audited: 2026-10-23 23:51–23:52 local, headless Chromium 1680×940 (Playwright) with fake capture devices, a fresh signed-in clone of u-mira (u-mira-clone-b8e242fe), second context u-sana (real seed persona, its own Playwright context); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
+session: /api/session/me sub u-mira-clone-b8e242fe (a fresh clone of u-mira), tenant social, role community-admin
 screenshot: rooms.jpg
-verdict: pass — real SFU media (fake devices) observed
-console errors: 0
-layout: pass — content column x=200px, width 1480px, top 70px, bottom 893px; rail 300px at x=200 (0px from content start), y=70, height 823; pane x=500, width 1180; scrollWidth 1680 / viewport 1680; body scrollHeight 940 / viewport height 940; footer row y=894–940px (1680px wide)
-keyboard: pass — physical Tab sweep reached 33 distinct controls in main against 51 visible enabled interactive elements (roving-focus rows and disabled controls are skipped by Tab); first stops: social-new-dm, social-rail-search, social-chat-rail-shelf-activ, social-chat-rail-shelf-menti, social-chat-rail-shelf-calls, social-chat-rail-shelf-recor, rail-section-header-toggle, social-active-now-person-u-f, social-active-now-person-u-j
-empty-state: pass — the surface's own GET /api/social/rooms answered with an empty list (stubbed in the browser, since rooms are platform-api's): Pick a room Choose a room under Rooms on the left to see who can join it, then join its call. A room stays open between calls, so a group can gather i; rail: ▸ ROOMS + No rooms yet Create one to start an ongoing hangout. Create room; unknown room id rendered the workspace with no pane
-realtime: pass — real room call on the local SFU/platform-api with fake devices: dock up in 0.00s, the peer's join showed "2 joined" in 0.00s, the peer's leave showed "1 joined" in 0.00s
-role-gating: New room control present (creates "journey-community-admin-muxin6l9", listed 1×); POST /api/social/rooms with an empty body → 400 (validation, not 403)
-room-detail: Journey community-admin muxin6l9 Open to the workspace Join call Who can join Everyone in this workspace Opened by Mira Okafor Call Audio and video Recording Off Lobby social:room:journey-community-admin-muxin6l9
-call-tiles: 2 tiles in the dock: You SI Sana Iqbal
-media: join enabled: true; after Leave the footer returned to its idle Huddle/Message row (checked separately after the walk: the call dock was absent 4s after Leave; the walk probe itself matched the idle row, so its "false" is a probe quirk, not a defect)
-environment: Tilt stack, DEV_OFFLINE with registered mock providers for chat/directory; rooms, calls and recordings come from the real platform-api and SFU. Mock state was reset per fixture after the walk; walk-created rooms/teams were left for the reviewer.
+verdict: fail — 13 console errors (4xx: 403 GET /api/calls/<id>/chat; 403 POST /api/video/sessions/<id>/<id>)
+console errors: 13 — the failing requests: 403 GET /api/calls/<id>/chat; 403 POST /api/video/sessions/<id>/<id>
+layout: pass — rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940
+keyboard: pass — 13 distinct Tab stops against 13 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity); Escape closed the New room dialog (true)
+empty-state: pass — this context's GET /api/social/rooms stubbed empty (page.route, this context only): pane "Pick a room Choose a room under Rooms on the left to see who can join it, then join its call. A room stays open between calls, so a group can gather in the same"; rail "No rooms yet Create one to start an ongoing hangout. Create room"; an unknown room id (?room=no-such-room-…) rendered "This room is not available It does not exist, or it is private and you are not one of its members."
+realtime: pass — real room call on the local SFU/platform-api with fake devices: the dock read 1 joined 0.07s after Join; u-sana's join showed "2 joined" 0.11s after she pressed the room's Join call (her pre-join dialog followed it); her leave showed "1 joined" 0.06s after her Leave
+role-gating: ManageChannels capability true, StartCall true; New room control present (rail) and present (pane); created "journey-community-admin-mvkfocls", listed 1×; POST /api/social/rooms {} → 400 (expected 400, validation: the role may open rooms)
+room-detail: journey-community-admin-mvkfocls Open to the workspace Join call Who can join Everyone in this workspace Opened by u-mira-clone-b8e242fe Call Audio and video Recording Off Lobby social:room:journey-community-admin-mvkfocls; lobby social:room:journey-community-admin-mvkfocls shown: true
+call-tiles: 2 tile element(s): "You Sana Iqbal"
+media: join enabled: true; the dock with both in it read "journey-community-admin-mvkfocls huddle 00:02 2 joined 2 Message"; peer joined: true; after Leave the footer returned to its idle row (true): "Social MO 2 online Huddle Message". Real SFU media with fake capture devices; no audio content is verifiable headless.
+huddle-chat: during the room call the huddle chat pane read "This call requires an OrgIQ or assessment session"; visible Leave controls while in the call: 2
+notes: Every field was observed in this pass. "Opened by" names the walking clone by its raw id, because a clone is not in the people directory; a seed persona shows its display name. The room made by this walk was left in platform-api (it has no reset). The second context is the real seed persona u-sana; no mock reset (shared stack).

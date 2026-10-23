@@ -1,20 +1,19 @@
 surface: teams
 role: moderator
 user: u-lena (Lena Brandt)
-url: /social/teams?channel=social%3Ateam%3Ajourney-moderator-muwxanes%3Ageneral
+url: /social/teams?channel=social%3Ateam%3Ajourney-moderator-185350%3Ageneral
 pages: portal/src/pages/social/TeamsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialConversation.tsx
-audited: 2026-10-08 11:05Z → 2026-10-08 11:06Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, second context u-sana; Tilt stack: Vite :5183 over middleware :3001 (mock providers) with the real SFU :3902 and platform-api :23001
-session: /api/session/me sub u-lena, tenant social, role moderator
+audited: 2026-10-22 18:51–18:54 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-lena (u-lena-clone-69668981), second context u-sana (the seed persona in its own Playwright context, already in tenant social); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
+session: /api/session/me sub u-lena-clone-69668981 (a clone of u-lena), tenant social, role moderator
 screenshot: teams.jpg
 verdict: pass
 console errors: 0
-layout: pass — content column x=200px, width 1480px, top 70px, bottom 893px; rail 300px at x=200, y=70, height 823; pane x=500, width 1180; scrollWidth 1680 / viewport 1680; body scrollHeight 940 / viewport height 940; composer y=824–864px, in view: true; footer row y=894–940px (1680px wide); h1 count 1
-type: title 16/400; sizes in main (size/weight×text nodes): 13/600×14, 12/400×12, 13/500×11, 11/400×11, 15/600×8, 11/600×6, 11/500×6, 14/500×5, 16/400×5, 12/600×4, 14/400×3, 10/600×1, 8/600×1, 13/400×1, 14/600×1, 20/600×1
-keyboard: pass — physical Tab sweep from the start of main reached 33 distinct controls against 32 Tab stops (56 really-visible interactive elements; roving-focus members are not Tab stops); first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-options, social-chat-rail-shelf-activity, social-chat-rail-shelf-mentions, social-chat-rail-shelf-calls, social-chat-rail-shelf-recordings, rail-section-header-toggle
+layout: pass — rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940; conversation pane x=500, width 1180px; composer y=841–883px, in view without the body scrolling: true; h1 count 1
+keyboard: pass — 18 distinct Tab stops against 21 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity) in the chat workspace; Enter on the Documents tab set ?view=documents, Enter on Chat brought the composer back (true)
 empty-state: pass — /social/teams?channel=social%3Ateam%3Ano-such-team%3Ageneral rendered: Pick a channel Choose a team's channel on the left to read it, or open a team's ⋯ menu to see who is on it.
-realtime: pass — u-lena's message reached u-sana in 0.175s, the reply came back in 0.176s, no reload; own message present after reload: true
-role-gating: can manage channels/teams: Create channel controls in DOM 1, New team 1, New room 1, New message 1; POST /api/social/channels {} → 400, POST /api/social/teams {} → 400 (403 = refused by Cedar, 400 = validation past the gate); message actions: own row Edit 1 / Delete 1, u-sana's view of that row Edit 0 / Delete 0
-header: JM Journey moderator muwxanes · General 2 members Chat Documents Pinned Calls Work graph; tabs present [chat, documents, pins, calls] = [true,true,true,true]
-team-tree: JM Journey moderator muwxanes ⋯ # General
-team-detail: team “Journey moderator muwxanes” (role owner, 1 channel(s)) chosen because both u-lena and u-sana are members
-notes: Every field above was observed in this pass, not carried forward. Not exercised in this pass: pins, forward, slash commands, attachments (covered by the pin/summarize specs, not by this surface log).
+realtime: pass — the clone's "journey moderator teams 18:54:08 out" reached u-sana in 0.020s, the reply came back in 0.024s, no reload; own message present after a reload: true
+role-gating: can manage channels/teams: on this route's DOM (the rail draws only this route's section) Create channel controls 0, Create team/New team 1, New room 0, New message 1; POST /api/social/channels {} → 400, POST /api/social/teams {} → 400 (403 = refused by Cedar, 400 = validation past the gate); message actions: this clone's own row Edit 0 / Delete 0; u-sana's own row (seed persona) Edit 1 / Delete 1; u-sana's view of the clone's row Edit 0 / Delete 0; the clone's view of u-sana's row Edit 0 / Delete 0 — a clone-only artifact of the dev:mock clone tooling, not judged: the gateway stamps a clone's message with its persona (recordUserId) while the page compares against the clone's session sub, so the clone sees its own message as someone else's; own-row Edit/Delete is judged on the seed persona above
+header: JM Journey moderator 185350 · General 2 members · Created by the 2026-10-22 chat journey walk. Chat Documents Pinned Calls LB Work graph; tabs present [chat, documents, pins, calls] = [true,true,true,true]; call actions [audio, video] = [true,true]
+team-tree: JM Journey moderator 185350 ⋯ # General
+team-detail: team “Journey moderator 185350” (mock-team-mvk5101b-5, this clone's role owner, 1 channel(s)), created for this walk by the clone (POST /api/social/teams → 201), added u-sana (→ 201); members: u-lena-clone-69668981 (owner), u-sana (member)
+notes: Every field above was observed in this pass. A second clone-only artifact, most likely the same persona-vs-clone id mismatch as the Edit/Delete gap: the clone's composer keeps the sent text after the message is delivered, so the screenshot shows the sent line still in the composer; a seed persona's composer clears on send (checked separately with u-sana on #general). No team was shared by this clone and u-sana before the walk (a clone's teams are keyed by its own id), so one was created; it is left in place (mock write). The unknown team id renders the generic "Pick a channel" prompt rather than a not-found state. Not exercised: membership edit through the UI, pins, forward, attachments.

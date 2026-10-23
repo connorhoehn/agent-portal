@@ -3,17 +3,17 @@ role: participant
 user: u-sana
 url: /social/contacts
 pages: portal/src/pages/social/ContactsPage.tsx
-audited: 2026-10-06 17:10Z → 17:10Z, Chromium 1680×940, Playwright headless, a separate signed-in context per user (second context u-lena); Tilt stack: Vite :5183 over middleware :3001 (mock providers) with the real SFU :3902 and platform-api :23002
-session: /api/session/me sub u-sana, tenant social, role participant
+audited: 2026-10-22 18:48–18:50 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-sana (u-sana-clone-7992116d), second context the real seed persona u-theo (a separate Playwright context opening /iq/projects in his own orgiq tenant; not switched); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
+session: /api/session/me sub u-sana-clone-7992116d (a clone of u-sana), tenant social, role participant
 screenshot: contacts.jpg
 verdict: pass
 console errors: 0
-layout: pass — content column x=224px, width 1432px, top 70px, bottom 893px; scrollWidth 1680 / viewport 1680; body scrollHeight 940 / viewport height 940; footer row y=894–940px (1680px wide)
-keyboard: pass — physical Tab sweep reached 25 distinct controls in main against 25 visible enabled interactive elements (roving-focus rows and disabled controls are skipped by Tab); first stops: datatable-search, social-contact-message, social-contact-call
-empty-state: n/a — the roster always holds the viewer (a session stands in social only with a social grant)
-realtime: pass — 0.31s: u-theo opened an orgiq page (the shell bar joins social:lobby): Here now 6→7 after 0.306s from navigation start incl. page load; on close 7→6 after 0.104s
-role-gating: Message (PostMessage) and Call (StartCall) on every other person's row (12 Call buttons, 12 Message buttons); none on the viewer's own row
-search: typing "Mia" in the table search left 1 of 12 rows
-message: Enter on the first Message opened /social/dms/social:dm:u-asha:u-sana
-presence: Here now before: "Here now6 JL SI RK ND LB AN"; after u-theo's orgiq page closed: "Here now6 JL SI RK ND LB AN"
-environment: Tilt stack, DEV_OFFLINE with registered mock providers for chat/directory; rooms, calls and recordings come from the real platform-api and SFU. Mock state was reset per fixture after the walk; walk-created rooms/teams were left for the reviewer.
+layout: pass — content column x=200px, width 1480px; scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940
+keyboard: pass — 56 distinct Tab stops against 55 visible interactive controls (first stops: page-header-description-trigger, Search contacts, filter-popover-trigger); Enter on the first Message button ("Message Sana Iqbal") opened /social/dms/social:dm:u-sana:u-sana-clone-7992116d
+empty-state: pass — a browser-side stub of GET /api/social/people answering { people: [] } (this context only) rendered "Nobody here yet People appear here once they hold a role in this workspace. An admin grants that from Identity."; a search that matches nobody is the table's own "No person matches these filters."
+realtime: pass — 7.23s: u-theo opened /iq/projects (his orgiq shell joins social:lobby) and Here now went 2→3 after 7.23s from his navigation start (his page's load event fired at 5.49s, so 1.75s after it); when his context closed it went 3→2 after 0.07s
+role-gating: Message (PostMessage) and Call (StartCall) on every other person's row (16 Message, 16 Call over 16 rows); rows marked "(you)": 0
+search: typing "Mia" in the table search left 1 of 16 rows ("1 of 16 people"); before: "16 of 16 people"
+message: Enter on the first row's Message opened /social/dms/social:dm:u-sana:<this clone>
+presence: Here now before: "Here now 2 SI"; with u-theo on an orgiq page: "Here now 3 SI"
+notes: The walker is a clone (u-sana-clone-7992116d); a clone's id is not in the workspace roster, so the table has 0 "(you)" rows and its persona's own row (u-sana) is listed like anyone else's with Message and Call. The own-row rule (no actions on "(you)") is therefore not exercised on this walk. Call was not pressed (calls are their own log).

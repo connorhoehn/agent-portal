@@ -109,3 +109,50 @@ fix. Moderator and admin logs were not re-observed for #3 in this pass.
 1. `/social/channels`, `/social/dms`, `/social/teams`, `/social/calls` · type scale · chat rail and conversation use 11/400, 11/500, 11/600, 13/500, 13/600, 15/600 (contract offenders "scale rail …"), plus 8/600 and 5/600 badge text and 10/600 labels; the conversation page has no 20/600 title (its h1 measures 16/400).
 2. Call dock · after Leave the dock stays in an "ended" state until Dismiss is clicked (new behaviour; the earlier logs expected it to vanish). Recorded, not a failure.
 3. `/social/channels/general` as admin (`u-operator`) · the admin is not a member, so the pane reads "You are not in #general" with a Join button; the walk joined to test chat (membership write left in place).
+
+# Defects — re-walk of 2026-10-22 (all nine surfaces, headless clones)
+
+Walked as identity clones of the seed personas, with the real u-sana / u-mira / u-theo as second
+contexts. These are the defects that keep calls, rooms and recordings from passing; the other
+surfaces pass. They are the same for every role unless a role is named.
+
+1. **Social calls draw a broken huddle chat** [middleware]. Every DM and room call opens the
+   huddle chat pane reading "This call requires an OrgIQ or assessment session": `GET
+   /api/calls/<id>/chat` answers 403 because `middleware/src/lib/call-access.ts:24` admits only
+   orgiq and assessment sessions, and platform-api's `POST /api/video/sessions/<id>/call-binding`
+   answers 403 too. ~11 console errors per calls walk, 13 per rooms walk. Seed personas see it
+   as well (a real u-mira → u-sana call).
+2. **The caller cannot leave a call from the DM it runs on** [portal]. The dock above the
+   composer hides its header (`social-call-dock-header` is `display:none`), so there is no
+   Leave, mic or camera control, and the DM header still offers "Join the call with audio". The
+   same dock on /social/calls shows all of them. Regression since the 2026-10-08 walk.
+3. **A ring cancelled before an answer leaves no call-log row** [portal / realtime-modules]. The
+   callee's bell gets "Missed call from …", but neither call log gets a row and the callee's
+   Missed filter stays empty: the caller's page posts no invite or missed event to
+   `/api/calls/log/events` for that ring.
+4. **Recordings never offer Delete** [platform-api]. The portal shows Delete only when the row's
+   `startedBy` is the viewer (`portal/src/pages/social/socialPlatform.ts:233`), but platform-api's
+   per-user list is read from the participant index, whose rows carry no `startedBy`
+   (`CallRecordingRepository.ts` `participantIndexItems` / `listByUser`). `DELETE
+   /api/social/recordings/:id` from the starter answers 204, so only the UI is cut off.
+   Moderator, community-admin and admin fail on it.
+5. **A recording without media logs a console error when opened** [middleware]. platform-api
+   answers the playback-token 404 and the BFF passes it through, so Chromium logs it; the BFF
+   could answer `mediaState: 'unavailable'` as its mock path does. The participant's recordings
+   log fails on this alone.
+6. **Real recorded calls cannot be played** [platform-api / SFU]. A real DM call is now listed
+   (the webhook arrives), but with stage failed, `callBindingReason: missing-recorded-participant`,
+   no `startedBy`, and playback 404 although the SFU wrote the media under
+   `/tmp/orgiq-media-validation-recordings`. With no `startedBy` nobody may delete those rows.
+7. **New message picker: Escape drops focus on the page body** instead of returning it to the
+   New message button, and the picker lists the viewer's own persona [portal].
+8. **An unknown team URL shows no "not found"** (`?channel=social:team:no-such-team:general` reads
+   "Pick a channel" or "You are not on a team yet"), unlike unknown channels and DMs [portal].
+9. **The room pane's title has no left gutter**: it sits flush at x=500 against the rail [portal].
+
+Walker-only (dev:mock identity clones, not seen by real users): a clone gets no Edit/Delete on
+its own messages and its composer keeps the sent text (the gateway stamps the persona, the page
+compares the clone id); a clone cannot be added to a team (not in the Social roster); room
+detail reads "Opened by u-…-clone-…". A clone's channel joins are recorded for its persona,
+which is how the admin walk put u-operator (the layout sweep's user) into #general and moved
+the Communication landing; that membership was removed after the walk.
