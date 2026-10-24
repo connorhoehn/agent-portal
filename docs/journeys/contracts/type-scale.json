@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "f3bbee93596389659cf30014ef7b7d3561d4397ec108ff08e4d639ba7425152e",
-  "at": "2026-10-23T04:12:40.203Z"
+  "sourceDigest": "89c18d9fba333a668a98bb1407c5dfd61d8dc1c397e6bbc5eeb88b219566dd12",
+  "at": "2026-10-24T15:51:36.630Z"
  },
  "routes": {
   "/access": {
@@ -779,14 +779,9 @@
   "/iq/runbooks/proposals/:pid": {
    "value": {
     "title": "20/600",
-    "offenders": [
-     "scale content 10.5/400",
-     "scale content 10/400",
-     "scale content 11.5/400",
-     "scale content 11/400"
-    ]
+    "offenders": []
    },
-   "changedAt": "2026-10-15T03:45:36.614Z"
+   "changedAt": "2026-10-24T15:51:36.630Z"
   },
   "/iq/runs": {
    "value": {
