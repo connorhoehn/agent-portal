@@ -75,7 +75,8 @@ export function huddleChatScopeTenant(tenant: string | null, joined: boolean): s
 }
 
 /** A page huddle can be live before another person accepts an invitation.
- * Its server-confirmed roster determines chat access, rather than startedAt. */
+ * Initial media connection precedes gateway registration, so it cannot yet
+ * resolve chat. A reconnect retains the existing call's roster checks. */
 export function hasJoinedCall(call: { callId: string } | null | undefined, phase: string): boolean {
-  return !!call?.callId && ['connecting', 'live', 'reconnecting'].includes(phase);
+  return !!call?.callId && ['live', 'reconnecting'].includes(phase);
 }

@@ -167,7 +167,7 @@ const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 function huddleChatShape(auth: LibraryGuardAuth, channel: string, bare: string): boolean {
   const org = str(auth.org); const tenants = list(auth.tenants);
   return !!huddleCallId(bare) && (channel === bare || channel === `reactions:${bare}`) && !!str(auth.userId)
-    && ['orgiq', 'assessment'].some(tenant => org === tenant || tenants.includes(tenant));
+    && ['orgiq', 'assessment', 'social'].some(tenant => org === tenant || tenants.includes(tenant));
 }
 
 const GATEWAY_FAMILIES = defineChannelFamilies<ChannelAuthority, GatewayFamily>(GATEWAY_FAMILY_TABLE, {

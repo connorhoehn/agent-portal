@@ -13,8 +13,8 @@ test('Accept retains work, scoped Search, and a deck already bound to the same i
 
 test('a solo page huddle is joined even before an invite acceptance gives it a start timestamp', () => {
   const solo = { callId: 'call-demo', startedAt: null };
-  for (const phase of ['connecting', 'live', 'reconnecting']) assert.equal(hasJoinedCall(solo, phase), true);
-  for (const phase of ['idle', 'calling', 'ringing', 'ended', 'failed']) assert.equal(hasJoinedCall(solo, phase), false);
+  for (const phase of ['live', 'reconnecting']) assert.equal(hasJoinedCall(solo, phase), true);
+  for (const phase of ['idle', 'connecting', 'calling', 'ringing', 'ended', 'failed']) assert.equal(hasJoinedCall(solo, phase), false);
   assert.equal(hasJoinedCall(null, 'live'), false);
 });
 

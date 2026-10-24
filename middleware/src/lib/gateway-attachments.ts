@@ -22,6 +22,7 @@ import { getUser } from '../providers/identity.js';
 import { decideLiveChannel, type LiveChannelGuards } from './live-principal.js';
 import { config as appConfig } from '../config.js';
 import { gatewayReactionsFixture, gatewayUploadsFixture } from '../mock/gateway-attachments.js';
+import { huddleChatOf } from './call-chat.js';
 
 // ── reactions ───────────────────────────────────────────────────────────────
 
@@ -256,7 +257,9 @@ export function createUploadsRouter(
     if (!channel || channel.length > 256) return fail(res, 400, 'BAD_REQUEST', 'channel is required');
     const base = guards.baseChannel(channel);
     const tenants = Array.isArray(ctx['tenants']) ? ctx['tenants'].map(String) : [String(ctx['org'] ?? '')];
-    if (!tenants.includes(base.split(':')[0]!)) return fail(res, 404, 'NOT_FOUND', 'No such conversation');
+    // Huddle channels retain their orgiq: namespace for every call tenant;
+    // their live seat authority below owns access, not the namespace prefix.
+    if (!huddleChatOf(base) && !tenants.includes(base.split(':')[0]!)) return fail(res, 404, 'NOT_FOUND', 'No such conversation');
     if (!await decideLiveChannel({ kind: 'subscribe', clientId: 'http', channel, ctx }, guards)) {
       return fail(res, 403, 'FORBIDDEN', 'You cannot read this conversation');
     }

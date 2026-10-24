@@ -373,7 +373,7 @@ socialEmbedRouter.post('/dms/read', socialGate('ViewSocial'), asyncHandler(async
   } finally { membership.dispose(); }
 }));
 
-socialRouter.get('/people', socialGate('ViewSocial'), socialHandler('get /people', asyncHandler(async (_req, res) => {
+socialRouter.get('/people', socialGate('ViewSocial'), socialHandler('get /people', asyncHandler(async (req, res) => {
   const directory = await listUsers();
   const avatars = await userAvatars(directory);
   // The cross-tenant platform operator (`admin`, a service account) holds a Social grant so it can administer the
@@ -381,7 +381,7 @@ socialRouter.get('/people', socialGate('ViewSocial'), socialHandler('get /people
   const people = [...(await socialRoster()).values()].filter((p) => !(p.roles.length === 1 && p.roles[0] === 'admin'))
     .sort((a, b) => a.displayName.localeCompare(b.displayName))
     .map((person) => ({ ...person, avatarUrl: avatars.get(person.userId) ?? null }));
-  res.json({ people });
+  res.json({ people, selfId: me(req) });
 })));
 
 // ── Rooms, teams, recordings, calls (phase S2) ──────────────────────────────

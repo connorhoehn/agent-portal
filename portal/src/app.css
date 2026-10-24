@@ -799,11 +799,7 @@ tbody tr:focus-within .row-reveal,
   padding-left: 0;
 }
 
-/* The social footer owns the call controls. The central dock is a compact
-   participant grid, whose cards never grow with an empty content column. */
-[data-testid="shell-call-media"][data-placement="composer"] [data-testid$="-header"] {
-  display: none;
-}
+/* Keep the dock's call controls visible above the compact participant strip. */
 [data-testid="shell-call-media"][data-placement="composer"] [data-testid="call-dock-tile-row"] {
   display: flex;
   flex-wrap: nowrap;

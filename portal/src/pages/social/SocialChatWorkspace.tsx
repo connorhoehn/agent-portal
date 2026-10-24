@@ -195,7 +195,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   // ── Data ──────────────────────────────────────────────────────────────
   const channelsFetch = useFetch<{ channels: SocialChannel[] }>(`${api}/channels`);
   const dmsFetch = useFetch<{ conversations: SocialDm[] }>(`${api}/dms`, 30_000);
-  const peopleFetch = useFetch<{ people: SocialPerson[] }>(`${api}/people`);
+  const peopleFetch = useFetch<{ people: SocialPerson[]; selfId?: string }>(`${api}/people`);
   const teamScope = JSON.stringify([me, session?.tenant, session?.role, session?.grants, session?.masquerading]);
   const teamsFetch = useSocialTeams(teamScope, me, api);
   const roomsFetch = useFetch<RoomsResponse>(`${api}/rooms`, 15_000);
@@ -244,6 +244,8 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     ? `${base}${href.slice('/social'.length)}` : href);
   const [shelf, setShelf] = useState<Shelf | null>(null);
   const [picking, setPicking] = useState(false);
+  const dmTrigger = useRef<HTMLElement | null>(null);
+  const newDmButton = useRef<HTMLButtonElement | null>(null);
   // Any navigation leaves the shelf and the picker: the URL names the pane again
   // — including `?shelf=activity|mentions`, which the footer bell's "See all
   // activity" link opens.
@@ -460,7 +462,14 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     }
   }
 
-  const openNewDm = () => { setShelf(null); setPicking(true); };
+  const openNewDm = () => {
+    dmTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setShelf(null); setPicking(true);
+  };
+  const closeNewDm = () => {
+    setPicking(false);
+    requestAnimationFrame(() => (dmTrigger.current?.isConnected ? dmTrigger.current : newDmButton.current)?.focus());
+  };
 
   // ── The rail ──────────────────────────────────────────────────────────
   const activeTiles = embedding?.activePeople ? embedding.activePeople(people) : people;
@@ -522,7 +531,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     <ConversationRail
       title="Chat"
       actions={<IconButton aria-label="New message" title="New message" size="sm" variant="ghost" icon={<PlusIcon size={14} />}
-        onClick={openNewDm} data-testid="social-new-dm" />}
+        ref={newDmButton} onClick={openNewDm} data-testid="social-new-dm" />}
       search={{ value: query, onChange: setQuery, placeholder: 'Find a chat', label: 'Find a chat', 'data-testid': 'social-rail-search' }}
       // One compact row of destinations (the user, 2026-10-07: they "shouldn't all stack in this window").
       shelfLayout="bar"
@@ -585,7 +594,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   const dmListed = lobby ? conversations.find((c) => c.channel === lobby) : undefined;
   const dmPeople = lobby ? dmPeers(lobby, me, roster, dmListed?.peers) : [];
   const candidates = useMemo<Candidate[]>(
-    () => teamCandidates(dmCandidates(peopleFetch.data?.people ?? [], me), members),
+    () => teamCandidates(dmCandidates(peopleFetch.data?.people ?? [], peopleFetch.data?.selfId ?? me), members),
     [peopleFetch.data, me, members],
   );
   const isOwner = detail.data?.team.role === 'owner';
@@ -658,8 +667,8 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
           description="When someone writes @ and your name in a channel you are in, it lands here." />;
     }
     if (picking) {
-      return <NewConversationPanel className="min-w-0 flex-1" people={dmCandidates(peopleFetch.data?.people ?? [], me)}
-        peopleError={peopleFetch.error} busy={busy} onStartDm={startDm} onCancel={() => setPicking(false)} data-testid="social-dm-picker" />;
+      return <NewConversationPanel className="min-w-0 flex-1" people={dmCandidates(peopleFetch.data?.people ?? [], peopleFetch.data?.selfId ?? me)}
+        peopleError={peopleFetch.error} busy={busy} onStartDm={startDm} onCancel={closeNewDm} data-testid="social-dm-picker" />;
     }
     if (route === 'channels') {
       if (!slug && embedding?.landing) {
@@ -726,7 +735,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       if (roomsFetch.isLoading && !roomsFetch.data) return <LoadingState label="Loading rooms…" />;
       if (roomsFetch.error && !roomsFetch.data) return <ErrorState title="Rooms could not be loaded" description={roomsFetch.error} actionLabel="Try again" onAction={roomsFetch.refresh} />;
       return <RoomPane selected={roomSlug} room={rooms.find((r) => r.slug === roomSlug) ?? null} nameOf={nameOf} call={call}
-        mayCreate={mayCreateChannel} onCreate={() => setCreatingRoom(true)} />;
+        inset={!embedding} mayCreate={mayCreateChannel} onCreate={() => setCreatingRoom(true)} />;
     }
     // Teams.
     if (teamsFetch.isLoading && !teamsFetch.data) return <LoadingState label="Loading teams…" />;
@@ -743,6 +752,10 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
         userId={me} displayName={displayName} nameOf={nameOf} placeholder={`Message ${openTeam.channel.name}`}
         onLatestMessage={(summary) => openRowChanged(teamChannel!, summary)} />;
     }
+    if (teamChannel) return <Stack gap="none" className={CONVERSATION_STATE_INSET} data-conversation-frame="missing">
+      <EmptyState align="start" testId="social-team-channel-missing" title="This team channel is not available"
+        description="It does not exist, or you are not a member of its team." />
+    </Stack>;
     if (managing && detail.data) {
       return (
         <Stack gap="md" className="min-w-0 flex-1" data-testid="social-team-detail">

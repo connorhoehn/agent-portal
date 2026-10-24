@@ -6,22 +6,23 @@ import { AppError } from './async-handler.js';
 import { currentDocumentSessionEpoch, documentSessionId } from './document-session.js';
 import { getUser } from '../providers/identity.js';
 import { DEMO_SUB, demoFallbackAllowed, type Grants, type Session } from './session.js';
-import { tenantChannelFamily } from './tenant-channels.js';
+import { SOCIAL_CONVERSATION_ID, tenantChannelFamily } from './tenant-channels.js';
 
 export interface CallAuthority { displayName: string; grants: Grants }
 /** The tenants whose sockets page pins (OrgIQ only) and huddle chat resolve. */
-export type CallTenant = 'orgiq' | 'assessment';
+export type CallTenant = 'orgiq' | 'assessment' | 'social';
 const ORGIQ_ONLY: readonly CallTenant[] = ['orgiq'];
-/** Huddle chat: OrgIQ lobbies, and an assessment team page's huddle (`assessment:team:<id>`). */
-export const HUDDLE_CHAT_TENANTS: readonly CallTenant[] = ['orgiq', 'assessment'];
-/** The tenant a huddle-bearing lobby belongs to, or null (Social, documents, pipelines, malformed). */
+/** Huddle chat follows the accepted call in Work, Assessment teams and Social. */
+export const HUDDLE_CHAT_TENANTS: readonly CallTenant[] = ['orgiq', 'assessment', 'social'];
+/** The tenant a huddle-bearing lobby belongs to, or null (documents, pipelines, malformed). */
 export function huddleLobbyTenant(lobbyName: string): CallTenant | null {
   if (lobbyName.startsWith('orgiq:')) return 'orgiq';
+  if (SOCIAL_CONVERSATION_ID.test(lobbyName)) return 'social';
   return tenantChannelFamily(lobbyName)?.id === 'assessment:team' ? 'assessment' : null;
 }
 export async function currentCallAuthority(session: Session, tenants: readonly CallTenant[] = ORGIQ_ONLY): Promise<CallAuthority> {
   if (!tenants.includes(session.tenant as CallTenant)) {
-    throw new AppError(403, tenants.length === 1 ? 'This call requires an OrgIQ session' : 'This call requires an OrgIQ or assessment session');
+    throw new AppError(403, tenants.length === 1 ? 'This call requires an OrgIQ session' : 'This session does not support call conversations');
   }
   try {
     const isDemo = session.sub === DEMO_SUB && process.env['NODE_ENV'] !== 'production' && demoFallbackAllowed();
@@ -95,7 +96,7 @@ export async function activeCallParticipant(opts: CallAccessOptions, callId: str
   // A huddle belongs to its lobby's tenant; a session standing elsewhere is not a seat of it.
   const tenant = huddleLobbyTenant(call.lobbyName)
     ?? (options.allowAssessmentDocument && /^assessment:doc:[A-Za-z0-9:_-]{1,256}$/.test(call.lobbyName) ? 'assessment' : null);
-  if (!tenant) throw new AppError(403, 'This call requires an OrgIQ lobby');
+  if (!tenant) throw new AppError(403, 'This lobby does not support call conversations');
   if (tenant !== session.tenant) throw new AppError(403, 'Join this call before opening its conversation');
   const key = callProvenance(session);
   const connected = await Promise.all(call.participantClientIds.map(id => resolveConnectedCallSession(opts.router, id, HUDDLE_CHAT_TENANTS)));
@@ -111,15 +112,22 @@ export async function activeCallParticipant(opts: CallAccessOptions, callId: str
 
 /**
  * A seated huddle participant speaks and chats under the stored lobby's read
- * authority. This is neither Social embedding nor a page-discussion write:
- * an OrgIQ member may join/chat without PostMessage or DispatchAgentRun.
- * The action selectors are kept for the runtime's read/write contract; both
- * require the same lobby authority, with the actual seat checked separately.
+ * authority. Work and Assessment use the host's read permission; Social
+ * retains its current conversation membership and read/write permissions.
+ * The runtime checks the exact connected call seat separately.
  */
-export async function currentCallChatGrant(session: Session, authority: CallAuthority, _action: 'ViewSocial' | 'PostMessage',
+export async function currentCallChatGrant(session: Session, authority: CallAuthority, action: 'ViewSocial' | 'PostMessage',
   lobbyName: string): Promise<boolean> {
   const tenant = huddleLobbyTenant(lobbyName);
   if (!tenant || session.tenant !== tenant || !authority.grants[tenant]?.includes(session.role)) return false;
+  if (tenant === 'social') {
+    // Social keeps its current action and conversation membership rules. The
+    // call runtime additionally requires this exact connected seat.
+    const { admitChannel } = await import('./gateway/authority.js');
+    const { sessionGatewayContext } = await import('./live-principal.js');
+    return admitChannel({ ctx: sessionGatewayContext({ ...session, grants: authority.grants }),
+      channel: lobbyName, kind: action === 'PostMessage' ? 'publish' : 'subscribe', clientId: 'http' });
+  }
   // DMs have no tenant family; the caller's ID membership is lobbyGuard's.
   if (!tenantChannelFamily(lobbyName)) return tenant === 'orgiq' && parseDmLobby(lobbyName, { prefix: 'orgiq:' })?.kind === 'dm';
   // The page lobby's read (lobby flag, family read, page existing now): the facade's one copy.

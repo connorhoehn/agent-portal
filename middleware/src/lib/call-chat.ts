@@ -45,12 +45,12 @@ export function huddleChatOf(channel: string): { callId: string; roomId: string 
   return callId ? { callId, roomId: room?.roomId ?? null } : null;
 }
 // The namespace keeps its `orgiq:` name for every huddle; an assessment team
-// page's huddle (`assessment:team:<id>`) has one too. Seats resolve in either
+// page's huddle (`assessment:team:<id>`) and Social calls have one too. Seats resolve in each
 // tenant, and activeCallParticipant pins each to its lobby's tenant.
 const connectedCallSession = (router: RealtimeRouter, clientId: string) => connectedAnyCallSession(router, clientId, HUDDLE_CHAT_TENANTS);
 const resolveConnectedCallSession = (router: RealtimeRouter, clientId: string) => resolveAnyCallSession(router, clientId, HUDDLE_CHAT_TENANTS);
 const huddleAuthority = (session: Session) => currentCallAuthority(session, HUDDLE_CHAT_TENANTS);
-/** Does this lobby's call carry a huddle conversation? (Not Social/document/pipelines calls.) */
+/** Does this lobby's call carry a huddle conversation? (Not document/pipelines calls.) */
 const huddleLobby = (lobbyName: string) => huddleLobbyTenant(lobbyName) !== null && !inCallChatNamespace(lobbyName);
 export interface CallChatPeer { userId: string; displayName: string }
 export interface CallChatSnapshot {

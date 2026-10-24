@@ -7,7 +7,7 @@ import { CallChatRuntime } from '../call-chat.js';
 import { MemoryCallChatStateStore } from '../call-chat-state.js';
 import type { Session } from '../session.js';
 
-it.each(['social:dm:u-mira:u-sana', 'assessment:doc:page:100002', 'pipelines:run:run-42', 'assessment:team:team-lower'])('shared call lifecycle leaves %s outside the huddle reconciler', async lobbyName => {
+it.each(['social:workgraph:workspace', 'assessment:doc:page:100002', 'pipelines:run:run-42', 'assessment:team:team-lower'])('shared call lifecycle leaves %s outside the huddle reconciler', async lobbyName => {
   const calls = new InMemoryCallStateStore(), state = new MemoryCallChatStateStore();
   const getState = jest.spyOn(state, 'get'), join = jest.spyOn(state, 'join');
   const authority = jest.fn().mockRejectedValue(new Error('OrgIQ authority must not run for another call tenant'));
@@ -27,7 +27,7 @@ it.each(['social:dm:u-mira:u-sana', 'assessment:doc:page:100002', 'pipelines:run
     // Ignoring an unrelated lifecycle callback never grants HTTP chat access.
     authority.mockResolvedValue({ displayName: 'Mira', grants: { social: ['participant'] } });
     await expect(runtime.get('other-call', { sub: 'u-mira', tenant: 'social' } as Session)).rejects.toMatchObject({
-      status: 403, message: 'This call requires an OrgIQ lobby',
+      status: 403, message: 'This lobby does not support call conversations',
     });
     await runtime.finish('other-call'); await calls.forgetCall('other-call');
     await expect(runtime.removed('other-call', 'sana-seat')).resolves.toBeUndefined();

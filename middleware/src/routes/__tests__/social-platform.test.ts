@@ -347,6 +347,26 @@ describe('platform-api configured — the BFF proxies with the caller\'s token',
     expect(denied.body.error).toBe('Access denied to room: quiet');
   });
 
+  it.each(['unavailable', 'processing', 'playable'])('POSTs playback-token as the caller and preserves %s media', async mediaState => {
+    const playlistUrl = mediaState === 'playable' ? 'http://sfu/recordings/rec-dm/segments/composed.mp4' : null;
+    reply = (url, method) => url.includes('/playback-token') && method === 'POST'
+      ? { status: 200, body: { mediaState, playlistUrl } }
+      : { status: 404, body: { error: 'not found' } };
+    const res = await request(sana()).get('/api/social/recordings/rec-dm/playback');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ recordingId: 'rec-dm', mediaState, playlistUrl });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ method: 'POST', url: 'http://platform.test:3001/api/recordings/rec-dm/playback-token?tenant=social' });
+    expect(decodeJwt(calls[0]!.auth.replace(/^Bearer /, ''))).toMatchObject({ sub: 'u-sana', org: 'social' });
+  });
+
+  it('keeps playback authority failures and upstream outages distinct from unavailable media', async () => {
+    for (const status of [403, 404, 500]) {
+      reply = () => ({ status, body: { error: 'refused' } });
+      expect((await request(sana()).get('/api/social/recordings/rec-dm/playback')).status).toBe(status === 500 ? 502 : status);
+    }
+  });
+
   it('GET /api/social/recordings/:recordingId/transcript asks platform-api for the recording first (404 for a non-social lobby), then its transcript, as the caller', async () => {
     reply = (url) => {
       if (url.includes('/recordings/rec-dm/transcript')) return { status: 200, body: { segments: [

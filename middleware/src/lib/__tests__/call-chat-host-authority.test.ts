@@ -14,6 +14,7 @@ import { CallChatRuntime, callChatChannel } from '../call-chat.js';
 import { MemoryCallChatStateStore } from '../call-chat-state.js';
 import { lobbyGuard } from '../gateway/authority.js';
 import type { Session } from '../session.js';
+import { socialChat } from '../social-chat.js';
 
 const CALL = 'host-only-call', LOBBY = 'orgiq:initiative:p-auth', CHANNEL = callChatChannel(CALL);
 const session = (sub: string): Session => ({ sub, tenant: 'orgiq', role: 'member', epoch: 0,
@@ -41,6 +42,30 @@ beforeEach(async () => {
   clock += 1000; sent.mockClear();
 });
 afterEach(() => { runtime.dispose(); jest.restoreAllMocks(); });
+
+it.each(['social:dm:alice:bob', 'social:room:journey'])('admits only seated Social participants of %s with current chat permissions', async lobbyName => {
+  const socialAlice: Session = { ...alice, tenant: 'social', role: 'participant', grants: { social: ['participant'] } };
+  const socialBob: Session = { ...socialAlice, sub: 'bob' };
+  users.get('alice')!.grants = socialAlice.grants;
+  users.get('bob')!.grants = socialBob.grants;
+  contexts.set('a', context(socialAlice)); contexts.set('b', context(socialBob)); contexts.set('b-unseated', context(socialBob));
+  jest.mocked(isAllowed).mockImplementation(async (principal, action) => principal.tenant === 'social' && ['ViewSocial', 'PostMessage'].includes(action));
+  const callId = 'social-call';
+  for (const id of ['a', 'b']) { await calls.registerParticipant(callId, id, 'alice', lobbyName, ['bob']); await runtime.registered(callId, id); }
+  expect(await runtime.get(callId, socialBob)).toMatchObject({ canSend: true, participants: [{ userId: 'alice' }, { userId: 'bob' }] });
+  await expect(runtime.assertSeat(callId, 'b', true)).resolves.toBeUndefined();
+  await expect(runtime.assertSeat(callId, 'b-unseated', true)).rejects.toMatchObject({ status: 403 });
+  jest.mocked(isAllowed).mockImplementation(async (_principal, action) => action === 'ViewSocial');
+  expect((await runtime.get(callId, socialBob)).canSend).toBe(false);
+  await expect(runtime.assertSeat(callId, 'b', true)).rejects.toMatchObject({ status: 403 });
+  jest.mocked(isAllowed).mockResolvedValue(true);
+  const members = socialChat().membershipStore;
+  await members.putMember({ channel: lobbyName, userId: 'bob', role: 'member', addedBy: 'alice', addedAt: new Date(clock).toISOString(), historyFrom: null, removedAt: new Date(clock).toISOString() });
+  try { await expect(runtime.get(callId, socialBob)).rejects.toMatchObject({ status: 403 }); }
+  finally { await members.putMember({ channel: lobbyName, userId: 'bob', role: 'member', addedBy: 'alice', addedAt: new Date(clock).toISOString(), historyFrom: null, removedAt: null }); }
+  users.get('bob')!.epoch = 1;
+  await expect(runtime.get(callId, socialBob)).rejects.toMatchObject({ status: 401 });
+});
 
 it('uses the exact host family read and resource, never Social or page write permissions', async () => {
   expect(await currentCallChatGrant(alice, { displayName: 'Alice', grants: alice.grants }, 'PostMessage', LOBBY)).toBe(true);

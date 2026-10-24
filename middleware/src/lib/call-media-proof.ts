@@ -17,7 +17,9 @@ export class CallMediaProofRuntime {
   private async hostAllowed(session: Session, authority: CallAuthority, lobbyName: string): Promise<boolean> {
     // DMs have no page-family read route. Reuse the huddle's existing named
     // participant read rule; activeCallParticipant also applies lobbyGuard.
-    if (/^orgiq:dm:[^:]+(?::[^:]+)+$/.test(lobbyName)) return currentCallChatGrant(session, authority, 'ViewSocial', lobbyName);
+    if (lobbyName.startsWith('social:') || /^orgiq:dm:[^:]+(?::[^:]+)+$/.test(lobbyName)) {
+      return currentCallChatGrant(session, authority, 'ViewSocial', lobbyName);
+    }
     return await admitLobbyRead(sessionGatewayContext(session), lobbyName) === 'ok';
   }
   /**

@@ -81,6 +81,22 @@ test('exact Work DM named user is supported; another DM or wrong tenant cannot b
   sockets.set('alice-socket', ctx({ ...session, tenant: 'assessment' }));
   expect((await ask({ callId, lobbyName, clientId: 'alice-socket' })).status).toBe(403);
 });
+test.each(['social:dm:alice:bob', 'social:room:journey'])('binds a current Social media seat in %s and refuses permission or identity revocation', async lobbyName => {
+  const social: Session = { ...session, tenant: 'social', role: 'participant', grants: { social: ['participant'] } };
+  users.get('alice')!.grants = social.grants;
+  sockets.set('alice-socket', ctx(social));
+  jest.mocked(isAllowed).mockImplementation(async (principal, action) => principal.tenant === 'social' && action === 'ViewSocial');
+  const callId = 'social-call';
+  await calls.registerParticipant(callId, 'alice-socket', 'alice', lobbyName, ['bob']); await calls.markAccepted(callId, 600);
+  const token = (await signRealtimeToken(realtimeClaims(social), 'synthetic-seat-proof')).token;
+  const input = { callId, lobbyName, clientId: 'alice-socket' };
+  expect((await ask(input, token)).body).toMatchObject({ allowed: true, callId, lobbyName, userId: 'alice', tenant: 'social' });
+  jest.mocked(isAllowed).mockResolvedValue(false);
+  expect((await ask(input, token)).status).toBe(403);
+  jest.mocked(isAllowed).mockResolvedValue(true);
+  users.get('alice')!.epoch = 3;
+  expect((await ask(input, token)).status).toBe(403);
+});
 test('leaving while final host read is pending cannot produce an ACK', async () => {
   jest.mocked(pageResourceVisible).mockImplementation(async () => { sockets.delete('alice-socket'); return true; });
   expect((await ask()).status).toBe(403);

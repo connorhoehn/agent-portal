@@ -6,13 +6,14 @@ import { Button, Chip, EmptyState, InlineAlert, KeyValue, PageHeader, Stack } fr
 import type { NameOf, SocialRoom } from './socialPlatform';
 import type { SocialCall } from './useSocialCall';
 
-export default function RoomPane({ selected, room, nameOf, call, mayCreate, onCreate }: {
+export default function RoomPane({ selected, room, nameOf, call, mayCreate, onCreate, inset = false }: {
   selected: string | null;
   room: SocialRoom | null;
   nameOf: NameOf;
   call: SocialCall;
   mayCreate: boolean;
   onCreate: (trigger: HTMLElement) => void;
+  inset?: boolean;
 }) {
   if (!room) {
     return <EmptyState align="start" testId={selected ? 'social-room-missing' : 'social-room-pick'}
@@ -23,7 +24,7 @@ export default function RoomPane({ selected, room, nameOf, call, mayCreate, onCr
       {...(!selected && mayCreate ? { action: <Button variant="secondary" size="sm" onClick={(e) => onCreate(e.currentTarget)} data-testid="social-empty-new-room">New room</Button> } : {})} />;
   }
   return (
-    <Stack gap="md" className="min-w-0" data-testid="social-room-detail">
+    <Stack gap="md" className={`min-w-0${inset ? ' px-[var(--ui-content-gutter,1rem)]' : ''}`} data-testid="social-room-detail">
       <PageHeader
         title={room.name}
         {...(room.description ? { description: room.description } : {})}

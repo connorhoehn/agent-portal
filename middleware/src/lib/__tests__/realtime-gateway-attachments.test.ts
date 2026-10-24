@@ -313,6 +313,21 @@ describe('the Files list for a conversation', () => {
     expect((await list('u-theo', DOC_CHANNEL)).status).toBe(404);
     expect((await list('u-farah', DOC_CHANNEL)).status).toBe(200);
   });
+
+  it('lists a Social huddle under its orgiq namespace only while the caller holds a live seat', async () => {
+    const social = await connectAs('u-sana', 'Sana Social', 'social');
+    const callId = 'social-files-huddle', lobbyName = 'social:room:files-huddle', channel = `orgiq:huddle:${callId}`;
+    try {
+      send(social, { service: 'call', action: 'join', callId, lobbyName, callerId: 'u-sana', callerName: 'Sana' });
+      await until(() => social.frames.some(f => f.type === 'call-chat' && f.action === 'members' && f.callId === callId));
+      const res = await list('u-sana', channel);
+      expect(res.status).toBe(200); expect(await res.json()).toEqual({ files: [] });
+      expect((await list('u-theo', channel)).status).toBe(403);
+      send(social, { service: 'call', action: 'ended', callId, lobbyName, callerId: 'u-sana', targetUserIds: ['u-sana'] });
+      await settle();
+      expect((await list('u-sana', channel)).status).toBe(403);
+    } finally { social.ws.close(); }
+  });
 });
 
 describe('attachments in the orgiq and pipelines discussions', () => {

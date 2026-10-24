@@ -220,9 +220,10 @@ describe('channelGuard (pure) — chat and presence channels are tenant-scoped l
     ['presence:', false],
     ['presence:orgiq', false],
   ])('%s → %s', (channel, ok) => expect(channelGuard(theo, channel)).toBe(ok));
-  it('admits only the huddle chat shape, never as a call lobby or for a token without orgiq', () => {
+  it('admits the huddle chat shape for supported tenants, never as a call lobby', () => {
     expect(channelGuard(theo, 'orgiq:huddle:call-id', 'publish')).toBe(true);
-    expect(channelGuard({ ...theo, org: 'social', tenants: ['social'] }, 'orgiq:huddle:call-id')).toBe(false);
+    expect(channelGuard({ ...theo, org: 'social', tenants: ['social'] }, 'orgiq:huddle:call-id')).toBe(true);
+    expect(channelGuard({ ...theo, org: 'pipelines', tenants: ['pipelines'] }, 'orgiq:huddle:call-id')).toBe(false);
     expect(channelGuard({ ...theo, userId: '' }, 'orgiq:huddle:call-id')).toBe(false);
     expect(lobbyGuard(theo, 'orgiq:huddle:call-id')).toBe(false);
   });

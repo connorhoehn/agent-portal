@@ -508,7 +508,7 @@ export async function recordingPlayback(session: Session, recordingId: string): 
   const backend = socialPlatformBackend();
   if (backend === 'platform') {
     const body = await platformRequest<{ playlistUrl?: string | null; mediaState?: string }>(
-      session, 'GET', `/api/recordings/${encodeURIComponent(recordingId)}/playback-token`);
+      session, 'POST', `/api/recordings/${encodeURIComponent(recordingId)}/playback-token`);
     return { recordingId, playlistUrl: body?.playlistUrl ?? null, mediaState: body?.mediaState ?? 'unavailable' };
   }
   if (backend === 'none') throw new AppError(503, 'recordings need platform-api (none configured)');
