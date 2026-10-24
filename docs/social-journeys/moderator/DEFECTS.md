@@ -148,3 +148,35 @@ compares the clone id); a clone cannot be added to a team (not in the Social ros
 detail reads "Opened by u-…-clone-…". A clone's channel joins are recorded for its persona,
 which is how the admin walk put u-operator (the layout sweep's user) into #general and moved
 the Communication landing; that membership was removed after the walk.
+
+## Closed — 2026-10-24 (c9, finishing Codex's handoff work)
+
+Every numbered defect of the 2026-10-22 re-walk above is closed, each observed on
+the Tilt stack with headless clones (evidence under `.scratch/journeys-2026-10-24/social/`):
+
+- Huddle chat on Social calls: `GET /api/calls/<id>/chat` and platform-api's
+  call-binding answer 200 on a DM call (451ef40e; `real-recording-c9.json`).
+- Leaving from the DM: the call bar keeps Leave, mic and camera on the DM and on
+  /social/channels through a 20 s call (`call-probe.mjs`); when one side of a
+  two-person call leaves, the other side's call ends with it.
+- A ring cancelled before an answer: the caller posts one `invite` and one
+  `missed` to `/api/calls/log/events`; the caller's log reads Outgoing · Missed,
+  the callee's Incoming · Missed with "1 missed" (realtime-modules 0.137.1;
+  `cancel-ring.json`).
+- Delete on recordings: the starter is offered Delete and it removes the row
+  (platform-api 1f0d3f2; the four recordings logs pass and are sealed).
+- Opening a recording without media: playback answers `mediaState:
+  unavailable`, no 404, no console error.
+- Real recorded calls: a new two-person DM call is listed with the right
+  starter and `callBindingStatus: bound`, plays through the page (1.8 s of
+  16.9 s) and deletes through the UI (`real-recording-c9.json`).
+- Smaller ones: Escape in the New message picker returns focus to New message
+  and the picker no longer lists the viewer; an unknown team URL reads "This team
+  channel is not available"; the room title sits 16 px in from the rail
+  (`small.mjs`).
+
+Shared-stack cleanup: the 6 "Journey …" teams and 7 "journey-…" rooms are
+archived the way platform-api's archiveTeam/archiveRoom do; the two stranded
+real-call recordings (starters were deleted walk clones) are deleted through
+platform-api's repository. Clone DM lobbies and tagged walk messages live in
+the dev:mock chat fixtures and are left for the next `POST /api/__mock/reset`.

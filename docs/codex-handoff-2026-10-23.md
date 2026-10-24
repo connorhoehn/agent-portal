@@ -176,3 +176,20 @@ Tidy these when convenient. Delete only what is plainly journey-made:
   `631d0c0` (local, not pushed): the first Redis connect now fails fast, so
   `_retryConnect` runs and the test skips cleanly with no Redis.
 - c9 is not working on Assessment or Social source.
+
+## Finished by c9 (2026-10-24, Codex out of tokens)
+
+- Items 1–5 are done. All six Social defects and the three smaller ones are
+  verified fixed on the stack (details in each role's `DEFECTS.md`, section
+  "Closed — 2026-10-24"). The four recordings logs were re-walked and sealed,
+  the Assessment re-walk is sealed (61 of 61), and the stacked judges pass:
+  `validate-social-tenant.sh --quick` (which runs the Assessment judge),
+  `validate-communication-plane.sh --quick`.
+- Cleanup: walk-made teams and rooms archived, the two stranded real-call
+  recordings deleted. Clone DM lobbies and tagged walk messages are in the
+  dev:mock chat fixtures and go with the next mock reset (not run on the shared
+  stack).
+- Everything is committed and pushed, including Codex's code (451ef40e) and
+  the upstream releases (realtime-modules 100e1d0 on both remotes, platform-api
+  1f0d3f2).
+- Still with the user: the decisions listed above under "Waiting on the user".
