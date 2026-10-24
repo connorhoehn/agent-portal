@@ -1,20 +1,20 @@
 surface: rooms
 role: moderator
-user: u-lena (walked as its clone u-lena-clone-74897e24)
+user: u-lena (walked as its clone u-lena-clone-70bf0945)
 url: /social/rooms
 pages: portal/src/pages/social/RoomsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialRoomsSection.tsx,portal/src/pages/social/RoomPane.tsx,portal/src/pages/social/useSocialCall.ts
-audited: 2026-10-23 23:51–23:51 local, headless Chromium 1680×940 (Playwright) with fake capture devices, a fresh signed-in clone of u-lena (u-lena-clone-74897e24), second context u-sana (real seed persona, its own Playwright context); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: /api/session/me sub u-lena-clone-74897e24 (a fresh clone of u-lena), tenant social, role moderator
+audited: 2026-10-24 08:46–08:48 local, headless Chromium 1680×940 (Playwright) with fake capture devices, a fresh signed-in clone of u-lena (u-lena-clone-70bf0945), second context u-mira-clone-d99874a2 (a second fresh clone, its own Playwright context); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
+session: /api/session/me sub u-lena-clone-70bf0945 (a fresh clone of u-lena), tenant social, role moderator
 screenshot: rooms.jpg
-verdict: fail — 13 console errors (4xx: 403 GET /api/calls/<id>/chat; 403 POST /api/video/sessions/<id>/<id>)
-console errors: 13 — the failing requests: 403 GET /api/calls/<id>/chat; 403 POST /api/video/sessions/<id>/<id>
+verdict: pass — real SFU media (fake devices) observed
+console errors: 0
 layout: pass — rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940
-keyboard: pass — 12 distinct Tab stops against 12 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity); Escape closed the New room dialog (true)
+keyboard: pass — 14 distinct Tab stops against 14 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity); Escape closed the New room dialog (true)
 empty-state: pass — this context's GET /api/social/rooms stubbed empty (page.route, this context only): pane "Pick a room Choose a room under Rooms on the left to see who can join it, then join its call. A room stays open between calls, so a group can gather in the same"; rail "No rooms yet Create one to start an ongoing hangout. Create room"; an unknown room id (?room=no-such-room-…) rendered "This room is not available It does not exist, or it is private and you are not one of its members."
-realtime: pass — real room call on the local SFU/platform-api with fake devices: the dock read 1 joined 0.08s after Join; u-sana's join showed "2 joined" 0.11s after she pressed the room's Join call (her pre-join dialog followed it); her leave showed "1 joined" 0.09s after her Leave
-role-gating: ManageChannels capability true, StartCall true; New room control present (rail) and present (pane); created "journey-moderator-mvkfntdl", listed 1×; POST /api/social/rooms {} → 400 (expected 400, validation: the role may open rooms)
-room-detail: journey-moderator-mvkfntdl Open to the workspace Join call Who can join Everyone in this workspace Opened by u-lena-clone-74897e24 Call Audio and video Recording Off Lobby social:room:journey-moderator-mvkfntdl; lobby social:room:journey-moderator-mvkfntdl shown: true
-call-tiles: 2 tile element(s): "You Sana Iqbal"
-media: join enabled: true; the dock with both in it read "journey-moderator-mvkfntdl huddle 00:02 2 joined 2 Message"; peer joined: true; after Leave the footer returned to its idle row (true): "Social LB 2 online Huddle Message". Real SFU media with fake capture devices; no audio content is verifiable headless.
-huddle-chat: during the room call the huddle chat pane read "This call requires an OrgIQ or assessment session"; visible Leave controls while in the call: 2
-notes: Every field was observed in this pass. "Opened by" names the walking clone by its raw id, because a clone is not in the people directory; a seed persona shows its display name. The room made by this walk was left in platform-api (it has no reset). The second context is the real seed persona u-sana; no mock reset (shared stack).
+realtime: pass — real room call on the local SFU/platform-api with fake devices: the dock read 1 joined 0.08s after Join; u-mira-clone-d99874a2's join showed "2 joined" 0.12s after she pressed the room's Join call (her pre-join dialog followed it); her leave showed "1 joined" 0.10s after her Leave
+role-gating: ManageChannels capability true, StartCall true; New room control present (rail) and present (pane); created "journey-moderator-mvme9dox", listed 1×; POST /api/social/rooms {} → 400 (expected 400, validation: the role may open rooms)
+room-detail: journey-moderator-mvme9dox Open to the workspace Join call Who can join Everyone in this workspace Opened by u-lena-clone-70bf0945 Call Audio and video Recording Off Lobby social:room:journey-moderator-mvme9dox; lobby social:room:journey-moderator-mvme9dox shown: true
+call-tiles: 0 tile element(s): "You Mira Okafor"
+media: join enabled: true; the dock with both in it read "journey-moderator-mvme9dox huddle 00:02 2 joined Message"; peer joined: true; after Leave the footer returned to its idle row (true): "Social LB 1 online Huddle Message". Real SFU media with fake capture devices; no audio content is verifiable headless.
+huddle-chat: during the room call the huddle chat pane read "(no error)"; visible Leave controls while in the call: 2
+notes: Every field was observed in this pass. "Opened by" names the walking clone by its raw id, because a clone is not in the people directory; a seed persona shows its display name. The room made by this walk was left in platform-api (it has no reset). The second context is fresh clone u-mira-clone-d99874a2; no mock reset (shared stack).
