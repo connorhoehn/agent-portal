@@ -193,3 +193,23 @@ Tidy these when convenient. Delete only what is plainly journey-made:
   the upstream releases (realtime-modules 100e1d0 on both remotes, platform-api
   1f0d3f2).
 - Still with the user: the decisions listed above under "Waiting on the user".
+
+## Remaining fixture cleanup completed by Codex (2026-10-24)
+
+- Removed 387 duplicate message rows from 149 abandoned clone DM channels in
+  the running dev:mock fixture registry. Every removed row was an exact copy
+  of a message retained in its original conversation; none of the clones was
+  still live. DM entries are derived from those rows, so the orphaned entries
+  are gone too. There were no tagged walk messages left to remove.
+- Compared all 168 fixtures before and after: the 165 original chat messages
+  and every unrelated row are unchanged. Cleared the gateway's chat caches and
+  verified zero remaining clone DM rows, zero live clones/scopes, the default
+  mock scenario, and healthy middleware. PID 8932 remained running throughout;
+  no reset, restart, source edit or cloud operation was needed.
+- This was a targeted maintenance operation through a temporary local Node
+  inspector, closed afterward. Private backups, the reviewed selection and
+  preservation checks are in
+  `.scratch/social-handoff-2026-10-24/chat-cleanup-*`; they are not committed.
+  Future clone deletion still does not automatically purge its DM copies.
+- The handoff's implementation, verification and cleanup work is complete.
+  The open user decisions remain untouched.
