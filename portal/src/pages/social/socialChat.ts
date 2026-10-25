@@ -361,18 +361,19 @@ export const ROUTE_RAIL_SECTION: Readonly<Record<SocialChatRouteId, 'channels' |
 };
 
 /** The caption that section draws — what the rail-parity measure and the navigation spec look for. */
-export const ROUTE_RAIL_CAPTION: Readonly<Record<SocialChatRouteId, 'Channels' | 'Direct messages' | 'Teams' | 'Rooms' | null>> = {
-  channels: 'Channels', dms: 'Direct messages', teams: 'Teams', rooms: 'Rooms', calls: null, recordings: null,
+export const ROUTE_RAIL_CAPTION: Readonly<Record<SocialChatRouteId, 'Channels' | 'Direct messages' | 'Teams' | 'Hangouts' | null>> = {
+  channels: 'Channels', dms: 'Direct messages', teams: 'Teams', rooms: 'Hangouts', calls: null, recordings: null,
 };
 
 /** Every conversation-section caption the Social rail can draw; on a route, all but its own are forbidden. */
-export const SOCIAL_SECTION_CAPTIONS = ['Teams', 'Rooms', 'Direct messages', 'Channels'] as const;
+export const SOCIAL_SECTION_CAPTIONS = ['Teams', 'Hangouts', 'Direct messages', 'Channels'] as const;
 
-/** Sections on every route: presence is not a destination, so it never gives way. */
+/** Presence remains visible on conversation routes. Rooms has its own focused list. */
 export const ALWAYS_SHOWN_RAIL_SECTIONS: readonly string[] = ['active-now'];
 
 /** The section ids `ConversationRail showSections` gets on a route: Active now, then the route's own section. */
 export function railSectionsFor(route: SocialChatRouteId): string[] {
+  if (route === 'rooms') return ['rooms'];
   const own = ROUTE_RAIL_SECTION[route];
   return [...ALWAYS_SHOWN_RAIL_SECTIONS, ...(own ? [own] : [])];
 }

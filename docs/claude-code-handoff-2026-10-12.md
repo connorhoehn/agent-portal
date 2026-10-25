@@ -6,8 +6,8 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Redis acceptance stopping point — 2026-10-18” and
-“Closeout — 2026-10-18” at the end of this document. The
+**Latest checkpoint:** read “Hangouts and chassis checkpoint — 2026-10-25”
+at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
 
@@ -800,3 +800,106 @@ one product gap:
 The full validator's only remaining failure is that rendered contracts must be
 remeasured on the current source (`scripts/journeys/measure.sh`). Live-platform
 room/call indexing remains a separate, unverified gap.
+
+
+## Hangouts and chassis checkpoint — 2026-10-25
+
+The current work is product/backend readiness in the existing AgentCore app.
+The earlier standalone concept was withdrawn. The user approved saved hangout
+layouts plus temporary breakouts, shared-library UI designs, and the three
+chassis refactors across owners and realtime-modules. ESM is the agreed target,
+but TD-ESM-01 is deferred and opportunistic; do not start a package-wide migration.
+
+### Released owners and app composition
+
+- ui-components `f23d75cf`, version **2.481.2**: dedicated call stage and compact
+  controls, contextual pane fit, shared hangout creation controls, contrast and
+  reusable audit contracts. Original main and the hangout worktree match the
+  pushed source. The original ui-components lockfile remains the user's prior
+  dirty file, preserved byte for byte; do not discard it.
+- realtime-modules `209c91c`, version **0.138.0**: camera-off entry on rejoin and
+  bounded retry for the known simultaneous breakout-return lobby claim conflict.
+  Portal and middleware consume the tracked tarball; portal consumes the UI
+  tarball. Lockfile integrity was checked against each packed artifact.
+- platform-api `83fdaca`: saved-layout validation and conditional updates,
+  parent/breakout metadata, recording configuration, bounded exact-session
+  activity and current recording-summary authorization. Preceding `a029309`
+  isolates unit AWS clients and improves test compilation; `03b10ad` repairs
+  canonical IPv4-mapped private image URL rejection discovered by the full sweep.
+- message-queue `3c36020`: local durability characterization harness and its
+  documentation only. This is evidence of defects, not a durability repair.
+
+The app uses Overview / Call / Conversation / Rooms / Activity tabs inside the
+existing tenant shell. The Call tab owns the media stage; the far-right huddle
+pane and duplicate media controls are suppressed while the page owns the call.
+Rooms separates saved assignments from temporary live changes. The shared person
+picker and tables replace ad hoc forms. Activity is rendered once and uses
+actual attendance and authorized recording summaries. Empty directories do not
+offer browse/search controls with nothing to browse. The UI owner contains the
+reusable fixes; app files retain tenant authority and adapters.
+
+See [product readiness](design/product-readiness/README.md), its 33 proposed
+journeys, generated concepts and
+[exact verification record](design/product-readiness/hangouts-verification.json).
+
+### Verification and current local runtime
+
+- ui-components: 1,019 test files / 11,214 tests passed, two skipped; lint and
+  build passed, as did the reusable audit rule fixtures.
+- realtime-modules: 91 conversation-call/meeting tests, lint and all 35 built
+  export checks passed.
+- platform-api: full suite **450 passed / four skipped suites; 6,304 passed /
+  15 skipped tests**, no failures. Full typecheck, build, OpenAPI coverage and
+  lint passed (356 existing warnings, zero errors). Unit tests now use dummy
+  AWS credentials and a closed local default endpoint. The first interrupted
+  run exposed unmocked AWS requests rejected for invalid credentials; it is not
+  acceptance evidence. No cloud operation was used to validate this release.
+- Browser: 14 targeted tests passed, including the actual two-person local
+  media walk. Its optional audit measured 28 stable light/dark wide/narrow
+  hangout states with zero findings. The separate directory deep audit passed
+  all 27 cases with zero findings/unclassified composer policies.
+- Portal build, middleware typecheck and 23 portal pure tests passed. BFF
+  Social/embedded/meeting tests passed; final added activity/Communication
+  authority cases cover caller-token forwarding, parent-room refusal, empty
+  mock history and cross-tenant grants. The route coverage gate is recorded
+  separately from journey freshness.
+- The release image is `orgiq-platform-api:hangouts-release-20261025`, digest
+  `sha256:b97f5de4e29793986f84a09cc386b5fabc4ce080b5bd9ec97832b4e086bdc83d`,
+  built from platform-api `83fdaca` and activated locally with the prior
+  container retained for rollback. Health passed. The actual two-person walk
+  passed again after activation (one test; DOM audit disabled on that repeat).
+  UI source/packages are unchanged from the measured 28-state audit.
+
+Walks used isolated clones and archived only their owned hangouts. Design studio
+and Product review remain. No shared mock reset was run. The older
+`social-rooms.spec.ts` still resets the mock world and was not used for live
+acceptance on the shared stack; the scoped `hangouts-real.spec.ts` supplies that
+proof.
+
+### Remaining acceptance and next work
+
+**The broad Social/Communication/Assessment judges are not all green on this
+source.** Their cascade/type-scale/rail measurements predate these changes.
+The Social quick judge identifies 32 changed journey records; Assessment's
+`stretch/realtime` record also needs a new walk. Do not reseal those records
+without observation or repeat the October 24 all-green claim. The newly added
+route coverage was completed separately; stale measurements/seals remain open.
+
+Activity is bounded to 20 session pointers per page and follows seven-day
+session retention, without historical backfill. The memory video-store profile
+is not durable history. The native SFU walk does not establish AWS IVS,
+process-restart durability, cloud deployment or capacity acceptance. All-tenant
+journeys in the catalog are an acceptance backlog, not a completion percentage.
+
+Continue [C0–C9](chassis/implementation-plan.md) and the
+[chassis ledger](chassis-extensibility-goal.md). The first C0 harness confirmed:
+restart can redeliver before visibility expiry; accepted delayed messages have
+no durable body; independent clients can deliver the same message; and a refused
+durable claim can still produce a delivery. Its normal send/ACK control passed;
+the UUID-owned DynamoDB Local table was removed. The harness intentionally exits
+2 while those defect flags are true. Separate-process, stale-ACK, FIFO/group,
+catalog poison-handling and job-attempt cases remain; C1–C9 are not complete.
+Prefer owner client contracts and capability checks before the delivery-store
+rewrite, reusing existing distributed-core fencing. The room validator remains
+mirrored until the independent C8 pure-contract extraction is adopted in both
+APIs. No whole-package ESM conversion was made.

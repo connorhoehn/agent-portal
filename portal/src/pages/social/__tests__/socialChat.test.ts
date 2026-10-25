@@ -141,7 +141,7 @@ test('one section per route: each Social rail page shows Active now and only its
   assert.deepEqual(railSectionsFor('channels'), ['active-now', 'channels']);
   assert.deepEqual(railSectionsFor('dms'), ['active-now', 'dms']);
   assert.deepEqual(railSectionsFor('teams'), ['active-now', 'teams']);
-  assert.deepEqual(railSectionsFor('rooms'), ['active-now', 'rooms']);
+  assert.deepEqual(railSectionsFor('rooms'), ['rooms']);
   assert.deepEqual(railSectionsFor('calls'), ['active-now']);
   assert.deepEqual(railSectionsFor('recordings'), ['active-now']);
   for (const route of ['channels', 'dms', 'teams', 'rooms'] as const) {

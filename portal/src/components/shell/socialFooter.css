@@ -6,7 +6,9 @@
 .shell-social-footer .shell-collaboration-bar {
   gap: 12px;
   justify-content: flex-end;
-  padding: 3px 0 3px 12px;
+  /* The row and controls already supply vertical padding. Keep the complete
+     live bar inside the shared 48px footer contract. */
+  padding: 1px 0 1px 12px;
 }
 .shell-social-footer .shell-collaboration-bar > div:first-child { max-width: 55%; }
 /* Idle controls have no status label, including during a shared-package refresh. */

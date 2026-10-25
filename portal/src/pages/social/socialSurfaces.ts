@@ -56,7 +56,7 @@ export const SOCIAL_SURFACES: Record<SocialSurfaceId, SocialSurface> = {
   },
   rooms: {
     id: 'rooms',
-    title: 'Rooms',
+    title: 'Hangouts',
     description: 'Standing rooms you can drop into without scheduling a call.',
     emptyTitle: 'No rooms yet',
     emptyBody: 'A room stays open between calls, so a team can gather in the same place every time.',

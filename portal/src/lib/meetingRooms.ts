@@ -29,11 +29,12 @@ export const MEETING_ROOMS_ON = meetingRoomsFlag(env.VITE_MEETING_ROOMS);
 
 /** The BFF's `RID` (lib/tenant-channels.ts) minus `~`: a breakout suffix is never a base lobby. */
 const INITIATIVE_LOBBY = /^orgiq:initiative:[^\s~]{1,256}$/;
+const HANGOUT_LOBBY = /^social:room:[A-Za-z0-9_-]{1,80}$/;
 const BREAKOUT = '~breakout~';
 
 /** The call in this lobby carries a meeting (decision 5: initiative huddles only). */
 export function meetingEnabledFor(lobbyName: string | null | undefined, on: boolean = MEETING_ROOMS_ON): boolean {
-  return on && !!lobbyName && INITIATIVE_LOBBY.test(lobbyName);
+  return on && !!lobbyName && (INITIATIVE_LOBBY.test(lobbyName) || HANGOUT_LOBBY.test(lobbyName));
 }
 
 /** The call host's `meeting.chatChannelFor`: the call's huddle channel, so a room's is `<that>~breakout~<roomId>`. */
@@ -61,7 +62,7 @@ export interface RoomsPolicyInput {
 /** Whether the Rooms control is offered on this call. */
 export function roomsAllowed({ lobbyName, joined, breakoutPhase, on = MEETING_ROOMS_ON }: RoomsPolicyInput): boolean {
   if (!meetingEnabledFor(lobbyName, on)) return false;
-  return joined >= ROOMS_MIN_PARTICIPANTS || breakoutPhase !== 'none';
+  return HANGOUT_LOBBY.test(lobbyName ?? '') || joined >= ROOMS_MIN_PARTICIPANTS || breakoutPhase !== 'none';
 }
 
 /** `meetingToolbarItems`' result, as read here. */
@@ -88,7 +89,7 @@ export function meetingStageItems<I>(items: MeetingItemSet<I>, opts: { rooms: bo
 
 /** The stage header is drawn (a page, block or composer holds the dock); the footer and the pane grid keep the bar. */
 export const stageHoldsMeeting = (placement: string): boolean =>
-  placement === 'page' || placement === 'block' || placement === 'composer';
+  placement === 'stage' || placement === 'page' || placement === 'block' || placement === 'composer';
 
 /**
  * The chat channel the huddle conversation reads: the meeting's `activeChat`

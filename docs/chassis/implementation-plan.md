@@ -2,7 +2,8 @@
 
 Updated 2026-10-25 from the checked-out source. This refines the three approved
 refactors: durable delivery and worker ownership, owner-published contracts, and
-runtime capability/composition checks. These work items are planned, not shipped.
+runtime capability/composition checks. Delivery repairs remain planned; C0 has
+begun with an isolated queue characterization against DynamoDB Local.
 The [execution ledger](../chassis-extensibility-goal.md) tracks completion;
 [dependency-inventory.json](dependency-inventory.json) records observed versions
 and pins. That inventory is not evidence of deployed versions.
@@ -39,7 +40,10 @@ request context and ordered shutdown. Extend these existing owners.
 | realtime-modules `src/client/hangout-rooms/types.ts`: saved layouts are absent; two application validators were introduced for the new plan | The new feature is not yet a complete reusable room contract | Publish the pure room-plan contract in realtime-modules and adopt it in both APIs and the UI |
 | Package manifests contain different distributed-core/service-runtime/event-catalog pins and an event-catalog optional MQ peer name unlike MQ's actual package name | Version labels alone cannot establish compatibility | Verify exports, installed resolution and wire behavior before pin consolidation; correct the package identity during client adoption |
 
-These are source findings, not claims that every failure has been reproduced.
+The queue's premature restart delivery, missing delayed-message persistence,
+competing-client delivery and ignored claim refusal have now reproduced against
+DynamoDB Local; see [the C0 record](queue-c0-verification.json). The remaining
+rows are source findings, not claims that every failure has been reproduced.
 The hangout return race was reproduced live separately and has a focused fix in
 realtime-modules; that is part of the hangout release, not chassis completion.
 Older repository roadmaps mention retired Raft queue wiring and a separate
@@ -111,8 +115,13 @@ Extend these owner suites alongside the integration gate:
   fixtures are a harness pattern, not proof of job attempt fencing; add the
   job-specific two-connection case.
 
-No chassis suite has been rerun as part of this planning pass. Existing test
-names identify extension points, not newly passing acceptance evidence.
+`message-queue/scripts/characterize-durability.ts` now supplies the first C0
+reproducers. A normal durable send/ACK control passed; all four observed defect
+flags were true and the run exited 2 as designed. It removed its UUID-owned
+table. This uses independent service/store instances in one process; separate
+process/HTTP, stale ACK, FIFO/groups, catalog poison handling and job-attempt
+cases remain. Existing suite names above are extension points, not newly passing
+acceptance evidence. C0 is in progress, and none of C1–C9 is complete.
 
 ## Durable queue design constraints
 

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import {
-  Button, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePopover, MetaLine, SectionLabel, Stack, StatusDot, T,
+  Button, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePopover, SectionLabel, Stack, StatusDot, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useSession, type SessionRole } from '../../lib/auth';
 import { CHOOSER } from '../../lib/tenantHome';
@@ -125,7 +125,7 @@ export function MasqueradeMenu() {
           {/* Current identity — always visible so "who/what am I now" is unambiguous. */}
           <Stack gap="none" className="px-2.5 pt-2 pb-2.5 border-b border-border mb-1">
             <T size="sm" weight="semibold" as="div">{session.name}</T>
-            <MetaLine size="xs" className="mb-2" items={[session.sub]} />
+            <T size="xs" tone="secondary" className="mb-2"><code>{session.sub}</code></T>
             <Inline gap="xs" wrap={false} className="text-xs">
               <StatusDot aria-hidden color={roleColor(session.role)} size="xs" />
               <strong>{tenantLabel(session.tenant)}</strong>

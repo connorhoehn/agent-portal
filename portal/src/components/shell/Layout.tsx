@@ -188,7 +188,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/social/dms',           label: 'Direct messages', tenant: 'social', group: 'Talk' },
   { path: '/social/channels',      label: 'Channels',        tenant: 'social', group: 'Talk' },
   { path: '/social/calls',         label: 'Calls',           tenant: 'social', group: 'Meet' },
-  { path: '/social/rooms',         label: 'Rooms',           tenant: 'social', group: 'Meet' },
+  { path: '/social/rooms',         label: 'Hangouts',           tenant: 'social', group: 'Meet' },
   { path: '/social/contacts',      label: 'Contacts',        tenant: 'social', group: 'People' },
   { path: '/social/teams',         label: 'Teams',           tenant: 'social', group: 'People' },
   { path: '/social/recordings',    label: 'Recordings',      tenant: 'social', group: 'Library' },

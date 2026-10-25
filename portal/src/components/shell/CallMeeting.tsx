@@ -134,6 +134,7 @@ export function MeetingStageHeader({ chat, react }: { chat: { open: boolean; tog
   // The recording note is the host's (one dismissal per session); a drawn stage holds it, in the toolbar's row.
   const note = host?.recordingNote ?? null;
   if (!call) return null;
+  if (placement === 'stage') return <Stack gap="none"><WrappedBreakoutRoomBanner meeting={call.meeting} />{note}</Stack>;
   if (!stageHoldsMeeting(placement)) return note ? <Inline gap="none" className="px-2" data-testid="huddle-recording-row">{note}</Inline> : null;
   const items = meetingToolbarItems(call.meeting, {
     roomsOpen: call.pane === 'rooms',
@@ -147,6 +148,17 @@ export function MeetingStageHeader({ chat, react }: { chat: { open: boolean; tog
     {/* No onLeave: the dock's own bar keeps mic, camera and the one Leave (2.478 draws none here). */}
     <MeetingToolbar items={meetingStageItems(items, { rooms: call.rooms })} {...(note ? { start: note } : {})} data-testid="huddle-meeting-toolbar" />
   </Stack>;
+}
+
+/** Additional meeting actions share the dedicated stage's one controls row. */
+export function MeetingStageActions({ react }: { react: HuddleReact }) {
+  const placement = useCallBlockPlacement();
+  const call = useCallMeeting();
+  if (placement !== 'stage' || !call) return null;
+  const items = meetingToolbarItems(call.meeting, { roomsOpen: false, onToggleRooms: () => call.toggle('rooms'),
+    ...(react ? { onReact: react.send, reactions: react.emojis } : {}) });
+  return <MeetingToolbar items={[items.raise, ...(items.react ? [items.react] : [])]}
+    phone={false} compact={false} className="min-h-0 border-0 p-0" data-testid="hangout-stage-actions" />;
 }
 
 /**

@@ -8,6 +8,15 @@
 // Names (§4.3): a room's call lobby is `social:room:<slug>`, a team channel's
 // conversation `social:team:<team>:<slug>`, a DM `social:dm:<sorted ids>`.
 
+export interface HangoutPlan {
+  version: number;
+  mode: 'assigned' | 'self-select';
+  allowReturnToMain: boolean;
+  rooms: Array<{ id: string; name: string; members: string[] }>;
+  updatedAt: string;
+  updatedBy: string;
+}
+
 export interface SocialRoom {
   orgId: string;
   roomId: string;
@@ -18,6 +27,7 @@ export interface SocialRoom {
   createdAt: string;
   visibility: 'org' | 'private';
   settings: { audioOnly: boolean; recordingEnabled: boolean; softCap: number };
+  plan?: HangoutPlan;
   state: 'active' | 'archived';
   lastActiveAt: string;
   /** `social:room:<slug>` — minted by the BFF. */
@@ -126,7 +136,7 @@ export interface HangoutRoomsLike {
   isLoading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
-  createRoom: (input: { name: string; description?: string; visibility?: 'org' | 'private' }) => Promise<SocialRoom>;
+  createRoom: (input: { name: string; description?: string; visibility?: 'org' | 'private'; settings?: Partial<SocialRoom['settings']> }) => Promise<SocialRoom>;
   archiveRoom: (slug: string) => Promise<void>;
   joinRoom: (slug: string) => Promise<never>;
 }
@@ -136,14 +146,14 @@ export function hangoutRoomsFrom(input: {
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
-  create: (body: { name: string; description?: string; visibility: 'org' | 'private' }) => Promise<SocialRoom>;
+  create: (body: { name: string; description?: string; visibility: 'org' | 'private'; settings?: Partial<SocialRoom['settings']> }) => Promise<SocialRoom>;
 }): HangoutRoomsLike {
   return {
     rooms: input.rooms ?? [],
     isLoading: input.isLoading && !input.rooms,
     error: input.error && !input.rooms ? new Error(input.error) : null,
     refetch: async () => { input.refetch(); },
-    createRoom: (body) => input.create({ name: body.name, ...(body.description ? { description: body.description } : {}), visibility: body.visibility === 'private' ? 'private' : 'org' }),
+    createRoom: (body) => input.create({ name: body.name, ...(body.description ? { description: body.description } : {}), visibility: body.visibility === 'private' ? 'private' : 'org', ...(body.settings ? { settings: body.settings } : {}) }),
     archiveRoom: async () => { throw new Error('Rooms are archived from platform-api, not from this page.'); },
     joinRoom: async () => { throw new Error('Join a room through its call.'); },
   };

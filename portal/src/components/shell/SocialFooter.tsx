@@ -30,7 +30,7 @@ import { useGatewayFrames } from '../../lib/gatewayFrames';
 import { callCounts, callDrawn, useCallBlockPlacement, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
 import { CallPageSharing } from './CallPageSharing';
 import { EmbeddedSocialEntry } from './EmbeddedSocial';
-import { HuddleReactionBar, useHuddleChatToggle, useHuddleReact } from './HuddleChat';
+import { HuddleReactionBar, useHuddleChat, useHuddleChatToggle, useHuddleReact } from './HuddleChat';
 import { useMeetingBarItems } from './CallMeeting';
 import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, hasJoinedCall } from './callShellModel';
@@ -63,6 +63,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
   const { session } = useSession();
   const frames = useGatewayFrames();
   const chat = useHuddleChatToggle();
+  const pageOwnsCall = useHuddleChat()?.paneOwned ?? false;
   // On a call that carries a meeting (lib/meetingRooms.ts): Raise, React,
   // People and Rooms as the bar's meeting items; React then replaces the
   // footer's own reaction row (same send, same channel). While the stage is
@@ -76,7 +77,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
   // While the full call bar is on screen (above a composer, or the page's call
   // block) it owns mic, camera and Leave/Cancel: the footer is the status only,
   // so nothing is drawn twice (the user: "two cancel buttons and duplicated controls").
-  const barShown = inComposer || placement === 'page' || placement === 'block';
+  const barShown = inComposer || placement === 'stage' || placement === 'page' || placement === 'block';
   if (!host?.lobby || !callDrawn(host.call.phase, true)) return null;
   const call = host.call;
   const title = /huddle$/i.test(host.lobby.title) ? host.lobby.title : `${host.lobby.title} huddle`;
@@ -109,7 +110,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
       screenShare={controls?.screenShare}
     /> : undefined}
     {...(joined && chat ? { onToggleChat: chat.toggle, chatOpen: chat.open, chatLabel: 'Message' } : {})}
-    {...(over || inComposer ? {} : { onToggleMedia, mediaOpen, mediaToggleLabel: `${people} — ${mediaOpen ? 'hide' : 'show'} call video` })}
+    {...(over || barShown || pageOwnsCall ? {} : { onToggleMedia, mediaOpen, mediaToggleLabel: `${people} — ${mediaOpen ? 'hide' : 'show'} call video` })}
     {...(call.phase === 'failed' ? { statusLabel: 'Connection failed' }
       : call.phase === 'calling' ? { statusLabel: `Calling ${host.lobby.title}…` } : {})}
     extras={<>

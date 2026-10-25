@@ -124,19 +124,19 @@ test('u-sana joins the room\'s call on its social:room lobby', async ({ browser,
   test.skip(!t.platformApiUrl, 'no platform-api (plain dev:mock): a call needs the `social` compose profile');
   const detail = sana.page.getByTestId('social-room-detail');
   await expect(detail).toBeVisible({ timeout: 20_000 });
-  await expect(detail.getByTestId('social-room-facts')).toContainText(`social:room:${openRoom!.slug}`);
+  await expect(detail.getByTestId('social-room-facts')).toContainText('Open to the workspace');
   const join = detail.getByTestId('social-room-join');
   await expect(join).toBeEnabled({ timeout: 20_000 }); // enabled once the gateway is connected
   await join.click();
   await expect(sana.page.getByTestId('social-call-dock')).toBeVisible({ timeout: 20_000 });
   // Live: the SFU connected and the dock counts her in.
-  await expect(sana.page.getByTestId('social-call-dock')).toContainText(/1 person/, { timeout: 30_000 });
+  await expect(sana.page.getByTestId('social-call-dock')).toContainText(/1 joined/, { timeout: 30_000 });
   // platform-api opened (or reused) a session on exactly this lobby.
   const session = await sana.page.request.get(`${t.platformApiUrl}/api/video/sessions/by-lobby/${encodeURIComponent(`social:room:${openRoom!.slug}`)}`, {
     headers: { Authorization: `Bearer ${t.token}` },
   });
   expect(session.status()).toBe(200);
-  await detail.getByTestId('social-room-leave').click();
+  await detail.getByRole('button', { name: 'Leave', exact: true }).click();
   // The walk-in reached her call log (SocialLayout reports it; /social/calls reads it).
   await expect.poll(async () => {
     const log = await sana.page.evaluate(async () => (await fetch('/api/social/calls', { credentials: 'include' })).json());

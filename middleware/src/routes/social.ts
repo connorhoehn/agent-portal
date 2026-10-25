@@ -70,8 +70,8 @@ import { socialSurfaceCounts, socialSurfaces } from '../mock/social.js';
 import { socialWorkGraphRouter } from './social-work-graph.js';
 import { emitSocialWorkGraphEvent } from '../lib/work-graph/social-events.js';
 import {
-  addTeamMember, createRoom, createTeam, deleteRecording, getTeam, listCalls, listRecordings, listRooms, listTeams,
-  recordingPlayback, recordingTranscript, removeTeamMember, setTeamFavorite, shareRecording, socialPlatformBackend,
+  addTeamMember, createRoom, createTeam, deleteRecording, getTeam, listCalls, listRecordings, listRoomsPage, listTeams,
+  recordingPlayback, recordingTranscript, removeTeamMember, setTeamFavorite, shareRecording, socialPlatformBackend, roomSettings, getRoom, updateRoom, roomActivity,
 } from '../providers/social-platform.js';
 import type { Session } from '../lib/session.js';
 
@@ -394,16 +394,29 @@ function optionalDescription(raw: unknown): { description?: string } {
 }
 
 socialRouter.get('/rooms', socialGate('ViewSocial'), socialHandler('get /rooms', asyncHandler(async (req, res) => {
-  const rooms = await listRooms(sessionOf(req));
+  const { rooms, cursor } = await listRoomsPage(sessionOf(req), typeof req.query['cursor'] === 'string' ? req.query['cursor'] : undefined);
   const open = rooms.filter((r) => r.visibility === 'org').length;
-  res.json({ source: source(), rooms, counts: { total: rooms.length, open, private: rooms.length - open } });
+  res.json({ source: source(), rooms, ...(cursor ? { cursor } : {}), counts: { total: rooms.length, open, private: rooms.length - open } });
 })));
 
 socialRouter.post('/rooms', socialGate('ManageChannels'), socialHandler('post /rooms', asyncHandler(async (req, res) => {
-  const body = (req.body ?? {}) as { name?: unknown; description?: unknown; visibility?: unknown };
+  const body = (req.body ?? {}) as { name?: unknown; description?: unknown; visibility?: unknown; settings?: unknown };
   const name = requiredName(body.name, 'room');
-  const room = await createRoom(sessionOf(req), { name, ...optionalDescription(body.description), visibility: body.visibility === 'private' ? 'private' : 'org' });
+  const room = await createRoom(sessionOf(req), { name, ...optionalDescription(body.description), visibility: body.visibility === 'private' ? 'private' : 'org', settings: roomSettings(body.settings) });
   res.status(201).json({ room });
+})));
+
+socialRouter.get('/rooms/:slug', socialGate('ViewSocial'), socialHandler('get /rooms/:slug', asyncHandler(async (req, res) => {
+  res.json({ room: await getRoom(sessionOf(req), String(req.params['slug'])) });
+})));
+
+socialRouter.get('/rooms/:slug/activity', socialGate('ViewSocial'), socialHandler('get /rooms/:slug/activity', asyncHandler(async (req, res) => {
+  res.json(await roomActivity(sessionOf(req), String(req.params['slug']), typeof req.query['cursor'] === 'string' ? req.query['cursor'] : undefined));
+})));
+
+socialRouter.patch('/rooms/:slug', socialGate('ManageChannels'), socialHandler('patch /rooms/:slug', asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as { settings?: unknown; plan?: unknown };
+  res.json({ room: await updateRoom(sessionOf(req), String(req.params['slug']), { settings: roomSettings(body.settings), ...(body.plan === undefined ? {} : { plan: body.plan }) }) });
 })));
 
 socialRouter.get('/teams', socialGate('ViewSocial'), socialHandler('get /teams', asyncHandler(async (req, res) => {

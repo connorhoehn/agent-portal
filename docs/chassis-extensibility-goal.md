@@ -9,7 +9,9 @@ ledger, not a claim of production acceptance.
 The [source-backed implementation plan](chassis/implementation-plan.md) defines
 C0–C9, package ownership, migration gates and failure acceptance. The
 [dependency inventory](chassis/dependency-inventory.json) records the inspected
-pins. Planning is complete enough to start C0; implementation remains pending.
+pins. C0 is in progress; the first four queue delivery defects reproduced on
+DynamoDB Local. Delivery/composition repairs and downstream chassis adoption
+remain pending.
 The detailed plan refines the order below: extract the needed client contract
 and capability checks before the durable queue migration.
 
@@ -39,7 +41,8 @@ and capability checks before the durable queue migration.
 
 | Work | Owners / consumers | Status | Required evidence |
 | --- | --- | --- | --- |
-| Hangout baseline | ui-components, realtime-modules, platform-api, aws-agentcore | In progress | Real two-person media walk; active-call layout at wide/narrow sizes; unique activity region; authorization denial tests |
+| Hangout baseline | ui-components, realtime-modules, platform-api, aws-agentcore | Targeted release verified | Real two-person media walk and 28 layout states pass; backend authorization checks pass. Broader tenant journey freshness still needs renewal (see product-readiness record) |
+| C0 failure characterization | message-queue; remaining catalog/job harnesses | In progress | Four queue defects reproduced against an owned local DDB table; positive send/ACK control passed; cleanup confirmed; remaining scope in the verification record |
 | Durable queue and worker lifecycle | message-queue, distributed-core; platform-api, realtime-modules | Planned | Restart and competing-owner tests against actual durable stores; duplicate/stale completion rejection |
 | Owner contracts and clients | message-queue, event-catalog, pipeline-runtime, platform-api; realtime-modules, aws-agentcore | Planned | Consumer typechecks; wire fixtures; no duplicate canonical validators/interfaces |
 | Runtime composition | service-runtime, distributed-core; realtime-modules, platform-api, aws-agentcore | Planned | Supported matrix passes; unsafe combinations rejected; ownership loss removes readiness |

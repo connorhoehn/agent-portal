@@ -19,7 +19,7 @@ import { acceptedCallHref, callPeopleHref, callScopeKey, shellCallDockTestId } f
 import { HuddleChatProvider, HuddleChatPanel, HuddleReactionOverlay, useHuddleChat, useHuddleChatToggle, useHuddleReact } from './HuddleChat';
 import { PostCallRecordingMonitor } from '../recordings/PostCallRecording';
 import { SHELL_MEETING } from '../../lib/meetingRooms';
-import { CallMeetingProvider, MeetingStageHeader } from './CallMeeting';
+import { CallMeetingProvider, MeetingStageHeader, MeetingStageActions, useCallMeeting } from './CallMeeting';
 
 const getToken = async () => (await realtimeTokenSource.get()).token;
 /** The pre-join choices were remembered under this key before the call host moved into the library. */
@@ -193,9 +193,12 @@ function ShellMeetingStage() {
 
 export function ShellCallMedia({ id }: { id?: string }) {
   const navigate = useNavigate();
+  const meeting = useCallMeeting();
+  const react = useHuddleReact();
   return <>
     <CallMediaOutlet {...(id ? { id } : {})} overlay={<HuddleReactionOverlay />} header={<ShellMeetingStage />}
-      onOpenPeople={(lobby, tenant) => { const href = callPeopleHref(lobby.channel, tenant); if (href) navigate(href); }}
+      extras={<MeetingStageActions react={react} />}
+      onOpenPeople={(lobby, tenant) => { if (meeting) { meeting.toggle('people'); return; } const href = callPeopleHref(lobby.channel, tenant); if (href) navigate(href); }}
       onOpenDocument={doc => { if (doc.href) navigate(doc.href); }}
       dockTestId={(lobby, tenant) => shellCallDockTestId(lobby.channel, tenant)} />
     <HuddleChatPanel />

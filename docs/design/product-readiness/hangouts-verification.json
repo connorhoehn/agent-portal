@@ -1,0 +1,499 @@
+{
+  "date": "2026-10-25",
+  "scope": "Local Social hangout; two isolated clones; actual BFF, platform-api and native media; synthetic browser devices",
+  "versions": {
+    "ui-components": "2.481.2",
+    "realtime-modules": "0.138.0"
+  },
+  "cases": [
+    {
+      "state": "settings",
+      "theme": "light",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "settings",
+      "theme": "dark",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "settings",
+      "theme": "light",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "settings",
+      "theme": "dark",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "room-editor",
+      "theme": "light",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "room-editor",
+      "theme": "dark",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "room-editor",
+      "theme": "light",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "room-editor",
+      "theme": "dark",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "saved-layout",
+      "theme": "light",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "saved-layout",
+      "theme": "dark",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "saved-layout",
+      "theme": "light",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "saved-layout",
+      "theme": "dark",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "call",
+      "theme": "light",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "call",
+      "theme": "dark",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "call",
+      "theme": "light",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "call",
+      "theme": "dark",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "conversation",
+      "theme": "light",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "conversation",
+      "theme": "dark",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "conversation",
+      "theme": "light",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "conversation",
+      "theme": "dark",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "live-rooms",
+      "theme": "light",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "live-rooms",
+      "theme": "dark",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "live-rooms",
+      "theme": "light",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "live-rooms",
+      "theme": "dark",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "activity",
+      "theme": "light",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "activity",
+      "theme": "dark",
+      "width": 1440,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "activity",
+      "theme": "light",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    },
+    {
+      "state": "activity",
+      "theme": "dark",
+      "width": 900,
+      "stable": true,
+      "issues": []
+    }
+  ],
+  "proof": {
+    "savedLayout": true,
+    "assignedBeforeCall": true,
+    "cloneAssignmentSetupViaAPI": true,
+    "audioOnlyJoin": true,
+    "realInboundAudio": true,
+    "temporaryRoomDoesNotChangeSavedLayout": true,
+    "breakoutMoves": [
+      {
+        "user": "u-mira-clone-97cc207c",
+        "lobby": "social:room:hangout-verification-f2210c8b",
+        "status": 201
+      },
+      {
+        "user": "u-sana-clone-7c2965b9",
+        "lobby": "social:room:hangout-verification-f2210c8b",
+        "status": 200
+      },
+      {
+        "user": "u-sana-clone-7c2965b9",
+        "lobby": "social:room:hangout-verification-f2210c8b~breakout~43808120-93ea-4b7d-8287-f0e186a8a20f",
+        "status": 201
+      },
+      {
+        "user": "u-mira-clone-97cc207c",
+        "lobby": "social:room:hangout-verification-f2210c8b~breakout~43808120-93ea-4b7d-8287-f0e186a8a20f",
+        "status": 200
+      },
+      {
+        "user": "u-sana-clone-7c2965b9",
+        "lobby": "social:room:hangout-verification-f2210c8b",
+        "status": 201
+      },
+      {
+        "user": "u-mira-clone-97cc207c",
+        "lobby": "social:room:hangout-verification-f2210c8b",
+        "status": 200
+      }
+    ],
+    "attendanceRecorded": true,
+    "persistedPlan": {
+      "mode": "assigned",
+      "allowReturnToMain": true,
+      "rooms": [
+        {
+          "name": "Design",
+          "id": "43808120-93ea-4b7d-8287-f0e186a8a20f",
+          "members": [
+            "u-sana-clone-7c2965b9"
+          ]
+        },
+        {
+          "name": "Engineering",
+          "id": "4b5d75de-1619-43cb-9b66-74019ac94c5d",
+          "members": []
+        }
+      ],
+      "updatedBy": "u-mira-clone-97cc207c",
+      "version": 2,
+      "updatedAt": "2026-10-25T20:49:24.535Z"
+    }
+  },
+  "browserChecks": {
+    "passed": 14,
+    "realJourney": 1,
+    "inertTransportNavigation": 13
+  },
+  "limitations": [
+    "Not AWS IVS or production capacity acceptance",
+    "Client-organizational isolation and durable service replacement remain separate work",
+    "Room history is limited to retained sessions; no backfill"
+  ],
+  "directoryDeepAudit": {
+    "cases": 27,
+    "findings": 0,
+    "unclassifiedComposerPolicies": 0,
+    "delta": {
+      "new": [],
+      "resolved": [
+        "ca02bb8945bed992",
+        "93a343abb3a0f686",
+        "05d27c4b6b3c8543"
+      ],
+      "comparedCases": 27,
+      "overlappingCases": 27,
+      "unverifiedFindings": 0,
+      "unverifiedCases": []
+    },
+    "casesMeasured": [
+      {
+        "state": "default",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "sidebar-collapsed",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "sidebar-expanded",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "filters-open",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "commands-help",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:focus-walk",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:layer:Activity",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:layer:Platform Operator\u00b7 Admin \u25be",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:layer:Filters",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:layer:Social activity",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:data:empty",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:data:error",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:data:loading",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:data:long",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:data:many",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "deep:data:denied",
+        "width": 1440,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "default",
+        "width": 900,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "filters-open",
+        "width": 900,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "commands-help",
+        "width": 900,
+        "theme": "light",
+        "issues": []
+      },
+      {
+        "state": "default",
+        "width": 1440,
+        "theme": "dark",
+        "issues": []
+      },
+      {
+        "state": "sidebar-collapsed",
+        "width": 1440,
+        "theme": "dark",
+        "issues": []
+      },
+      {
+        "state": "sidebar-expanded",
+        "width": 1440,
+        "theme": "dark",
+        "issues": []
+      },
+      {
+        "state": "filters-open",
+        "width": 1440,
+        "theme": "dark",
+        "issues": []
+      },
+      {
+        "state": "commands-help",
+        "width": 1440,
+        "theme": "dark",
+        "issues": []
+      },
+      {
+        "state": "default",
+        "width": 900,
+        "theme": "dark",
+        "issues": []
+      },
+      {
+        "state": "filters-open",
+        "width": 900,
+        "theme": "dark",
+        "issues": []
+      },
+      {
+        "state": "commands-help",
+        "width": 900,
+        "theme": "dark",
+        "issues": []
+      }
+    ]
+  },
+  "backendVerification": {
+    "commit": "83fdaca42427646a55ed4c67800696fd6e554d1f",
+    "unit": {
+      "success": true,
+      "numPassedTestSuites": 450,
+      "numPendingTestSuites": 4,
+      "numPassedTests": 6304,
+      "numPendingTests": 15,
+      "numFailedTests": 0
+    },
+    "checks": [
+      "npm run typecheck",
+      "npm run lint (0 errors, 356 existing warnings)",
+      "npm run build",
+      "npm run lint:openapi"
+    ],
+    "command": "npm test -- --maxWorkers=2 --json",
+    "cloudAcceptance": false
+  },
+  "releaseRuntime": {
+    "image": "sha256:b97f5de4e29793986f84a09cc386b5fabc4ce080b5bd9ec97832b4e086bdc83d",
+    "stage": "healthy",
+    "media": "native SFU",
+    "postActivationBrowser": {
+      "command": "npx playwright test e2e/hangouts-real.spec.ts --project=chromium",
+      "passed": 1,
+      "seconds": 9.6,
+      "domAuditEnabled": false
+    },
+    "previousAudits": "The 28-state DOM audit and 27-case directory audit above were run before this activation; UI source and packages are unchanged."
+  },
+  "tenantJudges": {
+    "status": "not-green",
+    "scope": "quick static checks, not full legacy browser suites",
+    "pending": [
+      "Refresh cascade/type-scale/rail measurements against current source",
+      "Re-walk 32 affected Social logs and the Assessment stretch/realtime log before resealing"
+    ],
+    "note": "Do not reuse the October 24 all-green tenant claim for this source. Targeted hangout evidence does not replace full tenant journey freshness."
+  }
+}

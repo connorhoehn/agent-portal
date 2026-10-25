@@ -12,7 +12,7 @@ test('the meeting rides initiative huddles only, and only with the switch on', (
   assert.equal(meetingEnabledFor(initiative, true), true);
   for (const lobby of [
     'orgiq:initiative:p-observability~breakout~r1', // a room is never a base lobby
-    'orgiq:person:p-001', 'social:room:general', 'assessment:team:t-1', 'assessment:doc:d-1', 'pipelines:run:r-1',
+    'orgiq:person:p-001', 'social:room:general~breakout~r', 'assessment:team:t-1', 'assessment:doc:d-1', 'pipelines:run:r-1',
     'orgiq:initiative:', 'orgiq:initiative:has space', 'xorgiq:initiative:p-a',
   ]) assert.equal(meetingEnabledFor(lobby, true), false, lobby);
   assert.equal(meetingEnabledFor(null, true), false);
@@ -38,7 +38,7 @@ test('Rooms needs three people, the initiative lobby and the switch; open rooms 
   assert.equal(roomsAllowed({ ...base, joined: 2 }), false);
   assert.equal(roomsAllowed({ ...base, joined: 3 }), true);
   assert.equal(roomsAllowed({ ...base, joined: 3, on: false }), false);
-  assert.equal(roomsAllowed({ ...base, joined: 5, lobbyName: 'social:room:general' }), false);
+  assert.equal(roomsAllowed({ ...base, joined: 1, lobbyName: 'social:room:general' }), true);
   // Someone left after rooms opened: the organizer can still close them.
   assert.equal(roomsAllowed({ ...base, joined: 2, breakoutPhase: 'open' }), true);
   assert.equal(roomsAllowed({ ...base, joined: 2, breakoutPhase: 'draft' }), true);
@@ -84,7 +84,7 @@ test('the expanded stage gets Chat, People, Raise, React, then Rooms when allowe
   const ids = (list: { id: string }[]) => list.map(item => item.id);
   assert.deepEqual(ids(meetingStageItems(items, { rooms: true })), [items.chat!.id, items.people!.id, items.raise.id, items.react!.id, items.rooms.id]);
   assert.deepEqual(ids(meetingStageItems(items, { rooms: false })), [items.chat!.id, items.people!.id, items.raise.id, items.react!.id]);
-  for (const placement of ['page', 'block', 'composer']) assert.equal(stageHoldsMeeting(placement), true, placement);
+  for (const placement of ['stage', 'page', 'block', 'composer']) assert.equal(stageHoldsMeeting(placement), true, placement);
   // The footer shelf and the pane grid keep the footer bar's meeting items (and the page's banner).
   for (const placement of ['footer', 'pane']) assert.equal(stageHoldsMeeting(placement), false, placement);
 });

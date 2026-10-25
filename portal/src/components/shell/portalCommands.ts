@@ -272,7 +272,7 @@ const PAGES: PageEntry[] = [
     keywords: ['dm', 'direct message', 'private', 'chat'] },
   { label: 'Calls',              hint: 'Start or join a call',                path: '/social/calls',                               tenant: 'social', group: 'Meet',
     keywords: ['call', 'video', 'audio', 'meet', 'ring'] },
-  { label: 'Rooms',              hint: 'Standing rooms you can drop into',    path: '/social/rooms',                               tenant: 'social', group: 'Meet',
+  { label: 'Hangouts',              hint: 'Standing rooms you can drop into',    path: '/social/rooms',                               tenant: 'social', group: 'Meet',
     keywords: ['room', 'hangout', 'huddle', 'meet'] },
   { label: 'Contacts',           hint: 'People you talk with',                path: '/social/contacts',                            tenant: 'social', group: 'People',
     keywords: ['contact', 'people', 'follow', 'presence'] },

@@ -136,6 +136,41 @@ describe('dev:mock backend (no platform-api)', () => {
     });
   });
 
+  describe('saved hangout configuration', () => {
+    it('GET /api/social/rooms/:slug/activity does not invent mock attendance or expose a private room', async () => {
+      const activity = await request(sana()).get('/api/social/rooms/town-hall/activity');
+      expect(activity.status).toBe(200);
+      expect(activity.body).toEqual({ sessions: [] });
+      expect((await request(sana()).get('/api/social/rooms/moderators-desk/activity')).status).toBe(404);
+      expect((await request(sana()).get('/api/social/rooms/missing/activity')).status).toBe(404);
+    });
+
+    it('round-trips audio, recording, layout and assignments and rejects a stale save', async () => {
+      const created = await request(mira()).post('/api/social/rooms').send({ name: 'Configured hangout', settings: { audioOnly: true, recordingEnabled: true } });
+      expect(created.status).toBe(201);
+      expect(created.body.room.settings).toMatchObject({ audioOnly: true, recordingEnabled: true });
+      const path = `/api/social/rooms/${created.body.room.slug}`;
+      const plan = { expectedVersion: 0, mode: 'assigned', allowReturnToMain: true, rooms: [{ id: 'design', name: 'Design', members: ['u-sana'] }] };
+      const saved = await request(mira()).patch(path).send({ settings: { recordingEnabled: false }, plan });
+      expect(saved.status).toBe(200);
+      expect((await request(sana()).get(path)).body.room).toMatchObject({ settings: { audioOnly: true, recordingEnabled: false }, plan: { version: 1, rooms: plan.rooms } });
+      expect((await request(mira()).patch(path).send({ plan })).status).toBe(409);
+      expect((await request(lena()).patch(path).send({ plan: { ...plan, expectedVersion: 1 } })).status).toBe(403);
+      expect((await request(sana()).patch(path).send({ settings: { audioOnly: false } })).status).toBe(403);
+    });
+    it('rejects invalid settings and private assignments do not create access', async () => {
+      for (const settings of [{ audioOnly: 'yes' }, { softCap: -1 }, { softCap: 1001 }, []]) {
+        expect((await request(mira()).post('/api/social/rooms').send({ name: 'Invalid', settings })).status).toBe(400);
+      }
+      const created = await request(mira()).post('/api/social/rooms').send({ name: 'Private plan', visibility: 'private' });
+      const path = `/api/social/rooms/${created.body.room.slug}`;
+      const plan = { expectedVersion: 0, mode: 'assigned', allowReturnToMain: true, rooms: [{ id: 'design', name: 'Design', members: ['u-sana'] }] };
+      expect((await request(mira()).patch(path).send({ plan })).status).toBe(400);
+      expect((await request(sana()).get(path)).status).toBe(404);
+      expect((await request(sana()).get(`${path}/activity`)).status).toBe(404);
+    });
+  });
+
   describe('teams', () => {
     it('GET /api/social/teams lists your teams with their channels', async () => {
       const res = await request(sana()).get('/api/social/teams');
@@ -315,6 +350,46 @@ describe('platform-api configured — the BFF proxies with the caller\'s token',
     expect(calls[0]!.url).toBe('http://platform.test:3001/api/rooms?limit=200&tenant=social');
     const claims = decodeJwt(calls[0]!.auth.replace(/^Bearer /, ''));
     expect(claims).toMatchObject({ sub: 'u-sana', org: 'social', tokenKind: 'orgiq-hs256' });
+  });
+
+  it('preserves the directory cursor even when a page contains only team channels', async () => {
+    reply = () => ({ status: 200, body: { rooms: [room('team-room', { teamId: 'team' })], cursor: 'next-page' } });
+    const res = await request(sana()).get('/api/social/rooms?cursor=previous-page');
+    expect(res.status).toBe(200); expect(res.body.rooms).toEqual([]); expect(res.body.cursor).toBe('next-page');
+    expect(calls[0]!.url).toContain('cursor=previous-page');
+  });
+
+  it('accepts a persisted layout when DynamoDB changes object property order', async () => {
+    const saved = { version: 1, mode: 'assigned', allowReturnToMain: true, rooms: [{ members: ['u-sana'], name: 'Design', id: 'design' }], updatedBy: 'u-mira', updatedAt: '2026-10-25T19:00:00Z' };
+    reply = (_url, method) => ({ status: 200, body: { room: room('review', method === 'PATCH' ? { plan: saved } : {}) } });
+    const res = await request(mira()).patch('/api/social/rooms/review').send({ plan: { expectedVersion: 0, mode: 'assigned', allowReturnToMain: true, rooms: [{ id: 'design', name: 'Design', members: ['u-sana'] }] } });
+    expect(res.status).toBe(200); expect(res.body.room.plan.version).toBe(1);
+  });
+
+  it('proxies room activity and its cursor as the caller after checking the parent room', async () => {
+    const activity = { sessions: [{ sessionId: 'session-1', people: [], summaries: [] }], cursor: 'next' };
+    reply = url => ({ status: 200, body: url.includes('/activity') ? activity : { room: room('review') } });
+    const res = await request(sana()).get('/api/social/rooms/review/activity?cursor=page%2F2');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(activity);
+    expect(calls.map(call => call.url)).toEqual([
+      'http://platform.test:3001/api/rooms/review?tenant=social',
+      'http://platform.test:3001/api/rooms/review/activity?cursor=page%2F2&tenant=social',
+    ]);
+    expect(decodeJwt(calls[1]!.auth.replace(/^Bearer /, ''))).toMatchObject({ sub: 'u-sana', org: 'social' });
+  });
+
+  it('does not read activity when upstream refuses access to the parent hangout', async () => {
+    reply = () => ({ status: 403, body: { error: 'Access denied' } });
+    expect((await request(sana()).get('/api/social/rooms/review/activity')).status).toBe(403);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).not.toContain('/activity');
+  });
+
+  it('refuses a successful-looking layout save from an older platform that ignores the plan', async () => {
+    reply = () => ({ status: 200, body: { room: room('review') } });
+    const res = await request(mira()).patch('/api/social/rooms/review').send({ plan: { expectedVersion: 0, mode: 'assigned', allowReturnToMain: true, rooms: [] } });
+    expect(res.status).toBe(503);
   });
 
   it('Social uses its private service when document and browser platform endpoints are also configured', async () => {

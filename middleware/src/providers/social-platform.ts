@@ -44,6 +44,7 @@ import {
 } from '../mock/social-platform.js';
 import { invalidateAll, invalidateForUser } from '../lib/gateway/authority-invalidation.js';
 import { noteSearchWrite } from '../lib/search-index/writes.js';
+import { readHangoutPlan } from '../lib/social-room-plan.js';
 
 export type { SocialCallLogRow, SocialRecordingRow, SocialRoomRow, SocialTeamRow } from '../mock/social-platform.js';
 
@@ -209,17 +210,81 @@ function mockTeamChannels(team: SocialTeamRow, userId: string): SocialTeamChanne
 // ── Rooms ───────────────────────────────────────────────────────────────────
 
 export async function listRooms(session: Session): Promise<SocialRoomView[]> {
-  const backend = socialPlatformBackend();
-  if (backend === 'platform') {
-    const body = await platformRequest<{ rooms?: SocialRoomRow[] } | SocialRoomRow[]>(session, 'GET', '/api/rooms?limit=200');
-    const rows = Array.isArray(body) ? body : body?.rooms ?? [];
-    return standaloneRooms(rows.filter((r) => r.orgId === SOCIAL_PARTITION)).map(roomView);
-  }
-  if (backend === 'none') throw new AppError(503, 'rooms need platform-api (none configured)');
-  return standaloneRooms(socialRoomsFixture.rows().filter((r) => roomVisibleTo(r, session.sub))).map(roomView);
+  return (await listRoomsPage(session)).rooms;
 }
 
-export interface CreateRoomInput { name: string; description?: string; visibility: 'org' | 'private' }
+export async function listRoomsPage(session: Session, cursor?: string): Promise<{ rooms: SocialRoomView[]; cursor?: string }> {
+  const backend = socialPlatformBackend();
+  if (backend === 'platform') {
+    const body = await platformRequest<{ rooms?: SocialRoomRow[]; cursor?: string } | SocialRoomRow[]>(session, 'GET', `/api/rooms?limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+    const rows = Array.isArray(body) ? body : body?.rooms ?? [];
+    return { rooms: standaloneRooms(rows.filter((r) => r.orgId === SOCIAL_PARTITION)).map(roomView),
+      ...(!Array.isArray(body) && body.cursor ? { cursor: body.cursor } : {}) };
+  }
+  if (backend === 'none') throw new AppError(503, 'rooms need platform-api (none configured)');
+  return { rooms: standaloneRooms(socialRoomsFixture.rows().filter((r) => roomVisibleTo(r, session.sub))).map(roomView) };
+}
+
+export interface CreateRoomInput { name: string; description?: string; visibility: 'org' | 'private'; settings?: Partial<SocialRoomRow['settings']> }
+
+export async function roomActivity(session: Session, slug: string, cursor?: string): Promise<unknown> {
+  await getRoom(session, slug);
+  if (socialPlatformBackend() === 'platform') return platformRequest(session, 'GET', `/api/rooms/${encodeURIComponent(slug)}/activity${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+  // Mock calls do not establish media attendance or transcripts.
+  return { sessions: [] };
+}
+
+export async function getRoom(session: Session, slug: string): Promise<SocialRoomView> {
+  const backend = socialPlatformBackend();
+  if (backend === 'platform') {
+    const { room } = await platformRequest<{ room: SocialRoomRow }>(session, 'GET', `/api/rooms/${encodeURIComponent(slug)}`);
+    if (room.orgId !== SOCIAL_PARTITION || room.teamId) throw new NotFoundError('Hangout not available');
+    return roomView(room);
+  }
+  if (backend === 'none') throw new AppError(503, 'rooms need platform-api (none configured)');
+  const room = socialRoomsFixture.rows().find(r => r.slug === slug && !r.teamId && r.state === 'active' && roomVisibleTo(r, session.sub));
+  if (!room) throw new NotFoundError('Hangout not available');
+  return roomView(room);
+}
+
+export async function updateRoom(session: Session, slug: string, input: { settings?: Partial<SocialRoomRow['settings']>; plan?: unknown }): Promise<SocialRoomView> {
+  const current = await getRoom(session, slug);
+  if (current.createdBy !== session.sub) throw new AppError(403, 'Only the hangout owner can change its saved configuration');
+  // Validate in both backends; this is also the registered mock's write contract.
+  const plan = input.plan === undefined ? undefined : readHangoutPlan(input.plan, session.sub);
+  if (plan && plan.version !== (current.plan?.version ?? 0) + 1) throw new AppError(409, 'This layout changed. Reload it before saving.');
+  if (socialPlatformBackend() === 'platform') {
+    const { room } = await platformRequest<{ room: SocialRoomRow }>(session, 'PATCH', `/api/rooms/${encodeURIComponent(slug)}`, input);
+    const saved = room.plan;
+    // DynamoDB may return object keys in a different order. Compare the wire
+    // values, preserving room/member order, rather than object serialization.
+    const layout = (value: typeof plan) => value?.rooms.map(r => [r.id, r.name, r.members]);
+    if (plan && (!saved || saved.version !== plan.version || saved.mode !== plan.mode
+      || saved.allowReturnToMain !== plan.allowReturnToMain || JSON.stringify(layout(saved)) !== JSON.stringify(layout(plan)))) {
+      throw new AppError(503, 'The room service has not saved this layout. Its hangout configuration update must be installed before you retry.');
+    }
+    return roomView(room);
+  }
+  if (plan && current.visibility === 'private' && plan.rooms.some(r => r.members.some(id => id !== current.createdBy && !isRoomMember(current.roomId, id)))) {
+    throw new ValidationError('Assigned people must already have access to this private hangout');
+  }
+  const row = socialRoomsFixture.rows().find(r => r.roomId === current.roomId)!;
+  row.settings = { ...row.settings, ...input.settings };
+  if (plan) row.plan = plan;
+  row.lastActiveAt = clock.nowIso();
+  return roomView(row);
+}
+
+/** Reject malformed configuration rather than silently changing the caller's intent. */
+export function roomSettings(input: unknown): Partial<SocialRoomRow['settings']> | undefined {
+  if (input === undefined) return undefined;
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ValidationError('settings must be an object');
+  const value = input as Record<string, unknown>;
+  if (Object.keys(value).some(key => !['audioOnly', 'recordingEnabled', 'softCap'].includes(key))) throw new ValidationError('Unknown room setting');
+  for (const key of ['audioOnly', 'recordingEnabled']) if (value[key] !== undefined && typeof value[key] !== 'boolean') throw new ValidationError(`${key} must be a boolean`);
+  if (value.softCap !== undefined && (!Number.isSafeInteger(value.softCap) || Number(value.softCap) < 1 || Number(value.softCap) > 1000)) throw new ValidationError('softCap must be an integer between 1 and 1000');
+  return value as Partial<SocialRoomRow['settings']>;
+}
 
 export async function createRoom(session: Session, input: CreateRoomInput): Promise<SocialRoomView> {
   const room = await createRoomRow(session, input);
@@ -242,7 +307,7 @@ async function createRoomRow(session: Session, input: CreateRoomInput): Promise<
     orgId: SOCIAL_PARTITION, roomId: mockId('room'), slug, name: input.name,
     ...(input.description ? { description: input.description } : {}),
     createdBy: session.sub, createdAt: now, visibility: input.visibility,
-    settings: { audioOnly: false, recordingEnabled: false, softCap: 25 }, state: 'active', lastActiveAt: now,
+    settings: { audioOnly: false, recordingEnabled: false, softCap: 25, ...input.settings }, state: 'active', lastActiveAt: now,
   };
   rows.push(row);
   if (input.visibility === 'private') socialRoomMembersFixture.rows().push({ roomId: row.roomId, userId: session.sub, role: 'owner', addedAt: now });

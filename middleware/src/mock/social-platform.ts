@@ -22,6 +22,7 @@
 //   recordings  two calls in `social:room:town-hall` and one DM call
 //   call log    Sana's and Mira's rows for the DM call, one missed call
 
+import type { HangoutPlan } from '../lib/social-room-plan.js';
 import { clock, defineFixture } from './core/index.js';
 
 export type RoomVisibility = 'org' | 'private';
@@ -38,6 +39,7 @@ export interface SocialRoomRow {
   createdAt: string;
   visibility: RoomVisibility;
   settings: { audioOnly: boolean; recordingEnabled: boolean; softCap: number };
+  plan?: HangoutPlan;
   state: 'active' | 'archived';
   lastActiveAt: string;
   teamId?: string;

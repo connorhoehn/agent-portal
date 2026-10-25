@@ -24,7 +24,7 @@ export interface SocialCall {
   unavailable: string | null;
   /** The lobby of the call in progress, if any. */
   activeLobby: string | null;
-  joinRoom: (room: { slug: string; name: string }) => void;
+  joinRoom: (room: { slug: string; name: string; settings?: { audioOnly: boolean } }) => void;
   callPeople: (people: { userId: string; displayName: string }[], opts?: { audioOnly?: boolean }) => void;
   /**
    * An open call in a conversation's own lobby (a channel, a team channel):
@@ -61,7 +61,7 @@ export function useSocialCall(): SocialCall {
     if (!want || bound !== want.lobbyName || !start) return;
     pending.current = null;
     // A live call in this lobby (discovered by the host): walk into it.
-    if (live && rejoin) void rejoin();
+    if (live && rejoin) void rejoin({ audioOnly: want.audioOnly });
     else void start(want.targets, want.audioOnly ? { audioOnly: true } : undefined);
   }, [bound, start, rejoin, live]);
 
@@ -75,7 +75,7 @@ export function useSocialCall(): SocialCall {
     // Already bound to this lobby: the effect will not re-run, so start now.
     if (bound === lobbyName && host.call) {
       pending.current = null;
-      if (live) void host.call.rejoin();
+      if (live) void host.call.rejoin({ audioOnly });
       else void host.call.start(targets, audioOnly ? { audioOnly: true } : undefined);
     }
   }, [host, availability.ok, availability.ok ? null : availability.reason, inCall, bound, live]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -83,7 +83,7 @@ export function useSocialCall(): SocialCall {
   return {
     unavailable: availability.ok ? null : availability.reason,
     activeLobby: inCall ? bound : null,
-    joinRoom: (room) => { const lobby = roomLobby(room.slug); begin(lobby, room.name, lobby, []); },
+    joinRoom: (room) => { const lobby = roomLobby(room.slug); begin(lobby, room.name, lobby, [], room.settings?.audioOnly ?? false); },
     callPeople: (people, opts) => {
       const self = host?.self?.userId;
       const others = people.filter((p) => p.userId && p.userId !== self);

@@ -17,6 +17,7 @@ const BoundConversationComposer = createConversationComposer(client);
 export function ConversationComposer(props: ComponentProps<typeof BoundConversationComposer>) {
   const host = useCallHost();
   const activeCall = !!host?.lobby && callDrawn(host.call.phase, true);
+  const carriesCall = activeCall && props.callBlock !== null;
   // A Social channel can be embedded in Work or Assessment; its partition
   // is not the signed-in workspace. The endpoint owns that directory scope.
   const mentions = useMentionCandidates(!props.onSearchPeople, { userId: props.identity?.userId,
@@ -27,8 +28,8 @@ export function ConversationComposer(props: ComponentProps<typeof BoundConversat
     onSearchPeople: props.onSearchPeople ?? mentions,
     // A call remains its original huddle while the page changes. Its one media
     // sink follows the visible composer, including another initiative's page.
-    callBlock: activeCall ? createElement(CallBlock, { placement: 'composer', compact: true }) : props.callBlock,
-    className: [props.className, activeCall && 'conversation-call-composer'].filter(Boolean).join(' '),
+    callBlock: carriesCall ? createElement(CallBlock, { placement: 'composer', compact: true }) : props.callBlock,
+    className: [props.className, carriesCall && 'conversation-call-composer'].filter(Boolean).join(' '),
   }));
 }
 

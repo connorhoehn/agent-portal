@@ -164,6 +164,7 @@ function HuddleChannel({ channel, userId, displayName, maySend, post, publish }:
 
 /** One shell controller survives route changes; its identity/call scope does not. */
 export function HuddleChatProvider({ children }: { children: ReactNode }) {
+  const { fits: paneFits } = useSidePaneHost();
   const [reactionPlayback] = useState(() => new CallReactionPlayback());
   const host = useCallHost();
   const { session } = useSession();
@@ -276,12 +277,12 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
   // and focus it, seed the draft and attach the page reference.
   const openPane = useCallback((request: HuddlePaneRequest = {}): boolean => {
     if (!current) return false;
-    setView(v => v === 'floating' ? v : 'pane');
+    setView(v => !paneFits || v === 'floating' ? 'floating' : 'pane');
     if (request.draft !== undefined) setDraft(composerDraftOf(request.draft));
     if (request.page !== undefined) setPage(request.page);
     if (request.focus !== false) setFocusRequest(n => n + 1);
     return true;
-  }, [current, setDraft, setPage]);
+  }, [current, setDraft, setPage, paneFits]);
   const sendRef = useRef<(text: string, page: CallPageDescriptor | null, extra: Record<string, unknown>) => Promise<boolean>>(async () => false);
   // One meeting chat binding for the shell (see `meetingChat` above); a source on every render.
   const meetingSource = host?.meeting ?? null;
@@ -340,11 +341,11 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
     title: host?.lobby?.title ?? 'Huddle', participants: state.participants, state,
     canSend: current && !unavailableReason && !pending, unavailableReason,
     open: current && view !== 'closed', view: current ? view : 'closed',
-    openMessage: () => { if (current) { setView(v => v === 'floating' ? v : 'pane'); setFocusRequest(n => n + 1); } },
+    openMessage: () => { if (current) { setView(v => !paneFits || v === 'floating' ? 'floating' : 'pane'); setFocusRequest(n => n + 1); } },
     popOut: () => { if (current) setView('floating'); }, closeMessage: () => setView('closed'),
     draft, setDraft, retiredDrafts, updateRetiredDraft, discardRetiredDraft, page, setPage, focusRequest, send, openPane,
     refresh: () => { setSendError(null); void confirm(true); }, meetingChat,
-  }), [meetingChat, paneOwners, registerPaneOwner, current, callId, channel, actorId, host?.lobby?.title, state, unavailableReason, pending, view, draft, setDraft, retiredDrafts, updateRetiredDraft, discardRetiredDraft, page, setPage, focusRequest, send, openPane, confirm]);
+  }), [meetingChat, paneOwners, registerPaneOwner, current, callId, channel, actorId, host?.lobby?.title, state, unavailableReason, pending, view, draft, setDraft, retiredDrafts, updateRetiredDraft, discardRetiredDraft, page, setPage, focusRequest, send, openPane, confirm, paneFits]);
   const publish = useCallback((next: HuddleChannelRuntime | null) => {
     if (next || store.get()) store.set(next);
   }, [store]);
@@ -449,7 +450,7 @@ export function useHuddleChatToggle(): { open: boolean; toggle(): void } | null 
 }
 
 /** The huddle conversation: ConversationThread on the call's channel (a room's inside one), with the page reference and participant mentions. */
-export function HuddleChatBody() {
+export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {}) {
   const chat = useHuddleChat();
   const runtime = useHuddleChannel();
   const location = useLocation();
@@ -528,6 +529,7 @@ export function HuddleChatBody() {
       renderMessageReferences={meetingChat ? (message => meetingChat.renderMessageReferences(message) ?? references(message)) : references}
       {...(meetingChat ? { transformMessages: meetingChat.withAnnouncements, ...(meetingChat.dock ? { dock: meetingChat.dock } : {}) } : {})}
       composer={{
+        ...(showCall ? {} : { callBlock: null }),
         // The huddle's confirmed send: one in flight, the delivery id, the page the draft carries.
         recipients: [{ id: 'huddle', label: chat.title, channel: runtime.channel, attachments: true,
           send: out => {
@@ -595,6 +597,11 @@ export function HuddleChatSplit({ children }: { children: ReactNode }) {
   const media = useCallMediaPanel();
   const pageHoldsMedia = useCallBlockPageClaimed();
   const pane = useSidePaneHost();
+  // The shell's auxiliary chat must honor the same measured fit policy as
+  // registered panes. Message reopens it as a floating panel on narrow screens.
+  useEffect(() => {
+    if (!pane.fits && chat?.view === 'pane') chat.closeMessage();
+  }, [pane.fits, chat?.view, chat?.closeMessage]);
   // The footer's Message (and any other focus request for the page's own
   // conversation) brings the pane on screen before a composer takes the caret.
   const { registered, reveal } = pane;
@@ -608,7 +615,7 @@ export function HuddleChatSplit({ children }: { children: ReactNode }) {
   }, !chat?.paneOwned);
 
   // ── The huddle ───────────────────────────────────────────────────────────
-  const shown = !!chat?.callId && !chat.paneOwned && chat.view === 'pane';
+  const shown = pane.fits && !!chat?.callId && !chat.paneOwned && chat.view === 'pane';
   const mediaShown = !!media?.open && !pageHoldsMedia;
   const chatPane = shown && chat
     ? <ChatSidePanelFrame title="Huddle chat" subtitle={participantsLine(chat)}
@@ -639,7 +646,7 @@ export function HuddleChatSplit({ children }: { children: ReactNode }) {
 export function HuddleChatPanel() {
   const chat = useHuddleChat();
   const anchorKey = useFooterAnchorKey();
-  if (!chat?.callId) return null;
+  if (!chat?.callId || chat.paneOwned) return null;
   return <FloatingPanel key={anchorKey} open={chat.view === 'floating'} onClose={chat.closeMessage} title={`${chat.title} · Huddle chat`}
     tone="light" defaultPosition={aboveFooterEnd(32, 28)} widthClassName="w-[min(28rem,calc(100vw-2rem))]"
     heightClassName="h-[min(32rem,calc(100dvh-var(--shell-collaboration-floor,0px)-2rem))]" data-testid="huddle-chat-panel">

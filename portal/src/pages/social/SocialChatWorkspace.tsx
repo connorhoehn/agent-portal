@@ -61,7 +61,9 @@ import CallLogPane, { type CallsResponse } from './CallLogPane';
 import RecordingsPane from './RecordingsPane';
 import { roomSummaryTargets } from './socialRoomSummary';
 import RoomPane from './RoomPane';
-import SocialRoomsSection, { RoomCreateDialog, useRoomsModel, type RoomsResponse } from './SocialRoomsSection';
+import { useRoomDirectory } from './useRoomDirectory';
+import RoomDirectory from './RoomDirectory';
+import SocialRoomsSection, { RoomCreateDialog, useRoomsModel } from './SocialRoomsSection';
 import {
   CHANNEL_PREFIX, DM_PREFIX, activeNow, railSectionsFor, channelHref, channelRailItems, dmCandidates, dmHref, dmPeers, dmRailItems, dmTitle,
   conversationRecordings, matchesRailFilter, mentionItems, messageHitRailItems, privacyForApi, slugFromChannel, socialInbox, withPresence,
@@ -198,7 +200,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   const peopleFetch = useFetch<{ people: SocialPerson[]; selfId?: string }>(`${api}/people`);
   const teamScope = JSON.stringify([me, session?.tenant, session?.role, session?.grants, session?.masquerading]);
   const teamsFetch = useSocialTeams(teamScope, me, api);
-  const roomsFetch = useFetch<RoomsResponse>(`${api}/rooms`, 15_000);
+  const roomsFetch = useRoomDirectory(api, route === 'rooms' ? params.get('room') : null);
   const callsFetch = useFetch<CallsResponse>(`${api}/calls`, 20_000);
   // Shared with RecordingsPane's read of the same URL (one request in flight).
   const recordingsFetch = useFetch<RecordingsResponse>(`${api}/recordings`, 30_000, { share: true });
@@ -521,21 +523,25 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       ),
     },
     {
-      id: 'rooms', label: 'Rooms',
+      id: 'rooms', label: 'Hangouts',
       node: <SocialRoomsSection rooms={roomsFetch} mayCreate={mayCreateChannel}
         collapsed={rail.isFolded('Rooms')} onToggleCollapse={(next) => rail.setFolded('Rooms', next)}
+        onBrowse={() => navigate(`${base}/rooms`)}
         onOpen={(slug) => navigate(`${base}/rooms?room=${encodeURIComponent(slug)}`)} />,
     },
   ];
   const railNode = (
     <ConversationRail
-      title="Chat"
-      actions={<IconButton aria-label="New message" title="New message" size="sm" variant="ghost" icon={<PlusIcon size={14} />}
-        ref={newDmButton} onClick={openNewDm} data-testid="social-new-dm" />}
-      search={{ value: query, onChange: setQuery, placeholder: 'Find a chat', label: 'Find a chat', 'data-testid': 'social-rail-search' }}
+      title={route === 'rooms' ? 'Hangouts' : 'Chat'}
+      actions={route === 'rooms' ? undefined : <>
+        {rooms.some(room => room.state === 'active') && <Button variant="secondary" size="sm" onClick={() => navigate(`${base}/rooms`)} data-testid="social-browse-rooms">Browse hangouts</Button>}
+        <IconButton aria-label="New message" title="New message" size="sm" variant="ghost" icon={<PlusIcon size={14} />}
+          ref={newDmButton} onClick={openNewDm} data-testid="social-new-dm" />
+      </>}
+      search={route === 'rooms' ? undefined : { value: query, onChange: setQuery, placeholder: 'Find a chat', label: 'Find a chat', 'data-testid': 'social-rail-search' }}
       // One compact row of destinations (the user, 2026-10-07: they "shouldn't all stack in this window").
       shelfLayout="bar"
-      shelf={[
+      shelf={route === 'rooms' ? [] : [
         { id: 'activity', label: 'Activity', icon: <ActivityIcon size={15} />, count: unread },
         { id: 'mentions', label: 'Mentions', icon: <AtIcon size={15} />, count: unreadMentions, urgent: true },
         { id: 'calls', label: 'Calls', icon: <PhoneIcon size={15} />, count: (callsFetch.data?.counts.missed ?? 0) + (embedding?.pageMissed ?? 0), urgent: true },
@@ -632,6 +638,10 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
    */
   function conversationPane(): ReactNode {
     const node = pane();
+    // Standalone shelf/empty/list views own no page gutter. Keep their content
+    // off the rail divider, just as SectionContent does for embedded views.
+    const ownsRoomInset = isValidElement(node) && (node.type === RoomDirectory || node.type === RoomPane);
+    if (!embedding && !conversationOpen && !ownsRoomInset) return <Stack gap="md" className="min-h-0 min-w-0 flex-1 overflow-y-auto px-[var(--ui-page-gutter,1.5rem)] pt-4 pb-6" data-page-body="inset" data-testid="social-workspace-content">{node}</Stack>;
     if (!conversationOpen || (isValidElement(node) && (node.type === SocialConversation || (node.props as { 'data-conversation-frame'?: string })['data-conversation-frame']))) return node;
     return <Stack gap="md" className={CONVERSATION_STATE_INSET} data-testid="social-conversation-state">{node}</Stack>;
   }
@@ -733,9 +743,12 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     }
     if (route === 'rooms') {
       if (roomsFetch.isLoading && !roomsFetch.data) return <LoadingState label="Loading rooms…" />;
-      if (roomsFetch.error && !roomsFetch.data) return <ErrorState title="Rooms could not be loaded" description={roomsFetch.error} actionLabel="Try again" onAction={roomsFetch.refresh} />;
+      if (roomsFetch.error && !roomsFetch.data) return <ErrorState title="Hangouts could not be loaded" description="We couldn’t retrieve the hangouts available to you. Try again in a moment." actionLabel="Try again" onAction={roomsFetch.refresh} />;
+      if (!roomSlug) return <RoomDirectory rooms={rooms} read={roomsFetch} nameOf={nameOf} activeLobby={call.activeLobby}
+        inset={!embedding} mayCreate={mayCreateChannel} onCreate={() => setCreatingRoom(true)} onOpen={(slug) => navigate(`${base}/rooms?room=${encodeURIComponent(slug)}`)} />;
       return <RoomPane selected={roomSlug} room={rooms.find((r) => r.slug === roomSlug) ?? null} nameOf={nameOf} call={call}
-        inset={!embedding} mayCreate={mayCreateChannel} onCreate={() => setCreatingRoom(true)} />;
+        people={roster} mayConfigure={mayCreateChannel && rooms.find(r => r.slug === roomSlug)?.createdBy === me}
+        onSaved={() => roomsFetch.refresh()} inset={!embedding} onBrowse={() => navigate(`${base}/rooms`)} />;
     }
     // Teams.
     if (teamsFetch.isLoading && !teamsFetch.data) return <LoadingState label="Loading teams…" />;
@@ -805,7 +818,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
 
   return (
     <Stack gap="none" className="min-h-0 min-w-0 bg-surface" data-shell-flush data-testid={PAGE_TESTID[route]}>
-      {!embedding && <VisuallyHidden as="h1">{PAGE_TITLE[route]}</VisuallyHidden>}
+      {!embedding && !(route === 'rooms' && !shelf && !picking && roomsFetch.data && (!roomSlug || rooms.some(room => room.slug === roomSlug))) && <VisuallyHidden as="h1">{PAGE_TITLE[route]}</VisuallyHidden>}
       <ViewportFillRegion className="flex min-w-0" data-testid="social-chat-workspace">
         {railNode}
         {embedding ? (

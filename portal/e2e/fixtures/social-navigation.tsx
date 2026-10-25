@@ -1,6 +1,7 @@
 // Actual shell/workspace/native inbox with disconnected inert transport.
 // Every HTTP read is intercepted by the spec; there is no socket. Native
 // subscription/presence discovery frames are inert; messages/calls are forbidden.
+import '@connorhoehnslalom/ui-components/styles.css';
 import '../../src/app.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -15,7 +16,9 @@ const frames: unknown[] = [];
 const gateway = { connectionState: 'disconnected', sessionEpoch: 0, rest: null,
   send: (frame: { service?: string; action?: string }) => {
     if ((frame.service === 'chat' && ['send', 'typing'].includes(frame.action ?? '')) ||
-      (frame.service === 'call' && !['status', 'list'].includes(frame.action ?? ''))) {
+      // The current call hook discovers existing calls with watch/unwatch.
+      // These are subscription-only; starting, joining and signalling calls stay forbidden.
+      (frame.service === 'call' && !['status', 'list', 'watch', 'unwatch'].includes(frame.action ?? ''))) {
       throw new Error('Social navigation fixture forbids messages and calls.');
     }
     frames.push(frame);

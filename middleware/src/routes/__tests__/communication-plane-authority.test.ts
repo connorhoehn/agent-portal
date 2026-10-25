@@ -123,7 +123,7 @@ afterEach(() => { for (const f of FIXTURES) f.reset(); jest.restoreAllMocks(); }
 // Every plane route, with what the Social tenant asks of the same actor.
 const today = () => clock.nowIso().slice(0, 10);
 const GRAPH_QUERY = () => `day=${today()}&timezone=UTC`;
-const READS = ['/capabilities', '/channels', '/people', '/dms', '/rooms', '/teams', '/teams/mock-team-community', '/recordings',
+const READS = ['/capabilities', '/channels', '/people', '/dms', '/rooms', '/rooms/town-hall', '/rooms/town-hall/activity', '/teams', '/teams/mock-team-community', '/recordings',
   '/recordings/mock-rec-dm-lena-sana/playback', '/recordings/mock-rec-dm-lena-sana/transcript', '/calls',
   // The plane's own reads (Lane A).
   '/active', '/people/u-vera/shared-work', `/work-graph/conversations/${encodeURIComponent('social:ch:plane-general')}/graph?${GRAPH_QUERY()}`];
@@ -144,6 +144,20 @@ const send = (w: Write, user: string) => request(app)[w.method](`${P}${w.path}`)
 const GATE = 'Your Social grants do not allow this action';
 
 describe('reads', () => {
+  it('the plane uses Social authority for hangout details, activity and saved configuration', async () => {
+    const detail = await request(app).get('/api/social/plane/rooms/town-hall').set('x-user', 'u-sana');
+    expect(detail.status).toBe(200);
+    expect(detail.body.room.slug).toBe('town-hall');
+    const activity = await request(app).get('/api/social/plane/rooms/town-hall/activity').set('x-user', 'u-sana');
+    expect(activity.status).toBe(200);
+    expect(activity.body).toEqual({ sessions: [] });
+    expect((await request(app).patch('/api/social/plane/rooms/town-hall').set('x-user', 'u-sana').send({ settings: { audioOnly: true } })).status).toBe(403);
+    const saved = await request(app).patch('/api/social/plane/rooms/town-hall').set('x-user', 'u-mira').send({ settings: { audioOnly: true } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.room.settings.audioOnly).toBe(true);
+    expect(sessions.get('u-mira')!.tenant).toBe('assessment');
+  });
+
   it('a Social participant standing in orgiq reads every plane route, and stays in orgiq', async () => {
     for (const path of READS) {
       const res = await get(`${P}${path}`, 'u-sana');
