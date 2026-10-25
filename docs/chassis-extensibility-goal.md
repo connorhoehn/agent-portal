@@ -55,6 +55,16 @@ and capability checks before the durable queue migration.
 - Do not replace working domain-specific authorization or fencing with a generic
   interface that weakens those guarantees.
 
+## Technical debt
+
+| ID | Decision | Status / trigger | Acceptance |
+| --- | --- | --- | --- |
+| TD-ESM-01 | ESM is the target across the chassis and application packages; retain CommonJS consumer compatibility as needed | Deferred. Only migrate a file already being changed for other authorized work when its package boundary safely supports it. No standalone conversion or broad configuration churn. | Future deterministic inventory + AST codemod with dry-run and idempotence checks; packed-artifact compatibility, singleton identity and consumer tests before each package release |
+
+Accepted by the user on 2026-10-25. The
+[migration policy and automation path](chassis/implementation-plan.md#esm-migration-debt--td-esm-01)
+define the scope. This debt does not block the three chassis refactors.
+
 ## Evidence
 
 Append exact test commands, outcomes, versions and remaining limitations as each

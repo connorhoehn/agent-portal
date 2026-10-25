@@ -174,11 +174,20 @@ Maintain principal revalidation and per-action authorization. Capability checks
 must never substitute for access control. The legacy factory gets a deliberate
 migration path and tests for its old supported inputs.
 
-## Module-format recommendation
+## ESM migration debt — TD-ESM-01
 
-Recommend ESM for new application modules and eventual service migration, with
-CommonJS compatibility retained for shared packages while consumers require it.
-This is a recommendation, not authorization for a blanket repository conversion.
+**Decision: accepted 2026-10-25. Status: deferred, opportunistic only.** ESM is the
+target module format. The user directed us to track this as technical debt and
+work on it only when already changing the relevant file for authorized work.
+Retain CommonJS compatibility for shared packages while consumers require it.
+This decision does not authorize a standalone migration or make conversion a
+prerequisite for C0–C9.
+
+Use ESM source syntax in touched files where the existing package/build contract
+supports it. TypeScript `import` syntax alone does not establish ESM output. Do
+not flip a package's `type`, exports, compiler mode or test runner merely because
+one file was touched; if conversion expands beyond that work, leave it deferred.
+Keep CommonJS tool/config files explicit where their runner still requires them.
 Current Node images mix 20 and 22, TypeScript versions differ, and several package
 engine ranges still admit early Node 20 releases. Do not rely on newer
 `require(esm)` interoperability without first tightening and testing that matrix.
@@ -188,6 +197,25 @@ libraries must share runtime state across import/require entrypoints; do not
 independently instantiate two registries, caches or owner managers. Browser-only
 entrypoints must remain isolated from server dependencies. Check packed artifacts
 in native Node ESM, native Node CommonJS and the actual Vite consumer.
+
+When a dedicated migration is scheduled, use a deterministic, reviewable process:
+
+1. Generate a versioned inventory of package boundaries, exports, emitted formats,
+   Node floors, consumer pins and CommonJS-only tooling from manifests/configs.
+2. Run AST-based codemods with explicit preconditions and a dry-run report. Convert
+   only mechanically safe static imports/exports and resolvable specifiers;
+   report dynamic `require`, resolution hooks, cycles and interop assumptions for
+   review instead of guessing. Resolve paths against actual emitted artifacts.
+3. Require an idempotent second run with no changes, then typecheck, build and test
+   packed artifacts across the supported Node/import/require/browser matrix.
+   Include shared singleton identity and initialization/cleanup behavior.
+4. Release one package boundary at a time with compatibility entrypoints and a
+   reversible consumer-pin update. Retire CommonJS output only after the consumer
+   inventory and compatibility tests show it is unused.
+
+Owners are the maintainers of each affected package; the central tracking entry
+is [TD-ESM-01 in the chassis ledger](../chassis-extensibility-goal.md#technical-debt).
+No codemod or package conversion is implemented by this planning entry.
 
 Primary references: [Node package exports](https://nodejs.org/api/packages.html#conditional-exports),
 [dual-package state hazards](https://github.com/nodejs/package-examples/blob/main/guide/07-dual-packages/README.md),

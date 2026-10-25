@@ -133,6 +133,13 @@ non-root `bedrock_agentcore` (UID 1000), ports 8080/8000, `GET /ping`,
 
 ## Conventions and naming
 
+- ESM is the agreed target, tracked as
+  [TD-ESM-01](docs/chassis-extensibility-goal.md#technical-debt). Migration is
+  deferred: only convert code already being touched for other authorized work
+  when the current package boundary supports it safely. Do not turn a file edit
+  into a package-wide module/config migration. Preserve required CommonJS
+  consumers; future bulk work should use the deterministic inventory/codemod
+  and packed-artifact checks in the chassis plan.
 - TypeScript strict everywhere; Python 3.12+. AWS-native models only
   (`amazon.nova-pro-v1:0` default, `MODEL_ID` override); the devbox's Claude
   via Bedrock inference profiles is the one deliberate exception.
