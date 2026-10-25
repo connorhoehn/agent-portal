@@ -79,6 +79,8 @@ export interface WriteCapture {
 
 export interface WritesSnapshot {
   capturedAt: string;
+  /** A later static policy review may add refusals without replaying any write. */
+  refusalReviewedAt?: string;
   /** See WireSnapshot.serverHandlerSha — same contract, same reason. */
   serverHandlerSha: string | null;
   baseUrl: string;

@@ -19,7 +19,7 @@
 // mock clock: a test freezes it and advances past a lease deliberately.
 
 import { randomUUID } from 'node:crypto';
-import type { MessageQueue, QueueDefinition, QueueMessage, ReceiveOptions, SendOptions } from './mq-client.js';
+import { MessageQueueError, type MessageQueue, type QueueDefinition, type QueueMessage, type ReceiveOptions, type SendOptions, type RequestOptions } from './mq-client.js';
 
 /** One stored message. Times are epoch ms from the injected clock. */
 export interface MemoryQueueRow {
@@ -60,17 +60,25 @@ export class MemoryMessageQueue implements MessageQueue {
     return () => this.listeners.delete(listener);
   }
 
-  async inspect(queue: string) {
+  async inspect(queue: string, options?: RequestOptions) {
+    this.checkCancelled(options);
     const def = this.defs.get(queue);
     if (!def) return null;
     const now = this.opts.now(), rows = this.opts.rows().filter(row => row.queue === queue);
     return { ready: rows.filter(row => row.visible_at_ms <= now).length,
-      inFlight: rows.filter(row => row.visible_at_ms > now).length,
-      delayed: 0, fifo: def.fifo, visibilityTimeoutSeconds: def.visibilityTimeoutSeconds };
+      inFlight: rows.filter(row => row.receipt_handle && row.visible_at_ms > now).length,
+      delayed: rows.filter(row => !row.receipt_handle && row.visible_at_ms > now).length,
+      fifo: def.fifo, visibilityTimeoutSeconds: def.visibilityTimeoutSeconds };
   }
 
-  async ensureQueue(def: QueueDefinition): Promise<void> {
-    this.defs.set(def.name, def);
+  async ensureQueue(def: QueueDefinition, options?: RequestOptions): Promise<void> {
+    this.checkCancelled(options);
+    const existing = this.defs.get(def.name);
+    if (existing && (existing.fifo !== def.fifo || existing.visibilityTimeoutSeconds !== def.visibilityTimeoutSeconds
+      || existing.redrive?.deadLetterQueue !== def.redrive?.deadLetterQueue || existing.redrive?.maxReceiveCount !== def.redrive?.maxReceiveCount)) {
+      throw new MessageQueueError('Queue configuration conflicts', 409, 'ConfigurationConflict');
+    }
+    this.defs.set(def.name, structuredClone(def));
   }
 
   definition(queue: string): QueueDefinition | undefined {
@@ -79,12 +87,26 @@ export class MemoryMessageQueue implements MessageQueue {
 
   private requireQueue(queue: string): QueueDefinition {
     const def = this.defs.get(queue);
-    if (!def) throw new Error(`memory queue ${queue} does not exist — ensureQueue first`);
+    if (!def) throw new MessageQueueError(`memory queue ${queue} does not exist — ensureQueue first`, 404, 'QueueDoesNotExist');
     return def;
   }
 
+  private checkCancelled(options?: RequestOptions): void {
+    if (options?.signal?.aborted) throw new MessageQueueError('Queue request Aborted', 0, 'Aborted');
+  }
+
+  private seconds(value: number, maximum: number): number {
+    if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
+      throw new MessageQueueError('Queue duration is invalid', 400, 'ValidationException');
+    }
+    return value * 1000;
+  }
+
   async send(queue: string, body: string, opts: SendOptions = {}): Promise<{ message_id: string }> {
-    this.requireQueue(queue);
+    this.checkCancelled(opts);
+    const def = this.requireQueue(queue);
+    if (def.fifo && !opts.groupId) throw new MessageQueueError('FIFO send requires a group', 400, 'ValidationException');
+    const delayMs = this.seconds(opts.delaySeconds ?? 0, 900);
     const now = this.opts.now();
     const rows = this.opts.rows();
     if (opts.deduplicationId) {
@@ -99,7 +121,7 @@ export class MemoryMessageQueue implements MessageQueue {
       group_id: opts.groupId ?? null,
       dedup_id: opts.deduplicationId ?? null,
       sent_at_ms: now,
-      visible_at_ms: now,
+      visible_at_ms: now + delayMs,
       receive_count: 0,
       receipt_handle: null,
       dead_lettered_from: null,
@@ -110,10 +132,12 @@ export class MemoryMessageQueue implements MessageQueue {
   }
 
   async receive(queue: string, opts: ReceiveOptions = {}): Promise<QueueMessage[]> {
+    this.checkCancelled(opts);
     const def = this.requireQueue(queue);
+    if (opts.consumerGroupId !== undefined) throw new MessageQueueError('The local memory fixture does not support consumer-group subscriptions', 400, 'UnsupportedOperation');
     const now = this.opts.now();
     const max = Math.max(1, opts.max ?? 1);
-    const visibilityMs = (opts.visibilityTimeoutSeconds ?? def.visibilityTimeoutSeconds) * 1000;
+    const visibilityMs = this.seconds(opts.visibilityTimeoutSeconds ?? def.visibilityTimeoutSeconds, 43_200);
     const rows = this.opts.rows();
 
     // An expired lease is released lazily: its handle stops being valid the
@@ -129,13 +153,14 @@ export class MemoryMessageQueue implements MessageQueue {
     const seenGroups = new Set<string>();
     for (const r of rows.slice().sort((a, b) => a.sent_at_ms - b.sent_at_ms)) {
       if (out.length >= max) break;
-      if (r.queue !== queue || r.receipt_handle || r.visible_at_ms > now) continue;
+      if (r.queue !== queue) continue;
       if (def.fifo && r.group_id !== null) {
         // Strict per-group order: only the group's head is deliverable, and
         // not while any of the group is leased.
         if (busyGroups.has(r.group_id) || seenGroups.has(r.group_id)) { seenGroups.add(r.group_id); continue; }
         seenGroups.add(r.group_id);
       }
+      if (r.receipt_handle || r.visible_at_ms > now) continue;
       if (def.redrive && r.receive_count >= def.redrive.maxReceiveCount) {
         this.requireQueue(def.redrive.deadLetterQueue);
         r.dead_lettered_from = queue;
@@ -158,13 +183,27 @@ export class MemoryMessageQueue implements MessageQueue {
     return out;
   }
 
-  async ack(queue: string, receiptHandle: string): Promise<boolean> {
+  async ack(queue: string, receiptHandle: string, options?: RequestOptions): Promise<boolean> {
+    this.checkCancelled(options);
+    this.requireQueue(queue);
     const rows = this.opts.rows();
     const now = this.opts.now();
     const idx = rows.findIndex((r) => r.queue === queue && r.receipt_handle === receiptHandle && r.visible_at_ms > now);
     if (idx < 0) return false;
     rows.splice(idx, 1);
     return true;
+  }
+
+  async extend(queue: string, receiptHandle: string, visibilityTimeoutSeconds: number, options?: RequestOptions) {
+    this.checkCancelled(options);
+    this.requireQueue(queue);
+    const durationMs = this.seconds(visibilityTimeoutSeconds, 43_200);
+    const now = this.opts.now();
+    const row = this.opts.rows().find(r => r.queue === queue && r.receipt_handle === receiptHandle && r.visible_at_ms > now);
+    if (!row) return { success: false };
+    row.receipt_handle = randomUUID();
+    row.visible_at_ms = now + durationMs;
+    return { success: true, new_receipt_handle: row.receipt_handle };
   }
 
   /** What is sitting in a queue right now — the depth an operator reads. */

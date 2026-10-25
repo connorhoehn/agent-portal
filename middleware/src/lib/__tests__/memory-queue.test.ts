@@ -83,6 +83,59 @@ describe('MemoryMessageQueue', () => {
     const { q } = harness();
     await expect(q.send('nope', 'x')).rejects.toThrow(/does not exist/);
   });
+
+  it('renews and rotates a live receipt, fencing both the old receipt and expired workers', async () => {
+    const { q, ready, advance } = harness();
+    await ready;
+    await q.send('work', 'job', { groupId: 'g' });
+    const [message] = await q.receive('work');
+    advance(20_000);
+    const renewed = await q.extend('work', message!.receipt_handle, 60);
+    expect(renewed.success).toBe(true);
+    expect(await q.ack('work', message!.receipt_handle)).toBe(false);
+    advance(20_000);
+    expect(await q.receive('work')).toEqual([]);
+    advance(41_000);
+    const [replacement] = await q.receive('work');
+    expect(await q.extend('work', renewed.new_receipt_handle!, 60)).toEqual({ success: false });
+    expect(await q.ack('work', renewed.new_receipt_handle!)).toBe(false);
+    expect(await q.ack('work', replacement!.receipt_handle)).toBe(true);
+  });
+
+  it('keeps a delayed FIFO head ahead of its group while other groups can proceed', async () => {
+    const { q, ready, advance } = harness();
+    await ready;
+    await q.send('work', 'delayed head', { groupId: 'g', delaySeconds: 5 });
+    await q.send('work', 'next', { groupId: 'g' });
+    await q.send('work', 'other', { groupId: 'other' });
+    expect(await q.inspect('work')).toMatchObject({ delayed: 1, inFlight: 0 });
+    expect((await q.receive('work', { max: 10 })).map(m => m.body)).toEqual(['other']);
+    advance(5_000);
+    const [head] = await q.receive('work');
+    expect(head!.body).toBe('delayed head');
+    await q.ack('work', head!.receipt_handle);
+    expect((await q.receive('work'))[0]!.body).toBe('next');
+  });
+
+  it('rejects conflicting definitions and unsupported group semantics explicitly', async () => {
+    const { q, ready } = harness();
+    await ready;
+    await expect(q.ensureQueue({ name: 'work', fifo: false, visibilityTimeoutSeconds: 30 }))
+      .rejects.toMatchObject({ code: 'ConfigurationConflict' });
+    await expect(q.receive('work', { consumerGroupId: 'g' })).rejects.toMatchObject({ code: 'UnsupportedOperation' });
+    expect(q.definition('work')!.fifo).toBe(true);
+  });
+
+  it('does not mutate on cancelled sends or lease operations', async () => {
+    const { q, rows, ready } = harness();
+    await ready;
+    await expect(q.send('work', 'cancelled', { groupId: 'g', signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'Aborted' });
+    expect(rows).toHaveLength(0);
+    await q.send('work', 'job', { groupId: 'g' });
+    const [message] = await q.receive('work');
+    await expect(q.ack('work', message!.receipt_handle, { signal: AbortSignal.abort() })).rejects.toMatchObject({ code: 'Aborted' });
+    expect(rows).toHaveLength(1);
+  });
 });
 
 

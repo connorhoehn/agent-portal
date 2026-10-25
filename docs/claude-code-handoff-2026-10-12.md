@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Hangouts and chassis checkpoint — 2026-10-25”
+**Latest checkpoint:** read “Chassis foundation checkpoint — 2026-10-25”
 at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -903,3 +903,40 @@ Prefer owner client contracts and capability checks before the delivery-store
 rewrite, reusing existing distributed-core fencing. The room validator remains
 mirrored until the independent C8 pure-contract extraction is adopted in both
 APIs. No whole-package ESM conversion was made.
+
+
+## Chassis foundation checkpoint — 2026-10-25
+
+The user explicitly made the three chassis improvements the active Codex goal.
+Continue the [implementation plan](chassis/implementation-plan.md) and
+[execution ledger](chassis-extensibility-goal.md); this is not goal completion.
+
+Released/pushed owners: event-catalog 0.8.8 (`0f979fa`, retain failed sources),
+service-runtime v0.5.0 (`0776e24`, capability evaluation + lean signing), and
+message-queue v0.3.0 (`dd97a69`, signed bounded client + shared types). MQ main
+then advanced to `e8a336d` with unreleased host preflight and v2 delivery design.
+The host refuses durable claims for legacy storage; C3–C5 must establish the
+actual guarantees before those capability labels can be enabled.
+
+The BFF now pins the released MQ client and runtime at full SHAs and re-exports
+owner APIs through the old local import. Its memory fixture has renewal/receipt
+rotation and explicit unsupported-group handling. The owner client passes its
+full 1,522-test gate (42 environment-gated skips), real signed broker HTTP, and
+packed Node 20/25 + browser type checks. BFF typecheck/build and 19 focused tests
+pass. Its full run passed 7,495 tests with two stale route-record failures and
+56 skips; the static route/refusal records were corrected, then all 79 wire
+tests passed. No full repeat after that metadata correction and no write replay
+or mock reset. Raw logs/results use `.scratch/chassis-*`; the ledger has detail.
+
+The middleware watcher is serving 3001 again after the new Git dependency
+finished installing; portal 5183 also returns 200. Existing backend/media images
+were not replaced by this chassis checkpoint. The ui-components lock still
+matches the original backup SHA recorded in the prior checkpoint.
+
+Next: transactional delivery-store implementation in message-queue, using the
+owner's `docs/delivery-state-v2.md` and UUID-owned local tables. Catalog client
+adoption/lifecycle, job fencing, reusable room validation, realtime composition
+and final host adoption remain open. The catalog source-retention fix is an
+owner release; older application catalog pins have not yet been consolidated.
+Do not revive the earlier all-green tenant-judge claim or convert packages to
+ESM wholesale. ESM remains deferred/opportunistic (TD-ESM-01).

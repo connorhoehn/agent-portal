@@ -16,7 +16,7 @@ it('keeps successful counts and redacts upstream failures without any queue muta
     if (name === 'ingest-landing-dlq') return null;
     throw new MessageQueueError('secret upstream http://private/?token=hidden', 403);
   });
-  const queue: MessageQueue = { backend: 'http', inspect, ensureQueue: jest.fn(), send: jest.fn(), receive: jest.fn(), ack: jest.fn() };
+  const queue: MessageQueue = { backend: 'http', inspect, ensureQueue: jest.fn(), send: jest.fn(), receive: jest.fn(), ack: jest.fn(), extend: jest.fn() };
   const result = await readPipelineQueues(queue, '');
   expect(inspect).toHaveBeenCalledTimes(3);
   expect(result.queues.find(row => row.name === 'ingest-landing')).toMatchObject({ state: 'available', snapshot: { ready: 8 } });

@@ -32,7 +32,7 @@
     "@aws-sdk/lib-dynamodb": "^3.700.0",
     "@aws-sdk/signature-v4": "^3.370.0",
     "@connorhoehn/realtime-modules": "file:../portal/vendor/connorhoehn-realtime-modules-0.138.0.tgz",
-    "@connorhoehn/service-runtime": "github:connorhoehn/service-runtime#5f7275e5f53377526a82076714618672f8f53d22",
+    "@connorhoehn/service-runtime": "github:connorhoehn/service-runtime#0776e24890478b9a3098bd132c47f086e0e6994a",
     "@smithy/protocol-http": "^5.3.14",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-collaboration": "^3.31.3",
@@ -57,7 +57,8 @@
     "pptxgenjs": "4.0.1",
     "redis": "6.3.0",
     "ws": "^8.21.3",
-    "yjs": "^13.6.30"
+    "yjs": "^13.6.30",
+    "@connorhoehnslalom/message-queue": "github:connorhoehnslalom/message-queue#dd97a694d3528e11b55f405af97a30b62b559abd"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

@@ -11,25 +11,23 @@ type Call = { url: string; method: string; headers: Record<string, string>; body
 
 function fakeFetch(respond: (call: Call) => { status: number; body?: unknown }) {
   const calls: Call[] = [];
-  const impl = (async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
-    const call = { url, method: init.method, headers: init.headers, body: init.body ?? '' };
+  const impl = (async (url: string, init: { method: string; headers: HeadersInit; body?: string }) => {
+    const call = { url, method: init.method, headers: Object.fromEntries(new Headers(init.headers).entries()), body: init.body ?? '' };
     calls.push(call);
     const { status, body } = respond(call);
-    return { ok: status >= 200 && status < 300, status, text: async () => (body === undefined ? '' : JSON.stringify(body)) };
+    return new Response(body === undefined ? '' : JSON.stringify(body), { status });
   }) as unknown as typeof fetch;
   return { calls, impl };
 }
 
 describe('HttpMessageQueue', () => {
-  it('ensures a FIFO queue with a redrive policy by idempotent PUT, and tolerates a 409', async () => {
+  it('ensures a FIFO queue with a redrive policy and rejects conflicting configuration', async () => {
     const { calls, impl } = fakeFetch(() => ({ status: 409, body: { status: 'conflict' } }));
     const q = new HttpMessageQueue({ baseUrl: 'http://mq:3000/', serviceId: 'orgiq-middleware', fetchImpl: impl });
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    await q.ensureQueue({
+    await expect(q.ensureQueue({
       name: 'distill-compact-l1', fifo: true, visibilityTimeoutSeconds: 60,
       redrive: { deadLetterQueue: 'distill-compact-l1-dlq', maxReceiveCount: 3 },
-    });
-    warn.mockRestore();
+    })).rejects.toMatchObject({ status: 409, code: 'ConfigurationConflict' });
     expect(calls[0]!.method).toBe('PUT');
     expect(calls[0]!.url).toBe('http://mq:3000/api/v1/queues/distill-compact-l1');
     expect(JSON.parse(calls[0]!.body)).toEqual({
@@ -64,7 +62,7 @@ describe('HttpMessageQueue', () => {
     const { calls, impl } = fakeFetch(() => ({ status: 201, body: { message_id: 'm' } }));
     const signed = new HttpMessageQueue({ baseUrl: 'http://mq:3000', serviceId: 'orgiq-middleware', secret: 's3cret', fetchImpl: impl });
     await signed.send('distill-compact-l1', 'x');
-    const header = calls[0]!.headers[SERVICE_AUTH_HEADER]!;
+    const header = calls[0]!.headers[SERVICE_AUTH_HEADER.toLowerCase()]!;
     const target = '/api/v1/queues/distill-compact-l1/messages';
     const opts = { secret: 's3cret', allowedServices: ['orgiq-middleware'], audience: 'message-queue' };
     // Verified with the same helper message-queue itself calls, rather than a
@@ -80,11 +78,11 @@ describe('HttpMessageQueue', () => {
 
     const unsigned = new HttpMessageQueue({ baseUrl: 'http://mq:3000', serviceId: 'orgiq-middleware', fetchImpl: impl });
     await unsigned.send('distill-compact-l1', 'x');
-    expect(calls[1]!.headers[SERVICE_AUTH_HEADER]).toBeUndefined();
+    expect(calls[1]!.headers[SERVICE_AUTH_HEADER.toLowerCase()]).toBeUndefined();
   });
 
   it('surfaces a non-2xx as MessageQueueError, and a stale receipt as a false ack', async () => {
-    const { impl } = fakeFetch((call) => ({ status: call.method === 'DELETE' ? 400 : 503, body: { error: 'nope' } }));
+    const { impl } = fakeFetch((call) => ({ status: call.method === 'DELETE' ? 400 : 503, body: { error_code: call.method === 'DELETE' ? 'InvalidReceiptHandle' : 'ServiceUnavailable' } }));
     const q = new HttpMessageQueue({ baseUrl: 'http://mq:3000', serviceId: 'orgiq-middleware', fetchImpl: impl });
     await expect(q.send('distill-compact-l1', 'x')).rejects.toBeInstanceOf(MessageQueueError);
     expect(await q.ack('distill-compact-l1', 'stale')).toBe(false);
@@ -105,14 +103,14 @@ describe('read-only queue attributes', () => {
     expect(call.method).toBe('GET');
     expect(call.url).toBe('http://mq:3000/api/v1/queues/scope%3Aqueue/attributes');
     expect(call.body).toBe('');
-    expect(verifyServiceRequest(call.headers[SERVICE_AUTH_HEADER]!,
+    expect(verifyServiceRequest(call.headers[SERVICE_AUTH_HEADER.toLowerCase()]!,
       { method: 'GET', target: '/api/v1/queues/scope%3Aqueue/attributes', body: '' },
       { secret: 'test-secret', allowedServices: ['orgiq-middleware'], audience: 'message-queue' },
     ).ok).toBe(true);
   });
 
   it('keeps malformed or omitted metrics unknown and missing queues absent', async () => {
-    const { impl } = fakeFetch(call => call.url.includes('absent') ? { status: 404 } : { status: 200, body: { attributes: {
+    const { impl } = fakeFetch(call => call.url.includes('absent') ? { status: 404, body: { error_code: 'QueueDoesNotExist' } } : { status: 200, body: { attributes: {
       ApproximateNumberOfMessages: -1, ApproximateNumberOfMessagesNotVisible: 'NaN',
       ApproximateNumberOfMessagesDelayed: 1.5, VisibilityTimeout: '', FifoQueue: 'false',
     } } });
@@ -125,7 +123,7 @@ describe('read-only queue attributes', () => {
     let signal: AbortSignal | undefined;
     const impl = (async (_url: unknown, init: RequestInit) => {
       signal = init.signal ?? undefined;
-      return { status: 200, ok: true, text: async () => '{}' };
+      return new Response('{}');
     }) as typeof fetch;
     const q = new HttpMessageQueue({ baseUrl: 'http://mq', serviceId: 'test', fetchImpl: impl });
     await expect(q.inspect('bad')).rejects.toThrow();

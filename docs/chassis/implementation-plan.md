@@ -2,8 +2,9 @@
 
 Updated 2026-10-25 from the checked-out source. This refines the three approved
 refactors: durable delivery and worker ownership, owner-published contracts, and
-runtime capability/composition checks. Delivery repairs remain planned; C0 has
-begun with an isolated queue characterization against DynamoDB Local.
+runtime capability/composition checks. Delivery repairs are in progress. C0 has queue characterization against
+DynamoDB Local and a catalog source-retention regression; the early catalog
+fix and capability-evaluator foundation are released (see the ledger).
 The [execution ledger](../chassis-extensibility-goal.md) tracks completion;
 [dependency-inventory.json](dependency-inventory.json) records observed versions
 and pins. That inventory is not evidence of deployed versions.
@@ -121,7 +122,10 @@ flags were true and the run exited 2 as designed. It removed its UUID-owned
 table. This uses independent service/store instances in one process; separate
 process/HTTP, stale ACK, FIFO/groups, catalog poison handling and job-attempt
 cases remain. Existing suite names above are extension points, not newly passing
-acceptance evidence. C0 is in progress, and none of C1–C9 is complete.
+acceptance evidence. C0 is in progress. The early C6 source-retention fix and C2 evaluator are
+released; the C1 owner client and BFF adoption are also released. Catalog adoption and
+full C1–C9 downstream acceptance remain open. MQ now rejects unsupported
+durable profiles before storage I/O; its transactional implementation is next.
 
 ## Durable queue design constraints
 
