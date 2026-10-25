@@ -213,3 +213,33 @@ Tidy these when convenient. Delete only what is plainly journey-made:
   Future clone deletion still does not automatically purge its DM copies.
 - The handoff's implementation, verification and cleanup work is complete.
   The open user decisions remain untouched.
+
+## Clone cleanup made automatic (2026-10-25)
+
+At the user's request, `da00370e` fixes the recurring fixture buildup:
+
+- Deleting a clone or discovering its expiry removes that clone's DM messages,
+  joins, membership, read cursors, pins, reactions and upload metadata from
+  every already-materialized mock scenario and request scope. Original
+  conversations and other clones' independent DMs are preserved. The gateway
+  drops its message cache, and in-flight/queued history copies check the
+  clone again before writing. Durable DynamoDB chat records and upload blobs
+  are outside this fixture cleanup.
+- The 67 focused tests and middleware TypeScript check pass. Mock-floor,
+  Social (including Assessment) and Communication quick judges pass. Wire
+  snapshots were recaptured on a separate, fresh mock server on port 13001.
+  The broader sweep passed 7,483 tests; its only failed suite could not load
+  the isolated checkout's missing infrastructure dependency link. After
+  linking the existing dependencies, both tests in that suite passed against
+  DynamoDB Local using their own temporary tables. That is 7,485 passing
+  tests across the sweep and targeted rerun, with 55 opt-in tests skipped.
+- The shared middleware loaded the change through its existing one-boot
+  snapshot replay. All chat data and six runtime mirrors were preserved;
+  166 fixtures were byte-for-byte unchanged, while the presence heartbeat and
+  findings' `lastSeenAt` fields refreshed normally. No shared mock reset was
+  used. Live API checks then exercised deletion, another clone's preservation
+  and expiry, returning chat data to its original 165 messages. All
+  non-presence fixtures matched the pre-probe state afterward.
+- Private restore snapshots and API proofs are under
+  `.scratch/clone-dm-cleanup-2026-10-25/`. The temporary inspectors and isolated
+  server were closed. The user authorized pushing this fix and `00cc296d`.
