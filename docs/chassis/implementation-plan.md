@@ -125,7 +125,9 @@ cases remain. Existing suite names above are extension points, not newly passing
 acceptance evidence. C0 is in progress. The early C6 source-retention fix and C2 evaluator are
 released; the C1 owner client and BFF adoption are also released. Catalog adoption and
 full C1–C9 downstream acceptance remain open. MQ now rejects unsupported
-durable profiles before storage I/O; its transactional implementation is next.
+durable profiles before storage I/O. The initial v2 store now passes 14 real DDB
+contract tests; it is not yet connected to QueueService/server. C3 process/HTTP
+acceptance and C4–C5 remain open. See the latest execution-ledger checkpoint.
 
 ## Durable queue design constraints
 

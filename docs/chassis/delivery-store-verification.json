@@ -1,0 +1,31 @@
+{
+  "observedOn": "2026-10-25",
+  "goalStatus": "active",
+  "scope": "Initial C3 store foundation; C3-C9 acceptance incomplete",
+  "owner": "message-queue",
+  "revision": "c0d22e9422b546370f712e5233f8fb5ecb85dc9c",
+  "releaseStatus": "unreleased source checkpoint, pushed to main",
+  "serverAdopted": false,
+  "durableProfilesEnabled": false,
+  "verification": {
+    "command": "MQ_DDB_INTEGRATION=1 DYNAMODB_ENDPOINT=http://127.0.0.1:8000 npm test -- --runInBand test/integration/ddb-delivery-store.test.ts",
+    "suitesPassed": 1,
+    "testsPassed": 14,
+    "testsSkipped": 0,
+    "store": "DynamoDB Local; independent SDK clients; UUID-owned table removed",
+    "processModel": "one test process, multiple independent clients",
+    "build": "pass",
+    "changedFileLint": "pass",
+    "fullOwnerSuiteRepeated": false,
+    "sharedResets": 0,
+    "sharedRestarts": 0,
+    "cloudDeployments": 0
+  },
+  "remaining": [
+    "QueueService and HTTP server adoption with readiness/shutdown",
+    "Separate-process restart and competing-owner acceptance",
+    "Durable FIFO/dedup/redrive and subscriptions",
+    "Retired-generation cleanup and explicit migration tooling",
+    "Catalog subscriber lifecycle, fenced jobs, realtime composition/contracts and C9 host adoption"
+  ]
+}

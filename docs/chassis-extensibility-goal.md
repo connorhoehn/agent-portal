@@ -149,3 +149,36 @@ user's original ui-components lock remains byte-identical to its backup.
 Event-catalog consumer pins, C3–C7 delivery/job work, C8 reusable room contracts
 and composition, and the C9 end-to-end release gate remain open. The earlier
 broad tenant journey freshness limitations still apply.
+
+### Usage-limit checkpoint: transactional store foundation
+
+The user reported an approaching usage limit. Progress is saved without marking
+the goal complete or changing it to paused. Message-queue main is pushed at
+`c0d22e9422b546370f712e5233f8fb5ecb85dc9c` (unreleased; v0.3.0 remains the earlier
+client release). `src/storage/delivery/` now contains the v2 store contract,
+configuration validation and DynamoDB transaction implementation. The store
+fences mutations by queue generation and current receipt, atomically persists
+enqueue/claim/ACK/renewal, retains append history, and bounds candidate discovery.
+
+Verification: **14 real DynamoDB Local tests pass**, including two-client
+enqueue/claim contention, replacement-client visibility/counts, stale receipt and
+generation rejection, ACK-versus-renewal races, delay, retention, pagination,
+storage failure and lost-response recovery. Build, changed-file lint and diff
+checks pass. The test deleted only its UUID-owned table and destroyed its own
+clients. Log: `.scratch/chassis-delivery-v2-store-tests.log`. Machine-readable
+record: `chassis/delivery-store-verification.json`.
+
+**C3 is not complete.** This is a store-level checkpoint; it is not connected to
+QueueService or the running server, and no new capability is advertised. The
+legacy path still has the C0 defects. FIFO, DLQ, subscriptions, retired-generation
+cleanup and migration tooling remain open. No consumer pin was moved for this
+unreleased work. No shared stack reset, restart or deployment was performed.
+
+Resume with the QueueService/HTTP integration. Read the owner's
+`docs/delivery-state-v2.md`, then audit concrete `getQueue()`/QueueInstance uses
+before choosing the adapter boundary. Keep the existing REST contract and memory
+profile; explicitly reject unsupported operations. Add connection readiness and
+bounded shutdown, then prove restart and competing claims using **separate queue
+processes over HTTP**. Do not enable durable profiles before the C3–C5 acceptance
+matrix passes. Continue all C0–C9 work from the original plan; this checkpoint
+does not narrow the approved three improvements. ESM remains opportunistic only.

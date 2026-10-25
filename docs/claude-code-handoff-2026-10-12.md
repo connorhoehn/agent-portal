@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Chassis foundation checkpoint — 2026-10-25”
+**Latest checkpoint:** read “Chassis usage-limit checkpoint — 2026-10-25”
 at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -940,3 +940,22 @@ and final host adoption remain open. The catalog source-retention fix is an
 owner release; older application catalog pins have not yet been consolidated.
 Do not revive the earlier all-green tenant-judge claim or convert packages to
 ESM wholesale. ESM remains deferred/opportunistic (TD-ESM-01).
+
+## Chassis usage-limit checkpoint — 2026-10-25
+
+The user is approaching a usage limit. The approved three-improvement goal
+remains active and incomplete. Message-queue main is pushed at
+`c0d22e9422b546370f712e5233f8fb5ecb85dc9c`, adding a v2 transactional delivery
+store. Fourteen real DynamoDB Local tests, build and changed-file lint pass.
+Only a UUID-owned test table was created/deleted; the shared application was
+not restarted or reset. No test process is intentionally left running.
+
+This store is **not connected to QueueService/server** and is not a new tagged
+release. Application pins remain at the previous client release. Durable runtime
+profiles remain unavailable; FIFO, DLQ, subscriptions and process acceptance are
+unfinished. Continue from the detailed resume instructions in
+`docs/chassis-extensibility-goal.md` under “Usage-limit checkpoint: transactional
+store foundation” and `docs/chassis/delivery-store-verification.json`.
+Next: integrate through the existing QueueService/HTTP surface, preserve memory
+behavior, then prove separate-process restart/claim/receipt semantics. Keep all
+C0–C9 scope intact. The user's dirty ui-components lock remains untouched.
