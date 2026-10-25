@@ -37,6 +37,7 @@ export {
   describeScenario,
   declaredScenariosFor,
   mockWorldGeneration,
+  removeFixtureRows,
 } from './fixture.js';
 
 export type { Accessor } from './derive.js';

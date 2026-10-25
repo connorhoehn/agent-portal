@@ -14,7 +14,10 @@ import {
   isScenarioName,
   SCENARIOS,
   SCENARIO_NAMES,
+  removeFixtureRows,
+  mockWorldGeneration,
 } from '../fixture.js';
+import { createMockScope, clearMockScopes, runInMockScope } from '../scope.js';
 
 interface Run {
   id: string;
@@ -23,6 +26,35 @@ interface Run {
 }
 
 afterEach(() => unfreezeClock());
+
+describe('ephemeral row removal', () => {
+  afterEach(() => clearMockScopes());
+
+  it('prunes existing shared scenarios and scopes while preserving their arrays and unrelated rows', () => {
+    const factory = jest.fn(() => [{ id: 'keep' }, { id: 'remove' }]);
+    const fixture = defineFixture({ key: 'ephemeral', scenarios: { default: factory, large: factory, empty: factory }, registry: createFixtureRegistry() });
+    const shared = fixture.rows();
+    const large = fixture.rows('large');
+    const scope = createMockScope({ base: 'default' });
+    const scoped = runInMockScope(scope, () => fixture.rows());
+    const generation = mockWorldGeneration();
+    expect(runInMockScope(scope, () => removeFixtureRows(fixture, row => row.id === 'remove'))).toBe(3);
+    expect(shared).toEqual([{ id: 'keep' }]); expect(large).toEqual(shared); expect(scoped).toEqual(shared);
+    expect(fixture.rows()).toBe(shared); expect(runInMockScope(scope, () => fixture.rows())).toBe(scoped);
+    expect(factory).toHaveBeenCalledTimes(2); // no untouched scenario or scope was seeded
+    expect(mockWorldGeneration()).toBeGreaterThan(generation);
+    const after = mockWorldGeneration();
+    expect(removeFixtureRows(fixture, row => row.id === 'remove')).toBe(0);
+    expect(mockWorldGeneration()).toBe(after);
+  });
+
+  it('does not materialize an unread fixture', () => {
+    const factory = jest.fn(() => [{ id: 'remove' }]);
+    const fixture = defineFixture({ key: 'unread', scenarios: { default: factory }, registry: createFixtureRegistry() });
+    expect(removeFixtureRows(fixture, () => true)).toBe(0);
+    expect(factory).not.toHaveBeenCalled();
+  });
+});
 
 describe('rows()', () => {
   it('builds from the factory lazily — not at define time', () => {

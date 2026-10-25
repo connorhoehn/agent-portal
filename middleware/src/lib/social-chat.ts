@@ -58,6 +58,7 @@ import { TENANTS } from './session.js';
 import { emitSocialWorkGraphEvent, socialConversationOrNull } from './work-graph/social-events.js';
 import { ownsRecord } from './record-owner.js';
 import { noteSearchWrite } from './search-index/writes.js';
+import { onCloneDmCleanup } from '../mock/clone-dm-cleanup.js';
 
 // ── Names ────────────────────────────────────────────────────────────────────
 
@@ -504,6 +505,7 @@ export function createMemorySocialChatBackend(opts: { fixtures?: boolean } = {})
 let backend: SocialChatBackend | null = null;
 let clearCaches: (() => void) | null = null;
 let publishPins: ((channel: string) => void) | null = null;
+onCloneDmCleanup(() => { clearCaches?.(); });
 
 /** The live backend. Lazily the memory one, so the routes work with the gateway off (and in tests). */
 export function socialChat(): SocialChatBackend {

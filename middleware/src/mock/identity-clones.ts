@@ -17,6 +17,7 @@
 // Unscoped (`scoped: false`): the directory is one per process.
 
 import { clock, defineFixture } from './core/index.js';
+import { removeCloneDmFixtures } from './clone-dm-cleanup.js';
 
 export interface IdentityCloneRow {
   id: string;
@@ -51,7 +52,10 @@ export function liveClones(): IdentityCloneRow[] {
   const rows = identityClonesFixture.rows();
   const now = clock.now().getTime();
   for (let i = rows.length - 1; i >= 0; i--) {
-    if (Date.parse(rows[i]!.expiresAt) <= now) rows.splice(i, 1);
+    if (Date.parse(rows[i]!.expiresAt) <= now) {
+      const [expired] = rows.splice(i, 1);
+      removeCloneDmFixtures(expired!.id);
+    }
   }
   return rows;
 }
@@ -65,5 +69,6 @@ export function removeClone(id: string): boolean {
   const at = rows.findIndex((c) => c.id === id);
   if (at < 0) return false;
   rows.splice(at, 1);
+  removeCloneDmFixtures(id);
   return true;
 }

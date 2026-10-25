@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-19T22:58:51.321Z",
-  "serverHandlerSha": "9cade41be4ad37d005daf261fbab28dc449e4c77bfc4379878735cc13cd3091a",
-  "baseUrl": "http://127.0.0.1:3013",
+  "capturedAt": "2026-10-25T14:20:05.503Z",
+  "serverHandlerSha": "db78878f257f0e366bd4462bc2b546d8b002232b1d4e42c457fb69d8367c14c8",
+  "baseUrl": "http://127.0.0.1:13001",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -3762,12 +3762,12 @@
           "ORG-INF-1",
           "ORG-INF-2",
           "ORG-INF-3",
-          "ORG-INF-4",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
           "ORG-LLM-1",
           "ORG-LLM-10",
+          "ORG-LLM-2",
           "ORG-LLM-3",
           "ORG-LLM-4",
           "ORG-LLM-5",
@@ -5745,7 +5745,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -9024,7 +9024,8 @@
         "people[].displayName": "string",
         "people[].roles": "array",
         "people[].roles[]": "string",
-        "people[].userId": "string"
+        "people[].userId": "string",
+        "selfId": "string"
       },
       "values": {
         "people[].roles[]": [
@@ -9140,7 +9141,8 @@
         "people[].displayName": "string",
         "people[].roles": "array",
         "people[].roles[]": "string",
-        "people[].userId": "string"
+        "people[].userId": "string",
+        "selfId": "string"
       },
       "values": {
         "people[].roles[]": [

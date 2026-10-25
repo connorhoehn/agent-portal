@@ -32,18 +32,25 @@ export function cloneDmChannel(channel: string, persona: string, cloneId: string
 async function mirror(sub: string, persona: string): Promise<void> {
   const chat = socialChat();
   await chat.ready;
+  if (!findClone(sub)) return;
   for (const row of await chat.conversations.listForUser(persona)) {
+    if (!findClone(sub)) return;
     const target = cloneDmChannel(row.channel, persona, sub);
     const members = target ? tenantDmMembers(target) : null;
     if (!target || !members) continue;
     if ((await chat.chatStore.listMessages(target, 1)).length) continue; // already copied (or the clone's own conversation)
     const history = await chat.chatStore.listMessages(row.channel, HISTORY_CAP);
     for (const m of history) {
+      // Deletion/expiry may have happened while history was loading. In the
+      // fixture backend the write is synchronous, so this check and the write
+      // cannot straddle teardown; re-check after each awaited store operation.
+      if (!findClone(sub)) return;
       const copy = { ...m, id: `${m.id}~${sub}`, channel: target, ...(m.userId === persona ? { userId: sub } : {}) };
       await chat.chatStore.putMessage(copy);
+      if (!findClone(sub)) return;
       await chat.conversations.recordDmMessage(target, members, copy);
     }
-    if (!history.length) await chat.conversations.recordJoin(target, sub);
+    if (!history.length && findClone(sub)) await chat.conversations.recordJoin(target, sub);
   }
 }
 

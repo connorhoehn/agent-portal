@@ -17,7 +17,7 @@ import type { Fixture, FixtureRegistry, Scenario, ScenarioName } from './contrac
 import { mockRestartSnapshot, restoredFixtureRows } from '../restart-state.js';
 import {
   cloneRows, currentMockScope, isDataState, lengthen, MANY_ROWS, multiply,
-  scopedUnavailable, scopeNamesFixture, scopeScenarioFor, type MockScope,
+  scopedUnavailable, scopeNamesFixture, scopeScenarioFor, listMockScopes, type MockScope,
 } from './scope.js';
 
 /** Produces a fresh, mutable row set. Called on first read and on every reset. */
@@ -159,6 +159,13 @@ export function createFixtureRegistry(): MockFixtureRegistry {
   return new Registry();
 }
 
+const rowRemovers = new WeakMap<object, (matches: (row: unknown) => boolean) => number>();
+
+/** Remove ephemeral rows from already-materialized shared/scoped worlds, without resetting or seeding any world. */
+export function removeFixtureRows<Row>(fixture: Fixture<Row>, matches: (row: Row) => boolean): number {
+  return rowRemovers.get(fixture)?.(matches as (row: unknown) => boolean) ?? 0;
+}
+
 /**
  * Define a fixture and register it. The returned object is the only handle to
  * its rows — there is no exported array to import directly, which is what
@@ -263,6 +270,20 @@ export function defineFixture<Row>(spec: FixtureSpec<Row>): Fixture<Row> {
   };
 
   declaredScenarios.set(fixture as unknown as Fixture<never>, declared);
+
+  rowRemovers.set(fixture, matches => {
+    let removed = 0;
+    const prune = (rows: unknown[]) => {
+      for (let i = rows.length - 1; i >= 0; i--) if (matches(rows[i])) { rows.splice(i, 1); removed++; }
+    };
+    for (const rows of live.values()) prune(rows);
+    // Clones are process-wide identities even when expiry is discovered in a scoped request.
+    if (scoped) for (const scope of listMockScopes()) {
+      for (const rows of scope.rows.get(fixture)?.values() ?? []) prune(rows);
+    }
+    if (removed) worldGeneration++;
+    return removed;
+  });
 
   return registry ? registry.register(fixture) : fixture;
 }

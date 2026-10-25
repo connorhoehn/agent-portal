@@ -331,6 +331,14 @@ Clones are rows of the registered `identity.clones` fixture: a full
 switch keeps clones (another auditor asking for `empty` must not sign this run
 out). They expire after 2 h by default (`ttlMs`, at most 12 h; 200 live at most).
 
+Deleting a clone, or discovering its expiry, also removes its DM conversations
+from the **fixture-backed chat store**: messages, joins, membership, read cursors,
+pins, reactions and upload metadata. Cleanup covers already-materialized shared
+scenarios and request scopes, preserves the persona's conversations and other
+clones' independent DMs, and drops the gateway's message cache. Pending DM
+history copies re-check that the clone is live before writing. This requires
+no mock reset. It does not purge durable DynamoDB chat records or upload blobs.
+
 **Both are memory-only.** A BFF restart — and under Tilt `tsx watch` restarts
 the BFF on every edit under `middleware/src` — drops every scope and clone: a
 scoped context then gets 410 on every call and a clone's cookie 401

@@ -32,6 +32,9 @@ import { errorHandler } from '../../lib/async-handler.js';
 import { createFixtureRegistry, defineFixture, LONG_TEXT_LENGTH, MANY_ROWS } from '../../mock/core/index.js';
 import { bumpSessionEpoch, getUser } from '../../providers/identity.js';
 import { mintSession, sessionMiddleware, setGrantsResolver, signSession, COOKIE_NAME } from '../../lib/session.js';
+import { socialChannelMessagesFixture } from '../../mock/social-channels.js';
+import { mirrorCloneDms } from '../../lib/clone-dms.js';
+import { createMemorySocialChatBackend, setSocialChatBackend } from '../../lib/social-chat.js';
 
 interface Row { id: string; name: string; email: string; slug: string }
 
@@ -247,6 +250,19 @@ describe('identity clones', () => {
     expect((await request(app()).get('/api/__mock/identity/clones')).body.clones).toEqual([]);
     expect((await request(app()).delete(`/api/__mock/identity/clone/${id}`)).status).toBe(404);
     expect((await request(app()).delete('/api/__mock/identity/clone/u-nobody')).status).toBe(404);
+  });
+
+  it('the clone delete route also removes mirrored DM history without changing the original', async () => {
+    const id = await clone('u-lena');
+    const chat = createMemorySocialChatBackend(); setSocialChatBackend(chat);
+    const original = JSON.stringify(socialChannelMessagesFixture.rows());
+    try {
+      await mirrorCloneDms(id);
+      expect((await chat.conversations.listForUser(id)).length).toBeGreaterThan(0);
+      expect((await request(app()).delete(`/api/__mock/identity/clone/${id}`)).status).toBe(200);
+      expect(await chat.conversations.listForUser(id)).toEqual([]);
+      expect(JSON.stringify(socialChannelMessagesFixture.rows())).toBe(original);
+    } finally { setSocialChatBackend(null); }
   });
 
   it('refuses a clone of a clone, an unknown persona, and runs without MOCK_AURORA', async () => {
