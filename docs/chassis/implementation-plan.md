@@ -174,6 +174,25 @@ Maintain principal revalidation and per-action authorization. Capability checks
 must never substitute for access control. The legacy factory gets a deliberate
 migration path and tests for its old supported inputs.
 
+## Module-format recommendation
+
+Recommend ESM for new application modules and eventual service migration, with
+CommonJS compatibility retained for shared packages while consumers require it.
+This is a recommendation, not authorization for a blanket repository conversion.
+Current Node images mix 20 and 22, TypeScript versions differ, and several package
+engine ranges still admit early Node 20 releases. Do not rely on newer
+`require(esm)` interoperability without first tightening and testing that matrix.
+
+Use tested conditional exports where dual entrypoints are necessary. Stateful
+libraries must share runtime state across import/require entrypoints; do not
+independently instantiate two registries, caches or owner managers. Browser-only
+entrypoints must remain isolated from server dependencies. Check packed artifacts
+in native Node ESM, native Node CommonJS and the actual Vite consumer.
+
+Primary references: [Node package exports](https://nodejs.org/api/packages.html#conditional-exports),
+[dual-package state hazards](https://github.com/nodejs/package-examples/blob/main/guide/07-dual-packages/README.md),
+and [TypeScript module configuration](https://www.typescriptlang.org/docs/handbook/modules/guides/choosing-compiler-options.html).
+
 ## Release and migration gates
 
 1. Capture C0 fixtures and the installed dependency graph; distinguish source,
