@@ -1,0 +1,223 @@
+# Chassis implementation plan
+
+Updated 2026-10-25 from the checked-out source. This refines the three approved
+refactors: durable delivery and worker ownership, owner-published contracts, and
+runtime capability/composition checks. These work items are planned, not shipped.
+The [execution ledger](../chassis-extensibility-goal.md) tracks completion;
+[dependency-inventory.json](dependency-inventory.json) records observed versions
+and pins. That inventory is not evidence of deployed versions.
+
+## Recommended path
+
+Finish the hangout regression release, then deliver one complete vertical slice:
+**a durable job survives a service restart, is owned by one current attempt, and
+reports honest readiness through the application and realtime modules.** Extract
+only the contracts needed by that slice before moving the rest. Establish the
+runtime capability vocabulary early so unsupported modes fail explicitly while
+queue storage is being repaired.
+
+Do not build another cluster framework. distributed-core already owns
+`FencedLease`, `LeaseGroup`, `ReadinessGate`, bounded Redis and `Cluster.create` /
+`createClusterFacade`. realtime-modules already has `defineFeature` and
+`attachRealtime`; service-runtime already has configuration, dependency probes,
+request context and ordered shutdown. Extend these existing owners.
+
+## Evidence changing the priority
+
+| Observed source | Consequence | Planned action |
+| --- | --- | --- |
+| message-queue `src/services/QueueInstance.ts`: delayed/dedup stores and consumer-group queues are in memory; durable lease claim failures do not block delivery | Persisted message bytes do not establish restart-safe delay, visibility, FIFO or group delivery | Replace the durable delivery path with transactional delivery state, then prove each guarantee separately |
+| message-queue `src/storage/LeaseStore.ts`: claims are keyed by a newly generated receipt, not by message identity | Two different receipts do not contend for the same message; receipt persistence alone cannot authorize multiple active queue processes | Claim message + delivery scope atomically; fence acknowledge/extend/transfer on the current attempt |
+| message-queue `src/storage/DurableBackedBatchedQueue.ts`: hydrates every retained body; QueueInstance reaches into private pending/inflight maps | Recovery can redeliver before an earlier visibility deadline; storage and scheduling are coupled | Make eligibility and lease state public delivery-store operations; remove private-map access from the durable path |
+| event-catalog `src/client/durable.ts`: poison messages go into a capped in-memory buffer, then source receipts are deleted | A process restart can lose the only retained failed message | Move dead-letter responsibility to the durable broker; never delete the source on the strength of a diagnostic buffer |
+| event-catalog publishes FIFO declarations without passing group/deduplication fields in `publishInner` | Declaring FIFO is insufficient to send valid FIFO messages | Add explicit publish options and contract tests; derive deduplication from stable event identity only where semantics permit |
+| aws-agentcore `middleware/src/lib/mq-client.ts`: independent HTTP client, warning-only configuration conflicts, no heartbeat operation in the local interface | Wire handling drifts and consumers cannot express the full lease lifecycle | Publish a lean client/types subpath from message-queue; keep app queue definitions in the app |
+| aws-agentcore `middleware/src/providers/agent-jobs.ts`: pull-side tokens fence results, push-side completion still permits the tokenless path | A late push-side completion can overwrite a newer attempt after recovery; the existing pull-side protection should be reused | Give push and pull executions an attempt token; conditional state changes and heartbeats in the authoritative job row |
+| aws-agentcore `middleware/src/lib/replica-fleet.ts`: recovery lock has a fixed TTL without renewal | A long recovery pass can outlive its mutex; membership does not itself fence writes | Reuse fenced ownership where appropriate, while retaining attempt checks at each durable job mutation |
+| realtime-modules `src/server/attach.ts`: duplicate wire keys are checked, manifest dependencies are not; factories create sequentially without rollback of earlier services on factory failure | Feature combinations and partial startup failure can leave inconsistent services | Preflight manifests/capabilities, preserve wire-name aliases, and clean up partially constructed features |
+| realtime-modules `src/server/factory.ts`: unknown feature manifests are silently skipped | Configuration can appear accepted while a feature is absent | Add strict composition validation; migrate the legacy factory through the same validation without breaking its existing API accidentally |
+| realtime-modules `src/client/hangout-rooms/types.ts`: saved layouts are absent; two application validators were introduced for the new plan | The new feature is not yet a complete reusable room contract | Publish the pure room-plan contract in realtime-modules and adopt it in both APIs and the UI |
+| Package manifests contain different distributed-core/service-runtime/event-catalog pins and an event-catalog optional MQ peer name unlike MQ's actual package name | Version labels alone cannot establish compatibility | Verify exports, installed resolution and wire behavior before pin consolidation; correct the package identity during client adoption |
+
+These are source findings, not claims that every failure has been reproduced.
+The hangout return race was reproduced live separately and has a focused fix in
+realtime-modules; that is part of the hangout release, not chassis completion.
+Older repository roadmaps mention retired Raft queue wiring and a separate
+pipeline-worker. Current code and the pipeline-runtime lifecycle take precedence.
+
+## Ownership and reusable boundaries
+
+| Owner | Owns | Consumer work |
+| --- | --- | --- |
+| distributed-core | Generic ownership, fencing, cluster and readiness primitives | Reuse existing exports; add a primitive only if a real consumer test exposes a missing operation |
+| service-runtime | Pure capability requirement evaluation; safe diagnostics; existing health/config/shutdown integration | Hosts declare requirements from their enabled features and deployment mode; no app names or business authorization in the library |
+| message-queue | Delivery state, atomic receipts, visibility, FIFO/delay/dedup, durable dead-letter transfer, consumer-group delivery, HTTP wire client | BFF memory fixture and event-catalog implement/consume the same public client contract |
+| event-catalog | Event declarations, envelope/schema compatibility, publish/subscribe policy | Use the MQ client; keep broker delivery separate from WS signals; remove destructive in-memory DLQ fallback |
+| realtime-modules | Realtime feature composition, store/authority requirements, room/meeting contracts and client hooks | Shared validation and capability reporting used by the BFF and gateway examples; keep browser entrypoints free of server dependencies |
+| pipeline-runtime | Pipeline types and existing in-process bridge wiring | Use the bridge's ready/shutdown result in host readiness; no executor service extraction |
+| platform-api | Business state, transactional outbox, authorization, scheduler integration and media-session metadata | Preserve repository transactions and scheduler fire claims; use new contracts and surface required dependency readiness |
+| aws-agentcore | Tenant policy, actual runtime selection, agent-job attempt ownership, application adapters | Remove duplicate transport/shape logic; preserve domain-specific projections and authorization |
+| live-video-streaming | Media ownership, channels, native SFU lifecycle | Compatibility consumer of fencing/event changes; no media topology redesign needed for this slice |
+| realtime-examples | Executable gateway integration examples | Follow the reusable module release; exercise one supported composition, not every historical bootstrap mode |
+
+managed-nosql-store is a future alternate DDB-wire adapter, not a prerequisite.
+The new delivery-store contract must first pass against DynamoDB Local; accepting
+the alternate store requires the same conditional-write/transaction failure tests.
+Do not introduce another database migration to fix the queue's current semantics.
+
+## Ordered work packages
+
+| ID | Deliverable and owner | Prerequisite | Exit evidence |
+| --- | --- | --- | --- |
+| C0 | Characterize current protocol and failure cases; isolated local DDB/Redis harness | Hangout release checkpoint | Reproducers for restart visibility, lost delayed send, stale ACK, poison-message loss, and stale job completion; no shared-data resets |
+| C1 | MQ client/types subpath with signed requests, deadlines, cancellation, visibility extension, explicit errors and strict ensure mode | C0 wire fixtures | BFF and event-catalog parity tests; browser/server import checks; old HTTP routes unchanged |
+| C2 | service-runtime capability evaluator plus host profile declarations | C0 inventory | All configuration errors collected before resources open; unsupported memory/multi-replica combinations rejected; no secret values in diagnostics |
+| C3 | Transactional durable message/attempt lifecycle in message-queue | C0, C1 | Two independent store clients cannot claim one live attempt; restart respects visibility; old ACK/extend rejected; durable write failure returns failure |
+| C4 | Durable delayed eligibility, FIFO ordering/dedup, retention and atomic DLQ transfer | C3 | Crash between each write boundary loses neither source nor destination; FIFO group order survives restart; dedup and receive counts survive restart |
+| C5 | Durable consumer-group subscriptions and delivery scopes | C3, C4 | Two groups each receive their own copy; same-group workers compete; last member leaving does not delete committed subscription backlog; generation-fenced offset commits |
+| C6 | Durable event subscriber lifecycle in event-catalog | C1, C4 | Broker-owned DLQ; slow-handler visibility renewal; abort/drain semantics; lost ACK redelivers without charging handler failure budget; FIFO publish wire tests |
+| C7 | Agent-job attempt lifecycle in the BFF | C0, C2 | Push/pull claims share fencing; cancel/requeue invalidates old completion; heartbeat expiry and two-dispatcher races tested against real local SQL |
+| C8 | Realtime composition validation and reusable room contracts | C2; room contract independent of C3–C7 | Missing/duplicate/cyclic features rejected; partial startup rollback and reverse shutdown; saved-plan CAS/limits parity in both APIs; existing imports work |
+| C9 | Host adoption and release compatibility matrix | C1–C8 | Platform outbox → MQ → consumer → durable result → realtime projection survives restart; mandatory dependency loss removes readiness; every owner release resolves from published artifacts |
+
+C2 can be implemented before C3 is finished. C7 and the room-contract part of C8
+are independent of queue storage. This is dependency independence, not a request
+to run parallel agents. For one implementer, prefer C0 → C1 → C2 → C3/C4 → C6,
+then C7/C8, then C5 and C9. Close the poison-message loss path as an early isolated
+fix after its reproducer; do not wait for the full storage rewrite.
+
+## Existing verification to extend
+
+Reuse `realtime-examples/examples/middleware-foundation/acceptance.py` and its
+UUID-owned Compose projects instead of inventing another integration stack. It
+already exercises MQ/store replacement, durable ACK failure/retry, signed
+requests, readiness and application recovery. Add a DynamoDB Local profile for
+transaction semantics, then run the same store contract against its existing
+managed-nosql-store profile. Build images serially; the example records a prior
+local VM exhaustion under simultaneous image builds.
+
+Extend these owner suites alongside the integration gate:
+
+- MQ `test/integration/health-ready-contract.test.ts`, `ddb-lease-store.test.ts`,
+  `ddb-store.test.ts`, `two-consumer-groups-fan-out.test.ts`, and
+  `src/services/__tests__/QueueInstance.fifo-properties.test.ts`.
+- event-catalog `tests/durable-failure-paths.test.ts`,
+  `durable-acknowledgement.test.ts`, `durable-request-headers.test.ts` and
+  `snapshot-consistency.test.ts`.
+- realtime-modules `test/server/attach.test.ts`,
+  `test/server/redis-router.lease.test.ts`, and meeting/call client tests.
+- BFF `middleware/src/lib/__tests__/mq-client.test.ts`, `memory-queue.test.ts`,
+  `replica-fleet.test.ts` and provider job tests. Existing SQL integration
+  fixtures are a harness pattern, not proof of job attempt fencing; add the
+  job-specific two-connection case.
+
+No chassis suite has been rerun as part of this planning pass. Existing test
+names identify extension points, not newly passing acceptance evidence.
+
+## Durable queue design constraints
+
+Use a delivery-state store owned by message-queue instead of adding more optional
+best-effort stores around the in-memory queue. Persist envelope identity, ordered
+sequence, eligibility/retention times, delivery scope, receive count, current
+receipt/attempt and lease deadline. Storage performs conditional transitions;
+in-memory lists may accelerate discovery but never authorize delivery or ACK.
+
+For DDB, the message/delivery key is the contention point. A successful claim and
+receipt index must be one transaction; ACK checks the current attempt and removes
+its durable state atomically. FIFO claim also checks the group head/ownership in
+the transaction. Dead-letter movement must atomically retain the destination
+before releasing the source. Dedup reservation and accepted enqueue must not split
+into a success-shaped reservation with no message. Expiration is a logical
+eligibility rule; background TTL deletion is not its clock.
+
+Preserve at-least-once delivery. Neither a receipt nor a fencing token guarantees
+exactly-once business effects: each consumer needs a durable idempotency boundary
+at its result write. Reuse platform-api's transactional outbox and SQL attempt
+checks. Record stable event/attempt identifiers in diagnostics without message
+bodies or tokens.
+
+Retain the existing REST shape and memory profile while introducing the durable
+implementation behind an explicit storage capability. Do not infer multi-process
+safety from a DDB endpoint. Keep one active MQ process until competing-process
+claim, FIFO, group and recovery tests all pass. Multi-owner readiness remains
+rejected until that acceptance is recorded.
+
+Group membership and subscription lifetime must be distinct. Persist the
+subscription and its start position; workers coming and going must not erase
+backlog. Define earliest/latest and unsubscribe behavior explicitly and preserve
+the legacy ephemeral group mode for existing callers during migration. Large
+fan-out must use a resumable durable expansion or per-group cursors, not an
+unbounded multi-write transaction or fire-and-forget copies.
+
+## Runtime profiles and composition
+
+Start with explicit profiles: local ephemeral, durable single-process, and durable
+replicated. Requirements come from enabled features, not from NODE_ENV alone.
+An ephemeral feature such as cursor presence may legitimately use memory in a
+durable application; chat history and accepted jobs cannot claim durability that
+way. Every supplied adapter declares capabilities such as persistence, atomic
+claim, conditional update and shared visibility. Verify declared capabilities in
+contract tests; a label is not proof.
+
+Keep static configuration validation separate from live dependency state. Use
+service-runtime's existing bounded checks for dependency probes and
+`ReadinessGate` for live ownership/listener state. A failed required capability
+blocks the affected runtime before accepting writes; an optional model feature
+may report degraded without disabling unrelated healthy routes. Preserve
+liveness as event-loop/process health. Preserve existing health response schemas
+where consumers depend on them; expose capability details additively.
+
+Extend `attachRealtime`, not a parallel bootstrap API: preflight the complete
+feature graph, account for serviceName aliases, construct in dependency order,
+register cleanup as each feature succeeds, and roll back on partial failure.
+Maintain principal revalidation and per-action authorization. Capability checks
+must never substitute for access control. The legacy factory gets a deliberate
+migration path and tests for its old supported inputs.
+
+## Release and migration gates
+
+1. Capture C0 fixtures and the installed dependency graph; distinguish source,
+   built artifact, installed artifact and running service fingerprints.
+2. Release additive owner APIs first. Keep temporary re-exports/adapters for the
+   old imports; do not require all applications to switch in one deployment.
+3. Install built owner artifacts in each consumer and run export/type/wire tests.
+   MQ currently ships ESM; event-catalog and realtime-modules ship CommonJS.
+   The client needs tested import/require entrypoints (or a compatible owner
+   artifact), not a root import that constructs queue services or starts timers.
+   Test packed artifacts with Node import and require, not only TypeScript.
+   Resolve service-runtime/DC compatibility without assuming every consumer needs
+   the newest version. Do not add a dependency cycle between event-catalog and MQ.
+4. Introduce new durable records with a schema version and a restartable migration.
+   Pause queue intake, drain or explicitly transfer live attempts, validate counts,
+   and retain old records until verified. No mixed old/new writers against changed
+   receipt semantics. Dry-run against an isolated copy before any shared migration.
+5. Rollback is safe only before incompatible state has been written, or through a
+   tested reverse migration. Merely downgrading a package is not a rollback plan.
+6. Run the vertical slice with two service processes, injected store/network
+   failures, worker cancellation, rolling replacement and stale completions.
+   Include native media/call regression checks for RT module releases.
+7. Commit owner source and built artifacts, tag where required, push, then update
+   consumer pins and record exact tested revisions. No cloud deploy is implied.
+
+## Acceptance matrix
+
+| Failure boundary | Required outcome |
+| --- | --- |
+| Accepted send then immediate process death | Message remains discoverable; accepted delay/retention semantics remain intact |
+| Claim then process death before response | One lease survives; message becomes eligible when its deadline expires |
+| Two processes receive the same message | One current receipt per delivery scope; competing worker gets another eligible message or empty result |
+| Old worker ACKs/extends after reassignment | Rejected without changing the current attempt |
+| Handler succeeds, ACK response is lost | Redelivery permitted; durable business result is not duplicated |
+| Poison handler; DLQ storage unavailable | Source retained and failure visible; diagnostic buffer is insufficient |
+| FIFO head is slow or its owner dies | No later message in that group passes it; other groups can progress |
+| Group worker exits or all members disconnect | Subscription backlog remains; rejoin resumes at the durable position |
+| Redis stalls beyond lease deadline | Owner fences immediately; readiness drops; stale business writes fail |
+| Required store absent / wrong capabilities | Startup or readiness rejects the enabled operation with an actionable reason |
+| Feature factory fails after earlier factories ran | Constructed services, listeners and timers are cleaned up |
+| Pipeline bootstrap returns null | Required pipeline capability is unavailable; unrelated optional features remain usable |
+| Browser consumer imports room contracts | No React hook execution, Node built-ins, DDB SDK or server side effects loaded |
+
+Capacity and cloud readiness are separate acceptance work. This plan does not
+claim AWS IVS validation, Redis Cluster support, cross-region queue safety, or a
+production throughput target. Choose and measure those profiles after correctness
+and release compatibility are established.
