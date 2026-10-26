@@ -292,3 +292,30 @@ contract checks pass. Fixtures removed only their owned processes/tables.
 are next, then C5 durable subscriptions and C9 host adoption. No shared stack
 restart/reset or cloud deployment occurred. Host consumer pins are unchanged.
 Evidence: [catalog-consumer-verification.json](chassis/catalog-consumer-verification.json).
+
+
+### 2026-10-26 — C7 fenced job attempts accepted locally
+
+Implementation `cf672ef5` unifies push, named and pull claims around the existing
+SQL attempt token and heartbeat. Late/missing-token writes are refused;
+cancellation/recovery revoke ownership. The dispatcher renews serially and
+aborts/suppresses late work when ownership is uncertain. Replica maintenance
+locks reuse the shipped `FencedLease`; long holds renew and displaced callbacks
+stop initiating mutations.
+
+The 27 ownership checks pass on Node 20.0.0 and 25.9.0, including nine actual
+PostgreSQL cases and nine Redis cases. All 554 middleware test files are accounted
+for across batches: 544 runnable suites passed, ten opt-in suites skipped in the
+default inventory. The ownership SQL and migration Dynamo tests were also run
+explicitly against isolated local stores. Type-checking and mock-floor source/
+snapshot checks pass. Two timing failures passed their focused rerun; the diff's
+explicit two-second assertion was unchanged. Jest reported a worker force-exit
+warning on that rerun. The detailed execution record preserves these limits:
+[job-attempt-verification.json](chassis/job-attempt-verification.json).
+
+The C8 implementation plan is now concrete. Four composition gaps reproduced
+against installed realtime-modules 0.138.0; see its C0 record and reusable
+reproducer. **C8 composition/room contracts, C5 subscriptions and C9 adoption
+remain unfinished.** No cloud rollout is authorized by this checkpoint. Before
+deployment, apply the existing job-fencing migration and drain old push workers;
+their unconditional SQL makes mixed-version execution unsafe.

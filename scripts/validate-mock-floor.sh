@@ -3,6 +3,7 @@
 # floor in middleware/src/mock/core/. Exit 0 only when every check passes.
 #
 #   --quick   skip the full jest run (still runs tsc and the floor's own suites)
+#   --static  source/snapshot checks only; requires separate build/test evidence
 #
 # What each section enforces, and what it cannot see, is written out in
 # docs/mock-floor.md § "The judge". Read that before loosening anything here.
@@ -11,7 +12,8 @@ cd "$(dirname "$0")/.."
 source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
 REPO="$PWD"
 MW="$REPO/middleware"
-QUICK=0; for a in "$@"; do case "$a" in --quick) QUICK=1;; esac; done
+QUICK=0; STATIC_ONLY=0
+for a in "$@"; do case "$a" in --quick) QUICK=1;; --static) STATIC_ONLY=1;; esac; done
 
 FAILS=()
 ok()   { printf '  ✓ %s\n' "$1"; }
@@ -101,6 +103,10 @@ strip_comments() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+if [ "$STATIC_ONLY" = 1 ]; then
+  section "builds — not run in --static mode"
+  note "Separate compilation and test evidence is required; this run cannot establish the full definition of done."
+else
 section "builds"
 if jg_mw_tsc >"$TMP/tsc.log" 2>&1; then ok "middleware tsc"; else
   fail "middleware: tsc errors"
@@ -118,6 +124,8 @@ else
     fail "middleware: src/mock jest failures"
     grep -E '^(FAIL|  ●)' "$TMP/jest.log" | head -8 | while read -r l; do note "$l"; done
   fi
+fi
+
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -519,7 +527,11 @@ grep -q "The judge" docs/mock-floor.md 2>/dev/null && ok "docs/mock-floor.md doc
 # ─────────────────────────────────────────────────────────────────────────────
 echo
 if [ "${#FAILS[@]}" = 0 ]; then
-  echo "ALL CHECKS PASS — the mock floor meets its definition of done."
+  if [ "$STATIC_ONLY" = 1 ]; then
+    echo "SOURCE/SNAPSHOT CHECKS PASS — compilation and tests were not run."
+  else
+    echo "ALL CHECKS PASS — the mock floor meets its definition of done."
+  fi
   exit 0
 fi
 printf '%d CHECK(S) FAILING:\n' "${#FAILS[@]}"

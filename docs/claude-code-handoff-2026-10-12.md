@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Chassis C6 owner releases — 2026-10-26”
+**Latest checkpoint:** read “Chassis C7 job attempts — 2026-10-26”
 at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -1022,3 +1022,28 @@ fix both callers and the underlying provider, not just dispatcher. Existing
 `claim_token`/`heartbeat_at` and pull-side routes provide the reusable starting
 point. Preserve schema fail-closed behavior, claim-token privacy and business
 result fencing. No cloud migration, shared reset/restart or host pin change in C6.
+
+
+## Chassis C7 job attempts — 2026-10-26
+
+Implementation `cf672ef5` is on `codex/chassis-attempts`; this validation checkpoint
+is merged to main after the checks. Push/pull/named claims now share tokens;
+starting, heartbeating and completing require live ownership. The dispatcher
+renews and aborts on loss; the simulated runner carries its token. The shared
+FencedLease replaces fixed-TTL maintenance locks. Existing host pins suffice
+for C7; owner release consolidation stays in C9.
+
+Evidence and rollout restrictions: `docs/chassis/job-attempt-verification.json`.
+27 focused ownership checks pass on Node 20/25, including real PostgreSQL and
+Redis. Across the complete middleware inventory, 544 runnable suites passed
+and ten opt-in suites were skipped by default. Compilation and mock-floor
+source/snapshot checks pass. See the record for the environment repair,
+timing reruns and Jest worker warning; this was not a single uninterrupted
+all-green full-suite command. Snapshot captures used only throwaway processes.
+
+Next: the exact C8 sequence is in `docs/chassis/implementation-plan.md`.
+`realtime-composition-c0.json` proves missing dependency, alias/identity,
+partial rollback and unknown legacy-feature gaps in the installed artifact.
+Share the room-plan contract and preserve CAS at each write. Then finish C5
+subscriptions and C9 end-to-end adoption/readiness. The original three-improvement
+goal is still unfinished. ESM remains opportunistic; no bulk migration.

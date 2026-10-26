@@ -718,6 +718,12 @@ Say it out loud so nobody over-trusts it:
 
 ## The judge
 
+`./scripts/validate-mock-floor.sh --static` runs only the source, fixture,
+route and snapshot checks. It explicitly omits compilation and tests and does
+not establish the full definition of done by itself. Use it when the same tree
+has separate successful `tsc` and complete middleware-test evidence; keep those
+results alongside the static report. Default and `--quick` behavior is unchanged.
+
 `scripts/validate-mock-floor.sh` is the only judge of the floor. It exits 0
 only when every check passes, and each failing line names the next task. The
 goal, the backlog and the rules that do not bend are in

@@ -40,14 +40,37 @@
     },
     "middlewareTypecheck": "pass",
     "fullMiddleware": {
-      "status": "running"
+      "status": "pass across recorded batches and focused reruns",
+      "filesInventoried": 554,
+      "suitesPassed": 544,
+      "suitesSkippedInDefaultRun": 10,
+      "defaultSkippedFiles": [
+        "src/lib/__tests__/call-chat-durable.integration.test.ts",
+        "src/lib/__tests__/call-chat-redis.integration.test.ts",
+        "src/lib/__tests__/call-features-cluster.integration.test.ts",
+        "src/lib/__tests__/call-pages-redis.integration.test.ts",
+        "src/lib/__tests__/migrate-work-comments-dynamo.test.ts",
+        "src/lib/__tests__/migrate-work-comments-postgres.test.ts",
+        "src/lib/access/__tests__/access-postgres.test.ts",
+        "src/providers/__tests__/agent-job-attempts-postgres.test.ts",
+        "src/providers/__tests__/recording-search-native-acceptance.test.ts",
+        "src/providers/__tests__/work-documents-postgres.test.ts"
+      ],
+      "execution": "436 suites passed with the normal typed Jest transform. Remaining files used isolated transpilation after separate successful tsc; 106 passed, 10 skipped, two timing failures. Both timing suites then passed with the original transform (31 tests); the test timeout was 30s, while the explicit 2s diff-performance assertion stayed unchanged.",
+      "environmentRepair": "Linked the already-installed infra dependencies into the isolated checkout. The affected migration suite then passed its two real DynamoDB Local tests.",
+      "note": "The final two-suite rerun exited 0 but Jest reported a worker force-exit warning; no ownership test or assertion was suppressed."
     },
     "mockFloor": {
-      "status": "pending"
+      "status": "source/snapshot checks pass",
+      "command": "./scripts/validate-mock-floor.sh --static",
+      "buildAndTests": "Separate tsc plus the complete middleware file inventory above; --static explicitly does not assert build/test success.",
+      "mockMints": 0,
+      "sharedReset": false
     },
     "wireCapture": {
       "isolation": "Owned non-watching process on an ephemeral loopback port, full mocks, in-memory realtime, no inherited service credentials",
-      "sharedReset": false
+      "sharedReset": false,
+      "coverageNote": "Harvesting selected a work item without a decision in the fresh fixture; two decision-write routes are honestly recorded as unresolved rather than retaining old response shapes."
     }
   },
   "proven": [
@@ -70,5 +93,6 @@
     "Attempt fencing is per job; fleet-wide box admission/capacity is not newly accepted.",
     "No cloud deployment, shared mock reset, Redis Cluster or production throughput acceptance.",
     "C8 composition/room contracts, C5 durable subscription lifetime and C9 host readiness/end-to-end result adoption are unfinished."
-  ]
+  ],
+  "implementationRevision": "cf672ef5d48148dfcc1c21cb63f8def8be25d0c0"
 }
