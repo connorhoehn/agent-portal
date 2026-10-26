@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Chassis C7 job attempts — 2026-10-26”
+**Latest checkpoint:** read “Chassis C8 realtime composition — 2026-10-26”
 at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -1047,3 +1047,35 @@ partial rollback and unknown legacy-feature gaps in the installed artifact.
 Share the room-plan contract and preserve CAS at each write. Then finish C5
 subscriptions and C9 end-to-end adoption/readiness. The original three-improvement
 goal is still unfinished. ESM remains opportunistic; no bulk migration.
+
+
+## Chassis C8 realtime composition — 2026-10-26
+
+Realtime-modules 0.139.0 is on main and tagged (`c002e5e`). The full graph is
+validated before startup; missing/duplicate/cyclic declarations and ambiguous
+aliases fail before resources open. Both server entry points share validation
+and reverse/idempotent lifecycle cleanup. `RealtimeStartupError.cleanup` exposes
+rollback completion. In-flight registration is drained and late authenticated
+upgrades are refused before services close. Existing direct feature-factory
+callers remain compatible.
+
+The pure room-plan contract replaces both host validators and the portal type
+copy. Room/update types now carry the plan; REST updates unwrap `{ room }`.
+Real DynamoDB and the registered mock both enforce one winning same-version
+save. The same malformed/boundary corpus runs in all three repositories.
+
+AgentCore consumes the tracked RT 0.139.0 artifact in middleware/portal, plus
+the already-verified MQ 0.4.0 packed client. Platform-api pins RT by full SHA (`9df9561`); all 450 runnable suites /
+6,334 tests pass with exit 0 after isolating background audit writes in five
+route fixtures. This is partial C9 pin adoption; other owner pins still need consolidation.
+A clean install with `--ignore-scripts` omitted generated files from git-only
+packages; use built tracked artifacts or allow their prepare step. No files in
+an installed dependency were patched. Vite must be restarted after host adoption.
+
+See `docs/chassis/realtime-composition-verification.json` for exact tests,
+artifact hashes, environment repairs and limitations. Owned capture processes
+and the DynamoDB container were removed; no shared mock reset or cloud deploy.
+Next is **C5 durable subscription lifetime/backlog and fenced offsets**, then
+**C9 complete owner pins, readiness and outbox-to-result/realtime restart proof**.
+The three-improvement goal remains unfinished; do not mark it complete or enable
+production durable profiles. ESM work stays deferred/opportunistic.

@@ -40,7 +40,7 @@ import {
   socialCallLogFixture, socialRecordingsFixture, socialRecordingTranscriptsFixture, socialRoomMembersFixture, socialRoomsFixture,
   socialTeamMembersFixture, socialTeamsFixture,
 } from '../../mock/social-platform.js';
-import { resetPlatformProbe, socialPlatformBackend, socialRecordingSharesFixture, standaloneRooms } from '../../providers/social-platform.js';
+import { resetPlatformProbe, socialPlatformBackend, socialRecordingSharesFixture, standaloneRooms, updateRoom } from '../../providers/social-platform.js';
 
 function appAs(sub: string, role: Role, tenant = 'social', name?: string) {
   const app = express();
@@ -158,6 +158,26 @@ describe('dev:mock backend (no platform-api)', () => {
       expect((await request(lena()).patch(path).send({ plan: { ...plan, expectedVersion: 1 } })).status).toBe(403);
       expect((await request(sana()).patch(path).send({ settings: { audioOnly: false } })).status).toBe(403);
     });
+    it('admits exactly one same-version save at the live mock mutation boundary', async () => {
+      const created = await request(mira()).post('/api/social/rooms').send({ name: 'Concurrent layout' });
+      const slug = created.body.room.slug;
+      const owner = { sub: 'u-mira' } as Session;
+      const plan = { expectedVersion: 0, mode: 'assigned', allowReturnToMain: true, rooms: [] };
+      // Direct concurrent provider calls deterministically both read before the
+      // first await resumes; HTTP scheduling alone does not guarantee overlap.
+      const results = await Promise.allSettled([
+        updateRoom(owner, slug, { plan, settings: { audioOnly: true } }),
+        updateRoom(owner, slug, { plan, settings: { recordingEnabled: true } }),
+      ]);
+      expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
+      expect(rejected.reason.status).toBe(409);
+      const persisted = socialRoomsFixture.rows().find(r => r.slug === slug)!;
+      const winner = results.find(r => r.status === 'fulfilled') as PromiseFulfilledResult<Awaited<ReturnType<typeof updateRoom>>>;
+      expect(persisted.plan?.version).toBe(1);
+      expect(persisted.settings).toEqual(winner.value.settings);
+    });
+
     it('rejects invalid settings and private assignments do not create access', async () => {
       for (const settings of [{ audioOnly: 'yes' }, { softCap: -1 }, { softCap: 1001 }, []]) {
         expect((await request(mira()).post('/api/social/rooms').send({ name: 'Invalid', settings })).status).toBe(400);

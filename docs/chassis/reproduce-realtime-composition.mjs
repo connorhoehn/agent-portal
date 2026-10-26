@@ -12,10 +12,10 @@ const manifest = name => ({ name, version: '1.0.0', dependencies: [] });
 (async () => {
   const checks = [];
   for (const [name, features] of [
-    ['missing dependency', [{ manifest: { ...manifest('dependent'), dependencies: ['missing'] }, create: () => ({ onMessage() {} }) }]],
+    ['missing dependency', [{ manifest: { ...manifest('dependent'), dependencies: ['missing'] }, create: () => ({ handleAction() {} }) }]],
     ['duplicate manifest identity with distinct wire aliases', [
-      { manifest: manifest('same'), serviceName: 'first', create: () => ({ onMessage() {} }) },
-      { manifest: manifest('same'), serviceName: 'second', create: () => ({ onMessage() {} }) },
+      { manifest: manifest('same'), serviceName: 'first', create: () => ({ handleAction() {} }) },
+      { manifest: manifest('same'), serviceName: 'second', create: () => ({ handleAction() {} }) },
     ]],
   ]) {
     const server = http.createServer();
@@ -28,13 +28,13 @@ const manifest = name => ({ name, version: '1.0.0', dependencies: [] });
   }
   let stopped = false;
   let threw = false;
-  const first = { onMessage() {}, shutdown() { stopped = true; } };
+  const first = { handleAction() {}, shutdown() { stopped = true; } };
   try {
     attachRealtime(http.createServer(), { features: [
       { manifest: manifest('first'), create: () => first },
       { manifest: manifest('broken'), create: () => { throw new Error('fixture startup failure'); } },
     ] });
-  } catch { threw = true; }
+  } catch (error) { threw = true; await error.cleanup; }
   await new Promise(resolve => setImmediate(resolve));
   checks.push({ name: 'partial construction rollback', expected: 'first service stopped', observed: { threw, stopped }, gap: !stopped });
   first.shutdown(); // Explicit fixture cleanup after measuring the missing rollback.
@@ -46,6 +46,6 @@ const manifest = name => ({ name, version: '1.0.0', dependencies: [] });
   checks.push({ name: 'unknown legacy feature', expected: 'reject', observed: legacyAccepted ? 'silently accepted' : 'rejected', gap: legacyAccepted });
   process.stdout.write(JSON.stringify({
     observedOn: '2026-10-26', packageVersion: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version,
-    scope: 'C8 pre-implementation characterization; no shared application mutation', checks,
+    scope: 'C8 composition characterization; no shared application mutation', checks,
   }, null, 2) + '\n');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -268,7 +268,11 @@ export async function updateRoom(session: Session, slug: string, input: { settin
   if (plan && current.visibility === 'private' && plan.rooms.some(r => r.members.some(id => id !== current.createdBy && !isRoomMember(current.roomId, id)))) {
     throw new ValidationError('Assigned people must already have access to this private hangout');
   }
-  const row = socialRoomsFixture.rows().find(r => r.roomId === current.roomId)!;
+  const row = socialRoomsFixture.rows().find(r => r.roomId === current.roomId && r.state === 'active');
+  if (!row) throw new NotFoundError('Hangout not available');
+  // getRoom returned a snapshot before an await. Compare the live version at
+  // the mutation boundary so simultaneous saves have one winner, like Dynamo.
+  if (plan && plan.version !== (row.plan?.version ?? 0) + 1) throw new AppError(409, 'This layout changed. Reload it before saving.');
   row.settings = { ...row.settings, ...input.settings };
   if (plan) row.plan = plan;
   row.lastActiveAt = clock.nowIso();

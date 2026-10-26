@@ -9,11 +9,11 @@ ledger, not a claim of production acceptance.
 The [source-backed implementation plan](chassis/implementation-plan.md) defines
 C0–C9, package ownership, migration gates and failure acceptance. The
 [dependency inventory](chassis/dependency-inventory.json) records the inspected
-pins. C0 is in progress; the first four queue delivery defects reproduced on
-DynamoDB Local. The catalog poison-source deletion is repaired and released; shared-client and
-capability work has started. C3/C4 transactional delivery, FIFO/dedup and atomic
-DLQ now pass store and separate-process HTTP acceptance. C5 subscriptions,
-downstream chassis adoption and the remaining C0–C9 gates are pending.
+pins. C3/C4 transactional delivery, FIFO/dedup and atomic DLQ pass local store
+and separate-process HTTP acceptance. C6 subscriber lifecycle, C7 fenced job
+attempts and C8 realtime composition/shared room contracts are verified locally
+and pushed. C5 durable subscriptions and C9 final host/readiness/end-to-end
+acceptance remain required. See the latest dated checkpoints below.
 The detailed plan refines the order below: extract the needed client contract
 and capability checks before the durable queue migration.
 
@@ -319,3 +319,24 @@ reproducer. **C8 composition/room contracts, C5 subscriptions and C9 adoption
 remain unfinished.** No cloud rollout is authorized by this checkpoint. Before
 deployment, apply the existing job-fencing migration and drain old push workers;
 their unconditional SQL makes mixed-version execution unsafe.
+
+
+## C8 realtime composition and room contracts — 2026-10-26
+
+Realtime-modules 0.139.0 (`c002e5e`) now validates feature graphs and explicit
+adapter capabilities before startup, resolves aliases in dependency order,
+rolls back partial construction, and disposes once in reverse order. Socket
+authentication/registration cannot outlive service teardown. The legacy factory
+shares the planner and lifecycle and refuses unknown features actionably.
+
+The pure `hangout-rooms` entry point owns room-plan input/types/limits and the
+REST client. Platform-api, the BFF and portal consume it. Both HTTP adapters
+run the same boundary corpus. Real DynamoDB competing writes and the BFF mock
+prove one winner for same-version saves; assignments remain separate from ACLs,
+attendance and IVS sessions. Artifact checks load the actual package in Node
+20/25 and a browser-like VM without React or Node imports.
+
+Evidence: [realtime-composition-verification.json](chassis/realtime-composition-verification.json).
+The original goal remains unfinished: **C5 subscriptions and C9 final adoption,
+readiness and restart/result acceptance remain**. Production durable profiles
+stay disabled; ESM migration remains opportunistic.

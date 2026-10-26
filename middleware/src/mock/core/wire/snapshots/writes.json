@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-26T15:34:17.785Z",
-  "serverHandlerSha": "d66db0ffa8a0ddb83325f4b58c9b5b82fea67ede7adcacc50acd43473800b82a",
-  "baseUrl": "http://127.0.0.1:59149",
+  "capturedAt": "2026-10-26T17:21:14.725Z",
+  "serverHandlerSha": "b432cb3d8a92f6412df20d6e1e24c0d517d320633ac1685b5be67111ca9116a2",
+  "baseUrl": "http://127.0.0.1:54700",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -149,7 +149,14 @@
       }
     },
     "DELETE /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-fs-e1-s2/decisions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 404,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "DELETE /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
@@ -538,7 +545,7 @@
       },
       "values": {
         "key": [
-          "ORG-FS-3"
+          "ORG-LLM-10"
         ],
         "status": [
           "done"
@@ -4613,7 +4620,25 @@
       }
     },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-fs-e1-s2/decisions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "escalatedAt": "null",
+        "id": "string",
+        "requiredRole": "null",
+        "status": "string",
+        "summary": "string",
+        "topic": "string",
+        "workItemId": "string",
+        "workItemTitle": "string"
+      },
+      "values": {
+        "status": [
+          "resolved"
+        ]
+      },
+      "sent": []
     },
     "PUT /api/graph/work-items/:id/documents/:documentId": {
       "refused": {

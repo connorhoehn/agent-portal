@@ -8,14 +8,8 @@
 // Names (§4.3): a room's call lobby is `social:room:<slug>`, a team channel's
 // conversation `social:team:<team>:<slug>`, a DM `social:dm:<sorted ids>`.
 
-export interface HangoutPlan {
-  version: number;
-  mode: 'assigned' | 'self-select';
-  allowReturnToMain: boolean;
-  rooms: Array<{ id: string; name: string; members: string[] }>;
-  updatedAt: string;
-  updatedBy: string;
-}
+import type { HangoutPlan } from '@connorhoehn/realtime-modules/hangout-rooms';
+export type { HangoutPlan, HangoutPlanInput } from '@connorhoehn/realtime-modules/hangout-rooms';
 
 export interface SocialRoom {
   orgId: string;
