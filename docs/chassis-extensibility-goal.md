@@ -340,3 +340,23 @@ Evidence: [realtime-composition-verification.json](chassis/realtime-composition-
 The original goal remains unfinished: **C5 subscriptions and C9 final adoption,
 readiness and restart/result acceptance remain**. Production durable profiles
 stay disabled; ESM migration remains opportunistic.
+
+
+## C5 append-history prerequisite — 2026-10-26
+
+MQ 0.4.1 (`aa981c5`) retains accepted eligibility in immutable append history.
+Before this change, ACK erased the only durable record of the original delay.
+The three regression cases failed before and pass after; all 44 actual store/
+process cases pass on Node 20/25, and all 130 runnable MQ suites / 1,541 tests pass.
+The owner now has a concrete storage/API/generation/migration/test plan in
+`docs/durable-subscription-plan.md`. Its subscription implementation is still
+required, followed by C9 host/readiness/restart acceptance. The original goal
+remains unfinished. See
+[subscription-prerequisite-verification.json](chassis/subscription-prerequisite-verification.json).
+
+
+The same release audit found obsolete generated modules surviving builds in the
+long-lived MQ checkout. Release 0.4.2 (`e02f726`) clears generated output before
+compiling. Fresh/main and Node 20/25 packages now match byte-for-byte; final
+packed-client checks pass on both runtimes. This closes that artifact drift
+without claiming the remaining C5/C9 work is done.

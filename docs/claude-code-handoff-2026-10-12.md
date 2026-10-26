@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Chassis C8 realtime composition — 2026-10-26”
+**Latest checkpoint:** read “Chassis C5 prerequisite — 2026-10-26”
 at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -1082,3 +1082,31 @@ Next is **C5 durable subscription lifetime/backlog and fenced offsets**, then
 **C9 complete owner pins, readiness and outbox-to-result/realtime restart proof**.
 The three-improvement goal remains unfinished; do not mark it complete or enable
 production durable profiles. ESM work stays deferred/opportunistic.
+
+
+## Chassis C5 prerequisite — 2026-10-26
+
+C8 is pushed: realtime-modules 0.139.0 `c002e5e`, platform-api `9df9561`,
+AgentCore implementation `58c0dffc` and adoption verification `71cf080e`.
+The actual main installs match the recorded artifacts. Portal/middleware were
+restarted through Tilt after repinning and return HTTP 200; failed forwarded
+platform/social resources predate this adoption and are not claimed healthy.
+
+MQ 0.4.1 `aa981c5` fixes the newly reproduced loss of original
+message eligibility from retained append history after ACK. All 130 runnable
+suites / 1,541 tests pass; 44 real DynamoDB/separate-process cases pass on Node
+20 and 25, as do packed-client checks. Owned test resources were removed.
+The release audit then found retired generated modules in the long-lived main
+checkout. MQ 0.4.2 `e02f726` is pushed/tagged with an ESM clean-build script.
+Fresh/main and Node 20/25 builds now produce identical artifacts; final packed
+checks pass on both runtimes. Runtime source is unchanged from the tested 0.4.1.
+Evidence: `docs/chassis/subscription-prerequisite-verification.json`.
+
+Continue with message-queue `docs/durable-subscription-plan.md`. C5 APIs/storage
+are **not implemented** by this prerequisite. The plan specifies independent
+subscription generations, transactional expansion cursors, scope-aware FIFO/DLQ,
+worker sessions, fenced offsets, explicit routes/client methods and failure tests.
+Older append rows without eligibility need explicit replay/migration handling.
+Then finish C9 owner pin consolidation, mandatory readiness and the durable
+outbox-to-result/realtime restart path. Do not enable durable production profiles
+or mark the three-improvement goal complete. ESM stays opportunistic.

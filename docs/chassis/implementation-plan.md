@@ -167,6 +167,24 @@ the legacy ephemeral group mode for existing callers during migration. Large
 fan-out must use a resumable durable expansion or per-group cursors, not an
 unbounded multi-write transaction or fire-and-forget copies.
 
+## C5 concrete continuation — 2026-10-26
+
+The owner sequence is now recorded in message-queue
+`docs/durable-subscription-plan.md`: extend storage contracts, make delivery/FIFO/
+DLQ keys scope-aware, implement bounded transactional materialization, add durable
+worker sessions and fenced offsets, expose explicit queue-scoped routes/client
+methods, then run real store/process and packed-consumer acceptance. Preserve the
+legacy ephemeral API as an explicit compatibility mode.
+
+A newly reproduced prerequisite is fixed in MQ 0.4.1 (`aa981c5`): append history
+now retains the original eligibility timestamp after the default delivery is
+ACKed. Three real-store regressions failed before the fix; 44 store/process cases
+pass on Node 20/25 afterward. Historical append records cannot prove their delay;
+earliest replay must inventory and handle that interval explicitly. Evidence:
+[subscription-prerequisite-verification.json](subscription-prerequisite-verification.json).
+This does **not** complete C5 or enable durable subscriptions/profiles. C9 remains
+required after the full subscription acceptance.
+
 ## Runtime profiles and composition
 
 Start with explicit profiles: local ephemeral, durable single-process, and durable

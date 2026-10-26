@@ -1,0 +1,80 @@
+{
+  "observedOn": "2026-10-26",
+  "goalStatus": "unfinished",
+  "scope": "C5 append-history prerequisite and concrete subscription plan; durable subscriptions and C9 still open",
+  "owner": {
+    "repository": "message-queue",
+    "revision": "e02f7263b6d975734c1fd39e235473d78d85e3e9",
+    "version": "0.4.2",
+    "tag": "v0.4.2",
+    "artifactIntegrity": "sha512-HWznp7FgKFtnpvqzZVqTi9J9YsTQzJDa6H4pCBWKnH/mQ1slDXqZLxzmuZbnUgAEF9uZ45Pj0u9vBSDU3UmI+Q==",
+    "eligibilityFixRevision": "aa981c58cdcf8d95683c9301559291adcc2da52d"
+  },
+  "regression": {
+    "before": {
+      "failedCases": 3,
+      "reason": "ACK removes default delivery; retained append record had no accepted eligibility timestamp"
+    },
+    "cases": [
+      "queue-default delay",
+      "explicit zero override",
+      "explicit nonzero override"
+    ],
+    "after": "accepted eligibility retained in the same transaction as append and default delivery"
+  },
+  "checks": {
+    "actualDynamoAndHttp": {
+      "storeTests": 34,
+      "httpTests": 10,
+      "runtimes": [
+        "25.9.0",
+        "20.0.0"
+      ],
+      "status": "pass",
+      "imageDigest": "amazon/dynamodb-local@sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab",
+      "isolation": "Owned loopback container, UUID tables and owned broker child processes; all removed"
+    },
+    "fullSuite": {
+      "passedSuites": 130,
+      "skippedSuites": 9,
+      "passedTests": 1541,
+      "skippedTests": 87,
+      "exitCode": 0,
+      "seconds": 201.69,
+      "command": "npm test -- --runInBand --json --outputFile=.scratch/chassis-c5-tests.json",
+      "sourceRevision": "aa981c58cdcf8d95683c9301559291adcc2da52d",
+      "note": "The subsequent 0.4.2 change affects the build script/package metadata only. Build and packed checks were repeated; runtime source is unchanged."
+    },
+    "build": "pass",
+    "changedSourceLint": "pass",
+    "packedClient": {
+      "runtimes": [
+        "25.9.0",
+        "20.0.0"
+      ],
+      "status": "pass",
+      "scope": "Actual packed MQ files; import/require identity, signing through pinned local dependency, isolated runtime imports and browser types. Dependency resolution uses an explicit symlink to the existing owner install; this is not a fresh network install."
+    },
+    "reproducibleBuild": {
+      "status": "pass",
+      "baseline": "Long-lived checkout retained 28 compiled files for deleted forwarding/cluster/priority-queue modules; packing differed from the fresh worktree.",
+      "fix": "ESM build script removes only package dist before invoking local tsc; script included in packed files.",
+      "verified": [
+        "Injected orphan output removed by build",
+        "Fresh worktree and long-lived main checkout have identical artifact integrity",
+        "Node 20 and 25 builds produce identical artifacts",
+        "Final packed client import/require and browser types pass on both runtimes"
+      ]
+    }
+  },
+  "remaining": [
+    "Implement queue-scoped subscriptions, bounded transactional expansion, independent delivery/FIFO/DLQ scopes, worker membership and generation-fenced offsets following message-queue/docs/durable-subscription-plan.md.",
+    "Old append rows lack exact accepted delay. Earliest replay needs inventory and explicit handling; no inferred immediate eligibility or automatic migration.",
+    "C9 full owner pin adoption, mandatory readiness and outbox-to-result/realtime restart proof."
+  ],
+  "limits": [
+    "No shared data migration/reset or cloud deploy. Production durable profiles and durable subscription APIs remain unavailable.",
+    "AgentCore still consumes MQ 0.4.0 client; this server-only prerequisite is not a new host deployment.",
+    "No production throughput, AWS durability or managed-nosql-store compatibility claim."
+  ]
+}
