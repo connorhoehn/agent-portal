@@ -25,6 +25,11 @@ CREATE INDEX IF NOT EXISTS assessment_team_members_user_idx ON assessment_team_m
 -- The seeded cast's memberships: exactly what the retired name match produced
 -- (Asha Nair is a contributor on Northstar Payments). The other leads and
 -- contributors the seed names have no app account.
-INSERT INTO assessment_team_members (team_id, user_id, role) VALUES
-  ('TEAM-001', 'u-asha', 'contributor')
+-- Guarded on both parents: no Aurora seed creates TEAM-001 (assessment teams
+-- arrive through the app), so on a fresh cluster a bare VALUES insert failed
+-- its foreign key and left the schema load INCOMPLETE.
+INSERT INTO assessment_team_members (team_id, user_id, role)
+SELECT 'TEAM-001', 'u-asha', 'contributor'
+WHERE EXISTS (SELECT 1 FROM assessment_teams WHERE id = 'TEAM-001')
+  AND EXISTS (SELECT 1 FROM app_users WHERE id = 'u-asha')
 ON CONFLICT (team_id, user_id) DO NOTHING;
