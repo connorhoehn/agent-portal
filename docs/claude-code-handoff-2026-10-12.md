@@ -1,5 +1,7 @@
 # Claude Code handoff — October 12, 2026
 
+**Superseded for continuation:** read [the October 26 handoff](claude-code-handoff-2026-10-26.md) first. This file retains earlier evidence and checkpoints.
+
 Start in `/Users/connorhoehn/Projects/aws-agentcore`. This is the current
 handoff for the tenant UI consistency and deterministic audit work. Older
 checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
