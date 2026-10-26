@@ -73,3 +73,29 @@ test('distinct nested commits retain their own artifacts and dependency edges', 
     assert.equal(result.packages['node_modules/public/node_modules/example'].integrity, integrity);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
+
+test('a tarball outside the build context is pointed at its exported copy', () => {
+  const f = fixture(); try {
+    const data = Buffer.from('tracked tarball bytes');
+    const integrity = 'sha512-' + createHash('sha512').update(data).digest('base64');
+    const outside = 'file:../portal/vendor/outside-1.0.0.tgz';
+    writeFileSync(resolve(f.vendor, 'outside-1.0.0.tgz'), data);
+    f.manifest[outside] = { resolved: outside, file: 'outside-1.0.0.tgz', integrity };
+    writeFileSync(resolve(f.vendor, 'manifest.json'), JSON.stringify({ [f.manifest.example.resolved]: f.manifest.example, [outside]: f.manifest[outside] }));
+    const pkg = JSON.parse(readFileSync(resolve(f.dir, 'package.json')));
+    pkg.dependencies.outside = outside;
+    f.lock.packages[''].dependencies.outside = outside;
+    f.lock.packages['node_modules/outside'] = { version: '1.0.0', resolved: outside, integrity };
+    writeFileSync(resolve(f.dir, 'package.json'), JSON.stringify(pkg));
+    writeFileSync(resolve(f.dir, 'package-lock.json'), JSON.stringify(f.lock));
+    f.run();
+    const result = JSON.parse(readFileSync(resolve(f.dir, 'package-lock.json')));
+    assert.equal(result.packages['node_modules/outside'].resolved, `file:${f.vendor}/outside-1.0.0.tgz`);
+    assert.equal(result.packages['node_modules/outside'].integrity, integrity);
+    assert.equal(JSON.parse(readFileSync(resolve(f.dir, 'package.json'))).dependencies.outside, `file:${f.vendor}/outside-1.0.0.tgz`);
+    writeFileSync(resolve(f.vendor, 'outside-1.0.0.tgz'), 'tampered');
+    writeFileSync(resolve(f.dir, 'package.json'), JSON.stringify(pkg));
+    writeFileSync(resolve(f.dir, 'package-lock.json'), JSON.stringify(f.lock));
+    assert.throws(f.run);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});

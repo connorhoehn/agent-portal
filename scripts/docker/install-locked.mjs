@@ -9,6 +9,25 @@ const pkg = JSON.parse(readFileSync('package.json'));
 const lock = JSON.parse(readFileSync('package-lock.json'));
 const libraries = JSON.parse(readFileSync(resolve(vendor, 'manifest.json')));
 for (const [packagePath, entry] of Object.entries(lock.packages)) {
+  // Tracked tarballs outside the build context (`file:../portal/vendor/…`),
+  // exported by prepare-libraries.mjs with their locked integrity.
+  if (entry.resolved?.startsWith('file:../') && entry.resolved.endsWith('.tgz')) {
+    const lib = libraries[entry.resolved];
+    if (!lib) throw new Error(`Missing tarball artifact for ${entry.resolved}; run node scripts/docker/prepare-libraries.mjs`);
+    const tar = resolve(vendor, lib.file);
+    const integrity = `sha512-${createHash('sha512').update(readFileSync(tar)).digest('base64')}`;
+    if (integrity !== lib.integrity || (entry.integrity && entry.integrity !== integrity)) {
+      throw new Error(`Corrupt tarball artifact for ${entry.resolved}`);
+    }
+    const name = packagePath.split('node_modules/').at(-1);
+    const locator = `file:${tar}`;
+    if (packagePath === `node_modules/${name}` && pkg.dependencies?.[name] === entry.resolved) {
+      pkg.dependencies[name] = locator;
+      lock.packages[''].dependencies[name] = locator;
+    }
+    entry.resolved = locator;
+    continue;
+  }
   if (!entry.resolved?.startsWith('git+')) continue;
   const name = packagePath.split('node_modules/').at(-1);
   const lib = libraries[entry.resolved] ?? libraries[name];
