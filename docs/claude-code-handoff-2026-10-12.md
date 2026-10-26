@@ -1070,7 +1070,10 @@ the already-verified MQ 0.4.0 packed client. Platform-api pins RT by full SHA (`
 route fixtures. This is partial C9 pin adoption; other owner pins still need consolidation.
 A clean install with `--ignore-scripts` omitted generated files from git-only
 packages; use built tracked artifacts or allow their prepare step. No files in
-an installed dependency were patched. Vite must be restarted after host adoption.
+an installed dependency were patched. Main installs now match the recorded
+artifacts; Vite cache was cleared and portal/middleware restarted through Tilt.
+Both HTTP checks return 200. The pre-existing failed forwarded/social-sim
+resources are not counted as healthy by this acceptance.
 
 See `docs/chassis/realtime-composition-verification.json` for exact tests,
 artifact hashes, environment repairs and limitations. Owned capture processes

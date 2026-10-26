@@ -189,5 +189,24 @@
     "Custom async cleanup/registration hooks must settle; composition does not manufacture completion for uncooperative user callbacks.",
     "No cloud deploy, AWS IVS capacity, production throughput, Redis Cluster or durable profile enablement.",
     "C5 durable subscription lifetime/backlog and fenced offsets, C9 pin consolidation and outbox-to-result/realtime restart acceptance remain."
-  ]
+  ],
+  "hostAdoption": {
+    "agentCoreRevision": "58c0dffcb165765a2b4be72405de8ffac6a152e7",
+    "platformRevision": "9df95617fe096646923ec537b9ef8cfbaec3d3b5",
+    "status": "Source and owner release pushed; main installs match recorded artifacts",
+    "localRuntime": {
+      "portalHttpStatus": 200,
+      "middlewareHttpStatus": 200,
+      "middlewareGateway": "on",
+      "middlewareStore": "memory",
+      "refreshed": [
+        "portal Vite cache cleared and Tilt portal restarted",
+        "Tilt middleware restarted after source watcher encountered old installed exports during repin"
+      ]
+    },
+    "limits": [
+      "Existing platform-api-forward, social-docs-forward and social-sim Tilt resources were already in error before adoption. C8 does not claim a healthy complete media stack.",
+      "No shared mock reset or cloud deploy; local restart was required to load the new owner export."
+    ]
+  }
 }
