@@ -93,7 +93,7 @@ S3_BUCKETS=(
 )
 
 for bucket in "${S3_BUCKETS[@]}"; do
-  if aws s3api head-bucket --bucket "$bucket" 2>/dev/null; then
+  if aws s3api head-bucket --bucket "$bucket" >/dev/null 2>&1; then
     # Ownership FIRST, by asking CloudFormation — the same authority check the
     # ECR section uses, for the same reason: this loop had none, so every
     # deploy pass after OrgIQ-Foundation came up deleted its (empty) buckets
