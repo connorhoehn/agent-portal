@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Chassis C3 HTTP checkpoint — 2026-10-26”
+**Latest checkpoint:** read “Chassis C4 and repository push checkpoint — 2026-10-26”
 at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -980,3 +980,24 @@ Next: C4 durable FIFO/dedup and atomic dead-letter transfer, following
 until complete policy/subscription acceptance. C6–C9 and migration are still
 open. No shared reset/restart or cloud deployment occurred in this checkpoint.
 ESM remains deferred/opportunistic.
+
+
+## Chassis C4 and repository push checkpoint — 2026-10-26
+
+MQ main is pushed through `2f562c20c522b3d697e9604ce26a1a86e9490fd4` (unreleased).
+C3/C4 transactional delivery now includes FIFO order, durable dedup and atomic
+automatic DLQ transfer. Full suite: 130 suites / 1,537 tests pass (84 gated tests
+skipped). Live DDB: 31 store + ten separate-process HTTP tests pass on Node
+20.0.0/25.9.0, as do packed client import/require/browser types. Runtime v0.5.1
+remains released/pushed and pinned by MQ; application client pins are unchanged.
+
+All 11 related repos and every local branch were audited for unpushed commits.
+There was no older unpublished branch work. The UI lockfile's only difference
+was stale root version metadata; it now matches the committed release exactly,
+and its original backup is preserved. The root documentation commit containing
+this checkpoint is the final push in this audit; repeat status if resuming later.
+
+Continue with the new C6 section in `docs/chassis/implementation-plan.md`, then
+C7/C8, C5 and C9. The original three-improvement goal is not complete. Durable
+profiles remain disabled until the remaining acceptance gates pass. No shared
+data reset/restart, cloud deployment or broad ESM conversion occurred.

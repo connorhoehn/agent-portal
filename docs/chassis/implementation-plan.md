@@ -126,10 +126,10 @@ acceptance evidence. C0 is in progress. The early C6 source-retention fix and C2
 released; the C1 owner client and BFF adoption are also released. Catalog adoption and
 full C1–C9 downstream acceptance remain open. MQ now rejects unsupported
 durable profiles before storage I/O. The v2 store is now connected to
-QueueService/server under explicit experimental selection: 14 real DDB store
-tests and eight separate-process signed HTTP tests pass, including restart,
-competing claims, stale receipts, outage and shutdown. C3's standard delivery
-lifecycle is verified locally. C4–C5, migration, scale and downstream acceptance
+QueueService/server under explicit experimental selection: 31 real DDB store
+tests and ten separate-process signed HTTP tests pass, including restart,
+competing claims, stale receipts, outage, shutdown, FIFO/dedup and atomic DLQ.
+C3/C4 delivery policy is verified locally. C5, migration, scale and downstream acceptance
 remain open; durable runtime profiles remain disabled. See the latest ledger.
 
 ## Durable queue design constraints
@@ -191,6 +191,57 @@ register cleanup as each feature succeeds, and roll back on partial failure.
 Maintain principal revalidation and per-action authorization. Capability checks
 must never substitute for access control. The legacy factory gets a deliberate
 migration path and tests for its old supported inputs.
+
+## Next consumer slice: C6 event-catalog
+
+Source review on 2026-10-26 narrows the next changes to
+`event-catalog/src/client/durable.ts`, `src/client/index.ts`, the public option
+types and their existing durable tests. The owner client already supports async
+request headers, strict `ensure`, POST receive, cancellation, deadlines and
+rotating receipt extension. Preserve those boundaries rather than add another
+HTTP retry/receipt implementation in the catalog.
+
+1. Install the actual `@connorhoehnslalom/message-queue/client` owner artifact;
+   replace the incorrectly named optional MQ peer with the dependency required
+   by the runtime import. Verify a packed catalog consumer without sibling paths.
+   Keep CommonJS compatibility; ESM remains opportunistic.
+2. Route ensure/send/receive/ACK/extension through that client. Keep event
+   validation, envelope construction, metrics and publish retry policy in the
+   catalog. If the metrics observer needs raw queue attributes beyond `inspect`,
+   add and test that query on the MQ client rather than duplicate its transport.
+   Bound health/attribute response bodies too; broker readiness must not be
+   inferred from process liveness.
+3. Make queue ensure strict. Today a failed DLQ ensure drops redrive policy and
+   a 409 is accepted. Preserve the full requested configuration across retries,
+   cache by configuration as well as name, and invalidate/recreate with that same
+   policy after a 404. Create FIFO DLQs with matching FIFO configuration and a
+   valid `base-dlq.fifo` name. Never silently downgrade durable policy.
+4. Carry declared `partitionKey(payload)` or an explicit publish group into FIFO
+   sends. Use the stable envelope ID as the default dedup identity for retries of
+   that envelope; expose explicit send options where callers need control.
+   Reject a FIFO publish lacking a group instead of inventing one. The existing
+   catalog currently forwards neither partition keys nor FIFO send fields.
+5. Track each acquired receipt as a lease, including messages waiting behind a
+   slow handler in a received batch. Renew before expiry, serialize renewal with
+   terminal ACK, and use the latest rotated receipt. Lease loss stops ACK and
+   signals cancellation to the handler; it must not increment the handler's
+   poison budget. Preserve the already-shipped rule that local diagnostics never
+   authorize source deletion. Broker delivery count and actual handler failures
+   are distinct observations.
+6. Separate stopping intake from draining accepted handlers. Keep synchronous
+   unsubscribe compatible, expose completion, and make disconnect wait within a
+   bounded budget. After cancellation/drain expiry, start no further handlers
+   from the leased batch and refuse late ACK. Handler cancellation is cooperative;
+   business writes still need their durable idempotency/fencing boundary.
+7. Reuse the UUID-owned DDB/child-process harness for a real catalog consumer:
+   slow handler plus competing subscriber, renewal/ACK race, cancelled batch,
+   lost ACK response, broker outage, poison movement, FIFO publish and policy
+   mismatch. Extend existing catalog unit/loopback suites and packed Node 20/25
+   import/require checks. Run its full suite and dist gate before release/push.
+
+C7 job fencing and C8 realtime composition/contracts follow this consumer slice;
+C5 durable subscriptions and C9 host adoption remain required by the original
+goal. This source review is a plan, not implemented catalog behavior.
 
 ## ESM migration debt — TD-ESM-01
 

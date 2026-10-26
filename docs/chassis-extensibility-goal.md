@@ -11,8 +11,8 @@ C0–C9, package ownership, migration gates and failure acceptance. The
 [dependency inventory](chassis/dependency-inventory.json) records the inspected
 pins. C0 is in progress; the first four queue delivery defects reproduced on
 DynamoDB Local. The catalog poison-source deletion is repaired and released; shared-client and
-capability work has started. C3's standard transactional delivery lifecycle now
-passes store and separate-process HTTP acceptance. C4–C5 queue policies,
+capability work has started. C3/C4 transactional delivery, FIFO/dedup and atomic
+DLQ now pass store and separate-process HTTP acceptance. C5 subscriptions,
 downstream chassis adoption and the remaining C0–C9 gates are pending.
 The detailed plan refines the order below: extract the needed client contract
 and capability checks before the durable queue migration.
@@ -226,3 +226,43 @@ Continue with C4 using the linked-group transaction design in the owner's
 `docs/delivery-state-v2.md`. No shared reset/restart or cloud deployment occurred
 in this checkpoint. Evidence is in `chassis/delivery-store-verification.json`;
 local logs use `.scratch/chassis-delivery-v2-` and `chassis-runtime-` prefixes.
+
+
+### 2026-10-26 — C4 policy acceptance and repository push audit
+
+Message-queue policy implementation `eb51d18fa232e1a5ee9e05b50d2cd67dcd8a1e36`
+and persisted-policy correction `2f562c20c522b3d697e9604ce26a1a86e9490fd4` are
+pushed to main. These remain unreleased server checkpoints; v0.3.0 and consumer
+pins are unchanged. FIFO group head/tail progression, five-minute queue/group
+deduplication, retained accepted responses, expiry unlinking and automatic DLQ
+movement now use transactional storage. Source removal, destination acceptance,
+FIFO progression and transfer identity commit together. Missing/replaced targets
+retain the source; cyclic or mismatched policies are rejected. Caller queue
+handles identify a generation but cannot override persisted dedup policy.
+
+Verification at the final correction: **130 suites / 1,537 tests pass**, nine
+gated suites / 84 tests skipped. **31 DDB store + ten separate-process HTTP
+cases pass on Node 25.9.0 and 20.0.0**; combined with API validation, the focused
+run passes 76 tests. Build, changed-file lint, diff checks and packed-client
+import/require/browser-type verification pass. Two added regressions failed
+before their fixes: broker DLQ provenance could strand a size-limit body, and a
+caller-supplied queue handle could change dedup scope. All fixtures removed only
+their own UUID tables and processes. No shared reset/restart or cloud action.
+
+The user explicitly requested every related repository be pushed. Audit scope:
+aws-agentcore, message-queue, service-runtime, event-catalog, realtime-modules,
+distributed-core, pipeline-runtime, platform-api, live-video-streaming,
+realtime-examples and ui-components. All local branch commits were checked
+against origin, not only the checked-out branch. There was no older unpushed
+work. The only pre-existing worktree difference was two stale UI lockfile version
+fields (2.457.1 versus published 2.481.2). They were aligned to the manifest;
+the result is byte-identical to the committed release, with the original full
+backup retained at `.scratch/ui-components-original-lock-before-hangouts.json`.
+No dependency entries changed and no new UI release was made.
+
+**The three-improvement goal remains unfinished.** Next is C6 catalog consumer
+adoption, then C7/C8, C5 and C9 as planned. The implementation plan now records
+the concrete C6 path: shared client, strict full-policy ensure, FIFO publish
+fields, lease renewal for all acquired batch messages, serialized ACK/renewal,
+and bounded drain. Durable profiles remain disabled. Legacy operator replay/
+redrive, subscriptions, migration and production scale are not newly accepted.
