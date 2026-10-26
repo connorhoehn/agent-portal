@@ -1928,7 +1928,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:174"
+      "source": "src/index.ts:203"
     },
     {
       "method": "GET",
@@ -3973,7 +3973,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:173"
+      "source": "src/index.ts:202"
     },
     {
       "method": "DELETE",
@@ -4054,6 +4054,11 @@
       "method": "POST",
       "path": "/internal/work-graph/compute-capabilities/use",
       "source": "src/routes/internal-work-graph-compute.ts:171"
+    },
+    {
+      "method": "GET",
+      "path": "/livez",
+      "source": "src/index.ts:204"
     }
   ],
   "unresolved": []

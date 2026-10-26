@@ -87,7 +87,11 @@ import { startMockBotRunner } from './lib/mock-bot-runner.js';
 import { runAllSweeps } from './providers/org-sweeps.js';
 import { readAwsCredentialsStatus } from './lib/aws-creds-probe.js';
 import { readDatastoreStatus } from './lib/datastore-probe.js';
-import { createHealthHandler } from './lib/health-handler.js';
+import { createHealthHandler, livezHandler } from './lib/health-handler.js';
+import { createHealthProbe } from './lib/health-probe.js';
+import { resolveRuntimeProfile, validateRuntimeProfile } from './lib/runtime-profile.js';
+import { hasPullSideColumns } from './providers/agent-jobs.js';
+import { inProcessQueue, pipelineQueue } from './lib/pipeline-queue-transport.js';
 import { promptHistoryRouter } from './routes/prompt-history.js';
 import { workItemsRouter } from './routes/work-items.js';
 import { workDocumentsRouter } from './routes/work-documents.js';
@@ -167,11 +171,37 @@ app.use(sessionMiddleware());
 // the /api/observability block can share it.
 const viewObs = [requireTenant('orgiq'), requireAction('ViewObservability')];
 
+// Runtime profile (lib/runtime-profile.ts): validated before anything listens.
+const runtimeProfile = resolveRuntimeProfile({ profile: process.env['ORGIQ_RUNTIME_PROFILE'],
+  mock: config.mock, inProcessQueue: inProcessQueue() });
+{
+  const problems = validateRuntimeProfile(runtimeProfile);
+  if (problems.length) {
+    console.error(`[runtime-profile] ${runtimeProfile.profile} requirements failed:\n  - ${problems.join('\n  - ')}`);
+    process.exit(2);
+  }
+  console.log(`[runtime-profile] ${runtimeProfile.profile}`);
+}
+// The column probe caches its answer for the process lifetime (applying the
+// migration is a deploy step with a restart), so a long TTL here only bounds
+// how often a failed information_schema read is retried.
+const jobSchemaProbe = createHealthProbe(300_000, async () => (await hasPullSideColumns()) ? { ok: true }
+  : { ok: false, error: 'agent_jobs lacks claim_token/heartbeat_at: apply schema/local_compute_worker_schema.sql, drain old push executors, then restart' },
+() => 'job schema probe failed');
+const queueProbe = inProcessQueue() ? null : createHealthProbe(15_000, async () => {
+  const queue = pipelineQueue() as { ready?: (o?: { timeoutMs?: number }) => Promise<void> };
+  if (!queue.ready) return { ok: false, error: 'queue transport has no readiness probe' };
+  await queue.ready({ timeoutMs: 2000 });
+  return { ok: true };
+}, (error) => `message-queue not ready: ${error instanceof Error ? error.message.split('\n')[0]?.slice(0, 120) : 'unknown'}`);
 const healthHandler = createHealthHandler({ readRealtime: () => realtimeGatewayStatus(),
   readAws: () => Object.values(config.mock).every(Boolean) ? { ok: true } : readAwsCredentialsStatus(),
-  readDatastore: readDatastoreStatus, mocks: config.mock, region: config.region });
+  readDatastore: readDatastoreStatus, readJobSchema: jobSchemaProbe.snapshot,
+  ...(queueProbe ? { readQueue: queueProbe.snapshot } : {}),
+  profile: runtimeProfile.profile, mocks: config.mock, region: config.region });
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
+app.get('/livez', livezHandler);
 
 // Dev-only mock control plane (/api/__mock/*). Mounted at the root so it can
 // stamp X-Mock-Scenario on every response; 404s every route, and stamps
