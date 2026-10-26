@@ -12,8 +12,8 @@ C0–C9, package ownership, migration gates and failure acceptance. The
 pins. C3/C4 transactional delivery, FIFO/dedup and atomic DLQ pass local store
 and separate-process HTTP acceptance. C6 subscriber lifecycle, C7 fenced job
 attempts and C8 realtime composition/shared room contracts are verified locally
-and pushed. C5 durable subscriptions and C9 final host/readiness/end-to-end
-acceptance remain required. See the latest dated checkpoints below.
+and pushed. C5 durable subscriptions now pass local acceptance in MQ 0.5.0.
+C9 final host/readiness/end-to-end acceptance remains required. See the latest dated checkpoints below.
 The detailed plan refines the order below: extract the needed client contract
 and capability checks before the durable queue migration.
 
@@ -44,11 +44,11 @@ and capability checks before the durable queue migration.
 | Work | Owners / consumers | Status | Required evidence |
 | --- | --- | --- | --- |
 | Hangout baseline | ui-components, realtime-modules, platform-api, aws-agentcore | Targeted release verified | Real two-person media walk and 28 layout states pass; backend authorization checks pass. Broader tenant journey freshness still needs renewal (see product-readiness record) |
-| C0 failure characterization | message-queue; remaining catalog/job harnesses | In progress | Four queue defects reproduced against an owned local DDB table; positive send/ACK control passed; cleanup confirmed; remaining scope in the verification record |
-| Durable queue and worker lifecycle | message-queue, distributed-core; platform-api, realtime-modules | In progress | Restart and competing-owner tests against actual durable stores; duplicate/stale completion rejection |
+| C0 failure characterization | message-queue, event-catalog, AgentCore | Locally verified | Queue failure reproductions plus catalog poison/ACK and job-attempt ownership records are linked in the dated checkpoints |
+| Durable queue and worker lifecycle | message-queue, distributed-core; platform-api, realtime-modules | Owner acceptance passed; C9 adoption pending | C3–C5 queue and C7 job ownership pass actual-store/process checks; final host path remains |
 | Owner contracts and clients | message-queue, event-catalog, pipeline-runtime, platform-api; realtime-modules, aws-agentcore | In progress | Consumer typechecks; wire fixtures; no duplicate canonical validators/interfaces |
 | Runtime composition | service-runtime, distributed-core; realtime-modules, platform-api, aws-agentcore | Library released; host adoption pending | Supported matrix passes; unsafe combinations rejected; ownership loss removes readiness |
-| Downstream releases | All changed owners and consumers | Planned | Built artifacts match source; pins resolve; release checks and pushed commits recorded |
+| Downstream releases | All changed owners and consumers | Owner releases pushed; C9 consolidation pending | Built owner artifacts match source; final consumer pin/result/readiness matrix remains |
 
 ## Boundaries
 
@@ -360,3 +360,28 @@ long-lived MQ checkout. Release 0.4.2 (`e02f726`) clears generated output before
 compiling. Fresh/main and Node 20/25 packages now match byte-for-byte; final
 packed-client checks pass on both runtimes. This closes that artifact drift
 without claiming the remaining C5/C9 work is done.
+
+
+## C5 durable subscriptions — 2026-10-26
+
+MQ **0.5.0 / `316c35f`** is committed, tagged and pushed. It adds independent
+durable subscription generations, bounded transactional history materialization,
+scope-local FIFO/DLQ, worker sessions and fenced offsets. The final member leaving
+preserves backlog. Offset observations cannot acknowledge or skip delivery.
+Explicit signed client/API methods preserve the default and legacy boundaries.
+ACK and renewal now enforce queue receive permissions as well.
+
+The body-free history inventory is read-only, bounded and generation-pinned. It
+reports missing original eligibility and incomplete scans without importing or
+resetting data. Legacy replay fails explicitly. Seventy-six actual DynamoDB and
+separate-process cases pass on Node 20.0.0 and 25.9.0. The full default inventory
+passes 131 suites / 1,557 tests (10 suites / 119 tests remain opt-in/skipped);
+13 API boundary and 28 client cases pass. Packed client/type checks pass and
+Node20/Node25 plus main/worktree artifact hashes match. Owned resources were removed.
+Evidence: [subscription-verification.json](chassis/subscription-verification.json).
+
+The three-improvement goal remains unfinished. **C9** must adopt the owner
+artifacts, add mandatory live readiness/schema/pipeline checks and prove the
+outbox → MQ → durable result → realtime projection path across restart. Source
+inspection and the optimized C9 order are recorded in the implementation plan.
+Production profiles remain gated; no shared data migration or cloud deploy ran.

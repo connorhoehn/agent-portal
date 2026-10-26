@@ -353,9 +353,60 @@ compatibility boundaries:
    Node builtin or server SDK. Run the existing attach matrix and call/meeting
    regressions before tagging the owner release and updating consumer pins.
 
-C5 subscription lifetime/backlog and C9 host/result/readiness integration remain
-separate required slices. Do not enable a durable production profile merely
+C5 subscription lifetime/backlog is now locally accepted in MQ 0.5.0; C9
+host/result/readiness integration remains required. Do not enable a durable production profile merely
 because C7 or C8 passes its local contract.
+
+## C5 implementation — durable subscription scopes
+
+Completed locally in message-queue 0.5.0 (`316c35f`), with the exact artifact and
+acceptance record in [subscription-verification.json](subscription-verification.json).
+Subscription progress, FIFO links and copied delivery metadata commit together.
+Worker membership does not own backlog; random generations fence unsubscribe,
+receipts and offsets. The explicit client/routes and read-only history inventory
+are released. All 76 actual store/process cases pass on Node20/25. Production
+profiles and shared migration remain gated on C9. Older history without eligibility
+fails replay; inventory reports it without guessing or changing data.
+
+## C9 execution path — source inspection, 2026-10-26
+
+C9 is the remaining implementation slice. Preserve tested owner boundaries and
+make the end-to-end proof use actual consumer code. The current findings are:
+
+| Boundary | Current source finding | Required adoption |
+| --- | --- | --- |
+| event-catalog `src/client/durable.ts`, `src/client/index.ts` | Durable polling uses the default scope; `SubscribeOptions` cannot carry a C5 handle | Add explicit typed subscription-handle forwarding. Subscription lifetime remains operator/host-owned; stale handles must never fall back or silently reset. Keep existing default consumers compatible. |
+| platform-api `src/routes/health.ts`, `src/index.ts` | Health probes DDB/Redis/build/model; catalog startup is non-fatal and pipeline `ready` can resolve null without affecting health | Declare enabled mandatory capabilities before startup; reflect required MQ/catalog/pipeline readiness and draining in dependency health. Preserve the process-only liveness route and optional model degradation. |
+| AgentCore `middleware/src/lib/health-handler.ts` | Router lease loss returns 503; failed/stale AWS/datastore snapshots still return HTTP 200 | Apply the selected host profile to mandatory stores, job-attempt schema and queue readiness. Preserve explicit mock/local profiles and existing lease-loss behavior. |
+| platform-api outbox/projection and realtime-examples gateway | Existing outbox publisher/drainer, work-graph commit path and pipeline event relay already own business writes and projections | Reuse their durable/idempotent mutations; do not create a second generic executor or use ephemeral relay success as durable-result proof. |
+| realtime-examples `examples/middleware-foundation/acceptance.py` / `compose.yml` | Existing UUID-owned Compose harness assumes the legacy `ddb` broker, managed-nosql store and successful WS upgrade | Extend this harness for `ddb-v2` using the actual DynamoDB fixture first, separate durable polling from WS signals, and exercise the required host path. Alternative DynamoDB-wire support needs the same store contract proof before acceptance. |
+| Owner artifact graph | Platform/catalog/AgentCore pins still predate some C6/C5 owners; realtime-modules already owns composition/room contracts | Install packed or published exact owner revisions and record resolved artifacts, exports and running fingerprints. Preserve intentional compatible pins where a consumer does not need a newer API; no blanket dependency churn. |
+
+Implement in this order:
+
+1. Release additive catalog subscription selection with queue-owned handles and
+   tests proving independent copies and stale-handle refusal. Provision lifetime
+   explicitly; disconnect only drains workers, never removes subscriptions.
+2. Consolidate the required MQ/catalog/service-runtime artifacts in platform-api,
+   AgentCore and the executable realtime example. Realtime modules stays transport
+   agnostic; use its existing feature/capability contracts, not an MQ SDK in browser
+   code. Verify packed imports/types before changing running consumers.
+3. Add static host profile declarations and mandatory live probes, including job
+   schema and pipeline bootstrap. Exercise missing/late/lost dependencies and
+   draining; only optional capabilities may report healthy degradation.
+4. Run the existing owned acceptance harness through transactional outbox → broker
+   → consumer → idempotent durable result → realtime projection. Kill/recreate
+   broker and consumer, lose ACK after result commit, pause/fail stores and reject
+   stale completion. Verify authoritative result counts after each boundary.
+5. Enable only the profiles proved by that matrix; record unsupported combinations
+   explicitly. Rebuild/restart local consumers after artifact changes, verify real
+   runtime fingerprints and call/meeting regressions for any RT owner changes,
+   then push every changed repository and reconcile the final completion ledger.
+
+No shared import is implied. A migration needs its own paused-writer inventory,
+count verification and recovery procedure; new isolated tables are the acceptance
+fixture. Cloud capacity, cross-region operation and a broad ESM conversion remain
+outside C0–C9.
 
 ## ESM migration debt — TD-ESM-01
 

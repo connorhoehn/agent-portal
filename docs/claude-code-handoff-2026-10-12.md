@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Chassis C5 prerequisite — 2026-10-26”
+**Latest checkpoint:** read “Chassis C5 subscriptions — 2026-10-26”
 at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -1110,3 +1110,28 @@ Older append rows without eligibility need explicit replay/migration handling.
 Then finish C9 owner pin consolidation, mandatory readiness and the durable
 outbox-to-result/realtime restart path. Do not enable durable production profiles
 or mark the three-improvement goal complete. ESM stays opportunistic.
+
+
+## Chassis C5 subscriptions — 2026-10-26
+
+MQ **0.5.0 `316c35f3694f8110ae7bd0fbb3097881cddc849b`** is pushed on main and
+`codex/chassis-subscriptions`, tagged `v0.5.0`. C5 now implements independent
+subscription generations, atomic bounded expansion, durable FIFO/DLQ scopes,
+worker membership and generation-fenced offsets. Last-member exit does not
+remove backlog; offsets never ACK. The explicit HTTP/client API enforces queue
+permissions, including ACK/renew, and refuses fallback to default or memory.
+The shipped read-only inventory detects incompatible old history without writes.
+
+Validation: 131 default suites / 1,557 tests pass, with 10 suites / 119 tests
+skipped/opt-in. Separately, all 76 actual DDB/process cases pass on Node20/25.
+Packed client/type checks pass on both runtimes; main/worktree and Node20/25
+artifacts match. Owned test tables/processes/container were removed. Record:
+`docs/chassis/subscription-verification.json`. The 0.4.2 prerequisite below/above
+is historical, not the current implementation status.
+
+Continue **C9**, not another queue rewrite. The implementation plan's C9 source
+inspection identifies explicit catalog scope adoption, host dependency readiness
+and the existing owned Compose acceptance harness as the next steps. Existing
+consumer installs are unchanged by this owner release. Do not enable production
+durable profiles, migrate/reset shared data or mark the overall goal complete
+before the host/result/readiness proof. ESM remains opportunistic.
