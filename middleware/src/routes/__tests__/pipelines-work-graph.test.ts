@@ -25,7 +25,7 @@ import { clock, freezeClock, unfreezeClock } from '../../mock/core/index.js';
 import { stopWorkGraphLiveHints } from '../../lib/work-graph/live.js';
 import { loadProjection } from '../../providers/pipeline-runs.js';
 import { listApprovals } from '../../providers/pipeline-definitions.js';
-import { enqueueJob, completeJob } from '../../providers/agent-jobs.js';
+import { claimJob, enqueueJob, completeJob } from '../../providers/agent-jobs.js';
 import { agentJobs } from '../../mock/agent-jobs.js';
 import { intervalOverlapsWorkDay } from '../../lib/work-graph/day-overlap.js';
 
@@ -149,7 +149,8 @@ describe('authz matrix (fresh per request)', () => {
 
   it('an approval on a projected run hangs off its step and is withheld from an author on the run page too', async () => {
     const job = (await enqueueJob({ kind: 'work', title: 'Review the plan', payload: { requiresReview: true }, createdBy: 'ines' }))!;
-    await completeJob(job.id, { status: 'awaiting_review' });
+    const claim = await claimJob(job.id, 'test-box', 'test-session');
+    await completeJob(job.id, { claimToken: claim!.claimToken, status: 'awaiting_review' });
     const approvals = (await listApprovals()).approvals;
     const mine = approvals.find(a => a.runId === `job:${job.id}`)!;
     expect(mine).toBeDefined();

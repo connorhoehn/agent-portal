@@ -23,7 +23,7 @@
 // (lane E); the sweeper reads that as "nothing to sweep here".
 
 import { AppError } from './async-handler.js';
-import { replicaFleet, type ReplicaFleet } from './replica-fleet.js';
+import { replicaFleet, type ReplicaFleet, type ReplicaLock } from './replica-fleet.js';
 import { eligibility, MAX_ESCALATION_LEVEL, nextEscalationLevel } from './access/chain.js';
 import { isOpen } from './access/status.js';
 import { accessNow, casStep, listCatalog, listRequests, listSteps, loadDirectory, type AccessRequestRow, type AccessStepRow } from '../providers/access.js';
@@ -74,7 +74,7 @@ export interface EscalationSweepResult {
   failed: Array<{ requestId: string; error: string }>;
 }
 
-async function sweepOnce(): Promise<Omit<EscalationSweepResult, 'ran'>> {
+async function sweepOnce(lease?: ReplicaLock): Promise<Omit<EscalationSweepResult, 'ran'>> {
   const now = accessNow();
   const sla = escalationSlaMs();
   const due = dueSteps(listRequests(), listSteps(), now, sla);
@@ -83,6 +83,7 @@ async function sweepOnce(): Promise<Omit<EscalationSweepResult, 'ran'>> {
   const dir = await loadDirectory();
   const catalog = new Map(listCatalog().map((i) => [i.id, i]));
   for (const { request, step } of due) {
+    lease?.assertLive();
     try {
       const item = catalog.get(request.itemId);
       if (!item) continue;

@@ -51,9 +51,9 @@ beforeEach(() => { _resetMockQueue(); });
 
 async function runToAwaitingReview(title: string, result: Record<string, unknown>): Promise<string> {
   const job = await enqueueJob({ kind: 'devbox:task', title });
-  await claimJob(job!.id, 'box-a', 'sess-a');
-  await markRunning(job!.id);
-  await completeJob(job!.id, { status: 'awaiting_review', result });
+  const claim = await claimJob(job!.id, 'box-a', 'sess-a');
+  await markRunning(job!.id, claim!.claimToken);
+  await completeJob(job!.id, { claimToken: claim!.claimToken, status: 'awaiting_review', result });
   return job!.id;
 }
 

@@ -1482,10 +1482,15 @@ async function simulateMarketplaceDispatch(input: {
   }
 
   const startedMs = Date.now();
+  let claimToken: string | undefined;
   const progression = [
-    async () => { await claimJob(job.id, box.id, sessionId); },
     async () => {
-      await markRunning(job.id);
+      const claim = await claimJob(job.id, box.id, sessionId);
+      if (!claim) throw new Error('Simulated job claim is no longer available');
+      claimToken = claim.claimToken;
+    },
+    async () => {
+      if (!await markRunning(job.id, claimToken)) throw new Error('Simulated job lost its claim');
       appendEvent(box.id, {
         type: 'job_started', jobId: job.id, title: job.title, kind: job.kind,
         ts: new Date().toISOString(),
@@ -1534,7 +1539,7 @@ async function simulateMarketplaceDispatch(input: {
         });
       }
     },
-    async () => { await settleSimulatedRun({ jobId: job.id, runId: run.id, boxId: box.id, item, startedMs }); },
+    async () => { await settleSimulatedRun({ claimToken: claimToken!, jobId: job.id, runId: run.id, boxId: box.id, item, startedMs }); },
   ];
 
   // A scoped dispatch is claimed and running, synchronously, and stays there:
@@ -1577,7 +1582,7 @@ async function simulateMarketplaceDispatch(input: {
  * move again.
  */
 async function settleSimulatedRun(input: {
-  jobId: string; runId: string; boxId: string; item: WorkItem; startedMs: number;
+  claimToken: string; jobId: string; runId: string; boxId: string; item: WorkItem; startedMs: number;
 }): Promise<void> {
   const durationMs = Date.now() - input.startedMs;
   const summary =
@@ -1587,8 +1592,8 @@ async function settleSimulatedRun(input: {
   // job-dispatcher.ts's own result shape, minus `transcript` — there is no
   // transcript, and an empty one would read as a run that said nothing rather
   // than a run that was never streamed.
-  await completeJob(input.jobId, {
-    status: 'done',
+  const committed = await completeJob(input.jobId, {
+    claimToken: input.claimToken, status: 'done',
     result: {
       summary, durationMs,
       costUsd: SIMULATED_RESULT.costUsd,
@@ -1596,6 +1601,7 @@ async function settleSimulatedRun(input: {
       toolCalls: SIMULATED_RESULT.toolCalls,
     },
   });
+  if (!committed) return;
   appendEvent(input.boxId, {
     type: 'job_finished', jobId: input.jobId, ok: true, ts: new Date().toISOString(),
   });

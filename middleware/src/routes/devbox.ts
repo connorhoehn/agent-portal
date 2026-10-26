@@ -931,6 +931,7 @@ export const _internal = {
 // the SDK client — including the test hooks — live in this module.
 
 export async function runDevboxTask(opts: {
+  signal?: AbortSignal;
   sessionId: string;
   prompt: string;
   resume?: boolean;
@@ -939,6 +940,7 @@ export async function runDevboxTask(opts: {
   /** The run's LAB_* context (lib/run-brief.ts); see DevboxRunOptions.lab. */
   lab?: DevboxLabContext;
 }): Promise<DevboxRunOutcome> {
+  opts.signal?.throwIfAborted();
   // Offline, a dispatched job plays a scripted run instead of dead-ending.
   // Without this the one journey the Work page exists for — pick a suggested
   // card, queue it, watch it run — ended in a red "job failed" on every
@@ -950,6 +952,7 @@ export async function runDevboxTask(opts: {
     const firstLine = opts.prompt.split('\n')[0] ?? '';
     const played = await playDispatchedRun({
       title: firstLine.slice(0, 120) || 'queued job',
+      ...(opts.signal ? { signal: opts.signal } : {}),
       prompt: opts.prompt,
       ...(opts.onEvent ? { onEvent: opts.onEvent } : {}),
     });
@@ -973,6 +976,7 @@ export async function runDevboxTask(opts: {
     };
   }
   return executeDevboxTask({
+    ...(opts.signal ? { signal: opts.signal } : {}),
     sessionId: opts.sessionId,
     prompt: opts.prompt,
     ...(opts.resume !== undefined ? { resume: opts.resume } : {}),

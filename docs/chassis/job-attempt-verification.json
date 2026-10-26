@@ -1,0 +1,74 @@
+{
+  "observedOn": "2026-10-26",
+  "goalStatus": "unfinished",
+  "scope": "C7 local job-attempt acceptance; C5/C8/C9 remain",
+  "ownerReuse": {
+    "package": "distributed-core",
+    "installedVersion": "0.48.0",
+    "import": "@connorhoehn/realtime-modules/server",
+    "realtimeVersion": "0.138.0",
+    "primitive": "FencedLease",
+    "newOwnerReleaseRequired": false
+  },
+  "checks": {
+    "postgres": {
+      "command": "REAL_JOB_ATTEMPTS_POSTGRES=1 npm test -- --runInBand src/providers/__tests__/agent-job-attempts-postgres.test.ts",
+      "testsPassed": 9,
+      "runtimes": [
+        "25.9.0",
+        "20.0.0"
+      ],
+      "transport": "Actual provider SQL, separate psql connection/process per call; Data API transport replaced only in the fixture",
+      "imageDigest": "postgres@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab"
+    },
+    "redis": {
+      "testsPassed": 9,
+      "runtimes": [
+        "25.9.0",
+        "20.0.0"
+      ],
+      "isolation": "Disposable loopback container; no shared fleet keys",
+      "imageDigest": "redis@sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6"
+    },
+    "finalFocused": {
+      "suitesPassed": 3,
+      "testsPassed": 18,
+      "runtimes": [
+        "25.9.0",
+        "20.0.0"
+      ]
+    },
+    "middlewareTypecheck": "pass",
+    "fullMiddleware": {
+      "status": "running"
+    },
+    "mockFloor": {
+      "status": "pending"
+    },
+    "wireCapture": {
+      "isolation": "Owned non-watching process on an ephemeral loopback port, full mocks, in-memory realtime, no inherited service credentials",
+      "sharedReset": false
+    }
+  },
+  "proven": [
+    "Only one of two independent SQL claim connections wins a queued job.",
+    "Missing/old tokens cannot start, heartbeat or overwrite a new attempt; the current claimant can finish once.",
+    "Cancellation revokes the attempt; a manual retry gets a new job identity.",
+    "Heartbeat preserves liveness, stale recovery revokes ownership and exhausted attempts cannot claim again.",
+    "Push/named/pull claims refuse to run before the existing token/heartbeat migration.",
+    "Hung/refused renewal aborts local execution; fenced work cannot invoke a new task or publish a refused terminal result.",
+    "Long maintenance holds renew; displacement aborts callbacks and does not delete the replacement lock."
+  ],
+  "rollout": [
+    "Apply schema/local_compute_worker_schema.sql before deploying the new push executor.",
+    "Drain/stop old push executors before enabling new claims; their unconditional SQL is not safe during mixed-version execution.",
+    "Current push and pull claims survive boot until the normal stale window; immediate boot cleanup is only for legacy tokenless rows."
+  ],
+  "limits": [
+    "Local PostgreSQL exercises production statements but does not prove Aurora Data API or AWS deployment.",
+    "Abort is cooperative; already-issued remote business effects still need durable idempotency.",
+    "Attempt fencing is per job; fleet-wide box admission/capacity is not newly accepted.",
+    "No cloud deployment, shared mock reset, Redis Cluster or production throughput acceptance.",
+    "C8 composition/room contracts, C5 durable subscription lifetime and C9 host readiness/end-to-end result adoption are unfinished."
+  ]
+}

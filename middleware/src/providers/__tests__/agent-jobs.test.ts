@@ -29,9 +29,9 @@ beforeEach(() => {
 
 describe('claim protocol', () => {
   it('claims with FOR UPDATE SKIP LOCKED so two dispatchers cannot take one job', async () => {
-    execMock.mockResolvedValue([{ ...ROW, status: 'claimed', box_id: 'box-a' }]);
+    execMock.mockResolvedValueOnce([{ n: 2 }]).mockResolvedValue([{ ...ROW, status: 'claimed', box_id: 'box-a' }]);
     const job = await claimNextJob('box-a', 'session-a');
-    const sql = execMock.mock.calls[0][0] as string;
+    const sql = execMock.mock.calls.at(-1)[0] as string;
     expect(sql).toMatch(/FOR UPDATE SKIP LOCKED/);
     expect(sql).toMatch(/WHERE status = 'queued'/);
     expect(sql).toMatch(/ORDER BY priority, created_at/);
@@ -40,13 +40,14 @@ describe('claim protocol', () => {
   });
 
   it('increments attempts on claim so retries are bounded', async () => {
-    execMock.mockResolvedValue([{ ...ROW, attempts: 1 }]);
+    execMock.mockResolvedValueOnce([{ n: 2 }]).mockResolvedValue([{ ...ROW, attempts: 1 }]);
     await claimNextJob('box-a', 'session-a');
-    expect(execMock.mock.calls[0][0]).toMatch(/attempts = attempts \+ 1/);
+    expect(execMock.mock.calls[1][0]).toMatch(/attempts = attempts \+ 1/);
   });
 
   it('returns null when the queue is empty', async () => {
     execMock.mockResolvedValue([]);
+    execMock.mockResolvedValueOnce([{ n: 2 }]);
     expect(await claimNextJob('box-a', 'session-a')).toBeNull();
   });
 });
@@ -61,9 +62,9 @@ describe('lifecycle', () => {
 
   it('completeJob records terminal state and preserves prior result when none given', async () => {
     execMock.mockResolvedValue([]);
-    await completeJob('job-1', { status: 'awaiting_review', result: { summary: 'done' } });
-    const sql = execMock.mock.calls[0][0] as string;
-    expect(sql).toMatch(/COALESCE\(:result::jsonb, result\)/);
+    await completeJob('job-1', { claimToken: 'attempt-1', status: 'awaiting_review', result: { summary: 'done' } });
+    const sql = execMock.mock.calls.at(-1)[0] as string;
+    expect(sql).toMatch(/COALESCE\(NULLIF\(:result, ''\)::jsonb, result\)/);
     expect(sql).toMatch(/finished_at = NOW\(\)/);
   });
 
@@ -76,7 +77,7 @@ describe('lifecycle', () => {
   it('cancel refuses jobs that already started', async () => {
     execMock.mockResolvedValue([]);
     const ok = await cancelJob('job-1');
-    expect(execMock.mock.calls[0][0]).toMatch(/status IN \('queued','claimed'\)/);
+    expect(execMock.mock.calls.at(-1)[0]).toMatch(/status IN \('queued','claimed'\)/);
     expect(ok).toBe(false);
   });
 });

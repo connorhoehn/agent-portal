@@ -77,6 +77,7 @@ export interface DevboxRunOutcome {
 }
 
 export interface DevboxRunOptions {
+  signal?: AbortSignal;
   sessionId: string;
   prompt: string;
   resume?: boolean;
@@ -139,13 +140,14 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
   });
 
   try {
+    opts.signal?.throwIfAborted();
     const resp = await opts.client.send(new InvokeRuntime({
       agentRuntimeArn: opts.runtimeArn,
       qualifier: 'DEFAULT',
       runtimeSessionId: opts.sessionId,
       accept: 'text/event-stream',
       payload: new TextEncoder().encode(payload),
-    }));
+    }), ...(opts.signal ? [{ abortSignal: opts.signal }] : []));
 
     const stream = resp.response as AsyncIterable<Uint8Array> | undefined;
     if (!stream) {
@@ -157,6 +159,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
     const decoder = new TextDecoder();
     let buffer = '';
     for await (const chunk of stream) {
+      opts.signal?.throwIfAborted();
       buffer += decoder.decode(chunk, { stream: true });
       let idx: number;
       while ((idx = buffer.indexOf('\n')) >= 0) {

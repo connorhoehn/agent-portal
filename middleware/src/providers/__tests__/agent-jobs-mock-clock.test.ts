@@ -54,11 +54,11 @@ describe('the offline queue stamps from the clock', () => {
     expect(claimed?.claimedAt).toBe('2026-03-11T09:05:00.000Z');
 
     freeze('2026-03-11T09:06:30.000Z');
-    await markRunning(job!.id);
+    await markRunning(job!.id, claimed!.claimToken);
     expect((await getJob(job!.id))?.startedAt).toBe('2026-03-11T09:06:30.000Z');
 
     freeze('2026-03-11T09:19:00.000Z');
-    await completeJob(job!.id, { status: 'done', result: { summary: 'rotated' } });
+    await completeJob(job!.id, { claimToken: claimed!.claimToken, status: 'done', result: { summary: 'rotated' } });
     const done = await getJob(job!.id);
     expect(done?.finishedAt).toBe('2026-03-11T09:19:00.000Z');
     // Created under the first freeze and untouched by the later ones — the

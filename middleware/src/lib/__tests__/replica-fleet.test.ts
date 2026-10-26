@@ -42,10 +42,10 @@ redisSuite('replica fleet over Redis', () => {
 
   beforeEach(async () => {
     redis = await openRedisStore(REDIS_URL!);
-    await redis.del(key, 'orgiq:lock:boot-test');
+    await redis.del(key, 'orgiq:lock:boot-test', 'orgiq:lock:boot-test:fence');
   });
   afterEach(async () => {
-    await redis.del(key, 'orgiq:lock:boot-test');
+    await redis.del(key, 'orgiq:lock:boot-test', 'orgiq:lock:boot-test:fence');
     await redis.quit();
   });
 
@@ -108,16 +108,38 @@ redisSuite('replica fleet over Redis', () => {
     a.stop(); b.stop();
   });
 
-  it('does not release a lock it no longer owns', async () => {
+  it('renews long work beyond the original TTL without admitting a competitor', async () => {
     const a = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-a' });
-    // A's lock expires mid-run and B legitimately takes it; A's release must not
-    // delete B's lock, which would hand it to a third replica.
-    await a.withLock('boot-test', 1, async () => {
-      await new Promise((r) => setTimeout(r, 30));
-      await redis.command('SET', 'orgiq:lock:boot-test', 'task-b');
-    });
-    expect(await redis.get('orgiq:lock:boot-test')).toBe('task-b');
-    a.stop();
+    const b = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-b' });
+    try {
+      await a.withLock('boot-test', 600, async lease => {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        lease!.assertLive();
+        expect(lease!.signal.aborted).toBe(false);
+        expect(await b.withLock('boot-test', 600, async () => 'wrong')).toBeNull();
+      });
+      expect(await b.withLock('boot-test', 600, async () => 'next')).toBe('next');
+    } finally { a.stop(); b.stop(); }
+  });
+
+  it('fences displaced work without deleting the replacement lock or continuing writes', async () => {
+    const a = createReplicaFleet({ redisUrl: REDIS_URL, id: 'task-a' });
+    let staleWrite = false;
+    let finished: Promise<void> | undefined;
+    try {
+      await expect(a.withLock('boot-test', 600, async lease => {
+        await redis.command('SET', 'orgiq:lock:boot-test', 'task-b');
+        finished = new Promise<void>(resolve => setTimeout(resolve, 500)).then(() => {
+          expect(lease!.signal.aborted).toBe(true);
+          expect(() => lease!.assertLive()).toThrow();
+          if (!lease!.signal.aborted) staleWrite = true;
+        });
+        await finished;
+      })).rejects.toThrow('Replica lock lost');
+      await finished;
+      expect(staleWrite).toBe(false);
+      expect(await redis.get('orgiq:lock:boot-test')).toBe('task-b');
+    } finally { a.stop(); }
   });
 
   it('treats an unreachable Redis as "peers unknown", never as "I am alone"', async () => {

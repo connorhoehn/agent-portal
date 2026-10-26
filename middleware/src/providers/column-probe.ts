@@ -7,8 +7,8 @@
 // the shared push path, so a feature nobody has turned on takes down the queue
 // that was working. The rule that follows is the one every caller here obeys:
 //
-//   NEVER name a new column in a statement the OLD path also runs.
-//   Branch on the probe, and keep the pre-migration branch byte-for-byte.
+//   Probe before using additive columns. Preserve safe legacy read paths;
+//   claims that require fencing must instead refuse to run before migration.
 //
 // Cached because it is asked on every claim, every heartbeat and every
 // completion, and `information_schema` is not free over the Data API. A false
@@ -36,8 +36,8 @@ const cache = new Map<string, boolean>();
  * tested by pointing the probe at a table that genuinely lacks the column.
  *
  * A read that fails answers `false`. That is the conservative direction: the
- * caller's fallback is "behave as you did before this feature existed", which is
- * always safe, whereas guessing `true` produces a statement that throws.
+ * caller either preserves a safe legacy path or refuses a capability that
+ * requires those columns. Guessing `true` produces a statement that throws.
  */
 export async function hasColumns(table: string, columns: readonly string[]): Promise<boolean> {
   if (config.mock.aurora) return true;

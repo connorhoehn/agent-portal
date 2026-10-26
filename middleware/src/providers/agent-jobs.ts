@@ -65,6 +65,13 @@ export interface AgentJob {
   botTrigger: string | null;
 }
 
+/** Returned only to the caller that won a claim; normal job reads omit the token. */
+export interface ClaimedAgentJob extends AgentJob { readonly claimToken: string; }
+
+async function requireClaimSchema(): Promise<void> {
+  if (!await hasPullSideColumns()) throw new Error('Agent job claims require schema/local_compute_worker_schema.sql');
+}
+
 /**
  * Fires whenever a job's status changes — every job, not only local-compute
  * ones. `routes/local-compute.ts`'s `GET /events` SSE stream is the one
@@ -507,14 +514,16 @@ export async function getJob(id: string): Promise<AgentJob | null> {
  * (lib/local-work.ts) — depends on this line.
  *
  * Excluded here rather than in `job-dispatcher.ts` so every push-side caller is
- * covered by construction, present and future. `kind` is an existing column, so
- * this is not gated on a migration probe.
+ * covered by construction, present and future. Claims require the existing
+ * token/heartbeat migration for both push and pull executors.
  */
-export async function claimNextJob(boxId: string, sessionId: string): Promise<AgentJob | null> {
+export async function claimNextJob(boxId: string, sessionId: string): Promise<ClaimedAgentJob | null> {
+  await requireClaimSchema();
+  const claimToken = mintClaimToken();
   const pullOnly = LOCAL_JOB_KINDS as readonly string[];
   if (config.mock.aurora) {
     const next = mockJobs
-      .filter((j) => j.status === 'queued' && !pullOnly.includes(j.kind))
+      .filter((j) => j.status === 'queued' && j.attempts < j.maxAttempts && !pullOnly.includes(j.kind))
       .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
     if (!next) return null;
     next.status = 'claimed';
@@ -522,8 +531,9 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Ag
     next.sessionId = sessionId;
     next.claimedAt = clock.nowIso();
     next.attempts += 1;
+    MOCK_CLAIM_TOKENS.set(next.id, claimToken);
     emitJobChange(next);
-    return { ...next };
+    return { ...next, claimToken };
   }
   // No array parameter in the RDS Data API, so the exclusion list is expanded
   // into named placeholders — the same shape claimNextJobForWorker's allowlist
@@ -533,19 +543,20 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Ag
   const rows = await exec(
     `UPDATE agent_jobs
         SET status = 'claimed', box_id = :box, session_id = :session,
-            claimed_at = NOW(), attempts = attempts + 1, updated_at = NOW()
+            claim_token = :token, heartbeat_at = NOW(), claimed_at = NOW(),
+            attempts = attempts + 1, updated_at = NOW()
       WHERE id = (
             SELECT id FROM agent_jobs
-             WHERE status = 'queued' AND kind NOT IN (${kindList})
+             WHERE status = 'queued' AND attempts < max_attempts AND kind NOT IN (${kindList})
              ORDER BY priority, created_at
              FOR UPDATE SKIP LOCKED
              LIMIT 1)
       RETURNING ${COLUMNS}`,
-    [strParam('box', boxId), strParam('session', sessionId), ...kindParams],
+    [strParam('box', boxId), strParam('session', sessionId), strParam('token', claimToken), ...kindParams],
   );
   const job = rows[0] ? rowToJob(rows[0]) : null;
   if (job) emitJobChange(job);
-  return job;
+  return job ? { ...job, claimToken } : null;
 }
 
 /**
@@ -560,41 +571,43 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Ag
  * 'queued'` for the same reason claimNextJob is: a job already claimed must
  * not be claimed twice.
  */
-export async function claimJob(id: string, boxId: string, sessionId: string): Promise<AgentJob | null> {
+export async function claimJob(id: string, boxId: string, sessionId: string): Promise<ClaimedAgentJob | null> {
+  await requireClaimSchema();
+  const claimToken = mintClaimToken();
   if (config.mock.aurora) {
-    const job = mockJobs.find((j) => j.id === id && j.status === 'queued');
+    const job = mockJobs.find((j) => j.id === id && j.status === 'queued' && j.attempts < j.maxAttempts);
     if (!job) return null;
     job.status = 'claimed';
     job.boxId = boxId;
     job.sessionId = sessionId;
     job.claimedAt = clock.nowIso();
     job.attempts += 1;
+    MOCK_CLAIM_TOKENS.set(job.id, claimToken);
     emitJobChange(job);
-    return { ...job };
+    return { ...job, claimToken };
   }
   const rows = await exec(
     `UPDATE agent_jobs
         SET status = 'claimed', box_id = :box, session_id = :session,
-            claimed_at = NOW(), attempts = attempts + 1, updated_at = NOW()
-      WHERE id = :id AND status = 'queued'
+            claim_token = :token, heartbeat_at = NOW(), claimed_at = NOW(),
+            attempts = attempts + 1, updated_at = NOW()
+      WHERE id = :id AND status = 'queued' AND attempts < max_attempts
       RETURNING ${COLUMNS}`,
-    [strParam('id', id), strParam('box', boxId), strParam('session', sessionId)],
+    [strParam('id', id), strParam('box', boxId), strParam('session', sessionId), strParam('token', claimToken)],
   );
   const job = rows[0] ? rowToJob(rows[0]) : null;
   if (job) emitJobChange(job);
-  return job;
+  return job ? { ...job, claimToken } : null;
 }
 
 // ─── Pull-side claims (local compute) ────────────────────────────────────────
 //
-// Everything above assumes the middleware is the executor: it claims a job,
-// invokes AgentCore, watches the stream, and writes the outcome. It cannot race
-// itself, which is why `completeJob` below needs no ownership guard and why
-// `reapStaleJobs(0)` at boot is safe — see recoverOrphanedWork's own comment,
-// "in a single-process middleware any job still marked live at boot is orphaned
-// by definition."
+// Push and pull executors share the same per-attempt token. Claiming a job is
+// atomic; every subsequent worker write is conditional on that live attempt.
+// A middleware restart or another replica can otherwise make a late push
+// completion overwrite newer work just as a stale workstation would.
 //
-// A paired workstation breaks that assumption. It has no inbound path (a stated
+// A paired workstation holds the same kind of claim. It has no inbound path (a stated
 // non-goal, not an omission), so it CLAIMS work, runs it out of sight, and
 // reports back. Now a claim can outlive the process that granted it, and a job
 // still marked live at boot may have a laptop happily working on it.
@@ -625,7 +638,7 @@ export interface PullClaim {
 }
 
 /**
- * Whether this cluster has the pull-side columns applied.
+ * Whether this cluster has the shared attempt-fencing columns applied.
  *
  * Probed once and cached, because the honest failure for a cluster running
  * ahead of `schema/local_compute_worker_schema.sql` is a clear 503 to the
@@ -679,6 +692,7 @@ export async function claimNextJobForWorker(opts: {
   nodeId?: string;
 }): Promise<PullClaim | null> {
   if (opts.kinds.length === 0) return null;
+  await requireClaimSchema();
   const claimToken = mintClaimToken();
 
   /** A job is claimable by this machine if it names no machine, or names this one. */
@@ -690,7 +704,7 @@ export async function claimNextJobForWorker(opts: {
 
   if (config.mock.aurora) {
     const next = mockJobs
-      .filter((j) => j.status === 'queued' && opts.kinds.includes(j.kind) && targetOk(j.payload))
+      .filter((j) => j.status === 'queued' && j.attempts < j.maxAttempts && opts.kinds.includes(j.kind) && targetOk(j.payload))
       .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
     if (!next) return null;
     next.status = 'claimed';
@@ -716,7 +730,7 @@ export async function claimNextJobForWorker(opts: {
             attempts = attempts + 1, updated_at = NOW()
       WHERE id = (
             SELECT id FROM agent_jobs
-             WHERE status = 'queued' AND kind IN (${kindList})
+             WHERE status = 'queued' AND attempts < max_attempts AND kind IN (${kindList})
                AND (payload->>'nodeId' IS NULL OR payload->>'nodeId' = :node)
              ORDER BY priority, created_at
              FOR UPDATE SKIP LOCKED
@@ -751,7 +765,7 @@ export async function countLiveJobsForBox(boxId: string): Promise<number> {
 }
 
 /**
- * Liveness ping from a pull-side worker, guarded by its fencing token.
+ * Liveness ping from an executor, guarded by its fencing token.
  *
  * Returns false when the claim is gone — requeued by the reaper, cancelled, or
  * never held — which is the signal for the worker to abandon the run rather than
@@ -782,46 +796,23 @@ export async function heartbeatJob(id: string, claimToken: string): Promise<bool
 /**
  * Move a claimed job to `running`.
  *
- * `claimToken` fences the transition for pull-side workers and is omitted by the
- * in-process dispatcher, which cannot race itself. Returns whether the
+ * `claimToken` fences the transition for every executor. Returns whether the
  * transition applied — false means the claim was already gone.
  */
 export async function markRunning(id: string, claimToken?: string): Promise<boolean> {
+  if (!claimToken) return false;
   if (config.mock.aurora) {
     const job = mockJobs.find((j) => j.id === id);
-    if (!job) return false;
-    if (claimToken !== undefined && MOCK_CLAIM_TOKENS.get(id) !== claimToken) return false;
+    if (!job || !['claimed', 'running'].includes(job.status)) return false;
+    if (MOCK_CLAIM_TOKENS.get(id) !== claimToken) return false;
     job.status = 'running';
-    job.startedAt = clock.nowIso();
+    job.startedAt ??= clock.nowIso();
     emitJobChange(job);
     return true;
   }
-  // The new columns appear ONLY on the fenced path. A cluster that has not
-  // applied schema/local_compute_worker_schema.sql must keep working exactly as
-  // before — naming claim_token in the dispatcher's own statement would take the
-  // whole push-side queue down on every pre-migration cluster to serve a feature
-  // it is not running. The fenced path is unreachable there, because the route
-  // checks hasPullSideColumns() first.
-  if (claimToken === undefined) {
-    const rows = await exec(
-      `UPDATE agent_jobs SET status='running', started_at=NOW(), updated_at=NOW()
-        WHERE id=:id RETURNING id, box_id, title, payload::text AS payload`,
-      [strParam('id', id)],
-    );
-    if (rows[0]) {
-      emitJobChange({
-        id: toStr(rows[0]['id']),
-        boxId: rows[0]['box_id'] ? toStr(rows[0]['box_id']) : null,
-        status: 'running',
-        title: toStr(rows[0]['title']),
-        payload: toJson(rows[0]['payload']) ?? {},
-      });
-    }
-    return rows.length > 0;
-  }
   const rows = await exec(
-    `UPDATE agent_jobs SET status='running', started_at=NOW(), heartbeat_at=NOW(), updated_at=NOW()
-      WHERE id=:id AND claim_token=:token RETURNING id, box_id, title, payload::text AS payload`,
+    `UPDATE agent_jobs SET status='running', started_at=COALESCE(started_at,NOW()), heartbeat_at=NOW(), updated_at=NOW()
+      WHERE id=:id AND claim_token=:token AND status IN ('claimed','running') RETURNING id, box_id, title, payload::text AS payload`,
     [strParam('id', id), strParam('token', claimToken)],
   );
   if (rows[0]) {
@@ -836,22 +827,7 @@ export async function markRunning(id: string, claimToken?: string): Promise<bool
   return rows.length > 0;
 }
 
-/**
- * Record a job's terminal state.
- *
- * `claimToken` is the fencing guard for pull-side workers, and it is the reason
- * this returns a boolean rather than void. Without it the statement was
- * `WHERE id = :id` — correct while the middleware was the only caller, since it
- * could not race itself, and wrong the moment a laptop holds a claim across a
- * middleware restart: a late completion from a worker whose job has since been
- * requeued and re-run would overwrite the newer result with the older one, and
- * both runs were billed. The guard also clears `claim_token`, so the same worker
- * retrying its POST cannot double-write.
- *
- * Returns false when nothing was updated — the claim expired, or the job is
- * already terminal. Callers that hold no token (the dispatcher) get the old
- * unguarded behaviour and can keep ignoring the result.
- */
+/** Record a terminal result only while the caller owns the current live attempt. */
 export async function completeJob(...a: Parameters<typeof completeJobRow>): Promise<boolean> {
   const out = await completeJobRow(...a);
   if (out) await noteSearchWrite({ tenant: 'pipelines', type: 'run', id: `job:${a[0]}` });
@@ -862,9 +838,10 @@ async function completeJobRow(id: string, opts: {
   status: 'awaiting_review' | 'done' | 'failed';
   result?: Record<string, unknown>;
   error?: string;
-  /** Pull-side fencing token. Omitted by the in-process dispatcher. */
+  /** Required for every executor. Missing tokens are refused without a write. */
   claimToken?: string;
 }): Promise<boolean> {
+  if (!opts.claimToken) return false;
   if (config.mock.aurora) {
     const job = mockJobs.find((j) => j.id === id);
     if (!job) return false;
@@ -886,33 +863,6 @@ async function completeJobRow(id: string, opts: {
     strParam('result', opts.result ? JSON.stringify(opts.result) : ''),
     strParam('error', opts.error ?? ''),
   ];
-  // Unfenced (the in-process dispatcher): byte-for-byte the previous statement.
-  // A cluster that has not applied schema/local_compute_worker_schema.sql must
-  // keep working — naming claim_token here would take the push-side queue down
-  // on every pre-migration cluster to serve a feature it is not running. The
-  // fenced path is unreachable there, because the route checks
-  // hasPullSideColumns() before handing out a claim.
-  if (opts.claimToken === undefined) {
-    const rows = await exec(
-      `UPDATE agent_jobs
-          SET status = :status,
-              result = COALESCE(:result::jsonb, result),
-              error = NULLIF(:error, ''),
-              finished_at = NOW(), updated_at = NOW()
-        WHERE id = :id RETURNING id, box_id, title, payload::text AS payload`,
-      params,
-    );
-    if (rows[0]) {
-      emitJobChange({
-        id: toStr(rows[0]['id']),
-        boxId: rows[0]['box_id'] ? toStr(rows[0]['box_id']) : null,
-        status: opts.status,
-        title: toStr(rows[0]['title']),
-        payload: toJson(rows[0]['payload']) ?? {},
-      });
-    }
-    return rows.length > 0;
-  }
   // Fenced callers must also still hold a LIVE claim: a job the reaper already
   // failed for good is terminal, and re-opening it from a straggler's POST would
   // resurrect work nobody is waiting for. Clearing the token makes the write
@@ -921,7 +871,7 @@ async function completeJobRow(id: string, opts: {
   const rows = await exec(
     `UPDATE agent_jobs
         SET status = :status,
-            result = COALESCE(:result::jsonb, result),
+            result = COALESCE(NULLIF(:result, '')::jsonb, result),
             error = NULLIF(:error, ''),
             claim_token = NULL,
             finished_at = NOW(), updated_at = NOW()
@@ -985,13 +935,15 @@ async function cancelJobRow(id: string): Promise<boolean> {
   if (config.mock.aurora) {
     const job = mockJobs.find((j) => j.id === id && (j.status === 'queued' || j.status === 'claimed'));
     if (!job) return false;
+    MOCK_CLAIM_TOKENS.delete(id);
     job.status = 'cancelled';
     job.finishedAt = clock.nowIso();
     emitJobChange(job);
     return true;
   }
+  const clearToken = await hasPullSideColumns() ? ', claim_token=NULL' : '';
   const rows = await exec(
-    `UPDATE agent_jobs SET status='cancelled', finished_at=NOW(), updated_at=NOW()
+    `UPDATE agent_jobs SET status='cancelled', finished_at=NOW(), updated_at=NOW()${clearToken}
       WHERE id=:id AND status IN ('queued','claimed') RETURNING id, box_id, title, payload::text AS payload`,
     [strParam('id', id)],
   );
@@ -1008,8 +960,10 @@ async function cancelJobRow(id: string): Promise<boolean> {
 }
 
 export interface ReapOptions {
+  /** Recovery lease guard, rechecked before each SQL mutation. */
+  assertLive?: () => void;
   /**
-   * Whether jobs held by a FENCED (pull-side) claim are eligible.
+   * Whether jobs held by any fenced claim (push or pull) are eligible.
    *
    * Defaults true, which is right for the periodic sweep: a workstation that has
    * not heartbeated for the whole stale window is gone, laptop or not, and its
@@ -1062,14 +1016,16 @@ export async function reapStaleJobs(
   const stale = `status IN ('claimed','running')
         AND ${liveness} < NOW() - (INTERVAL '1 minute' * :mins)${skipFenced}`;
 
+  opts.assertLive?.();
   const requeued = await exec(
     `UPDATE agent_jobs
-        SET status='queued', box_id=NULL, session_id=NULL, claimed_at=NULL, updated_at=NOW()${clearToken}
+        SET status='queued', box_id=NULL, session_id=NULL, claimed_at=NULL, started_at=NULL, updated_at=NOW()${clearToken}
       WHERE ${stale}
         AND attempts < max_attempts
       RETURNING id`,
     [intParam('mins', staleMinutes)],
   );
+  opts.assertLive?.();
   const failed = await exec(
     `UPDATE agent_jobs
         SET status='failed', error='worker did not report back before the stale window elapsed',

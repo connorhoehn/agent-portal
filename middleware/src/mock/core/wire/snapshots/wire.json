@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-25T14:20:05.503Z",
-  "serverHandlerSha": "db78878f257f0e366bd4462bc2b546d8b002232b1d4e42c457fb69d8367c14c8",
-  "baseUrl": "http://127.0.0.1:13001",
+  "capturedAt": "2026-10-26T15:34:15.103Z",
+  "serverHandlerSha": "d66db0ffa8a0ddb83325f4b58c9b5b82fea67ede7adcacc50acd43473800b82a",
+  "baseUrl": "http://127.0.0.1:59149",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -2938,6 +2938,7 @@
       "values": {
         "boxes[].status": [
           "idle",
+          "provisioning",
           "running",
           "waiting"
         ]
@@ -9235,6 +9236,43 @@
         ]
       }
     },
+    "GET /api/social/plane/rooms/:slug": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "room": "object",
+        "room.createdAt": "string",
+        "room.createdBy": "string",
+        "room.description": "string",
+        "room.lastActiveAt": "string",
+        "room.lobbyName": "string",
+        "room.name": "string",
+        "room.orgId": "string",
+        "room.roomId": "string",
+        "room.settings": "object",
+        "room.settings.audioOnly": "boolean",
+        "room.settings.recordingEnabled": "boolean",
+        "room.settings.softCap": "number",
+        "room.slug": "string",
+        "room.state": "string",
+        "room.visibility": "string"
+      },
+      "values": {
+        "room.state": [
+          "active"
+        ]
+      }
+    },
+    "GET /api/social/plane/rooms/:slug/activity": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "sessions": "array"
+      },
+      "values": {}
+    },
     "GET /api/social/plane/teams": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -9345,6 +9383,43 @@
           "active"
         ]
       }
+    },
+    "GET /api/social/rooms/:slug": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "room": "object",
+        "room.createdAt": "string",
+        "room.createdBy": "string",
+        "room.description": "string",
+        "room.lastActiveAt": "string",
+        "room.lobbyName": "string",
+        "room.name": "string",
+        "room.orgId": "string",
+        "room.roomId": "string",
+        "room.settings": "object",
+        "room.settings.audioOnly": "boolean",
+        "room.settings.recordingEnabled": "boolean",
+        "room.settings.softCap": "number",
+        "room.slug": "string",
+        "room.state": "string",
+        "room.visibility": "string"
+      },
+      "values": {
+        "room.state": [
+          "active"
+        ]
+      }
+    },
+    "GET /api/social/rooms/:slug/activity": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "sessions": "array"
+      },
+      "values": {}
     },
     "GET /api/social/share-destinations": {
       "persona": "orgiq/admin",

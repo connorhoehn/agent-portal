@@ -32,7 +32,7 @@ import { clock, freezeClock, unfreezeClock } from '../../../mock/core/index.js';
 import type { Session } from '../../session.js';
 import { createWorkItem, getProjectWorkItems } from '../../../providers/work-items.js';
 import { createBotRun, listBots, __resetMockRuns } from '../../../providers/bots.js';
-import { enqueueJob, completeJob, cancelJob } from '../../../providers/agent-jobs.js';
+import { claimJob, enqueueJob, completeJob, cancelJob } from '../../../providers/agent-jobs.js';
 import { agentJobs } from '../../../mock/agent-jobs.js';
 import { buildAssessmentViewerWorkGraph, buildPipelinesViewerWorkGraph, buildSocialViewerWorkGraph } from '../build.js';
 import { observeCall, observeCallEnded, resetObservedCalls } from '../social-events.js';
@@ -539,6 +539,7 @@ describe('pipelines work graph: per-viewer frames', () => {
     expect(ids(ines.state)).toContain(`prun:${runId}`); expect(ids(kofi.state)).toContain(`prun:${runId}`);
     const statusOf = (v: { state: ClientWorkGraphState }) => v.state.nodes[`prun:${runId}`]!.status;
     const first = statusOf(kofi);
+    const claim = await claimJob(job.id, 'test-box', 'test-session');
     agentJobs.rows().find(j => j.id === job.id)!.status = 'running';
     await publishWorkGraphChange({ tenant: 'pipelines', runId, cause: 'job' });
     ines.apply(env.frames('ines-s').slice(1)); kofi.apply(env.frames('kofi-s').slice(1));
@@ -546,7 +547,7 @@ describe('pipelines work graph: per-viewer frames', () => {
     expect(first).not.toBe('running');
 
     // The job finishes into review: an approval arrives — for the operator only.
-    await completeJob(job.id, { status: 'awaiting_review' });
+    await completeJob(job.id, { claimToken: claim!.claimToken, status: 'awaiting_review' });
     await publishWorkGraphChange({ tenant: 'pipelines', runId, cause: 'approval' });
     ines.apply(env.frames('ines-s').slice(2)); kofi.apply(env.frames('kofi-s').slice(2));
     expect(ids(kofi.state).filter(id => id.startsWith('approval:'))).toContain(`approval:job:${job.id}`);
@@ -571,7 +572,8 @@ describe('pipelines work graph: per-viewer frames', () => {
     await subscribe(env, 'kofi-s', 'gr', snap.scope.personId, snap.cursor);
     expect(env.acks('kofi-s')).toEqual(['subscribed']);
     const kofi = reader(snap, 'gr');
-    await completeJob(job.id, { status: 'awaiting_review' });
+    const claim = await claimJob(job.id, 'test-box', 'test-session');
+    await completeJob(job.id, { claimToken: claim!.claimToken, status: 'awaiting_review' });
     await publishWorkGraphChange({ tenant: 'pipelines', runId, cause: 'approval' });
     kofi.apply(env.frames('kofi-s'));
     expect(ids(kofi.state).filter(id => id.startsWith('prun:'))).toEqual([`prun:${runId}`]);

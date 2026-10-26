@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-25T14:20:08.254Z",
-  "serverHandlerSha": "db78878f257f0e366bd4462bc2b546d8b002232b1d4e42c457fb69d8367c14c8",
-  "baseUrl": "http://127.0.0.1:13001",
+  "capturedAt": "2026-10-26T15:34:17.785Z",
+  "serverHandlerSha": "d66db0ffa8a0ddb83325f4b58c9b5b82fea67ede7adcacc50acd43473800b82a",
+  "baseUrl": "http://127.0.0.1:59149",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -149,14 +149,7 @@
       }
     },
     "DELETE /api/graph/work-items/:id/decisions/:decisionId": {
-      "persona": "orgiq/admin",
-      "status": 404,
-      "shape": {
-        "$": "object",
-        "error": "string"
-      },
-      "values": {},
-      "sent": []
+      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-fs-e1-s2/decisions (orgiq/admin)"
     },
     "DELETE /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
@@ -545,7 +538,7 @@
       },
       "values": {
         "key": [
-          "ORG-OBS-8"
+          "ORG-FS-3"
         ],
         "status": [
           "done"
@@ -4620,25 +4613,7 @@
       }
     },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "escalatedAt": "null",
-        "id": "string",
-        "requiredRole": "null",
-        "status": "string",
-        "summary": "string",
-        "topic": "string",
-        "workItemId": "string",
-        "workItemTitle": "string"
-      },
-      "values": {
-        "status": [
-          "resolved"
-        ]
-      },
-      "sent": []
+      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-fs-e1-s2/decisions (orgiq/admin)"
     },
     "PUT /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
@@ -4771,6 +4746,5 @@
     "PUT /api/social/bindings": {
       "skipped": "no body: the context this binds is a query parameter (`?context=<kind>:<id>`), and this harness replays a write at its resolved path with a body only — it has no way to carry a query string. The GET side is captured with a QUERY_HINT; routes/__tests__/social-bindings.test.ts covers the write."
     }
-  },
-  "refusalReviewedAt": "2026-10-25T22:22:11.736Z"
+  }
 }

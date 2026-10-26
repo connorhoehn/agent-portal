@@ -1,25 +1,11 @@
 // Which middleware replicas are alive right now, and a mutex for the work only
 // one of them may do.
 //
-// WHY THIS EXISTS. `recoverOrphanedWork` (lib/job-dispatcher.ts) calls
-// `reapStaleJobs(0)` at boot — requeue EVERY job still marked claimed/running,
-// with no stale window at all. That is justified by one sentence in its own
-// comment: "in a single-process middleware any job still marked live at boot is
-// orphaned by definition; there is no run left to wait for."
-//
-// The sentence is true and the middleware autoscales to four tasks
-// (infra/lib/middleware-service-stack.ts). At two tasks it is false, and the
-// damage is the one already documented for paired workstations: a booting
-// replica requeues work another replica is actively running, so the job runs
-// twice, is BILLED twice, and the straggler's completion overwrites the newer
-// attempt's result. It fires on exactly the events you scale for — a scale-out,
-// and every task of a rolling deploy.
-//
-// So this module answers one question: is another replica alive? When the answer
-// is yes, the boot sweep must not assert that somebody else's in-flight work is
-// dead; it defers to the periodic sweep, which measures real staleness from
-// `heartbeat_at`. That is the same resolution local compute already forced for
-// fenced claims, applied to the case where the other executor is a sibling task.
+// A replica's presence prevents another from declaring legacy tokenless jobs
+// orphaned at boot. Current push and pull jobs have per-attempt SQL tokens and
+// heartbeats, so every replica leaves them to the ordinary stale sweep.
+// Named maintenance locks use the shared FencedLease owner: renewable, bounded
+// on dependency loss, and paired with conditional writes at the destination.
 //
 // Membership is ONE sorted set (`orgiq:replicas`, score = last heartbeat) rather
 // than a key per replica, so reading the fleet is a single range query and
@@ -29,7 +15,7 @@
 // Everything degrades to "I am alone" when REDIS_URL is unset, which is the
 // honest answer for a single task and preserves today's behaviour exactly.
 
-import { createBoundedRedis, type BoundedRedis } from '@connorhoehn/realtime-modules/server';
+import { FencedLease, LeaseHeldError, createBoundedRedis, type BoundedRedis } from '@connorhoehn/realtime-modules/server';
 import { createRedisStore } from './redis-store.js';
 
 const FLEET_KEY = 'orgiq:replicas';
@@ -62,6 +48,13 @@ export function replicaId(): string {
   return cachedId;
 }
 
+export interface ReplicaLock {
+  readonly signal: AbortSignal;
+  readonly token: number;
+  /** Check before each mutation; the destination still needs conditional writes. */
+  assertLive(): void;
+}
+
 export interface ReplicaFleet {
   readonly id: string;
   /** Record this replica as alive. Safe to call repeatedly. */
@@ -72,9 +65,10 @@ export interface ReplicaFleet {
   peers(): Promise<string[]>;
   /**
    * Run `fn` only if this replica wins the named lock, so two replicas booting
-   * together do not both sweep. Returns `null` when the lock was already held.
+   * together do not both sweep. Renews through the callback; loss aborts the
+   * context and rejects. Returns `null` when another owner holds the lock.
    */
-  withLock<T>(name: string, ttlMs: number, fn: () => Promise<T>): Promise<T | null>;
+  withLock<T>(name: string, ttlMs: number, fn: (lease?: ReplicaLock) => Promise<T>): Promise<T | null>;
   /** Leave the fleet promptly rather than waiting out the TTL. */
   leave(): Promise<void>;
   stop(): void;
@@ -87,7 +81,7 @@ function soloFleet(id: string): ReplicaFleet {
     async heartbeat() { /* nothing to record */ },
     async members() { return [id]; },
     async peers() { return []; },
-    async withLock<T>(_name: string, _ttlMs: number, fn: () => Promise<T>) { return fn(); },
+    async withLock<T>(_name: string, _ttlMs: number, fn: (lease?: ReplicaLock) => Promise<T>) { return fn({ signal: new AbortController().signal, token: 0, assertLive() {} }); },
     async leave() { /* nothing to remove */ },
     stop() { /* no timer */ },
   };
@@ -101,6 +95,7 @@ export function createReplicaFleet(opts: { redisUrl?: string | null; id?: string
   let connection: Promise<BoundedRedis> | null = null;
   let timer: NodeJS.Timeout | null = null;
   let stopped = false;
+  const leases = new Set<FencedLease>();
 
   // The fleet API is synchronous, while each operation awaits the library's
   // connection. Failed connections are discarded so a later heartbeat can
@@ -141,26 +136,34 @@ export function createReplicaFleet(opts: { redisUrl?: string | null; id?: string
     async peers() {
       return (await fleet.members()).filter((m) => m !== id);
     },
-    async withLock<T>(name: string, ttlMs: number, fn: () => Promise<T>): Promise<T | null> {
-      const key = `orgiq:lock:${name}`;
-      const { locks, won } = await withRedis(async redis => {
-        const locks = redis.lockClient();
-        // A plain SET NX PX, which is what distributed-core's RedisLockProvider
-        // builds its fencing on; the value names the holder so a stuck lock is
-        // attributable rather than anonymous.
-        const won = await locks.set(key, id, 'NX', 'PX', ttlMs);
-        return { locks, won };
+    async withLock<T>(name: string, ttlMs: number, fn: (lease?: ReplicaLock) => Promise<T>): Promise<T | null> {
+      const lease = await withRedis(async redis => {
+        const candidate = new FencedLease({ redis, key: `orgiq:lock:${name}`, leaseMs: ttlMs });
+        try { await candidate.acquire(); return candidate; }
+        catch (error) { if (error instanceof LeaseHeldError) return null; throw error; }
       });
-      if (won !== 'OK') return null;
-      // A failure in application work must not discard a healthy transport.
-      try { return await fn(); } finally {
-        // Release only if still ours: if the TTL expired mid-run another
-        // replica may legitimately hold it now, and deleting that would hand
-        // the lock to a third.
-        await locks.eval(
-          "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end",
-          1, key, id,
-        ).catch(() => undefined);
+      if (!lease) return null;
+      leases.add(lease);
+      const controller = new AbortController();
+      const off = lease.onFence(event => controller.abort(new Error(`Replica lock lost: ${event.reason}`)));
+      const assertLive = () => {
+        if (!lease.isLive()) throw controller.signal.reason ?? new Error('Replica lock is not live');
+      };
+      let onAbort: (() => void) | undefined;
+      try {
+        assertLive();
+        const lost = new Promise<never>((_, reject) => {
+          onAbort = () => reject(controller.signal.reason);
+          controller.signal.addEventListener('abort', onAbort, { once: true });
+        });
+        const result = await Promise.race([fn({ signal: controller.signal, token: lease.token, assertLive }), lost]);
+        assertLive();
+        return result;
+      } finally {
+        if (onAbort) controller.signal.removeEventListener('abort', onAbort);
+        off();
+        leases.delete(lease);
+        await lease.release();
       }
     },
     async leave() {
@@ -168,6 +171,7 @@ export function createReplicaFleet(opts: { redisUrl?: string | null; id?: string
     },
     stop() {
       stopped = true;
+      for (const lease of leases) lease.fence('manual', 'Replica fleet stopped');
       if (timer) clearInterval(timer);
       timer = null;
       const pending = connection;

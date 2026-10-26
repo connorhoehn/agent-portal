@@ -1,0 +1,34 @@
+{
+  "observedOn": "2026-10-26",
+  "packageVersion": "0.138.0",
+  "scope": "C8 pre-implementation characterization; no shared application mutation",
+  "checks": [
+    {
+      "name": "missing dependency",
+      "expected": "reject before construction",
+      "observed": "accepted",
+      "gap": true
+    },
+    {
+      "name": "duplicate manifest identity with distinct wire aliases",
+      "expected": "reject before construction",
+      "observed": "accepted",
+      "gap": true
+    },
+    {
+      "name": "partial construction rollback",
+      "expected": "first service stopped",
+      "observed": {
+        "threw": true,
+        "stopped": false
+      },
+      "gap": true
+    },
+    {
+      "name": "unknown legacy feature",
+      "expected": "reject",
+      "observed": "silently accepted",
+      "gap": true
+    }
+  ]
+}

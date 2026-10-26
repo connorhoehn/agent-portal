@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises';
 // A simulated bot run, so "watch what a bot is doing" is developable offline.
 //
 // The scenario this exists for: a cron bot or the job dispatcher picks up an
@@ -114,6 +115,7 @@ const JOBS: { title: string; prompt: string; steps: Step[] }[] = [
  * echoed so a tail reads coherently next to the job banner above it.
  */
 export async function playDispatchedRun(opts: {
+  signal?: AbortSignal;
   title: string;
   prompt: string;
   onEvent?: (event: Record<string, unknown>) => void;
@@ -135,7 +137,7 @@ export async function playDispatchedRun(opts: {
     { afterMs: 2000, event: uses('Bash', { command: 'npm test' }) },
   ];
   for (const step of steps) {
-    await new Promise((r) => setTimeout(r, step.afterMs));
+    await delay(step.afterMs, undefined, { signal: opts.signal });
     emit(step.event);
   }
 
@@ -147,7 +149,7 @@ export async function playDispatchedRun(opts: {
     usage: { input_tokens: 6200, output_tokens: 1900 },
     result: summary,
   };
-  await new Promise((r) => setTimeout(r, 1800));
+  await delay(1800, undefined, { signal: opts.signal });
   emit(result);
   emit({ type: 'devbox_end' });
   return { summary, turns: 6, durationMs, costUsd: 0.0341, toolCalls: 5 };

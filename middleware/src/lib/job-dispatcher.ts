@@ -17,13 +17,14 @@
 
 import { EventEmitter } from 'node:events';
 import {
-  claimNextJob, markRunning, completeJob, reapStaleJobs, listJobs, type AgentJob,
+  claimNextJob, markRunning, completeJob, reapStaleJobs, listJobs, type AgentJob, type ClaimedAgentJob,
 } from '../providers/agent-jobs.js';
 import { listBoxes, appendEvent, getBox, registerBox, isReserved } from './devbox-fleet.js';
 import { isLocalBoxId } from './local-compute-fleet.js';
 import { replicaFleet } from './replica-fleet.js';
 import { runDevboxTask } from '../routes/devbox.js';
 import { freezeJobBrief } from './run-brief.js';
+import { maintainJobAttempt, type JobAttempt } from './job-attempt.js';
 
 const TICK_MS = Number(process.env['JOB_DISPATCH_INTERVAL_MS'] ?? 10_000);
 /**
@@ -36,6 +37,7 @@ const TICK_MS = Number(process.env['JOB_DISPATCH_INTERVAL_MS'] ?? 10_000);
  * var, read once, quoted to the worker in the claim response.
  */
 export const STALE_MINUTES = Number(process.env['JOB_STALE_MINUTES'] ?? 30);
+if (!Number.isFinite(STALE_MINUTES) || STALE_MINUTES <= 0) throw new Error('JOB_STALE_MINUTES must be positive');
 
 /**
  * Emits 'job' events so SSE consumers can watch the queue without polling.
@@ -60,105 +62,60 @@ function emit(kind: string, job: AgentJob | { id: string }, extra: Record<string
   dispatcherEvents.emit('job', { kind, jobId: job.id, ...extra, ts: new Date().toISOString() });
 }
 
-async function runJob(job: AgentJob): Promise<void> {
-  const boxId = job.boxId;
-  const sessionId = job.sessionId;
+async function runJob(job: ClaimedAgentJob): Promise<void> {
+  const { boxId, sessionId, claimToken } = job;
   if (!boxId || !sessionId) {
-    await completeJob(job.id, { status: 'failed', error: 'claimed without a box assignment' });
+    await completeJob(job.id, { claimToken, status: 'failed', error: 'claimed without a box assignment' });
     return;
   }
-
   busy.add(boxId);
+  let attempt: JobAttempt | undefined;
   try {
-    await markRunning(job.id);
+    if (!await markRunning(job.id, claimToken)) return;
+    attempt = await maintainJobAttempt(job.id, claimToken, STALE_MINUTES * 60_000);
     emit('running', job, { boxId });
-
-    // Announce the job in the box's own event stream so an operator tailing
-    // the box sees why it suddenly started working.
-    appendEvent(boxId, {
-      type: 'job_started',
-      jobId: job.id,
-      title: job.title,
-      kind: job.kind,
-      ts: new Date().toISOString(),
-    });
-
+    appendEvent(boxId, { type: 'job_started', jobId: job.id, title: job.title, kind: job.kind, ts: new Date().toISOString() });
     const prompt = String(job.payload['prompt'] ?? '').trim();
-    if (!prompt) {
-      await completeJob(job.id, { status: 'failed', error: 'payload.prompt is required for devbox:task' });
-      emit('failed', job, { boxId });
-      return;
-    }
+    if (!prompt) throw new Error('payload.prompt is required for devbox:task');
 
-    // The session brief, frozen NOW — the moment this run is bound to a box
-    // (lib/run-brief.ts). Stamped onto the job as payload.brief_id + brief_sha;
-    // the box fetches exactly those bytes with `lab brief` (SessionStart). A
-    // re-dispatch of the same job (reaped, then claimed again) gets the SAME
-    // brief: the store is write-once per run_ref.
-    const frozen = await freezeJobBrief(job, 'devbox');
-    if (frozen) {
-      appendEvent(boxId, {
-        type: 'brief_frozen', jobId: job.id, brief_id: frozen.brief.id, brief_sha: frozen.brief.sha256,
-        tokens: frozen.brief.used_tokens, ts: new Date().toISOString(),
-      });
-    }
-
-    const outcome = await runDevboxTask({
-      sessionId,
-      prompt,
+    // The immutable brief is reused across retries; results remain attempt-fenced.
+    const frozen = await attempt.run(() => freezeJobBrief(job, 'devbox'));
+    attempt.assertLive();
+    if (frozen) appendEvent(boxId, {
+      type: 'brief_frozen', jobId: job.id, brief_id: frozen.brief.id, brief_sha: frozen.brief.sha256,
+      tokens: frozen.brief.used_tokens, ts: new Date().toISOString(),
+    });
+    const guard = attempt;
+    const outcome = await attempt.run(() => runDevboxTask({
+      sessionId, prompt, signal: guard.signal,
       ...(frozen ? { lab: { ...frozen.run, session_id: sessionId, box_id: boxId } } : {}),
       resume: Boolean(job.payload['resume']),
-      // A queued job may ask for a bigger model; most should not need to.
       ...(typeof job.payload['model'] === 'string' ? { model: job.payload['model'] } : {}),
-      onEvent: (ev) => appendEvent(boxId, ev),
-    });
-
-    appendEvent(boxId, {
-      type: 'job_finished',
-      jobId: job.id,
-      ok: outcome.ok,
-      ts: new Date().toISOString(),
-    });
-
-    if (!outcome.ok) {
-      await completeJob(job.id, {
-        status: 'failed',
-        error: outcome.error ?? 'task failed',
-        result: {
-          summary: outcome.summary,
-          turns: outcome.turns,
-          durationMs: outcome.durationMs,
-          costUsd: outcome.costUsd,
-          toolCalls: outcome.toolCalls,
-          transcript: outcome.transcript,
-        },
-      });
-      emit('failed', job, { boxId });
-      return;
-    }
-
-    // A job that changed the workspace needs a human to accept the artifact;
-    // a read-only job is simply done. `requiresReview` defaults to true for
-    // devbox work because it can open PRs.
-    const requiresReview = job.payload['requiresReview'] !== false;
-    await completeJob(job.id, {
-      status: requiresReview ? 'awaiting_review' : 'done',
+      onEvent: ev => { guard.assertLive(); appendEvent(boxId, ev); },
+    }));
+    attempt.assertLive();
+    const status = !outcome.ok ? 'failed' : job.payload['requiresReview'] !== false ? 'awaiting_review' : 'done';
+    const committed = await completeJob(job.id, {
+      claimToken, status,
+      ...(!outcome.ok ? { error: outcome.error ?? 'task failed' } : {}),
       result: {
-        summary: outcome.summary,
-        turns: outcome.turns,
-        durationMs: outcome.durationMs,
-        costUsd: outcome.costUsd,
-        toolCalls: outcome.toolCalls,
-        // Stored so the job detail page can show what the worker did long
-        // after the fleet ring buffer has rolled past this run.
-        transcript: outcome.transcript,
+        summary: outcome.summary, turns: outcome.turns, durationMs: outcome.durationMs,
+        costUsd: outcome.costUsd, toolCalls: outcome.toolCalls, transcript: outcome.transcript,
       },
     });
-    emit(requiresReview ? 'awaiting_review' : 'done', job, { boxId });
+    if (committed) {
+      appendEvent(boxId, { type: 'job_finished', jobId: job.id, ok: outcome.ok, ts: new Date().toISOString() });
+      emit(status, job, { boxId });
+    }
   } catch (err) {
-    await completeJob(job.id, { status: 'failed', error: (err as Error).message });
-    emit('failed', job, { boxId });
+    // An uncertain/lost heartbeat is not a business failure. Leave recovery to
+    // the authoritative stale sweep and never publish a stale terminal event.
+    if (!attempt || attempt.signal.aborted) return;
+    if (await completeJob(job.id, { claimToken, status: 'failed', error: (err as Error).message })) {
+      emit('failed', job, { boxId });
+    }
   } finally {
+    attempt?.stop();
     busy.delete(boxId);
   }
 }
@@ -187,7 +144,7 @@ async function tick(): Promise<void> {
       const job = await claimNextJob(box.id, box.sessionId);
       if (!job) break;                        // queue empty — stop probing
       emit('claimed', job, { boxId: box.id });
-      void runJob(job);                       // fire and forget; bounded by idle boxes
+      void runJob(job).catch(error => console.warn('[dispatcher] attempt failed:', (error as Error).message));                       // fire and forget; bounded by idle boxes
     }
   } catch (err) {
     console.warn('[dispatcher] tick failed:', (err as Error).message);
@@ -197,49 +154,11 @@ async function tick(): Promise<void> {
 }
 
 /**
- * Recover from a middleware restart.
- *
- * The fleet registry is in-memory, so a restart leaves Aurora holding jobs
- * marked claimed/running whose runner died with the old process. Nothing is
- * driving them, their box is no longer registered (so tailing them 404s), and
- * the ordinary reaper would not touch them for a full stale window.
- *
- * Both halves are needed. Re-registering the boxes keeps their session ids
- * addressable so the fleet is not silently empty after every dev reload; then
- * reaping with a zero window requeues the orphans immediately, because in a
- * single-process middleware any job still marked live at boot is orphaned by
- * definition — there is no run left to wait for.
- *
- * ⚠️ That last sentence is the reason both halves now skip LOCAL work, and it is
- * the sharpest edge local compute cut into this file. A job claimed by a paired
- * workstation is running in a process the middleware does not own, so at boot it
- * is not orphaned — it is somebody else's, and still going. Unguarded, this
- * function did two damaging things to it on every restart, including every `tsx
- * watch` save in dev:
- *
- *   1. `registerBox({id: job.boxId, sessionId: job.sessionId})` minted a phantom
- *      devbox box for `local:<nodeId>`, which the dispatcher then read as idle
- *      and handed cloud work to, and which `devbox-reaper` then tried to stop
- *      through AgentCore — an API call against a session that never existed.
- *   2. `reapStaleJobs(0)` requeued the laptop's in-flight job with no window at
- *      all, so the work ran twice and the second copy was billed. The laptop's
- *      eventual completion then overwrote the newer attempt's result, which is
- *      the race `claim_token` fences.
- *
- * Local claims are left to the periodic sweep, which reaps them once their
- * heartbeat actually goes quiet — the honest test for a worker the middleware
- * cannot see.
- *
- * ⚠️ A SIBLING REPLICA is the same counterexample, and it arrives the moment this
- * service scales. "Any job still marked live at boot is orphaned" holds only
- * while this process is the ONLY executor; with a second task the booting
- * replica requeues work the first one is actively running, so the job runs
- * twice, is billed twice, and the straggler's completion overwrites the newer
- * attempt. That fires on every scale-out and on every task of a rolling deploy —
- * i.e. precisely when you scale. So the zero-window sweep now runs only when
- * `replicaFleet().peers()` is empty, and is serialized by a short distributed
- * lock so two replicas booting together cannot both sweep. With no REDIS_URL the
- * fleet reports no peers and the behaviour is byte-for-byte what it was.
+ * Recover addressable cloud boxes after a restart. Local boxes remain owned by
+ * their workstation. The zero-window sweep is only for legacy tokenless rows,
+ * only while no peer is known, and under a renewed fleet lease. All current
+ * claims (push and pull) survive startup until their heartbeat goes stale.
+ * Redis membership is a scheduling hint; SQL attempt tokens fence job writes.
  */
 async function recoverOrphanedWork(): Promise<void> {
   try {
@@ -271,7 +190,7 @@ async function recoverOrphanedWork(): Promise<void> {
       return;
     }
     const reaped = await fleet.withLock('dispatcher-boot-recovery', 30_000,
-      () => reapStaleJobs(0, { includeFenced: false }));
+      (lease) => reapStaleJobs(0, { includeFenced: false, assertLive: lease?.assertLive }));
     if (!reaped) {
       console.log('[dispatcher] restart recovery: another replica holds the recovery lock; skipping the sweep');
       return;

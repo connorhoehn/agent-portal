@@ -24,7 +24,7 @@
 // (lane E); the sweeper reads that as "nothing to sweep here" and says so once.
 
 import { AppError } from './async-handler.js';
-import { replicaFleet, type ReplicaFleet } from './replica-fleet.js';
+import { replicaFleet, type ReplicaFleet, type ReplicaLock } from './replica-fleet.js';
 import { revokeAccess } from './access-provision.js';
 import { accessNow, casRequest, listCatalog, listRequests, type AccessRequestRow } from '../providers/access.js';
 import { getUser } from '../providers/identity.js';
@@ -65,11 +65,12 @@ export function dueRows(rows: readonly AccessRequestRow[], now: string, aheadMs 
   return { expire, warn };
 }
 
-async function sweepOnce(): Promise<Omit<SweepResult, 'ran'>> {
+async function sweepOnce(lease?: ReplicaLock): Promise<Omit<SweepResult, 'ran'>> {
   const now = accessNow();
   const { expire, warn } = dueRows(listRequests(), now);
   const out: Omit<SweepResult, 'ran'> = { expired: [], warned: [], failed: [] };
   for (const r of expire) {
+    lease?.assertLive();
     try {
       const res = await revokeAccess(r, `Reached its ${r.duration} end`, null, { outcome: 'expired' });
       if (res.changed) out.expired.push(r.id);
@@ -79,10 +80,12 @@ async function sweepOnce(): Promise<Omit<SweepResult, 'ran'>> {
   }
   const titles = new Map(listCatalog().map((i) => [i.id, i.title]));
   for (const r of warn) {
+    lease?.assertLive();
     // The claim is the once-only rule: a second sweep (or replica) loses it.
     const claimed = casRequest(r.id, { from: ['active'], warnedAtNull: true }, { expiryWarnedAt: now }, [], null, now);
     if (!claimed) continue;
     const beneficiary = await getUser(r.beneficiaryId).catch(() => null);
+    lease?.assertLive();
     await notifyAccessRequest({
       kind: 'expiring', requestId: r.id, itemTitle: titles.get(r.itemId) ?? r.itemId, requesterId: r.requesterId,
       beneficiaryId: r.beneficiaryId, beneficiaryName: beneficiary?.displayName ?? null, actorId: null, expiresAt: r.expiresAt,

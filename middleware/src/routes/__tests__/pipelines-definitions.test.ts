@@ -29,7 +29,7 @@ import { errorHandler } from '../../lib/async-handler.js';
 import { type Role, type Session, type Tenant } from '../../lib/session.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
 import { mockJobs } from '../../mock/agent-jobs.js';
-import { completeJob } from '../../providers/agent-jobs.js';
+import { claimJob, completeJob } from '../../providers/agent-jobs.js';
 import { promoteCandidate } from '../../providers/promotions.js';
 import { pipelineRunRecords } from '../../mock/pipeline-definitions.js';
 import { setNotificationSink, type NotificationInputLike } from '../../lib/social-notify.js';
@@ -153,8 +153,8 @@ describe('POST /api/pipelines/definitions/:id/dry-run — RunPipeline, the exist
     expect(dup.status).toBe(409);
 
     // The queue's own completion path closes it.
-    job.status = 'running';
-    await completeJob(job.id, { status: 'done', result: { costUsd: 0.0341 } });
+    const claim = await claimJob(job.id, 'test-box', 'test-session');
+    await completeJob(job.id, { claimToken: claim!.claimToken, status: 'done', result: { costUsd: 0.0341 } });
     await new Promise((r) => setImmediate(r));
     expect(pipelineRunRecords.rows().find((r) => r.id === `job:${job.id}`)?.status).toBe('completed');
     // The run's cost is read off the job it ran as, once the job reports one.
@@ -199,8 +199,8 @@ describe('row 9 — a run record entering completed notifies its trigger and its
     setNotificationSink({ notifyUser: async (userId, input) => { sent.push({ userId, input }); return {}; } });
     const res = await request(ines()).post(`/api/pipelines/definitions/${enc(RUNBOOK)}/dry-run`).send({});
     const job = mockJobs.find((j) => j.id === res.body.jobId)!;
-    job.status = 'running';
-    await completeJob(job.id, { status: 'done', result: { costUsd: 0.01 } });
+    const claim = await claimJob(job.id, 'test-box', 'test-session');
+    await completeJob(job.id, { claimToken: claim!.claimToken, status: 'done', result: { costUsd: 0.01 } });
     for (let i = 0; i < 50 && sent.length < 3; i += 1) await new Promise((r) => setTimeout(r, 10));
     expect(sent.map((x) => x.userId).sort()).toEqual(['u-dara', 'u-ines', 'u-kofi']);
     expect(sent[0]!.input).toMatchObject({
@@ -208,7 +208,7 @@ describe('row 9 — a run record entering completed notifies its trigger and its
       action: { href: `/pipelines/runs/${enc(`job:${job.id}`)}` },
     });
     // A replayed event for the same status moves nothing and notifies nobody again.
-    await completeJob(job.id, { status: 'done', result: { costUsd: 0.01 } }).catch(() => undefined);
+    await completeJob(job.id, { claimToken: claim!.claimToken, status: 'done', result: { costUsd: 0.01 } }).catch(() => undefined);
     await new Promise((r) => setTimeout(r, 30));
     expect(sent).toHaveLength(3);
   });
