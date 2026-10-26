@@ -1,0 +1,78 @@
+{
+  "observedOn": "2026-10-26",
+  "goalStatus": "unfinished",
+  "scope": "C6 owner integration released; C5/C7/C8/C9 remain",
+  "owners": {
+    "messageQueue": {
+      "version": "0.4.0",
+      "revision": "b055b33a1ca3fa201415478768b18fbaed73f805"
+    },
+    "eventCatalog": {
+      "version": "0.9.0",
+      "revision": "4e8910f70486d335014d6d6eb93fa842ae8bed32"
+    }
+  },
+  "checks": {
+    "fullCatalogSuite": {
+      "command": "EC_DDB_INTEGRATION=1 npm test",
+      "suitesPassed": 152,
+      "testsPassed": 3157,
+      "testsSkipped": 0
+    },
+    "fullQueueSuite": {
+      "suitesPassed": 130,
+      "testsPassed": 1541,
+      "suitesSkipped": 9,
+      "testsSkipped": 84
+    },
+    "catalogRealBroker": {
+      "testsPassed": 9,
+      "nodeVersions": [
+        "25.9.0",
+        "20.0.0"
+      ],
+      "storage": "DynamoDB Local, UUID-owned table",
+      "processes": "two independent installed MQ broker processes, signed HTTP"
+    },
+    "node20Focused": {
+      "suitesPassed": 3,
+      "testsPassed": 16
+    },
+    "packedCatalog": "root/durable import and require identity, typed consumer and owner-client publish pass on Node 20.0.0 and 25.9.0",
+    "packedQueue": "client import/require identity and browser-only types pass on Node 20.0.0 and 25.9.0",
+    "builds": [
+      "catalog library",
+      "catalog CLI/server",
+      "queue"
+    ],
+    "lintAll": "pass",
+    "distGate": "pass",
+    "generatedContracts": "regenerated; AsyncAPI and registry snapshot tests pass"
+  },
+  "accepted": [
+    "strict full-policy setup and same-policy recreation after missing queue",
+    "FIFO group and retry dedup fields, valid derived source/DLQ names",
+    "renew every fetched receipt including queued batch members",
+    "serialize renewal with ACK and use latest receipt",
+    "bounded drain, no unstarted handlers or late ACK after cancellation",
+    "lease/ACK failure separate from handler poison budget",
+    "broker-owned poison transfer",
+    "declared queue names and paused intake",
+    "raw broker string counts normalized",
+    "catalog schema fallback explicit despite transitive AJV"
+  ],
+  "limitations": [
+    "experimental broker ddb-v2 still rejects production/durable profiles",
+    "handler cancellation is cooperative; durable business idempotency/fencing required",
+    "separate publish calls need explicit dedup ID for the same business operation",
+    "host pins and full platform end-to-end adoption deferred to C9",
+    "durable subscriptions and operator replay/redrive remain C5; no migration/scale acceptance"
+  ],
+  "preservation": {
+    "sharedResets": 0,
+    "sharedRestarts": 0,
+    "cloudDeployments": 0,
+    "ownedFixturesRemoved": true
+  },
+  "localLogs": ".scratch/chassis-ec-c6-* and .scratch/chassis-mq-040-*"
+}

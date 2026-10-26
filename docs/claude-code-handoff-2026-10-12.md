@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Chassis C4 and repository push checkpoint — 2026-10-26”
+**Latest checkpoint:** read “Chassis C6 owner releases — 2026-10-26”
 at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -1001,3 +1001,24 @@ Continue with the new C6 section in `docs/chassis/implementation-plan.md`, then
 C7/C8, C5 and C9. The original three-improvement goal is not complete. Durable
 profiles remain disabled until the remaining acceptance gates pass. No shared
 data reset/restart, cloud deployment or broad ESM conversion occurred.
+
+
+## Chassis C6 owner releases — 2026-10-26
+
+MQ 0.4.0 (`b055b33`) and event-catalog 0.9.0 (`4e8910f`) are released/tagged
+and pushed. The catalog uses the owner HTTP client, strict full queue policy,
+FIFO routing/dedup, renewable delivery leases, serialized ACK and bounded drain.
+Paused subscribers retain skipped work; custom queue names and string metrics
+are honored. Explicit fallback schema mode prevents dependency hoisting from
+changing accepted events.
+
+All 152 catalog suites / 3,157 tests pass, including nine real DDB/child-broker
+cases; 16 focused tests and packed consumers pass on Node 20.0.0 too. MQ's
+130 suites / 1,541 tests pass (nine gated suites / 84 skipped). See
+`docs/chassis/catalog-consumer-verification.json` for commands and scope.
+
+C7/C8/C5/C9 remain. Dispatcher and bot-runner still use tokenless completion;
+fix both callers and the underlying provider, not just dispatcher. Existing
+`claim_token`/`heartbeat_at` and pull-side routes provide the reusable starting
+point. Preserve schema fail-closed behavior, claim-token privacy and business
+result fencing. No cloud migration, shared reset/restart or host pin change in C6.

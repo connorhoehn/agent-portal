@@ -266,3 +266,29 @@ the concrete C6 path: shared client, strict full-policy ensure, FIFO publish
 fields, lease renewal for all acquired batch messages, serialized ACK/renewal,
 and bounded drain. Durable profiles remain disabled. Legacy operator replay/
 redrive, subscriptions, migration and production scale are not newly accepted.
+
+
+### 2026-10-26 — C6 catalog consumer released
+
+Message-queue **0.4.0** (`b055b33a1ca3fa201415478768b18fbaed73f805`) and event-catalog
+**0.9.0** (`4e8910f70486d335014d6d6eb93fa842ae8bed32`) are pushed with release tags. C6 now
+uses the owner client for signed/bounded wire operations, strict policy setup,
+FIFO group/dedup fields, readiness and metrics. Every fetched receipt renews,
+including queued batch members. Renewal and ACK serialize; cancelled/expired
+leases cannot authorize late ACK. Stop intake then drain within a bounded budget;
+pausing no longer acknowledges skipped work. Declared queue names flow through
+publish, subscribe and observation. Transitive AJV installation exposed an
+implicit schema-mode switch; catalog now explicitly preserves its established
+fallback keyword semantics.
+
+**152 suites / 3,157 tests pass**, including nine real DDB/separate-process broker
+cases. The 16 focused ownership/policy tests pass on Node 20.0.0; packed catalog
+root/durable import/require identity and public types pass on Node 20.0.0 and
+25.9.0. MQ passes 130 suites / 1,541 tests (nine gated suites / 84 skipped),
+plus packed client checks on both runtimes. Builds, dist gate and generated
+contract checks pass. Fixtures removed only their owned processes/tables.
+
+**The goal remains unfinished:** C7 attempt fencing and C8 composition/contracts
+are next, then C5 durable subscriptions and C9 host adoption. No shared stack
+restart/reset or cloud deployment occurred. Host consumer pins are unchanged.
+Evidence: [catalog-consumer-verification.json](chassis/catalog-consumer-verification.json).

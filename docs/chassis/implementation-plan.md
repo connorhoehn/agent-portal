@@ -192,7 +192,7 @@ Maintain principal revalidation and per-action authorization. Capability checks
 must never substitute for access control. The legacy factory gets a deliberate
 migration path and tests for its old supported inputs.
 
-## Next consumer slice: C6 event-catalog
+## C6 event-catalog — released 2026-10-26
 
 Source review on 2026-10-26 narrows the next changes to
 `event-catalog/src/client/durable.ts`, `src/client/index.ts`, the public option
@@ -241,7 +241,11 @@ HTTP retry/receipt implementation in the catalog.
 
 C7 job fencing and C8 realtime composition/contracts follow this consumer slice;
 C5 durable subscriptions and C9 host adoption remain required by the original
-goal. This source review is a plan, not implemented catalog behavior.
+goal. The C6 steps above are implemented in event-catalog 0.9.0 (`4e8910f`) using
+message-queue 0.4.0 (`b055b33`). All 152 catalog suites / 3,157 tests pass,
+including nine real broker cases; focused Node 20 and packed consumer checks
+pass. See [the C6 record](catalog-consumer-verification.json). Host pin adoption
+and the original C5/C7/C8/C9 acceptance remain unfinished.
 
 ## ESM migration debt — TD-ESM-01
 
