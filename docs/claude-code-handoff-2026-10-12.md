@@ -6,7 +6,7 @@ checkpoint prose in `CLAUDE.md` is historical, including claims about unmerged
 release branches, old dependency versions, and a blocked local environment.
 Use current code and Git state when they differ.
 
-**Latest checkpoint:** read “Chassis usage-limit checkpoint — 2026-10-25”
+**Latest checkpoint:** read “Chassis C3 HTTP checkpoint — 2026-10-26”
 at the end of this document. The
 “Current state” and verification sections immediately below describe the
 original October 12 handoff, not the current dependency pins or acceptance.
@@ -959,3 +959,24 @@ store foundation” and `docs/chassis/delivery-store-verification.json`.
 Next: integrate through the existing QueueService/HTTP surface, preserve memory
 behavior, then prove separate-process restart/claim/receipt semantics. Keep all
 C0–C9 scope intact. The user's dirty ui-components lock remains untouched.
+
+
+## Chassis C3 HTTP checkpoint — 2026-10-26
+
+The three chassis improvements remain unfinished. MQ main is pushed at
+`757d06fc0085f14ed0357104fe14274c44f19cbe`; service-runtime v0.5.1 is released
+at `c01db0e6dfe0e6b91081ae92ee5cc3c1e77d2ad6` and adopted by MQ. The application
+client pins remain unchanged. Standard transactional delivery now runs through
+the existing signed HTTP API under explicit experimental `ddb-v2` selection.
+
+Verification: 130 MQ suites / 1,537 tests pass (nine gated suites / 65 skipped);
+14 real DDB store tests plus eight separate-process HTTP tests pass. All eight
+HTTP tests also pass on Node 20.0.0. Shared shutdown has 360 passing tests and
+packed Node 20/25 compatibility. See `docs/chassis-extensibility-goal.md` and
+`docs/chassis/delivery-store-verification.json` for exact scope and limitations.
+
+Next: C4 durable FIFO/dedup and atomic dead-letter transfer, following
+`message-queue/docs/delivery-state-v2.md`. Durable runtime profiles stay disabled
+until complete policy/subscription acceptance. C6–C9 and migration are still
+open. No shared reset/restart or cloud deployment occurred in this checkpoint.
+ESM remains deferred/opportunistic.

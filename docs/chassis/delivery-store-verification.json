@@ -1,31 +1,58 @@
 {
-  "observedOn": "2026-10-25",
-  "goalStatus": "active",
-  "scope": "Initial C3 store foundation; C3-C9 acceptance incomplete",
+  "observedOn": "2026-10-26",
+  "goalStatus": "unfinished",
+  "scope": "C3 standard delivery lifecycle verified locally; C4-C9 incomplete",
   "owner": "message-queue",
-  "revision": "c0d22e9422b546370f712e5233f8fb5ecb85dc9c",
+  "revision": "757d06fc0085f14ed0357104fe14274c44f19cbe",
   "releaseStatus": "unreleased source checkpoint, pushed to main",
-  "serverAdopted": false,
+  "serverAdopted": true,
+  "selection": "explicit ddb-v2 with separate pre-provisioned table",
   "durableProfilesEnabled": false,
   "verification": {
-    "command": "MQ_DDB_INTEGRATION=1 DYNAMODB_ENDPOINT=http://127.0.0.1:8000 npm test -- --runInBand test/integration/ddb-delivery-store.test.ts",
-    "suitesPassed": 1,
-    "testsPassed": 14,
+    "command": "MQ_DDB_INTEGRATION=1 DYNAMODB_ENDPOINT=http://127.0.0.1:8000 npm test -- --runInBand test/integration/ddb-delivery-http.test.ts test/integration/ddb-delivery-store.test.ts",
+    "suitesPassed": 2,
+    "testsPassed": 22,
     "testsSkipped": 0,
-    "store": "DynamoDB Local; independent SDK clients; UUID-owned table removed",
-    "processModel": "one test process, multiple independent clients",
+    "store": "DynamoDB Local; UUID-owned tables removed",
+    "processModel": "independent SDK clients plus two signed HTTP queue child processes and SIGKILL/replacement",
+    "fullOwnerSuite": {
+      "suitesPassed": 130,
+      "testsPassed": 1537,
+      "suitesSkipped": 9,
+      "testsSkipped": 65
+    },
+    "node20HttpAcceptance": {
+      "node": "20.0.0",
+      "testsPassed": 8
+    },
+    "packedClient": "Node 25.9.0 import/require identity and browser-only types pass",
     "build": "pass",
     "changedFileLint": "pass",
-    "fullOwnerSuiteRepeated": false,
     "sharedResets": 0,
     "sharedRestarts": 0,
     "cloudDeployments": 0
   },
+  "sharedLifecycle": {
+    "owner": "service-runtime",
+    "version": "0.5.1",
+    "revision": "c01db0e6dfe0e6b91081ae92ee5cc3c1e77d2ad6",
+    "releasedAndPushed": true,
+    "adoptedBy": [
+      "message-queue"
+    ],
+    "suitesPassed": 19,
+    "testsPassed": 360,
+    "node20LifecycleTestsPassed": 9,
+    "packedNativeChecks": [
+      "20.0.0",
+      "25.9.0"
+    ],
+    "buildTypecheckLint": "pass; 13 existing lint warnings"
+  },
   "remaining": [
-    "QueueService and HTTP server adoption with readiness/shutdown",
-    "Separate-process restart and competing-owner acceptance",
     "Durable FIFO/dedup/redrive and subscriptions",
     "Retired-generation cleanup and explicit migration tooling",
-    "Catalog subscriber lifecycle, fenced jobs, realtime composition/contracts and C9 host adoption"
+    "Catalog subscriber lifecycle, fenced jobs, realtime composition/contracts and C9 host adoption",
+    "Capacity and cloud acceptance"
   ]
 }

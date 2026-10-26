@@ -1,6 +1,6 @@
 # Chassis implementation plan
 
-Updated 2026-10-25 from the checked-out source. This refines the three approved
+Updated 2026-10-26 from the checked-out source. This refines the three approved
 refactors: durable delivery and worker ownership, owner-published contracts, and
 runtime capability/composition checks. Delivery repairs are in progress. C0 has queue characterization against
 DynamoDB Local and a catalog source-retention regression; the early catalog
@@ -125,9 +125,12 @@ cases remain. Existing suite names above are extension points, not newly passing
 acceptance evidence. C0 is in progress. The early C6 source-retention fix and C2 evaluator are
 released; the C1 owner client and BFF adoption are also released. Catalog adoption and
 full C1–C9 downstream acceptance remain open. MQ now rejects unsupported
-durable profiles before storage I/O. The initial v2 store now passes 14 real DDB
-contract tests; it is not yet connected to QueueService/server. C3 process/HTTP
-acceptance and C4–C5 remain open. See the latest execution-ledger checkpoint.
+durable profiles before storage I/O. The v2 store is now connected to
+QueueService/server under explicit experimental selection: 14 real DDB store
+tests and eight separate-process signed HTTP tests pass, including restart,
+competing claims, stale receipts, outage and shutdown. C3's standard delivery
+lifecycle is verified locally. C4–C5, migration, scale and downstream acceptance
+remain open; durable runtime profiles remain disabled. See the latest ledger.
 
 ## Durable queue design constraints
 

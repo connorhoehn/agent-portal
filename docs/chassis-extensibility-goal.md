@@ -11,8 +11,9 @@ C0–C9, package ownership, migration gates and failure acceptance. The
 [dependency inventory](chassis/dependency-inventory.json) records the inspected
 pins. C0 is in progress; the first four queue delivery defects reproduced on
 DynamoDB Local. The catalog poison-source deletion is repaired and released; shared-client and
-capability work has started. Queue storage repairs and downstream chassis
-adoption remain pending.
+capability work has started. C3's standard transactional delivery lifecycle now
+passes store and separate-process HTTP acceptance. C4–C5 queue policies,
+downstream chassis adoption and the remaining C0–C9 gates are pending.
 The detailed plan refines the order below: extract the needed client contract
 and capability checks before the durable queue migration.
 
@@ -182,3 +183,46 @@ bounded shutdown, then prove restart and competing claims using **separate queue
 processes over HTTP**. Do not enable durable profiles before the C3–C5 acceptance
 matrix passes. Continue all C0–C9 work from the original plan; this checkpoint
 does not narrow the approved three improvements. ESM remains opportunistic only.
+
+### 2026-10-26 — C3 HTTP lifecycle and shared shutdown release
+
+Message-queue `757d06fc0085f14ed0357104fe14274c44f19cbe` is pushed to main
+(unreleased; the v0.3.0 tag and application client pin remain unchanged).
+The existing QueueService and signed HTTP API now use transactional standard
+delivery when explicitly configured with `ddb-v2` and a separate pre-provisioned
+table. Startup validates that table, reads discover current queue generations,
+operations are bounded/cancellable, and readiness follows storage availability.
+Partial storage initialization rolls back, parked receives end before HTTP
+drain, and accepted acknowledgements can finish before final shutdown.
+
+- Full MQ suite: **130 suites / 1,537 tests passed**, nine gated suites /
+  65 tests skipped. Build, changed-file lint and diff checks pass.
+- Real DynamoDB Local: **14 store + eight separate-process HTTP tests passed**.
+  The latter use the published HTTP client, signed requests, two queue children,
+  SIGKILL/replacement, competing claims, delayed delivery, stale receipts,
+  queue recreation, injected storage outage, abort and graceful shutdown.
+  Only UUID-owned tables and child processes are removed.
+- All eight HTTP cases also pass under **Node 20.0.0**. The packed MQ client
+  import/require identity and browser-only type checks pass under Node 25.9.0.
+- A real same-port IPv4/IPv6 test identified a Supertest fixture-routing defect;
+  the test harness now targets the actual listener family. Focused fixture,
+  quota and schema tests pass (18). Queue deletion now stops its legacy runtime;
+  parked receive/deletion and delayed workflows pass (62 focused tests).
+
+Service-runtime **v0.5.1**, `c01db0e6dfe0e6b91081ae92ee5cc3c1e77d2ad6`, is
+released and pinned by MQ. Its HTTP drain closes idle keep-alive sockets on
+early Node 20 while preserving active responses. Shutdown uses a monotonic total
+budget, reports hook failures through exit status, and settles custom callbacks
+once. All **19 suites / 360 tests**, build/typecheck and lint pass (13 existing
+warnings); nine lifecycle tests pass on Node 20.0.0. Native extracted npm packs
+pass import/require identity and custom-shutdown checks on Node 20.0.0/25.9.0.
+Application adoption of this patch remains part of C9.
+
+**C3's standard delivery lifecycle is locally verified; the overall goal is
+unfinished.** Durable profiles remain disabled. FIFO/dedup, atomic DLQ transfer,
+subscriptions, retired-generation cleanup/migration, C6 catalog lifecycle,
+C7 job fencing, C8 realtime composition/room contracts and C9 adoption remain.
+Continue with C4 using the linked-group transaction design in the owner's
+`docs/delivery-state-v2.md`. No shared reset/restart or cloud deployment occurred
+in this checkpoint. Evidence is in `chassis/delivery-store-verification.json`;
+local logs use `.scratch/chassis-delivery-v2-` and `chassis-runtime-` prefixes.
