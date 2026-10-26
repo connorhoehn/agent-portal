@@ -348,8 +348,8 @@ export class SocialMediaStack extends cdk.Stack {
       turn.secret.grantRead(role);
       // coturn relays from ITS Elastic IP to the address mediasoup announces,
       // so the SFU must admit the relay's public address on the media ports.
-      this.securityGroup.addIngressRule(ec2.Peer.ipv4(`${turn.publicIp}/32`), mediaPort('udp'), 'TURN relay → RTC media (UDP)');
-      this.securityGroup.addIngressRule(ec2.Peer.ipv4(`${turn.publicIp}/32`), mediaPort('tcp'), 'TURN relay → RTC media (TCP)');
+      this.securityGroup.addIngressRule(ec2.Peer.ipv4(`${turn.publicIp}/32`), mediaPort('udp'), 'TURN relay to RTC media (UDP)');
+      this.securityGroup.addIngressRule(ec2.Peer.ipv4(`${turn.publicIp}/32`), mediaPort('tcp'), 'TURN relay to RTC media (TCP)');
     }
 
     const userData = ec2.UserData.forLinux();
@@ -606,7 +606,7 @@ export class SocialMediaStack extends cdk.Stack {
     }
     // The relayed leg: the SFU sends media back to the relay's allocated port.
     sg.addIngressRule(ec2.Peer.ipv4(`${sfuEip.attrPublicIp}/32`),
-      ec2.Port.udpRange(TURN_PORTS.relay.from, TURN_PORTS.relay.to), 'SFU → TURN relay ports');
+      ec2.Port.udpRange(TURN_PORTS.relay.from, TURN_PORTS.relay.to), 'SFU to TURN relay ports');
 
     const eip = new ec2.CfnEIP(this, 'TurnEip', { domain: 'vpc', tags: [{ key: 'Name', value: `${prefix}-social-turn` }] });
 

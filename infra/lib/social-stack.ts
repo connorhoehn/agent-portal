@@ -626,7 +626,7 @@ export class SocialStack extends cdk.Stack {
     if (props.sfu) {
       const sfuSg = ec2.SecurityGroup.fromSecurityGroupId(this, 'SfuSecurityGroup', props.sfu.securityGroupId, { mutable: true });
       // Server-to-server session calls, inside the VPC.
-      sfuSg.addIngressRule(ec2.Peer.securityGroupId(platformSg.securityGroupId), ec2.Port.tcp(SFU_PORTS.api), 'platform-api → SFU API');
+      sfuSg.addIngressRule(ec2.Peer.securityGroupId(platformSg.securityGroupId), ec2.Port.tcp(SFU_PORTS.api), 'platform-api to SFU API');
       // The SFU's recording webhook back to platform-api.
       platformSg.addIngressRule(ec2.Peer.securityGroupId(props.sfu.securityGroupId), ec2.Port.tcp(3001), 'SFU webhook');
 
@@ -654,8 +654,8 @@ export class SocialStack extends cdk.Stack {
         if (viaCloudFront) {
           cloudFrontRule('SfuCloudFrontRule', CLOUDFRONT_RULE_PRIORITY.sfu, ORIGIN_ROUTES.sfu, sfuTg);
         }
-        sfuSg.addIngressRule(ec2.Peer.securityGroupId(props.loadBalancerSecurityGroupId), ec2.Port.tcp(SFU_PORTS.api), 'ALB → SFU API');
-        albSg.addEgressRule(ec2.Peer.securityGroupId(props.sfu.securityGroupId), ec2.Port.tcp(SFU_PORTS.api), 'ALB → SFU API');
+        sfuSg.addIngressRule(ec2.Peer.securityGroupId(props.loadBalancerSecurityGroupId), ec2.Port.tcp(SFU_PORTS.api), 'ALB to SFU API');
+        albSg.addEgressRule(ec2.Peer.securityGroupId(props.sfu.securityGroupId), ec2.Port.tcp(SFU_PORTS.api), 'ALB to SFU API');
       }
     }
 

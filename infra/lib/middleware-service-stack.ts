@@ -1253,7 +1253,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
       }
       const cloudFrontSg = new ec2.SecurityGroup(this, 'CloudFrontOriginSecurityGroup', {
         vpc,
-        description: 'CloudFront origin-facing prefix list -> middleware ALB (OrgIQ-Portal)',
+        description: 'CloudFront origin-facing prefix list to middleware ALB (OrgIQ-Portal)',
         allowAllOutbound: false,
       });
       cloudFrontSg.addIngressRule(
