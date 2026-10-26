@@ -816,10 +816,12 @@ curl -s "$PORTAL_URL/health"                                        # the middle
 ./scripts/deploy.sh OrgIQ-MiddlewareService -e "${MW[@]}" --context portalPublicUrls=true
 
 # 5. Close the callback guards, and give the fleet a reachable MIDDLEWARE_URL.
-for s in approvals-request harness-trace assessment-run-complete; do
-  aws secretsmanager get-secret-value --secret-id orgiq-$s-secret --query SecretString --output text; done
-./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true --context portalPublicUrl=$PORTAL_URL \
-  --context approvalsRequestSecret=… --context harnessTraceSecret=… --context assessmentRunCompleteSecret=…
+#    deploy.sh (§3b "Sticky context", 2026-10-26) reads the three
+#    orgiq-*-secret values and OrgIQ-Portal's PortalUrl itself, and on every
+#    later deploy also re-supplies deployRuntimes, deployMiddlewareService,
+#    albAllowCidr, deployPortal and portalPublicUrls from what is live.
+#    Explicit --context still wins; DEPLOY_INFER_CONTEXT=false turns it off.
+./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true
 
 # 6. Social. Portal FIRST with the social flags, so its platform/SFU
 #    distributions and parameters exist before the middleware reads them.

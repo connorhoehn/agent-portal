@@ -316,6 +316,83 @@ echo ""
 # --method direct   skip changeset create→wait→execute round-trip on updates,
 #                   saves ~15-30s per stack. Safe for dev; remove for prod.
 # ──────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────
+# 3b. Sticky context — read the second-phase flags back from what is live.
+#
+# Several gates are CLI context, not cdk.json, because each needs an artifact
+# that does not exist on a first deploy (an image, a stack output, a secret).
+# Once they are live, every later deploy had to repeat them by hand, and one
+# that forgot did real damage while reading as healthy: without
+# deployMiddlewareService the BFF scales to 0; without deployPortal the
+# CloudFront lock and origin rules go and the portal answers 403; without
+# deployRuntimes every CfnRuntime is DELETED; and the runtimes' three callback
+# secrets plus portalPublicUrl had to be copied out of Secrets Manager and
+# CloudFormation into --context (docs/social-calls-deploy-plan.md §10 step 5).
+#
+# So each value is read from the live account, ONLY when the caller did not
+# pass it, and only once its artifact exists — a fresh account infers nothing,
+# so first-deploy ordering is unchanged. DEPLOY_INFER_CONTEXT=false turns it off.
+# ──────────────────────────────────────────────────────────────────
+ctx_given() {
+  local a
+  for a in ${CDK_ARGS[@]+"${CDK_ARGS[@]}"}; do [[ "$a" == "$1="* ]] && return 0; done
+  return 1
+}
+stack_output() {
+  local v
+  v=$(aws cloudformation describe-stacks --stack-name "$1" --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text 2>/dev/null || true)
+  [[ "$v" == "None" ]] && v=""
+  echo "$v"
+}
+INFERRED=()
+INFERRED_SHOWN=()
+infer() {  # infer <key> <value> [secret]
+  ctx_given "$1" && return 0
+  INFERRED+=(--context "$1=$2")
+  if [[ "${3:-}" == "secret" ]]; then INFERRED_SHOWN+=("$1=<from Secrets Manager>"); else INFERRED_SHOWN+=("$1=$2"); fi
+}
+if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
+  echo "── Inferring second-phase context from the live account ──"
+  RUNTIME_COUNT=$(aws cloudformation list-stack-resources --stack-name OrgIQ-AgentCoreRuntime --region "$REGION" \
+    --query "length(StackResourceSummaries[?ResourceType=='AWS::BedrockAgentCore::Runtime'])" --output text 2>/dev/null || echo 0)
+  [[ "$RUNTIME_COUNT" =~ ^[1-9] ]] && infer deployRuntimes true
+
+  MW_DESIRED=$(aws ecs describe-services --cluster "${PREFIX}-middleware" --services "${PREFIX}-middleware" --region "$REGION" \
+    --query 'services[0].desiredCount' --output text 2>/dev/null || echo 0)
+  [[ "$MW_DESIRED" =~ ^[1-9] ]] && infer deployMiddlewareService true
+  MW_CIDRS=$(stack_output OrgIQ-MiddlewareService MiddlewareAllowedCidrs)
+  [[ "$MW_CIDRS" =~ ^[0-9] ]] && infer albAllowCidr "$MW_CIDRS"
+
+  PORTAL_URL=$(stack_output OrgIQ-Portal PortalUrl)
+  if [[ -n "$PORTAL_URL" ]]; then
+    infer deployPortal true
+    infer portalPublicUrl "$PORTAL_URL"
+    # Only once OrgIQ-Portal has written the parameters the middleware resolves.
+    aws ssm get-parameter --name "/${PREFIX}/portal/url" --region "$REGION" >/dev/null 2>&1 \
+      && infer portalPublicUrls true
+  fi
+
+  # The runtimes' machine-callback secrets (lib/agentcore-runtime-stack.ts):
+  # minted by OrgIQ-MiddlewareService, passed as plain env because a runtime's
+  # EnvironmentVariables cannot hold a Secrets Manager reference.
+  for pair in approvalsRequestSecret:approvals-request harnessTraceSecret:harness-trace \
+              assessmentRunCompleteSecret:assessment-run-complete; do
+    key=${pair%%:*}
+    ctx_given "$key" && continue
+    val=$(aws secretsmanager get-secret-value --secret-id "${PREFIX}-${pair#*:}-secret" --region "$REGION" \
+      --query SecretString --output text 2>/dev/null || true)
+    [[ -n "$val" && "$val" != "None" ]] && infer "$key" "$val" secret
+  done
+
+  if [[ ${#INFERRED_SHOWN[@]} -eq 0 ]]; then
+    echo "  None (nothing second-phase is live yet)"
+  else
+    for s in "${INFERRED_SHOWN[@]}"; do echo "  --context ${s}"; done
+  fi
+  echo ""
+fi
+
 echo "── Running cdk deploy ──"
 echo ""
 
@@ -327,7 +404,7 @@ EXISTING_STACKS=$(aws cloudformation list-stacks \
   --query 'StackSummaries[?starts_with(StackName, `OrgIQ`)].StackName' \
   --output text 2>/dev/null || echo "")
 
-STACKS_TO_DEPLOY=$("${CDK[@]}" ls 2>/dev/null | grep "^OrgIQ" || echo "")
+STACKS_TO_DEPLOY=$("${CDK[@]}" ls ${INFERRED[@]+"${INFERRED[@]}"} 2>/dev/null | grep "^OrgIQ" || echo "")
 ALL_EXIST=true
 while IFS= read -r stack; do
   [[ -z "$stack" ]] && continue
@@ -372,9 +449,9 @@ echo ""
 
 run_cdk_deploy() {
   if [[ ${#CDK_ARGS[@]} -eq 0 ]]; then
-    "${CDK[@]}" deploy --all "${CDK_FLAGS[@]}"
+    "${CDK[@]}" deploy --all ${INFERRED[@]+"${INFERRED[@]}"} "${CDK_FLAGS[@]}"
   else
-    "${CDK[@]}" deploy "${CDK_ARGS[@]}" "${CDK_FLAGS[@]}"
+    "${CDK[@]}" deploy "${CDK_ARGS[@]}" ${INFERRED[@]+"${INFERRED[@]}"} "${CDK_FLAGS[@]}"
   fi
 }
 

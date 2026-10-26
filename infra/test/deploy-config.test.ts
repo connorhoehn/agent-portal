@@ -113,6 +113,35 @@ describe('deploy.sh: a half-built fleet must not exit 0', () => {
   });
 });
 
+describe('deploy.sh: a later deploy keeps the second-phase gates that are live', () => {
+  // Forgetting one of these on a later deploy scaled the BFF to 0, removed the
+  // CloudFront lock, deleted every CfnRuntime, or left the runtimes' callback
+  // guards open — each while every stack read healthy.
+  const script = code(deploySh);
+  for (const key of [
+    'deployRuntimes', 'deployMiddlewareService', 'albAllowCidr', 'deployPortal', 'portalPublicUrl', 'portalPublicUrls',
+    'approvalsRequestSecret', 'harnessTraceSecret', 'assessmentRunCompleteSecret',
+  ]) {
+    test(`${key} is inferred from the live account`, () => {
+      assert.match(script, new RegExp(`infer ${key} |${key}:`), `${key} is not inferred`);
+    });
+  }
+
+  test('a value the caller passed wins over an inferred one', () => {
+    assert.match(script, /infer\(\) \{[^}]*ctx_given "\$1" && return 0/);
+  });
+
+  test('inferred context reaches cdk ls and both cdk deploy forms', () => {
+    assert.match(script, /ls \$\{INFERRED\[@\]\+"\$\{INFERRED\[@\]\}"\}/);
+    assert.match(script, /deploy --all \$\{INFERRED\[@\]\+"\$\{INFERRED\[@\]\}"\}/);
+    assert.match(script, /deploy "\$\{CDK_ARGS\[@\]\}" \$\{INFERRED\[@\]\+"\$\{INFERRED\[@\]\}"\}/);
+  });
+
+  test('secret values are never echoed', () => {
+    assert.match(script, /<from Secrets Manager>/);
+  });
+});
+
 describe('teardown and rebuild know the opt-in stacks (deploy plan §8/§10)', () => {
   test('cdk destroy synthesizes the opt-in stacks, or it cannot see them to delete', () => {
     // Without the flags OrgIQ-Portal / OrgIQ-Social* are not in the app, so
