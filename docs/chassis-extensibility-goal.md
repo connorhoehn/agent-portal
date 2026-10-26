@@ -13,7 +13,7 @@ pins. C3/C4 transactional delivery, FIFO/dedup and atomic DLQ pass local store
 and separate-process HTTP acceptance. C6 subscriber lifecycle, C7 fenced job
 attempts and C8 realtime composition/shared room contracts are verified locally
 and pushed. C5 durable subscriptions now pass local acceptance in MQ 0.5.0.
-C9 final host/readiness/end-to-end acceptance remains required. See the latest dated checkpoints below.
+C9 host adoption, readiness and the durable result/realtime path passed local acceptance on 2026-10-26 (see the last section); cloud, replicated and AgentCore-on-Aurora acceptance remain open.
 The detailed plan refines the order below: extract the needed client contract
 and capability checks before the durable queue migration.
 
@@ -45,10 +45,10 @@ and capability checks before the durable queue migration.
 | --- | --- | --- | --- |
 | Hangout baseline | ui-components, realtime-modules, platform-api, aws-agentcore | Targeted release verified | Real two-person media walk and 28 layout states pass; backend authorization checks pass. Broader tenant journey freshness still needs renewal (see product-readiness record) |
 | C0 failure characterization | message-queue, event-catalog, AgentCore | Locally verified | Queue failure reproductions plus catalog poison/ACK and job-attempt ownership records are linked in the dated checkpoints |
-| Durable queue and worker lifecycle | message-queue, distributed-core; platform-api, realtime-modules | Owner acceptance passed; C9 adoption pending | C3–C5 queue and C7 job ownership pass actual-store/process checks; final host path remains |
-| Owner contracts and clients | message-queue, event-catalog, pipeline-runtime, platform-api; realtime-modules, aws-agentcore | In progress | Consumer typechecks; wire fixtures; no duplicate canonical validators/interfaces |
-| Runtime composition | service-runtime, distributed-core; realtime-modules, platform-api, aws-agentcore | Library released; host adoption pending | Supported matrix passes; unsafe combinations rejected; ownership loss removes readiness |
-| Downstream releases | All changed owners and consumers | Owner releases pushed; C9 consolidation pending | Built owner artifacts match source; final consumer pin/result/readiness matrix remains |
+| Durable queue and worker lifecycle | message-queue, distributed-core; platform-api, realtime-modules | Locally accepted (C9) | C3–C5 owner checks plus the C9 host matrix; MQ `ddb-v2` durable-single enabled, replicated refused |
+| Owner contracts and clients | message-queue, event-catalog, pipeline-runtime, platform-api; realtime-modules, aws-agentcore | Locally accepted | Consumer typechecks; wire fixtures; no duplicate canonical validators/interfaces |
+| Runtime composition | service-runtime, distributed-core; realtime-modules, platform-api, aws-agentcore | Adopted in platform-api and AgentCore; platform path accepted | Supported matrix passes; unsafe combinations rejected; ownership loss removes readiness |
+| Downstream releases | All changed owners and consumers | Pushed: catalog 0.10.0, MQ 0.5.2, platform-api 8a0be3f, AgentCore, realtime-examples | Built owner artifacts match source; final consumer pin/result/readiness matrix remains |
 
 ## Boundaries
 
@@ -385,3 +385,35 @@ artifacts, add mandatory live readiness/schema/pipeline checks and prove the
 outbox → MQ → durable result → realtime projection path across restart. Source
 inspection and the optimized C9 order are recorded in the implementation plan.
 Production profiles remain gated; no shared data migration or cloud deploy ran.
+
+## C9 host adoption and durable result — 2026-10-26
+
+Local C9 acceptance passed. Evidence:
+[c9-durable-result-verification.json](chassis/c9-durable-result-verification.json).
+
+- **Catalog 0.10.0** (`b758fb7`) installs MQ 0.5.0 through its Git prepare build;
+  the lock integrity equals the verified packed MQ artifact. Explicit queue-owned
+  subscription handles are forwarded on receive; a stale or removed handle ends
+  intake with a typed error and never falls back or re-creates anything.
+- **platform-api** (`8a0be3f`) adopts catalog 0.10.0 and service-runtime 0.5.1.
+  `PLATFORM_RUNTIME_PROFILE=durable` validates providers before startup (exit 2)
+  and makes outbox, catalog, consumers, pipelines, scheduler and work-graph
+  mandatory `feature:*` health checks; readiness drops first on shutdown.
+- **AgentCore middleware** (`91ae19aa`): `ORGIQ_RUNTIME_PROFILE=durable` makes
+  Aurora, credentials, the C7 claim columns and the queue mandatory (503 with the
+  dependency named); `/livez` is process-only. Default behaviour is unchanged.
+  Not run against live Aurora: credentials are still invalid.
+- **realtime-examples** `acceptance.py --durable-result` ran platform-api's real
+  work-graph path on DynamoDB Local and the `ddb-v2` broker three times, the last
+  with the broker as `durable-single` in production mode. Across broker, consumer
+  and store SIGKILL, redelivery of committed results and a stale completion:
+  10 business events, 10 event markers, contiguous revisions 1–10, no pending
+  outbox rows, a projection event per revision and the Redis signal.
+- The harness found five defects, all fixed and pushed: the MQ image build, the
+  14-day `ddb-v2` retention cap, drainer rows marked FAILED during broker
+  outages, a consumer-created queue conflicting with producers, and consumers
+  never started after a background catalog reconnect.
+- **MQ 0.5.2** enables `durable-single` for `ddb-v2`. Still unsupported:
+  `durable-replicated`, legacy-store migration, managed-nosql-store as a
+  transactional datastore, gateway WebSocket delivery, AWS and capacity.
+

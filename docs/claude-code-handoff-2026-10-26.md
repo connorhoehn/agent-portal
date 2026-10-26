@@ -7,6 +7,17 @@ running. Do not run Codex and Claude against the same worktree concurrently.
 Older handoffs and dated verification records are historical evidence, not a
 substitute for the state below. Recheck Git and running artifacts before edits.
 
+## Update — C9 local acceptance passed (Claude Code, same day)
+
+The catalog pin checkpoint, subscription selection, host readiness and the
+durable result/realtime proof are done and pushed. Read the last section of the
+[ledger](chassis-extensibility-goal.md) and
+[c9-durable-result-verification.json](chassis/c9-durable-result-verification.json)
+before the older sections below, which describe the state this session started
+from. Still open: replicated brokers, AgentCore's durable profile on live Aurora
+(credentials), the gateway WebSocket leg, cloud/capacity, and the UI/backend
+journey backlog further down.
+
 ## Objective and user decisions
 
 Finish the **three chassis improvements** in their owning repositories and adopt

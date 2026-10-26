@@ -408,6 +408,14 @@ count verification and recovery procedure; new isolated tables are the acceptanc
 fixture. Cloud capacity, cross-region operation and a broad ESM conversion remain
 outside C0–C9.
 
+### C9 record — 2026-10-26
+
+Steps 1–5 above ran. The acceptance path is realtime-examples
+`acceptance.py --durable-result`; results and the enabled/unsupported profile
+list are in [c9-durable-result-verification.json](c9-durable-result-verification.json).
+Remaining outside local acceptance: replicated brokers, AgentCore's durable
+profile against live Aurora, the gateway WebSocket leg, cloud and capacity.
+
 ## ESM migration debt — TD-ESM-01
 
 **Decision: accepted 2026-10-25. Status: deferred, opportunistic only.** ESM is the

@@ -1,0 +1,263 @@
+{
+  "record": "C9 host adoption, readiness and durable result/realtime acceptance",
+  "date": "2026-10-26",
+  "scope": "Local correctness only. No cloud deploy, no AWS credentials, no shared data migration.",
+  "harness": {
+    "repo": "realtime-examples",
+    "commit": "a57cd916",
+    "command": "python3 examples/middleware-foundation/acceptance.py --durable-result",
+    "path": "platform-api source publisher -> transactional outbox (DynamoDB Local) -> outbox drainer -> message-queue ddb-v2 -> work-graph consumer -> conditional projection commit + outbox row -> work-graph.projection.changed.v1 + Redis signal"
+  },
+  "artifacts": {
+    "event-catalog": {
+      "version": "0.10.0",
+      "commit": "b758fb7dcd7b915119d5914cc670578c057af223",
+      "tag": "v0.10.0",
+      "mqClientPin": "316c35f3694f8110ae7bd0fbb3097881cddc849b",
+      "mqLockIntegrity": "sha512-El8r16UFdHA3fspD73edRSKO93IZdhyMk84a6I3Ebt/dBwNS8223bk0S+ko2zdNN/PGjJxmEtmii3/njBx/SVA=="
+    },
+    "message-queue": {
+      "releases": {
+        "0.5.1": "e39f3b5ef77cc65cb4da921b3e271a6c86f8e41c",
+        "0.5.2": "0d0dcd62af960e89428846bdd09dd95f04d5946f"
+      },
+      "durableSingleImageSource": "8acd79119e2ddbe09b6720ddd5c602353b5a46f2 (0.5.2 source before the version/changelog-only release commit)"
+    },
+    "platform-api": {
+      "commit": "8a0be3fbc6acb73bf80da9ea22de4a0c88c85196",
+      "pins": {
+        "event-catalog": "0.10.0 b758fb7",
+        "service-runtime": "0.5.1 c01db0e"
+      }
+    },
+    "aws-agentcore-middleware": {
+      "commit": "91ae19aa",
+      "pins": "unchanged: service-runtime 0.5.0 (0776e24, has capabilities), message-queue client 0.4.0 tarball (no subscription API needed), realtime-modules 0.139.0"
+    },
+    "realtime-examples": {
+      "commit": "a57cd916",
+      "gatewayPins": "unchanged (catalog 0.8.4, realtime-modules 0.99.3): the gateway reads the Redis projection signal and uses no subscription API"
+    }
+  },
+  "runs": {
+    "localEphemeralBroker_1": {
+      "project": "middleware-gate-ef5c97cf0c74",
+      "businessEvents": 10,
+      "final": {
+        "events": 10,
+        "distinctEventIds": 10,
+        "deltas": 10,
+        "revision": 10,
+        "watermarksContiguous": true,
+        "sourceOutboxPending": 0
+      },
+      "undeclaredDurableProfileRefused": true,
+      "durableProfileReady": [
+        "feature:durable-consumers",
+        "feature:event-catalog",
+        "feature:outbox",
+        "feature:pipelines",
+        "feature:scheduler",
+        "feature:work-graph"
+      ],
+      "brokerLossFailsReadiness": [
+        "feature:event-catalog"
+      ],
+      "brokerReplacedNoLossNoDuplicate": true,
+      "consumerReplacedNoLossNoDuplicate": true,
+      "redeliveredCommittedResultIgnored": true,
+      "storeLossFailsReadiness": [
+        "dynamodb",
+        "feature:event-catalog"
+      ],
+      "storeOutageRejectedThenRecovered": true,
+      "staleCompletionRejected": true,
+      "projectionEventsCoverEveryRevision": {
+        "revisions": 10,
+        "delivered": 10
+      },
+      "realtimeSignalReachedFinalRevision": true,
+      "hostPorts": false,
+      "externalNetwork": false,
+      "images": {
+        "MQ_IMAGE": {
+          "id": "sha256:707d4d7da5e807bc79e1ab43501421a8e3977b89234624c2dd33d51870638ad2",
+          "revision": "e39f3b5ef77cc65cb4da921b3e271a6c86f8e41c"
+        },
+        "PLATFORM_API_IMAGE": {
+          "id": "sha256:47b48fbe8c06a32ba744c98d3ba7b30b55e92abe8c6b361e0dbc99872830022f",
+          "revision": "8a0be3fbc6acb73bf80da9ea22de4a0c88c85196"
+        },
+        "REDIS_IMAGE": {
+          "id": "sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6",
+          "revision": null
+        },
+        "DDB_LOCAL_IMAGE": {
+          "id": "sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab",
+          "revision": null
+        }
+      }
+    },
+    "localEphemeralBroker_2": {
+      "project": "middleware-gate-c4d2097bc53e",
+      "businessEvents": 10,
+      "final": {
+        "events": 10,
+        "distinctEventIds": 10,
+        "deltas": 10,
+        "revision": 10,
+        "watermarksContiguous": true,
+        "sourceOutboxPending": 0
+      },
+      "undeclaredDurableProfileRefused": true,
+      "durableProfileReady": [
+        "feature:durable-consumers",
+        "feature:event-catalog",
+        "feature:outbox",
+        "feature:pipelines",
+        "feature:scheduler",
+        "feature:work-graph"
+      ],
+      "brokerLossFailsReadiness": [
+        "feature:event-catalog"
+      ],
+      "brokerReplacedNoLossNoDuplicate": true,
+      "consumerReplacedNoLossNoDuplicate": true,
+      "redeliveredCommittedResultIgnored": true,
+      "storeLossFailsReadiness": [
+        "dynamodb",
+        "feature:event-catalog"
+      ],
+      "storeOutageRejectedThenRecovered": true,
+      "staleCompletionRejected": true,
+      "projectionEventsCoverEveryRevision": {
+        "revisions": 10,
+        "delivered": 10
+      },
+      "realtimeSignalReachedFinalRevision": true,
+      "hostPorts": false,
+      "externalNetwork": false,
+      "images": {
+        "MQ_IMAGE": {
+          "id": "sha256:707d4d7da5e807bc79e1ab43501421a8e3977b89234624c2dd33d51870638ad2",
+          "revision": "e39f3b5ef77cc65cb4da921b3e271a6c86f8e41c"
+        },
+        "PLATFORM_API_IMAGE": {
+          "id": "sha256:47b48fbe8c06a32ba744c98d3ba7b30b55e92abe8c6b361e0dbc99872830022f",
+          "revision": "8a0be3fbc6acb73bf80da9ea22de4a0c88c85196"
+        },
+        "REDIS_IMAGE": {
+          "id": "sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6",
+          "revision": null
+        },
+        "DDB_LOCAL_IMAGE": {
+          "id": "sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab",
+          "revision": null
+        }
+      }
+    },
+    "durableSingleProductionBroker": {
+      "project": "middleware-gate-5e35e9b5fe53",
+      "businessEvents": 10,
+      "final": {
+        "events": 10,
+        "distinctEventIds": 10,
+        "deltas": 10,
+        "revision": 10,
+        "watermarksContiguous": true,
+        "sourceOutboxPending": 0
+      },
+      "undeclaredDurableProfileRefused": true,
+      "durableProfileReady": [
+        "feature:durable-consumers",
+        "feature:event-catalog",
+        "feature:outbox",
+        "feature:pipelines",
+        "feature:scheduler",
+        "feature:work-graph"
+      ],
+      "brokerLossFailsReadiness": [
+        "feature:event-catalog"
+      ],
+      "brokerReplacedNoLossNoDuplicate": true,
+      "consumerReplacedNoLossNoDuplicate": true,
+      "redeliveredCommittedResultIgnored": true,
+      "storeLossFailsReadiness": [
+        "dynamodb",
+        "feature:event-catalog"
+      ],
+      "storeOutageRejectedThenRecovered": true,
+      "staleCompletionRejected": true,
+      "projectionEventsCoverEveryRevision": {
+        "revisions": 10,
+        "delivered": 10
+      },
+      "realtimeSignalReachedFinalRevision": true,
+      "brokerRuntime": {
+        "profile": "durable-single",
+        "replicas": 1,
+        "store": "ddb-v2",
+        "capabilities": [
+          "single-process",
+          "persistent-bodies",
+          "persistent-delivery",
+          "atomic-claim",
+          "fenced-receipts",
+          "durable-scheduling",
+          "durable-redrive",
+          "durable-subscriptions"
+        ]
+      },
+      "hostPorts": false,
+      "externalNetwork": false,
+      "images": {
+        "MQ_IMAGE": {
+          "id": "sha256:6474cba1d2dc8f410de4eb61aeb527beecc8c53a08586813410bf4992f4d4183",
+          "revision": "8acd79119e2ddbe09b6720ddd5c602353b5a46f2"
+        },
+        "PLATFORM_API_IMAGE": {
+          "id": "sha256:47b48fbe8c06a32ba744c98d3ba7b30b55e92abe8c6b361e0dbc99872830022f",
+          "revision": "8a0be3fbc6acb73bf80da9ea22de4a0c88c85196"
+        },
+        "REDIS_IMAGE": {
+          "id": "sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6",
+          "revision": null
+        },
+        "DDB_LOCAL_IMAGE": {
+          "id": "sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab",
+          "revision": null
+        }
+      }
+    }
+  },
+  "ownerChecks": {
+    "event-catalog": "151 files / 3,127 tests; 12 actual-broker + 10 policy cases on Node 20.0.0 and 25.9.0; packed import/require/types",
+    "message-queue": "132 suites / 1,564 tests; 76 DynamoDB Local store/subscription/HTTP cases; packed client",
+    "platform-api": "451 suites / 6,349 tests plus drainer and work-graph consumer suites after the fixes; typecheck",
+    "aws-agentcore-middleware": "typecheck; full suite 541/546 suites passed under Docker build load, the 4 timeout suites pass alone, route snapshot regenerated; mock-floor judge ALL PASS"
+  },
+  "defectsFoundByHarness": [
+    "message-queue Dockerfile omitted scripts/build.mjs, so 0.5.0 images could not build (fixed fa4aad9).",
+    "ddb-v2 capped retention at 14 days while the legacy store accepted the 30/90/365-day catalog declarations; work-graph queue creation failed (0.5.1).",
+    "platform-api outbox drainer marked accepted events FAILED after three transient broker failures in about six seconds (fixed 8802d4e).",
+    "platform-api work-graph consumer created the shared queue without its declared policy; producers then hit ConfigurationConflict (fixed 8a0be3f).",
+    "platform-api background catalog reconnect never started durable consumers (fixed d7ff8a2)."
+  ],
+  "enabledProfiles": {
+    "message-queue": "ddb-v2 durable-single (incl. production)",
+    "platform-api": "PLATFORM_RUNTIME_PROFILE=durable with PLATFORM_DATASTORE aws-dynamodb or dynamodb-local",
+    "aws-agentcore": "ORGIQ_RUNTIME_PROFILE=durable (static and unit verified; not run against live Aurora)"
+  },
+  "unsupported": [
+    "message-queue durable-replicated (no replicated host matrix)",
+    "memory and legacy ddb stores for any durable profile",
+    "managed-nosql-store as the platform datastore (declares no transaction capability)",
+    "legacy-to-ddb-v2 data migration (needs paused-writer migration)",
+    "AgentCore durable profile on Aurora (credentials invalid since early October)"
+  ],
+  "notCovered": [
+    "gateway WebSocket delivery of the projection",
+    "broker replicas and AWS",
+    "work-graph.projection.changed.v1 has no durable consumer; the gateway relies on the Redis signal and its safety poll"
+  ]
+}
