@@ -453,6 +453,7 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
       ServiceName: 'orgiq-social-platform-api',
       DesiredCount: 0,
       DeploymentConfiguration: Match.objectLike({ MinimumHealthyPercent: 0, MaximumPercent: 100 }),
+      AvailabilityZoneRebalancing: 'DISABLED',
     });
   });
 

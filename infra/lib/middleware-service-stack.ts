@@ -1172,6 +1172,12 @@ export class MiddlewareServiceStack extends cdk.Stack {
       const cfnService = fargateService.service.node.defaultChild as ecs.CfnService;
       cfnService.desiredCount = 0;
     }
+    // ECS rejects maximumPercent <= 100 while AZ rebalancing is on, and a
+    // service created at 200% has it on; the pattern does not forward the
+    // prop. One pinned task has nothing to rebalance anyway.
+    if (realtimePinned) {
+      (fargateService.service.node.defaultChild as ecs.CfnService).availabilityZoneRebalancing = 'DISABLED';
+    }
 
     // Without a certificate the ALB's own DNS name IS the middleware origin,
     // so the socket URL can be derived (the portal appends /ws). ws://, not

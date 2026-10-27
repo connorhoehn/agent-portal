@@ -45,6 +45,8 @@ describe('#2 the realtime gateway runs as exactly one task', () => {
     on.resourceCountIs('AWS::ApplicationAutoScaling::ScalableTarget', 0);
     on.hasResourceProperties('AWS::ECS::Service', {
       DeploymentConfiguration: Match.objectLike({ MinimumHealthyPercent: 0, MaximumPercent: 100 }),
+      // ECS refuses MaximumPercent 100 while AZ rebalancing is on.
+      AvailabilityZoneRebalancing: 'DISABLED',
     });
     const { td } = container(on, 'middleware');
     assert.equal(td.Properties.Cpu, '1024');

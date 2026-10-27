@@ -580,6 +580,8 @@ export class SocialStack extends cdk.Stack {
       // established, so a rolling overlap could double-write.
       minHealthyPercent: 0,
       maxHealthyPercent: 100,
+      // ECS rejects maximumPercent <= 100 with AZ rebalancing on.
+      availabilityZoneRebalancing: ecs.AvailabilityZoneRebalancing.DISABLED,
       circuitBreaker: { enable: true, rollback: true },
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [platformSg],
