@@ -57,7 +57,7 @@ export async function ensureDocumentMapping(sourceId: string, revision: string, 
   }
   const rows = await (transaction ?? exec)(`INSERT INTO assessment_document_mappings
     (tenant_id, source_namespace, source_id, document_id, source_revision, schema_version, migration_state, owner_sub)
-    VALUES (:tenant, :namespace, :source, :document, :revision, 2, 'pending', :owner)
+    VALUES (:tenant, :namespace, :source, CAST(:document AS uuid), :revision, 2, 'pending', :owner)
     ON CONFLICT (tenant_id, source_namespace, source_id) DO UPDATE
       SET source_id = EXCLUDED.source_id
     RETURNING tenant_id, source_namespace, source_id, document_id::text, source_revision, schema_version, migration_state, owner_sub, published_revision`,
@@ -78,7 +78,7 @@ export async function advanceDocumentSourceRevision(documentId: string, expected
     return true;
   }
   const rows = await (transaction ?? exec)(`UPDATE assessment_document_mappings SET published_revision = :next
-    WHERE tenant_id = 'assessment' AND document_id = :document
+    WHERE tenant_id = 'assessment' AND document_id = CAST(:document AS uuid)
       AND COALESCE(published_revision, source_revision) = :expected RETURNING document_id`,
   [str('next', next), str('document', documentId), str('expected', expected)]);
   return rows.length === 1;
@@ -93,7 +93,7 @@ export async function markDocumentMappingReady(documentId: string, revision: str
     return true;
   }
   const rows = await exec(`UPDATE assessment_document_mappings SET migration_state = 'ready'
-    WHERE tenant_id = 'assessment' AND document_id = :document AND source_revision = :revision
+    WHERE tenant_id = 'assessment' AND document_id = CAST(:document AS uuid) AND source_revision = :revision
     RETURNING document_id`, [str('document', documentId), str('revision', revision)]);
   return rows.length === 1;
 }

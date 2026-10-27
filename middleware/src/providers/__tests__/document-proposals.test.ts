@@ -423,7 +423,7 @@ describe('live SQL adapter', () => {
     const found = await getDocumentProposal(sourceId, reader, input.id);
     expect(found).toEqual({ documentId: DOC, proposal: draft(), canEdit: false });
     expect(exec).toHaveBeenCalledTimes(1);
-    expect(exec).toHaveBeenCalledWith(expect.stringContaining('WHERE document_id = :document AND source_id = :source AND proposal_id = :id'), [
+    expect(exec).toHaveBeenCalledWith(expect.stringContaining('WHERE document_id = CAST(:document AS uuid) AND source_id = :source AND proposal_id = :id'), [
       { name: 'document', value: { stringValue: DOC } }, { name: 'source', value: { stringValue: sourceId } }, { name: 'id', value: { stringValue: input.id } },
     ]);
     expect(jest.mocked(exec).mock.calls[0]![0]).not.toContain('LIMIT');
@@ -466,7 +466,7 @@ describe('live SQL adapter', () => {
     const updatedColumns = jest.mocked(exec).mock.calls[0]![0].split('WHERE')[0]!;
     for (const column of ['anchor =', 'kind =', 'cursor_position =', 'original_text =', 'source_id =', 'created_by =', 'created_at =']) expect(updatedColumns).not.toContain(column);
     expect(await reviseDocumentProposal(sourceId, editor, input.id, revision)).toEqual({ ...first, replayed: true });
-    expect(jest.mocked(exec).mock.calls.at(-1)![0]).toContain('WHERE document_id = :document AND source_id = :source AND proposal_id = :id');
+    expect(jest.mocked(exec).mock.calls.at(-1)![0]).toContain('WHERE document_id = CAST(:document AS uuid) AND source_id = :source AND proposal_id = :id');
     await expect(reviseDocumentProposal(sourceId, { ...editor, sub: 'another-editor' }, input.id, revision)).rejects.toMatchObject({ status: 409 });
     await expect(reviseDocumentProposal(sourceId, editor, input.id, { ...revision, content: { text: 'Different' } })).rejects.toMatchObject({ status: 409 });
     expect(assessmentBroker.publish).toHaveBeenCalledTimes(1); expect(send).not.toHaveBeenCalled();

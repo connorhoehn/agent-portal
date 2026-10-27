@@ -69,7 +69,7 @@ export async function listDocumentProposals(sourceId: string, session: Session) 
     ? documentProposalsFixture.rows().filter(row => row.documentId === grant.documentId)
       .sort((a, b) => Number(!['ready', 'applying'].includes(a.status)) - Number(!['ready', 'applying'].includes(b.status))
         || b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)).slice(0, 100).map(cloneDocumentProposal)
-    : (await exec(`SELECT ${columns} FROM assessment_document_proposals WHERE document_id = :document
+    : (await exec(`SELECT ${columns} FROM assessment_document_proposals WHERE document_id = CAST(:document AS uuid)
         ORDER BY CASE WHEN status IN ('ready', 'applying') THEN 0 ELSE 1 END,
         created_at DESC, proposal_id DESC LIMIT 100`, [s('document', grant.documentId)])).map(rowToProposal);
   return { documentId: grant.documentId, proposals, canEdit };
@@ -81,7 +81,7 @@ export async function getDocumentProposal(sourceId: string, session: Session, id
   const proposal = config.mock.aurora
     ? documentProposalsFixture.rows().find(row => row.documentId === grant.documentId && row.sourceId === sourceId && row.id === id)
     : (await exec(`SELECT ${columns} FROM assessment_document_proposals
-        WHERE document_id = :document AND source_id = :source AND proposal_id = :id`,
+        WHERE document_id = CAST(:document AS uuid) AND source_id = :source AND proposal_id = :id`,
       [s('document', grant.documentId), s('source', sourceId), s('id', id)])).map(rowToProposal)[0];
   if (!proposal) throw new DocumentProposalError(404, 'Proposed edit not found');
   return { documentId: grant.documentId, proposal: cloneDocumentProposal(proposal), canEdit: await readCanEdit(sourceId, session, grant) };
@@ -120,14 +120,14 @@ export async function createDocumentProposal(sourceId: string, session: Session,
   } else {
     const rows = await exec(`INSERT INTO assessment_document_proposals
       (document_id, proposal_id, source_id, kind, anchor, content, original_text, cursor_position, instruction, summary, created_by, producer_agent)
-      VALUES (:document, :id, :source, :kind, CAST(:anchor AS jsonb), :content, :original, :cursor, :instruction, :summary, :by, :agent)
+      VALUES (CAST(:document AS uuid), :id, :source, :kind, CAST(:anchor AS jsonb), :content, :original, :cursor, :instruction, :summary, :by, :agent)
       ON CONFLICT (document_id, proposal_id) DO NOTHING RETURNING ${columns}`,
     [s('document', grant.documentId), s('id', input.id), s('source', sourceId), s('kind', input.kind), s('anchor', JSON.stringify(input.anchor)),
       s('content', input.content.text), s('original', input.originalText), n('cursor', input.cursor),
       s('instruction', input.instruction), s('summary', input.summary ?? null), s('by', session.sub), s('agent', DOCUMENT_DRAFTER_AGENT)]);
     created = rows.length === 1;
     const stored = rows[0] ?? (await exec(`SELECT ${columns} FROM assessment_document_proposals
-      WHERE document_id = :document AND proposal_id = :id`, [s('document', grant.documentId), s('id', input.id)]))[0];
+      WHERE document_id = CAST(:document AS uuid) AND proposal_id = :id`, [s('document', grant.documentId), s('id', input.id)]))[0];
     if (!stored) throw new DocumentProposalError(503, 'The proposed edit was not stored');
     proposal = rowToProposal(stored);
   }
@@ -161,13 +161,13 @@ export async function reviseDocumentProposal(sourceId: string, session: Session,
   } else {
     const rows = await exec(`UPDATE assessment_document_proposals SET content = :content, instruction = :instruction,
       summary = :summary, version = version + 1, decided_by = :by, updated_at = NOW()
-      WHERE document_id = :document AND source_id = :source AND proposal_id = :id
+      WHERE document_id = CAST(:document AS uuid) AND source_id = :source AND proposal_id = :id
       AND status = 'ready' AND version = :version RETURNING ${columns}`,
     [s('content', input.content.text), s('instruction', input.instruction), s('summary', input.summary ?? null), s('by', session.sub),
       s('document', grant.documentId), s('source', sourceId), s('id', id), n('version', input.version)]);
     if (!rows[0]) {
       const current = (await exec(`SELECT ${columns} FROM assessment_document_proposals
-        WHERE document_id = :document AND source_id = :source AND proposal_id = :id`,
+        WHERE document_id = CAST(:document AS uuid) AND source_id = :source AND proposal_id = :id`,
       [s('document', grant.documentId), s('source', sourceId), s('id', id)]))[0];
       if (!current) throw new DocumentProposalError(404, 'Proposed edit not found');
       const row = rowToProposal(current);
@@ -199,12 +199,12 @@ export async function decideDocumentProposal(sourceId: string, session: Session,
     proposal = cloneDocumentProposal(row);
   } else {
     const rows = await exec(`UPDATE assessment_document_proposals SET status = :next, version = version + 1,
-      decided_by = :decider, updated_at = NOW() WHERE document_id = :document AND proposal_id = :id
+      decided_by = :decider, updated_at = NOW() WHERE document_id = CAST(:document AS uuid) AND proposal_id = :id
       AND status = :previous AND version = :version ${transition.claimActor ? 'AND decided_by = :by' : ''} RETURNING ${columns}`,
     [s('next', transition.to), s('decider', action === 'release' ? null : session.sub), s('document', grant.documentId),
       s('id', id), s('previous', transition.from), n('version', version), ...(transition.claimActor ? [s('by', session.sub)] : [])]);
     if (!rows[0]) {
-      const current = (await exec(`SELECT ${columns} FROM assessment_document_proposals WHERE document_id = :document AND proposal_id = :id`,
+      const current = (await exec(`SELECT ${columns} FROM assessment_document_proposals WHERE document_id = CAST(:document AS uuid) AND proposal_id = :id`,
         [s('document', grant.documentId), s('id', id)]))[0];
       if (!current) throw new DocumentProposalError(404, 'Proposed edit not found');
       const row = rowToProposal(current);
