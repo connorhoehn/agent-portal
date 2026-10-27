@@ -16,7 +16,7 @@ import type { Construct } from 'constructs';
 import { socialRepoName } from './social-images-stack';
 import { SFU_PORTS, sfuParameterNames, sfuSecretNames } from './social-media-stack';
 import {
-  CLOUDFRONT_RULE_PRIORITY, ORIGIN_ROUTE_HEADER, ORIGIN_ROUTES, ORIGIN_VERIFY_HEADER, originVerifyValue,
+  CLOUDFRONT_RULE_PRIORITY, ORIGIN_ROUTE_HEADER, ORIGIN_ROUTES, ORIGIN_VERIFY_HEADER, originVerifyValue, portalParameterNames,
 } from './portal-stack';
 import { realtimeAlarm, realtimeAlarmsEnabled, realtimeAlarmTopic } from './realtime-alarms';
 
@@ -488,14 +488,26 @@ export class SocialStack extends cdk.Stack {
     const sfuPrivateIp = props.sfu ? ssm.StringParameter.valueForStringParameter(this, sfuParams.privateIp) : undefined;
     const sfuInstanceId = props.sfu ? ssm.StringParameter.valueForStringParameter(this, sfuParams.instanceId) : undefined;
     const videoApiUrl = sfuPrivateIp ? `http://${sfuPrivateIp}:${SFU_PORTS.api}` : ctx('videoApiUrl');
-    const videoPublicUrl = ctx('videoPublicUrl') ?? (sfuHost ? `https://${sfuHost}` : undefined);
+    // The portal's public URLs (OrgIQ-Portal's parameters, by name) on a
+    // later deploy, as the middleware reads them: the portal stack may not
+    // exist yet on a first one.
+    const portalParams = portalParameterNames(prefix);
+    const portalUrl = (key: 'url' | 'videoUrl') => (flag('portalPublicUrls')
+      ? ssm.StringParameter.valueForStringParameter(this, portalParams[key]) : undefined);
+    const portalVideoUrl = props.sfu ? portalUrl('videoUrl') : undefined;
+    const videoPublicUrl = ctx('videoPublicUrl') ?? (sfuHost ? `https://${sfuHost}` : portalVideoUrl);
     const gatewayWsUrl = ctx('socialGatewayWsUrl');
     const platformInternal = socialPlatformInternalUrl(prefix);
     // Per-resource lobby admission (platform-api docs/lobby-authority.md):
     // opt-in, and only AFTER the middleware carrying POST
     // /api/realtime/lobby-access is deployed — the reverse order refuses
     // every OrgIQ call lobby (docs/social-calls-plan.md, "Lobby admission").
-    const lobbyAuthorityUrl = ctx('lobbyAuthorityUrl');
+    // The same URL derives the call-seat authority call-binding asks; unset,
+    // every call-binding answers 503. With the portal live it is the
+    // middleware through CloudFront: the middleware has no in-VPC name.
+    const portalSite = portalUrl('url');
+    const lobbyAuthorityUrl = ctx('lobbyAuthorityUrl')
+      ?? (portalSite ? `${portalSite}/api/realtime/lobby-access` : undefined);
 
     const environment: Record<string, string> = {
       NODE_ENV: 'production',

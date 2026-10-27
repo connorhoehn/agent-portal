@@ -448,6 +448,28 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
     }
   });
 
+  test('with the portal live, the lobby (and call-seat) authority is the middleware through CloudFront', () => {
+    const envOfSocial = (context: Record<string, unknown>) => {
+      const st = Template.fromStack(socialApp(context).social);
+      const td = Object.values<any>(st.findResources('AWS::ECS::TaskDefinition'))
+        .find((d) => d.Properties.ContainerDefinitions.some((c: any) => c.Name === 'platform-api'));
+      const env = Object.fromEntries(td.Properties.ContainerDefinitions[0].Environment.map((e: any) => [e.Name, e.Value]));
+      return { env, params: st.toJSON().Parameters ?? {} };
+    };
+    const off = envOfSocial({}).env;
+    assert.equal(off.LOBBY_AUTHORITY_URL, undefined, 'no portal, no authority: call lobbies would refuse');
+    const { env, params } = envOfSocial({ deployPortal: 'true', portalPublicUrls: 'true' });
+    const lobby = JSON.stringify(env.LOBBY_AUTHORITY_URL);
+    assert.match(lobby, /\/api\/realtime\/lobby-access/);
+    const [ref] = [...lobby.matchAll(/"Ref":"([^"]+)"/g)].map((m) => m[1]);
+    assert.equal(params[ref!].Default, '/orgiq/portal/url');
+    assert.equal(env.LOBBY_AUTHORITY_REQUIRED, 'true');
+    assert.equal(params[env.VIDEO_PUBLIC_URL.Ref].Default, '/orgiq/portal/video-url');
+    // Explicit context still wins.
+    assert.equal(envOfSocial({ deployPortal: 'true', portalPublicUrls: 'true', lobbyAuthorityUrl: 'https://x.example/api/realtime/lobby-access' })
+      .env.LOBBY_AUTHORITY_URL, 'https://x.example/api/realtime/lobby-access');
+  });
+
   test('phase 1: platform-api runs at DesiredCount 0, stop-before-start', () => {
     t.hasResourceProperties('AWS::ECS::Service', {
       ServiceName: 'orgiq-social-platform-api',
