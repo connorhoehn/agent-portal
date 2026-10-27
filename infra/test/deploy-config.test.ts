@@ -123,6 +123,7 @@ describe('deploy.sh: a later deploy keeps the second-phase gates that are live',
     'approvalsRequestSecret', 'harnessTraceSecret', 'assessmentRunCompleteSecret',
     'realtimeGateway', 'deploySocialImages', 'deploySocialMedia', 'sfuImageDigest', 'sfuAllowCidr',
     'socialPortalOrigin', 'deploySocial', 'deploySocialService', 'platformApiImageDigest',
+    'deployDocumentWorkspace', 'documentWorkspace',
   ]) {
     test(`${key} is inferred from the live account`, () => {
       assert.match(script, new RegExp(`infer ${key} |${key}:`), `${key} is not inferred`);

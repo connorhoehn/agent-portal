@@ -72,6 +72,9 @@ export function portalParameterNames(prefix: string) {
 
 /** Paths the portal distribution sends to the middleware instead of S3. */
 export const MIDDLEWARE_PATHS = ['/api/*', '/ws', '/ws/*', '/health'] as const;
+/** The document workspace gateway's socket on the same ALB (deployDocumentWorkspace);
+ * without it the ALB answers these paths with its default action. */
+export const DOCUMENT_PATHS = ['/document-realtime', '/document-realtime/*'] as const;
 
 export interface PortalStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -225,7 +228,7 @@ export class PortalStack extends cdk.Stack {
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
         functionAssociations: [{ function: spaRewrite, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
       },
-      additionalBehaviors: Object.fromEntries(MIDDLEWARE_PATHS.map((p) => [p, passThrough(middleware)])),
+      additionalBehaviors: Object.fromEntries([...MIDDLEWARE_PATHS, ...DOCUMENT_PATHS].map((p) => [p, passThrough(middleware)])),
     });
     this.portalUrl = `https://${this.distribution.distributionDomainName}`;
 

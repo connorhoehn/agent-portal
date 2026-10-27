@@ -407,6 +407,19 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
     fi
   fi
 
+  # The document workspace: live when the middleware stack reports its public
+  # socket URL. Its context (image digests, key-secret ARNs) is the SSM copy
+  # scripts/docker/document-workspace-push.mjs writes; a deploy without it
+  # would tear the document services down.
+  if [[ -n "$(stack_output OrgIQ-MiddlewareService DocumentGatewayPublicUrl)" ]]; then
+    DOC_CONFIG=$(aws ssm get-parameter --name "/${PREFIX}/documents/workspace-config" --region "$REGION" \
+      --query 'Parameter.Value' --output text 2>/dev/null || true)
+    if [[ "$DOC_CONFIG" == "{"* ]]; then
+      infer deployDocumentWorkspace true
+      infer documentWorkspace "$DOC_CONFIG"
+    fi
+  fi
+
   # The runtimes' machine-callback secrets (lib/agentcore-runtime-stack.ts):
   # minted by OrgIQ-MiddlewareService, passed as plain env because a runtime's
   # EnvironmentVariables cannot hold a Secrets Manager reference.

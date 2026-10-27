@@ -12,7 +12,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import {
-  CLOUDFRONT_RULE_PRIORITY, MIDDLEWARE_PATHS, ORIGIN_ROUTE_HEADER, ORIGIN_VERIFY_HEADER, portalParameterNames,
+  CLOUDFRONT_RULE_PRIORITY, DOCUMENT_PATHS, MIDDLEWARE_PATHS, ORIGIN_ROUTE_HEADER, ORIGIN_VERIFY_HEADER, portalParameterNames,
 } from '../lib/portal-stack';
 import { middlewareServiceStack } from './helpers/stacks';
 import { exportedNames, importedExportNames, synthApp } from './helpers/app-assembly';
@@ -129,10 +129,10 @@ describe('OrgIQ-Portal', () => {
     });
   });
 
-  test('the middleware paths go to the ALB, uncached, every method, every viewer header', () => {
+  test('the middleware and document-socket paths go to the ALB, uncached, every method, every viewer header', () => {
     const d = portal();
     const paths = d.CacheBehaviors.map((b: any) => b.PathPattern);
-    assert.deepEqual(paths, [...MIDDLEWARE_PATHS]);
+    assert.deepEqual(paths, [...MIDDLEWARE_PATHS, ...DOCUMENT_PATHS]);
     for (const b of d.CacheBehaviors) {
       assert.equal(b.CachePolicyId, CACHING_DISABLED, `${b.PathPattern} is cached`);
       assert.equal(b.OriginRequestPolicyId, ALL_VIEWER_AND_CLOUDFRONT, `${b.PathPattern} drops viewer headers`);

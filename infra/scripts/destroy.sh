@@ -515,6 +515,12 @@ RETAINED_REPOS=(
   "${PREFIX}-social-gateway"
   "${PREFIX}-platform-api"
   "${PREFIX}-lvs-sfu"
+  # scripts/docker/document-workspace-push.mjs creates these outside CFN.
+  "${PREFIX}-documents-gateway"
+  "${PREFIX}-documents-platform"
+  "${PREFIX}-documents-catalog"
+  "${PREFIX}-documents-mq"
+  "${PREFIX}-documents-redis"
 )
 if [[ "${PURGE_RETAINED:-false}" == "true" ]]; then
   echo ""
@@ -528,6 +534,38 @@ if [[ "${PURGE_RETAINED:-false}" == "true" ]]; then
     aws dynamodb delete-table --table-name "$table" --region "$REGION" > /dev/null 2>&1 \
       || FAILURES+=("social table ${table} could not be deleted")
   done
+  # deployDocumentWorkspace: its RETAINed tables and upload file system, and
+  # the grant keys + context the push script made outside CloudFormation.
+  for table in $(aws dynamodb list-tables --region "$REGION" \
+      --query "TableNames[?starts_with(@, '${PREFIX}-assessment-documents-')]" --output text 2>/dev/null | tr '\t' '\n' || true); do
+    echo "  Deleting table ${table} (deletion protection off first)"
+    aws dynamodb update-table --table-name "$table" --no-deletion-protection-enabled \
+      --region "$REGION" > /dev/null 2>&1 || true
+    aws dynamodb delete-table --table-name "$table" --region "$REGION" > /dev/null 2>&1 \
+      || FAILURES+=("document table ${table} could not be deleted")
+  done
+  for fs in $(aws efs describe-file-systems --region "$REGION" \
+      --query "FileSystems[?Tags[?Key=='aws:cloudformation:logical-id' && starts_with(Value, 'DocumentUploads')]].FileSystemId" \
+      --output text 2>/dev/null | tr '\t' '\n' || true); do
+    echo "  Deleting document upload file system ${fs} (mount targets first)"
+    for mt in $(aws efs describe-mount-targets --file-system-id "$fs" --region "$REGION" \
+        --query 'MountTargets[].MountTargetId' --output text 2>/dev/null | tr '\t' '\n' || true); do
+      aws efs delete-mount-target --mount-target-id "$mt" --region "$REGION" > /dev/null 2>&1 || true
+    done
+    for _ in $(seq 1 30); do
+      [[ "$(aws efs describe-mount-targets --file-system-id "$fs" --region "$REGION" \
+        --query 'length(MountTargets)' --output text 2>/dev/null || echo 0)" == "0" ]] && break
+      sleep 10
+    done
+    aws efs delete-file-system --file-system-id "$fs" --region "$REGION" > /dev/null 2>&1 \
+      || FAILURES+=("document file system ${fs} could not be deleted")
+  done
+  for secret in "${PREFIX}-document-grant-private-key" "${PREFIX}-document-grant-public-key"; do
+    aws secretsmanager delete-secret --secret-id "$secret" --force-delete-without-recovery \
+      --region "$REGION" > /dev/null 2>&1 && echo "  Deleted secret ${secret}" || true
+  done
+  aws ssm delete-parameter --name "/${PREFIX}/documents/workspace-config" --region "$REGION" > /dev/null 2>&1 \
+    && echo "  Deleted /${PREFIX}/documents/workspace-config" || true
   for repo in "${RETAINED_REPOS[@]}"; do
     if aws ecr describe-repositories --repository-names "$repo" --region "$REGION" > /dev/null 2>&1; then
       echo "  Deleting ECR repo ${repo} (with its images)"

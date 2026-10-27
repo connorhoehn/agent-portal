@@ -1235,6 +1235,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // 403, and a request is forwarded only if it carries OrgIQ-Portal's secret
     // header, or comes from an albAllowCidr address (rules below). The social
     // stacks' host and header rules sit at lower priorities, unchanged.
+    let originVerify: string | undefined;
     if (viaCloudFront) {
       const originSecret = new secretsmanager.Secret(this, 'CloudFrontOriginSecret', {
         secretName: cloudFrontOriginSecretName(prefix),
@@ -1297,6 +1298,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
         conditions: [elbv2.ListenerCondition.httpHeader(ORIGIN_VERIFY_HEADER, [originSecret.secretValue.unsafeUnwrap()])],
         action: forward(),
       });
+      originVerify = originSecret.secretValue.unsafeUnwrap();
       // ALB rules take at most five condition values, so one rule per five CIDRs.
       for (let i = 0; i < allowCidrs.length; i += 5) {
         new elbv2.ApplicationListenerRule(this, `AllowlistedClientRule${i / 5}`, {
@@ -1446,14 +1448,20 @@ export class MiddlewareServiceStack extends cdk.Stack {
       || this.node.tryGetContext('deployDocumentWorkspace') === 'true';
     if (deployDocuments) {
       if (!deployService) throw new Error('deployDocumentWorkspace requires deployMiddlewareService=true');
-      if (!certArn) throw new Error('deployDocumentWorkspace requires an HTTPS certificate');
+      // HTTPS from the ALB's certificate, or from the portal's CloudFront
+      // certificate in front of it (publicBaseUrl is then the portal URL).
+      if (!certArn && !viaCloudFront) throw new Error('deployDocumentWorkspace requires an HTTPS certificate or deployPortal=true');
+      // `--context documentWorkspace='{…}'` arrives as a string; cdk.json and
+      // props pass the object itself.
+      const rawConfig = this.node.tryGetContext('documentWorkspace') as DocumentWorkspaceConfig | string | undefined;
       const documentConfig = props.documentWorkspace
-        ?? this.node.tryGetContext('documentWorkspace') as DocumentWorkspaceConfig | undefined;
+        ?? (typeof rawConfig === 'string' ? JSON.parse(rawConfig) as DocumentWorkspaceConfig : rawConfig);
       if (!documentConfig) throw new Error('deployDocumentWorkspace requires documentWorkspace configuration');
       if (!props.cognitoUserPoolId) throw new Error('deployDocumentWorkspace requires the normal identity pool');
       attachDocumentWorkspace(this, {
         config: documentConfig, prefix, vpc, cluster, middleware: fargateService,
         cognitoUserPoolId: props.cognitoUserPoolId,
+        ...(originVerify && { originVerify }),
       });
     }
 

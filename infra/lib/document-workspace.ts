@@ -10,6 +10,7 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as discovery from 'aws-cdk-lib/aws-servicediscovery';
 import type { ApplicationLoadBalancedFargateService } from 'aws-cdk-lib/aws-ecs-patterns';
 import { ApplicationTables, DocumentWorkspaceServices, RedisService } from '@connorhoehn/realtime-examples-cdk';
+import { ORIGIN_VERIFY_HEADER } from './portal-stack';
 
 interface ImageConfig { repositoryName: string; digest: string }
 export interface DocumentWorkspaceConfig {
@@ -36,6 +37,9 @@ export function attachDocumentWorkspace(scope: cdk.Stack, props: {
   cluster: ecs.Cluster;
   middleware: ApplicationLoadBalancedFargateService;
   cognitoUserPoolId: string;
+  /** The portal's origin-verify header value, when CloudFront fronts the ALB:
+   * the document route then answers only requests that came through it. */
+  originVerify?: string;
 }): DocumentWorkspaceServices {
   const { config, prefix, vpc, cluster, middleware } = props;
   if (config.tenantId !== 'assessment') throw new Error('This BFF document adapter currently serves the assessment tenant');
@@ -164,7 +168,10 @@ export function attachDocumentWorkspace(scope: cdk.Stack, props: {
     action: elbv2.ListenerAction.fixedResponse(404),
   });
   middleware.listener.addTargets('DocumentRealtime', {
-    priority: 20, conditions: [elbv2.ListenerCondition.pathPatterns(['/document-realtime', '/document-realtime/*', '/api/uploads/*'])],
+    priority: 20, conditions: [
+      elbv2.ListenerCondition.pathPatterns(['/document-realtime', '/document-realtime/*', '/api/uploads/*']),
+      ...(props.originVerify ? [elbv2.ListenerCondition.httpHeader(ORIGIN_VERIFY_HEADER, [props.originVerify])] : []),
+    ],
     port: 8080, protocol: elbv2.ApplicationProtocol.HTTP,
     targets: [workspace.gateway.loadBalancerTarget({ containerName: 'gateway', containerPort: 8080 })],
     healthCheck: { path: '/health', healthyHttpCodes: '200', interval: cdk.Duration.seconds(30) },

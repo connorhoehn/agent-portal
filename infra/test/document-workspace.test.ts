@@ -125,7 +125,7 @@ test('co-deployed Social and document proxies keep distinct private platform nam
 
 test('requires BFF service, HTTPS, normal identity and concrete configuration', () => {
   assert.throws(() => middlewareServiceStack({ deployDocumentWorkspace: true }, props), /deployMiddlewareService/);
-  assert.throws(() => middlewareServiceStack(context, { ...props, certificateArn: undefined }), /HTTPS/);
+  assert.throws(() => middlewareServiceStack(context, { ...props, certificateArn: undefined }), /HTTPS certificate or deployPortal/);
   assert.throws(() => middlewareServiceStack(context, { ...props, documentWorkspace: undefined }), /configuration/);
   assert.throws(() => middlewareServiceStack(context, { ...props, cognitoUserPoolId: undefined }), /identity pool/);
 });
@@ -140,4 +140,20 @@ test('local-only document deployment does not require an accelerator source', ()
   const template = Template.fromStack(middlewareServiceStack(context, { ...props, documentWorkspace: { ...config, source: undefined } }));
   assert.ok(!JSON.stringify(template.findResources('AWS::ECS::TaskDefinition')).includes('ASSESSMENT_SOURCE_SECRET'));
   assert.throws(() => middlewareServiceStack(context, { ...props, documentWorkspace: { ...config, source: { url: 'http://accelerator.example.test', secretArn: config.source!.secretArn } } }), /HTTPS URL/);
+});
+
+test('behind the portal CloudFront no certificate is needed, and the document route requires the origin header', () => {
+  const t = Template.fromStack(middlewareServiceStack({ ...context, deployPortal: true }, { ...props, certificateArn: undefined }));
+  const rules = Object.values<any>(t.findResources('AWS::ElasticLoadBalancingV2::ListenerRule'))
+    .filter(r => JSON.stringify(r.Properties.Conditions).includes('/document-realtime'));
+  assert.equal(rules.length, 1);
+  const fields = rules[0].Properties.Conditions.map((c: any) => c.Field);
+  assert.deepEqual(fields.sort(), ['http-header', 'path-pattern']);
+  const header = rules[0].Properties.Conditions.find((c: any) => c.Field === 'http-header');
+  assert.equal(header.HttpHeaderConfig.HttpHeaderName, 'x-orgiq-origin-verify');
+});
+
+test('documentWorkspace passed as a --context JSON string is parsed', () => {
+  const t = Template.fromStack(middlewareServiceStack({ ...context, documentWorkspace: JSON.stringify(config) }, { ...props, documentWorkspace: undefined }));
+  assert.ok(Object.keys(t.findResources('AWS::ECS::Service')).length > 1, 'the document services were not attached');
 });
