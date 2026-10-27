@@ -7,6 +7,17 @@ running. Do not run Codex and Claude against the same worktree concurrently.
 Older handoffs and dated verification records are historical evidence, not a
 substitute for the state below. Recheck Git and running artifacts before edits.
 
+## Update — WebSocket leg and replicated brokers (Claude Code, 2026-10-27)
+
+The gateway WebSocket leg and `durable-replicated` brokers passed locally; see
+the ledger's last section. Pushed: message-queue 0.5.3 (`8736e3c`), platform-api
+`e0be5e0` (a day's first activity no longer revokes an open stream),
+realtime-examples `ea69aad8` (reader container and `MQ_REPLICAS=2`). Still open:
+AgentCore durable profile on live Aurora (credentials), legacy-to-`ddb-v2`
+migration, managed-nosql-store transactions, a durable consumer for
+`work-graph.projection.changed.v1`, cloud/capacity and the UI/backend journey
+backlog below.
+
 ## Update — C9 local acceptance passed (Claude Code, same day)
 
 The catalog pin checkpoint, subscription selection, host readiness and the

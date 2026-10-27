@@ -4,9 +4,9 @@
   "scope": "Local correctness only. No cloud deploy, no AWS credentials, no shared data migration.",
   "harness": {
     "repo": "realtime-examples",
-    "commit": "a57cd916",
+    "commit": "ea69aad8",
     "command": "python3 examples/middleware-foundation/acceptance.py --durable-result",
-    "path": "platform-api source publisher -> transactional outbox (DynamoDB Local) -> outbox drainer -> message-queue ddb-v2 -> work-graph consumer -> conditional projection commit + outbox row -> work-graph.projection.changed.v1 + Redis signal"
+    "path": "platform-api source publisher -> transactional outbox (DynamoDB Local) -> outbox drainer -> message-queue ddb-v2 -> work-graph consumer -> conditional projection commit + outbox row -> work-graph.projection.changed.v1 + Redis signal -> gateway replay (realtime-examples) -> WebSocket reader"
   },
   "artifacts": {
     "event-catalog": {
@@ -19,12 +19,13 @@
     "message-queue": {
       "releases": {
         "0.5.1": "e39f3b5ef77cc65cb4da921b3e271a6c86f8e41c",
-        "0.5.2": "0d0dcd62af960e89428846bdd09dd95f04d5946f"
+        "0.5.2": "0d0dcd62af960e89428846bdd09dd95f04d5946f",
+        "0.5.3": "8736e3c4836463012802c642841f2d88aeb46d41"
       },
       "durableSingleImageSource": "8acd79119e2ddbe09b6720ddd5c602353b5a46f2 (0.5.2 source before the version/changelog-only release commit)"
     },
     "platform-api": {
-      "commit": "8a0be3fbc6acb73bf80da9ea22de4a0c88c85196",
+      "commit": "e0be5e07d41f695c249fad61785f7a7b7bac0b72",
       "pins": {
         "event-catalog": "0.10.0 b758fb7",
         "service-runtime": "0.5.1 c01db0e"
@@ -37,6 +38,11 @@
     "realtime-examples": {
       "commit": "a57cd916",
       "gatewayPins": "unchanged (catalog 0.8.4, realtime-modules 0.99.3): the gateway reads the Redis projection signal and uses no subscription API"
+    },
+    "gateway": {
+      "repo": "realtime-examples",
+      "commit": "a57cd91643a538d3032113a2e040919a3d551573",
+      "target": "server-runtime"
     }
   },
   "runs": {
@@ -228,36 +234,101 @@
           "revision": null
         }
       }
+    },
+    "2026-10-27-websocket-and-replicated": {
+      "single": {
+        "project": "middleware-gate-743920b464d1",
+        "images": {
+          "mq": "0d0dcd6-era durable-single image",
+          "platform-api": "e0be5e0",
+          "gateway": "a57cd916"
+        },
+        "businessEvents": 12,
+        "revision": 12,
+        "readerWatermark": 12,
+        "readerContiguous": true,
+        "readerLagAfterCommitSeconds": 0.1,
+        "gatewayReplacedReaderCaughtUp": true
+      },
+      "replicatedCandidate": {
+        "project": "middleware-gate-ba11c7762d32",
+        "mq": "fcb2daf (shared-delivery candidate)",
+        "replicas": 2,
+        "businessEvents": 16,
+        "revision": 16,
+        "served": {
+          "replicaA": {
+            "receive": 48
+          },
+          "replicaB": {
+            "receive": 61
+          }
+        }
+      },
+      "replicatedRelease": {
+        "project": "middleware-gate-52c06a586198",
+        "mq": "8736e3c (0.5.3 tag)",
+        "platform-api": "e0be5e0",
+        "gateway": "a57cd916",
+        "replicas": 2,
+        "profile": "durable-replicated",
+        "businessEvents": 16,
+        "distinctResults": 16,
+        "revision": 16,
+        "watermarksContiguous": true,
+        "sourceOutboxPending": 0,
+        "eachReplicaKilledInTurn": true,
+        "served": {
+          "replicaA": {
+            "send": 8,
+            "receive": 55
+          },
+          "replicaB": {
+            "send": 4,
+            "receive": 45
+          }
+        },
+        "readerWatermark": 16,
+        "readerContiguous": true,
+        "readerResets": [],
+        "readerLagAfterCommitSeconds": 0.1,
+        "hostPorts": false,
+        "externalNetwork": false
+      }
     }
   },
   "ownerChecks": {
     "event-catalog": "151 files / 3,127 tests; 12 actual-broker + 10 policy cases on Node 20.0.0 and 25.9.0; packed import/require/types",
     "message-queue": "132 suites / 1,564 tests; 76 DynamoDB Local store/subscription/HTTP cases; packed client",
     "platform-api": "451 suites / 6,349 tests plus drainer and work-graph consumer suites after the fixes; typecheck",
-    "aws-agentcore-middleware": "typecheck; full suite 541/546 suites passed under Docker build load, the 4 timeout suites pass alone, route snapshot regenerated; mock-floor judge ALL PASS"
+    "aws-agentcore-middleware": "typecheck; full suite 541/546 suites passed under Docker build load, the 4 timeout suites pass alone, route snapshot regenerated; mock-floor judge ALL PASS",
+    "2026-10-27": {
+      "platform-api": "451 suites / 6,356 tests at e0be5e0",
+      "message-queue": "132 suites / 1,564 tests at 0.5.3"
+    }
   },
   "defectsFoundByHarness": [
     "message-queue Dockerfile omitted scripts/build.mjs, so 0.5.0 images could not build (fixed fa4aad9).",
     "ddb-v2 capped retention at 14 days while the legacy store accepted the 30/90/365-day catalog declarations; work-graph queue creation failed (0.5.1).",
     "platform-api outbox drainer marked accepted events FAILED after three transient broker failures in about six seconds (fixed 8802d4e).",
     "platform-api work-graph consumer created the shared queue without its declared policy; producers then hit ConfigurationConflict (fixed 8a0be3f).",
-    "platform-api background catalog reconnect never started durable consumers (fixed d7ff8a2)."
+    "platform-api background catalog reconnect never started durable consumers (fixed d7ff8a2).",
+    "platform-api revoked an open work-graph stream (policy-changed) on its day's first activity: the authorization revision's base hashed source health and an empty day lists no sources (fixed e0be5e0; found by the WebSocket leg)."
   ],
   "enabledProfiles": {
-    "message-queue": "ddb-v2 durable-single (incl. production)",
+    "message-queue": "ddb-v2 durable-single and durable-replicated (incl. production; 0.5.3)",
     "platform-api": "PLATFORM_RUNTIME_PROFILE=durable with PLATFORM_DATASTORE aws-dynamodb or dynamodb-local",
     "aws-agentcore": "ORGIQ_RUNTIME_PROFILE=durable (static and unit verified; not run against live Aurora)"
   },
   "unsupported": [
-    "message-queue durable-replicated (no replicated host matrix)",
     "memory and legacy ddb stores for any durable profile",
     "managed-nosql-store as the platform datastore (declares no transaction capability)",
     "legacy-to-ddb-v2 data migration (needs paused-writer migration)",
     "AgentCore durable profile on Aurora (credentials invalid since early October)"
   ],
   "notCovered": [
-    "gateway WebSocket delivery of the projection",
-    "broker replicas and AWS",
-    "work-graph.projection.changed.v1 has no durable consumer; the gateway relies on the Redis signal and its safety poll"
+    "browser rendering of the stream (the reader is a protocol client)",
+    "AWS, capacity and cross-AZ brokers",
+    "work-graph.projection.changed.v1 has no durable consumer; the gateway relies on the Redis signal and its 30 s safety poll (the signal path is now proven under 10 s)"
   ]
 }

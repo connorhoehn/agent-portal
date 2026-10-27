@@ -13,7 +13,7 @@ pins. C3/C4 transactional delivery, FIFO/dedup and atomic DLQ pass local store
 and separate-process HTTP acceptance. C6 subscriber lifecycle, C7 fenced job
 attempts and C8 realtime composition/shared room contracts are verified locally
 and pushed. C5 durable subscriptions now pass local acceptance in MQ 0.5.0.
-C9 host adoption, readiness and the durable result/realtime path passed local acceptance on 2026-10-26 (see the last section); cloud, replicated and AgentCore-on-Aurora acceptance remain open.
+C9 host adoption, readiness and the durable result/realtime path passed local acceptance on 2026-10-26, and the WebSocket leg and replicated brokers on 2026-10-27 (see the last sections); cloud and AgentCore-on-Aurora acceptance remain open.
 The detailed plan refines the order below: extract the needed client contract
 and capability checks before the durable queue migration.
 
@@ -45,7 +45,7 @@ and capability checks before the durable queue migration.
 | --- | --- | --- | --- |
 | Hangout baseline | ui-components, realtime-modules, platform-api, aws-agentcore | Targeted release verified | Real two-person media walk and 28 layout states pass; backend authorization checks pass. Broader tenant journey freshness still needs renewal (see product-readiness record) |
 | C0 failure characterization | message-queue, event-catalog, AgentCore | Locally verified | Queue failure reproductions plus catalog poison/ACK and job-attempt ownership records are linked in the dated checkpoints |
-| Durable queue and worker lifecycle | message-queue, distributed-core; platform-api, realtime-modules | Locally accepted (C9) | C3–C5 owner checks plus the C9 host matrix; MQ `ddb-v2` durable-single enabled, replicated refused |
+| Durable queue and worker lifecycle | message-queue, distributed-core; platform-api, realtime-modules | Locally accepted (C9) | C3–C5 owner checks plus the C9 host matrix; MQ `ddb-v2` durable-single and durable-replicated enabled (0.5.3) |
 | Owner contracts and clients | message-queue, event-catalog, pipeline-runtime, platform-api; realtime-modules, aws-agentcore | Locally accepted | Consumer typechecks; wire fixtures; no duplicate canonical validators/interfaces |
 | Runtime composition | service-runtime, distributed-core; realtime-modules, platform-api, aws-agentcore | Adopted in platform-api and AgentCore; platform path accepted | Supported matrix passes; unsafe combinations rejected; ownership loss removes readiness |
 | Downstream releases | All changed owners and consumers | Pushed: catalog 0.10.0, MQ 0.5.2, platform-api 8a0be3f, AgentCore, realtime-examples | Built owner artifacts match source; final consumer pin/result/readiness matrix remains |
@@ -417,3 +417,30 @@ Local C9 acceptance passed. Evidence:
   `durable-replicated`, legacy-store migration, managed-nosql-store as a
   transactional datastore, gateway WebSocket delivery, AWS and capacity.
 
+## C9 WebSocket leg and replicated brokers — 2026-10-27
+
+Evidence: the `2026-10-27-websocket-and-replicated` run in
+[c9-durable-result-verification.json](chassis/c9-durable-result-verification.json).
+
+- **WebSocket leg.** The durable-result matrix now runs the gateway and a
+  reader in its own container: a snapshot over platform-api's HTTP route, then
+  the gateway stream from its signed cursor. Across broker, consumer, store and
+  gateway SIGKILL its watermarks form one contiguous chain to the final
+  revision, with no resets; in steady state it catches up 0.1 s after the
+  commit, so the Redis signal, not the 30 s safety poll, drives it.
+- **Defect found and fixed (platform-api `e0be5e0`).** An empty day lists no
+  sources, and the authorization revision's base hashed source health, so a
+  day's first activity moved the base and the replay answered `policyChanged`:
+  a reader that opened on an empty day was revoked by its own first event. The
+  base now hashes only sources that are not `available`; an unavailable source
+  still moves it. Full suite 451 suites / 6,356 tests.
+- **message-queue 0.5.3** (`8736e3c`, tag `v0.5.3`) declares `shared-delivery`
+  for `ddb-v2`, enabling `durable-replicated`. `MQ_REPLICAS=2` ran two brokers
+  behind one service name; each was SIGKILLed in turn while the survivor
+  finished the accepted events, projections and the reader's revisions, and
+  both served receives. Run on the candidate and again on the tagged image:
+  16 events, 16 results, contiguous revisions, no pending outbox rows.
+- Still open: AgentCore's durable profile on live Aurora (credentials),
+  legacy-to-`ddb-v2` data migration, managed-nosql-store as a transactional
+  datastore, a durable consumer for `work-graph.projection.changed.v1`, browser
+  rendering of the stream, and AWS/capacity.
