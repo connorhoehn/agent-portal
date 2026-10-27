@@ -4,9 +4,9 @@
   "scope": "Local correctness only. No cloud deploy, no AWS credentials, no shared data migration.",
   "harness": {
     "repo": "realtime-examples",
-    "commit": "ea69aad8",
+    "commit": "be3c604d",
     "command": "python3 examples/middleware-foundation/acceptance.py --durable-result",
-    "path": "platform-api source publisher -> transactional outbox (DynamoDB Local) -> outbox drainer -> message-queue ddb-v2 -> work-graph consumer -> conditional projection commit + outbox row -> work-graph.projection.changed.v1 + Redis signal -> gateway replay (realtime-examples) -> WebSocket reader"
+    "path": "platform-api source publisher -> transactional outbox (DynamoDB Local) -> outbox drainer -> message-queue ddb-v2 -> work-graph consumer -> conditional projection commit + outbox row -> work-graph.projection.changed.v1 + Redis signal -> gateway durable consumer re-broadcast -> gateway replay (realtime-examples) -> WebSocket reader"
   },
   "artifacts": {
     "event-catalog": {
@@ -20,7 +20,8 @@
       "releases": {
         "0.5.1": "e39f3b5ef77cc65cb4da921b3e271a6c86f8e41c",
         "0.5.2": "0d0dcd62af960e89428846bdd09dd95f04d5946f",
-        "0.5.3": "8736e3c4836463012802c642841f2d88aeb46d41"
+        "0.5.3": "8736e3c4836463012802c642841f2d88aeb46d41",
+        "0.6.0": "3cc40aa (tag v0.6.0): legacy ddb -> ddb-v2 migration and reverse transfer"
       },
       "durableSingleImageSource": "8acd79119e2ddbe09b6720ddd5c602353b5a46f2 (0.5.2 source before the version/changelog-only release commit)"
     },
@@ -41,7 +42,7 @@
     },
     "gateway": {
       "repo": "realtime-examples",
-      "commit": "a57cd91643a538d3032113a2e040919a3d551573",
+      "commit": "be3c604d",
       "target": "server-runtime"
     }
   },
@@ -295,6 +296,73 @@
         "hostPorts": false,
         "externalNetwork": false
       }
+    },
+    "2026-10-27-projection-consumer": {
+      "project": "middleware-gate-f83cfb4a6f7d",
+      "images": {
+        "MQ_IMAGE": {
+          "ref": "message-queue:0.5.3",
+          "id": "sha256:44251767663055b593a54a0dea0f8bbc4702649ef4252078a3bcb5a47dc86522",
+          "revision": "8736e3c4836463012802c642841f2d88aeb46d41"
+        },
+        "PLATFORM_API_IMAGE": {
+          "ref": "platform-api:c9-e0be5e0",
+          "id": "sha256:51a26519c76ef66956759a09059aef878282d92298928c0a812fa14e287a6d52",
+          "revision": "e0be5e07d41f695c249fad61785f7a7b7bac0b72"
+        },
+        "GATEWAY_IMAGE": {
+          "ref": "realtime-examples:c9-be3c604d",
+          "id": "sha256:675298f1aa87496e4ec50c41778bcf5b06ff7e14db6e1fd297a7c37c7ebc2854",
+          "revision": "be3c604d"
+        },
+        "REDIS_IMAGE": {
+          "ref": "redis:7-alpine",
+          "id": "sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6",
+          "revision": null
+        },
+        "DDB_LOCAL_IMAGE": {
+          "ref": "amazon/dynamodb-local@sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab",
+          "id": "sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab",
+          "revision": null
+        }
+      },
+      "brokerReplicas": 1,
+      "businessEvents": 12,
+      "final": {
+        "events": 12,
+        "distinctEventIds": 12,
+        "deltas": 12,
+        "revision": 12,
+        "watermarksContiguous": true,
+        "sourceOutboxPending": 0
+      },
+      "readerLagAfterCommitSeconds": 0.1,
+      "projectionEventsConsumedAndRebroadcast": {
+        "revisions": 12,
+        "rebroadcast": 12,
+        "queueDepth": {
+          "ApproximateNumberOfMessages": 0,
+          "ApproximateNumberOfMessagesNotVisible": 0,
+          "ApproximateNumberOfMessagesDelayed": 0
+        },
+        "deadLettered": {
+          "ApproximateNumberOfMessages": 0,
+          "ApproximateNumberOfMessagesNotVisible": 0,
+          "ApproximateNumberOfMessagesDelayed": 0
+        }
+      },
+      "webSocketReaderReachedFinalRevision": {
+        "watermark": 12,
+        "contiguous": true,
+        "frames": {
+          "snapshot": 1,
+          "open": 2,
+          "delta": 12,
+          "close": 2,
+          "socket-error": 1
+        },
+        "resets": []
+      }
     }
   },
   "ownerChecks": {
@@ -305,6 +373,10 @@
     "2026-10-27": {
       "platform-api": "451 suites / 6,356 tests at e0be5e0",
       "message-queue": "132 suites / 1,564 tests at 0.5.3"
+    },
+    "2026-10-27-later": {
+      "message-queue": "132 suites / 1,564 tests default at 0.6.0 source; ddb-legacy-transfer 4/4, ddb-delivery-store + ddb-subscriptions 62/62, ddb-delivery-http 14/14 on DynamoDB Local 3.3.1; CLI run from the built image (import --apply, rerun idempotent)",
+      "realtime-examples": "test/work-graph 21 suites / 160 tests (consumer 6, push de-duplication 1 new)"
     }
   },
   "defectsFoundByHarness": [
@@ -323,12 +395,12 @@
   "unsupported": [
     "memory and legacy ddb stores for any durable profile",
     "managed-nosql-store as the platform datastore (declares no transaction capability)",
-    "legacy-to-ddb-v2 data migration (needs paused-writer migration)",
     "AgentCore durable profile on Aurora (credentials invalid since early October)"
   ],
   "notCovered": [
     "browser rendering of the stream (the reader is a protocol client)",
     "AWS, capacity and cross-AZ brokers",
-    "work-graph.projection.changed.v1 has no durable consumer; the gateway relies on the Redis signal and its 30 s safety poll (the signal path is now proven under 10 s)"
+    "legacy-to-ddb-v2 migration ran only on DynamoDB Local tables, never a shared or cloud table",
+    "platform-api losing Redis while the gateway keeps it (the case only the projection consumer covers) is unit-tested, not staged in the harness"
   ]
 }

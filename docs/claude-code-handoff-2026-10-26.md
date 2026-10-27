@@ -7,6 +7,16 @@ running. Do not run Codex and Claude against the same worktree concurrently.
 Older handoffs and dated verification records are historical evidence, not a
 substitute for the state below. Recheck Git and running artifacts before edits.
 
+## Update — queue migration and projection consumer (Claude Code, 2026-10-27, later)
+
+Pushed: message-queue 0.6.0 (`3cc40aa`, tag `v0.6.0`) with the legacy `ddb` →
+`ddb-v2` migration and reverse-transfer tool (README "Moving legacy `ddb` data"),
+and realtime-examples `be3c604d`, whose gateway now drains
+`work-graph.projection.changed.v1` and re-broadcasts it on Redis; the C9 run
+passed with it. Still open: AgentCore durable profile on live Aurora
+(credentials), running the migration on a real table, managed-nosql-store
+transactions, browser rendering, cloud/capacity and the journey backlog below.
+
 ## Update — WebSocket leg and replicated brokers (Claude Code, 2026-10-27)
 
 The gateway WebSocket leg and `durable-replicated` brokers passed locally; see

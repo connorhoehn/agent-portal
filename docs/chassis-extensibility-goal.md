@@ -13,7 +13,7 @@ pins. C3/C4 transactional delivery, FIFO/dedup and atomic DLQ pass local store
 and separate-process HTTP acceptance. C6 subscriber lifecycle, C7 fenced job
 attempts and C8 realtime composition/shared room contracts are verified locally
 and pushed. C5 durable subscriptions now pass local acceptance in MQ 0.5.0.
-C9 host adoption, readiness and the durable result/realtime path passed local acceptance on 2026-10-26, and the WebSocket leg and replicated brokers on 2026-10-27 (see the last sections); cloud and AgentCore-on-Aurora acceptance remain open.
+C9 host adoption, readiness and the durable result/realtime path passed local acceptance on 2026-10-26, and the WebSocket leg, replicated brokers, the legacy queue migration and the projection-changed consumer on 2026-10-27 (see the last sections); cloud and AgentCore-on-Aurora acceptance remain open.
 The detailed plan refines the order below: extract the needed client contract
 and capability checks before the durable queue migration.
 
@@ -45,7 +45,7 @@ and capability checks before the durable queue migration.
 | --- | --- | --- | --- |
 | Hangout baseline | ui-components, realtime-modules, platform-api, aws-agentcore | Targeted release verified | Real two-person media walk and 28 layout states pass; backend authorization checks pass. Broader tenant journey freshness still needs renewal (see product-readiness record) |
 | C0 failure characterization | message-queue, event-catalog, AgentCore | Locally verified | Queue failure reproductions plus catalog poison/ACK and job-attempt ownership records are linked in the dated checkpoints |
-| Durable queue and worker lifecycle | message-queue, distributed-core; platform-api, realtime-modules | Locally accepted (C9) | C3–C5 owner checks plus the C9 host matrix; MQ `ddb-v2` durable-single and durable-replicated enabled (0.5.3) |
+| Durable queue and worker lifecycle | message-queue, distributed-core; platform-api, realtime-modules | Locally accepted (C9) | C3–C5 owner checks plus the C9 host matrix; MQ `ddb-v2` durable-single and durable-replicated enabled (0.5.3); legacy migration tool (0.6.0) |
 | Owner contracts and clients | message-queue, event-catalog, pipeline-runtime, platform-api; realtime-modules, aws-agentcore | Locally accepted | Consumer typechecks; wire fixtures; no duplicate canonical validators/interfaces |
 | Runtime composition | service-runtime, distributed-core; realtime-modules, platform-api, aws-agentcore | Adopted in platform-api and AgentCore; platform path accepted | Supported matrix passes; unsafe combinations rejected; ownership loss removes readiness |
 | Downstream releases | All changed owners and consumers | Pushed: catalog 0.10.0, MQ 0.5.2, platform-api 8a0be3f, AgentCore, realtime-examples | Built owner artifacts match source; final consumer pin/result/readiness matrix remains |
@@ -444,3 +444,31 @@ Evidence: the `2026-10-27-websocket-and-replicated` run in
   legacy-to-`ddb-v2` data migration, managed-nosql-store as a transactional
   datastore, a durable consumer for `work-graph.projection.changed.v1`, browser
   rendering of the stream, and AWS/capacity.
+
+## Legacy queue migration and projection-changed consumer — 2026-10-27
+
+- **message-queue 0.6.0** (`3cc40aa`, tag `v0.6.0`):
+  `scripts/migrate-legacy-delivery.mjs import|reverse [--apply]`, shipped in
+  the image. It carries each unexpired legacy message under its original id,
+  body (decompressed), attributes, FIFO group/dedup id, send time, delay and
+  retention, dead-letter targets first. A ledger row commits with each enqueue,
+  so reruns never duplicate. It refuses live legacy leases, v2 queues that
+  something else wrote and unsupported configuration, detects a running legacy
+  writer by rereading its rows, and verifies ledger, sequence and v2 counts.
+  `reverse` is the rollback: legacy ends up holding exactly v2's undelivered
+  messages, all or nothing. Proven on DynamoDB Local only (4 integration tests,
+  rows written and read back by the legacy broker; CLI run from the image).
+  Default suite 132 suites / 1,564 tests; v2 store, subscription and HTTP
+  suites 76 tests. No shared or cloud table was migrated.
+- **Projection-changed consumer** (realtime-examples `be3c604d`). Each gateway
+  drains `work-graph-projection-changed-v1` and re-broadcasts every change on
+  the Redis topic, acknowledging only after Redis accepted it (retried in hand
+  for 20 s, then redelivered). Signal listeners drop a repeated revision, so
+  the extra announcement costs no poll. C9 run `middleware-gate-f83cfb4a6f7d`:
+  12 events, a gateway re-broadcast for all 12 revisions, queue and DLQ empty,
+  reader contiguous to 12 with no resets, 0.1 s lag. The harness no longer
+  drains that queue itself. The case only this consumer covers (platform-api
+  losing Redis while the gateway keeps it) is unit-tested, not staged.
+- Still open: AgentCore's durable profile on live Aurora (credentials),
+  running the migration on a real table, managed-nosql-store as a
+  transactional datastore, browser rendering of the stream, and AWS/capacity.
