@@ -535,6 +535,12 @@ export class SocialMediaStack extends cdk.Stack {
       value: allowCidrs.length ? allowCidrs.join(',') : '(none — SFU accepts no media)',
       description: 'CIDRs permitted to send media to the SFU',
     });
+    // Read back by deploy.sh's sticky context, so a later deploy keeps the
+    // verified image instead of failing over to :latest.
+    new cdk.CfnOutput(this, 'SfuImageDigest', {
+      value: digest ?? '(none — :latest)',
+      description: 'sfuImageDigest this stack was deployed with',
+    });
     new cdk.CfnOutput(this, 'SfuMediaPorts', {
       value: `${instanceTypeName}, ${ports.workers} workers: UDP ${ports.rtcUdp.from}-${ports.rtcUdp.to}, TCP ${ports.rtcTcp.from}-${ports.rtcTcp.to}`,
       description: 'Instance type, worker count and the media ports the group opens',

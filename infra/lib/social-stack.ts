@@ -721,6 +721,11 @@ export class SocialStack extends cdk.Stack {
       value: platformInternal,
       description: 'platform-api inside the VPC (Cloud Map)',
     });
+    // Read back by deploy.sh's sticky context (deploySocialService needs it).
+    new cdk.CfnOutput(this, 'PlatformApiImageDigest', {
+      value: digest ?? '(none)',
+      description: 'platformApiImageDigest this stack was deployed with',
+    });
     new cdk.CfnOutput(this, 'PlatformApiServiceName', {
       value: this.platformService.serviceName,
       description: 'aws ecs describe-services --cluster orgiq-middleware --services <this>',

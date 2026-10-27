@@ -373,6 +373,40 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
       && infer portalPublicUrls true
   fi
 
+  # The middleware as its own realtime gateway, read off the running task.
+  MW_TASKDEF=$(aws ecs describe-services --cluster "${PREFIX}-middleware" --services "${PREFIX}-middleware" --region "$REGION" \
+    --query 'services[0].taskDefinition' --output text 2>/dev/null || true)
+  if [[ "$MW_TASKDEF" == arn:* ]]; then
+    RT_GW=$(aws ecs describe-task-definition --task-definition "$MW_TASKDEF" --region "$REGION" \
+      --query "taskDefinition.containerDefinitions[0].environment[?name=='REALTIME_GATEWAY'].value | [0]" --output text 2>/dev/null || true)
+    [[ "$RT_GW" == "on" ]] && infer realtimeGateway true
+  fi
+
+  # The opt-in Social stacks. Each consumes the middleware's exports, so a
+  # deploy without its flag would try to delete exports still in use.
+  stack_live() { case "$(stack_status "$1")" in NOT_FOUND|DELETE_*) return 1 ;; *) return 0 ;; esac; }
+  stack_live OrgIQ-SocialImages && infer deploySocialImages true
+  if stack_live OrgIQ-SocialMedia; then
+    infer deploySocialMedia true
+    SFU_DIGEST=$(stack_output OrgIQ-SocialMedia SfuImageDigest)
+    [[ "$SFU_DIGEST" == sha256:* ]] && infer sfuImageDigest "$SFU_DIGEST"
+    SFU_CIDRS=$(stack_output OrgIQ-SocialMedia SfuAllowedCidrs)
+    [[ "$SFU_CIDRS" =~ ^[0-9] ]] && infer sfuAllowCidr "$SFU_CIDRS"
+    [[ -n "$PORTAL_URL" ]] && infer socialPortalOrigin "$PORTAL_URL"
+  fi
+  if stack_live OrgIQ-Social; then
+    infer deploySocial true
+    PLATFORM_DIGEST=$(stack_output OrgIQ-Social PlatformApiImageDigest)
+    PLATFORM_SVC=$(stack_output OrgIQ-Social PlatformApiServiceName)
+    PLATFORM_DESIRED=0
+    [[ -n "$PLATFORM_SVC" ]] && PLATFORM_DESIRED=$(aws ecs describe-services --cluster "${PREFIX}-middleware" \
+      --services "$PLATFORM_SVC" --region "$REGION" --query 'services[0].desiredCount' --output text 2>/dev/null || echo 0)
+    if [[ "$PLATFORM_DIGEST" == sha256:* && "$PLATFORM_DESIRED" =~ ^[1-9] ]]; then
+      infer deploySocialService true
+      infer platformApiImageDigest "$PLATFORM_DIGEST"
+    fi
+  fi
+
   # The runtimes' machine-callback secrets (lib/agentcore-runtime-stack.ts):
   # minted by OrgIQ-MiddlewareService, passed as plain env because a runtime's
   # EnvironmentVariables cannot hold a Secrets Manager reference.

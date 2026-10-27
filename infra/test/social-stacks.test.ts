@@ -667,4 +667,14 @@ describe('bin/app.ts — the social stacks are opt-in', () => {
     const mw = JSON.stringify(app.templates['OrgIQ-MiddlewareService']);
     assert.ok(!/OrgIQ-Social/.test(mw), 'middleware stack must not reference the social stacks');
   });
+
+  test('both stacks report the image digest they were deployed with (deploy.sh reads it back)', () => {
+    const sfu = `sha256:${'1'.repeat(64)}`, platform = `sha256:${'2'.repeat(64)}`;
+    const app = synthApp({
+      deploySocial: 'true', deploySocialMedia: 'true', sfuAllowCidr: '203.0.113.4/32',
+      sfuImageDigest: sfu, deploySocialService: 'true', platformApiImageDigest: platform,
+    });
+    assert.equal(app.templates['OrgIQ-SocialMedia'].Outputs.SfuImageDigest.Value, sfu);
+    assert.equal(app.templates['OrgIQ-Social'].Outputs.PlatformApiImageDigest.Value, platform);
+  });
 });
