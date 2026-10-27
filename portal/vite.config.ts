@@ -2,6 +2,30 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
+import type { Plugin } from 'vite';
+
+// realtime-modules ships its canvas client and TipTap adapters as CommonJS, so
+// a production build resolves their `require`s through the packages' `require`
+// condition: y-tiptap.cjs, @tiptap/core's index.cjs, prosemirror-view's
+// index.cjs. That is a second instance of the whole editor stack beside the
+// ESM one ui-components imports, and two DecorationSet classes fail each
+// other's instanceof: every collaborative canvas crashed on mount ("Cannot read
+// properties of undefined (reading 'localsInner')"). optimizeDeps dedupes this
+// in dev, which is why only the deployed portal broke. Resolve those requires
+// as imports, so the editor stack has exactly one ESM instance per package.
+const EDITOR_STACK = /^(?:@tiptap\/|prosemirror-|orderedmap$|rope-sequence$|w3c-keyname$)/;
+function editorStackAsEsm(): Plugin {
+  return {
+    name: 'orgiq-editor-stack-esm',
+    enforce: 'pre',
+    async resolveId(source, importer, options) {
+      const nodeResolve = (options.custom as { 'node-resolve'?: { isRequire?: boolean } } | undefined)?.['node-resolve'];
+      if (!nodeResolve?.isRequire || !EDITOR_STACK.test(source)) return null;
+      return this.resolve(source, importer, { ...options, skipSelf: true,
+        custom: { ...options.custom, 'node-resolve': { ...nodeResolve, isRequire: false } } });
+    },
+  };
+}
 
 // The API target. Node resolves `localhost` to ::1 first, and another
 // project's server listening on IPv6 :3001 silently answers every /api call
@@ -27,7 +51,7 @@ export default defineConfig(async () => ({
   define: {
     global: 'globalThis',
   },
-  plugins: [react(), tailwindcss()],
+  plugins: [editorStackAsEsm(), react(), tailwindcss()],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
