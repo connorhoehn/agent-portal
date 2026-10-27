@@ -46,7 +46,7 @@ test('opt-in document workspace uses the exported backend composition with scope
   assert.ok(rules.some(r => JSON.stringify(r.Properties.Conditions).includes('/document-realtime') && JSON.stringify(r.Properties.Conditions).includes('/api/uploads/*')));
   const fs = Object.values<any>(template.findResources('AWS::EFS::FileSystem'))[0];
   assert.equal(fs.Properties.Encrypted, true);
-  assert.equal(fs.DeletionPolicy, 'Retain');
+  assert.equal(fs.DeletionPolicy, 'RetainExceptOnCreate');
   const policies = Object.values<any>(template.toJSON().Resources).filter(resource => ['AWS::IAM::Policy', 'AWS::IAM::ManagedPolicy', 'AWS::IAM::Role'].includes(resource.Type));
   const allPolicies = JSON.stringify(policies);
   assert.ok(allPolicies.includes('elasticfilesystem:ClientWrite'));
@@ -164,4 +164,12 @@ test('the gateway service waits for the upload file system mount targets', () =>
   const gateway = Object.entries<any>(t.findResources('AWS::ECS::Service')).find(([id]) => /gateway/i.test(id));
   assert.ok(gateway && mountTargets.length > 0);
   for (const mt of mountTargets) assert.ok((gateway![1].DependsOn ?? []).includes(mt), `gateway does not wait for ${mt}`);
+});
+
+test('document tables and uploads are retained, except when their own creation rolls back', () => {
+  const t = Template.fromStack(middlewareServiceStack(context, props)).toJSON();
+  const kept = Object.values<any>(t.Resources).filter(r => ['AWS::DynamoDB::Table', 'AWS::EFS::FileSystem'].includes(r.Type)
+    && (r.Properties?.TableName ?? '').toString().includes('documents') || r.Type === 'AWS::EFS::FileSystem');
+  assert.ok(kept.length > 10);
+  for (const r of kept) assert.equal(r.DeletionPolicy, 'RetainExceptOnCreate', `${r.Properties?.TableName ?? r.Type}`);
 });

@@ -87,6 +87,17 @@ export function attachDocumentWorkspace(scope: cdk.Stack, props: {
     path: '/document-uploads', posixUser: { uid: '1000', gid: '1000' },
     createAcl: { ownerUid: '1000', ownerGid: '1000', permissions: '750' },
   });
+  // Keep document data on update and teardown, but not when the operation
+  // that created it rolls back: plain Retain left all 54 tables and the EFS
+  // behind after a failed first deploy, and the retry then failed "already
+  // exists" on every one of them.
+  for (const construct of [tables, mqTable, uploads]) {
+    for (const child of construct.node.findAll()) {
+      if (child instanceof cdk.CfnResource && child.cfnOptions.deletionPolicy === cdk.CfnDeletionPolicy.RETAIN) {
+        child.cfnOptions.deletionPolicy = cdk.CfnDeletionPolicy.RETAIN_EXCEPT_ON_CREATE;
+      }
+    }
+  }
   const secret = (id: string) => new secretsmanager.Secret(scope, id, { generateSecretString: { passwordLength: 48, excludePunctuation: true } });
   const policySecret = secret('DocumentPolicySecret');
   const gatewaySecret = secret('DocumentGatewayServiceSecret');

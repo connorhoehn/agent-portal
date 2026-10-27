@@ -200,3 +200,11 @@ describe('deploy.sh: a replacement deploys with rollback from the start', () => 
     assert.match(script, /\$NO_ROLLBACK && CDK_FLAGS\+=\(--no-rollback\)/);
   });
 });
+
+describe('deploy.sh: an orphaned Cloud Map namespace is swept before deploy', () => {
+  test('only unowned namespaces with no services are deleted', () => {
+    assert.match(deploySh, /servicediscovery list-namespaces/);
+    assert.match(deploySh, /describe-stack-resources --physical-resource-id "\$ns"/);
+    assert.match(deploySh, /services" == "0"/);
+  });
+});

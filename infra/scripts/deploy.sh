@@ -307,6 +307,33 @@ echo "  Done"
 echo ""
 
 # ──────────────────────────────────────────────────────────────────
+# 3b. Orphaned Cloud Map namespaces
+# Cloud Map creates a namespace asynchronously, so CloudFormation can cancel
+# one, record DELETE_COMPLETE, and have it finish creating afterwards. Its
+# private zone then holds the name in the VPC and the next create fails
+# ConflictingDomainExists. Delete only a namespace no stack owns and that has
+# no services.
+# ──────────────────────────────────────────────────────────────────
+echo "── Checking for orphaned Cloud Map namespaces ──"
+for ns in $(aws servicediscovery list-namespaces --region "$REGION" \
+    --query "Namespaces[?Name=='${PREFIX}-documents.local' || Name=='${PREFIX}-social.local'].Id" \
+    --output text 2>/dev/null || true); do
+  if aws cloudformation describe-stack-resources --physical-resource-id "$ns" --region "$REGION" > /dev/null 2>&1; then
+    continue
+  fi
+  services=$(aws servicediscovery list-services --region "$REGION" \
+    --filters "Name=NAMESPACE_ID,Values=${ns},Condition=EQ" --query 'length(Services)' --output text 2>/dev/null || echo 1)
+  if [[ "$services" == "0" ]]; then
+    echo "  Deleting orphaned namespace ${ns}"
+    aws servicediscovery delete-namespace --id "$ns" --region "$REGION" > /dev/null 2>&1 || true
+  else
+    echo "  ⚠️  Namespace ${ns} is unowned but has services; left in place"
+  fi
+done
+echo "  Done"
+echo ""
+
+# ──────────────────────────────────────────────────────────────────
 # 4. CDK deploy
 #
 # --concurrency 5   deploy independent stacks in parallel (CDK respects
