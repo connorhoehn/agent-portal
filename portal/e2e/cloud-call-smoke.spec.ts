@@ -11,6 +11,8 @@ const logins = [process.env.CLOUD_LOGIN_A, process.env.CLOUD_LOGIN_B];
 test.skip(!base || logins.some((l) => !l), 'CLOUD_PORTAL_URL / CLOUD_LOGIN_A / CLOUD_LOGIN_B not set');
 test.use({ launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] } });
 
+const bindings: number[] = [];
+
 async function signIn(browser: Browser, login: string, label: string): Promise<Page> {
   const [email, password] = [login.slice(0, login.indexOf(':')), login.slice(login.indexOf(':') + 1)];
   const context = await browser.newContext({ baseURL: base, permissions: ['camera', 'microphone'], viewport: { width: 1440, height: 960 } });
@@ -20,7 +22,14 @@ async function signIn(browser: Browser, login: string, label: string): Promise<P
     window.RTCPeerConnection = new Proxy(window.RTCPeerConnection, { construct(T, a) { const pc = Reflect.construct(T, a); peers.push(pc); return pc; } });
   });
   const page = await context.newPage();
+  if (process.env.CLOUD_TIMELINE) {
+    const t0 = Date.now();
+    page.on('request', (q) => { if (/\/api\/(video|calls|realtime)/.test(q.url())) console.log(`[${label}] +${Date.now() - t0}ms → ${q.method()} ${new URL(q.url()).pathname}`); });
+    page.on('response', (r) => { if (/\/api\/(video|calls|realtime)/.test(r.url())) console.log(`[${label}] +${Date.now() - t0}ms ← ${r.status()} ${new URL(r.url()).pathname}`); });
+    page.on('websocket', (ws) => ws.on('framesent', (f) => { const m = String(f.payload); if (m.includes('"service":"call"')) console.log(`[${label}] +${Date.now() - t0}ms ws→ ${m.slice(0, 120)}`); }));
+  }
   page.on('response', async (r) => {
+    if (r.url().includes('/call-binding')) bindings.push(r.status());
     const bindingRefused = r.url().includes('/call-binding') && r.status() >= 400;
     if (r.status() >= 500 || bindingRefused) console.log(`[${label}] ${r.status()} ${r.request().method()} ${r.url()} ${(await r.text().catch(() => '')).slice(0, 200)}`);
     if (bindingRefused && process.env.CLOUD_DEBUG_SEAT) {
@@ -45,7 +54,8 @@ async function signIn(browser: Browser, login: string, label: string): Promise<P
 // A fresh account gets the pre-join device check before every join.
 async function join(page: Page) {
   await page.getByTestId('social-room-join').click();
-  const prejoin = page.getByRole('dialog').filter({ hasText: 'Start a huddle' });
+  // "Start a huddle" for the first caller, "Join the huddle" into a live call.
+  const prejoin = page.getByRole('dialog').filter({ hasText: /^(Start a|Join the) huddle/ });
   await prejoin.getByRole('button', { name: 'Join', exact: true }).click({ timeout: 15000 }).catch(() => {});
 }
 
@@ -106,10 +116,20 @@ test('two signed-in users hear each other through the deployed SFU', async ({ br
     await expect(owner.getByTestId('social-room-join')).toBeEnabled({ timeout: 30000 });
     await join(owner);
     await expect(owner.getByTestId('call-dock-leave')).toBeVisible({ timeout: 30000 });
+    // Join walks into a call the page has discovered, and starts a second one
+    // otherwise: wait until the guest's page sees the owner's call.
+    // On the deployed stack the gateway registers the first caller's call
+    // ~9 s after Join (serial authoritative directory reads over the Data
+    // API); a guest who joins inside that window starts a second call in the
+    // lobby and neither seat is ever accepted. Wait it out, then join.
+    await expect(owner.getByText('1 connected to this hangout')).toBeVisible({ timeout: 30000 });
+    await guest.waitForTimeout(Number(process.env.CLOUD_SEAT_SETTLE_MS ?? 15000));
     await join(guest);
     await expect(guest.getByTestId('hangout-call-stage')).toContainText('2 connected', { timeout: 45000 });
     await expect.poll(() => inboundAudio(guest), { timeout: 45000 }).toBeGreaterThan(0);
     await expect.poll(() => inboundAudio(owner), { timeout: 45000 }).toBeGreaterThan(0);
+    // Each live media leg binds to its accepted gateway seat.
+    await expect.poll(() => bindings.filter((s) => s === 200).length, { timeout: 30000 }).toBeGreaterThanOrEqual(2);
     await owner.screenshot({ path: `${out}/owner-in-call.png`, fullPage: true });
     await guest.screenshot({ path: `${out}/guest-in-call.png`, fullPage: true });
   } finally {
