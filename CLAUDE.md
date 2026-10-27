@@ -5,7 +5,9 @@ on Amazon Bedrock AgentCore that ingests org docs, builds a knowledge graph,
 scores expertise and serves conversational search across four tenants
 (`orgiq`, `assessment`, `social`, `pipelines`). `CONSTITUTION.md` is the spec.
 
-**Current state:** read `docs/claude-code-handoff-2026-10-26.md` first. It
+**Current state:** read `docs/claude-code-handoff-2026-10-26.md` first, and
+`docs/aws-deploy-open-items-2026-10-27.md` for the live AWS deploy's open
+items (the call join window first). The 10-26 handoff
 holds the current commits, pins, verified test scope and the open
 continuation items. The dated checkpoint prose that used to live here is in
 `docs/history/claude-md-checkpoints-2026-10.md`; treat it as history, not as
