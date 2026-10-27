@@ -467,14 +467,28 @@ else
   METHOD="change-set"
 fi
 
+# --no-rollback cannot replace a resource (see the recovery below), and that
+# recovery rolls back before retrying — which strands every RETAINed resource
+# the refused attempt had already created (the document workspace's tables and
+# upload EFS), so the retry then fails "already exists". When the diff shows a
+# replacement, deploy with rollback from the start instead.
+NO_ROLLBACK=true
+if [[ "$METHOD" == "direct" ]]; then
+  if [[ ${#CDK_ARGS[@]} -eq 0 ]]; then DIFF_ARGS=(); else DIFF_ARGS=("${CDK_ARGS[@]}"); fi
+  if "${CDK[@]}" diff ${DIFF_ARGS[@]+"${DIFF_ARGS[@]}"} ${INFERRED[@]+"${INFERRED[@]}"} 2>&1 \
+      | grep -qE '\(requires replacement\)|\(may cause replacement\)|[[:space:]]replace$'; then
+    NO_ROLLBACK=false
+  fi
+fi
+
 CDK_FLAGS=(
   --require-approval never
   --concurrency 5
-  --no-rollback
   --method "$METHOD"
 )
+$NO_ROLLBACK && CDK_FLAGS+=(--no-rollback)
 
-echo "  method=${METHOD}  concurrency=5  no-rollback=true"
+echo "  method=${METHOD}  concurrency=5  no-rollback=${NO_ROLLBACK}"
 echo ""
 
 # ──────────────────────────────────────────────────────────────────

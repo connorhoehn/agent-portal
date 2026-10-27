@@ -159,6 +159,10 @@ export function attachDocumentWorkspace(scope: cdk.Stack, props: {
   }
   container.addSecret('DOCUMENT_GRANT_PRIVATE_KEY', ecs.Secret.fromSecretsManager(privateKey));
   container.addSecret('DOCUMENT_POLICY_SECRET', ecs.Secret.fromSecretsManager(policySecret));
+  // The gateway mounts the uploads EFS at task start. Created alongside the
+  // mount targets, its first tasks fail "Failed to resolve fs-….efs…" until
+  // they are available, and only an ECS retry recovers.
+  workspace.gateway.node.addDependency(uploads.mountTargetsAvailable);
   workspace.gateway.connections.allowFrom(middleware.service, ec2.Port.tcp(8080), 'BFF scoped document transport');
   workspace.platform.connections.allowFrom(middleware.service, ec2.Port.tcp(3001), 'BFF document workflow proxy');
   middleware.service.connections.allowFrom(workspace.gateway, ec2.Port.tcp(3001), 'Gateway document session policy');

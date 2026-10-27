@@ -191,3 +191,12 @@ describe('teardown and rebuild know the opt-in stacks (deploy plan §8/§10)', (
     assert.match(script, /--force-delete-without-recovery/);
   });
 });
+
+describe('deploy.sh: a replacement deploys with rollback from the start', () => {
+  const script = deploySh;
+  test('the diff decides --no-rollback, so a refused attempt cannot strand RETAINed resources', () => {
+    assert.match(script, /diff .*INFERRED/);
+    assert.match(script, /requires replacement/);
+    assert.match(script, /\$NO_ROLLBACK && CDK_FLAGS\+=\(--no-rollback\)/);
+  });
+});

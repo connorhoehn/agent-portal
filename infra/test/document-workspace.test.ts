@@ -157,3 +157,11 @@ test('documentWorkspace passed as a --context JSON string is parsed', () => {
   const t = Template.fromStack(middlewareServiceStack({ ...context, documentWorkspace: JSON.stringify(config) }, { ...props, documentWorkspace: undefined }));
   assert.ok(Object.keys(t.findResources('AWS::ECS::Service')).length > 1, 'the document services were not attached');
 });
+
+test('the gateway service waits for the upload file system mount targets', () => {
+  const t = Template.fromStack(middlewareServiceStack(context, props));
+  const mountTargets = Object.keys(t.findResources('AWS::EFS::MountTarget'));
+  const gateway = Object.entries<any>(t.findResources('AWS::ECS::Service')).find(([id]) => /gateway/i.test(id));
+  assert.ok(gateway && mountTargets.length > 0);
+  for (const mt of mountTargets) assert.ok((gateway![1].DependsOn ?? []).includes(mt), `gateway does not wait for ${mt}`);
+});
