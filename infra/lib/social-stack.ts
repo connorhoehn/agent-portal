@@ -159,6 +159,16 @@ export function socialRedisUrlParameterName(prefix: string): string {
   return `/${prefix}/social/redis-url`;
 }
 
+/**
+ * The realtime JWT secret's COMPLETE ARN, written by OrgIQ-MiddlewareService
+ * and read here by name. Not a by-name import: that renders a partial ARN, and
+ * Secrets Manager reads the last `-xxxxxx` of an ARN as the random suffix, so
+ * `orgiq-realtime-jwt-secret` (suffix `-secret`) resolves to no secret.
+ */
+export function realtimeJwtSecretArnParameterName(prefix: string): string {
+  return `/${prefix}/realtime/jwt-secret-arn`;
+}
+
 /** Private Cloud Map endpoint shared by the Social service and its BFF. */
 export function socialPlatformInternalUrl(prefix: string): string {
   return `http://social-platform.${prefix}-social.local:3001`;
@@ -181,7 +191,6 @@ export interface SocialStackProps extends cdk.StackProps {
   readonly middlewareSecurityGroupId: string;
   /** Fixed name of the middleware task role — granted the chat tables by name. */
   readonly middlewareTaskRoleName: string;
-  readonly realtimeJwtSecretName: string;
   // From OrgIQ-Authentication.
   readonly cognitoUserPoolId: string;
   readonly cognitoClientId?: string;
@@ -382,14 +391,25 @@ export class SocialStack extends cdk.Stack {
     });
 
     // ── Secrets ────────────────────────────────────────────────────────────
-    // Imported by NAME so no export freezes: the realtime JWT (minted by
-    // OrgIQ-MiddlewareService) and the three SFU secrets (minted by
-    // OrgIQ-SocialMedia, which deploys first).
-    const realtimeJwt = secretsmanager.Secret.fromSecretNameV2(this, 'RealtimeJwtSecret', props.realtimeJwtSecretName);
+    // The realtime JWT (minted by OrgIQ-MiddlewareService) and the three SFU
+    // secrets (minted by OrgIQ-SocialMedia, which deploys first), by their
+    // COMPLETE ARNs read from SSM by name, so no export freezes. Not
+    // `fromSecretNameV2`: its partial ARN loses to Secrets Manager reading the
+    // last `-xxxxxx` as the random suffix (`orgiq-realtime-jwt-secret`), and
+    // the task fails AccessDenied before it starts.
+    const fromArnParameter = (id: string, parameterName: string) => secretsmanager.Secret.fromSecretCompleteArn(
+      this, id, ssm.StringParameter.valueForStringParameter(this, parameterName),
+    );
+    const realtimeJwt = fromArnParameter('RealtimeJwtSecret', realtimeJwtSecretArnParameterName(prefix));
     const sfuNames = sfuSecretNames(prefix);
-    const sfuAdmin = secretsmanager.Secret.fromSecretNameV2(this, 'SfuAdminToken', sfuNames.adminToken);
-    const sfuWebhook = secretsmanager.Secret.fromSecretNameV2(this, 'SfuWebhookSecret', sfuNames.webhook);
-    const sfuService = secretsmanager.Secret.fromSecretNameV2(this, 'SfuServiceToken', sfuNames.serviceToken);
+    const sfuArns = sfuParameterNames(prefix).secretArns;
+    // Without OrgIQ-SocialMedia in the app nothing has minted these yet.
+    const sfuSecret = (id: string, name: string, arnParameter: string) => (props.sfu
+      ? fromArnParameter(id, arnParameter)
+      : secretsmanager.Secret.fromSecretNameV2(this, id, name));
+    const sfuAdmin = sfuSecret('SfuAdminToken', sfuNames.adminToken, sfuArns.adminToken);
+    const sfuWebhook = sfuSecret('SfuWebhookSecret', sfuNames.webhook, sfuArns.webhook);
+    const sfuService = sfuSecret('SfuServiceToken', sfuNames.serviceToken, sfuArns.serviceToken);
     const serviceAuth = new secretsmanager.Secret(this, 'SocialServiceAuthSecret', {
       secretName: `${prefix}-social-service-auth-secret`,
       description: 'SERVICE_AUTH_SECRET for platform-api service-to-service envelopes',

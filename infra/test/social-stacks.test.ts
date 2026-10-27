@@ -55,7 +55,6 @@ function socialApp(context: Record<string, unknown> = {}, withSfu = true) {
     loadBalancerSecurityGroupId: mw.loadBalancerSecurityGroupId,
     middlewareSecurityGroupId: mw.serviceSecurityGroupId,
     middlewareTaskRoleName: mw.taskRoleName,
-    realtimeJwtSecretName: mw.realtimeJwtSecretName,
     cognitoUserPoolId: POOL,
     ...(media && {
       sfu: {
@@ -97,6 +96,13 @@ describe('OrgIQ-MiddlewareService — realtime amendments', () => {
     });
   });
 
+  test('publishes its complete ARN to SSM by name (OrgIQ-Social cannot use a partial ARN)', () => {
+    const [secretId] = Object.keys(t.findResources('AWS::SecretsManager::Secret', {
+      Properties: { Name: 'orgiq-realtime-jwt-secret' },
+    }));
+    t.hasResourceProperties('AWS::SSM::Parameter', { Name: '/orgiq/realtime/jwt-secret-arn', Value: { Ref: secretId } });
+  });
+
   test('wires it as the REALTIME_JWT_SECRET container secret (no plaintext env copy)', () => {
     const c = container();
     const secret = (c.Secrets as any[]).find((s) => s.Name === 'REALTIME_JWT_SECRET');
@@ -133,7 +139,9 @@ describe('OrgIQ-MiddlewareService — realtime amendments', () => {
     for (const absent of ['REALTIME_GATEWAY', 'REDIS_URL', 'SOCIAL_CHAT_STORE', 'SOCIAL_CHAT_TABLE_PREFIX', 'REALTIME_GATEWAY_URL']) {
       assert.ok(!names.includes(absent), `${absent} must not be set without realtimeGateway=true`);
     }
-    t.resourceCountIs('AWS::SSM::Parameter', 0);
+    // Only the realtime JWT's ARN, which the secret itself always carries.
+    const params = Object.values<any>(t.findResources('AWS::SSM::Parameter')).map((p) => p.Properties.Name);
+    assert.deepEqual(params, ['/orgiq/realtime/jwt-secret-arn']);
   });
 
   const envOf = (stack: MiddlewareServiceStack) => {
@@ -289,6 +297,17 @@ describe('OrgIQ-SocialMedia — the SFU', () => {
   const { media } = socialApp();
   const t = Template.fromStack(media!);
 
+  test('publishes the complete ARN of each secret it mints to SSM by name', () => {
+    for (const [secret, param] of [
+      ['orgiq-social-sfu-admin-token', '/orgiq/social/sfu-admin-token-arn'],
+      ['orgiq-social-sfu-webhook-secret', '/orgiq/social/sfu-webhook-secret-arn'],
+      ['orgiq-social-sfu-service-token', '/orgiq/social/sfu-service-token-arn'],
+    ]) {
+      const [secretId] = Object.keys(t.findResources('AWS::SecretsManager::Secret', { Properties: { Name: secret } }));
+      t.hasResourceProperties('AWS::SSM::Parameter', { Name: param, Value: { Ref: secretId } });
+    }
+  });
+
   test('a t4g.small (ARM64) instance with an Elastic IP associated', () => {
     t.hasResourceProperties('AWS::EC2::Instance', { InstanceType: 't4g.small' });
     t.resourceCountIs('AWS::EC2::EIP', 1);
@@ -409,11 +428,20 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
     for (const name of ['REALTIME_JWT_SECRET', 'VIDEO_ADMIN_TOKEN', 'VIDEO_SERVICE_TOKEN', 'LVS_WEBHOOK_SECRET', 'SERVICE_AUTH_SECRET']) {
       assert.ok(secrets[name], `${name} missing`);
     }
-    assert.match(secrets.REALTIME_JWT_SECRET!, /secret:orgiq-realtime-jwt-secret/);
-    assert.match(secrets.VIDEO_ADMIN_TOKEN!, /secret:orgiq-social-sfu-admin-token/);
-    assert.match(secrets.LVS_WEBHOOK_SECRET!, /secret:orgiq-social-sfu-webhook-secret/);
+    // COMPLETE ARNs read from SSM by name, never a by-name import's partial
+    // ARN: Secrets Manager reads the `-secret` of
+    // `arn:…:secret:orgiq-realtime-jwt-secret` as the random suffix.
+    const params = t.toJSON().Parameters ?? {};
+    const ssmName = (env: string) => {
+      const ref = JSON.parse(secrets[env]!).Ref;
+      assert.ok(ref, `${env} must come from an SSM parameter, not ${secrets[env]}`);
+      return params[ref].Default;
+    };
+    assert.equal(ssmName('REALTIME_JWT_SECRET'), '/orgiq/realtime/jwt-secret-arn');
+    assert.equal(ssmName('VIDEO_ADMIN_TOKEN'), '/orgiq/social/sfu-admin-token-arn');
+    assert.equal(ssmName('LVS_WEBHOOK_SECRET'), '/orgiq/social/sfu-webhook-secret-arn');
     // The SFU's LVS_SERVICE_TOKEN under platform-api's name for it.
-    assert.match(secrets.VIDEO_SERVICE_TOKEN!, /secret:orgiq-social-sfu-service-token/);
+    assert.equal(ssmName('VIDEO_SERVICE_TOKEN'), '/orgiq/social/sfu-service-token-arn');
     const envNames = (c.Environment as any[]).map((e) => e.Name);
     for (const leaked of ['VIDEO_ADMIN_TOKEN', 'VIDEO_SERVICE_TOKEN', 'LVS_WEBHOOK_SECRET', 'REALTIME_JWT_SECRET']) {
       assert.ok(!envNames.includes(leaked), `${leaked} must not be plaintext env`);

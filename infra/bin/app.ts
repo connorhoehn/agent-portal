@@ -527,7 +527,6 @@ if (deploySocial) {
     loadBalancerSecurityGroupId: middlewareService.loadBalancerSecurityGroupId,
     middlewareSecurityGroupId: middlewareService.serviceSecurityGroupId,
     middlewareTaskRoleName: middlewareService.taskRoleName,
-    realtimeJwtSecretName: middlewareService.realtimeJwtSecretName,
     cognitoUserPoolId: authentication.userPoolId,
     cognitoClientId: authentication.userPoolClientId,
     ...(socialMedia && {

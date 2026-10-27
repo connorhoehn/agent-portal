@@ -17,7 +17,9 @@ import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 import { realtimeAlarm, realtimeAlarmsEnabled, realtimeAlarmTopicName } from './realtime-alarms';
 import { capabilityParameterNames } from './agentcore-capabilities-stack';
 import type { Construct } from 'constructs';
-import { socialPlatformInternalUrl, socialRedisUrlParameterName, socialTablePrefix } from './social-stack';
+import {
+  realtimeJwtSecretArnParameterName, socialPlatformInternalUrl, socialRedisUrlParameterName, socialTablePrefix,
+} from './social-stack';
 import {
   CLOUDFRONT_RULE_PRIORITY, ORIGIN_VERIFY_HEADER, cloudFrontOriginSecretName, portalParameterNames,
 } from './portal-stack';
@@ -402,8 +404,8 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // unset in production the bridge 503s, set it issues tokens — so deploying
     // it has no blackout window. Both consumers are ECS tasks, so both take it
     // as an ECS container secret; nobody copies the value by hand. The fixed
-    // name is load-bearing: OrgIQ-Social imports it by NAME
-    // (`fromSecretNameV2`) so no CloudFormation export freezes on it.
+    // name is load-bearing; OrgIQ-Social reads its complete ARN from the SSM
+    // parameter below, by name, so no CloudFormation export freezes on it.
     // See docs/social-calls-deploy-plan.md §1.
     const realtimeJwtSecretName = `${prefix}-realtime-jwt-secret`;
     const realtimeJwtSecret = new secretsmanager.Secret(this, 'RealtimeJwtSecret', {
@@ -413,6 +415,11 @@ export class MiddlewareServiceStack extends cdk.Stack {
     });
     realtimeJwtSecret.grantRead(taskRole);
     this.realtimeJwtSecretName = realtimeJwtSecretName;
+    new ssm.StringParameter(this, 'RealtimeJwtSecretArnParameter', {
+      parameterName: realtimeJwtSecretArnParameterName(prefix),
+      stringValue: realtimeJwtSecret.secretArn,
+      description: 'Complete ARN of the realtime token secret; the Social stack reads it by name',
+    });
     new cdk.CfnOutput(this, 'RealtimeJwtSecretName', {
       value: realtimeJwtSecretName,
       description: 'Realtime token secret — consumers import it by this name, not by an export',

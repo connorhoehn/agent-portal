@@ -58,8 +58,21 @@ export const TURN_PORTS = { plain: 3478, tls: 443, relay: { from: 49152, to: 496
  * fail with "Cannot delete export … in use" — every SFU image roll would have
  * wedged. A parameter changes value freely.
  */
-export function sfuParameterNames(prefix: string): { privateIp: string; instanceId: string } {
-  return { privateIp: `/${prefix}/social/sfu-private-ip`, instanceId: `/${prefix}/social/sfu-instance-id` };
+export function sfuParameterNames(prefix: string): {
+  privateIp: string; instanceId: string;
+  secretArns: { adminToken: string; webhook: string; serviceToken: string };
+} {
+  return {
+    privateIp: `/${prefix}/social/sfu-private-ip`,
+    instanceId: `/${prefix}/social/sfu-instance-id`,
+    // COMPLETE ARNs of sfuSecretNames: a by-name import renders a partial ARN,
+    // which Secrets Manager misreads when the name ends `-xxxxxx` (`-secret`).
+    secretArns: {
+      adminToken: `/${prefix}/social/sfu-admin-token-arn`,
+      webhook: `/${prefix}/social/sfu-webhook-secret-arn`,
+      serviceToken: `/${prefix}/social/sfu-service-token-arn`,
+    },
+  };
 }
 
 /** The TURN shared secret (coturn `static-auth-secret` = LVS `LVS_TURN_STATIC_SECRET`). */
@@ -202,6 +215,17 @@ export class SocialMediaStack extends cdk.Stack {
       description: 'LVS LVS_SERVICE_TOKEN = platform-api VIDEO_SERVICE_TOKEN',
       generateSecretString: { excludePunctuation: true, passwordLength: 48 },
     });
+    const secretArnParams = sfuParameterNames(prefix).secretArns;
+    for (const [id, name, secret] of [
+      ['SfuAdminTokenArnParameter', secretArnParams.adminToken, this.adminTokenSecret],
+      ['SfuWebhookSecretArnParameter', secretArnParams.webhook, this.webhookSecret],
+      ['SfuServiceTokenArnParameter', secretArnParams.serviceToken, this.serviceTokenSecret],
+    ] as const) {
+      new ssm.StringParameter(this, id, {
+        parameterName: name, stringValue: secret.secretArn,
+        description: 'Complete ARN of an SFU secret; OrgIQ-Social reads it by name',
+      });
+    }
 
     // ── Security group ─────────────────────────────────────────────────────
     this.securityGroup = new ec2.SecurityGroup(this, 'SfuSecurityGroup', {
