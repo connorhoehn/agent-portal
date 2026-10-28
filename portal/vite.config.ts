@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
+import { existsSync } from 'fs';
 import type { Plugin } from 'vite';
 
 // realtime-modules ships its canvas client and TipTap adapters as CommonJS, so
@@ -19,10 +20,14 @@ function editorStackAsEsm(): Plugin {
     name: 'orgiq-editor-stack-esm',
     enforce: 'pre',
     async resolveId(source, importer, options) {
-      const nodeResolve = (options.custom as { 'node-resolve'?: { isRequire?: boolean } } | undefined)?.['node-resolve'];
-      if (!nodeResolve?.isRequire || !EDITOR_STACK.test(source)) return null;
-      return this.resolve(source, importer, { ...options, skipSelf: true,
-        custom: { ...options.custom, 'node-resolve': { ...nodeResolve, isRequire: false } } });
+      if (!EDITOR_STACK.test(source)) return null;
+      // Resolve as asked (options forwarded unchanged, which the commonjs
+      // resolver requires), then swap a CJS entry for its ESM sibling: every
+      // package in the stack ships dist/<name>.cjs beside dist/<name>.js.
+      const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
+      if (!resolved || resolved.external || !resolved.id.endsWith('.cjs')) return resolved;
+      const esm = `${resolved.id.slice(0, -'.cjs'.length)}.js`;
+      return existsSync(esm) ? { ...resolved, id: esm } : resolved;
     },
   };
 }

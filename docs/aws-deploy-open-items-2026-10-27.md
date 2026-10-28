@@ -34,7 +34,10 @@ CLOUD_PORTAL_URL=https://d1hrudaahzp0ro.cloudfront.net CLOUD_LOGIN_DOC="$A" \
   npx playwright test e2e/cloud-documents-smoke.spec.ts --project=chromium # canvas loads, edit persists
 ```
 
-Both passed at `ad97de16`. The Cognito users `farah.osei@assessment.example`
+Both passed at `ad97de16`. The `deployed-stack-debug` skill
+(`.claude/skills/deployed-stack-debug/`) holds these commands plus probes for
+the live gateway, provider code against the real Aurora, local-vs-Redis call
+state, and the production bundle; start there for any cloud-only failure. The Cognito users `farah.osei@assessment.example`
 and `mira.okafor@social.example` were given permanent passwords for this; the
 other seeded Cognito users are still `FORCE_CHANGE_PASSWORD`.
 
