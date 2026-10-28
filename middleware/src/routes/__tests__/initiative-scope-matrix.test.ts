@@ -15,7 +15,7 @@ import { resolve } from 'node:path';
 const ROUTES = resolve(__dirname, '..');
 const FILES = ['bots', 'work', 'agent-projects', 'sdlc', 'internal-devbox', 'work-items', 'work-documents',
   'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints'];
-const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|sprintMoveAllowed|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(/;
+const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|sprintMoveAllowed|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(/;
 
 const SCOPED = [
   'agent-projects DELETE /:id', 'agent-projects POST /', 'agent-projects POST /:id/clone-command',
@@ -28,6 +28,7 @@ const SCOPED = [
   'internal-devbox POST /:sessionId/task', 'internal-devbox POST /sessions',
   'sdlc POST /changes/:id/address', 'sdlc POST /changes/:id/decide', 'sdlc POST /changes/:id/deliver',
   'sdlc POST /changes/:id/rereview',
+  'lab POST /signals', 'lab POST /experiences', 'lab POST /consults', 'lab POST /consults/:id/answer',
   'sprints DELETE /:sprintId/items/:itemId', 'sprints PATCH /:sprintId/items', 'sprints POST /',
   'work DELETE /jobs/:id', 'work POST /findings/:id/promote', 'work POST /jobs', 'work POST /jobs/:id/requeue',
   'work POST /jobs/:id/review', 'work POST /sweeps/run',
@@ -49,10 +50,6 @@ const OPEN: Record<string, string> = {
   'initiative-decks POST /:id/revisions': 'DE-44 row 31 (low)',
   'initiative-decks POST /:id/revise': 'DE-44 row 31 (low)',
   'initiative-decks POST /:id/preview': 'DE-44 row 31 (low)',
-  'lab POST /signals': 'DE-44 row 28: needs the run-token binding (box-signed callbacks, no session)',
-  'lab POST /experiences': 'DE-44 row 28',
-  'lab POST /consults': 'DE-44 row 28',
-  'lab POST /consults/:id/answer': 'DE-44 row 29 (medium)',
   'sdlc POST /policies': 'DE-43/DE-46: policy edits move to their own Cedar action and versioned policy',
   'sdlc DELETE /policies/:id': 'DE-43/DE-46',
   'devbox POST /sessions': 'mints a fresh session id for the caller; nothing to scope until a box is registered',

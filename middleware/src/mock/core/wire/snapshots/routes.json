@@ -2243,37 +2243,37 @@
     {
       "method": "GET",
       "path": "/api/lab/consults",
-      "source": "src/routes/lab.ts:135"
+      "source": "src/routes/lab.ts:163"
     },
     {
       "method": "POST",
       "path": "/api/lab/consults",
-      "source": "src/routes/lab.ts:117"
+      "source": "src/routes/lab.ts:144"
     },
     {
       "method": "GET",
       "path": "/api/lab/consults/:id",
-      "source": "src/routes/lab.ts:156"
+      "source": "src/routes/lab.ts:184"
     },
     {
       "method": "POST",
       "path": "/api/lab/consults/:id/answer",
-      "source": "src/routes/lab.ts:163"
+      "source": "src/routes/lab.ts:191"
     },
     {
       "method": "GET",
+      "path": "/api/lab/experiences",
+      "source": "src/routes/lab.ts:133"
+    },
+    {
+      "method": "POST",
       "path": "/api/lab/experiences",
       "source": "src/routes/lab.ts:106"
     },
     {
       "method": "POST",
-      "path": "/api/lab/experiences",
-      "source": "src/routes/lab.ts:80"
-    },
-    {
-      "method": "POST",
       "path": "/api/lab/signals",
-      "source": "src/routes/lab.ts:53"
+      "source": "src/routes/lab.ts:78"
     },
     {
       "method": "GET",

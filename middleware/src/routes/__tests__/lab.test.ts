@@ -26,10 +26,22 @@ jest.mock('../../config.js', () => ({
   config: {
     mock: { aurora: true, agentcore: true, guardrails: true, cloudwatch: true },
     region: 'us-east-1',
+    // Run tokens are signed under the dev session key when no secret ARN is set.
+    auth: { sessionSigningSecretArn: '' },
   },
 }));
 
+// The run's frozen brief, as the runbook store would return it.
+jest.mock('../../lib/runbooks/store-select.js', () => ({
+  runbookStore: () => ({
+    getBrief: async (runRef: string) => (runRef === 'job-run-1'
+      ? { run_ref: 'job-run-1', initiative_id: 'p-auth-migration', repo: 'orgiq-auth-service' } : null),
+  }),
+}));
+
 import { labRouter } from '../lab.js';
+import { mintRunToken, RUN_TOKEN_HEADER } from '../../lib/run-token.js';
+import { listExperiences } from '../../providers/lab.js';
 import { listFindings } from '../../providers/org-sweeps.js';
 
 function appWith(session: { sub: string; role: string; tenant: string } | null) {
@@ -158,5 +170,49 @@ describe('lab consults', () => {
     } finally {
       delete process.env['LAB_CALLBACK_SECRET'];
     }
+  });
+});
+
+describe('where a callback is filed (DE-44 row 28)', () => {
+  it('ignores a body-supplied initiative when the box sends no run token: files unattributed', async () => {
+    const res = await request(agent()).post('/api/lab/experiences').send({
+      kind: 'gotcha', title: 'Claims to be on billing', repo: 'payments', initiativeId: 'p-billing',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.experience.initiativeId ?? null).toBeNull();
+  });
+
+  it('files under the initiative and repo of the run the token names, whatever the body says', async () => {
+    const token = await mintRunToken('job-run-1');
+    const res = await request(agent()).post('/api/lab/signals').set(RUN_TOKEN_HEADER, token).send({
+      severity: 'info', title: 'Run-bound signal', repo: 'payments', initiativeId: 'p-billing',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.finding.initiativeId ?? res.body.finding.evidence?.initiativeId).toBe('p-auth-migration');
+    const exp = await request(agent()).post('/api/lab/experiences').set(RUN_TOKEN_HEADER, token).send({
+      kind: 'gotcha', title: 'Run-bound lesson', repo: 'payments', initiativeId: 'p-billing',
+    });
+    expect(exp.body.experience).toMatchObject({ initiativeId: 'p-auth-migration', repo: 'orgiq-auth-service' });
+    expect((await listExperiences({ repo: 'orgiq-auth-service' })).some((e) => e.title === 'Run-bound lesson')).toBe(true);
+  });
+
+  it('refuses a run token that does not verify', async () => {
+    const forged = `${Buffer.from(JSON.stringify({ k: 'lab-run', v: 1, r: 'job-run-1' })).toString('base64url')}.forged`;
+    const res = await request(agent()).post('/api/lab/consults').set(RUN_TOKEN_HEADER, forged).send({ question: 'May I?' });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('answering a consult steers its run (DE-44 row 29)', () => {
+  it('only someone on the consult\'s initiative may answer it', async () => {
+    const token = await mintRunToken('job-run-1');
+    const opened = await request(agent()).post('/api/lab/consults').set(RUN_TOKEN_HEADER, token).send({ question: 'Ship the cookie change?' });
+    const id = opened.body.consult.id as string;
+    // An SME attached to nothing is refused; Nora contributes to Auth Migration.
+    const stranger = appWith({ sub: 'u-nobody', role: 'sme', tenant: 'orgiq' });
+    expect((await request(stranger).post(`/api/lab/consults/${id}/answer`).send({ answer: 'yes' })).status).toBe(403);
+    const ok = await request(sme()).post(`/api/lab/consults/${id}/answer`).send({ answer: 'yes, ship it' });
+    expect(ok.status).toBe(200);
+    expect(ok.body.consult.answer).toBe('yes, ship it');
   });
 });

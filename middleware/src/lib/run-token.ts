@@ -40,3 +40,17 @@ export async function runTokenMatches(req: Request, runRef: string): Promise<boo
   const raw = req.headers[RUN_TOKEN_HEADER];
   return typeof raw === 'string' && verifyRunToken(raw.trim(), runRef);
 }
+
+/**
+ * The run a request's token names, read from the token itself (it is signed
+ * under the session key, so a box cannot forge one). 'none' when no token was
+ * sent; 'invalid' when one was sent and does not verify.
+ */
+export async function runRefFromRequest(req: Request): Promise<string | 'none' | 'invalid'> {
+  const raw = req.headers[RUN_TOKEN_HEADER];
+  if (typeof raw !== 'string' || !raw.trim()) return 'none';
+  const token = raw.trim();
+  if (token.length > 2048) return 'invalid';
+  const p = await verifyValue<RunTokenPayload>(token);
+  return p && p.k === KIND && p.v === 1 && typeof p.r === 'string' && p.r ? p.r : 'invalid';
+}

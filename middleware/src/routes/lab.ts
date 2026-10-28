@@ -27,6 +27,8 @@ import {
 } from '../providers/lab.js';
 import { requireServiceAuth, LAB_CALLBACK_SERVICE_AUTH } from '../lib/service-auth.js';
 import { notifyPipelinesWorkGraphChanged } from '../lib/work-graph/live.js';
+import { runRefFromRequest } from '../lib/run-token.js';
+import { requireInitiativeScope } from '../lib/initiative-scope.js';
 
 export const labRouter = Router();
 
@@ -43,6 +45,29 @@ const requireLabAuth = requireServiceAuth(LAB_CALLBACK_SERVICE_AUTH);
 function sessionOrLabAuth(req: Request, res: Response, next: NextFunction): void {
   if (req.session) { next(); return; }
   requireLabAuth(req, res, next);
+}
+
+/**
+ * Where a box's callback is filed (DE-44 row 28). Every box holds the same
+ * LAB_CALLBACK_SECRET, so the envelope proves "a box of the fleet" and nothing
+ * about which initiative it works for: a body-supplied initiativeId let any
+ * box file under any initiative. A dispatched run sends its run token; the
+ * initiative and repo then come from that run's frozen brief. No token (an
+ * ad-hoc shell) files unattributed; a token that does not verify is refused.
+ * Answers the refusal itself; null means stop.
+ */
+async function runAttribution(req: Request, res: Response, body: Record<string, unknown>):
+  Promise<{ initiativeId?: string; repo?: string } | null> {
+  const runRef = await runRefFromRequest(req);
+  if (runRef === 'invalid') { res.status(403).json({ error: 'the run token does not verify' }); return null; }
+  if (runRef === 'none') return str(body['repo']) !== undefined ? { repo: str(body['repo'])! } : {};
+  const { runbookStore } = await import('../lib/runbooks/store-select.js');
+  const brief = await runbookStore().getBrief(runRef).catch(() => null);
+  const repo = brief?.repo ?? str(body['repo']);
+  return {
+    ...(brief?.initiative_id ? { initiativeId: brief.initiative_id } : {}),
+    ...(repo !== undefined && repo !== null ? { repo } : {}),
+  };
 }
 
 const SEVERITIES = new Set(['critical', 'warning', 'info']);
@@ -62,6 +87,8 @@ labRouter.post('/signals', callbackLimit, requireLabAuth, asyncHandler(async (re
     ?? createHash('sha256').update(`${title}|${str(body['repo']) ?? ''}`).digest('hex').slice(0, 24);
 
   const opt = (v: string | undefined) => (v !== undefined ? v : undefined);
+  const filed = await runAttribution(req, res, body);
+  if (!filed) return;
   const finding = await fileLabSignal({
     severity: severity as 'critical' | 'warning' | 'info',
     title,
@@ -69,8 +96,7 @@ labRouter.post('/signals', callbackLimit, requireLabAuth, asyncHandler(async (re
     ...(opt(str(body['detail'])) !== undefined ? { detail: str(body['detail'])! } : {}),
     ...(opt(str(body['sessionId'])) !== undefined ? { sessionId: str(body['sessionId'])! } : {}),
     ...(opt(str(body['boxId'])) !== undefined ? { boxId: str(body['boxId'])! } : {}),
-    ...(opt(str(body['repo'])) !== undefined ? { repo: str(body['repo'])! } : {}),
-    ...(opt(str(body['initiativeId'])) !== undefined ? { initiativeId: str(body['initiativeId'])! } : {}),
+    ...filed,
   });
   res.status(201).json({ finding });
 }));
@@ -88,6 +114,8 @@ labRouter.post('/experiences', callbackLimit, requireLabAuth, asyncHandler(async
   const tags = Array.isArray(body['tags'])
     ? (body['tags'] as unknown[]).filter((t): t is string => typeof t === 'string').slice(0, 12)
     : [];
+  const filed = await runAttribution(req, res, body);
+  if (!filed) return;
   const experience = await recordExperience({
     kind: kind as ExperienceKind,
     title,
@@ -95,8 +123,7 @@ labRouter.post('/experiences', callbackLimit, requireLabAuth, asyncHandler(async
     ...(str(body['body']) !== undefined ? { body: str(body['body'])! } : {}),
     ...(str(body['sessionId']) !== undefined ? { sessionId: str(body['sessionId'])! } : {}),
     ...(str(body['boxId']) !== undefined ? { boxId: str(body['boxId'])! } : {}),
-    ...(str(body['repo']) !== undefined ? { repo: str(body['repo'])! } : {}),
-    ...(str(body['initiativeId']) !== undefined ? { initiativeId: str(body['initiativeId'])! } : {}),
+    ...filed,
   });
   res.status(201).json({ experience });
 }));
@@ -118,13 +145,14 @@ labRouter.post('/consults', callbackLimit, requireLabAuth, asyncHandler(async (r
   const body = (req.body ?? {}) as Record<string, unknown>;
   const question = str(body['question']);
   if (!question) throw new ValidationError('`question` is required');
+  const filed = await runAttribution(req, res, body);
+  if (!filed) return;
   const consult = await openConsult({
     question,
     ...(str(body['context']) !== undefined ? { context: str(body['context'])! } : {}),
     ...(str(body['sessionId']) !== undefined ? { sessionId: str(body['sessionId'])! } : {}),
     ...(str(body['boxId']) !== undefined ? { boxId: str(body['boxId'])! } : {}),
-    ...(str(body['repo']) !== undefined ? { repo: str(body['repo'])! } : {}),
-    ...(str(body['initiativeId']) !== undefined ? { initiativeId: str(body['initiativeId'])! } : {}),
+    ...filed,
   });
   // A pending consult is an approval waiting on a person (pipelines activity graph, content-free hint).
   void notifyPipelinesWorkGraphChanged(null, 'approval');
@@ -164,6 +192,9 @@ labRouter.post('/consults/:id/answer', requireAction('DispatchAgentRun'), asyncH
   const answer = str((req.body ?? {})['answer']);
   if (!answer) throw new ValidationError('`answer` is required');
   const who = req.session?.sub ?? 'unknown';
+  // An answer steers a running agent: only for someone on its initiative (DE-44 row 29).
+  const pending = await getConsult(String(req.params['id']));
+  if (pending && !await requireInitiativeScope(req, res, pending.initiativeId ?? null, { action: 'answer consults' })) return;
   const consult = await answerConsult(String(req.params['id']), answer, who);
   if (!consult) { res.status(409).json({ error: 'consult is not pending (answered, expired, or unknown)' }); return; }
   void notifyPipelinesWorkGraphChanged(null, 'approval');
