@@ -530,10 +530,12 @@ export async function evaluateChange(changeId: string): Promise<{ evaluation: Ev
 
   // Defence in depth: the pure engine reads zero gates as "approved" because it
   // cannot tell "no policies configured" from "policies configured, none
-  // fired". If the policy set is empty here — seeding raced or failed — refuse
-  // to auto-approve and route to a human instead. A governance layer must fail
-  // closed, never open.
-  if (policies.length === 0 && evaluation.decision === 'approved') {
+  // fired". If no policy is ENABLED here — seeding raced or failed, or every
+  // rule was saved disabled — refuse to auto-approve and route to a human
+  // instead. Counting rows let a set of disabled defaults approve every change
+  // (the engine skips them, and re-seeding only runs on an empty table). A
+  // governance layer must fail closed, never open.
+  if (!policies.some((policy) => policy.enabled) && evaluation.decision === 'approved') {
     evaluation.decision = 'needs_approval';
     evaluation.autoApproved = false;
     evaluation.gates.push({

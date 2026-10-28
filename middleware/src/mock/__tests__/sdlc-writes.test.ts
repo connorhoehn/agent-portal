@@ -192,6 +192,17 @@ describe('policies offline', () => {
     expect(evaluated?.evaluation.autoApproved).toBe(false);
     expect(evaluated?.evaluation.gates.map((g) => g.policyName)).toContain('no policies configured');
   });
+  it('fails CLOSED when every policy is disabled: disabling the rules is not approving everything', async () => {
+    for (const row of sdlcPolicies.rows()) (row as { enabled: boolean }).enabled = false;
+    await recordReview({
+      changeId: CHANGES_REQUESTED, model: 'amazon.nova-pro-v1:0', verdict: 'approve',
+      summary: 'Looks fine.', findings: [],
+    });
+    const evaluated = await evaluateChange(CHANGES_REQUESTED);
+    expect(evaluated?.status).toBe('needs_approval');
+    expect(evaluated?.evaluation.autoApproved).toBe(false);
+    expect(evaluated?.evaluation.gates.map((g) => g.policyName)).toContain('no policies configured');
+  });
 });
 
 describe('capturing a change offline', () => {
