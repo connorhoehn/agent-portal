@@ -10,7 +10,7 @@ inside the deployed task) runs later from the machine holding credentials.
 | 1 | DE-44: `/internal/devbox/sessions` checks `projectId` | a box is charged to an initiative only when the signed principal owns or contributes to it (or holds an org-wide role); unit tests cover allow, deny and lookup failure | done |
 | 2 | DE-51: lab callbacks fail closed | with no `LAB_CALLBACK_SECRET` outside dev, callbacks refuse; tests cover both postures | already true: `requireServiceAuth` 503s in production with no secret (`service-auth-guard.test.ts`); `LAB_API_BASE` waits on DE-52 |
 | 3 | Stale records | CLAUDE.md and the 10-26 handoff no longer say nothing is deployed or the schemas are unapplied | done |
-| 4 | Call join window (open item 1) | two people joining one lobby at once end in one call | gateway fix in realtime-modules 0.140.0 (see below); pin move pending |
+| 4 | Call join window (open item 1) | two people joining one lobby at once end in one call | done locally: realtime-modules 0.140.0 (`v0.140.0`, both remotes), portal + middleware pinned; cloud proof pending a middleware image |
 | 5 | realtime-modules ships canvas client + TipTap adapters as ESM (open item 2) | upstream release, portal pin moved, `vite build --sourcemap` has no `prosemirror-*/dist/index.cjs` | needs a decision (below); the portal plugin stays |
 | 6 | Tiltfile media forwards (open item 4) | key path and SSH port come from Colima, not literals | done; the port had already moved (50697 → 58155) on this machine too |
 

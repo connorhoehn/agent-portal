@@ -42,6 +42,17 @@ other seeded Cognito users are still `FORCE_CHANGE_PASSWORD`.
 
 ### 1. Calls: a second joiner within ~9 s starts a parallel call
 
+**Update (2026-10-27, later, local only).** The split is a gateway race,
+reproduced locally and fixed in realtime-modules 0.140.0 (pinned in portal and
+middleware): two first joins of a lobby's page huddle with their own minted
+ids both passed the live-call check before either registered. An atomic
+per-lobby claim now gives both one call; the loser adopts the winner's id
+(`realtime-gateway-page-huddles.test.ts` "same moment" through the BFF
+router). Data API latency widens the window but is not the cause, so the
+cache/direct-connection options below are no longer needed for this symptom.
+Not yet proven in AWS: rebuild and roll the middleware image, then run
+`cloud-call-smoke` with `CLOUD_SEAT_SETTLE_MS=0`.
+
 **Symptom.** The first person to Join a hangout room is registered as the
 lobby's live call by the gateway ~9 s after they click (owner's call id minted
 17:18:43.75, gateway `lobby-occupancy active:true` at 17:18:53.1). Anyone who

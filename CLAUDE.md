@@ -18,7 +18,7 @@ Durable facts the handoff does not repeat:
 
 - Pins: the portal consumes `@connorhoehnslalom/ui-components` **2.481.2**;
   portal and middleware consume `@connorhoehn/realtime-modules` (its real
-  package name, no alias) **0.139.0** from
+  package name, no alias) **0.140.0** from
   tracked tarballs in `portal/vendor/` (`file:` deps, both lockfiles); middleware
   pins `@connorhoehn/service-runtime` 0.4.1 and `distributed-core` 0.48.0
   (`077d7594`) by full sha; infra consumes

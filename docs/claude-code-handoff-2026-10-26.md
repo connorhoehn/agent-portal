@@ -118,7 +118,7 @@ Other owner main heads do not change during handoff preparation.
 | event-catalog | `4e8910f70486d335014d6d6eb93fa842ae8bed32` | 0.9.0; C6 released, C9 not on main |
 | service-runtime | `c01db0e6dfe0e6b91081ae92ee5cc3c1e77d2ad6` | 0.5.1; capability evaluator and bounded lifecycle |
 | distributed-core | `f0931a9b5c8fbd41d02c2a02d570c6d064a0da7c` | 0.49.0; consumers may intentionally retain compatible older pins |
-| realtime-modules | `c002e5e86f61bad8c6534826561f55d6471f0a8d` | 0.139.0; C8 composition and shared room plan |
+| realtime-modules | `14e1913` (tag `v0.140.0`) | 0.140.0; one page huddle per lobby on simultaneous joins (0.139.0 was C8 composition) |
 | platform-api | `9df95617fe096646923ec537b9ef8cfbaec3d3b5` | Shared room-plan adoption and CAS checks |
 | pipeline-runtime | `9c308b0b15b62f7f0644cca1c5e8ba8f928b7668` | 1.2.1; reuse existing bridge ready/shutdown |
 | live-video-streaming | `631d0c02016394410f92663bb02cb48a63f58a34` | 1.0.0; existing native media compatibility consumer |

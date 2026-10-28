@@ -219,3 +219,26 @@ describe('admit path', () => {
     expect(pageResourceVisible).toHaveBeenCalledWith('pipelines-run', RUN);
   });
 });
+
+describe('two people joining one page huddle at the same moment', () => {
+  const join = (callId: string, lobbyName: string, callerId: string) =>
+    ({ service: 'call', action: 'join', callId, lobbyName, callerId, callerName: callerId });
+  it('seats both in one call (realtime-modules 0.140.0), so both seats count as accepted', async () => {
+    const ana = await connect(assessor('ana')), bea = await connect(assessor('bea'));
+    // Each client minted its own id before either join reached the gateway.
+    send(ana, join('call-ana', TEAM, 'ana')); send(bea, join('call-bea', TEAM, 'bea'));
+    // Whoever lost the race is told the real id (`active-call`); the winner hears them arrive.
+    const adopted = (client: Client) => callFrames(client, 'active-call').map(frame => (frame.data as { callId?: string }).callId);
+    await until(() => adopted(ana).length + adopted(bea).length > 0);
+    await pause(60);
+    const [loser, winner] = adopted(bea).length ? [bea, ana] : [ana, bea];
+    const callId = adopted(loser).at(-1)!;
+    expect(callId).toBe(winner === ana ? 'call-ana' : 'call-bea');
+    expect(adopted(winner)).toEqual([]);
+    await until(() => callFrames(winner, 'user-status').some(frame => (frame.data as { callId?: string }).callId === callId));
+    const store = (handle.services.call as unknown as { stateStore: { getCall(id: string): Promise<{ participantClientIds: string[] } | null> } }).stateStore;
+    expect((await store.getCall(callId))?.participantClientIds).toHaveLength(2);
+    expect(await store.getCall(callId === 'call-ana' ? 'call-bea' : 'call-ana')).toBeNull();
+    expect(callErrors(ana)).toEqual([]); expect(callErrors(bea)).toEqual([]);
+  });
+});
