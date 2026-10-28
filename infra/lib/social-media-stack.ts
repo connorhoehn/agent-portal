@@ -572,6 +572,13 @@ export class SocialMediaStack extends cdk.Stack {
     if (turn) {
       new cdk.CfnOutput(this, 'TurnPublicIp', { value: turn.publicIp, description: 'coturn relay Elastic IP' });
       new cdk.CfnOutput(this, 'TurnUrls', { value: turn.urls, description: 'LVS_TURN_URL handed to browsers via /api/ice-servers' });
+      // Read back by deploy.sh so a later deploy keeps TURN and its allowlist
+      // instead of deleting the relay (DE-23).
+      const turnAllow = this.node.tryGetContext('turnAllowCidr');
+      new cdk.CfnOutput(this, 'TurnAllowedCidrs', {
+        value: typeof turnAllow === 'string' && turnAllow.trim() ? turnAllow.trim() : '(none)',
+        description: 'CIDRs permitted to reach the TURN relay',
+      });
     }
   }
 

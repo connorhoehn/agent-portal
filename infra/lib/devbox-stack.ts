@@ -282,5 +282,10 @@ export class DevboxStack extends cdk.Stack {
       value: runtime.attrAgentRuntimeArn,
       exportName: `${prefix}-devbox-runtime-arn`,
     });
+    // The second-phase choices deploy.sh reads back, so a plain later deploy
+    // keeps the runtime, its org access and the lab wiring (DE-51, DE-52).
+    // The lab secret itself is re-read from Secrets Manager, never output.
+    new cdk.CfnOutput(this, 'DevboxOrgAccess', { value: orgAccess ? 'true' : 'false' });
+    if (props.labApiBase) new cdk.CfnOutput(this, 'DevboxLabApiBase', { value: props.labApiBase });
   }
 }

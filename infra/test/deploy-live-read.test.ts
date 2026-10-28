@@ -62,3 +62,44 @@ describe('live_read', () => {
 test('bash -n accepts deploy.sh', () => {
   execFileSync('bash', ['-n', join(__dirname, '..', 'scripts', 'deploy.sh')]);
 });
+
+describe('second-phase inference carries every live choice forward', () => {
+  // The block from ctx_given() to the cdk deploy, run against a fake account.
+  const block = script.slice(script.indexOf('ctx_given() {'), script.indexOf('echo "── Running cdk deploy ──"'));
+  const fakeAws = `
+args="$*"
+case "$args" in
+  *"list-stack-resources --stack-name OrgIQ-AgentCoreRuntime"*) echo 8 ;;
+  *"describe-stacks --stack-name OrgIQ-SocialMedia"*"StackStatus"*) echo UPDATE_COMPLETE ;;
+  *"describe-stacks --stack-name OrgIQ-SocialMedia"*"TurnPublicIp"*) echo 3.3.3.3 ;;
+  *"describe-stacks --stack-name OrgIQ-SocialMedia"*"TurnAllowedCidrs"*) echo 9.179.13.10/32 ;;
+  *"describe-stacks --stack-name OrgIQ-Devbox"*"StackStatus"*) echo UPDATE_COMPLETE ;;
+  *"describe-stacks --stack-name OrgIQ-Devbox"*"DevboxRuntimeArn"*) echo arn:aws:bedrock-agentcore:us-east-1:647757222309:runtime/orgiq_devbox ;;
+  *"describe-stacks --stack-name OrgIQ-Devbox"*"DevboxOrgAccess"*) echo true ;;
+  *"describe-stacks --stack-name OrgIQ-Devbox"*"DevboxLabApiBase"*) echo https://d1.cloudfront.net ;;
+  *"get-secret-value --secret-id orgiq-lab-callback-secret"*) echo s3cret ;;
+  *"describe-stacks"*"StackStatus"*) echo "Stack with id X does not exist" >&2; exit 254 ;;
+  *"describe-stacks"*) echo None ;;
+  *"ecs describe-services"*) echo None ;;
+  *"get-secret-value"*) echo "ResourceNotFoundException" >&2; exit 254 ;;
+  *"ssm get-parameter"*) echo "ParameterNotFound" >&2; exit 254 ;;
+  *) echo None ;;
+esac`;
+
+  test('runtimes, devbox (org access, lab), and TURN with its allowlist are inferred; the secret is never echoed', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'infer-'));
+    writeFileSync(join(dir, 'aws'), `#!/bin/bash\n${fakeAws}\n`);
+    chmodSync(join(dir, 'aws'), 0o755);
+    const r = spawnSync('/bin/bash', ['-c', `set -euo pipefail\nREGION=us-east-1 PREFIX=orgiq CDK_ARGS=()\n${block}\nprintf '%s\\n' "\${INFERRED[@]}"`], {
+      env: { ...process.env, PATH: `${dir}:${process.env['PATH']}` }, encoding: 'utf8',
+    });
+    assert.equal(r.status, 0, r.stderr);
+    for (const ctx of ['deployRuntimes=true', 'deployDevbox=true', 'devboxOrgAccess=true',
+      'labApiBase=https://d1.cloudfront.net', 'labCallbackSecret=s3cret', 'deployTurn=true', 'turnAllowCidr=9.179.13.10/32']) {
+      assert.ok(r.stdout.includes(ctx), `missing --context ${ctx}\n${r.stdout}`);
+    }
+    // The shown list (printed to the operator) masks the secret.
+    assert.match(r.stdout, /labCallbackSecret=<from Secrets Manager>/);
+    assert.doesNotMatch(r.stdout.split('── Inferring')[1] ?? '', /--context labCallbackSecret=s3cret/);
+  });
+});

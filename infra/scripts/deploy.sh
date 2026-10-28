@@ -448,6 +448,38 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
     [[ "$SFU_CIDRS" =~ ^[0-9] ]] && infer sfuAllowCidr "$SFU_CIDRS"
     [[ -n "$PORTAL_URL" ]] && infer socialPortalOrigin "$PORTAL_URL"
   fi
+  # TURN (opt-in on OrgIQ-SocialMedia): its relay and allowlist must be
+  # re-supplied or the next deploy deletes the relay (DE-23).
+  if stack_live OrgIQ-SocialMedia; then
+    stack_output TURN_IP OrgIQ-SocialMedia TurnPublicIp
+    if [[ -n "$TURN_IP" ]]; then
+      infer deployTurn true
+      stack_output TURN_CIDRS OrgIQ-SocialMedia TurnAllowedCidrs
+      [[ "$TURN_CIDRS" =~ ^[0-9:] ]] && infer turnAllowCidr "$TURN_CIDRS"
+    fi
+  fi
+
+  # The devbox runtime (OrgIQ-Devbox phase 2). Without deployDevbox a plain
+  # deploy deletes the runtime and wipes every workspace (DE-52); its org
+  # access and lab wiring are carried the same way (DE-51).
+  if stack_live OrgIQ-Devbox; then
+    stack_output DEVBOX_ARN OrgIQ-Devbox DevboxRuntimeArn
+    if [[ "$DEVBOX_ARN" == arn:* ]]; then
+      infer deployDevbox true
+      stack_output DEVBOX_ORG OrgIQ-Devbox DevboxOrgAccess
+      [[ "$DEVBOX_ORG" == "true" ]] && infer devboxOrgAccess true
+      stack_output DEVBOX_LAB OrgIQ-Devbox DevboxLabApiBase
+      if [[ "$DEVBOX_LAB" == http* ]]; then
+        infer labApiBase "$DEVBOX_LAB"
+        if ! ctx_given labCallbackSecret; then
+          live_read LAB_SECRET secretsmanager get-secret-value --secret-id "${PREFIX}-lab-callback-secret" --region "$REGION" \
+            --query SecretString --output text
+          [[ -n "$LAB_SECRET" ]] && infer labCallbackSecret "$LAB_SECRET" secret
+        fi
+      fi
+    fi
+  fi
+
   if stack_live OrgIQ-Social; then
     infer deploySocial true
     stack_output PLATFORM_DIGEST OrgIQ-Social PlatformApiImageDigest
