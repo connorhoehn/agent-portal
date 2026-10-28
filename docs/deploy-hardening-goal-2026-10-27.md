@@ -32,7 +32,7 @@ Rules for whoever continues (including an hourly loop):
 | 11 | `onlyAgents` cannot delete runtimes it leaves out on a live stack | DE-1 | synth guard + test | done (`d023e71f`) |
 | 12 | Guardrail editor reads the per-role ids the BFF actually sets | DE-12 | config test; deployed env has a usable id | done (`80044049`); the other two roles' guardrails still need a role selector in the editor |
 | 13 | Agent runtime session ids are scoped to the caller | finding while fixing DE-8 | a client-supplied sessionId cannot continue another user's runtime session; test | done (`4669fa37`) |
-| 14 | Lab callbacks bind to the run, not the shared secret | DE-44 rows 28–29 | signals/experiences/consults take box and initiative from the run token's frozen brief (lib/run-token.ts), not the body; consult answers need steward or box access; matrix rows move to SCOPED | open |
+| 14 | Lab callbacks bind to the run, not the shared secret | DE-44 rows 28–29 | signals/experiences/consults take box and initiative from the run token's frozen brief (lib/run-token.ts), not the body; consult answers need steward or box access; matrix rows move to SCOPED | done (`ea92f9bb`) |
 | 15 | Low DE-44 rows that need no decision | DE-44 rows 5, 9, 23, 30, 31 | estimate, finding dismiss, work-item criteria/comments/decisions/documents, design answer/signoff, deck writes scoped; matrix rows move to SCOPED | open |
 
 ## Next (not yet rows)
