@@ -112,94 +112,117 @@ the current behaviour lives; each item is the gap it closes.
   tasks and `POST /api/work/jobs` / `findings/:id/promote` queue jobs spend
   real Bedrock money that no budget sees. One append-only spend ledger keyed by
   initiative, grant, run and box, written by every path.
-- **DE-31 Box spend rolls up.** `devbox-fleet.ts` accumulates `spendUsd` per box
+- **DE-31 Box spend rolls up.** Spec:
+  [`DE-31-box-spend-rollup.md`](deployment-enhancements/DE-31-box-spend-rollup.md). `devbox-fleet.ts` accumulates `spendUsd` per box
   from each `total_cost_usd`, but it never reaches a budget. Attribute it to the
   box's `projectId` and owner.
-- **DE-32 Claude prices in the pricing table.** `BEDROCK_PRICING`
+- **DE-32 Claude prices in the pricing table.** Spec:
+  [`DE-32-claude-pricing.md`](deployment-enhancements/DE-32-claude-pricing.md). `BEDROCK_PRICING`
   (`lib/pricing.ts`) holds Nova/Titan only, so lab traces price to `null`.
   Source prices per model and inference profile from config, with a fallback
   estimate when Claude Code reports no cost.
-- **DE-33 Unknown cost is not "allowed".** The SDLC `max_cost` policy passes a
+- **DE-33 Unknown cost is not "allowed".** Spec:
+  [`DE-33-unknown-cost-gates.md`](deployment-enhancements/DE-33-unknown-cost-gates.md). The SDLC `max_cost` policy passes a
   change with no recorded cost (`sdlc-policy.ts`), and local runs record a
   confident $0 (`run-cost.ts`). Unknown should route to approval.
 
 ### D2. Enforcement: budgets hold during the run, not only before it
 
-- **DE-34 Budget reservations at dispatch.** Checks are before-dispatch only and
+- **DE-34 Budget reservations at dispatch.** Spec:
+  [`DE-34-spend-holds.md`](deployment-enhancements/DE-34-spend-holds.md). Checks are before-dispatch only and
   nothing is held, so concurrent dispatches each pass the allocation check
   against the same remaining money (`routes/bots.ts`). Reserve the forecast
   (p75) against the allocation and the envelope at dispatch; settle on finish.
-- **DE-35 Mid-run spend cutoff.** `appendEvent` adds spend with no check
+- **DE-35 Mid-run spend cutoff.** Spec:
+  [`DE-35-mid-run-cutoff.md`](deployment-enhancements/DE-35-mid-run-cutoff.md). `appendEvent` adds spend with no check
   (`devbox-fleet.ts`), and over-budget after the fact only sets
   `overRunBudget: true` (`bot-runner.ts`). Stop the task (the process-group
   kill already exists in `agents/devbox/main.py`) when a run crosses its
   reserved ceiling, with a recorded reason.
-- **DE-36 Hard caps beside the soft brakes.** All three brakes are confirmable
+- **DE-36 Hard caps beside the soft brakes.** Spec:
+  [`DE-36-hard-caps.md`](deployment-enhancements/DE-36-hard-caps.md). All three brakes are confirmable
   409s; no allocation row means no allocation brake, and an unreadable envelope
   means no envelope brake (fail-open). Add a non-overridable hard cap per
   initiative and per grant, and fail closed when budget state is unreadable.
-- **DE-37 Rate and concurrency limits per initiative.** `BOT_MAX_CONCURRENT=3` is
+- **DE-37 Rate and concurrency limits per initiative.** Spec:
+  [`DE-37-run-limits.md`](deployment-enhancements/DE-37-run-limits.md). `BOT_MAX_CONCURRENT=3` is
   one global number (`bot-runner.ts`); queue jobs are bounded only by idle
   boxes. Per-initiative and per-tenant concurrency, runs/day and $/hour limits.
-- **DE-38 Budget periods beyond monthly.** Monthly is the only period
+- **DE-38 Budget periods beyond monthly.** Spec:
+  [`DE-38-budget-periods.md`](deployment-enhancements/DE-38-budget-periods.md). Monthly is the only period
   (`agent_budgets_schema.sql`); add sprint-aligned and rolling windows, and
   carry-over rules.
-- **DE-39 The bot-fire allocation brake.** Documented as not built
+- **DE-39 The bot-fire allocation brake.** Spec:
+  [`DE-39-bot-fire-allocation-brake.md`](deployment-enhancements/DE-39-bot-fire-allocation-brake.md). Documented as not built
   (`docs/program-operating-model.md`, `bots.enforce_allocation`); cron firings
   spend without the allocation check unless opted in.
 
 ### D3. Policy: what a box may do, per initiative
 
-- **DE-40 Policy profiles per initiative.** Model allowlist (today in CDK and the
+- **DE-40 Policy profiles per initiative.** Spec:
+  [`DE-40-policy-profiles.md`](deployment-enhancements/DE-40-policy-profiles.md). Model allowlist (today in CDK and the
   Dockerfile, silent fallback on an unlisted model), max task time (840 s / 3300 s
   in `main.py`), box lifetime, network mode, org-data access
   (`devboxOrgAccess`, deploy-wide) as one versioned profile an initiative
   references, editable without redeploying the runtime.
-- **DE-41 Egress control.** Network mode is `PUBLIC` with no egress rules
+- **DE-41 Egress control.** Spec:
+  [`DE-41-devbox-egress.md`](deployment-enhancements/DE-41-devbox-egress.md). Network mode is `PUBLIC` with no egress rules
   (`devbox-stack.ts`), and Claude Code runs with
   `--dangerously-skip-permissions` (`main.py`). VPC mode with an allowlist
   (GitHub, Bedrock, package registries) per profile.
-- **DE-42 Cedar for box actions.** `ManageDevbox` gates everything from shell to
+- **DE-42 Cedar for box actions.** Spec:
+  [`DE-42-cedar-box-actions.md`](deployment-enhancements/DE-42-cedar-box-actions.md). `ManageDevbox` gates everything from shell to
   SDLC policy CRUD (`index.ts`). Split shell, task, delivery and policy-edit
   into separate actions with initiative attributes, evaluated (locally
   attribute conditions are skipped, `authz.ts`).
-- **DE-43 Separation of duties.** `POST /changes/:id/decide` does not stop the
+- **DE-43 Separation of duties.** Spec:
+  [`DE-43-separation-of-duties.md`](deployment-enhancements/DE-43-separation-of-duties.md). `POST /changes/:id/decide` does not stop the
   author approving their own change; an SME holding `ManageDevbox` can edit or
   delete the SDLC policies that gate them (`routes/sdlc.ts`).
-- **DE-44 Scope checks on every entry point.** Done 2026-10-27:
+- **DE-44 Scope checks on every entry point.** Spec:
+  [`DE-44-scope-checks.md`](deployment-enhancements/DE-44-scope-checks.md). Done 2026-10-27:
   `/internal/devbox/sessions` runs the steward check for the signed principal's
   user (`userStewardsInitiative`, `lib/initiative-scope.ts`) before charging a
   box to `projectId`. Other entry points not yet audited.
-- **DE-45 Credentials out of shell strings.** The clone token is interpolated
+- **DE-45 Credentials out of shell strings.** Spec:
+  [`DE-45-credentials-out-of-shell.md`](deployment-enhancements/DE-45-credentials-out-of-shell.md). The clone token is interpolated
   into a shell command (`providers/agent-projects.ts`, flagged as needing an
   image change); short-lived, repo-scoped tokens (GitHub App) per run.
-- **DE-46 Policy as data, versioned.** SDLC defaults ($5, 40 files, sensitive
+- **DE-46 Policy as data, versioned.** Spec:
+  [`DE-46-sdlc-policy-versioned.md`](deployment-enhancements/DE-46-sdlc-policy-versioned.md). SDLC defaults ($5, 40 files, sensitive
   paths in `sdlc-policy.ts`) as versioned per-initiative policy with an audit of
   who changed what.
 
 ### D4. Operations: the fleet survives scale and failure
 
-- **DE-47 Fleet state that survives replicas.** Busy flags, reservations, event
+- **DE-47 Fleet state that survives replicas.** Spec:
+  [`DE-47-fleet-state-across-replicas.md`](deployment-enhancements/DE-47-fleet-state-across-replicas.md). Busy flags, reservations, event
   buffers and the reaper live in one process (`devbox-fleet.ts`,
   `devbox-reaper.ts`, started on import of `routes/devbox.ts`); sessions the
   registry forgets cannot be enumerated from AgentCore. Move to Redis/Aurora
   with a leader-elected reaper (the lease groups exist upstream).
-- **DE-48 One lifetime model.** The reaper's 60 min ceiling from creation can kill
+- **DE-48 One lifetime model.** Spec:
+  [`DE-48-one-lifetime-model.md`](deployment-enhancements/DE-48-one-lifetime-model.md). The reaper's 60 min ceiling from creation can kill
   a running task while AgentCore allows 8 h and the task timeout is up to 55 min;
   align the ceilings and make them profile-driven (DE-40).
-- **DE-49 Workspace persistence that survives a deploy.** `/mnt/workspace` is
+- **DE-49 Workspace persistence that survives a deploy.** Spec:
+  [`DE-49-workspace-survives-deploy.md`](deployment-enhancements/DE-49-workspace-survives-deploy.md). `/mnt/workspace` is
   wiped on every runtime version update (digest-pinned images roll the runtime);
   snapshot checkouts and `~/.claude` to S3 or re-clone deterministically.
-- **DE-50 Kill switches and alerts.** Fleet-wide pause, per-initiative pause, and
+- **DE-50 Kill switches and alerts.** Spec:
+  [`DE-50-kill-switches-and-alerts.md`](deployment-enhancements/DE-50-kill-switches-and-alerts.md). Fleet-wide pause, per-initiative pause, and
   alarms on spend rate, budget thresholds (50/80/100 %), stuck runs and reaper
   kills; today the reaper only writes `console.warn`.
-- **DE-51 Lab loop wiring.** Callback auth already fails closed in production
+- **DE-51 Lab loop wiring.** Spec:
+  [`DE-51-lab-loop-wiring.md`](deployment-enhancements/DE-51-lab-loop-wiring.md). Callback auth already fails closed in production
   (`requireServiceAuth` answers 503 with no secret, `service-auth.ts`; covered
   by `service-auth-guard.test.ts`) and the deployed middleware sets
   `LAB_CALLBACK_SECRET`; open only in development. What remains is that
   `LAB_API_BASE` was never set, so the lab loop is inert in AWS (needs DE-52).
-- **DE-52 Deployable devbox phase 2.** `OrgIQ-Devbox` is phase 1 only in AWS (no
+- **DE-52 Deployable devbox phase 2.** Spec:
+  [`DE-52-devbox-phase-2.md`](deployment-enhancements/DE-52-devbox-phase-2.md). `OrgIQ-Devbox` is phase 1 only in AWS (no
   runtime); fold `agents/devbox/build.sh` and `deployDevbox` into DE-1/DE-14.
-- **DE-53 Spend and run reporting per initiative.** One view joining allocation,
+- **DE-53 Spend and run reporting per initiative.** Spec:
+  [`DE-53-initiative-spend-report.md`](deployment-enhancements/DE-53-initiative-spend-report.md). One view joining allocation,
   grants, reservations (DE-34), ledger spend (DE-30), forecasts and run
   outcomes, for the release manager and the SME.
