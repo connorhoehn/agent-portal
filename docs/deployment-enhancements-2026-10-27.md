@@ -4,7 +4,8 @@ Short-form items for other agents to spec. Each comes from something observed
 during the 2026-10-26/27 AWS deploy (`docs/aws-deploy-open-items-2026-10-27.md`)
 or a documented gotcha in `CLAUDE.md`; none is generic best practice. The
 theme is extensibility, adaptability and operations. Numbering is stable so
-specs can cite `DE-<n>`.
+specs can cite `DE-<n>`. Expanded specs live in `docs/deployment-enhancements/`
+(one file per item); an item with a spec links to it.
 
 ## A. AgentCore / Bedrock
 
@@ -104,7 +105,8 @@ the current behaviour lives; each item is the gap it closes.
 
 ### D1. Metering: every dollar lands on the initiative
 
-- **DE-30 One spend ledger for every run path.** Budget spend is
+- **DE-30 One spend ledger for every run path.** Spec:
+  [`DE-30-spend-ledger.md`](deployment-enhancements/DE-30-spend-ledger.md). Budget spend is
   `SUM(bot_runs.cost_usd)` (`schema/agent_budgets_schema.sql`,
   `providers/budgets.ts`), so ad-hoc `/api/devbox/:sid/task`, `/internal/devbox`
   tasks and `POST /api/work/jobs` / `findings/:id/promote` queue jobs spend
