@@ -29,7 +29,7 @@ Rules for whoever continues (including an hourly loop):
 | 8 | Medium rows of DE-44 that need no decision | DE-44 rows 4, 7, 8, 11, 15, 22 (13, 19, 26 done with rows 6–7) | deny tests | done (`a057335d`) |
 | 9 | DE-44 matrix test: a new write route without a scope row fails | DE-44 | `routes/__tests__/initiative-scope-matrix.test.ts` | open |
 | 10 | deploy.sh carries `deployDevbox`, lab values and `deployTurn` forward | DE-51, DE-52, DE-23 | inference test like #5 | done (`92077c7d`) |
-| 11 | `onlyAgents` cannot delete runtimes it leaves out on a live stack | DE-1 | synth guard + test | open |
+| 11 | `onlyAgents` cannot delete runtimes it leaves out on a live stack | DE-1 | synth guard + test | done (`d023e71f`) |
 | 12 | Guardrail editor reads the per-role ids the BFF actually sets | DE-12 | config test; deployed env has a usable id | open |
 | 13 | Agent runtime session ids are scoped to the caller | finding while fixing DE-8 | a client-supplied sessionId cannot continue another user's runtime session; test | open |
 
