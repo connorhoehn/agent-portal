@@ -107,3 +107,45 @@ export async function personOnInitiative(personId: string | null | undefined, in
     return false;
   }
 }
+
+type ScopeResponse = { status: (n: number) => { json: (b: unknown) => void } };
+
+/**
+ * The route-level scope check (DE-44): may this caller act on `initiativeId`?
+ * Answers the refusal itself and returns false; true means go on.
+ *
+ * - steward: owner, contributor, or an org-wide role (`stewardsInitiative`),
+ *   denying on any lookup failure;
+ * - `spend: true` additionally asks the grant verdict an SME needs to spend
+ *   on the initiative (`grantScopedDispatchVerdict`): deny is 403, unknown
+ *   grant authority 503, so "may write here" and "may spend here" stay two
+ *   named questions.
+ *
+ * A null initiative (an unattributed bot, an unlinked codebase) is not scoped
+ * here: there is no initiative to be attached to. Whether unattributed spend
+ * needs its own rule is a decision recorded in DE-44.
+ */
+export async function requireInitiativeScope(
+  req: { session?: Session | null },
+  res: ScopeResponse,
+  initiativeId: string | null | undefined,
+  opts: { spend?: boolean; action?: string } = {},
+): Promise<boolean> {
+  if (!initiativeId) return true;
+  const session = req.session ?? null;
+  if (!await stewardsInitiative(session, initiativeId)) {
+    res.status(403).json({
+      error: `you can only ${opts.action ?? 'act'} on initiatives you own or contribute to`,
+      initiativeId,
+      ...(session?.role ? { role: session.role } : {}),
+    });
+    return false;
+  }
+  if (opts.spend) {
+    const { grantScopedDispatchVerdict } = await import('./bot-runner.js');
+    const verdict = await grantScopedDispatchVerdict(initiativeId, session ?? undefined);
+    if (verdict.kind === 'deny') { res.status(403).json({ error: verdict.reason, initiativeId }); return false; }
+    if (verdict.kind === 'unavailable') { res.status(503).json({ error: verdict.reason, gate: 'grant-authorization' }); return false; }
+  }
+  return true;
+}

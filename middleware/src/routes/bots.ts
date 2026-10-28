@@ -28,8 +28,9 @@ import {
 } from '../providers/bots.js';
 import {
   fireBot, dispatchWorkItem, preflightWorkItem, decideRunBudget, decideAllocation,
-  decideEnvelope, loadEnvelope, grantScopedDispatchVerdict,
+  decideEnvelope, loadEnvelope, grantScopedDispatchVerdict, resolveBotInitiativeId,
 } from '../lib/bot-runner.js';
+import { requireInitiativeScope } from '../lib/initiative-scope.js';
 import {
   getWorkItem, recordWorkItemEstimate, reviewWorkItemEstimate,
 } from '../providers/work-items.js';
@@ -629,6 +630,10 @@ botsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
     agentProjectId: body.agentProjectId ?? null, orgProjectId: body.orgProjectId ?? null,
   });
   checkFieldTypes(body);
+  // A bot spends on the initiative it targets (directly, or through the
+  // codebase it maintains), so creating one there is the steward's call (DE-44).
+  const target = await resolveBotInitiativeId({ orgProjectId: body.orgProjectId ?? null, agentProjectId: body.agentProjectId ?? null });
+  if (!await requireInitiativeScope(req, res, target, { action: 'create bots' })) return;
 
   const bot = await createBot({
     name, template: body.template as BotTemplate, prompt, model,
@@ -694,6 +699,16 @@ botsRouter.patch('/:id', manageGate, asyncHandler(async (req, res) => {
     orgProjectId: patch.orgProjectId !== undefined ? (patch.orgProjectId ?? null) : existing.orgProjectId,
   });
   checkFieldTypes(patch);
+  // Steward of the bot's initiative now, and of the one it is being moved to:
+  // retargeting moves its spend, and the patch can also clear its brakes.
+  if (!await requireInitiativeScope(req, res, await resolveBotInitiativeId(existing), { action: 'manage bots' })) return;
+  if (patch.orgProjectId !== undefined || patch.agentProjectId !== undefined) {
+    const next = await resolveBotInitiativeId({
+      orgProjectId: patch.orgProjectId !== undefined ? (patch.orgProjectId ?? null) : existing.orgProjectId,
+      agentProjectId: patch.agentProjectId !== undefined ? (patch.agentProjectId ?? null) : existing.agentProjectId,
+    });
+    if (!await requireInitiativeScope(req, res, next, { action: 'manage bots' })) return;
+  }
 
   const bot = await updateBot(id, patch);
   if (!bot) throw new NotFoundError('No such bot');
@@ -725,7 +740,12 @@ botsRouter.post('/:id/run', manageGate, asyncHandler(async (req, res) => {
   // Over budget demands an explicit confirmOverRunBudget — 409 with the
   // estimate attached so the operator sees what they are confirming.
   const bot = await getBot(id);
-  if (bot?.budgetPerRunUsd != null) {
+  if (!bot) throw new NotFoundError('No such bot');
+  // A manual run spends on the bot's initiative: steward, and the grant an SME
+  // spends under (DE-44 row 3). The envelope and allocation brakes the
+  // dispatch route runs are DE-34/DE-36.
+  if (!await requireInitiativeScope(req, res, await resolveBotInitiativeId(bot), { spend: true, action: 'run bots' })) return;
+  if (bot.budgetPerRunUsd != null) {
     // A bot fires a whole run, not a sized item, so points is null and the
     // forecast is run-level by construction — same loader as the marketplace,
     // so a bot and a work item are never priced by two different chains.

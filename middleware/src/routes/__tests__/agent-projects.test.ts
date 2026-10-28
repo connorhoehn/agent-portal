@@ -31,6 +31,14 @@ jest.mock('../../providers/agent-projects.js', () => ({
 
 jest.mock('../../lib/sdlc-pipeline.js', () => ({ dispatchGovernedRun: jest.fn() }));
 const boxAccess = { value: true };
+const scope = { deny: new Set<string>(), calls: [] as Array<{ initiativeId: unknown; opts: unknown }> };
+jest.mock('../../lib/initiative-scope.js', () => ({
+  requireInitiativeScope: jest.fn(async (_req: unknown, res: { status(n: number): { json(b: unknown): void } }, initiativeId: string | null, opts: unknown) => {
+    scope.calls.push({ initiativeId, opts });
+    if (initiativeId && scope.deny.has(initiativeId)) { res.status(403).json({ error: 'not your initiative' }); return false; }
+    return true;
+  }),
+}));
 jest.mock('../../lib/devbox-visibility.js', () => ({
   requireBoxAccess: jest.fn(async (_req: unknown, res: { status(n: number): { json(b: unknown): void } }) => {
     if (boxAccess.value) return true;
@@ -82,6 +90,8 @@ function buildApp(session: Record<string, unknown> | null) {
 
 beforeEach(() => {
   manageAllow.value = true;
+  boxAccess.value = true;
+  scope.deny.clear(); scope.calls.length = 0;
   listMock.mockReset(); listMock.mockResolvedValue([PROJECT]);
   getMock.mockReset(); getMock.mockResolvedValue(PROJECT);
   linkMock.mockReset(); linkMock.mockResolvedValue(PROJECT);
@@ -220,6 +230,35 @@ describe('POST /api/agent-projects/:id/clone-command — runs the clone server-s
     const res = await request(buildApp(leader)).post('/api/agent-projects/p-1/clone-command').send({ sessionId: 's-other' });
     expect(res.status).toBe(403);
     expect(runDevboxShell).not.toHaveBeenCalled();
+  });
+});
+
+describe('initiative scope (DE-44 rows 10, 12–14)', () => {
+  it('refuses to link a codebase to an initiative the caller is not on', async () => {
+    scope.deny.add('p-billing');
+    const res = await request(buildApp(leader)).post('/api/agent-projects').send({ repoFullName: 'org/repo', orgProjectId: 'p-billing' });
+    expect(res.status).toBe(403);
+    expect(linkMock).not.toHaveBeenCalled();
+  });
+
+  it('a run asks the spend question on the codebase\'s initiative and needs the box', async () => {
+    scope.deny.add('p-rag-search');
+    const denied = await request(buildApp(leader)).post('/api/agent-projects/p-1/runs').send({ prompt: 'do it', sessionId: 's-1' });
+    expect(denied.status).toBe(403);
+    expect(scope.calls[0]).toEqual({ initiativeId: 'p-rag-search', opts: expect.objectContaining({ spend: true }) });
+    expect(dispatchMock).not.toHaveBeenCalled();
+    scope.deny.clear(); boxAccess.value = false;
+    const noBox = await request(buildApp(leader)).post('/api/agent-projects/p-1/runs').send({ prompt: 'do it', sessionId: 's-other' });
+    expect(noBox.status).toBe(403);
+    expect(dispatchMock).not.toHaveBeenCalled();
+  });
+
+  it('cloning needs the codebase\'s initiative, and repointing needs the box', async () => {
+    scope.deny.add('p-rag-search');
+    expect((await request(buildApp(leader)).post('/api/agent-projects/p-1/clone-command').send({ sessionId: 's-1' })).status).toBe(403);
+    scope.deny.clear(); boxAccess.value = false;
+    expect((await request(buildApp(leader)).post('/api/agent-projects/p-1/cloned').send({ sessionId: 's-other' })).status).toBe(403);
+    expect(markClonedMock).not.toHaveBeenCalled();
   });
 });
 

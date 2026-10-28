@@ -56,6 +56,17 @@ jest.mock('../../lib/bot-runner.js', () => ({
   fireBot: jest.fn(), dispatchWorkItem: jest.fn(), preflightWorkItem: jest.fn(),
   decideRunBudget: jest.fn(), decideAllocation: jest.fn(), decideEnvelope: jest.fn(),
   loadEnvelope: jest.fn(), grantScopedDispatchVerdict: jest.fn(),
+  resolveBotInitiativeId: jest.fn(async (b: { orgProjectId?: string | null }) => b.orgProjectId ?? null),
+}));
+// The scope check itself is tested in lib/__tests__/initiative-scope-route.test.ts;
+// here it is a switch, and every call is recorded to assert what was asked.
+const scope = { deny: new Set<string>(), calls: [] as Array<{ initiativeId: unknown; opts: unknown }> };
+jest.mock('../../lib/initiative-scope.js', () => ({
+  requireInitiativeScope: jest.fn(async (_req: unknown, res: { status(n: number): { json(b: unknown): void } }, initiativeId: string | null, opts: unknown) => {
+    scope.calls.push({ initiativeId, opts });
+    if (initiativeId && scope.deny.has(initiativeId)) { res.status(403).json({ error: 'not your initiative', initiativeId }); return false; }
+    return true;
+  }),
 }));
 jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn() }));
 jest.mock('../../providers/budgets.js', () => ({ getBudget: jest.fn() }));
@@ -107,6 +118,7 @@ function buildApp(session: Record<string, unknown> | null = { sub: 'u-nora', rol
 
 beforeEach(() => {
   jest.clearAllMocks();
+  scope.deny.clear(); scope.calls.length = 0;
   m(validateCronExpr).mockReturnValue(true);
   m(runCostSamples).mockResolvedValue([]);
   m(perPointCostSamples).mockResolvedValue([]);
@@ -433,5 +445,41 @@ describe('GET /api/bots/runs', () => {
     const res = await request(buildApp()).get('/api/bots/runs?botIds=bot-1');
     expect(res.status).toBe(200);
     expect(getBot).not.toHaveBeenCalled();
+  });
+});
+
+describe('initiative scope (DE-44 rows 1–3)', () => {
+  it('refuses to create a bot on an initiative the caller is not on, and creates nothing', async () => {
+    scope.deny.add('p-billing');
+    const res = await request(buildApp()).post('/api/bots').send({ ...VALID_CREATE, orgProjectId: 'p-billing' });
+    expect(res.status).toBe(403);
+    expect(createBot).not.toHaveBeenCalled();
+    expect(registerBot).not.toHaveBeenCalled();
+  });
+
+  it('checks both the current and the new initiative when a patch retargets a bot', async () => {
+    m(getBot).mockResolvedValue(BOT);
+    scope.deny.add('p-billing');
+    const res = await request(buildApp()).patch('/api/bots/bot-1').send({ orgProjectId: 'p-billing' });
+    expect(res.status).toBe(403);
+    expect(scope.calls.map((c) => c.initiativeId)).toEqual(['p-observability', 'p-billing']);
+    expect(updateBot).not.toHaveBeenCalled();
+  });
+
+  it('refuses to patch a bot on someone else\'s initiative, even without retargeting', async () => {
+    m(getBot).mockResolvedValue(BOT);
+    scope.deny.add('p-observability');
+    const res = await request(buildApp()).patch('/api/bots/bot-1').send({ enforceAllocation: false });
+    expect(res.status).toBe(403);
+    expect(updateBot).not.toHaveBeenCalled();
+  });
+
+  it('a manual run asks the spend question on the bot\'s initiative before firing', async () => {
+    m(getBot).mockResolvedValue(BOT);
+    scope.deny.add('p-observability');
+    const res = await request(buildApp()).post('/api/bots/bot-1/run').send({});
+    expect(res.status).toBe(403);
+    expect(scope.calls[0]).toEqual({ initiativeId: 'p-observability', opts: expect.objectContaining({ spend: true }) });
+    expect(fireBot).not.toHaveBeenCalled();
   });
 });

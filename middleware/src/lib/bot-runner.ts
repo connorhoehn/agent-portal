@@ -875,7 +875,7 @@ async function ensureWorkspace(
  * Null when neither resolves — an untargeted or unlinked bot has no allocation
  * to be braked by, which the brake reads as "unbudgeted", never "zero".
  */
-async function resolveBotInitiativeId(bot: Bot): Promise<string | null> {
+export async function resolveBotInitiativeId(bot: Pick<Bot, 'orgProjectId' | 'agentProjectId'>): Promise<string | null> {
   if (bot.orgProjectId) return bot.orgProjectId;
   if (bot.agentProjectId) {
     const project = await getAgentProject(bot.agentProjectId);

@@ -298,42 +298,42 @@
     {
       "method": "GET",
       "path": "/api/agent-projects",
-      "source": "src/routes/agent-projects.ts:31"
+      "source": "src/routes/agent-projects.ts:32"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects",
-      "source": "src/routes/agent-projects.ts:47"
+      "source": "src/routes/agent-projects.ts:48"
     },
     {
       "method": "DELETE",
       "path": "/api/agent-projects/:id",
-      "source": "src/routes/agent-projects.ts:66"
+      "source": "src/routes/agent-projects.ts:70"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/:id/clone-command",
-      "source": "src/routes/agent-projects.ts:91"
+      "source": "src/routes/agent-projects.ts:95"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/:id/cloned",
-      "source": "src/routes/agent-projects.ts:123"
+      "source": "src/routes/agent-projects.ts:128"
     },
     {
       "method": "GET",
       "path": "/api/agent-projects/:id/runs",
-      "source": "src/routes/agent-projects.ts:72"
+      "source": "src/routes/agent-projects.ts:76"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/:id/runs",
-      "source": "src/routes/agent-projects.ts:134"
+      "source": "src/routes/agent-projects.ts:141"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/runs/:runId/finish",
-      "source": "src/routes/agent-projects.ts:157"
+      "source": "src/routes/agent-projects.ts:168"
     },
     {
       "method": "GET",
@@ -928,87 +928,87 @@
     {
       "method": "GET",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:603"
+      "source": "src/routes/bots.ts:604"
     },
     {
       "method": "POST",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:608"
+      "source": "src/routes/bots.ts:609"
     },
     {
       "method": "DELETE",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:705"
+      "source": "src/routes/bots.ts:720"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:649"
+      "source": "src/routes/bots.ts:654"
     },
     {
       "method": "PATCH",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:655"
+      "source": "src/routes/bots.ts:660"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/pause",
-      "source": "src/routes/bots.ts:762"
+      "source": "src/routes/bots.ts:782"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/resume",
-      "source": "src/routes/bots.ts:773"
+      "source": "src/routes/bots.ts:793"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/run",
-      "source": "src/routes/bots.ts:715"
+      "source": "src/routes/bots.ts:730"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id/runs",
-      "source": "src/routes/bots.ts:794"
+      "source": "src/routes/bots.ts:814"
     },
     {
       "method": "GET",
       "path": "/api/bots/active-runs",
-      "source": "src/routes/bots.ts:509"
+      "source": "src/routes/bots.ts:510"
     },
     {
       "method": "POST",
       "path": "/api/bots/dispatch-work",
-      "source": "src/routes/bots.ts:204"
+      "source": "src/routes/bots.ts:205"
     },
     {
       "method": "GET",
       "path": "/api/bots/estimate",
-      "source": "src/routes/bots.ts:191"
+      "source": "src/routes/bots.ts:192"
     },
     {
       "method": "GET",
       "path": "/api/bots/initiative-runs",
-      "source": "src/routes/bots.ts:547"
+      "source": "src/routes/bots.ts:548"
     },
     {
       "method": "GET",
       "path": "/api/bots/marketplace-runs",
-      "source": "src/routes/bots.ts:529"
+      "source": "src/routes/bots.ts:530"
     },
     {
       "method": "GET",
       "path": "/api/bots/runs",
-      "source": "src/routes/bots.ts:578"
+      "source": "src/routes/bots.ts:579"
     },
     {
       "method": "POST",
       "path": "/api/bots/work-items/:id/estimate",
-      "source": "src/routes/bots.ts:448"
+      "source": "src/routes/bots.ts:449"
     },
     {
       "method": "POST",
       "path": "/api/bots/work-items/:id/review-estimate",
-      "source": "src/routes/bots.ts:482"
+      "source": "src/routes/bots.ts:483"
     },
     {
       "method": "GET",

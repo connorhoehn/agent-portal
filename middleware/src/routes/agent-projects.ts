@@ -7,6 +7,7 @@
 
 import { Router } from 'express';
 import { requireBoxAccess } from '../lib/devbox-visibility.js';
+import { requireInitiativeScope } from '../lib/initiative-scope.js';
 import { resolveDevboxArn, devboxDataClient } from '../lib/devbox-arn.js';
 import { runDevboxShell } from '../lib/project-runner.js';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
@@ -53,6 +54,9 @@ agentProjectsRouter.post('/', writeGate, asyncHandler(async (req, res) => {
   if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
     throw new ValidationError('repoFullName must be in owner/name form');
   }
+  // Repo-target bots inherit this initiative, so linking a codebase to one
+  // redirects their spend there: the steward's call (DE-44 row 10).
+  if (!await requireInitiativeScope(req, res, body.orgProjectId ?? null, { action: 'link codebases' })) return;
   const project = await linkAgentProject({
     repoFullName: repo,
     ...(body.defaultBranch ? { defaultBranch: body.defaultBranch } : {}),
@@ -94,6 +98,7 @@ agentProjectsRouter.post('/:id/clone-command', writeGate, asyncHandler(async (re
 
   const sessionId = String((req.body as { sessionId?: string } ?? {}).sessionId ?? '').trim();
   if (!sessionId) throw new ValidationError('sessionId is required — a project is cloned into a workspace');
+  if (!await requireInitiativeScope(req, res, project.orgProjectId, { action: 'clone codebases' })) return;
   if (!await requireBoxAccess(req, res, sessionId)) return;
   const arn = await resolveDevboxArn();
   if (!arn) { res.status(503).json({ error: 'the devbox runtime is not deployed' }); return; }
@@ -125,6 +130,8 @@ agentProjectsRouter.post('/:id/cloned', writeGate, asyncHandler(async (req, res)
   if (!project) throw new NotFoundError('No such project');
   const sessionId = String((req.body as { sessionId?: string } ?? {}).sessionId ?? '').trim();
   if (!sessionId) throw new ValidationError('sessionId is required');
+  // Repointing a codebase at a box: the caller must reach that box (row 13).
+  if (!await requireBoxAccess(req, res, sessionId)) return;
   await markCloned(project.id, sessionId);
   res.json({ ok: true });
 }));
@@ -143,6 +150,10 @@ agentProjectsRouter.post('/:id/runs', writeGate, asyncHandler(async (req, res) =
   if (!sessionId) {
     throw new ValidationError('This project has no workspace — clone it before running anything against it');
   }
+  // A run spends on the codebase's initiative and executes in a box: steward,
+  // the grant an SME spends under, and access to that box (DE-44 row 14).
+  if (!await requireInitiativeScope(req, res, project.orgProjectId, { spend: true, action: 'run agents' })) return;
+  if (!await requireBoxAccess(req, res, sessionId)) return;
 
   // A run finishes on its own and, if it changed code, flows through
   // governance — capture, review, gates — without anyone submitting it. The
