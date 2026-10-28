@@ -23,6 +23,7 @@ import { listBoxes, appendEvent, getBox, registerBox, isReserved } from './devbo
 import { isLocalBoxId } from './local-compute-fleet.js';
 import { replicaFleet } from './replica-fleet.js';
 import { runDevboxTask } from '../routes/devbox.js';
+import type { DevboxRunOutcome } from './devbox-runner.js';
 import { freezeJobBrief } from './run-brief.js';
 import { maintainJobAttempt, type JobAttempt } from './job-attempt.js';
 import { recordSpend } from '../providers/spend-ledger.js';
@@ -68,18 +69,25 @@ function emit(kind: string, job: AgentJob | { id: string }, extra: Record<string
  * firing or a marketplace dispatch) is skipped: its money lands on the
  * bot_run, and writing it here too would count the same dollar twice.
  */
-async function recordJobSpend(job: ClaimedAgentJob, costUsd: number | null): Promise<void> {
+async function recordJobSpend(
+  job: ClaimedAgentJob,
+  cost: Pick<DevboxRunOutcome, 'costUsd' | 'costBasis' | 'estimatedCostUsd'> & Partial<Pick<DevboxRunOutcome, 'model' | 'usage'>>,
+): Promise<void> {
   if (job.botId) return;
   const initiative = job.payload['initiativeId'];
-  const model = job.payload['model'];
+  const requested = job.payload['model'];
   await recordSpend({
     source: 'job',
     sourceId: `${job.id}:${job.attempts}`,
     initiativeId: typeof initiative === 'string' && initiative ? initiative : null,
     boxId: job.boxId,
     actorId: job.createdBy,
-    model: typeof model === 'string' && model ? model : null,
-    costUsd,
+    model: cost.model ?? (typeof requested === 'string' && requested ? requested : null),
+    costUsd: cost.costUsd ?? null,
+    costBasis: cost.costBasis,
+    estimatedCostUsd: cost.estimatedCostUsd ?? null,
+    inputTokens: cost.usage?.inputTokens ?? null,
+    outputTokens: cost.usage?.outputTokens ?? null,
   }, { unlessBotRunOwnsJob: job.id });
 }
 
@@ -123,11 +131,12 @@ async function runJob(job: ClaimedAgentJob): Promise<void> {
       ...(!outcome.ok ? { error: outcome.error ?? 'task failed' } : {}),
       result: {
         summary: outcome.summary, turns: outcome.turns, durationMs: outcome.durationMs,
-        costUsd: outcome.costUsd, toolCalls: outcome.toolCalls, transcript: outcome.transcript,
+        costUsd: outcome.costUsd, costBasis: outcome.costBasis, estimatedCostUsd: outcome.estimatedCostUsd,
+        toolCalls: outcome.toolCalls, transcript: outcome.transcript,
       },
     });
     if (committed) {
-      await recordJobSpend(job, outcome.costUsd ?? null);
+      await recordJobSpend(job, outcome);
       appendEvent(boxId, { type: 'job_finished', jobId: job.id, ok: outcome.ok, ts: new Date().toISOString() });
       emit(status, job, { boxId });
     }
@@ -137,7 +146,7 @@ async function runJob(job: ClaimedAgentJob): Promise<void> {
     if (!attempt || attempt.signal.aborted) return;
     if (await completeJob(job.id, { claimToken, status: 'failed', error: (err as Error).message })) {
       // The task may have spent before it threw; how much is unknown, not zero.
-      if (invoked) await recordJobSpend(job, null);
+      if (invoked) await recordJobSpend(job, { costUsd: null, costBasis: 'unknown', estimatedCostUsd: null });
       emit('failed', job, { boxId });
     }
   } finally {

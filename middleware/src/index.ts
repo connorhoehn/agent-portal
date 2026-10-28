@@ -138,6 +138,7 @@ import { assessmentDocumentSourceRouter } from './routes/assessment-document-sou
 import { assessmentDocumentProposalsRouter } from './routes/assessment-document-proposals.js';
 
 import { trustedProxyHops } from './lib/trusted-proxy.js';
+import { startModelPriceRefresh } from './lib/model-prices.js';
 
 const app = express();
 
@@ -567,6 +568,11 @@ void initBotScheduler();
 // the DB layer (ON CONFLICT DO NOTHING on invocation_id). Set
 // OBS_TRACE_POLLER_DISABLED=1 to skip in offline/test environments.
 startTracePoller();
+
+// The Claude price table (DE-32): read SSM /orgiq/pricing/model_prices now
+// and every five minutes, so the synchronous lookups in the trace sink, the
+// fleet and the devbox runner price from a current snapshot. No-op offline.
+startModelPriceRefresh();
 
 // Tails observability.canary_decisions and bridges new rows into canaryBroker
 // so the portal's Decision History panel updates when the SFN controller

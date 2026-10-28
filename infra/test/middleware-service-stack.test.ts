@@ -195,6 +195,24 @@ describe('machine-callback secrets are injected, never baked into the task defin
   });
 });
 
+describe('the Claude price table (DE-32)', () => {
+  test('the task role may read parameter/orgiq/pricing/* and nothing more under it', () => {
+    const policies = Object.values<any>(closedTemplate.findResources('AWS::IAM::Policy'));
+    const statements = policies.flatMap((p) => (p.Properties?.PolicyDocument?.Statement ?? []) as any[]);
+    const pricing = statements.find((s) => s.Sid === 'PricingParameters');
+    assert.ok(pricing, 'no PricingParameters statement on the task role');
+    assert.deepEqual([pricing.Action].flat(), ['ssm:GetParameter'], 'read-only: a task must not rewrite the rates');
+    const resources = JSON.stringify(pricing.Resource);
+    assert.match(resources, /parameter\/orgiq\/pricing\/\*/, 'the grant must be scoped to /orgiq/pricing/*');
+  });
+
+  test('the container is told which parameter holds the table', () => {
+    const container = containerDefinition(closedTemplate);
+    const env = Object.fromEntries(((container.Environment ?? []) as any[]).map((e) => [e.Name, e.Value]));
+    assert.equal(env.MODEL_PRICES_PARAM, '/orgiq/pricing/model_prices');
+  });
+});
+
 describe('routing and health', () => {
   test('tasks are not publicly addressable; only the ALB is', () => {
     closedTemplate.hasResourceProperties('AWS::ECS::Service', {

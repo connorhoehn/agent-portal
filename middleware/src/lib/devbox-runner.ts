@@ -10,7 +10,11 @@ import {
   BedrockAgentCoreClient,
   InvokeAgentRuntimeCommand as InvokeRuntime,
 } from '@aws-sdk/client-bedrock-agentcore';
-import { parseReportedCost, resultEventError, resultEventSucceeded } from './run-cost.js';
+import {
+  parseReportedCost, parseResultUsage, resultEventError, resultEventSucceeded, settleRunCost, type CostBasis,
+} from './run-cost.js';
+import { estimateUsageCost } from './model-prices.js';
+import type { TokenUsage } from './pricing.js';
 
 /**
  * One line of what the worker actually did.
@@ -69,6 +73,19 @@ export interface DevboxRunOutcome {
    * copy cannot drift from this one again.
    */
   costUsd: number | null;
+  /**
+   * Where `costUsd` came from (DE-32). `reported` is Claude Code's own
+   * `total_cost_usd`; `estimated` is the `result` event's `usage` priced
+   * through `lib/model-prices.ts` when no figure was reported; `unknown` is
+   * null. DE-30's writers pass it straight through to `spend_entries`.
+   */
+  costBasis: CostBasis;
+  /** The table's figure, kept beside the reported one for the drift check; null when unpriceable. */
+  estimatedCostUsd: number | null;
+  /** The model the runtime announced on `devbox_start`, else the one requested, else null. */
+  model: string | null;
+  /** The `result` event's usage block, when it carried one. */
+  usage: TokenUsage | null;
   toolCalls: number;
   exitCode: number | null;
   error?: string;
@@ -120,7 +137,8 @@ export interface DevboxLabContext {
 export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxRunOutcome> {
   const started = Date.now();
   const outcome: DevboxRunOutcome = {
-    ok: false, summary: '', turns: 0, durationMs: 0, costUsd: null, toolCalls: 0, exitCode: null,
+    ok: false, summary: '', turns: 0, durationMs: 0, costUsd: null, costBasis: 'unknown', estimatedCostUsd: null,
+    model: opts.model ?? null, usage: null, toolCalls: 0, exitCode: null,
     transcript: [],
   };
 
@@ -181,7 +199,12 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
 
         const type = ev['type'];
         const ts = new Date().toISOString();
-        if (type === 'assistant') {
+        if (type === 'devbox_start') {
+          // The runtime's own announcement of the model it resolved to — the
+          // id the price table is keyed by (an inference-profile id in the
+          // cloud), ahead of whatever the caller asked for.
+          if (typeof ev['model'] === 'string' && ev['model']) outcome.model = ev['model'];
+        } else if (type === 'assistant') {
           const content = ((ev['message'] as { content?: unknown[] })?.content ?? []) as Record<string, unknown>[];
           for (const block of content) {
             if (block['type'] === 'tool_use') {
@@ -200,7 +223,16 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
           }
         } else if (type === 'result') {
           outcome.turns = Number(ev['num_turns'] ?? 0);
-          outcome.costUsd = parseReportedCost(ev);
+          // Reported figure first; when Claude Code reports none, the usage
+          // block priced through the table (DE-32), each cache bucket at its
+          // own rate; else unknown. The estimate is kept beside a reported
+          // figure so the two can be compared later.
+          outcome.usage = parseResultUsage(ev);
+          const estimated = outcome.usage && outcome.model ? estimateUsageCost(outcome.model, outcome.usage) : null;
+          const settled = settleRunCost(parseReportedCost(ev), estimated);
+          outcome.costUsd = settled.costUsd;
+          outcome.costBasis = settled.costBasis;
+          outcome.estimatedCostUsd = settled.estimatedCostUsd;
           if (typeof ev['result'] === 'string') outcome.summary = ev['result'];
           outcome.ok = resultEventSucceeded(ev);
           if (!outcome.ok) {

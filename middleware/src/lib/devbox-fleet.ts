@@ -16,7 +16,8 @@
 // and re-adopts boxes if the middleware restarts, so dev-loop restarts don't
 // strand sessions. Promote to Aurora when fleets need to survive deploys.
 
-import { parseReportedCost } from './run-cost.js';
+import { parseReportedCost, parseResultUsage } from './run-cost.js';
+import { estimateUsageCost } from './pricing.js';
 
 /**
  * `provisioning` — the box is minted in the registry but its microVM is not up
@@ -552,7 +553,12 @@ export function appendEvent(id: string, ev: FleetEvent): void {
     // which reads the same event on the durable path. This was independently
     // `Number(ev['total_cost_usd'] ?? 0)` in both places, and only one of them
     // got fixed the first time.
-    const cost = parseReportedCost(ev);
+    // When no figure was reported, the usage block priced through the table
+    // (DE-32; `pricing.ts` sees the Claude rates once lib/model-prices.ts has
+    // registered them at boot). Null stays null: a box never accrues a zero.
+    const reported = parseReportedCost(ev);
+    const usage = reported === null ? parseResultUsage(ev) : null;
+    const cost = reported ?? (usage && s.box.activeModel ? estimateUsageCost(s.box.activeModel, usage) : null);
     s.box.lastResult = {
       subtype: String(ev['subtype'] ?? ''),
       turns: Number(ev['num_turns'] ?? 0),

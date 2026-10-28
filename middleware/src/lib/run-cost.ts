@@ -60,6 +60,8 @@
  *                  fiction on purpose; kept distinguishable so a demo's numbers
  *                  never merge into a real rollup.
  */
+import type { TokenUsage } from './pricing.js';
+
 export type ModelProvider = 'bedrock' | 'local' | 'simulated';
 
 const PROVIDERS: readonly ModelProvider[] = ['bedrock', 'local', 'simulated'];
@@ -111,6 +113,67 @@ export function parseReportedCost(ev: Record<string, unknown>): number | null {
       : Number.NaN;
   if (!Number.isFinite(numeric) || numeric < 0) return null;
   return numeric;
+}
+
+/**
+ * Where a recorded figure came from (DE-30's `spend_entries.cost_basis`):
+ * `reported` is the executor's own `total_cost_usd`, `estimated` is tokens ×
+ * the price table (`lib/model-prices.ts`), `unknown` is null — never 0.
+ */
+export type CostBasis = 'reported' | 'estimated' | 'unknown';
+
+/**
+ * The `usage` block a `result` event carries, as a `TokenUsage`, or `null`
+ * when there is none. Cache buckets are kept apart from `input_tokens` on
+ * purpose: on a real Claude Code run `cache_read_input_tokens` is where most
+ * of the tokens live (`lib/devbox-fleet.ts::extractUsage` measured ~22k cached
+ * against 10 fresh), and they are priced at a fraction of the input rate.
+ */
+export function parseResultUsage(ev: Record<string, unknown>): TokenUsage | null {
+  const direct = ev['usage'];
+  const nested = (ev['message'] as { usage?: unknown } | undefined)?.usage;
+  const usage = (direct ?? nested) as Record<string, unknown> | undefined;
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return null;
+  const n = (v: unknown): number | null => {
+    const x = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+    return Number.isFinite(x) && x >= 0 ? x : null;
+  };
+  const input = n(usage['input_tokens']);
+  const output = n(usage['output_tokens']);
+  const cacheWrite = usage['cache_creation_input_tokens'] === undefined ? 0 : n(usage['cache_creation_input_tokens']);
+  const cacheRead = usage['cache_read_input_tokens'] === undefined ? 0 : n(usage['cache_read_input_tokens']);
+  // Missing/malformed usage cannot establish a free run or a partial price.
+  if (input === null || output === null || cacheWrite === null || cacheRead === null) return null;
+  return {
+    inputTokens: input,
+    outputTokens: output,
+    cacheWriteTokens: cacheWrite,
+    cacheReadTokens: cacheRead,
+  };
+}
+
+export interface SettledCost {
+  /** What to record. `null` = burn unknown. */
+  costUsd: number | null;
+  costBasis: CostBasis;
+  /**
+   * The table's figure, kept BESIDE the recorded one even when the executor
+   * reported, so a gap between Claude Code's price list and the Bedrock rate
+   * is selectable later (DE-32 drift check). Null when the table cannot price.
+   */
+  estimatedCostUsd: number | null;
+}
+
+/**
+ * Prefer the reported figure, fall back to the estimate, else unknown. The
+ * reported figure wins when both exist because it is the executor's own
+ * account of the run; the estimate is recorded next to it rather than
+ * discarded. Pure.
+ */
+export function settleRunCost(reportedUsd: number | null, estimatedUsd: number | null): SettledCost {
+  if (reportedUsd !== null) return { costUsd: reportedUsd, costBasis: 'reported', estimatedCostUsd: estimatedUsd };
+  if (estimatedUsd !== null) return { costUsd: estimatedUsd, costBasis: 'estimated', estimatedCostUsd: estimatedUsd };
+  return { costUsd: null, costBasis: 'unknown', estimatedCostUsd: null };
 }
 
 export interface RunCost {

@@ -630,6 +630,16 @@ export class MiddlewareServiceStack extends cdk.Stack {
       resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/${prefix}/canary/*`],
     }));
 
+    // The model price table (lib/model-prices.ts, DE-32): read-only, so a
+    // compromised task cannot rewrite the rates the ledger estimates from.
+    // The parameter itself is created by hand or by a script, never by CDK, so
+    // a redeploy cannot overwrite what the operator supplied.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'PricingParameters',
+      actions: ['ssm:GetParameter'],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/${prefix}/pricing/*`],
+    }));
+
     // The canary's score stream (lib/emf-emitter.ts writes EMF lines to
     // /orgiq/canary/scores, which PromptCanary owns).
     taskRole.addToPolicy(new iam.PolicyStatement({
@@ -895,6 +905,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
       TRUST_PROXY_HOPS: viaCloudFront ? '2' : '1',
       MOCK_GUARDRAILS: 'false',
       MOCK_CLOUDWATCH: 'false',
+
+      // The Claude price table the ledger estimates from (DE-32).
+      MODEL_PRICES_PARAM: `/${prefix}/pricing/model_prices`,
 
       // AgentCore identifiers
       ...(memoryId && { MEMORY_ID: memoryId }),

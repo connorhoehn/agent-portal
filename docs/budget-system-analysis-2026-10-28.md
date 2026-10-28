@@ -1,5 +1,14 @@
 # OrgIQ agent budget system: honest analysis (2026-10-28)
 
+**Continuation checkpoint (2026-10-28):** the analysis below records the earlier
+state. The baseline ledger/schema work is now deployed; the local DE-32 batch
+adds configurable Claude estimates and a direct agent-project-run writer.
+Reported/estimated provenance is retained through project settlement, bot
+ownership and job backfill. BFF Bedrock metering, direct-run historical backfill
+and mock-ledger parity, user budgets, holds, a funded maintenance reserve and
+billed reconciliation remain follow-ups. Local validation and the rollout order
+are recorded in `local-backlog-goal-2026-10-28.md`.
+
 **Executive summary**
 
 1. Money is modelled as a monthly per-initiative allocation plus per-SME sprint envelopes, with burn derived at read time from `bot_runs.cost_usd`; only `POST /api/bots/dispatch-work` runs the full gate set, and every money gate on it is a confirmable 409 that fails open when its inputs are missing.

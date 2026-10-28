@@ -20,6 +20,7 @@ import {
 } from '@aws-sdk/client-bedrock-agentcore';
 import { executeDevboxTask, type DevboxLabContext } from './devbox-runner.js';
 import { finishRun } from '../providers/agent-projects.js';
+import { recordAgentProjectRunSpend } from '../providers/spend-ledger.js';
 
 /**
  * Run a shell command in a devbox and collect its output as text.
@@ -194,9 +195,10 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
       filesChanged: diff.filesChanged,
       diffSummary: diff.summary || null,
       error: outcome.ok ? null : (outcome.error ?? 'the agent reported a failure'),
-      // Real spend as the runtime reported it — the estimation engine's whole
-      // data supply. Recorded even for failed runs; failures cost money too.
+      // Preserve reported versus estimated spend through later bot settlement.
       costUsd: outcome.costUsd,
+      costBasis: outcome.costBasis,
+      estimatedCostUsd: outcome.estimatedCostUsd,
       // This path is AgentCore Runtime by construction (it invokes one), so the
       // provenance is known and worth stating rather than left NULL. Stated at
       // the call site, never inferred inside the provider: the provider cannot
@@ -204,6 +206,8 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
       // local run's self-reported first-party price look like Bedrock spend.
       modelProvider: 'bedrock',
     });
+    // The ledger entry (DE-30): this path writes no bot_runs row of its own.
+    await recordAgentProjectRunSpend(req.runId);
 
     // Hand a changed run to governance. Fired only when the tree actually
     // moved — a run that changed nothing has nothing to review.

@@ -63,7 +63,9 @@ import { presignShellUrl, isValidShellId, MAX_FRAME_BYTES } from '../lib/devbox-
 import { startReaper, timeLeft } from '../lib/devbox-reaper.js';
 import { mockDevboxClient } from '../mock/devbox-shell.js';
 import { randomUUID } from 'node:crypto';
-import { parseReportedCost } from '../lib/run-cost.js';
+import { parseReportedCost, parseResultUsage, settleRunCost } from '../lib/run-cost.js';
+import { estimateUsageCost } from '../lib/model-prices.js';
+import type { TokenUsage } from '../lib/pricing.js';
 import { recordSpend } from '../providers/spend-ledger.js';
 
 export const devboxRouter = Router();
@@ -582,17 +584,16 @@ export async function runTaskAndForward(opts: {
   initSSE(res);
   // The task's own ledger figures, read off the frames as they pass.
   const taskId = randomUUID();
-  let costUsd: number | null = null;
+  let reportedUsd: number | null = null;
   let resultSeen = false;
   let usedModel: string | null = model ?? null;
-  let tokens: { input: number; output: number } | null = null;
+  let usage: TokenUsage | null = null;
   const observe = (ev: Record<string, unknown>): void => {
     if (ev['type'] === 'devbox_start' && typeof ev['model'] === 'string' && ev['model']) usedModel = ev['model'];
     if (ev['type'] === 'result') {
       resultSeen = true;
-      costUsd = parseReportedCost(ev);
-      const usage = ev['usage'] as { input_tokens?: unknown; output_tokens?: unknown } | undefined;
-      if (usage) tokens = { input: Number(usage.input_tokens ?? 0) || 0, output: Number(usage.output_tokens ?? 0) || 0 };
+      reportedUsd = parseReportedCost(ev);
+      usage = parseResultUsage(ev);
     }
   };
   try {
@@ -634,8 +635,11 @@ export async function runTaskAndForward(opts: {
   } finally {
     endSSE(res);
     // The runtime accepted the task, so it may have spent: a run that never
-    // reported a result is unknown cost, not zero.
-    const t = tokens as { input: number; output: number } | null;
+    // reported a result is unknown cost, not zero. When it reported tokens but
+    // no figure, the table prices them (DE-32) and the basis says so.
+    const u = usage as TokenUsage | null;
+    const estimated = resultSeen && u && usedModel ? estimateUsageCost(usedModel, u) : null;
+    const settled = settleRunCost(resultSeen ? reportedUsd : null, estimated);
     await recordSpend({
       source: opts.spend.source,
       sourceId: `${fleetBox.id}:${taskId}`,
@@ -643,9 +647,11 @@ export async function runTaskAndForward(opts: {
       boxId: fleetBox.id,
       actorId: opts.spend.actorId,
       model: usedModel,
-      costUsd: resultSeen ? costUsd : null,
-      inputTokens: t?.input ?? null,
-      outputTokens: t?.output ?? null,
+      costUsd: settled.costUsd,
+      costBasis: settled.costBasis,
+      estimatedCostUsd: settled.estimatedCostUsd,
+      inputTokens: u?.inputTokens ?? null,
+      outputTokens: u?.outputTokens ?? null,
     });
   }
 }
@@ -973,7 +979,8 @@ export async function runDevboxTask(opts: {
     });
     return {
       ok: true, summary: played.summary, turns: played.turns,
-      durationMs: played.durationMs, costUsd: played.costUsd,
+      durationMs: played.durationMs, costUsd: played.costUsd, costBasis: 'reported', estimatedCostUsd: null,
+      model: opts.model ?? null, usage: null,
       toolCalls: played.toolCalls, exitCode: 0, transcript: [],
     };
   }
@@ -986,7 +993,8 @@ export async function runDevboxTask(opts: {
       // precisely so the two can be told apart — "no figure was reported" is
       // null (see lib/run-cost.ts), "nothing was spent because nothing ran" is
       // 0, and there are no token counts beside it to make it read as free.
-      ok: false, summary: '', turns: 0, durationMs: 0, costUsd: 0, toolCalls: 0,
+      ok: false, summary: '', turns: 0, durationMs: 0, costUsd: 0, costBasis: 'reported', estimatedCostUsd: null,
+      model: opts.model ?? null, usage: null, toolCalls: 0,
       exitCode: null, error: 'devbox runtime not deployed', transcript: [],
     };
   }

@@ -16,9 +16,10 @@ import { config } from '../config.js';
 import { hasColumns } from './column-probe.js';
 import { clock } from '../mock/core/index.js';
 import { spendEntries } from '../mock/spend-ledger.js';
+import type { CostBasis } from '../lib/run-cost.js';
 
-export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop';
-export type CostBasis = 'reported' | 'estimated' | 'unknown';
+export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run';
+export type { CostBasis };
 
 export interface SpendEntry {
   source: SpendSource;
@@ -32,13 +33,20 @@ export interface SpendEntry {
   /** Null = unknown, never coerced to 0. */
   costUsd: number | null;
   costBasis: CostBasis;
+  /**
+   * The price table's figure beside the recorded one (DE-32 drift check):
+   * equal to `costUsd` when the basis is `estimated`, the table's number when
+   * a reported figure won, null when the table could not price the run.
+   */
+  estimatedCostUsd: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
   occurredAt: string;
 }
 
-export type SpendInput = Omit<SpendEntry, 'costBasis' | 'occurredAt' | 'grantId' | 'trigger' | 'inputTokens' | 'outputTokens'> & {
+export type SpendInput = Omit<SpendEntry, 'costBasis' | 'occurredAt' | 'grantId' | 'trigger' | 'inputTokens' | 'outputTokens' | 'estimatedCostUsd'> & {
   costBasis?: CostBasis;
+  estimatedCostUsd?: number | null;
   grantId?: string | null;
   trigger?: string | null;
   inputTokens?: number | null;
@@ -71,6 +79,11 @@ const UPSERT_TAIL = `
   ON CONFLICT (source, source_id) DO UPDATE
      SET cost_usd = EXCLUDED.cost_usd, cost_basis = EXCLUDED.cost_basis
    WHERE spend_entries.cost_basis = 'unknown' AND EXCLUDED.cost_basis <> 'unknown'`;
+const UPSERT_TAIL_WITH_ESTIMATE = `
+  ON CONFLICT (source, source_id) DO UPDATE
+     SET cost_usd = EXCLUDED.cost_usd, cost_basis = EXCLUDED.cost_basis,
+         estimated_cost_usd = EXCLUDED.estimated_cost_usd
+   WHERE spend_entries.cost_basis = 'unknown' AND EXCLUDED.cost_basis <> 'unknown'`;
 
 /**
  * Append one entry. Best-effort: logs and returns on failure.
@@ -88,6 +101,7 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
     inputTokens: input.inputTokens ?? null,
     outputTokens: input.outputTokens ?? null,
     costBasis: basisFor(input.costUsd, input.costBasis),
+    estimatedCostUsd: input.estimatedCostUsd ?? null,
     occurredAt: input.occurredAt ?? clock.nowIso(),
   };
   if (config.mock.aurora) {
@@ -100,6 +114,7 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
       else if (prior.costBasis === 'unknown' && entry.costBasis !== 'unknown') {
         prior.costUsd = entry.costUsd;
         prior.costBasis = entry.costBasis;
+        prior.estimatedCostUsd = entry.estimatedCostUsd;
       }
     } catch (err) {
       console.warn(`[spend-ledger] mock write failed: ${(err as Error).message}`);
@@ -107,19 +122,23 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
     return;
   }
   try {
+    // `estimated_cost_usd` is an additive column (DE-32); a cluster that has
+    // not re-applied spend_ledger_schema.sql still takes the row without it.
+    const withEstimate = await hasColumns('spend_entries', ['estimated_cost_usd']).catch(() => false);
     await exec(
       `INSERT INTO spend_entries
          (source, source_id, initiative_id, grant_id, box_id, actor_id, trigger, model,
-          cost_usd, cost_basis, input_tokens, output_tokens, occurred_at)
+          cost_usd, cost_basis, input_tokens, output_tokens, occurred_at${withEstimate ? ', estimated_cost_usd' : ''})
        SELECT :source, :sid, :init, :grant, :box, :actor, :trigger, :model,
-              :cost::numeric, :basis, :itok::bigint, :otok::bigint, :at::timestamptz
-       ${opts.unlessBotRunOwnsJob ? 'WHERE NOT EXISTS (SELECT 1 FROM bot_runs WHERE job_id = :ownedjob)' : ''}${UPSERT_TAIL}`,
+              :cost::numeric, :basis, :itok::bigint, :otok::bigint, :at::timestamptz${withEstimate ? ', :est::numeric' : ''}
+       ${opts.unlessBotRunOwnsJob ? 'WHERE NOT EXISTS (SELECT 1 FROM bot_runs WHERE job_id = :ownedjob)' : ''}${withEstimate ? UPSERT_TAIL_WITH_ESTIMATE : UPSERT_TAIL}`,
       [
         s('source', entry.source), s('sid', entry.sourceId), maybe('init', entry.initiativeId),
         maybe('grant', entry.grantId), maybe('box', entry.boxId), maybe('actor', entry.actorId),
         maybe('trigger', entry.trigger), maybe('model', entry.model), maybeNum('cost', entry.costUsd),
         s('basis', entry.costBasis), maybeNum('itok', entry.inputTokens), maybeNum('otok', entry.outputTokens),
         s('at', entry.occurredAt),
+        ...(withEstimate ? [maybeNum('est', entry.estimatedCostUsd)] : []),
         ...(opts.unlessBotRunOwnsJob ? [s('ownedjob', opts.unlessBotRunOwnsJob)] : []),
       ],
     );
@@ -140,10 +159,10 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
  * `occurred_at` is the run's start, the instant the legacy readers window on.
  * Skipped runs never ran and write nothing.
  */
-export function botRunSpendSql(withDispatchedBy: boolean, where = 'br.id = :id::uuid'): string {
+export function botRunSpendSql(withDispatchedBy: boolean, where = 'br.id = :id::uuid', withEstimate = false): string {
   return `
     INSERT INTO spend_entries
-      (source, source_id, initiative_id, actor_id, trigger, model, cost_usd, cost_basis, occurred_at)
+      (source, source_id, initiative_id, actor_id, trigger, model, cost_usd, cost_basis, occurred_at${withEstimate ? ', estimated_cost_usd' : ''})
     SELECT 'bot_run', br.id::text,
            COALESCE(
              (SELECT w.project_id FROM work_items w WHERE w.id = br.work_item_id),
@@ -154,13 +173,16 @@ export function botRunSpendSql(withDispatchedBy: boolean, where = 'br.id = :id::
            br.trigger,
            COALESCE(apr.model, aj.payload->>'model', b.model),
            br.cost_usd,
-           CASE WHEN br.cost_usd IS NULL THEN 'unknown' ELSE 'reported' END,
+           CASE WHEN br.cost_usd IS NULL THEN 'unknown'
+                WHEN COALESCE(to_jsonb(apr)->>'cost_basis', aj.result->>'costBasis') = 'estimated' THEN 'estimated'
+                ELSE 'reported' END,
            br.started_at
+           ${withEstimate ? ", COALESCE((to_jsonb(apr)->>'estimated_cost_usd')::numeric, (aj.result->>'estimatedCostUsd')::numeric)" : ''}
       FROM bot_runs br
       LEFT JOIN bots b ON b.id = br.bot_id
       LEFT JOIN agent_project_runs apr ON apr.id = br.run_id
       LEFT JOIN agent_jobs aj ON aj.id = br.job_id
-     WHERE ${where} AND br.status IN ('done', 'failed')${UPSERT_TAIL}`;
+     WHERE ${where} AND br.status IN ('done', 'failed')${withEstimate ? UPSERT_TAIL_WITH_ESTIMATE : UPSERT_TAIL}`;
 }
 
 /** Write (or complete) the ledger entry for a settled bot run. Best-effort. */
@@ -168,10 +190,55 @@ export async function recordBotRunSpend(runId: string): Promise<void> {
   if (config.mock.aurora) return; // derived from the bot_runs fixture
   try {
     const withBy = await hasColumns('bot_runs', ['dispatched_by']);
-    await exec(botRunSpendSql(withBy), [s('id', runId)]);
+    const withEstimate = await hasColumns('spend_entries', ['estimated_cost_usd']);
+    await exec(botRunSpendSql(withBy, undefined, withEstimate), [s('id', runId)]);
   } catch (err) {
     if (missingTable(err)) return;
     console.warn(`[spend-ledger] bot run ${runId} not recorded: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * The entry for a direct agent-project run (POST /api/agent-projects/:id/runs),
+ * resolved from the finished row. Skipped when a bot_run owns the run (a bot
+ * firing or a marketplace dispatch): that run's settle writes the money.
+ * Initiative: the run's work item, else the codebase's initiative.
+ */
+export function agentProjectRunSpendSql(withDispatchedBy: boolean, withEstimate = false): string {
+  return `
+    INSERT INTO spend_entries
+      (source, source_id, initiative_id, actor_id, model, cost_usd, cost_basis, occurred_at${withEstimate ? ', estimated_cost_usd' : ''})
+    SELECT 'agent_project_run', apr.id::text,
+           COALESCE(
+             (SELECT w.project_id FROM work_items w WHERE w.id = apr.work_item_id),
+             ap.org_project_id
+           ),
+           ${withDispatchedBy ? 'apr.dispatched_by' : 'NULL'},
+           apr.model,
+           apr.cost_usd,
+           CASE WHEN apr.cost_usd IS NULL THEN 'unknown'
+                WHEN to_jsonb(apr)->>'cost_basis' = 'estimated' THEN 'estimated'
+                ELSE 'reported' END,
+           apr.started_at
+           ${withEstimate ? ", (to_jsonb(apr)->>'estimated_cost_usd')::numeric" : ''}
+      FROM agent_project_runs apr
+      JOIN agent_projects ap ON ap.id = apr.project_id
+     WHERE apr.id = :id::uuid AND apr.status IN ('done', 'failed')
+       AND NOT EXISTS (SELECT 1 FROM bot_runs br WHERE br.run_id = apr.id)${withEstimate ? UPSERT_TAIL_WITH_ESTIMATE : UPSERT_TAIL}`;
+}
+
+/** Write the ledger entry for a finished agent-project run. Best-effort. */
+export async function recordAgentProjectRunSpend(runId: string): Promise<void> {
+  // Offline these runs live in mock/agent-project-runs.ts and are not yet in
+  // the mock ledger's view (a known gap; ledger mode is off by default).
+  if (config.mock.aurora) return;
+  try {
+    const withBy = await hasColumns('agent_project_runs', ['dispatched_by']);
+    const withEstimate = await hasColumns('spend_entries', ['estimated_cost_usd']);
+    await exec(agentProjectRunSpendSql(withBy, withEstimate), [s('id', runId)]);
+  } catch (err) {
+    if (missingTable(err)) return;
+    console.warn(`[spend-ledger] agent-project run ${runId} not recorded: ${(err as Error).message}`);
   }
 }
 

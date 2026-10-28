@@ -29,7 +29,7 @@ import {
 import { config } from '../config.js';
 import { hasColumns } from './column-probe.js';
 // One vocabulary for "who served this inference", shared with providers/bots.ts.
-import type { ModelProvider } from '../lib/run-cost.js';
+import type { CostBasis, ModelProvider } from '../lib/run-cost.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -367,6 +367,8 @@ export async function getRunProjectId(id: string): Promise<string | null> {
 export async function finishRun(id: string, outcome: {
   status: 'done' | 'failed'; filesChanged?: number | null; diffSummary?: string | null; error?: string | null;
   costUsd?: number | null;
+  costBasis?: CostBasis;
+  estimatedCostUsd?: number | null;
   /**
    * What served the inference. See lib/run-cost.ts: `cost_usd` on its own cannot
    * distinguish "cost nothing because it ran on hardware we own" from "cost
@@ -403,6 +405,11 @@ export async function finishRun(id: string, outcome: {
     && await hasColumns('agent_project_runs', ['model_provider'])
     ? outcome.modelProvider
     : null;
+  const withCostBasis = outcome.costBasis !== undefined
+    && await hasColumns('agent_project_runs', ['cost_basis', 'estimated_cost_usd']);
+  // An old cluster cannot retain the label. Leave its figure unknown rather
+  // than let downstream readers present an estimate as reported spend.
+  const costUsd = outcome.costBasis === 'estimated' && !withCostBasis ? null : outcome.costUsd;
   await exec(
     `UPDATE agent_project_runs
         SET status = :status,
@@ -412,17 +419,22 @@ export async function finishRun(id: string, outcome: {
             diff_summary = :diff,
             error = :err,
             ${provider ? 'model_provider = :provider,' : ''}
+            ${withCostBasis ? 'cost_basis = :basis, estimated_cost_usd = :estimate,' : ''}
             cost_usd = :cost
       WHERE id = :id::uuid`,
     [
       s('status', outcome.status), s('id', id),
       ...(provider ? [s('provider', provider)] : []),
+      ...(withCostBasis ? [
+        s('basis', costUsd == null ? 'unknown' : outcome.costBasis!),
+        outcome.estimatedCostUsd == null ? nul('estimate') : { name: 'estimate', value: { doubleValue: outcome.estimatedCostUsd } },
+      ] : []),
       outcome.filesChanged == null ? nul('files') : { name: 'files', value: { longValue: outcome.filesChanged } },
       maybe('diff', outcome.diffSummary ?? null),
       maybe('err', outcome.error ?? null),
       // The column existed from day one; it was simply never written. Every
       // row that lands here feeds the bot/marketplace cost estimator.
-      outcome.costUsd == null ? nul('cost') : { name: 'cost', value: { doubleValue: outcome.costUsd } },
+      costUsd == null ? nul('cost') : { name: 'cost', value: { doubleValue: costUsd } },
     ],
   );
 }

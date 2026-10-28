@@ -15,9 +15,10 @@ import { readFileSync } from 'node:fs';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from '../aurora.js';
 import { _resetColumnProbes } from '../column-probe.js';
-import { recordBotRunSpend, recordSpend, ledgerMismatches } from '../spend-ledger.js';
+import { recordBotRunSpend, recordSpend, ledgerMismatches, recordAgentProjectRunSpend } from '../spend-ledger.js';
 import { listBudgets } from '../budgets.js';
 import { backfillSpendLedger } from '../../lib/backfill-spend-ledger.js';
+import { finishRun } from '../agent-projects.js';
 
 const enabled = process.env['REAL_SPEND_LEDGER_POSTGRES'] === '1';
 const container = process.env['ORGIQ_SPEND_LEDGER_POSTGRES_CONTAINER'] ?? '';
@@ -102,7 +103,7 @@ const count = async (where = 'TRUE') => Number((await rows(`SELECT COUNT(*) AS n
     _resetColumnProbes();
     // Two initiatives, each attributed through a different arm of the legacy
     // predicate: a bot targeting the initiative, and a run's work item.
-    await sql(`TRUNCATE spend_entries, bot_runs, bots, agent_jobs, work_items, projects CASCADE;
+    await sql(`TRUNCATE spend_entries, bot_runs, bots, agent_jobs, agent_project_runs, agent_projects, work_items, projects CASCADE;
       INSERT INTO projects (id, name) VALUES ('p-alpha', 'Alpha'), ('p-beta', 'Beta');
       INSERT INTO work_items (id, project_id, type, title) VALUES ('w-1', 'p-beta', 'story', 'W1');
       INSERT INTO bots (id, name, template, prompt_template, org_project_id, model, trigger)
@@ -157,6 +158,53 @@ const count = async (where = 'TRUE') => Number((await rows(`SELECT COUNT(*) AS n
     expect(await rows(`SELECT cost_usd, cost_basis FROM spend_entries`)).toEqual([{ cost_usd: '0.4000', cost_basis: 'reported' }]);
   });
 
+  it('retains estimates through project settlement, bot ownership and job backfill', async () => {
+    await sql(`INSERT INTO agent_projects (id, repo_full_name, org_project_id)
+      VALUES ('00000000-0000-0000-0000-0000000000a1', 'org/alpha', 'p-alpha');
+      INSERT INTO agent_project_runs (id, project_id, prompt, model, status) VALUES
+      ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1', 'fix', 'sonnet', 'running');`);
+    const runId = '00000000-0000-0000-0000-0000000000c1';
+    await finishRun(runId, { status: 'done', costUsd: 0.8, costBasis: 'estimated', estimatedCostUsd: 0.8 });
+    await recordAgentProjectRunSpend(runId);
+    expect(await rows(`SELECT cost_usd, cost_basis, estimated_cost_usd FROM spend_entries`))
+      .toEqual([{ cost_usd: '0.8000', cost_basis: 'estimated', estimated_cost_usd: '0.8000' }]);
+    // Same execution path when a bot owns the run: exactly one bot entry.
+    await sql(`TRUNCATE spend_entries;
+      UPDATE bot_runs SET run_id = '${runId}', cost_usd = 0.8
+      WHERE id = '00000000-0000-0000-0000-000000000001';`);
+    await recordAgentProjectRunSpend(runId);
+    expect(await count()).toBe(0);
+    await recordBotRunSpend('00000000-0000-0000-0000-000000000001');
+    expect(await rows(`SELECT source, cost_basis, estimated_cost_usd FROM spend_entries`))
+      .toEqual([{ source: 'bot_run', cost_basis: 'estimated', estimated_cost_usd: '0.8000' }]);
+    await sql(`UPDATE agent_jobs SET result = '{"costUsd":0.25,"costBasis":"estimated","estimatedCostUsd":0.25}' WHERE id = 'job-owned';
+      INSERT INTO agent_jobs (id, kind, title, status, started_at, result) VALUES
+      ('job-free', 'devbox:task', 'adhoc', 'done', NOW(), '{"costUsd":0.7,"costBasis":"reported","estimatedCostUsd":0.65}');`);
+    await backfillSpendLedger({ dryRun: false });
+    const ledger = await rows(`SELECT source, cost_usd, cost_basis, estimated_cost_usd FROM spend_entries ORDER BY cost_usd`);
+    expect(ledger).toEqual(expect.arrayContaining([
+      { source: 'bot_run', cost_usd: '0.2500', cost_basis: 'estimated', estimated_cost_usd: '0.2500' },
+      { source: 'job', cost_usd: '0.7000', cost_basis: 'reported', estimated_cost_usd: '0.6500' },
+    ]));
+  });
+
+  it('does not relabel an estimate on a cluster that lacks the new project columns', async () => {
+    await sql(`ALTER TABLE agent_project_runs DROP COLUMN cost_basis, DROP COLUMN estimated_cost_usd;
+      INSERT INTO agent_projects (id, repo_full_name, org_project_id)
+      VALUES ('00000000-0000-0000-0000-0000000000a1', 'org/alpha', 'p-alpha');
+      INSERT INTO agent_project_runs (id, project_id, prompt, model, status) VALUES
+      ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1', 'fix', 'sonnet', 'running');`);
+    try {
+      await finishRun('00000000-0000-0000-0000-0000000000c1', { status: 'done', costUsd: 0.8, costBasis: 'estimated', estimatedCostUsd: 0.8 });
+      await recordAgentProjectRunSpend('00000000-0000-0000-0000-0000000000c1');
+      expect(await rows(`SELECT cost_usd, cost_basis FROM spend_entries`))
+        .toEqual([{ cost_usd: null, cost_basis: 'unknown' }]);
+    } finally {
+      await sql(read('spend_ledger_schema.sql'));
+      _resetColumnProbes();
+    }
+  });
+
   it('skips a job a bot run owns, and books an ad-hoc box task to its initiative', async () => {
     await recordSpend({ source: 'job', sourceId: 'job-owned:1', initiativeId: 'p-beta', boxId: 'box-1', actorId: 'u-sme', model: null, costUsd: 0.25 }, { unlessBotRunOwnsJob: 'job-owned' });
     expect(await count()).toBe(0);
@@ -171,5 +219,20 @@ const count = async (where = 'TRUE') => Number((await rows(`SELECT COUNT(*) AS n
     const ledger = await listBudgets();
     const usd = (b: typeof legacy) => b.map((r) => ({ id: r.orgProjectId, usd: r.spentThisPeriodUsd }));
     expect(ledgerMismatches(usd(legacy), usd(ledger))).toEqual([{ id: 'p-beta', legacyUsd: 0.25, ledgerUsd: 0.95 }]);
+  });
+
+  it('books a direct agent-project run to its codebase initiative, and skips one a bot run owns', async () => {
+    await sql(`INSERT INTO agent_projects (id, repo_full_name, org_project_id)
+        VALUES ('00000000-0000-0000-0000-0000000000a1', 'org/alpha-repo', 'p-alpha');
+      INSERT INTO agent_project_runs (id, project_id, prompt, model, status, cost_usd) VALUES
+        ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000a1', 'fix', 'us.anthropic.claude-sonnet', 'done', 0.8),
+        ('00000000-0000-0000-0000-0000000000c2', '00000000-0000-0000-0000-0000000000a1', 'fix', NULL, 'done', 0.3);
+      UPDATE bot_runs SET run_id = '00000000-0000-0000-0000-0000000000c2' WHERE id = '00000000-0000-0000-0000-000000000001';`);
+    await recordAgentProjectRunSpend('00000000-0000-0000-0000-0000000000c1');
+    await recordAgentProjectRunSpend('00000000-0000-0000-0000-0000000000c1');
+    await recordAgentProjectRunSpend('00000000-0000-0000-0000-0000000000c2');
+    expect(await rows(`SELECT source, initiative_id, cost_usd, cost_basis FROM spend_entries`)).toEqual([
+      { source: 'agent_project_run', initiative_id: 'p-alpha', cost_usd: '0.8000', cost_basis: 'reported' },
+    ]);
   });
 });

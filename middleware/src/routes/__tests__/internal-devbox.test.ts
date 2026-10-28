@@ -235,9 +235,12 @@ describe('internal devbox router — mock loop round trip', () => {
     expect(recordSpend).toHaveBeenCalledTimes(1);
     expect(recordSpend).toHaveBeenCalledWith(expect.objectContaining({
       source: 'agent_loop', boxId, actorId: 'u-loop-owner', initiativeId: null,
-      // The mock result reports usage but no dollar figure: unknown, not $0.
-      costUsd: null, inputTokens: expect.any(Number), outputTokens: expect.any(Number),
+      // The mock result reports usage but no dollar figure: the mock price
+      // table prices the tokens (DE-32) and the basis says it is an estimate.
+      costUsd: expect.any(Number), costBasis: 'estimated', estimatedCostUsd: expect.any(Number),
+      inputTokens: expect.any(Number), outputTokens: expect.any(Number),
     }));
+    expect((recordSpend as jest.Mock).mock.calls[0][0].costUsd).toBeGreaterThan(0);
     expect((recordSpend as jest.Mock).mock.calls[0][0].sourceId).toMatch(new RegExp(`^${boxId}:`));
   });
 

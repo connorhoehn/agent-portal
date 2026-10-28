@@ -15,8 +15,8 @@
 
 CREATE TABLE IF NOT EXISTS spend_entries (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source         TEXT NOT NULL CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop')),
-  -- bot_runs.id | agent_jobs.id:<attempt> | <boxId>:<task id>
+  source         TEXT NOT NULL,
+  -- bot_runs.id | agent_jobs.id:<attempt> | <boxId>:<task id> | agent_project_runs.id
   source_id      TEXT NOT NULL,
   -- Null = unattributed: spent, but on no initiative.
   initiative_id  TEXT REFERENCES projects (id) ON DELETE SET NULL,
@@ -40,3 +40,22 @@ CREATE TABLE IF NOT EXISTS spend_entries (
 CREATE INDEX IF NOT EXISTS spend_entries_initiative_idx ON spend_entries (initiative_id, occurred_at);
 CREATE INDEX IF NOT EXISTS spend_entries_grant_idx ON spend_entries (grant_id, occurred_at);
 CREATE INDEX IF NOT EXISTS spend_entries_actor_idx ON spend_entries (actor_id, occurred_at);
+
+-- DE-32: the price table's figure beside the recorded one, so a gap between
+-- Claude Code's own price list ('reported') and the configured Bedrock rate
+-- can be selected. Null when the table could not price the run. Additive.
+ALTER TABLE spend_entries ADD COLUMN IF NOT EXISTS estimated_cost_usd NUMERIC(10,4);
+
+-- Project runs can settle before a bot polls their result. Keep provenance
+-- durably on the run so that poll and ledger backfills retain the estimate.
+-- NULL identifies legacy rows, whose non-null figures were executor-reported.
+ALTER TABLE agent_project_runs ADD COLUMN IF NOT EXISTS cost_basis TEXT
+  CHECK (cost_basis IN ('reported', 'estimated', 'unknown'));
+ALTER TABLE agent_project_runs ADD COLUMN IF NOT EXISTS estimated_cost_usd NUMERIC(10,4);
+
+-- The source list as a named constraint, so adding a path is a re-apply of
+-- this file rather than a hand migration (agent_project_run: direct
+-- POST /api/agent-projects/:id/runs, which writes no bot_runs row).
+ALTER TABLE spend_entries DROP CONSTRAINT IF EXISTS spend_entries_source_check;
+ALTER TABLE spend_entries ADD CONSTRAINT spend_entries_source_check
+  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run'));

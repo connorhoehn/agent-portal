@@ -3,8 +3,14 @@
 // all agree on the same numbers. Keep current — the dollar values shown on
 // the dashboards are only as accurate as this map.
 //
-// AWS-native only. Anthropic / Claude is intentionally excluded — OrgIQ's
-// model policy says nova-pro for vision+text and titan-v2 for embeddings.
+// AWS-native only. The Nova/Titan rates the nine agents use live here in
+// code. The devbox's Bedrock Claude inference profiles — the one deliberate
+// exception to the AWS-native model rule — are priced from CONFIG, not from
+// this file: `lib/model-prices.ts` reads SSM `/orgiq/pricing/model_prices`
+// (checked-in defaults in `lib/model-prices-defaults.ts`, the mock fixture
+// offline) and registers itself through `registerPriceSource` below. No
+// Claude rate is hard-coded in this module (DE-32), and this module imports
+// no config so the fleet and the runner can price without a credential.
 //
 // "Embeddings" model output tokens are zero by definition; we keep the slot
 // for shape uniformity so `estimateCost` doesn't need to special-case.
@@ -12,8 +18,16 @@
 import { createHash } from 'node:crypto';
 
 export interface BedrockPrice {
-  input: number;   // USD per 1K input tokens
-  output: number;  // USD per 1K output tokens
+  input: number;        // USD per 1K input tokens
+  output: number;       // USD per 1K output tokens
+  /** USD per 1K prompt-cache write tokens. Absent = this model cannot price cache writes. */
+  cacheWrite?: number;
+  /** USD per 1K prompt-cache read tokens. Absent = this model cannot price cache reads. */
+  cacheRead?: number;
+  /** Where the rate came from (a URL, a bill, 'mock'). Required for config-supplied rates. */
+  source?: string;
+  /** ISO date the rate took effect. Required for config-supplied rates. */
+  effectiveFrom?: string;
 }
 
 export const BEDROCK_PRICING: Record<string, BedrockPrice> = {
@@ -26,39 +40,117 @@ export const BEDROCK_PRICING: Record<string, BedrockPrice> = {
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  /** `cache_creation_input_tokens` — tokens written to the prompt cache. */
+  cacheWriteTokens?: number;
+  /** `cache_read_input_tokens` — tokens re-read from the prompt cache. */
+  cacheReadTokens?: number;
+}
+
+/**
+ * Cross-region and global inference profiles (`us.`, `eu.`, `apac.`,
+ * `global.`) bill as the underlying foundation model, so a lookup keyed by
+ * bare id must try the exact id first and then the id with that prefix
+ * stripped — otherwise a `us.amazon.nova-pro-v1:0` run reads as unpriced.
+ */
+const PROFILE_PREFIX_RE = /^(us|eu|apac|global)\./;
+
+/**
+ * One id rule for every price lookup: the exact id if `known` accepts it,
+ * else the id without its geo/global profile prefix if `known` accepts that,
+ * else `null`. Pure, so the mock fixture and the SSM table resolve the same.
+ */
+export function normalizeModelId(modelId: string, known: (id: string) => boolean): string | null {
+  // Telemetry and older callers may omit the id at runtime. Preserve the
+  // unpriced result instead of failing the trace pipeline on `.trim()`.
+  if (typeof modelId !== 'string') return null;
+  const id = modelId.trim();
+  if (!id) return null;
+  if (known(id)) return id;
+  const bare = id.replace(PROFILE_PREFIX_RE, '');
+  if (bare !== id && known(bare)) return bare;
+  return null;
+}
+
+/** A further price table consulted after BEDROCK_PRICING; keyed by exact id. */
+export type PriceSource = (modelId: string) => BedrockPrice | undefined;
+
+let extraSource: PriceSource | null = null;
+
+/**
+ * Register the config-supplied table (`lib/model-prices.ts` does this at
+ * import). Kept as a hook rather than an import so this module needs no
+ * config and no credential — the fleet accrues a box's live spend from here.
+ */
+export function registerPriceSource(source: PriceSource | null): void {
+  extraSource = source;
+}
+
+function lookup(id: string): BedrockPrice | undefined {
+  return BEDROCK_PRICING[id] ?? extraSource?.(id);
+}
+
+/** The price row for `modelId` after the one id rule, or `null`. */
+export function priceFor(modelId: string): BedrockPrice | null {
+  const id = normalizeModelId(modelId, (candidate) => lookup(candidate) !== undefined);
+  return id ? lookup(id) ?? null : null;
+}
+
+/** Whether `modelId` can be priced at all. */
+export function hasPricing(modelId: string): boolean {
+  return priceFor(modelId) !== null;
+}
+
+function tokens(v: number | undefined): number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+/**
+ * Price every bucket of a usage block separately, or `null`.
+ *
+ * `null` when the model has no row, and ALSO when a bucket with tokens in it
+ * has no rate — a cache-heavy Claude Code run priced at its input rate alone
+ * would be wrong by an order of magnitude and would look exact, so there is
+ * never a partial price. A bucket with zero tokens needs no rate.
+ */
+export function estimateUsageCost(modelId: string, usage: TokenUsage): number | null {
+  const p = priceFor(modelId);
+  if (!p) return null;
+  const buckets: Array<[number, number | undefined]> = [
+    [tokens(usage.inputTokens), p.input],
+    [tokens(usage.outputTokens), p.output],
+    [tokens(usage.cacheWriteTokens), p.cacheWrite],
+    [tokens(usage.cacheReadTokens), p.cacheRead],
+  ];
+  let total = 0;
+  for (const [count, rate] of buckets) {
+    if (count === 0) continue;
+    if (typeof rate !== 'number' || !Number.isFinite(rate)) return null;
+    total += (count / 1000) * rate;
+  }
+  return total;
 }
 
 /**
  * Estimate USD cost for a single Bedrock invocation.
  *
- * Returns 0 for unknown modelIds — callers can detect "no pricing data" by
- * checking BEDROCK_PRICING explicitly. We do NOT throw on unknown ids because
+ * Returns 0 for unknown modelIds — callers can detect "no pricing data" with
+ * `hasPricing` / `estimateCostOrNull`. We do NOT throw on unknown ids because
  * partial cost telemetry is better than crashing the trace path.
  */
 export function estimateCost(modelId: string, usage: TokenUsage): number {
-  const p = BEDROCK_PRICING[modelId];
-  if (!p) return 0;
-  const input = Number.isFinite(usage.inputTokens) ? usage.inputTokens : 0;
-  const output = Number.isFinite(usage.outputTokens) ? usage.outputTokens : 0;
-  return (input / 1000) * p.input + (output / 1000) * p.output;
-}
-
-/** Whether this map can price `modelId` at all. */
-export function hasPricing(modelId: string): boolean {
-  return modelId in BEDROCK_PRICING;
+  return estimateUsageCost(modelId, usage) ?? 0;
 }
 
 /**
- * Cost, or `null` when the model has no entry above.
+ * Cost, or `null` when the model has no price.
  *
  * The distinction matters more than it looks. `estimateCost` returns 0 for an
  * unknown model, and a 0 with real token counts beside it does not read as
  * "unpriced" — it reads as *free*. The devbox is exactly that case: the
- * computer lab runs Claude Code on Bedrock Claude inference profiles
- * (`us.anthropic.claude-*`, the deliberate devbox-only exception to the
- * AWS-native model rule), and this map holds only the Nova/Titan models the
- * nine agents use. So every lab run — the expensive kind, a Claude model in a
- * microVM — was recording `cost_usd = 0` with a full token count.
+ * computer lab runs Claude Code on Bedrock Claude inference profiles, and for
+ * a long time this map held only the Nova/Titan models the nine agents use,
+ * so every lab run — the expensive kind, a Claude model in a microVM — was
+ * recording `cost_usd = 0` with a full token count.
  *
  * That is not a rounding problem, it is a governance one: the program
  * operating model meters initiatives in dollars (`initiative_budgets`,
@@ -70,18 +162,14 @@ export function hasPricing(modelId: string): boolean {
  * is *excluded* from a total rather than counted as free, and the cost surface
  * can say "unknown" where it means unknown.
  *
- * The fix for the underlying gap is to add the Claude inference-profile rates
- * to BEDROCK_PRICING. They are deliberately NOT guessed here: Bedrock is
- * partner-operated with its own price list, distinct from Anthropic's
- * first-party rates, and neither the AWS pricing page nor the Price List API
- * publishes current-generation Anthropic models (the API carries only Claude 2
- * and Claude 3 entries). Sourcing them from the account's own bill or the
- * Bedrock console is the honest way to fill this in — an invented number here
- * would be worse than the null, because it would look authoritative.
+ * The Claude rates are deliberately NOT in this file: Bedrock is
+ * partner-operated with its own price list, and neither the AWS pricing page
+ * nor the Price List API publishes current-generation Anthropic models. They
+ * come from config (`lib/model-prices.ts`), each row carrying its source and
+ * effective date, so a number here never looks more authoritative than it is.
  */
 export function estimateCostOrNull(modelId: string, usage: TokenUsage): number | null {
-  if (!hasPricing(modelId)) return null;
-  return estimateCost(modelId, usage);
+  return estimateUsageCost(modelId, usage);
 }
 
 /**

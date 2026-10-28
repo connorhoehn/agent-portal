@@ -40,6 +40,17 @@ describe('writer', () => {
     expect(mockStoredEntries()[0]).toMatchObject({ costUsd: 0.3, costBasis: 'reported' });
   });
 
+  it('keeps the table estimate beside a reported figure, and carries the basis through (DE-32)', async () => {
+    await recordSpend(box({ costUsd: 0.5, costBasis: 'reported', estimatedCostUsd: 0.47 }));
+    expect(mockStoredEntries()[0]).toMatchObject({ costUsd: 0.5, costBasis: 'reported', estimatedCostUsd: 0.47 });
+    await recordSpend(box({ sourceId: 'box-1:t2', costUsd: 0.47, costBasis: 'estimated', estimatedCostUsd: 0.47 }));
+    expect(mockStoredEntries()[1]).toMatchObject({ costUsd: 0.47, costBasis: 'estimated', estimatedCostUsd: 0.47 });
+    // A later figure that settles an unknown brings its estimate with it.
+    await recordSpend(box({ sourceId: 'box-1:t3', costUsd: null }));
+    await recordSpend(box({ sourceId: 'box-1:t3', costUsd: 0.2, costBasis: 'estimated', estimatedCostUsd: 0.2 }));
+    expect(mockStoredEntries()[2]).toMatchObject({ costUsd: 0.2, costBasis: 'estimated', estimatedCostUsd: 0.2 });
+  });
+
   it('stores no bot_run rows offline: those are derived from the bot_runs fixture', async () => {
     await recordSpend(box({ source: 'bot_run', sourceId: 'run-1' }));
     expect(mockStoredEntries()).toHaveLength(0);

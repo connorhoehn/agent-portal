@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-28T13:15:35.373Z",
-  "serverHandlerSha": "4516036902f6d9193990e71698d38f5d41b94b4830b6c9f6c917ff86bfbbefb4",
+  "capturedAt": "2026-10-28T23:09:36.835Z",
+  "serverHandlerSha": "c418a3bbd05597278d44760f4d723de63c90703014bdecfbb011ceb45e9fb2d7",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -2938,6 +2938,7 @@
       "values": {
         "boxes[].status": [
           "idle",
+          "provisioning",
           "running",
           "waiting"
         ]
@@ -3762,20 +3763,19 @@
           "ORG-INF-1",
           "ORG-INF-2",
           "ORG-INF-3",
+          "ORG-INF-4",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
           "ORG-LLM-1",
           "ORG-LLM-10",
-          "ORG-LLM-2",
           "ORG-LLM-3",
           "ORG-LLM-4",
-          "ORG-LLM-5",
-          "ORG-LLM-7",
-          "ORG-LLM-9",
+          "ORG-MOB-1",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
+          "ORG-OBS-1",
           "ORG-OBS-10",
           "ORG-OBS-12",
           "ORG-OBS-13",
@@ -3784,6 +3784,7 @@
           "ORG-OBS-4",
           "ORG-OBS-5",
           "ORG-OBS-8",
+          "ORG-RAG-2",
           "ORG-RAG-3",
           "ORG-RAG-4",
           "ORG-RTA-2",

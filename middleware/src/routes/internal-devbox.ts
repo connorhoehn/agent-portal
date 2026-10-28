@@ -58,7 +58,8 @@ import {
 } from './devbox.js';
 import { buildLoopMockFrames, loopMockPaceMs, clearMockWorkspace } from '../mock/devbox-agent-loop.js';
 import { randomUUID } from 'node:crypto';
-import { parseReportedCost } from '../lib/run-cost.js';
+import { parseReportedCost, parseResultUsage, settleRunCost } from '../lib/run-cost.js';
+import { estimateUsageCost } from '../lib/model-prices.js';
 import { recordSpend } from '../providers/spend-ledger.js';
 import {
   isValidFileId,
@@ -235,18 +236,27 @@ internalDevboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
       if ((frame as Record<string, unknown>)['type'] === 'result') result = frame as Record<string, unknown>;
     }
     endSSE(res);
-    // Same ledger entry the real path writes in runTaskAndForward (DE-30).
-    const usage = result?.['usage'] as { input_tokens?: number; output_tokens?: number } | undefined;
+    // Same ledger entry the real path writes in runTaskAndForward (DE-30);
+    // the mock result carries usage but no figure, so the mock price table
+    // prices it (DE-32) — 'estimated', or 'unknown' when a scenario blanks it.
+    const model = body.model ?? 'sonnet';
+    const usage = result ? parseResultUsage(result) : null;
+    const settled = settleRunCost(
+      result ? parseReportedCost(result) : null,
+      usage ? estimateUsageCost(model, usage) : null,
+    );
     await recordSpend({
       source: 'agent_loop',
       sourceId: `${box.id}:${randomUUID()}`,
       initiativeId: box.projectId ?? null,
       boxId: box.id,
       actorId: principal.requestedBy,
-      model: body.model ?? 'sonnet',
-      costUsd: result ? parseReportedCost(result) : null,
-      inputTokens: usage?.input_tokens ?? null,
-      outputTokens: usage?.output_tokens ?? null,
+      model,
+      costUsd: settled.costUsd,
+      costBasis: settled.costBasis,
+      estimatedCostUsd: settled.estimatedCostUsd,
+      inputTokens: usage?.inputTokens ?? null,
+      outputTokens: usage?.outputTokens ?? null,
     });
     return;
   }

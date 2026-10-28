@@ -1,9 +1,27 @@
 # DE-32 Claude prices in the pricing table
 
-Status: spec, 2026-10-27. Backlog: `docs/deployment-enhancements-2026-10-27.md`.
+Status: locally complete and verified, 2026-10-28 (full mock-floor, 7,753 middleware tests, 415 infra tests, PostgreSQL acceptance and CDK synthesis). Backlog: `docs/deployment-enhancements-2026-10-27.md`.
 Feeds DE-30's `cost_basis = 'estimated'`; independent of DE-31 and DE-33.
 
-## Current state (read from the code, 2026-10-27)
+## Implementation checkpoint (2026-10-28)
+
+The implementation uses SSM overlays plus labelled first-party fallback rates;
+`MODEL_PRICES_DEFAULTS=off` restores the original empty-until-supplied default.
+See `docs/local-backlog-goal-2026-10-28.md` for that money decision and rollout
+requirements. The rate source was checked again against
+https://platform.claude.com/docs/en/about-claude/pricing on 2026-10-28; it is not
+an account-specific Bedrock bill.
+
+Runner, ad-hoc box, agent-loop, job and trace estimates share the same bucket
+pricing. Direct project runs persist their basis and comparison estimate on
+`agent_project_runs`; direct-run and bot-owned ledger entries retain those
+fields. Job and bot backfills also preserve estimated versus reported figures.
+The two agent changes originally dropped this provenance where they met; the
+PostgreSQL acceptance now exercises that boundary and the old-schema fallback.
+Malformed usage remains unknown, and missing runtime model IDs remain unpriced
+without breaking trace ingestion. The drift alarm remains DE-50.
+
+## Original state (read from the code, 2026-10-27)
 
 `BEDROCK_PRICING` holds four Nova/Titan rates, per 1K tokens, input and output
 only (`middleware/src/lib/pricing.ts:14-24`). Claude is left out on purpose,
