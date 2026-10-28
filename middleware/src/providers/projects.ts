@@ -18,6 +18,7 @@ import { config } from '../config.js';
 // the budget period is a single fact and this rollup must not have its own copy
 // of it. See PERIOD_START_SQL for why the windows were unified.
 import { PERIOD_START_SQL, MOCK_BUDGETS, mockBudgetRow } from './budgets.js';
+import { spendLedgerMode } from './spend-ledger.js';
 // Same reasoning: the work-item rollup (points/open counts) is one fact,
 // owned by work-items.ts's own mock fixture, so the Initiatives list can't
 // restate a different number than the initiative-detail Work tab reads.
@@ -515,8 +516,15 @@ export async function listProjects(opts: {
         WHERE w.project_id = p.id AND w.type IN ('story','bug'))::int AS points_total,
       (SELECT COALESCE(SUM(w.story_points), 0) FROM work_items w
         WHERE w.project_id = p.id AND w.type IN ('story','bug') AND w.status = 'done')::int AS points_done,
-      (SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br WHERE ${spendPredicate}) AS agent_spend_usd,
-      (SELECT MAX(br.started_at) FROM bot_runs br WHERE ${attributionPredicate}) AS last_agent_activity_at,
+      ${spendLedgerMode() === 'ledger'
+        // The spend ledger (DE-30): attribution resolved at write time, so the
+        // rollup and the Budgets ledger read the same rows.
+        ? `(SELECT COALESCE(SUM(se.cost_usd), 0)::float8 FROM spend_entries se
+             WHERE se.initiative_id = p.id AND se.occurred_at >= ${PERIOD_START_SQL}) AS agent_spend_usd,
+      (SELECT MAX(se.occurred_at) FROM spend_entries se
+        WHERE se.initiative_id = p.id AND se.cost_usd IS NOT NULL) AS last_agent_activity_at,`
+        : `(SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br WHERE ${spendPredicate}) AS agent_spend_usd,
+      (SELECT MAX(br.started_at) FROM bot_runs br WHERE ${attributionPredicate}) AS last_agent_activity_at,`}
       (SELECT ap.repo_full_name FROM agent_projects ap
         WHERE ap.org_project_id = p.id
         ORDER BY ap.created_at ASC LIMIT 1) AS repo_full_name,
@@ -739,8 +747,11 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
         )`;
     const spendRows = await exec(
       `SELECT
-         (SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br
-            WHERE br.started_at >= ${PERIOD_START_SQL} AND br.cost_usd IS NOT NULL AND ${linkPredicate}) AS agent_spend_usd,
+         ${spendLedgerMode() === 'ledger'
+           ? `(SELECT COALESCE(SUM(se.cost_usd), 0)::float8 FROM spend_entries se
+                WHERE se.initiative_id = :id AND se.occurred_at >= ${PERIOD_START_SQL}) AS agent_spend_usd,`
+           : `(SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br
+            WHERE br.started_at >= ${PERIOD_START_SQL} AND br.cost_usd IS NOT NULL AND ${linkPredicate}) AS agent_spend_usd,`}
          (SELECT ap.repo_full_name FROM agent_projects ap
             WHERE ap.org_project_id = :id ORDER BY ap.created_at ASC LIMIT 1) AS repo_full_name,
          (SELECT COUNT(*)::int FROM bot_runs br

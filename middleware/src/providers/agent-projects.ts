@@ -324,6 +324,8 @@ export async function startRun(input: {
    * came back detached from the issue that asked for it.
    */
   workItemId?: string | null;
+  /** The person who dispatched it (DE-43); the change it captures answers to them. */
+  dispatchedBy?: string | null;
 }): Promise<ProjectRun> {
   // The run rows render offline (mockRunsForProject) but could not be *made*
   // offline, so the portal's run button 500'd here on a laptop. The mock row
@@ -333,17 +335,19 @@ export async function startRun(input: {
     return mockStartRun({
       projectId: input.projectId, prompt: input.prompt, model: input.model ?? null,
       ...(input.workItemId ? { workItemId: input.workItemId } : {}),
+      ...(input.dispatchedBy ? { dispatchedBy: input.dispatchedBy } : {}),
     });
   }
   const id = randomUUID();
   const rows = await exec(
-    `INSERT INTO agent_project_runs (id, project_id, prompt, model, session_id, work_item_id)
-     VALUES (:id::uuid, :pid::uuid, :prompt, :model, :sid, :wid)
+    `INSERT INTO agent_project_runs (id, project_id, prompt, model, session_id, work_item_id, dispatched_by)
+     VALUES (:id::uuid, :pid::uuid, :prompt, :model, :sid, :wid, :by)
      RETURNING *`,
     [
       s('id', id), s('pid', input.projectId), s('prompt', input.prompt),
       maybe('model', input.model ?? null), maybe('sid', input.sessionId ?? null),
       maybe('wid', input.workItemId ?? null),
+      maybe('by', input.dispatchedBy ?? null),
     ],
   );
   const row = rows[0];

@@ -26,6 +26,11 @@ import { Template } from 'aws-cdk-lib/assertions';
 
 const APP_ENTRY = require.resolve('../../bin/app');
 
+const AZ_CONTEXT = {
+  'availability-zones:account=647757222309:region=us-east-1':
+    ['us-east-1a', 'us-east-1b', 'us-east-1c', 'us-east-1d', 'us-east-1e', 'us-east-1f'],
+};
+
 // `require`, not `import * as` — a namespace import compiles to an
 // __importStar copy whose properties are getter-only, so the stub below would
 // throw and, worse, would not be visible to the module under test.
@@ -38,6 +43,8 @@ export interface SynthesisedApp {
   /** Stack name → assertions Template, for Template.fromJSON-style matching. */
   template(stackName: string): Template;
   readonly stackNames: string[];
+  /** Stack name -> `aws://account/region` as written in the cloud assembly manifest. */
+  readonly environments: Record<string, string>;
   /** true when the app produced a template for this stack name. */
   has(stackName: string): boolean;
 }
@@ -63,7 +70,10 @@ export function synthApp(context: Record<string, string> = {}): SynthesisedApp {
   const savedExec = childProcess.execFileSync;
 
   process.env.CDK_OUTDIR = outdir;
-  process.env.CDK_CONTEXT_JSON = JSON.stringify(context);
+  // DE-17: stacks now carry the environment file's explicit account, so the AZ
+  // lookup is answered from context (what infra/cdk.context.json does for the
+  // CLI) instead of reaching for credentials.
+  process.env.CDK_CONTEXT_JSON = JSON.stringify({ ...AZ_CONTEXT, ...context });
   // Environment-agnostic on purpose — see the file header.
   delete process.env.CDK_DEFAULT_ACCOUNT;
 
@@ -93,11 +103,17 @@ export function synthApp(context: Record<string, string> = {}): SynthesisedApp {
     const name = file.slice(0, -'.template.json'.length);
     templates[name] = JSON.parse(fs.readFileSync(path.join(outdir, file), 'utf8'));
   }
+  const environments: Record<string, string> = {};
+  const manifest = JSON.parse(fs.readFileSync(path.join(outdir, 'manifest.json'), 'utf8'));
+  for (const [name, artifact] of Object.entries<any>(manifest.artifacts ?? {})) {
+    if (artifact.type === 'aws:cloudformation:stack') environments[name] = artifact.environment;
+  }
   fs.rmSync(outdir, { recursive: true, force: true });
 
   const result: SynthesisedApp = {
     templates,
     stackNames: Object.keys(templates).sort(),
+    environments,
     has: (stackName: string) => stackName in templates,
     template(stackName: string) {
       const t = templates[stackName];

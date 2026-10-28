@@ -28,6 +28,10 @@ const SCOPED = [
   'internal-devbox POST /:sessionId/task', 'internal-devbox POST /sessions',
   'sdlc POST /changes/:id/address', 'sdlc POST /changes/:id/decide', 'sdlc POST /changes/:id/deliver',
   'sdlc POST /changes/:id/rereview',
+  // DE-46: an initiative's policy set is edited by its stewards. The check is
+  // stewardsInitiative inside lib/sdlc-policy-governance.ts; the route body
+  // names it where it hands over.
+  'sdlc PUT /policy-sets/:scope', 'sdlc POST /policy-proposals/:id/decide',
   'lab POST /signals', 'lab POST /experiences', 'lab POST /consults', 'lab POST /consults/:id/answer',
   'bots POST /work-items/:id/estimate', 'bots POST /work-items/:id/review-estimate', 'designs POST /:id/answer', 'designs POST /:id/signoff', 'work POST /findings/:id/dismiss', 'work-items POST /work-items/:id/criteria', 'work-items PATCH /work-items/:id/criteria/:criterionId', 'work-items DELETE /work-items/:id/criteria/:criterionId', 'work-items PUT /work-items/:id/decisions/:decisionId', 'work-items DELETE /work-items/:id/decisions/:decisionId', 'work-documents PUT /work-items/:id/documents/:documentId', 'work-documents DELETE /work-items/:id/documents/:documentId',
   'sprints DELETE /:sprintId/items/:itemId', 'sprints PATCH /:sprintId/items', 'sprints POST /',
@@ -47,8 +51,8 @@ const OPEN: Record<string, string> = {
   'initiative-decks POST /:id/revisions': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
   'initiative-decks POST /:id/revise': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
   'initiative-decks POST /:id/preview': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
-  'sdlc POST /policies': 'DE-43/DE-46: policy edits move to their own Cedar action and versioned policy',
-  'sdlc DELETE /policies/:id': 'DE-43/DE-46',
+  'sdlc POST /policies': 'the org set only (no initiative); EditSdlcPolicy + org-wide role + self-gate + two-person rule in lib/sdlc-policy-governance.ts (DE-43/DE-46)',
+  'sdlc DELETE /policies/:id': 'same as POST /policies: the org set only',
   'devbox POST /sessions': 'mints a fresh session id for the caller; nothing to scope until a box is registered',
   'work POST /dispatch': 'operator kick of the dispatcher; no initiative in the request',
   'work POST /findings/:id/analyze': 'DE-44 row 9-adjacent (low): analysis only, no spend on an initiative budget',

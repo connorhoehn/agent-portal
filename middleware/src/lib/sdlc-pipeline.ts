@@ -40,6 +40,8 @@ export interface CaptureInput {
   model?: string | null;
   /** The marketplace work item this run answers, when a dispatch bound one. */
   workItemId?: string | null;
+  /** Who caused the change (DE-43): the dispatcher, else a bot's creator. */
+  requestedBy?: string | null;
 }
 
 /**
@@ -60,8 +62,12 @@ export async function dispatchGovernedRun(input: {
    *  box this dispatch has to mint. See ensureWorkspace in lib/bot-runner.ts:
    *  an unattributed box is invisible to the SME who created it. */
   attribution?: { ownerId?: string | undefined; projectId?: string | undefined };
-  /** The person dispatching (session sub), stamped on the run's frozen brief. */
+  /** The person dispatching (session sub), stamped on the run's frozen brief
+   *  and on the run row (`agent_project_runs.dispatched_by`, DE-43). */
   dispatchedBy?: string | null;
+  /** Who the change this run captures answers to (DE-43): defaults to
+   *  `dispatchedBy`; a cron bot passes its creator, since nobody pressed go. */
+  requestedBy?: string | null;
 }): Promise<{ ok: true; runId: string; checkout: string; briefId: string | null } | { ok: false; error: string }> {
   const arn = await resolveDevboxArn();
   if (!arn) return { ok: false, error: 'the devbox runtime is not deployed' };
@@ -70,7 +76,9 @@ export async function dispatchGovernedRun(input: {
     projectId: input.project.id, prompt: input.prompt,
     model: input.model ?? null, sessionId: input.sessionId,
     ...(input.workItemId ? { workItemId: input.workItemId } : {}),
+    ...(input.dispatchedBy ? { dispatchedBy: input.dispatchedBy } : {}),
   });
+  const requestedBy = input.requestedBy ?? input.dispatchedBy ?? null;
   const checkout = checkoutPath(input.project);
   const box = getBoxBySession(input.sessionId) ?? registerBox({
     sessionId: input.sessionId,
@@ -132,6 +140,7 @@ export async function dispatchGovernedRun(input: {
         checkout, projectId: input.project.id, runId: run.id,
         prompt: input.prompt, model: input.model ?? null,
         ...(input.workItemId ? { workItemId: input.workItemId } : {}),
+        requestedBy,
       }).catch((err) => console.warn('[sdlc] capture failed:', (err as Error).message));
     },
   }).finally(() => releaseBox(box.id, holder));
@@ -240,6 +249,7 @@ export async function captureAndGate(input: CaptureInput): Promise<string | null
     files: captured.files,
     model: input.model ?? null,
     ...(input.workItemId ? { workItemId: input.workItemId } : {}),
+    requestedBy: input.requestedBy ?? null,
   });
   console.warn(`[sdlc] captured change ${change.id} (${captured.files.length} file(s)) for project ${input.projectId}`);
 

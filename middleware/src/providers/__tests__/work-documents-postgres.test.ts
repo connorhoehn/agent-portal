@@ -7,14 +7,15 @@ import { execFile, execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { exec } from '../aurora.js';
+import { schemaSql } from '../../test-support/schema-manifest.js';
 import { getDocumentRecord, linkWorkDocument, listWorkDocuments, searchDocumentRecords, unlinkWorkDocument } from '../work-documents.js';
 
 const enabled = process.env.REAL_WORK_DOCUMENTS_POSTGRES === '1';
 const container = process.env.ORGIQ_WORK_DOCUMENTS_POSTGRES_CONTAINER ?? '';
 const runFile = promisify(execFile);
 const migration = readFileSync(`${process.cwd()}/../schema/work_item_documents_schema.sql`, 'utf8');
-const parents = ['orgiq_schema.sql', 'orgiq_work_items_schema.sql']
-  .map(name => readFileSync(`${process.cwd()}/../schema/${name}`, 'utf8')).join('\n');
+// Everything the manifest (schema/manifest.json) loads before the file under test.
+const parents = schemaSql({ before: 'work_item_documents_schema.sql' });
 const literal = (value: string) => `'${value.replace(/'/g, "''")}'`;
 
 async function sql(statement: string): Promise<void> {

@@ -256,6 +256,143 @@ export function evaluate(policies: SdlcPolicy[], facts: ChangeFacts): Evaluation
   return { gates, decision, autoApproved: decision === 'approved' };
 }
 
+// ─── Governance code ────────────────────────────────────────────────────────
+
+/**
+ * The files that ARE the governance: the gate engine, its schema, the Cedar
+ * seeds and the authorization code (DE-43 §6, DE-46). A change touching one
+ * needs a human like any sensitive path, and approving it is reserved to the
+ * roles in SDLC_GOVERNANCE_APPROVER_ROLES (providers/sdlc.ts decideChange).
+ */
+export const GOVERNANCE_PATH_GLOBS: readonly string[] = [
+  '**/sdlc-policy*', '**/sdlc*.sql', '**/seeds/roles/**', '**/*.cedar', '**/authz*',
+];
+
+/** The changed files that touch governance code. */
+export function governancePathsTouched(files: readonly string[]): string[] {
+  return files.filter((f) => matchesAny(f, [...GOVERNANCE_PATH_GLOBS]));
+}
+
+// ─── Policy sets: validation and loosening (DE-43/DE-46) ───────────────────
+
+const KINDS: readonly PolicyKind[] = ['require_review', 'protected_paths', 'max_files', 'model_allowlist', 'max_cost'];
+
+/** Whether a value names a policy kind the engine knows. */
+export function isPolicyKind(v: unknown): v is PolicyKind {
+  return typeof v === 'string' && (KINDS as readonly string[]).includes(v);
+}
+
+/**
+ * Normalise one policy of a submitted set, or say why it cannot be one.
+ * `id` is the policy's stable key across versions; diffs line up on it.
+ */
+export function normalizePolicy(raw: unknown): SdlcPolicy | string {
+  if (!raw || typeof raw !== 'object') return 'each policy must be an object';
+  const r = raw as Record<string, unknown>;
+  const id = typeof r['id'] === 'string' ? r['id'].trim() : typeof r['key'] === 'string' ? r['key'].trim() : '';
+  if (!id) return 'each policy needs a stable id';
+  const name = typeof r['name'] === 'string' ? r['name'].trim() : '';
+  if (!name) return `policy ${id} needs a name`;
+  if (!isPolicyKind(r['kind'])) return `policy ${id}: kind must be one of: ${KINDS.join(', ')}`;
+  const config = r['config'] && typeof r['config'] === 'object' && !Array.isArray(r['config'])
+    ? { ...(r['config'] as Record<string, unknown>) } : {};
+  return {
+    id, name, enabled: r['enabled'] !== false, kind: r['kind'],
+    config, action: r['action'] === 'block' ? 'block' : 'require_approval',
+  };
+}
+
+/**
+ * Why a whole set cannot be stored, or null. Ids must be unique, and the set
+ * must keep a require_review policy: the independent review is the one gate
+ * every change passes through, so it cannot be deleted while it is the only
+ * one (it can still be disabled, which is a loosening edit).
+ */
+export function policySetError(policies: readonly SdlcPolicy[]): string | null {
+  const ids = new Set<string>();
+  for (const p of policies) {
+    if (ids.has(p.id)) return `duplicate policy id ${p.id}`;
+    ids.add(p.id);
+  }
+  if (!policies.some((p) => p.kind === 'require_review')) {
+    return 'the independent-review policy cannot be removed; disable it instead (a loosening edit)';
+  }
+  return null;
+}
+
+/** How strict an action is: block outranks require_approval. */
+const actionRank = (a: PolicyAction): number => (a === 'block' ? 2 : 1);
+const num = (v: unknown): number => { const n = Number(v ?? 0); return Number.isFinite(n) ? n : 0; };
+
+/**
+ * Every way `after` is looser than `before`, as sentences; empty when it is
+ * not looser anywhere. Loosening (DE-43 §4): a policy that was enabled is
+ * disabled or gone, `block` became `require_approval`, a limit was raised or
+ * cleared, a protected glob was removed, a model was allowed, or a policy
+ * changed kind. Policies only in `after` are additions, never loosening.
+ *
+ * Read against the model allowlist the spec's wording "removes a model" would
+ * be backwards: removing a model from an allowlist tightens it. Adding one,
+ * or emptying the list (which switches the gate off), loosens it.
+ */
+export function looseningChanges(before: readonly SdlcPolicy[], after: readonly SdlcPolicy[]): string[] {
+  const out: string[] = [];
+  const next = new Map(after.map((p) => [p.id, p]));
+  for (const b of before) {
+    if (!b.enabled) continue;
+    const a = next.get(b.id);
+    if (!a) { out.push(`removes "${b.name}"`); continue; }
+    if (!a.enabled) { out.push(`disables "${b.name}"`); continue; }
+    if (a.kind !== b.kind) { out.push(`changes the kind of "${b.name}"`); continue; }
+    if (actionRank(a.action) < actionRank(b.action)) out.push(`downgrades "${b.name}" from block to require_approval`);
+    switch (b.kind) {
+      case 'max_files': {
+        const was = num(b.config['max']); const now = num(a.config['max']);
+        if (was > 0 && (now <= 0 || now > was)) out.push(`raises "${b.name}" from ${was} to ${now <= 0 ? 'no limit' : now}`);
+        break;
+      }
+      case 'max_cost': {
+        const was = num(b.config['maxUsd']); const now = num(a.config['maxUsd']);
+        if (was > 0 && (now <= 0 || now > was)) out.push(`raises "${b.name}" from $${was} to ${now <= 0 ? 'no limit' : `$${now}`}`);
+        break;
+      }
+      case 'protected_paths': {
+        const kept = new Set(stringList(a.config['globs']));
+        const gone = stringList(b.config['globs']).filter((g) => !kept.has(g));
+        if (gone.length) out.push(`removes ${gone.length} protected path${gone.length > 1 ? 's' : ''} from "${b.name}" (${gone.slice(0, 3).join(', ')})`);
+        break;
+      }
+      case 'model_allowlist': {
+        const was = stringList(b.config['models']);
+        const now = stringList(a.config['models']);
+        if (was.length > 0 && now.length === 0) out.push(`empties the allowlist of "${b.name}"`);
+        else if (was.length > 0) {
+          const added = now.filter((m) => !was.includes(m));
+          if (added.length) out.push(`allows ${added.join(', ')} in "${b.name}"`);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return out;
+}
+
+/** Insert or replace one policy (by id) in a set — the legacy POST /policies edit. */
+export function withPolicy(set: readonly SdlcPolicy[], policy: SdlcPolicy): SdlcPolicy[] {
+  const i = set.findIndex((p) => p.id === policy.id);
+  if (i < 0) return [...set, policy];
+  const out = [...set];
+  out[i] = policy;
+  return out;
+}
+
+/** The set without one policy — the legacy DELETE /policies/:id edit. */
+export function withoutPolicy(set: readonly SdlcPolicy[], id: string): SdlcPolicy[] {
+  return set.filter((p) => p.id !== id);
+}
+
 // ─── Defaults ───────────────────────────────────────────────────────────────
 
 /**
@@ -282,6 +419,9 @@ export const DEFAULT_POLICIES: Omit<SdlcPolicy, 'id'>[] = [
       globs: [
         'infra/**', '**/auth/**', '**/*auth*', '.github/**',
         '**/Dockerfile', '**/*.tf', '**/secrets/**',
+        // The governance rules themselves (DE-43/DE-46): until these were
+        // here, the comment above was not true of any default glob.
+        ...GOVERNANCE_PATH_GLOBS,
       ],
     },
     action: 'require_approval',

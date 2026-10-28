@@ -1,0 +1,346 @@
+{
+  "$comment": "The one list of schema files (DE-20, docs/deployment-enhancements/DE-20-schema-migrations.md). Entries are in load order. kind: repeatable = idempotent, re-applied when its checksum changes; versioned = run once in a transaction; data = moves or rewrites rows, needs plan + approve; seed = demo data, never run by a deploy. schema/load_schema.py loads every repeatable entry; schema/apply_all_seed.py runs seed_run in order; python -m schema.migrate keeps the ledger.",
+  "$seed_run": "apply_all_seed.py's order. Schema entries are repeated around the seeds so a seed-only run against an older database still works; environments_schema follows seed_program because its tail seeds rows for the p-* cast.",
+  "entries": [
+    {
+      "id": "schema_migrations_schema",
+      "file": "schema_migrations_schema.sql",
+      "kind": "repeatable",
+      "why": "The migration ledger itself (DE-20). First, so every later entry can be recorded."
+    },
+    {
+      "id": "orgiq_schema",
+      "file": "orgiq_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "search_workspace_schema",
+      "file": "search_workspace_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "identity_schema",
+      "file": "identity_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "social_schema",
+      "file": "social_schema.sql",
+      "kind": "repeatable",
+      "why": "The social tenant's channel directory + context bindings (chat state is DynamoDB)."
+    },
+    {
+      "id": "observability_schema",
+      "file": "observability_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "observability_authz_schema",
+      "file": "observability_authz_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "observability_sprint1_schema",
+      "file": "observability_sprint1_schema.sql",
+      "kind": "repeatable",
+      "why": "The observability sprint schemas. These were never in this list, so a rebuilt cluster came up without the tables the middleware queries by name — observability.approvals, .canary_experiments, .prompt_versions and .prompt_version_meta are referenced across a dozen middleware files, and each page hitting them 500s on a fresh database. They load in sprint order because the later ones ALTER what the earlier ones create."
+    },
+    {
+      "id": "observability_sprint2_schema",
+      "file": "observability_sprint2_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "observability_sprint3_promote_schema",
+      "file": "observability_sprint3_promote_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "observability_sprint4_calibration_schema",
+      "file": "observability_sprint4_calibration_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "observability_sprint4_memory_schema",
+      "file": "observability_sprint4_memory_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "observability_sprint5_canary_schema",
+      "file": "observability_sprint5_canary_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "observability_sprint6_prompt_history_schema",
+      "file": "observability_sprint6_prompt_history_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "prompt_contract_schema",
+      "file": "prompt_contract_schema.sql",
+      "kind": "repeatable",
+      "why": "The prompt CONTRACT columns (kind/tier/contract/owner_email/ eval_pass_rate) that sprint6's prompt_version_meta does not create. Same bug class as the sprint schemas above, but failing softer and so harder to spot: providers/prompt-library.ts `fetchAuroraMeta` SELECTs all five by name and swallows the error, so a cluster missing this ALTER does not 500 — the prompt library just silently degrades to \"Bedrock defaults\" with every tier and contract blank. Loads directly after the file that creates the table it alters."
+    },
+    {
+      "id": "observability_approvals_schema",
+      "file": "observability_approvals_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "orgiq_kb_registry_schema",
+      "file": "orgiq_kb_registry_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "orgiq_work_items_schema",
+      "file": "orgiq_work_items_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "work_item_key_schema",
+      "file": "work_item_key_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "work_item_documents_schema",
+      "file": "work_item_documents_schema.sql",
+      "kind": "repeatable",
+      "why": "Explicit work context links require both work_items and documents."
+    },
+    {
+      "id": "work_item_comment_migration_schema",
+      "file": "work_item_comment_migration_schema.sql",
+      "kind": "repeatable",
+      "why": "The page-thread migration ledger (work_item_comments -> orgiq:work:<id>)."
+    },
+    {
+      "id": "agentic_work_schema",
+      "file": "agentic_work_schema.sql",
+      "kind": "repeatable",
+      "why": "The agentic loop: agent_jobs, agent_findings, graph_proposals. Was applied only by apply_agentic_work.py, so a rebuild left the Work page 500ing on missing tables."
+    },
+    {
+      "id": "kb_upload_links_schema",
+      "file": "kb_upload_links_schema.sql",
+      "kind": "repeatable",
+      "why": "Document uploads via share links (standalone)."
+    },
+    {
+      "id": "agent_projects_schema",
+      "file": "agent_projects_schema.sql",
+      "kind": "repeatable",
+      "why": "Codebases agents work on. References `projects` (orgiq_schema), so it loads after it — and agent_sdlc loads after this, since its change requests reference agent_project_runs."
+    },
+    {
+      "id": "agent_sdlc_schema",
+      "file": "agent_sdlc_schema.sql",
+      "kind": "repeatable"
+    },
+    {
+      "id": "sdlc_governance_schema",
+      "file": "sdlc_governance_schema.sql",
+      "kind": "repeatable",
+      "why": "Separation of duties (DE-43) and versioned per-initiative policy sets (DE-46). Alters agent_project_runs, agent_change_requests and agent_change_gates, so it loads right after agent_sdlc_schema."
+    },
+    {
+      "id": "lab_loop_schema",
+      "file": "lab_loop_schema.sql",
+      "kind": "repeatable",
+      "why": "The lab loop: fleet memory + human consults for computer-lab agents."
+    },
+    {
+      "id": "devbox_fleet_schema",
+      "file": "devbox_fleet_schema.sql",
+      "kind": "repeatable",
+      "why": "The fleet itself — which computers exist. Standalone (no FKs): the registry it backs is in-process memory, and a cluster missing this table degrades to exactly the old behaviour rather than failing, so it does not gate anything that loads after it."
+    },
+    {
+      "id": "agent_bots_schema",
+      "file": "agent_bots_schema.sql",
+      "kind": "repeatable",
+      "why": "Bots + bot_runs. Loads last: it references agent_projects, agent_project_runs, agent_jobs and projects, and its ALTERs add linkage columns to tables the files above create."
+    },
+    {
+      "id": "agent_budgets_schema",
+      "file": "agent_budgets_schema.sql",
+      "kind": "repeatable",
+      "why": "Initiative budget allocations. Loads after agent_bots_schema.sql (spend reads join bot_runs) and orgiq_schema.sql (FK on projects)."
+    },
+    {
+      "id": "program_schema",
+      "file": "program_schema.sql",
+      "kind": "repeatable",
+      "why": "Sprints, SME budget grants, work-item cost estimates, maintenance baseline view. Loads last: references people, projects, work_items, bots and bot_runs."
+    },
+    {
+      "id": "spend_ledger_schema",
+      "file": "spend_ledger_schema.sql",
+      "kind": "repeatable",
+      "why": "The spend ledger (DE-30): one row per finished task attempt on every run path. FKs projects and budget_grants, so it loads after this."
+    },
+    {
+      "id": "assessment_schema",
+      "file": "assessment_schema.sql",
+      "kind": "repeatable",
+      "why": "The assessment tenant's own tables (docs/assessment-tenant.md). Standalone — no FK into the org graph — so it can load anywhere; kept here so a rebuilt cluster has the tables the Aurora path of providers/assessment.ts will query."
+    },
+    {
+      "id": "assessment_team_members_schema",
+      "file": "assessment_team_members_schema.sql",
+      "kind": "repeatable",
+      "why": "Which app users are on which assessment team (the Communication plane's \"My teams\"); needs assessment_teams and app_users, so it loads after both."
+    },
+    {
+      "id": "assessment_deck_schema",
+      "file": "assessment_deck_schema.sql",
+      "kind": "repeatable",
+      "why": "Review decks for an assessed team (docs/assessment-deck-goal.md). Additive; FKs assessment_teams, so it loads right after it."
+    },
+    {
+      "id": "pipeline_deck_schema",
+      "file": "pipeline_deck_schema.sql",
+      "kind": "repeatable",
+      "why": "Pipeline run report decks (docs/agentic-flows-migration.md slice 3). Additive and standalone (no FK to the run projection)."
+    },
+    {
+      "id": "initiative_deck_schema",
+      "file": "initiative_deck_schema.sql",
+      "kind": "repeatable",
+      "why": "Orgiq initiative status decks (docs/agentic-flows-migration.md slice 6). Additive and standalone (project_id is text, no FK)."
+    },
+    {
+      "id": "flow_runs_schema",
+      "file": "flow_runs_schema.sql",
+      "kind": "repeatable",
+      "why": "Durable flow runs (docs/agentic-flows-migration.md slice 4a). Additive and standalone."
+    },
+    {
+      "id": "social_deck_schema",
+      "file": "social_deck_schema.sql",
+      "kind": "repeatable",
+      "why": "Social /deck decks (docs/agentic-flows-migration.md slice 5). Additive, standalone (channel is text, no FK)."
+    },
+    {
+      "id": "agent_run_attribution_schema",
+      "file": "agent_run_attribution_schema.sql",
+      "kind": "repeatable",
+      "why": "bot_runs.dispatched_by — who authorized a run, which is what lets the per-SME budget_grants envelope be enforced. Additive ALTER, so it loads after agent_bots_schema.sql creates the table."
+    },
+    {
+      "id": "work_item_estimate_schema",
+      "file": "work_item_estimate_schema.sql",
+      "kind": "repeatable",
+      "why": "work_items estimate provenance — who stood behind a forecast, when, and for which model. Additive ALTER on work_items, so it loads after orgiq_work_items_schema.sql creates the table and after program_schema.sql adds estimated_cost_usd beside it."
+    },
+    {
+      "id": "local_compute_schema",
+      "file": "local_compute_schema.sql",
+      "kind": "repeatable",
+      "why": "Paired developer machines (compute_nodes, compute_pairing_codes). No FK into the graph — owner_id is a bare app_users sub — so it can load anywhere. providers/local-compute.ts queries both tables by name with no fallback, so a rebuilt cluster without them 500s every pairing and presence call."
+    },
+    {
+      "id": "local_compute_worker_schema",
+      "file": "local_compute_worker_schema.sql",
+      "kind": "repeatable",
+      "why": "Local compute P2 — cost provenance (bot_runs/agent_project_runs model_provider) plus the fencing columns a pull-side claim needs. All additive ALTERs, so it loads after agent_bots_schema.sql, agent_projects_schema.sql, agentic_work_schema.sql and local_compute_schema.sql have created the four tables it touches."
+    },
+    {
+      "id": "pipeline_schema",
+      "file": "pipeline_schema.sql",
+      "kind": "repeatable",
+      "why": "The pipelines tenant's own tables (definitions' recorded versions, the runs it starts — the runbook dry-run — and its config). No FK into any other table: the projection reads the run-shaped tables, nothing here joins them, so it can load last."
+    },
+    {
+      "id": "access_schema",
+      "file": "access_schema.sql",
+      "kind": "repeatable",
+      "why": "The access tenant's model (docs/access-tenant-design.md §3): catalog, requests, steps, SoD policies, events, reviews, plus the additive people.manager_id and the access cast's people rows. Needs people and app_users (orgiq_schema.sql, identity_schema.sql), so it loads late. NOT yet applied to Aurora — a user decision (goal lane E)."
+    },
+    {
+      "id": "seed",
+      "file": "seed.sql",
+      "kind": "seed",
+      "why": "Demo org graph. Needs orgiq_work_items_schema first (decision rows fill its columns)."
+    },
+    {
+      "id": "seed_program",
+      "file": "seed_program.sql",
+      "kind": "seed",
+      "why": "The curated program seed (14 p-* initiatives, sprints, grants, bots). Generated by schema/seeds/generate_program_seed.py; regenerate, don't hand-edit."
+    },
+    {
+      "id": "environments_schema",
+      "file": "environments_schema.sql",
+      "kind": "seed",
+      "why": "environments_schema.sql is deliberately NOT here. Its last statement seeds environments for the p-* cast, and those ids are created by seed_program.sql — which apply_all_seed.py applies, AFTER this script. So on a from-scratch cluster the INSERT could only ever fail its FK on projects (\"violates foreign key constraint environments_org_project_id_fkey\"), taking this whole loader to exit 1 with every other file already applied. A file whose tail depends on seed rows belongs in the seed script, so that is where it now loads."
+    },
+    {
+      "id": "seed_kb_registry",
+      "file": "seed_kb_registry.sql",
+      "kind": "seed",
+      "why": "Knowledge-base registry rows."
+    },
+    {
+      "id": "graph_readonly_role",
+      "file": "graph_readonly_role.sql",
+      "kind": "seed",
+      "why": "LAST in the seed run: grants SELECT on an explicit allow-list, so every table must exist. The database half of the agents' read-only boundary (docs/readonly-graph-role.md); apply_all_seed.py sets its password from Secrets Manager afterwards. Kind seed because no deploy runs it today."
+    },
+    {
+      "id": "2026-09-05-drop-newsroom",
+      "kind": "data",
+      "file": "migrations/2026-09-05-drop-newsroom.sql",
+      "dry_run_file": "migrations/2026-09-05-drop-newsroom.dry-run.sql",
+      "why": "Drops the retired newsroom tenant's tables and identity rows on a cluster loaded before its removal. Destructive, so it is a data entry: plan, approve, apply."
+    },
+    {
+      "id": "2026-10-27-page-thread",
+      "kind": "data",
+      "before": "middleware",
+      "cwd": "middleware",
+      "dry_run_command": [
+        "npx",
+        "tsx",
+        "src/lib/migrate-work-comments.ts",
+        "--dry-run",
+        "--report",
+        "{report}"
+      ],
+      "apply_command": [
+        "npx",
+        "tsx",
+        "src/lib/migrate-work-comments.ts",
+        "--report",
+        "{report}"
+      ],
+      "report": {
+        "rows": "claimed",
+        "fields": [
+          "claimed",
+          "perWorkItem",
+          "unlinkedAuthors",
+          "removedAuthors"
+        ]
+      },
+      "why": "Moves human work_item_comments into the orgiq:work:<id> chat threads (middleware/src/lib/migrate-work-comments.ts). Runs with the operator's middleware env (SOCIAL_CHAT_STORE=dynamo and the Aurora vars). Must be applied before the BFF that reads the thread is deployed."
+    }
+  ],
+  "seed_run": [
+    "orgiq_work_items_schema",
+    "work_item_documents_schema",
+    "work_item_comment_migration_schema",
+    "assessment_team_members_schema",
+    "assessment_deck_schema",
+    "pipeline_deck_schema",
+    "initiative_deck_schema",
+    "flow_runs_schema",
+    "social_deck_schema",
+    "seed",
+    "access_schema",
+    "program_schema",
+    "seed_program",
+    "environments_schema",
+    "seed_kb_registry",
+    "graph_readonly_role"
+  ]
+}

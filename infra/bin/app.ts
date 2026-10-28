@@ -7,6 +7,8 @@ import { GuardrailsStack } from '../lib/guardrails-stack';
 import { AgentsStack } from '../lib/agents-stack';
 import { ObservabilityStack } from '../lib/observability-stack';
 import { AgentCoreMemoryStack } from '../lib/agentcore-memory-stack';
+import { memoryIdParameterName } from '../lib/memory-config';
+import { loadEnvironment, stackId } from '../lib/environment';
 import { AgentCorePolicyStack } from '../lib/agentcore-policy-stack';
 import { AgentCoreRuntimeStack } from '../lib/agentcore-runtime-stack';
 import { AgentCoreGatewayStack } from '../lib/agentcore-gateway-stack';
@@ -25,30 +27,46 @@ import { PortalStack } from '../lib/portal-stack';
 
 const app = new cdk.App();
 
-const prefix = app.node.tryGetContext('projectPrefix') ?? 'orgiq';
+// The environment file (infra/environments/<name>.json, DE-17) names the
+// account, region, resource prefix and stack-id prefix. `--context env=<name>`
+// picks one; the default is `lab`. `envDir` points at another directory (tests).
+const environment = loadEnvironment(
+  (app.node.tryGetContext('env') as string | undefined) ?? undefined,
+  (app.node.tryGetContext('envDir') as string | undefined) ?? undefined,
+);
+const prefix = environment.prefix;
+const ctxPrefix = app.node.tryGetContext('projectPrefix') as string | undefined;
+if (ctxPrefix !== undefined && ctxPrefix !== prefix) {
+  throw new Error(`--context projectPrefix=${ctxPrefix} disagrees with environment "${environment.name}" (prefix "${prefix}"); edit the environment file instead`);
+}
 const alertEmail = app.node.tryGetContext('alertEmail') ?? '';
-const monthlyBudgetUsd = Number(app.node.tryGetContext('monthlyBudgetUsd') ?? '200');
+const monthlyBudgetUsd = Number(app.node.tryGetContext('monthlyBudgetUsd') ?? environment.monthlyBudgetUsd);
 
+// Explicit, from the file and never from the shell: CDK refuses to deploy a
+// stack whose account differs from the credentials in use.
 const env: cdk.Environment = {
-  account: process.env.CDK_DEFAULT_ACCOUNT,
-  region: process.env.CDK_DEFAULT_REGION ?? 'us-east-1',
+  account: environment.account,
+  region: environment.region,
 };
 
 // -------------------------------------------------------------------
 // Stack 1: Foundation (S3, DynamoDB, base IAM)
 // -------------------------------------------------------------------
-const foundation = new FoundationStack(app, 'OrgIQ-Foundation', {
+const foundation = new FoundationStack(app, stackId(environment, 'Foundation'), {
   env,
   prefix,
   description: 'OrgIQ Foundation: S3 buckets, DynamoDB tables, base IAM roles',
 });
+// The resolved environment, so `cdk diff` shows it whenever an environment
+// file changes.
+foundation.templateOptions.metadata = { 'OrgIQ::Environment': environment };
 
 // -------------------------------------------------------------------
 // Stack 2: Aurora Serverless v2 (pgvector for embeddings + relational tables for the org graph)
 // Replaces Neptune Analytics and OpenSearch Serverless.
 // Idle cost: ~$0.06/hr (0.5 ACU min). Enable with: cdk deploy OrgIQ-Aurora
 // -------------------------------------------------------------------
-const aurora = new AuroraStack(app, 'OrgIQ-Aurora', {
+const aurora = new AuroraStack(app, stackId(environment, 'Aurora'), {
   env,
   prefix,
   agentRoleArn: foundation.agentBaseRole.roleArn,
@@ -59,7 +77,7 @@ aurora.addDependency(foundation);
 // -------------------------------------------------------------------
 // Stack 3: Knowledge Base (Bedrock KB backed by Aurora pgvector)
 // -------------------------------------------------------------------
-const knowledgeBase = new KnowledgeBaseStack(app, 'OrgIQ-KnowledgeBase', {
+const knowledgeBase = new KnowledgeBaseStack(app, stackId(environment, 'KnowledgeBase'), {
   env,
   prefix,
   documentsBucket: foundation.documentsBucket,
@@ -72,7 +90,7 @@ knowledgeBase.addDependency(aurora);
 // -------------------------------------------------------------------
 // Stack 4: Guardrails (PII, content policy, grounding)
 // -------------------------------------------------------------------
-const guardrails = new GuardrailsStack(app, 'OrgIQ-Guardrails', {
+const guardrails = new GuardrailsStack(app, stackId(environment, 'Guardrails'), {
   env,
   prefix,
   description: 'OrgIQ Guardrails: PII filtering, content policy, topic denials',
@@ -83,7 +101,7 @@ const guardrails = new GuardrailsStack(app, 'OrgIQ-Guardrails', {
 // User-facing RBAC for masquerade roles. Middleware calls AVP IsAuthorized;
 // supervisor reads role-mapped guardrail IDs at agent-invoke time.
 // -------------------------------------------------------------------
-const authorization = new AuthorizationStack(app, 'OrgIQ-Authorization', {
+const authorization = new AuthorizationStack(app, stackId(environment, 'Authorization'), {
   env,
   prefix,
   description: 'OrgIQ Authorization: Cedar policies + AVP policy store + session signing key',
@@ -112,7 +130,7 @@ const withPortal = (list: string[] | undefined, extra: string) =>
   (portalPublicUrl ? [...(list ?? []), `${portalPublicUrl}${extra}`] : list);
 const authCallbackUrls = withPortal(splitList('authCallbackUrls'), '/api/auth/callback');
 const authLogoutUrls = withPortal(splitList('authLogoutUrls'), '/');
-const authentication = new AuthenticationStack(app, 'OrgIQ-Authentication', {
+const authentication = new AuthenticationStack(app, stackId(environment, 'Authentication'), {
   env,
   prefix,
   ...(authCallbackUrls ? { callbackUrls: authCallbackUrls } : {}),
@@ -123,7 +141,7 @@ const authentication = new AuthenticationStack(app, 'OrgIQ-Authentication', {
 // -------------------------------------------------------------------
 // Stack 5: Agents (per-agent IAM roles + Managed Prompts)
 // -------------------------------------------------------------------
-const agents = new AgentsStack(app, 'OrgIQ-Agents', {
+const agents = new AgentsStack(app, stackId(environment, 'Agents'), {
   env,
   prefix,
   auroraClusterArn: aurora.clusterArn,
@@ -144,7 +162,7 @@ agents.addDependency(knowledgeBase);
 // -------------------------------------------------------------------
 // Stack 6: Observability (CloudWatch dashboard + budget alarm)
 // -------------------------------------------------------------------
-const observability = new ObservabilityStack(app, 'OrgIQ-Observability', {
+const observability = new ObservabilityStack(app, stackId(environment, 'Observability'), {
   env,
   prefix,
   auroraClusterIdentifier: `${prefix}-aurora`,
@@ -165,16 +183,20 @@ observability.addDependency(knowledgeBase);
 // -------------------------------------------------------------------
 // Stack 7: AgentCore Memory
 // -------------------------------------------------------------------
-const agentCoreMemory = new AgentCoreMemoryStack(app, 'OrgIQ-AgentCoreMemory', {
+const agentCoreMemory = new AgentCoreMemoryStack(app, stackId(environment, 'AgentCoreMemory'), {
   env,
   prefix,
   description: 'OrgIQ AgentCore Memory: semantic, user preference, and summary memory strategies',
 });
 
+// The orgiq tenant's memory id reaches the runtimes and the BFF by SSM
+// parameter (infra/memory-config.json), not by CFN export.
+const orgiqMemory = agentCoreMemory.tenants.some(t => t.tenant === 'orgiq');
+
 // -------------------------------------------------------------------
 // Stack 8: AgentCore Policy Engine
 // -------------------------------------------------------------------
-const agentCorePolicy = new AgentCorePolicyStack(app, 'OrgIQ-AgentCorePolicy', {
+const agentCorePolicy = new AgentCorePolicyStack(app, stackId(environment, 'AgentCorePolicy'), {
   env,
   prefix,
   description: 'OrgIQ AgentCore Policy: Cedar-based access control for agent tools',
@@ -192,7 +214,7 @@ const allowedOauth2ReturnUrls = portalUrl
   ? [`${portalUrl}/auth/callback`]
   : undefined; // falls back to localhost dev URLs defined in the stack
 
-const agentCoreCapabilities = new AgentCoreCapabilitiesStack(app, 'OrgIQ-AgentCoreCapabilities', {
+const agentCoreCapabilities = new AgentCoreCapabilitiesStack(app, stackId(environment, 'AgentCoreCapabilities'), {
   env,
   prefix,
   allowedOauth2ReturnUrls,
@@ -206,11 +228,11 @@ const agentCoreCapabilities = new AgentCoreCapabilitiesStack(app, 'OrgIQ-AgentCo
 // exports (ExportsOutputFnGetAtt...) whose hashes change when the runtime stack template
 // changes (e.g. deployRuntimes=true / enableEval=true), causing UPDATE_FAILED on the
 // source stacks due to the CloudFormation cross-stack export deletion lock.
-const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime', {
+const agentCoreRuntime = new AgentCoreRuntimeStack(app, stackId(environment, 'AgentCoreRuntime'), {
   env,
   prefix,
   agentRoles: agents.agentRoles,
-  memoryId: cdk.Fn.importValue(`${prefix}-memory-id`),
+  ...(orgiqMemory && { memoryIdParameter: memoryIdParameterName(prefix, 'orgiq') }),
   // Sub-agents no longer get a guardrail — enforcement lives only on the
   // supervisor edge, which selects from the three role-keyed IDs below.
   guardrailIdMember: cdk.Fn.importValue(`${prefix}-guardrail-id-member`),
@@ -262,7 +284,7 @@ agentCoreRuntime.addDependency(guardrails);
 // -------------------------------------------------------------------
 // Stack 11: AgentCore MCP Gateway
 // -------------------------------------------------------------------
-const agentCoreGateway = new AgentCoreGatewayStack(app, 'OrgIQ-AgentCoreGateway', {
+const agentCoreGateway = new AgentCoreGatewayStack(app, stackId(environment, 'AgentCoreGateway'), {
   env,
   prefix,
   auroraClusterArn: aurora.clusterArn,
@@ -271,7 +293,6 @@ const agentCoreGateway = new AgentCoreGatewayStack(app, 'OrgIQ-AgentCoreGateway'
   knowledgeBaseId: knowledgeBase.knowledgeBaseId,
   policyEngineArn: agentCorePolicy.policyEngineArn,
   policyEngineId: agentCorePolicy.policyEngineId,
-  agentRoles: agents.agentRoles,
   description: 'OrgIQ AgentCore Gateway: MCP Gateway with Lambda tools + Cedar policy enforcement',
 });
 agentCoreGateway.addDependency(agentCorePolicy);
@@ -284,7 +305,7 @@ agentCoreGateway.addDependency(knowledgeBase);
 // Enable online evaluation after runtimes are deployed:
 //   cdk deploy OrgIQ-AgentCoreTelemetry --context enableEval=true
 // -------------------------------------------------------------------
-const agentCoreTelemetry = new AgentCoreTelemetryStack(app, 'OrgIQ-AgentCoreTelemetry', {
+const agentCoreTelemetry = new AgentCoreTelemetryStack(app, stackId(environment, 'AgentCoreTelemetry'), {
   env,
   prefix,
   description: 'OrgIQ AgentCore Telemetry: custom evaluators, online eval config, X-Ray, CloudWatch dashboard',
@@ -303,7 +324,8 @@ void authorization;
 // each trace into observability.invocation_traces + observability.tool_calls.
 // Runs on a 1-minute EventBridge schedule. Idempotent.
 // -------------------------------------------------------------------
-const spanProjector = new SpanProjectorStack(app, 'OrgIQ-SpanProjector', {
+const spanProjector = new SpanProjectorStack(app, stackId(environment, 'SpanProjector'), {
+  prefix,
   env,
   auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),
   auroraSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
@@ -322,7 +344,7 @@ void spanProjector;
 // -------------------------------------------------------------------
 const deployCanary = app.node.tryGetContext('deployCanary') === 'true' || app.node.tryGetContext('deployCanary') === true;
 if (deployCanary) {
-  const promptCanary = new PromptCanaryStack(app, 'OrgIQ-PromptCanary', { env, prefix });
+  const promptCanary = new PromptCanaryStack(app, stackId(environment, 'PromptCanary'), { env, prefix });
 // PromptCanary reads the Aurora cluster and secret ARNs through raw
 // Fn.importValue, which creates no CDK dependency — so on a from-scratch
 // deploy with concurrency the canary stack raced ahead of Aurora and failed
@@ -342,7 +364,7 @@ promptCanary.addDependency(aurora);
 //   ... --context devboxModel=anthropic.claude-opus-5
 // -------------------------------------------------------------------
 const devboxOrgAccess = app.node.tryGetContext('devboxOrgAccess') === 'true' || app.node.tryGetContext('devboxOrgAccess') === true;
-new DevboxStack(app, 'OrgIQ-Devbox', {
+new DevboxStack(app, stackId(environment, 'Devbox'), {
   env,
   prefix,
   // Only referenced (and therefore only imported) when devboxOrgAccess=true.
@@ -400,7 +422,7 @@ const websocketGatewayUrl = app.node.tryGetContext('websocketGatewayUrl') as str
 const gatewayServiceAuthSecretArn =
   app.node.tryGetContext('gatewayServiceAuthSecretArn') as string | undefined;
 
-const middlewareService = new MiddlewareServiceStack(app, 'OrgIQ-MiddlewareService', {
+const middlewareService = new MiddlewareServiceStack(app, stackId(environment, 'MiddlewareService'), {
   env,
   prefix,
   certificateArn: middlewareCertArn,
@@ -444,7 +466,10 @@ const middlewareService = new MiddlewareServiceStack(app, 'OrgIQ-MiddlewareServi
   // CODE_INTERPRETER_ID / BROWSER_PROFILE_ID by SSM name from the
   // capabilities stack (no import, no freeze) + the code-interpreter grant.
   capabilityParameters: true,
-  memoryId: cdk.Fn.importValue(`${prefix}-memory-id`),
+  ...(orgiqMemory && { memoryIdParameter: memoryIdParameterName(prefix, 'orgiq') }),
+  tenantMemoryIdParameters: Object.fromEntries(
+    agentCoreMemory.tenants.filter(t => t.tenant !== 'orgiq')
+      .map(t => [t.tenant, memoryIdParameterName(prefix, t.tenant)])),
   // `--context kbId=<id>` overrides the CFN import. The KnowledgeBase stack's
   // exports are imported by four other stacks, so a knowledge base deleted
   // out-of-band cannot be replaced without a multi-stack teardown — the export
@@ -497,7 +522,7 @@ const deploySocial = ctxFlag('deploySocial');
 const deploySocialImages = ctxFlag('deploySocialImages') || deploySocialMedia || deploySocial;
 
 const socialImages = deploySocialImages
-  ? new SocialImagesStack(app, 'OrgIQ-SocialImages', {
+  ? new SocialImagesStack(app, stackId(environment, 'SocialImages'), {
     env,
     prefix,
     description: 'OrgIQ Social images: ECR repos for the gateway, platform-api and the SFU (RETAIN)',
@@ -505,7 +530,7 @@ const socialImages = deploySocialImages
   : undefined;
 
 const socialMedia = deploySocialMedia
-  ? new SocialMediaStack(app, 'OrgIQ-SocialMedia', {
+  ? new SocialMediaStack(app, stackId(environment, 'SocialMedia'), {
     env,
     prefix,
     vpc: middlewareService.vpc,
@@ -519,7 +544,7 @@ if (socialMedia) {
 }
 
 if (deploySocial) {
-  const social = new SocialStack(app, 'OrgIQ-Social', {
+  const social = new SocialStack(app, stackId(environment, 'Social'), {
     env,
     prefix,
     vpc: middlewareService.vpc,
@@ -563,9 +588,10 @@ if (deploySocial) {
 // has always had, and the origin secret BY NAME — no new export to freeze.
 // -------------------------------------------------------------------
 if (ctxFlag('deployPortal')) {
-  const portal = new PortalStack(app, 'OrgIQ-Portal', {
+  const portal = new PortalStack(app, stackId(environment, 'Portal'), {
     env,
     prefix,
+    stackPrefix: environment.stackPrefix,
     loadBalancerDnsName: cdk.Fn.importValue(`${prefix}-middleware-alb-dns`),
     platformApi: deploySocial,
     sfu: deploySocialMedia,

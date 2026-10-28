@@ -156,21 +156,21 @@ export class PromptCanaryStack extends cdk.Stack {
     // -----------------------------------------------------------------------
 
     const weightBParam = new ssm.StringParameter(this, 'WeightBParam', {
-      parameterName: '/orgiq/canary/weight_b',
+      parameterName: `/${prefix}/canary/weight_b`,
       description: 'Current B-variant traffic weight (integer 0-100, percentage).',
       stringValue: '10',
       tier: ssm.ParameterTier.STANDARD,
     });
 
     const controlParam = new ssm.StringParameter(this, 'ControlParam', {
-      parameterName: '/orgiq/canary/control',
+      parameterName: `/${prefix}/canary/control`,
       description: 'Manual override / cooldown / halt flags for the canary controller.',
       stringValue: '{"manual_override_until":"0","cooldown_until":"0","halted":false}',
       tier: ssm.ParameterTier.STANDARD,
     });
 
     const configParam = new ssm.StringParameter(this, 'ConfigParam', {
-      parameterName: '/orgiq/canary/config',
+      parameterName: `/${prefix}/canary/config`,
       description: 'Controller thresholds: sample size, promotion delta, rollback floor, ceilings, step size.',
       stringValue: '{"min_samples":30,"promotion_delta":0.05,"rollback_floor":0.55,"error_ceiling":0.05,"latency_p95_ceiling_ms":8000,"step_pp":10,"cooldown_seconds":90}',
       tier: ssm.ParameterTier.STANDARD,
@@ -181,13 +181,13 @@ export class PromptCanaryStack extends cdk.Stack {
     // -----------------------------------------------------------------------
 
     const scoresLogGroup = new logs.LogGroup(this, 'ScoresLogGroup', {
-      logGroupName: '/orgiq/canary/scores',
+      logGroupName: `/${prefix}/canary/scores`,
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     const sfnLogGroup = new logs.LogGroup(this, 'ControllerLogGroup', {
-      logGroupName: '/aws/vendedlogs/states/orgiq-canary-controller',
+      logGroupName: `/aws/vendedlogs/states/${prefix}-canary-controller`,
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -221,19 +221,19 @@ export class PromptCanaryStack extends cdk.Stack {
       stack.formatArn({
         service: 'ssm',
         resource: 'parameter',
-        resourceName: 'orgiq/canary/weight_b',
+        resourceName: `${prefix}/canary/weight_b`,
         arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
       }),
       stack.formatArn({
         service: 'ssm',
         resource: 'parameter',
-        resourceName: 'orgiq/canary/control',
+        resourceName: `${prefix}/canary/control`,
         arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
       }),
       stack.formatArn({
         service: 'ssm',
         resource: 'parameter',
-        resourceName: 'orgiq/canary/config',
+        resourceName: `${prefix}/canary/config`,
         arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
       }),
     ];

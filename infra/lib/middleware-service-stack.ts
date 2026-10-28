@@ -79,6 +79,10 @@ export interface MiddlewareServiceStackProps extends cdk.StackProps {
 
   // ── AgentCore (optional — middleware can run with MOCK_AGENTCORE=true) ─────
   readonly memoryId?: string;
+  /** SSM name of the orgiq memory id (DE-8); used instead of `memoryId` when set. */
+  readonly memoryIdParameter?: string;
+  /** tenant -> SSM name of that tenant's memory id; surfaces as MEMORY_ID_<TENANT> and is granted like MEMORY_ID. */
+  readonly tenantMemoryIdParameters?: Record<string, string>;
   readonly browserId?: string;
   readonly browserArn?: string;
   /**
@@ -180,8 +184,10 @@ export class MiddlewareServiceStack extends cdk.Stack {
   /** Fixed task role name — OrgIQ-Social attaches its chat-table policy by name. */
   public readonly taskRoleName: string;
   /**
-   * Fixed name of the realtime token secret. Consumers import it with
-   * `Secret.fromSecretNameV2`, by name, so no export is created for it.
+   * Fixed name of the realtime token secret. Consumers import it by its full
+   * ARN, read from the SSM parameter `realtimeJwtSecretArnParameterName`
+   * (social-stack.ts), never by name: the name ends in `-secret`, which a
+   * partial-ARN lookup misreads as the random suffix.
    */
   public readonly realtimeJwtSecretName: string;
 
@@ -265,7 +271,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
     const taskRole = new iam.Role(this, 'MiddlewareTaskRole', {
       roleName: `${prefix}-middleware-task-role`,
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
-      description: 'Runtime role for orgiq-middleware Fargate task',
+      description: `Runtime role for ${prefix}-middleware Fargate task`,
     });
 
     // Secrets Manager — session signing key
@@ -556,7 +562,15 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // set while the role could not touch the memory it named, so a deployed
     // chat answered but kept no history and every session list came back
     // empty. Scoped to the one memory this stack is given.
-    if (props.memoryId) {
+    const memoryId = props.memoryIdParameter
+      ? ssm.StringParameter.valueForStringParameter(this, props.memoryIdParameter)
+      : props.memoryId;
+    const tenantMemoryIds: Record<string, string> = {};
+    for (const [tenant, name] of Object.entries(props.tenantMemoryIdParameters ?? {})) {
+      tenantMemoryIds[tenant] = ssm.StringParameter.valueForStringParameter(this, name);
+    }
+    const memoryResourceIds = [...new Set([...(memoryId ? [memoryId] : []), ...Object.values(tenantMemoryIds)])];
+    if (memoryResourceIds.length > 0) {
       taskRole.addToPolicy(new iam.PolicyStatement({
         sid: 'AgentCoreMemoryEvents',
         actions: [
@@ -565,7 +579,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
           'bedrock-agentcore:GetEvent',
           'bedrock-agentcore:ListSessions',
         ],
-        resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:memory/${props.memoryId}`],
+        resources: memoryResourceIds.map(m => `arn:aws:bedrock-agentcore:${this.region}:${this.account}:memory/${m}`),
       }));
     }
 
@@ -883,7 +897,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
       MOCK_CLOUDWATCH: 'false',
 
       // AgentCore identifiers
-      ...(props.memoryId && { MEMORY_ID: props.memoryId }),
+      ...(memoryId && { MEMORY_ID: memoryId }),
+      ...Object.fromEntries(Object.entries(tenantMemoryIds)
+        .map(([tenant, id]) => [`MEMORY_ID_${tenant.toUpperCase()}`, id])),
       ...(props.browserId && { BROWSER_ID: props.browserId }),
       ...(props.knowledgeBaseId && { KNOWLEDGE_BASE_ID: props.knowledgeBaseId }),
       ...(props.gatewayId && { GATEWAY_ID: props.gatewayId }),

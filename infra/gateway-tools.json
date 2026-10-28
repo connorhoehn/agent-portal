@@ -1,0 +1,63 @@
+{
+  "tools": [
+    {
+      "name": "knowledge-base-query",
+      "target": "kb-query",
+      "logicalId": "KBQuery",
+      "handler": "kb_query.handler",
+      "description": "Query the OrgIQ Knowledge Base for relevant organizational information",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "The search query" },
+          "maxResults": { "type": "number", "description": "Maximum number of results to return (default 5)" }
+        },
+        "required": ["query"]
+      },
+      "access": { "kb": true, "aurora": "none" },
+      "timeoutSeconds": 30,
+      "memoryMb": 256,
+      "agents": ["supervisor", "search", "advisor"]
+    },
+    {
+      "name": "graph-traversal",
+      "target": "graph-traversal",
+      "logicalId": "GraphTraversal",
+      "handler": "graph_traversal.handler",
+      "description": "Execute read-only SQL (SELECT/WITH) against the OrgIQ relational graph schema",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sql": { "type": "string", "description": "PostgreSQL SELECT or WITH statement" },
+          "parameters": { "type": "object", "description": "Named query parameters as key-value pairs" }
+        },
+        "required": ["sql"]
+      },
+      "access": { "aurora": "reader" },
+      "timeoutSeconds": 30,
+      "memoryMb": 256,
+      "agents": ["supervisor", "search", "scoring", "advisor", "graph-builder"]
+    },
+    {
+      "name": "compute-pagerank",
+      "target": "compute-pagerank",
+      "logicalId": "ComputePageRank",
+      "handler": "compute_pagerank.handler",
+      "description": "Compute PageRank scores for expertise ranking in the organizational graph",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "topic": { "type": "string", "description": "Limit PageRank to nodes related to this topic (optional)" },
+          "iterations": { "type": "number", "description": "Number of PageRank iterations (default 20)" },
+          "dampingFactor": { "type": "number", "description": "Damping factor for PageRank (default 0.85)" },
+          "limit": { "type": "number", "description": "Maximum number of ranked results to return (default 10)" }
+        },
+        "required": []
+      },
+      "access": { "aurora": "reader" },
+      "timeoutSeconds": 60,
+      "memoryMb": 512,
+      "agents": ["supervisor", "scoring", "advisor"]
+    }
+  ]
+}

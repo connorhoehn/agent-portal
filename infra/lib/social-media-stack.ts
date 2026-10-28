@@ -231,7 +231,7 @@ export class SocialMediaStack extends cdk.Stack {
     this.securityGroup = new ec2.SecurityGroup(this, 'SfuSecurityGroup', {
       vpc: props.vpc,
       securityGroupName: `${prefix}-social-sfu`,
-      description: 'orgiq-lvs-sfu media ports - allowlisted CIDRs only (sfuAllowCidr)',
+      description: `${prefix}-lvs-sfu media ports - allowlisted CIDRs only (sfuAllowCidr)`,
       allowAllOutbound: true,
     });
 
@@ -266,7 +266,7 @@ export class SocialMediaStack extends cdk.Stack {
     const role = new iam.Role(this, 'SfuInstanceRole', {
       roleName: `${prefix}-social-sfu-instance-role`,
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
-      description: 'orgiq-lvs-sfu host: ECR pull, its three secrets, SSM Session Manager',
+      description: `${prefix}-lvs-sfu host: ECR pull, its three secrets, SSM Session Manager`,
       managedPolicies: [
         // Shell access without an SSH port — nothing listens on 22.
         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
@@ -441,7 +441,7 @@ export class SocialMediaStack extends cdk.Stack {
       'chmod 0755 /usr/local/bin/lvs-sfu-run',
       "cat > /etc/systemd/system/lvs-sfu.service <<'EOS'",
       '[Unit]',
-      'Description=orgiq-lvs-sfu (mediasoup SFU)',
+      `Description=${prefix}-lvs-sfu (mediasoup SFU)`,
       ...(redisOverride
         ? ['After=docker.service network-online.target', 'Requires=docker.service']
         : ['After=docker.service network-online.target lvs-redis.service', 'Requires=docker.service lvs-redis.service']),

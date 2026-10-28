@@ -1,0 +1,175 @@
+// Opt-in SQL acceptance for the spend ledger (DE-30) against a disposable
+// PostgreSQL container: the schema files load unmodified, and the ledger's
+// writers, backfill and readers run their exact SQL. Only the RDS Data API
+// transport is replaced. This does NOT establish Aurora or Data API binding.
+//
+//   REAL_SPEND_LEDGER_POSTGRES=1 ORGIQ_SPEND_LEDGER_POSTGRES_CONTAINER=<name> \
+//   [ORGIQ_DOCKER='colima ssh -- sudo docker'] npx jest spend-ledger-postgres
+//
+// The container must carry the label orgiq.validation=spend-ledger-postgres.
+jest.mock('../aurora.js', () => ({ exec: jest.fn() }));
+jest.mock('../../config.js', () => ({ config: { mock: { aurora: false } } }));
+
+import { execFile, execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import type { SqlParameter } from '@aws-sdk/client-rds-data';
+import { exec } from '../aurora.js';
+import { _resetColumnProbes } from '../column-probe.js';
+import { recordBotRunSpend, recordSpend, ledgerMismatches } from '../spend-ledger.js';
+import { listBudgets } from '../budgets.js';
+import { backfillSpendLedger } from '../../lib/backfill-spend-ledger.js';
+
+const enabled = process.env['REAL_SPEND_LEDGER_POSTGRES'] === '1';
+const container = process.env['ORGIQ_SPEND_LEDGER_POSTGRES_CONTAINER'] ?? '';
+const docker = (process.env['ORGIQ_DOCKER'] ?? 'docker').split(' ').filter(Boolean);
+const SCHEMA = 'spend_ledger_acceptance';
+const read = (name: string) => readFileSync(`${process.cwd()}/../schema/${name}`, 'utf8');
+// load_schema.py's order up to the ledger.
+const schema = [
+  'orgiq_schema.sql', 'search_workspace_schema.sql', 'identity_schema.sql', 'social_schema.sql', 'observability_schema.sql',
+  'observability_authz_schema.sql', 'observability_sprint1_schema.sql', 'observability_sprint2_schema.sql',
+  'observability_sprint3_promote_schema.sql', 'observability_sprint4_calibration_schema.sql',
+  'observability_sprint4_memory_schema.sql', 'observability_sprint5_canary_schema.sql',
+  'observability_sprint6_prompt_history_schema.sql', 'prompt_contract_schema.sql', 'observability_approvals_schema.sql',
+  'orgiq_kb_registry_schema.sql', 'orgiq_work_items_schema.sql', 'work_item_key_schema.sql', 'work_item_documents_schema.sql',
+  'agentic_work_schema.sql', 'kb_upload_links_schema.sql', 'agent_projects_schema.sql', 'agent_sdlc_schema.sql',
+  'lab_loop_schema.sql', 'devbox_fleet_schema.sql', 'agent_bots_schema.sql', 'agent_budgets_schema.sql', 'program_schema.sql',
+  'spend_ledger_schema.sql',
+].map(read).join('\n');
+const NULL = '__PG_NULL__';
+const literal = (value: string) => `'${value.replace(/'/g, "''")}'`;
+
+function psql(input: string, csv: boolean): Promise<string> {
+  const args = [...docker.slice(1), 'exec', '-i', container, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1',
+    ...(csv ? ['--csv', '-P', `null=${NULL}`] : []), '-U', 'postgres', '-d', 'postgres'];
+  return new Promise((resolve, reject) => {
+    const child = execFile(docker[0]!, args, { maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => (err ? reject(new Error(stderr || err.message)) : resolve(stdout)));
+    child.stdin!.end(`SET search_path TO ${SCHEMA}, public; SET client_min_messages TO warning;\n${input}\n`);
+  });
+}
+const sql = async (statement: string): Promise<void> => { await psql(statement, false); };
+
+function parseCsv(text: string): Record<string, string | null>[] {
+  const rows: string[][] = []; let row: string[] = []; let field = ''; let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; } else if (ch === '"') quoted = false; else field += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else field += ch;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  const [header, ...data] = rows.filter((r) => !(r.length === 1 && r[0] === '') && r[0] !== 'SET');
+  if (!header) return [];
+  return data.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] === NULL ? null : r[i] ?? null])));
+}
+
+/** The Data API transport, replaced: bind parameters, run the exact statement. */
+async function rows(statement: string, params: SqlParameter[] = []): Promise<Record<string, unknown>[]> {
+  const bindings = new Map<string, string>((params ?? []).map((p) => {
+    const v = (p.value ?? {}) as { isNull?: boolean; stringValue?: string; doubleValue?: number; longValue?: number };
+    if (v.isNull) return [p.name!, 'NULL'];
+    if (v.stringValue !== undefined) return [p.name!, literal(v.stringValue)];
+    if (v.doubleValue !== undefined) return [p.name!, String(v.doubleValue)];
+    if (v.longValue !== undefined) return [p.name!, String(v.longValue)];
+    throw new Error(`unsupported parameter ${p.name}`);
+  }));
+  const bound = statement.replace(/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, name: string) => {
+    if (!bindings.has(name)) throw new Error(`Unbound parameter ${name}`);
+    return bindings.get(name)!;
+  });
+  return parseCsv(await psql(`${bound};`, true));
+}
+
+const count = async (where = 'TRUE') => Number((await rows(`SELECT COUNT(*) AS n FROM spend_entries WHERE ${where}`))[0]!['n']);
+
+(enabled ? describe : describe.skip)('spend ledger with real PostgreSQL', () => {
+  jest.setTimeout(120_000);
+
+  beforeAll(async () => {
+    if (!container) throw new Error('ORGIQ_SPEND_LEDGER_POSTGRES_CONTAINER is required');
+    const owned = execFileSync(docker[0]!, [...docker.slice(1), 'inspect', '--format', '{{index .Config.Labels "orgiq.validation"}}', container], { encoding: 'utf8' });
+    if (owned.trim() !== 'spend-ledger-postgres') throw new Error('Refusing a container without the dedicated acceptance label');
+    await sql(`CREATE EXTENSION IF NOT EXISTS pgcrypto; DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE; CREATE SCHEMA ${SCHEMA}; SET search_path TO ${SCHEMA}, public;
+      ${schema}`);
+    jest.mocked(exec).mockImplementation(rows as never);
+  });
+
+  beforeEach(async () => {
+    delete process.env['SPEND_LEDGER'];
+    _resetColumnProbes();
+    // Two initiatives, each attributed through a different arm of the legacy
+    // predicate: a bot targeting the initiative, and a run's work item.
+    await sql(`TRUNCATE spend_entries, bot_runs, bots, agent_jobs, work_items, projects CASCADE;
+      INSERT INTO projects (id, name) VALUES ('p-alpha', 'Alpha'), ('p-beta', 'Beta');
+      INSERT INTO work_items (id, project_id, type, title) VALUES ('w-1', 'p-beta', 'story', 'W1');
+      INSERT INTO bots (id, name, template, prompt_template, org_project_id, model, trigger)
+        VALUES ('00000000-0000-0000-0000-0000000000b1', 'nightly', 'story', 'x', 'p-alpha', 'amazon.nova-pro-v1:0', 'cron');
+      INSERT INTO agent_jobs (id, kind, title, status, started_at, result) VALUES
+        ('job-owned', 'devbox:task', 'dispatched', 'done', NOW(), '{"costUsd": 0.25}');
+      INSERT INTO bot_runs (id, bot_id, trigger, status, cost_usd, work_item_id, job_id, started_at) VALUES
+        ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000b1', 'cron', 'done', 1.5, NULL, NULL, NOW()),
+        ('00000000-0000-0000-0000-000000000002', NULL, 'marketplace', 'done', 0.25, 'w-1', 'job-owned', NOW()),
+        ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-0000000000b1', 'cron', 'failed', NULL, NULL, NULL, NOW()),
+        ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-0000000000b1', 'cron', 'skipped', NULL, NULL, NULL, NOW());`);
+  });
+
+  it('backfills settled runs once, resolves attribution, and leaves the owned job out', async () => {
+    const dry = await backfillSpendLedger({ dryRun: true });
+    expect(dry.pending.find((p) => p.source === 'bot_run')).toMatchObject({ rows: 3 });
+    expect(dry.pending.find((p) => p.source === 'job')).toMatchObject({ rows: 0 });
+    expect(await count()).toBe(0);
+
+    await backfillSpendLedger({ dryRun: false });
+    await backfillSpendLedger({ dryRun: false });
+    expect(await count()).toBe(3);
+    const byRun = await rows(`SELECT source_id, initiative_id, cost_basis, trigger, model FROM spend_entries ORDER BY source_id`);
+    expect(byRun).toEqual([
+      { source_id: '00000000-0000-0000-0000-000000000001', initiative_id: 'p-alpha', cost_basis: 'reported', trigger: 'cron', model: 'amazon.nova-pro-v1:0' },
+      { source_id: '00000000-0000-0000-0000-000000000002', initiative_id: 'p-beta', cost_basis: 'reported', trigger: 'marketplace', model: null },
+      { source_id: '00000000-0000-0000-0000-000000000003', initiative_id: 'p-alpha', cost_basis: 'unknown', trigger: 'cron', model: 'amazon.nova-pro-v1:0' },
+    ]);
+  });
+
+  it('reads the same budget totals from the ledger as from bot_runs on bot-run-only history', async () => {
+    await backfillSpendLedger({ dryRun: false });
+    const legacy = await listBudgets();
+    process.env['SPEND_LEDGER'] = 'ledger';
+    const ledger = await listBudgets();
+    const pick = (b: Awaited<ReturnType<typeof listBudgets>>) =>
+      b.map((r) => ({ id: r.orgProjectId, usd: r.spentThisPeriodUsd, runs: r.runCountThisPeriod, cron: r.maintenanceUsd }));
+    expect(pick(ledger)).toEqual(pick(legacy));
+    expect(ledgerMismatches(pick(legacy), pick(ledger))).toEqual([]);
+    // The unknown-cost failure is counted, not summed as $0.
+    expect(ledger.find((r) => r.orgProjectId === 'p-alpha')?.unknownCostCount).toBe(1);
+  });
+
+  it('settles a bot run once, and lets a late cost replace an unknown one', async () => {
+    await recordBotRunSpend('00000000-0000-0000-0000-000000000003');
+    await recordBotRunSpend('00000000-0000-0000-0000-000000000003');
+    expect(await count()).toBe(1);
+    await sql(`UPDATE bot_runs SET cost_usd = 0.4 WHERE id = '00000000-0000-0000-0000-000000000003'`);
+    await recordBotRunSpend('00000000-0000-0000-0000-000000000003');
+    await sql(`UPDATE bot_runs SET cost_usd = 9 WHERE id = '00000000-0000-0000-0000-000000000003'`);
+    await recordBotRunSpend('00000000-0000-0000-0000-000000000003');
+    expect(await rows(`SELECT cost_usd, cost_basis FROM spend_entries`)).toEqual([{ cost_usd: '0.4000', cost_basis: 'reported' }]);
+  });
+
+  it('skips a job a bot run owns, and books an ad-hoc box task to its initiative', async () => {
+    await recordSpend({ source: 'job', sourceId: 'job-owned:1', initiativeId: 'p-beta', boxId: 'box-1', actorId: 'u-sme', model: null, costUsd: 0.25 }, { unlessBotRunOwnsJob: 'job-owned' });
+    expect(await count()).toBe(0);
+    await recordSpend({ source: 'box_task', sourceId: 'box-1:t1', initiativeId: 'p-beta', boxId: 'box-1', actorId: 'u-sme', model: 'sonnet', costUsd: 0.7, inputTokens: 10, outputTokens: 5 });
+    await recordSpend({ source: 'box_task', sourceId: 'box-1:t1', initiativeId: 'p-beta', boxId: 'box-1', actorId: 'u-sme', model: 'sonnet', costUsd: 0.7 });
+    expect(await count(`source = 'box_task'`)).toBe(1);
+
+    // The legacy reader never saw that box task; dual mode names the gap.
+    await backfillSpendLedger({ dryRun: false });
+    const legacy = await listBudgets();
+    process.env['SPEND_LEDGER'] = 'ledger';
+    const ledger = await listBudgets();
+    const usd = (b: typeof legacy) => b.map((r) => ({ id: r.orgProjectId, usd: r.spentThisPeriodUsd }));
+    expect(ledgerMismatches(usd(legacy), usd(ledger))).toEqual([{ id: 'p-beta', legacyUsd: 0.25, ledgerUsd: 0.95 }]);
+  });
+});

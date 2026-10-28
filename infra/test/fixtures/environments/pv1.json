@@ -1,0 +1,10 @@
+{
+  "name": "pv1",
+  "account": "647757222309",
+  "region": "us-east-1",
+  "prefix": "pv1",
+  "stackPrefix": "OrgIQPv1",
+  "edge": { "mode": "cloudfront" },
+  "features": { "social": false, "documents": false, "devbox": false },
+  "monthlyBudgetUsd": 50
+}

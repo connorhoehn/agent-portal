@@ -18,6 +18,7 @@ import { userStewardsInitiative } from '../../lib/initiative-scope.js';
 import { _resetFleet, getBox, getBoxBySession, listBoxes } from '../../lib/devbox-fleet.js';
 import { _resetLoopMock } from '../../mock/devbox-agent-loop.js';
 import { isValidFileId } from '../../lib/devbox-files.js';
+import { recordSpend } from '../../providers/spend-ledger.js';
 
 jest.mock('../../lib/initiative-scope.js', () => ({
   ...jest.requireActual('../../lib/initiative-scope.js'),
@@ -27,6 +28,14 @@ jest.mock('../../lib/initiative-scope.js', () => ({
   userReachesBox: jest.fn(async (userId: string, box: { ownerId?: string | null }) => box.ownerId === userId),
 }));
 const stewards = userStewardsInitiative as jest.MockedFunction<typeof userStewardsInitiative>;
+// The DE-42 box-action gate (lib/agent-actions.ts) asks Cedar through
+// authz.ts, which this suite cannot load (config.ts uses import.meta). The
+// gate has its own suite (routes/__tests__/agent-actions-routes.test.ts);
+// here it passes through so the routes' own behaviour is what is tested.
+jest.mock('../../lib/agent-actions.js', () => ({
+  requireBoxAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+jest.mock('../../providers/spend-ledger.js', () => ({ recordSpend: jest.fn(async () => undefined) }));
 
 const SECRET = 'devbox-internal-test-secret';
 const originalEnv = { ...process.env };
@@ -218,6 +227,19 @@ describe('internal devbox router — mock loop round trip', () => {
     expect(res.status).toBe(200);
     return parseFrames(res.text);
   }
+
+  it('writes one agent_loop ledger entry per task, for the requesting user (DE-30)', async () => {
+    (recordSpend as jest.Mock).mockClear();
+    const { sessionId, boxId } = await createSession();
+    await runTask(sessionId, 'Draft the meeting agenda', false);
+    expect(recordSpend).toHaveBeenCalledTimes(1);
+    expect(recordSpend).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'agent_loop', boxId, actorId: 'u-loop-owner', initiativeId: null,
+      // The mock result reports usage but no dollar figure: unknown, not $0.
+      costUsd: null, inputTokens: expect.any(Number), outputTokens: expect.any(Number),
+    }));
+    expect((recordSpend as jest.Mock).mock.calls[0][0].sourceId).toMatch(new RegExp(`^${boxId}:`));
+  });
 
   it('re-frames mock stream-json flat, with mock:true on every frame', async () => {
     const { sessionId } = await createSession();

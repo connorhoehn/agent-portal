@@ -8,6 +8,8 @@ import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as path from 'path';
 
 export interface SpanProjectorStackProps extends cdk.StackProps {
+  /** Resource-naming prefix; defaults to 'orgiq' so the deployed names do not move. */
+  prefix?: string;
   /** ARN of the Aurora Serverless v2 cluster (accepts cross-stack ref or Fn.importValue) */
   auroraClusterArn: string;
   /** ARN of the Aurora credentials secret in Secrets Manager */
@@ -34,12 +36,13 @@ export class SpanProjectorStack extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props: SpanProjectorStackProps) {
     super(scope, id, props);
+    const prefix = props.prefix ?? 'orgiq';
 
     // -----------------------------------------------------------------------
     // SSM cursor parameter — tracks last-processed timestamp
     // -----------------------------------------------------------------------
     const cursorParam = new ssm.StringParameter(this, 'CursorParam', {
-      parameterName: '/orgiq/span-projector/cursor',
+      parameterName: `/${prefix}/span-projector/cursor`,
       description: 'High-water mark (epoch-ms) for the Span Projector Lambda poll window',
       stringValue: '0', // Lambda overwrites this with real epoch-ms values on each run
     });
@@ -59,7 +62,7 @@ export class SpanProjectorStack extends cdk.Stack {
     }
 
     const fn = new lambda.Function(this, 'Projector', {
-      functionName: 'orgiq-span-projector',
+      functionName: `${prefix}-span-projector`,
       description: 'OI Phase 3: project OTel OI spans from CloudWatch into Aurora observability tables',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.lambda_handler',
@@ -119,7 +122,7 @@ export class SpanProjectorStack extends cdk.Stack {
     // workaround and two rules. 1-minute is sufficient for near-real-time.)
     // -----------------------------------------------------------------------
     const rule = new events.Rule(this, 'PollSchedule', {
-      ruleName: 'orgiq-span-projector-poll',
+      ruleName: `${prefix}-span-projector-poll`,
       description: 'Trigger the Span Projector Lambda every minute',
       schedule: events.Schedule.rate(cdk.Duration.minutes(1)),
     });
@@ -132,7 +135,7 @@ export class SpanProjectorStack extends cdk.Stack {
     // -----------------------------------------------------------------------
     new cdk.CfnOutput(this, 'ProjectorFunctionArn', {
       value: fn.functionArn,
-      exportName: 'orgiq-span-projector-fn-arn',
+      exportName: `${prefix}-span-projector-fn-arn`,
       description: 'ARN of the Span Projector Lambda',
     });
 

@@ -25,6 +25,7 @@ import { exec } from '../../providers/aurora.js';
 import { auroraCommentSource, migrateWorkComments } from '../migrate-work-comments.js';
 import { createMemorySocialChatBackend, RowsChatStore, setSocialChatBackend } from '../social-chat.js';
 import { createWorkItemComment, getProjectActivity, listWorkItemComments, workThreadSummary } from '../../providers/work-items.js';
+import { schemaSql } from '../../test-support/schema-manifest.js';
 
 const enabled = process.env['REAL_PAGE_THREAD_POSTGRES'] === '1';
 const container = process.env['ORGIQ_PAGE_THREAD_POSTGRES_CONTAINER'] ?? '';
@@ -33,19 +34,10 @@ const SCHEMA = 'page_thread_acceptance';
 const read = (name: string) => readFileSync(`${process.cwd()}/../schema/${name}`, 'utf8');
 const ledger = read('work_item_comment_migration_schema.sql');
 // The provider's work-item reads select columns that later files add to work_items (key, sprint,
-// estimate), and those files have their own parents, so this is load_schema.py's order up to the
-// estimate columns. The ledger is left out here because the suite applies it itself.
-const parents = [
-  'orgiq_schema.sql', 'search_workspace_schema.sql', 'identity_schema.sql', 'social_schema.sql', 'observability_schema.sql',
-  'observability_authz_schema.sql', 'observability_sprint1_schema.sql', 'observability_sprint2_schema.sql',
-  'observability_sprint3_promote_schema.sql', 'observability_sprint4_calibration_schema.sql',
-  'observability_sprint4_memory_schema.sql', 'observability_sprint5_canary_schema.sql',
-  'observability_sprint6_prompt_history_schema.sql', 'prompt_contract_schema.sql', 'observability_approvals_schema.sql',
-  'orgiq_kb_registry_schema.sql', 'orgiq_work_items_schema.sql', 'work_item_key_schema.sql', 'work_item_documents_schema.sql',
-  'agentic_work_schema.sql', 'kb_upload_links_schema.sql', 'agent_projects_schema.sql', 'agent_sdlc_schema.sql',
-  'lab_loop_schema.sql', 'devbox_fleet_schema.sql', 'agent_bots_schema.sql', 'agent_budgets_schema.sql', 'program_schema.sql',
-  'work_item_estimate_schema.sql',
-].map(read).join('\n');
+// estimate), and those files have their own parents, so this is the manifest's load order
+// (schema/manifest.json) through the estimate columns. The ledger is left out here because the
+// suite applies it itself.
+const parents = schemaSql({ through: 'work_item_estimate_schema.sql', exclude: ['work_item_comment_migration_schema.sql'] });
 const NULL = '__PG_NULL__';
 const literal = (value: string) => `'${value.replace(/'/g, "''")}'`;
 

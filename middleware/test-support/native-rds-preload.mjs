@@ -391,8 +391,21 @@ function value(field) {
   }
   throw new Error('Unsupported native RDS parameter type');
 }
+// The Data API binds a stringValue as text unless the parameter carries a
+// typeHint, so Postgres refuses `uuid = text`. An untyped `$n` would let this
+// harness infer uuid and hide that, so every string bind is cast the way the
+// Data API types it. ORGIQ_NATIVE_RDS_UNTYPED=1 restores the old behaviour
+// for one release (DE-28, docs/deployment-enhancements/DE-28-bug-class-lint.md).
+const HINT_TYPES = { UUID: 'uuid', JSON: 'json', TIMESTAMP: 'timestamp', DATE: 'date', TIME: 'time', DECIMAL: 'numeric' };
+function castFor(parameter) {
+  if (process.env.ORGIQ_NATIVE_RDS_UNTYPED === '1') return '';
+  const field = parameter.value;
+  if (!field || field.isNull || field.stringValue === undefined) return '';
+  return '::' + (HINT_TYPES[String(parameter.typeHint ?? '').toUpperCase()] ?? 'text');
+}
 function bind(sql, parameters = []) {
   const params = new Map(parameters.map(parameter => [parameter.name, value(parameter.value)]));
+  const casts = new Map(parameters.map(parameter => [parameter.name, castFor(parameter)]));
   const positions = new Map(), values = [];
   let result = '', i = 0, quote = null;
   while (i < sql.length) {
@@ -418,7 +431,7 @@ function bind(sql, parameters = []) {
       if (name) {
         if (!params.has(name)) throw new Error(`Unbound native RDS parameter ${name}`);
         if (!positions.has(name)) { values.push(params.get(name)); positions.set(name, values.length); }
-        result += `$${positions.get(name)}`; i += name.length + 1; continue;
+        result += `$${positions.get(name)}${casts.get(name)}`; i += name.length + 1; continue;
       }
     }
     result += char; i++;

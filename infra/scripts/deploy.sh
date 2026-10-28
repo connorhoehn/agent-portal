@@ -8,7 +8,7 @@
 #   ./scripts/deploy.sh                        # deploy all stacks
 #   ./scripts/deploy.sh OrgIQ-Aurora           # deploy one stack
 #   ./scripts/deploy.sh --context key=value    # pass extra CDK args
-#   PREFIX=myprefix ./scripts/deploy.sh        # override resource prefix
+#   ENV=pv1 ./scripts/deploy.sh                # another environment file (infra/environments/pv1.json)
 
 set -euo pipefail
 
@@ -38,13 +38,43 @@ if ! "${CDK[@]}" --version >/dev/null 2>&1; then
   exit 1
 fi
 
-PREFIX="${PREFIX:-orgiq}"
-REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+# ── Environment (DE-17) ───────────────────────────────────────────────────
+# The account, region, resource prefix and stack-id prefix come from
+# infra/environments/${ENV}.json (default: lab), through the same loader
+# bin/app.ts uses. There are no PREFIX or region defaults here: a PREFIX that
+# disagrees with the file is an error, not an override.
+ENV_NAME="${ENV:-lab}"
+if ! ENV_OUT=$(node --require ts-node/register scripts/print-environment.ts "$ENV_NAME"); then
+  exit 1
+fi
+while IFS='=' read -r _k _v; do
+  case "$_k" in
+    ENV_ACCOUNT) ENV_ACCOUNT="$_v" ;;
+    ENV_REGION) ENV_REGION="$_v" ;;
+    ENV_PREFIX) ENV_PREFIX="$_v" ;;
+    ENV_STACK_PREFIX) ENV_STACK_PREFIX="$_v" ;;
+  esac
+done <<< "$ENV_OUT"
+if [[ -n "${PREFIX-}" && "${PREFIX}" != "$ENV_PREFIX" ]]; then
+  echo "✗ PREFIX=${PREFIX} disagrees with environment '${ENV_NAME}' (prefix '${ENV_PREFIX}'). Edit infra/environments/${ENV_NAME}.json, or run with ENV=<name>." >&2
+  exit 1
+fi
+PREFIX="$ENV_PREFIX"
+REGION="$ENV_REGION"
+STACK_PREFIX="${ENV_STACK_PREFIX}-"
+export AWS_DEFAULT_REGION="$REGION" AWS_REGION="$REGION"
+ENV_CONTEXT=(--context "env=${ENV_NAME}")
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+# Refuse before anything is swept, deleted or deployed: credentials for another
+# account (the personal 264161986065 above all) must not touch this fleet.
+if [[ "$ACCOUNT" != "$ENV_ACCOUNT" ]]; then
+  echo "✗ The current AWS credentials are for account ${ACCOUNT}, but environment '${ENV_NAME}' is ${ENV_ACCOUNT}. Nothing was changed." >&2
+  exit 1
+fi
 CDK_ARGS=("$@")
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  OrgIQ Deploy — ${REGION} / ${ACCOUNT}"
+echo "║  OrgIQ Deploy — ${ENV_NAME} / ${REGION} / ${ACCOUNT}"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -115,7 +145,7 @@ for bucket in "${S3_BUCKETS[@]}"; do
       # Foundation create that follows will fail on it. Say so, with the
       # command, rather than leaving a warning that reads as optional.
       echo "  ⚠️  Bucket s3://${bucket} is NOT empty — skipping deletion"
-      echo "      Its stack (OrgIQ-Foundation / OrgIQ-Portal) will FAIL to create this bucket while the name is taken."
+      echo "      Its stack (${STACK_PREFIX}Foundation / ${STACK_PREFIX}Portal) will FAIL to create this bucket while the name is taken."
       echo "      Contents are regenerable (schema/synth; the portal bundle: scripts/portal-publish.mjs). To proceed:"
       echo "        aws s3 rb s3://${bucket} --force"
     fi
@@ -173,7 +203,7 @@ echo ""
 # is on — and is deleted. One that holds data (chat history, call log) is
 # never deleted here: the message names both ways forward.
 # ──────────────────────────────────────────────────────────────────
-echo "── Checking for orphaned OrgIQ-Social tables ──"
+echo "── Checking for orphaned ${STACK_PREFIX}Social tables ──"
 
 # Emptiness by asking for one item, not ItemCount: describe-table's count is
 # refreshed about every six hours, so a table written to an hour ago reads 0.
@@ -191,7 +221,7 @@ for table in $SOCIAL_TABLES; do
     --physical-resource-id "$table" \
     --query 'StackResources[0].StackName' --output text 2>/dev/null || echo "")
   if [[ -n "$T_OWNER" && "$T_OWNER" != "None" ]]; then
-    continue  # a live OrgIQ-Social owns it
+    continue  # a live ${STACK_PREFIX}Social owns it
   fi
   if dynamo_has_items "$table"; then
     SOCIAL_KEPT+=("$table")
@@ -204,7 +234,7 @@ done
 if [[ ${#SOCIAL_KEPT[@]} -gt 0 ]]; then
   echo "  ⚠️  ${#SOCIAL_KEPT[@]} orphaned social table(s) hold data — NOT deleted:"
   for t in "${SOCIAL_KEPT[@]}"; do echo "      ${t}"; done
-  echo "      OrgIQ-Social will FAIL to create these names while they exist. Either deploy into a"
+  echo "      ${STACK_PREFIX}Social will FAIL to create these names while they exist. Either deploy into a"
   echo "      fresh namespace (--context tableSuffix=v2, passed to the middleware AND the social stack),"
   echo "      or, once the data is not wanted, per table:"
   echo "        aws dynamodb update-table --table-name <t> --no-deletion-protection-enabled"
@@ -403,13 +433,13 @@ infer() {  # infer <key> <value> [secret]
 }
 if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
   echo "── Inferring second-phase context from the live account ──"
-  live_read RUNTIME_COUNT cloudformation list-stack-resources --stack-name OrgIQ-AgentCoreRuntime --region "$REGION" \
+  live_read RUNTIME_COUNT cloudformation list-stack-resources --stack-name ${STACK_PREFIX}AgentCoreRuntime --region "$REGION" \
     --query "length(StackResourceSummaries[?ResourceType=='AWS::BedrockAgentCore::Runtime'])" --output text
   [[ "$RUNTIME_COUNT" =~ ^[1-9] ]] && infer deployRuntimes true
   # Which runtimes are live, so an onlyAgents that would delete one is refused
   # at synth (agentcore-runtime-stack.ts, DE-1).
   if [[ "$RUNTIME_COUNT" =~ ^[1-9] ]]; then
-    live_read LIVE_RUNTIMES cloudformation list-stack-resources --stack-name OrgIQ-AgentCoreRuntime --region "$REGION" \
+    live_read LIVE_RUNTIMES cloudformation list-stack-resources --stack-name ${STACK_PREFIX}AgentCoreRuntime --region "$REGION" \
       --query "StackResourceSummaries[?ResourceType=='AWS::BedrockAgentCore::Runtime'].LogicalResourceId" --output text
     [[ -n "$LIVE_RUNTIMES" ]] && infer liveRuntimeIds "$(echo "$LIVE_RUNTIMES" | tr -s '[:space:]' ',' | sed 's/,$//')"
   fi
@@ -417,10 +447,10 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
   live_read MW_DESIRED ecs describe-services --cluster "${PREFIX}-middleware" --services "${PREFIX}-middleware" --region "$REGION" \
     --query 'services[0].desiredCount' --output text
   [[ "$MW_DESIRED" =~ ^[1-9] ]] && infer deployMiddlewareService true
-  stack_output MW_CIDRS OrgIQ-MiddlewareService MiddlewareAllowedCidrs
+  stack_output MW_CIDRS ${STACK_PREFIX}MiddlewareService MiddlewareAllowedCidrs
   [[ "$MW_CIDRS" =~ ^[0-9] ]] && infer albAllowCidr "$MW_CIDRS"
 
-  stack_output PORTAL_URL OrgIQ-Portal PortalUrl
+  stack_output PORTAL_URL ${STACK_PREFIX}Portal PortalUrl
   if [[ -n "$PORTAL_URL" ]]; then
     infer deployPortal true
     infer portalPublicUrl "$PORTAL_URL"
@@ -446,22 +476,22 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
     live_read st cloudformation describe-stacks --stack-name "$1" --region "$REGION" --query 'Stacks[0].StackStatus' --output text
     case "$st" in ""|DELETE_*) return 1 ;; *) return 0 ;; esac
   }
-  stack_live OrgIQ-SocialImages && infer deploySocialImages true
-  if stack_live OrgIQ-SocialMedia; then
+  stack_live ${STACK_PREFIX}SocialImages && infer deploySocialImages true
+  if stack_live ${STACK_PREFIX}SocialMedia; then
     infer deploySocialMedia true
-    stack_output SFU_DIGEST OrgIQ-SocialMedia SfuImageDigest
+    stack_output SFU_DIGEST ${STACK_PREFIX}SocialMedia SfuImageDigest
     [[ "$SFU_DIGEST" == sha256:* ]] && infer sfuImageDigest "$SFU_DIGEST"
-    stack_output SFU_CIDRS OrgIQ-SocialMedia SfuAllowedCidrs
+    stack_output SFU_CIDRS ${STACK_PREFIX}SocialMedia SfuAllowedCidrs
     [[ "$SFU_CIDRS" =~ ^[0-9] ]] && infer sfuAllowCidr "$SFU_CIDRS"
     [[ -n "$PORTAL_URL" ]] && infer socialPortalOrigin "$PORTAL_URL"
   fi
   # TURN (opt-in on OrgIQ-SocialMedia): its relay and allowlist must be
   # re-supplied or the next deploy deletes the relay (DE-23).
-  if stack_live OrgIQ-SocialMedia; then
-    stack_output TURN_IP OrgIQ-SocialMedia TurnPublicIp
+  if stack_live ${STACK_PREFIX}SocialMedia; then
+    stack_output TURN_IP ${STACK_PREFIX}SocialMedia TurnPublicIp
     if [[ -n "$TURN_IP" ]]; then
       infer deployTurn true
-      stack_output TURN_CIDRS OrgIQ-SocialMedia TurnAllowedCidrs
+      stack_output TURN_CIDRS ${STACK_PREFIX}SocialMedia TurnAllowedCidrs
       [[ "$TURN_CIDRS" =~ ^[0-9:] ]] && infer turnAllowCidr "$TURN_CIDRS"
     fi
   fi
@@ -469,13 +499,13 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
   # The devbox runtime (OrgIQ-Devbox phase 2). Without deployDevbox a plain
   # deploy deletes the runtime and wipes every workspace (DE-52); its org
   # access and lab wiring are carried the same way (DE-51).
-  if stack_live OrgIQ-Devbox; then
-    stack_output DEVBOX_ARN OrgIQ-Devbox DevboxRuntimeArn
+  if stack_live ${STACK_PREFIX}Devbox; then
+    stack_output DEVBOX_ARN ${STACK_PREFIX}Devbox DevboxRuntimeArn
     if [[ "$DEVBOX_ARN" == arn:* ]]; then
       infer deployDevbox true
-      stack_output DEVBOX_ORG OrgIQ-Devbox DevboxOrgAccess
+      stack_output DEVBOX_ORG ${STACK_PREFIX}Devbox DevboxOrgAccess
       [[ "$DEVBOX_ORG" == "true" ]] && infer devboxOrgAccess true
-      stack_output DEVBOX_LAB OrgIQ-Devbox DevboxLabApiBase
+      stack_output DEVBOX_LAB ${STACK_PREFIX}Devbox DevboxLabApiBase
       if [[ "$DEVBOX_LAB" == http* ]]; then
         infer labApiBase "$DEVBOX_LAB"
         if ! ctx_given labCallbackSecret; then
@@ -487,10 +517,10 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
     fi
   fi
 
-  if stack_live OrgIQ-Social; then
+  if stack_live ${STACK_PREFIX}Social; then
     infer deploySocial true
-    stack_output PLATFORM_DIGEST OrgIQ-Social PlatformApiImageDigest
-    stack_output PLATFORM_SVC OrgIQ-Social PlatformApiServiceName
+    stack_output PLATFORM_DIGEST ${STACK_PREFIX}Social PlatformApiImageDigest
+    stack_output PLATFORM_SVC ${STACK_PREFIX}Social PlatformApiServiceName
     PLATFORM_DESIRED=0
     if [[ -n "$PLATFORM_SVC" ]]; then
       live_read PLATFORM_DESIRED ecs describe-services --cluster "${PREFIX}-middleware" \
@@ -506,7 +536,7 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
   # socket URL. Its context (image digests, key-secret ARNs) is the SSM copy
   # scripts/docker/document-workspace-push.mjs writes; a deploy without it
   # would tear the document services down.
-  stack_output DOC_GATEWAY_URL OrgIQ-MiddlewareService DocumentGatewayPublicUrl
+  stack_output DOC_GATEWAY_URL ${STACK_PREFIX}MiddlewareService DocumentGatewayPublicUrl
   if [[ -n "$DOC_GATEWAY_URL" ]]; then
     live_read DOC_CONFIG ssm get-parameter --name "/${PREFIX}/documents/workspace-config" --region "$REGION" \
       --query 'Parameter.Value' --output text
@@ -544,10 +574,10 @@ echo ""
 # change-set method if so (change-set works for both create and update).
 EXISTING_STACKS=$(aws cloudformation list-stacks \
   --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE \
-  --query 'StackSummaries[?starts_with(StackName, `OrgIQ`)].StackName' \
+  --query "StackSummaries[?starts_with(StackName, \`${STACK_PREFIX}\`)].StackName" \
   --output text 2>/dev/null || echo "")
 
-STACKS_TO_DEPLOY=$("${CDK[@]}" ls ${INFERRED[@]+"${INFERRED[@]}"} 2>/dev/null | grep "^OrgIQ" || echo "")
+STACKS_TO_DEPLOY=$("${CDK[@]}" ls "${ENV_CONTEXT[@]}" ${INFERRED[@]+"${INFERRED[@]}"} 2>/dev/null | grep "^${STACK_PREFIX}" || echo "")
 ALL_EXIST=true
 while IFS= read -r stack; do
   [[ -z "$stack" ]] && continue
@@ -571,7 +601,7 @@ fi
 NO_ROLLBACK=true
 if [[ "$METHOD" == "direct" ]]; then
   if [[ ${#CDK_ARGS[@]} -eq 0 ]]; then DIFF_ARGS=(); else DIFF_ARGS=("${CDK_ARGS[@]}"); fi
-  if "${CDK[@]}" diff ${DIFF_ARGS[@]+"${DIFF_ARGS[@]}"} ${INFERRED[@]+"${INFERRED[@]}"} 2>&1 \
+  if "${CDK[@]}" diff "${ENV_CONTEXT[@]}" ${DIFF_ARGS[@]+"${DIFF_ARGS[@]}"} ${INFERRED[@]+"${INFERRED[@]}"} 2>&1 \
       | grep -qE '\(requires replacement\)|\(may cause replacement\)|[[:space:]]replace$'; then
     NO_ROLLBACK=false
   fi
@@ -606,9 +636,9 @@ echo ""
 
 run_cdk_deploy() {
   if [[ ${#CDK_ARGS[@]} -eq 0 ]]; then
-    "${CDK[@]}" deploy --all ${INFERRED[@]+"${INFERRED[@]}"} "${CDK_FLAGS[@]}"
+    "${CDK[@]}" deploy --all "${ENV_CONTEXT[@]}" ${INFERRED[@]+"${INFERRED[@]}"} "${CDK_FLAGS[@]}"
   else
-    "${CDK[@]}" deploy "${CDK_ARGS[@]}" ${INFERRED[@]+"${INFERRED[@]}"} "${CDK_FLAGS[@]}"
+    "${CDK[@]}" deploy "${CDK_ARGS[@]}" "${ENV_CONTEXT[@]}" ${INFERRED[@]+"${INFERRED[@]}"} "${CDK_FLAGS[@]}"
   fi
 }
 
@@ -622,7 +652,7 @@ run_cdk_deploy() {
 EXPECTED_STACKS=()
 if [[ ${#CDK_ARGS[@]} -gt 0 ]]; then
   for arg in "${CDK_ARGS[@]}"; do
-    [[ "$arg" == OrgIQ* ]] && EXPECTED_STACKS+=("$arg")
+    [[ "$arg" == "${STACK_PREFIX}"* ]] && EXPECTED_STACKS+=("$arg")
   done
 fi
 if [[ ${#EXPECTED_STACKS[@]} -eq 0 ]]; then
@@ -639,7 +669,7 @@ fi
 kb_expected() {
   local s
   for s in "${EXPECTED_STACKS[@]}"; do
-    [[ "$s" == "OrgIQ-KnowledgeBase" ]] && return 0
+    [[ "$s" == "${STACK_PREFIX}KnowledgeBase" ]] && return 0
   done
   return 1
 }
@@ -651,14 +681,62 @@ kb_expected() {
 # Data API endpoint is stable. A sibling change hardens the CDK side; this is
 # defense in depth so deploy.sh recovers even if the race slips through.
 kb_hit_datapi_race() {
-  [[ "$(stack_status OrgIQ-KnowledgeBase)" == "CREATE_FAILED" ]] || return 1
+  [[ "$(stack_status ${STACK_PREFIX}KnowledgeBase)" == "CREATE_FAILED" ]] || return 1
   local reason
   reason=$(aws cloudformation describe-stack-events \
-    --stack-name OrgIQ-KnowledgeBase --region "$REGION" \
+    --stack-name ${STACK_PREFIX}KnowledgeBase --region "$REGION" \
     --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].ResourceStatusReason" \
     --output text 2>/dev/null || echo "")
   echo "$reason" | grep -qiE 'HttpEndpoint is not enabled|DbInit'
 }
+
+# ──────────────────────────────────────────────────────────────────
+# Schema migrations (DE-20, docs/deployment-enhancements/DE-20-schema-migrations.md)
+#
+# The new BFF must start on the new schema, so when OrgIQ-Aurora is already
+# live the migration ledger applies every repeatable/versioned entry of
+# schema/manifest.json BEFORE cdk deploy. `data` entries never run here: one
+# marked `before: middleware` that is not applied stops a deploy that
+# includes OrgIQ-MiddlewareService and prints its plan/approve/apply commands
+# (the page-thread migration is the first). On a fresh account Aurora does
+# not exist yet, so the step runs after cdk deploy creates it.
+# DEPLOY_MIGRATE=false skips both.
+# ──────────────────────────────────────────────────────────────────
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+if [[ -x "${REPO_ROOT}/.venv-synth/bin/python" ]]; then MIGRATE_PY="${REPO_ROOT}/.venv-synth/bin/python"; else MIGRATE_PY=python3; fi
+run_migrate() {
+  (cd "$REPO_ROOT" && AWS_REGION="$REGION" "$MIGRATE_PY" -m schema.migrate "$@")
+}
+aurora_live() {
+  case "$(stack_status ${STACK_PREFIX}Aurora)" in
+    CREATE_COMPLETE|UPDATE_COMPLETE|IMPORT_COMPLETE|UPDATE_ROLLBACK_COMPLETE) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+MIGRATE_AFTER_DEPLOY=false
+if [[ "${DEPLOY_MIGRATE:-true}" == "true" ]]; then
+  echo "── Schema migrations (python -m schema.migrate) ──"
+  if aurora_live; then
+    if ! run_migrate apply --schema-only; then
+      echo "  ✗ Schema migration failed; not deploying a BFF onto a half-migrated schema." >&2
+      echo "    Fix it and rerun, or DEPLOY_MIGRATE=false to skip on purpose." >&2
+      exit 1
+    fi
+    if printf '%s\n' "${EXPECTED_STACKS[@]}" | grep -qx "${STACK_PREFIX}MiddlewareService"; then
+      if ! run_migrate gate --before middleware; then
+        echo "  ✗ A data migration must be approved and applied before the middleware deploys (commands above)." >&2
+        exit 1
+      fi
+    fi
+  else
+    MIGRATE_AFTER_DEPLOY=true
+    echo "  ${STACK_PREFIX}Aurora is not live yet; migrations run after cdk deploy creates it."
+  fi
+  echo ""
+else
+  echo "── Schema migrations skipped (DEPLOY_MIGRATE=false) ──"
+  echo ""
+fi
 
 # Deploy. `|| DEPLOY_RC=$?` keeps `set -e` from aborting on a mid-fleet failure,
 # so we always reach the reconciliation below no matter how cdk exits.
@@ -676,10 +754,10 @@ run_cdk_deploy || DEPLOY_RC=$?
 # downstream importers were skipped, so nothing consumes the KB's exports yet.)
 if [[ "${KB_RETRIED:-false}" == "false" ]] && kb_expected && kb_hit_datapi_race; then
   echo ""
-  echo "── OrgIQ-KnowledgeBase CREATE_FAILED on the Data-API race — recovering ──"
+  echo "── ${STACK_PREFIX}KnowledgeBase CREATE_FAILED on the Data-API race — recovering ──"
   echo "  Deleting the failed KB stack (a CREATE_FAILED stack cannot be updated)..."
-  aws cloudformation delete-stack --stack-name OrgIQ-KnowledgeBase --region "$REGION" 2>/dev/null || true
-  aws cloudformation wait stack-delete-complete --stack-name OrgIQ-KnowledgeBase --region "$REGION" 2>/dev/null || true
+  aws cloudformation delete-stack --stack-name ${STACK_PREFIX}KnowledgeBase --region "$REGION" 2>/dev/null || true
+  aws cloudformation wait stack-delete-complete --stack-name ${STACK_PREFIX}KnowledgeBase --region "$REGION" 2>/dev/null || true
   echo "  Re-running the deploy once (Data API endpoint is stable by now)..."
   KB_RETRIED=true
   DEPLOY_RC=0
@@ -793,5 +871,13 @@ if [[ ${#FAILURES[@]} -gt 0 ]]; then
   echo "  reconciliation exists. Fix the failed stack and re-run"
   echo "  ./scripts/deploy.sh (it is idempotent — healthy stacks are no-ops)."
   exit 1
+fi
+# A fresh account: Aurora exists only now, so the baseline runs here.
+if [[ "$MIGRATE_AFTER_DEPLOY" == "true" ]] && aurora_live; then
+  echo "── Schema migrations (fresh cluster baseline) ──"
+  if ! run_migrate apply --schema-only; then
+    echo "✗ Stacks are healthy but the schema migration failed; rerun: python -m schema.migrate apply --schema-only"
+    exit 1
+  fi
 fi
 echo "✓ Deploy complete — all ${#EXPECTED_STACKS[@]} expected stack(s) healthy"

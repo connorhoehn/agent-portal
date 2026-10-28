@@ -38,6 +38,7 @@ import {
 } from '@aws-sdk/client-bedrock-agentcore-control';
 
 import { canSee, visibleBoxes, FLEET_WIDE_ROLES, requireBoxAccess } from '../lib/devbox-visibility.js';
+import { requireBoxAction } from '../lib/agent-actions.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
@@ -61,6 +62,9 @@ import {
 import { presignShellUrl, isValidShellId, MAX_FRAME_BYTES } from '../lib/devbox-shell.js';
 import { startReaper, timeLeft } from '../lib/devbox-reaper.js';
 import { mockDevboxClient } from '../mock/devbox-shell.js';
+import { randomUUID } from 'node:crypto';
+import { parseReportedCost } from '../lib/run-cost.js';
+import { recordSpend } from '../providers/spend-ledger.js';
 
 export const devboxRouter = Router();
 
@@ -548,6 +552,9 @@ export async function runTaskAndForward(opts: {
   timeout?: number;
   res: Response;
   arn: string;
+  /** Who this ad-hoc task spends for (DE-30). Only the two routes no bot run
+   *  or job owns call this function, so every call writes its own entry. */
+  spend: { source: 'box_task' | 'agent_loop'; actorId: string | null };
 }): Promise<void> {
   const { sessionId, prompt, resume, model, timeout, res, arn } = opts;
   const payload = JSON.stringify({
@@ -573,6 +580,21 @@ export async function runTaskAndForward(opts: {
   }));
 
   initSSE(res);
+  // The task's own ledger figures, read off the frames as they pass.
+  const taskId = randomUUID();
+  let costUsd: number | null = null;
+  let resultSeen = false;
+  let usedModel: string | null = model ?? null;
+  let tokens: { input: number; output: number } | null = null;
+  const observe = (ev: Record<string, unknown>): void => {
+    if (ev['type'] === 'devbox_start' && typeof ev['model'] === 'string' && ev['model']) usedModel = ev['model'];
+    if (ev['type'] === 'result') {
+      resultSeen = true;
+      costUsd = parseReportedCost(ev);
+      const usage = ev['usage'] as { input_tokens?: unknown; output_tokens?: unknown } | undefined;
+      if (usage) tokens = { input: Number(usage.input_tokens ?? 0) || 0, output: Number(usage.output_tokens ?? 0) || 0 };
+    }
+  };
   try {
     const stream = resp.response as AsyncIterable<Uint8Array> | undefined;
     if (!stream) { writeSSE(res, { type: 'devbox_error', error: 'empty response stream' }); return; }
@@ -599,7 +621,11 @@ export async function runTaskAndForward(opts: {
         }
         if (!line.startsWith('{')) continue;
         if (!res.writableEnded) res.write(`data: ${line}\n\n`);
-        try { appendEvent(fleetBox.id, JSON.parse(line) as Record<string, unknown>); } catch { /* malformed frame — forwarded raw above, skip tee */ }
+        try {
+          const ev = JSON.parse(line) as Record<string, unknown>;
+          appendEvent(fleetBox.id, ev);
+          observe(ev);
+        } catch { /* malformed frame — forwarded raw above, skip tee */ }
       }
     }
   } catch (err) {
@@ -607,13 +633,27 @@ export async function runTaskAndForward(opts: {
     appendEvent(fleetBox.id, { type: 'devbox_error', error: (err as Error).message });
   } finally {
     endSSE(res);
+    // The runtime accepted the task, so it may have spent: a run that never
+    // reported a result is unknown cost, not zero.
+    const t = tokens as { input: number; output: number } | null;
+    await recordSpend({
+      source: opts.spend.source,
+      sourceId: `${fleetBox.id}:${taskId}`,
+      initiativeId: fleetBox.projectId ?? null,
+      boxId: fleetBox.id,
+      actorId: opts.spend.actorId,
+      model: usedModel,
+      costUsd: resultSeen ? costUsd : null,
+      inputTokens: t?.input ?? null,
+      outputTokens: t?.output ?? null,
+    });
   }
 }
 
 // Task mode: Claude Code headless run in /mnt/workspace, stream-json events
 // forwarded as SSE. The devbox wrapper emits devbox_start/devbox_end envelope
 // events around Claude Code's own stream.
-devboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
+devboxRouter.post('/:sessionId/task', requireBoxAction('RunDevboxTask'), asyncHandler(async (req, res) => {
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
   if (!await requireBoxAccess(req, res, sessionId)) return;
@@ -626,6 +666,7 @@ devboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
 
   await runTaskAndForward({
     sessionId, prompt, resume: Boolean(body.resume), res, arn,
+    spend: { source: 'box_task', actorId: req.session?.sub ?? null },
     ...(body.model ? { model: body.model } : {}),
     ...(body.timeout ? { timeout: body.timeout } : {}),
   });
@@ -634,7 +675,7 @@ devboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
 // Command mode: deterministic shell via the InvokeAgentRuntimeCommand
 // operation — no LLM in the loop. Allowlisted + metacharacter-banned; the cwd
 // prefix below is composed server-side AFTER validation.
-devboxRouter.post('/:sessionId/command', asyncHandler(async (req, res) => {
+devboxRouter.post('/:sessionId/command', requireBoxAction('OpenDevboxShell'), asyncHandler(async (req, res) => {
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
   if (!await requireBoxAccess(req, res, sessionId)) return;
@@ -810,7 +851,7 @@ export async function mintShellUrl(
   }
 }
 
-devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
+devboxRouter.post('/:sessionId/shell-url', requireBoxAction('OpenDevboxShell'), asyncHandler(async (req, res) => {
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
   if (!await requireBoxAccess(req, res, sessionId)) return;

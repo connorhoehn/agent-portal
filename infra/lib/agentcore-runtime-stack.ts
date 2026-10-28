@@ -1,9 +1,11 @@
 import { execFileSync } from 'child_process';
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
+import { DEFAULT_MODEL_REGISTRY_FILE, loadModelRegistry, primaryModelFor } from './model-registry';
 
 /**
  * Resolve `<repo>:latest` to a digest-pinned URI at synth time so CFN sees a
@@ -38,7 +40,9 @@ export function resolveContainerUri(repoUri: string, repoName: string, region: s
 export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly prefix?: string;
   readonly agentRoles: Record<string, iam.Role>;
-  readonly memoryId: string;
+  /** Literal id, or leave unset and pass `memoryIdParameter` (SSM name published by the memory stack). */
+  readonly memoryId?: string;
+  readonly memoryIdParameter?: string;
   /** Per-role guardrail IDs — supervisor selects one based on caller's role. */
   readonly guardrailIdMember?: string;
   readonly guardrailIdOrgLeader?: string;
@@ -53,7 +57,13 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
    */
   readonly auroraReadOnlySecretArn?: string;
   readonly knowledgeBaseId: string;
+  /**
+   * Fleet-wide model override. Unset (the default), each runtime's cold
+   * `MODEL_ID` is its role's `primary` in the model registry (DE-3).
+   */
   readonly modelId?: string;
+  /** Registry file; defaults to `infra/config/model-registry.json` (or `--context modelRegistryFile=`). */
+  readonly modelRegistryFile?: string;
   readonly codeInterpreterId?: string;
   readonly codeInterpreterArn?: string;
   readonly browserId?: string;
@@ -85,7 +95,7 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly middlewareUrl?: string;
 }
 
-const AGENT_NAMES = [
+export const AGENT_NAMES = [
   'supervisor',
   'search',
   'scoring',
@@ -149,6 +159,30 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
 
     const prefix = props.prefix ?? 'orgiq';
     const modelId = props.modelId ?? 'amazon.nova-pro-v1:0';
+    // DE-3: one versioned registry document in SSM, validated at synth (a
+    // non-AWS-native id fails the synth). Agents re-read it every 60 s, so an
+    // edit to the parameter rolls no runtime; MODEL_ID below is only the cold
+    // fallback. DE-5 gates the parameter write, not the deploy.
+    const modelRegistryFile = props.modelRegistryFile
+      ?? (this.node.tryGetContext('modelRegistryFile') as string | undefined)
+      ?? DEFAULT_MODEL_REGISTRY_FILE;
+    const modelRegistry = loadModelRegistry(modelRegistryFile);
+    const modelRegistryJson = JSON.stringify(modelRegistry);
+    if (Buffer.byteLength(modelRegistryJson, 'utf8') > 4096) {
+      throw new Error(`${modelRegistryFile}: registry exceeds the 4 KB SSM standard-tier limit`);
+    }
+    const modelRegistryParamName = `/${prefix}/models/registry`;
+    const modelRegistryParam = new ssm.StringParameter(this, 'ModelRegistryParam', {
+      parameterName: modelRegistryParamName,
+      stringValue: modelRegistryJson,
+      tier: ssm.ParameterTier.STANDARD,
+      description: 'OrgIQ model registry (DE-3), written from infra/config/model-registry.json',
+    });
+    // Optional pin to an SSM parameter version while a DE-5 gate judges a change.
+    const modelRegistryVersion = this.node.tryGetContext('modelRegistryVersion') as string | undefined;
+    const memoryId = props.memoryIdParameter
+      ? ssm.StringParameter.valueForStringParameter(this, props.memoryIdParameter)
+      : (props.memoryId ?? '');
     if (props.middlewareUrl !== undefined && !/^https?:\/\/[^/\s]+\/?$/.test(props.middlewareUrl)) {
       throw new Error(`middlewareUrl must be an origin (https://host), got ${props.middlewareUrl}`);
     }
@@ -299,6 +333,13 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         },
       });
 
+      // DE-3: every agent reads the model registry parameter (read-only).
+      executionRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'ModelRegistryRead',
+        actions: ['ssm:GetParameter'],
+        resources: [modelRegistryParam.parameterArn],
+      }));
+
       // Supervisor needs A2A: list runtimes for discovery + invoke sub-agents
       if (agentName === 'supervisor') {
         executionRole.addToPolicy(new iam.PolicyStatement({
@@ -442,9 +483,9 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           // endpoint into CloudWatch GenAI observability (requires the
           // aws-opentelemetry-distro package in the image).
           AGENT_OBSERVABILITY_ENABLED: 'true',
-          OTEL_SERVICE_NAME: `orgiq-${agentName}`,
+          OTEL_SERVICE_NAME: `${prefix}-${agentName}`,
           OTEL_PYTHON_LOG_CORRELATION: 'true',
-          OTEL_RESOURCE_ATTRIBUTES: `deployment.environment=dev,service.namespace=orgiq,agent.id=orgiq-${agentName}`,
+          OTEL_RESOURCE_ATTRIBUTES: `deployment.environment=dev,service.namespace=orgiq,agent.id=${prefix}-${agentName}`,
           OTEL_PYTHON_DISABLED_INSTRUMENTATIONS: '',
           AGENT_NAME: agentName,
           // Live system prompts: each agent resolves `orgiq-<agent>-system-prompt`
@@ -455,14 +496,16 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           SYSTEM_PROMPT_NAME: `${prefix}-${agentName}-system-prompt`,
           SYSTEM_PROMPT_VERSION: 'DRAFT',
           PROMPT_REFRESH_S: '60',
-          MEMORY_ID: props.memoryId,
+          MEMORY_ID: memoryId,
           // Sub-agents run without a guardrail — the supervisor enforces at the
           // edge based on the caller's role. Supervisor still gets per-role IDs
           // via GUARDRAIL_ID_MEMBER/ORG_LEADER/HR_ADMIN below.
           // DRAFT means agents always see the latest portal edits without rebuild.
           // Switch to a numbered version (e.g. "2") for audited rollouts.
           GUARDRAIL_VERSION: 'DRAFT',
-          MODEL_ID: modelId,
+          MODEL_ID: props.modelId ?? primaryModelFor(modelRegistry, agentName, modelId),
+          MODEL_REGISTRY_PARAM: modelRegistryParamName,
+          ...(modelRegistryVersion && { MODEL_REGISTRY_VERSION: String(modelRegistryVersion) }),
           AURORA_CLUSTER_ARN: props.auroraClusterArn,
           AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
           APP_ENV: 'production',

@@ -9,6 +9,18 @@ from pathlib import Path
 
 SCHEMA_DIR = Path(__file__).resolve().parent
 
+try:
+    from .schema_manifest import schema_files as manifest_schema_files
+except ImportError:
+    try:
+        from schema_manifest import schema_files as manifest_schema_files
+    except ModuleNotFoundError:
+        # Loaded by file path (agents/_shared/test_schema_loader.py uses
+        # importlib.spec_from_file_location), so neither the package nor the
+        # cwd puts the sibling on sys.path; it lives next to this file.
+        sys.path.insert(0, str(SCHEMA_DIR))
+        from schema_manifest import schema_files as manifest_schema_files
+
 # --- The cold-cluster scale-up race ---------------------------------------
 # A freshly created Aurora Serverless v2 cluster sits cold at its 0.5-ACU
 # minimum. The FIRST Data API call after idle triggers a scale-up, and while
@@ -74,12 +86,13 @@ def is_transient(e):
         return True
     return any(m in str(e).lower() for m in TRANSIENT_MARKERS)
 
-def execute_with_retry(rds, cluster_arn, secret_arn, db_name, sql):
+def execute_with_retry(rds, cluster_arn, secret_arn, db_name, sql, **extra):
     """execute_statement with backoff for the scale-up race.
 
     Retries only transient scale-up/resume/reset errors. `already exists` and
     genuine SQL errors are raised to the caller unchanged — the loop treats the
-    former as success (↻) and the latter as a real failure.
+    former as success (↻) and the latter as a real failure. `extra` passes
+    through to execute_statement (parameters, transactionId, formatRecordsAs).
     """
     last = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -89,6 +102,7 @@ def execute_with_retry(rds, cluster_arn, secret_arn, db_name, sql):
                 secretArn=secret_arn,
                 database=db_name,
                 sql=sql,
+                **extra,
             )
         except Exception as e:
             # 'already exists' is idempotent success; never retry, let the caller
@@ -167,139 +181,10 @@ def main():
     # eat the cold-cluster scale-up race.
     warm_up(rds, cluster_arn, secret_arn, db_name)
 
-    schema_files = [
-        'orgiq_schema.sql',
-        'search_workspace_schema.sql',
-        'identity_schema.sql',
-        # The social tenant's channel directory + context bindings (chat state is DynamoDB).
-        'social_schema.sql',
-        'observability_schema.sql',
-        'observability_authz_schema.sql',
-        # The observability sprint schemas. These were never in this list, so a
-        # rebuilt cluster came up without the tables the middleware queries by
-        # name — observability.approvals, .canary_experiments, .prompt_versions
-        # and .prompt_version_meta are referenced across a dozen middleware
-        # files, and each page hitting them 500s on a fresh database. They load
-        # in sprint order because the later ones ALTER what the earlier ones
-        # create.
-        'observability_sprint1_schema.sql',
-        'observability_sprint2_schema.sql',
-        'observability_sprint3_promote_schema.sql',
-        'observability_sprint4_calibration_schema.sql',
-        'observability_sprint4_memory_schema.sql',
-        'observability_sprint5_canary_schema.sql',
-        'observability_sprint6_prompt_history_schema.sql',
-        # The prompt CONTRACT columns (kind/tier/contract/owner_email/
-        # eval_pass_rate) that sprint6's prompt_version_meta does not create.
-        # Same bug class as the sprint schemas above, but failing softer and so
-        # harder to spot: providers/prompt-library.ts `fetchAuroraMeta` SELECTs
-        # all five by name and swallows the error, so a cluster missing this
-        # ALTER does not 500 — the prompt library just silently degrades to
-        # "Bedrock defaults" with every tier and contract blank. Loads directly
-        # after the file that creates the table it alters.
-        'prompt_contract_schema.sql',
-        'observability_approvals_schema.sql',
-        'orgiq_kb_registry_schema.sql',
-        'orgiq_work_items_schema.sql',
-        'work_item_key_schema.sql',
-        # Explicit work context links require both work_items and documents.
-        'work_item_documents_schema.sql',
-        # The page-thread migration ledger (work_item_comments -> orgiq:work:<id>).
-        'work_item_comment_migration_schema.sql',
-        # The agentic loop: agent_jobs, agent_findings, graph_proposals. Was
-        # applied only by apply_agentic_work.py, so a rebuild left the Work
-        # page 500ing on missing tables.
-        'agentic_work_schema.sql',
-        # Document uploads via share links (standalone).
-        'kb_upload_links_schema.sql',
-        # Codebases agents work on. References `projects` (orgiq_schema), so it
-        # loads after it — and agent_sdlc loads after this, since its change
-        # requests reference agent_project_runs.
-        'agent_projects_schema.sql',
-        'agent_sdlc_schema.sql',
-        # The lab loop: fleet memory + human consults for computer-lab agents.
-        'lab_loop_schema.sql',
-        # The fleet itself — which computers exist. Standalone (no FKs): the
-        # registry it backs is in-process memory, and a cluster missing this
-        # table degrades to exactly the old behaviour rather than failing, so
-        # it does not gate anything that loads after it.
-        'devbox_fleet_schema.sql',
-        # Bots + bot_runs. Loads last: it references agent_projects,
-        # agent_project_runs, agent_jobs and projects, and its ALTERs add
-        # linkage columns to tables the files above create.
-        'agent_bots_schema.sql',
-        # Initiative budget allocations. Loads after agent_bots_schema.sql
-        # (spend reads join bot_runs) and orgiq_schema.sql (FK on projects).
-        'agent_budgets_schema.sql',
-        # Sprints, SME budget grants, work-item cost estimates, maintenance
-        # baseline view. Loads last: references people, projects, work_items,
-        # bots and bot_runs.
-        'program_schema.sql',
-        # The assessment tenant's own tables (docs/assessment-tenant.md).
-        # Standalone — no FK into the org graph — so it can load anywhere;
-        # kept here so a rebuilt cluster has the tables the Aurora path of
-        # providers/assessment.ts will query.
-        'assessment_schema.sql',
-        # Which app users are on which assessment team (the Communication plane's
-        # "My teams"); needs assessment_teams and app_users, so it loads after both.
-        'assessment_team_members_schema.sql',
-        # Review decks for an assessed team (docs/assessment-deck-goal.md).
-        # Additive; FKs assessment_teams, so it loads right after it.
-        'assessment_deck_schema.sql',
-        # Pipeline run report decks (docs/agentic-flows-migration.md slice 3).
-        # Additive and standalone (no FK to the run projection).
-        'pipeline_deck_schema.sql',
-        # Orgiq initiative status decks (docs/agentic-flows-migration.md slice 6).
-        # Additive and standalone (project_id is text, no FK).
-        'initiative_deck_schema.sql',
-        # Durable flow runs (docs/agentic-flows-migration.md slice 4a).
-        # Additive and standalone.
-        'flow_runs_schema.sql',
-        # Social /deck decks (docs/agentic-flows-migration.md slice 5). Additive,
-        # standalone (channel is text, no FK).
-        'social_deck_schema.sql',
-        # bot_runs.dispatched_by — who authorized a run, which is what lets the
-        # per-SME budget_grants envelope be enforced. Additive ALTER, so it
-        # loads after agent_bots_schema.sql creates the table.
-        'agent_run_attribution_schema.sql',
-        # work_items estimate provenance — who stood behind a forecast, when,
-        # and for which model. Additive ALTER on work_items, so it loads after
-        # orgiq_work_items_schema.sql creates the table and after
-        # program_schema.sql adds estimated_cost_usd beside it.
-        'work_item_estimate_schema.sql',
-        # NOTE: environments_schema.sql is deliberately NOT here. Its last
-        # statement seeds environments for the p-* cast, and those ids are
-        # created by seed_program.sql — which apply_all_seed.py applies, AFTER
-        # this script. So on a from-scratch cluster the INSERT could only ever
-        # fail its FK on projects ("violates foreign key constraint
-        # environments_org_project_id_fkey"), taking this whole loader to
-        # exit 1 with every other file already applied. A file whose tail
-        # depends on seed rows belongs in the seed script, so that is where it
-        # now loads.
-        # Paired developer machines (compute_nodes, compute_pairing_codes).
-        # No FK into the graph — owner_id is a bare app_users sub — so it can
-        # load anywhere. providers/local-compute.ts queries both tables by name
-        # with no fallback, so a rebuilt cluster without them 500s every
-        # pairing and presence call.
-        'local_compute_schema.sql',
-        # Local compute P2 — cost provenance (bot_runs/agent_project_runs
-        # model_provider) plus the fencing columns a pull-side claim needs.
-        # All additive ALTERs, so it loads after agent_bots_schema.sql,
-        # agent_projects_schema.sql, agentic_work_schema.sql and
-        # local_compute_schema.sql have created the four tables it touches.
-        'local_compute_worker_schema.sql',
-        # The pipelines tenant's own tables (definitions' recorded versions,
-        # the runs it starts — the runbook dry-run — and its config). No FK
-        # into any other table: the projection reads the run-shaped tables,
-        # nothing here joins them, so it can load last.
-        'pipeline_schema.sql',
-        # The access tenant's model (docs/access-tenant-design.md §3): catalog,
-        # requests, steps, SoD policies, events, reviews, plus the additive
-        # people.manager_id and the access cast's people rows. Needs people and
-        # app_users (orgiq_schema.sql, identity_schema.sql), so it loads late.
-        # NOT yet applied to Aurora — a user decision (goal lane E).
-        'access_schema.sql',
-    ]
+    # The load order and the reason each file sits where it does live in
+    # schema/manifest.json (DE-20): every `repeatable` entry, in order. The
+    # migration ledger (python -m schema.migrate) reads the same list.
+    schema_files = manifest_schema_files()
 
     # Track genuine failures — statements that erred for a non-transient reason
     # and never succeeded after exhausting retries. These, and only these,

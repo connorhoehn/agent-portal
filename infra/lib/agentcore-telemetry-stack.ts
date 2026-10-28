@@ -5,6 +5,7 @@ import * as xray from 'aws-cdk-lib/aws-xray';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
+import { loadModelRegistry, primaryModelFor } from './model-registry';
 
 const AGENT_NAMES = ['supervisor', 'search', 'scoring', 'advisor', 'ingestion', 'graph-builder'] as const;
 
@@ -30,7 +31,10 @@ export class AgentCoreTelemetryStack extends cdk.Stack {
 
     const prefix = props.prefix ?? 'orgiq';
     const safeName = prefix.replace(/-/g, '_');
-    const modelId = props.modelId ?? 'us.amazon.nova-pro-v1:0';
+    // DE-3: the judge model is the registry's `eval-judge` role (validated
+    // AWS-native at synth); the literal is kept as the cold fallback.
+    const modelId = props.modelId
+      ?? primaryModelFor(loadModelRegistry(), 'eval-judge', 'us.amazon.nova-pro-v1:0');
     // enableEval=true creates evaluator definitions + dashboard.
     // enableOnlineEvalConfig=true also creates CfnOnlineEvaluationConfig — only set
     // this AFTER agents are running so X-Ray has created the aws/spans log group.

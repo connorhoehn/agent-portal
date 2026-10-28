@@ -41,6 +41,7 @@ import { type SqlParameter } from '@aws-sdk/client-rds-data';
 // providers/agentcore.ts and with the `degraded` marker routes/cost.ts put on
 // the wire. See lib/upstream.ts for why an envelope and not a throw.
 import { reached, unreachable, type Upstream } from '../lib/upstream.js';
+import { recordBotRunSpend, spendLedgerMode, mockStoredSpend } from './spend-ledger.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
@@ -326,8 +327,15 @@ export async function dispatchedSpendInWindow(input: {
     params.push(s('to', input.endsOn));
   }
   try {
+    // Ledger mode (DE-30) counts every path this person spent through on the
+    // initiative — ad-hoc box tasks and queued jobs as well as dispatches.
     const rows = await exec(
-      `SELECT COALESCE(SUM(br.cost_usd), 0)::float8 AS spent
+      spendLedgerMode() === 'ledger'
+        ? `SELECT COALESCE(SUM(se.cost_usd), 0)::float8 AS spent
+             FROM spend_entries se
+            WHERE se.actor_id = :by
+              AND se.initiative_id = :pid${window.replace(/br\.started_at/g, 'se.occurred_at')}`
+        : `SELECT COALESCE(SUM(br.cost_usd), 0)::float8 AS spent
          FROM bot_runs br
         WHERE br.dispatched_by = :by
           AND (${spendPredicateSql(':pid')})${window}`,
@@ -408,6 +416,15 @@ async function mockDispatchedSpend(input: {
       attributed = bot?.orgProjectId === input.orgProjectId;
     }
     if (attributed) spent += run.costUsd ?? 0;
+  }
+
+  if (spendLedgerMode() === 'ledger') {
+    for (const e of mockStoredSpend((x) => x.actorId === input.dispatchedBy && x.initiativeId === input.orgProjectId)) {
+      const at = Date.parse(e.occurredAt);
+      if (from != null && at < from) continue;
+      if (toExclusive != null && at >= toExclusive) continue;
+      spent += e.costUsd ?? 0;
+    }
   }
 
   return { spentUsd: Math.round(spent * 10_000) / 10_000, attributionAvailable: true };
@@ -1148,6 +1165,8 @@ async function settleBotRun(id: string, result: {
       s('outcome', JSON.stringify(result.outcome ?? {})),
     ],
   );
+  // The ledger entry (DE-30), resolved from the row just settled.
+  await recordBotRunSpend(id);
 }
 
 /**

@@ -135,9 +135,9 @@ describe('deploy.sh: a later deploy keeps the second-phase gates that are live',
   });
 
   test('inferred context reaches cdk ls and both cdk deploy forms', () => {
-    assert.match(script, /ls \$\{INFERRED\[@\]\+"\$\{INFERRED\[@\]\}"\}/);
-    assert.match(script, /deploy --all \$\{INFERRED\[@\]\+"\$\{INFERRED\[@\]\}"\}/);
-    assert.match(script, /deploy "\$\{CDK_ARGS\[@\]\}" \$\{INFERRED\[@\]\+"\$\{INFERRED\[@\]\}"\}/);
+    assert.match(script, /ls "\$\{ENV_CONTEXT\[@\]\}" \$\{INFERRED\[@\]\+"\$\{INFERRED\[@\]\}"\}/);
+    assert.match(script, /deploy --all "\$\{ENV_CONTEXT\[@\]\}" \$\{INFERRED\[@\]\+"\$\{INFERRED\[@\]\}"\}/);
+    assert.match(script, /deploy "\$\{CDK_ARGS\[@\]\}" "\$\{ENV_CONTEXT\[@\]\}" \$\{INFERRED\[@\]\+"\$\{INFERRED\[@\]\}"\}/);
   });
 
   test('secret values are never echoed', () => {
@@ -154,7 +154,7 @@ describe('teardown and rebuild know the opt-in stacks (deploy plan §8/§10)', (
     for (const flag of ['deploySocial=true', 'deploySocialMedia=true', 'deploySocialImages=true', 'deployPortal=true']) {
       assert.match(script, new RegExp(`--context ${flag}`), `destroy does not pass ${flag}`);
     }
-    assert.match(script, /destroy --all --force "\$\{DESTROY_CONTEXT\[@\]\}"/);
+    assert.match(script, /destroy --all --force "\$\{ENV_CONTEXT\[@\]\}" "\$\{DESTROY_CONTEXT\[@\]\}"/);
   });
 
   test('the billing sweep reports ElastiCache, the SFU host and EIP, CloudFront, social tables and retained repos', () => {
@@ -206,5 +206,33 @@ describe('deploy.sh: an orphaned Cloud Map namespace is swept before deploy', ()
     assert.match(deploySh, /servicediscovery list-namespaces/);
     assert.match(deploySh, /describe-stack-resources --physical-resource-id "\$ns"/);
     assert.match(deploySh, /services" == "0"/);
+  });
+});
+
+describe('deploy.sh: schema migrations run before cdk deploy (DE-20)', () => {
+  const script = code(deploySh);
+
+  test('the migrate step applies the schema before the first cdk deploy', () => {
+    // The new BFF must start on the new schema; a step after cdk deploy would
+    // let the middleware boot against tables it does not have yet.
+    const migrate = script.indexOf('run_migrate apply --schema-only');
+    const firstDeploy = script.indexOf('run_cdk_deploy || DEPLOY_RC=$?');
+    assert.ok(migrate > 0, 'no `migrate apply --schema-only` step in deploy.sh');
+    assert.ok(firstDeploy > 0, 'run_cdk_deploy call not found');
+    assert.ok(migrate < firstDeploy, 'the migrate step must come before cdk deploy');
+    assert.match(script, /-m schema\.migrate/);
+  });
+
+  test('an unapplied before-middleware data entry stops a middleware deploy', () => {
+    const gate = script.indexOf('run_migrate gate --before middleware');
+    assert.ok(gate > 0 && gate < script.indexOf('run_cdk_deploy || DEPLOY_RC=$?'));
+    assert.match(script, /\$\{STACK_PREFIX\}MiddlewareService"[^\n]*\n\s*if ! run_migrate gate --before middleware/);
+  });
+
+  test('it is skippable, waits for Aurora, and baselines a fresh cluster after deploy', () => {
+    assert.match(script, /DEPLOY_MIGRATE:-true/);
+    assert.match(script, /stack_status \$\{STACK_PREFIX\}Aurora/);
+    const after = script.lastIndexOf('run_migrate apply --schema-only');
+    assert.ok(after > script.lastIndexOf('run_cdk_deploy || DEPLOY_RC=$?'), 'no fresh-cluster migrate after cdk deploy');
   });
 });

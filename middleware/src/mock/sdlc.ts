@@ -1,5 +1,6 @@
 // AI SDLC governance — `agent_change_requests`, `agent_change_reviews`,
-// `agent_change_gates` and `sdlc_policies`, offline.
+// `agent_change_gates`, `sdlc_policy_versions` and `sdlc_policy_proposals`,
+// offline. (`sdlc_policies` is only the migration's source now, DE-46.)
 //
 // WHY THIS MODULE EXISTS. The whole capture → review → gate → deliver pipeline
 // was Aurora-only. `providers/sdlc.ts` carried two mock *reads* (a bare
@@ -183,18 +184,11 @@ export function parseFilesOf(diff: string): string[] {
 
 // ─── Policies ───────────────────────────────────────────────────────────────
 
-/** A policy row: `sdlc_policies`, plus the `created_at` its ORDER BY reads. */
-export interface PolicyRow extends SdlcPolicy {
-  createdAt: string;
-}
-
 /**
- * Stable uuids for the four seeded defaults, in `DEFAULT_POLICIES` order.
- *
- * They are uuids because `sdlc_policies.id` is one, and because
- * `deletePolicy`/`upsertPolicy` gate on `isUuid` — under the old
- * `default-0`-style ids every offline DELETE 404'd before it reached the row
- * it was aimed at, which looked exactly like "the policy is not there".
+ * Stable ids for the four seeded defaults, in `DEFAULT_POLICIES` order. In a
+ * versioned set (DE-46) the id is the policy's KEY: the same policy keeps it
+ * across versions, so two versions diff policy by policy. They are the uuids
+ * the old `sdlc_policies` rows carried, which is what the migration copies.
  */
 const POLICY_IDS = [
   'b0d1f7a4-3c52-4e19-9a67-2f8c41d5e603',
@@ -203,91 +197,145 @@ const POLICY_IDS = [
   'e3a4cad7-6f85-4b4c-ad9a-5cbf74081936',
 ];
 
+/** The defaults as the set `('org', 1)` holds them. */
+export function defaultPolicySet(): SdlcPolicy[] {
+  return DEFAULT_POLICIES.map((p, i) => ({
+    ...p, id: POLICY_IDS[i] ?? randomUUID(),
+    config: JSON.parse(JSON.stringify(p.config)) as Record<string, unknown>,
+  }));
+}
+
+/** A row of `sdlc_policy_versions`: one whole policy set at one version. */
+export interface PolicyVersionRow {
+  scope: string;
+  version: number;
+  policies: SdlcPolicy[];
+  basedOn: number | null;
+  changedBy: string;
+  reason: string;
+  createdAt: string;
+}
+
 /**
- * Governance policies.
+ * Versioned policy sets (DE-46).
  *
- * `default` — the four `DEFAULT_POLICIES` a fresh environment seeds itself
- *             with, which is what Aurora holds the moment anyone opens the
- *             policy surface.
- * `empty`   — an *ungoverned* environment. Note this is a state the product
- *             actively repairs: `seedDefaultPolicies` re-seeds an empty table
- *             on the next read, offline exactly as in Aurora, so pinning this
- *             fixture to `empty` shows the fail-closed path
- *             (`evaluateChange` refusing to auto-approve with no policies)
- *             rather than a permanently empty list.
+ * `default` — `('org', 1)`, the defaults as the migration writes them from an
+ *             environment that had only ever held the seeded rows.
+ * `empty`   — no version at all: an environment the migration has not
+ *             reached. The provider bootstraps `('org', 1)` on first use,
+ *             offline as in Aurora, so this shows the bootstrap rather than an
+ *             ungoverned surface.
  */
-export const sdlcPolicies = defineFixture<PolicyRow>({
-  key: 'sdlc-policies',
+export const sdlcPolicyVersions = defineFixture<PolicyVersionRow>({
+  key: 'sdlc-policy-versions',
   scenarios: {
-    default: () => DEFAULT_POLICIES.map((p, i) => ({
-      ...p,
-      id: POLICY_IDS[i] ?? randomUUID(),
-      config: { ...p.config },
-      createdAt: clock.daysAgo(DEFAULT_POLICIES.length - i),
-    })),
+    default: () => [{
+      scope: 'org', version: 1, policies: defaultPolicySet(), basedOn: null,
+      changedBy: 'migration', reason: 'Migrated from sdlc_policies (DE-46).',
+      createdAt: clock.daysAgo(DEFAULT_POLICIES.length),
+    }],
     empty: () => [],
   },
 });
 
-/** `SELECT * FROM sdlc_policies ORDER BY created_at`. */
-export function mockListPolicies(): SdlcPolicy[] {
-  return sdlcPolicies
-    .rows()
-    .slice()
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    .map(({ createdAt: _createdAt, ...policy }) => ({ ...policy, config: { ...policy.config } }));
+const copySet = (set: readonly SdlcPolicy[]): SdlcPolicy[] =>
+  set.map((p) => ({ ...p, config: JSON.parse(JSON.stringify(p.config)) as Record<string, unknown> }));
+const copyVersion = (r: PolicyVersionRow): PolicyVersionRow => ({ ...r, policies: copySet(r.policies) });
+
+/** `SELECT * FROM sdlc_policy_versions WHERE scope = :scope ORDER BY version DESC LIMIT 1`. */
+export function mockLatestPolicyVersion(scope: string): PolicyVersionRow | null {
+  const rows = sdlcPolicyVersions.rows().filter((r) => r.scope === scope).sort((a, b) => b.version - a.version);
+  return rows[0] ? copyVersion(rows[0]) : null;
+}
+
+/** One version, or null. */
+export function mockGetPolicyVersion(scope: string, version: number): PolicyVersionRow | null {
+  const row = sdlcPolicyVersions.rows().find((r) => r.scope === scope && r.version === version);
+  return row ? copyVersion(row) : null;
+}
+
+/** Every version of a scope, newest first. */
+export function mockListPolicyVersions(scope: string): PolicyVersionRow[] {
+  return sdlcPolicyVersions.rows().filter((r) => r.scope === scope)
+    .sort((a, b) => b.version - a.version).map(copyVersion);
+}
+
+/** Whether any version exists for a scope. */
+export function mockHasPolicyScope(scope: string): boolean {
+  return sdlcPolicyVersions.rows().some((r) => r.scope === scope);
 }
 
 /**
- * `seedDefaultPolicies` offline: seed only into an empty table, and report how
- * many rows were written so the caller can tell "seeded" from "already there".
+ * `INSERT ... ON CONFLICT (scope, version) DO NOTHING RETURNING *`: null when
+ * that version already exists, which is how a concurrent edit loses.
  */
-export function mockSeedDefaultPolicies(): number {
-  const rows = sdlcPolicies.rows();
-  if (rows.length > 0) return 0;
-  for (const p of DEFAULT_POLICIES) {
-    rows.push({ ...p, id: randomUUID(), config: { ...p.config }, createdAt: clock.nowIso() });
-  }
-  return DEFAULT_POLICIES.length;
+export function mockInsertPolicyVersion(input: Omit<PolicyVersionRow, 'createdAt'>): PolicyVersionRow | null {
+  const rows = sdlcPolicyVersions.rows();
+  if (rows.some((r) => r.scope === input.scope && r.version === input.version)) return null;
+  const row: PolicyVersionRow = { ...input, policies: copySet(input.policies), createdAt: clock.nowIso() };
+  rows.push(row);
+  return copyVersion(row);
 }
 
-/** `UPDATE ... RETURNING *`, or `INSERT ... RETURNING *`. Throws like the real one. */
-export function mockUpsertPolicy(input: {
-  id?: string; name: string; enabled: boolean; kind: SdlcPolicy['kind'];
-  config: Record<string, unknown>; action: SdlcPolicy['action'];
-}): SdlcPolicy {
-  const rows = sdlcPolicies.rows();
-  if (input.id) {
-    const existing = rows.find((p) => p.id === input.id);
-    if (!existing) throw new Error('policy not found');
-    existing.name = input.name;
-    existing.enabled = input.enabled;
-    existing.kind = input.kind;
-    existing.config = { ...input.config };
-    existing.action = input.action;
-    const { createdAt: _createdAt, ...policy } = existing;
-    return { ...policy, config: { ...policy.config } };
-  }
-  const created: PolicyRow = {
-    id: randomUUID(),
-    name: input.name,
-    enabled: input.enabled,
-    kind: input.kind,
-    config: { ...input.config },
-    action: input.action,
+/** A row of `sdlc_policy_proposals`: a loosening edit waiting for a second person (DE-43). */
+export interface PolicyProposalRow {
+  id: string;
+  scope: string;
+  baseVersion: number;
+  policies: SdlcPolicy[];
+  loosening: string[];
+  proposedBy: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'superseded';
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  appliedVersion: number | null;
+  createdAt: string;
+}
+
+/** Loosening proposals. None is seeded: a pending one is something a person makes. */
+export const sdlcPolicyProposals = defineFixture<PolicyProposalRow>({
+  key: 'sdlc-policy-proposals',
+  scenarios: { default: () => [] },
+});
+
+const copyProposal = (r: PolicyProposalRow): PolicyProposalRow =>
+  ({ ...r, policies: copySet(r.policies), loosening: [...r.loosening] });
+
+export function mockCreatePolicyProposal(input: Pick<PolicyProposalRow, 'scope' | 'baseVersion' | 'policies' | 'loosening' | 'proposedBy' | 'reason'>): PolicyProposalRow {
+  const row: PolicyProposalRow = {
+    ...input, id: randomUUID(), policies: copySet(input.policies), loosening: [...input.loosening],
+    status: 'pending', decidedBy: null, decidedAt: null, decisionNote: null, appliedVersion: null,
     createdAt: clock.nowIso(),
   };
-  rows.push(created);
-  const { createdAt: _createdAt, ...policy } = created;
-  return { ...policy, config: { ...policy.config } };
+  sdlcPolicyProposals.rows().push(row);
+  return copyProposal(row);
 }
 
-/** `DELETE ... RETURNING id` — false means "no such row", not "failed". */
-export function mockDeletePolicy(id: string): boolean {
-  const rows = sdlcPolicies.rows();
-  const i = rows.findIndex((p) => p.id === id);
-  if (i < 0) return false;
-  rows.splice(i, 1);
+export function mockGetPolicyProposal(id: string): PolicyProposalRow | null {
+  const row = sdlcPolicyProposals.rows().find((r) => r.id === id);
+  return row ? copyProposal(row) : null;
+}
+
+export function mockListPolicyProposals(opts: { scope?: string; status?: string } = {}): PolicyProposalRow[] {
+  return sdlcPolicyProposals.rows()
+    .filter((r) => (!opts.scope || r.scope === opts.scope) && (!opts.status || r.status === opts.status))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .map(copyProposal);
+}
+
+/** `UPDATE sdlc_policy_proposals SET status ... WHERE id = :id AND status = 'pending'` — false when it was not pending. */
+export function mockDecidePolicyProposal(id: string, patch: {
+  status: 'approved' | 'rejected' | 'superseded'; decidedBy: string; decisionNote: string | null; appliedVersion: number | null;
+}): boolean {
+  const row = sdlcPolicyProposals.rows().find((r) => r.id === id);
+  if (!row || row.status !== 'pending') return false;
+  row.status = patch.status;
+  row.decidedBy = patch.decidedBy;
+  row.decidedAt = clock.nowIso();
+  row.decisionNote = patch.decisionNote;
+  row.appliedVersion = patch.appliedVersion;
   return true;
 }
 
@@ -318,6 +366,13 @@ export interface ChangeRow {
   decisionNote: string | null;
   error: string | null;
   createdAt: string;
+  /** Who caused the change (DE-43): the run's dispatcher, else a bot's creator. */
+  requestedBy: string | null;
+  /** The policy set version the change is evaluated under (DE-46 pin). */
+  policyScope: string | null;
+  policyVersion: number | null;
+  /** The latest evaluation's sequence; its gates are the current ones (0 = never evaluated). */
+  evaluationSeq: number;
 }
 
 /** A review as `agent_change_reviews` holds it — the FK is a column, not a nesting. */
@@ -342,6 +397,10 @@ export interface GateRow {
   outcome: string;
   detail: string | null;
   createdAt: string;
+  /** The set version that produced this gate, and which evaluation of the change it belongs to (DE-46). */
+  policyScope: string | null;
+  policyVersion: number | null;
+  evaluationSeq: number;
 }
 
 const CHANGE_INHIBIT = '9f2c17a0-5b64-4de1-8a03-6c1de4f27b58';
@@ -354,6 +413,8 @@ const CHANGE_DASH = 'b14e39c2-7d86-4f03-ac25-8e3f06194d7a';
  */
 interface ChangeSeed {
   id: string;
+  /** Who dispatched the run behind it (DE-43). */
+  requestedBy: string;
   title: string;
   diff: string;
   model: string;
@@ -382,6 +443,9 @@ interface ChangeSeed {
 const CHANGE_SEEDS: ChangeSeed[] = [
   {
     id: CHANGE_INHIBIT,
+    // The Observability maintenance bots are Nora's (mock/bots.ts), so the
+    // changes they capture answer to her, and she cannot approve them herself.
+    requestedBy: 'u-nora',
     title: 'Suppress downstream pages during a cluster-wide outage',
     diff: INHIBIT_DIFF,
     model: SONNET,
@@ -412,6 +476,7 @@ const CHANGE_SEEDS: ChangeSeed[] = [
   },
   {
     id: CHANGE_DEDUP,
+    requestedBy: 'u-nora',
     title: 'Alert dedup: collapse by alertname+namespace',
     diff: DEDUP_DIFF,
     model: SONNET,
@@ -446,6 +511,9 @@ const CHANGE_SEEDS: ChangeSeed[] = [
   },
   {
     id: CHANGE_DASH,
+    // Decided by Nora, so dispatched by someone else: an author never decides
+    // their own change.
+    requestedBy: 'u-eli',
     title: 'RED dashboards: span metrics primary, StatsD fallback',
     diff: DASH_DIFF,
     model: SONNET,
@@ -492,8 +560,7 @@ function factsOf(seed: ChangeSeed): ChangeFacts {
  * pinned the policy fixture to another world.
  */
 function evaluationOf(seed: ChangeSeed): { decision: string; gates: GateResult[] } {
-  const policies = sdlcPolicies.rows('default').map(({ createdAt: _createdAt, ...p }) => p);
-  return evaluate(policies, factsOf(seed));
+  return evaluate(defaultPolicySet(), factsOf(seed));
 }
 
 /**
@@ -539,6 +606,10 @@ export const sdlcChanges = defineFixture<ChangeRow>({
         decisionNote: seed.decisionNote,
         error: null,
         createdAt: clock.hoursAgo(seed.createdHoursAgo),
+        requestedBy: seed.requestedBy,
+        policyScope: 'org',
+        policyVersion: 1,
+        evaluationSeq: 1,
       };
     }),
     empty: () => [],
@@ -588,6 +659,9 @@ export const sdlcChangeGates = defineFixture<GateRow>({
         // Gates are written in one pass right after the review lands; the
         // index keeps their ORDER BY created_at stable.
         createdAt: clock.hoursAgo(Math.max(0, seed.createdHoursAgo - 0.04 - i * 0.0001)),
+        policyScope: 'org',
+        policyVersion: 1,
+        evaluationSeq: 1,
       }))),
     empty: () => [],
     fresh: () => [],
@@ -641,13 +715,37 @@ export function mockListReviews(changeId: string): ReviewRow[] {
     .map((r) => ({ ...r, findings: r.findings.map((f) => ({ ...f })) }));
 }
 
-/** `WHERE change_request_id = :id ORDER BY created_at` — ascending, unlike reviews. */
+/**
+ * `WHERE change_request_id = :id AND evaluation_seq = (latest) ORDER BY
+ * created_at` — ascending, unlike reviews. The change detail shows its
+ * current evaluation; `mockListGateHistory` keeps the earlier ones (DE-46).
+ */
 export function mockListGates(changeId: string): GateRow[] {
+  const latest = sdlcChanges.rows().find((c) => c.id === changeId)?.evaluationSeq ?? 0;
+  return mockListGateHistory(changeId).filter((g) => g.evaluationSeq === latest);
+}
+
+/** Every evaluation's gates for a change, `ORDER BY evaluation_seq, created_at`. */
+export function mockListGateHistory(changeId: string): GateRow[] {
   return sdlcChangeGates
     .rows()
     .filter((g) => g.changeRequestId === changeId)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .sort((a, b) => a.evaluationSeq - b.evaluationSeq
+      || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     .map((g) => ({ ...g }));
+}
+
+/**
+ * Has `sub` caused a change governed by `scope`? For `org`, any change at all
+ * (every initiative set is checked against the org set); for an initiative,
+ * a change on a codebase of that initiative. DE-43's self-gate rule.
+ */
+export function mockHasChangesRequestedBy(sub: string, scope: string): boolean {
+  return sdlcChanges.rows().some((c) => {
+    if (c.requestedBy !== sub) return false;
+    if (scope === 'org') return true;
+    return mockGetAgentProject(c.projectId)?.orgProjectId === scope;
+  });
 }
 
 /** One change with its joins resolved; null for an unknown id or an unlinked codebase. */
@@ -741,7 +839,7 @@ export function mockSetCommitSha(id: string, sha: string): void {
 export function mockCreateChange(input: {
   projectId: string; runId: string | null; title: string;
   diff: string; diffTruncated: boolean; files: string[]; model: string | null;
-  workItemId?: string | null;
+  workItemId?: string | null; requestedBy?: string | null;
 }): JoinedChange {
   const row: ChangeRow = {
     id: randomUUID(),
@@ -766,6 +864,10 @@ export function mockCreateChange(input: {
     decisionNote: null,
     error: null,
     createdAt: clock.nowIso(),
+    requestedBy: input.requestedBy ?? null,
+    policyScope: null,
+    policyVersion: null,
+    evaluationSeq: 0,
   };
   sdlcChanges.rows().push(row);
   return unjoined(row);
@@ -789,16 +891,25 @@ export function mockRecordReview(input: {
   });
 }
 
+/** `UPDATE agent_change_requests SET policy_scope, policy_version` — the DE-46 pin. */
+export function mockSetPolicyPin(id: string, scope: string, version: number): void {
+  const row = sdlcChanges.rows().find((c) => c.id === id);
+  if (row) { row.policyScope = scope; row.policyVersion = version; }
+}
+
 /**
- * `DELETE FROM agent_change_gates WHERE change_request_id = ...` then one
- * INSERT per gate — the recorded gates reflect the current decision rather
- * than accumulating every re-evaluation.
+ * One INSERT per gate at `evaluation_seq = max + 1`. Appends rather than
+ * replacing (DE-46): a re-review keeps the earlier evaluation readable, and
+ * the change detail reads only the latest sequence. Returns the sequence.
  */
-export function mockReplaceGates(changeId: string, gates: GateResult[]): void {
+export function mockAppendGates(changeId: string, gates: GateResult[], pin: { scope: string; version: number }): number {
   const rows = sdlcChangeGates.rows();
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (rows[i]!.changeRequestId === changeId) rows.splice(i, 1);
-  }
+  const change = sdlcChanges.rows().find((c) => c.id === changeId);
+  // The change row carries the sequence, so an evaluation that fired no gate
+  // still moves it (and the detail stops showing the previous one's gates).
+  const seq = 1 + Math.max(change?.evaluationSeq ?? 0,
+    ...rows.filter((g) => g.changeRequestId === changeId).map((g) => g.evaluationSeq));
+  if (change) change.evaluationSeq = seq;
   const at = clock.nowIso();
   for (const g of gates) {
     rows.push({
@@ -810,6 +921,10 @@ export function mockReplaceGates(changeId: string, gates: GateResult[]): void {
       outcome: g.outcome,
       detail: g.detail,
       createdAt: at,
+      policyScope: pin.scope,
+      policyVersion: pin.version,
+      evaluationSeq: seq,
     });
   }
+  return seq;
 }

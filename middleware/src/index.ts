@@ -382,9 +382,12 @@ app.use('/api/connections', requireAction('ManageIngest'), connectionsRouter);
 // marketReadGate) without holding ManageDevbox. The mount is just the floor —
 // tenant scope + a real session.
 app.use('/api/agent-projects', requireTenant('orgiq'), requireSession('ViewAgentProjects'), agentProjectsRouter);
-// AI SDLC governance — change requests, reviews, gates, policies. Gated as a
-// devbox-management action.
-app.use('/api/sdlc', requireAction('ManageDevbox'), sdlcRouter);
+// AI SDLC governance — change requests, reviews, gates, policies. The mount is
+// the floor (tenant scope + a real session); each route carries its own action
+// (DE-42): reads ManageDevbox as before, decide DecideAgentChange, deliver
+// DeliverAgentChange, re-review/address RunDevboxTask, policy writes
+// EditSdlcPolicy.
+app.use('/api/sdlc', requireTenant('orgiq'), requireSession('ViewSdlc'), sdlcRouter);
 // Environments — where each initiative's code runs. Mount is the floor only
 // (tenant scope + a real session): reading the estate is open to every orgiq
 // role, editing it needs ManageEnvironments, and reaching a specific
@@ -504,6 +507,8 @@ app.use('/api/sessions', requireTenant('orgiq'), requireSession('ViewSessions'),
 // scoped path and see the computers on initiatives they run.
 app.use(
   '/api/devbox',
+  // The tenant boundary used to be only the Cedar `when` (DE-42).
+  requireTenant('orgiq'),
   readForRolesElseAction(['org-leader', 'hr-admin', 'program-owner'], 'ManageDevbox'),
   devboxRouter,
 );

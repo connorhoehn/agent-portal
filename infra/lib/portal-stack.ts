@@ -78,6 +78,8 @@ export const DOCUMENT_PATHS = ['/document-realtime', '/document-realtime/*'] as 
 
 export interface PortalStackProps extends cdk.StackProps {
   readonly prefix?: string;
+  /** Stack-id prefix of the environment (DE-17); only used in the distribution comment destroy.sh matches on. */
+  readonly stackPrefix?: string;
   /**
    * The ALB's DNS name — `Fn.importValue('<prefix>-middleware-alb-dns')`, an
    * export OrgIQ-MiddlewareService has always had, so this stack adds none.
@@ -217,7 +219,7 @@ export class PortalStack extends cdk.Stack {
 
     const middleware = albOrigin();
     this.distribution = new cloudfront.Distribution(this, 'PortalDistribution', {
-      comment: `${prefix} portal + middleware (OrgIQ-Portal)`,
+      comment: `${prefix} portal + middleware (${props.stackPrefix ?? 'OrgIQ'}-Portal)`,
       defaultRootObject: 'index.html',
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
@@ -234,7 +236,7 @@ export class PortalStack extends cdk.Stack {
 
     // ── platform-api and the SFU, each on its own distribution ────────────
     const routed = (logicalId: string, route: string, comment: string) => new cloudfront.Distribution(this, logicalId, {
-      comment: `${prefix} ${comment} (OrgIQ-Portal)`,
+      comment: `${prefix} ${comment} (${props.stackPrefix ?? 'OrgIQ'}-Portal)`,
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
       defaultBehavior: passThrough(albOrigin(route)),

@@ -904,6 +904,15 @@ async function botFireProjectionP75(model: string, agentProjectId: string | null
 }
 
 /** Dispatch one run of a bot. The single entry point for every trigger. */
+/**
+ * Who a change captured by a bot run answers to (DE-43): the person who
+ * pressed run, else — a cron firing nobody pressed — the bot's author, who
+ * wrote the standing mission. Never null for a bot with a recorded creator.
+ */
+export function botChangeRequester(bot: { createdBy?: string | null }, dispatchedBy?: string | null): string | null {
+  return dispatchedBy ?? bot.createdBy ?? null;
+}
+
 export async function fireBot(botId: string, opts: {
   trigger: 'manual' | 'cron' | 'pr_watch';
   /** One-shot steering, appended to the mission for this run only. */
@@ -1000,6 +1009,11 @@ export async function fireBot(botId: string, opts: {
 
     const started = await dispatchGovernedRun({
       project, prompt, model: bot.model, sessionId: ws.sessionId,
+      // The change this run captures answers to whoever pressed run, else
+      // (a cron firing) the bot's author (DE-43). The run row's own
+      // dispatched_by stays the person, so a cron run records none.
+      ...(opts.dispatchedBy ? { dispatchedBy: opts.dispatchedBy } : {}),
+      requestedBy: botChangeRequester(bot, opts.dispatchedBy),
     });
     if (!started.ok) {
       const run = await createBotRun({

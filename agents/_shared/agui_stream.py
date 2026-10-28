@@ -184,6 +184,8 @@ async def stream_agui(
             agent_id=agent_id,
             agent_name=agent_name,
             prompt_version=prompt_sha,
+            model_id=model_id,
+            model_registry_version=getattr(live_agent, "registry_version", "") or None,
         ) as oi_span:
             async for event in adapter.run(run_input):
                 if event_type(event) == "TEXT_MESSAGE_CONTENT":

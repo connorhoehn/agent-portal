@@ -26,6 +26,15 @@ import {
 import { type Session } from '../../lib/session.js';
 import { registerBox, _resetFleet, getBoxBySession, getBox } from '../../lib/devbox-fleet.js';
 import { decideReaping, MAX_LIFETIME_MS } from '../../lib/devbox-reaper.js';
+import { recordSpend } from '../../providers/spend-ledger.js';
+// The DE-42 box-action gate (lib/agent-actions.ts) asks Cedar through
+// authz.ts, which this suite cannot load (config.ts uses import.meta). The
+// gate has its own suite (routes/__tests__/agent-actions-routes.test.ts);
+// here it passes through so the routes' own behaviour is what is tested.
+jest.mock('../../lib/agent-actions.js', () => ({
+  requireBoxAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+jest.mock('../../providers/spend-ledger.js', () => ({ recordSpend: jest.fn(async () => undefined) }));
 
 const SESSION = 'devbox-0123456789abcdef0123456789abcdef';
 const ARN = 'arn:aws:bedrock-agentcore:us-east-1:111122223333:runtime/orgiq_devbox-abc123';
@@ -248,6 +257,35 @@ describe('POST /api/devbox/:sessionId/task', () => {
     expect(payload.prompt).toBe('scaffold a project');
     expect(payload.resume).toBe(true);
     expect(input.runtimeSessionId).toBe(SESSION);
+  });
+
+  it('writes one box_task ledger entry with the reported cost, the box\'s initiative and the session user (DE-30)', async () => {
+    (recordSpend as jest.Mock).mockClear();
+    // An earlier /task test in this block adopts SESSION with no initiative;
+    // start from an empty fleet so this box is the one the route reads.
+    _resetFleet();
+    const box = registerBox({ sessionId: SESSION, ownerId: 'u-test', projectId: 'p-auth-migration' });
+    const upstream = [
+      'data: {"type":"devbox_start","model":"sonnet"}\n',
+      'data: {"type":"result","total_cost_usd":0.37,"usage":{"input_tokens":120,"output_tokens":45}}\n',
+      'data: {"type":"devbox_end","exit_code":0}\n',
+    ].map((s) => new TextEncoder().encode(s));
+    mockDataClient(async () => ({ response: asyncIterOf(upstream) }));
+    const res = await request(buildApp()).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'fix it' });
+    expect(res.status).toBe(200);
+    expect(recordSpend).toHaveBeenCalledTimes(1);
+    expect(recordSpend).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'box_task', boxId: box.id, initiativeId: 'p-auth-migration', actorId: 'u-test',
+      model: 'sonnet', costUsd: 0.37, inputTokens: 120, outputTokens: 45,
+    }));
+  });
+
+  it('records unknown cost when the stream ends without a result frame', async () => {
+    (recordSpend as jest.Mock).mockClear();
+    const upstream = ['data: {"type":"devbox_end","exit_code":1}\n'].map((s) => new TextEncoder().encode(s));
+    mockDataClient(async () => ({ response: asyncIterOf(upstream) }));
+    await request(buildApp()).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'fix it' });
+    expect(recordSpend).toHaveBeenCalledWith(expect.objectContaining({ source: 'box_task', costUsd: null }));
   });
 
   it('unwraps double-encoded SSE frames (wrapper yielded a string, not a dict)', async () => {

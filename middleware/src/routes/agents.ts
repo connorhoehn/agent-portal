@@ -170,7 +170,8 @@ function requireAgentTenant(req: import('express').Request, res: import('express
 // data-plane ManageIngest capability. Read agents (supervisor/search/advisor)
 // keep their existing Search + tenant gating, authorized by requireAgentTenant.
 //
-// The devbox runtime is gated the same way on ManageDevbox: it runs Claude
+// The devbox runtime is gated the same way on RunDevboxTask (DE-42; it was
+// ManageDevbox, held by the same roles): it runs Claude
 // Code in a microVM — compute that bills and a shell that can push to repos —
 // which is why /api/devbox/* already requires ManageDevbox. The portal's agent
 // picker hides it from roles without the capability, but a hidden control is
@@ -182,7 +183,11 @@ function requireAgentTenant(req: import('express').Request, res: import('express
 const WRITE_AGENT_RE = /(graph[-_]builder|ingestion|scoring)/;
 const DEVBOX_AGENT_RE = /(^|[-_])devbox($|[-_])/;
 
-interface AgentCapabilityGate { action: string; message: string }
+interface AgentCapabilityGate {
+  action: string; message: string;
+  /** Resource attributes for a conditioned action (DE-42). */
+  attrs?: Record<string, boolean>;
+}
 
 /** The capability a DIRECT invoke of `agentId` needs beyond Search, or null. */
 export function agentCapabilityGate(agentId: string): AgentCapabilityGate | null {
@@ -191,7 +196,13 @@ export function agentCapabilityGate(agentId: string): AgentCapabilityGate | null
     return { action: 'ManageIngest', message: 'this agent performs data writes; you need the ManageIngest capability to invoke it directly' };
   }
   if (DEVBOX_AGENT_RE.test(id)) {
-    return { action: 'ManageDevbox', message: 'this agent runs a devbox (Claude Code in a microVM); you need the ManageDevbox capability to invoke it directly' };
+    // DE-42: running Claude Code is RunDevboxTask, split out of ManageDevbox
+    // (held by the same roles). A direct invoke starts a session the caller
+    // owns, so it is asked as `ownsBox`, which the sme permit accepts.
+    return {
+      action: 'RunDevboxTask', attrs: { ownsBox: true },
+      message: 'this agent runs a devbox (Claude Code in a microVM); you need the RunDevboxTask capability to invoke it directly',
+    };
   }
   return null;
 }
@@ -214,7 +225,7 @@ async function requireAgentCapability(
     return;
   }
   try {
-    if (await isAllowed(session, gate.action)) { next(); return; }
+    if (await isAllowed(session, gate.action, gate.attrs)) { next(); return; }
     res.status(403).json({ error: 'Forbidden', action: gate.action, agentId, message: gate.message });
   } catch {
     // Authorization infrastructure failure (AVP unreachable/throttled) — 503,

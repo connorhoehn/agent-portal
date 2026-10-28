@@ -11,7 +11,8 @@ import { requireInitiativeScope } from '../lib/initiative-scope.js';
 import { resolveDevboxArn, devboxDataClient } from '../lib/devbox-arn.js';
 import { runDevboxShell } from '../lib/project-runner.js';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
-import { readForRolesElseAction, requireAction } from '../lib/authz.js';
+import { readForRolesElseAction, requireAction, resolveSession } from '../lib/authz.js';
+import { authorizeAgentAction } from '../lib/agent-actions.js';
 import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject,
   buildCloneCommand, markCloned, checkoutPath, finishRun, listRuns,
@@ -157,12 +158,19 @@ agentProjectsRouter.post('/:id/runs', writeGate, asyncHandler(async (req, res) =
   // the grant an SME spends under, and access to that box (DE-44 row 14).
   if (!await requireInitiativeScope(req, res, project.orgProjectId, { spend: true, action: 'run agents' })) return;
   if (!await requireBoxAccess(req, res, sessionId)) return;
+  // Running Claude Code on the box is RunDevboxTask (DE-42); the scope checks
+  // above already put the caller on the initiative.
+  if (!await authorizeAgentAction(req, res, 'RunDevboxTask', { onInitiative: true })) return;
 
   // A run finishes on its own and, if it changed code, flows through
   // governance — capture, review, gates — without anyone submitting it. The
   // dispatch itself lives in one shared place so this and the review loop's
   // "address these findings" cannot diverge.
-  const started = await dispatchGovernedRun({ project, prompt, model: body.model ?? null, sessionId });
+  const started = await dispatchGovernedRun({
+    project, prompt, model: body.model ?? null, sessionId,
+    // The change this run captures answers to the person who started it (DE-43).
+    dispatchedBy: resolveSession(req)?.sub ?? null,
+  });
   if (!started.ok) { res.status(503).json({ error: started.error }); return; }
 
   res.status(202).json({ run: { id: started.runId }, checkout: started.checkout });

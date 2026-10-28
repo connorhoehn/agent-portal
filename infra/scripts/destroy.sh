@@ -20,7 +20,7 @@
 #
 # Usage:
 #   ./scripts/destroy.sh              # destroy all stacks
-#   PREFIX=myprefix ./scripts/destroy.sh
+#   ENV=pv1 ./scripts/destroy.sh
 
 set -euo pipefail
 
@@ -36,9 +36,39 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}/.."
 
-PREFIX="${PREFIX:-orgiq}"
-REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+# ── Environment (DE-17) ───────────────────────────────────────────────────
+# The account, region, resource prefix and stack-id prefix come from
+# infra/environments/${ENV}.json (default: lab), through the same loader
+# bin/app.ts uses. There are no PREFIX or region defaults here: a PREFIX that
+# disagrees with the file is an error, not an override.
+ENV_NAME="${ENV:-lab}"
+if ! ENV_OUT=$(node --require ts-node/register scripts/print-environment.ts "$ENV_NAME"); then
+  exit 1
+fi
+while IFS='=' read -r _k _v; do
+  case "$_k" in
+    ENV_ACCOUNT) ENV_ACCOUNT="$_v" ;;
+    ENV_REGION) ENV_REGION="$_v" ;;
+    ENV_PREFIX) ENV_PREFIX="$_v" ;;
+    ENV_STACK_PREFIX) ENV_STACK_PREFIX="$_v" ;;
+  esac
+done <<< "$ENV_OUT"
+if [[ -n "${PREFIX-}" && "${PREFIX}" != "$ENV_PREFIX" ]]; then
+  echo "✗ PREFIX=${PREFIX} disagrees with environment '${ENV_NAME}' (prefix '${ENV_PREFIX}'). Edit infra/environments/${ENV_NAME}.json, or run with ENV=<name>." >&2
+  exit 1
+fi
+PREFIX="$ENV_PREFIX"
+REGION="$ENV_REGION"
+STACK_PREFIX="${ENV_STACK_PREFIX}-"
+export AWS_DEFAULT_REGION="$REGION" AWS_REGION="$REGION"
+ENV_CONTEXT=(--context "env=${ENV_NAME}")
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+# Refuse before anything is swept, deleted or deployed: credentials for another
+# account (the personal 264161986065 above all) must not touch this fleet.
+if [[ "$ACCOUNT" != "$ENV_ACCOUNT" ]]; then
+  echo "✗ The current AWS credentials are for account ${ACCOUNT}, but environment '${ENV_NAME}' is ${ENV_ACCOUNT}. Nothing was changed." >&2
+  exit 1
+fi
 
 # Failures are collected instead of aborting mid-drain, then reported honestly
 # at the end. The old behavior (|| true everywhere + unconditional "✓ Destroy
@@ -81,10 +111,10 @@ require_creds() {
 
 # CDK stack names use title-case "OrgIQ-" regardless of the resource PREFIX.
 # Use this for all CloudFormation stack-name queries.
-STACK_PREFIX="OrgIQ-"
+# STACK_PREFIX comes from the environment file (above).
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  OrgIQ Destroy — ${REGION} / ${ACCOUNT}"
+echo "║  OrgIQ Destroy — ${ENV_NAME} / ${REGION} / ${ACCOUNT}"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 echo "  Prefix : ${PREFIX}"
@@ -152,10 +182,10 @@ while IFS= read -r line; do
   GW_NAME=$(echo "$line" | jq -r '.name')
   # Skip the gateway CDK owns (it will be destroyed by CFN)
   if aws cloudformation describe-stack-resource \
-       --stack-name "OrgIQ-AgentCoreGateway" \
+       --stack-name "${STACK_PREFIX}AgentCoreGateway" \
        --logical-resource-id "McpGateway" > /dev/null 2>&1; then
     CFN_GW_ID=$(aws cloudformation describe-stack-resource \
-      --stack-name "OrgIQ-AgentCoreGateway" \
+      --stack-name "${STACK_PREFIX}AgentCoreGateway" \
       --logical-resource-id "McpGateway" \
       --query 'StackResourceDetail.PhysicalResourceId' --output text 2>/dev/null || echo "")
     [[ "$GW_ID" == "$CFN_GW_ID" ]] && continue
@@ -215,7 +245,7 @@ echo "── Pre-draining AgentCore runtimes ──"
 # (it cost 15 minutes here, blocking the OpenSearch teardown that actually
 # bills by the hour).
 RUNTIME_STACKS=""
-for CANDIDATE in "OrgIQ-AgentCoreRuntime" "OrgIQ-Devbox"; do
+for CANDIDATE in "${STACK_PREFIX}AgentCoreRuntime" "${STACK_PREFIX}Devbox"; do
   if aws cloudformation describe-stacks --stack-name "$CANDIDATE" \
        --region "$REGION" > /dev/null 2>&1; then
     RUNTIME_STACKS="${RUNTIME_STACKS} ${CANDIDATE}"
@@ -493,7 +523,7 @@ DESTROY_CONTEXT=(
   --context deploySocialMedia=true
   --context deployPortal=true
 )
-if ! "${CDK[@]}" destroy --all --force "${DESTROY_CONTEXT[@]}"; then
+if ! "${CDK[@]}" destroy --all --force "${ENV_CONTEXT[@]}" "${DESTROY_CONTEXT[@]}"; then
   FAILURES+=("cdk destroy --all exited non-zero — one or more stacks not destroyed")
 fi
 
@@ -798,7 +828,7 @@ else
   # on the comment the stack writes. A distribution deletes slowly (it must be
   # disabled first), so a survivor right after cdk destroy may be on its way.
   for dist in $(aws cloudfront list-distributions \
-      --query "DistributionList.Items[?contains(Comment, '(OrgIQ-Portal)')].Id" \
+      --query "DistributionList.Items[?contains(Comment, '(${STACK_PREFIX}Portal)')].Id" \
       --output text 2>/dev/null || true); do
     [[ "$dist" == "None" ]] && continue
     sweep_survivor "CloudFront distribution still present: ${dist}"
@@ -808,7 +838,7 @@ else
   SOCIAL_LEFT=$(aws dynamodb list-tables --region "$REGION" \
     --query "TableNames[?starts_with(@, '${PREFIX}-social-')]" --output text 2>/dev/null | wc -w | tr -d ' ' || echo 0)
   if [[ "${SOCIAL_LEFT:-0}" != "0" ]]; then
-    sweep_survivor "${SOCIAL_LEFT} OrgIQ-Social table(s) retained (${PREFIX}-social-*) — PURGE_RETAINED=true deletes them"
+    sweep_survivor "${SOCIAL_LEFT} ${STACK_PREFIX}Social table(s) retained (${PREFIX}-social-*) — PURGE_RETAINED=true deletes them"
   fi
 
   # RETAINed image repos (6b above).
@@ -837,7 +867,7 @@ if [[ ${#FAILURES[@]} -gt 0 ]]; then
   for f in "${FAILURES[@]}"; do echo "  - $f"; done
   echo ""
   echo "  Re-run ./scripts/destroy.sh after fixing the above (it is idempotent)."
-  echo "  ⚠ If OrgIQ-KnowledgeBase remains, OpenSearch Serverless is still billing (~\$0.48/hr)."
+  echo "  ⚠ If ${STACK_PREFIX}KnowledgeBase remains, OpenSearch Serverless is still billing (~\$0.48/hr)."
   exit 1
 fi
 echo "✓ Destroy complete — no OrgIQ stacks remain"

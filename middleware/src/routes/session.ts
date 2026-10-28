@@ -160,6 +160,12 @@ sessionRouter.get('/person', asyncHandler(async (req, res) => {
 // condition — the per-instance decision still happens at the real endpoint.
 const CAPABILITY_PROBE_ATTRS: Record<string, Record<string, number | string | boolean>> = {
   ApproveTransaction: { amount: 20000 },
+  // DE-42: the sme permits need the caller on the initiative (or owning the
+  // box); DecideAgentChange's author forbid (DE-43) needs isAuthor false.
+  OpenDevboxShell: { onInitiative: true, ownsBox: true },
+  RunDevboxTask: { onInitiative: true, ownsBox: true },
+  DecideAgentChange: { onInitiative: true, isAuthor: false },
+  DeliverAgentChange: { onInitiative: true },
 };
 
 sessionRouter.get('/capabilities', asyncHandler(async (req, res) => {

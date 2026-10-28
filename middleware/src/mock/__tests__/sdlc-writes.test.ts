@@ -23,14 +23,15 @@
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: true, agentcore: true }, region: 'us-east-1' } }));
 
 import { fixtureRegistry, freezeClock } from '../core/index.js';
-import { sdlcChanges, sdlcChangeGates, sdlcChangeReviews, sdlcPolicies } from '../sdlc.js';
+import { sdlcChanges, sdlcChangeGates, sdlcChangeReviews, sdlcPolicyVersions, sdlcPolicyProposals } from '../sdlc.js';
 import { agentProjects } from '../agent-projects.js';
 import {
-  createChangeRequest, decideChange, deletePolicy, evaluateChange,
+  createChangeRequest, decideChange, evaluateChange,
   getChangeRequest, hasNewerChangeForProject, listChangeRequests, listPolicies,
-  listReviews, markDelivered, markFailed, markInReview, recordReview,
-  seedDefaultPolicies, setCommitSha, upsertPolicy,
+  listReviews, markDelivered, markFailed, markInReview, recordReview, setCommitSha,
+  listEvaluations,
 } from '../../providers/sdlc.js';
+import { writePolicySet, latestPolicySet, listPolicySetVersions } from '../../providers/sdlc-policy-sets.js';
 
 const OBSERVABILITY = '4870e01d-9274-5c4a-91af-ea9acb7f857a';
 const NEEDS_APPROVAL = '9f2c17a0-5b64-4de1-8a03-6c1de4f27b58';
@@ -48,7 +49,8 @@ const GATE_OUTCOMES = new Set(['pass', 'requires_approval', 'block']);
 const VERDICTS = new Set(['approve', 'request_changes', 'reject']);
 
 beforeEach(() => {
-  sdlcPolicies.reset('default');
+  sdlcPolicyVersions.reset('default');
+  sdlcPolicyProposals.reset('default');
   sdlcChanges.reset('default');
   sdlcChangeReviews.reset('default');
   sdlcChangeGates.reset('default');
@@ -131,77 +133,54 @@ describe('the seeded queue', () => {
   });
 });
 
-describe('policies offline', () => {
-  it('creates, updates in place, and deletes', async () => {
-    const before = (await listPolicies()).length;
-
-    const created = await upsertPolicy({
-      name: 'Only Nova may ship', enabled: true, kind: 'model_allowlist',
-      config: { models: ['amazon.nova-pro-v1:0'] }, action: 'block',
-    });
-    expect((await listPolicies())).toHaveLength(before + 1);
-
-    const updated = await upsertPolicy({
-      id: created.id, name: 'Only Nova may ship', enabled: false,
-      kind: 'model_allowlist', config: { models: [] }, action: 'require_approval',
-    });
-    // An update, not an insert: same id, same count.
-    expect(updated.id).toBe(created.id);
-    expect(updated.enabled).toBe(false);
-    expect(await listPolicies()).toHaveLength(before + 1);
-
-    expect(await deletePolicy(created.id)).toBe(true);
-    expect(await deletePolicy(created.id)).toBe(false);
-    expect(await listPolicies()).toHaveLength(before);
+describe('policies offline (versioned sets, DE-46)', () => {
+  it('serves the org set at version 1, migrated from the defaults', async () => {
+    const org = await latestPolicySet('org');
+    expect(org).toMatchObject({ scope: 'org', version: 1, changedBy: 'migration', basedOn: null });
+    expect((await listPolicies()).map((p) => p.id)).toEqual(org!.policies.map((p) => p.id));
   });
 
-  it('mints uuids, so the DELETE route can address what the list returned', async () => {
-    // `deletePolicy` refuses a non-uuid id before it reaches a row. Under the
-    // old `default-0` ids every offline delete 404'd, which read as "the
-    // policy is not there" rather than "this id was never deletable".
+  it('keeps uuid keys, so the legacy DELETE route can address what the list returned', async () => {
     for (const policy of await listPolicies()) {
       expect(policy.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     }
   });
 
-  it('rejects an update to a policy that is not there, as the RETURNING does', async () => {
-    await expect(upsertPolicy({
-      id: '00000000-0000-4000-8000-000000000000', name: 'ghost', enabled: true,
-      kind: 'max_files', config: { max: 1 }, action: 'block',
-    })).rejects.toThrow('policy not found');
-  });
-
-  it('seeds an empty policy set and is then a no-op', async () => {
-    // An operator who deleted every rule — the state `seedDefaultPolicies`
-    // exists to repair, and the one the old `return 0` could never leave.
-    sdlcPolicies.rows().length = 0;
-    expect(await listPolicies()).toEqual([]);
-    expect(await seedDefaultPolicies()).toBe(4);
+  it('bootstraps (org, 1) in an environment with no version yet', async () => {
+    sdlcPolicyVersions.rows().length = 0;
+    expect(await latestPolicySet('org')).toBeNull();
     expect(await listPolicies()).toHaveLength(4);
-    expect(await seedDefaultPolicies()).toBe(0);
+    expect((await listPolicySetVersions('org')).map((v) => v.version)).toEqual([1]);
   });
 
-  it('fails CLOSED with no policies: an unpoliced change is not auto-approved', async () => {
-    // `evaluateChange` seeds before evaluating, so the only way to reach the
-    // empty-policy arm is a seed that fails — emptied AFTER the seed runs.
-    // A fresh array per call, so the seed's writes land nowhere — which is
-    // what "seeding raced or failed" looks like from `evaluateChange`.
-    jest.spyOn(sdlcPolicies, 'rows').mockImplementation(() => []);
-    const evaluated = await evaluateChange(CHANGES_REQUESTED);
-    expect(evaluated?.status).toBe('needs_approval');
-    expect(evaluated?.evaluation.autoApproved).toBe(false);
-    expect(evaluated?.evaluation.gates.map((g) => g.policyName)).toContain('no policies configured');
-  });
   it('fails CLOSED when every policy is disabled: disabling the rules is not approving everything', async () => {
-    for (const row of sdlcPolicies.rows()) (row as { enabled: boolean }).enabled = false;
+    const org = await latestPolicySet('org');
+    const out = await writePolicySet({
+      scope: 'org', baseVersion: 1, changedBy: 'u-hr', reason: 'test: all off',
+      policies: org!.policies.map((p) => ({ ...p, enabled: false })),
+    });
+    expect(out.ok).toBe(true);
     await recordReview({
       changeId: CHANGES_REQUESTED, model: 'amazon.nova-pro-v1:0', verdict: 'approve',
       summary: 'Looks fine.', findings: [],
     });
-    const evaluated = await evaluateChange(CHANGES_REQUESTED);
+    // repin: the seeded change is pinned to version 1, which still has the rules on.
+    const evaluated = await evaluateChange(CHANGES_REQUESTED, { repin: true });
+    expect(evaluated?.policyVersion).toBe(2);
     expect(evaluated?.status).toBe('needs_approval');
     expect(evaluated?.evaluation.autoApproved).toBe(false);
     expect(evaluated?.evaluation.gates.map((g) => g.policyName)).toContain('no policies configured');
+  });
+
+  it('a NEW change captured after every default was disabled lands needs_approval, not approved (DE-43)', async () => {
+    const org = await latestPolicySet('org');
+    await writePolicySet({
+      scope: 'org', baseVersion: 1, changedBy: 'u-hr', reason: 'test: all off',
+      policies: org!.policies.map((p) => ({ ...p, enabled: false })),
+    });
+    const created = await createChangeRequest({ projectId: OBSERVABILITY, title: 'New', diff: 'd', files: ['src/a.ts'], requestedBy: 'u-eli' });
+    const evaluated = await evaluateChange(created.id);
+    expect(evaluated?.status).toBe('needs_approval');
   });
 });
 
@@ -274,7 +253,7 @@ describe('review and gate offline', () => {
     expect(reviews[1]!.verdict).toBe('request_changes');
   });
 
-  it('re-evaluates on the newest verdict, and rewrites the gates rather than appending', async () => {
+  it('re-evaluates on the newest verdict; the detail shows only the latest evaluation, the history keeps both', async () => {
     const before = await getChangeRequest(CHANGES_REQUESTED);
     expect(before!.status).toBe('changes_requested');
 
@@ -287,9 +266,14 @@ describe('review and gate offline', () => {
 
     const after = await getChangeRequest(CHANGES_REQUESTED);
     expect(after!.status).toBe('approved');
-    // One row per firing policy — not one per re-evaluation.
+    // One row per firing policy in the CURRENT evaluation...
     expect(after!.gates).toHaveLength(1);
     expect(after!.gates[0]!.outcome).toBe('pass');
+    expect(after!.evaluationSeq).toBe(2);
+    // ...and the first evaluation is still readable (DE-46: append, not replace).
+    const history = await listEvaluations(CHANGES_REQUESTED);
+    expect(history.map((e) => e.seq)).toEqual([1, 2]);
+    expect(history.every((e) => e.policyScope === 'org' && e.policyVersion === 1)).toBe(true);
   });
 
   it('routes a protected-path change to a human even with an approving review', async () => {
@@ -305,10 +289,13 @@ describe('review and gate offline', () => {
   });
 });
 
+/** A second SME — not the seeded changes' requester (u-nora). */
+const OTHER_SME = { by: 'u-eli', role: 'sme' };
+
 describe('the human decision offline', () => {
   it('approves, and the decision is durable in the queue', async () => {
     const restore = freezeClock('2026-03-01T09:00:00.000Z');
-    const out = await decideChange(NEEDS_APPROVAL, 'approve', { by: 'u-hr', note: 'Reviewed with on-call.' });
+    const out = await decideChange(NEEDS_APPROVAL, 'approve', { by: 'u-hr', role: 'hr-admin', note: 'Reviewed with on-call.' });
     restore();
     expect(out).toEqual({ ok: true, status: 'approved' });
 
@@ -322,19 +309,19 @@ describe('the human decision offline', () => {
   });
 
   it('lets a human overrule a reviewer that asked for changes', async () => {
-    expect(await decideChange(CHANGES_REQUESTED, 'approve', {})).toEqual({ ok: true, status: 'approved' });
+    expect(await decideChange(CHANGES_REQUESTED, 'approve', OTHER_SME)).toEqual({ ok: true, status: 'approved' });
   });
 
   it('refuses a change that is not awaiting one', async () => {
-    expect(await decideChange(DELIVERED, 'reject', {})).toEqual({
+    expect(await decideChange(DELIVERED, 'reject', OTHER_SME)).toEqual({
       ok: false, error: 'change is delivered, not awaiting a decision',
     });
-    await decideChange(NEEDS_APPROVAL, 'approve', {});
-    expect((await decideChange(NEEDS_APPROVAL, 'approve', {})).ok).toBe(false);
+    await decideChange(NEEDS_APPROVAL, 'approve', OTHER_SME);
+    expect((await decideChange(NEEDS_APPROVAL, 'approve', OTHER_SME)).ok).toBe(false);
   });
 
   it('refuses a change that is not there', async () => {
-    expect(await decideChange('00000000-0000-4000-8000-000000000000', 'approve', {}))
+    expect(await decideChange('00000000-0000-4000-8000-000000000000', 'approve', OTHER_SME))
       .toEqual({ ok: false, error: 'change not found' });
   });
 });
@@ -367,12 +354,15 @@ describe('the scenario control plane owns every write', () => {
     const policies = (await listPolicies()).length;
     const changes = (await listChangeRequests()).length;
 
-    await decideChange(NEEDS_APPROVAL, 'approve', { by: 'u-hr', note: 'x' });
-    await upsertPolicy({ name: 'temp', enabled: true, kind: 'max_files', config: { max: 1 }, action: 'block' });
+    await decideChange(NEEDS_APPROVAL, 'approve', { by: 'u-hr', role: 'hr-admin', note: 'x' });
+    await writePolicySet({
+      scope: 'org', baseVersion: 1, changedBy: 'u-hr', reason: 'temp',
+      policies: [...await listPolicies(), { id: 'temp', name: 'temp', enabled: true, kind: 'max_files', config: { max: 1 }, action: 'block' }],
+    });
     await createChangeRequest({ projectId: OBSERVABILITY, title: 'temp', diff: 'd', files: ['a.ts'] });
     await recordReview({ changeId: NEEDS_APPROVAL, verdict: 'reject', summary: null, findings: [] });
 
-    sdlcPolicies.reset();
+    sdlcPolicyVersions.reset();
     sdlcChanges.reset();
     sdlcChangeReviews.reset();
     sdlcChangeGates.reset();

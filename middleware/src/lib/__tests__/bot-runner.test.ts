@@ -33,7 +33,7 @@ jest.mock('../../providers/agent-jobs.js', () => ({
 import {
   decideFire, renderPrompt, decideConcurrency, botMaxConcurrent, decideRunBudget,
   decideAllocation, decideEnvelope, decideBotFireAllocation, decideGrantScopedDispatch,
-  fireBot,
+  fireBot, botChangeRequester,
   type FireGuardInput, type EnvelopeState,
 } from '../bot-runner.js';
 import {
@@ -698,5 +698,19 @@ describe('fireBot — opt-in allocation brake', () => {
     expect(res.ok).toBe(true);
     expect(mGetBudget).not.toHaveBeenCalled();
     expect(mEnqueueJob).toHaveBeenCalledTimes(1);
+  });
+});
+
+// DE-43: who a bot run's captured change answers to.
+describe('botChangeRequester', () => {
+  it('is whoever pressed run for a manual or marketplace firing', () => {
+    expect(botChangeRequester({ createdBy: 'u-nora' }, 'u-eli')).toBe('u-eli');
+  });
+  it('is the bot\'s creator for a cron firing nobody pressed', () => {
+    expect(botChangeRequester({ createdBy: 'u-nora' }, null)).toBe('u-nora');
+    expect(botChangeRequester({ createdBy: 'u-nora' })).toBe('u-nora');
+  });
+  it('is null only when neither is known', () => {
+    expect(botChangeRequester({ createdBy: null }, null)).toBeNull();
   });
 });

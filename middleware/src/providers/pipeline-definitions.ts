@@ -592,7 +592,10 @@ async function decideApprovalRow(id: string, decision: 'approve' | 'reject', opt
   }
   if (approval.source === 'agent_change_requests') {
     const { decideChange } = await import('./sdlc.js');
-    const out = await decideChange(approval.sourceId, decision, { by: opts.sub ?? null, note });
+    // The same separation-of-duties checks as /api/sdlc decide (DE-43): the
+    // change's author is refused, whichever inbox they decide it from.
+    if (!opts.sub) return { ok: false, status: 401, error: 'a decision needs a signed-in decider' };
+    const out = await decideChange(approval.sourceId, decision, { by: opts.sub, role: opts.role ?? null, note });
     if (!out.ok) return { ok: false, status: 409, error: out.error ?? 'could not decide the change' };
     return { ok: true, approval, decision, outcome: out.status ?? decision };
   }

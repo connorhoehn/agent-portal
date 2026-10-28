@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
 from _shared.prompt_source import resolve_system_prompt
+from _shared.model_registry import invoke_with_fallback, resolve_model  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
     install_bedrock_usage_capture,
@@ -51,7 +52,15 @@ log = logging.getLogger(__name__)
 app = BedrockAgentCoreApp()
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
-MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-lite-v1:0")
+# DE-3: the model comes from the central registry (SSM /orgiq/models/registry,
+# written from infra/config/model-registry.json), then the MODEL_ID env var,
+# then the literal below. The literal moved from Nova Lite to Nova Pro: the
+# deployed supervisor has always run Pro (CDK's fleet-wide MODEL_ID), so Pro is
+# what users were served; Lite is now the registry's capacity fallback.
+# MODEL_ID is the import-time view; each invocation re-resolves (60 s cache).
+MODEL_ROLE = "supervisor"
+_MODEL_DEFAULTS = {"default_model_id": "amazon.nova-pro-v1:0", "default_temperature": 0.0, "default_max_tokens": 4096}
+MODEL_ID = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS).model_id
 PREFIX = os.environ.get("PROJECT_PREFIX", "orgiq")
 MEMORY_ID = os.environ.get("MEMORY_ID", "")
 GUARDRAIL_ID = os.environ.get("GUARDRAIL_ID", "")
@@ -363,17 +372,18 @@ GUARDRAIL_ROLE_FALLBACK: dict[str, str] = {
 }
 
 
-def _model_kwargs(guardrail_id: str = "") -> dict:
+def _model_kwargs(guardrail_id: str = "", model_id: str | None = None) -> dict:
     """Build BedrockModel kwargs with the role-specific guardrail attached.
 
     GUARDRAIL_VERSION=DRAFT means "use the live editable spec" — UI edits go
     into effect on the very next InvokeModel call without rebuilding this image.
     """
-    kw: dict = {
-        "model_id": MODEL_ID,
-        "temperature": float(os.environ.get("MODEL_TEMPERATURE", "0.0")),
-        "max_tokens": int(os.environ.get("MODEL_MAX_TOKENS", "4096")),
-    }
+    resolved = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS)
+    kw: dict = {"model_id": model_id or resolved.model_id}
+    if resolved.temperature is not None:
+        kw["temperature"] = resolved.temperature
+    if resolved.max_tokens is not None:
+        kw["max_tokens"] = resolved.max_tokens
     gid = guardrail_id or os.environ.get("GUARDRAIL_ID", "")
     if gid:
         kw["guardrail_id"] = gid
@@ -382,9 +392,9 @@ def _model_kwargs(guardrail_id: str = "") -> dict:
     return kw
 
 
-def _build_agent(guardrail_id: str, system_prompt: str) -> Agent:
+def _build_agent(guardrail_id: str, system_prompt: str, model_id: str | None = None) -> Agent:
     return Agent(
-        model=BedrockModel(**_model_kwargs(guardrail_id)),
+        model=BedrockModel(**_model_kwargs(guardrail_id, model_id)),
         tools=SUPERVISOR_TOOLS,
         system_prompt=system_prompt,
     )
@@ -413,6 +423,9 @@ _ROLES: dict[str, str] = {r: g for r, g in ROLE_GUARDRAIL_IDS.items() if g} or {
 _AGENTS_BY_KEY: dict[tuple[str, str], Agent] = {}
 _AG_UI_AGENTS: dict[tuple[str, str], StrandsAgent] = {}
 _PROMPT_SHA_BY_KEY: dict[tuple[str, str], str] = {}
+# The registry model (id, temperature, max tokens) each cached agent was built
+# with; a registry edit rebuilds on the next invocation, like a prompt edit.
+_MODEL_BY_KEY: dict[tuple[str, str], tuple] = {}
 
 
 def _guardrail_role(role: str) -> str:
@@ -429,14 +442,21 @@ def _agents_for_role(role: str, tenant: str = DEFAULT_TENANT) -> tuple[Agent, St
     """(agent, ag_ui_adapter, prompt_sha) for (tenant, role), rebuilt on prompt change."""
     key = (tenant, role)
     resolved = resolve_system_prompt(SYSTEM_PROMPT, agent_name="supervisor")
-    if _PROMPT_SHA_BY_KEY.get(key) != resolved.sha or key not in _AGENTS_BY_KEY:
-        agent = _build_agent(_ROLES.get(_guardrail_role(role), ""), resolved.text)
+    model = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS)
+    model_key = (model.model_id, model.temperature, model.max_tokens)
+    if (
+        _PROMPT_SHA_BY_KEY.get(key) != resolved.sha
+        or _MODEL_BY_KEY.get(key) != model_key
+        or key not in _AGENTS_BY_KEY
+    ):
+        agent = _build_agent(_ROLES.get(_guardrail_role(role), ""), resolved.text, model.model_id)
         # Keep the historical adapter name for orgiq so topology/session naming
         # stays stable; other tenants get a tenant-qualified name.
         suffix = role if tenant == DEFAULT_TENANT else f"{tenant}-{role}"
         _AGENTS_BY_KEY[key] = agent
         _AG_UI_AGENTS[key] = _build_ag_ui(suffix, agent)
         _PROMPT_SHA_BY_KEY[key] = resolved.sha
+        _MODEL_BY_KEY[key] = model_key
         log.info(
             "Supervisor agent for tenant=%s role=%s built (guardrail_role=%s prompt source=%s sha=%s)",
             tenant, role, _guardrail_role(role), resolved.source, resolved.sha,
@@ -610,6 +630,8 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
     user traffic no matter how many sub-agent calls the supervisor made.
     """
     _, ag_ui_agent, _prompt_sha = _agents_for_role(role, tenant)
+    # Streaming serves the registry primary the cached agent was built with.
+    _stream_model = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS)
 
     ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
     token = _current_ctx.set(ctx)
@@ -686,6 +708,8 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
             agent_id="orgiq-supervisor",
             agent_name="Supervisor",
             prompt_version=_prompt_sha,
+            model_id=_stream_model.model_id,
+            model_registry_version=_stream_model.version or None,
         ) as oi_span:
             async for event in ag_ui_agent.run(run_input):
                 etype = _event_type(event)
@@ -784,7 +808,7 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
                 response=response_text,
                 agent_id="orgiq-supervisor",
                 agent_name="Supervisor",
-                model_id=MODEL_ID,
+                model_id=_stream_model.model_id,
                 duration_ms=duration_ms,
                 prompt_version=_prompt_sha,
             )
@@ -796,6 +820,8 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
 async def _handle_sync(payload: dict, input_text: str, role: str, tenant: str = DEFAULT_TENANT) -> dict:
     """Synchronous dict-return path for A2A sub-agent calls."""
     agent, _, _prompt_sha = _agents_for_role(role, tenant)
+    _sync_model = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS)
+    served_model = _sync_model.model_id
 
     messages = []
     raw_history = payload.get("history", []) if isinstance(payload, dict) else []
@@ -817,10 +843,19 @@ async def _handle_sync(payload: dict, input_text: str, role: str, tenant: str = 
         agent_id="orgiq-supervisor",
         agent_name="Supervisor",
         prompt_version=_prompt_sha,
+        model_id=_sync_model.model_id,
+        model_registry_version=_sync_model.version or None,
     ) as oi_span:
         t0 = time.monotonic()
         try:
-            result = _invoke_with_retry(agent, input_text, messages=messages if messages else None)
+            result, served_model = _invoke_with_model_fallback(
+                agent, role, input_text, messages=messages if messages else None,
+            )
+            if oi_span is not None:
+                try:
+                    oi_span.set_attribute("orgiq.model_id", served_model)
+                except Exception:  # noqa: BLE001 — provenance never breaks a turn
+                    pass
         finally:
             _current_ctx.reset(token)
             reset_active_ctx(shared_token)
@@ -835,7 +870,7 @@ async def _handle_sync(payload: dict, input_text: str, role: str, tenant: str = 
                 response=response_text,
                 agent_id="orgiq-supervisor",
                 agent_name="Supervisor",
-                model_id=MODEL_ID,
+                model_id=served_model,
                 duration_ms=duration_ms,
                 prompt_version=_prompt_sha,
             )
@@ -850,6 +885,26 @@ async def _handle_sync(payload: dict, input_text: str, role: str, tenant: str = 
         "invocationId": ctx.invocation_id,
         "toolCalls": ctx.project_tool_calls(),
     }
+
+
+def _invoke_with_model_fallback(agent: Agent, role: str, input_text: str, messages=None):
+    """Run the turn on the registry primary; on a capacity error (throttling,
+    model not ready, unavailable) retry it on each fallback model in turn.
+    Returns ``(result, model_id_served)``. A fallback agent is built for the
+    turn only (same guardrail, same prompt) and is never cached, so the next
+    invocation tries the primary again."""
+    model = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS)
+
+    def run(model_id: str):
+        if model_id == model.model_id:
+            target = agent
+        else:
+            target = _build_agent(
+                _ROLES.get(_guardrail_role(role), ""), agent.system_prompt, model_id,
+            )
+        return _invoke_with_retry(target, input_text, messages=messages)
+
+    return invoke_with_fallback(run, model.chain)
 
 
 def _invoke_with_retry(agent: Agent, input_text: str, messages=None):

@@ -149,29 +149,33 @@ describe('POST /api/agents/:agentId/invoke — ManageIngest gate on write agents
   });
 });
 
-// The devbox runtime (Claude Code in a microVM) is gated on ManageDevbox the
-// same way: the portal's picker hides it from roles without the capability,
-// and this pins that the route refuses them too (2026-10-01).
-describe('POST /api/agents/:agentId/invoke — ManageDevbox gate on the devbox agent', () => {
+// The devbox runtime (Claude Code in a microVM) is gated on RunDevboxTask —
+// ManageDevbox until DE-42 split it, held by the same roles — the same way:
+// the portal's picker hides it from roles without the capability, and this
+// pins that the route refuses them too (2026-10-01).
+describe('POST /api/agents/:agentId/invoke — RunDevboxTask gate on the devbox agent', () => {
   const DEVBOX_IDS = ['devbox', 'orgiq-devbox', 'orgiq_devbox', 'ORGIQ-DEVBOX'];
 
-  it('403s a session without ManageDevbox on every id spelling, before any stream opens', async () => {
-    allowOnly('Search', 'ManageIngest'); // a member's Search, even with ManageIngest
+  it('403s a session without RunDevboxTask on every id spelling, before any stream opens', async () => {
+    allowOnly('Search', 'ManageIngest', 'ManageDevbox'); // box lifecycle alone does not run Claude Code
     for (const id of DEVBOX_IDS) {
       const res = await invoke(id);
       expect(res.status).toBe(403);
-      expect(res.body).toMatchObject({ error: 'Forbidden', action: 'ManageDevbox', agentId: id });
-      expect(res.body.message).toMatch(/ManageDevbox/);
+      expect(res.body).toMatchObject({ error: 'Forbidden', action: 'RunDevboxTask', agentId: id });
+      expect(res.body.message).toMatch(/RunDevboxTask/);
     }
   });
 
-  it('lets a ManageDevbox holder invoke it', async () => {
-    allowOnly('Search', 'ManageDevbox');
+  it('lets a RunDevboxTask holder invoke it, asking Cedar as the owner of the new session', async () => {
+    allowOnly('Search', 'RunDevboxTask');
     for (const id of DEVBOX_IDS) {
       const res = await invoke(id);
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ streamed: true });
     }
+    const asked = mockSend.mock.calls.map(([cmd]) => cmd as { input: { action: { actionId: string }; entities?: { entityList: Array<{ attributes: Record<string, unknown> }> } } })
+      .find((c) => c.input.action.actionId === 'RunDevboxTask');
+    expect(asked?.input.entities?.entityList[1]?.attributes).toEqual({ ownsBox: { boolean: true } });
   });
 
   it('503s (not 403) when authorization itself is unavailable', async () => {
@@ -180,18 +184,18 @@ describe('POST /api/agents/:agentId/invoke — ManageDevbox gate on the devbox a
       : Promise.reject(new Error('throttled'))));
     const res = await invoke('orgiq-devbox');
     expect(res.status).toBe(503);
-    expect(res.body).toMatchObject({ action: 'ManageDevbox' });
+    expect(res.body).toMatchObject({ action: 'RunDevboxTask' });
   });
 
   it('does not catch ids that merely contain the word', () => {
     expect(agentCapabilityGate('orgiq-supervisor')).toBeNull();
     expect(agentCapabilityGate('devboxer')).toBeNull();
-    expect(agentCapabilityGate('orgiq-devbox')?.action).toBe('ManageDevbox');
+    expect(agentCapabilityGate('orgiq-devbox')?.action).toBe('RunDevboxTask');
     expect(agentCapabilityGate('orgiq_graph_builder')?.action).toBe('ManageIngest');
   });
 
-  it('matches the seeded roles: sme and hr-admin hold ManageDevbox, member does not', () => {
-    const holds = (role: string) => /OrgIQ::Action::"ManageDevbox"/.test(
+  it('matches the seeded roles: sme and hr-admin hold RunDevboxTask, member does not', () => {
+    const holds = (role: string) => /OrgIQ::Action::"RunDevboxTask"/.test(
       readFileSync(join(__dirname, '../../../seeds/roles/orgiq', `${role}.cedar`), 'utf8'));
     expect(holds('member')).toBe(false);
     expect(holds('sme')).toBe(true);
@@ -199,7 +203,7 @@ describe('POST /api/agents/:agentId/invoke — ManageDevbox gate on the devbox a
   });
 
   it('is probed by GET /api/session/capabilities, so the picker can read it', () => {
-    expect(CAPABILITY_ACTIONS).toContain('ManageDevbox');
+    expect(CAPABILITY_ACTIONS).toContain('RunDevboxTask');
   });
 });
 

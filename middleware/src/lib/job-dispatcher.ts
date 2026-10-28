@@ -25,6 +25,7 @@ import { replicaFleet } from './replica-fleet.js';
 import { runDevboxTask } from '../routes/devbox.js';
 import { freezeJobBrief } from './run-brief.js';
 import { maintainJobAttempt, type JobAttempt } from './job-attempt.js';
+import { recordSpend } from '../providers/spend-ledger.js';
 
 const TICK_MS = Number(process.env['JOB_DISPATCH_INTERVAL_MS'] ?? 10_000);
 /**
@@ -62,6 +63,26 @@ function emit(kind: string, job: AgentJob | { id: string }, extra: Record<string
   dispatcherEvents.emit('job', { kind, jobId: job.id, ...extra, ts: new Date().toISOString() });
 }
 
+/**
+ * The ledger entry for one job attempt (DE-30). A job a bot run owns (a bot
+ * firing or a marketplace dispatch) is skipped: its money lands on the
+ * bot_run, and writing it here too would count the same dollar twice.
+ */
+async function recordJobSpend(job: ClaimedAgentJob, costUsd: number | null): Promise<void> {
+  if (job.botId) return;
+  const initiative = job.payload['initiativeId'];
+  const model = job.payload['model'];
+  await recordSpend({
+    source: 'job',
+    sourceId: `${job.id}:${job.attempts}`,
+    initiativeId: typeof initiative === 'string' && initiative ? initiative : null,
+    boxId: job.boxId,
+    actorId: job.createdBy,
+    model: typeof model === 'string' && model ? model : null,
+    costUsd,
+  }, { unlessBotRunOwnsJob: job.id });
+}
+
 async function runJob(job: ClaimedAgentJob): Promise<void> {
   const { boxId, sessionId, claimToken } = job;
   if (!boxId || !sessionId) {
@@ -70,6 +91,7 @@ async function runJob(job: ClaimedAgentJob): Promise<void> {
   }
   busy.add(boxId);
   let attempt: JobAttempt | undefined;
+  let invoked = false;
   try {
     if (!await markRunning(job.id, claimToken)) return;
     attempt = await maintainJobAttempt(job.id, claimToken, STALE_MINUTES * 60_000);
@@ -86,6 +108,7 @@ async function runJob(job: ClaimedAgentJob): Promise<void> {
       tokens: frozen.brief.used_tokens, ts: new Date().toISOString(),
     });
     const guard = attempt;
+    invoked = true;
     const outcome = await attempt.run(() => runDevboxTask({
       sessionId, prompt, signal: guard.signal,
       ...(frozen ? { lab: { ...frozen.run, session_id: sessionId, box_id: boxId } } : {}),
@@ -104,6 +127,7 @@ async function runJob(job: ClaimedAgentJob): Promise<void> {
       },
     });
     if (committed) {
+      await recordJobSpend(job, outcome.costUsd ?? null);
       appendEvent(boxId, { type: 'job_finished', jobId: job.id, ok: outcome.ok, ts: new Date().toISOString() });
       emit(status, job, { boxId });
     }
@@ -112,6 +136,8 @@ async function runJob(job: ClaimedAgentJob): Promise<void> {
     // the authoritative stale sweep and never publish a stale terminal event.
     if (!attempt || attempt.signal.aborted) return;
     if (await completeJob(job.id, { claimToken, status: 'failed', error: (err as Error).message })) {
+      // The task may have spent before it threw; how much is unknown, not zero.
+      if (invoked) await recordJobSpend(job, null);
       emit('failed', job, { boxId });
     }
   } finally {

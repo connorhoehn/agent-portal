@@ -78,3 +78,51 @@ forbid (
   resource
 )
 when { principal.role == "sme" };
+
+// The agent-code authorities split out of ManageDevbox (DE-42). Same role as
+// above, but scoped: an SME acts only where the route found them on the
+// initiative (`onInitiative`: owner or contributor of the box's or change's
+// initiative) or, for a box, its owner (`ownsBox`). The route computes both
+// booleans and refuses first (403 NOT_ON_INITIATIVE), because the local
+// open-mode matrix ignores `when` clauses; this is the production copy.
+// RunDevboxTask accepts `ownsBox` too: an SME's own unattributed box takes
+// tasks today, and the split must not take that away.
+permit (
+  principal,
+  action in [
+    OrgIQ::Action::"OpenDevboxShell",
+    OrgIQ::Action::"RunDevboxTask"
+  ],
+  resource
+)
+when {
+  principal.role == "sme" && principal has tenant && principal.tenant == "orgiq" &&
+  ((resource has onInitiative && resource.onInitiative) || (resource has ownsBox && resource.ownsBox))
+};
+
+// Approve and ship agent-written code on the initiatives they are on. Policy
+// editing (EditSdlcPolicy) is deliberately absent: the gates constrain the
+// SME, so the SME does not get to move them (DE-43).
+permit (
+  principal,
+  action in [
+    OrgIQ::Action::"DecideAgentChange",
+    OrgIQ::Action::"DeliverAgentChange"
+  ],
+  resource
+)
+when {
+  principal.role == "sme" && principal has tenant && principal.tenant == "orgiq" &&
+  resource has onInitiative && resource.onInitiative
+};
+
+// Nobody but admin decides a change they caused (DE-43). The route compares
+// the decider with the change's requested_by and answers 409 self-approval;
+// this forbid is the production copy. The capability probe sends
+// isAuthor: false so the control still shows.
+forbid (
+  principal,
+  action == OrgIQ::Action::"DecideAgentChange",
+  resource
+)
+when { resource has isAuthor && resource.isAuthor && principal.role != "admin" };

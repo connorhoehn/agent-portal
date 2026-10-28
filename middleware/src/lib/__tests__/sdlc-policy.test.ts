@@ -240,3 +240,82 @@ describe('default policies are safe out of the box', () => {
     expect(e.decision).toBe('approved');
   });
 });
+
+// ─── DE-43 / DE-46: loosening, set validation, governance paths ────────────
+import {
+  looseningChanges as loosening, policySetError, normalizePolicy, governancePathsTouched,
+  DEFAULT_POLICIES as DEFAULTS, evaluate as evaluateSet, type SdlcPolicy as Policy,
+} from '../sdlc-policy.js';
+
+describe('looseningChanges', () => {
+  const base: Policy[] = [
+    { id: 'r', name: 'Review', enabled: true, kind: 'require_review', config: {}, action: 'require_approval' },
+    { id: 'p', name: 'Paths', enabled: true, kind: 'protected_paths', config: { globs: ['infra/**', '**/*.tf'] }, action: 'block' },
+    { id: 'f', name: 'Files', enabled: true, kind: 'max_files', config: { max: 40 }, action: 'require_approval' },
+    { id: 'c', name: 'Cost', enabled: true, kind: 'max_cost', config: { maxUsd: 5 }, action: 'require_approval' },
+    { id: 'm', name: 'Models', enabled: true, kind: 'model_allowlist', config: { models: ['a'] }, action: 'require_approval' },
+  ];
+  const edit = (id: string, patch: Partial<Policy>) => base.map((p) => (p.id === id ? { ...p, ...patch } : p));
+
+  it('reads an unchanged set, an added policy and every tightening as not loosening', () => {
+    expect(loosening(base, base)).toEqual([]);
+    expect(loosening(base, [...base, { id: 'x', name: 'X', enabled: true, kind: 'max_files', config: { max: 1 }, action: 'block' }])).toEqual([]);
+    expect(loosening(base, edit('f', { config: { max: 10 } }))).toEqual([]);
+    expect(loosening(base, edit('p', { config: { globs: ['infra/**', '**/*.tf', '**/*.cedar'] } }))).toEqual([]);
+    expect(loosening(base, edit('m', { config: { models: [] } }).filter((p) => p.id !== 'm').concat([{ ...base[4]!, config: { models: ['a'] } }]))).toEqual([]);
+    expect(loosening(base, edit('f', { action: 'block' }))).toEqual([]);
+  });
+
+  it('names each loosening: disable, delete, downgrade, raise, remove a glob, allow a model, empty the allowlist', () => {
+    expect(loosening(base, edit('f', { enabled: false }))).toEqual(['disables "Files"']);
+    expect(loosening(base, base.filter((p) => p.id !== 'c'))).toEqual(['removes "Cost"']);
+    expect(loosening(base, edit('p', { action: 'require_approval' }))[0]).toMatch(/downgrades "Paths"/);
+    expect(loosening(base, edit('f', { config: { max: 41 } }))[0]).toMatch(/raises "Files" from 40 to 41/);
+    expect(loosening(base, edit('c', { config: {} }))[0]).toMatch(/raises "Cost" from \$5 to no limit/);
+    expect(loosening(base, edit('p', { config: { globs: ['infra/**'] } }))[0]).toMatch(/removes 1 protected path .*\*\*\/\*\.tf/);
+    expect(loosening(base, edit('m', { config: { models: ['a', 'b'] } }))[0]).toMatch(/allows b/);
+    expect(loosening(base, edit('m', { config: { models: [] } }))[0]).toMatch(/empties the allowlist/);
+    expect(loosening(base, edit('f', { kind: 'max_cost' }))[0]).toMatch(/changes the kind/);
+  });
+
+  it('a policy already disabled can be removed without counting as loosening', () => {
+    const off = edit('c', { enabled: false });
+    expect(loosening(off, off.filter((p) => p.id !== 'c'))).toEqual([]);
+  });
+});
+
+describe('policy set validation', () => {
+  it('normalises a policy, defaulting action to require_approval and enabled to true', () => {
+    expect(normalizePolicy({ id: ' k ', name: ' N ', kind: 'max_files', action: 'blocK' }))
+      .toEqual({ id: 'k', name: 'N', enabled: true, kind: 'max_files', config: {}, action: 'require_approval' });
+    expect(normalizePolicy({ name: 'N', kind: 'max_files' })).toMatch(/stable id/);
+    expect(normalizePolicy({ id: 'k', name: 'N', kind: 'vibes' })).toMatch(/kind must be one of/);
+  });
+
+  it('refuses duplicate ids and a set without the independent-review policy', () => {
+    const r: Policy = { id: 'r', name: 'R', enabled: false, kind: 'require_review', config: {}, action: 'require_approval' };
+    expect(policySetError([r])).toBeNull();
+    expect(policySetError([r, r])).toMatch(/duplicate/);
+    expect(policySetError([])).toMatch(/independent-review policy cannot be removed/);
+  });
+});
+
+describe('governance code (DE-43 §6, DE-46)', () => {
+  it('names the files that are the governance', () => {
+    expect(governancePathsTouched([
+      'middleware/src/lib/sdlc-policy.ts', 'schema/agent_sdlc_schema.sql',
+      'middleware/seeds/roles/orgiq/sme.cedar', 'middleware/src/lib/authz.ts', 'src/app.ts',
+    ])).toEqual([
+      'middleware/src/lib/sdlc-policy.ts', 'schema/agent_sdlc_schema.sql',
+      'middleware/seeds/roles/orgiq/sme.cedar', 'middleware/src/lib/authz.ts',
+    ]);
+  });
+
+  it('the default sensitive-paths policy now routes them to a human', () => {
+    const policies = DEFAULTS.map((p, i) => ({ ...p, id: String(i) }));
+    for (const f of ['middleware/src/lib/sdlc-policy.ts', 'middleware/seeds/roles/orgiq/sme.cedar', 'schema/sdlc_governance_schema.sql']) {
+      const out = evaluateSet(policies, { files: [f], model: null, reviewVerdict: 'approve', costUsd: null });
+      expect([f, out.decision]).toEqual([f, 'needs_approval']);
+    }
+  });
+});

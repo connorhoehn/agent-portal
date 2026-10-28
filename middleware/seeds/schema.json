@@ -39,6 +39,18 @@
             "envStatus": {
               "type": "String",
               "required": false
+            },
+            "onInitiative": {
+              "type": "Boolean",
+              "required": false
+            },
+            "ownsBox": {
+              "type": "Boolean",
+              "required": false
+            },
+            "isAuthor": {
+              "type": "Boolean",
+              "required": false
             }
           }
         }
@@ -576,6 +588,56 @@
         }
       },
       "ProvisionAccess": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "OpenDevboxShell": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "RunDevboxTask": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "DecideAgentChange": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "DeliverAgentChange": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "EditSdlcPolicy": {
         "appliesTo": {
           "principalTypes": [
             "User"

@@ -57,6 +57,9 @@ import {
   buildDevboxStatusPayload,
 } from './devbox.js';
 import { buildLoopMockFrames, loopMockPaceMs, clearMockWorkspace } from '../mock/devbox-agent-loop.js';
+import { randomUUID } from 'node:crypto';
+import { parseReportedCost } from '../lib/run-cost.js';
+import { recordSpend } from '../providers/spend-ledger.js';
 import {
   isValidFileId,
   listMockFiles,
@@ -224,12 +227,27 @@ internalDevboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
     // fleet log for OTHER tailers, not into this caller's own response body.
     if (taskStarted) appendEvent(box.id, taskStarted);
     const pace = loopMockPaceMs();
+    let result: Record<string, unknown> | null = null;
     for (const frame of rest) {
       if (pace > 0) await new Promise<void>((resolve) => { const t = setTimeout(resolve, pace); t.unref?.(); });
       writeSSE(res, frame);
       appendEvent(box.id, frame);
+      if ((frame as Record<string, unknown>)['type'] === 'result') result = frame as Record<string, unknown>;
     }
     endSSE(res);
+    // Same ledger entry the real path writes in runTaskAndForward (DE-30).
+    const usage = result?.['usage'] as { input_tokens?: number; output_tokens?: number } | undefined;
+    await recordSpend({
+      source: 'agent_loop',
+      sourceId: `${box.id}:${randomUUID()}`,
+      initiativeId: box.projectId ?? null,
+      boxId: box.id,
+      actorId: principal.requestedBy,
+      model: body.model ?? 'sonnet',
+      costUsd: result ? parseReportedCost(result) : null,
+      inputTokens: usage?.input_tokens ?? null,
+      outputTokens: usage?.output_tokens ?? null,
+    });
     return;
   }
 
@@ -237,6 +255,7 @@ internalDevboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
   if (!arn) return;
   await runTaskAndForward({
     sessionId, prompt, resume, res, arn,
+    spend: { source: 'agent_loop', actorId: principal.requestedBy },
     ...(body.model ? { model: body.model } : {}),
     ...(body.timeout ? { timeout: body.timeout } : {}),
   });

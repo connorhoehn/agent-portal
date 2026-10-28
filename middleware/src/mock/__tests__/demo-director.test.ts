@@ -17,6 +17,10 @@ jest.mock('../../lib/authz.js', () => ({
   readForRolesElseAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   requireAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   requireSession: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  // The DE-42 box-action gate (lib/agent-actions.ts) asks these; this story is
+  // not about Cedar, so every action is allowed for the session at hand.
+  resolveSession: (req: { session?: unknown }) => req.session ?? null,
+  isAllowed: async () => true,
 }));
 jest.mock('../../lib/devbox-arn.js', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports

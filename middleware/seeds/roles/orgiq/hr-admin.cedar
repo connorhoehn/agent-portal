@@ -67,3 +67,31 @@ forbid (
   resource
 )
 when { principal.role == "hr-admin" };
+
+// The agent-code authorities split out of ManageDevbox (DE-42). hr-admin held
+// every one of them through ManageDevbox and keeps them: whether People Ops
+// should lose shell and task is an open decision (DE-42), and the split must
+// not narrow a role on its own. Org-wide, so no initiative condition; the
+// route layer treats hr-admin as on every initiative. EditSdlcPolicy is the
+// governance-editing half; DE-43's two-person rule and self-gate refusal
+// apply on top of it at the route.
+permit (
+  principal,
+  action in [
+    OrgIQ::Action::"OpenDevboxShell",
+    OrgIQ::Action::"RunDevboxTask",
+    OrgIQ::Action::"DecideAgentChange",
+    OrgIQ::Action::"DeliverAgentChange",
+    OrgIQ::Action::"EditSdlcPolicy"
+  ],
+  resource
+)
+when { principal.role == "hr-admin" && principal has tenant && principal.tenant == "orgiq" };
+
+// Nobody but admin decides a change they caused (DE-43); see sme.cedar.
+forbid (
+  principal,
+  action == OrgIQ::Action::"DecideAgentChange",
+  resource
+)
+when { resource has isAuthor && resource.isAuthor && principal.role != "admin" };

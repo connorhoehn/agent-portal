@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "roles": {
+    "supervisor":         { "primary": "amazon.nova-pro-v1:0", "fallbacks": ["us.amazon.nova-pro-v1:0", "amazon.nova-lite-v1:0"], "temperature": 0.0, "maxTokens": 4096 },
+    "search":             { "primary": "amazon.nova-pro-v1:0", "fallbacks": ["us.amazon.nova-pro-v1:0"], "temperature": 0.1, "maxTokens": 4096 },
+    "advisor":            { "primary": "amazon.nova-pro-v1:0", "fallbacks": ["us.amazon.nova-pro-v1:0"], "temperature": 0.1, "maxTokens": 4096 },
+    "scoring":            { "primary": "amazon.nova-pro-v1:0", "fallbacks": ["us.amazon.nova-pro-v1:0"], "temperature": 0.1, "maxTokens": 4096 },
+    "ingestion":          { "primary": "amazon.nova-pro-v1:0", "fallbacks": ["us.amazon.nova-pro-v1:0"] },
+    "graph-builder":      { "primary": "amazon.nova-pro-v1:0", "fallbacks": ["us.amazon.nova-pro-v1:0"] },
+    "assessment-drafter": { "primary": "amazon.nova-pro-v1:0", "fallbacks": ["us.amazon.nova-pro-v1:0"] },
+    "assessment-scorer":  { "primary": "amazon.nova-pro-v1:0", "fallbacks": ["us.amazon.nova-pro-v1:0"] },
+    "eval-judge":         { "primary": "us.amazon.nova-pro-v1:0", "fallbacks": [] }
+  },
+  "allow": ["amazon.", "us.amazon.", "eu.amazon.", "apac.amazon."]
+}

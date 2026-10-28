@@ -13,40 +13,8 @@
     ]
   },
   "context": {
-    "projectPrefix": "orgiq",
     "enableEval": "true",
     "deployCanary": "true",
-    "deploySocial": "false",
-    "documentWorkspace": {
-      "tenantId": "assessment",
-      "publicBaseUrl": "https://orgiq-docs.orgiq.test",
-      "grantIssuer": "assessment-bff",
-      "grantKeyId": "v1",
-      "grantPrivateKeySecretArn": "arn:aws:secretsmanager:us-east-1:647757222309:secret:orgiq-document-grant-private-key-KeVROT",
-      "grantPublicKeySecretArn": "arn:aws:secretsmanager:us-east-1:647757222309:secret:orgiq-document-grant-public-key-032jPz",
-      "architecture": "ARM64",
-      "images": {
-        "gateway": {
-          "repositoryName": "orgiq-documents-gateway",
-          "digest": "sha256:0b3c0db6eb19f1ec0e72c688c3dafd9c019dd9cc6eaf6a1e428bee43f794f3fe"
-        },
-        "platform": {
-          "repositoryName": "orgiq-documents-platform",
-          "digest": "sha256:a3fe77adac6530991a20ddd4bbb9e01a0ad0667b63a4c88f104ef4306ce7a535"
-        },
-        "catalog": {
-          "repositoryName": "orgiq-documents-catalog",
-          "digest": "sha256:eafc08dc4807a309b8db0620fd5e186886449a7dcd457a5dd5826390d29addf8"
-        },
-        "mq": {
-          "repositoryName": "orgiq-documents-mq",
-          "digest": "sha256:f1d75d9f2cb68ffae6217c415187edab53f4b56f485dead039d4830bfa3d7e89"
-        },
-        "redis": {
-          "repositoryName": "orgiq-documents-redis",
-          "digest": "sha256:1f09a89a207d794a8c61d9edfc26e7c58427de10ccef7c5d18d638df79a63b85"
-        }
-      }
-    }
+    "deploySocial": "false"
   }
 }

@@ -331,3 +331,58 @@ describe('schema/policy agreement', () => {
     }
   });
 });
+
+// ===========================================================================
+// 6. DE-42 / DE-43: the agent-code actions split out of ManageDevbox.
+//    The sme's grants are conditioned on the initiative booleans the route
+//    computes; the author forbid refuses self-approval in production. The
+//    local matrix ignores both, so the routes repeat them — this pins the
+//    production copy.
+// ===========================================================================
+describe('DE-42 initiative conditions and the DE-43 author forbid', () => {
+  const schema = JSON.parse(readFileSync(join(seedsDir(), 'schema.json'), 'utf8'));
+  const app = schema.OrgIQ.entityTypes.Application.shape.attributes;
+  const ACTIONS = ['OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange'];
+
+  test('schema.json declares onInitiative, ownsBox and isAuthor as optional Booleans on Application', () => {
+    for (const attr of ['onInitiative', 'ownsBox', 'isAuthor']) {
+      expect(app[attr]).toEqual({ type: 'Boolean', required: false });
+    }
+  });
+
+  test.each(ACTIONS)('every sme permit naming %s carries the onInitiative clause and the orgiq tenant guard', (action) => {
+    const stmts = permits(role('orgiq/sme')).filter((s) => s.includes(`OrgIQ::Action::"${action}"`));
+    expect(stmts.length).toBe(1);
+    const cond = whenBody(stmts[0]!);
+    expect(cond).toContain('resource has onInitiative && resource.onInitiative');
+    expect(cond).toMatch(/principal has tenant && principal\.tenant == "orgiq"/);
+  });
+
+  test('only the shell and task permit also accept ownsBox', () => {
+    for (const s of permits(role('orgiq/sme')).filter((x) => ACTIONS.some((a) => x.includes(`"${a}"`)))) {
+      const shellOrTask = /OpenDevboxShell|RunDevboxTask/.test(s);
+      expect(/resource has ownsBox && resource\.ownsBox/.test(whenBody(s))).toBe(shellOrTask);
+    }
+  });
+
+  test('the sme general grant (the first permit) does not name any of the new actions', () => {
+    const general = permits(role('orgiq/sme'))[0]!;
+    for (const a of [...ACTIONS, 'EditSdlcPolicy']) expect(general).not.toContain(`"${a}"`);
+  });
+
+  test.each(['orgiq/sme', 'orgiq/hr-admin'])('%s forbids DecideAgentChange when the caller is the author, except admin', (key) => {
+    const f = forbids(role(key)).filter((s) => /DecideAgentChange/.test(s));
+    expect(f).toHaveLength(1);
+    expect(f[0]).toMatch(/action\s*==\s*OrgIQ::Action::"DecideAgentChange"/);
+    expect(whenBody(f[0]!)).toBe('resource has isAuthor && resource.isAuthor && principal.role != "admin"');
+  });
+
+  test('the new statements were appended: each role file still opens with its original general grant', () => {
+    // policy-seeds.ts keys AVP policies by statement position; appending keeps
+    // every existing statement's description (and so its policy id).
+    expect(permits(role('orgiq/sme'))[0]).toMatch(/"ManageDevbox"/);
+    expect(permits(role('orgiq/hr-admin'))[0]).toMatch(/"ManageDevbox"/);
+    const smeStatements = role('orgiq/sme').statements;
+    expect(smeStatements.slice(-3).map((s) => s.split(/\s/)[0])).toEqual(['permit', 'permit', 'forbid']);
+  });
+});

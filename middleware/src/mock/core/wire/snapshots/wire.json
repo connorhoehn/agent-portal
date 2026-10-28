@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-28T06:06:16.946Z",
-  "serverHandlerSha": "5818f472e951d55524342c670a622a9e039dcf2818bc490d967d8cf561c06d33",
+  "capturedAt": "2026-10-28T13:15:35.373Z",
+  "serverHandlerSha": "4516036902f6d9193990e71698d38f5d41b94b4830b6c9f6c917ff86bfbbefb4",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -2938,7 +2938,6 @@
       "values": {
         "boxes[].status": [
           "idle",
-          "provisioning",
           "running",
           "waiting"
         ]
@@ -3981,6 +3980,18 @@
         "schema.OrgIQ.actions.DecideAccess.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.DecideAccess.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.DecideAccess.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.DecideAgentChange": "object",
+        "schema.OrgIQ.actions.DecideAgentChange.appliesTo": "object",
+        "schema.OrgIQ.actions.DecideAgentChange.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.DecideAgentChange.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.DecideAgentChange.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.DecideAgentChange.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.DeliverAgentChange": "object",
+        "schema.OrgIQ.actions.DeliverAgentChange.appliesTo": "object",
+        "schema.OrgIQ.actions.DeliverAgentChange.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.DeliverAgentChange.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.DeliverAgentChange.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.DeliverAgentChange.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.DispatchAgentRun": "object",
         "schema.OrgIQ.actions.DispatchAgentRun.appliesTo": "object",
         "schema.OrgIQ.actions.DispatchAgentRun.appliesTo.principalTypes": "array",
@@ -4005,6 +4016,12 @@
         "schema.OrgIQ.actions.EditSchema.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.EditSchema.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.EditSchema.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.EditSdlcPolicy": "object",
+        "schema.OrgIQ.actions.EditSdlcPolicy.appliesTo": "object",
+        "schema.OrgIQ.actions.EditSdlcPolicy.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.EditSdlcPolicy.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.EditSdlcPolicy.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.EditSdlcPolicy.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.EnterEnvironment": "object",
         "schema.OrgIQ.actions.EnterEnvironment.appliesTo": "object",
         "schema.OrgIQ.actions.EnterEnvironment.appliesTo.principalTypes": "array",
@@ -4131,6 +4148,12 @@
         "schema.OrgIQ.actions.ManageUsers.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.ManageUsers.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.ManageUsers.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.OpenDevboxShell": "object",
+        "schema.OrgIQ.actions.OpenDevboxShell.appliesTo": "object",
+        "schema.OrgIQ.actions.OpenDevboxShell.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.OpenDevboxShell.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.OpenDevboxShell.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.OpenDevboxShell.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.PostMessage": "object",
         "schema.OrgIQ.actions.PostMessage.appliesTo": "object",
         "schema.OrgIQ.actions.PostMessage.appliesTo.principalTypes": "array",
@@ -4167,6 +4190,12 @@
         "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.RunAssessmentAgent.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.RunDevboxTask": "object",
+        "schema.OrgIQ.actions.RunDevboxTask.appliesTo": "object",
+        "schema.OrgIQ.actions.RunDevboxTask.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.RunDevboxTask.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.RunDevboxTask.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.RunDevboxTask.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.RunPipeline": "object",
         "schema.OrgIQ.actions.RunPipeline.appliesTo": "object",
         "schema.OrgIQ.actions.RunPipeline.appliesTo.principalTypes": "array",
@@ -5757,7 +5786,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -8284,6 +8313,7 @@
         "changes[].diff": "string",
         "changes[].diffTruncated": "boolean",
         "changes[].error": "null",
+        "changes[].evaluationSeq": "number",
         "changes[].files": "array",
         "changes[].filesChanged": "number",
         "changes[].files[]": "string",
@@ -8292,9 +8322,12 @@
         "changes[].model": "string",
         "changes[].orgProjectId": "string",
         "changes[].orgProjectName": "string",
+        "changes[].policyScope": "string",
+        "changes[].policyVersion": "number",
         "changes[].prUrl": "null|string",
         "changes[].projectId": "string",
         "changes[].repoFullName": "string",
+        "changes[].requestedBy": "string",
         "changes[].reviews": "array",
         "changes[].runId": "null",
         "changes[].status": "string",
@@ -8324,6 +8357,7 @@
         "change.diff": "string",
         "change.diffTruncated": "boolean",
         "change.error": "null",
+        "change.evaluationSeq": "number",
         "change.files": "array",
         "change.filesChanged": "number",
         "change.files[]": "string",
@@ -8337,9 +8371,12 @@
         "change.model": "string",
         "change.orgProjectId": "string",
         "change.orgProjectName": "string",
+        "change.policyScope": "string",
+        "change.policyVersion": "number",
         "change.prUrl": "null",
         "change.projectId": "string",
         "change.repoFullName": "string",
+        "change.requestedBy": "string",
         "change.reviews": "array",
         "change.reviews[]": "object",
         "change.reviews[].createdAt": "string",
@@ -8380,6 +8417,35 @@
         ]
       }
     },
+    "GET /api/sdlc/changes/:id/evaluations": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "changeId": "string",
+        "evaluations": "array",
+        "evaluations[]": "object",
+        "evaluations[].gates": "array",
+        "evaluations[].gates[]": "object",
+        "evaluations[].gates[].detail": "string",
+        "evaluations[].gates[].kind": "string",
+        "evaluations[].gates[].outcome": "string",
+        "evaluations[].gates[].policyName": "string",
+        "evaluations[].policyScope": "string",
+        "evaluations[].policyVersion": "number",
+        "evaluations[].seq": "number"
+      },
+      "values": {
+        "evaluations[].gates[].kind": [
+          "protected_paths",
+          "require_review"
+        ],
+        "evaluations[].gates[].outcome": [
+          "pass",
+          "requires_approval"
+        ]
+      }
+    },
     "GET /api/sdlc/policies": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -8396,7 +8462,9 @@
         "policies[].enabled": "boolean",
         "policies[].id": "string",
         "policies[].kind": "string",
-        "policies[].name": "string"
+        "policies[].name": "string",
+        "scope": "string",
+        "version": "number"
       },
       "values": {
         "policies[].action": [
@@ -8409,6 +8477,24 @@
           "require_review"
         ]
       }
+    },
+    "GET /api/sdlc/policy-proposals": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "proposals": "array"
+      },
+      "values": {}
+    },
+    "GET /api/sdlc/policy-sets/:scope": {
+      "skipped": "no value found for :scope under /api/sdlc/policy-sets (orgiq/admin); no value found for :scope under /api/sdlc/policy-sets (assessment/admin); no value found for :scope under /api/sdlc/policy-sets (anonymous)"
+    },
+    "GET /api/sdlc/policy-sets/:scope/versions": {
+      "skipped": "no value found for :scope under /api/sdlc/policy-sets (orgiq/admin); no value found for :scope under /api/sdlc/policy-sets (assessment/admin); no value found for :scope under /api/sdlc/policy-sets (anonymous)"
+    },
+    "GET /api/sdlc/policy-sets/:scope/versions/:version": {
+      "skipped": "no value found for :scope under /api/sdlc/policy-sets (orgiq/admin); no value found for :scope under /api/sdlc/policy-sets (assessment/admin); no value found for :scope under /api/sdlc/policy-sets (anonymous)"
     },
     "GET /api/search": {
       "persona": "orgiq/admin",
@@ -8659,10 +8745,13 @@
           "CancelRun",
           "ConnectLocalCompute",
           "DecideAccess",
+          "DecideAgentChange",
+          "DeliverAgentChange",
           "DispatchAgentRun",
           "EditGuardrail",
           "EditPolicy",
           "EditSchema",
+          "EditSdlcPolicy",
           "EnterEnvironment",
           "LabelFeedback",
           "ManageAccessCatalog",
@@ -8685,12 +8774,14 @@
           "ManageTeams",
           "ManageUsers",
           "Masquerade",
+          "OpenDevboxShell",
           "PostMessage",
           "ProvisionAccess",
           "PublishReport",
           "RequestAccess",
           "ReviewRunbook",
           "RunAssessmentAgent",
+          "RunDevboxTask",
           "RunPipeline",
           "ScoreAssessment",
           "Search",
@@ -10202,10 +10293,13 @@
         "CancelRun",
         "ConnectLocalCompute",
         "DecideAccess",
+        "DecideAgentChange",
+        "DeliverAgentChange",
         "DispatchAgentRun",
         "EditGuardrail",
         "EditPolicy",
         "EditSchema",
+        "EditSdlcPolicy",
         "EnterEnvironment",
         "LabelFeedback",
         "ManageAccessCatalog",
@@ -10228,12 +10322,14 @@
         "ManageTeams",
         "ManageUsers",
         "Masquerade",
+        "OpenDevboxShell",
         "PostMessage",
         "ProvisionAccess",
         "PublishReport",
         "RequestAccess",
         "ReviewRunbook",
         "RunAssessmentAgent",
+        "RunDevboxTask",
         "RunPipeline",
         "ScoreAssessment",
         "Search",

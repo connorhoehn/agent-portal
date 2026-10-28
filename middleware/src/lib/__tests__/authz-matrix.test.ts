@@ -156,6 +156,10 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // ReviewRunbook is role-wide; routes/runbooks.ts scopes an SME to the
       // runbooks they own or whose initiative they are attached to.
       'ViewSessionBrief', 'ReviewRunbook',
+      // DE-42: the agent-code authorities split out of ManageDevbox, each
+      // conditioned on onInitiative (shell and task also on ownsBox).
+      // EditSdlcPolicy is deliberately absent (DE-43).
+      'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange',
     ],
   },
   'orgiq/program-owner': {
@@ -187,6 +191,9 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'LabelFeedback', 'ManageIngest', 'ManageCanary', 'ManageKB', 'ManageDevbox',
       'ManageBots', 'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
       'ConnectLocalCompute', 'ViewSessionBrief',
+      // DE-42: hr-admin held all of these through ManageDevbox and keeps them
+      // (losing shell/task is an open decision); EditSdlcPolicy is its own.
+      'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange', 'EditSdlcPolicy',
     ],
   },
   'assessment/assessor': {
@@ -618,4 +625,46 @@ describe('schema completeness (AVP rejects undeclared actions)', () => {
     expect(schema.OrgIQ.entityTypes.Application.shape.attributes.amount.type).toBe('Long');
   });
 
+});
+
+// ---------------------------------------------------------------------------
+// DE-42: ManageDevbox split into shell / task / decide / deliver / policy edit.
+// The split keeps every role's effective permissions: exactly the roles that
+// held ManageDevbox (sme, hr-admin, admin) hold the new actions, except that
+// the sme does not get EditSdlcPolicy (DE-43: the gated do not move the gates).
+// ---------------------------------------------------------------------------
+describe('DE-42 box and agent-change actions', () => {
+  const NEW = ['OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange', 'EditSdlcPolicy'];
+  const EXPECTED: Record<string, string[]> = {
+    'orgiq/sme': ['OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange'],
+    'orgiq/hr-admin': NEW,
+  };
+
+  test.each(NEW)('%s is granted to exactly the expected roles, and to none in the other four tenants', (action) => {
+    const holders = [...roles.entries()]
+      .filter(([key, r]) => key !== '*/admin' && r.granted.includes(action))
+      .map(([key]) => key).sort();
+    const expected = Object.entries(EXPECTED).filter(([, acts]) => acts.includes(action)).map(([k]) => k).sort();
+    expect(holders).toEqual(expected);
+    for (const key of holders) expect(role(key).tenant).toBe('orgiq');
+  });
+
+  test('every role that held ManageDevbox holds the shell, task, decide and deliver actions', () => {
+    for (const [key, r] of roles) {
+      if (key === '*/admin' || !r.granted.includes('ManageDevbox')) continue;
+      for (const a of ['OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange']) {
+        expect(r.granted).toContain(a);
+      }
+    }
+  });
+
+  test('sme does not hold EditSdlcPolicy (DE-43)', () => {
+    expect(role('orgiq/sme').granted).not.toContain('EditSdlcPolicy');
+  });
+
+  test('program-owner, org-leader and member hold none of them (decide/deliver for the first two is an open decision)', () => {
+    for (const key of ['orgiq/program-owner', 'orgiq/org-leader', 'orgiq/member']) {
+      for (const a of NEW) expect(role(key).granted).not.toContain(a);
+    }
+  });
 });

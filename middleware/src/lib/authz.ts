@@ -41,7 +41,15 @@ export const CAPABILITY_ACTIONS = [
   'EditPolicy',          // identity.ts — Cedar policy CRUD
   'EditSchema',          // identity.ts — Cedar schema
   'EditGuardrail',       // capabilities.ts — guardrail config
-  'ManageDevbox',        // index.ts, work.ts, bots.ts, capabilities.ts
+  'ManageDevbox',        // box lifecycle, codebases, work queue, capabilities, session bundles (index.ts, work.ts, bots.ts, capabilities.ts)
+  // The agent-code authorities split out of ManageDevbox (DE-42). Conditioned
+  // on `onInitiative` / `ownsBox` for sme, so session.ts probes them with a
+  // representative resource (CAPABILITY_PROBE_ATTRS).
+  'OpenDevboxShell',     // devbox.ts — POST /:sid/command, /:sid/shell-url
+  'RunDevboxTask',       // devbox.ts /:sid/task, agent-projects /:id/runs, sdlc /address + /rereview, devbox agent invoke
+  'DecideAgentChange',   // sdlc.ts — POST /changes/:id/decide (author refused, DE-43)
+  'DeliverAgentChange',  // sdlc.ts — POST /changes/:id/deliver
+  'EditSdlcPolicy',      // sdlc.ts — policy sets, policy writes, loosening proposals (DE-43/DE-46)
   'ManageBots',          // bots.ts — create/edit standing missions (sme, program-owner, leaders)
   'DispatchAgentRun',    // projects.ts, bots.ts
   'ManageIngest',        // index.ts — ingest + connections

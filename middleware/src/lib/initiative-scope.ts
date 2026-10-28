@@ -155,6 +155,9 @@ export async function requireInitiativeScope(
   if (!await stewardsInitiative(session, initiativeId)) {
     res.status(403).json({
       error: `you can only ${opts.action ?? 'act'} on initiatives you own or contribute to`,
+      // A stable code for the refusal (DE-42), so a client can tell "not on
+      // this initiative" from "your role lacks the action".
+      code: 'NOT_ON_INITIATIVE',
       initiativeId,
       ...(session?.role ? { role: session.role } : {}),
     });

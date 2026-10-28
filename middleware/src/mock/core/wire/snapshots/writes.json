@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-28T06:06:27.964Z",
-  "serverHandlerSha": "5818f472e951d55524342c670a622a9e039dcf2818bc490d967d8cf561c06d33",
+  "capturedAt": "2026-10-28T13:15:46.722Z",
+  "serverHandlerSha": "4516036902f6d9193990e71698d38f5d41b94b4830b6c9f6c917ff86bfbbefb4",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -3982,7 +3982,11 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "evaluationSeq": "number",
         "ok": "boolean",
+        "policyScope": "string",
+        "policyVersion": "number",
+        "repinned": "boolean",
         "status": "string",
         "verdict": "string"
       },
@@ -4021,6 +4025,12 @@
         "kind",
         "name"
       ]
+    },
+    "POST /api/sdlc/policy-proposals/:id/decide": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/session-bundle/:id/publish": {
       "persona": "orgiq/admin",
@@ -4768,6 +4778,12 @@
       "sent": [
         "roles"
       ]
+    },
+    "PUT /api/sdlc/policy-sets/:scope": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "PUT /api/social/bindings": {
       "skipped": "no body: the context this binds is a query parameter (`?context=<kind>:<id>`), and this harness replays a write at its resolved path with a body only — it has no way to carry a query string. The GET side is captured with a QUERY_HINT; routes/__tests__/social-bindings.test.ts covers the write."

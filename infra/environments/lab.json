@@ -1,0 +1,10 @@
+{
+  "name": "lab",
+  "account": "647757222309",
+  "region": "us-east-1",
+  "prefix": "orgiq",
+  "stackPrefix": "OrgIQ",
+  "edge": { "mode": "cloudfront" },
+  "features": { "social": false, "documents": false, "devbox": false },
+  "monthlyBudgetUsd": 200
+}

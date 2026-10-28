@@ -430,7 +430,7 @@ export class SocialStack extends cdk.Stack {
     const taskRole = new iam.Role(this, 'PlatformApiTaskRole', {
       roleName: `${prefix}-social-platform-api-task-role`,
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
-      description: 'Runtime role for the orgiq social platform-api task',
+      description: `Runtime role for the ${prefix} social platform-api task`,
     });
     // Scoped to this deployment's namespace (tables AND their indexes), one
     // statement instead of 23 table grants. No CreateTable: CDK owns them.

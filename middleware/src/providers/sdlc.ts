@@ -13,17 +13,21 @@
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import {
-  evaluate, DEFAULT_POLICIES,
+  evaluate, governancePathsTouched,
   type SdlcPolicy, type ChangeFacts, type ReviewVerdict, type Evaluation,
   type GateResult,
 } from '../lib/sdlc-policy.js';
 import {
-  mockListPolicies, mockSeedDefaultPolicies, mockUpsertPolicy, mockDeletePolicy,
   mockCreateChange, mockSetCommitSha, mockGetChange, mockListChanges,
   mockHasNewerChangeForProject, mockSetChangeStatus, mockListReviews,
-  mockRecordReview, mockListGates, mockReplaceGates, mockRunCostUsd,
+  mockRecordReview, mockListGates, mockListGateHistory, mockAppendGates, mockSetPolicyPin,
+  mockHasChangesRequestedBy, mockRunCostUsd,
   type JoinedChange, type StatusExtras,
 } from '../mock/sdlc.js';
+import {
+  ensureOrgPolicySet, latestPolicySet, getPolicySetVersion, resolvePolicyScope, ORG_SCOPE,
+  type PolicySetVersion,
+} from './sdlc-policy-sets.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -43,88 +47,16 @@ function parseJson<T>(v: unknown, fallback: T): T {
 }
 
 // ─── Policies ─────────────────────────────────────────────────────────────────
-
-function rowToPolicy(r: Record<string, unknown>): SdlcPolicy {
-  return {
-    id: toStr(r['id']),
-    name: toStr(r['name']),
-    enabled: toBool(r['enabled']),
-    kind: toStr(r['kind']) as SdlcPolicy['kind'],
-    config: parseJson<Record<string, unknown>>(r['config'], {}),
-    action: toStr(r['action'], 'require_approval') as SdlcPolicy['action'],
-  };
-}
+//
+// Policies live in versioned sets now (providers/sdlc-policy-sets.ts, DE-46).
+// `listPolicies` is the org set's current version — the list the legacy
+// GET /api/sdlc/policies returns. The old in-place `upsertPolicy` /
+// `deletePolicy` and the seed-on-empty `seedDefaultPolicies` are gone: an edit
+// is a new version, and the org set is bootstrapped once rather than
+// re-seeded whenever the table happens to be empty.
 
 export async function listPolicies(): Promise<SdlcPolicy[]> {
-  if (config.mock.aurora) return mockListPolicies();
-  const rows = await exec(`SELECT * FROM sdlc_policies ORDER BY created_at`);
-  return rows.map(rowToPolicy);
-}
-
-/**
- * Ensure a set of policies exists.
- *
- * Called once when the surface is first used, so a fresh environment starts
- * governed rather than wide open — the safe default is the whole point of a
- * governance layer, and an empty policy table would auto-approve everything.
- */
-export async function seedDefaultPolicies(): Promise<number> {
-  // Offline this is not a no-op. Returning 0 without seeding left the mock
-  // policy set defined only by whatever `listPolicies` happened to synthesise,
-  // so an emptied policy table could never come back — and `evaluateChange`'s
-  // fail-closed arm (no policies configured) could never be exercised.
-  if (config.mock.aurora) return mockSeedDefaultPolicies();
-  const existing = await exec(`SELECT count(*)::int AS n FROM sdlc_policies`);
-  if (toNum(existing[0]?.['n']) > 0) return 0;
-  let seeded = 0;
-  for (const p of DEFAULT_POLICIES) {
-    await exec(
-      `INSERT INTO sdlc_policies (name, enabled, kind, config, action)
-       VALUES (:name, :enabled, :kind, :config::jsonb, :action)`,
-      [s('name', p.name), b('enabled', p.enabled), s('kind', p.kind),
-        s('config', JSON.stringify(p.config)), s('action', p.action)],
-    );
-    seeded++;
-  }
-  return seeded;
-}
-
-export async function upsertPolicy(input: {
-  id?: string; name: string; enabled: boolean; kind: SdlcPolicy['kind'];
-  config: Record<string, unknown>; action: SdlcPolicy['action'];
-}): Promise<SdlcPolicy> {
-  if (config.mock.aurora) {
-    // Mirror the update/insert split exactly: only a uuid `id` addresses an
-    // existing row; anything else is an insert, id and all.
-    const { id, ...rest } = input;
-    return mockUpsertPolicy(id && isUuid(id) ? { ...rest, id } : rest);
-  }
-  if (input.id && isUuid(input.id)) {
-    const rows = await exec(
-      `UPDATE sdlc_policies
-          SET name = :name, enabled = :enabled, kind = :kind,
-              config = :config::jsonb, action = :action, updated_at = NOW()
-        WHERE id = :id::uuid RETURNING *`,
-      [s('id', input.id), s('name', input.name), b('enabled', input.enabled),
-        s('kind', input.kind), s('config', JSON.stringify(input.config)), s('action', input.action)],
-    );
-    if (!rows[0]) throw new Error('policy not found');
-    return rowToPolicy(rows[0]);
-  }
-  const rows = await exec(
-    `INSERT INTO sdlc_policies (name, enabled, kind, config, action)
-     VALUES (:name, :enabled, :kind, :config::jsonb, :action) RETURNING *`,
-    [s('name', input.name), b('enabled', input.enabled), s('kind', input.kind),
-      s('config', JSON.stringify(input.config)), s('action', input.action)],
-  );
-  return rowToPolicy(rows[0]!);
-}
-
-export async function deletePolicy(id: string): Promise<boolean> {
-  if (!isUuid(id)) return false;
-  if (config.mock.aurora) return mockDeletePolicy(id);
-  const rows = await exec(`DELETE FROM sdlc_policies WHERE id = :id::uuid RETURNING id`, [s('id', id)]);
-  return rows.length > 0;
+  return (await ensureOrgPolicySet()).policies;
 }
 
 // ─── Change requests ────────────────────────────────────────────────────────
@@ -170,6 +102,13 @@ export interface ChangeRequest {
   decisionNote: string | null;
   error: string | null;
   createdAt: string;
+  /** Who caused the change: the run's dispatcher, else a bot's creator (DE-43). Null for changes captured before it was recorded. */
+  requestedBy: string | null;
+  /** The policy set version this change is judged under (DE-46); null until first evaluated. */
+  policyScope: string | null;
+  policyVersion: number | null;
+  /** Which evaluation `gates` belong to; earlier ones are in GET /changes/:id/evaluations. */
+  evaluationSeq: number;
   reviews: ChangeReview[];
   gates: ChangeGate[];
 }
@@ -200,6 +139,10 @@ function rowToChange(r: Record<string, unknown>): ChangeRequest {
     decisionNote: r['decision_note'] ? toStr(r['decision_note']) : null,
     error: r['error'] ? toStr(r['error']) : null,
     createdAt: toStr(r['created_at']),
+    requestedBy: r['requested_by'] ? toStr(r['requested_by']) : null,
+    policyScope: r['policy_scope'] ? toStr(r['policy_scope']) : null,
+    policyVersion: r['policy_version'] == null ? null : toNum(r['policy_version']),
+    evaluationSeq: toNum(r['evaluation_seq']),
     reviews: [],
     gates: [],
   };
@@ -219,6 +162,8 @@ export async function createChangeRequest(input: {
   /** The work item behind the run, when the caller knows it. Real Aurora can
    *  read it back off the run row; the offline store has no subquery. */
   workItemId?: string | null;
+  /** Who caused it (DE-43): stamped by the pipeline from the dispatch. */
+  requestedBy?: string | null;
 }): Promise<ChangeRequest> {
   const truncated = input.diff.length > MAX_DIFF_CHARS;
   const diff = truncated ? input.diff.slice(0, MAX_DIFF_CHARS) : input.diff;
@@ -228,6 +173,7 @@ export async function createChangeRequest(input: {
       projectId: input.projectId, runId: input.runId ?? null, title,
       diff, diffTruncated: truncated, files: input.files, model: input.model ?? null,
       ...(input.workItemId ? { workItemId: input.workItemId } : {}),
+      requestedBy: input.requestedBy ?? null,
     }));
   }
   // work_item_id is copied from the run at capture time, so the change carries
@@ -235,9 +181,10 @@ export async function createChangeRequest(input: {
   // subquery yields NULL when runId is absent (no row matches a NULL id).
   const rows = await exec(
     `INSERT INTO agent_change_requests
-        (project_id, run_id, title, diff, diff_truncated, files, files_changed, model, status, work_item_id)
+        (project_id, run_id, title, diff, diff_truncated, files, files_changed, model, status, work_item_id, requested_by)
      VALUES (:pid::uuid, :rid::uuid, :title, :diff, :trunc, :files::jsonb, :nfiles, :model, 'captured',
-             (SELECT work_item_id FROM agent_project_runs WHERE id = :rid::uuid))
+             (SELECT work_item_id FROM agent_project_runs WHERE id = :rid::uuid),
+             COALESCE(:requested_by, (SELECT dispatched_by FROM agent_project_runs WHERE id = :rid::uuid)))
      RETURNING *`,
     [
       s('pid', input.projectId),
@@ -248,6 +195,7 @@ export async function createChangeRequest(input: {
       s('files', JSON.stringify(input.files)),
       n('nfiles', input.files.length),
       maybe('model', input.model ?? null),
+      maybe('requested_by', input.requestedBy ?? null),
     ],
   );
   return rowToChange(rows[0]!);
@@ -449,9 +397,12 @@ async function listGates(changeId: string): Promise<ChangeGate[]> {
     }));
   }
   if (!isUuid(changeId)) return [];
+  // The current evaluation only (DE-46); the change row carries its sequence.
   const rows = await exec(
-    `SELECT policy_name, kind, outcome, detail FROM agent_change_gates
-      WHERE change_request_id = :id::uuid ORDER BY created_at`,
+    `SELECT g.policy_name, g.kind, g.outcome, g.detail FROM agent_change_gates g
+       JOIN agent_change_requests cr ON cr.id = g.change_request_id
+      WHERE g.change_request_id = :id::uuid AND g.evaluation_seq = cr.evaluation_seq
+      ORDER BY g.created_at`,
     [s('id', changeId)],
   );
   return rows.map((r) => ({
@@ -460,26 +411,98 @@ async function listGates(changeId: string): Promise<ChangeGate[]> {
   }));
 }
 
+/** One evaluation of a change: which set version judged it, and the gates it produced. */
+export interface ChangeEvaluation {
+  seq: number;
+  policyScope: string | null;
+  policyVersion: number | null;
+  gates: ChangeGate[];
+}
+
+/** Every evaluation of a change, oldest first — a re-review no longer erases the one before (DE-46). */
+export async function listEvaluations(changeId: string): Promise<ChangeEvaluation[]> {
+  let rows: Array<{ seq: number; scope: string | null; version: number | null; gate: ChangeGate }>;
+  if (config.mock.aurora) {
+    rows = mockListGateHistory(changeId).map((g) => ({
+      seq: g.evaluationSeq, scope: g.policyScope, version: g.policyVersion,
+      gate: { policyName: g.policyName, kind: g.kind, outcome: g.outcome, detail: g.detail ?? '' },
+    }));
+  } else {
+    if (!isUuid(changeId)) return [];
+    const raw = await exec(
+      `SELECT evaluation_seq, policy_scope, policy_version, policy_name, kind, outcome, detail
+         FROM agent_change_gates WHERE change_request_id = :id::uuid
+        ORDER BY evaluation_seq, created_at`,
+      [s('id', changeId)],
+    );
+    rows = raw.map((r) => ({
+      seq: toNum(r['evaluation_seq']) || 1,
+      scope: r['policy_scope'] ? toStr(r['policy_scope']) : null,
+      version: r['policy_version'] == null ? null : toNum(r['policy_version']),
+      gate: { policyName: toStr(r['policy_name']), kind: toStr(r['kind']), outcome: toStr(r['outcome']), detail: toStr(r['detail']) },
+    }));
+  }
+  const bySeq = new Map<number, ChangeEvaluation>();
+  for (const r of rows) {
+    const e = bySeq.get(r.seq) ?? { seq: r.seq, policyScope: r.scope, policyVersion: r.version, gates: [] };
+    e.gates.push(r.gate);
+    bySeq.set(r.seq, e);
+  }
+  return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+}
+
 /**
- * Replace this change's recorded gates with the current evaluation's.
- *
- * The recorded gates should reflect the current decision, not accumulate every
- * re-evaluation — so it is a delete-then-insert, and it is one function rather
- * than two raw `exec`s inline in `evaluateChange` so the offline path has a
- * seam to mirror. Without it, re-running the gates 500'd offline even though
- * every fact it needed was in memory.
+ * Append this evaluation's gates at the next sequence and move the change's
+ * sequence to it (DE-46). It used to be a delete-then-insert, so a re-review
+ * erased the evaluation before it and nobody could see under which rules a
+ * change had first been judged.
  */
-async function replaceGates(changeId: string, gates: GateResult[]): Promise<void> {
-  if (config.mock.aurora) { mockReplaceGates(changeId, gates); return; }
-  await exec(`DELETE FROM agent_change_gates WHERE change_request_id = :id::uuid`, [s('id', changeId)]);
+async function appendGates(changeId: string, gates: GateResult[], pin: { scope: string; version: number }): Promise<number> {
+  if (config.mock.aurora) return mockAppendGates(changeId, gates, pin);
+  const rows = await exec(
+    `UPDATE agent_change_requests SET evaluation_seq = evaluation_seq + 1, updated_at = NOW()
+      WHERE id = :id::uuid RETURNING evaluation_seq`,
+    [s('id', changeId)],
+  );
+  const seq = toNum(rows[0]?.['evaluation_seq']) || 1;
   for (const g of gates) {
     await exec(
-      `INSERT INTO agent_change_gates (change_request_id, policy_id, policy_name, kind, outcome, detail)
-       VALUES (:cid::uuid, :pid, :name, :kind, :outcome, :detail)`,
+      `INSERT INTO agent_change_gates
+          (change_request_id, policy_id, policy_name, kind, outcome, detail, policy_scope, policy_version, evaluation_seq)
+       VALUES (:cid::uuid, :pid, :name, :kind, :outcome, :detail, :scope, :version, :seq)`,
       [s('cid', changeId), maybe('pid', g.policyId), s('name', g.policyName),
-        s('kind', g.kind), s('outcome', g.outcome), maybe('detail', g.detail)],
+        s('kind', g.kind), s('outcome', g.outcome), maybe('detail', g.detail),
+        s('scope', pin.scope), n('version', pin.version), n('seq', seq)],
     );
   }
+  return seq;
+}
+
+/** Pin a change to the set version it is judged under (DE-46). */
+async function setPolicyPin(changeId: string, scope: string, version: number): Promise<void> {
+  if (config.mock.aurora) { mockSetPolicyPin(changeId, scope, version); return; }
+  await exec(
+    `UPDATE agent_change_requests SET policy_scope = :scope, policy_version = :v, updated_at = NOW() WHERE id = :id::uuid`,
+    [s('id', changeId), s('scope', scope), n('v', version)],
+  );
+}
+
+/**
+ * Has `sub` caused a change governed by `scope`? For `org`, any change (the
+ * org set is the floor every initiative set is checked against); for an
+ * initiative, a change on one of its codebases. DE-43's self-gate: whoever the
+ * rules have gated does not get to edit them.
+ */
+export async function hasChangesRequestedBy(sub: string, scope: string): Promise<boolean> {
+  if (config.mock.aurora) return mockHasChangesRequestedBy(sub, scope);
+  const rows = scope === ORG_SCOPE
+    ? await exec(`SELECT 1 FROM agent_change_requests WHERE requested_by = :sub LIMIT 1`, [s('sub', sub)])
+    : await exec(
+      `SELECT 1 FROM agent_change_requests cr JOIN agent_projects ap ON ap.id = cr.project_id
+        WHERE cr.requested_by = :sub AND ap.org_project_id = :scope LIMIT 1`,
+      [s('sub', sub), s('scope', scope)],
+    );
+  return rows.length > 0;
 }
 
 /**
@@ -501,24 +524,44 @@ async function runCostUsd(runId: string | null): Promise<number | null> {
 }
 
 /**
+ * The set version a change is judged under: its pin, or — first evaluation,
+ * or an explicit `repin` — the latest set for its initiative (else `org`),
+ * which is then pinned (DE-46). An edit governs new changes; a change keeps
+ * the rules it was captured under unless someone re-pins it on purpose.
+ */
+async function pinnedPolicySet(change: ChangeRequest, repin: boolean): Promise<PolicySetVersion> {
+  if (!repin && change.policyScope && change.policyVersion != null) {
+    const pinned = await getPolicySetVersion(change.policyScope, change.policyVersion);
+    if (pinned) return pinned;
+    // A pin to a version that is gone cannot be honoured by guessing; fall
+    // through and re-pin, which the result reports.
+  }
+  const scope = await resolvePolicyScope(change.orgProjectId);
+  const set = scope === ORG_SCOPE ? await ensureOrgPolicySet() : await latestPolicySet(scope) ?? await ensureOrgPolicySet();
+  await setPolicyPin(change.id, set.scope, set.version);
+  return set;
+}
+
+/**
  * Run the gate engine over a change and record the result.
  *
  * This is the one function that moves a change into `approved`, `needs_approval`,
  * `changes_requested`, or `blocked` — always as the output of the pure engine,
  * never by fiat. It re-reads the latest review each time, so re-evaluating
  * after a review lands produces the right decision without special-casing.
+ * The policies are the change's pinned set version (`repin: true` moves the
+ * pin to the latest first); the gates are appended as a new evaluation.
  */
-export async function evaluateChange(changeId: string): Promise<{ evaluation: Evaluation; status: string } | null> {
+export async function evaluateChange(changeId: string, opts: { repin?: boolean } = {}): Promise<{
+  evaluation: Evaluation; status: string; policyScope: string; policyVersion: number;
+  evaluationSeq: number; repinned: boolean;
+} | null> {
   const change = await getChangeRequest(changeId);
   if (!change) return null;
 
-  // Seed before evaluating, not only when the policy UI is opened. A governed
-  // run can capture a change before anyone has visited the policy page, and
-  // evaluating against an empty policy set auto-approves it — governance
-  // silently off exactly when a fresh environment most needs it on. Idempotent:
-  // seeding is a no-op once any policy exists.
-  await seedDefaultPolicies().catch(() => { /* fail-safe below covers a failed seed */ });
-  const policies = await listPolicies();
+  const before = change.policyScope && change.policyVersion != null ? `${change.policyScope}@${change.policyVersion}` : null;
+  const set = await pinnedPolicySet(change, opts.repin === true);
+  const policies = set.policies;
   const latestReview = change.reviews[0] ?? null;
   const facts: ChangeFacts = {
     files: change.files,
@@ -530,10 +573,9 @@ export async function evaluateChange(changeId: string): Promise<{ evaluation: Ev
 
   // Defence in depth: the pure engine reads zero gates as "approved" because it
   // cannot tell "no policies configured" from "policies configured, none
-  // fired". If no policy is ENABLED here — seeding raced or failed, or every
-  // rule was saved disabled — refuse to auto-approve and route to a human
-  // instead. Counting rows let a set of disabled defaults approve every change
-  // (the engine skips them, and re-seeding only runs on an empty table). A
+  // fired". If no policy is ENABLED here — every rule was saved disabled, or
+  // the set is empty — refuse to auto-approve and route to a human instead.
+  // Counting rows let a set of disabled defaults approve every change. A
   // governance layer must fail closed, never open.
   if (!policies.some((policy) => policy.enabled) && evaluation.decision === 'approved') {
     evaluation.decision = 'needs_approval';
@@ -543,17 +585,38 @@ export async function evaluateChange(changeId: string): Promise<{ evaluation: Ev
       policyName: 'no policies configured',
       kind: 'require_review',
       outcome: 'requires_approval',
-      detail: 'No governance policies are configured; routed to a human to fail closed.',
+      detail: 'No governance policies are enabled; routed to a human to fail closed.',
     });
   }
 
-  await replaceGates(changeId, evaluation.gates);
+  const evaluationSeq = await appendGates(changeId, evaluation.gates, { scope: set.scope, version: set.version });
   await setStatus(changeId, evaluation.decision);
-  return { evaluation, status: evaluation.decision };
+  return {
+    evaluation, status: evaluation.decision, policyScope: set.scope, policyVersion: set.version,
+    evaluationSeq, repinned: before !== null && before !== `${set.scope}@${set.version}`,
+  };
 }
 
 /** States a human may still decide on. */
 const DECIDABLE = new Set(['needs_approval', 'changes_requested']);
+
+/** Roles that may approve a change whose requester was never recorded (DE-43 default; SDLC_UNATTRIBUTED_APPROVER_ROLES). */
+export function unattributedApproverRoles(): string[] {
+  return listEnv('SDLC_UNATTRIBUTED_APPROVER_ROLES', ['org-leader', 'hr-admin', 'admin']);
+}
+
+/** Roles that may approve a change touching governance code (DE-43 §6; SDLC_GOVERNANCE_APPROVER_ROLES). */
+export function governanceApproverRoles(): string[] {
+  return listEnv('SDLC_GOVERNANCE_APPROVER_ROLES', ['org-leader', 'admin']);
+}
+
+function listEnv(name: string, fallback: string[]): string[] {
+  const raw = process.env[name];
+  if (raw == null || !raw.trim()) return fallback;
+  return raw.split(',').map((r) => r.trim()).filter(Boolean);
+}
+
+export type DecideRefusal = 'self-approval' | 'unattributed' | 'governance-approver';
 
 /**
  * A human's decision on a change awaiting one.
@@ -564,23 +627,48 @@ const DECIDABLE = new Set(['needs_approval', 'changes_requested']);
  * the whole reason a human is in this loop. The decision and who made it are
  * recorded either way, so an override is auditable rather than invisible.
  *
+ * Separation of duties (DE-43), checked here so every caller gets it:
+ * - nobody decides a change they caused (`requested_by`), approve or reject,
+ *   unless `override` (admin only, enforced and audited by the route);
+ * - a change with no recorded requester is approved only by the roles in
+ *   `unattributedApproverRoles()`, never an SME;
+ * - a change touching governance code is approved only by the roles in
+ *   `governanceApproverRoles()`.
+ * A refusal carries its `gate`; the route answers 409.
+ *
  * Deliberately narrow beyond that: it records the decision and stops. Delivery
  * is a separate, explicit step, because approving a change and shipping it are
  * two decisions and collapsing them removes the moment to stop.
  */
 export async function decideChange(id: string, decision: 'approve' | 'reject', input: {
-  by?: string | null; note?: string | null;
-}): Promise<{ ok: boolean; status?: string; error?: string }> {
+  by: string; role?: string | null; note?: string | null; override?: boolean;
+}): Promise<{ ok: boolean; status?: string; error?: string; gate?: DecideRefusal }> {
   const change = await getChangeRequest(id);
   if (!change) return { ok: false, error: 'change not found' };
   if (!DECIDABLE.has(change.status)) {
     return { ok: false, error: `change is ${change.status}, not awaiting a decision` };
+  }
+  const role = input.role ?? '';
+  if (change.requestedBy && change.requestedBy === input.by && !input.override) {
+    return { ok: false, gate: 'self-approval', error: 'you caused this change, so someone else must decide it' };
+  }
+  if (decision === 'approve' && !change.requestedBy && !unattributedApproverRoles().includes(role)) {
+    return {
+      ok: false, gate: 'unattributed',
+      error: `nobody is recorded as having caused this change, so only ${unattributedApproverRoles().join(', ')} may approve it`,
+    };
+  }
+  if (decision === 'approve' && governancePathsTouched(change.files).length > 0 && !governanceApproverRoles().includes(role)) {
+    return {
+      ok: false, gate: 'governance-approver',
+      error: `this change touches governance code (${governancePathsTouched(change.files).slice(0, 3).join(', ')}), so only ${governanceApproverRoles().join(', ')} may approve it`,
+    };
   }
   const status = decision === 'approve' ? 'approved' : 'rejected';
   // One call for both backends. The old offline arm mutated the object it had
   // just read — a copy, in the fixture world — so an offline approval reported
   // success and left the queue untouched; and it minted its own `new Date()`,
   // a fixture timestamp outside the fixture directory.
-  await setStatus(id, status, { decision: { by: input.by ?? null, note: input.note ?? null } });
+  await setStatus(id, status, { decision: { by: input.by, note: input.note ?? null } });
   return { ok: true, status };
 }

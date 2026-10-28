@@ -431,7 +431,9 @@ workRouter.post('/findings/:id/promote', requireAction('DispatchAgentRun'), asyn
   const job = await enqueueJob({
     kind: 'devbox:task',
     title: `Mitigate: ${finding.title}`,
-    payload: { prompt: remedy.prompt, requiresReview: true, findingId: finding.id },
+    // initiativeId: the job's spend lands on the finding's initiative (DE-30),
+    // and the review/requeue scope checks read it from here (jobInitiative).
+    payload: { prompt: remedy.prompt, requiresReview: true, findingId: finding.id, ...(initiativeId ? { initiativeId } : {}) },
     priority: override.priority ?? remedy.priority,
     createdBy: (req as { session?: { sub?: string } }).session?.sub ?? 'portal',
   });

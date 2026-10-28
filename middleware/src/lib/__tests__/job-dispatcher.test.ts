@@ -9,12 +9,17 @@ jest.mock('../devbox-fleet.js', () => ({
 jest.mock('../replica-fleet.js', () => ({ replicaFleet: jest.fn() }));
 jest.mock('../../routes/devbox.js', () => ({ runDevboxTask: jest.fn() }));
 jest.mock('../run-brief.js', () => ({ freezeJobBrief: jest.fn(async () => null) }));
+jest.mock('../../providers/spend-ledger.js', () => ({ recordSpend: jest.fn(async () => undefined) }));
+import { recordSpend } from '../../providers/spend-ledger.js';
 import { claimNextJob, completeJob, heartbeatJob, markRunning } from '../../providers/agent-jobs.js';
 import { runDevboxTask } from '../../routes/devbox.js';
 import { appendEvent } from '../devbox-fleet.js';
 import { dispatchOnce, dispatcherEvents, busyBoxes } from '../job-dispatcher.js';
 const outcome = { ok: true, summary: 'done', transcript: [] };
-const job = { id: 'job', boxId: 'box', sessionId: 'session', claimToken: 'private-attempt', payload: { prompt: 'go', requiresReview: false } };
+const job = {
+  id: 'job', boxId: 'box', sessionId: 'session', claimToken: 'private-attempt', attempts: 1, createdBy: 'u-sme', botId: null,
+  payload: { prompt: 'go', requiresReview: false, initiativeId: 'p-auth-migration' },
+};
 const events: unknown[] = [];
 const capture = (event: unknown) => events.push(event);
 const untilIdle = async () => {
@@ -60,4 +65,34 @@ it('publishes no terminal event when SQL refuses an obsolete result', async () =
   await dispatchOnce(); await untilIdle();
   expect(events).not.toContainEqual(expect.objectContaining({ kind: 'done' }));
   expect(appendEvent).not.toHaveBeenCalledWith('box', expect.objectContaining({ type: 'job_finished' }));
+});
+
+describe('spend ledger (DE-30)', () => {
+  it('writes one job entry per attempt, attributed to the served initiative and its requester', async () => {
+    (runDevboxTask as jest.Mock).mockResolvedValue({ ...outcome, costUsd: 0.42 });
+    await dispatchOnce(); await untilIdle();
+    expect(recordSpend).toHaveBeenCalledTimes(1);
+    expect(recordSpend).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'job', sourceId: 'job:1', initiativeId: 'p-auth-migration', actorId: 'u-sme', boxId: 'box', costUsd: 0.42 }),
+      { unlessBotRunOwnsJob: 'job' },
+    );
+  });
+
+  it('records an unreported cost as null, which the ledger stores as unknown', async () => {
+    await dispatchOnce(); await untilIdle();
+    expect(recordSpend).toHaveBeenCalledWith(expect.objectContaining({ costUsd: null }), expect.anything());
+  });
+
+  it('records unknown cost when the task throws after it started', async () => {
+    (runDevboxTask as jest.Mock).mockRejectedValue(new Error('runtime went away'));
+    await dispatchOnce(); await untilIdle();
+    expect(recordSpend).toHaveBeenCalledWith(expect.objectContaining({ source: 'job', costUsd: null }), expect.anything());
+  });
+
+  it('writes nothing for a job a bot enqueued: the bot_run carries that money', async () => {
+    (claimNextJob as jest.Mock).mockReset().mockResolvedValueOnce({ ...job, botId: 'bot-1' }).mockResolvedValue(null);
+    (runDevboxTask as jest.Mock).mockResolvedValue({ ...outcome, costUsd: 1 });
+    await dispatchOnce(); await untilIdle();
+    expect(recordSpend).not.toHaveBeenCalled();
+  });
 });

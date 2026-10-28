@@ -34,6 +34,9 @@ import { liveArrayView } from '../mock/live-view.js';
 // bots.ts import above for why nothing here may read at module scope.
 import { mockProjectName } from './projects.js';
 import { displayNameForSubject } from './identity.js';
+// The spend ledger (DE-30). Readers answer from it only when SPEND_LEDGER says
+// so; until then they sum bot_runs exactly as before.
+import { spendLedgerMode, ledgerMismatches, mockStoredSpend, mockUnknownSpend } from './spend-ledger.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
@@ -69,6 +72,9 @@ export interface BudgetRow {
    *  work, and a floor approaching the allocation means the initiative cannot
    *  take anything on. See docs/program-operating-model.md. */
   maintenanceUsd: number;
+  /** Ledger mode only (SPEND_LEDGER=ledger): this period's attributed task
+   *  attempts whose cost is unknown. Counted, never summed as $0 (DE-30). */
+  unknownCostCount?: number;
 }
 
 export interface OrgBudgetSummary {
@@ -233,6 +239,8 @@ export interface MockInitiativeSpend {
   spentUsd: number;
   runCount: number;
   maintenanceUsd: number;
+  /** Ledger mode only. */
+  unknownCostCount?: number;
 }
 
 /** This period's spend, run count and cron floor for one initiative, summed
@@ -259,18 +267,32 @@ export function mockLastAgentActivityAt(orgProjectId: string): string | null {
   // still in flight has not yet made an initiative "active" there. Without this
   // the two seeded in-flight runs would move Observability's last activity to
   // minutes ago offline while Aurora kept the last finished run.
-  const runs = costed(mockRunsAttributedTo(orgProjectId));
-  if (runs.length === 0) return null;
-  return runs.reduce(
-    (latest, r) => (Date.parse(r.startedAt) > Date.parse(latest) ? r.startedAt : latest),
-    runs[0]!.startedAt,
-  );
+  const stamps = costed(mockRunsAttributedTo(orgProjectId)).map((r) => r.startedAt);
+  if (spendLedgerMode() === 'ledger') {
+    stamps.push(...mockStoredSpend((e) => e.initiativeId === orgProjectId).map((e) => e.occurredAt));
+  }
+  if (stamps.length === 0) return null;
+  return stamps.reduce((latest, at) => (Date.parse(at) > Date.parse(latest) ? at : latest));
 }
 
 export function mockInitiativeSpend(orgProjectId: string): MockInitiativeSpend {
   const start = periodStartMs();
   const runs = costed(mockRunsAttributedTo(orgProjectId))
     .filter((r) => Date.parse(r.startedAt) >= start);
+  if (spendLedgerMode() === 'ledger') {
+    // The ledger's view: the same bot runs (derived, never stored) plus every
+    // job, box task and agent-loop entry recorded against this initiative.
+    const mine = (e: { initiativeId: string | null; occurredAt: string }) =>
+      e.initiativeId === orgProjectId && Date.parse(e.occurredAt) >= start;
+    const stored = mockStoredSpend(mine);
+    return {
+      spentUsd: sumBy([...runs.map((r) => r.costUsd ?? 0), ...stored.map((e) => e.costUsd ?? 0)], (v: number) => v, { digits: COST_SCALE }),
+      runCount: runs.length + stored.length,
+      maintenanceUsd: sumBy(runs.filter((r) => r.trigger === 'cron'), 'costUsd', { digits: COST_SCALE }),
+      unknownCostCount: mockUnknownSpend(mine).length
+        + mockRunsAttributedTo(orgProjectId).filter((r) => r.costUsd == null && r.status !== 'running' && r.status !== 'skipped' && Date.parse(r.startedAt) >= start).length,
+    };
+  }
   return {
     // COST_SCALE, not 2. `cost_usd` is NUMERIC(10,4) and the seed writes four
     // decimals (0.1739, 0.0341), so Postgres sums them EXACTLY and returns
@@ -302,13 +324,18 @@ export function mockInitiativeWindowSpendUsd(
 ): number {
   const from = startsOn ? Date.parse(`${startsOn}T00:00:00Z`) : null;
   const toExclusive = endsOn ? Date.parse(`${endsOn}T00:00:00Z`) + 86_400_000 : null;
-  const runs = costed(mockRunsAttributedTo(orgProjectId)).filter((r) => {
-    const at = Date.parse(r.startedAt);
+  const inWindow = (iso: string): boolean => {
+    const at = Date.parse(iso);
     if (from != null && at < from) return false;
     if (toExclusive != null && at >= toExclusive) return false;
     return true;
-  });
-  return sumBy(runs, 'costUsd', { digits: COST_SCALE });
+  };
+  const runs = costed(mockRunsAttributedTo(orgProjectId)).filter((r) => inWindow(r.startedAt));
+  const costs = runs.map((r) => r.costUsd ?? 0);
+  if (spendLedgerMode() === 'ledger') {
+    costs.push(...mockStoredSpend((e) => e.initiativeId === orgProjectId && inWindow(e.occurredAt)).map((e) => e.costUsd ?? 0));
+  }
+  return sumBy(costs, (v: number) => v, { digits: COST_SCALE });
 }
 
 /**
@@ -349,6 +376,7 @@ export function mockBudgetRow(m: MockBudget): BudgetRow {
     runCountThisPeriod: spend.runCount,
     lastAgentActivityAt: mockLastAgentActivityAt(m.id),
     maintenanceUsd: spend.maintenanceUsd,
+    ...(spend.unknownCostCount !== undefined ? { unknownCostCount: spend.unknownCostCount } : {}),
   };
 }
 
@@ -446,6 +474,7 @@ function rowToBudget(r: Record<string, unknown>): BudgetRow {
     runCountThisPeriod: toNum(r['run_count_this_period']),
     lastAgentActivityAt: r['last_agent_activity_at'] != null ? toStr(r['last_agent_activity_at']) : null,
     maintenanceUsd: toNum(r['maintenance_usd']),
+    ...(r['unknown_cost_count'] !== undefined ? { unknownCostCount: toNum(r['unknown_cost_count']) } : {}),
   };
 }
 
@@ -504,12 +533,84 @@ function budgetSelectSql(scopeToId: boolean): string {
      ORDER BY COALESCE(ps.spent_this_period_usd, 0) DESC, ids.org_project_id`;
 }
 
+/**
+ * budgetSelectSql over the spend ledger (SPEND_LEDGER=ledger). Same row shape,
+ * plus `unknown_cost_count`. Attribution was resolved once when each entry was
+ * written, so the period CTE is a plain GROUP BY; entries with no initiative
+ * are unattributed spend and appear only in the org totals.
+ */
+export function ledgerBudgetSelectSql(scopeToId: boolean): string {
+  const scope = scopeToId ? 'WHERE ids.org_project_id = :pid' : '';
+  return `
+    WITH period_spend AS (
+      SELECT se.initiative_id AS org_project_id,
+             SUM(se.cost_usd)::float8 AS spent_this_period_usd,
+             COUNT(se.cost_usd)::int AS run_count_this_period,
+             COALESCE(SUM(se.cost_usd) FILTER (WHERE se.trigger = 'cron'), 0)::float8
+               AS maintenance_usd,
+             COUNT(*) FILTER (WHERE se.cost_usd IS NULL)::int AS unknown_cost_count
+        FROM spend_entries se
+       WHERE se.initiative_id IS NOT NULL
+         AND se.occurred_at >= ${PERIOD_START_SQL}
+       GROUP BY se.initiative_id
+    ),
+    ids AS (
+      SELECT org_project_id FROM initiative_budgets
+      UNION
+      SELECT org_project_id FROM period_spend WHERE run_count_this_period > 0
+    )
+    SELECT ids.org_project_id,
+           p.name AS org_project_name,
+           ib.allocated_usd::float8 AS allocated_usd,
+           ib.period,
+           ib.updated_by,
+           au.display_name AS updated_by_name,
+           ib.updated_at,
+           COALESCE(ps.spent_this_period_usd, 0)::float8 AS spent_this_period_usd,
+           COALESCE(ps.run_count_this_period, 0)::int AS run_count_this_period,
+           (SELECT MAX(se.occurred_at) FROM spend_entries se
+             WHERE se.initiative_id = ids.org_project_id AND se.cost_usd IS NOT NULL) AS last_agent_activity_at,
+           COALESCE(ps.maintenance_usd, 0)::float8 AS maintenance_usd,
+           COALESCE(ps.unknown_cost_count, 0)::int AS unknown_cost_count
+      FROM ids
+      LEFT JOIN initiative_budgets ib ON ib.org_project_id = ids.org_project_id
+      LEFT JOIN app_users au ON au.id = ib.updated_by
+      LEFT JOIN period_spend ps ON ps.org_project_id = ids.org_project_id
+      LEFT JOIN projects p ON p.id = ids.org_project_id
+      ${scope}
+     ORDER BY COALESCE(ps.spent_this_period_usd, 0) DESC, ids.org_project_id`;
+}
+
+/**
+ * SPEND_LEDGER=dual: answer from bot_runs, and log every initiative whose
+ * ledger total differs. A mismatch is the signal the cutover waits on; the
+ * known causes are box tasks (the legacy reader never saw them) and a run the
+ * legacy OR-predicate counted under two initiatives.
+ */
+async function logLedgerDrift(legacy: readonly BudgetRow[], scopeToId: string | null): Promise<void> {
+  try {
+    const rows = await safeExec(ledgerBudgetSelectSql(scopeToId != null), scopeToId ? [s('pid', scopeToId)] : []);
+    const drift = ledgerMismatches(
+      legacy.map((r) => ({ id: r.orgProjectId, usd: r.spentThisPeriodUsd })),
+      rows.map(rowToBudget).map((r) => ({ id: r.orgProjectId, usd: r.spentThisPeriodUsd })),
+    );
+    for (const d of drift) {
+      console.warn(`[spend-ledger] dual-read drift on ${d.id}: bot_runs $${d.legacyUsd} vs ledger $${d.ledgerUsd}`);
+    }
+  } catch (err) {
+    console.warn(`[spend-ledger] dual-read failed: ${(err as Error).message}`);
+  }
+}
+
 // ─── Provider functions ──────────────────────────────────────────────────────
 
 export async function listBudgets(): Promise<BudgetRow[]> {
   if (config.mock.aurora) return MOCK_BUDGETS.map(mockBudgetRow);
-  const rows = await safeExec(budgetSelectSql(false));
-  return rows.map(rowToBudget);
+  const mode = spendLedgerMode();
+  const rows = await safeExec(mode === 'ledger' ? ledgerBudgetSelectSql(false) : budgetSelectSql(false));
+  const out = rows.map(rowToBudget);
+  if (mode === 'dual') await logLedgerDrift(out, null);
+  return out;
 }
 
 export async function getBudget(orgProjectId: string): Promise<BudgetRow | null> {
@@ -517,8 +618,14 @@ export async function getBudget(orgProjectId: string): Promise<BudgetRow | null>
     const m = MOCK_BUDGETS.find((b) => b.id === orgProjectId);
     return m ? mockBudgetRow(m) : null;
   }
-  const rows = await safeExec(budgetSelectSql(true), [s('pid', orgProjectId)]);
-  return rows[0] ? rowToBudget(rows[0]) : null;
+  const mode = spendLedgerMode();
+  const rows = await safeExec(
+    mode === 'ledger' ? ledgerBudgetSelectSql(true) : budgetSelectSql(true),
+    [s('pid', orgProjectId)],
+  );
+  const out = rows[0] ? rowToBudget(rows[0]) : null;
+  if (mode === 'dual') await logLedgerDrift(out ? [out] : [], orgProjectId);
+  return out;
 }
 
 /** The recurring cron floor over the trailing 30 days — the mock analogue of
@@ -681,11 +788,15 @@ export async function listGrants(orgProjectId?: string): Promise<GrantRow[]> {
             sp.starts_on::text AS starts_on, sp.ends_on::text AS ends_on,
             sp.status AS sprint_status,
             g.allocated_usd::float8 AS allocated_usd, g.granted_by, g.note,
-            COALESCE((
+            COALESCE((${spendLedgerMode() === 'ledger' ? `
+              SELECT SUM(se.cost_usd)::float8 FROM spend_entries se
+               WHERE se.initiative_id = g.org_project_id
+                 AND (sp.starts_on IS NULL OR se.occurred_at >= sp.starts_on)
+                 AND (sp.ends_on   IS NULL OR se.occurred_at < sp.ends_on + 1)` : `
               SELECT SUM(br.cost_usd)::float8 FROM bot_runs br
                WHERE (${spendPredicateSql('g.org_project_id')})
                  AND (sp.starts_on IS NULL OR br.started_at >= sp.starts_on)
-                 AND (sp.ends_on   IS NULL OR br.started_at < sp.ends_on + 1)
+                 AND (sp.ends_on   IS NULL OR br.started_at < sp.ends_on + 1)`}
             ), 0)::float8 AS window_spend_usd
        FROM budget_grants g
        LEFT JOIN projects p  ON p.id = g.org_project_id
@@ -733,11 +844,20 @@ export async function orgSummary(): Promise<OrgBudgetSummary> {
     //
     // Allocation stays a sum over MOCK_BUDGETS: an allocation is a stored
     // column (initiative_budgets.allocated_usd), not an aggregate of rows.
-    const runs = mockPeriodRuns();
+    // Ledger mode adds every stored job/box-task/agent-loop entry this period,
+    // grouped by its source where a bot run would group by trigger.
+    const start = periodStartMs();
+    const stored = spendLedgerMode() === 'ledger'
+      ? mockStoredSpend((e) => Date.parse(e.occurredAt) >= start).map((e) => ({
+        run: { costUsd: e.costUsd, trigger: e.trigger ?? e.source } as Pick<BotRun, 'costUsd' | 'trigger'>,
+        model: e.model ?? 'unknown',
+      }))
+      : [];
+    const runs: Array<{ run: Pick<BotRun, 'costUsd' | 'trigger'>; model: string }> = [...mockPeriodRuns(), ...stored];
     const byModel = groupBy(runs, (r) => r.model);
     const byTrigger = groupBy(runs, (r) => r.run.trigger);
-    const money = (rows: Array<{ run: BotRun }>): number =>
-      sumBy(rows.map((r) => r.run), 'costUsd', { digits: COST_SCALE });
+    const money = (rows: Array<{ run: Pick<BotRun, 'costUsd'> }>): number =>
+      sumBy(rows.map((r) => r.run.costUsd ?? 0), (v: number) => v, { digits: COST_SCALE });
     return {
       totalAllocatedUsd: sumBy(MOCK_BUDGETS, (b) => b.allocated ?? 0, { digits: 2 }),
       totalSpentThisPeriodUsd: money(runs),
@@ -750,6 +870,8 @@ export async function orgSummary(): Promise<OrgBudgetSummary> {
       })).sort((a, b) => b.spentUsd - a.spentUsd),
     };
   }
+
+  if (spendLedgerMode() === 'ledger') return ledgerOrgSummary();
 
   // Totals: allocation from the ledger; spend is ALL bot_runs cost this
   // period, attributed or not — the org total must not hide spend that no
@@ -819,5 +941,32 @@ export async function orgSummary(): Promise<OrgBudgetSummary> {
     byTrigger: byTrigger.map((r) => ({
       trigger: toStr(r['trigger']), spentUsd: toNum(r['spent_usd']), runCount: toNum(r['run_count']),
     })),
+  };
+}
+
+/** orgSummary over the spend ledger: every entry this period, attributed or
+ *  not, grouped by model and by trigger (a non-bot entry groups by source). */
+async function ledgerOrgSummary(): Promise<OrgBudgetSummary> {
+  const totals = await safeExec(
+    `SELECT
+       (SELECT COALESCE(SUM(allocated_usd), 0)::float8 FROM initiative_budgets) AS total_allocated,
+       (SELECT COALESCE(SUM(cost_usd), 0)::float8 FROM spend_entries
+         WHERE occurred_at >= ${PERIOD_START_SQL}) AS total_spent,
+       (SELECT COALESCE(SUM(cost_usd), 0)::float8 FROM spend_entries
+         WHERE occurred_at >= ${PERIOD_START_SQL} AND trigger = 'cron') AS total_maintenance`,
+  );
+  const group = (key: string) => safeExec(
+    `SELECT ${key} AS k, COALESCE(SUM(cost_usd), 0)::float8 AS spent_usd, COUNT(*)::int AS run_count
+       FROM spend_entries
+      WHERE occurred_at >= ${PERIOD_START_SQL} AND cost_usd IS NOT NULL
+      GROUP BY 1 ORDER BY spent_usd DESC`,
+  );
+  const [byModel, byTrigger] = await Promise.all([group(`COALESCE(model, 'unknown')`), group('COALESCE(trigger, source)')]);
+  return {
+    totalAllocatedUsd: toNum(totals[0]?.['total_allocated']),
+    totalSpentThisPeriodUsd: toNum(totals[0]?.['total_spent']),
+    totalMaintenanceUsd: toNum(totals[0]?.['total_maintenance']),
+    byModel: byModel.map((r) => ({ model: toStr(r['k']), spentUsd: toNum(r['spent_usd']), runCount: toNum(r['run_count']) })),
+    byTrigger: byTrigger.map((r) => ({ trigger: toStr(r['k']), spentUsd: toNum(r['spent_usd']), runCount: toNum(r['run_count']) })),
   };
 }

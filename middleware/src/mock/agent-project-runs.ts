@@ -38,6 +38,8 @@ export interface ProjectRunSeed {
   costUsd: number | null;
   /** The marketplace work item this run answers, when a dispatch bound one. */
   workItemId?: string | null;
+  /** `agent_project_runs.dispatched_by` (DE-43). A column, not part of the run wire shape. */
+  dispatchedBy?: string | null;
 }
 
 /** The wire shape both routes return — `durationMs` computed, everything else carried. */
@@ -168,7 +170,9 @@ function durationMs(seed: ProjectRunSeed): number | null {
 }
 
 function toRow(seed: ProjectRunSeed): ProjectRunRow {
-  return { ...seed, durationMs: durationMs(seed) };
+  // `rowToRun` does not read dispatched_by, so the offline wire does not carry it either.
+  const { dispatchedBy: _dispatchedBy, ...run } = seed;
+  return { ...run, durationMs: durationMs(seed) };
 }
 
 function newestFirst(a: ProjectRunSeed, b: ProjectRunSeed): number {
@@ -214,6 +218,7 @@ export function mockRecentRunsForProjects(
  */
 export function mockStartRun(input: {
   projectId: string; prompt: string; model?: string | null; workItemId?: string | null;
+  dispatchedBy?: string | null;
 }): ProjectRunRow {
   const seed: ProjectRunSeed = {
     id: randomUUID(),
@@ -228,6 +233,7 @@ export function mockStartRun(input: {
     error: null,
     costUsd: null,
     ...(input.workItemId ? { workItemId: input.workItemId } : {}),
+    ...(input.dispatchedBy ? { dispatchedBy: input.dispatchedBy } : {}),
   };
   agentProjectRuns.rows().push(seed);
   return toRow(seed);

@@ -20,7 +20,7 @@ from strands.models.bedrock import BedrockModel
 # Shared instrumentation — pull TraceContext + decorator from agents/_shared,
 # the same way every other agent does.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _shared.prompt_source import LiveAgent  # noqa: E402
+from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model  # noqa: E402
 from _shared.agui_stream import (  # noqa: E402
     agui_events_for_text,
     run_error_event,
@@ -55,7 +55,14 @@ _current_ctx: ContextVar[TraceContext | None] = ContextVar(
 app = BedrockAgentCoreApp()
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
-MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
+# DE-3: the model comes from the central registry (SSM /orgiq/models/registry,
+# written from infra/config/model-registry.json), then the MODEL_ID env var,
+# then the literal below. MODEL_ID is the import-time view; every turn
+# re-resolves (60 s cache) and may fall back on capacity errors, so traces
+# record _agent.model_id, the id actually served.
+MODEL_ROLE = "assessment-drafter"
+_MODEL_DEFAULTS = {"default_model_id": "amazon.nova-pro-v1:0", "default_temperature": None, "default_max_tokens": None}
+MODEL_ID = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS).model_id
 
 # This agent serves exactly one tenant, enforced in code (see
 # agents/_shared/tenant_guard.py for why this is stricter than the news-*
@@ -123,8 +130,13 @@ def validate_facts(facts: list, source_text: str) -> str:
     return json.dumps(validate_context_facts(facts, source_text), ensure_ascii=False)
 
 
-def _model_kwargs() -> dict:
-    kw: dict = {"model_id": MODEL_ID}
+def _model_kwargs(model_id: str | None = None) -> dict:
+    resolved = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS)
+    kw: dict = {"model_id": model_id or resolved.model_id}
+    if resolved.temperature is not None:
+        kw["temperature"] = resolved.temperature
+    if resolved.max_tokens is not None:
+        kw["max_tokens"] = resolved.max_tokens
     gid = os.environ.get("GUARDRAIL_ID", "")
     if gid:
         kw["guardrail_id"] = gid
@@ -240,16 +252,17 @@ OUTPUT (context mode) — return exactly one JSON object and nothing else:
 
 SYSTEM_PROMPT += DOCUMENT_PROMPT + DECK_PROMPT + EVIDENCE_PROMPT + AGENT_PLAN_PROMPT
 
-_model = BedrockModel(**_model_kwargs())
 # System prompt is resolved from Bedrock Prompt Management at run time
 # (falls back to the SYSTEM_PROMPT literal above). Editing the managed
 # prompt `orgiq-assessment-drafter-system-prompt` changes this agent within
 # PROMPT_REFRESH_S — no image rebuild, no redeploy.
-_agent = LiveAgent(
+_agent = RegistryAgent(
+    role=MODEL_ROLE,
+    **_MODEL_DEFAULTS,
     baked=SYSTEM_PROMPT,
     agent_name="assessment-drafter",
-    build=lambda system_prompt: Agent(
-        model=_model,
+    build=lambda system_prompt, model_id: Agent(
+        model=BedrockModel(**_model_kwargs(model_id)),
         tools=[check_story_draft, validate_facts],
         system_prompt=system_prompt,
     ),
@@ -430,7 +443,7 @@ async def _handle_sync(payload: dict) -> dict:
             response=response_text,
             agent_id="orgiq-assessment-drafter",
             agent_name="AssessmentDrafter",
-            model_id=MODEL_ID,
+            model_id=_agent.model_id,
             duration_ms=duration_ms,
             prompt_version=_agent.prompt_sha,
         )

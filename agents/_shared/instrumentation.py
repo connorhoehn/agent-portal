@@ -925,6 +925,8 @@ def with_orgiq_root(
     prompt_version: Optional[str] = None,
     template_id: Optional[str] = None,
     runtime_image_digest: Optional[str] = None,
+    model_id: Optional[str] = None,
+    model_registry_version: Optional[str] = None,
 ) -> Iterator[object]:
     """Wrap an agent invocation in an OpenInference-compliant root AGENT span.
 
@@ -933,6 +935,7 @@ def with_orgiq_root(
       - Sets ``agent.name``, ``orgiq.agent_id``, ``orgiq.agent_name``, ``orgiq.invocation_id``
       - Sets ``orgiq.parent_invocation_id``, ``orgiq.user_id``, ``orgiq.session_id`` when non-empty on ctx
       - Sets ``orgiq.prompt_version``, ``orgiq.template_id``, ``orgiq.runtime_image_digest`` when supplied
+      - Sets ``orgiq.model_id`` / ``orgiq.model_registry_version`` (DE-3) when supplied
       - Wraps the body in OI ``using_session(...)`` and ``using_user(...)`` so all child spans inherit
         these via OTel context propagation
       - Sets ``input.value`` to ctx.user_prompt if the field exists on ctx; otherwise omits
@@ -971,6 +974,10 @@ def with_orgiq_root(
         attrs["orgiq.template_id"] = template_id
     if runtime_image_digest:
         attrs["orgiq.runtime_image_digest"] = runtime_image_digest
+    if model_id:
+        attrs["orgiq.model_id"] = model_id
+    if model_registry_version:
+        attrs["orgiq.model_registry_version"] = model_registry_version
 
     # Stack the OI session + user context managers if values are present.
     session_cm = using_session(session_id=ctx.session_id) if ctx.session_id else contextlib.nullcontext()

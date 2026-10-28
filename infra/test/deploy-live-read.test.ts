@@ -91,7 +91,7 @@ esac`;
     const dir = mkdtempSync(join(tmpdir(), 'infer-'));
     writeFileSync(join(dir, 'aws'), `#!/bin/bash\n${fakeAws}\n`);
     chmodSync(join(dir, 'aws'), 0o755);
-    const r = spawnSync('/bin/bash', ['-c', `set -euo pipefail\nREGION=us-east-1 PREFIX=orgiq CDK_ARGS=()\n${block}\nprintf '%s\\n' "\${INFERRED[@]}"`], {
+    const r = spawnSync('/bin/bash', ['-c', `set -euo pipefail\nREGION=us-east-1 PREFIX=orgiq STACK_PREFIX=OrgIQ- CDK_ARGS=()\n${block}\nprintf '%s\\n' "\${INFERRED[@]}"`], {
       env: { ...process.env, PATH: `${dir}:${process.env['PATH']}` }, encoding: 'utf8',
     });
     assert.equal(r.status, 0, r.stderr);

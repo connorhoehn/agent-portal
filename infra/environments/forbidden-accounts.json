@@ -1,0 +1,4 @@
+{
+  "accounts": ["264161986065"],
+  "note": "264161986065 is a personal account and must never be deployed to from this repository. Read by lib/environment.ts; shell scripts and the image scripts should read this file rather than carry their own copy."
+}

@@ -1,0 +1,6 @@
+{
+  "default": { "eventExpiryDays": 90, "strategies": [] },
+  "tenants": {
+    "orgiq": { "eventExpiryDays": 90, "strategies": ["semantic", "summary", "user_preference"] }
+  }
+}

@@ -145,7 +145,9 @@ class NeverPersists(unittest.TestCase):
         """Nova by default; never an Anthropic id (the devbox is the exception)."""
         for name, module in (("scorer", scorer), ("drafter", drafter)):
             with self.subTest(agent=name):
-                model_id = module._model.kwargs["model_id"]
+                # The model is built per registry resolution (DE-3); the
+                # stubbed agent carries the kwargs it was built with.
+                model_id = _stub_agent(module).model.kwargs["model_id"]
                 self.assertEqual(model_id, "amazon.nova-pro-v1:0")
                 self.assertNotIn("anthropic", model_id)
 

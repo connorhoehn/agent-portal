@@ -65,6 +65,24 @@ export const ALLOWED: { file: string; entries: AllowEntry[] } = {
         'the plane/active enrichment is merged in; the test feeds that client-side ' +
         'tile shape, and `GET /api/social/plane/active` only ever sends online/busy/offline.',
     },
+    {
+      file: 'middleware/src/lib/__tests__/sdlc-policy.test.ts',
+      field: 'action',
+      value: 'blocK',
+      reason:
+        'Deliberately not an action. The test is "normalizePolicy defaults an ' +
+        'unknown action to require_approval" (DE-46 policy-set validation) — an ' +
+        'action the server DOES send would not test the default.',
+    },
+    {
+      file: 'middleware/src/lib/__tests__/sdlc-policy.test.ts',
+      field: 'kind',
+      value: 'vibes',
+      reason:
+        'Deliberately not a kind. The test is "normalizePolicy refuses an unknown ' +
+        'kind" (DE-46 policy-set validation) — a kind the server DOES send would ' +
+        'not be refused.',
+    },
   ],
 };
 

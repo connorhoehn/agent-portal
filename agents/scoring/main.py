@@ -14,7 +14,7 @@ from strands.models.bedrock import BedrockModel
 
 # Shared instrumentation — pull TraceContext + decorator from agents/_shared.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _shared.prompt_source import LiveAgent
+from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
@@ -46,7 +46,14 @@ REGION = os.environ.get("AWS_REGION", "us-east-1")
 AURORA_CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
 AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
 DB_NAME = os.environ.get("PROJECT_PREFIX", "orgiq")
-MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
+# DE-3: the model comes from the central registry (SSM /orgiq/models/registry,
+# written from infra/config/model-registry.json), then the MODEL_ID env var,
+# then the literal below. MODEL_ID is the import-time view; every turn
+# re-resolves (60 s cache) and may fall back on capacity errors, so traces
+# record _agent.model_id, the id actually served.
+MODEL_ROLE = "scoring"
+_MODEL_DEFAULTS = {"default_model_id": "amazon.nova-pro-v1:0", "default_temperature": 0.1, "default_max_tokens": 4096}
+MODEL_ID = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS).model_id
 PREFIX = os.environ.get("PROJECT_PREFIX", "orgiq")
 SCORES_TABLE = f"{PREFIX}-scores"
 CODE_INTERPRETER_ID = os.environ.get("CODE_INTERPRETER_ID", "")
@@ -359,12 +366,13 @@ def run_in_sandbox(python_code: str) -> str:
                 pass
 
 
-def _model_kwargs() -> dict:
-    kw: dict = {
-        "model_id": MODEL_ID,
-        "temperature": float(os.environ.get("MODEL_TEMPERATURE", "0.1")),
-        "max_tokens": int(os.environ.get("MODEL_MAX_TOKENS", "4096")),
-    }
+def _model_kwargs(model_id: str | None = None) -> dict:
+    resolved = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS)
+    kw: dict = {"model_id": model_id or resolved.model_id}
+    if resolved.temperature is not None:
+        kw["temperature"] = resolved.temperature
+    if resolved.max_tokens is not None:
+        kw["max_tokens"] = resolved.max_tokens
     gid = os.environ.get("GUARDRAIL_ID", "")
     if gid:
         kw["guardrail_id"] = gid
@@ -391,16 +399,17 @@ SYSTEM_PROMPT = (
 
 _SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
 
-_model = BedrockModel(**_model_kwargs())
 # System prompt is resolved from Bedrock Prompt Management at run time
 # (falls back to the SYSTEM_PROMPT literal above). Editing the managed
 # prompt `orgiq-scoring-system-prompt` changes this agent within
 # PROMPT_REFRESH_S — no image rebuild, no redeploy.
-_agent = LiveAgent(
+_agent = RegistryAgent(
+    role=MODEL_ROLE,
+    **_MODEL_DEFAULTS,
     baked=SYSTEM_PROMPT,
     agent_name="scoring",
-    build=lambda system_prompt: Agent(
-        model=_model,
+    build=lambda system_prompt, model_id: Agent(
+        model=BedrockModel(**_model_kwargs(model_id)),
         tools=[compute_expertise_scores, get_scores, get_leaderboard, run_in_sandbox],
         system_prompt=system_prompt,
     ),
@@ -438,7 +447,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
                 live_agent=_agent,
                 agent_id="orgiq-scoring",
                 agent_name="Scoring",
-                model_id=MODEL_ID,
+                model_id=_agent.model_id,
                 ctx_var=_current_ctx,
                 scoped_vars=[(_sandbox_log, [])],
             )
@@ -459,6 +468,8 @@ async def handle(payload: dict) -> AsyncIterator | dict:
             agent_id="orgiq-scoring",
             agent_name="Scoring",
             prompt_version=_agent.prompt_sha,
+            model_id=_agent.model_id,
+            model_registry_version=_agent.registry_version or None,
         ) as oi_span:  # noqa: F841 — oi_span reserved for future guardrail stamping
             t0 = time.monotonic()
             try:
@@ -476,7 +487,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
                     response=response_text,
                     agent_id="orgiq-scoring",
                     agent_name="Scoring",
-                    model_id=MODEL_ID,
+                    model_id=_agent.model_id,
                     duration_ms=duration_ms,
                     prompt_version=_agent.prompt_sha,
                 )
