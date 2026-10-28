@@ -483,3 +483,17 @@ describe('initiative scope (DE-44 rows 1–3)', () => {
     expect(fireBot).not.toHaveBeenCalled();
   });
 });
+
+describe('initiative scope on bot lifecycle (DE-44 row 4)', () => {
+  it('refuses delete, pause and resume on someone else\'s initiative; resume asks the spend question', async () => {
+    m(getBot).mockResolvedValue(BOT);
+    scope.deny.add('p-observability');
+    expect((await request(buildApp()).delete('/api/bots/bot-1')).status).toBe(403);
+    expect((await request(buildApp()).post('/api/bots/bot-1/pause').send({})).status).toBe(403);
+    expect((await request(buildApp()).post('/api/bots/bot-1/resume').send({})).status).toBe(403);
+    expect(deleteBot).not.toHaveBeenCalled();
+    expect(unregisterBot).not.toHaveBeenCalled();
+    expect(registerBot).not.toHaveBeenCalled();
+    expect((scope.calls[2]!.opts as { spend?: boolean }).spend).toBe(true);
+  });
+});

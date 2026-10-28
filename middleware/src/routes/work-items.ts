@@ -26,6 +26,8 @@ import { Router, type Response } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
 import { getUser } from '../providers/identity.js';
+import { getSprint } from '../providers/sprints.js';
+import { requireInitiativeScope } from '../lib/initiative-scope.js';
 import { notifyWorkItemAssigned } from '../lib/social-notify.js';
 import { publishChannelActivity } from '../lib/gateway-run-feed.js';
 import { notifyWorkGraphChanged } from '../lib/work-graph/live.js';
@@ -64,6 +66,27 @@ import { getProjectActivitySeries } from '../providers/activity.js';
 import { postInitiativeWorkComment } from '../lib/initiative-comments.js';
 
 export const workItemsRouter = Router();
+
+/**
+ * Putting an item in a sprint here must ask what PATCH /api/sprints/:id/items
+ * asks (DE-44 row 22): the sprint exists, is on the item's own initiative, and
+ * the caller stewards that initiative. Clearing the sprint (null) asks nothing.
+ * Answers the refusal itself; true means go on.
+ */
+async function sprintMoveAllowed(
+  req: { session?: import('../lib/session.js').Session | null },
+  res: Response, initiativeId: string, sprintId: unknown,
+): Promise<boolean> {
+  if (typeof sprintId !== 'string' || !sprintId) return true;
+  const sprint = await getSprint(sprintId);
+  // 400 'no such sprint', the answer the create path already gave on the FK.
+  if (!sprint) { res.status(400).json({ error: 'no such sprint' }); return false; }
+  if (sprint.orgProjectId !== initiativeId) {
+    res.status(400).json({ error: `a work item can only join a sprint on its own initiative — item is on ${initiativeId}, sprint is on ${sprint.orgProjectId}` });
+    return false;
+  }
+  return requireInitiativeScope(req, res, initiativeId, { action: 'manage sprints' });
+}
 
 // Writes are gated per-route on DispatchAgentRun (the marketplace authority) —
 // the mount's tenant guard alone let any orgiq member create or mutate board
@@ -370,6 +393,8 @@ workItemsRouter.post(
       return;
     }
 
+    if (!await sprintMoveAllowed(req, res, projectId, body['sprintId'])) return;
+
     try {
       const item = await createWorkItem({
         projectId,
@@ -465,6 +490,8 @@ workItemsRouter.patch(
       res.status(404).json({ error: 'Work item not found' });
       return;
     }
+    if ('sprintId' in body && body['sprintId'] !== current.sprintId
+      && !await sprintMoveAllowed(req, res, current.projectId, body['sprintId'])) return;
 
     // Status moves go through the board's transition matrix — the counterpart
     // to the dispatch path's refusal matrix, which the board never had.

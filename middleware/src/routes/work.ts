@@ -287,11 +287,21 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
   res.status(201).json(job);
 }));
 
+/** The initiative a queued job serves, as stored at enqueue (servedWorkItem). */
+async function jobInitiative(id: string): Promise<{ found: boolean; initiativeId: string | null }> {
+  const job = await getJob(id);
+  if (!job) return { found: false, initiativeId: null };
+  const raw = (job.payload as { initiativeId?: unknown } | null | undefined)?.initiativeId;
+  return { found: true, initiativeId: typeof raw === 'string' && raw ? raw : null };
+}
+
 workRouter.post('/jobs/:id/review', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
   const { decision, note } = (req.body ?? {}) as { decision?: string; note?: string };
   if (decision !== 'accept' && decision !== 'reject') {
     throw new ValidationError("decision must be 'accept' or 'reject'");
   }
+  const served = await jobInitiative(String(req.params['id'] ?? ''));
+  if (served.found && !await requireInitiativeScope(req, res, served.initiativeId, { action: 'review jobs' })) return;
   const job = await reviewJob(String(req.params['id'] ?? ''), decision, note);
   if (!job) { res.status(404).json({ error: 'job not found or not awaiting review' }); return; }
   // Rejecting says the work did not solve it, so the finding goes back on the
@@ -306,6 +316,9 @@ workRouter.post('/jobs/:id/review', requireAction('ManageDevbox'), asyncHandler(
 workRouter.post('/jobs/:id/requeue', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const session = resolveSession(req);
+  // A requeue spends again on the job's initiative (DE-44 row 7).
+  const served = await jobInitiative(id);
+  if (served.found && !await requireInitiativeScope(req, res, served.initiativeId, { spend: true, action: 'requeue jobs' })) return;
   const job = await requeueJob(id, session?.sub);
   if (!job) {
     const dead = await getJob(id);
@@ -318,6 +331,8 @@ workRouter.post('/jobs/:id/requeue', requireAction('ManageDevbox'), asyncHandler
 
 workRouter.delete('/jobs/:id', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
+  const served = await jobInitiative(id);
+  if (served.found && !await requireInitiativeScope(req, res, served.initiativeId, { action: 'cancel jobs' })) return;
   const ok = await cancelJob(id);
   if (!ok) { res.status(409).json({ error: 'job is not cancellable (already running or finished)' }); return; }
   const reopened = await reopenFindingForJob(id);

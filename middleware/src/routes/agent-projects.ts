@@ -15,7 +15,7 @@ import { readForRolesElseAction, requireAction } from '../lib/authz.js';
 import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject,
   buildCloneCommand, markCloned, checkoutPath, finishRun, listRuns,
-  listRecentRunsForProjects,
+  listRecentRunsForProjects, getRunProjectId,
 } from '../providers/agent-projects.js';
 import { dispatchGovernedRun } from '../lib/sdlc-pipeline.js';
 
@@ -68,6 +68,9 @@ agentProjectsRouter.post('/', writeGate, asyncHandler(async (req, res) => {
 }));
 
 agentProjectsRouter.delete('/:id', writeGate, asyncHandler(async (req, res) => {
+  const existing = await getAgentProject(String(req.params['id'] ?? ''));
+  if (!existing) throw new NotFoundError('No such project');
+  if (!await requireInitiativeScope(req, res, existing.orgProjectId, { action: 'unlink codebases' })) return;
   const ok = await unlinkAgentProject(String(req.params['id'] ?? ''));
   if (!ok) throw new NotFoundError('No such project');
   res.json({ ok: true });
@@ -170,6 +173,12 @@ agentProjectsRouter.post('/runs/:runId/finish', writeGate, asyncHandler(async (r
     status?: string; filesChanged?: number; diffSummary?: string; error?: string;
   };
   const status = body.status === 'failed' ? 'failed' : 'done';
+  // Setting a run's outcome is the codebase's steward's call (DE-44 row 15).
+  const projectId = await getRunProjectId(String(req.params['runId'] ?? ''));
+  if (projectId) {
+    const project = await getAgentProject(projectId);
+    if (!await requireInitiativeScope(req, res, project?.orgProjectId ?? null, { action: 'finish runs' })) return;
+  }
   await finishRun(String(req.params['runId'] ?? ''), {
     status,
     filesChanged: body.filesChanged ?? null,

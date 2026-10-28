@@ -26,7 +26,7 @@ jest.mock('../../providers/agent-projects.js', () => ({
   listAgentProjects: jest.fn(), getAgentProject: jest.fn(), linkAgentProject: jest.fn(),
   unlinkAgentProject: jest.fn(), buildCloneCommand: jest.fn(), markCloned: jest.fn(),
   checkoutPath: jest.fn(() => '/workspace/checkout'), finishRun: jest.fn(), listRuns: jest.fn(),
-  listRecentRunsForProjects: jest.fn(),
+  listRecentRunsForProjects: jest.fn(), getRunProjectId: jest.fn(async () => null),
 }));
 
 jest.mock('../../lib/sdlc-pipeline.js', () => ({ dispatchGovernedRun: jest.fn() }));
@@ -56,7 +56,7 @@ import { agentProjectsRouter } from '../agent-projects.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject, listRuns,
-  listRecentRunsForProjects, markCloned, finishRun, buildCloneCommand,
+  listRecentRunsForProjects, markCloned, finishRun, buildCloneCommand, getRunProjectId,
 } from '../../providers/agent-projects.js';
 import { runDevboxShell } from '../../lib/project-runner.js';
 import { dispatchGovernedRun } from '../../lib/sdlc-pipeline.js';
@@ -309,6 +309,17 @@ describe('POST /api/agent-projects/runs/:runId/finish', () => {
     manageAllow.value = false;
     const res = await request(buildApp(leader)).post('/api/agent-projects/runs/run-1/finish').send({ status: 'done' });
     expect(res.status).toBe(403);
+    expect(finishRunMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('initiative scope on codebase unlink and run finish (DE-44 rows 11, 15)', () => {
+  it('refuses to unlink or finish a run on a codebase outside the caller\'s initiatives', async () => {
+    scope.deny.add('p-rag-search');
+    expect((await request(buildApp(leader)).delete('/api/agent-projects/p-1')).status).toBe(403);
+    expect(unlinkMock).not.toHaveBeenCalled();
+    (getRunProjectId as unknown as jest.Mock).mockResolvedValueOnce('p-1');
+    expect((await request(buildApp(leader)).post('/api/agent-projects/runs/run-1/finish').send({ status: 'done' })).status).toBe(403);
     expect(finishRunMock).not.toHaveBeenCalled();
   });
 });

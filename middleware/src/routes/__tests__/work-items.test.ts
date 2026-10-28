@@ -23,6 +23,18 @@ jest.mock('../../lib/authz.js', () => ({
 }));
 
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
+jest.mock('../../providers/sprints.js', () => ({
+  getSprint: jest.fn(async (id: string) => (
+    id === 'spr-obs-s2' || id === 'spr-obs-s3' ? { id, orgProjectId: 'p-observability' }
+      : id === 'spr-auth-s2' ? { id, orgProjectId: 'p-auth-migration' } : null)),
+}));
+const scopeDeny = new Set<string>();
+jest.mock('../../lib/initiative-scope.js', () => ({
+  requireInitiativeScope: jest.fn(async (_req: unknown, res: { status(n: number): { json(b: unknown): void } }, initiativeId: string | null) => {
+    if (initiativeId && scopeDeny.has(initiativeId)) { res.status(403).json({ error: 'not your initiative' }); return false; }
+    return true;
+  }),
+}));
 jest.mock('../../lib/initiative-comments.js', () => ({ postInitiativeWorkComment: jest.fn() }));
 
 jest.mock('../../providers/activity.js', () => ({
@@ -323,6 +335,31 @@ describe('POST /api/graph/work-items', () => {
     const res = await request(buildApp()).post('/api/graph/work-items').send({ ...BASE, sprintId: 'spr-nope' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('no such sprint');
+  });
+});
+
+describe('sprint moves ask what the sprints route asks (DE-44 row 22)', () => {
+  beforeEach(() => { scopeDeny.clear(); getMock.mockResolvedValue(ITEM); updateMock.mockResolvedValue(ITEM); createMock.mockResolvedValue(ITEM); });
+  afterEach(() => { scopeDeny.clear(); });
+
+  it('refuses a sprint on another initiative, on create and on patch', async () => {
+    const created = await request(buildApp()).post('/api/graph/work-items')
+      .send({ projectId: 'p-observability', type: 'story', title: 'x', sprintId: 'spr-auth-s2' });
+    expect(created.status).toBe(400);
+    const patched = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ sprintId: 'spr-auth-s2' });
+    expect(patched.status).toBe(400);
+    expect(createMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a sprint move by someone who does not steward the initiative, and lets them clear nothing else', async () => {
+    scopeDeny.add('p-observability');
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ sprintId: 'spr-obs-s2' });
+    expect(res.status).toBe(403);
+    expect(updateMock).not.toHaveBeenCalled();
+    // Clearing the sprint, or leaving it as it is, asks nothing.
+    expect((await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ sprintId: null })).status).toBe(200);
+    expect((await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ sprintId: ITEM.sprintId, title: 'Retitled' })).status).toBe(200);
   });
 });
 

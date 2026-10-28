@@ -242,6 +242,11 @@ export function mockStartRun(input: {
  * because Aurora derives it from the same two stamps — storing it here would
  * be a typed aggregate that could disagree with its own row.
  */
+/** The codebase a run belongs to, or null for an unknown run. */
+export function mockRunProjectId(id: string): string | null {
+  return agentProjectRuns.rows().find((r) => r.id === id)?.projectId ?? null;
+}
+
 export function mockFinishRun(id: string, outcome: {
   status: 'done' | 'failed'; filesChanged?: number | null; diffSummary?: string | null;
   error?: string | null; costUsd?: number | null;

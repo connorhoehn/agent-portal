@@ -20,7 +20,7 @@ import { randomUUID } from 'node:crypto';
 import { exec } from './aurora.js';
 import { borrowApiKey } from './connected-sources.js';
 import {
-  mockFinishRun, mockRecentRunsForProjects, mockRunsForProject, mockStartRun,
+  mockFinishRun, mockRecentRunsForProjects, mockRunsForProject, mockStartRun, mockRunProjectId,
 } from '../mock/agent-project-runs.js';
 import {
   mockGetAgentProject, mockLinkAgentProject, mockListAgentProjects, mockMarkCloned,
@@ -349,6 +349,15 @@ export async function startRun(input: {
   const row = rows[0];
   if (!row) throw new Error('agent_project_runs insert returned no row');
   return rowToRun(row);
+}
+
+/** The codebase a run belongs to (for the route's scope check), or null. */
+export async function getRunProjectId(id: string): Promise<string | null> {
+  if (config.mock.aurora) return mockRunProjectId(id);
+  if (!isUuid(id)) return null;
+  const rows = await exec(`SELECT project_id FROM agent_project_runs WHERE id = :id::uuid`, [s('id', id)]);
+  const pid = rows[0]?.[0];
+  return typeof pid === 'string' ? pid : null;
 }
 
 export async function finishRun(id: string, outcome: {

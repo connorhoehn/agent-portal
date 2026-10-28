@@ -436,7 +436,8 @@ describe('job lifecycle verbs', () => {
     expect(res.body.id).toBe('job-2');
     // Attributed to the requester, not to the original author.
     expect(requeueJob).toHaveBeenCalledWith('job-1', 'u-nora');
-    expect(getJob).not.toHaveBeenCalled();
+    // One read, for the job's initiative (DE-44 row 7) — not the 404/409 fallback.
+    expect(getJob).toHaveBeenCalledTimes(1);
   });
 
   it('POST /jobs/:id/requeue distinguishes 404 (no such job) from 409 (still alive)', async () => {
@@ -665,5 +666,29 @@ describe('graph proposals', () => {
     m(decideProposal).mockResolvedValue({ id: 'gp-1' });
     await request(buildApp(null)).post('/api/work/proposals/gp-1/decide').send({ decision: 'approve' });
     expect((m(decideProposal).mock.calls[0]![2] as { reviewer: string }).reviewer).toBe('portal');
+  });
+});
+
+describe('initiative scope on job lifecycle (DE-44 rows 7–8)', () => {
+  beforeEach(() => { scopeDeny.clear(); scopeCalls.length = 0; });
+  afterEach(() => { scopeDeny.clear(); });
+
+  it('refuses review, requeue and cancel of a job serving someone else\'s initiative; requeue asks the spend question', async () => {
+    m(getJob).mockResolvedValue({ id: 'job-1', status: 'failed', payload: { initiativeId: 'p-billing' } });
+    scopeDeny.add('p-billing');
+    expect((await request(buildApp()).post('/api/work/jobs/job-1/review').send({ decision: 'accept' })).status).toBe(403);
+    expect((await request(buildApp()).post('/api/work/jobs/job-1/requeue').send({})).status).toBe(403);
+    expect((await request(buildApp()).delete('/api/work/jobs/job-1')).status).toBe(403);
+    expect(reviewJob).not.toHaveBeenCalled();
+    expect(requeueJob).not.toHaveBeenCalled();
+    expect(cancelJob).not.toHaveBeenCalled();
+    expect((scopeCalls[1]!.opts as { spend?: boolean }).spend).toBe(true);
+  });
+
+  it('a job with no initiative is not scoped', async () => {
+    m(getJob).mockResolvedValue({ id: 'job-1', status: 'awaiting_review', payload: {} });
+    m(reviewJob).mockResolvedValue({ id: 'job-1', status: 'done' });
+    expect((await request(buildApp()).post('/api/work/jobs/job-1/review').send({ decision: 'accept' })).status).toBe(200);
+    expect(scopeCalls[0]!.initiativeId).toBeNull();
   });
 });

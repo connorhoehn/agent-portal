@@ -719,6 +719,9 @@ botsRouter.patch('/:id', manageGate, asyncHandler(async (req, res) => {
 
 botsRouter.delete('/:id', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
+  const existing = await getBot(id);
+  if (!existing) throw new NotFoundError('No such bot');
+  if (!await requireInitiativeScope(req, res, await resolveBotInitiativeId(existing), { action: 'manage bots' })) return;
   const ok = await deleteBot(id);
   if (!ok) throw new NotFoundError('No such bot');
   unregisterBot(id);
@@ -781,7 +784,9 @@ botsRouter.post('/:id/run', manageGate, asyncHandler(async (req, res) => {
 
 botsRouter.post('/:id/pause', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
-  if (!await getBot(id)) throw new NotFoundError('No such bot');
+  const existing = await getBot(id);
+  if (!existing) throw new NotFoundError('No such bot');
+  if (!await requireInitiativeScope(req, res, await resolveBotInitiativeId(existing), { action: 'manage bots' })) return;
   const reason = String((req.body as { reason?: string } ?? {}).reason ?? '').trim();
   await setPausedReason(id, reason || 'paused by operator');
   // Disarm the live cron too — a paused bot that keeps firing until the next
@@ -792,7 +797,10 @@ botsRouter.post('/:id/pause', manageGate, asyncHandler(async (req, res) => {
 
 botsRouter.post('/:id/resume', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
-  if (!await getBot(id)) throw new NotFoundError('No such bot');
+  const existing = await getBot(id);
+  if (!existing) throw new NotFoundError('No such bot');
+  // Resume re-arms a cron that spends on the bot's initiative (DE-44 row 4).
+  if (!await requireInitiativeScope(req, res, await resolveBotInitiativeId(existing), { spend: true, action: 'resume bots' })) return;
   // Resume clears BOTH halves of "paused": the operator/self-pause reason and
   // the enabled flag. Either alone would leave a bot that looks resumed but
   // still refuses to fire.
