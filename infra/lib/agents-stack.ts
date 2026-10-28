@@ -345,6 +345,11 @@ use only what it validates.`,
         value: role.roleArn,
         exportName: `${prefix}-${agentName}-role-arn`,
       });
+      // AgentCoreGateway used to take these roles as objects, which made CDK
+      // mint ExportsOutputFnGetAtt<Role>Arn exports it imports. Agents deploys
+      // first, and CloudFormation refuses to delete an export still imported,
+      // so keep the auto-named exports until no deployed Gateway imports them.
+      this.exportValue(role.roleArn);
     }
   }
 
