@@ -82,8 +82,8 @@ test('every Cedar principal is a runtime execution role and no policy has a bare
 test('an agent gets exactly the tools the manifest lists for it', () => {
   const t = synth();
   const search = cedar(t).find(s => s.includes('orgiq-search-execution-role'))!;
-  assert.match(search, /orgiq-kb-query__knowledge-base-query/);
-  assert.match(search, /orgiq-graph-traversal__graph-traversal/);
+  assert.match(search, /"orgiq-kb-query___knowledge-base-query"/);
+  assert.match(search, /"orgiq-graph-traversal___graph-traversal"/);
   assert.doesNotMatch(search, /compute-pagerank/);
   // ingestion is in no manifest entry: no policy, so the gateway denies it.
   assert.ok(!cedar(t).some(s => s.includes('orgiq-ingestion-execution-role')));
@@ -143,5 +143,5 @@ test('a fourth tool in a fixture manifest yields a fourth target with no TypeScr
   t.resourceCountIs('AWS::BedrockAgentCore::GatewayTarget', 4);
   t.resourceCountIs('AWS::Lambda::Function', 4);
   t.hasResourceProperties('AWS::BedrockAgentCore::GatewayTarget', { Name: 'orgiq-people-lookup' });
-  assert.match(cedar(t).find(s => s.includes('orgiq-search-execution-role'))!, /orgiq-people-lookup__people-lookup/);
+  assert.match(cedar(t).find(s => s.includes('orgiq-search-execution-role'))!, /"orgiq-people-lookup___people-lookup"/);
 });

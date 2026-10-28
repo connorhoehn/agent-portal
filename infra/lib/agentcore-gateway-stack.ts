@@ -257,7 +257,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
 
       const roleArn = `arn:aws:iam::${this.account}:role/${prefix}-${agent}-execution-role`;
       const actions = tools
-        .map(t => `AgentCore::Action::"${prefix}-${t.target}__${t.name}"`).join(', ');
+        .map(t => `AgentCore::Action::"${prefix}-${t.target}___${t.name}"`).join(', ');
       const statement =
         `permit (\n  principal == AgentCore::IamEntity::"${roleArn}",\n  action in [${actions}],\n  resource == AgentCore::Gateway::"${gatewayArn}"\n);`;
 
