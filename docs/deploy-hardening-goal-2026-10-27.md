@@ -31,7 +31,7 @@ Rules for whoever continues (including an hourly loop):
 | 10 | deploy.sh carries `deployDevbox`, lab values and `deployTurn` forward | DE-51, DE-52, DE-23 | inference test like #5 | done (`92077c7d`) |
 | 11 | `onlyAgents` cannot delete runtimes it leaves out on a live stack | DE-1 | synth guard + test | done (`d023e71f`) |
 | 12 | Guardrail editor reads the per-role ids the BFF actually sets | DE-12 | config test; deployed env has a usable id | done (`80044049`); the other two roles' guardrails still need a role selector in the editor |
-| 13 | Agent runtime session ids are scoped to the caller | finding while fixing DE-8 | a client-supplied sessionId cannot continue another user's runtime session; test | open |
+| 13 | Agent runtime session ids are scoped to the caller | finding while fixing DE-8 | a client-supplied sessionId cannot continue another user's runtime session; test | done (`4669fa37`) |
 
 ## Owed from the deploy machine
 
