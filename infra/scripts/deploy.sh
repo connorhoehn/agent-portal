@@ -365,12 +365,34 @@ ctx_given() {
   for a in ${CDK_ARGS[@]+"${CDK_ARGS[@]}"}; do [[ "$a" == "$1="* ]] && return 0; done
   return 1
 }
-stack_output() {
-  local v
-  v=$(aws cloudformation describe-stacks --stack-name "$1" --region "$REGION" \
-    --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text 2>/dev/null || true)
-  [[ "$v" == "None" ]] && v=""
-  echo "$v"
+# live_read <var> <aws args...>: read live state into <var>. A resource that
+# does not exist reads as "" (absent). ANY other failure (expired session,
+# throttling, network) stops the deploy: treating an error as "not live" would
+# deploy without the second-phase flags and delete live runtimes and services
+# (DE-16). Exit 75 means "re-login and rerun"; nothing has been deployed yet.
+live_read() {
+  local __var=$1 __out __err __errfile
+  shift
+  __errfile=$(mktemp)
+  if __out=$(aws "$@" 2>"$__errfile"); then
+    rm -f "$__errfile"
+    [[ "$__out" == "None" ]] && __out=""
+    printf -v "$__var" '%s' "$__out"
+    return 0
+  fi
+  __err=$(head -c 400 "$__errfile"); rm -f "$__errfile"
+  if [[ "$__err" =~ (does\ not\ exist|[Nn]ot\ ?[Ff]ound|ResourceNotFound|ParameterNotFound|ClusterNotFound|ServiceNotFound) ]]; then
+    printf -v "$__var" '%s' ""
+    return 0
+  fi
+  echo "✖ could not read live state (aws $1 $2): ${__err}" >&2
+  echo "  Refusing to infer second-phase context from a failed read: deploying without it would remove live runtimes and services." >&2
+  echo "  Re-login (aws sts get-caller-identity) and rerun, or pass DEPLOY_INFER_CONTEXT=false with every context yourself." >&2
+  exit 75
+}
+stack_output() {  # stack_output <var> <stack> <output-key>
+  live_read "$1" cloudformation describe-stacks --stack-name "$2" --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='$3'].OutputValue" --output text
 }
 INFERRED=()
 INFERRED_SHOWN=()
@@ -381,53 +403,60 @@ infer() {  # infer <key> <value> [secret]
 }
 if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
   echo "── Inferring second-phase context from the live account ──"
-  RUNTIME_COUNT=$(aws cloudformation list-stack-resources --stack-name OrgIQ-AgentCoreRuntime --region "$REGION" \
-    --query "length(StackResourceSummaries[?ResourceType=='AWS::BedrockAgentCore::Runtime'])" --output text 2>/dev/null || echo 0)
+  live_read RUNTIME_COUNT cloudformation list-stack-resources --stack-name OrgIQ-AgentCoreRuntime --region "$REGION" \
+    --query "length(StackResourceSummaries[?ResourceType=='AWS::BedrockAgentCore::Runtime'])" --output text
   [[ "$RUNTIME_COUNT" =~ ^[1-9] ]] && infer deployRuntimes true
 
-  MW_DESIRED=$(aws ecs describe-services --cluster "${PREFIX}-middleware" --services "${PREFIX}-middleware" --region "$REGION" \
-    --query 'services[0].desiredCount' --output text 2>/dev/null || echo 0)
+  live_read MW_DESIRED ecs describe-services --cluster "${PREFIX}-middleware" --services "${PREFIX}-middleware" --region "$REGION" \
+    --query 'services[0].desiredCount' --output text
   [[ "$MW_DESIRED" =~ ^[1-9] ]] && infer deployMiddlewareService true
-  MW_CIDRS=$(stack_output OrgIQ-MiddlewareService MiddlewareAllowedCidrs)
+  stack_output MW_CIDRS OrgIQ-MiddlewareService MiddlewareAllowedCidrs
   [[ "$MW_CIDRS" =~ ^[0-9] ]] && infer albAllowCidr "$MW_CIDRS"
 
-  PORTAL_URL=$(stack_output OrgIQ-Portal PortalUrl)
+  stack_output PORTAL_URL OrgIQ-Portal PortalUrl
   if [[ -n "$PORTAL_URL" ]]; then
     infer deployPortal true
     infer portalPublicUrl "$PORTAL_URL"
     # Only once OrgIQ-Portal has written the parameters the middleware resolves.
-    aws ssm get-parameter --name "/${PREFIX}/portal/url" --region "$REGION" >/dev/null 2>&1 \
-      && infer portalPublicUrls true
+    live_read PORTAL_URL_PARAM ssm get-parameter --name "/${PREFIX}/portal/url" --region "$REGION" \
+      --query 'Parameter.Value' --output text
+    [[ -n "$PORTAL_URL_PARAM" ]] && infer portalPublicUrls true
   fi
 
   # The middleware as its own realtime gateway, read off the running task.
-  MW_TASKDEF=$(aws ecs describe-services --cluster "${PREFIX}-middleware" --services "${PREFIX}-middleware" --region "$REGION" \
-    --query 'services[0].taskDefinition' --output text 2>/dev/null || true)
+  live_read MW_TASKDEF ecs describe-services --cluster "${PREFIX}-middleware" --services "${PREFIX}-middleware" --region "$REGION" \
+    --query 'services[0].taskDefinition' --output text
   if [[ "$MW_TASKDEF" == arn:* ]]; then
-    RT_GW=$(aws ecs describe-task-definition --task-definition "$MW_TASKDEF" --region "$REGION" \
-      --query "taskDefinition.containerDefinitions[0].environment[?name=='REALTIME_GATEWAY'].value | [0]" --output text 2>/dev/null || true)
+    live_read RT_GW ecs describe-task-definition --task-definition "$MW_TASKDEF" --region "$REGION" \
+      --query "taskDefinition.containerDefinitions[0].environment[?name=='REALTIME_GATEWAY'].value | [0]" --output text
     [[ "$RT_GW" == "on" ]] && infer realtimeGateway true
   fi
 
   # The opt-in Social stacks. Each consumes the middleware's exports, so a
   # deploy without its flag would try to delete exports still in use.
-  stack_live() { case "$(stack_status "$1")" in NOT_FOUND|DELETE_*) return 1 ;; *) return 0 ;; esac; }
+  stack_live() {
+    local st
+    live_read st cloudformation describe-stacks --stack-name "$1" --region "$REGION" --query 'Stacks[0].StackStatus' --output text
+    case "$st" in ""|DELETE_*) return 1 ;; *) return 0 ;; esac
+  }
   stack_live OrgIQ-SocialImages && infer deploySocialImages true
   if stack_live OrgIQ-SocialMedia; then
     infer deploySocialMedia true
-    SFU_DIGEST=$(stack_output OrgIQ-SocialMedia SfuImageDigest)
+    stack_output SFU_DIGEST OrgIQ-SocialMedia SfuImageDigest
     [[ "$SFU_DIGEST" == sha256:* ]] && infer sfuImageDigest "$SFU_DIGEST"
-    SFU_CIDRS=$(stack_output OrgIQ-SocialMedia SfuAllowedCidrs)
+    stack_output SFU_CIDRS OrgIQ-SocialMedia SfuAllowedCidrs
     [[ "$SFU_CIDRS" =~ ^[0-9] ]] && infer sfuAllowCidr "$SFU_CIDRS"
     [[ -n "$PORTAL_URL" ]] && infer socialPortalOrigin "$PORTAL_URL"
   fi
   if stack_live OrgIQ-Social; then
     infer deploySocial true
-    PLATFORM_DIGEST=$(stack_output OrgIQ-Social PlatformApiImageDigest)
-    PLATFORM_SVC=$(stack_output OrgIQ-Social PlatformApiServiceName)
+    stack_output PLATFORM_DIGEST OrgIQ-Social PlatformApiImageDigest
+    stack_output PLATFORM_SVC OrgIQ-Social PlatformApiServiceName
     PLATFORM_DESIRED=0
-    [[ -n "$PLATFORM_SVC" ]] && PLATFORM_DESIRED=$(aws ecs describe-services --cluster "${PREFIX}-middleware" \
-      --services "$PLATFORM_SVC" --region "$REGION" --query 'services[0].desiredCount' --output text 2>/dev/null || echo 0)
+    if [[ -n "$PLATFORM_SVC" ]]; then
+      live_read PLATFORM_DESIRED ecs describe-services --cluster "${PREFIX}-middleware" \
+        --services "$PLATFORM_SVC" --region "$REGION" --query 'services[0].desiredCount' --output text
+    fi
     if [[ "$PLATFORM_DIGEST" == sha256:* && "$PLATFORM_DESIRED" =~ ^[1-9] ]]; then
       infer deploySocialService true
       infer platformApiImageDigest "$PLATFORM_DIGEST"
@@ -438,9 +467,10 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
   # socket URL. Its context (image digests, key-secret ARNs) is the SSM copy
   # scripts/docker/document-workspace-push.mjs writes; a deploy without it
   # would tear the document services down.
-  if [[ -n "$(stack_output OrgIQ-MiddlewareService DocumentGatewayPublicUrl)" ]]; then
-    DOC_CONFIG=$(aws ssm get-parameter --name "/${PREFIX}/documents/workspace-config" --region "$REGION" \
-      --query 'Parameter.Value' --output text 2>/dev/null || true)
+  stack_output DOC_GATEWAY_URL OrgIQ-MiddlewareService DocumentGatewayPublicUrl
+  if [[ -n "$DOC_GATEWAY_URL" ]]; then
+    live_read DOC_CONFIG ssm get-parameter --name "/${PREFIX}/documents/workspace-config" --region "$REGION" \
+      --query 'Parameter.Value' --output text
     if [[ "$DOC_CONFIG" == "{"* ]]; then
       infer deployDocumentWorkspace true
       infer documentWorkspace "$DOC_CONFIG"
@@ -454,8 +484,8 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
               assessmentRunCompleteSecret:assessment-run-complete; do
     key=${pair%%:*}
     ctx_given "$key" && continue
-    val=$(aws secretsmanager get-secret-value --secret-id "${PREFIX}-${pair#*:}-secret" --region "$REGION" \
-      --query SecretString --output text 2>/dev/null || true)
+    live_read val secretsmanager get-secret-value --secret-id "${PREFIX}-${pair#*:}-secret" --region "$REGION" \
+      --query SecretString --output text
     [[ -n "$val" && "$val" != "None" ]] && infer "$key" "$val" secret
   done
 
