@@ -2103,8 +2103,8 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'POST /api/agent-projects/:id/clone-command',
     persona: 'orgiq/admin',
-    safe: 'It builds a string and returns it. Every seeded repository is private and carries a `connectionName`, but under MOCK_AGENTCORE `buildCloneCommand` does not call `borrowApiKey` (which THROWS there by design, rather than handing out a fake token): it builds the credentialed command with the token left out, so the AgentCore Identity call its old reason named is not made. Deliberately NOT paired with `/cloned`: generating the command is not the clone, and the handler is explicit that it must not mark the project cloned.',
-    bodyFrom: 'routes/agent-projects.ts: `sessionId` must be a non-blank string; it is not resolved against the devbox and does not reach the response. `:id` is a repository off GET /api/agent-projects.',
+    safe: 'It builds the clone command and runs it in the box server-side (the command carries the repository credential, so it no longer goes to the browser). Offline the box is the fake microVM in mock/devbox-shell.ts, which answers any `git clone`, and under MOCK_AGENTCORE `buildCloneCommand` leaves the token out rather than calling `borrowApiKey`. The persona is a fleet-wide role, so `requireBoxAccess` adopts the label session as an operator would. Deliberately NOT paired with `/cloned`: running the clone is not confirming it, and the handler must not mark the project cloned.',
+    bodyFrom: 'routes/agent-projects.ts: `sessionId` must be a non-blank string the caller can reach (`requireBoxAccess`); a fleet-wide persona adopts an unknown one. `:id` is a repository off GET /api/agent-projects.',
     intercepts: ['aurora', 'agentcore'],
     build: async (ctx) => ({ sessionId: ctx.label() }),
   },

@@ -25,7 +25,8 @@
 // answers "is this person attached to that initiative", which needs I/O.
 
 import { type Session } from './session.js';
-import { type FleetBox } from './devbox-fleet.js';
+import type { Request, Response } from 'express';
+import { type FleetBox, getBoxBySession, registerBox } from './devbox-fleet.js';
 import { ORG_WIDE_INITIATIVE_ROLES, stewardsInitiative } from './initiative-scope.js';
 
 /** Roles that operate the whole fleet and see every computer in it. */
@@ -91,4 +92,39 @@ export async function visibleBoxes(
 export async function canSee(session: Session | null, box: FleetBox): Promise<boolean> {
   const who = await resolveVisibility(session, [box]);
   return canSeeBox(box, who);
+}
+
+/**
+ * Whether this session may act on the box behind `sessionId`; answers the
+ * refusal itself. Shared by routes/devbox.ts and the agent-projects clone
+ * route. An unregistered session is refused for anyone but a fleet-wide role,
+ * which adopts it (see the note above routes/devbox.ts's old copy).
+ */
+export async function requireBoxAccess(req: Request, res: Response, sessionId: string): Promise<boolean> {
+  const box = getBoxBySession(sessionId);
+  const session = req.session ?? null;
+  if (!box) {
+    if (session?.role && FLEET_WIDE_ROLES.includes(session.role)) {
+      // A fresh createdAt restarts the lifetime clock, which is the honest
+      // reading: the registry cannot know when a session it has never seen
+      // began, and a clock that restarts bounds the box, where no clock at
+      // all does not.
+      registerBox({
+        sessionId,
+        label: `adopted ${sessionId.slice(-8)}`,
+        ...(session.sub ? { ownerId: session.sub } : {}),
+      });
+      console.warn(`[devbox] adopted unregistered session ${sessionId} — the reaper can see it again`);
+      return true;
+    }
+    res.status(403).json({ error: 'no computer here you can reach', sessionId });
+    return false;
+  }
+  if (await canSee(session, box)) return true;
+  res.status(403).json({
+    error: 'that computer belongs to someone else, or to an initiative you are not on',
+    ...(box.projectId ? { projectId: box.projectId } : {}),
+    ...(session?.role ? { role: session.role } : {}),
+  });
+  return false;
 }

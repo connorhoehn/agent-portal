@@ -37,7 +37,7 @@ import {
   ListAgentRuntimesCommand,
 } from '@aws-sdk/client-bedrock-agentcore-control';
 
-import { canSee, visibleBoxes, FLEET_WIDE_ROLES } from '../lib/devbox-visibility.js';
+import { canSee, visibleBoxes, FLEET_WIDE_ROLES, requireBoxAccess } from '../lib/devbox-visibility.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
@@ -305,34 +305,8 @@ function requireSessionId(raw: string, res: Response): string | null {
  * line); doing it here means `/command` and `/shell-url` stop being the paths
  * where an orphan gets used but never reclaimed.
  */
-async function requireBoxAccess(req: Request, res: Response, sessionId: string): Promise<boolean> {
-  const box = getBoxBySession(sessionId);
-  const session = req.session ?? null;
-  if (!box) {
-    if (session?.role && FLEET_WIDE_ROLES.includes(session.role)) {
-      // A fresh createdAt restarts the lifetime clock, which is the honest
-      // reading: the registry cannot know when a session it has never seen
-      // began, and a clock that restarts bounds the box, where no clock at
-      // all does not.
-      registerBox({
-        sessionId,
-        label: `adopted ${sessionId.slice(-8)}`,
-        ...(session.sub ? { ownerId: session.sub } : {}),
-      });
-      console.warn(`[devbox] adopted unregistered session ${sessionId} — the reaper can see it again`);
-      return true;
-    }
-    res.status(403).json({ error: 'no computer here you can reach', sessionId });
-    return false;
-  }
-  if (await canSee(session, box)) return true;
-  res.status(403).json({
-    error: 'that computer belongs to someone else, or to an initiative you are not on',
-    ...(box.projectId ? { projectId: box.projectId } : {}),
-    ...(session?.role ? { role: session.role } : {}),
-  });
-  return false;
-}
+// requireBoxAccess lives in lib/devbox-visibility.ts (shared with the
+// agent-projects clone route); the rationale above applies there.
 
 /** Exported for `routes/internal-devbox.ts` — the real (non-mock) transport
  *  path resolves the ARN the exact same way for either principal. */

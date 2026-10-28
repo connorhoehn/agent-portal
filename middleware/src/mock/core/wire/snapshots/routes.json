@@ -298,57 +298,57 @@
     {
       "method": "GET",
       "path": "/api/agent-projects",
-      "source": "src/routes/agent-projects.ts:28"
+      "source": "src/routes/agent-projects.ts:31"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects",
-      "source": "src/routes/agent-projects.ts:44"
+      "source": "src/routes/agent-projects.ts:47"
     },
     {
       "method": "DELETE",
       "path": "/api/agent-projects/:id",
-      "source": "src/routes/agent-projects.ts:63"
+      "source": "src/routes/agent-projects.ts:66"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/:id/clone-command",
-      "source": "src/routes/agent-projects.ts:84"
+      "source": "src/routes/agent-projects.ts:91"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/:id/cloned",
-      "source": "src/routes/agent-projects.ts:102"
+      "source": "src/routes/agent-projects.ts:123"
     },
     {
       "method": "GET",
       "path": "/api/agent-projects/:id/runs",
-      "source": "src/routes/agent-projects.ts:69"
+      "source": "src/routes/agent-projects.ts:72"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/:id/runs",
-      "source": "src/routes/agent-projects.ts:113"
+      "source": "src/routes/agent-projects.ts:134"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/runs/:runId/finish",
-      "source": "src/routes/agent-projects.ts:136"
+      "source": "src/routes/agent-projects.ts:157"
     },
     {
       "method": "GET",
       "path": "/api/agents",
-      "source": "src/routes/agents.ts:47"
+      "source": "src/routes/agents.ts:48"
     },
     {
       "method": "POST",
       "path": "/api/agents/:agentId/invoke",
-      "source": "src/routes/agents.ts:241"
+      "source": "src/routes/agents.ts:242"
     },
     {
       "method": "GET",
       "path": "/api/agents/:agentId/metrics",
-      "source": "src/routes/agents.ts:52"
+      "source": "src/routes/agents.ts:53"
     },
     {
       "method": "GET",
@@ -1603,57 +1603,57 @@
     {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
-      "source": "src/routes/devbox.ts:910"
+      "source": "src/routes/devbox.ts:884"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/command",
-      "source": "src/routes/devbox.ts:663"
+      "source": "src/routes/devbox.ts:637"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/shell-url",
-      "source": "src/routes/devbox.ts:839"
+      "source": "src/routes/devbox.ts:813"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/task",
-      "source": "src/routes/devbox.ts:642"
+      "source": "src/routes/devbox.ts:616"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:428"
+      "source": "src/routes/devbox.ts:402"
     },
     {
       "method": "POST",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:441"
+      "source": "src/routes/devbox.ts:415"
     },
     {
       "method": "DELETE",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:482"
+      "source": "src/routes/devbox.ts:456"
     },
     {
       "method": "PATCH",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:469"
+      "source": "src/routes/devbox.ts:443"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes/:boxId/tail",
-      "source": "src/routes/devbox.ts:543"
+      "source": "src/routes/devbox.ts:517"
     },
     {
       "method": "POST",
       "path": "/api/devbox/sessions",
-      "source": "src/routes/devbox.ts:417"
+      "source": "src/routes/devbox.ts:391"
     },
     {
       "method": "GET",
       "path": "/api/devbox/status",
-      "source": "src/routes/devbox.ts:413"
+      "source": "src/routes/devbox.ts:387"
     },
     {
       "method": "GET",
@@ -3468,12 +3468,12 @@
     {
       "method": "GET",
       "path": "/api/sessions",
-      "source": "src/routes/sessions.ts:14"
+      "source": "src/routes/sessions.ts:17"
     },
     {
       "method": "GET",
       "path": "/api/sessions/:sessionId/events",
-      "source": "src/routes/sessions.ts:71"
+      "source": "src/routes/sessions.ts:75"
     },
     {
       "method": "GET",
@@ -3978,42 +3978,42 @@
     {
       "method": "DELETE",
       "path": "/internal/devbox/:sessionId",
-      "source": "src/routes/internal-devbox.ts:315"
+      "source": "src/routes/internal-devbox.ts:327"
     },
     {
       "method": "GET",
       "path": "/internal/devbox/:sessionId/files",
-      "source": "src/routes/internal-devbox.ts:264"
+      "source": "src/routes/internal-devbox.ts:276"
     },
     {
       "method": "GET",
       "path": "/internal/devbox/:sessionId/files/:fileId",
-      "source": "src/routes/internal-devbox.ts:286"
+      "source": "src/routes/internal-devbox.ts:298"
     },
     {
       "method": "POST",
       "path": "/internal/devbox/:sessionId/shell-url",
-      "source": "src/routes/internal-devbox.ts:244"
+      "source": "src/routes/internal-devbox.ts:256"
     },
     {
       "method": "POST",
       "path": "/internal/devbox/:sessionId/task",
-      "source": "src/routes/internal-devbox.ts:184"
+      "source": "src/routes/internal-devbox.ts:196"
     },
     {
       "method": "GET",
       "path": "/internal/devbox/boxes/:boxId/tail",
-      "source": "src/routes/internal-devbox.ts:234"
+      "source": "src/routes/internal-devbox.ts:246"
     },
     {
       "method": "POST",
       "path": "/internal/devbox/sessions",
-      "source": "src/routes/internal-devbox.ts:164"
+      "source": "src/routes/internal-devbox.ts:165"
     },
     {
       "method": "GET",
       "path": "/internal/devbox/status",
-      "source": "src/routes/internal-devbox.ts:153"
+      "source": "src/routes/internal-devbox.ts:154"
     },
     {
       "method": "POST",

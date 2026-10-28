@@ -6,6 +6,9 @@
 // have the bots done to it".
 
 import { Router } from 'express';
+import { requireBoxAccess } from '../lib/devbox-visibility.js';
+import { resolveDevboxArn, devboxDataClient } from '../lib/devbox-arn.js';
+import { runDevboxShell } from '../lib/project-runner.js';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { readForRolesElseAction, requireAction } from '../lib/authz.js';
 import {
@@ -71,15 +74,19 @@ agentProjectsRouter.get('/:id/runs', readGate, asyncHandler(async (req, res) => 
 }));
 
 /**
- * The clone command for a project, ready to run in a devbox.
+ * Clone a project into a devbox, run HERE rather than handed to the caller.
  *
- * Returned rather than executed here: the devbox command API streams its
- * output over SSE to whoever called it, and proxying that through this route
- * would mean the portal watches a copy instead of the real thing.
+ * This route used to return the clone command for the portal to post back to
+ * `/api/devbox/:sid/command`. For a private repository that command carries
+ * the connection's GitHub token in the URL, so every clone sent a live
+ * credential to the browser (DE-44/DE-45). Now the command is built and run
+ * server-side, the caller must be able to reach the box (the same check as
+ * every devbox route), and only redacted text comes back: the command's
+ * redacted form and git's output with URL credentials scrubbed, since git
+ * echoes the URL verbatim in `fatal: unable to access '<url>'`.
  *
- * The response carries the command because the caller has to run it — and the
- * caller is the portal, over an authenticated session. The redacted form is
- * what anything else should record.
+ * Still not marked cloned: the portal confirms via POST /:id/cloned once it
+ * has read `ok`, so a failed clone never leaves a phantom checkout.
  */
 agentProjectsRouter.post('/:id/clone-command', writeGate, asyncHandler(async (req, res) => {
   const project = await getAgentProject(String(req.params['id'] ?? ''));
@@ -87,15 +94,29 @@ agentProjectsRouter.post('/:id/clone-command', writeGate, asyncHandler(async (re
 
   const sessionId = String((req.body as { sessionId?: string } ?? {}).sessionId ?? '').trim();
   if (!sessionId) throw new ValidationError('sessionId is required — a project is cloned into a workspace');
+  if (!await requireBoxAccess(req, res, sessionId)) return;
+  const arn = await resolveDevboxArn();
+  if (!arn) { res.status(503).json({ error: 'the devbox runtime is not deployed' }); return; }
 
-  // Build the command but do NOT mark the project cloned yet — generating the
-  // command is not the same as the clone succeeding. The caller runs it in the
-  // devbox and confirms via POST /:id/cloned only when git exits 0, so a failed
-  // clone (e.g. a private repo linked without a credential) never leaves the
-  // project looking "in workspace" with an empty/nonexistent checkout.
   const { command, redacted } = await buildCloneCommand(project);
-  res.json({ command, redacted, checkout: checkoutPath(project), cwd: project.workspacePath });
+  let output: string;
+  try {
+    output = redactUrlCredentials(await runDevboxShell(devboxDataClient(), arn, sessionId, command));
+  } catch (err) {
+    res.status(502).json({ ok: false, error: `clone failed: ${redactUrlCredentials((err as Error).message)}`, redacted });
+    return;
+  }
+  const ok = !CLONE_FAILURE.test(output);
+  res.json({ ok, output: output.slice(-4000), redacted, checkout: checkoutPath(project), cwd: project.workspacePath });
 }));
+
+/** The clone's own failure markers (same set the bot runner's workspace clone uses). */
+const CLONE_FAILURE = /fatal: (?!detected dubious ownership)|repository not found|authentication failed|could not read username|could not resolve host|permission denied/i;
+
+/** `https://user:token@host` → `https://***@host`, anywhere in the text. */
+function redactUrlCredentials(text: string): string {
+  return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@'"]+@/gi, '$1***@');
+}
 
 // Confirm a successful clone. The portal calls this after the clone command
 // exits 0 in the devbox — only then is the project actually in a workspace.

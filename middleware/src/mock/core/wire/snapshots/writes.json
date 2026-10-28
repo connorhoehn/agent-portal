@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-26T19:59:27.426Z",
-  "serverHandlerSha": "247c775ac222532c258249591944661983e1138438c41d46e304bc7ac99c5428",
-  "baseUrl": "http://127.0.0.1:3011",
+  "capturedAt": "2026-10-28T01:43:17.485Z",
+  "serverHandlerSha": "7d228a88dfa9b14f0863e0c92c20c0a7e9cfc70a7e32a040766d5e5ac5c2f8bb",
+  "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -1320,8 +1320,9 @@
       "shape": {
         "$": "object",
         "checkout": "string",
-        "command": "string",
         "cwd": "string",
+        "ok": "boolean",
+        "output": "string",
         "redacted": "string"
       },
       "values": {},

@@ -30,6 +30,17 @@ jest.mock('../../providers/agent-projects.js', () => ({
 }));
 
 jest.mock('../../lib/sdlc-pipeline.js', () => ({ dispatchGovernedRun: jest.fn() }));
+const boxAccess = { value: true };
+jest.mock('../../lib/devbox-visibility.js', () => ({
+  requireBoxAccess: jest.fn(async (_req: unknown, res: { status(n: number): { json(b: unknown): void } }) => {
+    if (boxAccess.value) return true;
+    res.status(403).json({ error: 'no computer here you can reach' });
+    return false;
+  }),
+}));
+jest.mock('../../lib/devbox-arn.js', () => ({ resolveDevboxArn: jest.fn(async () => 'arn:devbox'), devboxDataClient: jest.fn(() => ({})) }));
+const shell = { output: '' };
+jest.mock('../../lib/project-runner.js', () => ({ runDevboxShell: jest.fn(async () => shell.output) }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
 import request from '../../test-support/http.js';
@@ -37,8 +48,9 @@ import { agentProjectsRouter } from '../agent-projects.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject, listRuns,
-  listRecentRunsForProjects, markCloned, finishRun,
+  listRecentRunsForProjects, markCloned, finishRun, buildCloneCommand,
 } from '../../providers/agent-projects.js';
+import { runDevboxShell } from '../../lib/project-runner.js';
 import { dispatchGovernedRun } from '../../lib/sdlc-pipeline.js';
 
 const listMock = listAgentProjects as unknown as jest.Mock;
@@ -164,6 +176,50 @@ describe('write routes stay on ManageDevbox', () => {
     const res = await request(buildApp(leader)).post('/api/agent-projects').send({ repoFullName: 'org/repo' });
     expect(res.status).toBe(201);
     expect(linkMock).toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/agent-projects/:id/clone-command — runs the clone server-side', () => {
+  const TOKEN = 'ghs_SECRETtoken123';
+  beforeEach(() => {
+    boxAccess.value = true;
+    (buildCloneCommand as unknown as jest.Mock).mockResolvedValue({
+      command: `git clone --depth 50 https://x-access-token:${TOKEN}@github.com/org/rag-search.git /w/rag-search`,
+      redacted: 'git clone --depth 50 https://***@github.com/org/rag-search.git /w/rag-search',
+    });
+    (runDevboxShell as unknown as jest.Mock).mockClear();
+  });
+
+  it('never returns the credentialed command, and scrubs credentials git echoes back', async () => {
+    shell.output = `Cloning into '/w/rag-search'...\nwarning: redirect https://x-access-token:${TOKEN}@github.com/org/rag-search.git\n`;
+    const res = await request(buildApp(leader)).post('/api/agent-projects/p-1/clone-command').send({ sessionId: 's-1' });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.command).toBeUndefined();
+    expect(JSON.stringify(res.body)).not.toContain(TOKEN);
+    expect(res.body.output).toContain('https://***@github.com');
+    expect(runDevboxShell).toHaveBeenCalledWith(expect.anything(), 'arn:devbox', 's-1', expect.stringContaining(TOKEN));
+    expect(markClonedMock).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed clone as ok:false with the scrubbed git error', async () => {
+    shell.output = `fatal: unable to access 'https://x-access-token:${TOKEN}@github.com/org/rag-search.git/': Could not resolve host\n`;
+    const res = await request(buildApp(leader)).post('/api/agent-projects/p-1/clone-command').send({ sessionId: 's-1' });
+    expect(res.body.ok).toBe(false);
+    expect(JSON.stringify(res.body)).not.toContain(TOKEN);
+  });
+
+  it('treats git\'s benign dubious-ownership notice as success', async () => {
+    shell.output = 'fatal: detected dubious ownership in repository at /w/rag-search\n';
+    const res = await request(buildApp(leader)).post('/api/agent-projects/p-1/clone-command').send({ sessionId: 's-1' });
+    expect(res.body.ok).toBe(true);
+  });
+
+  it('refuses a box the caller cannot reach, and runs nothing', async () => {
+    boxAccess.value = false;
+    const res = await request(buildApp(leader)).post('/api/agent-projects/p-1/clone-command').send({ sessionId: 's-other' });
+    expect(res.status).toBe(403);
+    expect(runDevboxShell).not.toHaveBeenCalled();
   });
 });
 

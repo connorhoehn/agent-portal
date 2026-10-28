@@ -230,49 +230,20 @@ export default function AgentProjectsPage() {
       let box = boxes.find((b) => b.sessionId === p.sessionId) ?? boxes[boxes.length - 1];
       if (!box) box = await createComputer();
 
+      // The middleware builds and runs the clone itself: the command carries
+      // the repository credential, so it never comes to the browser. What
+      // returns is `ok` and git's output with URL credentials already
+      // scrubbed (git echoes the URL in `fatal: unable to access '<url>'`);
+      // it is scrubbed again here so no later reader can render a token.
       const res = await fetch(`/api/agent-projects/${p.id}/clone-command`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: box.sessionId }),
       });
-      const body = await res.json() as { command?: string; cwd?: string; error?: string };
-      if (!res.ok || !body.command) throw new Error(body.error ?? `HTTP ${res.status}`);
-
-      // Run it in the devbox. `full` mode because a clone writes, and the
-      // command carries a credential for private repos — so it is sent, never
-      // displayed or stored client-side.
-      const run = await fetch(`/api/devbox/${encodeURIComponent(box.sessionId)}/command`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: body.command, mode: 'full', cwd: body.cwd ?? '/mnt/workspace' }),
-      });
-      if (!run.ok) throw new Error(`clone failed: HTTP ${run.status}`);
-      // The command endpoint streams; draining it is what waits for completion.
-      // HTTP 200 only means the command *ran* — a git clone that failed (bad
-      // repo, auth, private without a credential) still returns 200 with the
-      // failure in the stream. Reporting that as "Cloned" sends the user on to a
-      // run against an empty checkout, so inspect the output and the exit event.
-      // Redact before anything reads it. The clone command carries a GitHub
-      // token in the URL userinfo for a private repo, and git echoes the URL
-      // back *verbatim* in `fatal: unable to access '<url>': ...` — it redacts
-      // nothing there. The access-failure and network branches below replace
-      // the text with hand-written messages, but the generic `fatal:` fallback
-      // throws the matched git line straight into a toast, and a TLS, proxy or
-      // curl error takes exactly that path: the token would be rendered in the
-      // UI (and into any screenshot or copied error text). Scrubbing the whole
-      // buffer at the source keeps every later reader safe by construction
-      // rather than relying on each branch to remember.
-      const out = redactUrlCredentials(await run.text());
-      // The command's exit code is authoritative — the stream ends with an
-      // {type:'exit', exitCode} event. Trust it over scanning for "fatal:":
-      // a *successful* clone's verification step can still print a benign
-      // "fatal: detected dubious ownership" (the checkout is owned by another
-      // uid), and flagging on that text alone turns good clones into false
-      // failures. Only fall back to text markers if no exit event arrived.
-      const exitMatch = out.match(/"exitcode":\s*(\d+)/i);
-      const failed = exitMatch
-        ? exitMatch[1] !== '0'
-        : /fatal:|repository not found|authentication failed|could not read username|could not resolve host|permission denied/i.test(out);
+      const body = await res.json() as { ok?: boolean; output?: string; error?: string };
+      if (!res.ok && body.ok === undefined) throw new Error(redactUrlCredentials(body.error ?? `HTTP ${res.status}`));
+      const out = redactUrlCredentials(body.output ?? body.error ?? '');
+      const failed = body.ok !== true;
       if (failed) {
         // Translate the raw git failure into something actionable. An auth
         // prompt ("could not read Username"), auth failure, permission denied,

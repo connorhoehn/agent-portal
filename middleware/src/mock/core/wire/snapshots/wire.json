@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-10-26T19:59:24.783Z",
-  "serverHandlerSha": "247c775ac222532c258249591944661983e1138438c41d46e304bc7ac99c5428",
-  "baseUrl": "http://127.0.0.1:3011",
+  "capturedAt": "2026-10-28T01:43:06.057Z",
+  "serverHandlerSha": "7d228a88dfa9b14f0863e0c92c20c0a7e9cfc70a7e32a040766d5e5ac5c2f8bb",
+  "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -3752,17 +3752,16 @@
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
-          "ORG-DS-1",
           "ORG-DS-3",
           "ORG-DS-4",
           "ORG-DSAPI-1",
           "ORG-DSAPI-2",
-          "ORG-DSAPI-3",
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
-          "ORG-FS-4",
           "ORG-INF-1",
+          "ORG-INF-2",
+          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -3772,6 +3771,8 @@
           "ORG-LLM-3",
           "ORG-LLM-4",
           "ORG-LLM-5",
+          "ORG-LLM-7",
+          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
@@ -3788,7 +3789,6 @@
           "ORG-RTA-2",
           "ORG-RTA-3",
           "ORG-RTA-5",
-          "ORG-SOC2-1",
           "ORG-SOC2-2",
           "ORG-SOC2-3",
           "ORG-SOC2-4",
@@ -3835,15 +3835,7 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "criteria": "array",
-        "criteria[]": "object",
-        "criteria[].createdAt": "string",
-        "criteria[].done": "boolean",
-        "criteria[].id": "string",
-        "criteria[].position": "number",
-        "criteria[].text": "string",
-        "criteria[].updatedAt": "string",
-        "criteria[].workItemId": "string"
+        "criteria": "array"
       },
       "values": {}
     },
@@ -3888,7 +3880,6 @@
         "capabilities.datastore.mandatory": "boolean",
         "capabilities.datastore.ok": "boolean",
         "capabilities.jobSchema": "object",
-        "capabilities.jobSchema.error": "string",
         "capabilities.jobSchema.mandatory": "boolean",
         "capabilities.jobSchema.ok": "boolean",
         "datastore": "object",
@@ -3908,7 +3899,7 @@
       },
       "values": {
         "status": [
-          "degraded"
+          "ok"
         ]
       }
     },
@@ -5765,7 +5756,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
