@@ -2,7 +2,8 @@
 // orgiq_memory resource so sessions survive page reloads / restarts.
 //
 // Model:
-//   - actorId  = "portal-default" (single-tenant; would be a user ID once auth lands)
+//   - actorId  = the signed-in user within their tenant (`memoryActor`); never
+//     taken from a request body or query string
 //   - sessionId = a UUID generated client-side, carried through invokes
 //   - event     = one user message + one assistant message, written per turn
 //
@@ -51,9 +52,6 @@ export interface MemorySession {
 const _client = (): BedrockAgentCoreClient =>
   new BedrockAgentCoreClient({ region: config.region });
 
-function actorScope(req?: { actorId?: string }): string {
-  return req?.actorId || 'portal-default';
-}
 
 /**
  * Whether AgentCore Memory is configured at all.
@@ -69,7 +67,7 @@ export function memoryConfigured(): boolean {
   return Boolean(config.agentcore.memoryId);
 }
 
-export async function listSessions(actorId?: string): Promise<MemorySession[]> {
+export async function listSessions(actorId: string): Promise<MemorySession[]> {
   const memoryId = config.agentcore.memoryId;
   if (!memoryId) return [];
   try {
@@ -79,7 +77,7 @@ export async function listSessions(actorId?: string): Promise<MemorySession[]> {
       const resp: ListSessionsCommandOutput = await _client().send(
         new ListSessionsCommand({
           memoryId,
-          actorId: actorScope({ actorId }),
+          actorId,
           maxResults: 50,
           nextToken,
         }),
@@ -88,7 +86,7 @@ export async function listSessions(actorId?: string): Promise<MemorySession[]> {
         if (!s.sessionId) continue;
         out.push({
           sessionId: s.sessionId,
-          actorId: s.actorId ?? actorScope({ actorId }),
+          actorId: s.actorId ?? actorId,
           createdAt: (s.createdAt instanceof Date ? s.createdAt : new Date()).toISOString(),
         });
       }
@@ -102,7 +100,7 @@ export async function listSessions(actorId?: string): Promise<MemorySession[]> {
   }
 }
 
-export async function listEvents(sessionId: string, actorId?: string): Promise<MemoryEvent[]> {
+export async function listEvents(sessionId: string, actorId: string): Promise<MemoryEvent[]> {
   const memoryId = config.agentcore.memoryId;
   if (!memoryId) return [];
   try {
@@ -113,7 +111,7 @@ export async function listEvents(sessionId: string, actorId?: string): Promise<M
         new ListEventsCommand({
           memoryId,
           sessionId,
-          actorId: actorScope({ actorId }),
+          actorId,
           includePayloads: true,
           maxResults: 100,
           nextToken,
@@ -168,7 +166,7 @@ export async function listEvents(sessionId: string, actorId?: string): Promise<M
 
 export async function recordTurn(opts: {
   sessionId: string;
-  actorId?: string;
+  actorId: string;
   userMessage: string;
   assistantMessage: string;
   /**
@@ -191,7 +189,7 @@ export async function recordTurn(opts: {
     _client().send(
       new CreateEventCommand({
         memoryId,
-        actorId: actorScope(opts),
+        actorId: opts.actorId,
         sessionId: opts.sessionId,
         eventTimestamp: new Date(),
         payload,

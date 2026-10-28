@@ -7,6 +7,7 @@ import type { Request as ExpressRequest } from 'express';
 import { agentcore } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
 import { listEvents, recordTurn, type StoredToolCall } from '../providers/memory.js';
+import { memoryActor } from '../lib/memory-actor.js';
 import { maybeGenerateTitle } from '../lib/session-titles.js';
 import { requireAction, requireTenant, isAllowed, resolveSession } from '../lib/authz.js';
 import { annotateToolResult } from '../lib/answer-sources.js';
@@ -254,10 +255,9 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   next();
 }), agentStreamMiddleware(async (req: ExpressRequest, stream: AgentStream, signal: AbortSignal) => {
   const agentId = String(req.params['agentId'] ?? '');
-  const { message, sessionId, actorId, selection, payload: rawPayload } = req.body as {
+  const { message, sessionId, selection, payload: rawPayload } = req.body as {
     message?: string;
     sessionId?: string;
-    actorId?: string;
     selection?: unknown;
     payload?: unknown;
   };
@@ -276,6 +276,10 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   // access, not a second unrelated context read or replacement answer.
   const refs = presentation ? [] : parseSearchSelection(selection);
   const principal = resolveSession(req);
+  // The transcript belongs to the signed-in user, never a body-supplied actor
+  // (that read another user's history into this model call). No session, no
+  // transcript: nothing is read or recorded.
+  const actorId = memoryActor(principal);
   const { scope, stance } = askScopes.get(req) ?? { scope: null, stance: null };
 
   // The local data assistant answers FIRST: a question about the program's own
@@ -319,7 +323,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   const agentName = await resolveAgentName(agentId);
 
   // Fetch conversation history for multi-turn context.
-  const events = await listEvents(canonicalSessionId, actorId);
+  const events = actorId ? await listEvents(canonicalSessionId, actorId) : [];
   const history = events
     .filter(e => e.role === 'USER' || e.role === 'ASSISTANT')
     .slice(-20)
@@ -516,10 +520,10 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
     // Durability: if part of the answer already streamed, persist the turn
     // anyway — otherwise a mid-stream error (or tab close) silently drops the
     // whole exchange from Memory and the conversation can't be resumed.
-    if (fullText) {
+    if (fullText && actorId) {
       void recordTurn({
         sessionId: canonicalSessionId,
-        ...(actorId ? { actorId } : {}),
+        actorId,
         userMessage: rawUserMessage,
         assistantMessage: fullText,
         toolCalls: Array.from(turnToolCalls.values()),
@@ -551,10 +555,10 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   });
 
   // Persist turn + title generation (fire-and-forget).
-  if (fullText) {
+  if (fullText && actorId) {
     void recordTurn({
       sessionId: canonicalSessionId,
-      ...(actorId ? { actorId } : {}),
+      actorId,
       userMessage: rawUserMessage,
       assistantMessage: fullText,
       toolCalls: Array.from(turnToolCalls.values()),
@@ -581,7 +585,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
 /** A local answer or an index answer (lib/search-index/answers.ts): the same stream shape. */
 type StreamedAnswer = Omit<LocalAnswer, 'intent' | 'records'> & { intent: string; records: ReadonlyArray<{ type: string; id: string }> };
 async function streamLocalAnswer(stream: AgentStream, local: StreamedAnswer, ctx: {
-  question: string; scope: AnswerScope | null; stance: AnswerStance | null; sessionId: string; actorId?: string | undefined;
+  question: string; scope: AnswerScope | null; stance: AnswerStance | null; sessionId: string; actorId: string | null;
 }): Promise<void> {
   const step = `local data: ${local.intent}`;
   stream.stepStarted(step);
@@ -603,9 +607,9 @@ async function streamLocalAnswer(stream: AgentStream, local: StreamedAnswer, ctx
   stream.textMessageStart(messageId, 'assistant');
   for (const part of local.text.split(/(?<=\n\n)/)) stream.textMessageContent(messageId, part);
   stream.textMessageEnd(messageId);
-  void recordTurn({
+  if (ctx.actorId) void recordTurn({
     sessionId: ctx.sessionId,
-    ...(ctx.actorId ? { actorId: ctx.actorId } : {}),
+    actorId: ctx.actorId,
     userMessage: ctx.question,
     assistantMessage: local.text,
     toolCalls,

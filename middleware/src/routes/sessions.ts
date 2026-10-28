@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
 import { listSessions, listEvents, memoryConfigured } from '../providers/memory.js';
+import { memoryActor } from '../lib/memory-actor.js';
 import {
   getSessionTitle,
   beginBackfill,
@@ -11,8 +12,11 @@ import {
 
 export const sessionsRouter = Router();
 
+// The actor is the signed-in user (memoryActor), never a query parameter: an
+// `?actorId=` used to list and read any other user's conversations.
 sessionsRouter.get('/', asyncHandler(async (req, res) => {
-  const actorId = (req.query['actorId'] as string) || undefined;
+  const actorId = memoryActor(req.session);
+  if (!actorId) { res.status(401).json({ error: 'sign in to read your conversations' }); return; }
   const sessions = await listSessions(actorId);
   // Backfill titles for any sessions that don't have one yet: pull the first
   // user message from the session's events and kick off generation in the
@@ -70,7 +74,8 @@ sessionsRouter.get('/', asyncHandler(async (req, res) => {
 // key and restore as text, exactly as they did.
 sessionsRouter.get('/:sessionId/events', asyncHandler(async (req, res) => {
   const sessionId = String(req.params['sessionId'] ?? '');
-  const actorId = (req.query['actorId'] as string) || undefined;
+  const actorId = memoryActor(req.session);
+  if (!actorId) { res.status(401).json({ error: 'sign in to read your conversations' }); return; }
   const events = await listEvents(sessionId, actorId);
   res.json({ events });
 }));

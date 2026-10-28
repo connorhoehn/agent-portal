@@ -43,12 +43,13 @@ import { _resetTitleState, getSessionTitle } from '../../lib/session-titles.js';
 
 function buildApp() {
   const app = express();
+  app.use((req, _res, next) => { (req as unknown as { session: unknown }).session = { sub: 'u-nora', tenant: 'orgiq', role: 'member', grants: {}, iat: 0 }; next(); });
   app.use('/api/sessions', sessionsRouter);
   return app;
 }
 
 function session(sessionId: string) {
-  return { sessionId, actorId: 'portal-default', createdAt: '2026-01-01T00:00:00Z' };
+  return { sessionId, actorId: 'orgiq_u-nora', createdAt: '2026-01-01T00:00:00Z' };
 }
 
 /** Let the fire-and-forget backfill (read + generation) drain. */

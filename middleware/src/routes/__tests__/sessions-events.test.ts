@@ -8,9 +8,8 @@
 //     key and must restore as plain text, exactly as it did,
 //   * the `{events}` envelope and the role vocabulary the transcript renderer
 //     switches on,
-//   * that the actorId filter is threaded through — a transcript is scoped to
-//     whoever is asking, and passing `undefined` (not '') is what the provider
-//     reads as "no filter",
+//   * that the transcript is the signed-in user's (lib/memory-actor.ts): an
+//     `?actorId=` used to read anyone's conversation and is now ignored,
 //   * an unknown session reading as an EMPTY transcript, not a 404: a brand-new
 //     conversation has no events yet and must not look like an error.
 
@@ -33,6 +32,7 @@ const eventsMock = listEvents as unknown as jest.Mock;
 function buildApp() {
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => { (req as unknown as { session: unknown }).session = { sub: 'u-nora', tenant: 'orgiq', role: 'member', grants: {}, iat: 0 }; next(); });
   app.use('/api/sessions', sessionsRouter);
   app.use(errorHandler);
   return app;
@@ -74,17 +74,26 @@ describe('GET /api/sessions/:sessionId/events', () => {
     expect(Object.prototype.hasOwnProperty.call(turn, 'toolCalls')).toBe(false);
   });
 
-  it('threads the actorId filter, passing undefined rather than an empty string', async () => {
+  it('reads the signed-in user\'s transcript, and ignores an ?actorId= naming anyone else', async () => {
     eventsMock.mockResolvedValue([]);
     const app = buildApp();
     await request(app).get('/api/sessions/sess-1/events');
-    await request(app).get('/api/sessions/sess-1/events?actorId=');
-    await request(app).get('/api/sessions/sess-1/events?actorId=u-nora');
+    await request(app).get('/api/sessions/sess-1/events?actorId=u-rhea');
+    await request(app).get('/api/sessions/sess-1/events?actorId=portal-default');
     expect(eventsMock.mock.calls).toEqual([
-      ['sess-1', undefined],
-      ['sess-1', undefined],
-      ['sess-1', 'u-nora'],
+      ['sess-1', 'orgiq_u-nora'],
+      ['sess-1', 'orgiq_u-nora'],
+      ['sess-1', 'orgiq_u-nora'],
     ]);
+  });
+
+  it('refuses a caller with no signed-in user, and reads nothing', async () => {
+    const app = express();
+    app.use('/api/sessions', sessionsRouter);
+    app.use(errorHandler);
+    const res = await request(app).get('/api/sessions/sess-1/events?actorId=u-nora');
+    expect(res.status).toBe(401);
+    expect(eventsMock).not.toHaveBeenCalled();
   });
 
   it('reads a brand-new conversation as an EMPTY transcript, not a 404', async () => {

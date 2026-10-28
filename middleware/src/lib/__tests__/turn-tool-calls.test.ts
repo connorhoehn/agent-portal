@@ -44,6 +44,7 @@ import {
   type StoredToolCall,
 } from '../turn-tool-calls.js';
 import { listEvents, recordTurn } from '../../providers/memory.js';
+import { memoryActor } from '../memory-actor.js';
 
 type Payload = Array<{ conversational: { role: string; content: { text: string } } }>;
 
@@ -202,6 +203,7 @@ describe('recordTurn → listEvents round trip', () => {
     mockSend.mockResolvedValueOnce({});
     await recordTurn({
       sessionId: 's-1',
+      actorId: 'orgiq_u-rhea',
       userMessage: 'Who are the top two Kubernetes experts?',
       assistantMessage: 'Sarah Thompson and Marcus Müller.',
       toolCalls: [
@@ -210,10 +212,11 @@ describe('recordTurn → listEvents round trip', () => {
     });
 
     const payload = mockSend.mock.calls[0]?.[0]?.input?.payload as Payload;
+    expect(mockSend.mock.calls[0]?.[0]?.input?.actorId).toBe('orgiq_u-rhea');
     expect(payload.map((p) => p.conversational.role)).toEqual(['USER', 'ASSISTANT', 'TOOL']);
 
     replay(payload);
-    const events = await listEvents('s-1');
+    const events = await listEvents('s-1', 'orgiq_u-rhea');
 
     // The TOOL payload is bookkeeping — it must never render as a message.
     expect(events.map((e) => e.role)).toEqual(['USER', 'ASSISTANT']);
@@ -230,6 +233,7 @@ describe('recordTurn → listEvents round trip', () => {
     mockSend.mockResolvedValueOnce({});
     await recordTurn({
       sessionId: 's-1',
+      actorId: 'orgiq_u-rhea',
       userMessage: 'hi',
       assistantMessage: 'hello',
       toolCalls: [{ id: 't1', name: 'query_graph', args: '{}', result: '[]' }],
@@ -241,7 +245,7 @@ describe('recordTurn → listEvents round trip', () => {
 
   it('writes no TOOL payload for a turn with no tool calls', async () => {
     mockSend.mockResolvedValueOnce({});
-    await recordTurn({ sessionId: 's-1', userMessage: 'hi', assistantMessage: 'hello' });
+    await recordTurn({ sessionId: 's-1', actorId: 'orgiq_u-rhea', userMessage: 'hi', assistantMessage: 'hello' });
     const payload = mockSend.mock.calls[0]?.[0]?.input?.payload as Payload;
     expect(payload).toHaveLength(2);
   });
@@ -251,9 +255,25 @@ describe('recordTurn → listEvents round trip', () => {
       { conversational: { role: 'USER', content: { text: 'Who knows auth best?' } } },
       { conversational: { role: 'ASSISTANT', content: { text: 'Priya Raman. *Source: Search agent*' } } },
     ]);
-    const events = await listEvents('s-old');
+    const events = await listEvents('s-old', 'orgiq_u-rhea');
     expect(events).toHaveLength(2);
     expect(events[1]?.text).toContain('Priya Raman');
     expect(events[1]?.toolCalls).toBeUndefined();
+  });
+});
+
+describe('memoryActor — the transcript belongs to the signed-in user', () => {
+  it('is one actor per user per tenant, from the session only', () => {
+    expect(memoryActor({ sub: 'u-rhea', tenant: 'orgiq' })).toBe('orgiq_u-rhea');
+    expect(memoryActor({ sub: 'u-rhea', tenant: 'assessment' })).toBe('assessment_u-rhea');
+    expect(memoryActor({ sub: 'u-omar', tenant: 'orgiq' })).not.toBe(memoryActor({ sub: 'u-rhea', tenant: 'orgiq' }));
+  });
+  it('has no actor without a signed-in user, so nothing is read or written', () => {
+    expect(memoryActor(null)).toBeNull();
+    expect(memoryActor({ sub: '', tenant: 'orgiq' })).toBeNull();
+    expect(memoryActor({ sub: 'u-rhea', tenant: '' })).toBeNull();
+  });
+  it('keeps a Cognito-style subject inside a conservative id charset', () => {
+    expect(memoryActor({ sub: 'a1b2:c3@x', tenant: 'orgiq' })).toBe('orgiq_a1b2-c3-x');
   });
 });

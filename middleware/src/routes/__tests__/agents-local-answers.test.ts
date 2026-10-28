@@ -44,7 +44,7 @@ import request from '../../test-support/http.js';
 import { agentsRouter } from '../agents.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { agentcore } from '../../providers/index.js';
-import { recordTurn } from '../../providers/memory.js';
+import { listEvents, recordTurn } from '../../providers/memory.js';
 import { openAgentRun } from '../../lib/agent-runs-live.js';
 import { listProjects } from '../../providers/projects.js';
 
@@ -84,6 +84,14 @@ describe('routing order', () => {
     expect(recordTurn).toHaveBeenCalledWith(expect.objectContaining({ userMessage: 'what project is over budget?',
       toolCalls: [expect.objectContaining({ name: 'local_answer' }), expect.objectContaining({ name: 'search_context' })] }));
     expect(mockStream.runFinished).toHaveBeenCalled();
+  });
+
+  it('reads and records the transcript as the signed-in user, never a body-supplied actor', async () => {
+    await request(app).post('/api/agents/orgiq-supervisor/invoke')
+      .send({ message: 'who knows auth best?', actorId: 'portal-default', sessionId: 'sess-of-someone-else-0000000000000' });
+    expect(listEvents).toHaveBeenCalledWith(expect.any(String), 'orgiq_u-release');
+    expect(recordTurn).toHaveBeenCalledWith(expect.objectContaining({ actorId: 'orgiq_u-release' }));
+    expect(JSON.stringify((listEvents as jest.Mock).mock.calls)).not.toContain('portal-default');
   });
 
   it('anything else falls through to the agent, with the scope and stance rebuilt as prose', async () => {
