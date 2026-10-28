@@ -9,8 +9,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   VerifiedPermissionsClient,
-  ListPoliciesCommand,
   CreatePolicyCommand,
+  DeletePolicyCommand,
   GetPolicyCommand,
   UpdatePolicyCommand,
   GetSchemaCommand,
@@ -18,6 +18,7 @@ import {
 } from '@aws-sdk/client-verifiedpermissions';
 import { config } from '../config.js';
 import { splitStatements } from './cedar-parse.js';
+import { listAllPolicies, partitionSeedPolicies } from './avp-policies.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -67,7 +68,10 @@ function seedPolicyDescription(roleKey: string): string {
   return `OrgIQ ${roleKey} role (seed)`;
 }
 
-const client = new VerifiedPermissionsClient({ region: config.region });
+// Boot-only client. Adaptive retries pace a burst of writes (a store with
+// hundreds of duplicate seeds to delete) under AVP's control-plane throttle.
+const client = new VerifiedPermissionsClient({ region: config.region, retryMode: 'adaptive', maxAttempts: 10 });
+
 
 export async function seedPoliciesIfMissing(): Promise<void> {
   if (!config.auth.policyStoreId) {
@@ -77,14 +81,15 @@ export async function seedPoliciesIfMissing(): Promise<void> {
   const dir = seedsDir();
   const policyStoreId = config.auth.policyStoreId;
 
-  // Snapshot existing policies (description → policyId).
-  const existing = await client.send(new ListPoliciesCommand({ policyStoreId }));
-  const existingById = new Map<string, string>(); // description → policyId
-  for (const p of existing.policies ?? []) {
-    const desc = p.definition?.static?.description ?? '';
-    const id = p.policyId ?? '';
-    if (desc && id) existingById.set(desc, id);
-  }
+  // Snapshot existing policies (description → policyId). Reading only the
+  // first page made every boot re-create the seeds it did not see; the live
+  // store reached ~9 copies of each, and only the copy in this map was ever
+  // updated, so a stale copy kept granting what its role had lost. Extra
+  // copies of a seed description are deleted; the latest-updated one stays.
+  const { keep: existingById, extra } = partitionSeedPolicies(await listAllPolicies(client, policyStoreId));
+  for (const policyId of extra) await client.send(new DeletePolicyCommand({ policyStoreId, policyId }));
+  const removed = extra.length;
+  if (removed) console.log(`[seed] removed ${removed} duplicate seed policies`);
 
   function normalizeStmt(s: string): string {
     return s.replace(/\s+/g, ' ').trim();
@@ -130,7 +135,7 @@ export async function seedPoliciesIfMissing(): Promise<void> {
       }
     }
   }
-  if (created === 0 && updated === 0) {
+  if (created === 0 && updated === 0 && removed === 0) {
     console.log('[seed] all baseline policies already present and up to date');
   }
 }

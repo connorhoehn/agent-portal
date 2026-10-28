@@ -8,7 +8,6 @@
 import { Router, type Response } from 'express';
 import {
   VerifiedPermissionsClient,
-  ListPoliciesCommand,
   GetPolicyCommand,
   CreatePolicyCommand,
   UpdatePolicyCommand,
@@ -22,6 +21,7 @@ import { clearAuthzCache, requireAction, requireAnyAction } from '../lib/authz.j
 import { logAuthz } from '../lib/audit.js';
 import { config } from '../config.js';
 import { roleRegistry } from '../lib/role-registry.js';
+import { listAllPolicies } from '../lib/avp-policies.js';
 import { listTenants, listUsers, getUser, createTenant, createUser, setGrants } from '../providers/identity.js';
 // providers/identity.ts (not owned by this route file) has no write for
 // person_id on an *existing* user — createUser's upsert only sets it on
@@ -308,8 +308,7 @@ function ensureStore(res: import('express').Response): string | null {
 
 identityRouter.get('/policies', identityAdminOnly, asyncHandler(async (_req, res) => {
   const policyStoreId = ensureStore(res); if (!policyStoreId) return;
-  const list = await client.send(new ListPoliciesCommand({ policyStoreId }));
-  const items = await Promise.all((list.policies ?? []).map(async (p) => {
+  const items = await Promise.all((await listAllPolicies(client, policyStoreId)).map(async (p) => {
     const detail = await client.send(new GetPolicyCommand({ policyStoreId, policyId: p.policyId }));
     const def = detail.definition;
     const stmt = def && 'static' in def ? def.static : undefined;
