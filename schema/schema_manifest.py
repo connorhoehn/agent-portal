@@ -55,7 +55,8 @@ def entry_checksum(entry, schema_dir=None):
     """sha256 over the entry's definition and every SQL file it names."""
     base = Path(schema_dir or SCHEMA_DIR)
     h = hashlib.sha256()
-    spec = {k: v for k, v in entry.items() if k not in ('why',)}
+    # `env` is the operator defaults a command runs with, not what it does.
+    spec = {k: v for k, v in entry.items() if k not in ('why', 'env')}
     h.update(json.dumps(spec, sort_keys=True).encode())
     for key in ('file', 'dry_run_file'):
         if entry.get(key):

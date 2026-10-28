@@ -300,8 +300,8 @@ def within_tolerance(approved, fresh, pct=ROW_GROWTH_PCT):
 
 # --- the runner -----------------------------------------------------------
 
-def default_run_command(argv, cwd):
-    return subprocess.run(argv, cwd=cwd).returncode
+def default_run_command(argv, cwd, env=None):
+    return subprocess.run(argv, cwd=cwd, env=env).returncode
 
 
 class Runner:
@@ -349,7 +349,9 @@ class Runner:
             report_path = os.path.join(tmp, 'report.json')
             argv = [a.replace('{report}', report_path) for a in entry[key]]
             cwd = REPO_ROOT / entry.get('cwd', '.')
-            code = self.run_command(argv, str(cwd))
+            # An entry's `env` fills only what the operator's shell leaves unset.
+            env = {**entry['env'], **os.environ} if entry.get('env') else None
+            code = self.run_command(argv, str(cwd), env)
             if code != 0:
                 raise MigrationError(f"{entry['id']}: {' '.join(argv)} exited {code}")
             if not os.path.exists(report_path):

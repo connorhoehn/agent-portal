@@ -296,6 +296,10 @@
     {
       "id": "2026-10-27-page-thread",
       "kind": "data",
+      "env": {
+        "SOCIAL_CHAT_STORE": "dynamo",
+        "SOCIAL_CHAT_TABLE_PREFIX": "orgiq-social-"
+      },
       "before": "middleware",
       "cwd": "middleware",
       "dry_run_command": [
@@ -322,7 +326,7 @@
           "removedAuthors"
         ]
       },
-      "why": "Moves human work_item_comments into the orgiq:work:<id> chat threads (middleware/src/lib/migrate-work-comments.ts). Runs with the operator's middleware env (SOCIAL_CHAT_STORE=dynamo and the Aurora vars). Must be applied before the BFF that reads the thread is deployed."
+      "why": "Moves human work_item_comments into the orgiq:work:<id> chat threads (middleware/src/lib/migrate-work-comments.ts). Runs against the deployed chat tables (`env`; the operator's shell overrides it) and the Aurora vars from middleware/.env.aws. Must be applied before the BFF that reads the thread is deployed."
     }
   ],
   "seed_run": [

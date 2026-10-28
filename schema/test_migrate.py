@@ -4,10 +4,12 @@ same runner against a real one."""
 import contextlib
 import io
 import json
+import os
 import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 from unittest.mock import Mock
 
 import migrate as m
@@ -84,6 +86,7 @@ class RunnerTests(unittest.TestCase):
         self.write_manifest()
         self.x, self.ledger, self.lines = FakeExecutor(), FakeLedger(), []
         self.commands = []
+        self.envs = []
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -99,8 +102,9 @@ class RunnerTests(unittest.TestCase):
         self.manifest.write_text(json.dumps({'entries': entries, 'seed_run': ['a', 'seed']}))
 
     def runner(self, run_command=None):
-        def run(argv, cwd):
+        def run(argv, cwd, env=None):
             self.commands.append(argv)
+            self.envs.append(env)
             return run_command(argv) if run_command else 0
         return m.Runner(self.x, self.ledger, lambda: 'arn:aws:sts::1:assumed-role/dev/alice',
                         manifest_path=self.manifest, schema_dir=self.dir,
@@ -242,6 +246,18 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(self.runner(run).apply(only='c'), m.OK)
         self.assertEqual([c[:2] for c in self.commands], [['tool', '--dry-run'], ['tool', '--dry-run'], ['tool', '--report']])
         self.assertEqual(self.runner(lambda argv: 1).apply(only='c'), m.OK, 'applied entries do not re-run')
+
+    def test_an_entry_env_fills_only_what_the_shell_leaves_unset(self):
+        entry = {'id': 'c', 'kind': 'data', 'env': {'MIGRATE_TEST_STORE': 'dynamo', 'MIGRATE_TEST_PREFIX': 'p-'},
+                 'dry_run_command': ['tool', '--report', '{report}'], 'apply_command': ['tool']}
+        self.write_manifest([entry])
+        with mock.patch.dict(os.environ, {'MIGRATE_TEST_PREFIX': 'operator-'}):
+            self.runner().plan(only='c')
+        self.assertEqual(self.envs[-1]['MIGRATE_TEST_STORE'], 'dynamo')
+        self.assertEqual(self.envs[-1]['MIGRATE_TEST_PREFIX'], 'operator-')
+        without = {k: v for k, v in entry.items() if k != 'env'}
+        self.assertEqual(sm.entry_checksum(entry, self.dir), sm.entry_checksum(without, self.dir),
+                         'env is operator config, so adding it never re-plans an applied entry')
 
     def test_a_failing_command_records_failed(self):
         self.write_manifest([{'id': 'c', 'kind': 'data', 'dry_run_command': ['t', '{report}'],
