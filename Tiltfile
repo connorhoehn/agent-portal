@@ -29,33 +29,36 @@ _mw_env = {
 }
 _mw_env.update(_media_env)
 
-# SSH forward to the platform-api published inside the Colima VM. Separate from
-# the capacity forwarder (never touch that one); same key/options.
+# SSH forwards into the Colima VM. The key path, user and port come from
+# `colima ssh-config` at start, never literals: they differ per machine and the
+# port changes whenever the VM restarts. Command-line options override the
+# generated config, so these forwards never share Lima's control socket.
+def _colima_forward(forwards):
+    cfg = '"${TMPDIR:-/tmp}/orgiq-colima-ssh.config"'
+    return ' '.join([
+        'colima ssh-config > ' + cfg + ' &&',
+        'exec ssh -F ' + cfg,
+        '-o ControlMaster=no -o ControlPath=none -o BatchMode=yes -o IdentitiesOnly=yes',
+        '-o ExitOnForwardFailure=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=3',
+        '-N', ' '.join(['-L 127.0.0.1:%d:127.0.0.1:%d' % (port, port) for port in forwards]),
+        'colima',
+    ])
+
+# The platform-api published inside the VM. Separate from the capacity
+# forwarder (never touch that one).
 local_resource(
     'platform-api-forward',
-    serve_cmd=' '.join([
-        'exec ssh -F /dev/null -i /Users/connorhoehn/.colima/_lima/_config/user',
-        '-o ControlMaster=no -o ControlPath=none -o BatchMode=yes -o IdentitiesOnly=yes',
-        '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
-        '-o ExitOnForwardFailure=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=3',
-        '-p 50697 -N -L 127.0.0.1:23002:127.0.0.1:23002 -L 127.0.0.1:16480:127.0.0.1:16480 connorhoehn@127.0.0.1',
-    ]),
+    serve_cmd=_colima_forward([23002, 16480]),
     labels=['media'],
 )
 
 # Document canvas: the labelled social-documents containers in the Colima VM
 # (gateway :28080 serves the Yjs socket, platform-api :23001 the comments and
-# workflows). Same key/options as platform-api-forward. Requires
-# `docker start orgiq-social-redis orgiq-social-dynamodb` if the VM restarted.
+# workflows). Requires `docker start orgiq-social-redis orgiq-social-dynamodb`
+# if the VM restarted.
 local_resource(
     'social-docs-forward',
-    serve_cmd=' '.join([
-        'exec ssh -F /dev/null -i /Users/connorhoehn/.colima/_lima/_config/user',
-        '-o ControlMaster=no -o ControlPath=none -o BatchMode=yes -o IdentitiesOnly=yes',
-        '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
-        '-o ExitOnForwardFailure=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=3',
-        '-p 50697 -N -L 127.0.0.1:28080:127.0.0.1:28080 -L 127.0.0.1:23001:127.0.0.1:23001 connorhoehn@127.0.0.1',
-    ]),
+    serve_cmd=_colima_forward([28080, 23001]),
     labels=['media'],
 )
 
