@@ -164,9 +164,10 @@ the current behaviour lives; each item is the gap it closes.
 - **DE-43 Separation of duties.** `POST /changes/:id/decide` does not stop the
   author approving their own change; an SME holding `ManageDevbox` can edit or
   delete the SDLC policies that gate them (`routes/sdlc.ts`).
-- **DE-44 Scope checks on every entry point.** `/internal/devbox` accepts
-  `projectId` from the body without the steward check `POST /boxes` runs
-  (`routes/internal-devbox.ts`).
+- **DE-44 Scope checks on every entry point.** Done 2026-10-27:
+  `/internal/devbox/sessions` runs the steward check for the signed principal's
+  user (`userStewardsInitiative`, `lib/initiative-scope.ts`) before charging a
+  box to `projectId`. Other entry points not yet audited.
 - **DE-45 Credentials out of shell strings.** The clone token is interpolated
   into a shell command (`providers/agent-projects.ts`, flagged as needing an
   image change); short-lived, repo-scoped tokens (GitHub App) per run.
@@ -190,9 +191,11 @@ the current behaviour lives; each item is the gap it closes.
 - **DE-50 Kill switches and alerts.** Fleet-wide pause, per-initiative pause, and
   alarms on spend rate, budget thresholds (50/80/100 %), stuck runs and reaper
   kills; today the reaper only writes `console.warn`.
-- **DE-51 Fail-closed callbacks.** Lab callback auth is open when
-  `LAB_CALLBACK_SECRET` is unset (`routes/lab.ts`), and `LAB_API_BASE` was never
-  set so the lab loop is inert in AWS.
+- **DE-51 Lab loop wiring.** Callback auth already fails closed in production
+  (`requireServiceAuth` answers 503 with no secret, `service-auth.ts`; covered
+  by `service-auth-guard.test.ts`) and the deployed middleware sets
+  `LAB_CALLBACK_SECRET`; open only in development. What remains is that
+  `LAB_API_BASE` was never set, so the lab loop is inert in AWS (needs DE-52).
 - **DE-52 Deployable devbox phase 2.** `OrgIQ-Devbox` is phase 1 only in AWS (no
   runtime); fold `agents/devbox/build.sh` and `deployDevbox` into DE-1/DE-14.
 - **DE-53 Spend and run reporting per initiative.** One view joining allocation,

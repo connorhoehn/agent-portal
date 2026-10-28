@@ -14,9 +14,16 @@ import type { Request, Response, NextFunction } from 'express';
 import request, { attachToSharedServer } from '../../test-support/http.js';
 import { SERVICE_AUTH_HEADER, signEnvelope } from '@connorhoehn/service-runtime';
 import { internalDevboxRouter } from '../internal-devbox.js';
-import { _resetFleet, getBox } from '../../lib/devbox-fleet.js';
+import { userStewardsInitiative } from '../../lib/initiative-scope.js';
+import { _resetFleet, getBox, listBoxes } from '../../lib/devbox-fleet.js';
 import { _resetLoopMock } from '../../mock/devbox-agent-loop.js';
 import { isValidFileId } from '../../lib/devbox-files.js';
+
+jest.mock('../../lib/initiative-scope.js', () => ({
+  ...jest.requireActual('../../lib/initiative-scope.js'),
+  userStewardsInitiative: jest.fn(async () => false),
+}));
+const stewards = userStewardsInitiative as jest.MockedFunction<typeof userStewardsInitiative>;
 
 const SECRET = 'devbox-internal-test-secret';
 const originalEnv = { ...process.env };
@@ -115,6 +122,34 @@ describe('internal devbox router — envelope', () => {
     // to be a different principal — the extra body-level check must catch it.
     const res = await request(app()).post('/internal/devbox/sessions').set(signed(body)).send(body);
     expect(res.status).toBe(400);
+  });
+});
+
+describe('internal devbox router — initiative charge', () => {
+  it('charges a box to an initiative the requesting user stewards', async () => {
+    stewards.mockResolvedValueOnce(true);
+    const body = { principal: principal('u-loop-owner'), label: 'x', projectId: ' p-auth-migration ' };
+    const res = await request(app()).post('/internal/devbox/sessions').set(signed(body)).send(body);
+    expect(res.status).toBe(201);
+    expect(stewards).toHaveBeenLastCalledWith('u-loop-owner', 'p-auth-migration');
+    expect(getBox(res.body.boxId)?.projectId).toBe('p-auth-migration');
+  });
+
+  it('403s a projectId the requesting user does not steward, and registers nothing', async () => {
+    stewards.mockResolvedValueOnce(false);
+    const body = { principal: principal('u-stranger'), label: 'x', projectId: 'p-auth-migration' };
+    const res = await request(app()).post('/internal/devbox/sessions').set(signed(body)).send(body);
+    expect(res.status).toBe(403);
+    expect(res.body.boxId).toBeUndefined();
+    expect(listBoxes()).toHaveLength(0);
+  });
+
+  it('asks nothing when no projectId is given', async () => {
+    stewards.mockClear();
+    const body = { principal: principal(), label: 'x' };
+    const res = await request(app()).post('/internal/devbox/sessions').set(signed(body)).send(body);
+    expect(res.status).toBe(201);
+    expect(stewards).not.toHaveBeenCalled();
   });
 });
 

@@ -7,6 +7,16 @@ running. Do not run Codex and Claude against the same worktree concurrently.
 Older handoffs and dated verification records are historical evidence, not a
 substitute for the state below. Recheck Git and running artifacts before edits.
 
+## Update — the AWS deploy (2026-10-27, evening)
+
+The platform now runs in AWS (account 647757222309): 22 stacks, the
+middleware, platform-api and document workspace on ECS, 8 runtimes, the portal
+on CloudFront, and the three additive schemas applied to Aurora. That deploy's
+open items are in `docs/aws-deploy-open-items-2026-10-27.md` and its backlog
+in `docs/deployment-enhancements-2026-10-27.md`; the "credentials" and
+"cloud" caveats below predate it. The work that can be finished without AWS
+is tracked in `docs/local-followups-goal-2026-10-27.md`.
+
 ## Update — queue migration and projection consumer (Claude Code, 2026-10-27, later)
 
 Pushed: message-queue 0.6.0 (`3cc40aa`, tag `v0.6.0`) with the legacy `ddb` →
@@ -344,8 +354,8 @@ were not repaired or re-verified by C5. Use Tilt's current state before walks.
 - No cloud apply/deployment, shared mock reset, business-data cleanup or blanket
   process kill. Stop only processes/resources the current verification owns.
 - Keep the existing single-gateway safeguard until capacity is accepted.
-- Default AWS credentials were historically invalid; not refreshed or newly
-  verified here. No Aurora migration is claimed applied by these local tests.
+- Default AWS credentials are invalid on this machine; the 2026-10-27 deploy
+  ran from another. The page-thread data migration has not run on Aurora.
 - Root `CLAUDE.md` retains open product decisions: burn-down dates, old knowledge
   comment retirement, Alt-click Social panel, Communication landing depth and
   deck save-permission unification. Do not silently decide them as cleanup.

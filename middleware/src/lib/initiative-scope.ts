@@ -69,6 +69,26 @@ export async function stewardsInitiative(
 }
 
 /**
+ * The same rule for a user id with no session in hand: a service-signed call
+ * names who it acts for (`principal.requestedBy`), not a cookie. The user is
+ * read authoritatively so a revoked grant cannot charge an initiative, and an
+ * org-wide role held in any tenant bypasses as it does for a session. Unknown
+ * user, unlinked person or a failed read resolves to NOT attached.
+ */
+export async function userStewardsInitiative(userId: string, initiativeId: string): Promise<boolean> {
+  try {
+    const { getUser } = await providers();
+    const user = await getUser(userId, { authoritative: true });
+    if (!user) return false;
+    if (Object.values(user.grants).flat().some((role) => ORG_WIDE_INITIATIVE_ROLES.includes(role))) return true;
+    return await personOnInitiative(user.personId, initiativeId);
+  } catch (err) {
+    console.warn(`[initiative-scope] could not resolve steward ${userId} for ${initiativeId}:`, (err as Error).message);
+    return false;
+  }
+}
+
+/**
  * The same "mine" rule for a person id with no session in hand and NO role
  * bypass: owner or contributor, nothing else. Used where the question is about
  * a recorded person (a proposal's author), not the caller. A lookup failure or

@@ -43,6 +43,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { SERVICE_AUTH_HEADER, verifyEnvelope } from '@connorhoehn/service-runtime';
 import { asyncHandler } from '../lib/async-handler.js';
+import { userStewardsInitiative } from '../lib/initiative-scope.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { normalizeRuntimeSessionId, RUNTIME_SESSION_ID_MIN_LENGTH } from '../lib/runtime-session.js';
 import { registerBox, getBox, getBoxBySession, appendEvent } from '../lib/devbox-fleet.js';
@@ -168,13 +169,24 @@ internalDevboxRouter.post('/sessions', asyncHandler(async (req, res) => {
   if (!principal) return;
 
   const body = (req.body ?? {}) as { label?: string; projectId?: string };
+  // The same steward check POST /api/devbox/boxes runs: charging a box to an
+  // initiative shares it with everyone on it, so the signature proves which
+  // service called, not that the user it acts for may claim this initiative.
+  const projectId = String(body.projectId ?? '').trim();
+  if (projectId && !await userStewardsInitiative(principal.requestedBy, projectId)) {
+    res.status(403).json({
+      error: 'the requesting user can only charge a computer to an initiative they own or contribute to',
+      projectId,
+    });
+    return;
+  }
   const sessionId = normalizeRuntimeSessionId();
   const box = registerBox({
     sessionId,
     ownerId: principal.requestedBy,
     source: principal.service,
     ...(body.label ? { label: body.label } : {}),
-    ...(body.projectId ? { projectId: body.projectId } : {}),
+    ...(projectId ? { projectId } : {}),
   });
   res.status(201).json({ sessionId, boxId: box.id });
 }));

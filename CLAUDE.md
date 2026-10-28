@@ -24,13 +24,15 @@ Durable facts the handoff does not repeat:
   (`077d7594`) by full sha; infra consumes
   `@connorhoehn/realtime-examples-cdk` 0.1.0 from `infra/vendor/`. Move a pin by replacing the tarball or sha,
   then clear `portal/node_modules/.vite` and restart Vite.
-- Three additive schema changes are registered in both loaders but **not
-  applied to Aurora**: `assessment_team_members_schema.sql`,
-  `work_item_comment_migration_schema.sql`, `work_item_documents_schema.sql`
-  (plus `people.avatar_url`). Deploy order for the page-thread migration:
-  apply the ledger schema, dry-run, migrate, then deploy the BFF.
-- Default AWS credentials have been `InvalidClientTokenId` since early October;
-  nothing has been deployed or verified in the cloud since. Capacity for 100
+- Three additive schema changes (`assessment_team_members_schema.sql`,
+  `work_item_comment_migration_schema.sql`, `work_item_documents_schema.sql`,
+  plus `people.avatar_url`) were applied to Aurora on 2026-10-27; the
+  page-thread data migration itself has **not** run (needs sign-off). Order:
+  dry-run, migrate, then deploy the BFF.
+- The platform was deployed to 647757222309 on 2026-10-26/27 from a machine
+  with working credentials (`docs/aws-deploy-open-items-2026-10-27.md`);
+  machines whose default credentials are still `InvalidClientTokenId` cannot
+  verify or change it. Capacity for 100
   calls / 1,000 sockets is unaccepted (1 vCPU BFF is CPU-bound; decision owed:
   raise `middlewareCpu`, accept a smaller profile, or lift the single-gateway
   safeguard).
