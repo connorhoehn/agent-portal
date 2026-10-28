@@ -19,9 +19,9 @@ Rules for whoever continues (including an hourly loop):
 
 | # | Fix | Spec | Done when | State |
 |---|-----|------|-----------|-------|
-| 1 | Chat memory is per user, never `?actorId=` / body actor | DE-8 | sessions + agents tests prove another user's actor is ignored; no session reads nothing | code done, uncommitted — waiting on the middleware suite |
-| 2 | SDLC guard counts enabled policies | DE-43 | an all-disabled policy set routes to a person (sdlc-writes test) | code done, uncommitted |
-| 3 | Clone runs server-side; token never reaches the browser | DE-44 row 12, DE-45 | route returns no `command`, scrubs git output, refuses an unreachable box; wire snapshot recaptured | code done, uncommitted |
+| 1 | Chat memory is per user, never `?actorId=` / body actor | DE-8 | sessions + agents tests prove another user's actor is ignored; no session reads nothing | done (`16e28942`) |
+| 2 | SDLC guard counts enabled policies | DE-43 | an all-disabled policy set routes to a person (sdlc-writes test) | done (`9cd6e89e`) |
+| 3 | Clone runs server-side; token never reaches the browser | DE-44 row 12, DE-45 | route returns no `command`, scrubs git output, refuses an unreachable box; wire snapshot recaptured | done (`09ebcdef`); middleware 7,575 tests green |
 | 4 | Devbox org access uses `orgiq_graph_reader`, not the master secret | DE-40 | synth test: master secret absent from the devbox stack | done (`9e759817`) |
 | 5 | deploy.sh inference stops on a failed read | DE-16 | live_read test with a fake `aws` (bash 3.2) | done (`83f0b9dc`) |
 | 6 | Shared scope check + bots create/patch/run, codebase link/runs | DE-44 rows 1–3, 10, 14 | `requireInitiativeScope` in lib/initiative-scope.ts; deny tests per route (attached-nowhere sme 403, steward pass, org-leader bypass) | open |
