@@ -166,6 +166,23 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     const onlyAgents = onlyAgentsCtx
       ? new Set(onlyAgentsCtx.split(',').map(s => s.trim()).filter(Boolean))
       : null;
+    // A runtime left out of the template is DELETED, so onlyAgents on a live
+    // stack removed every runtime it did not name (DE-1). deploy.sh passes the
+    // live runtimes' logical ids as liveRuntimeIds; leaving one out is refused
+    // unless the operator says allowRuntimeDelete=true. onlyAgents stays the
+    // tool for a first partial deploy.
+    const liveRuntimeIds = new Set(String(this.node.tryGetContext('liveRuntimeIds') ?? '')
+      .split(',').map(s => s.trim()).filter(Boolean));
+    const allowRuntimeDelete = this.node.tryGetContext('allowRuntimeDelete') === 'true'
+      || this.node.tryGetContext('allowRuntimeDelete') === true;
+    if (deployRuntimes && onlyAgents && !allowRuntimeDelete) {
+      const dropped = ALL_AGENT_NAMES.filter(name => !onlyAgents.has(name)
+        && liveRuntimeIds.has(`${this.pascal(name)}Runtime`));
+      if (dropped.length) {
+        throw new Error(`onlyAgents=${onlyAgentsCtx} would delete live runtime(s): ${dropped.join(', ')}. `
+          + 'Name every live agent, or pass --context allowRuntimeDelete=true to delete them on purpose.');
+      }
+    }
 
     // Read-only credentials are mandatory for model-authored SQL. Deploy the
     // Aurora reader secret and apply its role/password before enabling runtimes.

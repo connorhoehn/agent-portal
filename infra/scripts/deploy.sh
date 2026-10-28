@@ -406,6 +406,13 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
   live_read RUNTIME_COUNT cloudformation list-stack-resources --stack-name OrgIQ-AgentCoreRuntime --region "$REGION" \
     --query "length(StackResourceSummaries[?ResourceType=='AWS::BedrockAgentCore::Runtime'])" --output text
   [[ "$RUNTIME_COUNT" =~ ^[1-9] ]] && infer deployRuntimes true
+  # Which runtimes are live, so an onlyAgents that would delete one is refused
+  # at synth (agentcore-runtime-stack.ts, DE-1).
+  if [[ "$RUNTIME_COUNT" =~ ^[1-9] ]]; then
+    live_read LIVE_RUNTIMES cloudformation list-stack-resources --stack-name OrgIQ-AgentCoreRuntime --region "$REGION" \
+      --query "StackResourceSummaries[?ResourceType=='AWS::BedrockAgentCore::Runtime'].LogicalResourceId" --output text
+    [[ -n "$LIVE_RUNTIMES" ]] && infer liveRuntimeIds "$(echo "$LIVE_RUNTIMES" | tr -s '[:space:]' ',' | sed 's/,$//')"
+  fi
 
   live_read MW_DESIRED ecs describe-services --cluster "${PREFIX}-middleware" --services "${PREFIX}-middleware" --region "$REGION" \
     --query 'services[0].desiredCount' --output text

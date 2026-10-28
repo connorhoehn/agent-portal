@@ -69,7 +69,8 @@ describe('second-phase inference carries every live choice forward', () => {
   const fakeAws = `
 args="$*"
 case "$args" in
-  *"list-stack-resources --stack-name OrgIQ-AgentCoreRuntime"*) echo 8 ;;
+  *"list-stack-resources --stack-name OrgIQ-AgentCoreRuntime"*"LogicalResourceId"*) printf 'SupervisorRuntime\tSearchRuntime\n' ;;
+  *"list-stack-resources --stack-name OrgIQ-AgentCoreRuntime"*) echo 2 ;;
   *"describe-stacks --stack-name OrgIQ-SocialMedia"*"StackStatus"*) echo UPDATE_COMPLETE ;;
   *"describe-stacks --stack-name OrgIQ-SocialMedia"*"TurnPublicIp"*) echo 3.3.3.3 ;;
   *"describe-stacks --stack-name OrgIQ-SocialMedia"*"TurnAllowedCidrs"*) echo 9.179.13.10/32 ;;
@@ -94,7 +95,7 @@ esac`;
       env: { ...process.env, PATH: `${dir}:${process.env['PATH']}` }, encoding: 'utf8',
     });
     assert.equal(r.status, 0, r.stderr);
-    for (const ctx of ['deployRuntimes=true', 'deployDevbox=true', 'devboxOrgAccess=true',
+    for (const ctx of ['deployRuntimes=true', 'liveRuntimeIds=SupervisorRuntime,SearchRuntime', 'deployDevbox=true', 'devboxOrgAccess=true',
       'labApiBase=https://d1.cloudfront.net', 'labCallbackSecret=s3cret', 'deployTurn=true', 'turnAllowCidr=9.179.13.10/32']) {
       assert.ok(r.stdout.includes(ctx), `missing --context ${ctx}\n${r.stdout}`);
     }

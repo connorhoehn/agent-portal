@@ -383,3 +383,20 @@ describe('model policy', () => {
     }
   });
 });
+
+describe('onlyAgents cannot delete live runtimes (DE-1)', () => {
+  const LIVE = 'SupervisorRuntime,SearchRuntime,AdvisorRuntime';
+
+  test('refuses an onlyAgents that leaves out a live runtime, naming it', () => {
+    assert.throws(
+      () => runtimeStack({ deployRuntimes: 'true', onlyAgents: 'search', liveRuntimeIds: LIVE }),
+      /would delete live runtime\(s\): supervisor, advisor/,
+    );
+  });
+
+  test('allows it when every live agent is named, on a first partial deploy, or on purpose', () => {
+    runtimeStack({ deployRuntimes: 'true', onlyAgents: 'supervisor,search,advisor', liveRuntimeIds: LIVE });
+    runtimeStack({ deployRuntimes: 'true', onlyAgents: 'search' });
+    runtimeStack({ deployRuntimes: 'true', onlyAgents: 'search', liveRuntimeIds: LIVE, allowRuntimeDelete: 'true' });
+  });
+});
