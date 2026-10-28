@@ -25,7 +25,7 @@ const { default: WebSocket } = await mwImport('ws');
 const session = { sub: userId, name: user.name, tenant, role, grants: user.grants, epoch: user.epoch, iat: Math.floor(Date.now() / 1000) };
 const { token } = await signRealtimeToken(realtimeClaims(session as never), secretValue('orgiq-realtime-jwt-secret'));
 
-const url = `${portal.replace(/^https:/, 'wss:').replace(/\/$/, '')}/ws`;
+const url = `${portal.replace(/^http/, "ws").replace(/\/$/, "")}/ws`;
 const ws = new WebSocket(url, ['bearer-token-v1', token], { headers: { Origin: portal } });
 const t0 = Date.now();
 const stamp = () => `+${Date.now() - t0}ms`;

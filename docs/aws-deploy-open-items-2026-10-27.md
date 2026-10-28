@@ -56,6 +56,31 @@ cache/direct-connection options below are no longer needed for this symptom.
 Not yet proven in AWS: rebuild and roll the middleware image, then run
 `cloud-call-smoke` with `CLOUD_SEAT_SETTLE_MS=0`.
 
+**Update (2026-10-28, AWS).** Proven: with the 0.140.0 image deployed,
+`cloud-call-smoke` with `CLOUD_SEAT_SETTLE_MS=0` passes 4/4; both joiners
+end in one call. What remains is a **~10 s wait before any seat is accepted**,
+the first joiner's included: `call-binding` answers 403 "Accepted call seat
+required" (and `/api/realtime/call-seat` `{"allowed":false}`) until then, so
+media starts ~10 s after Join. Measured locally against the deployed Aurora/AVP
+(this tree, the task's env, a local Redis): join → seat allowed **11.1 s**;
+one join drives **~100 serial directory reads** (`readCurrentUsers`, ~30–65 ms
+each). Cause: `lib/call-pages.ts` wraps the call store, and its
+`registerParticipant` / `claimAcceptedSeat` await the huddle chat's
+`registered()` reconciliation (`lib/call-chat.ts` `participant()` ×3 per seat,
+each re-reading the principal and its grants twice) before returning, and the
+library's join awaits that write before `markAccepted`. The other ~46 reads
+are the authority engine's load + recheck per channel decision.
+Moving the chat reconciliation off the seat path (queued per call, history
+floor stamped with the seat time) was tried and **reverted**: 11
+`routes/__tests__/call-chat.test.ts` cases fail, one of them security-relevant
+("a delayed membership reconciliation cannot restore a departed seat" got 200,
+not 409). The options left need a decision: (a) make the chat reconciliation
+cheaper while keeping its order (one principal read per `participant()` step
+instead of per sub-check); (b) a bounded directory memo (e.g. ≤1 s, dropped on
+epoch bump; the BFF is the single writer while the single-gateway safeguard
+holds), which relaxes the "every decision starts a new read" rule in
+`providers/identity.ts`; (c) accept media starting ~10 s after Join.
+
 **Symptom.** The first person to Join a hangout room is registered as the
 lobby's live call by the gateway ~9 s after they click (owner's call id minted
 17:18:43.75, gateway `lobby-occupancy active:true` at 17:18:53.1). Anyone who
@@ -169,6 +194,7 @@ the `orgiq-documents-{gateway,platform,catalog,mq,redis}` ECR repos, secrets
 | Middleware image build `ENOENT …message-queue-0.4.0.tgz` | lockfile resolves `file:vendor/…`, deps stage never copied `vendor/` | `COPY vendor ./vendor` in `middleware/Dockerfile` |
 | deploy.sh's gate: page-thread migrator "Refusing to migrate into a process-local memory store" | the manifest left the chat-store env to the operator's shell | manifest entries carry `env` (outside the checksum) |
 | `PolicySupervisorFullAccess` NotStabilized "Target … does not exist" | Cedar actions used `<target>__<tool>`; the gateway names tools `<target>___<tool>` | `___` in `lib/agentcore-gateway-stack.ts` |
+| Every BFF boot added ~25–50 Cedar policies (244 in the store, ~9 copies per seed statement) | `seedPoliciesIfMissing` read only `ListPolicies`' first page; only the copy it saw was ever updated, so stale copies kept their old permits | `lib/avp-policies.ts` paginates and keeps one copy per seed description (the latest-updated); the seeder's client retries adaptively under AVP's throttle. Store cleaned to 40 policies on 2026-10-28 |
 
 The 2026-10-28 rollout also applied the schema ledger baseline and the
 page-thread data migration (19 comments, 0 failures; `2026-09-05-drop-newsroom`

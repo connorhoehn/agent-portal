@@ -1,6 +1,6 @@
 ---
 name: deployed-stack-debug
-description: Debug the DEPLOYED OrgIQ stack in AWS (account 647757222309) when something works locally but fails in the cloud — calls, the realtime gateway, call-binding/seat proofs, documents/canvas, or any route that answers a generic 503. Probes the live gateway as a seeded user, runs middleware provider code against the real Aurora, compares local vs deployed call-state stores, maps minified portal stack traces to source and finds duplicate module instances in the bundle, and runs the two cloud smoke specs.
+description: Debug the DEPLOYED OrgIQ stack in AWS (account 647757222309) when something works locally but fails or is slow in the cloud — calls, the realtime gateway, call-binding/seat proofs, documents/canvas, or any route that answers a generic 503. Probes the live gateway as a seeded user, runs middleware provider code against the real Aurora, runs this tree locally with the deployed task's config while timing every AWS SDK call, compares local vs deployed call-state stores, maps minified portal stack traces to source and finds duplicate module instances in the bundle, and runs the two cloud smoke specs.
 ---
 
 # Debugging the deployed stack
@@ -95,15 +95,51 @@ code matches the published asset first (same commit and lockfile give the same
 positions). Get frames from the browser console: an error boundary swallows
 `pageerror`, so capture `console` messages with their full text.
 
+## 6. Slow only in AWS: this tree, the task's config — `task-env.py`, `sdk-timing.mjs`, `seat-latency.mts`
+
+When the deployed path is slow or wrong and no log says why, run this
+checkout locally with the deployed task's exact environment and count what it
+does. Local timings run ~2× AWS's (laptop → Data API), so compare shapes and
+counts, not milliseconds.
+
+```bash
+S=.claude/skills/deployed-stack-debug/scripts
+python3 $S/task-env.py --out .scratch/mw-cloud.env          # mode 600, secrets resolved, never printed
+docker run -d --rm --name claude-mw-redis -p 127.0.0.1:26400:6379 redis:7-alpine
+cd middleware && source ../.scratch/mw-cloud.env && \
+  NODE_OPTIONS="--import $PWD/../$S/sdk-timing.mjs" npx tsx src/index.ts > ../.scratch/mw-cloud.log 2>&1 &
+npx tsx ../$S/gateway-probe.mts --portal http://127.0.0.1:3031 --user u-farah --tenant social --send '…'
+npx tsx ../$S/seat-latency.mts            # join → /api/realtime/call-seat allowed, in ms
+grep '^\[sdk' ../.scratch/mw-cloud.log   # every SDK call with its duration; [sdk-stack] = who asked
+```
+
+- **The boot is real.** It runs the Cedar seeder against the deployed policy
+  store and the recovery sweeps against the deployed Aurora, as a task start
+  does. Port 3031 keeps it clear of Tilt's servers.
+- Directory reads are batched through `setImmediate`
+  (`providers/identity.ts` `queuedAuthoritativeUser`), which cuts the async
+  stack: `[sdk-stack]` shows only the provider. To name the caller, log
+  `new Error().stack` at the queue's entry point temporarily, then revert.
+- Afterwards stop the server, `docker rm -f claude-mw-redis`, and delete
+  `.scratch/mw-cloud.env`.
+
+How it was used (2026-10-28): a join drove ~100 serial directory reads, which
+is the ~10 s before a call seat is accepted (open item 1). Boot logs from the
+same run showed the seeder duplicating Cedar policies on every start.
+
 ## Ruled out already (2026-10-27)
 
 - Call discovery and the lobby watch work on the deployed gateway.
 - Redis and in-memory call stores agree on register/lookup/accept.
 - `HUDDLE_CHAT_TENANTS` includes `social`.
-- The ~9 s call join window is open: `docs/aws-deploy-open-items-2026-10-27.md` item 1.
+- The parallel-call split is fixed in AWS (0.140.0); what remains is the ~10 s
+  before a seat is accepted, with its cause measured: item 1 of
+  `docs/aws-deploy-open-items-2026-10-27.md`.
+- The gateway's own admission is fast (~0.2–0.7 s even from a laptop); Redis
+  logs no timeouts; the event loop p99 is ~11 ms.
 
 ## Afterwards
 
 Leave nothing behind: no `*.tmp.*` files in the repo, no probe containers
-(`docker ps | grep claude-`), and record new cloud-only failure classes in
+(`docker ps | grep claude-`), no `.scratch/mw-cloud.env`, and record new cloud-only failure classes in
 `docs/aws-deploy-open-items-*.md` or `docs/deployment-enhancements-*.md`.
