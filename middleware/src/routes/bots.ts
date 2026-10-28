@@ -461,7 +461,10 @@ botsRouter.post('/work-items/:id/estimate', dispatchGate, asyncHandler(async (re
 
   // 404 before the write: recording an estimate against an id that does not
   // exist would silently succeed as a no-op UPDATE and report success.
-  if (!await getWorkItem(id)) { res.status(404).json({ error: 'no such work item' }); return; }
+  const item = await getWorkItem(id);
+  if (!item) { res.status(404).json({ error: 'no such work item' }); return; }
+  // An item's recorded estimate is its initiative's stewards' call (DE-44 row 5).
+  if (!await requireInitiativeScope(req, res, item.projectId, { action: 'estimate work' })) return;
 
   const forecast = body.estimate as Record<string, unknown>;
   const p75 = Number(forecast['costUsdP75']);
@@ -485,6 +488,9 @@ botsRouter.post('/work-items/:id/review-estimate', dispatchGate, asyncHandler(as
   if (!id) throw new ValidationError('work item id is required');
   const actor = req.session?.sub;
   if (!actor) { res.status(401).json({ error: 'a session is required to review an estimate' }); return; }
+  const item = await getWorkItem(id);
+  if (!item) { res.status(404).json({ error: 'no such work item' }); return; }
+  if (!await requireInitiativeScope(req, res, item.projectId, { action: 'sign off estimates' })) return;
   const ok = await reviewWorkItemEstimate(id, actor);
   if (!ok) {
     // 409, not 404: the item may well exist. What is missing is an estimate to

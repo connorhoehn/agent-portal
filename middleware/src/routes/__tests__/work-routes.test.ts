@@ -561,10 +561,12 @@ describe('findings', () => {
   });
 
   it('POST /findings/:id/dismiss 404s an unknown finding', async () => {
-    m(setFindingStatus).mockResolvedValue(false);
+    m(getFinding).mockResolvedValue(null);
     const missing = await request(buildApp()).post('/api/work/findings/f-x/dismiss').send({});
     expect(missing.status).toBe(404);
 
+    m(getFinding).mockResolvedValue({ id: 'f-1', status: 'open', jobId: null });
+    m(initiativeIdForFinding).mockReturnValue(null);
     m(setFindingStatus).mockResolvedValue(true);
     const ok = await request(buildApp()).post('/api/work/findings/f-1/dismiss').send({});
     expect(ok.status).toBe(200);
@@ -683,6 +685,14 @@ describe('initiative scope on job lifecycle (DE-44 rows 7–8)', () => {
     expect(requeueJob).not.toHaveBeenCalled();
     expect(cancelJob).not.toHaveBeenCalled();
     expect((scopeCalls[1]!.opts as { spend?: boolean }).spend).toBe(true);
+  });
+
+  it('refuses to dismiss a finding on someone else\'s initiative (DE-44 row 9)', async () => {
+    m(getFinding).mockResolvedValue({ id: 'f-1', status: 'open', jobId: null });
+    m(initiativeIdForFinding).mockReturnValue('p-billing');
+    scopeDeny.add('p-billing');
+    expect((await request(buildApp()).post('/api/work/findings/f-1/dismiss').send({})).status).toBe(403);
+    expect(setFindingStatus).not.toHaveBeenCalled();
   });
 
   it('a job with no initiative is not scoped', async () => {

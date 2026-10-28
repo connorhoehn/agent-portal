@@ -2,6 +2,7 @@ import { Router, type Request } from 'express';
 import { AppError, asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { currentLiveSession } from '../lib/live-principal.js';
 import { isAllowed } from '../lib/authz.js';
+import { requireInitiativeScope } from '../lib/initiative-scope.js';
 import { getWorkItem } from '../providers/work-items.js';
 import { notifyWorkGraphChanged } from '../lib/work-graph/live.js';
 import { documentRecordHref, getDocumentRecord, linkWorkDocument, listWorkDocuments, searchDocumentRecords, unlinkWorkDocument } from '../providers/work-documents.js';
@@ -55,6 +56,8 @@ workDocumentsRouter.put('/work-items/:id/documents/:documentId', asyncHandler(as
   const workItemId = id(req.params.id), documentId = id(req.params.documentId);
   const [work, doc] = await Promise.all([getWorkItem(workItemId), getDocumentRecord(documentId)]);
   if (!work || !doc) throw new AppError(404, 'Work item or document record not found');
+  // Linking a document to an item is the item's initiative's stewards' call (DE-44 row 23).
+  if (!await requireInitiativeScope(req, res, work.projectId, { action: 'link documents' })) return;
   session = await authority(session, true);
   const result = await linkWorkDocument(workItemId, documentId, session.sub);
   await authority(session, true);
@@ -64,10 +67,12 @@ workDocumentsRouter.put('/work-items/:id/documents/:documentId', asyncHandler(as
 workDocumentsRouter.delete('/work-items/:id/documents/:documentId', asyncHandler(async (req, res) => {
   emptyBody(req);
   const session = await authority(req.session, true), workItemId = id(req.params.id), documentId = id(req.params.documentId);
-  if (!await getWorkItem(workItemId)) throw new AppError(404, 'Work item not found');
+  const work = await getWorkItem(workItemId);
+  if (!work) throw new AppError(404, 'Work item not found');
+  if (!await requireInitiativeScope(req, res, work.projectId, { action: 'unlink documents' })) return;
   await authority(session, true);
   const removed = await unlinkWorkDocument(workItemId, documentId);
   await authority(session, true);
-  if (removed) void getWorkItem(workItemId).then(item => item && notifyWorkGraphChanged(item.projectId, 'work-document')).catch(() => undefined);
+  if (removed) void notifyWorkGraphChanged(work.projectId, 'work-document');
   res.json({ workItemId, documentId, removed });
 }));

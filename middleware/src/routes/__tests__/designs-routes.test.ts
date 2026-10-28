@@ -25,6 +25,13 @@ jest.mock('../../lib/authz.js', () => ({
   resolveSession: () => sessionValue,
 }));
 
+const scopeDeny = new Set<string>();
+jest.mock('../../lib/initiative-scope.js', () => ({
+  requireInitiativeScope: jest.fn(async (_req: unknown, res: { status(n: number): { json(b: unknown): void } }, initiativeId: string | null) => {
+    if (initiativeId && scopeDeny.has(initiativeId)) { res.status(403).json({ error: 'not your initiative' }); return false; }
+    return true;
+  }),
+}));
 jest.mock('../../providers/design-reviews.js', () => ({
   listDesignReviews: jest.fn(),
   getDesignThread: jest.fn(),
@@ -62,6 +69,9 @@ function buildApp() {
 
 beforeEach(() => {
   listMock.mockReset(); threadMock.mockReset(); answerMock.mockReset(); signoffMock.mockReset();
+  // Answer and signoff resolve the thread's home initiative first (DE-44 row 30).
+  threadMock.mockResolvedValue(THREAD);
+  scopeDeny.clear();
   sessionValue = { sub: 'u-1', name: 'Nora Vance', role: 'sme' };
 });
 
@@ -183,5 +193,15 @@ describe('POST /api/designs/:id/signoff', () => {
     const res = await request(buildApp())
       .post('/api/designs/dr-x/signoff').send({ decision: 'approve' });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('design scope (DE-44 row 30)', () => {
+  it('refuses answer and signoff on a design outside the caller\'s initiatives', async () => {
+    scopeDeny.add(THREAD.orgProjectId);
+    expect((await request(buildApp()).post('/api/designs/dr-1/answer').send({ questionPostId: 'q-1', body: 'yes' })).status).toBe(403);
+    expect((await request(buildApp()).post('/api/designs/dr-1/signoff').send({ decision: 'approve' })).status).toBe(403);
+    expect(answerMock).not.toHaveBeenCalled();
+    expect(signoffMock).not.toHaveBeenCalled();
   });
 });

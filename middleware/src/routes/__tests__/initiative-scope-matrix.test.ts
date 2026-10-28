@@ -15,7 +15,7 @@ import { resolve } from 'node:path';
 const ROUTES = resolve(__dirname, '..');
 const FILES = ['bots', 'work', 'agent-projects', 'sdlc', 'internal-devbox', 'work-items', 'work-documents',
   'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints'];
-const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|sprintMoveAllowed|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(/;
+const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|sprintMoveAllowed|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(/;
 
 const SCOPED = [
   'agent-projects DELETE /:id', 'agent-projects POST /', 'agent-projects POST /:id/clone-command',
@@ -29,6 +29,7 @@ const SCOPED = [
   'sdlc POST /changes/:id/address', 'sdlc POST /changes/:id/decide', 'sdlc POST /changes/:id/deliver',
   'sdlc POST /changes/:id/rereview',
   'lab POST /signals', 'lab POST /experiences', 'lab POST /consults', 'lab POST /consults/:id/answer',
+  'bots POST /work-items/:id/estimate', 'bots POST /work-items/:id/review-estimate', 'designs POST /:id/answer', 'designs POST /:id/signoff', 'work POST /findings/:id/dismiss', 'work-items POST /work-items/:id/criteria', 'work-items PATCH /work-items/:id/criteria/:criterionId', 'work-items DELETE /work-items/:id/criteria/:criterionId', 'work-items PUT /work-items/:id/decisions/:decisionId', 'work-items DELETE /work-items/:id/decisions/:decisionId', 'work-documents PUT /work-items/:id/documents/:documentId', 'work-documents DELETE /work-items/:id/documents/:documentId',
   'sprints DELETE /:sprintId/items/:itemId', 'sprints PATCH /:sprintId/items', 'sprints POST /',
   'work DELETE /jobs/:id', 'work POST /findings/:id/promote', 'work POST /jobs', 'work POST /jobs/:id/requeue',
   'work POST /jobs/:id/review', 'work POST /sweeps/run',
@@ -37,37 +38,25 @@ const SCOPED = [
 
 /** Not scoped yet, each with why. Fixing one moves it to SCOPED. */
 const OPEN: Record<string, string> = {
-  'bots POST /work-items/:id/estimate': 'DE-44 row 5 (low): estimate only, spends one model call',
-  'bots POST /work-items/:id/review-estimate': 'DE-44 row 5 (low)',
   'budgets PUT /:orgProjectId': 'DE-44 row 20: whether program-owner is program-wide is a user decision',
   'budgets DELETE /:orgProjectId': 'DE-44 row 20: same decision',
   'grants POST /': 'DE-44 row 21: same program-owner decision',
   'grants PATCH /:id': 'DE-44 row 21',
   'grants DELETE /:id': 'DE-44 row 21',
-  'designs POST /:id/answer': 'DE-44 row 30 (medium)',
-  'designs POST /:id/signoff': 'DE-44 row 30 (medium)',
-  'initiative-decks POST /projects/:projectId': 'DE-44 row 31 (low): deckWriteAuthority ignores projectId',
-  'initiative-decks POST /:id/revisions': 'DE-44 row 31 (low)',
-  'initiative-decks POST /:id/revise': 'DE-44 row 31 (low)',
-  'initiative-decks POST /:id/preview': 'DE-44 row 31 (low)',
+  'initiative-decks POST /projects/:projectId': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
+  'initiative-decks POST /:id/revisions': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
+  'initiative-decks POST /:id/revise': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
+  'initiative-decks POST /:id/preview': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
   'sdlc POST /policies': 'DE-43/DE-46: policy edits move to their own Cedar action and versioned policy',
   'sdlc DELETE /policies/:id': 'DE-43/DE-46',
   'devbox POST /sessions': 'mints a fresh session id for the caller; nothing to scope until a box is registered',
   'work POST /dispatch': 'operator kick of the dispatcher; no initiative in the request',
   'work POST /findings/:id/analyze': 'DE-44 row 9-adjacent (low): analysis only, no spend on an initiative budget',
   'work POST /findings/analyze-batch': 'same as /findings/:id/analyze',
-  'work POST /findings/:id/dismiss': 'DE-44 row 9 (low)',
   'work POST /proposals': 'ManageDevbox-gated; not yet assessed for initiative scope (not in the DE-44 table)',
   'work POST /proposals/:id/decide': 'ManageDevbox-gated; not yet assessed for initiative scope (not in the DE-44 table)',
-  'work-items POST /projects/:id/discussion/comments': 'DE-44 row 23 (low)',
-  'work-items POST /work-items/:id/comments': 'DE-44 row 23 (low)',
-  'work-items POST /work-items/:id/criteria': 'DE-44 row 23 (low)',
-  'work-items PATCH /work-items/:id/criteria/:criterionId': 'DE-44 row 23 (low)',
-  'work-items DELETE /work-items/:id/criteria/:criterionId': 'DE-44 row 23 (low)',
-  'work-items PUT /work-items/:id/decisions/:decisionId': 'DE-44 row 23 (low)',
-  'work-items DELETE /work-items/:id/decisions/:decisionId': 'DE-44 row 23 (low)',
-  'work-documents PUT /work-items/:id/documents/:documentId': 'DE-44 row 23 (low)',
-  'work-documents DELETE /work-items/:id/documents/:documentId': 'DE-44 row 23 (low)',
+  'work-items POST /projects/:id/discussion/comments': 'commenting is open to every reader today; restricting it to stewards is a user decision (DE-44 row 23)',
+  'work-items POST /work-items/:id/comments': 'commenting is open to every reader today; restricting it to stewards is a user decision (DE-44 row 23)',
 };
 
 function writeRoutes(): Map<string, string> {

@@ -68,6 +68,18 @@ import { postInitiativeWorkComment } from '../lib/initiative-comments.js';
 export const workItemsRouter = Router();
 
 /**
+ * Editing an item's criteria or linked decisions is the item's initiative's
+ * stewards' call (DE-44 row 23). Answers 404 / 403 itself; null means stop.
+ */
+async function itemInScope(
+  req: { session?: import('../lib/session.js').Session | null }, res: Response, id: string, action: string,
+): Promise<Awaited<ReturnType<typeof getWorkItem>> | null> {
+  const item = await getWorkItem(id);
+  if (!item) { res.status(404).json({ error: 'Work item not found' }); return null; }
+  return await requireInitiativeScope(req, res, item.projectId, { action }) ? item : null;
+}
+
+/**
  * Putting an item in a sprint here must ask what PATCH /api/sprints/:id/items
  * asks (DE-44 row 22): the sprint exists, is on the item's own initiative, and
  * the caller stewards that initiative. Clearing the sprint (null) asks nothing.
@@ -618,7 +630,7 @@ workItemsRouter.post(
     const textError = checkCriterionText(body['text']);
     if (textError) { res.status(400).json({ error: textError }); return; }
 
-    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+    if (!(await itemInScope(req, res, id, 'edit acceptance criteria'))) return;
 
     const criterion = await createWorkItemCriterion(id, (body['text'] as string).trim());
     res.status(201).json(criterion);
@@ -650,7 +662,7 @@ workItemsRouter.patch(
       ?? ('position' in body ? checkCriterionPosition(body['position']) : null);
     if (fieldError) { res.status(400).json({ error: fieldError }); return; }
 
-    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+    if (!(await itemInScope(req, res, id, 'edit acceptance criteria'))) return;
 
     const updated = await updateWorkItemCriterion(id, criterionId, {
       ...('text' in body ? { text: (body['text'] as string).trim() } : {}),
@@ -670,7 +682,7 @@ workItemsRouter.delete(
     const criterionId = req.params['criterionId'] as string;
     if (!id || !criterionId) { res.status(400).json({ error: 'Missing work item or criterion id' }); return; }
 
-    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+    if (!(await itemInScope(req, res, id, 'edit acceptance criteria'))) return;
 
     const deleted = await deleteWorkItemCriterion(id, criterionId);
     if (!deleted) { res.status(404).json({ error: 'Criterion not found' }); return; }
@@ -775,8 +787,8 @@ workItemsRouter.put(
       return;
     }
 
-    const item = await getWorkItem(id);
-    if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+    const item = await itemInScope(req, res, id, 'link decisions');
+    if (!item) return;
 
     const result = await linkDecisionToWorkItem(item, decisionId);
     if (result.kind === 'not-found') { res.status(404).json({ error: 'Decision not found' }); return; }
@@ -794,8 +806,8 @@ workItemsRouter.delete(
     const decisionId = req.params['decisionId'] as string;
     if (!id || !decisionId) { res.status(400).json({ error: 'Missing work item or decision id' }); return; }
 
-    const linked = await getWorkItem(id);
-    if (!linked) { res.status(404).json({ error: 'Work item not found' }); return; }
+    const linked = await itemInScope(req, res, id, 'link decisions');
+    if (!linked) return;
 
     const unlinked = await unlinkDecisionFromWorkItem(id, decisionId);
     if (!unlinked) { res.status(404).json({ error: 'Decision is not linked to this work item' }); return; }

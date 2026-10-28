@@ -497,3 +497,15 @@ describe('initiative scope on bot lifecycle (DE-44 row 4)', () => {
     expect((scope.calls[2]!.opts as { spend?: boolean }).spend).toBe(true);
   });
 });
+
+describe('estimates are the item\'s initiative\'s stewards\' call (DE-44 row 5)', () => {
+  it('refuses to record or sign off an estimate on someone else\'s initiative', async () => {
+    const { getWorkItem } = jest.requireMock('../../providers/work-items.js') as { getWorkItem: jest.Mock };
+    getWorkItem.mockResolvedValue({ id: 'wi-1', projectId: 'p-billing' });
+    scope.deny.add('p-billing');
+    const est = await request(buildApp()).post('/api/bots/work-items/wi-1/estimate')
+      .send({ model: 'amazon.nova-pro-v1:0', estimate: { costUsdP75: 1 } });
+    expect(est.status).toBe(403);
+    expect((await request(buildApp()).post('/api/bots/work-items/wi-1/review-estimate').send({})).status).toBe(403);
+  });
+});

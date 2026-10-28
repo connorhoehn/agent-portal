@@ -11,6 +11,13 @@ const manageAllow = { value: true };
 // Stubbed so the real provider module can be loaded for its pure helper
 // (decideStatusTransition, required actual below) without dragging in
 // config.ts or an RDS client — same as routes/__tests__/work-items.test.ts.
+const scopeDeny = new Set<string>();
+jest.mock('../../lib/initiative-scope.js', () => ({
+  requireInitiativeScope: jest.fn(async (_req: unknown, res: { status(n: number): { json(b: unknown): void } }, initiativeId: string | null) => {
+    if (initiativeId && scopeDeny.has(initiativeId)) { res.status(403).json({ error: 'not your initiative' }); return false; }
+    return true;
+  }),
+}));
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: false } } }));
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 
@@ -421,5 +428,28 @@ describe('POST /api/graph/work-items/:id/comments', () => {
       .send({ body: 'ok' });
     expect(res.status).toBe(403);
     expect(createCommentMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('criteria edits are the item\'s initiative\'s stewards\' call (DE-44 row 23)', () => {
+  afterEach(() => { scopeDeny.clear(); });
+  it('refuses to add, change or remove a criterion on someone else\'s initiative', async () => {
+    scopeDeny.add('p-observability');
+    const app = buildApp({ sub: 'u-nobody', role: 'sme', tenant: 'orgiq' });
+    expect((await request(app).post('/api/graph/work-items/wi-obs-e1-s4/criteria').send({ text: 'x' })).status).toBe(403);
+    expect((await request(app).patch('/api/graph/work-items/wi-obs-e1-s4/criteria/c-1').send({ done: true })).status).toBe(403);
+    expect((await request(app).delete('/api/graph/work-items/wi-obs-e1-s4/criteria/c-1')).status).toBe(403);
+    expect(createCriterionMock).not.toHaveBeenCalled();
+    expect(updateCriterionMock).not.toHaveBeenCalled();
+    expect(deleteCriterionMock).not.toHaveBeenCalled();
+  });
+
+  it('commenting stays open to every reader (recorded as a user decision)', async () => {
+    scopeDeny.add('p-observability');
+    getUserMock.mockResolvedValue({ id: 'u-nobody', displayName: 'Nobody', personId: 'p-999', grants: {}, epoch: 0, email: null });
+    createCommentMock.mockResolvedValue({ id: 'cm-1', body: 'hi' });
+    const res = await request(buildApp({ sub: 'u-nobody', role: 'sme', tenant: 'orgiq' }))
+      .post('/api/graph/work-items/wi-obs-e1-s4/comments').send({ body: 'hi' });
+    expect(res.status).not.toBe(403);
   });
 });

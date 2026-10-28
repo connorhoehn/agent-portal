@@ -488,6 +488,11 @@ workRouter.get('/findings/stats', asyncHandler(async (_req, res) => {
 }));
 
 workRouter.post('/findings/:id/dismiss', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
+  // Dismissing takes a finding off its initiative's board: that initiative's
+  // stewards' call when it has one (DE-44 row 9).
+  const finding = await getFinding(String(req.params['id'] ?? ''));
+  if (!finding) { res.status(404).json({ error: 'finding not found' }); return; }
+  if (!await requireInitiativeScope(req, res, initiativeIdForFinding(finding), { action: 'dismiss findings' })) return;
   const ok = await setFindingStatus(String(req.params['id'] ?? ''), 'dismissed');
   if (!ok) { res.status(404).json({ error: 'finding not found' }); return; }
   res.json({ dismissed: true });

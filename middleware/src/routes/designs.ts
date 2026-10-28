@@ -9,6 +9,7 @@
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
+import { requireInitiativeScope } from '../lib/initiative-scope.js';
 import {
   listDesignReviews, getDesignThread, answerQuestion, signoffDesign,
 } from '../providers/design-reviews.js';
@@ -36,6 +37,14 @@ designsRouter.get('/:id', asyncHandler(async (req, res) => {
   res.json(thread);
 }));
 
+/** A design review's home initiative decides who may answer or ratify it (DE-44 row 30). */
+async function designInScope(req: { session?: import('../lib/session.js').Session | null; params: Record<string, unknown> },
+  res: import('express').Response, action: string): Promise<boolean> {
+  const thread = await getDesignThread(String(req.params['id'] ?? ''));
+  if (!thread) throw new NotFoundError('design review not found');
+  return requireInitiativeScope(req, res, thread.orgProjectId, { action });
+}
+
 // POST /api/designs/:id/answer {questionPostId, body}
 // The human half of the HITL loop: resolve an open agent question. The agent
 // follows up with a revision, and the thread advances when nothing is open.
@@ -44,6 +53,7 @@ designsRouter.post('/:id/answer', steerGate, asyncHandler(async (req, res) => {
   if (!questionPostId || !String(body ?? '').trim()) {
     throw new ValidationError('questionPostId and a non-empty body are required');
   }
+  if (!await designInScope(req, res, 'answer design questions')) return;
   const session = resolveSession(req);
   const thread = await answerQuestion(
     String(req.params['id'] ?? ''), questionPostId, String(body).trim(),
@@ -65,6 +75,7 @@ designsRouter.post('/:id/signoff', steerGate, asyncHandler(async (req, res) => {
   if (decision !== 'approve' && decision !== 'reject') {
     throw new ValidationError("decision must be 'approve' or 'reject'");
   }
+  if (!await designInScope(req, res, 'sign off designs')) return;
   const session = resolveSession(req);
   const result = await signoffDesign(
     String(req.params['id'] ?? ''), decision,
