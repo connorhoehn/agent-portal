@@ -25,8 +25,8 @@ Rules for whoever continues (including an hourly loop):
 | 4 | Devbox org access uses `orgiq_graph_reader`, not the master secret | DE-40 | synth test: master secret absent from the devbox stack | done (`9e759817`) |
 | 5 | deploy.sh inference stops on a failed read | DE-16 | live_read test with a fake `aws` (bash 3.2) | done (`83f0b9dc`) |
 | 6 | Shared scope check + bots create/patch/run, codebase link/runs | DE-44 rows 1–3, 10, 14 | `requireInitiativeScope` in lib/initiative-scope.ts; deny tests per route (attached-nowhere sme 403, steward pass, org-leader bypass) | done (`68b7a6e6`; rows 12–13 included) |
-| 7 | SDLC decide/address/deliver, POST /work/jobs, internal task/shell-url | DE-44 rows 6, 16–18, 24–25 | same deny tests; internal routes check `requestedBy` reaches the box and stop auto-registering unknown sessions | open |
-| 8 | Medium rows of DE-44 that need no decision | DE-44 rows 4, 7, 8, 11, 13, 15, 19, 22, 26 | deny tests | open |
+| 7 | SDLC decide/address/deliver, POST /work/jobs, internal task/shell-url | DE-44 rows 6, 16–18, 24–25 | same deny tests; internal routes check `requestedBy` reaches the box and stop auto-registering unknown sessions | done (`5c84136e`; also rows 19 and 26) |
+| 8 | Medium rows of DE-44 that need no decision | DE-44 rows 4, 7, 8, 11, 15, 22 (13, 19, 26 done with rows 6–7) | deny tests | open |
 | 9 | DE-44 matrix test: a new write route without a scope row fails | DE-44 | `routes/__tests__/initiative-scope-matrix.test.ts` | open |
 | 10 | deploy.sh carries `deployDevbox`, lab values and `deployTurn` forward | DE-51, DE-52, DE-23 | inference test like #5 | open |
 | 11 | `onlyAgents` cannot delete runtimes it leaves out on a live stack | DE-1 | synth guard + test | open |
