@@ -771,7 +771,7 @@ export const realAgentCore: AgentCoreProvider = {
         qualifier: 'DEFAULT',
         accept: 'text/event-stream',
         payload: new TextEncoder().encode(body),
-        ...(payload.sessionId ? { runtimeSessionId: payload.sessionId } : {}),
+        ...((payload.runtimeSessionId ?? payload.sessionId) ? { runtimeSessionId: payload.runtimeSessionId ?? payload.sessionId } : {}),
       }),
     );
 

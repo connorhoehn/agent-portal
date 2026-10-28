@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-28T03:06:46.162Z",
-  "serverHandlerSha": "e31b2fe9d5bc4dc74ab29baab2a384d8f898478ccfd5936bc1cc21262d7174b1",
+  "capturedAt": "2026-10-28T03:36:50.421Z",
+  "serverHandlerSha": "b10003c6300e04cbd0c04c8d190bde553721719f7af464c04502b890be5b1301",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -545,7 +545,7 @@
       },
       "values": {
         "key": [
-          "ORG-OBS-3"
+          "ORG-LLM-10"
         ],
         "status": [
           "done"

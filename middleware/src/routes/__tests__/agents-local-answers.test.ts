@@ -44,6 +44,7 @@ import request from '../../test-support/http.js';
 import { agentsRouter } from '../agents.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { agentcore } from '../../providers/index.js';
+import { scopedRuntimeSessionId } from '../../lib/runtime-session.js';
 import { listEvents, recordTurn } from '../../providers/memory.js';
 import { openAgentRun } from '../../lib/agent-runs-live.js';
 import { listProjects } from '../../providers/projects.js';
@@ -100,6 +101,18 @@ describe('routing order', () => {
     const payload = (agentcore.invokeAgentStreaming as jest.Mock).mock.calls[0]![1];
     expect(payload.message).toBe("who knows auth best?\n\nAbout the organisation's initiatives. Advise only; do not change anything.");
     expect(recordTurn).toHaveBeenCalledWith(expect.objectContaining({ userMessage: 'who knows auth best?' }));
+  });
+
+  it('routes the agent to a microVM bound to the signed-in user, not the client-chosen session id', async () => {
+    const clientId = 'someone-elses-conversation-'.padEnd(40, 'x');
+    await request(app).post('/api/agents/orgiq-supervisor/invoke').send({ message: 'who knows auth best?', sessionId: clientId });
+    const first = (agentcore.invokeAgentStreaming as jest.Mock).mock.calls[0]![1];
+    expect(first.sessionId).toBe(clientId);
+    expect(first.runtimeSessionId).toBe(scopedRuntimeSessionId('orgiq_u-release', clientId));
+    principal = { sub: 'u-other', role: 'org-leader', tenant: 'orgiq' };
+    await request(app).post('/api/agents/orgiq-supervisor/invoke').send({ message: 'who knows auth best?', sessionId: clientId });
+    const second = (agentcore.invokeAgentStreaming as jest.Mock).mock.calls[1]![1];
+    expect(second.runtimeSessionId).not.toBe(first.runtimeSessionId);
   });
 
   it('LOCAL_ANSWERS=false sends every question to the agent', async () => {

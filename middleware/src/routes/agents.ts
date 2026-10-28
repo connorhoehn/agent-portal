@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { asyncHandler } from '../lib/async-handler.js';
-import { normalizeRuntimeSessionId } from '../lib/runtime-session.js';
+import { normalizeRuntimeSessionId, scopedRuntimeSessionId } from '../lib/runtime-session.js';
 import { agentStreamMiddleware, type AgentStream } from '@connorhoehn/realtime-modules/agent-streaming';
 import type { Request as ExpressRequest } from 'express';
 import { agentcore } from '../providers/index.js';
@@ -332,6 +332,9 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   const invokePayload = {
     message: userMessage,
     sessionId: canonicalSessionId,
+    // The microVM is the signed-in user's own for this conversation (row 13 of
+    // docs/deploy-hardening-goal-2026-10-27.md), never chosen by the client.
+    runtimeSessionId: scopedRuntimeSessionId(actorId, canonicalSessionId),
     // The run the portal is watching — the agent's RUN_STARTED and its trace
     // bundle carry it back (pipelines P1).
     runId: stream.runId,

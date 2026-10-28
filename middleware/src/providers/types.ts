@@ -364,6 +364,13 @@ export interface AgentCoreProvider {
     structuredInput?: Record<string, unknown>;
     sessionId?: string;
     /**
+     * The microVM session to route to, when it must differ from `sessionId`:
+     * the agent route binds it to the signed-in user (scopedRuntimeSessionId)
+     * so a client-chosen id cannot land in another user's runtime session.
+     * Defaults to `sessionId`.
+     */
+    runtimeSessionId?: string;
+    /**
      * The AG-UI run id the route minted (the id its RUN_STARTED carries). The
      * agent uses it as RunAgentInput.run_id and returns it on the trace bundle
      * — the join between a run and its trace (pipelines P1).
