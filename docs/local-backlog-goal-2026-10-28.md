@@ -100,7 +100,12 @@ the maintenance reserve (folds in DE-39), billed reconciliation.
 
 ## Owed from the deploy machine
 
-- DE-30: apply `spend_ledger_schema.sql`, backfill `--dry-run` then run, deploy with `SPEND_LEDGER=dual`, read the drift log, then `ledger`.
-- DE-20: `python -m schema.migrate status`, then plan/approve/apply the page-thread migration — `deploy.sh` now refuses a middleware deploy until it has run (`DEPLOY_MIGRATE=false` bypasses).
+The 2026-10-28 rollout of `fa782230` (`docs/aws-deploy-open-items-2026-10-27.md`)
+applied the schema ledger baseline and the page-thread migration, and fixed
+the gateway's Cedar action separator (`___`), the Agents exports, the
+middleware image's vendor copy and the migration env. Still owed:
+
+- DE-30: backfill `--dry-run` then run, deploy with `SPEND_LEDGER=dual`, read the drift log, then `ledger`.
+- DE-20: `2026-09-05-drop-newsroom` is pending (not gated).
 - DE-3: confirm the runtimes read `/orgiq/models/registry`.
-- DE-7: verify the per-tool Cedar action names and the runtime-role denial against the live gateway.
+- DE-18: the middleware still pulls `:latest` (`--force-new-deployment` after each push).
