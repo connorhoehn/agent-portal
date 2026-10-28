@@ -14,7 +14,7 @@ import { type Session } from '../lib/session.js';
 import { userNameFor } from '../lib/user-names.js';
 import { getUser } from '../providers/identity.js';
 import { searchWorkItems, getWorkItem } from '../providers/work-items.js';
-import { stewardsInitiative } from '../lib/initiative-scope.js';
+import { stewardsInitiative, requireInitiativeScope } from '../lib/initiative-scope.js';
 import { rankSuggestions, askSuggestionsFrom, seesEveryInitiative } from '../lib/work-suggestions.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import {
@@ -252,13 +252,28 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
     throw new ValidationError(`kind must be one of ${QUEUEABLE_KINDS.join(', ')}`);
   }
 
+  // A queued job spends on the initiative of the work it serves, and a
+  // findingId marks that finding promoted: both ask what the promote route
+  // asks (steward + grant), or this route was the way around it (DE-44 row 6).
+  const served = await servedWorkItem(body);
+  if (!await requireInitiativeScope(req, res, served.initiativeId ?? null, { spend: true, action: 'queue work' })) return;
+  if (body.findingId) {
+    const finding = await getFinding(body.findingId);
+    if (!finding) { res.status(404).json({ error: 'finding not found' }); return; }
+    if (finding.jobId && finding.status === 'promoted') {
+      res.status(409).json({ error: 'finding already has a worker on it', jobId: finding.jobId });
+      return;
+    }
+    if (!await requireInitiativeScope(req, res, initiativeIdForFinding(finding), { spend: true, action: 'promote findings' })) return;
+  }
+
   const job = await enqueueJob({
     kind,
     title,
     payload: {
       prompt,
       requiresReview: body.requiresReview !== false,
-      ...(await servedWorkItem(body)),
+      ...served,
     },
     ...(body.priority !== undefined ? { priority: body.priority } : {}),
     createdBy: (req as { session?: { sub?: string } }).session?.sub ?? 'portal',

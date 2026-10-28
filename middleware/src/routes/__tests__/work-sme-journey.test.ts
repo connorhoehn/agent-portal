@@ -133,7 +133,10 @@ describe('GET /api/work/suggestions', () => {
 describe('POST /api/work/jobs — what the job serves', () => {
   it('resolves a suggestion id to the work item and the initiative it moves', async () => {
     const app = buildApp(nora);
-    const [first] = (await request(app).get('/api/work/suggestions')).body.suggestions as Suggestion[];
+    // Nora spends only where she holds an active sprint grant (Auth
+    // Migration, bg-auth-3), so the card she queues is one from there.
+    const first = ((await request(app).get('/api/work/suggestions')).body.suggestions as Suggestion[])
+      .find((sg) => sg.initiativeId === 'p-auth-migration');
     expect(first).toBeDefined();
 
     const res = await request(app).post('/api/work/jobs').send({
@@ -152,17 +155,27 @@ describe('POST /api/work/jobs — what the job serves', () => {
 
   it('takes a work item id directly — the canonical field', async () => {
     const res = await request(buildApp(nora)).post('/api/work/jobs').send({
-      title: 'Finish the burn-rate alerts',
+      title: 'Finish the cookie hardening',
       prompt: 'Read the open PR and say what is left before it can merge.',
-      workItemId: 'wi-obs-e2-s2',
+      workItemId: 'wi-auth-e1-s3',
     });
     expect(res.status).toBe(201);
     expect((res.body as Job).payload).toMatchObject({
-      workItemId: 'wi-obs-e2-s2',
-      workItemTitle: 'Multi-window burn-rate alerts',
-      initiativeId: 'p-observability',
-      initiativeName: 'Observability Platform',
+      workItemId: 'wi-auth-e1-s3',
+      workItemTitle: 'Session cookie hardening: max-age, rotation on switch',
+      initiativeId: 'p-auth-migration',
+      initiativeName: 'Auth Migration',
     });
+  });
+
+  it('refuses to queue work on an initiative where she holds no sprint grant (DE-44 row 6)', async () => {
+    // She contributes to Observability but was never granted an envelope
+    // there; queueing a job used to be the way around the promote route's gate.
+    const res = await request(buildApp(nora)).post('/api/work/jobs').send({
+      title: 'Finish the burn-rate alerts', prompt: 'Read the open PR.', workItemId: 'wi-obs-e2-s2',
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/no active sprint grant on Observability Platform/);
   });
 
   it('queues a free-typed prompt with no attribution rather than inventing one', async () => {

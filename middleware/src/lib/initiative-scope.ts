@@ -108,6 +108,25 @@ export async function personOnInitiative(personId: string | null | undefined, in
   }
 }
 
+/**
+ * Whether a user, named by a service-signed call rather than a cookie, may
+ * reach a box: its owner, a steward of the initiative it is charged to, or an
+ * org-wide role (DE-44 rows 24–26). Read authoritatively; any lookup failure
+ * is "no".
+ */
+export async function userReachesBox(userId: string, box: { ownerId?: string | null; projectId?: string | null }): Promise<boolean> {
+  if (box.ownerId && box.ownerId === userId) return true;
+  if (box.projectId) return userStewardsInitiative(userId, box.projectId);
+  try {
+    const { getUser } = await providers();
+    const user = await getUser(userId, { authoritative: true });
+    return !!user && Object.values(user.grants).flat().some((role) => ORG_WIDE_INITIATIVE_ROLES.includes(role));
+  } catch (err) {
+    console.warn(`[initiative-scope] could not resolve ${userId} for box access:`, (err as Error).message);
+    return false;
+  }
+}
+
 type ScopeResponse = { status: (n: number) => { json: (b: unknown) => void } };
 
 /**

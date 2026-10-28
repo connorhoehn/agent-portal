@@ -50,7 +50,16 @@ jest.mock('../../lib/authz.js', () => ({
 
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../../providers/work-items.js', () => ({ searchWorkItems: jest.fn(), getWorkItem: jest.fn() }));
-jest.mock('../../lib/initiative-scope.js', () => ({ stewardsInitiative: jest.fn() }));
+const scopeDeny = new Set<string>();
+const scopeCalls: Array<{ initiativeId: unknown; opts: unknown }> = [];
+jest.mock('../../lib/initiative-scope.js', () => ({
+  stewardsInitiative: jest.fn(),
+  requireInitiativeScope: jest.fn(async (_req: unknown, res: { status(n: number): { json(b: unknown): void } }, initiativeId: string | null, opts: unknown) => {
+    scopeCalls.push({ initiativeId, opts });
+    if (initiativeId && scopeDeny.has(initiativeId)) { res.status(403).json({ error: 'not your initiative' }); return false; }
+    return true;
+  }),
+}));
 jest.mock('../../lib/work-suggestions.js', () => ({
   rankSuggestions: jest.fn(), askSuggestionsFrom: jest.fn(), seesEveryInitiative: jest.fn(),
 }));
@@ -104,7 +113,7 @@ import {
 } from '../../providers/agent-jobs.js';
 import {
   runSweep, runAllSweeps, listFindings, setFindingStatus, getFinding, findingStats,
-  reopenFindingForJob, releaseAbandonedFindings,
+  reopenFindingForJob, releaseAbandonedFindings, initiativeIdForFinding,
 } from '../../providers/org-sweeps.js';
 import { listProposals, decideProposal, proposeGraphChange, proposalStats } from '../../providers/graph-proposals.js';
 import { dispatcherEvents, dispatchOnce, busyBoxes } from '../../lib/job-dispatcher.js';
@@ -320,6 +329,7 @@ describe('POST /api/work/jobs — attribution', () => {
 
   it('attributes the job to the session, and marks a promoted finding', async () => {
     m(enqueueJob).mockResolvedValue(JOB);
+    m(getFinding).mockResolvedValue({ id: 'find-1', status: 'open', jobId: null });
     await request(buildApp()).post('/api/work/jobs')
       .send({ title: 't', prompt: 'p', findingId: 'find-1' });
     expect((m(enqueueJob).mock.calls[0]![0] as { createdBy: string }).createdBy).toBe('u-nora');
@@ -331,6 +341,33 @@ describe('POST /api/work/jobs — attribution', () => {
     const res = await request(buildApp()).post('/api/work/jobs').send({ title: 't', prompt: 'p' });
     expect(res.status).toBe(503);
     expect(res.body.error).toMatch(/queue unavailable/);
+  });
+});
+
+describe('POST /api/work/jobs — initiative scope (DE-44 row 6)', () => {
+  const JOB = { id: 'job-1', status: 'queued', payload: {} };
+  beforeEach(() => { scopeDeny.clear(); scopeCalls.length = 0; m(enqueueJob).mockResolvedValue(JOB); });
+
+  it('refuses to queue work on an initiative the caller may not spend on, and queues nothing', async () => {
+    m(getWorkItem).mockResolvedValue({ id: 'wi-1', title: 'Fix it', projectId: 'p-billing', projectName: 'Billing' });
+    scopeDeny.add('p-billing');
+    const res = await request(buildApp()).post('/api/work/jobs').send({ title: 't', prompt: 'p', workItemId: 'wi-1' });
+    expect(res.status).toBe(403);
+    expect(scopeCalls[0]).toEqual({ initiativeId: 'p-billing', opts: expect.objectContaining({ spend: true }) });
+    expect(enqueueJob).not.toHaveBeenCalled();
+  });
+
+  it('a findingId asks the promote route\'s question, and an unknown or taken finding is refused', async () => {
+    m(getFinding).mockResolvedValue({ id: 'f-1', status: 'open', jobId: null });
+    m(initiativeIdForFinding).mockReturnValue('p-billing');
+    scopeDeny.add('p-billing');
+    expect((await request(buildApp()).post('/api/work/jobs').send({ title: 't', prompt: 'p', findingId: 'f-1' })).status).toBe(403);
+    m(getFinding).mockResolvedValue(null);
+    expect((await request(buildApp()).post('/api/work/jobs').send({ title: 't', prompt: 'p', findingId: 'f-x' })).status).toBe(404);
+    m(getFinding).mockResolvedValue({ id: 'f-2', status: 'promoted', jobId: 'job-9' });
+    expect((await request(buildApp()).post('/api/work/jobs').send({ title: 't', prompt: 'p', findingId: 'f-2' })).status).toBe(409);
+    expect(enqueueJob).not.toHaveBeenCalled();
+    expect(setFindingStatus).not.toHaveBeenCalled();
   });
 });
 

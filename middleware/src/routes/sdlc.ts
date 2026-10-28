@@ -7,6 +7,7 @@
 // class of authority as running the agents in the first place.
 
 import { Router } from 'express';
+import { requireInitiativeScope } from '../lib/initiative-scope.js';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import {
   listPolicies, upsertPolicy, deletePolicy, seedDefaultPolicies,
@@ -84,6 +85,11 @@ sdlcRouter.get('/changes/:id', asyncHandler(async (req, res) => {
   res.json({ change });
 }));
 
+/** The initiative a change belongs to: its codebase's initiative (DE-44). */
+async function changeInitiative(change: { projectId: string }): Promise<string | null> {
+  return (await getAgentProject(change.projectId))?.orgProjectId ?? null;
+}
+
 // ── Human decision on a change that needs approval ──────────────────────────
 
 sdlcRouter.post('/changes/:id/decide', asyncHandler(async (req, res) => {
@@ -91,6 +97,9 @@ sdlcRouter.post('/changes/:id/decide', asyncHandler(async (req, res) => {
   if (body.decision !== 'approve' && body.decision !== 'reject') {
     throw new ValidationError('decision must be approve or reject');
   }
+  const change = await getChangeRequest(String(req.params['id'] ?? ''));
+  if (!change) throw new NotFoundError('No such change request');
+  if (!await requireInitiativeScope(req, res, await changeInitiative(change), { action: 'decide changes' })) return;
   const out = await decideChange(String(req.params['id'] ?? ''), body.decision, {
     by: req.session?.sub ?? null,
     note: body.note ?? null,
@@ -111,6 +120,7 @@ sdlcRouter.post('/changes/:id/rereview', asyncHandler(async (req, res) => {
   const change = await getChangeRequest(id);
   if (!change) throw new NotFoundError('No such change request');
   if (!change.diff) throw new ValidationError('This change has no stored diff to review.');
+  if (!await requireInitiativeScope(req, res, await changeInitiative(change), { action: 're-review changes' })) return;
 
   await markInReview(id);
   const review = await reviewDiff({
@@ -143,6 +153,8 @@ sdlcRouter.post('/changes/:id/address', asyncHandler(async (req, res) => {
 
   const project = await getAgentProject(change.projectId);
   if (!project) throw new NotFoundError('The change\'s project no longer exists');
+  // Addressing dispatches a run that spends on the initiative.
+  if (!await requireInitiativeScope(req, res, project.orgProjectId, { spend: true, action: 'address reviews' })) return;
   if (!project.sessionId) {
     throw new ValidationError('This project has no live workspace — re-clone it before addressing the review.');
   }
@@ -173,6 +185,8 @@ sdlcRouter.post('/changes/:id/deliver', asyncHandler(async (req, res) => {
 
   const project = await getAgentProject(change.projectId);
   if (!project) throw new NotFoundError('The change\'s project no longer exists');
+  // Delivery pushes to GitHub with the connection's token.
+  if (!await requireInitiativeScope(req, res, project.orgProjectId, { action: 'deliver changes' })) return;
 
   const arn = await resolveDevboxArn();
   if (!arn) { res.status(503).json({ error: 'the devbox runtime is not deployed' }); return; }

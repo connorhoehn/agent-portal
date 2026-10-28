@@ -35,6 +35,14 @@ jest.mock('../../providers/agent-projects.js', () => ({
 jest.mock('../../lib/devbox-arn.js', () => ({
   resolveDevboxArn: jest.fn(), devboxDataClient: jest.fn(() => ({})),
 }));
+const scope = { deny: new Set<string>(), calls: [] as Array<{ initiativeId: unknown; opts: unknown }> };
+jest.mock('../../lib/initiative-scope.js', () => ({
+  requireInitiativeScope: jest.fn(async (_req: unknown, res: { status(n: number): { json(b: unknown): void } }, initiativeId: string | null, opts: unknown) => {
+    scope.calls.push({ initiativeId, opts });
+    if (initiativeId && scope.deny.has(initiativeId)) { res.status(403).json({ error: 'not your initiative' }); return false; }
+    return true;
+  }),
+}));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
 import request from '../../test-support/http.js';
@@ -85,6 +93,38 @@ function buildApp(session: Record<string, unknown> | null = { sub: 'u-nora' }) {
 beforeEach(() => {
   jest.clearAllMocks();
   m(seedDefaultPolicies).mockResolvedValue(undefined);
+  scope.deny.clear(); scope.calls.length = 0;
+});
+
+describe('initiative scope on change routes (DE-44 rows 16–19)', () => {
+  const ON_BILLING = { ...PROJECT, orgProjectId: 'p-billing' };
+  beforeEach(() => {
+    scope.deny.add('p-billing');
+    m(getChangeRequest).mockResolvedValue(CHANGE);
+    m(getAgentProject).mockResolvedValue(ON_BILLING);
+    m(resolveDevboxArn).mockResolvedValue('arn:devbox');
+  });
+
+  it('refuses decide, rereview, address and deliver on a change outside the caller\'s initiatives', async () => {
+    const app = buildApp({ sub: 'u-nora', role: 'sme' });
+    expect((await request(app).post('/api/sdlc/changes/cr-1/decide').send({ decision: 'approve' })).status).toBe(403);
+    expect((await request(app).post('/api/sdlc/changes/cr-1/rereview').send({})).status).toBe(403);
+    expect((await request(app).post('/api/sdlc/changes/cr-1/address').send({})).status).toBe(403);
+    expect((await request(app).post('/api/sdlc/changes/cr-1/deliver').send({})).status).toBe(403);
+    expect(decideChange).not.toHaveBeenCalled();
+    expect(reviewDiff).not.toHaveBeenCalled();
+    expect(dispatchGovernedRun).not.toHaveBeenCalled();
+    expect(deliverApprovedChange).not.toHaveBeenCalled();
+    // Addressing dispatches a run, so it is the one that asks the spend question.
+    expect(scope.calls.map((c) => (c.opts as { spend?: boolean }).spend === true)).toEqual([false, false, true, false]);
+  });
+
+  it('a decide on an unknown change is a 404 before anything is asked', async () => {
+    m(getChangeRequest).mockResolvedValue(null);
+    const res = await request(buildApp()).post('/api/sdlc/changes/cr-x/decide').send({ decision: 'approve' });
+    expect(res.status).toBe(404);
+    expect(decideChange).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /policies', () => {

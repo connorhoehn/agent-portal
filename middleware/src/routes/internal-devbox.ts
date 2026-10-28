@@ -43,7 +43,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { SERVICE_AUTH_HEADER, verifyEnvelope } from '@connorhoehn/service-runtime';
 import { asyncHandler } from '../lib/async-handler.js';
-import { userStewardsInitiative } from '../lib/initiative-scope.js';
+import { userStewardsInitiative, userReachesBox } from '../lib/initiative-scope.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { normalizeRuntimeSessionId, RUNTIME_SESSION_ID_MIN_LENGTH } from '../lib/runtime-session.js';
 import { registerBox, getBox, getBoxBySession, appendEvent } from '../lib/devbox-fleet.js';
@@ -206,12 +206,15 @@ internalDevboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
   if (!prompt) { res.status(400).json({ error: 'prompt is required' }); return; }
   const resume = Boolean(body.resume);
 
-  // Same auto-adopt convention `runTaskAndForward` itself relies on — a
-  // sessionId that never went through POST /sessions (a curl/replay call)
-  // still gets a box rather than 404ing, but real loop traffic always has
-  // one already, created above with the right owner/source.
-  const box = getBoxBySession(sessionId)
-    ?? registerBox({ sessionId, ownerId: principal.requestedBy, source: principal.service });
+  // A box must have been minted by POST /sessions: auto-registering an unknown
+  // session made the requesting user its owner, so any live session id could
+  // be claimed. And the user the call acts for must reach the box (DE-44 row 24).
+  const box = getBoxBySession(sessionId);
+  if (!box) { res.status(404).json({ error: 'computer not found — mint one via POST /internal/devbox/sessions' }); return; }
+  if (!await userReachesBox(principal.requestedBy, box)) {
+    res.status(403).json({ error: 'the requesting user cannot reach that computer' });
+    return;
+  }
 
   if (mockAgentCore()) {
     const frames = buildLoopMockFrames({ sessionId, prompt, resume, ...(body.model ? { model: body.model } : {}) });
@@ -258,10 +261,17 @@ internalDevboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res)
   if (!sessionId) return;
   const serviceId = verifyServiceAuth(req, res, req.body ?? {});
   if (!serviceId) return;
-  if (!requirePrincipal(req, res, serviceId)) return;
+  const principal = requirePrincipal(req, res, serviceId);
+  if (!principal) return;
 
   const box = getBoxBySession(sessionId);
   if (!box) { res.status(404).json({ error: 'computer not found' }); return; }
+  // A shell URL is a bearer credential for the box: only for a user who may
+  // reach it (DE-44 row 25; the principal used to be parsed and dropped).
+  if (!await userReachesBox(principal.requestedBy, box)) {
+    res.status(403).json({ error: 'the requesting user cannot reach that computer' });
+    return;
+  }
 
   const body = (req.body ?? {}) as { shellId?: string; expiresIn?: number };
   await mintShellUrl(sessionId, body, res);
@@ -329,7 +339,15 @@ internalDevboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
   if (!sessionId) return;
   const serviceId = verifyServiceAuth(req, res, req.body ?? {});
   if (!serviceId) return;
-  if (!requirePrincipal(req, res, serviceId)) return;
+  const principal = requirePrincipal(req, res, serviceId);
+  if (!principal) return;
+  // Stopping ends someone's microVM and wipes its workspace: the same reach
+  // check as the task and shell routes (DE-44 row 26).
+  const box = getBoxBySession(sessionId);
+  if (box && !await userReachesBox(principal.requestedBy, box)) {
+    res.status(403).json({ error: 'the requesting user cannot reach that computer' });
+    return;
+  }
 
   // Mirrors the real transport stopping the microVM (and its workspace) on
   // session stop — the mock's per-session notes.md temp dir must not

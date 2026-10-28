@@ -15,13 +15,16 @@ import request, { attachToSharedServer } from '../../test-support/http.js';
 import { SERVICE_AUTH_HEADER, signEnvelope } from '@connorhoehn/service-runtime';
 import { internalDevboxRouter } from '../internal-devbox.js';
 import { userStewardsInitiative } from '../../lib/initiative-scope.js';
-import { _resetFleet, getBox, listBoxes } from '../../lib/devbox-fleet.js';
+import { _resetFleet, getBox, getBoxBySession, listBoxes } from '../../lib/devbox-fleet.js';
 import { _resetLoopMock } from '../../mock/devbox-agent-loop.js';
 import { isValidFileId } from '../../lib/devbox-files.js';
 
 jest.mock('../../lib/initiative-scope.js', () => ({
   ...jest.requireActual('../../lib/initiative-scope.js'),
   userStewardsInitiative: jest.fn(async () => false),
+  // Owner reaches its box; the real rule (steward / org-wide) is unit-tested in
+  // lib/__tests__/initiative-scope-route.test.ts.
+  userReachesBox: jest.fn(async (userId: string, box: { ownerId?: string | null }) => box.ownerId === userId),
 }));
 const stewards = userStewardsInitiative as jest.MockedFunction<typeof userStewardsInitiative>;
 
@@ -150,6 +153,31 @@ describe('internal devbox router — initiative charge', () => {
     const res = await request(app()).post('/internal/devbox/sessions').set(signed(body)).send(body);
     expect(res.status).toBe(201);
     expect(stewards).not.toHaveBeenCalled();
+  });
+});
+
+describe('internal devbox router — the requesting user must reach the box (DE-44 rows 24–26)', () => {
+  async function mint(owner: string): Promise<string> {
+    const body = { principal: principal(owner), label: 'x' };
+    return (await request(app()).post('/internal/devbox/sessions').set(signed(body)).send(body)).body.sessionId;
+  }
+
+  it('refuses task, shell-url and stop for a user who does not own or steward the box', async () => {
+    const sessionId = await mint('u-loop-owner');
+    const task = { principal: principal('u-other'), prompt: 'cat secrets' };
+    expect((await request(app()).post(`/internal/devbox/${sessionId}/task`).set(signed(task)).send(task)).status).toBe(403);
+    const shell = { principal: principal('u-other') };
+    expect((await request(app()).post(`/internal/devbox/${sessionId}/shell-url`).set(signed(shell)).send(shell)).status).toBe(403);
+    expect((await request(app()).delete(`/internal/devbox/${sessionId}`).set(signed(shell)).send(shell)).status).toBe(403);
+    expect(getBoxBySession(sessionId)?.status).not.toBe('stopped');
+  });
+
+  it('does not adopt an unknown session as the requester\'s own box', async () => {
+    const unknown = 'sess-never-minted-'.padEnd(40, 'z');
+    const task = { principal: principal('u-other'), prompt: 'hello' };
+    const res = await request(app()).post(`/internal/devbox/${unknown}/task`).set(signed(task)).send(task);
+    expect(res.status).toBe(404);
+    expect(getBoxBySession(unknown)).toBeNull();
   });
 });
 

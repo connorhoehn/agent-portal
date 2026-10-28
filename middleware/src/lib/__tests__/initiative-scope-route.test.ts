@@ -1,7 +1,11 @@
 // requireInitiativeScope: the route-level "may this caller act here" check
 // (DE-44). Steward first; `spend` adds the grant verdict an SME spends under.
 
-const users = new Map<string, { personId: string | null }>([['u-owner', { personId: 'p-001' }], ['u-stranger', { personId: 'p-009' }]]);
+const users = new Map<string, { personId: string | null; grants: Record<string, string[]> }>([
+  ['u-owner', { personId: 'p-001', grants: { orgiq: ['sme'] } }],
+  ['u-stranger', { personId: 'p-009', grants: { orgiq: ['sme'] } }],
+  ['u-leader', { personId: null, grants: { orgiq: ['org-leader'] } }],
+]);
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn(async (id: string) => users.get(id) ?? null) }));
 jest.mock('../../providers/projects.js', () => ({
   getProject: jest.fn(async (id: string) => (id === 'p-auth' ? { id, ownerId: 'p-001', contributors: [] } : null)),
@@ -9,7 +13,7 @@ jest.mock('../../providers/projects.js', () => ({
 const verdict = { value: { kind: 'allow' } as { kind: string; reason?: string } };
 jest.mock('../bot-runner.js', () => ({ grantScopedDispatchVerdict: jest.fn(async () => verdict.value) }));
 
-import { requireInitiativeScope } from '../initiative-scope.js';
+import { requireInitiativeScope, userReachesBox } from '../initiative-scope.js';
 
 function res() {
   const out: { status?: number; body?: Record<string, unknown> } = {};
@@ -50,5 +54,16 @@ describe('requireInitiativeScope', () => {
     expect(unknown.out.status).toBe(503);
     // Without `spend` the grant is never asked.
     expect(await requireInitiativeScope(sme('u-owner'), res().res, 'p-auth')).toBe(true);
+  });
+});
+
+describe('userReachesBox', () => {
+  it('its owner, a steward of its initiative, or an org-wide role; nobody else', async () => {
+    expect(await userReachesBox('u-stranger', { ownerId: 'u-stranger' })).toBe(true);
+    expect(await userReachesBox('u-owner', { ownerId: 'u-x', projectId: 'p-auth' })).toBe(true);
+    expect(await userReachesBox('u-stranger', { ownerId: 'u-x', projectId: 'p-auth' })).toBe(false);
+    expect(await userReachesBox('u-leader', { ownerId: 'u-x' })).toBe(true);
+    expect(await userReachesBox('u-stranger', { ownerId: 'u-x' })).toBe(false);
+    expect(await userReachesBox('u-unknown', { ownerId: null })).toBe(false);
   });
 });
