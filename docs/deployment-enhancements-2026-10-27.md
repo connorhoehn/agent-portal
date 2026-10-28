@@ -9,88 +9,117 @@ specs can cite `DE-<n>`. Expanded specs live in `docs/deployment-enhancements/`
 
 ## A. AgentCore / Bedrock
 
-- **DE-1 One-command runtime rollout.** Today: deploy `OrgIQ-AgentCoreRuntime`
+- **DE-1 One-command runtime rollout.** Spec:
+  [`DE-1-runtime-rollout.md`](deployment-enhancements/DE-1-runtime-rollout.md). Today: deploy `OrgIQ-AgentCoreRuntime`
   (empty ECR repos), run `agents/base/build.sh` + `agents/build-all.sh`,
   redeploy with `deployRuntimes=true`. Fold into one idempotent step.
-- **DE-2 Digest-pinned agent images, versioned rollout.** Pin each runtime to
+- **DE-2 Digest-pinned agent images, versioned rollout.** Spec:
+  [`DE-2-digest-pinned-runtimes.md`](deployment-enhancements/DE-2-digest-pinned-runtimes.md). Pin each runtime to
   an image digest; use AgentCore runtime versions/endpoints for per-agent
   canary or traffic shift, beyond the all-or-nothing `onlyAgents`.
-- **DE-3 Model registry.** Replace per-agent `MODEL_ID` env with a central,
+- **DE-3 Model registry.** Spec:
+  [`DE-3-model-registry.md`](deployment-enhancements/DE-3-model-registry.md). Replace per-agent `MODEL_ID` env with a central,
   versioned config (SSM/AppConfig): inference profiles, fallback models,
   cross-region routing.
-- **DE-4 Prompt promotion pipeline.** Prompts are read from the DRAFT version
+- **DE-4 Prompt promotion pipeline.** Spec:
+  [`DE-4-prompt-promotion.md`](deployment-enhancements/DE-4-prompt-promotion.md). Prompts are read from the DRAFT version
   with a 60 s cache. Move to versioned prompt aliases promoted through the
   existing prompt canary and eval.
-- **DE-5 Eval as a deploy gate.** Online eval is a raw `CfnResource`, off by
+- **DE-5 Eval as a deploy gate.** Spec:
+  [`DE-5-eval-deploy-gate.md`](deployment-enhancements/DE-5-eval-deploy-gate.md). Online eval is a raw `CfnResource`, off by
   default. Make golden sets plus online eval a pass/fail step before a model,
   prompt or image change ships.
-- **DE-6 AgentCore Identity for callbacks.** Runtime callback secrets are
+- **DE-6 AgentCore Identity for callbacks.** Spec:
+  [`DE-6-callback-identity.md`](deployment-enhancements/DE-6-callback-identity.md). Runtime callback secrets are
   plain env vars (runtime env cannot reference Secrets Manager), and closing
   the callback guards is an ordered multi-stack deploy. Replace with workload
   identity / OAuth tokens and rotation.
-- **DE-7 Registry-driven MCP gateway tools.** Onboard tools and targets from a
+- **DE-7 Registry-driven MCP gateway tools.** Spec:
+  [`DE-7-mcp-tool-registry.md`](deployment-enhancements/DE-7-mcp-tool-registry.md). Onboard tools and targets from a
   manifest without CDK edits.
-- **DE-8 AgentCore Memory as config.** Per-tenant memory strategies and
+- **DE-8 AgentCore Memory as config.** Spec:
+  [`DE-8-memory-config.md`](deployment-enhancements/DE-8-memory-config.md). Per-tenant memory strategies and
   retention through config, not code.
-- **DE-9 Native observability.** Replace the CloudWatch-polling trace sink
+- **DE-9 Native observability.** Spec:
+  [`DE-9-native-observability.md`](deployment-enhancements/DE-9-native-observability.md). Replace the CloudWatch-polling trace sink
   (`OBS_USE_LEGACY_POLLER=true`, `FALLBACK_RATE = 0.1`) with AgentCore
   Observability / OTLP; per-agent latency, error and token dashboards.
-- **DE-10 Bedrock cost and quota operations.** Token and dollar metering per
+- **DE-10 Bedrock cost and quota operations.** Spec:
+  [`DE-10-bedrock-cost-quota.md`](deployment-enhancements/DE-10-bedrock-cost-quota.md). Token and dollar metering per
   runtime and per tenant; throttling (TPM/RPM) alarms; quota requests ahead of
   demand.
-- **DE-11 Knowledge Base off CFN exports.** KB exports freeze once imported and
+- **DE-11 Knowledge Base off CFN exports.** Spec:
+  [`DE-11-kb-resolution.md`](deployment-enhancements/DE-11-kb-resolution.md). KB exports freeze once imported and
   the KB registry drifts (`PENDING` rows fall back to `KB_ID`). Resolve KB ids
   through SSM; reconcile ingestion state and the pinned `HYBRID` search type.
-- **DE-12 Guardrail lifecycle.** Versioned per-role guardrails, live-vs-code
+- **DE-12 Guardrail lifecycle.** Spec:
+  [`DE-12-guardrail-lifecycle.md`](deployment-enhancements/DE-12-guardrail-lifecycle.md). Versioned per-role guardrails, live-vs-code
   drift detection, tests before promotion.
-- **DE-13 Low-latency directory and graph reads.** Every authoritative read is
+- **DE-13 Low-latency directory and graph reads.** Spec:
+  [`DE-13-low-latency-reads.md`](deployment-enhancements/DE-13-low-latency-reads.md). Every authoritative read is
   a Data API round trip; RDS Proxy or a direct in-VPC connection for the BFF
   and agents. Likely cause of the ~9 s call join window.
 
 ## B. Deployment orchestration
 
-- **DE-14 Single resumable deploy orchestrator.** Fleet → images → runtimes →
+- **DE-14 Single resumable deploy orchestrator.** Spec:
+  [`DE-14-deploy-orchestrator.md`](deployment-enhancements/DE-14-deploy-orchestrator.md). Fleet → images → runtimes →
   middleware → portal → Social → documents as one command with recorded
   state. Today each phase is hand-run with digests copied between steps.
-- **DE-15 CI/CD.** Deploy from GitHub Actions through an OIDC role; build ARM64
+- **DE-15 CI/CD.** Spec:
+  [`DE-15-ci-cd.md`](deployment-enhancements/DE-15-ci-cd.md). Deploy from GitHub Actions through an OIDC role; build ARM64
   images in the cloud (a local Colima Docker crash stalled builds this
   session; private GitHub deps need a scoped read credential).
-- **DE-16 Resume after credential expiry.** Checkpoint progress;
+- **DE-16 Resume after credential expiry.** Spec:
+  [`DE-16-resume-after-expiry.md`](deployment-enhancements/DE-16-resume-after-expiry.md). Checkpoint progress;
   `aws-azure-login` sessions expire mid-deploy.
-- **DE-17 Parameterised environments.** Account, region, prefix and
+- **DE-17 Parameterised environments.** Spec:
+  [`DE-17-parameterised-environments.md`](deployment-enhancements/DE-17-parameterised-environments.md). Account, region, prefix and
   domain-vs-CloudFront as configuration, so a preview or fresh environment
   needs no edits.
-- **DE-18 Digest pins everywhere.** The middleware service pulls `:latest` and
+- **DE-18 Digest pins everywhere.** Spec:
+  [`DE-18-digest-pins.md`](deployment-enhancements/DE-18-digest-pins.md). The middleware service pulls `:latest` and
   needs `--force-new-deployment` after each push.
-- **DE-19 Script-made resources under CloudFormation.** Document ECR repos,
+- **DE-19 Script-made resources under CloudFormation.** Spec:
+  [`DE-19-document-images-stack.md`](deployment-enhancements/DE-19-document-images-stack.md). Document ECR repos,
   grant keys and the SSM context are created by
   `document-workspace-push.mjs`; a `DocumentImages`-style stack would own
   them, as `OrgIQ-SocialImages` does.
-- **DE-20 Automated schema migrations.** A migration ledger with dry-run,
+- **DE-20 Automated schema migrations.** Spec:
+  [`DE-20-schema-migrations.md`](deployment-enhancements/DE-20-schema-migrations.md). A migration ledger with dry-run,
   applied by the deploy, instead of `schema/load_schema.py` by hand.
 
 ## C. Operations and verification
 
-- **DE-21 Post-deploy verification gate.** `cloud-call-smoke` and
+- **DE-21 Post-deploy verification gate.** Spec:
+  [`DE-21-post-deploy-gate.md`](deployment-enhancements/DE-21-post-deploy-gate.md). `cloud-call-smoke` and
   `cloud-documents-smoke`, health and target checks as the final deploy step.
-- **DE-22 Custodian preflight.** The account custodian revokes open SG rules
+- **DE-22 Custodian preflight.** Spec:
+  [`DE-22-custodian-preflight.md`](deployment-enhancements/DE-22-custodian-preflight.md). The account custodian revokes open SG rules
   and strips bucket policies; verify the rules and policies survived instead
   of trusting `*_COMPLETE`.
-- **DE-23 Allowlists that follow people.** Derive the operator IP; admit call
+- **DE-23 Allowlists that follow people.** Spec:
+  [`DE-23-allowlists-and-turn.md`](deployment-enhancements/DE-23-allowlists-and-turn.md). Derive the operator IP; admit call
   participants through TURN (`deployTurn`, built but off), not per-IP
   `sfuAllowCidr`.
-- **DE-24 Cloud environment bootstrap.** Cognito test users (seeded ones sit at
+- **DE-24 Cloud environment bootstrap.** Spec:
+  [`DE-24-cloud-bootstrap.md`](deployment-enhancements/DE-24-cloud-bootstrap.md). Cognito test users (seeded ones sit at
   `FORCE_CHANGE_PASSWORD`), a knowledge source and synthetic corpus, demo
   identities.
-- **DE-25 Middleware capacity.** One pinned 1 vCPU gateway task; decide a larger
+- **DE-25 Middleware capacity.** Spec:
+  [`DE-25-middleware-capacity.md`](deployment-enhancements/DE-25-middleware-capacity.md). One pinned 1 vCPU gateway task; decide a larger
   task vs Redis peer routing (open decision in `CLAUDE.md`).
-- **DE-26 Idle cost controls.** Scheduled scale-to-zero for Aurora, Fargate and
+- **DE-26 Idle cost controls.** Spec:
+  [`DE-26-idle-cost.md`](deployment-enhancements/DE-26-idle-cost.md). Scheduled scale-to-zero for Aurora, Fargate and
   the SFU in idle environments; per-environment budget; hourly-burn estimate.
-- **DE-27 Verified teardown.** `destroy.sh` checks the API and reports every
+- **DE-27 Verified teardown.** Spec:
+  [`DE-27-verified-teardown.md`](deployment-enhancements/DE-27-verified-teardown.md). `destroy.sh` checks the API and reports every
   survivor, including non-CFN resources.
-- **DE-28 Lint for this deploy's bug classes.** Partial secret ARNs, uuid binds
+- **DE-28 Lint for this deploy's bug classes.** Spec:
+  [`DE-28-bug-class-lint.md`](deployment-enhancements/DE-28-bug-class-lint.md). Partial secret ARNs, uuid binds
   as text, a second CommonJS editor stack in the production bundle.
-- **DE-29 Tenant manifest.** Five tenants are hard-coded across `TENANTS`, the
+- **DE-29 Tenant manifest.** Spec:
+  [`DE-29-tenant-manifest.md`](deployment-enhancements/DE-29-tenant-manifest.md). Five tenants are hard-coded across `TENANTS`, the
   Cedar seeds, routers and CDK; a manifest should drive policies, routes,
   runtimes and stacks so a tenant is added without code changes.
 

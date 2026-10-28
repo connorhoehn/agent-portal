@@ -115,7 +115,7 @@ Everything is CDK; never `agentcore deploy` for the cloud (it drifts from CDK).
 | Resource | Stack / flag |
 |----------|--------------|
 | Aurora Serverless v2 (pgvector) | `OrgIQ-Aurora` |
-| OpenSearch Serverless + Bedrock KB | `OrgIQ-KnowledgeBase` |
+| Bedrock KB on Aurora pgvector | `OrgIQ-KnowledgeBase` |
 | Guardrails (one per role) | `OrgIQ-Guardrails` |
 | Verified Permissions + Cedar | `OrgIQ-Authorization` |
 | Cognito pool + hosted UI | `OrgIQ-Authentication` |
@@ -318,8 +318,8 @@ touch.
 - **`middleware/.env.aws` rots on every rebuild** (browser, code interpreter,
   memory ids). Regenerate with `./schema/dump-stack-outputs.sh`; `config.ts`
   only fills vars the shell leaves undefined.
-- Aurora bills 0.5 ACU idle (~$45/mo) and OpenSearch Serverless 2 OCU; the
-  budget alarm matters.
+- Aurora bills 0.5 ACU idle (~$45/mo), and the knowledge base shares that
+  cluster (pgvector); the budget alarm matters.
 
 ## Agent runtimes and images
 
