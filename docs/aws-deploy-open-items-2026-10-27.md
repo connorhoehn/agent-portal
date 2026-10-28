@@ -165,3 +165,12 @@ the `orgiq-documents-{gateway,platform,catalog,mq,redis}` ECR repos, secrets
 | Doc gateway "Failed to resolve fs-….efs…" | service created alongside mount targets | depends on `mountTargetsAvailable` |
 | Every draft creation 503 | uuid `document_id` bound as text | `CAST(:document AS uuid)` + guard test |
 | Canvas crashed on mount | two editor stacks in the bundle | `editorStackAsEsm` (item 2 is the upstream fix) |
+| Agents deploy would refuse to drop six exports (2026-10-28 rollout of `fa782230`) | Gateway stopped taking the roles as objects; the deployed Gateway still imported the auto exports | `exportValue` keeps them in `lib/agents-stack.ts` |
+| Middleware image build `ENOENT …message-queue-0.4.0.tgz` | lockfile resolves `file:vendor/…`, deps stage never copied `vendor/` | `COPY vendor ./vendor` in `middleware/Dockerfile` |
+| deploy.sh's gate: page-thread migrator "Refusing to migrate into a process-local memory store" | the manifest left the chat-store env to the operator's shell | manifest entries carry `env` (outside the checksum) |
+| `PolicySupervisorFullAccess` NotStabilized "Target … does not exist" | Cedar actions used `<target>__<tool>`; the gateway names tools `<target>___<tool>` | `___` in `lib/agentcore-gateway-stack.ts` |
+
+The 2026-10-28 rollout also applied the schema ledger baseline and the
+page-thread data migration (19 comments, 0 failures; `2026-09-05-drop-newsroom`
+is still pending and not gated). The middleware still pulls `:latest`, so a
+push needs `aws ecs update-service --force-new-deployment` (DE-18).
