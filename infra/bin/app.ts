@@ -348,7 +348,8 @@ new DevboxStack(app, 'OrgIQ-Devbox', {
   // Only referenced (and therefore only imported) when devboxOrgAccess=true.
   ...(devboxOrgAccess && {
     auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),
-    auroraCredentialsSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
+    // The SELECT-only reader, not the master secret (DE-40).
+    auroraReadOnlySecretArn: cdk.Fn.importValue(`${prefix}-aurora-readonly-secret-arn`),
     knowledgeBaseId: cdk.Fn.importValue(`${prefix}-knowledge-base-id`),
   }),
   // The lab loop, off unless an operator turns it on. Same hand-copied shape as

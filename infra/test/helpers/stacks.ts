@@ -32,8 +32,8 @@ import { SpanProjectorStack } from '../../lib/span-projector-stack';
 export const PREFIX = 'orgiq';
 
 const CLUSTER_ARN = 'arn:aws:rds:us-east-1:111111111111:cluster:orgiq-aurora';
-const SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:111111111111:secret:orgiq-aurora-abc123';
-const READONLY_SECRET_ARN =
+export const SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:111111111111:secret:orgiq-aurora-abc123';
+export const READONLY_SECRET_ARN =
   'arn:aws:secretsmanager:us-east-1:111111111111:secret:orgiq-aurora-readonly-def456';
 const KB_ARN = 'arn:aws:bedrock:us-east-1:111111111111:knowledge-base/KBTEST0001';
 const DOCS_BUCKET_ARN = 'arn:aws:s3:::orgiq-documents-111111111111-us-east-1';
@@ -144,7 +144,7 @@ export function devboxStack(
       new DevboxStack(newApp(context), 'OrgIQ-Devbox', {
         prefix: PREFIX,
         auroraClusterArn: CLUSTER_ARN,
-        auroraCredentialsSecretArn: SECRET_ARN,
+        auroraReadOnlySecretArn: READONLY_SECRET_ARN,
         knowledgeBaseId: 'KBTEST0001',
         ...props,
       }),

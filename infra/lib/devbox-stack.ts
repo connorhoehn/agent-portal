@@ -22,7 +22,12 @@ export interface DevboxStackProps extends cdk.StackProps {
    * the devbox starts with Bedrock inference + logging and nothing else.
    */
   readonly auroraClusterArn?: string;
-  readonly auroraCredentialsSecretArn?: string;
+  /**
+   * The `orgiq_graph_reader` credential (SELECT-only), never the cluster's
+   * master secret: this box runs Claude Code with permissions skipped, so the
+   * database role is the boundary that keeps "read-only" true (DE-40).
+   */
+  readonly auroraReadOnlySecretArn?: string;
   readonly knowledgeBaseId?: string;
   /**
    * Origin the in-container `lab` CLI calls back to, e.g.
@@ -174,19 +179,19 @@ export class DevboxStack extends cdk.Stack {
     // exercise real OrgIQ agent code against live data.
     //   cdk deploy OrgIQ-Devbox --context deployDevbox=true --context devboxOrgAccess=true
     if (orgAccess) {
-      if (props.auroraClusterArn && props.auroraCredentialsSecretArn) {
+      if (props.auroraClusterArn && props.auroraReadOnlySecretArn) {
         executionRole.addToPolicy(new iam.PolicyStatement({
           sid: 'OrgAccessAuroraRead',
-          // ExecuteStatement only — no transactions, no batch writes. SQL-level
-          // read enforcement is the caller's responsibility, as with the
-          // OrgIQ read tools.
+          // ExecuteStatement only — no transactions, no batch writes — and as
+          // `orgiq_graph_reader` (below), so a write the agent composes is
+          // refused by the database, not left to the caller's discipline.
           actions: ['rds-data:ExecuteStatement'],
           resources: [props.auroraClusterArn],
         }));
         executionRole.addToPolicy(new iam.PolicyStatement({
           sid: 'OrgAccessAuroraSecret',
           actions: ['secretsmanager:GetSecretValue'],
-          resources: [props.auroraCredentialsSecretArn],
+          resources: [props.auroraReadOnlySecretArn],
         }));
       }
       executionRole.addToPolicy(new iam.PolicyStatement({

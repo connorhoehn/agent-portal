@@ -5,7 +5,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { Template } from 'aws-cdk-lib/assertions';
-import { devboxStack } from './helpers/stacks';
+import { devboxStack, SECRET_ARN, READONLY_SECRET_ARN } from './helpers/stacks';
 import { actionsOf, statementsForRole } from './helpers/cfn';
 
 const phaseOne = Template.fromStack(devboxStack());
@@ -99,6 +99,15 @@ describe('org data access is opt-in', () => {
     ]) {
       assert.ok(!granted.has(write), `org access must stay read-only; found ${write}`);
     }
+  });
+
+  test('org access reads Aurora as orgiq_graph_reader, never with the master secret (DE-40)', () => {
+    const t = Template.fromStack(devboxStack({ devboxOrgAccess: 'true' }));
+    const secretResources = statementsForRole(t, 'orgiq-devbox-execution-role')
+      .filter((st: any) => actionsOf(st).includes('secretsmanager:GetSecretValue'))
+      .flatMap((st: any) => [].concat(st.Resource));
+    assert.deepEqual(secretResources, [READONLY_SECRET_ARN]);
+    assert.ok(!JSON.stringify(t.toJSON()).includes(SECRET_ARN), 'the master secret must not appear in the devbox stack');
   });
 });
 
