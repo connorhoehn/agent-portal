@@ -107,7 +107,11 @@ export const config = {
   },
 
   guardrail: {
-    id: env('GUARDRAIL_ID'),
+    // The editor, metrics and capability readout target one guardrail. The
+    // deployed BFF sets only the per-role ids (middleware-service-stack.ts), so
+    // without this fallback they called Bedrock with an empty id in the cloud
+    // (DE-12). The member guardrail is the one the editor was built against.
+    id: env('GUARDRAIL_ID') || env('GUARDRAIL_ID_MEMBER'),
     version: env('GUARDRAIL_VERSION', '1'),
     // Per-role guardrail IDs. Middleware passes the matching one to the
     // supervisor on each invoke based on the caller's session role.
