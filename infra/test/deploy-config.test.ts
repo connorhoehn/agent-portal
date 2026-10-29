@@ -123,12 +123,22 @@ describe('deploy.sh: a later deploy keeps the second-phase gates that are live',
     'approvalsRequestSecret', 'harnessTraceSecret', 'assessmentRunCompleteSecret',
     'realtimeGateway', 'deploySocialImages', 'deploySocialMedia', 'sfuImageDigest', 'sfuAllowCidr',
     'socialPortalOrigin', 'deploySocial', 'deploySocialService', 'platformApiImageDigest',
-    'deployDocumentWorkspace', 'documentWorkspace',
+    'deployDocumentWorkspace', 'documentWorkspace', 'sfuAmiId', 'turnAmiId',
   ]) {
     test(`${key} is inferred from the live account`, () => {
       assert.match(script, new RegExp(`infer ${key} |${key}:`), `${key} is not inferred`);
     });
   }
+
+  test('a named stack brings its dependencies and its readers-by-name into the diff, deploy and reconciliation', () => {
+    // ./deploy.sh OrgIQ-SocialMedia redeployed OrgIQ-MiddlewareService under
+    // --no-rollback (UPDATE_FAILED) and still reported "all 1 expected stack(s)
+    // healthy"; the SFU it replaced left OrgIQ-Social calling a dead host.
+    assert.match(script, /--show-dependencies --json/);
+    assert.match(script, /EXPECTED_STACKS=\("\$\{SELECTED_STACKS\[@\]\}"\)/);
+    assert.match(script, /READS_BY_NAME=\("\$\{STACK_PREFIX\}SocialMedia:\$\{STACK_PREFIX\}Social"\)/);
+    assert.match(script, /deploy "\$\{NAMED_STACKS\[@\]\}"/);
+  });
 
   test('a value the caller passed wins over an inferred one', () => {
     assert.match(script, /infer\(\) \{[^}]*ctx_given "\$1" && return 0/);

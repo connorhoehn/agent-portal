@@ -58,6 +58,26 @@ export const TURN_PORTS = { plain: 3478, tls: 443, relay: { from: 49152, to: 496
  * fail with "Cannot delete export … in use" — every SFU image roll would have
  * wedged. A parameter changes value freely.
  */
+/**
+ * A media host's OS image. latestAmazonLinux2023() resolves AWS's newest image
+ * on every deploy, and an instance is replaced whenever its image changes, so
+ * each Amazon Linux release dropped every live call on the next unrelated
+ * deploy (2026-10-29: a CIDR-only deploy replaced the SFU because
+ * al2023-ami-2023.12.20261028.0 had shipped the day before, and OrgIQ-Social
+ * kept calling the terminated host). `key` (`sfuAmiId`, `turnAmiId`) pins an
+ * image; deploy.sh carries the live one forward from the stack's `…AmiId`
+ * output; `latest` (or unset, on a first deploy) takes AWS's newest on purpose.
+ */
+export function hostImage(scope: Construct, key: string): ec2.IMachineImage {
+  const raw: unknown = scope.node.tryGetContext(key);
+  if (raw === undefined || raw === null || raw === '' || raw === 'latest') {
+    return ec2.MachineImage.latestAmazonLinux2023({ cpuType: ec2.AmazonLinuxCpuType.ARM_64 });
+  }
+  if (typeof raw !== 'string' || !/^ami-[0-9a-f]{8,17}$/.test(raw)) throw new Error(`${key} must be ami-<hex> or latest, got ${String(raw)}`);
+  // An AMI id is regional already; no per-region map (genericLinux needs a concrete region key).
+  return { getImage: () => ({ imageId: raw, osType: ec2.OperatingSystemType.LINUX, userData: ec2.UserData.forLinux() }) };
+}
+
 export function sfuParameterNames(prefix: string): {
   privateIp: string; instanceId: string;
   secretArns: { adminToken: string; webhook: string; serviceToken: string };
@@ -464,8 +484,8 @@ export class SocialMediaStack extends cdk.Stack {
       // One public subnet (the first AZ): a single SFU is single-AZ anyway.
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       instanceType: new ec2.InstanceType(instanceTypeName),
-      // Resolved from the public SSM parameter at deploy time — no context lookup.
-      machineImage: ec2.MachineImage.latestAmazonLinux2023({ cpuType: ec2.AmazonLinuxCpuType.ARM_64 }),
+      // Pinned (sfuAmiId, carried forward by deploy.sh): see hostImage.
+      machineImage: hostImage(this, 'sfuAmiId'),
       securityGroup: this.securityGroup,
       role,
       userData,
@@ -565,6 +585,8 @@ export class SocialMediaStack extends cdk.Stack {
       value: digest ?? '(none — :latest)',
       description: 'sfuImageDigest this stack was deployed with',
     });
+    // Read back by deploy.sh (sfuAmiId), so a later deploy keeps this image.
+    new cdk.CfnOutput(this, 'SfuAmiId', { value: this.instance.instance.imageId!, description: 'The SFU host image (sfuAmiId)' });
     new cdk.CfnOutput(this, 'SfuMediaPorts', {
       value: `${instanceTypeName}, ${ports.workers} workers: UDP ${ports.rtcUdp.from}-${ports.rtcUdp.to}, TCP ${ports.rtcTcp.from}-${ports.rtcTcp.to}`,
       description: 'Instance type, worker count and the media ports the group opens',
@@ -572,6 +594,7 @@ export class SocialMediaStack extends cdk.Stack {
     if (turn) {
       new cdk.CfnOutput(this, 'TurnPublicIp', { value: turn.publicIp, description: 'coturn relay Elastic IP' });
       new cdk.CfnOutput(this, 'TurnUrls', { value: turn.urls, description: 'LVS_TURN_URL handed to browsers via /api/ice-servers' });
+      new cdk.CfnOutput(this, 'TurnAmiId', { value: turn.imageId, description: 'The TURN host image (turnAmiId)' });
       // Read back by deploy.sh so a later deploy keeps TURN and its allowlist
       // instead of deleting the relay (DE-23).
       const turnAllow = this.node.tryGetContext('turnAllowCidr');
@@ -611,7 +634,7 @@ export class SocialMediaStack extends cdk.Stack {
    * an owner decision — measure it, or get the exception.
    */
   private turnRelay(prefix: string, vpc: ec2.IVpc, sfuEip: ec2.CfnEIP): {
-    publicIp: string; urls: string; secret: secretsmanager.Secret;
+    publicIp: string; urls: string; secret: secretsmanager.Secret; imageId: string;
   } {
     const ctx = (k: string) => this.node.tryGetContext(k) as string | undefined;
     const secret = new secretsmanager.Secret(this, 'TurnSecret', {
@@ -738,7 +761,7 @@ export class SocialMediaStack extends cdk.Stack {
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       instanceType: new ec2.InstanceType(ctx('turnInstanceType') ?? 't4g.small'),
-      machineImage: ec2.MachineImage.latestAmazonLinux2023({ cpuType: ec2.AmazonLinuxCpuType.ARM_64 }),
+      machineImage: hostImage(this, 'turnAmiId'),
       securityGroup: sg,
       role,
       userData,
@@ -766,6 +789,6 @@ export class SocialMediaStack extends cdk.Stack {
       `turn:${eip.attrPublicIp}:${TURN_PORTS.plain}`,
       tlsDomain ? `turns:${tlsDomain}:${TURN_PORTS.tls}?transport=tcp` : `turn:${eip.attrPublicIp}:${TURN_PORTS.tls}?transport=tcp`,
     ].join(',');
-    return { publicIp: eip.attrPublicIp, urls, secret };
+    return { publicIp: eip.attrPublicIp, urls, secret, imageId: instance.instance.imageId! };
   }
 }

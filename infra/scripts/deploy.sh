@@ -481,6 +481,10 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
     infer deploySocialMedia true
     stack_output SFU_DIGEST ${STACK_PREFIX}SocialMedia SfuImageDigest
     [[ "$SFU_DIGEST" == sha256:* ]] && infer sfuImageDigest "$SFU_DIGEST"
+    # The host image: AWS's newest would replace the SFU on every deploy after
+    # an Amazon Linux release (hostImage in lib/social-media-stack.ts).
+    stack_output SFU_AMI ${STACK_PREFIX}SocialMedia SfuAmiId
+    [[ "$SFU_AMI" == ami-* ]] && infer sfuAmiId "$SFU_AMI"
     stack_output SFU_CIDRS ${STACK_PREFIX}SocialMedia SfuAllowedCidrs
     [[ "$SFU_CIDRS" =~ ^[0-9] ]] && infer sfuAllowCidr "$SFU_CIDRS"
     [[ -n "$PORTAL_URL" ]] && infer socialPortalOrigin "$PORTAL_URL"
@@ -491,6 +495,8 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
     stack_output TURN_IP ${STACK_PREFIX}SocialMedia TurnPublicIp
     if [[ -n "$TURN_IP" ]]; then
       infer deployTurn true
+      stack_output TURN_AMI ${STACK_PREFIX}SocialMedia TurnAmiId
+      [[ "$TURN_AMI" == ami-* ]] && infer turnAmiId "$TURN_AMI"
       stack_output TURN_CIDRS ${STACK_PREFIX}SocialMedia TurnAllowedCidrs
       [[ "$TURN_CIDRS" =~ ^[0-9:] ]] && infer turnAllowCidr "$TURN_CIDRS"
     fi
@@ -593,6 +599,61 @@ else
   METHOD="change-set"
 fi
 
+# What this invocation will actually deploy. `cdk deploy <stack>` also deploys
+# every stack the named one depends on (unless -e/--exclusively), and those
+# fail exactly as the named one can. Scoping the diff, the replacement recovery
+# and the reconciliation to the named stack alone let a dependency's refused
+# replacement through all three: `./deploy.sh OrgIQ-SocialMedia` redeployed
+# OrgIQ-MiddlewareService under --no-rollback, it went UPDATE_FAILED, the
+# SocialMedia change never ran, and the script still printed "all 1 expected
+# stack(s) healthy". So named stacks expand to their dependency closure here.
+NAMED_STACKS=()
+OTHER_ARGS=()
+EXCLUSIVE=false
+for arg in ${CDK_ARGS[@]+"${CDK_ARGS[@]}"}; do
+  case "$arg" in
+    "${STACK_PREFIX}"*) NAMED_STACKS+=("$arg") ;;
+    -e|--exclusively) EXCLUSIVE=true; OTHER_ARGS+=("$arg") ;;
+    *) OTHER_ARGS+=("$arg") ;;
+  esac
+done
+# Readers BY NAME: stacks that resolve another stack's SSM parameters at
+# deploy time, so CloudFormation sees no dependency. OrgIQ-Social bakes the SFU
+# host's private IP (platform-api's VIDEO_API_URL) and instance id (the video
+# origin's ALB target) from OrgIQ-SocialMedia, and the SFU instance is replaced
+# on every image roll or user-data change. Deploying SocialMedia alone left
+# both pointing at a terminated instance (platform-api's SFU calls timed out,
+# every POST /api/video/sessions 504). A named producer brings its readers.
+READS_BY_NAME=("${STACK_PREFIX}SocialMedia:${STACK_PREFIX}Social")
+if [[ ${#NAMED_STACKS[@]} -gt 0 ]] && ! $EXCLUSIVE; then
+  for pair in "${READS_BY_NAME[@]}"; do
+    producer="${pair%%:*}" reader="${pair#*:}"
+    printf '%s\n' "${NAMED_STACKS[@]}" | grep -qx "$producer" || continue
+    printf '%s\n' "${NAMED_STACKS[@]}" | grep -qx "$reader" && continue
+    echo "$STACKS_TO_DEPLOY" | grep -qx "$reader" || continue
+    echo "  ${reader} reads ${producer}'s parameters by name: deploying it too."
+    NAMED_STACKS+=("$reader")
+  done
+fi
+SELECTED_STACKS=()
+if [[ ${#NAMED_STACKS[@]} -gt 0 ]]; then
+  if $EXCLUSIVE; then
+    SELECTED_STACKS=("${NAMED_STACKS[@]}")
+  else
+    while IFS= read -r stack; do
+      [[ -n "$stack" ]] && SELECTED_STACKS+=("$stack")
+    done < <("${CDK[@]}" ls "${NAMED_STACKS[@]}" --show-dependencies --json "${ENV_CONTEXT[@]}" ${OTHER_ARGS[@]+"${OTHER_ARGS[@]}"} ${INFERRED[@]+"${INFERRED[@]}"} 2>/dev/null \
+      | node -e 'for (const s of JSON.parse(require("fs").readFileSync(0, "utf8"))) console.log(s.id)' 2>/dev/null || true)
+    # Unreadable closure: fall back to the names, as before, rather than guess.
+    [[ ${#SELECTED_STACKS[@]} -eq 0 ]] && SELECTED_STACKS=("${NAMED_STACKS[@]}")
+    if [[ ${#SELECTED_STACKS[@]} -gt ${#NAMED_STACKS[@]} ]]; then
+      echo "  ${NAMED_STACKS[*]} deploys with its dependencies: ${SELECTED_STACKS[*]}"
+      echo "  (-e / --exclusively deploys only the named stacks)"
+      echo ""
+    fi
+  fi
+fi
+
 # --no-rollback cannot replace a resource (see the recovery below), and that
 # recovery rolls back before retrying — which strands every RETAINed resource
 # the refused attempt had already created (the document workspace's tables and
@@ -600,7 +661,10 @@ fi
 # replacement, deploy with rollback from the start instead.
 NO_ROLLBACK=true
 if [[ "$METHOD" == "direct" ]]; then
-  if [[ ${#CDK_ARGS[@]} -eq 0 ]]; then DIFF_ARGS=(); else DIFF_ARGS=("${CDK_ARGS[@]}"); fi
+  # The same stacks the deploy will touch: `cdk diff <stack>` alone skips its dependencies.
+  if [[ ${#SELECTED_STACKS[@]} -gt 0 ]]; then
+    DIFF_ARGS=("${SELECTED_STACKS[@]}" ${OTHER_ARGS[@]+"${OTHER_ARGS[@]}"})
+  elif [[ ${#CDK_ARGS[@]} -eq 0 ]]; then DIFF_ARGS=(); else DIFF_ARGS=("${CDK_ARGS[@]}"); fi
   if "${CDK[@]}" diff "${ENV_CONTEXT[@]}" ${DIFF_ARGS[@]+"${DIFF_ARGS[@]}"} ${INFERRED[@]+"${INFERRED[@]}"} 2>&1 \
       | grep -qE '\(requires replacement\)|\(may cause replacement\)|[[:space:]]replace$'; then
     NO_ROLLBACK=false
@@ -637,23 +701,24 @@ echo ""
 run_cdk_deploy() {
   if [[ ${#CDK_ARGS[@]} -eq 0 ]]; then
     "${CDK[@]}" deploy --all "${ENV_CONTEXT[@]}" ${INFERRED[@]+"${INFERRED[@]}"} "${CDK_FLAGS[@]}"
+  elif [[ ${#NAMED_STACKS[@]} -gt 0 ]]; then
+    # The names given plus the readers-by-name added above.
+    "${CDK[@]}" deploy "${NAMED_STACKS[@]}" ${OTHER_ARGS[@]+"${OTHER_ARGS[@]}"} "${ENV_CONTEXT[@]}" ${INFERRED[@]+"${INFERRED[@]}"} "${CDK_FLAGS[@]}"
   else
     "${CDK[@]}" deploy "${CDK_ARGS[@]}" "${ENV_CONTEXT[@]}" ${INFERRED[@]+"${INFERRED[@]}"} "${CDK_FLAGS[@]}"
   fi
 }
 
 # The stacks this invocation is expected to produce. Explicit OrgIQ-* names on
-# the command line scope the deploy to exactly those (matching cdk's own
-# selection); otherwise (`--all`, or context-only args like `--context k=v`) the
+# the command line scope the deploy to those and the dependencies cdk deploys
+# with them (SELECTED_STACKS above; exactly the names with -e); otherwise (`--all`, or context-only args like `--context k=v`) the
 # whole app is deployed and STACKS_TO_DEPLOY (from `cdk ls` above) is the
 # expected set. This keeps the single-stack invocation — e.g. `./deploy.sh
 # OrgIQ-AgentCoreRuntime --context deployRuntimes=true` — reconciling only
 # against OrgIQ-AgentCoreRuntime, not the whole fleet.
 EXPECTED_STACKS=()
-if [[ ${#CDK_ARGS[@]} -gt 0 ]]; then
-  for arg in "${CDK_ARGS[@]}"; do
-    [[ "$arg" == "${STACK_PREFIX}"* ]] && EXPECTED_STACKS+=("$arg")
-  done
+if [[ ${#SELECTED_STACKS[@]} -gt 0 ]]; then
+  EXPECTED_STACKS=("${SELECTED_STACKS[@]}")
 fi
 if [[ ${#EXPECTED_STACKS[@]} -eq 0 ]]; then
   while IFS= read -r stack; do

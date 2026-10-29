@@ -385,6 +385,29 @@ describe('OrgIQ-SocialMedia — the SFU', () => {
   test('a malformed sfuImageDigest fails synth', () => {
     assert.throws(() => socialApp({ sfuImageDigest: 'latest' }), /sfuImageDigest/);
   });
+
+  // An unpinned image is AWS's newest at every deploy, and a new image replaces
+  // the host: each Amazon Linux release dropped every live call on the next
+  // unrelated deploy. deploy.sh carries the live image forward (SfuAmiId).
+  test('sfuAmiId pins the SFU host image and is published for the next deploy', () => {
+    const { media: m } = socialApp({ sfuAmiId: 'ami-0123456789abcdef0', sfuImageDigest: DIGEST });
+    const mt = Template.fromStack(m!);
+    const instance = Object.values<any>(mt.findResources('AWS::EC2::Instance'))[0];
+    assert.equal(JSON.stringify(instance.Properties.ImageId).includes('ami-0123456789abcdef0'), true);
+    assert.ok(mt.findOutputs('SfuAmiId').SfuAmiId, 'SfuAmiId is the value deploy.sh reads back');
+  });
+
+  test('an unpinned (or latest) SFU image still resolves the newest Amazon Linux 2023', () => {
+    for (const ctx of [{}, { sfuAmiId: 'latest' }]) {
+      const { media: m } = socialApp({ ...ctx, sfuImageDigest: DIGEST });
+      const instance = Object.values<any>(Template.fromStack(m!).findResources('AWS::EC2::Instance'))[0];
+      assert.match(JSON.stringify(instance.Properties.ImageId), /Ref/);
+    }
+  });
+
+  test('a malformed sfuAmiId fails synth', () => {
+    assert.throws(() => socialApp({ sfuAmiId: 'al2023' }), /sfuAmiId/);
+  });
 });
 
 // ── OrgIQ-Social ────────────────────────────────────────────────────────────
