@@ -86,8 +86,13 @@ describe('the lab environment keeps every stack id and account', () => {
     }
   });
 
-  test('the resolved environment is stack metadata on Foundation, so cdk diff shows a change', () => {
-    assert.deepEqual(app.templates['OrgIQ-Foundation'].Metadata['OrgIQ::Environment'], loadEnvironment('lab'));
+  test('the resolved environment is an SSM parameter on Foundation, so cdk diff shows a change and the deploy applies it', () => {
+    const params = Object.values<any>(app.templates['OrgIQ-Foundation'].Resources).filter((r) => r.Type === 'AWS::SSM::Parameter'
+      && r.Properties.Name === '/orgiq/environment');
+    assert.equal(params.length, 1);
+    assert.deepEqual(JSON.parse(params[0].Properties.Value), loadEnvironment('lab'));
+    // Template Metadata alone is never applied by CloudFormation.
+    assert.equal(app.templates['OrgIQ-Foundation'].Metadata?.['OrgIQ::Environment'], undefined);
   });
 
   test('names stay literal: no resource moves for lab', () => {

@@ -140,6 +140,19 @@ describe('deploy.sh: a later deploy keeps the second-phase gates that are live',
     assert.match(script, /deploy "\$\{NAMED_STACKS\[@\]\}"/);
   });
 
+  test('DEPLOY_PLAN_ONLY changes nothing: every sweep delete goes through act, and it exits before migrations', () => {
+    const lines = script.split('\n');
+    const exit = lines.findIndex((l) => /^if \$PLAN_ONLY; then$/.test(l));
+    assert.ok(exit > 0, 'the plan exit exists');
+    const before = lines.slice(0, exit).join('\n');
+    // Any account write before the exit must be wrapped (echoed hints are fine).
+    const writes = before.split('\n').filter((l) => /^\s*aws [a-z0-9-]+ (put|create|update|delete|tag|rb|rm|deregister|register|start|stop|invoke|execute)/.test(l));
+    assert.deepEqual(writes, []);
+    assert.match(before, /act aws s3 rb/);
+    assert.match(before, /act aws ecr delete-repository/);
+    assert.ok(script.indexOf('run_migrate apply') > script.indexOf('Plan only — nothing deployed'), 'migrations come after the plan exit');
+  });
+
   test('a value the caller passed wins over an inferred one', () => {
     assert.match(script, /infer\(\) \{[^}]*ctx_given "\$1" && return 0/);
   });

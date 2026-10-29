@@ -9,6 +9,8 @@
 #   ./scripts/deploy.sh OrgIQ-Aurora           # deploy one stack
 #   ./scripts/deploy.sh --context key=value    # pass extra CDK args
 #   ENV=pv1 ./scripts/deploy.sh                # another environment file (infra/environments/pv1.json)
+#   DEPLOY_PLAN_ONLY=true ./scripts/deploy.sh [Stack] [--context k=v]
+#                                              # infer, select, diff and print; change nothing
 
 set -euo pipefail
 
@@ -112,6 +114,17 @@ stack_status() {
 # ──────────────────────────────────────────────────────────────────
 # 1. Orphaned S3 buckets
 # ──────────────────────────────────────────────────────────────────
+# DEPLOY_PLAN_ONLY=true: everything up to `cdk deploy` runs and prints (the
+# live inference, the stack selection with its dependencies and readers, the
+# replacement pre-flight and the diff), and nothing in the account changes:
+# each sweep's delete says what it would have done (on fd 3, which no
+# redirect below swallows), and the script exits before migrations or deploy.
+PLAN_ONLY=false
+[[ "${DEPLOY_PLAN_ONLY:-false}" == "true" ]] && PLAN_ONLY=true
+exec 3>&1
+act() { if $PLAN_ONLY; then echo "    (plan only, not run) $*" >&3; else "$@"; fi; }
+$PLAN_ONLY && { echo "── PLAN ONLY: nothing in the account will change ──"; echo ""; }
+
 echo "── Checking for orphaned S3 buckets ──"
 
 S3_BUCKETS=(
@@ -138,7 +151,7 @@ for bucket in "${S3_BUCKETS[@]}"; do
       echo "  Bucket ${bucket} is owned by stack '${OWNER}' — skipping"
     elif s3_empty "$bucket"; then
       echo "  Removing empty orphan bucket: s3://${bucket}"
-      aws s3 rb "s3://${bucket}" --force
+      act aws s3 rb "s3://${bucket}" --force
     else
       # Naming the consequence matters: this is not advisory. The bucket is
       # orphaned (its stack is gone) but the NAME is still taken, so the
@@ -177,7 +190,7 @@ for table in "${DYNAMO_TABLES[@]}"; do
       echo "  Table ${table} is owned by stack '${T_OWNER}' — skipping"
     elif dynamo_empty "$table"; then
       echo "  Removing empty orphan table: ${table}"
-      aws dynamodb delete-table --table-name "$table" > /dev/null
+      act aws dynamodb delete-table --table-name "$table" > /dev/null
     else
       echo "  ⚠️  Table ${table} has data — skipping deletion"
     fi
@@ -227,8 +240,8 @@ for table in $SOCIAL_TABLES; do
     SOCIAL_KEPT+=("$table")
   else
     echo "  Removing empty orphan table: ${table} (deletion protection off first)"
-    aws dynamodb update-table --table-name "$table" --no-deletion-protection-enabled > /dev/null
-    aws dynamodb delete-table --table-name "$table" > /dev/null
+    act aws dynamodb update-table --table-name "$table" --no-deletion-protection-enabled > /dev/null
+    act aws dynamodb delete-table --table-name "$table" > /dev/null
   fi
 done
 if [[ ${#SOCIAL_KEPT[@]} -gt 0 ]]; then
@@ -265,7 +278,7 @@ if [[ -z "$PENDING_SECRETS" ]]; then
 else
   for secret in $PENDING_SECRETS; do
     echo "  Force-deleting pending secret: ${secret}"
-    aws secretsmanager delete-secret --secret-id "$secret" --force-delete-without-recovery > /dev/null 2>&1 || true
+    act aws secretsmanager delete-secret --secret-id "$secret" --force-delete-without-recovery > /dev/null 2>&1 || true
   done
 fi
 echo "  Done"
@@ -327,7 +340,7 @@ for repo in "${ECR_REPOS[@]}"; do
       --query 'StackResources[0].StackName' --output text 2>/dev/null || echo "")
     if [[ -z "$OWNER" || "$OWNER" == "None" ]]; then
       echo "  Removing orphan ECR repo (no stack manages it): ${repo}"
-      aws ecr delete-repository --repository-name "$repo" --force > /dev/null
+      act aws ecr delete-repository --repository-name "$repo" --force > /dev/null
     else
       echo "  Repo ${repo} is owned by stack '${OWNER}' — skipping"
     fi
@@ -355,7 +368,7 @@ for ns in $(aws servicediscovery list-namespaces --region "$REGION" \
     --filters "Name=NAMESPACE_ID,Values=${ns},Condition=EQ" --query 'length(Services)' --output text 2>/dev/null || echo 1)
   if [[ "$services" == "0" ]]; then
     echo "  Deleting orphaned namespace ${ns}"
-    aws servicediscovery delete-namespace --id "$ns" --region "$REGION" > /dev/null 2>&1 || true
+    act aws servicediscovery delete-namespace --id "$ns" --region "$REGION" > /dev/null 2>&1 || true
   else
     echo "  ⚠️  Namespace ${ns} is unowned but has services; left in place"
   fi
@@ -660,15 +673,30 @@ fi
 # upload EFS), so the retry then fails "already exists". When the diff shows a
 # replacement, deploy with rollback from the start instead.
 NO_ROLLBACK=true
-if [[ "$METHOD" == "direct" ]]; then
+PLAN_DIFF="${SCRIPT_DIR}/../cdk.out/deploy-plan.diff"
+if [[ "$METHOD" == "direct" ]] || $PLAN_ONLY; then
   # The same stacks the deploy will touch: `cdk diff <stack>` alone skips its dependencies.
   if [[ ${#SELECTED_STACKS[@]} -gt 0 ]]; then
     DIFF_ARGS=("${SELECTED_STACKS[@]}" ${OTHER_ARGS[@]+"${OTHER_ARGS[@]}"})
   elif [[ ${#CDK_ARGS[@]} -eq 0 ]]; then DIFF_ARGS=(); else DIFF_ARGS=("${CDK_ARGS[@]}"); fi
-  if "${CDK[@]}" diff "${ENV_CONTEXT[@]}" ${DIFF_ARGS[@]+"${DIFF_ARGS[@]}"} ${INFERRED[@]+"${INFERRED[@]}"} 2>&1 \
-      | grep -qE '\(requires replacement\)|\(may cause replacement\)|[[:space:]]replace$'; then
+  mkdir -p "$(dirname "$PLAN_DIFF")"
+  "${CDK[@]}" diff "${ENV_CONTEXT[@]}" ${DIFF_ARGS[@]+"${DIFF_ARGS[@]}"} ${INFERRED[@]+"${INFERRED[@]}"} > "$PLAN_DIFF" 2>&1 || true
+  if grep -qE '\(requires replacement\)|\(may cause replacement\)|[[:space:]]replace$' "$PLAN_DIFF"; then
     NO_ROLLBACK=false
   fi
+fi
+
+if $PLAN_ONLY; then
+  echo "── Plan ──"
+  if [[ ${#SELECTED_STACKS[@]} -gt 0 ]]; then echo "  stacks: ${SELECTED_STACKS[*]}"; else echo "  stacks: all (${STACKS_TO_DEPLOY//$'\n'/ })"; fi
+  echo "  method=${METHOD}  no-rollback=${NO_ROLLBACK}"
+  echo "  changes (full diff: ${PLAN_DIFF}):"
+  awk '/^Stack /{stack=$2} /\[[~+-]\] /{n[stack]++} /requires replacement|may cause replacement|[[:space:]]replace$/{r[stack]++} END{for (k in n) printf "    %-34s %3d change(s)%s\n", k, n[k], (r[k] ? ", " r[k] " REPLACEMENT(S)" : "")}' "$PLAN_DIFF" | sort
+  { grep -E 'requires replacement|may cause replacement' "$PLAN_DIFF" || true; } | sed 's/^/      /' | head -20
+  grep -qE '\[[~+-]\] ' "$PLAN_DIFF" || echo "    none"
+  echo ""
+  echo "✓ Plan only — nothing deployed, migrated or deleted."
+  exit 0
 fi
 
 CDK_FLAGS=(

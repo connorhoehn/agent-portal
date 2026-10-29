@@ -5,6 +5,6 @@
   "prefix": "orgiq",
   "stackPrefix": "OrgIQ",
   "edge": { "mode": "cloudfront" },
-  "features": { "social": false, "documents": false, "devbox": false },
+  "features": { "social": true, "documents": true, "devbox": false },
   "monthlyBudgetUsd": 200
 }

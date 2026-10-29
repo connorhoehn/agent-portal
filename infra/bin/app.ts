@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { FoundationStack } from '../lib/foundation-stack';
 import { AuroraStack } from '../lib/aurora-stack';
 import { KnowledgeBaseStack } from '../lib/knowledge-base-stack';
@@ -57,9 +58,16 @@ const foundation = new FoundationStack(app, stackId(environment, 'Foundation'), 
   prefix,
   description: 'OrgIQ Foundation: S3 buckets, DynamoDB tables, base IAM roles',
 });
-// The resolved environment, so `cdk diff` shows it whenever an environment
-// file changes.
-foundation.templateOptions.metadata = { 'OrgIQ::Environment': environment };
+// The resolved environment, as a resource so `cdk diff` shows it whenever an
+// environment file changes AND the deploy applies it. (It was template
+// Metadata first: CloudFormation never applies a Metadata-only change, so the
+// record never reached the account and every diff, every DEPLOY_PLAN_ONLY run
+// included, showed it pending.) Readable by tools at /<prefix>/environment.
+new ssm.StringParameter(foundation, 'EnvironmentRecord', {
+  parameterName: `/${prefix}/environment`,
+  description: `The resolved environment file (infra/environments/${environment.name}.json)`,
+  stringValue: JSON.stringify(environment),
+});
 
 // -------------------------------------------------------------------
 // Stack 2: Aurora Serverless v2 (pgvector for embeddings + relational tables for the org graph)

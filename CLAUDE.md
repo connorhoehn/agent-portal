@@ -181,6 +181,7 @@ non-root `bedrock_agentcore` (UID 1000), ports 8080/8000, `GET /ping`,
 
 ```bash
 cd infra && ./scripts/deploy.sh [Stack] [--context k=v]   # reconciles real CFN status after deploy
+cd infra && DEPLOY_PLAN_ONLY=true ./scripts/deploy.sh [Stack]  # inference, stack closure, diff; changes nothing
 cd infra && ./scripts/destroy.sh                           # pre-drains runtimes/Aurora, sweeps billing survivors
 node scripts/docker/middleware-image-build.mjs --dry-run   # ARM64 middleware image
 cd middleware && npm test && npm run typecheck             # jest + supertest (run full suites alone, not concurrently)

@@ -99,8 +99,11 @@ explicitly **not built** (`docs/social-calls-deploy-plan.md:858-860`).
    reads it. An environment without that parameter simply has no document
    workspace.
 6. **Synth-time check.** `cdk synth --context env=lab` writes the resolved
-   environment as stack metadata on `${stackPrefix}-Foundation`, so
-   `cdk diff` shows it whenever someone changes an environment file.
+   environment to `${stackPrefix}-Foundation` as the SSM parameter
+   `/<prefix>/environment`, so `cdk diff` shows it whenever someone changes an
+   environment file. (Built first as template Metadata, which CloudFormation
+   never applies on its own: it never reached the account and every diff
+   showed it pending. Changed 2026-10-29.)
 
 ## Decisions owed
 
