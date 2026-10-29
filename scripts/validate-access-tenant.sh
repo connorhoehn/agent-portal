@@ -46,7 +46,9 @@ exists docs/access-tenant-design.md "design doc"
 exists docs/access-tenant-goal.md "goal doc"
 
 section "A0 · registration (the 21 points)"
-F=middleware/src/lib/session.ts
+# TENANTS, ROLES_BY_TENANT, the Role union and DEMO_EXCLUDED_TENANTS are generated from
+# tenants/manifest.json (DE-29); lib/session.ts re-exports them.
+F=middleware/src/lib/tenants.generated.ts
 need "'$T'" $F "1 TENANTS names $T"
 need "$T: \['requester', 'approver', 'access-admin'\]" $F "1 ROLES_BY_TENANT lists the three roles"
 for r in "${ROLES[@]}"; do need "'$r'" $F "1 Role union / ROLE_RANK has $r"; done
@@ -68,13 +70,13 @@ need "'u-operator', *'$T', *'admin'" schema/identity_schema.sql "6 u-operator ho
 need "manager_id" schema/access_schema.sql "model: people.manager_id is additive in access_schema.sql"
 exists schema/access_schema.sql "model: schema/access_schema.sql"
 for t in access_catalog_items access_requests access_request_steps access_policies access_events; do need "CREATE TABLE IF NOT EXISTS $t" schema/access_schema.sql "model: table $t"; done
-need "access_schema" schema/load_schema.py "model: load_schema.py registers access_schema.sql"
+need "access_schema" schema/manifest.json "model: schema/manifest.json registers access_schema.sql (DE-20; load_schema.py reads it)"
 need "app.use\('/api/$T', *requireTenant\('$T'\)" middleware/src/index.ts "8 /api/$T mounts behind requireTenant('$T')"
 ok "9 n/a — the tenant owns no agents"
 need "access (catalog|requests|policies)" middleware/src/mock/core/parity/entities.ts "10 parity entities cover the access fixtures"
 for f in access-catalog access-requests access-policies; do exists middleware/src/mock/$f.ts "10 mock fixture $f"; done
-for F in portal/src/lib/auth.tsx portal/src/components/shell/Layout.tsx portal/src/components/shell/portalCommands.ts; do need "'$T'" $F "11 $F names the tenant"; done
-need "$T: '/access/requests'" portal/src/lib/tenantHome.ts "12 tenant home is /access/requests"
+for F in portal/src/lib/tenants.generated.ts portal/src/components/shell/Layout.tsx portal/src/components/shell/portalCommands.ts; do need "'$T'" $F "11 $F names the tenant"; done
+need "$T: '/access/requests'" portal/src/lib/tenants.generated.ts "12 tenant home is /access/requests"
 need "ACCESS_ENABLED" portal/src/lib/features.ts "13 ACCESS_ENABLED feature flag"
 need "ACCESS_ENABLED" portal/src/App.tsx "13 App.tsx honours the flag"
 need "tenant: '$T'" portal/src/components/shell/Layout.tsx "14 NAV_ITEMS rows for $T"
@@ -95,7 +97,7 @@ need "access-tenant-goal\.md.*validate-access-tenant\.sh" CLAUDE.md "21 CLAUDE.m
 n_val=$(ls scripts/validate-*.sh | wc -l | tr -d ' ')
 claimed=$(grep -oE '\(([0-9]+) validators\)' CLAUDE.md | grep -oE '[0-9]+' | head -1)
 [ "${claimed:-x}" = "$n_val" ] && ok "21 CLAUDE.md validator count ($claimed) matches scripts/ ($n_val)" || fail "21 CLAUDE.md says (${claimed:-?} validators); scripts/ holds $n_val"
-need "$T: 'Access'" portal/src/components/shell/TenantSwitcher.tsx "switcher LABELS.$T"
+need "$T: 'Access'" portal/src/lib/tenants.generated.ts "switcher LABELS.$T (TENANT_DISPLAY_NAMES)"
 need "access:req:" middleware/src/lib/tenant-channels.ts "channel family access:req: registered"
 
 section "A0 · routes + pages + policy"

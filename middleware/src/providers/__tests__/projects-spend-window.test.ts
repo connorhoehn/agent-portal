@@ -31,6 +31,7 @@ jest.mock('../../config.js', () => ({
 
 import { listProjects } from '../projects.js';
 import { PERIOD_START_SQL } from '../budgets.js';
+import { periodStartForSql, withBudgetWindowsSql } from '../../lib/budget-periods.js';
 
 beforeEach(() => {
   send.mockReset();
@@ -50,7 +51,10 @@ describe('listProjects agent spend', () => {
       sql.indexOf('AS agent_spend_usd') - 900,
       sql.indexOf('AS agent_spend_usd'),
     );
-    expect(spendSelect).toContain(`br.started_at >= ${PERIOD_START_SQL}`);
+    // DE-38: the initiative's own budget window, read from the same
+    // budget_windows CTE the ledger uses (calendar month unless it opts out).
+    expect(spendSelect).toContain(`br.started_at >= ${periodStartForSql('p.id')}`);
+    expect(sql).toContain(withBudgetWindowsSql().trim());
   });
 
   it('uses the ledger window verbatim rather than declaring its own', async () => {

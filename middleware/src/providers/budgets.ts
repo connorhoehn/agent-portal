@@ -6,7 +6,9 @@
 // actuals can never disagree. The cost philosophy (docs/bots-and-work-
 // marketplace.md §7) puts the per-run and per-day brakes on the bot; this
 // surface is the program-manager's layer above them: how much each initiative
-// may spend per month, and where money is going with no allocation behind it.
+// may spend per period (monthly by default; quarterly, sprint-aligned or
+// rolling once its allocation opts in — DE-38, lib/budget-periods.ts), and
+// where money is going with no allocation behind it.
 //
 // This module is persistence only. Gating lives in routes/budgets.ts.
 
@@ -44,6 +46,17 @@ import { mockHolds, openHeldSplit, openHeldSplitAll } from './spend-holds.js';
 import {
   autoReserveUsd, discretionary, effectiveHardCap, maintenanceReserveEnabled, type CapSource,
 } from '../lib/budget-decisions.js';
+// DE-38: the one window helper. Every per-initiative read below asks it (the
+// TS functions in mock mode, the `budget_windows` CTE on Aurora).
+import {
+  PERIOD_START_SQL, PERIOD_COLUMNS, budgetWindowsCteSql, budgetedAllocation, policyColumnSql, closesAtBoundary, currentPeriod, effectiveAllocation,
+  inBounds, monthWindow, periodStartForSql, previousPeriod, sprintBounds, sprintWindowSql, withBudgetWindowsSql,
+  DEFAULT_CARRY_OVER, type BudgetPeriod, type BudgetWindow, type CarryOver, type PeriodPolicy, type SprintSpan, type WindowState,
+} from '../lib/budget-periods.js';
+import {
+  auroraCarryIn, auroraCloseReconfigured, mockCarryIn, mockCloseReconfigured, type WindowSpend,
+} from './budget-periods.js';
+import { sprints as sprintsFixture } from './sprintWindows.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
@@ -53,6 +66,15 @@ function maybe(name: string, v: string | null | undefined): SqlParameter {
 function num(name: string, v: number): SqlParameter { return { name, value: { doubleValue: v } }; }
 function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
 function toNum(v: unknown): number { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+/** A Data API / psql timestamp (often naive, always UTC here) as an ISO instant. */
+function utcIso(v: unknown): string | null {
+  if (v == null) return null;
+  let t = String(v).trim().replace(' ', 'T');
+  if (/[+-]\d\d$/.test(t)) t += ':00';
+  else if (!/(Z|[+-]\d\d:?\d\d)$/.test(t)) t += 'Z';
+  const ms = Date.parse(t);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
 
 export interface BudgetRow {
   orgProjectId: string;
@@ -109,6 +131,51 @@ export interface BudgetRow {
   /** allocated - max(reserve, floorSpent + floorHeld) - discretionarySpent - discretionaryHeld.
    *  What every human, job and box dispatch is judged against. Null without an allocation. */
   discretionaryRemainingUsd?: number | null;
+
+  // ── DE-38 budget periods ─────────────────────────────────────────────────
+  /** The current window [periodStart, periodEnd). Between sprints: the calendar
+   *  month the spend is summed over, with periodState 'between-sprints'. */
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  /** 'YYYY-MM' | 'YYYY-Qn' | sprint id; null for rolling and between sprints. */
+  periodKey?: string | null;
+  periodState?: WindowState;
+  /** Set for period 'rolling' only. */
+  rollingDays?: number | null;
+  carryOver?: CarryOver;
+  carryOverCapUsd?: number | null;
+  /** The previous period's close carry-out (signed); 0 unless the policy carries. */
+  carryInUsd?: number;
+  /** allocated + carry in (never below 0) — what every brake judges against.
+   *  Null with no allocation, and between sprints (the allocation is not in force). */
+  effectiveAllocatedUsd?: number | null;
+}
+
+export { budgetedAllocation };
+
+/**
+ * The DE-38 fields of a row, from its window and carry. Pure, so the mock and
+ * Aurora attach them identically. Between sprints the allocation is not in
+ * force: effectiveAllocatedUsd is null, so every brake reads "unbudgeted".
+ */
+export function periodFigures(
+  allocatedUsd: number | null,
+  window: Pick<BudgetWindow, 'start' | 'end' | 'key' | 'state'>,
+  carryInUsd: number,
+  policy: { period: BudgetPeriod; rollingDays?: number | null; carryOver: CarryOver; carryOverCapUsd: number | null } | null,
+): Pick<BudgetRow, 'periodStart' | 'periodEnd' | 'periodKey' | 'periodState' | 'rollingDays' | 'carryOver' | 'carryOverCapUsd' | 'carryInUsd' | 'effectiveAllocatedUsd'> {
+  const between = window.state === 'between-sprints';
+  return {
+    periodStart: window.start.toISOString(),
+    periodEnd: window.end.toISOString(),
+    periodKey: window.key,
+    periodState: window.state,
+    rollingDays: policy?.period === 'rolling' ? policy.rollingDays ?? null : null,
+    carryOver: policy?.carryOver ?? DEFAULT_CARRY_OVER,
+    carryOverCapUsd: policy?.carryOverCapUsd ?? null,
+    carryInUsd,
+    effectiveAllocatedUsd: allocatedUsd == null || between ? null : effectiveAllocation(allocatedUsd, carryInUsd),
+  };
 }
 
 /** The floor history one initiative's reserve is derived from. */
@@ -135,12 +202,13 @@ export function withReserveFigures(
   row: BudgetRow, cols: ReserveColumns, floor: FloorHistory,
   held: { floorUsd: number; discretionaryUsd: number } | null,
 ): BudgetRow {
-  const cap = effectiveHardCap(row.allocatedUsd, cols.hardCapUsd, { unbudgeted: true });
+  const allocated = budgetedAllocation(row);
+  const cap = effectiveHardCap(allocated, cols.hardCapUsd, { unbudgeted: true });
   const floorSpentUsd = round4(Math.min(floor.thisPeriodUsd, row.spentThisPeriodUsd));
   const discretionarySpentUsd = round4(Math.max(0, row.spentThisPeriodUsd - floorSpentUsd));
   let reserveUsd: number | null = null;
   let reserveSource: BudgetRow['reserveSource'] = null;
-  if (row.allocatedUsd != null) {
+  if (allocated != null) {
     if (!maintenanceReserveEnabled()) { reserveUsd = 0; reserveSource = 'off'; }
     else if (cols.maintenanceReserveUsd != null) { reserveUsd = cols.maintenanceReserveUsd; reserveSource = 'set'; }
     else { reserveUsd = autoReserveUsd(floor.lastPeriodUsd, floor.trailing30dUsd); reserveSource = 'auto'; }
@@ -159,9 +227,9 @@ export function withReserveFigures(
     discretionaryRemainingUsd: null,
   };
   if (held) { out.floorHeldUsd = held.floorUsd; out.discretionaryHeldUsd = held.discretionaryUsd; }
-  if (row.allocatedUsd != null && reserveUsd != null) {
+  if (allocated != null && reserveUsd != null) {
     out.discretionaryRemainingUsd = discretionary({
-      allocatedUsd: row.allocatedUsd, reserveUsd, floorSpentUsd, floorHeldUsd: held?.floorUsd ?? 0,
+      allocatedUsd: allocated, reserveUsd, floorSpentUsd, floorHeldUsd: held?.floorUsd ?? 0,
       discretionarySpentUsd, discretionaryHeldUsd: held?.discretionaryUsd ?? 0,
     }).discretionaryRemainingUsd;
   }
@@ -176,6 +244,9 @@ export interface OrgBudgetSummary {
   totalMaintenanceUsd: number;
   byModel: Array<{ model: string; spentUsd: number; runCount: number }>;
   byTrigger: Array<{ trigger: string; spentUsd: number; runCount: number }>;
+  /** DE-38: org totals stay on the calendar month whatever each initiative's
+   *  period is (initiatives no longer share a boundary), and say so. */
+  window?: { period: 'calendar-month'; start: string; end: string };
 }
 
 // ─── Period window + attribution (pure SQL builders, unit-tested) ────────────
@@ -193,7 +264,11 @@ export interface OrgBudgetSummary {
  *  initiative_budgets.allocated_usd, which is monthly, so a monotonically
  *  growing total can never be judged against anything. One window, everywhere,
  *  labelled with the month on both pages. */
-export const PERIOD_START_SQL = `date_trunc('month', NOW())`;
+export { PERIOD_START_SQL };
+// DE-38: the constant now lives in lib/budget-periods.ts and is the window only
+// of the org totals and the user budgets. Per-initiative reads use the
+// initiative's own window — monthly unless the allocation names another period,
+// so with every initiative still monthly the figures are unchanged.
 
 /**
  * The three-way attribution predicate — copied from listProjects in
@@ -256,6 +331,12 @@ export interface MockBudget {
   maintenanceReserveUsd?: number | null;
   /** DE-55: absent = true, the column default. */
   allowFloorSpill?: boolean;
+  /** DE-38 policy columns; absent = the column defaults (monthly, no carry-over). */
+  period?: BudgetPeriod;
+  rollingDays?: number | null;
+  carryOver?: CarryOver;
+  carryOverCapUsd?: number | null;
+  carryOverSince?: string | null;
 }
 
 /**
@@ -326,12 +407,91 @@ export { MOCK_BUDGETS } from '../mock/budgets.js';
  *  and the real query can agree. */
 const COST_SCALE = 4;
 
-/** Start of the current budget period — the fixture analogue of
- *  PERIOD_START_SQL (`date_trunc('month', NOW())`, in a UTC session). Read
- *  through the mock clock so a frozen test sees a frozen period. */
+/** Start of the calendar month — the window of the org totals, which stay
+ *  calendar month whatever each initiative's period is (DE-38). Read through
+ *  the mock clock so a frozen test sees a frozen period. */
 function periodStartMs(): number {
-  const now = clock.now();
-  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  return monthWindow(clock.now()).start.getTime();
+}
+
+// ─── DE-38: the mock's window per initiative ────────────────────────────────
+//
+// lib/budget-periods.ts `currentPeriod` over the registered fixtures — the
+// allocation row's policy and the initiative's sprints — so the mock and the
+// `budget_windows` CTE answer the same window. An unreadable fixture (an
+// `error` scenario) reads as monthly here; the caller that read the allocation
+// rows has already surfaced that error.
+
+interface MockPolicy extends PeriodPolicy {
+  carryOver: CarryOver;
+  carryOverCapUsd: number | null;
+  carryOverSince: string | null;
+  allocatedUsd: number;
+}
+
+function mockPolicyOf(m: MockBudget | undefined): MockPolicy | null {
+  if (!m || m.allocated == null) return null;
+  return {
+    period: m.period ?? 'monthly', rollingDays: m.rollingDays ?? null,
+    carryOver: m.carryOver ?? DEFAULT_CARRY_OVER, carryOverCapUsd: m.carryOverCapUsd ?? null,
+    carryOverSince: m.carryOverSince ?? null, allocatedUsd: m.allocated,
+  };
+}
+
+function mockAllocationRow(orgProjectId: string): MockBudget | undefined {
+  try { return initiativeBudgets.rows().find((b) => b.id === orgProjectId); } catch { return undefined; }
+}
+
+/** The initiative's sprints as the window needs them. */
+export function mockSprintSpans(orgProjectId: string): SprintSpan[] {
+  try {
+    return sprintsFixture.rows()
+      .filter((sp) => sp.orgProjectId === orgProjectId)
+      .map((sp) => ({ id: sp.id, startsOn: sp.startsOn, endsOn: sp.endsOn, status: sp.status }));
+  } catch { return []; }
+}
+
+/** The current budget window of one initiative, offline. */
+export function mockBudgetWindow(orgProjectId: string, now: Date = clock.now()): BudgetWindow {
+  return currentPeriod(mockPolicyOf(mockAllocationRow(orgProjectId)), now, mockSprintSpans(orgProjectId));
+}
+
+function mockPreviousWindow(orgProjectId: string, now: Date = clock.now()): BudgetWindow | null {
+  return previousPeriod(mockPolicyOf(mockAllocationRow(orgProjectId)), now, mockSprintSpans(orgProjectId));
+}
+
+/**
+ * Known spend and unknown-cost entries attributed to an initiative inside
+ * [fromMs, toMs) — what a close row records. A null bound is unbounded. The
+ * same rows and ledger-mode split as mockInitiativeSpend.
+ */
+export function mockInitiativeSpendBetween(orgProjectId: string, fromMs: number | null, toMs: number | null): WindowSpend {
+  const b = { fromMs, toMs };
+  const attributed = mockRunsAttributedTo(orgProjectId).filter((r) => inBounds(Date.parse(r.startedAt), b));
+  const costs = costed(attributed).map((r) => r.costUsd ?? 0);
+  let unknownCount = attributed.filter((r) => r.costUsd == null && (r.status === 'done' || r.status === 'failed')).length;
+  if (spendLedgerMode() === 'ledger') {
+    const mine = (e: { initiativeId: string | null; occurredAt: string }) =>
+      e.initiativeId === orgProjectId && inBounds(Date.parse(e.occurredAt), b);
+    costs.push(...mockStoredSpend(mine).map((e) => e.costUsd ?? 0));
+    unknownCount += mockUnknownSpend(mine).length;
+  }
+  return { spentUsd: sumBy(costs, (v: number) => v, { digits: COST_SCALE }), unknownCount };
+}
+
+/** The previous keyed period's carry-out, closing it now if nobody has (mock). */
+function mockPeriodCarryIn(orgProjectId: string, policy: MockPolicy | null, window: BudgetWindow): number {
+  if (!policy || !closesAtBoundary(policy) || window.state !== 'open') return 0;
+  const prev = mockPreviousWindow(orgProjectId);
+  if (!prev?.key) return 0;
+  return mockCarryIn(
+    {
+      orgProjectId, allocatedUsd: policy.allocatedUsd,
+      policy: { carryOver: policy.carryOver, capUsd: policy.carryOverCapUsd, since: policy.carryOverSince ? new Date(policy.carryOverSince) : null },
+    },
+    { key: prev.key, start: prev.start, end: prev.end },
+    (from, to) => mockInitiativeSpendBetween(orgProjectId, from.getTime(), to.getTime()),
+  );
 }
 
 /** Costed runs only — `cost_usd IS NOT NULL`. */
@@ -380,7 +540,9 @@ export function mockLastAgentActivityAt(orgProjectId: string): string | null {
 }
 
 export function mockInitiativeSpend(orgProjectId: string): MockInitiativeSpend {
-  const start = periodStartMs();
+  // The initiative's own window (DE-38): the calendar month unless its
+  // allocation names another period.
+  const start = mockBudgetWindow(orgProjectId).start.getTime();
   const runs = costed(mockRunsAttributedTo(orgProjectId))
     .filter((r) => Date.parse(r.startedAt) >= start);
   if (spendLedgerMode() === 'ledger') {
@@ -426,14 +588,10 @@ export function mockInitiativeWindowSpendUsd(
   startsOn: string | null,
   endsOn: string | null,
 ): number {
-  const from = startsOn ? Date.parse(`${startsOn}T00:00:00Z`) : null;
-  const toExclusive = endsOn ? Date.parse(`${endsOn}T00:00:00Z`) + 86_400_000 : null;
-  const inWindow = (iso: string): boolean => {
-    const at = Date.parse(iso);
-    if (from != null && at < from) return false;
-    if (toExclusive != null && at >= toExclusive) return false;
-    return true;
-  };
+  // The one sprint-bounds convention (lib/budget-periods.ts), shared with the
+  // envelope burn and a sprint-period allocation.
+  const bounds = sprintBounds(startsOn, endsOn);
+  const inWindow = (iso: string): boolean => inBounds(Date.parse(iso), bounds);
   const runs = costed(mockRunsAttributedTo(orgProjectId)).filter((r) => inWindow(r.startedAt));
   const costs = runs.map((r) => r.costUsd ?? 0);
   if (spendLedgerMode() === 'ledger') {
@@ -473,8 +631,10 @@ function mockPeriodRuns(): Array<{ run: BotRun; model: string }> {
  */
 export function mockFloorHistory(orgProjectId: string): FloorHistory {
   const now = clock.now();
-  const thisStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-  const lastStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
+  // This window and the one before it (DE-38), so the auto reserve is "last
+  // period's essential spend" in the initiative's own period.
+  const thisStart = mockBudgetWindow(orgProjectId, now).start.getTime();
+  const prev = mockPreviousWindow(orgProjectId, now);
   const from30 = now.getTime() - 30 * 86_400_000;
   const essential = new Map(MOCK_BOTS.map((b) => [b.id, botIsEssentialLocal(b)]));
   const runs = costed(mockRunsAttributedTo(orgProjectId))
@@ -482,7 +642,7 @@ export function mockFloorHistory(orgProjectId: string): FloorHistory {
   const sum = (pred: (at: number) => boolean) => sumBy(runs.filter((r) => pred(Date.parse(r.startedAt))), 'costUsd', { digits: COST_SCALE });
   return {
     thisPeriodUsd: sum((at) => at >= thisStart),
-    lastPeriodUsd: sum((at) => at >= lastStart && at < thisStart),
+    lastPeriodUsd: prev ? sum((at) => at >= prev.start.getTime() && at < prev.end.getTime()) : 0,
     trailing30dUsd: sum((at) => at > from30),
   };
 }
@@ -509,11 +669,15 @@ export function mockBudgetRow(m: MockBudget, opts: { withHolds?: boolean } = {})
 
 function mockBudgetRowBase(m: MockBudget): BudgetRow {
   const spend = mockInitiativeSpend(m.id);
+  const policy = mockPolicyOf(m);
+  const window = mockBudgetWindow(m.id);
+  const carryInUsd = mockPeriodCarryIn(m.id, policy, window);
   return {
     orgProjectId: m.id,
     orgProjectName: m.name,
     allocatedUsd: m.allocated,
-    period: m.allocated == null ? null : 'monthly',
+    period: m.allocated == null ? null : (m.period ?? 'monthly'),
+    ...periodFigures(m.allocated, window, carryInUsd, policy),
     updatedBy: m.allocated == null ? null : (m.updatedBy ?? 'u-release'),
     updatedByName: m.allocated == null ? null : displayNameForSubject(m.updatedBy ?? 'u-release'),
     updatedAt: m.allocated == null ? null : (m.updatedAt ?? new Date(clock.now().getTime() - 6 * 86_400_000).toISOString()),
@@ -623,14 +787,58 @@ function rowToBudget(r: Record<string, unknown>): BudgetRow {
   };
 }
 
+/** The window and policy columns every budget row carries (DE-38). */
+function periodColumnsSql(): string {
+  return `bw.period_start, bw.period_end, bw.period_key, bw.period_state,
+           bw.prev_start, bw.prev_end, bw.prev_key, bw.rolling_days,
+           ${policyColumnSql('ib', 'carry_over', 'text')} AS carry_over,
+           ${policyColumnSql('ib', 'carry_over_cap_usd', 'float8')} AS carry_over_cap_usd,
+           ${policyColumnSql('ib', 'carry_over_since', 'timestamptz')} AS carry_over_since`;
+}
+
+/** The window a row was read under, and the window before it (for the close). */
+interface RowWindows {
+  window: BudgetWindow;
+  prev: BudgetWindow | null;
+  policy: (PeriodPolicy & { carryOver: CarryOver; carryOverCapUsd: number | null; carryOverSince: string | null }) | null;
+}
+
+/** Null when the row predates DE-38's columns (a stubbed statement); the row then keeps its stored figures. */
+function rowWindows(r: Record<string, unknown>, allocatedUsd: number | null): RowWindows | null {
+  const start = utcIso(r['period_start']);
+  const end = utcIso(r['period_end']);
+  if (!start || !end) return null;
+  const period = (r['period'] != null ? toStr(r['period']) : 'monthly') as BudgetPeriod;
+  const state: WindowState = r['period_state'] === 'between-sprints' ? 'between-sprints' : 'open';
+  const prevStart = utcIso(r['prev_start']);
+  const prevEnd = utcIso(r['prev_end']);
+  return {
+    window: { period, start: new Date(start), end: new Date(end), key: r['period_key'] != null ? toStr(r['period_key']) : null, state },
+    prev: prevStart && prevEnd
+      ? { period, start: new Date(prevStart), end: new Date(prevEnd), key: r['prev_key'] != null ? toStr(r['prev_key']) : null, state: 'open' }
+      : null,
+    policy: allocatedUsd == null ? null : {
+      period,
+      rollingDays: r['rolling_days'] == null ? null : toNum(r['rolling_days']),
+      carryOver: (r['carry_over'] != null ? toStr(r['carry_over']) : DEFAULT_CARRY_OVER) as CarryOver,
+      carryOverCapUsd: r['carry_over_cap_usd'] == null ? null : toNum(r['carry_over_cap_usd']),
+      carryOverSince: utcIso(r['carry_over_since']),
+    },
+  };
+}
+
 // Every initiative that has an allocation OR any attributed spend this period.
 // The id set is the UNION of both sources (FULL-OUTER-ish), so an initiative
 // spending with no allocation still surfaces — that unallocated-but-spending
 // row is exactly the program-manager's blind spot.
-function budgetSelectSql(scopeToId: boolean): string {
+export function budgetSelectSql(scopeToId: boolean): string {
   const scope = scopeToId ? 'WHERE ids.org_project_id = :pid' : '';
+  // Each initiative's spend is windowed on its own period (DE-38): the
+  // budget_windows CTE is lib/budget-periods.ts currentPeriod in SQL, and is
+  // the calendar month for every initiative still on 'monthly'.
   return `
-    WITH period_spend AS (
+    WITH ${budgetWindowsCteSql({ scoped: scopeToId })},
+    period_spend AS (
       SELECT p.id AS org_project_id,
              SUM(br.cost_usd)::float8 AS spent_this_period_usd,
              COUNT(*)::int AS run_count_this_period,
@@ -638,8 +846,9 @@ function budgetSelectSql(scopeToId: boolean): string {
              COALESCE(SUM(br.cost_usd) FILTER (WHERE br.trigger = 'cron'), 0)::float8
                AS maintenance_usd
         FROM projects p
+        JOIN budget_windows bw ON bw.org_project_id = p.id
         JOIN bot_runs br
-          ON br.started_at >= ${PERIOD_START_SQL}
+          ON br.started_at >= bw.period_start
          AND (${spendPredicateSql('p.id')})
        GROUP BY p.id
     ),
@@ -667,12 +876,14 @@ function budgetSelectSql(scopeToId: boolean): string {
            -- it stay month-to-date; that split is the point.
            (SELECT MAX(br.started_at) FROM bot_runs br
              WHERE (${spendPredicateSql('ids.org_project_id')})) AS last_agent_activity_at,
-           COALESCE(ps.maintenance_usd, 0)::float8 AS maintenance_usd
+           COALESCE(ps.maintenance_usd, 0)::float8 AS maintenance_usd,
+           ${periodColumnsSql()}
       FROM ids
       LEFT JOIN initiative_budgets ib ON ib.org_project_id = ids.org_project_id
       -- updated_by is a session subject; the ledger renders the person.
       LEFT JOIN app_users au ON au.id = ib.updated_by
       LEFT JOIN period_spend ps ON ps.org_project_id = ids.org_project_id
+      LEFT JOIN budget_windows bw ON bw.org_project_id = ids.org_project_id
       LEFT JOIN projects p ON p.id = ids.org_project_id
       ${scope}
      ORDER BY COALESCE(ps.spent_this_period_usd, 0) DESC, ids.org_project_id`;
@@ -687,7 +898,8 @@ function budgetSelectSql(scopeToId: boolean): string {
 export function ledgerBudgetSelectSql(scopeToId: boolean): string {
   const scope = scopeToId ? 'WHERE ids.org_project_id = :pid' : '';
   return `
-    WITH period_spend AS (
+    WITH ${budgetWindowsCteSql({ scoped: scopeToId })},
+    period_spend AS (
       SELECT se.initiative_id AS org_project_id,
              SUM(se.cost_usd)::float8 AS spent_this_period_usd,
              COUNT(se.cost_usd)::int AS run_count_this_period,
@@ -695,8 +907,9 @@ export function ledgerBudgetSelectSql(scopeToId: boolean): string {
                AS maintenance_usd,
              COUNT(*) FILTER (WHERE se.cost_usd IS NULL)::int AS unknown_cost_count
         FROM spend_entries se
+        JOIN budget_windows bw ON bw.org_project_id = se.initiative_id
        WHERE se.initiative_id IS NOT NULL
-         AND se.occurred_at >= ${PERIOD_START_SQL}
+         AND se.occurred_at >= bw.period_start
        GROUP BY se.initiative_id
     ),
     ids AS (
@@ -716,11 +929,13 @@ export function ledgerBudgetSelectSql(scopeToId: boolean): string {
            (SELECT MAX(se.occurred_at) FROM spend_entries se
              WHERE se.initiative_id = ids.org_project_id AND se.cost_usd IS NOT NULL) AS last_agent_activity_at,
            COALESCE(ps.maintenance_usd, 0)::float8 AS maintenance_usd,
-           COALESCE(ps.unknown_cost_count, 0)::int AS unknown_cost_count
+           COALESCE(ps.unknown_cost_count, 0)::int AS unknown_cost_count,
+           ${periodColumnsSql()}
       FROM ids
       LEFT JOIN initiative_budgets ib ON ib.org_project_id = ids.org_project_id
       LEFT JOIN app_users au ON au.id = ib.updated_by
       LEFT JOIN period_spend ps ON ps.org_project_id = ids.org_project_id
+      LEFT JOIN budget_windows bw ON bw.org_project_id = ids.org_project_id
       LEFT JOIN projects p ON p.id = ids.org_project_id
       ${scope}
      ORDER BY COALESCE(ps.spent_this_period_usd, 0) DESC, ids.org_project_id`;
@@ -763,17 +978,22 @@ function essentialSql(alias: string, withColumn: boolean): string {
  * ledger mode: each settled run's ledger entry mirrors it.
  */
 export function floorHistorySql(scoped: boolean, withEssential: boolean): string {
+  // This period and the one before it are the initiative's own windows
+  // (DE-38's budget_windows); for a monthly initiative that is this month and
+  // last month, exactly as before.
   return `
+    WITH ${budgetWindowsCteSql({ scoped })}
     SELECT COALESCE(b.org_project_id, ap.org_project_id) AS org_project_id,
-           COALESCE(SUM(br.cost_usd) FILTER (WHERE br.started_at >= ${PERIOD_START_SQL}), 0)::float8 AS this_period,
-           COALESCE(SUM(br.cost_usd) FILTER (WHERE br.started_at >= ${PERIOD_START_SQL} - INTERVAL '1 month'
-                                             AND br.started_at < ${PERIOD_START_SQL}), 0)::float8 AS last_period,
+           COALESCE(SUM(br.cost_usd) FILTER (WHERE br.started_at >= bw.period_start), 0)::float8 AS this_period,
+           COALESCE(SUM(br.cost_usd) FILTER (WHERE br.started_at >= bw.prev_start
+                                             AND br.started_at < bw.prev_end), 0)::float8 AS last_period,
            COALESCE(SUM(br.cost_usd) FILTER (WHERE br.started_at > NOW() - INTERVAL '30 days'), 0)::float8 AS trailing_30d
       FROM bot_runs br
       JOIN bots b ON b.id = br.bot_id
       LEFT JOIN agent_projects ap ON ap.id = b.agent_project_id
+      JOIN budget_windows bw ON bw.org_project_id = COALESCE(b.org_project_id, ap.org_project_id)
      WHERE br.cost_usd IS NOT NULL AND br.trigger <> 'manual' AND ${essentialSql('b', withEssential)}
-       AND br.started_at >= LEAST(${PERIOD_START_SQL} - INTERVAL '1 month', NOW() - INTERVAL '30 days')
+       AND br.started_at >= LEAST(COALESCE(bw.prev_start, bw.period_start), bw.period_start, NOW() - INTERVAL '30 days')
        ${scoped ? 'AND COALESCE(b.org_project_id, ap.org_project_id) = :pid' : 'AND COALESCE(b.org_project_id, ap.org_project_id) IS NOT NULL'}
      GROUP BY 1`;
 }
@@ -821,11 +1041,69 @@ const NO_FLOOR: FloorHistory = { thisPeriodUsd: 0, lastPeriodUsd: 0, trailing30d
 
 // ─── Provider functions ──────────────────────────────────────────────────────
 
+// ─── Periods over Aurora (DE-38) ─────────────────────────────────────────────
+
+/** Has this cluster got schema/budget_periods_schema.sql? Probed once (column-probe.ts) — only before a policy WRITE; reads go through policyColumnSql and need no probe. */
+export async function periodsSupported(): Promise<boolean> {
+  return hasColumns('initiative_budgets', PERIOD_COLUMNS);
+}
+
+/** Known spend + unknown-cost entries attributed to one initiative inside [from, to), on the read mode's source. */
+export async function auroraSpendBetween(run: Run, orgProjectId: string, from: Date, to: Date): Promise<WindowSpend> {
+  const params = [s('pid', orgProjectId), s('from', from.toISOString()), s('to', to.toISOString())];
+  const rows = await run(
+    spendLedgerMode() === 'ledger'
+      ? `SELECT COALESCE(SUM(se.cost_usd), 0)::float8 AS spent, COUNT(*) FILTER (WHERE se.cost_usd IS NULL)::int AS unknown
+           FROM spend_entries se
+          WHERE se.initiative_id = :pid AND se.occurred_at >= :from::timestamptz AND se.occurred_at < :to::timestamptz`
+      : `SELECT COALESCE(SUM(br.cost_usd), 0)::float8 AS spent,
+                COUNT(*) FILTER (WHERE br.cost_usd IS NULL AND br.status IN ('done', 'failed'))::int AS unknown
+           FROM bot_runs br
+          WHERE (${attributionPredicateSql(':pid')})
+            AND br.started_at >= :from::timestamptz AND br.started_at < :to::timestamptz`,
+    params,
+  );
+  return { spentUsd: round4(toNum(rows[0]?.['spent'])), unknownCount: toNum(rows[0]?.['unknown']) };
+}
+
+/**
+ * Attach the window, the carry in and the effective allocation to each row.
+ * The carry is the previous keyed period's close, written now when missing
+ * (providers/budget-periods.ts). `strict` (the money gate's read) lets a
+ * failed close surface as unreadable budget state; the list read logs it and
+ * carries nothing.
+ */
+async function attachPeriods(raws: Record<string, unknown>[], base: BudgetRow[], run: Run, strict: boolean): Promise<BudgetRow[]> {
+  return Promise.all(base.map(async (row, i) => {
+    const w = rowWindows(raws[i] ?? {}, row.allocatedUsd);
+    if (!w) return row;
+    let carryInUsd = 0;
+    const prev = w.prev;
+    if (row.allocatedUsd != null && w.policy && closesAtBoundary(w.policy) && w.window.state === 'open' && prev?.key) {
+      try {
+        carryInUsd = await auroraCarryIn(
+          run,
+          {
+            orgProjectId: row.orgProjectId, allocatedUsd: row.allocatedUsd,
+            policy: { carryOver: w.policy.carryOver, capUsd: w.policy.carryOverCapUsd, since: w.policy.carryOverSince ? new Date(w.policy.carryOverSince) : null },
+          },
+          { key: prev.key, start: prev.start, end: prev.end },
+          (from, to) => auroraSpendBetween(run, row.orgProjectId, from, to),
+        );
+      } catch (err) {
+        if (strict) throw err;
+        console.warn(`[budgets] could not close ${row.orgProjectId}'s period ${prev.key}: ${(err as Error).message}`);
+      }
+    }
+    return { ...row, ...periodFigures(row.allocatedUsd, w.window, carryInUsd, w.policy) };
+  }));
+}
+
 export async function listBudgets(): Promise<BudgetRow[]> {
   if (config.mock.aurora) return MOCK_BUDGETS.map((m) => mockBudgetRow(m));
   const mode = spendLedgerMode();
   const rows = await safeExec(mode === 'ledger' ? ledgerBudgetSelectSql(false) : budgetSelectSql(false));
-  const base = rows.map(rowToBudget);
+  const base = await attachPeriods(rows, rows.map(rowToBudget), safeExec, false);
   if (mode === 'dual') await logLedgerDrift(base, null);
   const { cols, floors } = await readReserveInputs(null, safeExec);
   const held = await openHeldSplitAll();
@@ -845,7 +1123,7 @@ export async function listBudgets(): Promise<BudgetRow[]> {
  */
 export async function unknownCostCountInPeriod(orgProjectId: string): Promise<number> {
   if (config.mock.aurora) {
-    const start = periodStartMs();
+    const start = mockBudgetWindow(orgProjectId).start.getTime();
     const runs = mockRunsAttributedTo(orgProjectId)
       .filter((r) => r.costUsd == null && (r.status === 'done' || r.status === 'failed') && Date.parse(r.startedAt) >= start);
     const stored = spendLedgerMode() === 'ledger'
@@ -853,14 +1131,15 @@ export async function unknownCostCountInPeriod(orgProjectId: string): Promise<nu
       : [];
     return runs.length + stored.length;
   }
+  const start = periodStartForSql(':pid');
   const rows = await safeExec(
-    spendLedgerMode() === 'ledger'
+    withBudgetWindowsSql(true) + (spendLedgerMode() === 'ledger'
       ? `SELECT COUNT(*)::int AS n FROM spend_entries se
-          WHERE se.initiative_id = :pid AND se.cost_usd IS NULL AND se.occurred_at >= ${PERIOD_START_SQL}`
+          WHERE se.initiative_id = :pid AND se.cost_usd IS NULL AND se.occurred_at >= ${start}`
       : `SELECT COUNT(*)::int AS n FROM bot_runs br
           WHERE br.cost_usd IS NULL AND br.status IN ('done', 'failed')
-            AND br.started_at >= ${PERIOD_START_SQL}
-            AND (${attributionPredicateSql(':pid')})`,
+            AND br.started_at >= ${start}
+            AND (${attributionPredicateSql(':pid')})`),
     [s('pid', orgProjectId)],
   );
   return toNum(rows[0]?.['n']);
@@ -870,7 +1149,7 @@ export async function getBudget(orgProjectId: string): Promise<BudgetRow | null>
   return fetchBudget(orgProjectId, { run: safeExec, withHolds: true });
 }
 
-async function fetchBudget(orgProjectId: string, opts: { run: Run; withHolds: boolean }): Promise<BudgetRow | null> {
+async function fetchBudget(orgProjectId: string, opts: { run: Run; withHolds: boolean; strict?: boolean }): Promise<BudgetRow | null> {
   if (config.mock.aurora) {
     const m = MOCK_BUDGETS.find((b) => b.id === orgProjectId);
     return m ? mockBudgetRow(m, { withHolds: opts.withHolds }) : null;
@@ -880,7 +1159,7 @@ async function fetchBudget(orgProjectId: string, opts: { run: Run; withHolds: bo
     mode === 'ledger' ? ledgerBudgetSelectSql(true) : budgetSelectSql(true),
     [s('pid', orgProjectId)],
   );
-  const out = rows[0] ? rowToBudget(rows[0]) : null;
+  const out = rows[0] ? (await attachPeriods([rows[0]], [rowToBudget(rows[0])], opts.run, opts.strict === true))[0]! : null;
   if (mode === 'dual') await logLedgerDrift(out ? [out] : [], orgProjectId);
   if (!out) return null;
   const { cols, floors } = await readReserveInputs(orgProjectId, opts.run);
@@ -901,7 +1180,7 @@ export type BudgetGate =
  */
 export async function readBudgetGate(orgProjectId: string): Promise<BudgetGate> {
   try {
-    const row = await fetchBudget(orgProjectId, { run: (sql, params = []) => exec(sql, params), withHolds: false });
+    const row = await fetchBudget(orgProjectId, { run: (sql, params = []) => exec(sql, params), withHolds: false, strict: true });
     return row ? { kind: 'ok', row } : { kind: 'none' };
   } catch (error) {
     return { kind: 'unavailable', reason: (error as Error).message, error };
@@ -940,6 +1219,49 @@ export interface AllocationExtras {
   hardCapUsd?: number | null;
   maintenanceReserveUsd?: number | null;
   allowFloorSpill?: boolean;
+  /** DE-38 policy. undefined = leave alone. The route has already checked the combination. */
+  period?: BudgetPeriod;
+  /** Rolling only; written NULL whenever the resulting period is not rolling. */
+  rollingDays?: number | null;
+  carryOver?: CarryOver;
+  carryOverCapUsd?: number | null;
+}
+
+/** Does this write change the period policy (and so close the outgoing window)? */
+export function policyChanges(before: BudgetRow | null, extras: AllocationExtras): boolean {
+  const cur = {
+    period: (before?.allocatedUsd != null ? before.period : null) ?? 'monthly',
+    rollingDays: before?.rollingDays ?? null,
+    carryOver: before?.carryOver ?? DEFAULT_CARRY_OVER,
+    carryOverCapUsd: before?.carryOverCapUsd ?? null,
+  };
+  const nextPeriod = extras.period ?? cur.period;
+  const nextRolling = nextPeriod === 'rolling' ? (extras.rollingDays !== undefined ? extras.rollingDays : cur.rollingDays) : null;
+  return nextPeriod !== cur.period
+    || nextRolling !== cur.rollingDays
+    || (extras.carryOver !== undefined && extras.carryOver !== cur.carryOver)
+    || (extras.carryOverCapUsd !== undefined && extras.carryOverCapUsd !== cur.carryOverCapUsd);
+}
+
+const hasPolicyFields = (e: AllocationExtras): boolean =>
+  e.period !== undefined || e.rollingDays !== undefined || e.carryOver !== undefined || e.carryOverCapUsd !== undefined;
+
+/**
+ * Close the outgoing window of a policy change (reason 'reconfigured', carry
+ * out 0) — only a keyed, open window under an allocation has one to close.
+ */
+async function closeOutgoing(before: BudgetRow | null): Promise<void> {
+  if (!before || before.allocatedUsd == null || !before.periodKey || before.periodState !== 'open' || !before.periodStart || !before.periodEnd) return;
+  const outgoing = { key: before.periodKey, start: new Date(before.periodStart), end: new Date(before.periodEnd) };
+  const carryIn = before.carryInUsd ?? 0;
+  if (config.mock.aurora) {
+    mockCloseReconfigured(before.orgProjectId, before.allocatedUsd, outgoing, carryIn,
+      mockInitiativeSpendBetween(before.orgProjectId, outgoing.start.getTime(), outgoing.end.getTime()));
+    return;
+  }
+  const run: Run = (sql, params = []) => exec(sql, params);
+  await auroraCloseReconfigured(run, before.orgProjectId, before.allocatedUsd, outgoing, carryIn,
+    await auroraSpendBetween(run, before.orgProjectId, outgoing.start, outgoing.end));
 }
 
 export async function upsertAllocation(
@@ -948,6 +1270,13 @@ export async function upsertAllocation(
   updatedBy: string | null,
   extras: AllocationExtras = {},
 ): Promise<BudgetRow | null> {
+  // DE-38: a policy change closes the outgoing window first (carry out 0) and
+  // stamps carry_over_since, so no period ending before the new policy carries.
+  const policyWrite = hasPolicyFields(extras);
+  const before = policyWrite ? await getBudget(orgProjectId) : null;
+  const reconfigured = policyWrite && policyChanges(before, extras);
+  if (reconfigured) await closeOutgoing(before);
+  const resultingPeriod = extras.period ?? (before?.allocatedUsd != null ? (before.period as BudgetPeriod | null) : null) ?? 'monthly';
   if (config.mock.aurora) {
     // Used to `return null`, which routes/budgets.ts reads as "no Aurora" and
     // answers 503 — so a release manager could not move an allocation offline
@@ -962,6 +1291,13 @@ export async function upsertAllocation(
       if (extras.hardCapUsd !== undefined) row.hardCapUsd = extras.hardCapUsd;
       if (extras.maintenanceReserveUsd !== undefined) row.maintenanceReserveUsd = extras.maintenanceReserveUsd;
       if (extras.allowFloorSpill !== undefined) row.allowFloorSpill = extras.allowFloorSpill;
+      if (policyWrite) {
+        row.period = resultingPeriod;
+        row.rollingDays = resultingPeriod === 'rolling' ? (extras.rollingDays !== undefined ? extras.rollingDays : row.rollingDays ?? null) : null;
+        if (extras.carryOver !== undefined) row.carryOver = extras.carryOver;
+        if (extras.carryOverCapUsd !== undefined) row.carryOverCapUsd = extras.carryOverCapUsd;
+        if (reconfigured) row.carryOverSince = stamp;
+      }
     };
     if (existing) {
       existing.allocated = allocatedUsd;
@@ -1004,6 +1340,18 @@ export async function upsertAllocation(
   }
   if (extras.allowFloorSpill !== undefined) {
     extra('allow_floor_spill', 'spill', { name: 'spill', value: { booleanValue: extras.allowFloorSpill } });
+  }
+  if (policyWrite) {
+    extra('period', 'period', s('period', resultingPeriod));
+    const rolling = resultingPeriod === 'rolling'
+      ? (extras.rollingDays !== undefined ? extras.rollingDays : before?.rollingDays ?? null)
+      : null;
+    extra('rolling_days', 'rolling', rolling == null ? nul('rolling') : { name: 'rolling', value: { longValue: rolling } }, '::int');
+    if (extras.carryOver !== undefined) extra('carry_over', 'carry', s('carry', extras.carryOver));
+    if (extras.carryOverCapUsd !== undefined) {
+      extra('carry_over_cap_usd', 'carrycap', extras.carryOverCapUsd == null ? nul('carrycap') : num('carrycap', extras.carryOverCapUsd), '::numeric');
+    }
+    if (reconfigured) extra('carry_over_since', 'since', s('since', clock.now().toISOString()), '::timestamptz');
   }
   await exec(
     `INSERT INTO initiative_budgets (${cols.join(', ')})
@@ -1110,12 +1458,10 @@ export async function listGrants(orgProjectId?: string): Promise<GrantRow[]> {
             COALESCE((${spendLedgerMode() === 'ledger' ? `
               SELECT SUM(se.cost_usd)::float8 FROM spend_entries se
                WHERE se.initiative_id = g.org_project_id
-                 AND (sp.starts_on IS NULL OR se.occurred_at >= sp.starts_on)
-                 AND (sp.ends_on   IS NULL OR se.occurred_at < sp.ends_on + 1)` : `
+                 AND ${sprintWindowSql('se.occurred_at', 'sp.starts_on', 'sp.ends_on')}` : `
               SELECT SUM(br.cost_usd)::float8 FROM bot_runs br
                WHERE (${spendPredicateSql('g.org_project_id')})
-                 AND (sp.starts_on IS NULL OR br.started_at >= sp.starts_on)
-                 AND (sp.ends_on   IS NULL OR br.started_at < sp.ends_on + 1)`}
+                 AND ${sprintWindowSql('br.started_at', 'sp.starts_on', 'sp.ends_on')}`}
             ), 0)::float8 AS window_spend_usd
        FROM budget_grants g
        LEFT JOIN projects p  ON p.id = g.org_project_id
@@ -1147,11 +1493,17 @@ export async function listGrants(orgProjectId?: string): Promise<GrantRow[]> {
 
 // ─── Org summary ─────────────────────────────────────────────────────────────
 
+/** The org totals' window: the calendar month, named on the response (DE-38). */
+function orgWindow(): NonNullable<OrgBudgetSummary['window']> {
+  const w = monthWindow(clock.now());
+  return { period: 'calendar-month', start: w.start.toISOString(), end: w.end.toISOString() };
+}
+
 export async function orgSummary(): Promise<OrgBudgetSummary> {
-  const empty: OrgBudgetSummary = {
-    totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, totalMaintenanceUsd: 0,
-    byModel: [], byTrigger: [],
-  };
+  return { ...(await orgSummaryFigures()), window: orgWindow() };
+}
+
+async function orgSummaryFigures(): Promise<OrgBudgetSummary> {
   if (config.mock.aurora) {
     // Every number here is now one cut or another of ONE row set — this
     // period's costed bot_runs — so the tiles, the by-model card and the

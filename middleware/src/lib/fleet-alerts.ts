@@ -23,6 +23,7 @@
 // - Auto-pause at 100 % is OFF (`BUDGET_AUTO_PAUSE=on` pauses the initiative
 //   with reason 'budget'); a user decision.
 
+import { budgetedAllocation, monthWindow } from './budget-periods.js';
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { budgetThresholds } from '../mock/run-controls.js';
@@ -57,9 +58,9 @@ export function thresholdToAnnounce(
   return crossed > prior ? crossed : null;
 }
 
-/** The budget period a row's spend is windowed by: the calendar month (v1 is monthly only). */
+/** The calendar month's key — the threshold memory of a row with no period key of its own (rolling). */
 export function currentPeriod(now = new Date()): string {
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+  return monthWindow(now).key!;
 }
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -108,7 +109,7 @@ export interface ThresholdCrossing { orgProjectId: string; threshold: number; sp
  */
 export async function sweepBudgetThresholds(now = new Date()): Promise<ThresholdCrossing[]> {
   const { listBudgets } = await import('../providers/budgets.js');
-  const period = currentPeriod(now);
+  const month = currentPeriod(now);
   const out: ThresholdCrossing[] = [];
   let rows: Awaited<ReturnType<typeof listBudgets>>;
   try {
@@ -118,15 +119,21 @@ export async function sweepBudgetThresholds(now = new Date()): Promise<Threshold
     return out;
   }
   for (const row of rows) {
-    if (row.allocatedUsd == null) continue;
+    // DE-38: judged against the effective allocation (null between sprints:
+    // nothing in force, nothing to cross), and remembered per the row's own
+    // period key so a new quarter or sprint announces afresh. Rolling windows
+    // have no key and keep the calendar month's.
+    const allocatedUsd = budgetedAllocation(row);
+    if (allocatedUsd == null) continue;
+    const period = row.periodKey ?? month;
     try {
-      const crossed = crossedThreshold(row.spentThisPeriodUsd, row.allocatedUsd);
+      const crossed = crossedThreshold(row.spentThisPeriodUsd, allocatedUsd);
       const announce = thresholdToAnnounce(crossed, period, await lastAnnounced(row.orgProjectId));
       if (announce == null) continue;
       await recordAnnounced(row.orgProjectId, announce, period);
       const c: ThresholdCrossing = {
         orgProjectId: row.orgProjectId, threshold: announce, spentUsd: row.spentThisPeriodUsd,
-        allocatedUsd: row.allocatedUsd, period,
+        allocatedUsd, period,
       };
       out.push(c);
       emitFleetMetric('budget-threshold', {

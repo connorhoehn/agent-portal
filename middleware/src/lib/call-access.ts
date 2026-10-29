@@ -7,13 +7,14 @@ import { currentDocumentSessionEpoch, documentSessionId } from './document-sessi
 import { getUser } from '../providers/identity.js';
 import { DEMO_SUB, demoFallbackAllowed, type Grants, type Session } from './session.js';
 import { SOCIAL_CONVERSATION_ID, tenantChannelFamily } from './tenant-channels.js';
+import { TENANTS_WITH_HUDDLE_CHAT } from './tenants.generated.js';
 
 export interface CallAuthority { displayName: string; grants: Grants }
 /** The tenants whose sockets page pins (OrgIQ only) and huddle chat resolve. */
-export type CallTenant = 'orgiq' | 'assessment' | 'social';
+export type CallTenant = typeof TENANTS_WITH_HUDDLE_CHAT[number];
 const ORGIQ_ONLY: readonly CallTenant[] = ['orgiq'];
-/** Huddle chat follows the accepted call in Work, Assessment teams and Social. */
-export const HUDDLE_CHAT_TENANTS: readonly CallTenant[] = ['orgiq', 'assessment', 'social'];
+/** Huddle chat follows the accepted call in Work, Assessment teams and Social (manifest `huddleChat`). */
+export const HUDDLE_CHAT_TENANTS: readonly CallTenant[] = TENANTS_WITH_HUDDLE_CHAT;
 /** The tenant a huddle-bearing lobby belongs to, or null (documents, pipelines, malformed). */
 export function huddleLobbyTenant(lobbyName: string): CallTenant | null {
   if (lobbyName.startsWith('orgiq:')) return 'orgiq';

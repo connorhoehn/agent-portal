@@ -144,7 +144,7 @@ const evt = () => `evt-pg-${++seq}`;
 
 /** A request with its steps as INSERT_REQUEST_SQL / INSERT_STEP_SQL write them. */
 async function file(id: string, requester: string, beneficiary: string, itemId: string, kinds: string[]): Promise<boolean> {
-  const won = await run(INSERT_REQUEST_SQL, { id, requester_id: requester, beneficiary_id: beneficiary, item_id: itemId, justification: 'Acceptance justification, twenty plus.', duration: '7d', sod_verdict: 'clear', at: T0 });
+  const won = await run(INSERT_REQUEST_SQL, { id, requester_id: requester, beneficiary_id: beneficiary, item_id: itemId, justification: 'Acceptance justification, twenty plus.', duration: '7d', sod_verdict: 'clear', requested_usd: null, forecast: null, at: T0 });
   if (!won.length) return false;
   for (const [i, kind] of kinds.entries()) {
     await run(INSERT_STEP_SQL, { request_id: id, step: i + 1, kind, status: i === 0 ? 'current' : 'waiting', current_since: i === 0 ? T0 : null });
@@ -201,7 +201,7 @@ const reject = (requestId: string, step: number, actor: string) => run(DECIDE_ST
 
   it('two racing submits for the same person and item file once; a withdrawn request frees the slot', async () => {
     const results = await Promise.all(Array.from({ length: 10 }, (_, i) =>
-      run(INSERT_REQUEST_SQL, { id: `req-race-${i}`, requester_id: 'u-rhea', beneficiary_id: 'u-rhea', item_id: 'role:orgiq:sme', justification: 'Racing submit, twenty characters.', duration: '7d', sod_verdict: 'clear', at: T0 })));
+      run(INSERT_REQUEST_SQL, { id: `req-race-${i}`, requester_id: 'u-rhea', beneficiary_id: 'u-rhea', item_id: 'role:orgiq:sme', justification: 'Racing submit, twenty characters.', duration: '7d', sod_verdict: 'clear', requested_usd: null, forecast: null, at: T0 })));
     expect(results.filter((r) => r.length === 1)).toHaveLength(1);
     expect(await one(`SELECT count(*) AS n FROM access_requests WHERE beneficiary_id = 'u-rhea' AND item_id = :item`, { item: 'role:orgiq:sme' })).toEqual({ n: '1' });
     await sql(`UPDATE access_requests SET status = 'withdrawn' WHERE beneficiary_id = 'u-rhea'`);

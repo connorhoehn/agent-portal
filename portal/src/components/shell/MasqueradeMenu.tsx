@@ -4,6 +4,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useSession, type SessionRole } from '../../lib/auth';
 import { CHOOSER } from '../../lib/tenantHome';
+import { TENANT_DISPLAY_NAMES } from '../../lib/tenants.generated.ts';
 
 const ROLE_LABELS: Record<string, string> = {
   member: 'Member',
@@ -52,7 +53,7 @@ const ROLE_HINTS: Record<string, string> = {
   'access-admin': 'Approver plus the catalog, policies and provisioning.',
 };
 
-const TENANT_LABELS: Record<string, string> = { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines', access: 'Access' };
+const TENANT_LABELS: Record<string, string> = TENANT_DISPLAY_NAMES;
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;

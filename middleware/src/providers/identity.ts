@@ -17,6 +17,7 @@ import {
 
 import { config } from '../config.js';
 import type { Grants } from '../lib/session.js';
+import { TENANTS, TENANT_MANIFEST } from '../lib/tenants.generated.js';
 import { identityGrantWritesFixture } from '../mock/identity-grants.js';
 import {
   GRANT_ROLE_SQL, REVOKE_ROLE_SQL, applyGrantDiff, grantDiff, writeGrantSet, type GrantDiff,
@@ -53,13 +54,9 @@ export interface UserInfo {
 
 // ── Fallback seed mirror (matches schema/identity_schema.sql) ────────────────
 
-const FALLBACK_TENANTS: TenantInfo[] = [
-  { id: 'orgiq', displayName: 'Work', status: 'ACTIVE' },
-  { id: 'assessment', displayName: 'Assessment', status: 'ACTIVE' },
-  { id: 'social', displayName: 'Social', status: 'ACTIVE' },
-  { id: 'pipelines', displayName: 'Pipelines', status: 'ACTIVE' },
-  { id: 'access', displayName: 'Access', status: 'ACTIVE' },
-];
+// The tenants rows (schema/identity_schema.sql) mirror tenants/manifest.json;
+// so does this fallback (DE-29).
+const FALLBACK_TENANTS: TenantInfo[] = TENANTS.map((id) => ({ id, displayName: TENANT_MANIFEST[id].displayName, status: 'ACTIVE' }));
 
 // Mutable epoch: bumpSessionEpoch increments in place so dev:mock exercises the
 // same sign-out-others / switch-invalidation semantics as Aurora.

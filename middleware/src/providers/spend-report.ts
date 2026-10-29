@@ -29,6 +29,7 @@ import { allMockRuns } from '../mock/bots.js';
 import { MOCK_BOTS, mockBotRunInitiative, mockRunsAttributedTo, dispatchedSpendInWindow } from './bots.js';
 import { mockProjectName } from './projects.js';
 import { displayNameForSubject, listUsers } from './identity.js';
+import { budgetedAllocation } from '../lib/budget-periods.js';
 import { attributionPredicateSql, getBudget, getMaintenance30d, listBudgets, listGrants, type BudgetRow } from './budgets.js';
 import { listOpenHolds, mockHolds, missingHoldsTable, openHeldUsdForActor, openHeldUsdForGrant } from './spend-holds.js';
 import { listUserBudgetRowsAndSpenders, userBudgetView, userSpendThisPeriod } from './user-budgets.js';
@@ -115,6 +116,14 @@ export interface InitiativeReport {
   allocation: {
     allocatedUsd: number | null;
     period: string | null;
+    /** DE-38: the current window and its carry. */
+    periodKey: string | null;
+    periodState: 'open' | 'between-sprints';
+    periodStart: string;
+    periodEnd: string;
+    carryInUsd: number;
+    /** allocated + carry in; null with no allocation or between sprints. */
+    effectiveAllocatedUsd: number | null;
     spentUsd: number;
     runCount: number;
     unknownCount: number;
@@ -300,8 +309,9 @@ async function allocationsFor(by: SpendGroupBy, keys: ReadonlyArray<string | nul
   const out = new Map<string, { allocatedUsd: number; remainingUsd: number }>();
   if (by === 'initiative') {
     for (const b of budgets ?? []) {
-      if (b.allocatedUsd == null || b.discretionaryRemainingUsd == null) continue;
-      out.set(b.orgProjectId, { allocatedUsd: b.allocatedUsd, remainingUsd: b.discretionaryRemainingUsd });
+      const allocated = budgetedAllocation(b);
+      if (allocated == null || b.discretionaryRemainingUsd == null) continue;
+      out.set(b.orgProjectId, { allocatedUsd: allocated, remainingUsd: b.discretionaryRemainingUsd });
     }
   } else if (by === 'actor') {
     let rows;
@@ -451,6 +461,13 @@ async function initiativeBlocks(initiativeId: string, w: ReportWindow, budget: B
     allocation: {
       allocatedUsd: budget?.allocatedUsd ?? null,
       period: budget?.period ?? null,
+      // DE-38: the window and carry the figures below are read in.
+      periodKey: budget?.periodKey ?? null,
+      periodState: budget?.periodState ?? 'open',
+      periodStart: budget?.periodStart ?? w.monthStart.toISOString(),
+      periodEnd: budget?.periodEnd ?? w.monthEnd.toISOString(),
+      carryInUsd: budget?.carryInUsd ?? 0,
+      effectiveAllocatedUsd: budget ? budgetedAllocation(budget) : null,
       spentUsd: budget?.spentThisPeriodUsd ?? 0,
       runCount: budget?.runCountThisPeriod ?? 0,
       unknownCount: budget?.unknownCostCount ?? people.reduce((a, p) => a + p.unknownCount, 0),
@@ -483,11 +500,16 @@ async function initiativeBlocks(initiativeId: string, w: ReportWindow, budget: B
  * no rows (holds as `holdsTracked: false`).
  */
 export async function getSpendReport(opts: { groupBy: SpendGroupBy; period: ReportPeriod; initiativeId?: string | null; now?: Date }): Promise<SpendReport> {
-  const w = reportWindow(opts.period, opts.now ?? clock.now());
   const initiativeId = opts.initiativeId ?? null;
   const budgets: BudgetRow[] | null = initiativeId
     ? await getBudget(initiativeId).then((b) => (b ? [b] : []))
     : opts.groupBy === 'initiative' ? await listBudgets() : null;
+  // DE-38: one initiative's report is cut at that initiative's budget window
+  // (month-to-date and the projection are "this period"); org-wide stays the
+  // calendar month, since initiatives no longer share a boundary.
+  const scoped = initiativeId ? budgets?.[0] : null;
+  const w = reportWindow(opts.period, opts.now ?? clock.now(),
+    scoped?.periodStart && scoped.periodEnd ? { start: new Date(scoped.periodStart), end: new Date(scoped.periodEnd) } : null);
   const { groups, totals, holdsTracked } = await buildGroups(opts.groupBy, w, initiativeId, budgets);
   const report: SpendReport = {
     groupBy: opts.groupBy,

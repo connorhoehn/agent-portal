@@ -39,6 +39,7 @@
 import { randomUUID } from 'node:crypto';
 import { clock } from '../mock/core/index.js';
 import { readBudgetGate, unknownCostCountInPeriod, type BudgetRow } from '../providers/budgets.js';
+import { budgetedAllocation } from './budget-periods.js';
 import { readUserBudgetGate, type UserBudgetRow, type UserSpend } from '../providers/user-budgets.js';
 import {
   budgetFailClosed, decideFloorFire, decideHardCap, decideUserBudget, discretionary, effectiveHardCap,
@@ -97,7 +98,11 @@ export interface ReserveSpendInput {
 
 export interface AllocationGateBody {
   orgProjectId: string;
+  /** DE-38: the EFFECTIVE allocation (stored allocation + carry in). */
   allocatedUsd: number;
+  /** DE-38: the carry the current period started with, and its window key. */
+  carryInUsd?: number;
+  periodKey?: string | null;
   /** Everything spent this period (floor + discretionary). */
   spentUsd: number;
   /** Everything held on the initiative (floor + discretionary). */
@@ -218,7 +223,8 @@ export async function forecastP75ForModel(model: string | null | undefined, agen
 const round4 = (n: number): number => Math.round(n * 10_000) / 10_000;
 
 function allocationBody(orgProjectId: string, row: BudgetRow, held: { floorUsd: number; discretionaryUsd: number }, unknownCostCount: number): AllocationGateBody {
-  const allocatedUsd = row.allocatedUsd ?? 0;
+  // DE-38: the effective allocation (allocation + carry in), what every brake judges.
+  const allocatedUsd = budgetedAllocation(row) ?? 0;
   const reserveUsd = row.reserveUsd ?? 0;
   const floorSpentUsd = row.floorSpentUsd ?? 0;
   const discretionarySpentUsd = row.discretionarySpentUsd ?? row.spentThisPeriodUsd;
@@ -229,9 +235,10 @@ function allocationBody(orgProjectId: string, row: BudgetRow, held: { floorUsd: 
   return {
     orgProjectId, allocatedUsd, spentUsd: row.spentThisPeriodUsd, heldUsd: round4(held.floorUsd + held.discretionaryUsd),
     remainingUsd: discretionaryRemainingUsd, unknownCostCount,
-    hardCapUsd: effectiveHardCap(row.allocatedUsd, row.hardCapUsd ?? null, { unbudgeted: true })?.capUsd ?? null,
+    hardCapUsd: effectiveHardCap(budgetedAllocation(row), row.hardCapUsd ?? null, { unbudgeted: true })?.capUsd ?? null,
     reserveUsd, floorSpentUsd, floorHeldUsd: held.floorUsd, discretionarySpentUsd, discretionaryHeldUsd: held.discretionaryUsd,
     discretionaryRemainingUsd,
+    ...(row.carryInUsd !== undefined ? { carryInUsd: row.carryInUsd, periodKey: row.periodKey ?? null } : {}),
   };
 }
 
@@ -356,8 +363,10 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
 
     const initiativeHeld = round4(held.floorUsd + held.discretionaryUsd);
     let unknownCostCount = 0;
-    if (pid && row?.allocatedUsd != null && judge && !essential) unknownCostCount = await unknownCostCountInPeriod(pid);
-    const allocation = pid && row?.allocatedUsd != null ? allocationBody(pid, row, held, unknownCostCount) : null;
+    // DE-38: null between sprints (the allocation is not in force) — unbudgeted, no soft brake.
+    const allocated = row ? budgetedAllocation(row) : null;
+    if (pid && allocated != null && judge && !essential) unknownCostCount = await unknownCostCountInPeriod(pid);
+    const allocation = pid && row && allocated != null ? allocationBody(pid, row, held, unknownCostCount) : null;
     const envBody = envelope ? envelopeBody(pid!, envelope, grantHeld) : null;
     const userBody = ub ? userBudgetBody(actor!, ub.row, ub.spend, userHeld) : null;
     // Each refusal carries the figures of the limit it names, and only those:
@@ -398,7 +407,7 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
     if (judge) {
       // ── 4. Hard caps (DE-36): before the soft brakes, no confirm flag ─────
       if (pid) {
-        const cap = effectiveHardCap(row?.allocatedUsd ?? null, row?.hardCapUsd ?? null, { unbudgeted: true });
+        const cap = effectiveHardCap(allocated, row?.hardCapUsd ?? null, { unbudgeted: true });
         if (cap) {
           const spentUsd = row?.spentThisPeriodUsd ?? 0;
           const d = decideHardCap({ capUsd: cap.capUsd, spentUsd, heldUsd: initiativeHeld, amountUsd }, 'this initiative');
@@ -427,9 +436,9 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
       }
 
       // ── 5. The initiative: reserve for the floor, discretionary for the rest
-      if (row?.allocatedUsd != null && allocation) {
+      if (row && allocated != null && allocation) {
         const figures = {
-          allocatedUsd: row.allocatedUsd, reserveUsd: allocation.reserveUsd,
+          allocatedUsd: allocated, reserveUsd: allocation.reserveUsd,
           floorSpentUsd: allocation.floorSpentUsd, floorHeldUsd: held.floorUsd,
           discretionarySpentUsd: allocation.discretionarySpentUsd, discretionaryHeldUsd: held.discretionaryUsd,
         };
@@ -444,7 +453,7 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
           spill = f.spill;
         } else {
           const state = {
-            allocatedUsd: row.allocatedUsd, spentUsd: allocation.discretionarySpentUsd, heldUsd: held.discretionaryUsd,
+            allocatedUsd: allocated, spentUsd: allocation.discretionarySpentUsd, heldUsd: held.discretionaryUsd,
             unknownCostCount, floorUsd: discretionary(figures).floorUsd,
           };
           const unconfirmed = decideAllocation(state, input.forecast, false, unknownOpts);

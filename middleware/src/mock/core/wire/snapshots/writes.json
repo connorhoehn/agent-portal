@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-29T21:09:52.466Z",
-  "serverHandlerSha": "0729aab07649a5c40a8e3cfc4a90019beae2941a3cf4c1868b9a62cc0e02e06a",
+  "capturedAt": "2026-10-29T22:57:39.760Z",
+  "serverHandlerSha": "59642a0ef4a25ad752c924bef6cdef3a57090654daaaf5fdf1e672dd36bea305",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -535,9 +535,9 @@
         "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
-        "completedAt": "null",
+        "completedAt": "string",
         "createdAt": "string",
-        "description": "string",
+        "description": "null",
         "estimateForecast": "null",
         "estimateModel": "null",
         "estimateReviewedAt": "null",
@@ -554,25 +554,25 @@
         "nextStep": "null",
         "nextStepDetail": "null",
         "parentId": "string",
-        "prStatus": "null",
-        "prUrl": "null",
+        "prStatus": "string",
+        "prUrl": "string",
         "priority": "string",
         "projectId": "string",
         "projectName": "string",
-        "sprintId": "null",
+        "sprintId": "string",
         "status": "string",
         "storyPoints": "number",
-        "summary": "string",
+        "summary": "null",
         "title": "string",
         "type": "string",
         "updatedAt": "string"
       },
       "values": {
         "key": [
-          "ORG-OBS-13"
+          "ORG-LLM-10"
         ],
         "status": [
-          "open"
+          "done"
         ],
         "type": [
           "story"
@@ -4675,9 +4675,13 @@
         "budget": "object",
         "budget.allocatedUsd": "number",
         "budget.allowFloorSpill": "boolean",
+        "budget.carryInUsd": "number",
+        "budget.carryOver": "string",
+        "budget.carryOverCapUsd": "null",
         "budget.discretionaryHeldUsd": "number",
         "budget.discretionaryRemainingUsd": "number",
         "budget.discretionarySpentUsd": "number",
+        "budget.effectiveAllocatedUsd": "number",
         "budget.effectiveHardCapUsd": "number",
         "budget.floorHeldUsd": "number",
         "budget.floorSpentUsd": "number",
@@ -4689,8 +4693,13 @@
         "budget.orgProjectId": "string",
         "budget.orgProjectName": "string",
         "budget.period": "string",
+        "budget.periodEnd": "string",
+        "budget.periodKey": "string",
+        "budget.periodStart": "string",
+        "budget.periodState": "string",
         "budget.reserveSource": "string",
         "budget.reserveUsd": "number",
+        "budget.rollingDays": "null",
         "budget.runCountThisPeriod": "number",
         "budget.spentThisPeriodUsd": "number",
         "budget.updatedAt": "string",

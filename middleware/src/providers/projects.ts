@@ -1,9 +1,9 @@
 // Projects provider — reads project data from Aurora PostgreSQL via RDS Data API.
 // Tables: projects(id, name, status, created_at), project_contributions(person_id, project_id, role, weight), people(id, name, title, team)
 // Does NOT import from or modify types.ts or aurora.ts — all types and exec are
-// local. The single exception is PERIOD_START_SQL from budgets.ts: the agent
-// spend window is one fact and duplicating it is what let the two pages
-// disagree in the first place.
+// local. The single exception is the budget window (lib/budget-periods.ts, via
+// budgets.ts): the agent spend window is one fact and duplicating it is what
+// let the two pages disagree in the first place.
 
 import { noteSearchWrite } from '../lib/search-index/writes.js';
 import {
@@ -16,8 +16,11 @@ import {
 import { config } from '../config.js';
 // The one exception to the "nothing shared" note above, and a deliberate one:
 // the budget period is a single fact and this rollup must not have its own copy
-// of it. See PERIOD_START_SQL for why the windows were unified.
-import { PERIOD_START_SQL, MOCK_BUDGETS, mockBudgetRow } from './budgets.js';
+// of it. See PERIOD_START_SQL in lib/budget-periods.ts for why the windows were unified.
+import { MOCK_BUDGETS, mockBudgetRow } from './budgets.js';
+// DE-38: each initiative's spend window is its budget period (monthly unless
+// its allocation names another), the same CTE the Budgets ledger reads.
+import { periodStartForSql, withBudgetWindowsSql } from '../lib/budget-periods.js';
 import { spendLedgerMode } from './spend-ledger.js';
 // Same reasoning: the work-item rollup (points/open counts) is one fact,
 // owned by work-items.ts's own mock fixture, so the Initiatives list can't
@@ -51,9 +54,10 @@ export interface ProjectSummary {
   openBugs: number | null;
   pointsDone: number | null;
   pointsTotal: number | null;
-  /** Agent spend MONTH-TO-DATE — the same calendar-month window the Budgets
-      ledger uses (providers/budgets.ts PERIOD_START_SQL), so the two surfaces
-      report one number for one initiative. Callers must label the month. */
+  /** Agent spend in the initiative's CURRENT BUDGET PERIOD — the window the
+      Budgets ledger uses (lib/budget-periods.ts): the calendar month unless the
+      allocation names another period (DE-38), so the two surfaces report one
+      number for one initiative. Callers must label the window. */
   agentSpendUsd: number | null;
   /** Genuinely last, not last-this-month — see the note in listProjects. */
   lastAgentActivityAt: string | null;
@@ -494,7 +498,8 @@ export async function listProjects(opts: {
   // agentSpendUsd is month-to-date, on the same window the Budgets ledger uses.
   // It was lifetime, which made the same initiative report two different
   // "agent spend" figures on two pages that neither named a window nor agreed.
-  const spendPredicate = `br.started_at >= ${PERIOD_START_SQL} AND ${attributionPredicate}`;
+  const periodStart = periodStartForSql('p.id');
+  const spendPredicate = `br.started_at >= ${periodStart} AND ${attributionPredicate}`;
   // Last activity stays UNwindowed on purpose: "when did an agent last touch
   // this" is a liveness question, not a money question, and windowing it would
   // report an initiative that ran last month as never having run at all.
@@ -520,7 +525,7 @@ export async function listProjects(opts: {
         // The spend ledger (DE-30): attribution resolved at write time, so the
         // rollup and the Budgets ledger read the same rows.
         ? `(SELECT COALESCE(SUM(se.cost_usd), 0)::float8 FROM spend_entries se
-             WHERE se.initiative_id = p.id AND se.occurred_at >= ${PERIOD_START_SQL}) AS agent_spend_usd,
+             WHERE se.initiative_id = p.id AND se.occurred_at >= ${periodStart}) AS agent_spend_usd,
       (SELECT MAX(se.occurred_at) FROM spend_entries se
         WHERE se.initiative_id = p.id AND se.cost_usd IS NOT NULL) AS last_agent_activity_at,`
         : `(SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br WHERE ${spendPredicate}) AS agent_spend_usd,
@@ -541,7 +546,7 @@ export async function listProjects(opts: {
         WHERE ib.org_project_id = p.id LIMIT 1) AS allocated_usd`;
 
   const buildSql = (withRollups: boolean) => `
-    SELECT
+    ${withRollups ? withBudgetWindowsSql() : ''}SELECT
       ${legacySelect}${withRollups ? rollupSelect : ''}
     FROM projects p
     LEFT JOIN project_contributions pc ON pc.project_id = p.id
@@ -745,13 +750,14 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
                 OR b.agent_project_id IN (SELECT ap.id FROM agent_projects ap WHERE ap.org_project_id = :id)
           )
         )`;
+    const periodStart = periodStartForSql(':id');
     const spendRows = await exec(
-      `SELECT
+      `${withBudgetWindowsSql()}SELECT
          ${spendLedgerMode() === 'ledger'
            ? `(SELECT COALESCE(SUM(se.cost_usd), 0)::float8 FROM spend_entries se
-                WHERE se.initiative_id = :id AND se.occurred_at >= ${PERIOD_START_SQL}) AS agent_spend_usd,`
+                WHERE se.initiative_id = :id AND se.occurred_at >= ${periodStart}) AS agent_spend_usd,`
            : `(SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br
-            WHERE br.started_at >= ${PERIOD_START_SQL} AND br.cost_usd IS NOT NULL AND ${linkPredicate}) AS agent_spend_usd,`}
+            WHERE br.started_at >= ${periodStart} AND br.cost_usd IS NOT NULL AND ${linkPredicate}) AS agent_spend_usd,`}
          (SELECT ap.repo_full_name FROM agent_projects ap
             WHERE ap.org_project_id = :id ORDER BY ap.created_at ASC LIMIT 1) AS repo_full_name,
          (SELECT COUNT(*)::int FROM bot_runs br

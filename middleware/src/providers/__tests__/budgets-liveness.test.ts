@@ -66,7 +66,10 @@ describe('spend columns', () => {
   it('stay month-to-date while liveness went lifetime', async () => {
     const sql = await ledgerSql();
     const cte = sql.slice(sql.indexOf('period_spend AS ('), sql.indexOf('ids AS ('));
-    expect(cte).toContain(`br.started_at >= ${PERIOD_START_SQL}`);
+    // DE-38: each initiative's own window, from the budget_windows CTE —
+    // whose default (monthly, or no allocation row) is PERIOD_START_SQL.
+    expect(cte).toContain('br.started_at >= bw.period_start');
+    expect(sql.slice(sql.indexOf('budget_windows AS ('), sql.indexOf('period_spend AS ('))).toContain(`ELSE ${PERIOD_START_SQL} END AS period_start`);
     expect(cte).toContain('SUM(br.cost_usd)');
     expect(cte).toContain('maintenance_usd');
     // …and the window is bounded only at the start: a "period" that also
@@ -80,6 +83,7 @@ describe('spend columns', () => {
     const sql = String(execMock.mock.calls[0]?.[0] ?? '');
     expect(sql).toContain('WHERE ids.org_project_id = :pid');
     expect(livenessExpr(sql)).not.toContain(PERIOD_START_SQL);
-    expect(sql).toContain(`br.started_at >= ${PERIOD_START_SQL}`);
+    expect(sql).toContain('br.started_at >= bw.period_start');
+    expect(sql).toContain('WHERE p.id = :pid');
   });
 });

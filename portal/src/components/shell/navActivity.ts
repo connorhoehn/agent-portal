@@ -1,5 +1,6 @@
 import { parseDmLobby } from '@connorhoehn/realtime-modules/call';
 import type { DiscussionUnread } from './discussionUnreadModel';
+import { TENANTS, TENANT_MANIFEST } from '../../lib/tenants.generated.ts';
 
 interface InboxNotice {
   id: string;
@@ -15,7 +16,8 @@ interface ActivityScope {
   /** The shell has already filtered these doors for the current actor. */
   visiblePaths: readonly string[];
 }
-const tenantPrefix: Readonly<Record<string, string>> = { orgiq: '/iq/', assessment: '/assessment/', social: '/social/', pipelines: '/pipelines/', access: '/access/' };
+/** Each tenant's portal tree with a trailing slash (manifest `portalRoot`). */
+const tenantPrefix: Readonly<Record<string, string>> = Object.fromEntries(TENANTS.map(t => [t, `${TENANT_MANIFEST[t].portalRoot}/`]));
 
 function localPath(href: unknown): string | null {
   if (typeof href !== 'string' || !href.startsWith('/') || href.startsWith('//') || /[\\\u0000-\u0020\u007f]/.test(href)) return null;

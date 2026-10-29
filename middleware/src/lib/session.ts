@@ -21,26 +21,22 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 import { config } from '../config.js';
 import { viewerScheme } from './trusted-proxy.js';
 
-export const TENANTS = ['orgiq', 'assessment', 'social', 'pipelines', 'access'] as const;
-export type Tenant = typeof TENANTS[number];
+// Tenants, their ordered roles and the Role union come from tenants/manifest.json
+// through the generated copy (DE-29; `node scripts/gen-tenants.mjs`).
+// scripts/check-tenant-manifest.mjs holds the Cedar seeds in
+// middleware/seeds/roles/{tenant}/ to the same lists. 'admin' is cross-tenant:
+// it can hold a grant in any tenant and is the only role permitted to masquerade.
+import {
+  TENANTS, ROLES_BY_TENANT as MANIFEST_ROLES_BY_TENANT, DEMO_EXCLUDED_TENANTS as MANIFEST_DEMO_EXCLUDED,
+  type Tenant, type Role,
+} from './tenants.generated.js';
+export { TENANTS, type Tenant, type Role };
 
-// Role vocabulary per tenant. Must match the Cedar seeds in
-// middleware/seeds/roles/{tenant}/. 'admin' is cross-tenant: it can hold a
-// grant in any tenant and is the only role permitted to masquerade.
-export const ROLES_BY_TENANT: Record<Tenant, readonly string[]> = {
-  orgiq: ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin'],
-  assessment: ['assessor', 'lead-assessor', 'program-lead'],
-  // The third and fourth tenants (docs/social-tenant-design.md §4, §5).
-  social: ['participant', 'moderator', 'community-admin'],
-  pipelines: ['author', 'operator', 'pipeline-admin'],
-  // The fifth tenant (docs/access-tenant-design.md): requests, approvals, provisioning.
-  access: ['requester', 'approver', 'access-admin'],
-};
+export const ROLES_BY_TENANT: Record<Tenant, readonly string[]> = MANIFEST_ROLES_BY_TENANT;
 export const ADMIN_ROLE = 'admin';
 
 // Legacy export — the orgiq role list. Prefer ROLES_BY_TENANT.
 export const ROLES = ROLES_BY_TENANT.orgiq as readonly ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin'];
-export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin' | 'assessor' | 'lead-assessor' | 'program-lead' | 'participant' | 'moderator' | 'community-admin' | 'author' | 'operator' | 'pipeline-admin' | 'requester' | 'approver' | 'access-admin' | 'admin';
 
 export const DEFAULT_ROLE: Role = 'member';
 export const DEFAULT_TENANT: Tenant = 'orgiq';
@@ -93,7 +89,7 @@ export interface Session {
  * (docs/social-tenant-design.md §4.1: "the demo user gets none"), and the demo
  * identity is the one every outside-role walk can start from without a login.
  * Seeded users still reach both through their real grants. */
-const DEMO_EXCLUDED_TENANTS: ReadonlySet<Tenant> = new Set<Tenant>(['social', 'pipelines', 'access']);
+const DEMO_EXCLUDED_TENANTS: ReadonlySet<Tenant> = new Set<Tenant>(MANIFEST_DEMO_EXCLUDED); // manifest `demoGrant: false`
 
 /** Grants used for the cookie-less demo identity and legacy cookies: every role
  * in every tenant except social and pipelines, so the demo stays explorable

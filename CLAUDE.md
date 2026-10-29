@@ -247,7 +247,7 @@ were public until 2026-09-29 because nothing in this tree creates them.
 Features follow goal-doc + validator: `docs/<feature>-goal.md` is the
 definition of done and `scripts/validate-<feature>.sh` is the only judge (most
 take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
-(24 validators).
+(25 validators).
 
 | Doc | What it is | Judge |
 |-----|------------|-------|
@@ -272,6 +272,7 @@ take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
 | `upstream-refinement-goal.md`, `upstream-refinement-plan-2026-10-14.md` | The realtime chain under the app: one distributed-core, realtime-modules owns its seams and capacity, apps on the chain, the consumer on the canonical name | `validate-upstream-refinement.sh` |
 | `meeting-rooms-app-goal.md` | Teams-style meetings on the app's calls: raise hand, reactions, breakout rooms (media and chat follow the room), announcements; library side in realtime-modules `docs/design/meeting-rooms-goal.md`; behind `VITE_MEETING_ROOMS` | `validate-meeting-rooms-app.sh` |
 | `agent-eval-goal.md` | Golden sets + `golden_runner.py` | `validate-agent-eval.sh` |
+| `deployment-enhancements/DE-28-bug-class-lint.md` | Lint for the deploy's bug classes: partial secret ARNs, uuid binds as text, a second CommonJS editor stack | `validate-deploy-bug-classes.sh` |
 | `agentcore-preview-surface.md`, `agentcore-preview-plan.md` | Preview API research, callback runbook (§6a) | — |
 | `audit/2026-10-07-audit-plan.md` | Structural duplication audit and its "stop doing" list | — |
 | `realtime-validation/<date>/` | Dated acceptance records for realtime, calls, capacity | — |

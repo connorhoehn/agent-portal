@@ -928,7 +928,7 @@
     {
       "method": "POST",
       "path": "/api/auth/logout",
-      "source": "src/routes/auth.ts:144"
+      "source": "src/routes/auth.ts:147"
     },
     {
       "method": "GET",
@@ -1043,32 +1043,32 @@
     {
       "method": "GET",
       "path": "/api/budgets",
-      "source": "src/routes/budgets.ts:37"
+      "source": "src/routes/budgets.ts:41"
     },
     {
       "method": "DELETE",
       "path": "/api/budgets/:orgProjectId",
-      "source": "src/routes/budgets.ts:157"
+      "source": "src/routes/budgets.ts:205"
     },
     {
       "method": "PUT",
       "path": "/api/budgets/:orgProjectId",
-      "source": "src/routes/budgets.ts:117"
+      "source": "src/routes/budgets.ts:121"
     },
     {
       "method": "GET",
       "path": "/api/budgets/:orgProjectId/limits",
-      "source": "src/routes/budgets.ts:94"
+      "source": "src/routes/budgets.ts:98"
     },
     {
       "method": "PUT",
       "path": "/api/budgets/:orgProjectId/limits",
-      "source": "src/routes/budgets.ts:100"
+      "source": "src/routes/budgets.ts:104"
     },
     {
       "method": "GET",
       "path": "/api/budgets/grants",
-      "source": "src/routes/budgets.ts:55"
+      "source": "src/routes/budgets.ts:59"
     },
     {
       "method": "GET",

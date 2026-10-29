@@ -5,6 +5,8 @@
 // re-gated against the page's current read authority. This module only reads
 // the payload defensively and decides where each number is shown.
 
+import { TENANTS_WITH_DISCUSSIONS } from '../../lib/tenants.generated.ts';
+
 export interface UnreadDiscussion {
   channel: string;
   title: string;
@@ -23,7 +25,7 @@ export interface DiscussionUnread {
 export const EMPTY_DISCUSSION_UNREAD: DiscussionUnread = { threads: [], sections: {} };
 
 /** The tenants whose pages carry reader-cursor discussions. */
-export const DISCUSSION_TENANTS: ReadonlySet<string> = new Set(['orgiq', 'assessment', 'pipelines']);
+export const DISCUSSION_TENANTS: ReadonlySet<string> = new Set(TENANTS_WITH_DISCUSSIONS); // manifest `discussions`
 
 const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
 const text = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);

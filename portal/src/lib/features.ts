@@ -1,4 +1,6 @@
 // Feature flags for portal surfaces.
+
+import { TENANT_MANIFEST } from './tenants.generated.ts';
 //
 // ASSESSMENT_ENABLED — the second tenant (engineering-maturity assessments).
 // ON by default; set VITE_ENABLE_ASSESSMENT=false to park it. Only gates the
@@ -29,11 +31,11 @@ export const ACCESS_ENABLED =
   (import.meta as unknown as { env?: Record<string, string | undefined> })
     .env?.VITE_ENABLE_ACCESS !== 'false';
 
-/** Whether a tenant's portal surfaces are switched on. orgiq always is. */
+/** Whether a tenant's portal surfaces are switched on: its manifest
+ *  `featureFlag` (tenants/manifest.json) is not 'false'. A tenant without a
+ *  flag (orgiq) or an unknown id always is. */
 export function tenantEnabled(tenant: string): boolean {
-  if (tenant === 'assessment') return ASSESSMENT_ENABLED;
-  if (tenant === 'social') return SOCIAL_ENABLED;
-  if (tenant === 'pipelines') return PIPELINES_ENABLED;
-  if (tenant === 'access') return ACCESS_ENABLED;
-  return true;
+  const flag = (TENANT_MANIFEST as Record<string, { featureFlag: string | null }>)[tenant]?.featureFlag;
+  if (!flag) return true;
+  return (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.[flag] !== 'false';
 }

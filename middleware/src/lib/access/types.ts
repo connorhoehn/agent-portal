@@ -1,7 +1,10 @@
 // The access tenant's vocabulary and wire shapes — docs/access-tenant-api.md is
 // the contract both halves are built against; this file is its middleware copy.
 
-export const ACCESS_TENANTS = ['orgiq', 'assessment', 'social', 'pipelines'] as const;
+import { TENANTS_GOVERNED_BY_ACCESS } from '../tenants.generated.js';
+
+/** The tenants whose roles this product requests and provisions: manifest `governedByAccess`. */
+export const ACCESS_TENANTS = TENANTS_GOVERNED_BY_ACCESS;
 export type AccessTenant = typeof ACCESS_TENANTS[number];
 
 /**

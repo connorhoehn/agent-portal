@@ -468,13 +468,16 @@ async function startDryRunRow(input: {
   const initiativeId = typeof def.meta['initiativeId'] === 'string' ? String(def.meta['initiativeId']) : null;
   if (initiativeId) {
     const { getBudget } = await import('./budgets.js');
+    const { budgetedAllocation } = await import('../lib/budget-periods.js');
     const budget = await getBudget(initiativeId);
-    if (budget?.allocatedUsd != null) {
-      const gate = bots.decideAllocation({ allocatedUsd: budget.allocatedUsd, spentUsd: budget.spentThisPeriodUsd }, f, input.confirm.allocation);
+    // DE-38: the effective allocation (allocation + carry in; null between sprints).
+    const allocatedUsd = budget ? budgetedAllocation(budget) : null;
+    if (budget && allocatedUsd != null) {
+      const gate = bots.decideAllocation({ allocatedUsd, spentUsd: budget.spentThisPeriodUsd }, f, input.confirm.allocation);
       if (gate.kind === 'confirm') {
         return { ok: false, status: 409, body: {
           error: gate.reason, gate: 'allocation', confirmFlag: 'confirmOverAllocation', estimate,
-          allocation: { orgProjectId: initiativeId, allocatedUsd: budget.allocatedUsd, spentUsd: budget.spentThisPeriodUsd },
+          allocation: { orgProjectId: initiativeId, allocatedUsd, spentUsd: budget.spentThisPeriodUsd },
         } };
       }
       brakes.push(`allocation: within ${initiativeId}`);

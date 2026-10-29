@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { TENANTS } from './tenants.generated';
 
 /**
  * DE-8: AgentCore Memory as per-tenant config (`infra/memory-config.json`).
@@ -7,7 +8,8 @@ import { join } from 'node:path';
  * entry becomes its own `CfnMemory`. Unknown tenants, strategies or keys, and
  * an expiry outside the service's 7..365 days, throw at synth.
  */
-export const MEMORY_TENANTS = ['orgiq', 'assessment', 'social', 'pipelines', 'access'] as const;
+/** Every tenant in tenants/manifest.json (DE-29) may carry a memory entry. */
+export const MEMORY_TENANTS = TENANTS;
 export const MEMORY_STRATEGIES = ['semantic', 'summary', 'user_preference'] as const;
 export type MemoryStrategy = (typeof MEMORY_STRATEGIES)[number];
 

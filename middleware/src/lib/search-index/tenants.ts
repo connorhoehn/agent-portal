@@ -7,9 +7,11 @@
 
 import type { PrincipalRef } from '../authz.js';
 import type { SearchDoc } from './types.js';
+import { TENANTS_SEARCH_INDEXED } from '../tenants.generated.js';
 
-export type IndexedTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access';
-export const INDEXED_TENANTS: readonly IndexedTenant[] = ['orgiq', 'assessment', 'social', 'pipelines', 'access'];
+/** The manifest's `searchIndexed` tenants (tenants/manifest.json, DE-29). */
+export type IndexedTenant = typeof TENANTS_SEARCH_INDEXED[number];
+export const INDEXED_TENANTS: readonly IndexedTenant[] = TENANTS_SEARCH_INDEXED;
 export const isIndexedTenant = (t: string): t is IndexedTenant => (INDEXED_TENANTS as readonly string[]).includes(t);
 
 export interface TenantBuild {

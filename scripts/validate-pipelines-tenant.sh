@@ -63,6 +63,9 @@ CAST_EMAIL=(ines.moreau@orgiq.example kofi.mensah@orgiq.example dara.whitfield@o
 CAST_NAME=("Ines Moreau" "Kofi Mensah" "Dara Whitfield")
 
 SESSION=middleware/src/lib/session.ts
+# Generated from tenants/manifest.json (DE-29): TENANTS, ROLES_BY_TENANT, Role, TENANT_MANIFEST.
+SESSION_DECL=middleware/src/lib/tenants.generated.ts
+PORTAL_TENANTS=portal/src/lib/tenants.generated.ts
 AUTHZ=middleware/src/lib/authz.ts
 CEDAR=middleware/seeds/roles/$T
 SCHEMA_JSON=middleware/seeds/schema.json
@@ -92,7 +95,7 @@ PY=.venv-synth/bin/python
 
 # The social tenant is being registered in parallel (lane S0). Its isolation
 # walks are owed only once it exists — judged by the same array this file reads.
-SOCIAL=0; grep -qE "TENANTS\s*=\s*\[[^]]*'social'" "$SESSION" 2>/dev/null && SOCIAL=1
+SOCIAL=0; grep -qE "TENANTS\s*=\s*\[[^]]*'social'" "$SESSION_DECL" 2>/dev/null && SOCIAL=1
 
 run_jest() { # run_jest <label> <test paths...> — targeted, never the whole suite
   local label="$1"; shift
@@ -118,9 +121,9 @@ neighbour() { # neighbour <script> <args...> — another judge must stay green; 
 
 section "P0 · registration — server (A.4 rows 1–10)"
 # 1. session.ts
-need "TENANTS\s*=\s*\[[^]]*'$T'" "$SESSION" "A.4#1 TENANTS lists '$T'"
-need "^\s*$T:\s*\['author',\s*'operator',\s*'pipeline-admin'\]" "$SESSION" "A.4#1 ROLES_BY_TENANT.$T = [author, operator, pipeline-admin]"
-role_line=$(grep -E '^export type Role\s*=' "$SESSION" 2>/dev/null)
+need "TENANTS\s*=\s*\[[^]]*'$T'" "$SESSION_DECL" "A.4#1 TENANTS lists '$T'"
+need "^\s*$T:\s*\['author',\s*'operator',\s*'pipeline-admin'\]" "$SESSION_DECL" "A.4#1 ROLES_BY_TENANT.$T = [author, operator, pipeline-admin]"
+role_line=$(grep -E '^export type Role\s*=' "$SESSION_DECL" 2>/dev/null)
 r_miss=""; for r in "${ROLES[@]}"; do printf '%s' "$role_line" | grep -qF "'$r'" || r_miss="$r_miss $r"; done
 [ -z "$r_miss" ] && ok "A.4#1 Role union carries the three roles" || fail "A.4#1 Role union in $SESSION is missing:$r_miss"
 rank_block=$(awk '/const ROLE_RANK/,/};/' "$SESSION" 2>/dev/null)
@@ -177,7 +180,7 @@ p_miss=""; for k in "author" "operator" "'pipeline-admin'"; do has "^\s*$k:\s*\{
 
 # 6. identity seed, 7. identity fallback
 need "\('$T',\s*'Pipelines'\)" "$ID_SQL" "A.4#6 identity_schema.sql seeds the '$T' tenant row"
-need "\{ id: '$T', displayName: 'Pipelines'" "$ID_TS" "A.4#7 FALLBACK_TENANTS carries '$T'"
+need "\{ id: '$T', displayName: 'Pipelines'" "$SESSION_DECL" "A.4#7 FALLBACK_TENANTS carries '$T' (derived from TENANT_MANIFEST)"
 for i in 0 1 2; do
   u=${CAST_IDS[$i]}; r=${CAST_ROLE[$i]}; e=${CAST_EMAIL[$i]}
   has "\('$u',\s*'${CAST_NAME[$i]}',\s*'$e'" "$ID_SQL" && has "\('$u',\s*'$T',\s*'$r'\)" "$ID_SQL" \
@@ -198,10 +201,10 @@ need "name: 'pipeline runs'" "$ENTITIES" "A.4#10 parity entity 'pipeline runs' p
 has "pipeline-runs" "$ENTITIES" || fail "A.4#10 $ENTITIES: the 'pipeline runs' entity must read lib/pipeline-runs (mock rows = the projection)"
 
 section "P0 · registration — portal (A.4 rows 11–18)"
-need "export type Tenant = [^;]*'$T'" "$AUTH_TSX" "A.4#11 auth.tsx Tenant union carries '$T'"
+need "export type Tenant = [^;]*'$T'" "$PORTAL_TENANTS" "A.4#11 auth.tsx Tenant union (generated, re-exported) carries '$T'"
 need "^type Tenant = [^;]*'$T'" "$LAYOUT" "A.4#11 Layout.tsx Tenant union carries '$T'"
 need "Tenant = [^;]*'$T'" "$CMDS" "A.4#11 portalCommands.ts Tenant union carries '$T'"
-need "^\s*$T:\s*'/$T/runs'" "$HOME_TS" "A.4#12 TENANT_HOME.$T = '/$T/runs' (the front door)"
+need "^\s*$T:\s*'/$T/runs'" "$PORTAL_TENANTS" "A.4#12 TENANT_HOME.$T = '/$T/runs' (the front door)"
 ok "A.4#12 tenantCaches — no tenant-scoped key is required by the design; any key a page adds must be listed (grep below)"
 if grep -rqE "localStorage\.(setItem|getItem)\(['\"]pipelines\." "$PAGES" 2>/dev/null; then
   keys=$(grep -rhoE "localStorage\.(setItem|getItem)\(['\"]pipelines\.[A-Za-z0-9_.-]+" "$PAGES" | grep -oE "pipelines\.[A-Za-z0-9_.-]+" | sort -u)

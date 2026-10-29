@@ -25,6 +25,7 @@ import { streamStatusLabel } from '../../lib/streamStatus';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
 import { ObservabilityCommandSection } from './ObservabilityCommandSection';
 import { OBSERVABILITY_GRAMMARS } from './observabilityCommands';
+import { CROSS_TENANT_ROLES, ROLES_BY_TENANT, TENANTS } from '../../lib/tenants.generated.ts';
 
 interface AuthzEvent {
   decision: 'ALLOW' | 'DENY';
@@ -42,8 +43,10 @@ interface AuthzEvent {
   ts: string;
 }
 
-const ROLE_FILTERS = ['', 'member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin'] as const;
-const TENANT_FILTERS = ['', 'orgiq', 'assessment', 'social', 'pipelines'] as const;
+// From tenants/manifest.json (DE-29): the orgiq roles plus the cross-tenant
+// ones, and every tenant (access was missing while this list was hand-kept).
+const ROLE_FILTERS = ['', ...ROLES_BY_TENANT.orgiq, ...CROSS_TENANT_ROLES] as const;
+const TENANT_FILTERS = ['', ...TENANTS] as const;
 const DECISION_FILTERS = ['', 'ALLOW', 'DENY'] as const;
 const MAX_EVENTS = 500;
 

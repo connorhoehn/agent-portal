@@ -52,6 +52,9 @@ trap 'rm -rf "$TMP"' EXIT
 
 MW=middleware
 SESSION=$MW/src/lib/session.ts
+# Generated from tenants/manifest.json (DE-29): TENANTS, ROLES_BY_TENANT, Role, TENANT_MANIFEST.
+SESSION_DECL=$MW/src/lib/tenants.generated.ts
+PORTAL_TENANTS=portal/src/lib/tenants.generated.ts
 AUTHZ=$MW/src/lib/authz.ts
 REGISTRY=$MW/src/lib/role-registry.ts
 CEDAR_DIR=$MW/seeds/roles/social
@@ -177,9 +180,9 @@ fi
 # ═════════════════════════════════════════════════════════════════════════════
 if want S0; then
 section "S0 · 1 session vocabulary ($SESSION)"
-has "TENANTS = \[[^]]*'social'" "$SESSION" && ok "TENANTS lists 'social'" || fail "A.4#1 $SESSION: TENANTS does not list 'social'"
-has "social: \['participant', 'moderator', 'community-admin'\]" "$SESSION" && ok "ROLES_BY_TENANT.social = participant/moderator/community-admin" || fail "A.4#1 $SESSION: ROLES_BY_TENANT has no \`social: ['participant', 'moderator', 'community-admin']\`"
-role_line=$(grep -E '^export type Role =' "$SESSION" 2>/dev/null)
+has "TENANTS = \[[^]]*'social'" "$SESSION_DECL" && ok "TENANTS lists 'social'" || fail "A.4#1 $SESSION: TENANTS does not list 'social'"
+has "social: \['participant', 'moderator', 'community-admin'\]" "$SESSION_DECL" && ok "ROLES_BY_TENANT.social = participant/moderator/community-admin" || fail "A.4#1 $SESSION: ROLES_BY_TENANT has no \`social: ['participant', 'moderator', 'community-admin']\`"
+role_line=$(grep -E '^export type Role =' "$SESSION_DECL" 2>/dev/null)
 miss=""; for r in $SOCIAL_ROLES; do printf '%s' "$role_line" | grep -qF "'$r'" || miss="$miss $r"; done
 [ -z "$miss" ] && ok "Role union names the three social roles" || fail "A.4#1 $SESSION: the hand-written Role union lacks:$miss"
 rank=$(range 'const ROLE_RANK' '};' "$SESSION")
@@ -242,7 +245,7 @@ grant_sql u-operator admin       || miss="$miss u-operator→admin"
 for u in $CURATED_PARTICIPANTS; do grant_sql "$u" participant || miss="$miss ${u}→participant"; done
 [ -z "$miss" ] && ok "identity seed grants the cast + curated participants" || fail "A.4#6 $IDSQL: user_tenant_roles lacks:$miss"
 has "'demo-user'" "$IDSQL" && fail "A.4#6 $IDSQL: a demo-user row exists (the demo user must hold no social grant)" || ok "no demo-user row in the identity seed"
-has "\{ id: 'social', displayName: 'Social'" "$IDFB" && ok "FALLBACK_TENANTS carries social" || fail "A.4#7 $IDFB: FALLBACK_TENANTS has no { id: 'social', displayName: 'Social' }"
+has "\{ id: 'social', displayName: 'Social'" "$SESSION_DECL" && ok "FALLBACK_TENANTS carries social" || fail "A.4#7 $IDFB: FALLBACK_TENANTS has no { id: 'social', displayName: 'Social' }"
 fb_grant() { grep -A2 -F "{ id: '$1'," "$IDFB" 2>/dev/null | tr '\n' ' ' | grep -qE "social: \[[^]]*'$2'"; }
 miss=""
 fb_grant u-mira community-admin || miss="$miss u-mira→community-admin"
@@ -261,7 +264,7 @@ for f in $RTESTS/social*.test.ts; do
 done
 [ -n "$gate_test" ] && ok "tenant gate pinned by a test ($gate_test)" || fail "A.4#8 no $RTESTS/social*.test.ts asserts an orgiq/assessment role gets 403 on /api/social/*"
 ok "A.4#9 agent↔tenant map: n/a — the social tenant has no agents"
-if node - "$SESSION" "$ENTITIES" <<'NODE'
+if node - "$SESSION_DECL" "$ENTITIES" <<'NODE'
 const fs = require('node:fs');
 const session = fs.readFileSync(process.argv[2], 'utf8');
 const entities = fs.readFileSync(process.argv[3], 'utf8');
@@ -274,10 +277,10 @@ then ok "parity entity 'tenants' describes every declared tenant"
 else fail "A.4#10 $ENTITIES: the 'tenants' description must name every tenant in TENANTS"; fi
 
 section "S0 · 11–13 portal tenant type, front door, flag"
-has "^export type Tenant = [^;]*'social'" "$AUTH_TSX" && ok "auth.tsx Tenant includes 'social'" || fail "A.4#11 $AUTH_TSX: export type Tenant lacks 'social'"
+has "^export type Tenant = [^;]*'social'" "$PORTAL_TENANTS" && ok "auth.tsx Tenant includes 'social'" || fail "A.4#11 $AUTH_TSX: export type Tenant lacks 'social'"
 has "^type Tenant = [^;]*'social'" "$LAYOUT" && ok "Layout.tsx Tenant includes 'social'" || fail "A.4#11 $LAYOUT: type Tenant lacks 'social'"
 has "^type PageTenant = [^;]*'social'" "$CMDS" && ok "portalCommands.ts PageTenant includes 'social'" || fail "A.4#11 $CMDS: type PageTenant lacks 'social'"
-has "social: '/social/channels'" "$HOME_TS" && ok "TENANT_HOME.social = /social/channels" || fail "A.4#12 $HOME_TS: TENANT_HOME has no social: '/social/channels'"
+has "social: '/social/channels'" "$PORTAL_TENANTS" && ok "TENANT_HOME.social = /social/channels" || fail "A.4#12 $HOME_TS: TENANT_HOME has no social: '/social/channels'"
 has "VITE_ENABLE_SOCIAL" "$FEATURES" && ok "VITE_ENABLE_SOCIAL flag" || fail "A.4#13 $FEATURES: no VITE_ENABLE_SOCIAL flag"
 
 section "S0 · 14–16 rail, palette, route tree"

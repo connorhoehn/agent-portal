@@ -6,8 +6,11 @@
 // Three rules carried from the ledger:
 //   - an unknown cost is counted, never summed as $0 (DE-30/DE-33);
 //   - a burn rate is the trailing seven days' KNOWN spend over seven days;
-//   - a projection is to the end of the budget period, which is the calendar
-//     month (PERIOD_START_SQL), whatever window the rows were read over.
+//   - a projection is to the end of the budget period, whatever window the
+//     rows were read over: the calendar month org-wide, and the initiative's
+//     own period (DE-38, lib/budget-periods.ts) for a one-initiative report.
+
+import { monthWindow } from './budget-periods.js';
 
 export type SpendGroupBy = 'initiative' | 'actor' | 'model' | 'source' | 'trigger';
 export type ReportPeriod = 'month' | '7d' | '30d';
@@ -24,9 +27,10 @@ export interface ReportWindow {
   now: Date;
   /** Start of the selected period (`?period=`). */
   since: Date;
-  /** Start of the budget period (calendar month, UTC). */
+  /** Start of the budget period: the calendar month (UTC), or the one
+   *  initiative's own window when the report is scoped to it (DE-38). */
   monthStart: Date;
-  /** Start of the end of the budget period (first instant of next month). */
+  /** End of the budget period (exclusive). */
   monthEnd: Date;
   /** Seven days before `now` — the burn-rate window. */
   burnFrom: Date;
@@ -34,9 +38,10 @@ export interface ReportWindow {
   readFrom: Date;
 }
 
-export function reportWindow(period: ReportPeriod, now: Date): ReportWindow {
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+export function reportWindow(period: ReportPeriod, now: Date, budgetPeriod?: { start: Date; end: Date } | null): ReportWindow {
+  const month = monthWindow(now);
+  const monthStart = budgetPeriod?.start ?? month.start;
+  const monthEnd = budgetPeriod?.end ?? month.end;
   const since = period === '7d' ? new Date(now.getTime() - 7 * DAY_MS)
     : period === '30d' ? new Date(now.getTime() - 30 * DAY_MS)
     : monthStart;

@@ -11,10 +11,12 @@
 
 import type { AccessCatalogRow } from '../../mock/access-catalog.js';
 import { ACCESS_TENANTS, type AccessTenant } from './types.js';
+import { TENANT_MANIFEST } from '../tenants.generated.js';
 
-const TENANT_TITLES: Readonly<Record<AccessTenant, string>> = {
-  orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines',
-};
+/** The manifest's display names (tenants/manifest.json, DE-29). */
+const TENANT_TITLES: Readonly<Record<AccessTenant, string>> = Object.fromEntries(
+  ACCESS_TENANTS.map((t) => [t, TENANT_MANIFEST[t].displayName]),
+) as Record<AccessTenant, string>;
 
 /** The id a standing (tenant, role) grant is named by. */
 export const roleItemId = (tenant: string, role: string): string => `role:${tenant}:${role}`;

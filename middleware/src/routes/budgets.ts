@@ -1,7 +1,8 @@
 // Budgets — /api/budgets
 //
-// The program-manager's surface: per-initiative monthly agent-spend
-// allocations beside the actuals derived from bot_runs. The list includes
+// The program-manager's surface: per-initiative agent-spend allocations (per
+// period: monthly by default, or quarterly / sprint / rolling with optional
+// carry-over — DE-38) beside the actuals derived from bot_runs. The list includes
 // initiatives spending with no allocation — those are the blind spots this
 // page exists to surface.
 //
@@ -18,8 +19,11 @@ import type { RunLimitPatch } from '../providers/run-limits.js';
 const runLimits = () => import('../providers/run-limits.js');
 import {
   listBudgets, orgSummary, upsertAllocation, deleteAllocation, initiativeExists,
-  listGrants, getBudget, type AllocationExtras,
+  listGrants, getBudget, periodsSupported, type AllocationExtras,
 } from '../providers/budgets.js';
+import {
+  BUDGET_PERIODS, CARRY_OVER_POLICIES, MAX_ROLLING_DAYS, MIN_ROLLING_DAYS, isBudgetPeriod, isCarryOver,
+} from '../lib/budget-periods.js';
 
 /** A money field that may be absent (leave alone), null (back to the default) or a finite number >= 0. */
 function optionalMoney(raw: unknown, name: string): number | null | undefined {
@@ -118,7 +122,10 @@ budgetsRouter.put('/:orgProjectId', manageGate, asyncHandler(async (req, res) =>
   const orgProjectId = String(req.params['orgProjectId'] ?? '').trim();
   if (!orgProjectId) throw new ValidationError('orgProjectId is required');
 
-  const reqBody = (req.body ?? {}) as { allocatedUsd?: unknown; hardCapUsd?: unknown; maintenanceReserveUsd?: unknown; allowFloorSpill?: unknown };
+  const reqBody = (req.body ?? {}) as {
+    allocatedUsd?: unknown; hardCapUsd?: unknown; maintenanceReserveUsd?: unknown; allowFloorSpill?: unknown;
+    period?: unknown; rollingDays?: unknown; carryOver?: unknown; carryOverCapUsd?: unknown;
+  };
   const raw = reqBody.allocatedUsd;
   // Strictly a finite non-negative number — a string that would coerce, NaN,
   // or Infinity must not become the ceiling every spend read is judged against.
@@ -139,11 +146,52 @@ budgetsRouter.put('/:orgProjectId', manageGate, asyncHandler(async (req, res) =>
     extras.allowFloorSpill = reqBody.allowFloorSpill;
   }
 
+  // DE-38 period policy, each optional (absent = leave alone).
+  const policyFields = reqBody.period !== undefined || reqBody.rollingDays !== undefined
+    || reqBody.carryOver !== undefined || reqBody.carryOverCapUsd !== undefined;
+  if (reqBody.period !== undefined) {
+    if (!isBudgetPeriod(reqBody.period)) throw new ValidationError(`period must be one of: ${BUDGET_PERIODS.join(', ')}`);
+    extras.period = reqBody.period;
+  }
+  if (reqBody.rollingDays !== undefined) {
+    const d = reqBody.rollingDays;
+    if (d !== null && (typeof d !== 'number' || !Number.isInteger(d) || d < MIN_ROLLING_DAYS || d > MAX_ROLLING_DAYS)) {
+      throw new ValidationError(`rollingDays must be an integer from ${MIN_ROLLING_DAYS} to ${MAX_ROLLING_DAYS}, or null`);
+    }
+    extras.rollingDays = d as number | null;
+  }
+  if (reqBody.carryOver !== undefined) {
+    if (!isCarryOver(reqBody.carryOver)) throw new ValidationError(`carryOver must be one of: ${CARRY_OVER_POLICIES.join(', ')}`);
+    extras.carryOver = reqBody.carryOver;
+  }
+  const carryCap = optionalMoney(reqBody.carryOverCapUsd, 'carryOverCapUsd');
+  if (carryCap !== undefined) extras.carryOverCapUsd = carryCap;
+
   if (!await initiativeExists(orgProjectId)) throw new NotFoundError('No such initiative');
+
+  const needsBefore = hardCapUsd === undefined || policyFields;
+  const before = needsBefore ? await getBudget(orgProjectId) : null;
+
+  if (policyFields) {
+    if (!await periodsSupported()) {
+      res.status(503).json({ error: 'budget periods require schema/budget_periods_schema.sql on this cluster' });
+      return;
+    }
+    // The combination the stored row will hold (the period_shape CHECK agrees).
+    const stored = before?.allocatedUsd != null ? before : null;
+    const period = extras.period ?? (stored?.period as typeof extras.period) ?? 'monthly';
+    const rolling = extras.rollingDays !== undefined ? extras.rollingDays : stored?.rollingDays ?? null;
+    const carry = extras.carryOver ?? stored?.carryOver ?? 'none';
+    if (period === 'rolling' && rolling == null) throw new ValidationError('a rolling period needs rollingDays');
+    if (period !== 'rolling' && extras.rollingDays != null) throw new ValidationError('rollingDays applies only to period "rolling"');
+    if (period === 'rolling' && carry !== 'none') {
+      throw new ValidationError('a rolling period never ends, so nothing carries over; set carryOver to "none"');
+    }
+  }
 
   // A cap never sits below its allocation (the column CHECK agrees); an omitted
   // cap keeps the stored one, so it must still clear the new allocation.
-  const capAfter = hardCapUsd === undefined ? (await getBudget(orgProjectId))?.hardCapUsd ?? null : hardCapUsd;
+  const capAfter = hardCapUsd === undefined ? before?.hardCapUsd ?? null : hardCapUsd;
   if (capAfter != null && capAfter < allocatedUsd) {
     throw new ValidationError(`hardCapUsd ($${capAfter}) must be at least allocatedUsd ($${allocatedUsd}); raise or clear it`);
   }

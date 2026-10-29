@@ -9,6 +9,7 @@
 // budget) lives in lib/bot-runner.ts, the cron registry in lib/bot-scheduler.ts.
 // Schema: schema/agent_bots_schema.sql.
 
+import { inBounds, sprintBounds, sprintLowerSql, sprintUpperSql } from '../lib/budget-periods.js';
 import { randomUUID } from 'node:crypto';
 import { exec, withTransaction } from './aurora.js';
 import { config } from '../config.js';
@@ -326,14 +327,15 @@ export async function dispatchedSpendInWindow(input: {
 
   const params: SqlParameter[] = [s('pid', input.orgProjectId), s('by', input.dispatchedBy)];
   let window = '';
+  // The one sprint-bounds convention (lib/budget-periods.ts): ends_on is
+  // inclusive, so the exclusive upper bound is the day after — the same days a
+  // sprint-period allocation and listGrants' window cover.
   if (input.startsOn) {
-    window += ' AND br.started_at >= :from::date';
+    window += ` AND ${sprintLowerSql('br.started_at', ':from::date')}`;
     params.push(s('from', input.startsOn));
   }
   if (input.endsOn) {
-    // ends_on is inclusive (a sprint ends ON that day), so the exclusive upper
-    // bound is the day after — same convention as listGrants' window.
-    window += ' AND br.started_at < :to::date + 1';
+    window += ` AND ${sprintUpperSql('br.started_at', ':to::date')}`;
     params.push(s('to', input.endsOn));
   }
   try {
@@ -404,15 +406,8 @@ async function mockDispatchedSpend(input: {
   startsOn: string | null;
   endsOn: string | null;
 }): Promise<DispatchedSpend> {
-  const from = input.startsOn ? Date.parse(`${input.startsOn}T00:00:00Z`) : null;
-  const toExclusive = input.endsOn ? Date.parse(`${input.endsOn}T00:00:00Z`) + 86_400_000 : null;
-
-  const inWindow = (iso: string): boolean => {
-    const at = Date.parse(iso);
-    if (from != null && at < from) return false;
-    if (toExclusive != null && at >= toExclusive) return false;
-    return true;
-  };
+  const bounds = sprintBounds(input.startsOn, input.endsOn);
+  const inWindow = (iso: string): boolean => inBounds(Date.parse(iso), bounds);
   // Costed runs burn; finished runs with no figure are counted as unknown
   // (DE-33) — the same `COUNT(*) FILTER` the statement above carries.
   const runs = allMockRuns().filter((r) => r.dispatchedBy === input.dispatchedBy

@@ -49,6 +49,7 @@ CREATE INDEX IF NOT EXISTS user_tenant_roles_tenant_idx ON user_tenant_roles (te
 
 -- ── Seed: tenants ────────────────────────────────────────────────────────────
 
+-- BEGIN GENERATED tenants (scripts/gen-tenants.mjs from tenants/manifest.json; do not edit)
 INSERT INTO tenants (id, display_name) VALUES
   ('orgiq', 'Work'),
   ('assessment', 'Assessment'),
@@ -56,6 +57,7 @@ INSERT INTO tenants (id, display_name) VALUES
   ('pipelines', 'Pipelines'),
   ('access', 'Access')
 ON CONFLICT (id) DO NOTHING;
+-- END GENERATED tenants
 
 -- Existing tenants retain their ID while the product display name converges.
 UPDATE tenants SET display_name = 'Work' WHERE id = 'orgiq';

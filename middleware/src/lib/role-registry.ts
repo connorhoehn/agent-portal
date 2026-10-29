@@ -3,7 +3,8 @@
 // source of truth to drift. Labels/summaries are presentation-only and live in
 // the small static map below.
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { manifestRoleFiles } from './tenant-roles.js';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -67,30 +68,13 @@ let _cache: RoleDefinition[] | null = null;
 
 export function roleRegistry(): RoleDefinition[] {
   if (_cache) return _cache;
-  const rolesDir = join(seedsDir(), 'roles');
-  const out: RoleDefinition[] = [];
-  for (const entry of readdirSync(rolesDir, { withFileTypes: true })) {
-    if (entry.isFile() && entry.name.endsWith('.cedar')) {
-      const id = entry.name.replace(/\.cedar$/, '');
-      out.push({
-        id,
-        tenant: null,
-        capabilities: permittedActions(readFileSync(join(rolesDir, entry.name), 'utf8')),
-        ...(PRESENTATION[id] ?? { label: id, summary: '' }),
-      });
-    } else if (entry.isDirectory()) {
-      for (const f of readdirSync(join(rolesDir, entry.name))) {
-        if (!f.endsWith('.cedar')) continue;
-        const id = f.replace(/\.cedar$/, '');
-        out.push({
-          id,
-          tenant: entry.name,
-          capabilities: permittedActions(readFileSync(join(rolesDir, entry.name, f), 'utf8')),
-          ...(PRESENTATION[id] ?? { label: id, summary: '' }),
-        });
-      }
-    }
-  }
+  // The role files tenants/manifest.json registers (DE-29; lib/tenant-roles.ts).
+  const out: RoleDefinition[] = manifestRoleFiles(join(seedsDir(), 'roles')).map(({ role, tenant, path }) => ({
+    id: role,
+    tenant,
+    capabilities: permittedActions(readFileSync(path, 'utf8')),
+    ...(PRESENTATION[role] ?? { label: role, summary: '' }),
+  }));
   _cache = out.sort((a, b) => (a.tenant ?? '').localeCompare(b.tenant ?? '') || a.id.localeCompare(b.id));
   return _cache;
 }

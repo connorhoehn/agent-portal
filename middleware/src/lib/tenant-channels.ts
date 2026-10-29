@@ -71,6 +71,7 @@
 
 import { defineChannelFamilies, type ChannelFamilies, type ChannelFamily } from '@connorhoehn/realtime-modules/server';
 import type { PageResourceKind } from './page-resources.js';
+import { TENANTS_CHANNEL_PARTITIONED, TENANTS_WITH_PRESENCE_LOBBY } from './tenants.generated.js';
 
 /** `social` appears ONLY for the `social:workgraph` family (it is not a partition tenant: TENANT_PARTITIONS stays three, and every other `social:` name keeps its own rules). */
 export type PartitionTenant = 'orgiq' | 'assessment' | 'pipelines' | 'social' | 'access';
@@ -188,13 +189,15 @@ export const TENANT_CHANNEL_FAMILIES: readonly TenantChannelFamily[] = [
   { id: 'access:req', tenant: 'access', pattern: /^access:req:req-[A-Za-z0-9-]{1,64}$/, services: DISCUSSION, lobby: false, cursors: true,
     channelResource: 'access-request',
     read: tenantOnly('access', 'ViewAccess'), write: tenantOnly('access', 'ViewAccess') },
-  ...(['orgiq', 'assessment', 'pipelines'] as const).map((tenant): TenantChannelFamily => ({
+  // The shell presence lobby of each tenant whose manifest entry says `presenceLobby`.
+  ...TENANTS_WITH_PRESENCE_LOBBY.map((tenant): TenantChannelFamily => ({
     id: `${tenant}:lobby`, tenant, pattern: new RegExp(`^${tenant}:lobby$`), services: PRESENCE, lobby: false,
     read: { tenant, activeTenant: false, action: null }, write: null,
   })),
 ];
 
-export const TENANT_PARTITIONS: ReadonlySet<string> = new Set(['orgiq', 'assessment', 'pipelines', 'access']);
+/** Default-deny partitions: the manifest's `channelPartition` tenants. */
+export const TENANT_PARTITIONS: ReadonlySet<string> = new Set(TENANTS_CHANNEL_PARTITIONED);
 
 /**
  * The family MECHANISM over the table above (realtime-modules 0.116

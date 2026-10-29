@@ -18,22 +18,15 @@
 // guess extensions. Vite and tsc both resolve them fine.
 import { contextCount, hasChosenContext } from './contextChoice.ts';
 import { tenantEnabled } from './features.ts';
+import { TENANT_HOME as MANIFEST_TENANT_HOME } from './tenants.generated.ts';
 import type { Session } from './auth';
 
-/** A tenant's landing route — the front door of that product. */
-export const TENANT_HOME: Record<string, string> = {
-  // Plan's front door (the program wall), not the Automate loop: a person's
-  // first screen should be the work of the org, not an ops queue that is
-  // legitimately all-zeros on a quiet morning.
-  orgiq: '/iq/projects',
-  assessment: '/assessment/teams',
-  // The conversation is the social product's front door (design §4.1).
-  social: '/social/channels',
-  // The run ledger is the pipelines product's front door (design §5.3).
-  pipelines: '/pipelines/runs',
-  // A person's own requests are the access product's front door (docs/access-tenant-design.md §6).
-  access: '/access/requests',
-};
+/** A tenant's landing route — the front door of that product. Each is the
+ *  manifest's `home` (tenants/manifest.json, DE-29): orgiq lands on Plan's
+ *  program wall (not the Automate loop, legitimately all-zeros on a quiet
+ *  morning), social on the conversation (design §4.1), pipelines on the run
+ *  ledger (§5.3), access on a person's own requests (access design §6). */
+export const TENANT_HOME: Record<string, string> = { ...MANIFEST_TENANT_HOME };
 
 /** The workspace chooser. Where an identity goes when no single home fits. */
 export const CHOOSER = '/workspaces';

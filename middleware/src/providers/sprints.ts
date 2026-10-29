@@ -31,6 +31,8 @@
 //
 // This module is persistence only. Gating lives in routes/sprints.ts.
 
+import { AppError } from '../lib/async-handler.js';
+import { sprintLowerSql, sprintUpperSql } from '../lib/budget-periods.js';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
@@ -312,8 +314,8 @@ export async function listSprints(opts: ListSprintsOpts = {}): Promise<SprintRow
             COALESCE((
               SELECT SUM(br.cost_usd)::float8 FROM bot_runs br
                WHERE (${spendPredicateSql('sp.org_project_id')})
-                 AND br.started_at >= sp.starts_on
-                 AND br.started_at < sp.ends_on + 1
+                 AND ${sprintLowerSql('br.started_at', 'sp.starts_on')}
+                 AND ${sprintUpperSql('br.started_at', 'sp.ends_on')}
             ), 0)::float8 AS window_spend_usd,
             (${isSteward}) AS is_steward,
             (${isGrantee}) AS is_grantee,
@@ -363,6 +365,19 @@ export async function personExists(personId: string): Promise<boolean> {
 
 // ─── Create ──────────────────────────────────────────────────────────────────
 
+function activeSprintConflict(): AppError {
+  return new AppError(409, 'this initiative already has an active sprint; finish it before activating another');
+}
+
+async function hasActiveSprint(orgProjectId: string): Promise<boolean> {
+  if (config.mock.aurora) return sprintsFixture.rows().some((r) => r.orgProjectId === orgProjectId && r.status === 'active');
+  const rows = await exec(
+    `SELECT 1 AS one FROM sprints WHERE org_project_id = :pid AND status = 'active' LIMIT 1`,
+    [s('pid', orgProjectId)],
+  );
+  return rows.length > 0;
+}
+
 /**
  * Create a sprint. The schema defaults the id (`spr-…`) and CHECKs
  * `ends_on > starts_on`; the route validates dates and referenced ids before we
@@ -372,6 +387,10 @@ export async function personExists(personId: string): Promise<boolean> {
  */
 export async function createSprint(input: CreateSprintInput): Promise<SprintRow> {
   const status: SprintStatus = input.status ?? 'planned';
+  // DE-38: at most one ACTIVE sprint per initiative, so a sprint-period
+  // allocation and every envelope resolve to one window (the partial unique
+  // index in schema/budget_periods_schema.sql is the database's half).
+  if (status === 'active' && await hasActiveSprint(input.orgProjectId)) throw activeSprintConflict();
   if (config.mock.aurora) {
     // The instant comes from the mock clock, not `Date.now()` — a fixture id is
     // a fixture timestamp with a prefix, and a frozen test that cannot predict
@@ -399,20 +418,27 @@ export async function createSprint(input: CreateSprintInput): Promise<SprintRow>
     return buildMockSprintRow(base, null);
   }
 
-  const rows = await exec(
-    `INSERT INTO sprints (org_project_id, name, goal, steward_person_id, starts_on, ends_on, status)
-     VALUES (:pid, :name, :goal, :steward, :starts::date, :ends::date, :status)
-     RETURNING id`,
-    [
-      s('pid', input.orgProjectId),
-      s('name', input.name),
-      maybe('goal', input.goal),
-      maybe('steward', input.stewardPersonId),
-      s('starts', input.startsOn),
-      s('ends', input.endsOn),
-      s('status', status),
-    ],
-  );
+  let rows: Record<string, unknown>[];
+  try {
+    rows = await exec(
+      `INSERT INTO sprints (org_project_id, name, goal, steward_person_id, starts_on, ends_on, status)
+       VALUES (:pid, :name, :goal, :steward, :starts::date, :ends::date, :status)
+       RETURNING id`,
+      [
+        s('pid', input.orgProjectId),
+        s('name', input.name),
+        maybe('goal', input.goal),
+        maybe('steward', input.stewardPersonId),
+        s('starts', input.startsOn),
+        s('ends', input.endsOn),
+        s('status', status),
+      ],
+    );
+  } catch (err) {
+    // Two activations racing past the check: the partial unique index decides.
+    if (/sprints_one_active_per_initiative/.test((err as Error).message ?? '')) throw activeSprintConflict();
+    throw err;
+  }
   const id = toStr(rows[0]?.['id']);
   // Read back through the list projection so the response carries the joined
   // initiative/steward names and the (zeroed) rollups a list row would show.

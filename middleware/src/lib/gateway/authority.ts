@@ -62,6 +62,7 @@ import { mayReadUpload } from '../gateway-attachments.js';
 import { recordUserId } from '../record-owner.js';
 import { currentlyReadsTenantChannel } from '../social-notify.js';
 import type { Session } from '../session.js';
+import { TENANTS_WITH_HUDDLE_CHAT } from '../tenants.generated.js';
 
 /** What the shape guards read from a connection's auth context. */
 export type GuardAuth = { userId?: unknown; org?: unknown; tenants?: unknown; role?: unknown };
@@ -167,7 +168,7 @@ const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 function huddleChatShape(auth: LibraryGuardAuth, channel: string, bare: string): boolean {
   const org = str(auth.org); const tenants = list(auth.tenants);
   return !!huddleCallId(bare) && (channel === bare || channel === `reactions:${bare}`) && !!str(auth.userId)
-    && ['orgiq', 'assessment', 'social'].some(tenant => org === tenant || tenants.includes(tenant));
+    && TENANTS_WITH_HUDDLE_CHAT.some(tenant => org === tenant || tenants.includes(tenant));
 }
 
 const GATEWAY_FAMILIES = defineChannelFamilies<ChannelAuthority, GatewayFamily>(GATEWAY_FAMILY_TABLE, {

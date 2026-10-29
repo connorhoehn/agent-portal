@@ -189,6 +189,8 @@ describe('orgSummary', () => {
     expect(await orgSummary()).toEqual({
       totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, totalMaintenanceUsd: 0,
       byModel: [], byTrigger: [],
+      // DE-38: org totals stay calendar month and say so.
+      window: { period: 'calendar-month', start: expect.any(String), end: expect.any(String) },
     });
   });
 
@@ -267,6 +269,8 @@ describe('orgSummary', () => {
     expect(await orgSummary()).toEqual({
       totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, totalMaintenanceUsd: 0,
       byModel: [], byTrigger: [],
+      // DE-38: org totals stay calendar month and say so.
+      window: { period: 'calendar-month', start: expect.any(String), end: expect.any(String) },
     });
   });
 });

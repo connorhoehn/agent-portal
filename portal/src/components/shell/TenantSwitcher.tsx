@@ -6,8 +6,10 @@ import { useSharedNotifications } from './SharedNotifications';
 import { useCallHost } from '../../lib/conversationCall';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
 import { roleGrants } from '../../lib/capabilityGrants';
+import { TENANT_DISPLAY_NAMES } from '../../lib/tenants.generated.ts';
 
-const LABELS: Record<Tenant, string> = { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines', access: 'Access' };
+/** Manifest order and display names (tenants/manifest.json, DE-29). */
+const LABELS: Record<Tenant, string> = TENANT_DISPLAY_NAMES;
 
 /** The shell's tenant switcher: the library draws it; this adapter supplies the
  * viewer's switchable tenants, their unread counts, live state and the switch. */

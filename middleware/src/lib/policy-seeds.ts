@@ -4,7 +4,7 @@
 // boots short-circuit. UI edits via the Identity Management page persist and
 // are never overwritten.
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -19,6 +19,7 @@ import {
 import { config } from '../config.js';
 import { splitStatements } from './cedar-parse.js';
 import { listAllPolicies, partitionSeedPolicies } from './avp-policies.js';
+import { manifestRoleFiles } from './tenant-roles.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,7 +36,8 @@ function seedsDir(): string {
 }
 
 // Role definitions live under seeds/roles/{tenant}/{role}.cedar, with
-// cross-tenant roles (admin) directly under seeds/roles/. Discovered at boot.
+// cross-tenant roles (admin) directly under seeds/roles/. Which files: the
+// roles tenants/manifest.json registers (lib/tenant-roles.ts).
 interface SeedRoleFile {
   /** e.g. 'member' or 'assessment/assessor' — tenant prefix omitted for orgiq
    * and root-level files so descriptions stay byte-identical with stores
@@ -45,21 +47,10 @@ interface SeedRoleFile {
 }
 
 function discoverRoleFiles(dir: string): SeedRoleFile[] {
-  const rolesDir = join(dir, 'roles');
-  const out: SeedRoleFile[] = [];
-  for (const entry of readdirSync(rolesDir, { withFileTypes: true })) {
-    if (entry.isFile() && entry.name.endsWith('.cedar')) {
-      out.push({ key: entry.name.replace(/\.cedar$/, ''), path: join(rolesDir, entry.name) });
-    } else if (entry.isDirectory()) {
-      for (const f of readdirSync(join(rolesDir, entry.name))) {
-        if (!f.endsWith('.cedar')) continue;
-        const role = f.replace(/\.cedar$/, '');
-        const key = entry.name === 'orgiq' ? role : `${entry.name}/${role}`;
-        out.push({ key, path: join(rolesDir, entry.name, f) });
-      }
-    }
-  }
-  return out.sort((a, b) => a.key.localeCompare(b.key));
+  // The files tenants/manifest.json registers (DE-29), not a directory walk.
+  return manifestRoleFiles(join(dir, 'roles'))
+    .map(({ key, path }) => ({ key, path }))
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 
 function seedPolicyDescription(roleKey: string): string {

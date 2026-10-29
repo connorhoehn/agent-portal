@@ -20,7 +20,8 @@ import { clock } from '../mock/core/index.js';
 import { userBudgets, type MockUserBudget } from '../mock/user-budgets.js';
 import { spendEntries } from '../mock/spend-ledger.js';
 import { displayNameForSubject } from './identity.js';
-import { PERIOD_START_SQL } from './budgets.js';
+// DE-38: user budgets stay on the calendar month, through the one window helper.
+import { PERIOD_START_SQL, monthWindow } from '../lib/budget-periods.js';
 import { effectiveHardCap, type CapSource } from '../lib/budget-decisions.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -83,7 +84,7 @@ export interface UserBudgetView {
 
 /** Start of the budget period (calendar month, UTC), the mock analogue of PERIOD_START_SQL. */
 export function userPeriodStart(now: Date = clock.now()): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  return monthWindow(now).start;
 }
 
 function mockRow(m: MockUserBudget): UserBudgetRow {

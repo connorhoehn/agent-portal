@@ -43,7 +43,7 @@ Rules for whoever continues:
 | 7 | DE-36 hard caps | non-overridable cap per initiative and grant; unreadable budget state fails closed | done (2026-10-29): non-overridable caps per initiative, grant and user before the soft brakes; fail closed in production (`BUDGET_FAIL_CLOSED`); one refusal renderer `lib/spend-refusal.ts` |
 | 8 | DE-39 bot-fire allocation brake | cron firings pass the allocation check | done, folded into DE-55 (maintenance reserve): essential bots judged against the reserve, then spill |
 | 9 | DE-37 run limits | per-initiative/tenant concurrency, runs/day, $/hour | done: per-initiative/tenant concurrency slots, runs/day, $/hour inside reserveSpend; 429 `run-limit`. Gaps: PR-watch enqueue takes no slot |
-| 10 | DE-38 budget periods | sprint-aligned and rolling windows, carry-over rules | |
+| 10 | DE-38 budget periods | sprint-aligned and rolling windows, carry-over rules | done (2026-10-29): one window helper `lib/budget-periods.ts` used by every reader; monthly/quarterly/sprint/rolling; carry-over close rows; every initiative stays monthly until it opts in |
 | 11 | DE-50 kill switches and alerts | fleet and initiative pause; threshold/stuck-run/reaper alerts as events (CloudWatch alarm half synth-tested) | done: fleet and initiative pause (423 at every path), metric lines, 50/80/100 % alerts, CloudWatch alarms behind `fleetAlarms`. Gap: no `PauseFleet` Cedar action (ManageBudgets reused) |
 | 12 | DE-53 initiative spend report | API plus portal view joining allocation, grants, holds, ledger, forecasts, outcomes | done: `GET /api/spend/report` grouped by initiative/actor/model/source/trigger; budgets page rolls up and drills down through the rails (floor / discretionary / held / projected, fit per open item); includes DE-31's per-person view |
 | 13 | DE-40 policy profiles | versioned per-initiative profile (models, task time, lifetime, network mode, org access) read at dispatch | done: versioned profiles per initiative (models, task time, lifetime), box stamp, unlisted model refused (400 `MODEL_NOT_ALLOWED`); IAM limited to `devboxModels` |
@@ -63,12 +63,21 @@ Rules for whoever continues:
 | 27 | DE-14 deploy orchestrator | one resumable command with recorded state, tested with a fake `aws`/`cdk` | done: `scripts/deploy/orchestrate.mjs` (plan/apply, recorded state, SSM lock), fake-aws tests |
 | 29 | DE-54 user budgets (new spec) | per-user allocation and cap, third lock in reserveSpend, `GET /api/me/spend` budget | done (2026-10-29) |
 | 30 | DE-55 maintenance reserve (new spec, folds DE-39) | reserve column, `bots.essential`, discretionary remainder on every brake | done (2026-10-29) |
-| 28 | DE-29 tenant manifest | one manifest drives TENANTS, Cedar seeds, routers and CDK | |
+| 28 | DE-29 tenant manifest | one manifest drives TENANTS, Cedar seeds, routers and CDK | done: `tenants/manifest.json` → generated TS (`scripts/gen-tenants.mjs`, `--check`) + drift check `scripts/check-tenant-manifest.mjs`; five tenants unchanged |
 
 ## Decisions taken by default
 
 Confirm or change each; every one is a config flag or a small edit.
 
+- **DE-38 periods** — carry-over `none` by default (overspend/underspend
+  opt-in, optional cap); between sprints an initiative is unbudgeted (hard
+  cap still applies in production); one active sprint per initiative; a
+  policy change mid-period forfeits that period's carry; org totals and user
+  budgets stay calendar month.
+- **DE-29 tenants** — generated TypeScript from the manifest (not runtime
+  JSON); role labels stay in `role-registry.ts`; the seed loader throws at
+  boot for a manifest role with no Cedar file; AuthzLog gains an `access`
+  filter (the spec called its absence a bug).
 - **DE-35/37/50 run controls** — `RUN_CUTOFF` on, 2 top-ups max, 30 s
   grace; the box's token backstop is hold × 3 at the output rate (cache-heavy
   runs cut there first). Run limits are hard 429s, none seeded,
@@ -213,6 +222,11 @@ or budget-enforcement behavior is claimed. Test logs and a machine-readable
 summary are in `.scratch/resume-2026-10-28/`.
 
 ## Next session
+
+**Follow-ups (2026-10-29):** PR-watch enqueue takes no run-limit slot; the
+spend metric line skips bot-run/governed-run settles (SQL path); `harness.ts`
+still keys promoted_at by prompt sha (DE-4); decks/summaries are not metered;
+the budgets page does not label "between sprints"; journey logs need a walk.
 
 Read `docs/budget-system-analysis-2026-10-28.md` first: it re-orders the money
 rows (2–12) toward the intended model (real Bedrock dollars, per-user budgets,

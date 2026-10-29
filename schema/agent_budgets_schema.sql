@@ -15,9 +15,8 @@ CREATE TABLE IF NOT EXISTS initiative_budgets (
   org_project_id  TEXT PRIMARY KEY REFERENCES projects (id) ON DELETE CASCADE,
 
   allocated_usd   NUMERIC     NOT NULL CHECK (allocated_usd >= 0),
-  -- Monthly is the only period v1 supports; the column (with its CHECK)
-  -- future-proofs the shape so adding 'quarterly' later is a constraint
-  -- change, not a migration.
+  -- v1 shipped monthly only; budget_periods_schema.sql (DE-38) replaces this
+  -- CHECK by name to allow quarterly, sprint and rolling.
   period          TEXT        NOT NULL DEFAULT 'monthly' CHECK (period IN ('monthly')),
 
   updated_by      TEXT,
