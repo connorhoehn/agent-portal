@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 
 const ROUTES = resolve(__dirname, '..');
 const FILES = ['bots', 'work', 'agent-projects', 'sdlc', 'internal-devbox', 'work-items', 'work-documents',
-  'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints'];
+  'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints', 'prompt-pointers'];
 const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|sprintMoveAllowed|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(/;
 
 const SCOPED = [
@@ -33,7 +33,9 @@ const SCOPED = [
   // names it where it hands over.
   'sdlc PUT /policy-sets/:scope', 'sdlc POST /policy-proposals/:id/decide',
   'lab POST /signals', 'lab POST /experiences', 'lab POST /consults', 'lab POST /consults/:id/answer',
-  'bots POST /work-items/:id/estimate', 'bots POST /work-items/:id/review-estimate', 'designs POST /:id/answer', 'designs POST /:id/signoff', 'work POST /findings/:id/dismiss', 'work-items POST /work-items/:id/criteria', 'work-items PATCH /work-items/:id/criteria/:criterionId', 'work-items DELETE /work-items/:id/criteria/:criterionId', 'work-items PUT /work-items/:id/decisions/:decisionId', 'work-items DELETE /work-items/:id/decisions/:decisionId', 'work-documents PUT /work-items/:id/documents/:documentId', 'work-documents DELETE /work-items/:id/documents/:documentId',
+  'bots POST /work-items/:id/estimate', 'bots POST /work-items/:id/review-estimate',
+  // The dispatch drawer's saved-for-later setup (2026-10-28): the item's stewards' call, like its estimate.
+  'bots PUT /work-items/:id/job-draft', 'bots DELETE /work-items/:id/job-draft', 'designs POST /:id/answer', 'designs POST /:id/signoff', 'work POST /findings/:id/dismiss', 'work-items POST /work-items/:id/criteria', 'work-items PATCH /work-items/:id/criteria/:criterionId', 'work-items DELETE /work-items/:id/criteria/:criterionId', 'work-items PUT /work-items/:id/decisions/:decisionId', 'work-items DELETE /work-items/:id/decisions/:decisionId', 'work-documents PUT /work-items/:id/documents/:documentId', 'work-documents DELETE /work-items/:id/documents/:documentId',
   'sprints DELETE /:sprintId/items/:itemId', 'sprints PATCH /:sprintId/items', 'sprints POST /',
   'work DELETE /jobs/:id', 'work POST /findings/:id/promote', 'work POST /jobs', 'work POST /jobs/:id/requeue',
   'work POST /jobs/:id/review', 'work POST /sweeps/run',
@@ -42,6 +44,9 @@ const SCOPED = [
 
 /** Not scoped yet, each with why. Fixing one moves it to SCOPED. */
 const OPEN: Record<string, string> = {
+  'prompt-pointers POST /:agent/candidate': 'DE-4: prompts are org-wide, keyed by agent, with no initiative; ManageCanary (org-leader / hr-admin) is the gate',
+  'prompt-pointers POST /:agent/promote': 'DE-4: same as candidate: org-wide, ManageCanary',
+  'prompt-pointers POST /:agent/rollback': 'DE-4: same as candidate: org-wide, ManageCanary',
   'budgets PUT /:orgProjectId': 'DE-44 row 20: whether program-owner is program-wide is a user decision',
   'budgets DELETE /:orgProjectId': 'DE-44 row 20: same decision',
   'grants POST /': 'DE-44 row 21: same program-owner decision',

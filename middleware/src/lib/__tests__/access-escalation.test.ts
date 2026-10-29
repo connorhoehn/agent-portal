@@ -17,7 +17,7 @@ const step = (over: Partial<AccessStepRow> = {}): AccessStepRow => ({
 });
 const req = (over: Partial<AccessRequestRow> = {}): AccessRequestRow => ({
   id: 'req-1', kind: 'grant', reviewId: null, requesterId: 'u-rhea', beneficiaryId: 'u-rhea', itemId: 'role:orgiq:sme', justification: 'x'.repeat(20),
-  duration: '7d', status: 'submitted', sodVerdict: 'clear', sodOverriddenBy: null, sodOverrideReason: null, submittedAt: T,
+  duration: '7d', requestedUsd: null, forecast: null, status: 'submitted', sodVerdict: 'clear', sodOverriddenBy: null, sodOverrideReason: null, submittedAt: T,
   decidedAt: null, provisionedAt: null, expiresAt: null, revokedAt: null, expiryWarnedAt: null, ...over,
 });
 const SLA = 48 * 3_600_000;

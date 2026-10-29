@@ -44,6 +44,20 @@ function sessionOr401(req: Request, res: Response): Session | null {
   return session;
 }
 
+/**
+ * An admin's `override: true` let a policy write past the self-gate or the
+ * two-person rule (DE-43): one audit line, as DecideAgentChange.Override below,
+ * so an override is auditable rather than invisible.
+ */
+function auditPolicyOverride(req: Request, session: Session, out: PolicyWriteOutcome | { kind: 'rejected' }, what: string): void {
+  if (out.kind !== 'applied' || !out.overrode) return;
+  logAuthz({
+    decision: 'ALLOW', action: 'EditSdlcPolicy.Override', sub: session.sub, role: session.role,
+    tenant: session.tenant, path: req.path,
+    reason: `admin override on ${what} (${out.version.scope} version ${out.version.version})`,
+  });
+}
+
 /** A policy write's outcome on the wire: 201 applied, 202 pending a second person, 409 conflict. */
 function answerPolicyWrite(res: Response, out: PolicyWriteOutcome | { kind: 'rejected' }, applied: (v: Extract<PolicyWriteOutcome, { kind: 'applied' }>) => unknown): void {
   switch (out.kind) {
@@ -111,6 +125,7 @@ sdlcRouter.post('/policies', asyncHandler(async (req, res) => {
     reason: body.reason?.trim() || `Edited "${policy.name}" (POST /api/sdlc/policies)`,
     ...(body.override === true ? { override: true } : {}),
   });
+  auditPolicyOverride(req, session, out, `policy "${policy.name}"`);
   answerPolicyWrite(res, out, () => ({ policy }));
 }));
 
@@ -170,6 +185,7 @@ sdlcRouter.put('/policy-sets/:scope', asyncHandler(async (req, res) => {
     session, scope, policies, baseVersion, reason: body.reason,
     ...(body.override === true ? { override: true } : {}),
   });
+  auditPolicyOverride(req, session, out, `policy set ${scope}`);
   answerPolicyWrite(res, out, (o) => ({ set: o.version }));
 }));
 
@@ -196,6 +212,7 @@ sdlcRouter.post('/policy-proposals/:id/decide', asyncHandler(async (req, res) =>
     session, id: String(req.params['id'] ?? ''), decision: body.decision, note: body.note ?? null,
     ...(body.override === true ? { override: true } : {}),
   });
+  auditPolicyOverride(req, session, out, `approving policy proposal ${String(req.params['id'] ?? '')}`);
   if (out.kind === 'applied') { res.json({ ok: true, status: 'approved', set: out.version }); return; }
   answerPolicyWrite(res, out, () => ({}));
 }));
@@ -345,7 +362,14 @@ sdlcRouter.post('/changes/:id/address', asyncHandler(async (req, res) => {
     // The re-run is a new change, requested by whoever pressed Address (DE-43).
     dispatchedBy: resolveSession(req)?.sub ?? null,
   });
-  if (!started.ok) { res.status(503).json({ error: started.error }); return; }
+  if (!started.ok) {
+    if (started.code === 'MODEL_NOT_ALLOWED') {
+      res.status(400).json({ error: started.error, code: started.code, allowedModels: started.allowedModels ?? [] });
+      return;
+    }
+    res.status(503).json({ error: started.error });
+    return;
+  }
   res.status(202).json({ ok: true, runId: started.runId });
 }));
 

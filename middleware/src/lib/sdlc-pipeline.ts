@@ -12,6 +12,9 @@
 // concern, not a run concern: the runner's job is to run the agent and record
 // what changed; whether that change is allowed to ship is this file's job.
 
+import { reserveSpend, forecastP75ForModel, type ReserveSpendResult } from './spend-holds.js';
+import { bindHoldSource, releaseHold } from '../providers/spend-holds.js';
+import { dispatchHoldTtlMs } from './bot-runner.js';
 import { runDevboxShell, executeProjectRun } from './project-runner.js';
 import { reviewDiff } from './change-reviewer.js';
 import {
@@ -25,7 +28,8 @@ import { deliverChange } from './change-delivery.js';
 import { deliveryBlockReason } from './delivery-guard.js';
 import { isGitFailure, parsePorcelainFiles } from './capture-parse.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
-import { registerBox, getBoxBySession, appendEvent, reserveBox, releaseBox } from './devbox-fleet.js';
+import { registerBox, getBoxBySession, appendEvent, reserveBox, releaseBox, setBoxProfile } from './devbox-fleet.js';
+import { profileForBox, resolveTaskModel, profileStamp } from './devbox-profile.js';
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
 import type { DevboxLabContext } from './devbox-runner.js';
 
@@ -68,23 +72,78 @@ export async function dispatchGovernedRun(input: {
   /** Who the change this run captures answers to (DE-43): defaults to
    *  `dispatchedBy`; a cron bot passes its creator, since nobody pressed go. */
   requestedBy?: string | null;
-}): Promise<{ ok: true; runId: string; checkout: string; briefId: string | null } | { ok: false; error: string }> {
+  /**
+   * The spend hold (DE-34). A caller that already held the money (fireBot,
+   * dispatchWorkItem) passes its id — or null when none was written — and the
+   * bot_run settles it. A caller that passes NOTHING (a direct
+   * POST /api/agent-projects/:id/runs, the review loop's "address") gets one
+   * taken here, before startRun, as an `agent_project_run` hold the run's own
+   * ledger entry settles. So every governed run is held without a sixth
+   * call site.
+   */
+  holdId?: string | null;
+}): Promise<
+  | { ok: true; runId: string; checkout: string; briefId: string | null }
+  | {
+    ok: false; error: string; refusal?: Exclude<ReserveSpendResult, { kind: 'held' }>;
+    /** DE-40: the model is not on the box's profile — a 400 naming the allowed set. */
+    code?: 'MODEL_NOT_ALLOWED'; allowedModels?: string[];
+  }
+> {
   const arn = await resolveDevboxArn();
   if (!arn) return { ok: false, error: 'the devbox runtime is not deployed' };
 
-  const run = await startRun({
-    projectId: input.project.id, prompt: input.prompt,
-    model: input.model ?? null, sessionId: input.sessionId,
-    ...(input.workItemId ? { workItemId: input.workItemId } : {}),
-    ...(input.dispatchedBy ? { dispatchedBy: input.dispatchedBy } : {}),
+  // The model this run may use (DE-40), resolved BEFORE any money is held or
+  // a run row exists: the box's stamped profile (a box keeps the rules it was
+  // created under), else its initiative's. An unlisted model is refused with
+  // the allowed set, never swapped — the container refuses it too, so letting
+  // it through would only fail later and less legibly. No model asked for →
+  // the profile's first, so the BFF always sends one.
+  const existingBox = getBoxBySession(input.sessionId);
+  const profile = await profileForBox(existingBox ?? {
+    projectId: input.attribution?.projectId ?? input.project.orgProjectId ?? undefined,
   });
+  const resolved = resolveTaskModel(profile, input.model ?? null);
+  if (!resolved.ok) return { ok: false, error: resolved.error, code: 'MODEL_NOT_ALLOWED', allowedModels: resolved.allowed };
+  const model = resolved.model;
+
+  let ownHold: string | null = null;
+  if (!('holdId' in input)) {
+    const held = await reserveSpend({
+      initiativeId: input.project.orgProjectId ?? null,
+      actorId: input.dispatchedBy ?? null,
+      source: 'agent_project_run',
+      forecast: await forecastP75ForModel(model, input.project.id),
+      expiresInMs: dispatchHoldTtlMs(),
+    });
+    if (held.kind !== 'held') return { ok: false, error: held.reason, refusal: held };
+    ownHold = held.holdId;
+  }
+
+  let run: Awaited<ReturnType<typeof startRun>>;
+  try {
+    run = await startRun({
+      projectId: input.project.id, prompt: input.prompt,
+      model, sessionId: input.sessionId,
+      ...(input.workItemId ? { workItemId: input.workItemId } : {}),
+      ...(input.dispatchedBy ? { dispatchedBy: input.dispatchedBy } : {}),
+    });
+  } catch (err) {
+    // No run row, nothing invoked: the money this call held goes back.
+    await releaseHold(ownHold);
+    throw err;
+  }
+  if (ownHold) await bindHoldSource(ownHold, 'agent_project_run', run.id);
   const requestedBy = input.requestedBy ?? input.dispatchedBy ?? null;
   const checkout = checkoutPath(input.project);
   const box = getBoxBySession(input.sessionId) ?? registerBox({
     sessionId: input.sessionId,
     ...(input.attribution?.ownerId ? { ownerId: input.attribution.ownerId } : {}),
     ...(input.attribution?.projectId ? { projectId: input.attribution.projectId } : {}),
+    profile: profileStamp(profile),
   });
+  // Write-once: a box that predates profiles takes the one this run resolved.
+  setBoxProfile(box.id, profileStamp(profile));
 
   // Tell the fleet what this computer is doing, now rather than when the
   // runtime's first event happens to arrive. `appendEvent` reads `task_started`
@@ -95,7 +154,7 @@ export async function dispatchGovernedRun(input: {
   appendEvent(box.id, {
     type: 'task_started',
     prompt: input.prompt,
-    ...(input.model ? { model: input.model } : {}),
+    model,
     ts: new Date().toISOString(),
   });
 
@@ -129,7 +188,7 @@ export async function dispatchGovernedRun(input: {
     sessionId: input.sessionId,
     checkout,
     prompt: input.prompt,
-    model: input.model ?? null,
+    model,
     runtimeArn: arn,
     client: devboxDataClient(),
     onEvent: (ev) => appendEvent(box.id, ev),
@@ -138,7 +197,7 @@ export async function dispatchGovernedRun(input: {
       void captureAndGate({
         client: devboxDataClient(), runtimeArn: arn, sessionId: input.sessionId,
         checkout, projectId: input.project.id, runId: run.id,
-        prompt: input.prompt, model: input.model ?? null,
+        prompt: input.prompt, model,
         ...(input.workItemId ? { workItemId: input.workItemId } : {}),
         requestedBy,
       }).catch((err) => console.warn('[sdlc] capture failed:', (err as Error).message));

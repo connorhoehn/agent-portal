@@ -22,8 +22,9 @@
 // Wire shapes: docs/access-tenant-api.md "Quick request".
 
 import { Router } from 'express';
-import { asyncHandler } from '../lib/async-handler.js';
+import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireSession, resolveSession } from '../lib/authz.js';
+import { envelopeItemId } from '../lib/access/items.js';
 import { listCatalog } from '../providers/access.js';
 import { bodyOf, context, fileRequest, ownRequestsFor, parseSubmission, type Ctx } from './access.js';
 import type { Request, Response } from 'express';
@@ -61,6 +62,35 @@ accessQuickRouter.post('/quick', asyncHandler(async (req, res) => {
   const ctx = await requesterContext(res, req);
   if (!ctx) return;
   const out = await fileRequest(ctx, { itemId: sub.itemId, justification: sub.justification, duration: sub.duration });
+  res.status(out.status).json(out.body);
+}));
+
+// POST /api/access-requests/envelope  { initiativeId, justification, requestedUsd, forecast?, duration? }
+//
+// The dispatch drawer's "Request budget" (2026-10-28): an SME refused by the
+// grant-scoped dispatch gate ("no active sprint grant") files an ORDINARY
+// request for the initiative's derived `envelope:<initiativeId>` item through
+// `fileRequest`, carrying their message, the amount and the forecast they were
+// looking at. The chain, the refusals, the rows and the bells are the catalog
+// path's; the last approval provisions a budget_grants row through the same
+// path POST /api/grants takes (lib/grant-envelope.ts). `duration` defaults to
+// the item's (`standing`): the envelope lives until it is revoked, like one
+// granted by hand.
+accessQuickRouter.post('/envelope', asyncHandler(async (req, res) => {
+  const b = bodyOf(req, ['initiativeId', 'justification', 'requestedUsd', 'forecast', 'duration']);
+  const initiativeId = typeof b['initiativeId'] === 'string' ? b['initiativeId'].trim() : '';
+  if (!initiativeId) throw new ValidationError('initiativeId is required');
+  const itemId = envelopeItemId(initiativeId);
+  const item = itemInTenant(req, res, itemId);
+  if (!item) return;
+  const sub = parseSubmission({
+    itemId, justification: b['justification'], duration: b['duration'] ?? item.defaultDuration,
+    requestedUsd: b['requestedUsd'], ...(b['forecast'] !== undefined ? { forecast: b['forecast'] } : {}),
+  });
+  if (sub.requestedUsd == null) throw new ValidationError('requestedUsd is required: the dollars the envelope should hold');
+  const ctx = await requesterContext(res, req);
+  if (!ctx) return;
+  const out = await fileRequest(ctx, sub);
   res.status(out.status).json(out.body);
 }));
 

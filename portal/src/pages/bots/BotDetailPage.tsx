@@ -51,6 +51,7 @@ import { botStatusChip, runStateChip } from '../../lib/statusTone';
 import { usd, showingLabel } from '../../lib/format';
 import { inputWiring, lastRanText } from './botsFormat';
 import { TEMPLATE_TONE, triggerSummary, type Bot, type BotRun } from './BotsPage';
+import { botRunRefusalMessage, type BotRunRefusal } from '../../lib/dispatchGates';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -206,12 +207,12 @@ export default function BotDetailPage() {
   async function runNow() {
     if (!bot || busy) return;
     setBusy('run');
-    const res = await writeJson<{ error?: string }>(
+    const res = await writeJson<BotRunRefusal>(
       `/api/bots/${bot.id}/run`, 'POST',
       instruction.trim() ? { instruction: instruction.trim() } : {},
     );
     if (res.status === 409) {
-      toastError(null, 'Not run', res.data?.error ?? 'The bot refused this run (budget or run cap reached).');
+      toastError(null, 'Not run', botRunRefusalMessage(res.data, 'The bot refused this run (budget or run cap reached).'));
       setBusy(null);
       return;
     }

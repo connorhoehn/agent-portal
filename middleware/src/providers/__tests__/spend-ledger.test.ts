@@ -5,7 +5,7 @@
 jest.mock('../aurora.js', () => ({ exec: jest.fn() }));
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
 
-import { recordSpend, mockStoredEntries, ledgerMismatches, spendLedgerMode } from '../spend-ledger.js';
+import { recordSpend, mockStoredEntries, ledgerMismatches, spendLedgerMode, getBoxSpend } from '../spend-ledger.js';
 import { getBudget, listGrants, orgSummary } from '../budgets.js';
 import { dispatchedSpendInWindow } from '../bots.js';
 import { exec } from '../aurora.js';
@@ -21,7 +21,10 @@ let unfreeze: () => void;
 beforeAll(() => { unfreeze = freezeClock('2026-10-15T12:00:00Z'); });
 afterAll(() => unfreeze());
 beforeEach(() => {
+  // The seeded fleet's finished tasks (DE-31) are ledger rows too; these cases
+  // are about the writer and readers, so they start from an empty ledger.
   spendEntries.reset();
+  spendEntries.rows().length = 0;
   delete process.env['SPEND_LEDGER'];
 });
 
@@ -105,5 +108,29 @@ describe('readers', () => {
       [{ id: 'a', usd: 1 }, { id: 'b', usd: 2 }],
       [{ id: 'a', usd: 1 }, { id: 'b', usd: 2.5 }, { id: 'c', usd: 0.1 }],
     )).toEqual([{ id: 'b', legacyUsd: 2, ledgerUsd: 2.5 }, { id: 'c', legacyUsd: 0, ledgerUsd: 0.1 }]);
+  });
+});
+
+// DE-31: a box's spend is a ledger read, offline as on Aurora.
+describe('box spend (DE-31)', () => {
+  it('the seeded fleet\'s spend is the seeded entries, not a stored total', async () => {
+    spendEntries.reset();
+    const spend = await getBoxSpend(['box-mock-0001', 'box-mock-0005']);
+    expect(spend.get('box-mock-0001')).toEqual({ knownUsd: 2.41, unknownCount: 0, bySource: { box_task: 2.41 } });
+    expect(spend.get('box-mock-0005')).toEqual({ knownUsd: 0.12, unknownCount: 0, bySource: { box_task: 0.12 } });
+  });
+
+  it('a result with no figure raises the unknown count and leaves the known sum unchanged', async () => {
+    await recordSpend(box({ sourceId: 'box-1:a', costUsd: 0.5 }));
+    const before = (await getBoxSpend(['box-1'])).get('box-1')!;
+    await recordSpend(box({ sourceId: 'box-1:b', costUsd: null }));
+    const after = (await getBoxSpend(['box-1'])).get('box-1')!;
+    expect(before).toEqual({ knownUsd: 0.5, unknownCount: 0, bySource: { box_task: 0.5 } });
+    expect(after).toEqual({ knownUsd: 0.5, unknownCount: 1, bySource: { box_task: 0.5 } });
+  });
+
+  it('records the provider beside the figure (DE-33): a local $0 is not a Bedrock $0', async () => {
+    await recordSpend(box({ sourceId: 'box-1:local', costUsd: 0, provider: 'local' }));
+    expect(mockStoredEntries().find((e) => e.sourceId === 'box-1:local')).toMatchObject({ costUsd: 0, costBasis: 'reported', provider: 'local' });
   });
 });

@@ -14,7 +14,7 @@
 // from these rows by the route at request time.
 
 import { clock, defineFixture } from './core/index.js';
-import type { AccessDuration, EscalationLevel, RequestKind, RequestStatus, SodVerdict, StepKind, StepStatus, AccessEventKind } from '../lib/access/types.js';
+import type { AccessDuration, EnvelopeForecast, EscalationLevel, RequestKind, RequestStatus, SodVerdict, StepKind, StepStatus, AccessEventKind } from '../lib/access/types.js';
 
 export interface AccessRequestRow {
   id: string;
@@ -27,6 +27,10 @@ export interface AccessRequestRow {
   itemId: string;
   justification: string;
   duration: AccessDuration;
+  /** `sprint-envelope` requests only (access_requests.requested_usd): the dollars asked for. Null on every other kind. */
+  requestedUsd: number | null;
+  /** `sprint-envelope` requests only (access_requests.forecast, JSONB): the dispatch forecast filed with it. */
+  forecast: EnvelopeForecast | null;
   status: RequestStatus;
   sodVerdict: SodVerdict;
   sodOverriddenBy: string | null;
@@ -81,6 +85,7 @@ const req = (
   sodVerdict: SodVerdict = 'clear',
 ): AccessRequestRow => ({
   id, kind: 'grant', reviewId: null, requesterId, beneficiaryId: requesterId, itemId, justification, duration, status,
+  requestedUsd: null, forecast: null,
   sodVerdict, sodOverriddenBy: null, sodOverrideReason: null,
   submittedAt, decidedAt, provisionedAt, expiresAt, revokedAt: null, expiryWarnedAt: null,
 });

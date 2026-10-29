@@ -54,6 +54,28 @@ export interface ChangeFacts {
   reviewVerdict: ReviewVerdict | null;
   /** Dollar cost of the run that authored the change, when recorded. */
   costUsd: number | null;
+  /**
+   * Where `costUsd` came from (DE-33). `reported` is the executor's own
+   * figure, `estimated` the price table's (DE-32) — both are judged against
+   * `maxUsd` like a bill. `local` is the route-decided $0 of a run served on
+   * owned hardware (lib/run-cost.ts), which passes. `unknown` is a null cost:
+   * nothing recorded a figure, so the gate routes the change to a person.
+   */
+  costBasis: 'reported' | 'estimated' | 'unknown' | 'local';
+}
+
+/**
+ * The engine's cost facts from a run row's three columns (`cost_usd`,
+ * `cost_basis`, `model_provider`), shared by the Aurora and mock readers so the
+ * two cannot label the same row differently. A local run is `local` whatever
+ * its figure; a null figure is `unknown`; the DE-32 estimate stays `estimated`.
+ */
+export function costFacts(
+  costUsd: number | null, costBasis: unknown, modelProvider: unknown,
+): Pick<ChangeFacts, 'costUsd' | 'costBasis'> {
+  if (costUsd == null) return { costUsd: null, costBasis: 'unknown' };
+  if (modelProvider === 'local') return { costUsd, costBasis: 'local' };
+  return { costUsd, costBasis: costBasis === 'estimated' ? 'estimated' : 'reported' };
 }
 
 export type GateOutcome = 'pass' | 'requires_approval' | 'block';
@@ -178,9 +200,20 @@ export function evaluatePolicy(policy: SdlcPolicy, facts: ChangeFacts): GateResu
     case 'model_allowlist': {
       const allowed = stringList(policy.config['models']);
       if (allowed.length === 0) return null;
-      // An unknown model is treated as not-allowed: the safe reading of "we do
-      // not know what wrote this" is to gate it, not wave it through.
-      const model = facts.model ?? '(unknown)';
+      // An unknown model is never waved through, but it is not evidence of a
+      // disallowed author either — the same reading as an unknown cost below.
+      // So it routes to a person (`requires_approval`) even under
+      // `action: 'block'`. The profile-derived allowlist (DE-40,
+      // `withProfileModelAllowlist`) is a `block` row, and a run whose model
+      // was not recorded must not hard-block a change a human could accept.
+      if (facts.model == null) {
+        return {
+          ...base,
+          outcome: 'requires_approval',
+          detail: 'Authored by (unknown); the model was not recorded, so a person must accept it.',
+        };
+      }
+      const model = facts.model;
       if (allowed.includes(model)) return null;
       return {
         ...base,
@@ -192,17 +225,32 @@ export function evaluatePolicy(policy: SdlcPolicy, facts: ChangeFacts): GateResu
     case 'max_cost': {
       const maxUsd = Number(policy.config['maxUsd'] ?? 0);
       if (!Number.isFinite(maxUsd) || maxUsd <= 0) return null;
-      // No recorded cost means this policy has no fact to judge — a spend gate
-      // cannot fire on a number that does not exist. Fail-open is correct
-      // *here* because it is not open overall: the require_review policy still
-      // gates the change, so a run whose cost was never recorded is reviewed
-      // like any other rather than stuck behind a gate nobody can satisfy.
-      if (facts.costUsd == null) return null;
+      // No recorded cost is not "under the limit" (DE-33). This gate used to
+      // return null here on the argument that require_review still gated the
+      // change — but that gate passes on the REVIEWER's approve, and the
+      // reviewer is a Nova model, not a person. So an agent-approved change
+      // with an unrecorded cost, no protected path and under the file limit
+      // was auto-approved. An unknown cost is not evidence of overspend
+      // either, so the outcome is `requires_approval` even under
+      // `action: 'block'`: a person accepts it, the policy does not refuse it.
+      // `config.onUnknown: 'pass'` is the explicit operator opt-out.
+      if (facts.costUsd == null) {
+        if (policy.config['onUnknown'] === 'pass') return null;
+        return {
+          ...base,
+          outcome: 'requires_approval',
+          detail: 'The run\'s cost was not recorded; a person must accept it.',
+        };
+      }
+      // A route-decided local $0 (lib/run-cost.ts) and any figure at or under
+      // the limit pass. An estimate is judged like a reported figure, and the
+      // detail says which it was.
       if (facts.costUsd <= maxUsd) return null;
+      const basis = facts.costBasis === 'estimated' ? 'an estimated' : facts.costBasis === 'local' ? 'a local-compute' : '';
       return {
         ...base,
         outcome: policy.action === 'block' ? 'block' : 'requires_approval',
-        detail: `The run cost $${facts.costUsd.toFixed(2)}; the limit is $${maxUsd.toFixed(2)}.`,
+        detail: `The run cost ${basis ? `${basis} ` : ''}$${facts.costUsd.toFixed(2)}; the limit is $${maxUsd.toFixed(2)}.`,
       };
     }
 
@@ -354,6 +402,9 @@ export function looseningChanges(before: readonly SdlcPolicy[], after: readonly 
       case 'max_cost': {
         const was = num(b.config['maxUsd']); const now = num(a.config['maxUsd']);
         if (was > 0 && (now <= 0 || now > was)) out.push(`raises "${b.name}" from $${was} to ${now <= 0 ? 'no limit' : `$${now}`}`);
+        // Letting an unrecorded cost pass is a loosening (DE-33): the default
+        // routes it to a person, and 'pass' is the opt-out.
+        if (b.config['onUnknown'] !== 'pass' && a.config['onUnknown'] === 'pass') out.push(`lets an unrecorded cost pass "${b.name}"`);
         break;
       }
       case 'protected_paths': {
@@ -437,7 +488,9 @@ export const DEFAULT_POLICIES: Omit<SdlcPolicy, 'id'>[] = [
     name: 'Expensive runs need a human',
     enabled: true,
     kind: 'max_cost',
-    config: { maxUsd: 5 },
+    // onUnknown seeded explicitly (DE-33): an unrecorded cost routes to a
+    // person; 'pass' is the operator's opt-out, never the default.
+    config: { maxUsd: 5, onUnknown: 'require_approval' },
     action: 'require_approval',
   },
 ];

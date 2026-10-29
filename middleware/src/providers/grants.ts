@@ -44,7 +44,9 @@ function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : 
 
 export interface CreateGrantInput {
   orgProjectId: string;
-  sprintId: string;
+  /** Null = an initiative-level standing grant (budget_grants.sprint_id is nullable): the
+   *  access tenant provisions one when the initiative has no active sprint (2026-10-28). */
+  sprintId: string | null;
   granteePersonId: string;
   amountUsd: number;
   grantedBy?: string | null;
@@ -85,7 +87,7 @@ async function mockGrantRowFor(input: CreateGrantInput, id: string): Promise<Gra
   // grant reads consistently with the sprint it funds. granteeName is the
   // people-table name of the grantee (the join `budgetsListGrants` does on
   // Aurora), so a new envelope reads "Nora DaSilva", not "p-004".
-  const sprint = await getSprint(input.sprintId);
+  const sprint = input.sprintId ? await getSprint(input.sprintId) : null;
   return withDerivedWindowSpend({
     id,
     orgProjectId: input.orgProjectId,
@@ -101,6 +103,7 @@ async function mockGrantRowFor(input: CreateGrantInput, id: string): Promise<Gra
     sprintStatus: sprint?.status ?? null,
     allocatedUsd: input.amountUsd,
     grantedBy: input.grantedBy ?? null,
+    note: input.note ?? null,
   });
 }
 
@@ -146,7 +149,7 @@ export async function createGrant(input: CreateGrantInput): Promise<GrantRow> {
      RETURNING id`,
     [
       s('pid', input.orgProjectId),
-      s('sprint', input.sprintId),
+      maybe('sprint', input.sprintId),
       s('grantee', input.granteePersonId),
       num('amt', input.amountUsd),
       maybe('by', input.grantedBy),

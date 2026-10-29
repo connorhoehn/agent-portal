@@ -89,6 +89,12 @@ function botMission(name: string): string {
 // lab's meters read as a spread (one nearly out, one fresh) rather than a row
 // of identical bars.
 
+// SPEND IS NOT STORED HERE (DE-31). A box's dollars are a ledger read
+// (providers/spend-ledger.ts getBoxSpend over `spend_entries` rows carrying
+// its `boxId`), so the seeded spend lives as entries in mock/spend-ledger.ts
+// and `spendUsd` on the wire is that selector. A task that settles offline
+// moves the chip; POST /api/__mock/reset restores it.
+
 function seedBoxes(): FleetBox[] {
   return [
     // SHARED, and busy — an SME's computer charged to an initiative she
@@ -104,7 +110,6 @@ function seedBoxes(): FleetBox[] {
       ownerId: 'u-nora',
       projectId: 'p-auth-migration',
       currentTask: task('wi-auth-e1-b4'),
-      spendUsd: 2.41,
       tokensUsed: 486_300,
       contextUsed: contextFraction(78_400),
       activeModel: 'claude-sonnet-5',
@@ -123,7 +128,6 @@ function seedBoxes(): FleetBox[] {
       projectId: 'p-auth-migration',
       currentTask: task('wi-auth-e1-s3'),
       lastResult: { subtype: 'success', turns: 14, durationMs: 512_000, costUsd: 1.86 },
-      spendUsd: 1.86,
       tokensUsed: 321_900,
       contextUsed: contextFraction(54_100),
       activeModel: 'claude-sonnet-5',
@@ -141,7 +145,6 @@ function seedBoxes(): FleetBox[] {
       ownerId: 'u-layla',
       projectId: 'p-observability',
       currentTask: task('wi-obs-e1-s3'),
-      spendUsd: 0.74,
       tokensUsed: 142_500,
       contextUsed: contextFraction(31_200),
       activeModel: 'claude-sonnet-5',
@@ -160,7 +163,6 @@ function seedBoxes(): FleetBox[] {
       ownerId: 'u-rachel',
       currentTask: 'Check whether the guardrail rule change actually fires on the salary prompt',
       lastResult: { subtype: 'success', turns: 6, durationMs: 141_000, costUsd: 0.38 },
-      spendUsd: 0.38,
       tokensUsed: 64_800,
       contextUsed: contextFraction(18_900),
       activeModel: 'claude-haiku-4-5',
@@ -177,7 +179,6 @@ function seedBoxes(): FleetBox[] {
       lastActivityAt: minutesAgo(6),
       currentTask: botMission('auth-dep-watch'),
       lastResult: { subtype: 'success', turns: 3, durationMs: 88_000, costUsd: 0.12 },
-      spendUsd: 0.12,
       tokensUsed: 28_400,
       contextUsed: contextFraction(9_100),
       activeModel: 'claude-haiku-4-5',
@@ -194,7 +195,6 @@ function seedBoxes(): FleetBox[] {
       ownerId: 'u-eli',
       projectId: 'p-observability',
       currentTask: task('wi-obs-e1-b5'),
-      spendUsd: 0.53,
       tokensUsed: 97_600,
       contextUsed: contextFraction(41_800),
       activeModel: 'claude-sonnet-5',
@@ -210,7 +210,6 @@ function seedBoxes(): FleetBox[] {
       ownerId: 'u-caleb',
       projectId: 'p-llm-platform',
       currentTask: task('wi-llm-e1-s2'),
-      spendUsd: 1.12,
       tokensUsed: 214_700,
       contextUsed: contextFraction(112_300),
       activeModel: 'claude-sonnet-5',
@@ -259,6 +258,10 @@ function demoBoxes(): FleetBox[] {
  * before anyone has provisioned anything, which is the ONE case where "No
  * computers to lab · Provision at least one computer" is the honest screen.
  */
+export function seededFleet(): FleetBox[] {
+  return seedBoxes();
+}
+
 export const devboxBoxes = defineFixture<FleetBox>({
   key: 'devbox-boxes',
   scenarios: {

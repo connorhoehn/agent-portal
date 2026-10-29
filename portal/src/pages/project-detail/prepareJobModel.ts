@@ -11,12 +11,24 @@
 //   <gate>                          a 409 from a money brake: its reason, its
 //                                   own confirm flag (confirmOverRunBudget /
 //                                   confirmOverAllocation / confirmOverEnvelope)
+//   This job needs a sprint envelope
+//                                   an SME with no grant here (the envelope
+//                                   reads "No sprint grant here", or dispatch
+//                                   answered 403): 1 Request budget · 2 Save for
+//                                   later, inside the same card (no modal):
+//                                   Choose → Draft request → Confirm → Done, or
+//                                   Choose → Saved (approved 2026-10-28,
+//                                   docs/claude-code-handoff-2026-10-28-ui.md)
 //
 // The server contract is the estimate drawer's, unchanged: POST
 // /api/bots/dispatch-work with { workItemId, model, agentProjectId?,
 // instruction?, budgetPerRunUsd? } plus only the flags confirmed so far.
-// Confirmations ACCUMULATE across a chain; a 403 (no sprint grant) and a 429
-// (concurrency) are not confirmable and stay on the card as errors.
+// Confirmations ACCUMULATE across a chain; a 429 (concurrency) is not
+// confirmable and stays on the card as an error. A 403 for a missing sprint
+// grant is not confirmable either: it routes to the funding prompt, which files
+// an ordinary access request (POST /api/access-requests/envelope) or saves the
+// setup (PUT /api/bots/work-items/:id/job-draft). Neither grants money or runs
+// anything, and nothing here says otherwise.
 //
 // Pure: no React, no fetch. `prepareJobPrompts` returns plain prompt objects
 // whose `onAnswer` calls the injected actions, so a node test can answer them.
@@ -34,6 +46,8 @@ import {
 } from '../../lib/dispatchGates.ts';
 import { envelopeForInitiative, hasKnownBurn, type EnvelopesResponse } from '../../lib/envelopeFormat.ts';
 import { usd } from '../../lib/format.ts';
+import type { AccessRequest } from '../../lib/accessRequests.ts';
+import { JUSTIFICATION_MIN, openStatusText, quickRequestState, waitingOn } from '../projects/budgetAccessModel.ts';
 import type { ComposerPrompt, ComposerPromptField, ComposerPromptResult } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import type { FlatWorkItem } from './projectFormat.ts';
 import type { Codebase } from './types.ts';
@@ -122,13 +136,16 @@ export function forecastLabel(item: Pick<JobItem, 'storyPoints'>, forecast: Fore
   return { value: forecast.error ? 'Forecast unavailable' : 'No forecast yet', tone: forecast.error ? 'warning' : undefined };
 }
 
+/** The envelope value an SME with no grant on this initiative reads. */
+export const NO_GRANT_LABEL = 'No sprint grant here';
+
 /** What is left of the reader's sprint envelope here, in one value. */
 export function envelopeLabel(data: EnvelopesResponse | null, orgProjectId: string | null, role: string | undefined, forecast: WorkEstimate | null):
   { value: string; tone?: ComposerPromptField['tone'] } {
   if (!data) return { value: '…' };
   if (!data.resolved) return { value: 'Unknown', tone: 'warning' };
   const row = envelopeForInitiative(data, orgProjectId);
-  if (!row) return role === 'sme' ? { value: 'No sprint grant here', tone: 'danger' } : { value: 'Not braked by an envelope' };
+  if (!row) return role === 'sme' ? { value: NO_GRANT_LABEL, tone: 'danger' } : { value: 'Not braked by an envelope' };
   if (!hasKnownBurn(row)) return { value: `${usd(row.allocatedUsd)} · burn not attributed` };
   const over = forecast != null && forecast.costUsdP75 > row.remainingUsd!;
   return { value: `${usd(row.remainingUsd!)} left of ${usd(row.allocatedUsd)}`, tone: over ? 'warning' : 'success' };
@@ -208,6 +225,8 @@ export type DispatchOutcome =
   | { kind: 'dispatched'; run: unknown }
   | { kind: 'codebase'; options: Array<{ id: string; repoFullName: string }> }
   | { kind: 'gate'; stop: GateStop }
+  /** 403 from the grant-scoped gate: the funding prompt, not an error. */
+  | { kind: 'no-grant'; message: string }
   | { kind: 'refused'; message: string };
 
 /** What a dispatch answer means — the drawer's four 409s, the 403 and the 429. */
@@ -247,7 +266,11 @@ export function readDispatchResponse(status: number, payload: DispatchPayload): 
       ],
     } };
   }
-  if (status === 403) return { kind: 'refused', message: payload.error ?? 'You hold no active sprint grant on this initiative.' };
+  if (status === 403) {
+    // The grant-scoped gate's words (lib/bot-runner.ts); any other 403 stays a refusal.
+    if (payload.error == null || /sprint grant/i.test(payload.error)) return { kind: 'no-grant', message: payload.error ?? 'You hold no active sprint grant on this initiative.' };
+    return { kind: 'refused', message: payload.error };
+  }
   if (status === 429) return { kind: 'refused', message: payload.error ?? 'Agent runs already in flight are at the concurrency ceiling. Try again shortly.' };
   if (status >= 200 && status < 300 && payload.run) return { kind: 'dispatched', run: payload.run };
   return { kind: 'refused', message: `Dispatch failed: ${payload.error ?? `HTTP ${status}`}` };
@@ -261,7 +284,9 @@ export type PrepareStep =
   | { kind: 'cap' }
   | { kind: 'instruction' }
   | { kind: 'codebase'; options: Array<{ id: string; repoFullName: string }> }
-  | { kind: 'gate'; stop: GateStop };
+  | { kind: 'gate'; stop: GateStop }
+  /** Dispatch answered 403 (no sprint grant): ask for budget or save for later. */
+  | { kind: 'funding' };
 
 export interface PrepareJobActions {
   /** POST the job (with the confirms so far, and a codebase picked from a 409). */
@@ -276,6 +301,10 @@ export interface PrepareJobActions {
   back: () => void;
   /** Record the live forecast on the item (no dispatch). Absent: not offered. */
   saveEstimate?: () => Promise<ComposerPromptResult>;
+  /** File the envelope request with the confirmed message (POST /api/access-requests/envelope). */
+  requestBudget: (justification: string, requestedUsd: number) => Promise<ComposerPromptResult>;
+  /** Keep the job on the item (PUT …/job-draft). */
+  saveDraft: () => Promise<{ error: string } | { ok: true }>;
 }
 
 export interface PrepareJobView {
@@ -290,6 +319,18 @@ export interface PrepareJobView {
   forecast: ForecastRead;
   /** A running job for this item. */
   running: boolean;
+  /** An SME without a grant can ask for one here; null: no initiative to ask on. */
+  funding?: FundingView | null;
+}
+
+/** What the funding prompt reads. */
+export interface FundingView {
+  /** The reader's envelope reads "No sprint grant here" (the prompt shows without a dispatch first). */
+  noGrant: boolean;
+  /** The budget holder's name when the page knows it; else the message says "the budget holder". */
+  holder: string | null;
+  /** The reader's envelope requests on this initiative (GET /api/access-requests/mine), newest first; null: not read yet. */
+  requests: readonly AccessRequest[] | null;
 }
 
 export const READ_ONLY_REASON = 'An SME with a sprint grant on this initiative, or a release manager, authorizes jobs. You can see the setup it would run with.';
@@ -301,7 +342,10 @@ export function prepareJobPrompts(view: PrepareJobView, actions: PrepareJobActio
   const eyebrow = canDispatch ? 'Prepare job' : 'Job setup';
   const id = (what: string) => `prepare-job:${item.id}:${what}:${rev}`;
 
-  if (!canDispatch || step.kind === 'confirm') {
+  const funding = canDispatch && view.funding && (step.kind === 'funding' || (step.kind === 'confirm' && view.funding.noGrant)) ? view.funding : null;
+  if (funding) return [fundingPrompt(view, funding, actions, id('funding'))];
+
+  if (!canDispatch || step.kind === 'confirm' || step.kind === 'funding') {
     const saveable = !!actions.saveEstimate && canDispatch && !!forecast.estimate && !forecast.stored;
     return [{
       id: id('confirm'), eyebrow, title, fields,
@@ -392,4 +436,148 @@ export function prepareJobPrompts(view: PrepareJobView, actions: PrepareJobActio
       return { receipt: `${stop.title}: not dispatched` };
     },
   }];
+}
+
+// ─── Funding: no sprint grant here ───────────────────────────────────────────
+
+export const FUNDING_STEPS: readonly string[] = ['Choose', 'Draft request', 'Confirm', 'Done'];
+export const SAVED_STEPS: readonly string[] = ['Choose', 'Saved'];
+export const NO_FORECAST_REASON = 'Get a forecast first';
+
+/** The dollars asked for: the forecast's high end, rounded up to the cent; null without a usable forecast. */
+export function requestedUsdFor(estimate: WorkEstimate | null | undefined): number | null {
+  if (!estimate || !Number.isFinite(estimate.costUsdP75) || estimate.costUsdP75 <= 0) return null;
+  // Round away float noise first (1.1 * 100 is 110.00000000000001), then up to the cent.
+  return Math.ceil(Math.round(estimate.costUsdP75 * 1e6) / 1e4) / 100;
+}
+
+/** The prefilled message: who it is for, the work item, the forecast and the ask. */
+export function fundingMessage(input: { holder: string | null; item: Pick<JobItem, 'id' | 'key' | 'title'>; model: string; estimate: WorkEstimate; requestedUsd: number }): string {
+  const { holder, item, model, estimate, requestedUsd } = input;
+  return `Hi${holder ? ` ${holder}` : ''}, I'd like a sprint envelope on this initiative so an agent can take ${item.key ?? item.id} "${clean(item.title)}". `
+    + `The forecast is ${usd(estimate.costUsdP25)}–${usd(estimate.costUsdP75)} on ${modelLabel(model)}, so I'm asking for ${usd(requestedUsd)}.`;
+}
+
+/** Why the message cannot be filed yet, or null. The server checks the same and is the authority. */
+export function justificationProblem(message: string): string | null {
+  const n = message.trim().length;
+  return n < JUSTIFICATION_MIN ? `Say why in at least ${JUSTIFICATION_MIN} characters (${n} so far)` : null;
+}
+
+/** POST /api/access-requests/envelope's body (docs/access-tenant-api.md, sprint envelopes). */
+export function envelopeRequestBody(input: { initiativeId: string; justification: string; requestedUsd: number; workItemId: string; model: string; estimate: WorkEstimate | null }): Record<string, unknown> {
+  const { initiativeId, justification, requestedUsd, workItemId, model, estimate } = input;
+  return {
+    initiativeId, justification: justification.trim(), requestedUsd,
+    forecast: { workItemId, model, costUsdP25: estimate?.costUsdP25 ?? null, costUsdP75: estimate?.costUsdP75 ?? null },
+  };
+}
+
+export type EnvelopeRequestOutcome =
+  | { kind: 'filed'; request: AccessRequest }
+  | { kind: 'already'; requestId: string }
+  | { kind: 'failed'; message: string };
+
+/** What the envelope route answered: filed (201), already open (409 + requestId), or not filed. */
+export function readEnvelopeResponse(status: number, payload: Partial<AccessRequest> & { error?: string; requestId?: string }): EnvelopeRequestOutcome {
+  if (status >= 200 && status < 300 && typeof payload.id === 'string') return { kind: 'filed', request: payload as AccessRequest };
+  if (status === 409 && typeof payload.requestId === 'string') return { kind: 'already', requestId: payload.requestId };
+  return { kind: 'failed', message: payload.error ?? `HTTP ${status}` };
+}
+
+/** The done stage's line (or the inline error). A filed request is a request: it grants nothing and runs nothing. */
+export function envelopeResult(outcome: EnvelopeRequestOutcome): ComposerPromptResult {
+  if (outcome.kind === 'failed') return { error: `Request not filed: ${outcome.message}` };
+  if (outcome.kind === 'already') return { receipt: 'Already requested · your open request on this initiative still stands. Nothing runs until an envelope is granted.' };
+  const who = Array.isArray(outcome.request.steps) ? waitingOn(outcome.request) : 'an approver';
+  return { receipt: `Request filed · waiting on ${who}. Nothing runs until an envelope is granted.` };
+}
+
+/** The reader's newest envelope request, as a status line; null when they may ask (none, or the last one closed). */
+export function fundingStatus(requests: readonly AccessRequest[] | null | undefined): string | null {
+  const state = quickRequestState(requests);
+  if (state.kind === 'open') return openStatusText(state);
+  if (state.kind === 'approved' || state.kind === 'granted') return 'Approved — waiting for the envelope to reach your session';
+  return null;
+}
+
+/** PUT /api/bots/work-items/:id/job-draft's body. */
+export function jobDraftBody(job: PreparedJob): Record<string, unknown> {
+  return { model: job.model, budgetPerRunUsd: job.capUsd, instruction: job.instruction.trim() || null, agentProjectId: job.agentProjectId };
+}
+
+/** A saved draft as job edits (GET …/job-draft): only what it actually recorded. */
+export function jobFromDraft(draft: { model?: string | null; budgetPerRunUsd?: number | null; instruction?: string | null; agentProjectId?: string | null } | null | undefined): Partial<PreparedJob> {
+  if (!draft) return {};
+  const job: Partial<PreparedJob> = { capUsd: draft.budgetPerRunUsd ?? null };
+  if (draft.model && DEVBOX_MODELS.some((m) => m.id === draft.model)) job.model = draft.model;
+  if (draft.instruction && draft.instruction.trim()) job.instruction = draft.instruction;
+  if (draft.agentProjectId) job.agentProjectId = draft.agentProjectId;
+  return job;
+}
+
+function fundingPrompt(view: PrepareJobView, funding: FundingView, actions: PrepareJobActions, promptId: string): ComposerPrompt {
+  const { item, job, fields, forecast } = view;
+  const status = fundingStatus(funding.requests);
+  const requestedUsd = requestedUsdFor(forecast.estimate);
+  const requestOff = status ?? (requestedUsd == null ? NO_FORECAST_REASON : null);
+  const holder = funding.holder?.trim() || null;
+  const pick = (label: string) => fields.filter((f) => f.label === label);
+
+  const compose: ComposerPrompt | null = requestedUsd != null && forecast.estimate ? {
+    id: `${promptId}:request`, eyebrow: 'Prepare job', title: 'Request budget',
+    fields: [...pick('Item'), ...pick('Forecast'), { label: 'Requested', value: usd(requestedUsd) }],
+    question: 'Edit the message, then review it before it is filed.',
+    kind: 'compose',
+    path: { steps: FUNDING_STEPS, current: 1 },
+    compose: {
+      initialMessage: fundingMessage({ holder, item, model: job.model, estimate: forecast.estimate, requestedUsd }),
+      recipient: `To ${holder ?? 'the budget holder'} · ${item.key ?? item.id}`,
+      reviewTitle: 'Confirm budget request',
+      continueLabel: 'Review request',
+      confirmLabel: 'Confirm request',
+      doneActionLabel: 'Close',
+      note: `Confirming files an access request for ${usd(requestedUsd)}. It does not grant funding or start the job.`,
+    },
+    onAnswer: (answer) => {
+      if (answer.kind !== 'compose') return { error: 'Confirm the message to file the request.' };
+      const problem = justificationProblem(answer.message);
+      if (problem) return { error: problem };
+      return actions.requestBudget(answer.message.trim(), requestedUsd);
+    },
+  } : null;
+
+  const saved: ComposerPrompt = {
+    id: `${promptId}:saved`, eyebrow: 'Prepare job', title: 'Saved for later',
+    fields: [...pick('Model'), ...pick('Run cap')],
+    question: 'The setup is saved on the item; Prepare job opens with it next time. Nothing runs and nothing is requested.',
+    kind: 'choice',
+    path: { steps: SAVED_STEPS, current: 1 },
+    options: [{ id: 'close', label: 'Close', emphasis: 'primary' }],
+    defaultOptionId: 'close',
+    onAnswer: () => ({ receipt: `Saved for later · ${item.key ?? item.id}` }),
+  };
+
+  return {
+    id: promptId, eyebrow: 'Prepare job', title: 'This job needs a sprint envelope',
+    fields: status ? [...fields, { label: 'Request', value: status, tone: 'info' }] : fields,
+    question: status
+      ? 'Your envelope request is open. Nothing runs until an envelope is granted; you can save this setup for later.'
+      : 'You hold no sprint grant on this initiative, so this job cannot run yet. Request budget from the budget holder, or save the setup for later.',
+    kind: 'choice',
+    path: { steps: FUNDING_STEPS, current: 0 },
+    options: [
+      { id: 'request', label: 'Request budget', emphasis: 'primary', ...(requestOff ? { disabledReason: requestOff } : {}) },
+      { id: 'save', label: 'Save for later', hint: 'Keep this setup on the item; nothing runs' },
+    ],
+    ...(requestOff ? {} : { defaultOptionId: 'request' }),
+    onAnswer: async (answer) => {
+      if (answer.optionId === 'request') return compose && !requestOff ? { next: compose } : { error: requestOff ?? NO_FORECAST_REASON };
+      if (answer.optionId === 'save') {
+        const result = await actions.saveDraft();
+        return 'error' in result ? result : { next: saved };
+      }
+      return { error: 'Pick one of the options.' };
+    },
+  };
 }

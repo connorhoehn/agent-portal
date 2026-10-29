@@ -23,8 +23,10 @@ import {
 import { accessReviewItemsFixture, accessReviewsFixture, type AccessReviewItemRow, type AccessReviewRow } from '../mock/access-reviews.js';
 import { accessDelegationsFixture, type AccessDelegationRow } from '../mock/access-delegations.js';
 import { delegationState } from '../lib/access/delegation.js';
-import { findInitiative } from '../mock/initiatives.js';
+import { envelopeItem, isEnvelopeItemId } from '../lib/access/items.js';
+import { findInitiative, initiatives } from '../mock/initiatives.js';
 import { getUser, listUsers } from './identity.js';
+import { listBudgets, listGrants } from './budgets.js';
 import type { AccessDirectory } from '../lib/access/types.js';
 import { invalidateAll, invalidateChannel } from '../lib/gateway/authority-invalidation.js';
 import { noteSearchWriteSoon } from '../lib/search-index/writes.js';
@@ -50,7 +52,23 @@ export function accessNow(): string {
   return clock.nowIso();
 }
 
-export function listCatalog(): AccessCatalogRow[] { store(); return copy(accessCatalogFixture.rows()); }
+/**
+ * The catalog: the seeded rows plus one DERIVED `envelope:<projectId>` row per
+ * initiative (lib/access/items.ts) — a sprint envelope is requestable on every
+ * initiative, so the item is a projection of the projects table, not a seed.
+ * The fixture (and the parity harness) stay seed-only; the cluster half is
+ * LIST_CATALOG_SQL in lib/access/sql.ts. A seeded row with an envelope id wins.
+ */
+export function listCatalog(): AccessCatalogRow[] {
+  store();
+  const seeded = copy(accessCatalogFixture.rows());
+  const have = new Set(seeded.map((i) => i.id));
+  const derived = initiatives.rows().map((p) => envelopeItem(p.id, p.name)).filter((i) => !have.has(i.id));
+  return [...seeded, ...derived];
+}
+
+/** Is this catalog item derived from an initiative (never stored, never edited through PUT /configuration)? */
+export const isDerivedCatalogItem = (id: string): boolean => isEnvelopeItemId(id) && !accessCatalogFixture.rows().some((i) => i.id === id);
 export function listPolicies(): AccessPolicyRow[] { store(); return copy(accessPoliciesFixture.rows()); }
 export function listRequests(): AccessRequestRow[] { store(); return copy(accessRequestsFixture.rows()); }
 export function listSteps(requestId?: string): AccessStepRow[] {
@@ -313,13 +331,31 @@ export function updatePolicy(id: string, patch: { severity?: AccessPolicyRow['se
  */
 export async function loadDirectory(): Promise<AccessDirectory> {
   store();
-  const users = (await listUsers({ authoritative: true })).map((u) => ({
+  const [listed, grants, budgets] = await Promise.all([
+    listUsers({ authoritative: true }),
+    // Sprint envelopes (2026-10-28): who holds an active grant where, and who
+    // set each allocation — the "already holds" rule and the budget-holder
+    // steward. Read through providers/budgets.ts, the same rows POST /api/grants
+    // writes and lib/bot-runner.ts dispatches on; an unreadable store means no
+    // holders and no holder, never a guess.
+    listGrants().catch((err: unknown) => { console.warn('[access] grants unavailable for the directory:', (err as Error).message); return []; }),
+    listBudgets().catch((err: unknown) => { console.warn('[access] budgets unavailable for the directory:', (err as Error).message); return []; }),
+  ]);
+  const users = listed.map((u) => ({
     id: u.id, displayName: u.displayName, personId: u.personId ?? null, grants: structuredClone(u.grants),
   }));
   const managers = new Map(accessPeopleFixture.rows().map((p) => [p.id, p.managerId]));
+  // Active = the grant's sprint is `active`, or it has no sprint (standing) — lib/bot-runner.ts isActiveGrant.
+  const holders = new Map<string, string[]>();
+  for (const g of grants) {
+    if (g.sprintStatus === 'active' || g.sprintId == null) holders.set(g.orgProjectId, [...(holders.get(g.orgProjectId) ?? []), g.granteePersonId]);
+  }
+  const budgetHolders = new Map(budgets.filter((b) => b.updatedBy).map((b) => [b.orgProjectId, b.updatedBy!]));
   const now = clock.nowIso();
   return {
     users,
+    envelopeHolders: (projectId) => holders.get(projectId) ?? [],
+    budgetHolderOf: (projectId) => budgetHolders.get(projectId) ?? null,
     // Delegations in force now (lib/access/chain.ts adds their delegates live).
     activeDelegations: accessDelegationsFixture.rows().filter((d) => delegationState(d, now) === 'active')
       .map((d) => ({ id: d.id, delegatorId: d.delegatorId, delegateId: d.delegateId })),

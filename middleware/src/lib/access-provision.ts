@@ -15,6 +15,15 @@
 //                           orgiq `budgets-reader` for budget visibility
 //   initiative-membership   a project_contributions row, through
 //                           providers/projects.ts `addContribution`
+//   sprint-envelope         a budget_grants row (2026-10-28), through
+//                           lib/grant-envelope.ts — the SAME path
+//                           POST /api/grants takes: initiative, the active
+//                           sprint if one exists (else a standing grant),
+//                           grantee = the beneficiary's person,
+//                           allocated_usd = the requested amount,
+//                           granted_by = the final approver, note = request id.
+//                           Revocation deletes that row (providers/grants.ts
+//                           `revokeGrant`), found by its note.
 //
 // then an `access_events` row and the request's own status. There is no
 // second table of "effective access".
@@ -58,7 +67,11 @@
 import { AppError } from './async-handler.js';
 import { bumpSessionEpoch, getUser, grantRole, listUsers, revokeRole } from '../providers/identity.js';
 import { addContribution, removeContribution } from '../providers/projects.js';
-import { accessNow, casRequest, findRequest, listCatalog, listPolicies, type AccessCatalogRow, type AccessRequestRow } from '../providers/access.js';
+import { accessNow, casRequest, findRequest, listCatalog, listPolicies, listSteps, type AccessCatalogRow, type AccessRequestRow } from '../providers/access.js';
+import { listGrants } from '../providers/budgets.js';
+import { revokeGrant } from '../providers/grants.js';
+import { listSprints } from '../providers/sprints.js';
+import { grantEnvelope } from './grant-envelope.js';
 import { requestItem } from './access/items.js';
 import { sodConflicts, sodVerdict } from './access/sod.js';
 import { notifyAccessRequest } from './social-notify.js';
@@ -142,9 +155,47 @@ async function applyGrant(request: AccessRequestRow, item: AccessCatalogRow, pre
   }
   const user = await beneficiaryOf(request);
   if (!item.projectId) throw new ProvisionError(`${item.id} names no initiative`);
+  if (item.kind === 'sprint-envelope') {
+    if (!user.personId) throw new ProvisionError(`${user.displayName} has no linked person; a sprint envelope is granted to a person`);
+    if (present) await grantEnvelopeFor(request, item.projectId, user.personId);
+    else await revokeEnvelopeFor(request, item.projectId);
+    return;
+  }
   if (!user.personId) throw new ProvisionError(`${user.displayName} has no linked person; an initiative membership needs one`);
   if (present) await addContribution(item.projectId, user.personId);
   else await removeContribution(item.projectId, user.personId);
+}
+
+/** The grant row this request provisioned, found by its note (the request id), or null. */
+async function envelopeGrantOf(request: Pick<AccessRequestRow, 'id'>, projectId: string) {
+  return (await listGrants(projectId)).find((g) => g.note === request.id) ?? null;
+}
+
+/**
+ * Provision a sprint envelope: ONE budget_grants row on the initiative, scoped
+ * to its active sprint when there is one (the newest, as listSprints orders
+ * them) and standing otherwise, for the requested amount, authorized by the
+ * final approver (the last approved step's decider), noted with the request id
+ * so the row and the request can find each other. Idempotent: a row already
+ * noted with this request is the row.
+ */
+async function grantEnvelopeFor(request: AccessRequestRow, projectId: string, personId: string): Promise<void> {
+  if (await envelopeGrantOf(request, projectId)) return;
+  if (request.requestedUsd == null || !(request.requestedUsd > 0)) throw new ProvisionError(`${request.id} asks for no amount; a sprint envelope needs one`);
+  const approved = listSteps(request.id).filter((s) => s.status === 'approved' && s.decidedBy)
+    .sort((a, b) => (b.decidedAt ?? '').localeCompare(a.decidedAt ?? '') || b.step - a.step);
+  const grantedBy = approved[0]?.decidedBy ?? null;
+  const active = await listSprints({ orgProjectId: projectId, status: 'active', limit: 1 });
+  await grantEnvelope({
+    orgProjectId: projectId, sprintId: active[0]?.id ?? null, granteePersonId: personId,
+    amountUsd: request.requestedUsd, grantedBy, note: request.id,
+  });
+}
+
+/** The inverse: delete the grant row this request provisioned. Nothing to delete is already revoked. */
+async function revokeEnvelopeFor(request: AccessRequestRow, projectId: string): Promise<void> {
+  const grant = await envelopeGrantOf(request, projectId);
+  if (grant) await revokeGrant(grant.id);
 }
 
 async function names(request: AccessRequestRow, actorId: string | null) {
@@ -173,8 +224,11 @@ export async function provisionAccess(request: Pick<AccessRequestRow, 'id'>): Pr
     // Refuse what can never be written BEFORE claiming the row, so a request
     // that cannot be provisioned stays `approved` and says why.
     const beneficiary = await beneficiaryOf(current);
-    if (item.kind === 'initiative-membership' && !beneficiary.personId) {
-      throw new ProvisionError(`${beneficiary.displayName} has no linked person; an initiative membership needs one`);
+    if ((item.kind === 'initiative-membership' || item.kind === 'sprint-envelope') && !beneficiary.personId) {
+      throw new ProvisionError(`${beneficiary.displayName} has no linked person; ${item.kind === 'sprint-envelope' ? 'a sprint envelope' : 'an initiative membership'} needs one`);
+    }
+    if (item.kind === 'sprint-envelope' && (current.requestedUsd == null || !(current.requestedUsd > 0))) {
+      throw new ProvisionError(`${current.id} asks for no amount; a sprint envelope needs one`);
     }
     const now = accessNow();
     // SoD against the beneficiary's grants NOW (A7), not the submit-time snapshot.

@@ -18,7 +18,7 @@ function policy(p: Omit<SdlcPolicy, 'id'>): SdlcPolicy {
   return { id: `p${++_seq}`, ...p };
 }
 function facts(f: Partial<ChangeFacts>): ChangeFacts {
-  return { files: [], model: null, reviewVerdict: null, costUsd: null, ...f };
+  return { files: [], model: null, reviewVerdict: null, costUsd: null, costBasis: 'unknown', ...f };
 }
 
 describe('globToRegExp', () => {
@@ -92,25 +92,48 @@ describe('model_allowlist gate', () => {
   it('gates a disallowed model', () => {
     expect(evaluatePolicy(p, facts({ model: 'claude-haiku-4-5' }))!.outcome).toBe('block');
   });
-  it('treats an unknown author as not-allowed', () => {
-    expect(evaluatePolicy(p, facts({ model: null }))!.outcome).toBe('block');
+  it('routes an unknown author to a person even under action: block — never passes, never hard-blocks', () => {
+    const g = evaluatePolicy(p, facts({ model: null }))!;
+    expect(g).not.toBeNull();
+    expect(g.outcome).toBe('requires_approval');
+    expect(g.detail).toContain('(unknown)');
   });
 });
 
 describe('max_cost gate', () => {
   const p = policy({ name: 'spend', enabled: true, kind: 'max_cost', config: { maxUsd: 5 }, action: 'require_approval' });
 
-  it('does not fire when no cost was recorded — the fact is missing, not over', () => {
-    // Fail-open here is correct because it is not open overall: require_review
-    // still gates the change, so an unrecorded cost gets reviewed, not stuck.
-    expect(evaluatePolicy(p, facts({ costUsd: null }))).toBeNull();
+  it('routes an unrecorded cost to a person — the fact is missing, and missing is not "under" (DE-33)', () => {
+    // The old fail-open leaned on require_review, but that gate passes on a
+    // Nova reviewer's approve, so an unrecorded cost was auto-approvable.
+    const g = evaluatePolicy(p, facts({ costUsd: null }))!;
+    expect(g.outcome).toBe('requires_approval');
+    expect(g.detail).toBe("The run's cost was not recorded; a person must accept it.");
+  });
+  it('an unknown cost is requires_approval even under action: block — it is not evidence of overspend', () => {
+    const blocker = { ...p, action: 'block' as const };
+    expect(evaluatePolicy(blocker, facts({ costUsd: null }))!.outcome).toBe('requires_approval');
+  });
+  it('onUnknown: pass is the explicit operator opt-out', () => {
+    const lenient = { ...p, config: { maxUsd: 5, onUnknown: 'pass' } };
+    expect(evaluatePolicy(lenient, facts({ costUsd: null }))).toBeNull();
+  });
+  it('a local-compute $0 passes — a route-decided zero, not an absence', () => {
+    expect(evaluatePolicy(p, facts({ costUsd: 0, costBasis: 'local' }))).toBeNull();
+  });
+  it('an estimate is judged like a reported figure, and the detail says so', () => {
+    const g = evaluatePolicy(p, facts({ costUsd: 7.25, costBasis: 'estimated' }))!;
+    expect(g.outcome).toBe('requires_approval');
+    expect(g.detail).toContain('estimated');
+    expect(g.detail).toContain('$7.25');
+    expect(evaluatePolicy(p, facts({ costUsd: 4.5, costBasis: 'estimated' }))).toBeNull();
   });
   it('ignores runs at or under the limit', () => {
     expect(evaluatePolicy(p, facts({ costUsd: 4.99 }))).toBeNull();
     expect(evaluatePolicy(p, facts({ costUsd: 5 }))).toBeNull();
   });
   it('fires over the limit, naming both numbers', () => {
-    const g = evaluatePolicy(p, facts({ costUsd: 7.25 }))!;
+    const g = evaluatePolicy(p, facts({ costUsd: 7.25, costBasis: 'reported' }))!;
     expect(g.outcome).toBe('requires_approval');
     expect(g.detail).toContain('$7.25');
     expect(g.detail).toContain('$5.00');
@@ -227,16 +250,21 @@ describe('default policies are safe out of the box', () => {
     const e = evaluate(defaults, facts({ files: ['infra/lib/aurora.ts'], reviewVerdict: 'approve' }));
     expect(e.decision).toBe('needs_approval');
   });
-  it('auto-approves a small, reviewed docs change', () => {
-    const e = evaluate(defaults, facts({ files: ['docs/readme.md'], reviewVerdict: 'approve' }));
+  it('auto-approves a small, reviewed docs change whose run cost is recorded', () => {
+    const e = evaluate(defaults, facts({ files: ['docs/readme.md'], reviewVerdict: 'approve', costUsd: 0.1, costBasis: 'reported' }));
     expect(e.decision).toBe('approved');
   });
   it('sends an expensive run to a human even after review passes', () => {
     const e = evaluate(defaults, facts({ files: ['docs/readme.md'], reviewVerdict: 'approve', costUsd: 12 }));
     expect(e.decision).toBe('needs_approval');
   });
-  it('does not gate a run whose cost was never recorded', () => {
+  it('routes a run whose cost was never recorded to a person (DE-33)', () => {
     const e = evaluate(defaults, facts({ files: ['docs/readme.md'], reviewVerdict: 'approve', costUsd: null }));
+    expect(e.decision).toBe('needs_approval');
+    expect(e.gates.map((g) => g.kind)).toContain('max_cost');
+  });
+  it('auto-approves a reviewed change whose run cost is recorded and under the limit', () => {
+    const e = evaluate(defaults, facts({ files: ['docs/readme.md'], reviewVerdict: 'approve', costUsd: 0.42, costBasis: 'reported' }));
     expect(e.decision).toBe('approved');
   });
 });
@@ -314,7 +342,7 @@ describe('governance code (DE-43 §6, DE-46)', () => {
   it('the default sensitive-paths policy now routes them to a human', () => {
     const policies = DEFAULTS.map((p, i) => ({ ...p, id: String(i) }));
     for (const f of ['middleware/src/lib/sdlc-policy.ts', 'middleware/seeds/roles/orgiq/sme.cedar', 'schema/sdlc_governance_schema.sql']) {
-      const out = evaluateSet(policies, { files: [f], model: null, reviewVerdict: 'approve', costUsd: null });
+      const out = evaluateSet(policies, { files: [f], model: null, reviewVerdict: 'approve', costUsd: null, costBasis: 'unknown' });
       expect([f, out.decision]).toEqual([f, 'needs_approval']);
     }
   });

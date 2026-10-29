@@ -7,7 +7,18 @@
 // every path here answers with the pair (spend, attributionAvailable) and never
 // with a bare number.
 
-jest.mock('../aurora.js', () => ({ exec: jest.fn() }));
+// insertBotRun takes the ceiling lock and inserts in ONE transaction (DE-34);
+// its statements are routed through the same `exec` mock so they are visible —
+// all but the advisory lock, which answers nothing and is not what these
+// cases are about.
+jest.mock('../aurora.js', () => {
+  const exec = jest.fn();
+  return {
+    exec,
+    withTransaction: jest.fn(async (fn: (tx: (sql: string, params?: unknown) => Promise<unknown>) => Promise<unknown>) =>
+      fn(async (sqlText, params) => (/pg_advisory_xact_lock/.test(sqlText) ? [] : exec(sqlText, params)))),
+  };
+});
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: false } } }));
 
 import { exec } from '../aurora.js';
@@ -67,7 +78,7 @@ describe('dispatchedSpendInWindow', () => {
   it('reports an UNKNOWN burn, not a zero one, when the column is absent', async () => {
     sql.mockResolvedValue([]); // the probe finds nothing
     expect(await dispatchedSpendInWindow(input)).toEqual({
-      spentUsd: 0, attributionAvailable: false,
+      spentUsd: 0, attributionAvailable: false, unknownCount: 0,
     });
     // And it did not even try to sum — there is nothing to sum by.
     expect(sql).toHaveBeenCalledTimes(1);
@@ -76,7 +87,7 @@ describe('dispatchedSpendInWindow', () => {
   it('sums only the runs recorded as dispatched by this subject', async () => {
     sql.mockResolvedValueOnce([{ ok: 1 }]).mockResolvedValueOnce([{ spent: 12.5 }]);
     expect(await dispatchedSpendInWindow(input)).toEqual({
-      spentUsd: 12.5, attributionAvailable: true,
+      spentUsd: 12.5, attributionAvailable: true, unknownCount: 0,
     });
     expect(lastSql()).toContain('br.dispatched_by = :by');
     // The initiative predicate is the ledger's own, imported not re-derived.
@@ -103,12 +114,12 @@ describe('dispatchedSpendInWindow', () => {
       .mockRejectedValueOnce(new Error('column "dispatched_by" does not exist'))
       .mockResolvedValueOnce([]);
     expect(await dispatchedSpendInWindow(input)).toEqual({
-      spentUsd: 0, attributionAvailable: false,
+      spentUsd: 0, attributionAvailable: false, unknownCount: 0,
     });
     // The cached "yes" was dropped, so the next call re-asks instead of
     // failing forever on a stale probe.
     expect(await dispatchedSpendInWindow(input)).toEqual({
-      spentUsd: 0, attributionAvailable: false,
+      spentUsd: 0, attributionAvailable: false, unknownCount: 0,
     });
     expect(lastSql()).toContain('information_schema.columns');
   });

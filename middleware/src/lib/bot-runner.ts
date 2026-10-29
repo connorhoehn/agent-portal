@@ -31,7 +31,7 @@ import {
 import { listGrants, getBudget, type GrantRow } from '../providers/budgets.js';
 import { getUser } from '../providers/identity.js';
 import {
-  getAgentProject, listAgentProjects, buildCloneCommand, markCloned, type AgentProject,
+  getAgentProject, listAgentProjects, markCloned, type AgentProject,
 } from '../providers/agent-projects.js';
 import { getWorkItem, updateWorkItem, addWorkItemComment, type WorkItem } from '../providers/work-items.js';
 import {
@@ -39,7 +39,13 @@ import {
 } from '../providers/agent-jobs.js';
 import { asModelProvider } from './run-cost.js';
 import { dispatchGovernedRun } from './sdlc-pipeline.js';
-import { runDevboxShell } from './project-runner.js';
+import { cloneIntoBox, CLONE_FAILURE } from './devbox-git.js';
+import { hasLifeFor, lifetimePolicy } from './devbox-lifetime.js';
+import {
+  lifetimePoliciesFor, profileForBox, profileForInitiative, profileStamp, resolveTaskModel, type ModelResolution,
+} from './devbox-profile.js';
+import { reserveSpend, HOLD_GRACE_MS, type ReserveSpendResult } from './spend-holds.js';
+import { bindHoldSource, releaseHold, expireHolds, expireHoldsWithTerminalOwners } from '../providers/spend-holds.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
 import { registerBox, getBoxBySession, appendEvent, removeBox, type BoxStatus } from './devbox-fleet.js';
 import { currentMockScope } from '../mock/core/scope.js';
@@ -55,9 +61,6 @@ import { type SqlParameter } from '@aws-sdk/client-rds-data';
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
 
-// The portal's clone-check heuristic: the devbox command API streams text with
-// no exit-code marker, so a failed clone is recognised by what git says.
-const CLONE_FAILURE = /fatal:|repository not found|authentication failed|could not read username/i;
 
 // ─── The guard, pure ──────────────────────────────────────────────────────────
 
@@ -265,6 +268,13 @@ export interface AllocationState {
   allocatedUsd: number | null;
   /** Attributed spend so far this period. */
   spentUsd: number;
+  /** Money held by dispatches still in flight (DE-34 spend holds). Counted
+   *  as spent for the remainder, named separately in the reason. */
+  heldUsd?: number;
+  /** This period's attributed runs whose cost was never recorded (DE-33).
+   *  They are in neither figure above, so while this is non-zero the brake
+   *  asks for the same confirmation an overrun would. */
+  unknownCostCount?: number;
 }
 
 /** What the brake is asked to judge. A bare number is read as a p75 it may
@@ -297,6 +307,19 @@ const CONFIDENCE_NOTE: Record<ForecastConfidence, string> = {
   'run-history': " (run-level history, not scaled to this item's size)",
   prior: ' (no history for this model yet: a deliberately wide prior)',
 };
+
+/**
+ * Whether an unknown-cost run in the window trips a brake ON ITS OWN (DE-33).
+ * Default true. Only a caller that can put a confirmation in front of a
+ * person passes it on: the marketplace dispatch (POST /api/bots/dispatch-work,
+ * whose deck renders the gate). Box tasks, a manual or cron bot firing, the
+ * job dispatcher and a governed run have nobody to confirm "the remainder may
+ * be optimistic", so for them unknown cost alone must not refuse; a real
+ * overrun of the recorded remainder still does.
+ */
+export interface UnknownCostOptions {
+  unknownCostTrips?: boolean;
+}
 
 /**
  * Whether a dispatch fits inside the initiative's remaining allocation.
@@ -335,25 +358,43 @@ export function decideAllocation(
   allocation: AllocationState,
   forecast: number | AllocationForecast,
   confirmed: boolean,
+  opts: UnknownCostOptions = {},
 ): AllocationDecision {
   const { allocatedUsd, spentUsd } = allocation;
   if (allocatedUsd == null || confirmed) return { kind: 'proceed' };
 
   const f: AllocationForecast = typeof forecast === 'number' ? { costUsdP75: forecast } : forecast;
-  const remaining = allocatedUsd - spentUsd;
+  const heldUsd = allocation.heldUsd ?? 0;
+  const unknown = allocation.unknownCostCount ?? 0;
+
+  // Unknown cost is not "spent nothing" (DE-33). A run that reported no figure
+  // is in neither sum, so the remainder below is optimistic by an unknown
+  // amount; while any such run exists the dispatch asks the same confirmation
+  // an overrun would, on its own, whatever the forecast — on a path that can
+  // answer it (`unknownCostTrips`, see UnknownCostOptions).
+  if (unknown > 0 && opts.unknownCostTrips !== false) {
+    return {
+      kind: 'confirm',
+      reason: `${unknown} run${unknown === 1 ? '' : 's'} in this window ${unknown === 1 ? 'has' : 'have'} no recorded cost, so this initiative's ${money(allocatedUsd)} allocation may be further spent than the ${money(spentUsd)} recorded — record or accept the unknown cost, or pass confirmOverAllocation`,
+      confidence: f.confidence ?? 'scaled',
+    };
+  }
+
+  const remaining = allocatedUsd - spentUsd - heldUsd;
   if (f.costUsdP75 <= remaining) return { kind: 'proceed' };
 
+  const held = heldUsd > 0 ? ` and ${money(heldUsd)} held by runs in flight` : '';
   // Exhausted: no forecast could fit, so say nothing about the forecast.
   if (remaining <= 0) {
     return {
       kind: 'confirm',
-      reason: `this initiative's ${money(allocatedUsd)} allocation is exhausted (${money(spentUsd)} spent) — raise the allocation or pass confirmOverAllocation`,
+      reason: `this initiative's ${money(allocatedUsd)} allocation is exhausted (${money(spentUsd)} spent${held}) — raise the allocation or pass confirmOverAllocation`,
       confidence: f.confidence ?? 'scaled',
     };
   }
 
   const confidence = f.confidence ?? 'scaled';
-  const left = `the ${money(remaining)} left of this initiative's ${money(allocatedUsd)} allocation`;
+  const left = `the ${money(remaining)} left of this initiative's ${money(allocatedUsd)} allocation${heldUsd > 0 ? ` (${money(heldUsd)} held by runs in flight)` : ''}`;
   if (confidence === 'scaled' || f.costUsdP25 == null) {
     return {
       kind: 'confirm',
@@ -414,6 +455,12 @@ export interface EnvelopeState {
   attributionAvailable: boolean;
   /** Names the envelope in the refusal: 'Sprint 98 — Span metrics'. */
   sprintName?: string | null;
+  /** Money held on this grant by the caller's dispatches still in flight
+   *  (DE-34). Counted as spent for the remainder. */
+  heldUsd?: number;
+  /** Finished runs the caller dispatched in the window with no recorded cost
+   *  (DE-33): in neither figure, so the brake confirms while non-zero. */
+  attributedUnknownCount?: number;
 }
 
 export type EnvelopeDecision =
@@ -457,6 +504,7 @@ export function decideEnvelope(
   envelope: EnvelopeState,
   forecast: number | AllocationForecast,
   confirmed: boolean,
+  opts: UnknownCostOptions = {},
 ): EnvelopeDecision {
   if (confirmed) return { kind: 'proceed' };
 
@@ -480,19 +528,32 @@ export function decideEnvelope(
     };
   }
 
-  const remaining = allocatedUsd - attributedSpentUsd;
-  if (f.costUsdP75 <= remaining) return { kind: 'proceed' };
-
-  // Spent out: no forecast could fit, so say nothing about the forecast.
-  if (remaining <= 0) {
+  // An unrecorded cost on one of the caller's own runs (DE-33): the burn is
+  // understated by an unknown amount, so confirm on its own.
+  const unknown = envelope.attributedUnknownCount ?? 0;
+  if (unknown > 0 && opts.unknownCostTrips !== false) {
     return {
       kind: 'confirm',
-      reason: `${named} is spent out (${money(attributedSpentUsd)} dispatched by you) — ask for a larger envelope or pass confirmOverEnvelope`,
+      reason: `${unknown} run${unknown === 1 ? '' : 's'} you dispatched in this window ${unknown === 1 ? 'has' : 'have'} no recorded cost, so ${named} may be further spent than the ${money(attributedSpentUsd)} recorded — record or accept the unknown cost, or pass confirmOverEnvelope`,
       confidence,
     };
   }
 
-  const left = `the ${money(remaining)} left of ${named}${ATTRIBUTION_NOTE}`;
+  const heldUsd = envelope.heldUsd ?? 0;
+  const remaining = allocatedUsd - attributedSpentUsd - heldUsd;
+  if (f.costUsdP75 <= remaining) return { kind: 'proceed' };
+
+  const held = heldUsd > 0 ? ` and ${money(heldUsd)} held by your runs in flight` : '';
+  // Spent out: no forecast could fit, so say nothing about the forecast.
+  if (remaining <= 0) {
+    return {
+      kind: 'confirm',
+      reason: `${named} is spent out (${money(attributedSpentUsd)} dispatched by you${held}) — ask for a larger envelope or pass confirmOverEnvelope`,
+      confidence,
+    };
+  }
+
+  const left = `the ${money(remaining)} left of ${named}${ATTRIBUTION_NOTE}${heldUsd > 0 ? ` (${money(heldUsd)} held by your runs in flight)` : ''}`;
   if (confidence === 'scaled' || f.costUsdP25 == null) {
     return {
       kind: 'confirm',
@@ -571,6 +632,7 @@ async function resolveEnvelope(grant: GrantRow, sessionSub: string, personId: st
     allocatedUsd: grant.allocatedUsd,
     attributedSpentUsd: burn.spentUsd,
     attributionAvailable: burn.attributionAvailable,
+    attributedUnknownCount: burn.unknownCount,
   };
 }
 
@@ -788,7 +850,12 @@ export async function grantScopedDispatchVerdict(
 
 export type FireResult =
   | { ok: true; run: BotRun }
-  | { ok: false; reason: string; run?: BotRun };
+  | {
+    ok: false; reason: string; run?: BotRun;
+    /** A money refusal from reserveSpend (DE-34), so the route can answer the
+     *  same 409/403/503 shapes the dispatch route does. */
+    refusal?: Exclude<ReserveSpendResult, { kind: 'held' }>;
+  };
 
 /**
  * Make sure the bot's target repository is checked out in a live workspace.
@@ -821,7 +888,13 @@ async function ensureWorkspace(
   // busy workspace (a run in flight, a run waiting on its operator, a microVM
   // still coming up) gets a sibling checkout in a fresh session instead.
   const busy = existing != null && BUSY_BOX_STATUSES.has(existing.status);
-  if (project.sessionId && existing && !busy) return { ok: true, sessionId: project.sessionId, boxId: existing.id };
+  // Nor is a workspace reused once its box lacks the ceiling for one default
+  // task plus grace (DE-48 rule 3): the reaper would stop it under the run.
+  // Judged by the box's own profile policy; a spent box is left to the reaper
+  // and this dispatch gets a fresh session, exactly like a busy one.
+  const spent = existing != null && !busy
+    && !hasLifeFor(existing, (await lifetimePoliciesFor([existing])).get(existing.id) ?? lifetimePolicy());
+  if (project.sessionId && existing && !busy && !spent) return { ok: true, sessionId: project.sessionId, boxId: existing.id };
 
   const arn = await resolveDevboxArn();
   if (!arn) return { ok: false, error: 'the devbox runtime is not deployed' };
@@ -829,7 +902,7 @@ async function ensureWorkspace(
   // Keep the project's session id when it satisfies the runtime's ≥33-char
   // rule — the workspace may still hold the checkout — else mint a fresh one.
   // A busy workspace's id is exactly the one not to keep.
-  const sessionId = normalizeRuntimeSessionId(busy ? undefined : project.sessionId);
+  const sessionId = normalizeRuntimeSessionId(busy || spent ? undefined : project.sessionId);
 
   // The box is minted BEFORE the clone, as `provisioning`: the clone is what
   // boots the microVM, and a computer that exists in the fleet while it comes
@@ -841,31 +914,48 @@ async function ensureWorkspace(
   // `provisioning` is busy, so a second dispatch arriving mid-clone gets its
   // own workspace rather than this half-made one.
   const minted = !getBoxBySession(sessionId);
+  // The box is created under its initiative's devbox profile (DE-40) and
+  // keeps that version for life.
+  const profile = await profileForInitiative(attribution?.projectId ?? project.orgProjectId ?? null);
   const box = registerBox({
     sessionId,
     ...(attribution?.ownerId ? { ownerId: attribution.ownerId } : {}),
     ...(attribution?.projectId ? { projectId: attribution.projectId } : {}),
     ...(minted ? { status: 'provisioning' as const } : {}),
+    profile: profileStamp(profile),
   });
   const unmint = (): void => { if (minted) removeBox(box.id); };
 
-  const { command, redacted } = await buildCloneCommand(project);
-  let output = '';
-  try {
-    output = await runDevboxShell(devboxDataClient(), arn, sessionId, command);
-  } catch (err) {
+  // The one clone path (DE-45): the git entrypoint with a per-run read token
+  // when DEVBOX_GIT_ENTRYPOINT is on, the legacy shell clone otherwise.
+  const outcome = await cloneIntoBox({
+    client: devboxDataClient(), arn, sessionId, project,
+    runRef: `clone:${sessionId}`, callerSub: attribution?.ownerId ?? null,
+  });
+  if (!outcome.ok) {
+    const line = outcome.output.split('\n').find((l) => CLONE_FAILURE.test(l))?.trim()
+      ?? outcome.error?.replace(/^clone failed:\s*/, '')
+      ?? outcome.output.slice(-200).trim();
+    console.warn(`[bots] clone failed for ${project.repoFullName} via ${outcome.via}: ${line} (${outcome.redacted})`);
     unmint();
-    return { ok: false, error: `clone failed: ${(err as Error).message}` };
-  }
-  if (CLONE_FAILURE.test(output)) {
-    const line = output.split('\n').find((l) => CLONE_FAILURE.test(l)) ?? output.slice(-200);
-    console.warn(`[bots] clone failed for ${project.repoFullName}: ${line.trim()} (${redacted})`);
-    unmint();
-    return { ok: false, error: `clone failed: ${line.trim()}` };
+    return { ok: false, error: `clone failed: ${line}` };
   }
 
   await markCloned(project.id, sessionId);
   return { ok: true, sessionId, boxId: box.id };
+}
+
+/**
+ * The model a governed run may use (DE-40), checked BEFORE a workspace is
+ * cloned: the codebase's live box keeps the profile it was created under,
+ * else the initiative's current one. dispatchGovernedRun repeats the check
+ * against the box it actually runs in; this one only spares a clone (and the
+ * box it mints) for a run that would be refused anyway.
+ */
+async function preflightTaskModel(project: AgentProject, initiativeId: string | null, model: string | null): Promise<ModelResolution> {
+  const box = project.sessionId ? getBoxBySession(project.sessionId) : null;
+  const profile = await profileForBox(box ?? { projectId: initiativeId ?? undefined });
+  return resolveTaskModel(profile, model);
 }
 
 /**
@@ -893,14 +983,15 @@ export async function resolveBotInitiativeId(bot: Pick<Bot, 'orgProjectId' | 'ag
  * model-wide), falling back to the model's static prior when there is no
  * history yet.
  */
-async function botFireProjectionP75(model: string, agentProjectId: string | null): Promise<number> {
+async function botFireForecast(model: string, agentProjectId: string | null): Promise<AllocationForecast> {
   const samples: ForecastSamples = {
     perPointRepo: null,
     perPointModel: null,
     runRepo: agentProjectId ? await runCostSamples(model, agentProjectId) : null,
     runModel: await runCostSamples(model, null),
   };
-  return selectDispatchForecast(model, null, samples).estimate.costUsdP75;
+  const f = selectDispatchForecast(model, null, samples);
+  return { costUsdP75: f.estimate.costUsdP75, costUsdP25: f.estimate.costUsdP25, confidence: f.confidence };
 }
 
 /** Dispatch one run of a bot. The single entry point for every trigger. */
@@ -922,6 +1013,8 @@ export async function fireBot(botId: string, opts: {
    *  pr_watch: nobody authorized those from inside an envelope, and inventing
    *  an owner for them is exactly what the envelope brake must not do. */
   dispatchedBy?: string | null;
+  /** The manual route's confirm flags, for the held allocation/envelope brakes. */
+  confirmed?: { allocation?: boolean; envelope?: boolean };
 }): Promise<FireResult> {
   const bot = await getBot(botId);
   if (!bot) return { ok: false, reason: 'no such bot' };
@@ -938,42 +1031,45 @@ export async function fireBot(botId: string, opts: {
     return { ok: false, reason: decision.reason, ...(run ? { run } : {}) };
   }
 
-  // The opt-in bot-fire allocation brake — CRON only, OFF by default. When a
-  // bot has NOT opted in (bot.enforceAllocation false, the default), this whole
-  // block is skipped: no budget read, no forecast, no run row — a pure no-op
-  // that preserves the documented design where a cron bot's spend is the
-  // maintenance floor an allocation is read against. When an operator opts a bot
-  // in, a cron firing whose p75 projection would push the initiative past its
-  // remaining monthly allocation records a *skipped* bot_run (the same visible
-  // brake the run cap uses — never a self-pause, which would strand the rest of
-  // the period's maintenance) and does not dispatch; the next cycle re-evaluates
-  // cleanly once the allocation resets. Hand-driven fires (manual/pr_watch) are
-  // untouched — this gates only scheduled maintenance the operator chose to cap.
-  if (opts.trigger === 'cron' && bot.enforceAllocation) {
-    const orgProjectId = await resolveBotInitiativeId(bot);
-    const budget = orgProjectId ? await getBudget(orgProjectId) : null;
-    const projectedCostUsd = await botFireProjectionP75(bot.model, bot.agentProjectId);
-    const verdict = decideBotFireAllocation({
-      enforceAllocation: true,
-      allocatedUsd: budget?.allocatedUsd ?? null,
-      spentUsd: budget?.spentThisPeriodUsd ?? 0,
-      projectedCostUsd,
+  // The spend hold (DE-34), before any side effect — markBotRan included. The
+  // firing's p75 is held under the initiative lock so every other brake sees
+  // this money in flight. Whether the hold may REFUSE depends on who is
+  // spending: a manual firing is a person's dispatch and is judged like one
+  // (allocation and envelope, confirmable through the route's flags); a cron
+  // or pr_watch firing is judged only when the bot opted in
+  // (bot.enforceAllocation, OFF by default) — the documented design where a
+  // cron bot's spend is the maintenance floor an allocation is read against,
+  // kept until the reserve exists. An opted-in cron firing that is refused
+  // records a *skipped* bot_run (the same visible brake the run cap uses,
+  // never a self-pause) and the next cycle re-evaluates once money frees.
+  const orgProjectId = await resolveBotInitiativeId(bot);
+  const held = await reserveSpend({
+    initiativeId: orgProjectId, actorId: opts.dispatchedBy ?? null, source: 'bot_run',
+    forecast: await botFireForecast(bot.model, bot.agentProjectId),
+    ...(opts.confirmed ? { confirmed: opts.confirmed } : {}),
+    judge: opts.trigger === 'manual' || bot.enforceAllocation,
+    expiresInMs: dispatchHoldTtlMs(),
+  });
+  if (held.kind !== 'held') {
+    if (opts.trigger === 'manual') return { ok: false, reason: held.reason, refusal: held };
+    // Nobody is there to pass a confirm flag for a scheduled firing, so the
+    // refusal is a visible skip, said as one.
+    const reason = `${opts.trigger} firing skipped while allocation enforcement is on for this bot: ${held.reason}`;
+    const run = await createBotRun({
+      botId: bot.id, trigger: opts.trigger, status: 'skipped',
+      dispatchedBy: opts.dispatchedBy ?? null,
+      outcome: { reason },
     });
-    if (verdict.kind === 'skip') {
-      const run = await createBotRun({
-        botId: bot.id, trigger: opts.trigger, status: 'skipped',
-        dispatchedBy: opts.dispatchedBy ?? null,
-        outcome: { reason: verdict.reason },
-      });
-      return { ok: false, reason: verdict.reason, ...(run ? { run } : {}) };
-    }
+    return { ok: false, reason, refusal: held, ...(run ? { run } : {}) };
   }
+  const holdId = held.holdId;
 
   // The global ceiling, after the bot's own brakes: a capped or paused bot
   // reports its own state, not the fleet's. A braked trigger is visible
   // history, same as the run cap.
   const congestion = await checkConcurrency();
   if (congestion.kind === 'refuse') {
+    await releaseHold(holdId);
     const run = await createBotRun({
       botId: bot.id, trigger: opts.trigger, status: 'skipped',
       dispatchedBy: opts.dispatchedBy ?? null,
@@ -992,13 +1088,25 @@ export async function fireBot(botId: string, opts: {
 
   if (bot.agentProjectId) {
     const project = await getAgentProject(bot.agentProjectId);
-    if (!project) return { ok: false, reason: 'the bot\'s target codebase no longer exists' };
+    if (!project) { await releaseHold(holdId); return { ok: false, reason: 'the bot\'s target codebase no longer exists' }; }
+
+    const allowed = await preflightTaskModel(project, bot.orgProjectId ?? project.orgProjectId ?? null, bot.model);
+    if (!allowed.ok) {
+      await releaseHold(holdId);
+      const run = await createBotRun({
+        botId: bot.id, trigger: opts.trigger, status: 'failed',
+        dispatchedBy: opts.dispatchedBy ?? null,
+        outcome: { error: allowed.error, code: 'MODEL_NOT_ALLOWED', allowedModels: allowed.allowed },
+      });
+      return { ok: false, reason: allowed.error, ...(run ? { run } : {}) };
+    }
 
     const ws = await ensureWorkspace(project, {
       projectId: bot.orgProjectId ?? project.orgProjectId ?? undefined,
       ownerId: opts.dispatchedBy ?? bot.createdBy ?? undefined,
     });
     if (!ws.ok) {
+      await releaseHold(holdId);
       const run = await createBotRun({
         botId: bot.id, trigger: opts.trigger, status: 'failed',
         dispatchedBy: opts.dispatchedBy ?? null,
@@ -1014,8 +1122,11 @@ export async function fireBot(botId: string, opts: {
       // dispatched_by stays the person, so a cron run records none.
       ...(opts.dispatchedBy ? { dispatchedBy: opts.dispatchedBy } : {}),
       requestedBy: botChangeRequester(bot, opts.dispatchedBy),
+      // The money is held above; the bot_run below is what settles it.
+      holdId,
     });
     if (!started.ok) {
+      await releaseHold(holdId);
       const run = await createBotRun({
         botId: bot.id, trigger: opts.trigger, status: 'failed',
         dispatchedBy: opts.dispatchedBy ?? null,
@@ -1027,9 +1138,13 @@ export async function fireBot(botId: string, opts: {
     const run = await createBotRun({
       botId: bot.id, trigger: opts.trigger, runId: started.runId,
       ceiling: botMaxConcurrent(), dispatchedBy: opts.dispatchedBy ?? null,
-      outcome: { sessionId: ws.sessionId, boxId: ws.boxId },
+      outcome: { sessionId: ws.sessionId, boxId: ws.boxId, ...(holdId ? { holdId } : {}) },
     });
+    // A ceiling refusal here leaves the governed run live (it started above);
+    // the hold stays with it until expiry rather than freeing money a run is
+    // spending — the ceiling itself is now atomic (insertBotRun).
     if (!run) return { ok: false, reason: 'could not record the bot run' };
+    if (holdId) await bindHoldSource(holdId, 'bot_run', run.id);
     return { ok: true, run };
   }
 
@@ -1045,12 +1160,16 @@ export async function fireBot(botId: string, opts: {
     // to name the mission behind a scheduled job.
     botId: bot.id,
   });
-  if (!job) return { ok: false, reason: 'could not enqueue the job' };
+  if (!job) { await releaseHold(holdId); return { ok: false, reason: 'could not enqueue the job' }; }
   const run = await createBotRun({
     botId: bot.id, trigger: opts.trigger, jobId: job.id, ceiling: botMaxConcurrent(),
     dispatchedBy: opts.dispatchedBy ?? null,
+    ...(holdId ? { outcome: { holdId } } : {}),
   });
-  if (!run) return { ok: false, reason: 'could not record the bot run' };
+  if (!run) { await releaseHold(holdId); return { ok: false, reason: 'could not record the bot run' }; }
+  // The job dispatcher skips the hold for a bot-owned job (it reads job.botId),
+  // so this one hold is the only money held for the firing.
+  if (holdId) await bindHoldSource(holdId, 'bot_run', run.id);
   return { ok: true, run };
 }
 
@@ -1213,13 +1332,21 @@ export async function dispatchWorkItem(input: {
    *  before the budget gates). Omitted → run it here, so a direct caller still
    *  gets every refusal. */
   preflight?: Extract<WorkItemPreflight, { ok: true }>;
+  /** The spend hold the route took (DE-34), or null when none was written.
+   *  Bound to the bot_run once it exists; released on every failure below. */
+  holdId?: string | null;
 }): Promise<DispatchWorkResult> {
+  const holdId = input.holdId ?? null;
+  const fail = async (result: Extract<DispatchWorkResult, { ok: false }>): Promise<DispatchWorkResult> => {
+    await releaseHold(holdId);
+    return result;
+  };
   const pre = input.preflight ?? await preflightWorkItem(input.workItemId, input.agentProjectId);
   if (!pre.ok) {
-    return {
+    return fail({
       ok: false, status: pre.status, error: pre.error,
       ...(pre.options ? { options: pre.options } : {}),
-    };
+    });
   }
   const item = pre.item;
 
@@ -1228,11 +1355,11 @@ export async function dispatchWorkItem(input: {
   // the operator retries when a slot frees up.
   const congestion = await checkConcurrency();
   if (congestion.kind === 'refuse') {
-    return { ok: false, status: 429, error: congestion.reason };
+    return fail({ ok: false, status: 429, error: congestion.reason });
   }
 
   const project = await getAgentProject(pre.agentProjectId);
-  if (!project) return { ok: false, status: 404, error: 'the chosen codebase no longer exists' };
+  if (!project) return fail({ ok: false, status: 404, error: 'the chosen codebase no longer exists' });
 
   // Claim the work item BEFORE any dispatch side effect, atomically: only an
   // 'open' item flips to in_progress, and no returned row means another
@@ -1247,9 +1374,13 @@ export async function dispatchWorkItem(input: {
   // deeper half, past the codebase-400 fix).
   const claimedItem = await updateWorkItem(item.id, { status: 'in_progress', expectStatus: 'open' });
   if (!claimedItem) {
-    return { ok: false, status: 409, error: 'this work item is already being worked' };
+    return fail({ ok: false, status: 409, error: 'this work item is already being worked' });
   }
+  // Every revert also gives the held money back: a claim lost, a workspace
+  // 503, a ceiling null — nothing after the hold and before the run is live
+  // may leave a `held` row behind.
   const revertClaim = async (): Promise<void> => {
+    await releaseHold(holdId);
     await updateWorkItem(item.id, { status: 'open', expectStatus: 'in_progress' }).catch((err: unknown) =>
       console.warn(`[bots] could not revert claim on ${item.id}:`, (err as Error).message));
   };
@@ -1276,11 +1407,14 @@ export async function dispatchWorkItem(input: {
   // computers are ephemeral — a walk must neither create nor depend on one.
   if (currentMockScope() !== undefined || !await resolveDevboxArn()) {
     return simulateMarketplaceDispatch({
-      item, project, prompt, model: input.model, revertClaim,
+      item, project, prompt, model: input.model, revertClaim, holdId,
       ...(input.actor ? { actor: input.actor } : {}),
       ...(input.estimate ? { estimate: input.estimate } : {}),
     });
   }
+
+  const allowed = await preflightTaskModel(project, item.projectId, input.model);
+  if (!allowed.ok) { await revertClaim(); return { ok: false, status: 400, error: allowed.error }; }
 
   const ws = await ensureWorkspace(project, {
     projectId: item.projectId, ...(input.actor ? { ownerId: input.actor } : {}),
@@ -1297,8 +1431,14 @@ export async function dispatchWorkItem(input: {
     workItemId: item.id,
     ...(input.actor ? { dispatchedBy: input.actor } : {}),
     attribution: { projectId: item.projectId, ...(input.actor ? { ownerId: input.actor } : {}) },
+    // The route held the money; the bot_run below settles it.
+    holdId,
   });
-  if (!started.ok) { await revertClaim(); return { ok: false, status: 503, error: started.error }; }
+  if (!started.ok) {
+    await revertClaim();
+    // An unlisted model (DE-40) is the request's fault, not the runtime's.
+    return { ok: false, status: started.code === 'MODEL_NOT_ALLOWED' ? 400 : 503, error: started.error };
+  }
 
   const run = await createBotRun({
     botId: null, trigger: 'marketplace', runId: started.runId, workItemId: item.id,
@@ -1311,12 +1451,16 @@ export async function dispatchWorkItem(input: {
       ...(started.briefId ? { brief_id: started.briefId } : {}),
       ...(input.actor ? { actor: input.actor } : {}),
       ...(input.estimate ? { estimate: input.estimate } : {}),
+      ...(holdId ? { holdId } : {}),
     },
   });
   if (!run) {
-    await revertClaim();
+    // The governed run is live; the item goes back but the hold stays with
+    // the money being spent until it expires (see fireBot).
+    await updateWorkItem(item.id, { status: 'open', expectStatus: 'in_progress' }).catch(() => undefined);
     return { ok: false, status: 503, error: 'could not record the marketplace run' };
   }
+  if (holdId) await bindHoldSource(holdId, 'bot_run', run.id);
   return { ok: true, run };
 }
 
@@ -1407,6 +1551,8 @@ async function simulateMarketplaceDispatch(input: {
   actor?: string;
   estimate?: Record<string, unknown>;
   revertClaim: () => Promise<void>;
+  /** The route's spend hold, bound to the simulated bot_run (DE-34). */
+  holdId: string | null;
 }): Promise<DispatchWorkResult> {
   const { item, project } = input;
 
@@ -1479,6 +1625,7 @@ async function simulateMarketplaceDispatch(input: {
       ...(input.actor ? { actor: input.actor } : {}),
       ...(input.estimate ? { estimate: input.estimate } : {}),
       ...(frozen ? { brief_id: frozen.brief.id, brief_sha: frozen.brief.sha256 } : {}),
+      ...(input.holdId ? { holdId: input.holdId } : {}),
       // Said on the row, not only in this file. Every surface that renders a
       // run outcome can then tell a simulated dispatch from a real one, which
       // matters most for the money: this run's cost is a fixture, not a bill.
@@ -1489,11 +1636,12 @@ async function simulateMarketplaceDispatch(input: {
     // The concurrency ceiling refused the row (createBotRun's null). Take the
     // queued job back out with it — a job nothing will ever run is worse than
     // no job, and the real path has no equivalent orphan because it never
-    // enqueues one.
+    // enqueues one. revertClaim releases the hold too.
     await cancelJob(job.id);
     await input.revertClaim();
     return { ok: false, status: 503, error: 'could not record the marketplace run' };
   }
+  if (input.holdId) await bindHoldSource(input.holdId, 'bot_run', run.id);
 
   const startedMs = Date.now();
   let claimToken: string | undefined;
@@ -1716,7 +1864,21 @@ async function settleRunBacked(runBacked: Record<string, unknown>[]): Promise<nu
  *  box ceiling. Env-tunable for a lab that wants a tighter or looser leash. */
 const STALE_RUN_MINUTES = parseInt(process.env['BOT_STALE_RUN_MINUTES'] ?? '30', 10);
 
+/** How long a governed run's spend hold stays open: the stale ceiling plus grace (DE-34). */
+export function dispatchHoldTtlMs(): number {
+  return STALE_RUN_MINUTES * 60_000 + HOLD_GRACE_MS;
+}
+
 export async function reconcileBotRuns(): Promise<{ settled: number }> {
+  // Spend holds past their deadline are closed first (DE-34): a run that
+  // never settled must not keep its money held forever. A late ledger write
+  // still lands — money spent is spent — it simply no longer double-counts.
+  try {
+    const expired = await expireHolds();
+    if (expired > 0) console.log(`[bots] expired ${expired} spend hold(s)`);
+  } catch (err) {
+    console.warn('[bots] hold expiry failed:', (err as Error).message);
+  }
   // Offline, only the governed-run arm has anything to settle: the simulated
   // dispatch settles its own job-backed row (settleSimulatedRun), and no
   // in-process run outlives a reset. Its rows come from the fixtures in the
@@ -1844,6 +2006,13 @@ export async function sweepOrphanedRuns(): Promise<{ failed: number }> {
   );
   if (rows.length > 0) {
     console.log(`[bots] boot sweep failed ${rows.length} run(s) orphaned by a restart`);
+  }
+  // Holds whose owner row is already terminal can never settle through it.
+  try {
+    const expired = await expireHoldsWithTerminalOwners();
+    if (expired > 0) console.log(`[bots] boot sweep expired ${expired} spend hold(s) with terminal owners`);
+  } catch (err) {
+    console.warn('[bots] boot hold sweep failed:', (err as Error).message);
   }
   return { failed: rows.length };
 }

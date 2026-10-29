@@ -104,10 +104,18 @@ export default function AgentProjectsPage() {
   const { data, error: projectsError, degraded: projectsDegraded, refresh } =
     useFetch<{ projects: Project[] }>('/api/agent-projects', 15_000);
   const projectsFailure = projectsError ?? projectsDegraded;
-  // link/unlink/clone/run-task ride /api/agent-projects + /api/devbox
-  // (ManageDevbox); connection add/delete rides /api/connections (ManageIngest).
+  // link/unlink/clone ride /api/agent-projects' `writeGate` (ManageDevbox:
+  // POST /, DELETE /:id, POST /:id/clone-command, /:id/cloned). Two controls
+  // ask a second action since DE-42, on top of that gate: "Run a task" is
+  // POST /:id/runs, which also asks RunDevboxTask (agent-projects.ts:163),
+  // and "Open shell" goes through the ComputeProvider to POST
+  // /api/devbox/:sid/shell-url, which asks OpenDevboxShell (devbox.ts:860)
+  // behind the /api/devbox mount's ManageDevbox. Connection add/delete rides
+  // /api/connections (ManageIngest).
   const { can, ready } = useCapabilities();
   const canDevbox = ready && can('ManageDevbox');
+  const canRunTask = canDevbox && can('RunDevboxTask');
+  const canOpenShell = canDevbox && can('OpenDevboxShell');
   const canIngest = ready && can('ManageIngest');
 
   // Deep links from the rest of the SDLC loop: /admin/projects?project=<id>
@@ -516,11 +524,21 @@ export default function AgentProjectsPage() {
                       </Inline>
                       {canDevbox && (
                         <Inline gap="xs">
-                          <Button variant="primary" size="sm" onClick={() => { setRunFor(p); setPrompt(''); }}>
+                          {/* Visible to every writer, pressable only with the finer action: the
+                              probe is coarse ("may ever"), and the route still refuses a caller
+                              off the box's initiative (403 NOT_ON_INITIATIVE). */}
+                          <Button
+                            variant="primary" size="sm"
+                            disabled={!canRunTask}
+                            title={canRunTask ? undefined : 'Running a task on a computer needs the RunDevboxTask capability'}
+                            onClick={() => { setRunFor(p); setPrompt(''); }}
+                          >
                             Run a task
                           </Button>
                           <Button
                             variant="secondary" size="sm"
+                            disabled={!canOpenShell}
+                            title={canOpenShell ? undefined : 'Opening a shell needs the OpenDevboxShell capability'}
                             onClick={() => box && openShell({ id: box.id, label: box.label, sessionId: box.sessionId, cwd: p.checkout })}
                           >
                             Open shell

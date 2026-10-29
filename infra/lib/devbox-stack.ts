@@ -5,6 +5,40 @@ import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
 import { resolveContainerUri } from './agentcore-runtime-stack';
 
+/**
+ * The pre-profile allowlist (DE-40): what the image and this stack carried
+ * before `--context devboxModels=` existed, and what the middleware seeds as
+ * `devbox_profiles ('default', 1)`. Keep the three in step.
+ */
+export const DEFAULT_DEVBOX_MODELS: readonly string[] = [
+  'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+  'us.anthropic.claude-sonnet-5',
+  'us.anthropic.claude-opus-4-8',
+];
+
+/**
+ * The Bedrock resource ARNs one inference-profile id needs for InvokeModel:
+ * the regional profile itself and the foundation model it routes to (a
+ * profile invocation is authorised against both; the foundation-model ARN
+ * has no region or account). `us.anthropic.X` → `anthropic.X`.
+ */
+export function bedrockModelArns(region: string, account: string, profileId: string): string[] {
+  const foundation = profileId.replace(/^[a-z]{2}\./, '');
+  return [
+    `arn:aws:bedrock:${region}:${account}:inference-profile/${profileId}`,
+    `arn:aws:bedrock:*::foundation-model/${foundation}`,
+  ];
+}
+
+/**
+ * The container's task-timeout default (seconds), set explicitly on the
+ * runtime so the deployed value is visible in CFN and agrees with the
+ * middleware's (DE-48: middleware/src/lib/devbox-lifetime.ts
+ * DEFAULT_LIFETIME.taskDefaultS). The BFF always sends a timeout clamped to
+ * the box's profile, so this only governs a caller that bypasses it.
+ */
+export const DEVBOX_TASK_TIMEOUT_S = 840;
+
 export interface DevboxStackProps extends cdk.StackProps {
   readonly prefix?: string;
   /**
@@ -107,6 +141,25 @@ export class DevboxStack extends cdk.Stack {
       ?? props.smallModelId
       ?? 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
+    // The union of models any devbox policy profile may name (DE-40):
+    //   --context devboxModels=us.anthropic.claude-haiku-4-5-20251001-v1:0,us.anthropic.claude-sonnet-5
+    // Backs the per-initiative allowlist with IAM, which is the only control
+    // that also covers command mode and the PTY (where main.py is not in the
+    // path). The default is exactly the pre-profile allowlist. The runtime's
+    // own default and small model are always included, so a context that
+    // forgets them cannot deploy a box that cannot run.
+    const modelsContext = this.node.tryGetContext('devboxModels') as string | undefined;
+    const allowedModels = Array.from(new Set([
+      ...(modelsContext ?? DEFAULT_DEVBOX_MODELS.join(','))
+        .split(',').map((m) => m.trim()).filter(Boolean),
+      modelId, smallModelId,
+    ]));
+    for (const m of allowedModels) {
+      if (!/^us\.anthropic\./.test(m)) {
+        throw new Error(`devboxModels: "${m}" is not a Bedrock inference-profile id (us.anthropic.*)`);
+      }
+    }
+
     // ── ECR ──────────────────────────────────────────────────────────────────
     this.ecrRepo = new ecr.Repository(this, 'DevboxRepo', {
       repositoryName: repoName,
@@ -134,10 +187,11 @@ export class DevboxStack extends cdk.Stack {
                 'bedrock:InvokeModelWithResponseStream',
                 'bedrock:CountTokens',
               ],
-              resources: [
-                'arn:aws:bedrock:*::foundation-model/anthropic.*',
-                `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*anthropic*`,
-              ],
+              // Exactly the configured models (DE-40): the union of what any
+              // profile may name, not `*anthropic*`. This is the control that
+              // reaches command mode and the PTY, where the allowlist in
+              // main.py is not in the path.
+              resources: allowedModels.flatMap((m) => bedrockModelArns(this.region, this.account, m)),
             }),
             new iam.PolicyStatement({
               sid: 'EcrAccess',
@@ -245,9 +299,14 @@ export class DevboxStack extends cdk.Stack {
         CLAUDE_CODE_USE_BEDROCK: '1',
         ANTHROPIC_MODEL: modelId,
         ANTHROPIC_SMALL_FAST_MODEL: smallModelId,
-        // Per-task overrides are validated against this list in the container,
-        // so a typo or a stray client cannot bill against an arbitrary model.
-        DEVBOX_ALLOWED_MODELS: 'us.anthropic.claude-haiku-4-5-20251001-v1:0,us.anthropic.claude-sonnet-5,us.anthropic.claude-opus-4-8',
+        // The container REFUSES a model outside this list (DE-40; the BFF
+        // answers 400 first). The per-initiative allowlist lives in
+        // `devbox_profiles` and needs no redeploy; this is the deploy-time
+        // union IAM also enforces (see BedrockInvokeClaude above).
+        DEVBOX_ALLOWED_MODELS: allowedModels.join(','),
+        // One lifetime model (DE-48): the image's default, stated rather than
+        // inherited from the Dockerfile so it cannot drift from the BFF's.
+        DEVBOX_TASK_TIMEOUT_S: String(DEVBOX_TASK_TIMEOUT_S),
         DISABLE_AUTOUPDATER: '1',
         OTEL_TRACES_EXPORTER: 'console',
         OTEL_SERVICE_NAME: `${prefix}-devbox`,

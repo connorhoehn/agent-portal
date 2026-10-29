@@ -1,17 +1,33 @@
 jest.mock('../../providers/agent-jobs.js', () => ({
-  claimNextJob: jest.fn(), markRunning: jest.fn(), completeJob: jest.fn(), heartbeatJob: jest.fn(),
+  claimNextJob: jest.fn(), markRunning: jest.fn(), completeJob: jest.fn(), heartbeatJob: jest.fn(), unclaimJob: jest.fn(async () => true),
   reapStaleJobs: jest.fn(async () => ({ requeued: 0, failed: 0 })), listJobs: jest.fn(async () => []),
 }));
+// The fleet as the dispatcher sees it; a test may age the box (DE-48 rule 3).
+const fleet = { createdAt: new Date().toISOString() };
 jest.mock('../devbox-fleet.js', () => ({
-  listBoxes: () => [{ id: 'box', sessionId: 'session', status: 'idle' }],
+  listBoxes: () => [{ id: 'box', sessionId: 'session', status: 'idle', createdAt: fleet.createdAt }],
   appendEvent: jest.fn(), getBox: () => ({ id: 'box' }), registerBox: jest.fn(), isReserved: () => false,
 }));
+// Per-box profile policies (DE-40): none resolved → the deployment default.
+jest.mock('../devbox-profile.js', () => ({ lifetimePoliciesFor: jest.fn(async () => new Map()) }));
 jest.mock('../replica-fleet.js', () => ({ replicaFleet: jest.fn() }));
 jest.mock('../../routes/devbox.js', () => ({ runDevboxTask: jest.fn() }));
 jest.mock('../run-brief.js', () => ({ freezeJobBrief: jest.fn(async () => null) }));
-jest.mock('../../providers/spend-ledger.js', () => ({ recordSpend: jest.fn(async () => undefined) }));
+jest.mock('../../providers/spend-ledger.js', () => ({
+  recordSpend: jest.fn(async () => undefined),
+  getBoxSpend: jest.fn(async () => new Map()), spendLedgerMode: () => 'off', ledgerIsFixture: () => false,
+}));
+// The spend hold (DE-34) is its own suite's business (spend-holds.test.ts); here it always holds.
+jest.mock('../../lib/spend-holds.js', () => ({
+  reserveSpend: jest.fn(async (i: { initiativeId: string | null }) => ({ kind: 'held', holdId: null, initiativeId: i.initiativeId, grantId: null, amountUsd: 0 })),
+  forecastP75ForModel: jest.fn(async () => ({ costUsdP75: 0.5 })),
+  HOLD_GRACE_MS: 300_000,
+}));
+jest.mock('../../providers/spend-holds.js', () => ({ releaseHold: jest.fn(async () => undefined), bindHoldSource: jest.fn(async () => undefined) }));
 import { recordSpend } from '../../providers/spend-ledger.js';
-import { claimNextJob, completeJob, heartbeatJob, markRunning } from '../../providers/agent-jobs.js';
+import { claimNextJob, completeJob, heartbeatJob, markRunning, unclaimJob } from '../../providers/agent-jobs.js';
+import { reserveSpend } from '../spend-holds.js';
+import { releaseHold } from '../../providers/spend-holds.js';
 import { runDevboxTask } from '../../routes/devbox.js';
 import { appendEvent } from '../devbox-fleet.js';
 import { dispatchOnce, dispatcherEvents, busyBoxes } from '../job-dispatcher.js';
@@ -44,6 +60,23 @@ it('passes the winning token to every write and keeps it out of UI events', asyn
   expect(runDevboxTask).toHaveBeenCalledWith(expect.objectContaining({ signal: expect.any(AbortSignal) }));
   expect(JSON.stringify(events)).not.toContain('private-attempt');
   expect(events).toContainEqual(expect.objectContaining({ kind: 'done' }));
+});
+
+it('states the policy\'s default task timeout instead of leaving the image to pick (DE-48)', async () => {
+  await dispatchOnce(); await untilIdle();
+  expect(runDevboxTask).toHaveBeenCalledWith(expect.objectContaining({ timeoutSeconds: 840 }));
+});
+
+it('never hands a job to a box without ceiling left for one default task plus grace', async () => {
+  const fresh = fleet.createdAt;
+  fleet.createdAt = new Date(Date.now() - 4 * 3_600_000 + 10 * 60_000).toISOString(); // 10 min of a 4 h ceiling left
+  try {
+    await dispatchOnce(); await untilIdle();
+    expect(claimNextJob).not.toHaveBeenCalled();
+    expect(runDevboxTask).not.toHaveBeenCalled();
+  } finally {
+    fleet.createdAt = fresh;
+  }
 });
 
 it('never starts the executor when the claim was revoked before running', async () => {
@@ -95,4 +128,29 @@ describe('spend ledger (DE-30)', () => {
     await dispatchOnce(); await untilIdle();
     expect(recordSpend).not.toHaveBeenCalled();
   });
+});
+
+// DE-34: the dispatcher holds a job's p75 between the claim and markRunning.
+it('holds the job\'s forecast under its payload initiative and creator, keyed by the attempt', async () => {
+  await dispatchOnce(); await untilIdle();
+  expect(reserveSpend).toHaveBeenCalledWith(expect.objectContaining({
+    initiativeId: 'p-auth-migration', actorId: 'u-sme', source: 'job', sourceId: 'job:1',
+  }));
+  expect(recordSpend).toHaveBeenCalledWith(expect.objectContaining({ source: 'job', sourceId: 'job:1', provider: 'bedrock' }), expect.anything());
+});
+
+it('a money refusal hands the job back to the queue without burning an attempt, and never runs it', async () => {
+  (reserveSpend as jest.Mock).mockResolvedValueOnce({ kind: 'confirm', gate: 'allocation', confirmFlag: 'confirmOverAllocation', reason: 'allocation exhausted', confidence: 'prior' });
+  await dispatchOnce(); await untilIdle();
+  expect(unclaimJob).toHaveBeenCalledWith('job', 'private-attempt');
+  expect(markRunning).not.toHaveBeenCalled();
+  expect(runDevboxTask).not.toHaveBeenCalled();
+  expect(events).toContainEqual(expect.objectContaining({ kind: 'held_back', reason: 'allocation exhausted' }));
+});
+
+it('a claim revoked after the hold gives the money back', async () => {
+  (reserveSpend as jest.Mock).mockResolvedValueOnce({ kind: 'held', holdId: 'hold-1', initiativeId: 'p-auth-migration', grantId: null, amountUsd: 0.5 });
+  (markRunning as jest.Mock).mockResolvedValue(false);
+  await dispatchOnce(); await untilIdle();
+  expect(releaseHold).toHaveBeenCalledWith('hold-1');
 });

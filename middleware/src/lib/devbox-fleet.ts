@@ -110,6 +110,23 @@ export interface FleetBox {
    * `ownerId`/`projectId` — this only tells an operator where a box came from.
    */
   source?: string;
+  /**
+   * The devbox policy profile this box was created under (DE-40), as the
+   * `(id, version)` of a `devbox_profiles` row. Stamped once, at creation or
+   * first task, and never moved: a running box does not change rules
+   * mid-task. The reaper may use a NEWER version only to shorten a lifetime
+   * (lib/devbox-profile.ts lifetimePoliciesFor). Absent on boxes that predate
+   * profiles; they resolve through their initiative.
+   */
+  profileId?: string;
+  profileVersion?: number;
+  /**
+   * When the current task began (DE-48). The reaper bounds a RUNNING box by
+   * `now - taskStartedAt` against the task's timeout plus grace, not by box
+   * age — a long task on an old, reused box used to be cut at the ceiling.
+   * Set at `task_started`; kept after the task ends (only read while running).
+   */
+  taskStartedAt?: string;
 }
 
 export type FleetEvent = Record<string, unknown>;
@@ -305,6 +322,8 @@ function labelForProject(projectId: string): string {
 export function registerBox(opts: {
   sessionId: string; label?: string; id?: string; createdAt?: string;
   ownerId?: string; projectId?: string; source?: string;
+  /** The policy profile the box is created under (DE-40); see FleetBox.profileId. */
+  profile?: { id: string; version: number };
   /** Only `provisioning` may be asked for: a box minted before its microVM is
    *  up. Anything else is derived from the event flow, never claimed. */
   status?: 'provisioning';
@@ -320,6 +339,7 @@ export function registerBox(opts: {
     ...(opts.ownerId ? { ownerId: opts.ownerId } : {}),
     ...(opts.projectId ? { projectId: opts.projectId } : {}),
     ...(opts.source ? { source: opts.source } : {}),
+    ...(opts.profile ? { profileId: opts.profile.id, profileVersion: opts.profile.version } : {}),
     status: opts.status ?? 'idle',
     lastActivityAt: now(),
   };
@@ -350,6 +370,22 @@ export function renameBox(id: string, label: string): FleetBox | null {
   s.box.label = label;
   tellStores((t) => t.upsert(s.box));
   return s.box;
+}
+
+/**
+ * Stamp the profile a box runs under (DE-40). Write-once: a box that already
+ * carries a stamp keeps it, because a running box never changes rules
+ * mid-task — a newer profile version reaches it only through the reaper's
+ * tightening (lib/devbox-profile.ts). Returns the stamp the box now carries.
+ */
+export function setBoxProfile(id: string, profile: { id: string; version: number }): { id: string; version: number } | null {
+  const s = boxes.get(id);
+  if (!s) return null;
+  if (s.box.profileId && s.box.profileVersion) return { id: s.box.profileId, version: s.box.profileVersion };
+  s.box.profileId = profile.id;
+  s.box.profileVersion = profile.version;
+  tellStores((t) => t.upsert(s.box));
+  return { ...profile };
 }
 
 export function markStopped(id: string): void {
@@ -542,6 +578,12 @@ export function appendEvent(id: string, ev: FleetEvent): void {
 
   if (type === 'task_started') {
     s.box.status = 'running';
+    // The clock the reaper bounds a running box by (DE-48): the task's own
+    // start, never the box's. Structural, so it is written through now rather
+    // than coalesced — a crash between here and the next flush would leave a
+    // running box with no start on its row.
+    s.box.taskStartedAt = now();
+    tellStores((t) => t.upsert(s.box));
     s.box.currentTask = String(ev['prompt'] ?? '').slice(0, TASK_SNIPPET_LEN);
     s.lastResultText = '';
     // A new task is a new conversation from the model's point of view, even

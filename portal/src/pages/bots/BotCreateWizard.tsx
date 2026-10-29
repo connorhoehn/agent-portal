@@ -68,6 +68,7 @@ import {
   type Step4State,
 } from './botWizardLogic';
 import type { Bot } from './BotsPage';
+import { botRunRefusalMessage, type BotRunRefusal } from '../../lib/dispatchGates';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -256,8 +257,8 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
     const bot = createdBot;
     if (!bot) return;
     setSubmitting(true);
-    const res = await writeJson<{ error?: string }>(`/api/bots/${bot.id}/run`, 'POST', {});
-    if (res.status === 409) toastError(null, 'Not run', res.data?.error ?? 'The bot refused this run.');
+    const res = await writeJson<BotRunRefusal>(`/api/bots/${bot.id}/run`, 'POST', {});
+    if (res.status === 409) toastError(null, 'Not run', botRunRefusalMessage(res.data, 'The bot refused this run.'));
     else if (!res.ok) toastError(null, 'Could not start', res.error ?? `HTTP ${res.status}`);
     else toastSuccess(null, 'First run started', 'It streams on the bot page as it works.');
     setSubmitting(false);

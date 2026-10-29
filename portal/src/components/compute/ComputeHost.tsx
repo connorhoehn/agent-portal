@@ -201,7 +201,13 @@ export function ComputeHost({ children }: { children: ReactNode }) {
   // The library's own kinds, with the DEFAULT one taught to tell a laptop from
   // a microVM — see localMachines.tsx for why this cannot be a second kind —
   // and not to attach a shell the session's capabilities already refuse.
-  const paneKinds = useMemo(() => labPaneKinds(canManage), [canManage]);
+  // Attaching is POST /api/devbox/:sid/shell-url, which asks OpenDevboxShell
+  // (DE-42, devbox.ts:860) behind the mount's ManageDevbox, so both are asked.
+  // `canManage` itself stays ManageDevbox: provision / stop / remove
+  // (POST /boxes, PATCH, DELETE) are mount-gated on it, and the library has
+  // one prop for all of its mutating controls.
+  const canOpenShell = canManage && can('OpenDevboxShell');
+  const paneKinds = useMemo(() => labPaneKinds(canOpenShell), [canOpenShell]);
 
   return (
     <ComputeProvider

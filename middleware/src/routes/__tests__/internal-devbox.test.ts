@@ -35,7 +35,17 @@ const stewards = userStewardsInitiative as jest.MockedFunction<typeof userStewar
 jest.mock('../../lib/agent-actions.js', () => ({
   requireBoxAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
-jest.mock('../../providers/spend-ledger.js', () => ({ recordSpend: jest.fn(async () => undefined) }));
+jest.mock('../../providers/spend-ledger.js', () => ({
+  recordSpend: jest.fn(async () => undefined),
+  getBoxSpend: jest.fn(async () => new Map()), spendLedgerMode: () => 'off', ledgerIsFixture: () => false,
+}));
+// The spend hold (DE-34) is its own suite's business (spend-holds.test.ts); here it always holds.
+jest.mock('../../lib/spend-holds.js', () => ({
+  reserveSpend: jest.fn(async (i: { initiativeId: string | null }) => ({ kind: 'held', holdId: null, initiativeId: i.initiativeId, grantId: null, amountUsd: 0 })),
+  forecastP75ForModel: jest.fn(async () => ({ costUsdP75: 0.5 })),
+  HOLD_GRACE_MS: 300_000,
+}));
+jest.mock('../../providers/spend-holds.js', () => ({ releaseHold: jest.fn(async () => undefined), bindHoldSource: jest.fn(async () => undefined) }));
 
 const SECRET = 'devbox-internal-test-secret';
 const originalEnv = { ...process.env };
@@ -242,6 +252,18 @@ describe('internal devbox router — mock loop round trip', () => {
     }));
     expect((recordSpend as jest.Mock).mock.calls[0][0].costUsd).toBeGreaterThan(0);
     expect((recordSpend as jest.Mock).mock.calls[0][0].sourceId).toMatch(new RegExp(`^${boxId}:`));
+  });
+
+  it('a task on a session created with a stewarded projectId books that initiative, for requestedBy (DE-31)', async () => {
+    (recordSpend as jest.Mock).mockClear();
+    stewards.mockResolvedValueOnce(true);
+    const body = { principal: principal(), label: 'agent-loop-stewarded', projectId: 'p-auth-migration' };
+    const created = await request(app()).post('/internal/devbox/sessions').set(signed(body)).send(body);
+    expect(created.status).toBe(201);
+    await runTask(created.body.sessionId as string, 'Draft the agenda', false);
+    expect(recordSpend).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'agent_loop', boxId: created.body.boxId, initiativeId: 'p-auth-migration', actorId: 'u-loop-owner',
+    }));
   });
 
   it('re-frames mock stream-json flat, with mock:true on every frame', async () => {

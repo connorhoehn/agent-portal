@@ -55,9 +55,16 @@ const withMaxFiles = (set: SdlcPolicy[], max: number): SdlcPolicy[] =>
   set.map((p) => (p.kind === 'max_files' ? { ...p, config: { max } } : p));
 
 /** A captured, reviewed change of `n` files on a codebase, evaluated once. */
+/** mock/agent-project-runs.ts: a run with a recorded cost ($0.42). Without one
+ *  the max_cost gate routes every capture to a person (DE-33), which is not
+ *  what these cases are about. */
+const COSTED_RUN = '1c9b2d5f-3a70-4b62-8d4c-8e2f6b015a22';
+
 async function capture(projectId: string, n: number, requestedBy = 'u-eli'): Promise<string> {
   const files = Array.from({ length: n }, (_, i) => `src/f${i}.ts`);
-  const c = await createChangeRequest({ projectId, title: 'wide change', diff: 'd', files, requestedBy });
+  // An author on the default devbox profile's list (DE-40): an unrecorded
+  // model routes every capture to a person, which these cases are not about.
+  const c = await createChangeRequest({ projectId, runId: COSTED_RUN, title: 'wide change', diff: 'd', files, requestedBy, model: 'us.anthropic.claude-sonnet-5' });
   await recordReview({ changeId: c.id, verdict: 'approve', summary: null, findings: [] });
   await evaluateChange(c.id);
   return c.id;
@@ -161,9 +168,15 @@ describe('policy edits (DE-43 two-person rule, DE-46 scope rules)', () => {
     expect((await getChangeRequest(await capture(OBSERVABILITY, 45)))!.status).toBe('approved');
   });
 
-  it('tightening applies at once', async () => {
+  it('tightening applies at once, and reports no override', async () => {
     const out = await submitPolicySet({ session: HR, scope: 'org', policies: withMaxFiles(await orgPolicies(), 10), baseVersion: 1, reason: 'tighter' });
     expect(out).toMatchObject({ kind: 'applied', version: { version: 2 } });
+    expect(out).not.toHaveProperty('overrode');
+  });
+
+  it('an admin override of the two-person rule is reported, so the route can audit it', async () => {
+    const out = await submitPolicySet({ session: ADMIN, scope: 'org', policies: withMaxFiles(await orgPolicies(), 500), baseVersion: 1, reason: 'x', override: true });
+    expect(out).toMatchObject({ kind: 'applied', overrode: true, version: { version: 2, changedBy: 'u-admin' } });
   });
 
   it('disabling every default is loosening, so it waits; a stale base is a conflict', async () => {
@@ -185,7 +198,7 @@ describe('policy edits (DE-43 two-person rule, DE-46 scope rules)', () => {
     expect(await submitPolicySet({ session: ADMIN, scope: 'org', policies: withMaxFiles(await orgPolicies(), 10), baseVersion: 1, reason: 'x' }))
       .toMatchObject({ kind: 'refused', gate: 'self-gated' });
     expect(await submitPolicySet({ session: ADMIN, scope: 'org', policies: withMaxFiles(await orgPolicies(), 10), baseVersion: 1, reason: 'x', override: true }))
-      .toMatchObject({ kind: 'applied' });
+      .toMatchObject({ kind: 'applied', overrode: true });
   });
 
   it('the org set needs an org-wide role; an initiative set needs the caller on it', async () => {

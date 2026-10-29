@@ -59,7 +59,11 @@ export default function DevboxPage() {
   // product. Name the boundary before they hit it, the same way the empty
   // state above names its cause rather than blaming permissions for an empty
   // fleet.
-  const readOnly = ready && !can('ManageDevbox');
+  // Since DE-42 the lab's two driving routes ask their own actions on top of
+  // the mount's ManageDevbox: shell-url / command → OpenDevboxShell
+  // (devbox.ts:737, :913), task (the Nudge bar) → RunDevboxTask (devbox.ts:710).
+  // Read-only means the viewer can do neither.
+  const readOnly = ready && !(can('ManageDevbox') && (can('OpenDevboxShell') || can('RunDevboxTask')));
 
   return (
     <Stack gap="none" className="h-full min-h-0">
@@ -90,7 +94,7 @@ export default function DevboxPage() {
             breadcrumb already names the page. Nudge needs no `onInstruct`:
             the library's default is a resumed task on each targeted box
             through this provider's client — POST /api/devbox/:sessionId/task,
-            the ManageDevbox-gated route the composer always used. */}
+            the RunDevboxTask-gated route (devbox.ts:710) the composer always used. */}
         <ComputerLab
           open
           variant="inline"

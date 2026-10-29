@@ -120,6 +120,7 @@ import {
 } from '../lib/local-work.js';
 import { STALE_MINUTES } from '../lib/job-dispatcher.js';
 import { parseReportedCost, resolveRunCost } from '../lib/run-cost.js';
+import { recordSpend } from '../providers/spend-ledger.js';
 import { DEMO_NODE_ID, demoPresenceSessions, demoMetrics } from '../mock/local-compute.js';
 import {
   emitLocalAnnounce,
@@ -712,6 +713,26 @@ localComputeRouter.post('/jobs/:jobId/complete', workLoopLimit, requireNodeToken
       gate: 'claim_lost',
     });
     return;
+  }
+  // The ledger entry (DE-33): a confident $0 with `provider = 'local'`, so
+  // local work is metered (not absent) and never mistaken for a Bedrock run
+  // that reported $0. A job a bot run owns books nothing here: that run's
+  // settle writes its money. No hold was taken for it (local runs cost $0).
+  if (!held.job.botId) {
+    const initiative = held.job.payload['initiativeId'];
+    await recordSpend({
+      source: 'job',
+      sourceId: `${held.job.id}:${held.job.attempts}`,
+      initiativeId: typeof initiative === 'string' && initiative ? initiative : null,
+      boxId: held.job.boxId,
+      actorId: held.job.createdBy,
+      model: typeof body.model === 'string' ? body.model.slice(0, MAX_MODEL_LEN) : null,
+      costUsd: cost.costUsd,
+      costBasis: 'reported',
+      provider: cost.provider,
+      inputTokens: Number.isFinite(Number(body.tokensIn)) ? Number(body.tokensIn) : null,
+      outputTokens: Number.isFinite(Number(body.tokensOut)) ? Number(body.tokensOut) : null,
+    }, { unlessBotRunOwnsJob: held.job.id });
   }
   res.json({ ok: true, jobId: held.job.id, status, costUsd: cost.costUsd, provider: cost.provider });
 }));

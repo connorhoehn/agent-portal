@@ -47,14 +47,16 @@ const [defaultKind, ...otherKinds] = DEFAULT_PANE_KINDS;
  * "reattach" that could never succeed. The capability already said no, so the
  * pane does not ask. It says why instead, and shows the computer's tail —
  * read-only, no shell slot, and served to anyone who can see the box — so the
- * pane still answers "what is it doing".
+ * pane still answers "what is it doing". Since DE-42 `shell-url` asks
+ * OpenDevboxShell (devbox.ts:860) on top of the mount's ManageDevbox, so
+ * `canOpenShell` below is both (ComputeHost.tsx).
  */
 function shellUnavailable(ctx: Parameters<PaneKind['render']>[0]) {
   return (
     <Stack gap="none" className="h-full min-h-0">
       <InlineAlert tone="info" palette="code" className="m-2 flex-none" data-testid="shell-unavailable">
-        No shell for your role — opening one needs computer access (ManageDevbox), which SMEs and HR admins hold.
-        Showing this computer&apos;s activity instead.
+        No shell for your role — opening one needs the OpenDevboxShell capability, which SMEs hold on their
+        initiatives&apos; computers and HR admins hold fleet-wide. Showing this computer&apos;s activity instead.
       </InlineAlert>
       <Stack gap="none" className="min-h-0 flex-1">{TAIL_PANE_KIND.render(ctx)}</Stack>
     </Stack>

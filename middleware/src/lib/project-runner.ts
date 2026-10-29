@@ -38,6 +38,12 @@ export async function runDevboxShell(
     'export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=/mnt/workspace',
     `echo ${b64} | base64 -d > /tmp/.orgiq-probe`,
     '. /tmp/.orgiq-probe < /dev/null',
+    // Removed once it has run (DE-45): a probe left behind is readable by the
+    // agent in the same microVM, and a legacy clone or push probe carries a
+    // token. The exit status is the probe's, not rm's.
+    'rc=$?',
+    'rm -f /tmp/.orgiq-probe',
+    'exit $rc',
   ].join('; ');
 
   const resp = await client.send(new RunRuntimeCommand({

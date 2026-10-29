@@ -339,7 +339,9 @@ const inReportedLayer = (modRel: string): boolean => REPORTED_LAYERS.some((l) =>
  * the function above it that actually decides whether there is an offline
  * path. Reported through its callers instead.
  */
-const TRANSPORT_LIB_FNS = new Set(['runDevboxShell']);
+// `runDevboxGit` (lib/devbox-git.ts, DE-45) is the same wire through the
+// image's git entrypoint; offline the injected mockDevboxClient answers it.
+const TRANSPORT_LIB_FNS = new Set(['runDevboxShell', 'runDevboxGit']);
 
 /**
  * HTTP transport wrappers, module-qualified.

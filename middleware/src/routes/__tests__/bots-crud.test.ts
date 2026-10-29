@@ -69,7 +69,13 @@ jest.mock('../../lib/initiative-scope.js', () => ({
   }),
 }));
 jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn() }));
-jest.mock('../../providers/budgets.js', () => ({ getBudget: jest.fn() }));
+jest.mock('../../providers/budgets.js', () => ({ getBudget: jest.fn(), getMaintenance30d: jest.fn() }));
+// The dispatch deck's job drafts (DE-42); providers import config.ts, whose
+// import.meta this CommonJS jest build cannot load.
+jest.mock('../../providers/work-item-job-drafts.js', () => ({
+  getJobDraft: jest.fn(async () => null), saveJobDraft: jest.fn(), deleteJobDraft: jest.fn(),
+}));
+jest.mock('../../lib/spend-holds.js', () => ({ reserveSpend: jest.fn() }));
 // GET /initiative-runs reads the codebases; stubbed like the other providers.
 jest.mock('../../providers/agent-projects.js', () => ({ listAgentProjects: jest.fn(async () => []) }));
 jest.mock('../../lib/bot-scheduler.js', () => ({ registerBot: jest.fn(), unregisterBot: jest.fn() }));
@@ -345,6 +351,8 @@ describe('POST /api/bots/:id/run', () => {
     // person at all; a cron firing has none.
     expect(m(fireBot).mock.calls[0]![1]).toEqual({
       trigger: 'manual', instruction: 'focus on the flaky test', dispatchedBy: 'u-nora',
+      // The route's confirm flags ride down to fireBot's spend hold (DE-34).
+      confirmed: { allocation: false, envelope: false },
     });
   });
 

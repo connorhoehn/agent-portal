@@ -49,6 +49,10 @@ export interface MockInitiative {
       does not carry. The board-derived value wins wherever there is one
       (providers/projects.ts); null for initiatives with nothing open. */
   priority: string | null;
+  /** projects.devbox_profile_id — the devbox policy profile this initiative's
+      boxes are created under (DE-40); absent/null = `default`. Set by the
+      mock branch of providers/devbox-profiles.ts setInitiativeProfile. */
+  devboxProfileId?: string | null;
 }
 
 /**

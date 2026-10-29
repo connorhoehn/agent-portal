@@ -559,3 +559,250 @@ class NoAgentNameTests(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
+
+
+# ── DE-4: pointer-based reads and promotion arms ────────────────────────────
+
+import json  # noqa: E402
+import random  # noqa: E402
+
+POINTER_ENV = ("SYSTEM_PROMPT_POINTER", "SYSTEM_PROMPT_VERSION", "SYSTEM_PROMPT_NAME", "APP_ENV", "AGENT_NAME")
+LIVE_7 = "Live version seven."
+CAND_8 = "Candidate version eight."
+
+
+def _fake_ssm(values=None, raises=None):
+    """SSM stand-in: get_parameters returns only the names present in `values`."""
+    client = mock.Mock()
+    values = values or {}
+    if raises is not None:
+        client.get_parameters.side_effect = raises
+    else:
+        def _get(Names):
+            present = [{"Name": n, "Value": values[n]} for n in Names if n in values]
+            missing = [n for n in Names if n not in values]
+            return {"Parameters": present, "InvalidParameters": missing}
+        client.get_parameters.side_effect = _get
+    return client
+
+
+def _versioned_bedrock(texts):
+    """bedrock-agent stand-in whose get_prompt answers by (promptIdentifier, promptVersion)."""
+    client = mock.Mock()
+
+    def _get(promptIdentifier, promptVersion=None):
+        key = (promptIdentifier, promptVersion or "DRAFT")
+        if key not in texts:
+            raise ClientError({"Error": {"Code": "ResourceNotFoundException"}}, "GetPrompt")
+        return _prompt_detail(texts[key], version=key[1])
+
+    client.get_prompt.side_effect = _get
+    client.get_paginator.side_effect = AssertionError("ListPrompts must not be called when a pointer is present")
+    return client
+
+
+class PointerTests(unittest.TestCase):
+    def setUp(self):
+        self._saved = {k: os.environ.pop(k, None) for k in POINTER_ENV}
+        ps.reset_cache()
+        ps.DISABLED = False
+        os.environ["SYSTEM_PROMPT_POINTER"] = "/orgiq/prompts/search"
+        self.live = json.dumps({"promptId": "PSEARCH", "version": "7"})
+        self.cand = json.dumps({"promptId": "PSEARCH", "version": "8", "weight": 25})
+        self.bedrock = _versioned_bedrock({("PSEARCH", "7"): LIVE_7, ("PSEARCH", "8"): CAND_8})
+
+    def tearDown(self):
+        for k in POINTER_ENV:
+            os.environ.pop(k, None)
+            if self._saved[k] is not None:
+                os.environ[k] = self._saved[k]
+        ps.reset_cache()
+        ps._rng = random.Random()
+
+    def _resolve(self, ssm):
+        with mock.patch.object(ps, "_ssm", return_value=ssm), \
+                mock.patch.object(ps, "_bedrock_agent", return_value=self.bedrock):
+            return ps.resolve_system_prompt(BAKED, agent_name="search")
+
+    def test_live_pointer_resolves_the_numbered_version_by_id(self):
+        ssm = _fake_ssm({"/orgiq/prompts/search/live": self.live})
+        got = self._resolve(ssm)
+        self.assertEqual(got.text, LIVE_7)
+        self.assertEqual(got.source, "bedrock")
+        self.assertEqual(got.version, "7")
+        self.assertEqual(got.version_number, "7")
+        self.assertEqual(got.arm, "live")
+        self.assertEqual(got.prompt_id, "PSEARCH")
+        self.bedrock.get_prompt.assert_called_once_with(promptIdentifier="PSEARCH", promptVersion="7")
+        # One GetParameters for both arms, and the pointer carried the id.
+        ssm.get_parameters.assert_called_once_with(
+            Names=["/orgiq/prompts/search/live", "/orgiq/prompts/search/candidate"])
+        self.bedrock.get_paginator.assert_not_called()
+
+    def test_no_list_prompts_when_a_pointer_is_present(self):
+        ssm = _fake_ssm({"/orgiq/prompts/search/live": self.live,
+                         "/orgiq/prompts/search/candidate": self.cand})
+        for _ in range(20):
+            self._resolve(ssm)
+        self.bedrock.get_paginator.assert_not_called()
+        self.assertFalse(any("list_prompts" in str(c) for c in self.bedrock.mock_calls))
+
+    def test_candidate_weight_splits_traffic_with_a_seeded_rng(self):
+        ssm = _fake_ssm({"/orgiq/prompts/search/live": self.live,
+                         "/orgiq/prompts/search/candidate": self.cand})
+        ps._rng = random.Random(7)
+        draws = random.Random(7)
+        expected = ["candidate" if draws.random() * 100 < 25 else "live" for _ in range(40)]
+        arms = [self._resolve(ssm).arm for _ in range(40)]
+        self.assertEqual(arms, expected, "the same seed must give the same sequence of arms")
+        self.assertIn("candidate", arms)
+        self.assertIn("live", arms)
+        # Each arm's text was fetched once; the split never refetches.
+        self.assertEqual(self.bedrock.get_prompt.call_count, 2)
+
+    def test_candidate_text_matches_its_arm(self):
+        ssm = _fake_ssm({"/orgiq/prompts/search/live": self.live,
+                         "/orgiq/prompts/search/candidate": self.cand})
+        ps._rng = random.Random(3)
+        seen = {}
+        for _ in range(40):
+            got = self._resolve(ssm)
+            seen[got.arm] = got.text
+        self.assertEqual(seen, {"live": LIVE_7, "candidate": CAND_8})
+
+    def test_weight_zero_and_absent_candidate_serve_live_only(self):
+        for cand in (None, json.dumps({"promptId": "PSEARCH", "version": "8", "weight": 0})):
+            ps.reset_cache()
+            values = {"/orgiq/prompts/search/live": self.live}
+            if cand:
+                values["/orgiq/prompts/search/candidate"] = cand
+            ssm = _fake_ssm(values)
+            arms = {self._resolve(ssm).arm for _ in range(30)}
+            self.assertEqual(arms, {"live"})
+
+    def test_pointer_read_failure_falls_back_to_baked_and_is_cached(self):
+        err = ClientError({"Error": {"Code": "AccessDeniedException"}}, "GetParameters")
+        ssm = _fake_ssm(raises=err)
+        got = self._resolve(ssm)
+        self.assertEqual(got.text, BAKED)
+        self.assertEqual(got.source, "baked")
+        self.assertEqual(self._resolve(ssm).text, BAKED)
+        self.assertEqual(ssm.get_parameters.call_count, 1, "an outage costs one call per refresh, not per run")
+        self.bedrock.get_prompt.assert_not_called()
+
+    def test_missing_pointers_fall_back_to_baked(self):
+        got = self._resolve(_fake_ssm({}))
+        self.assertEqual(got.source, "baked")
+        self.bedrock.get_prompt.assert_not_called()
+
+    def test_malformed_pointer_is_treated_as_absent(self):
+        for raw in ("not json", "[]", json.dumps({"version": "7"}), json.dumps({"promptId": "P", "version": "v7"}),
+                    json.dumps({"promptId": "P", "version": "7", "weight": 250})):
+            ps.reset_cache()
+            got = self._resolve(_fake_ssm({"/orgiq/prompts/search/live": raw,
+                                           "/orgiq/prompts/search/candidate": raw}))
+            self.assertEqual(got.source, "baked", raw)
+
+    def test_version_fetch_failure_falls_back_to_baked(self):
+        ssm = _fake_ssm({"/orgiq/prompts/search/live": json.dumps({"promptId": "PSEARCH", "version": "99"})})
+        got = self._resolve(ssm)
+        self.assertEqual(got.source, "baked")
+        self.assertEqual(got.arm, "live")
+
+    def test_hard_pin_wins_over_the_pointer_versions_and_weight(self):
+        os.environ["SYSTEM_PROMPT_VERSION"] = "7"
+        cand100 = json.dumps({"promptId": "PSEARCH", "version": "8", "weight": 100})
+        ssm = _fake_ssm({"/orgiq/prompts/search/live": self.live, "/orgiq/prompts/search/candidate": cand100})
+        got = self._resolve(ssm)
+        self.assertEqual(got.text, LIVE_7)
+        self.assertEqual(got.arm, "pinned")
+
+    def test_draft_pointer_is_refused_in_production(self):
+        os.environ["APP_ENV"] = "production"
+        self.bedrock = _versioned_bedrock({("PSEARCH", "DRAFT"): "draft text"})
+        ssm = _fake_ssm({"/orgiq/prompts/search/live": json.dumps({"promptId": "PSEARCH", "version": "DRAFT"})})
+        got = self._resolve(ssm)
+        self.assertEqual(got.source, "baked")
+        self.bedrock.get_prompt.assert_not_called()
+
+    def test_draft_pointer_is_served_outside_production(self):
+        self.bedrock = _versioned_bedrock({("PSEARCH", "DRAFT"): "draft text"})
+        ssm = _fake_ssm({"/orgiq/prompts/search/live": json.dumps({"promptId": "PSEARCH", "version": "DRAFT"})})
+        got = self._resolve(ssm)
+        self.assertEqual(got.text, "draft text")
+        self.assertEqual(got.version_number, "")
+        self._resolve(ssm)
+        self.assertEqual(self.bedrock.get_prompt.call_count, 1, "DRAFT text is TTL-cached like a name lookup")
+
+    def test_trace_attributes_carry_version_and_arm(self):
+        ssm = _fake_ssm({"/orgiq/prompts/search/live": self.live})
+        got = self._resolve(ssm)
+        self.assertEqual(ps.trace_attributes(got), {"orgiq.prompt_version_number": "7", "orgiq.prompt_arm": "live"})
+        baked = ps.ResolvedPrompt(text=BAKED, source="baked", version="", sha=ps.prompt_sha(BAKED))
+        self.assertEqual(ps.trace_attributes(baked), {})
+        self.assertEqual(ps.trace_attributes(None), {})
+
+    def test_prompted_agent_keeps_both_arms_built(self):
+        ssm = _fake_ssm({"/orgiq/prompts/search/live": self.live,
+                         "/orgiq/prompts/search/candidate": self.cand})
+        ps._rng = random.Random(11)
+        builds = []
+        pa = ps.PromptedAgent(baked=BAKED, agent_name="search",
+                              build=lambda text: builds.append(text) or f"agent::{ps.prompt_sha(text)}")
+        with mock.patch.object(ps, "_ssm", return_value=ssm), \
+                mock.patch.object(ps, "_bedrock_agent", return_value=self.bedrock):
+            pairs = [pa.get() for _ in range(40)]
+        self.assertEqual(sorted(builds), sorted([LIVE_7, CAND_8]), "one build per arm, never per flip")
+        for agent, resolved in pairs:
+            self.assertEqual(agent, f"agent::{resolved.sha}", "each run gets the agent built for its own text")
+
+
+class ProductionDraftRefusalTests(unittest.TestCase):
+    """Without a pointer, APP_ENV=production never reads DRAFT (DE-4 item 2)."""
+
+    def setUp(self):
+        self._saved = {k: os.environ.pop(k, None) for k in POINTER_ENV}
+        ps.reset_cache()
+        ps.DISABLED = False
+        os.environ["APP_ENV"] = "production"
+        self.client = _fake_client(
+            prompts=[{"name": "orgiq-search-system-prompt", "id": "P1"}],
+            get_result=_prompt_detail(LIVE),
+        )
+
+    def tearDown(self):
+        for k in POINTER_ENV:
+            os.environ.pop(k, None)
+            if self._saved[k] is not None:
+                os.environ[k] = self._saved[k]
+        ps.reset_cache()
+
+    def test_unset_version_is_refused_and_bedrock_is_not_called(self):
+        with mock.patch.object(ps, "_bedrock_agent", return_value=self.client):
+            got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(got.source, "baked")
+        self.client.get_prompt.assert_not_called()
+        self.client.get_paginator.assert_not_called()
+
+    def test_explicit_DRAFT_is_refused_too(self):
+        os.environ["SYSTEM_PROMPT_VERSION"] = "DRAFT"
+        with mock.patch.object(ps, "_bedrock_agent", return_value=self.client):
+            got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(got.source, "baked")
+        self.client.get_prompt.assert_not_called()
+
+    def test_a_numbered_pin_still_reads_bedrock_in_production(self):
+        os.environ["SYSTEM_PROMPT_VERSION"] = "4"
+        self.client.get_prompt.return_value = _prompt_detail(LIVE, version="4")
+        with mock.patch.object(ps, "_bedrock_agent", return_value=self.client):
+            got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(got.text, LIVE)
+        self.assertEqual(got.version_number, "4")
+
+    def test_outside_production_DRAFT_still_serves(self):
+        os.environ["APP_ENV"] = "dev"
+        with mock.patch.object(ps, "_bedrock_agent", return_value=self.client):
+            got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(got.text, LIVE)
+
+

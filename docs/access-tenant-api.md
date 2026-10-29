@@ -267,6 +267,99 @@ A tier holder's payload is unchanged (no `budgetAccess` key). A locked budget
 answer from the local assistant carries the same item as
 `action: { kind: 'request-access', itemId, label, href }` (`docs/local-answers.md`).
 
+## Sprint envelopes — "Request budget" from the dispatch drawer (2026-10-28)
+
+An SME the grant-scoped dispatch gate refuses (`POST /api/bots/dispatch-work`
+403 "you hold no active sprint grant", `lib/bot-runner.ts`) asks for the
+envelope from where they are. It is an ORDINARY access request for a new item
+kind, filed through `fileRequest` like the quick request above; the last
+approval provisions a `budget_grants` row through the same path
+`POST /api/grants` takes (`lib/grant-envelope.ts`), so an envelope granted by
+approval and one granted by hand are the same row to every reader.
+
+```ts
+type AccessKind = 'tenant-role' | 'initiative-membership' | 'capability' | 'sprint-envelope';
+type StewardRule = 'tenant-steward' | 'initiative-owner' | 'budget-owner' | 'budget-holder';
+
+// One DERIVED catalog item per initiative — never seeded, never edited through
+// PUT /configuration (400), listed by GET /catalog like any other item:
+{ id: 'envelope:<projectId>', kind: 'sprint-envelope', tenant: 'orgiq', projectId,
+  title: 'Sprint envelope on <initiative name>', sensitive: false,
+  defaultDuration: 'standing',          // the grant lives until revoked, like one granted by hand
+  stewardRule: 'budget-holder' }
+// heldByActor: the actor's person holds an ACTIVE budget grant on the initiative
+// (its sprint `active`, or sprint-less) — the same rule the dispatch gate reads.
+
+interface EnvelopeForecast { workItemId: string | null; model: string | null; costUsdP25: number | null; costUsdP75: number | null }
+
+interface AccessRequest {
+  /* … */
+  requestedUsd: number | null;          // sprint-envelope only: the dollars asked for
+  forecast: EnvelopeForecast | null;    // sprint-envelope only: what the requester was looking at
+}
+```
+
+| route | gate | response |
+|---|---|---|
+| `POST /api/access-requests/envelope` body `{ initiativeId, justification, requestedUsd, forecast?, duration? }` | session floor (the quick router: caller stands in `orgiq`, is requester **and** beneficiary, must have a directory account with a linked person) | 201 `AccessRequest` (`item.kind: 'sprint-envelope'`, `requestedUsd`, `forecast`). 400: unknown key, no/unknown `initiativeId`, `justification` < 20 chars, `requestedUsd` missing / not a finite number > 0, a malformed `forecast` (keys other than the four, wrong types), a `forecast.workItemId` that does not exist or is on another initiative, a beneficiary with no linked person. 403: not standing in `orgiq`, or no directory account. 409 `{ error, requestId }`: an open envelope request on this initiative already. 409 `{ error }` "already holds": an active grant on the initiative now |
+| `GET /api/access-requests/mine?itemId=envelope:<projectId>` | session floor | `{ items: AccessRequest[] }` — the caller's envelope requests on that initiative, newest first (the status read) |
+| `POST /api/access/requests` | RequestAccess | now also accepts `requestedUsd` and `forecast`; a `sprint-envelope` item requires `requestedUsd`, any other item refuses both (400) |
+
+Chain: the manager step when the requester's person has `people.manager_id`,
+then one **steward** step under the new rule `budget-holder` — the app user who
+last set the initiative's allocation (`initiative_budgets.updated_by`) when
+they hold a deciding role in Access, **otherwise the orgiq `org-leader`
+holders** (the `budget-owner` rule). The A0 escalation still applies when that
+leaves nobody. Conservative reading of "the budget holder, else an org-leader":
+the person who allocated the money decides alone when they can; the program's
+allocators decide when they cannot. In the mock the allocations were set by the
+release manager (Sienna, no Access grant), so the step falls to Vera and Rachel.
+
+Provisioning (`lib/access-provision.ts`): ONE `budget_grants` row —
+`org_project_id` = the initiative, `sprint_id` = the initiative's active sprint
+when one exists (newest first) else NULL (a standing grant),
+`grantee_person_id` = the beneficiary's person, `allocated_usd` =
+`requestedUsd`, `granted_by` = the final approver (the last approved step's
+decider), `note` = the request id. The grantee's bell (`budget-grant`) and the
+work graph's live hint fire as they do for `POST /api/grants`. Revocation in
+Access (`POST /requests/:id/revoke`, expiry) deletes that row, found by its
+note; the request's `can.revoke` and the ordinary refusals are unchanged.
+`GET /configuration.stewards` gains `{ scope: 'sprint-envelope', tenant: 'orgiq',
+rule: 'budget-holder', role: 'org-leader' }`; derived items are not in `items`.
+
+Cluster: `access_catalog_items.kind` / `steward_rule` CHECKs widened,
+`access_requests.requested_usd NUMERIC` and `forecast JSONB` added
+(`schema/access_schema.sql`, additive); `LIST_CATALOG_SQL` derives the envelope
+rows from `projects` and `INSERT_REQUEST_SQL` binds the two columns
+(`lib/access/sql.ts`). The access store itself is still mock-only until lane E
+applies the schema; the grant row it writes goes through `providers/grants.ts`,
+whose Aurora path is real SQL.
+
+### Saved-for-later job drafts — `/api/bots/work-items/:id/job-draft` (2026-10-28)
+
+The drawer's other branch. Not an access route: it lives beside the estimate
+on `botsRouter` (`/api/bots`, `requireTenant('orgiq')`), gated `DispatchAgentRun`
+then the item's initiative scope (`requireInitiativeScope`: owner, contributor
+or an org-wide role; 403 `{ error, code: 'NOT_ON_INITIATIVE', initiativeId, role }`)
+on the read AND the writes. One draft per work item; a dispatch of the item
+(`POST /api/bots/dispatch-work` 202) clears it. Table
+`work_item_job_drafts` (`schema/work_item_job_drafts_schema.sql`), fixture
+`mock/work-item-job-drafts.ts` (seed empty, reset-safe).
+
+```ts
+interface JobDraft {
+  workItemId: string; model: string; budgetPerRunUsd: number | null; instruction: string | null;
+  agentProjectId: string | null;       // codebase UUID
+  savedBy: string; savedByName: string | null; savedAt: string; updatedAt: string;
+}
+```
+
+| route | response |
+|---|---|
+| `GET /api/bots/work-items/:id/job-draft` | `{ draft: JobDraft \| null }`; 404 `{ error }` unknown item; 403 outside the initiative |
+| `PUT /api/bots/work-items/:id/job-draft` body `{ model, budgetPerRunUsd?, instruction?, agentProjectId? }` | `{ draft }` (upsert; a second save replaces the setup and `savedBy`, keeps `savedAt`). 400: unknown key, no `model`, `budgetPerRunUsd` not a number >= 0, `instruction` not a string / over 8000 chars, `agentProjectId` not a UUID; 401 no session; 404; 403 |
+| `DELETE /api/bots/work-items/:id/job-draft` | 204; 404 `{ error }` when the item has no draft (or does not exist); 403 |
+
 ## Escalation timers and delegation (lane A3, 2026-10-14)
 
 All additive. `RequestStep` gains the escalation clock and the delegate's provenance;

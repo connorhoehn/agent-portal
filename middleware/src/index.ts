@@ -19,6 +19,7 @@ import { agentsRouter } from './routes/agents.js';
 import { savedSearchesRouter } from './routes/saved-searches.js';
 import { graphRouter } from './routes/graph.js';
 import { meGroupsRouter } from './routes/me-groups.js';
+import { meSpendRouter } from './routes/me-spend.js';
 import { searchRouter } from './routes/search.js';
 import { tenantSearchRouter } from './routes/tenant-search.js';
 import { socialGate } from './lib/social-authority.js';
@@ -93,12 +94,14 @@ import { resolveRuntimeProfile, validateRuntimeProfile } from './lib/runtime-pro
 import { hasPullSideColumns } from './providers/agent-jobs.js';
 import { inProcessQueue, pipelineQueue } from './lib/pipeline-queue-transport.js';
 import { promptHistoryRouter } from './routes/prompt-history.js';
+import { promptPointersRouter } from './routes/prompt-pointers.js';
 import { workItemsRouter } from './routes/work-items.js';
 import { workDocumentsRouter } from './routes/work-documents.js';
 import { workGraphRouter } from './routes/work-graph.js';
 import { kbAdminRouter } from './routes/kb-admin.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { devboxRouter } from './routes/devbox.js';
+import { devboxProfilesRouter } from './routes/devbox-profiles.js';
 import { localComputeRouter } from './routes/local-compute.js';
 import { dropRouter } from './routes/drop.js';
 import { agentDetailRouter } from './routes/agent-detail.js';
@@ -232,6 +235,8 @@ app.use('/api/graph/projects', requireTenant('orgiq'), projectsRouter);
 // kind's own tenant boundary and read action inside (routes/me-groups.ts) — the Communication plane's My initiatives /
 // My teams / My pipelines / My org teams.
 app.use('/api/me/groups', requireSession('MyGroups'), meGroupsRouter);
+// What the signed-in person spent, per initiative, from the spend ledger (DE-31): read-only, own spend only.
+app.use('/api/me/spend', requireSession('MySpend'), meSpendRouter);
 // Design reviews — the ADR threads that gate initiative designs. Session
 // floor: readable by every signed-in orgiq role, writes gated per-route.
 app.use('/api/designs', requireTenant('orgiq'), requireSession('ViewDesigns'), designsRouter);
@@ -487,6 +492,8 @@ app.use('/api/observability/canary', viewObs, canaryRouter);
 app.use('/api/observability/canary', viewObs, canaryLibraryRouter);
 // Prompt history + experiment log — version timeline + outcome cards for /iq/history.
 app.use('/api/iq/prompts', viewObs, promptHistoryRouter);
+// DE-4 — per-agent prompt pointers: candidate / promote / rollback (ManageCanary on the writes).
+app.use('/api/iq/prompts', viewObs, promptPointersRouter);
 // Evaluations — LLM-as-judge config + recent scores. The config is SSM-backed
 // and read by fireJudge() on every canary invocation, so the /iq/evaluations
 // page actually governs judging (enable, model, rubric weights, sampling).
@@ -506,6 +513,10 @@ app.use('/api/sessions', requireTenant('orgiq'), requireSession('ViewSessions'),
 // making that visibility branch dead code and the nav item a door onto a wall.
 // A program-owner is deliberately NOT fleet-wide: they fall through to the
 // scoped path and see the computers on initiatives they run.
+// Policy profiles (DE-40) — mounted first so `/profiles/...` never reads as a
+// `:sessionId` on the fleet router below. Reads share the fleet's read tier;
+// the write is gated inside (ManageBudgets + an org-wide role).
+app.use('/api/devbox/profiles', requireTenant('orgiq'), devboxProfilesRouter);
 app.use(
   '/api/devbox',
   // The tenant boundary used to be only the Cedar `when` (DE-42).

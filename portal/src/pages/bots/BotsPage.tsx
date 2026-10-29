@@ -27,6 +27,7 @@ import { CollectionCommandPage } from '../../components/collections/CollectionCo
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { botsCommandAdapter } from './botsCommands';
 import { botIsPaused, botListLastRanText, botsRollup, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
+import { botRunRefusalMessage, type BotRunRefusal } from '../../lib/dispatchGates';
 
 // ─── Types (the /api/bots contract) ──────────────────────────────────────────
 
@@ -143,9 +144,9 @@ export default function BotsPage() {
   async function runBotNow(bot: Bot) {
     if (rowBusy[bot.id]) return;
     setRowBusy((prev) => ({ ...prev, [bot.id]: 'run' }));
-    const res = await writeJson<{ error?: string }>(`/api/bots/${bot.id}/run`, 'POST', {});
+    const res = await writeJson<BotRunRefusal>(`/api/bots/${bot.id}/run`, 'POST', {});
     if (res.status === 409) {
-      toastError(null, 'Not run', res.data?.error ?? 'The bot refused this run (budget or run cap reached).');
+      toastError(null, 'Not run', botRunRefusalMessage(res.data, 'The bot refused this run (budget or run cap reached).'));
     } else if (!res.ok) {
       toastError(null, 'Could not start', res.error ?? `HTTP ${res.status}`);
     } else {

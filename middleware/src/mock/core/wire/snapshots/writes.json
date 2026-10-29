@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-28T23:09:42.198Z",
-  "serverHandlerSha": "c418a3bbd05597278d44760f4d723de63c90703014bdecfbb011ceb45e9fb2d7",
+  "capturedAt": "2026-10-29T18:37:30.021Z",
+  "serverHandlerSha": "dce75dcf50480981fb26a7b073c1a2a437b63d56fc984aa11ed4a983b960ed06",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -65,6 +65,12 @@
       }
     },
     "DELETE /api/bots/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
+    "DELETE /api/bots/work-items/:id/job-draft": {
       "refused": {
         "rule": "destructive",
         "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
@@ -418,7 +424,6 @@
         "ownerId": "string",
         "projectId": "string",
         "sessionId": "string",
-        "spendUsd": "number",
         "status": "string",
         "tokensUsed": "number"
       },
@@ -498,6 +503,19 @@
       "skipped": "HTTP 503: contribution role updates require Aurora (orgiq/admin)",
       "sent": [
         "role"
+      ]
+    },
+    "PATCH /api/graph/projects/:id/devbox-profile": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "profileId": "string"
+      },
+      "values": {},
+      "sent": [
+        "profileId"
       ]
     },
     "PATCH /api/graph/work-items/:id": {
@@ -851,6 +869,12 @@
         "reason": "The capture's own tool. `POST /api/__mock/scenario` switches the world every later shape would be captured in, so the harness may not replay it. (`POST /api/__mock/reset` IS replayed — the sweep calls it between every write anyway, so its shape comes for free and costs nothing.) `POST /api/__mock/scope` sets a scope cookie on the caller, which would move every later request of the sweep into that scope; `POST /api/__mock/identity/clone` mints a user the sweep would then have to sign in as to learn anything. Both shapes are pinned by routes/__tests__/mock-scope.test.ts instead."
       }
     },
+    "POST /api/access-requests/envelope": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/access-requests/quick": {
       "persona": "orgiq/admin",
       "status": 201,
@@ -869,6 +893,7 @@
         "decidedAt": "null",
         "duration": "string",
         "expiresAt": "null",
+        "forecast": "null",
         "id": "string",
         "item": "object",
         "item.defaultDuration": "string",
@@ -885,6 +910,7 @@
         "justification": "string",
         "kind": "string",
         "provisionedAt": "null",
+        "requestedUsd": "null",
         "requester": "object",
         "requester.displayName": "string",
         "requester.id": "string",
@@ -995,6 +1021,7 @@
         "decidedAt": "null",
         "duration": "string",
         "expiresAt": "null",
+        "forecast": "null",
         "id": "string",
         "item": "object",
         "item.defaultDuration": "string",
@@ -1011,6 +1038,7 @@
         "justification": "string",
         "kind": "string",
         "provisionedAt": "null",
+        "requestedUsd": "null",
         "requester": "object",
         "requester.displayName": "string",
         "requester.id": "string",
@@ -2530,6 +2558,7 @@
         "grant.granteePersonId": "string",
         "grant.id": "string",
         "grant.initiativeSpendInWindowUsd": "number",
+        "grant.note": "null",
         "grant.orgProjectId": "string",
         "grant.orgProjectName": "string",
         "grant.sprintId": "string",
@@ -2733,6 +2762,24 @@
       }
     },
     "POST /api/initiative-decks/projects/:projectId": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/iq/prompts/:agent/candidate": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/iq/prompts/:agent/promote": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/iq/prompts/:agent/rollback": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
@@ -4601,6 +4648,12 @@
         "markdown"
       ]
     },
+    "PUT /api/bots/work-items/:id/job-draft": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "PUT /api/budgets/:orgProjectId": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -4629,6 +4682,32 @@
         "rule": "active-call-state",
         "reason": "Page sharing requires an authenticated, connected participant in a live call with current cookie/socket provenance and grants. Call and page stores are selected independently of MOCK_AURORA and are not resettable fixtures. The capture cannot synthesize a joined call or restore revisions; dedicated HTTP, gateway and two-browser contracts cover this write. (Huddle messages travel over the gateway chat channel, not HTTP.)"
       }
+    },
+    "PUT /api/devbox/profiles/:id": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "profile": "object",
+        "profile.created_at": "string",
+        "profile.created_by": "string",
+        "profile.id": "string",
+        "profile.idle_minutes": "number",
+        "profile.max_lifetime_minutes": "number",
+        "profile.models": "array",
+        "profile.models[]": "string",
+        "profile.network_class": "string",
+        "profile.org_access": "string",
+        "profile.reason": "string",
+        "profile.task_timeout_s": "number",
+        "profile.version": "number"
+      },
+      "values": {},
+      "sent": [
+        "baseVersion",
+        "profile",
+        "reason"
+      ]
     },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
       "persona": "orgiq/admin",

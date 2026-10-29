@@ -257,6 +257,38 @@ describe('POST /policies (legacy, writes a new org version)', () => {
     expect(res.status).toBe(409);
     expect(res.body.gate).toBe('self-gated');
   });
+
+  it('member gets 403 on every policy write, naming EditSdlcPolicy (DE-42)', async () => {
+    const app = buildApp(MEMBER);
+    const policies = (await latestPolicySet('org'))!.policies;
+    const post = await request(app).post('/api/sdlc/policies').send({ name: 'a', kind: 'max_files' });
+    const put = await request(app).put('/api/sdlc/policy-sets/org').send({ policies, baseVersion: 1, reason: 'x' });
+    const del = await request(app).delete(`/api/sdlc/policies/${policies[1]!.id}`);
+    for (const res of [post, put, del]) {
+      expect(res.status).toBe(403);
+      expect(res.body.action).toBe('EditSdlcPolicy');
+    }
+    expect((await latestPolicySet('org'))!.version).toBe(1);
+  });
+
+  it('admin with override: true applies a loosening edit alone and leaves one EditSdlcPolicy.Override audit line', async () => {
+    const large = (await latestPolicySet('org'))!.policies.find((p) => p.kind === 'max_files')!;
+    const overrides = () => recentAuthzEvents({ limit: 1000 }).filter((e) => e.action === 'EditSdlcPolicy.Override').length;
+    const before = overrides();
+    // Without the flag an admin is a proposer like anyone else: pending, no audit line.
+    const pending = await request(buildApp(ADMIN)).post('/api/sdlc/policies').send({ ...large, config: { max: 400 } });
+    expect(pending.status).toBe(202);
+    expect(overrides()).toBe(before);
+
+    const res = await request(buildApp(ADMIN)).post('/api/sdlc/policies').send({ ...large, config: { max: 400 }, override: true });
+    expect(res.status).toBe(201);
+    expect((await latestPolicySet('org'))).toMatchObject({ version: 2, changedBy: 'u-admin' });
+    expect(overrides()).toBe(before + 1);
+    // A tightening edit needs no override, so the flag leaves no line.
+    const tight = await request(buildApp(ADMIN)).post('/api/sdlc/policies').send({ ...large, config: { max: 5 }, override: true });
+    expect(tight.status).toBe(201);
+    expect(overrides()).toBe(before + 1);
+  });
 });
 
 describe('DELETE /policies/:id', () => {

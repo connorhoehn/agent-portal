@@ -9,13 +9,13 @@ import { Router } from 'express';
 import { requireBoxAccess } from '../lib/devbox-visibility.js';
 import { requireInitiativeScope } from '../lib/initiative-scope.js';
 import { resolveDevboxArn, devboxDataClient } from '../lib/devbox-arn.js';
-import { runDevboxShell } from '../lib/project-runner.js';
+import { cloneIntoBox } from '../lib/devbox-git.js';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { readForRolesElseAction, requireAction, resolveSession } from '../lib/authz.js';
 import { authorizeAgentAction } from '../lib/agent-actions.js';
 import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject,
-  buildCloneCommand, markCloned, checkoutPath, finishRun, listRuns,
+  markCloned, checkoutPath, finishRun, listRuns,
   listRecentRunsForProjects, getRunProjectId,
 } from '../providers/agent-projects.js';
 import { dispatchGovernedRun } from '../lib/sdlc-pipeline.js';
@@ -107,25 +107,20 @@ agentProjectsRouter.post('/:id/clone-command', writeGate, asyncHandler(async (re
   const arn = await resolveDevboxArn();
   if (!arn) { res.status(503).json({ error: 'the devbox runtime is not deployed' }); return; }
 
-  const { command, redacted } = await buildCloneCommand(project);
-  let output: string;
-  try {
-    output = redactUrlCredentials(await runDevboxShell(devboxDataClient(), arn, sessionId, command));
-  } catch (err) {
-    res.status(502).json({ ok: false, error: `clone failed: ${redactUrlCredentials((err as Error).message)}`, redacted });
+  // Through the one clone function (lib/devbox-git.ts, DE-45): with the git
+  // entrypoint on, a per-run read token minted for this repository goes in an
+  // invoke payload and never in shell text; off, the legacy shell clone runs
+  // as before. Either way only redacted text comes back.
+  const outcome = await cloneIntoBox({
+    client: devboxDataClient(), arn, sessionId, project,
+    runRef: `clone:${sessionId}`, callerSub: resolveSession(req)?.sub ?? null,
+  });
+  if (!outcome.ok && outcome.error && !outcome.output) {
+    res.status(502).json({ ok: false, error: outcome.error.startsWith('clone failed') ? outcome.error : `clone failed: ${outcome.error}`, redacted: outcome.redacted });
     return;
   }
-  const ok = !CLONE_FAILURE.test(output);
-  res.json({ ok, output: output.slice(-4000), redacted, checkout: checkoutPath(project), cwd: project.workspacePath });
+  res.json({ ok: outcome.ok, output: outcome.output, redacted: outcome.redacted, checkout: outcome.checkout, cwd: project.workspacePath });
 }));
-
-/** The clone's own failure markers (same set the bot runner's workspace clone uses). */
-const CLONE_FAILURE = /fatal: (?!detected dubious ownership)|repository not found|authentication failed|could not read username|could not resolve host|permission denied/i;
-
-/** `https://user:token@host` → `https://***@host`, anywhere in the text. */
-function redactUrlCredentials(text: string): string {
-  return text.replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@'"]+@/gi, '$1***@');
-}
 
 // Confirm a successful clone. The portal calls this after the clone command
 // exits 0 in the devbox — only then is the project actually in a workspace.
@@ -171,7 +166,27 @@ agentProjectsRouter.post('/:id/runs', writeGate, asyncHandler(async (req, res) =
     // The change this run captures answers to the person who started it (DE-43).
     dispatchedBy: resolveSession(req)?.sub ?? null,
   });
-  if (!started.ok) { res.status(503).json({ error: started.error }); return; }
+  if (!started.ok) {
+    // An unlisted model (DE-40) is the caller's mistake: 400 with the allowed set.
+    if (started.code === 'MODEL_NOT_ALLOWED') {
+      res.status(400).json({ error: started.error, code: started.code, allowedModels: started.allowedModels ?? [] });
+      return;
+    }
+    // A money refusal (DE-34) is the same 409 / 403 / 503 the dispatch route
+    // answers; anything else is the runtime's 503.
+    const r = started.refusal;
+    if (r?.kind === 'confirm') {
+      res.status(409).json({
+        error: r.reason, gate: r.gate, confirmFlag: r.confirmFlag, confidence: r.confidence,
+        ...(r.allocation ? { allocation: r.allocation } : {}),
+        ...(r.envelope ? { envelope: r.envelope } : {}),
+      });
+      return;
+    }
+    if (r?.kind === 'refused') { res.status(403).json({ error: started.error, gate: 'spend-hold' }); return; }
+    res.status(503).json({ error: started.error, ...(r ? { gate: 'spend-hold' } : {}) });
+    return;
+  }
 
   res.status(202).json({ run: { id: started.runId }, checkout: started.checkout });
 }));

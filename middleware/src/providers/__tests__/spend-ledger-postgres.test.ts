@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from '../aurora.js';
 import { _resetColumnProbes } from '../column-probe.js';
-import { recordBotRunSpend, recordSpend, ledgerMismatches, recordAgentProjectRunSpend } from '../spend-ledger.js';
+import { recordBotRunSpend, recordSpend, ledgerMismatches, recordAgentProjectRunSpend, getBoxSpend, getActorSpend } from '../spend-ledger.js';
 import { listBudgets } from '../budgets.js';
 import { backfillSpendLedger } from '../../lib/backfill-spend-ledger.js';
 import { finishRun } from '../agent-projects.js';
@@ -233,6 +233,23 @@ const count = async (where = 'TRUE') => Number((await rows(`SELECT COUNT(*) AS n
     await recordAgentProjectRunSpend('00000000-0000-0000-0000-0000000000c2');
     expect(await rows(`SELECT source, initiative_id, cost_usd, cost_basis FROM spend_entries`)).toEqual([
       { source: 'agent_project_run', initiative_id: 'p-alpha', cost_usd: '0.8000', cost_basis: 'reported' },
+    ]);
+  });
+
+  // DE-31: a box's spend is the sum of its ledger entries across sources —
+  // the bot run that teed into it is counted once, as its bot_run entry.
+  it('a box running one bot-run task and one ad-hoc task reports the sum of exactly two entries', async () => {
+    await sql(`UPDATE bot_runs SET outcome = '{"boxId": "box-7"}'::jsonb WHERE id = '00000000-0000-0000-0000-000000000001';`);
+    await recordBotRunSpend('00000000-0000-0000-0000-000000000001');
+    await recordSpend({ source: 'box_task', sourceId: 'box-7:t1', initiativeId: 'p-alpha', boxId: 'box-7', actorId: 'u-sme', model: 'sonnet', costUsd: 0.7 });
+    await recordSpend({ source: 'box_task', sourceId: 'box-7:t2', initiativeId: 'p-alpha', boxId: 'box-7', actorId: 'u-sme', model: 'sonnet', costUsd: null });
+    expect(await count(`box_id = 'box-7'`)).toBe(3);
+    const spend = (await getBoxSpend(['box-7', 'box-none'])).get('box-7');
+    expect(spend).toEqual({ knownUsd: 2.2, unknownCount: 1, bySource: { bot_run: 1.5, box_task: 0.7 } });
+    expect((await getBoxSpend(['box-none'])).get('box-none')).toEqual({ knownUsd: 0, unknownCount: 0, bySource: {} });
+    // The sender is the actor, never inferred from a box owner.
+    expect((await getActorSpend('u-sme', 'month'))).toEqual([
+      { initiativeId: 'p-alpha', knownUsd: 0.7, unknownCount: 1, entries: 2, bySource: { box_task: 0.7 } },
     ]);
   });
 });

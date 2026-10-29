@@ -26,6 +26,7 @@ import {
   DiffViewer,
   EmptyState,
   Inline,
+  InlineAlert,
   Link as ExternalLink,
   LoadingState,
   PageHeader,
@@ -37,10 +38,11 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { useSession } from '../../lib/auth';
 import { absoluteTime } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
-import { STATUS_TONE, STATUS_LABEL } from './changesFormat';
+import { STATUS_TONE, STATUS_LABEL, changeActionGate } from './changesFormat';
 import { KeyValue } from '../../components/KeyValue';
 
 type Verdict = 'approve' | 'request_changes' | 'reject';
@@ -58,6 +60,8 @@ interface Change {
   files: string[]; filesChanged: number; model: string | null;
   commitSha: string | null; branchName: string | null; prUrl: string | null;
   decidedBy: string | null; decidedAt: string | null; decisionNote: string | null;
+  /** Who caused the change; the server refuses their own approval (409 self-approval, DE-43). */
+  requestedBy?: string | null;
   error: string | null; createdAt: string; reviews: Review[]; gates: Gate[];
 }
 
@@ -82,11 +86,20 @@ function severityOf(s: string | undefined): 'critical' | 'warning' | 'info' {
 export default function ChangeReviewPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  // Reading the change is ManageDevbox (sdlc.ts `readGate`); each decision
+  // button asks the action its own route checks (DE-42, table in
+  // changesFormat.ts): decide → DecideAgentChange, deliver →
+  // DeliverAgentChange, address / rereview → RunDevboxTask.
   const { can, ready } = useCapabilities();
-  const canDecide = ready && can('ManageDevbox');
+  const { session } = useSession();
   const { data, error, isLoading, refresh } =
     useFetch<{ change: Change }>(id ? `/api/sdlc/changes/${encodeURIComponent(id)}` : null, 15_000);
   const c = data?.change ?? null;
+  const viewer = { can, ready, sub: session?.sub };
+  const decide = changeActionGate('decide', c ?? {}, viewer);
+  const deliver = changeActionGate('deliver', c ?? {}, viewer);
+  const address = changeActionGate('address', c ?? {}, viewer);
+  const rereview = changeActionGate('rereview', c ?? {}, viewer);
   const [busy, setBusy] = useState(false);
 
   const act = useCallback(async (path: string, verb: string, body: Record<string, unknown>) => {
@@ -222,27 +235,41 @@ export default function ChangeReviewPage() {
         </Card>
       )}
 
-      {canDecide && (decidable || c.status === 'approved' || c.status === 'failed') && (
+      {((decide.show && decidable)
+        || (deliver.show && c.status === 'approved')
+        || (address.show && c.status === 'changes_requested')
+        || (rereview.show && (c.status === 'changes_requested' || c.status === 'failed'))) && (
         <Card padding="md">
           <Stack gap="sm">
             <SectionLabel>Decision</SectionLabel>
+            {decide.show && decidable && decide.reason && (
+              <InlineAlert tone="info">{decide.reason}</InlineAlert>
+            )}
             <Inline gap="sm" wrap>
-              {decidable && (
+              {decide.show && decidable && (
                 <>
-                  <Button variant="primary" size="sm" disabled={busy} onClick={() => void act('decide', 'Approving', { decision: 'approve' })}>
+                  <Button
+                    variant="primary" size="sm" disabled={busy || decide.disabled}
+                    title={decide.reason ?? undefined}
+                    onClick={() => void act('decide', 'Approving', { decision: 'approve' })}
+                  >
                     {c.status === 'changes_requested' ? 'Approve anyway' : 'Approve'}
                   </Button>
-                  <Button variant="secondary" size="sm" disabled={busy} tone="surface" onClick={() => void act('decide', 'Rejecting', { decision: 'reject' })}>
+                  <Button
+                    variant="secondary" size="sm" disabled={busy || decide.disabled} tone="surface"
+                    title={decide.reason ?? undefined}
+                    onClick={() => void act('decide', 'Rejecting', { decision: 'reject' })}
+                  >
                     Reject
                   </Button>
                 </>
               )}
-              {c.status === 'approved' && (
+              {deliver.show && c.status === 'approved' && (
                 <Button variant="primary" size="sm" disabled={busy} onClick={() => void act('deliver', 'Delivering', {})}>
                   Deliver as pull request
                 </Button>
               )}
-              {c.status === 'changes_requested' && (
+              {address.show && c.status === 'changes_requested' && (
                 <Button
                   variant="secondary" size="sm" disabled={busy}
                   title="Send the reviewer's findings back to an agent to fix"
@@ -251,7 +278,7 @@ export default function ChangeReviewPage() {
                   Address with an agent
                 </Button>
               )}
-              {(c.status === 'changes_requested' || c.status === 'failed') && (
+              {rereview.show && (c.status === 'changes_requested' || c.status === 'failed') && (
                 <Button variant="secondary" size="sm" disabled={busy} onClick={() => void act('rereview', 'Re-reviewing', {})}>
                   Re-review
                 </Button>

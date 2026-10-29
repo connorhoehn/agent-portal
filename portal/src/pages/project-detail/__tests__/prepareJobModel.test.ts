@@ -17,9 +17,18 @@ import {
   dispatchBlockedReason,
   dispatchBody,
   envelopeLabel,
+  envelopeRequestBody,
+  envelopeResult,
+  fundingMessage,
+  fundingStatus,
+  jobDraftBody,
   jobFields,
+  jobFromDraft,
+  justificationProblem,
   prepareJobPrompts,
   readDispatchResponse,
+  readEnvelopeResponse,
+  requestedUsdFor,
   type ForecastRead,
   type PrepareJobActions,
   type PrepareJobView,
@@ -109,7 +118,9 @@ test('dispatch answers: codebase options, three gates with their own flags, 403/
   assert.ok(alloc.kind === 'gate' && alloc.stop.flag === 'confirmOverAllocation' && /\$99\.00 of \$100\.00 is already spent/.test(alloc.stop.body));
   const env = readDispatchResponse(409, { gate: 'envelope', envelope: { sprintName: 'Sprint 14', allocatedUsd: 30, attributedSpentUsd: 29, remainingUsd: 1, attributionAvailable: true } });
   assert.ok(env.kind === 'gate' && env.stop.flag === 'confirmOverEnvelope' && env.stop.fields.some((f) => f.value === '$1.00'));
-  assert.deepEqual(readDispatchResponse(403, { error: 'No active sprint grant' }), { kind: 'refused', message: 'No active sprint grant' });
+  assert.deepEqual(readDispatchResponse(403, { error: 'you hold no active sprint grant on p-x' }), { kind: 'no-grant', message: 'you hold no active sprint grant on p-x' });
+  assert.equal(readDispatchResponse(403, {}).kind, 'no-grant');
+  assert.deepEqual(readDispatchResponse(403, { error: 'Forbidden: DispatchAgentRun' }), { kind: 'refused', message: 'Forbidden: DispatchAgentRun' });
   assert.equal(readDispatchResponse(429, {}).kind, 'refused');
   assert.deepEqual(readDispatchResponse(202, { run: { id: 'r1' } }), { kind: 'dispatched', run: { id: 'r1' } });
   assert.deepEqual(readDispatchResponse(500, { error: 'boom' }), { kind: 'refused', message: 'Dispatch failed: boom' });
@@ -126,6 +137,8 @@ function harness(over: Partial<PrepareJobView> = {}) {
     confirmGate: async (g) => { calls.push(`confirm:${g}`); return undefined; },
     back: () => { calls.push('back'); },
     saveEstimate: async () => { calls.push('save'); return undefined; },
+    requestBudget: async (text, usdAsked) => { calls.push(`request:${usdAsked}:${text}`); return { receipt: 'Request filed' }; },
+    saveDraft: async () => { calls.push('draft'); return { ok: true }; },
   };
   const view: PrepareJobView = {
     item, job: { model: DEFAULT_DEVBOX_MODEL, agentProjectId: 'cb-obs', capUsd: null, instruction: 'Do it' },
@@ -200,4 +213,114 @@ test('a gate is a confirm carrying its reason and flag; a codebase pick dispatch
 
 test('prompt ids change with the revision, so a re-asked question is a new prompt', () => {
   assert.notEqual(harness({ rev: 1 }).prompts[0]!.id, harness({ rev: 2 }).prompts[0]!.id);
+});
+
+// ─── Funding: no sprint grant ────────────────────────────────────────────────
+
+const openRequest = (status: string, eligible: string[] = ['Vera Lindqvist', 'Rachel Kim']) => ({
+  id: 'ar-1', status, submittedAt: '2026-10-28T10:00:00Z',
+  steps: [{ status: 'current', kind: 'steward', eligible: eligible.map((displayName) => ({ displayName })) }],
+}) as never;
+
+test('requested dollars: the forecast high, rounded up to the cent; none without a forecast', () => {
+  assert.equal(requestedUsdFor(estimate), 1.1);
+  assert.equal(requestedUsdFor({ ...estimate, costUsdP75: 1.231 }), 1.24);
+  assert.equal(requestedUsdFor({ ...estimate, costUsdP75: 0 }), null);
+  assert.equal(requestedUsdFor(null), null);
+});
+
+test('the funding prompt replaces the job question for an SME with no grant', async () => {
+  const { prompts, calls } = harness({ funding: { noGrant: true, holder: null, requests: [] } });
+  assert.equal(prompts.length, 1);
+  const p = prompts[0]!;
+  assert.equal(p.title, 'This job needs a sprint envelope');
+  assert.equal(p.kind, 'choice');
+  assert.deepEqual(p.path, { steps: ['Choose', 'Draft request', 'Confirm', 'Done'], current: 0 });
+  assert.deepEqual(p.options!.map((o) => [o.label, o.emphasis ?? null, o.disabledReason ?? null]),
+    [['Request budget', 'primary', null], ['Save for later', null, null]]);
+  assert.equal(p.defaultOptionId, 'request');
+
+  // 1 → the compose follow-up, prefilled; nothing filed yet.
+  const next = await p.onAnswer({ kind: 'choice', optionId: 'request' });
+  assert.ok(next && 'next' in next);
+  const compose = next.next;
+  assert.equal(compose.kind, 'compose');
+  assert.deepEqual(compose.path, { steps: ['Choose', 'Draft request', 'Confirm', 'Done'], current: 1 });
+  assert.equal(compose.compose!.recipient, 'To the budget holder · ORG-OBS-11');
+  assert.match(compose.compose!.initialMessage!, /^Hi, I'd like a sprint envelope on this initiative so an agent can take ORG-OBS-11 "Stop duplicate alerts during a dependency outage"\. The forecast is \$0\.40–\$1\.10 on Haiku, so I'm asking for \$1\.10\.$/);
+  assert.match(String(compose.compose!.note), /does not grant funding or start the job/);
+  assert.deepEqual(compose.fields!.find((f) => f.label === 'Requested')!.value, '$1.10');
+  assert.deepEqual(calls, []);
+
+  // Too short: refused inline, nothing sent. Confirmed: filed with the edited words and the forecast high.
+  assert.deepEqual(await compose.onAnswer({ kind: 'compose', message: '  more money  ' }), { error: 'Say why in at least 20 characters (10 so far)' });
+  assert.deepEqual(await compose.onAnswer({ kind: 'compose', message: '  Please fund ORG-OBS-11 this sprint.  ' }), { receipt: 'Request filed' });
+  assert.deepEqual(calls, ['request:1.1:Please fund ORG-OBS-11 this sprint.']);
+});
+
+test('the budget holder is named when known; no forecast disables Request budget', () => {
+  const named = harness({ funding: { noGrant: true, holder: 'Nora Patel', requests: [] } }).prompts[0]!;
+  assert.equal(named.title, 'This job needs a sprint envelope');
+  const noForecast = harness({ funding: { noGrant: true, holder: null, requests: [] }, forecast: { estimate: null, stored: false, loading: false, error: 'x' } }).prompts[0]!;
+  assert.equal(noForecast.options![0]!.disabledReason, 'Get a forecast first');
+  assert.equal(noForecast.defaultOptionId, undefined);
+  assert.equal(fundingMessage({ holder: 'Nora Patel', item, model: DEFAULT_DEVBOX_MODEL, estimate, requestedUsd: 1.1 }).startsWith('Hi Nora Patel, '), true);
+});
+
+test('save for later: the job is kept, then Choose → Saved', async () => {
+  const { prompts, calls } = harness({ funding: { noGrant: true, holder: null, requests: [] } });
+  const next = await prompts[0]!.onAnswer({ kind: 'choice', optionId: 'save' });
+  assert.ok(next && 'next' in next);
+  assert.equal(next.next.title, 'Saved for later');
+  assert.deepEqual(next.next.path, { steps: ['Choose', 'Saved'], current: 1 });
+  assert.deepEqual(calls, ['draft']);
+  // A failed save stays on the question with the error.
+  const failing: PrepareJobActions = {
+    dispatch: async () => undefined, edit: () => {}, setModel: () => {}, setCap: () => {}, setInstruction: () => {},
+    confirmGate: async () => undefined, back: () => {}, requestBudget: async () => undefined,
+    saveDraft: async () => ({ error: 'Not saved: HTTP 403' }),
+  };
+  const p = prepareJobPrompts({ item, job: { model: DEFAULT_DEVBOX_MODEL, agentProjectId: null, capUsd: null, instruction: 'x' }, fields: [], step: { kind: 'funding' },
+    rev: 1, canDispatch: true, blocked: null, forecast: live, running: false, funding: { noGrant: false, holder: null, requests: [] } }, failing)[0]!;
+  assert.equal(p.title, 'This job needs a sprint envelope', 'a 403 from dispatch routes here even when the envelope read did not say so');
+  assert.deepEqual(await p.onAnswer({ kind: 'choice', optionId: 'save' }), { error: 'Not saved: HTTP 403' });
+});
+
+test('an open request shows its status instead of offering another', () => {
+  const p = harness({ funding: { noGrant: true, holder: null, requests: [openRequest('submitted')] } }).prompts[0]!;
+  assert.equal(p.options![0]!.disabledReason, 'Requested — waiting on Vera Lindqvist or Rachel Kim');
+  assert.equal(p.fields!.at(-1)!.value, 'Requested — waiting on Vera Lindqvist or Rachel Kim');
+  assert.match(p.question, /Nothing runs until an envelope is granted/);
+  assert.equal(fundingStatus([openRequest('rejected')]), null, 'a closed request lets the reader ask again');
+  assert.equal(fundingStatus([openRequest('approved')]), 'Approved — waiting for the envelope to reach your session');
+});
+
+test('the funding prompt is only for a dispatcher with an initiative; a granted SME keeps the job question', () => {
+  assert.equal(harness({ funding: { noGrant: false, holder: null, requests: [] } }).prompts[0]!.question, 'Dispatch with these settings?');
+  assert.equal(harness({ funding: null, step: { kind: 'funding' } }).prompts[0]!.question, 'Dispatch with these settings?');
+  assert.equal(harness({ canDispatch: false, blocked: 'x', funding: { noGrant: true, holder: null, requests: [] } }).prompts[0]!.readOnlyReason, READ_ONLY_REASON);
+});
+
+test('envelope request: body, 201 filed, 409 already, other errors inline — never "granted"', () => {
+  assert.deepEqual(envelopeRequestBody({ initiativeId: 'p-observability', justification: '  Please fund it this sprint.  ', requestedUsd: 1.1, workItemId: item.id, model: 'm', estimate }), {
+    initiativeId: 'p-observability', justification: 'Please fund it this sprint.', requestedUsd: 1.1,
+    forecast: { workItemId: item.id, model: 'm', costUsdP25: 0.4, costUsdP75: 1.1 },
+  });
+  const filed = envelopeResult(readEnvelopeResponse(201, openRequest('submitted')));
+  assert.deepEqual(filed, { receipt: 'Request filed · waiting on Vera Lindqvist or Rachel Kim. Nothing runs until an envelope is granted.' });
+  const already = readEnvelopeResponse(409, { error: 'open', requestId: 'ar-9' });
+  assert.deepEqual(already, { kind: 'already', requestId: 'ar-9' });
+  assert.match((envelopeResult(already) as { receipt: string }).receipt, /^Already requested/);
+  assert.deepEqual(envelopeResult(readEnvelopeResponse(409, { error: 'you already hold an active grant' })), { error: 'Request not filed: you already hold an active grant' });
+  assert.deepEqual(envelopeResult(readEnvelopeResponse(400, {})), { error: 'Request not filed: HTTP 400' });
+  for (const r of [filed, envelopeResult(already)]) assert.doesNotMatch((r as { receipt: string }).receipt, /(was|has been) (granted|approved|funded)|\bapproved\b|\bfunded\b/i);
+  assert.equal(justificationProblem('x'.repeat(20)), null);
+});
+
+test('job drafts: the PUT body and the edits a saved draft restores', () => {
+  assert.deepEqual(jobDraftBody({ model: 'm', agentProjectId: null, capUsd: 2.5, instruction: '  ' }), { model: 'm', budgetPerRunUsd: 2.5, instruction: null, agentProjectId: null });
+  assert.deepEqual(jobFromDraft({ model: DEVBOX_MODELS[1]!.id, budgetPerRunUsd: 3, instruction: 'Do the thing', agentProjectId: 'cb-obs' }),
+    { model: DEVBOX_MODELS[1]!.id, capUsd: 3, instruction: 'Do the thing', agentProjectId: 'cb-obs' });
+  assert.deepEqual(jobFromDraft({ model: 'retired', budgetPerRunUsd: null, instruction: null, agentProjectId: null }), { capUsd: null });
+  assert.deepEqual(jobFromDraft(null), {});
 });

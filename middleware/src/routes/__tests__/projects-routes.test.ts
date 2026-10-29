@@ -71,9 +71,10 @@ beforeEach(() => {
 });
 
 describe('auth floor', () => {
-  it('gates exactly the two governance writes, both on DispatchAgentRun', () => {
-    // Constructed once at module load — one gate shared by both PATCHes.
-    expect(gateCalls).toEqual(['DispatchAgentRun']);
+  it('gates the two governance writes on DispatchAgentRun and the devbox profile pointer on ManageBudgets', () => {
+    // Constructed once at module load — one gate shared by both governance
+    // PATCHes; PATCH /:id/devbox-profile (DE-40) is a release-manager call.
+    expect(gateCalls).toEqual(['DispatchAgentRun', 'ManageBudgets']);
   });
 });
 

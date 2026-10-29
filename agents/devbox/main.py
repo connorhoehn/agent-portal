@@ -46,7 +46,20 @@ WORKSPACE_MOUNT = "/mnt/workspace"
 # Hard cap below the 15-min synchronous request limit; streaming responses may
 # run longer but we keep one conservative default and let callers raise it.
 DEFAULT_TIMEOUT_S = int(os.environ.get("DEVBOX_TASK_TIMEOUT_S", "840"))
-MAX_TIMEOUT_S = 3300  # under the 60-min streaming connection cap
+# The container's own last line of defence, under the 60-min streaming
+# connection cap. The middleware owns the one cap callers see
+# (middleware/src/lib/devbox-lifetime.ts TASK_MAX_S, DE-48); the two MUST
+# agree — a BFF that sends more than this is silently clamped here.
+MAX_TIMEOUT_S = 3300
+
+
+class ModelNotAllowed(ValueError):
+    """A requested model the allowlist does not name (DE-40)."""
+
+    def __init__(self, requested: str, allowed: set[str]):
+        super().__init__(f"model not allowlisted: {requested}")
+        self.requested = requested
+        self.allowed = sorted(allowed)
 
 
 def _resolve_workspace() -> tuple[str, bool]:
@@ -83,25 +96,32 @@ def _claude_bin() -> str:
     return path
 
 
+def _allowed_models() -> set[str]:
+    return {m.strip() for m in os.environ.get(
+        "DEVBOX_ALLOWED_MODELS", "").split(",") if m.strip()}
+
+
 def _resolve_model(requested: str | None) -> str:
     """Model for this task.
 
     Defaults to whatever the runtime was deployed with (Haiku) and lets a
     caller opt into something larger per task. Most devbox work is small —
     reading a file, running a test, writing a note — and paying Sonnet rates
-    for "are you there" is the common case, not the exception. Anything not on
-    the allowlist falls back to the default rather than being passed through,
-    so a typo cannot silently bill against an unexpected model.
+    for "are you there" is the common case, not the exception.
+
+    A model the allowlist does not name is REFUSED (ModelNotAllowed), never
+    silently swapped for the default (DE-40): the middleware already answers
+    400 with the allowed set, so a caller that reaches this with a bad model
+    has bypassed it and must fail visibly rather than bill something else.
     """
     default = os.environ.get("ANTHROPIC_MODEL", "").strip()
     if not requested:
         return default
-    allowed = {m.strip() for m in os.environ.get(
-        "DEVBOX_ALLOWED_MODELS", "").split(",") if m.strip()}
-    if requested in allowed:
+    requested = str(requested).strip()
+    allowed = _allowed_models()
+    if requested in allowed or (not allowed and requested == default):
         return requested
-    log.warning("Requested model %s is not allowlisted — using %s", requested, default)
-    return default
+    raise ModelNotAllowed(requested, allowed)
 
 
 def _build_cmd(prompt: str, resume: bool, output_format: str, model: str = "") -> list[str]:
@@ -289,6 +309,127 @@ async def _run_sync(cmd: list[str], workspace: str, persistent: bool, timeout_s:
     }
 
 
+# ─── Credentialed git (DE-45) ────────────────────────────────────────────────
+#
+# InvokeAgentRuntimeCommand takes only a command string, so a clone or push
+# through it put the repository token INTO shell text — in `ps`, in the probe
+# file the wrapper writes, in git's own error output. This entrypoint is the
+# other channel: the token arrives in the invoke payload, is handed to git as
+# an HTTP auth header through the child's ENVIRONMENT (GIT_CONFIG_* →
+# `http.https://github.com/.extraheader`), and touches neither argv, nor
+# .git/config, nor disk. The remote URL stays clean, so no `set-url` dance.
+
+GIT_OPS = ("clone", "push")
+_GIT_TIMEOUT_S = 600
+_SAFE_REPO = r"^[\w.-]+/[\w.-]+$"
+_SAFE_REF = r"^[\w./-]{1,200}$"
+
+
+def _git_bin() -> str:
+    path = shutil.which("git")
+    if not path:
+        raise RuntimeError("git not found on PATH — image build is broken")
+    return path
+
+
+def _git_env(workspace: str, token: str | None) -> dict:
+    """The child's environment: the token as an auth header, never an argument.
+
+    GIT_CONFIG_COUNT/KEY_n/VALUE_n are read by git itself, so nothing is
+    written anywhere. `safe.directory` because the checkout may be owned by a
+    different uid than this process."""
+    env = dict(os.environ)
+    env["HOME"] = workspace
+    env.pop("GIT_ASKPASS", None)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    pairs = [("safe.directory", "*")]
+    if token:
+        import base64
+        basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+        pairs.append(("http.https://github.com/.extraheader", f"AUTHORIZATION: basic {basic}"))
+    env["GIT_CONFIG_COUNT"] = str(len(pairs))
+    for i, (k, v) in enumerate(pairs):
+        env[f"GIT_CONFIG_KEY_{i}"] = k
+        env[f"GIT_CONFIG_VALUE_{i}"] = v
+    return env
+
+
+def _git_argv(op: str, repo: str, target: str, branch: str | None, commit: str | None, depth: int) -> list[list[str]]:
+    """The git invocations for an op. The token is NOT here — see _git_env."""
+    import re
+    if op not in GIT_OPS:
+        raise ValueError(f"unsupported git op: {op}")
+    if not re.match(_SAFE_REPO, repo or "") or any(re.fullmatch(r"\.+", seg) for seg in repo.split("/")):
+        raise ValueError("repo must be owner/name")
+    if not target or not target.startswith("/") or any(c in target for c in "\n\r\0"):
+        raise ValueError("target must be an absolute path")
+    url = f"https://github.com/{repo}.git"
+    git = _git_bin()
+    if op == "clone":
+        return [[git, "clone", "--depth", str(max(1, int(depth))), url, target]]
+    if not branch or not re.match(_SAFE_REF, branch):
+        raise ValueError("branch is required for push")
+    if commit and not re.match(r"^[0-9a-f]{7,40}$", commit):
+        raise ValueError("commit must be a sha")
+    steps = []
+    if commit:
+        steps.append([git, "-C", target, "checkout", "-B", branch, commit])
+    else:
+        steps.append([git, "-C", target, "checkout", "-B", branch])
+    steps.append([git, "-C", target, "push", "-u", url, branch, "--force-with-lease"])
+    return steps
+
+
+async def _run_git(payload: dict) -> AsyncIterator[dict]:
+    """Run one credentialed git op and stream its output.
+
+    Events: `git_start` (op, repo, target — never the token), `git_output`
+    lines (the token cannot appear: git never saw it as text), and `git_end`
+    with the exit code. Output is capped per step."""
+    op = str(payload.get("op") or "")
+    repo = str(payload.get("repo") or "")
+    target = str(payload.get("target") or "")
+    branch = payload.get("branch")
+    commit = payload.get("commit")
+    token = payload.get("token")
+    depth = payload.get("depth") or 50
+    token = token if isinstance(token, str) and token else None
+    workspace, persistent = _resolve_workspace()
+    try:
+        steps = _git_argv(op, repo, target, branch if isinstance(branch, str) else None,
+                          commit if isinstance(commit, str) else None, depth)
+    except ValueError as err:
+        yield {"type": "git_end", "op": op, "exit_code": 2, "error": str(err)}
+        return
+    yield {"type": "git_start", "op": op, "repo": repo, "target": target, "authenticated": bool(token),
+           "workspace_persistent": persistent}
+    if op == "clone":
+        shutil.rmtree(target, ignore_errors=True)
+        os.makedirs(os.path.dirname(target) or workspace, exist_ok=True)
+    env = _git_env(workspace, token)
+    rc = 0
+    for argv in steps:
+        proc = await asyncio.create_subprocess_exec(
+            *argv, cwd=workspace, env=env,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            start_new_session=True,
+        )
+        try:
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=_GIT_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            _kill_process_group(proc, _GIT_TIMEOUT_S)
+            await proc.wait()
+            yield {"type": "git_end", "op": op, "exit_code": 124, "error": f"git timed out after {_GIT_TIMEOUT_S}s"}
+            return
+        text = out.decode("utf-8", errors="replace")[-8000:]
+        if text.strip():
+            yield {"type": "git_output", "text": text}
+        rc = proc.returncode or 0
+        if rc != 0:
+            break
+    yield {"type": "git_end", "op": op, "exit_code": rc}
+
+
 @app.entrypoint
 async def handle(payload: dict) -> AsyncIterator | dict:
     """Payload contract:
@@ -298,13 +439,30 @@ async def handle(payload: dict) -> AsyncIterator | dict:
       "resume":  bool  (optional — continue the workspace's last conversation),
       "stream":  bool  (optional, default true — SSE stream-json vs single JSON),
       "timeout": int   (optional seconds, capped at MAX_TIMEOUT_S),
+      "model":   str   (optional — MUST be on DEVBOX_ALLOWED_MODELS, else an
+                        error and no `claude` process, DE-40),
       "lab":     dict  (optional — the run: run_ref, run_token, brief_id,
                         work_item_id, initiative_id, repo, session_id, box_id;
                         set as LAB_* for every `lab` call, see _LAB_ENV)
     }
+
+    Or a credentialed git op (DE-45), which never starts `claude`:
+
+    {
+      "op":     "clone" | "push",
+      "repo":   "owner/name",
+      "target": "/mnt/workspace/<dir>",
+      "branch": str   (push),
+      "commit": sha   (push, optional — branch from this commit),
+      "token":  str   (optional — passed to git as an auth header via env,
+                        never argv, config or disk)
+    }
     """
     if not isinstance(payload, dict):
         payload = {"prompt": str(payload)}
+
+    if payload.get("op") in GIT_OPS:
+        return _run_git(payload)
 
     prompt = payload.get("prompt") or payload.get("input_text") or payload.get("message") or ""
     if not prompt:
@@ -313,7 +471,11 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     resume = bool(payload.get("resume", False))
     stream = payload.get("stream", True) is not False
     timeout_s = min(int(payload.get("timeout") or DEFAULT_TIMEOUT_S), MAX_TIMEOUT_S)
-    model = _resolve_model(payload.get("model"))
+    try:
+        model = _resolve_model(payload.get("model"))
+    except ModelNotAllowed as err:
+        log.warning("Refused model %s (allowed: %s)", err.requested, ",".join(err.allowed))
+        return {"agent": "devbox", "error": "model not allowlisted", "model": err.requested, "allowed": err.allowed}
 
     workspace, persistent = _resolve_workspace()
     log.info(

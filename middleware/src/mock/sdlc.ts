@@ -51,11 +51,11 @@
 
 import { randomUUID } from 'node:crypto';
 import { clock, defineFixture } from './core/index.js';
-import { agentProjectRuns } from './agent-project-runs.js';
+import { agentProjectRuns, type ProjectRunSeed } from './agent-project-runs.js';
 import { mockGetAgentProject } from './agent-projects.js';
 import { mockProjectName } from '../providers/projects.js';
 import {
-  evaluate, DEFAULT_POLICIES,
+  evaluate, DEFAULT_POLICIES, costFacts,
   type ChangeFacts, type GateResult, type ReviewVerdict, type SdlcPolicy,
 } from '../lib/sdlc-policy.js';
 
@@ -422,6 +422,14 @@ interface ChangeSeed {
   branchName: string | null;
   prUrl: string | null;
   workItemId: string | null;
+  /**
+   * The `agent_project_runs` fixture row behind the capture (DE-33). Only the
+   * delivered demo names one: its gates must still read "approved", and
+   * since an unrecorded cost now routes to a person, the approved path needs
+   * a run with a recorded cost behind it. The others keep null and show the
+   * cost gate.
+   */
+  runId?: string | null;
   createdHoursAgo: number;
   /**
    * Pinned only for a change a human or a delivery moved on from. Left null,
@@ -525,6 +533,8 @@ const CHANGE_SEEDS: ChangeSeed[] = [
     // `createChangeRequest` copies off the run, and what delivery writes the
     // PR url back onto.
     workItemId: 'wi-obs-e1-s3',
+    // mock/agent-project-runs.ts: the Observability run that cost $0.42.
+    runId: '1c9b2d5f-3a70-4b62-8d4c-8e2f6b015a22',
     createdHoursAgo: 30,
     // Pinned: the gates cleared this one, a person approved it, and delivery
     // opened the PR. `delivered` is not something the engine can decide.
@@ -547,9 +557,10 @@ function factsOf(seed: ChangeSeed): ChangeFacts {
     files: parseFilesOf(seed.diff),
     model: seed.model,
     reviewVerdict: seed.review.verdict,
-    // No seeded change carries a run id (see `sdlcChanges` below), and a run
-    // with no recorded cost is exactly what `runCostUsd` returns null for.
-    costUsd: null,
+    // The run's recorded cost, where the seed names one (CHANGE_DASH, the
+    // delivered demo); every other seed has no run, so its cost is unknown and
+    // the max_cost gate routes it to a person (DE-33).
+    ...mockRunCost(seed.runId ?? null),
   };
 }
 
@@ -576,10 +587,11 @@ function evaluationOf(seed: ChangeSeed): { decision: string; gates: GateResult[]
  *             "No changes yet" copy is for.
  * `fresh`   — same: the cast and the codebases exist, nothing has run.
  *
- * `runId` is null throughout. The seed links no run to a capture — Aurora's
- * `agent_project_runs` rows are produced by the fleet, not declared by the
- * corpus — and pointing a change at one of `mock/agent-project-runs.ts`'s runs
- * would assert a relationship neither seed states.
+ * `runId` is null except on the delivered demo change (DE-33): the fleet, not
+ * the corpus, produces `agent_project_runs` rows, so no seed asserts a run
+ * behind a capture — but the approved path must stay demonstrable, and an
+ * unrecorded cost now routes to a person, so CHANGE_DASH points at the
+ * fixture run that cost $0.42.
  */
 export const sdlcChanges = defineFixture<ChangeRow>({
   key: 'sdlc-changes',
@@ -588,7 +600,7 @@ export const sdlcChanges = defineFixture<ChangeRow>({
       const files = parseFilesOf(seed.diff);
       return {
         id: seed.id,
-        runId: null,
+        runId: seed.runId ?? null,
         projectId: OBSERVABILITY,
         workItemId: seed.workItemId,
         title: seed.title,
@@ -787,12 +799,17 @@ export function mockHasNewerChangeForProject(changeId: string): boolean {
 }
 
 /**
- * The recorded cost of the run behind a change — `agent_project_runs.cost_usd`.
- * Null means "cannot judge", which is what the max_cost gate treats it as.
+ * The recorded cost of the run behind a change and its provenance — the
+ * `agent_project_runs` row's cost_usd / cost_basis / model_provider, through
+ * the same `costFacts` the Aurora reader uses. No run, or no figure, is
+ * unknown — which the max_cost gate routes to a person (DE-33).
  */
-export function mockRunCostUsd(runId: string | null): number | null {
-  if (!runId) return null;
-  return agentProjectRuns.rows().find((r) => r.id === runId)?.costUsd ?? null;
+export function mockRunCost(runId: string | null): Pick<ChangeFacts, 'costUsd' | 'costBasis'> {
+  if (!runId) return { costUsd: null, costBasis: 'unknown' };
+  const run = agentProjectRuns.rows().find((r) => r.id === runId) as
+    (ProjectRunSeed & { costBasis?: string | null; modelProvider?: string | null }) | undefined;
+  if (!run) return { costUsd: null, costBasis: 'unknown' };
+  return costFacts(run.costUsd ?? null, run.costBasis ?? null, run.modelProvider ?? null);
 }
 
 // ─── Writes ─────────────────────────────────────────────────────────────────

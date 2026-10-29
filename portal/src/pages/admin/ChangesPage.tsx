@@ -33,10 +33,11 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { useSession } from '../../lib/auth';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
-import { STATUS_TONE, STATUS_LABEL } from './changesFormat';
+import { STATUS_TONE, STATUS_LABEL, changeActionGate } from './changesFormat';
 import { sendJson } from '../../lib/writeJson';
 import { PolicyEditor } from '../../components/sdlc/PolicyEditor';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
@@ -58,6 +59,8 @@ interface Change {
   files: string[]; filesChanged: number; model: string | null;
   branchName: string | null; prUrl: string | null;
   decidedBy: string | null; decisionNote: string | null; error: string | null;
+  /** Who caused the change (the run's dispatcher); the server refuses their own approval (409 self-approval, DE-43). */
+  requestedBy?: string | null;
   createdAt: string; reviews: Review[]; gates: Gate[];
 }
 
@@ -78,14 +81,18 @@ const TERMINAL = new Set(['delivered', 'rejected', 'blocked']);
 
 export default function ChangesPage() {
   const [tab, setTab] = useState<'queue' | 'policies'>('queue');
-  // The WHOLE surface rides /api/sdlc, which is mounted requireAction
-  // ('ManageDevbox') — the list included, not just the decisions and policy
-  // edits. Without that authority there is no readable queue: the fetch 403s
-  // and this page knows nothing about what is waiting. So ManageDevbox gates
-  // the decision buttons and the Policies tab, and a denied list is reported
-  // as a denial below rather than being rendered as an empty queue.
+  // Reads on /api/sdlc stay with ManageDevbox (routes/sdlc.ts `readGate`:
+  // GET /changes, GET /policies) — the list included. Without that authority
+  // there is no readable queue: the fetch 403s and this page knows nothing
+  // about what is waiting, so a denied list is reported as a denial below
+  // rather than rendered as an empty queue. The WRITES carry their own actions
+  // since DE-42: the policy editor's POST/DELETE /policies ask EditSdlcPolicy
+  // (sdlc.ts `editGate`), which an SME does not hold even though they can read
+  // the policies. So the Policies tab opens for every reader and the editor
+  // itself goes read-only, with the reason, when the write is not theirs.
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
+  const canEditPolicy = ready && can('EditSdlcPolicy');
   const { data, error, isLoading, refresh } = useFetch<{ changes: Change[] }>('/api/sdlc/changes', 15_000);
   // A denial and an outage are different facts and get different words. The
   // one thing neither may be reported as is "no changes yet".
@@ -164,7 +171,7 @@ export default function ChangesPage() {
       <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
       <Tabs items={tabItems} value={tab} onValueChange={(id) => setTab(id as 'queue' | 'policies')} size="sm" />
 
-      {!onQueue ? <PolicyEditor /> : (
+      {!onQueue ? <PolicyEditor canEdit={canEditPolicy} /> : (
         <Stack gap="md">
           <CollectionToolbar
             label="Change filters"
@@ -272,8 +279,17 @@ function ChangeCard({ change: c, busy, act, superseded }: {
   act: (id: string, path: string, verb: string, body: Record<string, unknown>) => void;
   superseded: boolean;
 }) {
+  // Each button asks the action its route checks (DE-42, table in
+  // changesFormat.ts). Reading the queue is ManageDevbox; deciding, delivering
+  // and dispatching are three separate authorities since the split.
   const { can, ready } = useCapabilities();
-  const canDecide = ready && can('ManageDevbox');
+  const { session } = useSession();
+  const viewer = { can, ready, sub: session?.sub };
+  const decide = changeActionGate('decide', c, viewer);
+  const deliver = changeActionGate('deliver', c, viewer);
+  const address = changeActionGate('address', c, viewer);
+  const rereview = changeActionGate('rereview', c, viewer);
+  const canAct = decide.show || deliver.show || address.show || rereview.show;
   const review = c.reviews[0] ?? null;
   const blockingGates = c.gates.filter((g) => g.outcome !== 'pass');
 
@@ -394,24 +410,32 @@ function ChangeCard({ change: c, busy, act, superseded }: {
             <T as="span" size="xs" tone="tertiary" className="italic">
               A newer change supersedes this one — decide and deliver the latest change for this codebase instead.
             </T>
-          ) : !canDecide ? null : (
+          ) : !canAct ? null : (
             <>
-              {(c.status === 'needs_approval' || c.status === 'changes_requested') && (
+              {decide.show && (c.status === 'needs_approval' || c.status === 'changes_requested') && (
                 <>
-                  <Button variant="primary" size="sm" disabled={busy} onClick={() => act(c.id, 'decide', 'Approving', { decision: 'approve' })}>
+                  <Button
+                    variant="primary" size="sm" disabled={busy || decide.disabled}
+                    title={decide.reason ?? undefined}
+                    onClick={() => act(c.id, 'decide', 'Approving', { decision: 'approve' })}
+                  >
                     {c.status === 'changes_requested' ? 'Approve anyway' : 'Approve'}
                   </Button>
-                  <Button variant="secondary" size="sm" disabled={busy} onClick={() => act(c.id, 'decide', 'Rejecting', { decision: 'reject' })}>
+                  <Button
+                    variant="secondary" size="sm" disabled={busy || decide.disabled}
+                    title={decide.reason ?? undefined}
+                    onClick={() => act(c.id, 'decide', 'Rejecting', { decision: 'reject' })}
+                  >
                     Reject
                   </Button>
                 </>
               )}
-              {c.status === 'approved' && (
+              {deliver.show && c.status === 'approved' && (
                 <Button variant="primary" size="sm" disabled={busy} onClick={() => act(c.id, 'deliver', 'Delivering', {})}>
                   {busy ? 'delivering…' : 'Deliver as pull request'}
                 </Button>
               )}
-              {c.status === 'changes_requested' && (
+              {address.show && c.status === 'changes_requested' && (
                 <Button
                   variant="secondary" size="sm" disabled={busy}
                   title="Send the reviewer's findings back to an agent to fix"
@@ -420,7 +444,7 @@ function ChangeCard({ change: c, busy, act, superseded }: {
                   Address with an agent
                 </Button>
               )}
-              {(c.status === 'changes_requested' || c.status === 'failed') && (
+              {rereview.show && (c.status === 'changes_requested' || c.status === 'failed') && (
                 <Button variant="secondary" size="sm" disabled={busy} onClick={() => act(c.id, 'rereview', 'Re-reviewing', {})}>
                   Re-review
                 </Button>

@@ -9,7 +9,9 @@
 //                 community-admin, pipelines pipeline-admin); an initiative:
 //                 its owner (projects.owner_id / project_contributions 'owner');
 //                 budget visibility (`budget-owner`): the orgiq budget owner,
-//                 `org-leader` — the role that allocates the money it reveals
+//                 `org-leader` — the role that allocates the money it reveals;
+//                 a sprint envelope (`budget-holder`, 2026-10-28): whoever set
+//                 the initiative's allocation, else the org-leaders
 //   access-admin  the access tenant's access-admin holders (sensitive items)
 //
 // Two live rules sit on top of the raw candidates:
@@ -82,6 +84,19 @@ export function stepCandidates(kind: StepKind, item: AccessCatalogRow, beneficia
     }
     case 'steward': {
       if (item.stewardRule === 'budget-owner') {
+        return dir.users.filter((u) => (u.grants[BUDGET_OWNER_ROLE.tenant] ?? []).includes(BUDGET_OWNER_ROLE.role));
+      }
+      if (item.stewardRule === 'budget-holder') {
+        // The sprint envelope's steward (2026-10-28): the person who set the
+        // initiative's allocation (initiative_budgets.updated_by) — the money
+        // the envelope comes out of is theirs to hand out. Conservative on
+        // purpose: that one person when they can decide in Access; otherwise
+        // the org-leaders (the budget-owner rule), who allocate across the
+        // program. A holder who is not in the directory, or holds no deciding
+        // role, is not asked and does not block: the fallback decides.
+        const holderId = item.projectId ? dir.budgetHolderOf?.(item.projectId) ?? null : null;
+        const holder = holderId ? dir.users.filter((u) => u.id === holderId && decidesInAccess(u)) : [];
+        if (holder.length > 0) return holder;
         return dir.users.filter((u) => (u.grants[BUDGET_OWNER_ROLE.tenant] ?? []).includes(BUDGET_OWNER_ROLE.role));
       }
       if (item.stewardRule === 'initiative-owner') {

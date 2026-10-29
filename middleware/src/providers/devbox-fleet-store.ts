@@ -88,12 +88,28 @@ export async function loadFleet(): Promise<FleetBox[]> {
   if (config.mock.aurora) return (mockRestartMirror('fleet')?.map(s => s.box) as FleetBox[] | undefined) ?? devboxBoxes.rows().map((b) => ({ ...b }));
   if (!usable()) return [];
   try {
-    const rows = await exec(
-      `SELECT id, session_id, label, owner_id, project_id, status,
-              created_at, last_activity_at, spend_usd, tokens_used, active_model
-         FROM devbox_boxes
-        WHERE status <> 'stopped'`,
-    );
+    // The profile stamp and task clock are additive columns
+    // (schema/devbox_profiles_schema.sql); a cluster without them falls to
+    // the bare select so the fleet still restores.
+    let rows: Record<string, unknown>[];
+    try {
+      rows = await exec(
+        `SELECT id, session_id, label, owner_id, project_id, status,
+                created_at, last_activity_at, spend_usd, tokens_used, active_model,
+                profile_id, profile_version, task_started_at
+           FROM devbox_boxes
+          WHERE status <> 'stopped'`,
+      );
+    } catch (err) {
+      if (!/column .* does not exist/i.test((err as Error).message ?? '')) throw err;
+      profileColumns = false;
+      rows = await exec(
+        `SELECT id, session_id, label, owner_id, project_id, status,
+                created_at, last_activity_at, spend_usd, tokens_used, active_model
+           FROM devbox_boxes
+          WHERE status <> 'stopped'`,
+      );
+    }
     // Best-effort tidy of the rows we just declined to restore. Fire-and-forget:
     // failing to prune is untidy, never incorrect.
     void exec(`DELETE FROM devbox_boxes WHERE status = 'stopped'`).catch(() => { /* untidy, not wrong */ });
@@ -108,15 +124,31 @@ export async function loadFleet(): Promise<FleetBox[]> {
   }
 }
 
+/**
+ * Whether `devbox_boxes` carries the DE-40/DE-48 columns (profile_id,
+ * profile_version, task_started_at). Assumed yes; `loadFleet` flips it off
+ * when the select for them fails, so writes against an older cluster keep
+ * landing instead of failing on every upsert until the schema is applied.
+ */
+let profileColumns = true;
+
 async function upsertRow(box: FleetBox): Promise<void> {
+  const extraCols = profileColumns ? ', profile_id, profile_version, task_started_at' : '';
+  const extraVals = profileColumns ? ', :profile_id, :profile_version, :task_started_at::timestamptz' : '';
+  const extraSet = profileColumns
+    ? `,
+       profile_id       = COALESCE(devbox_boxes.profile_id, EXCLUDED.profile_id),
+       profile_version  = COALESCE(devbox_boxes.profile_version, EXCLUDED.profile_version),
+       task_started_at  = EXCLUDED.task_started_at`
+    : '';
   await exec(
     `INSERT INTO devbox_boxes
        (id, session_id, label, owner_id, project_id, status,
-        created_at, last_activity_at, spend_usd, tokens_used, active_model)
+        created_at, last_activity_at, spend_usd, tokens_used, active_model${extraCols})
      VALUES
        (:id, :session_id, :label, :owner_id, :project_id, :status,
         :created_at::timestamptz, :last_activity_at::timestamptz,
-        :spend_usd, :tokens_used, :active_model)
+        :spend_usd, :tokens_used, :active_model${extraVals})
      ON CONFLICT (id) DO UPDATE SET
        label            = EXCLUDED.label,
        owner_id         = EXCLUDED.owner_id,
@@ -125,10 +157,12 @@ async function upsertRow(box: FleetBox): Promise<void> {
        last_activity_at = EXCLUDED.last_activity_at,
        spend_usd        = EXCLUDED.spend_usd,
        tokens_used      = EXCLUDED.tokens_used,
-       active_model     = EXCLUDED.active_model`,
+       active_model     = EXCLUDED.active_model${extraSet}`,
     // created_at is deliberately absent from the UPDATE list: it is what the
     // lifetime ceiling measures from, and letting a later write move it forward
     // would hand a long-lived box a fresh ceiling every time it was touched.
+    // The profile stamp is COALESCEd for the same reason: write-once, so a
+    // running box keeps the rules it started under (DE-40).
     [
       str('id', box.id),
       str('session_id', box.sessionId),
@@ -141,6 +175,13 @@ async function upsertRow(box: FleetBox): Promise<void> {
       num('spend_usd', box.spendUsd ?? null),
       num('tokens_used', box.tokensUsed ?? null),
       str('active_model', box.activeModel ?? null),
+      ...(profileColumns ? [
+        str('profile_id', box.profileId ?? null),
+        box.profileVersion == null
+          ? { name: 'profile_version', value: { isNull: true } } as SqlParameter
+          : { name: 'profile_version', value: { longValue: box.profileVersion } } as SqlParameter,
+        str('task_started_at', box.taskStartedAt ?? null),
+      ] : []),
     ],
   );
 }

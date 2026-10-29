@@ -11,7 +11,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { Annotations, Match, Template } from 'aws-cdk-lib/assertions';
 import { runtimeStack } from './helpers/stacks';
-import { actionsOf, runtimeNamed, runtimeNames, statementsForRole } from './helpers/cfn';
+import { actionsOf, flatten, runtimeNamed, runtimeNames, statementsForRole } from './helpers/cfn';
 import { resolveContainerUri } from '../lib/agentcore-runtime-stack';
 
 // `require`, not `import * as`: a namespace import is an __importStar copy with
@@ -206,17 +206,45 @@ describe('the ADOT trace pipeline', () => {
   }
 });
 
-describe('live system prompts reach the deployed fleet', () => {
+describe('live system prompts reach the deployed fleet through promoted pointers (DE-4)', () => {
   for (const agent of ALL_AGENTS) {
-    test(`orgiq-${agent} points at the prompt name OrgIQ-Agents actually creates`, () => {
+    test(`orgiq-${agent} points at the prompt name OrgIQ-Agents actually creates, and at its own pointer`, () => {
       const env = envOf(phaseTwo, agent);
       // Must match CfnPrompt name `${prefix}-${agentName}-system-prompt` in
       // agents-stack.ts — see cross-stack.test.ts, which checks both ends.
       assert.equal(env.SYSTEM_PROMPT_NAME, `orgiq-${agent}-system-prompt`);
-      assert.equal(env.SYSTEM_PROMPT_VERSION, 'DRAFT', 'DRAFT is the studio working copy — intentional');
+      assert.equal(env.SYSTEM_PROMPT_POINTER, `/orgiq/prompts/${agent}`);
       assert.equal(env.PROMPT_REFRESH_S, '60');
     });
+
+    test(`orgiq-${agent} never deploys on DRAFT: a studio edit must be published and promoted first`, () => {
+      const env = envOf(phaseTwo, agent);
+      assert.equal(env.SYSTEM_PROMPT_VERSION, undefined, 'no fleet-wide version by default; the pointer decides');
+      assert.equal(env.APP_ENV, 'production', 'prompt_source.py refuses DRAFT under APP_ENV=production');
+    });
+
+    test(`orgiq-${agent} may read only its own pointer path, and cannot move one`, () => {
+      const statements = statementsForRole(phaseTwo, `orgiq-${agent}-execution-role`);
+      const read = statements.find((s: any) => s.Sid === 'PromptPointerRead');
+      assert.ok(read, 'PromptPointerRead missing on the execution role');
+      assert.deepEqual(actionsOf(read!).sort(), ['ssm:GetParameter', 'ssm:GetParameters']);
+      const resource = flatten(read!.Resource);
+      assert.match(resource, new RegExp(`parameter/orgiq/prompts/${agent}/\\*`));
+      for (const other of ALL_AGENTS.filter((a) => a !== agent)) {
+        assert.doesNotMatch(resource, new RegExp(`prompts/${other}/`));
+      }
+      for (const s of statements) {
+        assert.ok(!actionsOf(s).some((a) => /^ssm:(Put|Delete)Parameter/.test(a)), `${agent} must not write SSM: ${actionsOf(s)}`);
+      }
+    });
   }
+
+  test('--context systemPromptVersion=<n> is a fleet-wide hard pin; DRAFT is refused at synth', () => {
+    const pinned = Template.fromStack(runtimeStack({ deployRuntimes: 'true', systemPromptVersion: '7' }).runtime);
+    for (const agent of ALL_AGENTS) assert.equal(envOf(pinned, agent).SYSTEM_PROMPT_VERSION, '7');
+    assert.throws(() => runtimeStack({ deployRuntimes: 'true', systemPromptVersion: 'DRAFT' }), /DRAFT is not deployable/);
+    assert.throws(() => runtimeStack({ deployRuntimes: 'true', systemPromptVersion: '0' }), /numbered/);
+  });
 });
 
 describe('the read-only graph role is mandatory and an EXCLUSIVE credential swap', () => {

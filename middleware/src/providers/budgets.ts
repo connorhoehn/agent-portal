@@ -116,14 +116,21 @@ export const PERIOD_START_SQL = `date_trunc('month', NOW())`;
  */
 export function spendPredicateSql(projectRef: string): string {
   return `
-        br.cost_usd IS NOT NULL AND (
+        br.cost_usd IS NOT NULL AND (${attributionPredicateSql(projectRef)}
+        )`;
+}
+
+/** The three arms alone, without the cost clause — what an UNKNOWN-cost run
+ *  is attributed by (DE-33). spendPredicateSql is this plus `cost_usd IS NOT
+ *  NULL`, so the two can never attribute a run differently. */
+export function attributionPredicateSql(projectRef: string): string {
+  return `
           br.work_item_id IN (SELECT w2.id FROM work_items w2 WHERE w2.project_id = ${projectRef})
           OR br.bot_id IN (
             SELECT b.id FROM bots b
              WHERE b.org_project_id = ${projectRef}
                 OR b.agent_project_id IN (SELECT ap.id FROM agent_projects ap WHERE ap.org_project_id = ${projectRef})
-          )
-        )`;
+          )`;
 }
 
 // ─── Mock fixtures (config.mock.aurora === true) ─────────────────────────────
@@ -611,6 +618,37 @@ export async function listBudgets(): Promise<BudgetRow[]> {
   const out = rows.map(rowToBudget);
   if (mode === 'dual') await logLedgerDrift(out, null);
   return out;
+}
+
+/**
+ * This period's task attempts attributed to the initiative whose cost is
+ * UNKNOWN (DE-33). A run that reports no figure spends no allocation in the
+ * sums above, so the soft brakes read this count beside the spend and ask for
+ * a confirmation while it is non-zero. Ledger mode counts `spend_entries`
+ * rows with a null cost; before that, finished `bot_runs` with no cost. A
+ * missing table reads as 0 — the brakes it feeds fail open like getBudget.
+ */
+export async function unknownCostCountInPeriod(orgProjectId: string): Promise<number> {
+  if (config.mock.aurora) {
+    const start = periodStartMs();
+    const runs = mockRunsAttributedTo(orgProjectId)
+      .filter((r) => r.costUsd == null && (r.status === 'done' || r.status === 'failed') && Date.parse(r.startedAt) >= start);
+    const stored = spendLedgerMode() === 'ledger'
+      ? mockUnknownSpend((e) => e.initiativeId === orgProjectId && Date.parse(e.occurredAt) >= start)
+      : [];
+    return runs.length + stored.length;
+  }
+  const rows = await safeExec(
+    spendLedgerMode() === 'ledger'
+      ? `SELECT COUNT(*)::int AS n FROM spend_entries se
+          WHERE se.initiative_id = :pid AND se.cost_usd IS NULL AND se.occurred_at >= ${PERIOD_START_SQL}`
+      : `SELECT COUNT(*)::int AS n FROM bot_runs br
+          WHERE br.cost_usd IS NULL AND br.status IN ('done', 'failed')
+            AND br.started_at >= ${PERIOD_START_SQL}
+            AND (${attributionPredicateSql(':pid')})`,
+    [s('pid', orgProjectId)],
+  );
+  return toNum(rows[0]?.['n']);
 }
 
 export async function getBudget(orgProjectId: string): Promise<BudgetRow | null> {

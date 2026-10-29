@@ -253,27 +253,84 @@ describe('review and gate offline', () => {
     expect(reviews[1]!.verdict).toBe('request_changes');
   });
 
-  it('re-evaluates on the newest verdict; the detail shows only the latest evaluation, the history keeps both', async () => {
+  it('re-evaluates on the newest verdict; with no recorded cost the max_cost gate routes it to a person (DE-33)', async () => {
     const before = await getChangeRequest(CHANGES_REQUESTED);
     expect(before!.status).toBe('changes_requested');
+    expect(before!.runId).toBeNull();
 
     await recordReview({
       changeId: CHANGES_REQUESTED, model: 'amazon.nova-pro-v1:0', verdict: 'approve',
       summary: 'Addressed.', findings: [],
     });
     const evaluated = await evaluateChange(CHANGES_REQUESTED);
-    expect(evaluated?.status).toBe('approved');
+    // The reviewer is a Nova model, not a person: its approve clears
+    // require_review, and the unrecorded cost is what keeps a person in the loop.
+    expect(evaluated?.status).toBe('needs_approval');
+    const cost = evaluated!.evaluation.gates.find((g) => g.kind === 'max_cost');
+    expect(cost?.outcome).toBe('requires_approval');
+    expect(cost?.detail).toContain('not recorded');
 
     const after = await getChangeRequest(CHANGES_REQUESTED);
-    expect(after!.status).toBe('approved');
-    // One row per firing policy in the CURRENT evaluation...
-    expect(after!.gates).toHaveLength(1);
-    expect(after!.gates[0]!.outcome).toBe('pass');
+    expect(after!.status).toBe('needs_approval');
+    // One row per firing policy in the CURRENT evaluation: the review's pass,
+    // the cost gate, and the devbox profile's model list (DE-40) — the seed's
+    // Nova author is not on it, which routes to a person, never blocks...
+    expect(after!.gates.map((g) => [g.kind, g.outcome]).sort()).toEqual([
+      ['max_cost', 'requires_approval'], ['model_allowlist', 'requires_approval'], ['require_review', 'pass'],
+    ]);
     expect(after!.evaluationSeq).toBe(2);
     // ...and the first evaluation is still readable (DE-46: append, not replace).
     const history = await listEvaluations(CHANGES_REQUESTED);
     expect(history.map((e) => e.seq)).toEqual([1, 2]);
     expect(history.every((e) => e.policyScope === 'org' && e.policyVersion === 1)).toBe(true);
+  });
+
+  it('the same flow with a recorded cost under the limit auto-approves', async () => {
+    // mock/agent-project-runs.ts: the Observability run that cost $0.42.
+    const created = await createChangeRequest({
+      projectId: OBSERVABILITY, runId: '1c9b2d5f-3a70-4b62-8d4c-8e2f6b015a22',
+      title: 'Costed', diff: 'd', files: ['src/alerts/dedup.ts'],
+      // On the default devbox profile's list (DE-40); an unrecorded model
+      // routes to a person (next case).
+      model: 'us.anthropic.claude-sonnet-5',
+    });
+    // Reviews are read newest first, so the two are stamped a minute apart.
+    let restore = freezeClock('2026-03-01T09:00:00.000Z');
+    await recordReview({
+      changeId: created.id, model: 'amazon.nova-pro-v1:0', verdict: 'request_changes',
+      summary: 'Key collides.', findings: [],
+    });
+    restore();
+    expect((await evaluateChange(created.id))?.status).toBe('changes_requested');
+    restore = freezeClock('2026-03-01T09:01:00.000Z');
+    await recordReview({
+      changeId: created.id, model: 'amazon.nova-pro-v1:0', verdict: 'approve',
+      summary: 'Addressed.', findings: [],
+    });
+    restore();
+    const evaluated = await evaluateChange(created.id);
+    expect(evaluated?.status).toBe('approved');
+    expect(evaluated!.evaluation.gates).toHaveLength(1);
+    expect(evaluated!.evaluation.gates[0]).toMatchObject({ kind: 'require_review', outcome: 'pass' });
+  });
+
+  it('an unrecorded author routes the same costed change to a person — never approved, never blocked (DE-40)', async () => {
+    const created = await createChangeRequest({
+      projectId: OBSERVABILITY, runId: '1c9b2d5f-3a70-4b62-8d4c-8e2f6b015a22',
+      title: 'Costed, no model', diff: 'd', files: ['src/alerts/dedup.ts'],
+    });
+    await recordReview({ changeId: created.id, model: 'amazon.nova-pro-v1:0', verdict: 'approve', summary: null, findings: [] });
+    const evaluated = await evaluateChange(created.id);
+    expect(evaluated?.status).toBe('needs_approval');
+    const gate = evaluated!.evaluation.gates.find((g) => g.kind === 'model_allowlist');
+    expect(gate).toMatchObject({ outcome: 'requires_approval' });
+    expect(gate?.detail).toContain('(unknown)');
+  });
+
+  it('the delivered demo change carries a costed run, so its seeded gates read approved', async () => {
+    const delivered = await getChangeRequest(DELIVERED);
+    expect(delivered!.runId).toBe('1c9b2d5f-3a70-4b62-8d4c-8e2f6b015a22');
+    expect(delivered!.gates.every((g) => g.outcome === 'pass')).toBe(true);
   });
 
   it('routes a protected-path change to a human even with an approving review', async () => {

@@ -104,7 +104,7 @@ describe('listActiveEnvelopes', () => {
   // envelope on a surface whose whole job is to say how much is left.
   it('carries attributionAvailable:false rather than a zero burn when nothing records the dispatcher', async () => {
     jest.spyOn(bots, 'dispatchedSpendInWindow')
-      .mockResolvedValue({ spentUsd: 0, attributionAvailable: false });
+      .mockResolvedValue({ spentUsd: 0, attributionAvailable: false, unknownCount: 0 });
 
     const rows = await listActiveEnvelopes(NORA);
     expect(rows).toHaveLength(1);

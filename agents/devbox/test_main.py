@@ -227,5 +227,79 @@ class DevboxWrapperTests(unittest.TestCase):
         self.assertEqual(argv["run_ref"], "job-9")
 
 
+    # 10. Model allowlist is a refusal, not a fallback (DE-40) ----------------
+
+    def test_unlisted_model_is_refused_and_starts_no_claude(self):
+        marker = os.path.join(self.tmp.name, "claude-ran")
+        self._use_stub(f"touch {marker}\necho '{{\"type\":\"result\"}}'\n")
+        saved = {k: os.environ.get(k) for k in ("DEVBOX_ALLOWED_MODELS", "ANTHROPIC_MODEL")}
+        os.environ["DEVBOX_ALLOWED_MODELS"] = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+        os.environ["ANTHROPIC_MODEL"] = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+        try:
+            out = asyncio.run(main.handle({"prompt": "hi", "model": "us.anthropic.claude-opus-4-8"}))
+            self.assertIsInstance(out, dict)
+            self.assertEqual(out["error"], "model not allowlisted")
+            self.assertEqual(out["allowed"], ["us.anthropic.claude-haiku-4-5-20251001-v1:0"])
+            self.assertFalse(os.path.exists(marker), "claude must not start for a refused model")
+            # A listed model, and no model at all, still resolve.
+            self.assertEqual(main._resolve_model("us.anthropic.claude-haiku-4-5-20251001-v1:0"),
+                             "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+            self.assertEqual(main._resolve_model(None), "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    # 11. Credentialed git keeps the token out of argv, config and disk (DE-45)
+
+    def test_git_op_passes_the_token_through_env_only(self):
+        token = "ghs_SECRET_token_value_123"
+        out_file = os.path.join(self.tmp.name, "git-calls")
+        git = os.path.join(self.tmp.name, "git")
+        with open(git, "w") as f:
+            # Records argv, and whether the auth header reached git's env.
+            f.write("#!/bin/sh\n"
+                    f"echo \"ARGV $*\" >> {out_file}\n"
+                    f"echo \"HDR ${{GIT_CONFIG_KEY_1:-}}\" >> {out_file}\n"
+                    "echo cloned\n")
+        os.chmod(git, 0o755)
+        orig = main._git_bin
+        main._git_bin = lambda: git
+        try:
+            target = os.path.join(self.workspace, "widgets")
+            gen = asyncio.run(main.handle({"op": "clone", "repo": "acme/widgets", "target": target, "token": token}))
+            events = _collect(gen)
+        finally:
+            main._git_bin = orig
+        self.assertEqual(events[0]["type"], "git_start")
+        self.assertTrue(events[0]["authenticated"])
+        self.assertEqual(events[-1], {"type": "git_end", "op": "clone", "exit_code": 0})
+        calls = Path(out_file).read_text()
+        self.assertIn("ARGV clone --depth 50 https://github.com/acme/widgets.git", calls)
+        self.assertIn("HDR http.https://github.com/.extraheader", calls)
+        self.assertNotIn(token, calls)                       # not in argv
+        self.assertNotIn(token, json.dumps(events))          # not in any event
+        self.assertNotIn("x-access-token", calls)
+        # The header value carries it, base64'd, in the CHILD env only.
+        env = main._git_env(self.workspace, token)
+        self.assertNotIn(token, env.get("GIT_CONFIG_VALUE_1", ""))
+        self.assertTrue(env["GIT_CONFIG_VALUE_1"].startswith("AUTHORIZATION: basic "))
+        self.assertNotIn("GIT_CONFIG_KEY_1", main._git_env(self.workspace, None))
+
+    def test_git_op_refuses_bad_input_without_running_git(self):
+        for payload in (
+            {"op": "clone", "repo": "../etc", "target": "/tmp/x"},
+            {"op": "clone", "repo": "a/b", "target": "relative"},
+            {"op": "push", "repo": "a/b", "target": "/tmp/x"},
+            {"op": "push", "repo": "a/b", "target": "/tmp/x", "branch": "b", "commit": "zz; rm"},
+        ):
+            events = _collect(asyncio.run(main.handle(payload)))
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["type"], "git_end")
+            self.assertEqual(events[0]["exit_code"], 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

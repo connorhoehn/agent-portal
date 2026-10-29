@@ -4,9 +4,14 @@
 export const ACCESS_TENANTS = ['orgiq', 'assessment', 'social', 'pipelines'] as const;
 export type AccessTenant = typeof ACCESS_TENANTS[number];
 
-/** `capability`: a grant entry that is not a role (lib/session.ts CAPABILITY_GRANTS), e.g. orgiq budget visibility. */
-export type AccessKind = 'tenant-role' | 'initiative-membership' | 'capability';
-export const ACCESS_KINDS: readonly AccessKind[] = ['tenant-role', 'initiative-membership', 'capability'];
+/**
+ * `capability`: a grant entry that is not a role (lib/session.ts CAPABILITY_GRANTS), e.g. orgiq budget visibility.
+ * `sprint-envelope` (2026-10-28): a spend envelope on one initiative — provisioned as a `budget_grants`
+ * row through the same path POST /api/grants writes, never a grants-table entry. One derived catalog
+ * item per initiative (`envelope:<projectId>`, lib/access/items.ts); the request carries the amount.
+ */
+export type AccessKind = 'tenant-role' | 'initiative-membership' | 'capability' | 'sprint-envelope';
+export const ACCESS_KINDS: readonly AccessKind[] = ['tenant-role', 'initiative-membership', 'capability', 'sprint-envelope'];
 export const DURATIONS = ['8h', '24h', '7d', '30d', 'standing'] as const;
 export type AccessDuration = typeof DURATIONS[number];
 export const REQUEST_STATUSES = ['draft', 'submitted', 'pending', 'approved', 'provisioned', 'active',
@@ -14,8 +19,12 @@ export const REQUEST_STATUSES = ['draft', 'submitted', 'pending', 'approved', 'p
 export type RequestStatus = typeof REQUEST_STATUSES[number];
 export type StepKind = 'manager' | 'steward' | 'access-admin';
 export type StepStatus = 'waiting' | 'current' | 'approved' | 'rejected' | 'info-requested' | 'skipped';
-/** `budget-owner`: the orgiq budget owner — `org-leader`, the holder of ManageBudgets (budget visibility, 2026-10-13). */
-export type StewardRule = 'tenant-steward' | 'initiative-owner' | 'budget-owner';
+/**
+ * `budget-owner`: the orgiq budget owner — `org-leader`, the holder of ManageBudgets (budget visibility, 2026-10-13).
+ * `budget-holder` (2026-10-28): the initiative's budget holder — whoever last set its allocation
+ * (`initiative_budgets.updated_by`) when they can decide in Access, else the org-leaders (lib/access/chain.ts).
+ */
+export type StewardRule = 'tenant-steward' | 'initiative-owner' | 'budget-owner' | 'budget-holder';
 export type AccessSeverity = 'warn' | 'block';
 export type SodVerdict = 'clear' | 'warn' | 'block';
 export type Decision = 'approve' | 'reject' | 'info';
@@ -47,6 +56,19 @@ export interface CatalogItem {
 }
 
 export interface Person { id: string; displayName: string; personId?: string | null }
+
+/**
+ * The forecast a sprint-envelope request was filed against (2026-10-28): the
+ * work item the SME was about to dispatch, the model, and the p25/p75 cost the
+ * dispatch drawer showed. Stored whole on the request (`access_requests.forecast`)
+ * so the approver sees what the requester saw; null on every other kind.
+ */
+export interface EnvelopeForecast {
+  workItemId: string | null;
+  model: string | null;
+  costUsdP25: number | null;
+  costUsdP75: number | null;
+}
 
 /** A person who may decide a step now; `onBehalfOf` when only a delegation makes them eligible (2026-10-14). */
 export interface EligiblePerson extends Person { onBehalfOf?: Person | null }
@@ -87,6 +109,10 @@ export interface AccessRequest {
   item: CatalogItem;
   justification: string;
   duration: AccessDuration;
+  /** `sprint-envelope` only: the dollars asked for (becomes `budget_grants.allocated_usd` when provisioned); null otherwise. */
+  requestedUsd: number | null;
+  /** `sprint-envelope` only: the dispatch forecast the request was filed against; null otherwise. */
+  forecast: EnvelopeForecast | null;
   status: RequestStatus;
   steps: RequestStep[];
   submittedAt: string;
@@ -174,6 +200,17 @@ export interface AccessDirectory {
   initiative(projectId: string): { ownerPersonId: string | null; memberPersonIds: readonly string[] } | null;
   /** Delegations in force now (window open, not ended), resolved when the directory is built. Absent = none. */
   activeDelegations?: ReadonlyArray<{ id: string; delegatorId: string; delegateId: string }>;
+  /**
+   * Sprint envelopes (2026-10-28): the people holding an ACTIVE budget grant on the
+   * initiative (its sprint `active`, or sprint-less), the same rule lib/bot-runner.ts
+   * dispatches on — "already holds" for a `sprint-envelope` item. Absent = nobody.
+   */
+  envelopeHolders?(projectId: string): readonly string[];
+  /**
+   * The app user who last set the initiative's allocation (`initiative_budgets.updated_by`),
+   * the `budget-holder` steward's first candidate. Absent or null = unknown.
+   */
+  budgetHolderOf?(projectId: string): string | null;
 }
 
 /** A delegation of one approver's decisions to another for a window (2026-10-14). */

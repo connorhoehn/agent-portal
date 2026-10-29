@@ -344,7 +344,13 @@ void spanProjector;
 // -------------------------------------------------------------------
 const deployCanary = app.node.tryGetContext('deployCanary') === 'true' || app.node.tryGetContext('deployCanary') === true;
 if (deployCanary) {
-  const promptCanary = new PromptCanaryStack(app, stackId(environment, 'PromptCanary'), { env, prefix });
+  // DE-4: the per-agent promotion controller is built but its schedule is
+  // DISABLED unless asked for; the default promotion path is gate-only
+  // (scripts/prompt-pointers.ts candidate → promote).
+  const promptPromotionCanary = app.node.tryGetContext('promptPromotionCanary') === 'true' || app.node.tryGetContext('promptPromotionCanary') === true;
+  const promptCanary = new PromptCanaryStack(app, stackId(environment, 'PromptCanary'), {
+    env, prefix, promptPromotion: { enabled: promptPromotionCanary },
+  });
 // PromptCanary reads the Aurora cluster and secret ARNs through raw
 // Fn.importValue, which creates no CDK dependency — so on a from-scratch
 // deploy with concurrency the canary stack raced ahead of Aurora and failed

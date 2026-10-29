@@ -22,6 +22,9 @@ import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
 import { mineViewer } from '../lib/mine.js';
 import { canReadBudgets, withholdBudget } from '../lib/budget-read-tier.js';
+import { stewardsInitiative } from '../lib/initiative-scope.js';
+import { PROFILE_ID_RE } from '../lib/devbox-profile.js';
+import { latestProfile, setInitiativeProfile } from '../providers/devbox-profiles.js';
 
 export const projectsRouter = Router();
 
@@ -123,4 +126,37 @@ projectsRouter.patch('/:id/contributors/:personId', governGate, asyncHandler(asy
   const result = await setContributionRole(id, personId, role);
   if (relayFailure(res, result)) return;
   res.json({ ok: true });
+}));
+
+// PATCH /api/graph/projects/:id/devbox-profile  body {profileId: string|null}
+// Points the initiative's boxes at a devbox policy profile (DE-40); null
+// clears it back to `default`. Takes effect on the NEXT box — a running box
+// keeps the version it was created under. Only a published profile id may be
+// named.
+//
+// WHO may assign is an open user decision (the spec proposes the initiative's
+// program owner or an org-leader). Built conservatively: Cedar `ManageBudgets`
+// (hr-admin, org-leader, program-owner — the existing program-management
+// action) AND a steward of this initiative (owner/contributor, or an org-wide
+// role), so a program-owner assigns only on initiatives they run.
+projectsRouter.patch('/:id/devbox-profile', requireAction('ManageBudgets'), asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  if (!id) throw new ValidationError('Invalid project id');
+  const body = (req.body ?? {}) as { profileId?: unknown };
+  if (!('profileId' in body)) throw new ValidationError('profileId is required (a profile id, or null to clear)');
+  if (body.profileId !== null && typeof body.profileId !== 'string') throw new ValidationError('profileId must be a string, or null to clear');
+  const profileId = body.profileId === null ? null : body.profileId.trim();
+  if (profileId !== null && !PROFILE_ID_RE.test(profileId)) throw new ValidationError('profileId is not a profile id');
+
+  if (!await stewardsInitiative(req.session ?? null, id)) {
+    res.status(403).json({ error: 'you can only set the devbox profile of an initiative you own or contribute to', code: 'NOT_ON_INITIATIVE', projectId: id });
+    return;
+  }
+  if (profileId !== null && profileId !== 'default' && !await latestProfile(profileId)) {
+    res.status(400).json({ error: `no published profile "${profileId}"`, code: 'UNKNOWN_PROFILE' });
+    return;
+  }
+  const result = await setInitiativeProfile(id, profileId === 'default' ? null : profileId);
+  if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+  res.json({ ok: true, profileId: profileId ?? 'default' });
 }));

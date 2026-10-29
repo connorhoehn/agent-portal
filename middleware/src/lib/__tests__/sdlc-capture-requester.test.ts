@@ -7,7 +7,7 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aur
 jest.mock('../devbox-arn.js', () => ({ resolveDevboxArn: jest.fn(async () => 'arn:devbox'), devboxDataClient: jest.fn(() => ({})) }));
 jest.mock('../devbox-fleet.js', () => ({
   registerBox: jest.fn(() => ({ id: 'box-1' })), getBoxBySession: jest.fn(() => null),
-  appendEvent: jest.fn(), reserveBox: jest.fn(), releaseBox: jest.fn(),
+  appendEvent: jest.fn(), reserveBox: jest.fn(), releaseBox: jest.fn(), setBoxProfile: jest.fn(),
 }));
 jest.mock('../run-brief.js', () => ({ freezeBrief: jest.fn(async () => { throw new Error('no brief here'); }), labRunContext: jest.fn() }));
 jest.mock('../change-reviewer.js', () => ({ reviewDiff: jest.fn(async () => ({ model: 'm', verdict: 'approve', summary: null, findings: [] })) }));

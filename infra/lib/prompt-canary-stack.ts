@@ -7,12 +7,27 @@ import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as scheduler from 'aws-cdk-lib/aws-scheduler';
 import * as path from 'path';
+import { POINTER_AGENTS } from './prompt-pointers';
+
+export interface PromptPromotionProps {
+  /**
+   * DE-4: run the per-agent promotion controller on a schedule. Off by
+   * default (the schedule is created DISABLED): until online eval scores
+   * arrive per arm (DE-5) the controller would promote on noise, so the
+   * default path is gate-only — `scripts/prompt-pointers.ts candidate` then
+   * `promote`, a straight pointer flip after the offline gate.
+   */
+  readonly enabled: boolean;
+  /** The agents whose pointers the controller may move. */
+  readonly agents?: readonly string[];
+}
 
 export interface PromptCanaryStackProps extends cdk.StackProps {
   /** AWS environment (account + region). */
   env: cdk.Environment;
   /** Resource-naming prefix (e.g. "orgiq"). */
   prefix: string;
+  promptPromotion?: PromptPromotionProps;
 }
 
 /**
@@ -572,6 +587,297 @@ export class PromptCanaryStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ControllerStateMachineArn', {
       value: stateMachine.stateMachineArn,
       description: 'ARN of the canary controller Express state machine.',
+    });
+
+    this.addPromptPromotionController({
+      prefix,
+      promotion: props.promptPromotion ?? { enabled: false },
+      parseMetricsFn,
+      scoresLogGroup,
+      configParam,
+      controlParam,
+      auroraClusterArn,
+      auroraSecretArn,
+    });
+  }
+
+  /**
+   * DE-4: the second, per-agent input to the canary. For each agent with a
+   * `/<prefix>/prompts/<agent>/candidate` pointer it reads the last five
+   * minutes of score events for that agent grouped by `prompt_arm`
+   * (`live` / `candidate`, the attribute prompt_source.py stamps on every
+   * span), hands them to the same ParseMetrics decision engine with the
+   * candidate's weight, and then:
+   *   PROMOTE  → live ← candidate, candidate deleted; prompt_version_meta
+   *              new → promoted, old live → superseded
+   *   ROLLBACK → candidate deleted; → rolled_back
+   *   anything else → nothing moves.
+   * Thresholds and the halt/cooldown flags are the existing
+   * `/<prefix>/canary/config` and `/control`. The controller's role may
+   * write SSM only under `/<prefix>/prompts/*`: it cannot touch weight_b.
+   */
+  private addPromptPromotionController(input: {
+    prefix: string;
+    promotion: PromptPromotionProps;
+    parseMetricsFn: lambda.IFunction;
+    scoresLogGroup: logs.ILogGroup;
+    configParam: ssm.IStringParameter;
+    controlParam: ssm.IStringParameter;
+    auroraClusterArn: string;
+    auroraSecretArn: string;
+  }): void {
+    const { prefix, promotion } = input;
+    const agents = [...(promotion.agents ?? POINTER_AGENTS)];
+    for (const a of agents) {
+      if (!/^[a-z][a-z0-9-]{0,39}$/.test(a)) throw new Error(`promptPromotion.agents: "${a}" is not an agent name`);
+    }
+    const stack = cdk.Stack.of(this);
+    const pointerArn = stack.formatArn({
+      service: 'ssm', resource: 'parameter', resourceName: `${prefix}/prompts/*`, arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
+    });
+
+    const role = new iam.Role(this, 'PromotionControllerRole', {
+      roleName: `${prefix}-prompt-promotion-role`,
+      assumedBy: new iam.ServicePrincipal('states.amazonaws.com'),
+      description: 'Execution role for the DE-4 per-agent prompt promotion controller.',
+    });
+    role.addToPolicy(new iam.PolicyStatement({
+      sid: 'PromptPointers',
+      actions: ['ssm:GetParameter', 'ssm:PutParameter', 'ssm:DeleteParameter'],
+      resources: [pointerArn],
+    }));
+    role.addToPolicy(new iam.PolicyStatement({
+      sid: 'CanaryThresholdsRead',
+      actions: ['ssm:GetParameter'],
+      resources: [input.configParam.parameterArn, input.controlParam.parameterArn],
+    }));
+    role.addToPolicy(new iam.PolicyStatement({
+      sid: 'LogsInsightsQuery',
+      actions: ['logs:StartQuery', 'logs:GetQueryResults', 'logs:StopQuery'],
+      resources: ['*'],
+    }));
+    role.addToPolicy(new iam.PolicyStatement({
+      sid: 'InvokeParseMetrics',
+      actions: ['lambda:InvokeFunction'],
+      resources: [input.parseMetricsFn.functionArn],
+    }));
+    role.addToPolicy(new iam.PolicyStatement({
+      sid: 'AuroraDataApi', actions: ['rds-data:ExecuteStatement'], resources: [input.auroraClusterArn],
+    }));
+    role.addToPolicy(new iam.PolicyStatement({
+      sid: 'AuroraSecret', actions: ['secretsmanager:GetSecretValue'], resources: [input.auroraSecretArn],
+    }));
+    role.addToPolicy(new iam.PolicyStatement({
+      sid: 'SfnLogDelivery',
+      actions: [
+        'logs:CreateLogStream', 'logs:PutLogEvents', 'logs:CreateLogDelivery', 'logs:GetLogDelivery', 'logs:UpdateLogDelivery',
+        'logs:DeleteLogDelivery', 'logs:ListLogDeliveries', 'logs:PutResourcePolicy', 'logs:DescribeResourcePolicies', 'logs:DescribeLogGroups',
+      ],
+      resources: ['*'],
+    }));
+
+    const lifecycleUpsert = (status: string, promptIdPath: string, versionPath: string, resultPath: string, next: string) => ({
+      Type: 'Task',
+      Resource: 'arn:aws:states:::aws-sdk:rdsdata:executeStatement',
+      Parameters: {
+        ResourceArn: input.auroraClusterArn,
+        SecretArn: input.auroraSecretArn,
+        Database: 'orgiq',
+        Sql: 'INSERT INTO observability.prompt_version_meta (prompt_id, version, lifecycle_status) VALUES (:prompt_id, :version, :status) '
+          + 'ON CONFLICT (prompt_id, version) DO UPDATE SET lifecycle_status = EXCLUDED.lifecycle_status'
+          + (status === 'superseded' ? ', superseded_at = now()' : ''),
+        Parameters: [
+          { Name: 'prompt_id', Value: { 'StringValue.$': promptIdPath } },
+          { Name: 'version', Value: { 'StringValue.$': versionPath } },
+          { Name: 'status', Value: { StringValue: status } },
+        ],
+      },
+      ResultPath: resultPath,
+      Next: next,
+    });
+
+    const perAgent = {
+      StartAt: 'GetCandidate',
+      States: {
+        GetCandidate: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::aws-sdk:ssm:getParameter',
+          Parameters: { 'Name.$': `States.Format('/${prefix}/prompts/{}/candidate', $.agent)` },
+          ResultSelector: { 'raw.$': '$.Parameter.Value', 'pointer.$': 'States.StringToJson($.Parameter.Value)' },
+          ResultPath: '$.candidate',
+          Catch: [{ ErrorEquals: ['Ssm.ParameterNotFoundException', 'States.ALL'], ResultPath: '$.error', Next: 'NoCandidate' }],
+          Next: 'GetLive',
+        },
+        NoCandidate: { Type: 'Pass', Result: { action: 'NO_CANDIDATE' }, ResultPath: '$.decision', End: true },
+        GetLive: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::aws-sdk:ssm:getParameter',
+          Parameters: { 'Name.$': `States.Format('/${prefix}/prompts/{}/live', $.agent)` },
+          ResultSelector: { 'pointer.$': 'States.StringToJson($.Parameter.Value)', present: true },
+          ResultPath: '$.live',
+          Catch: [{ ErrorEquals: ['States.ALL'], ResultPath: '$.live', Next: 'GetConfig' }],
+          Next: 'GetConfig',
+        },
+        GetConfig: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::aws-sdk:ssm:getParameter',
+          Parameters: { Name: input.configParam.parameterName },
+          ResultPath: '$.config',
+          Next: 'GetControl',
+        },
+        GetControl: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::aws-sdk:ssm:getParameter',
+          Parameters: { Name: input.controlParam.parameterName },
+          ResultPath: '$.control',
+          Next: 'StartInsights',
+        },
+        StartInsights: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::aws-sdk:cloudwatchlogs:startQuery',
+          Parameters: {
+            LogGroupName: input.scoresLogGroup.logGroupName,
+            // Scores for THIS agent, bucketed by the arm that served the run
+            // (`orgiq.prompt_arm` on the span → `prompt_arm` on the score
+            // event). The lambda maps live→A, candidate→B.
+            'QueryString.$': "States.Format('fields @timestamp, prompt_arm as version_label | filter agent = \"{}\" and ispresent(prompt_arm) | stats avg(composite_score) as composite, sum(error)/count(*) as error_rate, pct(latency_ms, 95) as p95, count(*) as n by version_label', $.agent)",
+            'StartTime.$': 'States.MathAdd($$.State.EnteredTime.UnixTime, -300)',
+            'EndTime.$': '$$.State.EnteredTime.UnixTime',
+          },
+          ResultPath: '$.query',
+          Next: 'WaitForResults',
+        },
+        WaitForResults: { Type: 'Wait', Seconds: 3, Next: 'GetResults' },
+        GetResults: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::aws-sdk:cloudwatchlogs:getQueryResults',
+          Parameters: { 'QueryId.$': '$.query.QueryId' },
+          ResultPath: '$.results',
+          Next: 'IsComplete',
+        },
+        IsComplete: {
+          Type: 'Choice',
+          Choices: [{ Variable: '$.results.Status', StringEquals: 'Complete', Next: 'ParseMetrics' }],
+          Default: 'WaitForResults',
+        },
+        ParseMetrics: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::lambda:invoke',
+          Parameters: {
+            FunctionName: input.parseMetricsFn.functionArn,
+            Payload: {
+              mode: 'pointer',
+              'agent.$': '$.agent',
+              'results.$': '$.results.Results',
+              'weight.$': "States.Format('{}', $.candidate.pointer.weight)",
+              'control.$': '$.control.Parameter.Value',
+              'config.$': '$.config.Parameter.Value',
+            },
+          },
+          ResultPath: '$.decision',
+          Next: 'DecideAction',
+        },
+        DecideAction: {
+          Type: 'Choice',
+          Choices: [
+            { Variable: '$.decision.Payload.action', StringEquals: 'PROMOTE', Next: 'PromoteLive' },
+            { Variable: '$.decision.Payload.action', StringEquals: 'ROLLBACK', Next: 'RollbackDeleteCandidate' },
+          ],
+          Default: 'Hold',
+        },
+        Hold: { Type: 'Pass', End: true },
+        // PROMOTE: live ← {promptId, version} of the candidate (weight dropped), then the candidate goes.
+        PromoteLive: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::aws-sdk:ssm:putParameter',
+          Parameters: {
+            'Name.$': `States.Format('/${prefix}/prompts/{}/live', $.agent)`,
+            'Value.$': "States.Format('{\"promptId\":\"{}\",\"version\":\"{}\"}', $.candidate.pointer.promptId, $.candidate.pointer.version)",
+            Type: 'String',
+            Overwrite: true,
+          },
+          ResultPath: '$.liveWrite',
+          Next: 'PromoteDeleteCandidate',
+        },
+        PromoteDeleteCandidate: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::aws-sdk:ssm:deleteParameter',
+          Parameters: { 'Name.$': `States.Format('/${prefix}/prompts/{}/candidate', $.agent)` },
+          ResultPath: '$.candidateDelete',
+          Next: 'MarkPromoted',
+        },
+        MarkPromoted: lifecycleUpsert('promoted', '$.candidate.pointer.promptId', '$.candidate.pointer.version', '$.audit1', 'HadLive'),
+        HadLive: {
+          Type: 'Choice',
+          Choices: [{ Variable: '$.live.present', IsPresent: true, Next: 'MarkSuperseded' }],
+          Default: 'Hold',
+        },
+        MarkSuperseded: { ...lifecycleUpsert('superseded', '$.live.pointer.promptId', '$.live.pointer.version', '$.audit2', 'Hold') },
+        // ROLLBACK: only the candidate goes; live is untouched.
+        RollbackDeleteCandidate: {
+          Type: 'Task',
+          Resource: 'arn:aws:states:::aws-sdk:ssm:deleteParameter',
+          Parameters: { 'Name.$': `States.Format('/${prefix}/prompts/{}/candidate', $.agent)` },
+          ResultPath: '$.candidateDelete',
+          Next: 'MarkRolledBack',
+        },
+        MarkRolledBack: lifecycleUpsert('rolled_back', '$.candidate.pointer.promptId', '$.candidate.pointer.version', '$.audit1', 'Hold'),
+      },
+    };
+
+    const definition = {
+      Comment: 'OrgIQ prompt promotion controller (DE-4) — per agent: promote the candidate pointer to live, or roll it back.',
+      StartAt: 'EachAgent',
+      States: {
+        EachAgent: {
+          Type: 'Map',
+          ItemsPath: '$.agents',
+          MaxConcurrency: 1,
+          Parameters: { 'agent.$': '$$.Map.Item.Value' },
+          Iterator: perAgent,
+          End: true,
+        },
+      },
+    };
+
+    const logGroup = new logs.LogGroup(this, 'PromotionControllerLogGroup', {
+      logGroupName: `/aws/vendedlogs/states/${prefix}-prompt-promotion`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    const machine = new sfn.StateMachine(this, 'PromotionStateMachine', {
+      stateMachineName: `${prefix}-prompt-promotion`,
+      stateMachineType: sfn.StateMachineType.EXPRESS,
+      role,
+      definitionBody: sfn.DefinitionBody.fromString(JSON.stringify(definition)),
+      logs: { destination: logGroup, level: sfn.LogLevel.ALL, includeExecutionData: true },
+    });
+
+    const schedulerRole = new iam.Role(this, 'PromotionSchedulerRole', {
+      roleName: `${prefix}-prompt-promotion-scheduler-role`,
+      assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
+    });
+    schedulerRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'StartPromotionController', actions: ['states:StartExecution'], resources: [machine.stateMachineArn],
+    }));
+    new scheduler.CfnSchedule(this, 'PromotionSchedule', {
+      name: `${prefix}-prompt-promotion-schedule`,
+      description: promotion.enabled
+        ? 'Fires the DE-4 prompt promotion controller every five minutes.'
+        : 'DISABLED by default (gate-only promotion); --context promptPromotionCanary=true enables it.',
+      scheduleExpression: 'rate(5 minutes)',
+      flexibleTimeWindow: { mode: 'OFF' },
+      state: promotion.enabled ? 'ENABLED' : 'DISABLED',
+      target: {
+        arn: machine.stateMachineArn,
+        roleArn: schedulerRole.roleArn,
+        input: JSON.stringify({ agents }),
+      },
+    });
+
+    new cdk.CfnOutput(this, 'PromptPromotionStateMachineArn', {
+      value: machine.stateMachineArn,
+      description: `DE-4 per-agent promotion controller (schedule ${promotion.enabled ? 'ENABLED' : 'DISABLED'}).`,
     });
   }
 }

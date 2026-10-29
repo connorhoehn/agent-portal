@@ -927,6 +927,8 @@ def with_orgiq_root(
     runtime_image_digest: Optional[str] = None,
     model_id: Optional[str] = None,
     model_registry_version: Optional[str] = None,
+    prompt_version_number: Optional[str] = None,
+    prompt_arm: Optional[str] = None,
 ) -> Iterator[object]:
     """Wrap an agent invocation in an OpenInference-compliant root AGENT span.
 
@@ -935,6 +937,7 @@ def with_orgiq_root(
       - Sets ``agent.name``, ``orgiq.agent_id``, ``orgiq.agent_name``, ``orgiq.invocation_id``
       - Sets ``orgiq.parent_invocation_id``, ``orgiq.user_id``, ``orgiq.session_id`` when non-empty on ctx
       - Sets ``orgiq.prompt_version``, ``orgiq.template_id``, ``orgiq.runtime_image_digest`` when supplied
+      - Sets ``orgiq.prompt_version_number`` / ``orgiq.prompt_arm`` (DE-4) when supplied
       - Sets ``orgiq.model_id`` / ``orgiq.model_registry_version`` (DE-3) when supplied
       - Wraps the body in OI ``using_session(...)`` and ``using_user(...)`` so all child spans inherit
         these via OTel context propagation
@@ -970,6 +973,10 @@ def with_orgiq_root(
         attrs["orgiq.session_id"] = ctx.session_id
     if prompt_version:
         attrs["orgiq.prompt_version"] = prompt_version
+    if prompt_version_number:
+        attrs["orgiq.prompt_version_number"] = prompt_version_number
+    if prompt_arm:
+        attrs["orgiq.prompt_arm"] = prompt_arm
     if template_id:
         attrs["orgiq.template_id"] = template_id
     if runtime_image_digest:

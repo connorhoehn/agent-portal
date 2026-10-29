@@ -565,7 +565,8 @@ export async function notifyWorkItemAssigned(ev: WorkItemAssignedEvent): Promise
 export interface BudgetGrantEvent {
   grantId: string;
   initiativeId: string;
-  sprintId: string;
+  /** Null for an initiative-level standing envelope (no active sprint when it was granted). */
+  sprintId: string | null;
   granteePersonId: string;
   amountUsd: number;
   actorId: string | null;
@@ -581,7 +582,7 @@ export async function notifyBudgetGranted(ev: BudgetGrantEvent): Promise<void> {
       id: `budget-grant:${ev.grantId}`,
       type: 'system',
       title: `You were granted a $${ev.amountUsd.toLocaleString('en-US')} sprint envelope`,
-      body: `Initiative ${ev.initiativeId}, sprint ${ev.sprintId}`,
+      body: ev.sprintId ? `Initiative ${ev.initiativeId}, sprint ${ev.sprintId}` : `Initiative ${ev.initiativeId}, standing (no sprint)`,
       payload: { tenant: 'orgiq', kind: 'budget-grant', grantId: ev.grantId, initiativeId: ev.initiativeId, sprintId: ev.sprintId, actorId: ev.actorId },
       action: { label: 'Open the initiative', href: `/iq/projects/${encodeURIComponent(ev.initiativeId)}` },
     });

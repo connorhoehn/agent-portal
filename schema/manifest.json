@@ -155,6 +155,18 @@
       "why": "The fleet itself — which computers exist. Standalone (no FKs): the registry it backs is in-process memory, and a cluster missing this table degrades to exactly the old behaviour rather than failing, so it does not gate anything that loads after it."
     },
     {
+      "id": "devbox_profiles_schema",
+      "file": "devbox_profiles_schema.sql",
+      "kind": "repeatable",
+      "why": "Versioned devbox policy profiles (DE-40) and the box columns the one lifetime model reads (DE-48). Alters projects (devbox_profile_id) and devbox_boxes (profile_id, profile_version, task_started_at), so it loads after orgiq_schema and devbox_fleet_schema; seeds ('default', 1) idempotently."
+    },
+    {
+      "id": "credential_issues_schema",
+      "file": "credential_issues_schema.sql",
+      "kind": "repeatable",
+      "why": "Audit of per-run repository tokens the BFF minted (DE-45): run, repo, permissions, expiry, caller — never the token. Standalone, no FKs."
+    },
+    {
       "id": "agent_bots_schema",
       "file": "agent_bots_schema.sql",
       "kind": "repeatable",
@@ -177,6 +189,18 @@
       "file": "spend_ledger_schema.sql",
       "kind": "repeatable",
       "why": "The spend ledger (DE-30): one row per finished task attempt on every run path. FKs projects and budget_grants, so it loads after this."
+    },
+    {
+      "id": "spend_ledger_provider_schema",
+      "file": "spend_ledger_provider_schema.sql",
+      "kind": "repeatable",
+      "why": "DE-33: nullable `provider` on spend_entries so a local $0 is distinguishable from a Bedrock $0. ALTERs the table spend_ledger_schema.sql creates, so it loads right after it."
+    },
+    {
+      "id": "spend_holds_schema",
+      "file": "spend_holds_schema.sql",
+      "kind": "repeatable",
+      "why": "Spend holds (DE-34): the forecast held at dispatch under an advisory lock, settled by the ledger entry for the same attempt. FKs projects and budget_grants like the ledger, so it loads after spend_ledger_schema.sql."
     },
     {
       "id": "assessment_schema",
@@ -231,6 +255,12 @@
       "file": "work_item_estimate_schema.sql",
       "kind": "repeatable",
       "why": "work_items estimate provenance — who stood behind a forecast, when, and for which model. Additive ALTER on work_items, so it loads after orgiq_work_items_schema.sql creates the table and after program_schema.sql adds estimated_cost_usd beside it."
+    },
+    {
+      "id": "work_item_job_drafts_schema",
+      "file": "work_item_job_drafts_schema.sql",
+      "kind": "repeatable",
+      "why": "A dispatch prepared on a work item and saved for later (the dispatch drawer's Save for later, 2026-10-28). Additive, FKs work_items and agent_projects, so it loads after both — right after the estimate columns it sits beside."
     },
     {
       "id": "local_compute_schema",

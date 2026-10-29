@@ -799,6 +799,44 @@ export async function heartbeatJob(id: string, claimToken: string): Promise<bool
  * `claimToken` fences the transition for every executor. Returns whether the
  * transition applied — false means the claim was already gone.
  */
+/**
+ * Hand a claimed job back to the queue WITHOUT burning an attempt (DE-34): the
+ * dispatcher claimed it and then could not hold its money, which is nothing
+ * the job did. The claim is undone exactly — status, box, session, token,
+ * stamps and the attempt counter — so the next tick re-claims it as if this
+ * one had never happened. Fenced on the claim token like every other write.
+ */
+export async function unclaimJob(id: string, claimToken: string): Promise<boolean> {
+  if (config.mock.aurora) {
+    const job = mockJobs.find((j) => j.id === id);
+    if (!job || job.status !== 'claimed' || MOCK_CLAIM_TOKENS.get(id) !== claimToken) return false;
+    job.status = 'queued';
+    job.boxId = null;
+    job.sessionId = null;
+    job.claimedAt = null;
+    job.attempts = Math.max(0, job.attempts - 1);
+    MOCK_CLAIM_TOKENS.delete(id);
+    emitJobChange(job);
+    return true;
+  }
+  const rows = await exec(
+    `UPDATE agent_jobs
+        SET status = 'queued', box_id = NULL, session_id = NULL, claim_token = NULL,
+            claimed_at = NULL, heartbeat_at = NULL,
+            attempts = GREATEST(attempts - 1, 0), updated_at = NOW()
+      WHERE id = :id AND claim_token = :token AND status = 'claimed'
+      RETURNING id, title, payload::text AS payload`,
+    [strParam('id', id), strParam('token', claimToken)],
+  );
+  if (rows[0]) {
+    emitJobChange({
+      id: toStr(rows[0]['id']), boxId: null, status: 'queued',
+      title: toStr(rows[0]['title']), payload: toJson(rows[0]['payload']) ?? {},
+    });
+  }
+  return rows.length > 0;
+}
+
 export async function markRunning(id: string, claimToken?: string): Promise<boolean> {
   if (!claimToken) return false;
   if (config.mock.aurora) {

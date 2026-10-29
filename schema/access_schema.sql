@@ -42,7 +42,7 @@ UPDATE app_users SET person_id = 'p-priya' WHERE id = 'u-priya' AND person_id IS
 -- (design: "provisioned by hand").
 CREATE TABLE IF NOT EXISTS access_catalog_items (
   id               TEXT PRIMARY KEY,
-  kind             TEXT NOT NULL CHECK (kind IN ('tenant-role', 'initiative-membership', 'capability')),
+  kind             TEXT NOT NULL CONSTRAINT access_catalog_items_kind_check CHECK (kind IN ('tenant-role', 'initiative-membership', 'capability', 'sprint-envelope')),
   tenant           TEXT NOT NULL,
   role             TEXT,
   project_id       TEXT,
@@ -50,12 +50,25 @@ CREATE TABLE IF NOT EXISTS access_catalog_items (
   description      TEXT NOT NULL,
   sensitive        BOOLEAN NOT NULL DEFAULT FALSE,
   default_duration TEXT NOT NULL CHECK (default_duration IN ('8h', '24h', '7d', '30d', 'standing')),
-  steward_rule     TEXT NOT NULL CHECK (steward_rule IN ('tenant-steward', 'initiative-owner', 'budget-owner')),
+  steward_rule     TEXT NOT NULL CONSTRAINT access_catalog_items_steward_rule_check CHECK (steward_rule IN ('tenant-steward', 'initiative-owner', 'budget-owner', 'budget-holder')),
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   -- `capability` (2026-10-13): a grant entry that is not a role, held in user_tenant_roles
   -- like one (orgiq `budgets-reader`, the budgets read tier); `role` names the entry.
-  CHECK ((kind IN ('tenant-role', 'capability') AND role IS NOT NULL) OR (kind = 'initiative-membership' AND project_id IS NOT NULL))
+  -- `sprint-envelope` (2026-10-28): a budget_grants row on `project_id`. Not seeded: the route
+  -- derives one `envelope:<project_id>` item per initiative (LIST_CATALOG_SQL in
+  -- middleware/src/lib/access/sql.ts); a stored row with that id overrides the derived one.
+  CONSTRAINT access_catalog_items_shape_check CHECK ((kind IN ('tenant-role', 'capability') AND role IS NOT NULL)
+    OR (kind IN ('initiative-membership', 'sprint-envelope') AND project_id IS NOT NULL))
 );
+-- Clusters created before 2026-10-28 carry the three-kind list and the unnamed shape check; replace by name.
+ALTER TABLE access_catalog_items DROP CONSTRAINT IF EXISTS access_catalog_items_kind_check;
+ALTER TABLE access_catalog_items ADD CONSTRAINT access_catalog_items_kind_check CHECK (kind IN ('tenant-role', 'initiative-membership', 'capability', 'sprint-envelope'));
+ALTER TABLE access_catalog_items DROP CONSTRAINT IF EXISTS access_catalog_items_steward_rule_check;
+ALTER TABLE access_catalog_items ADD CONSTRAINT access_catalog_items_steward_rule_check CHECK (steward_rule IN ('tenant-steward', 'initiative-owner', 'budget-owner', 'budget-holder'));
+ALTER TABLE access_catalog_items DROP CONSTRAINT IF EXISTS access_catalog_items_check;
+ALTER TABLE access_catalog_items DROP CONSTRAINT IF EXISTS access_catalog_items_shape_check;
+ALTER TABLE access_catalog_items ADD CONSTRAINT access_catalog_items_shape_check CHECK ((kind IN ('tenant-role', 'capability') AND role IS NOT NULL)
+  OR (kind IN ('initiative-membership', 'sprint-envelope') AND project_id IS NOT NULL));
 
 -- ── access_requests ──────────────────────────────────────────────────────────
 -- `kind` (lane A2): a `grant` asks for access and names a catalog item; a
@@ -84,11 +97,19 @@ CREATE TABLE IF NOT EXISTS access_requests (
   revoked_at          TIMESTAMPTZ,
   -- When the 24-hour expiry warning was sent (lib/access-expiry.ts): the
   -- once-only marker the sweeper claims with a conditional UPDATE.
-  expiry_warned_at    TIMESTAMPTZ
+  expiry_warned_at    TIMESTAMPTZ,
+  -- A sprint envelope's request (2026-10-28): the dollars asked for (becomes
+  -- budget_grants.allocated_usd when provisioned) and the dispatch forecast it
+  -- was filed against ({ workItemId, model, costUsdP25, costUsdP75 }, stored
+  -- whole so the approver sees what the requester saw). NULL on every other kind.
+  requested_usd       NUMERIC CHECK (requested_usd IS NULL OR requested_usd > 0),
+  forecast            JSONB
 );
 ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS expiry_warned_at TIMESTAMPTZ;
 ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'grant';
 ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS review_id TEXT;
+ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS requested_usd NUMERIC CHECK (requested_usd IS NULL OR requested_usd > 0);
+ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS forecast JSONB;
 CREATE INDEX IF NOT EXISTS access_requests_beneficiary_idx ON access_requests (beneficiary_id);
 CREATE INDEX IF NOT EXISTS access_requests_status_idx ON access_requests (status);
 CREATE INDEX IF NOT EXISTS access_requests_expires_idx ON access_requests (expires_at) WHERE expires_at IS NOT NULL;

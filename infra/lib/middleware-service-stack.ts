@@ -16,6 +16,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 import { realtimeAlarm, realtimeAlarmsEnabled, realtimeAlarmTopicName } from './realtime-alarms';
 import { capabilityParameterNames } from './agentcore-capabilities-stack';
+import { DEVBOX_TASK_TIMEOUT_S } from './devbox-stack';
 import type { Construct } from 'constructs';
 import {
   realtimeJwtSecretArnParameterName, socialPlatformInternalUrl, socialRedisUrlParameterName, socialTablePrefix,
@@ -630,6 +631,15 @@ export class MiddlewareServiceStack extends cdk.Stack {
       resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/${prefix}/canary/*`],
     }));
 
+    // DE-4 prompt pointers (lib/prompt-pointers.ts): the BFF reads and writes
+    // /orgiq/prompts/<agent>/{live,candidate} for candidate / promote /
+    // rollback. Bedrock prompt versions are read to gate a candidate.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'PromptPointerParameters',
+      actions: ['ssm:GetParameter', 'ssm:GetParameters', 'ssm:PutParameter', 'ssm:DeleteParameter'],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/${prefix}/prompts/*`],
+    }));
+
     // The model price table (lib/model-prices.ts, DE-32): read-only, so a
     // compromised task cannot rewrite the rates the ledger estimates from.
     // The parameter itself is created by hand or by a script, never by CDK, so
@@ -862,6 +872,35 @@ export class MiddlewareServiceStack extends cdk.Stack {
       ssm.StringParameter.fromStringParameterName(this, id, name),
     );
 
+    // ── Devbox lifetime and git (DE-48, DE-45) ─────────────────────────────
+    // The deploy-wide values of the `default` devbox profile, stated so the
+    // deployed numbers are visible in CFN. They equal
+    // middleware/src/lib/devbox-lifetime.ts DEFAULT_LIFETIME (idle 20 min,
+    // ceiling 4 h, task 840 s / 3300 s, grace 5 min) and the runtime's
+    // DEVBOX_TASK_TIMEOUT_S (devbox-stack.ts); the BFF validates them and
+    // falls back to those defaults if a value is unsound.
+    const devboxLifetime: Record<string, string> = {
+      DEVBOX_IDLE_TIMEOUT_MINUTES: '20',
+      DEVBOX_MAX_LIFETIME_MINUTES: '240',
+      DEVBOX_TASK_TIMEOUT_S: String(DEVBOX_TASK_TIMEOUT_S),
+      DEVBOX_TASK_MAX_S: '3300',
+      DEVBOX_REAP_GRACE_MINUTES: '5',
+    };
+    // Credentialed git through the devbox image's entrypoint (lib/devbox-git.ts).
+    // Off until the rebuilt image is deployed: `--context devboxGitEntrypoint=true`.
+    const devboxGitEntrypoint = ctxOn('devboxGitEntrypoint');
+    // Per-run GitHub App tokens (lib/repo-token-provider.ts). The secret
+    // `${prefix}/github-app` ({appId, privateKey}) is created by hand
+    // (docs/github-app-tokens-runbook.md) and does not exist yet, so it is
+    // wired only when `--context githubAppSecretArn=<its complete ARN>` is
+    // given; without it the BFF keeps the connection-PAT provider. A complete
+    // ARN, never a name: a partial-ARN lookup misreads `-app`-style suffixes
+    // (the DE-28 bug class).
+    const githubAppSecretArn = this.node.tryGetContext('githubAppSecretArn') as string | undefined;
+    const githubAppSecret = githubAppSecretArn
+      ? secretsmanager.Secret.fromSecretCompleteArn(this, 'GitHubAppSecret', githubAppSecretArn)
+      : null;
+
     // ── Container environment variables ────────────────────────────────────
     // All values that are resolvable at synth time go here as plain strings.
     // Secrets (ARNs only known at runtime) are injected separately below.
@@ -908,6 +947,10 @@ export class MiddlewareServiceStack extends cdk.Stack {
 
       // The Claude price table the ledger estimates from (DE-32).
       MODEL_PRICES_PARAM: `/${prefix}/pricing/model_prices`,
+
+      // Devbox lifetime (DE-48) and the git entrypoint switch (DE-45); see above.
+      ...devboxLifetime,
+      DEVBOX_GIT_ENTRYPOINT: devboxGitEntrypoint ? 'on' : 'off',
 
       // AgentCore identifiers
       ...(memoryId && { MEMORY_ID: memoryId }),
@@ -1008,6 +1051,11 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // The realtime token secret — no blackout window, see RealtimeJwtSecret.
       REALTIME_JWT_SECRET: ecs.Secret.fromSecretsManager(realtimeJwtSecret),
       ...portalSecrets,
+      // The GitHub App's id and key (DE-45), only when the secret is wired.
+      ...(githubAppSecret ? {
+        GITHUB_APP_ID: ecs.Secret.fromSecretsManager(githubAppSecret, 'appId'),
+        GITHUB_APP_PRIVATE_KEY: ecs.Secret.fromSecretsManager(githubAppSecret, 'privateKey'),
+      } : {}),
     };
     if (props.capabilityParameters) {
       // From OrgIQ-AgentCoreCapabilities' parameters, by name (see

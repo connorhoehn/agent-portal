@@ -15,6 +15,7 @@ import {
 } from './run-cost.js';
 import { estimateUsageCost } from './model-prices.js';
 import type { TokenUsage } from './pricing.js';
+import { clampTaskTimeout } from './devbox-lifetime.js';
 
 /**
  * One line of what the worker actually did.
@@ -153,7 +154,9 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
     prompt: opts.prompt,
     resume: Boolean(opts.resume),
     ...(opts.model ? { model: opts.model } : {}),
-    ...(opts.timeoutSeconds ? { timeout: Math.min(opts.timeoutSeconds, 3300) } : {}),
+    // The one cap (DE-48, lib/devbox-lifetime.ts); the image repeats it as its
+    // own defence.
+    ...(opts.timeoutSeconds ? { timeout: clampTaskTimeout(opts.timeoutSeconds) } : {}),
     ...(opts.lab ? { lab: opts.lab } : {}),
   });
 

@@ -34,7 +34,17 @@ import { recordSpend } from '../../providers/spend-ledger.js';
 jest.mock('../../lib/agent-actions.js', () => ({
   requireBoxAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
-jest.mock('../../providers/spend-ledger.js', () => ({ recordSpend: jest.fn(async () => undefined) }));
+jest.mock('../../providers/spend-ledger.js', () => ({
+  recordSpend: jest.fn(async () => undefined),
+  getBoxSpend: jest.fn(async () => new Map()), spendLedgerMode: () => 'off', ledgerIsFixture: () => false,
+}));
+// The spend hold (DE-34) is its own suite's business (spend-holds.test.ts); here it always holds.
+jest.mock('../../lib/spend-holds.js', () => ({
+  reserveSpend: jest.fn(async (i: { initiativeId: string | null }) => ({ kind: 'held', holdId: null, initiativeId: i.initiativeId, grantId: null, amountUsd: 0 })),
+  forecastP75ForModel: jest.fn(async () => ({ costUsdP75: 0.5 })),
+  HOLD_GRACE_MS: 300_000,
+}));
+jest.mock('../../providers/spend-holds.js', () => ({ releaseHold: jest.fn(async () => undefined), bindHoldSource: jest.fn(async () => undefined) }));
 
 const SESSION = 'devbox-0123456789abcdef0123456789abcdef';
 const ARN = 'arn:aws:bedrock-agentcore:us-east-1:111122223333:runtime/orgiq_devbox-abc123';
@@ -280,6 +290,44 @@ describe('POST /api/devbox/:sessionId/task', () => {
     }));
   });
 
+  it('charges the SENDER of a task on a shared box, never the box owner (DE-31)', async () => {
+    (recordSpend as jest.Mock).mockClear();
+    _resetFleet();
+    // 'p-mine' is the initiative this suite's scope mock says the SME stewards.
+    const box = registerBox({ sessionId: SESSION, ownerId: 'u-box-owner', projectId: 'p-mine' });
+    const upstream = [
+      'data: {"type":"result","total_cost_usd":0.21}\n',
+    ].map((s) => new TextEncoder().encode(s));
+    mockDataClient(async () => ({ response: asyncIterOf(upstream) }));
+    const res = await request(buildApp({ sub: 'u-nora', role: 'sme' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'fix it' });
+    expect(res.status).toBe(200);
+    expect(recordSpend).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'box_task', boxId: box.id, initiativeId: 'p-mine', actorId: 'u-nora', provider: 'bedrock',
+    }));
+    expect((recordSpend as jest.Mock).mock.calls[0][0].actorId).not.toBe('u-box-owner');
+  });
+
+  it('holds the task\'s forecast before InvokeRuntime, and a money refusal answers JSON before any frame (DE-34)', async () => {
+    const { reserveSpend } = jest.requireMock('../../lib/spend-holds.js') as { reserveSpend: jest.Mock };
+    _resetFleet();
+    registerBox({ sessionId: SESSION, ownerId: 'u-test', projectId: 'p-auth-migration' });
+    const { calls } = mockDataClient(async () => ({ response: asyncIterOf([]) }));
+    reserveSpend.mockResolvedValueOnce({
+      kind: 'confirm', gate: 'envelope', confirmFlag: 'confirmOverEnvelope', reason: 'spent out', confidence: 'prior',
+      envelope: { grantId: 'bg-1' },
+    });
+    const res = await request(buildApp()).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'fix it' });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ gate: 'envelope', confirmFlag: 'confirmOverEnvelope', envelope: { grantId: 'bg-1' } });
+    expect(calls).toHaveLength(0);
+    // The confirm flag rides through to the hold.
+    await request(buildApp()).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'fix it', confirmOverEnvelope: true });
+    expect(reserveSpend).toHaveBeenLastCalledWith(expect.objectContaining({
+      initiativeId: 'p-auth-migration', actorId: 'u-test', source: 'box_task', confirmed: { allocation: false, envelope: true },
+    }));
+    expect(calls).toHaveLength(1);
+  });
+
   it('records unknown cost when the stream ends without a result frame', async () => {
     (recordSpend as jest.Mock).mockClear();
     const upstream = ['data: {"type":"devbox_end","exit_code":1}\n'].map((s) => new TextEncoder().encode(s));
@@ -460,6 +508,24 @@ describe('per-computer scoping', () => {
     const res = await request(buildApp({ role: 'hr-admin' })).get('/api/devbox/boxes');
     expect((res.body.boxes as { id: string }[]).map((b) => b.id).sort())
       .toEqual(['orphan', 'own', 'shared', 'theirs']);
+  });
+
+  it('GET /boxes carries each box\'s ledger spend, its unknown count and the live accrual (DE-31)', async () => {
+    const ledger = jest.requireMock('../../providers/spend-ledger.js') as { getBoxSpend: jest.Mock; ledgerIsFixture: () => boolean };
+    ledger.getBoxSpend.mockResolvedValueOnce(new Map([
+      ['own', { knownUsd: 2.2, unknownCount: 1, bySource: { bot_run: 1.5, box_task: 0.7 } }],
+    ]));
+    const original = ledger.ledgerIsFixture;
+    ledger.ledgerIsFixture = () => true;
+    try {
+      const res = await request(buildApp({ role: 'hr-admin' })).get('/api/devbox/boxes');
+      const boxes = res.body.boxes as Array<{ id: string; spendUsd?: number; spendUnknownCount: number; spendLiveUsd: number }>;
+      expect(ledger.getBoxSpend).toHaveBeenCalledWith(expect.arrayContaining(['own', 'shared', 'theirs', 'orphan']));
+      expect(boxes.find((b) => b.id === 'own')).toMatchObject({ spendUsd: 2.2, spendUnknownCount: 1, spendLiveUsd: 0 });
+      expect(boxes.find((b) => b.id === 'orphan')).toMatchObject({ spendUnknownCount: 0, spendLiveUsd: 0 });
+    } finally {
+      ledger.ledgerIsFixture = original;
+    }
   });
 
   it('403s an SME tailing a computer that is not theirs', async () => {

@@ -30,6 +30,7 @@ import {
   InvokeAgentRuntimeCommand as InvokeRuntime,
   InvokeAgentRuntimeCommandCommand as RunRuntimeCommand,
   StopRuntimeSessionCommand,
+  type InvokeAgentRuntimeCommandOutput,
 } from '@aws-sdk/client-bedrock-agentcore';
 import {
   BedrockAgentCoreControlClient,
@@ -58,12 +59,23 @@ import {
   replayEvents,
   subscribe as subscribeFleet,
   appendEvent,
+  setBoxProfile,
+  isReserved,
+  type FleetBox,
 } from '../lib/devbox-fleet.js';
 import { presignShellUrl, isValidShellId, MAX_FRAME_BYTES } from '../lib/devbox-shell.js';
 import { startReaper, timeLeft } from '../lib/devbox-reaper.js';
+import {
+  profileForBox, profileForInitiative, resolveTaskModel, lifetimeOf, profileStamp, lifetimePoliciesFor,
+  type DevboxProfile,
+} from '../lib/devbox-profile.js';
+import { clampTaskTimeout, lifetimePolicy } from '../lib/devbox-lifetime.js';
 import { mockDevboxClient } from '../mock/devbox-shell.js';
 import { randomUUID } from 'node:crypto';
 import { parseReportedCost, parseResultUsage, settleRunCost } from '../lib/run-cost.js';
+import { reserveSpend, forecastP75ForModel, HOLD_GRACE_MS, type ReserveSpendResult } from '../lib/spend-holds.js';
+import { releaseHold } from '../providers/spend-holds.js';
+import { getBoxSpend, spendLedgerMode, ledgerIsFixture, type BoxSpend } from '../providers/spend-ledger.js';
 import { estimateUsageCost } from '../lib/model-prices.js';
 import type { TokenUsage } from '../lib/pricing.js';
 import { recordSpend } from '../providers/spend-ledger.js';
@@ -249,6 +261,10 @@ export function buildContainerCommand(command: string, cwd: string): string {
     // before, and arbitrary commands make it far easier to hit.
     '. /tmp/.orgiq-cmd < /dev/null',
     'rc=$?',
+    // The decoded command is removed once it has run (DE-45): a file left
+    // behind is readable by the agent that runs in the same microVM, and a
+    // command may carry something it should not have to.
+    'rm -f /tmp/.orgiq-cmd',
     `printf "\\n${CWD_MARKER}%s\\n" "$(pwd)"`,
     'exit $rc',
   ].join('; ');
@@ -415,8 +431,78 @@ devboxRouter.get('/boxes', asyncHandler(async (req, res) => {
   // filter is here rather than in the client because a fleet the client has to
   // trim is a fleet the client was already sent.
   const mine = await visibleBoxes(req.session ?? null, listBoxes());
-  res.json({ boxes: mine.map((b) => ({ ...b, ...timeLeft(b) })) });
+  // Meters are per box's own profile (DE-40), not the deployment default.
+  const policies = await lifetimePoliciesFor(mine);
+  const spend = await boxSpendFields(mine);
+  const now = Date.now();
+  res.json({ boxes: mine.map((b) => {
+    const policy = policies.get(b.id);
+    return { ...b, ...(policy ? timeLeft(b, now, policy) : timeLeft(b, now)), ...spend.get(b.id) };
+  }) });
 }));
+
+/**
+ * A box's spend as the wire carries it (DE-31), read for the whole list in
+ * one ledger statement:
+ *   spendUsd           — the box's known spend. From the ledger when
+ *                        SPEND_LEDGER=ledger (and always offline, where the
+ *                        fixtures are the ledger); otherwise the in-memory
+ *                        lifetime figure, as before.
+ *   spendUnknownCount  — the box's ledger entries with no recorded cost.
+ *   spendLiveUsd       — the in-memory accrual: a live, in-flight estimate
+ *                        between a task starting and its entry landing.
+ * Under `dual` a box whose two figures differ by a cent or more is logged.
+ */
+async function boxSpendFields(boxes: readonly FleetBox[]): Promise<Map<string, { spendUsd?: number; spendUnknownCount: number; spendLiveUsd: number }>> {
+  const out = new Map<string, { spendUsd?: number; spendUnknownCount: number; spendLiveUsd: number }>();
+  let ledger = new Map<string, BoxSpend>();
+  try {
+    ledger = (await getBoxSpend(boxes.map((b) => b.id))) ?? new Map();
+  } catch (err) {
+    console.warn('[devbox] box spend not read from the ledger:', (err as Error).message);
+  }
+  const mode = spendLedgerMode();
+  const fromLedger = mode === 'ledger' || ledgerIsFixture();
+  for (const b of boxes) {
+    const live = Math.round((b.spendUsd ?? 0) * 10_000) / 10_000;
+    const l = ledger.get(b.id);
+    if (mode === 'dual' && l && Math.abs(l.knownUsd - live) >= 0.01) {
+      console.warn(`[devbox] box ${b.id} spend differs: ledger $${l.knownUsd.toFixed(4)}, in-memory $${live.toFixed(4)}`);
+    }
+    out.set(b.id, {
+      ...(fromLedger && l ? { spendUsd: l.knownUsd } : b.spendUsd != null ? { spendUsd: b.spendUsd } : {}),
+      spendUnknownCount: l?.unknownCount ?? 0,
+      spendLiveUsd: live,
+    });
+  }
+  return out;
+}
+
+/**
+ * Resolve, record and apply the profile a task runs under (DE-40): the model
+ * (an unlisted one is a 400 naming the allowed set, never a silent fallback)
+ * and the timeout (clamped to the profile's ceiling through the one cap in
+ * lib/devbox-lifetime.ts). Stamps the profile on the box the first time, so
+ * the rules a box started under travel with it. Shared by the public and
+ * internal task routes; returns null after answering the refusal.
+ */
+export async function applyTaskProfile(
+  box: FleetBox | null,
+  body: { model?: unknown; timeout?: unknown },
+  res: Response,
+): Promise<{ model: string; timeout: number; profile: DevboxProfile } | null> {
+  const profile = await profileForBox(box);
+  const resolved = resolveTaskModel(profile, body.model);
+  if (!resolved.ok) {
+    res.status(400).json({
+      error: resolved.error, code: 'MODEL_NOT_ALLOWED', allowedModels: resolved.allowed,
+      profile: { id: profile.id, version: profile.version },
+    });
+    return null;
+  }
+  if (box) setBoxProfile(box.id, profileStamp(profile));
+  return { model: resolved.model, timeout: clampTaskTimeout(body.timeout, lifetimeOf(profile)), profile };
+}
 
 devboxRouter.post('/boxes', asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as {
@@ -434,6 +520,10 @@ devboxRouter.post('/boxes', asyncHandler(async (req, res) => {
     });
     return;
   }
+  // The rules this computer is created under (DE-40): its initiative's
+  // profile, else `default`. Recorded on the box so a later profile edit
+  // never changes a box mid-task.
+  const profile = await profileForInitiative(projectId || null);
   const box = registerBox({
     sessionId,
     // From the session, never the body — an attribution a caller can set is
@@ -442,6 +532,7 @@ devboxRouter.post('/boxes', asyncHandler(async (req, res) => {
     ...(projectId ? { projectId } : {}),
     ...(body.label ? { label: body.label } : {}),
     ...(body.createdAt ? { createdAt: body.createdAt } : {}),
+    profile: profileStamp(profile),
   });
   res.status(201).json(box);
 }));
@@ -557,13 +648,17 @@ export async function runTaskAndForward(opts: {
   /** Who this ad-hoc task spends for (DE-30). Only the two routes no bot run
    *  or job owns call this function, so every call writes its own entry. */
   spend: { source: 'box_task' | 'agent_loop'; actorId: string | null };
+  /** The caller's confirm flags for the held allocation/envelope brakes (DE-34). */
+  confirmed?: { allocation?: boolean; envelope?: boolean };
 }): Promise<void> {
   const { sessionId, prompt, resume, model, timeout, res, arn } = opts;
   const payload = JSON.stringify({
     prompt,
     resume,
     ...(model ? { model } : {}),
-    ...(timeout ? { timeout: Math.min(Number(timeout), 3300) } : {}),
+    // The one cap (lib/devbox-lifetime.ts): the callers already clamped to the
+    // box's profile; this keeps the deploy-wide ceiling for any that did not.
+    ...(timeout ? { timeout: clampTaskTimeout(timeout) } : {}),
   });
 
   // Fleet tee: auto-register unknown sessions (curl/notebook starts, and an
@@ -571,19 +666,51 @@ export async function runTaskAndForward(opts: {
   // too), flip status to running, and mirror every event into the box's
   // server-side log so other clients can tail this run.
   const fleetBox = getBoxBySession(sessionId) ?? registerBox({ sessionId });
+
+  // The spend hold (DE-34), before InvokeRuntime — the box task's one side
+  // effect that spends. The box's initiative is charged (none → unattributed,
+  // no hold, as the ledger books it); the sender is the actor (DE-31). The
+  // ledger key is minted first so the entry written in `finally` settles it.
+  const taskId = randomUUID();
+  const sourceId = `${fleetBox.id}:${taskId}`;
+  const held = await reserveSpend({
+    initiativeId: fleetBox.projectId ?? null,
+    actorId: opts.spend.actorId,
+    source: opts.spend.source,
+    sourceId,
+    forecast: await forecastP75ForModel(model ?? null),
+    ...(opts.confirmed ? { confirmed: opts.confirmed } : {}),
+    // A task sent into a box a governed run holds (reserveBox) is a reply
+    // inside that run — a person answering its question — whose money the
+    // run's own hold already covers. It is held for visibility, never
+    // refused: refusing it would strand a run that is already spending.
+    judge: !isReserved(fleetBox.id),
+    expiresInMs: (timeout ? clampTaskTimeout(timeout) : lifetimePolicy().taskMaxS) * 1000 + HOLD_GRACE_MS,
+  });
+  if (held.kind !== 'held') {
+    sendSpendRefusal(res, held);
+    return;
+  }
+
   appendEvent(fleetBox.id, { type: 'task_started', prompt, ts: new Date().toISOString() });
 
-  const resp = await dataClient().send(new InvokeRuntime({
-    agentRuntimeArn: arn,
-    qualifier: 'DEFAULT',
-    runtimeSessionId: sessionId,
-    accept: 'text/event-stream',
-    payload: new TextEncoder().encode(payload),
-  }));
+  let resp: InvokeAgentRuntimeCommandOutput;
+  try {
+    resp = await dataClient().send(new InvokeRuntime({
+      agentRuntimeArn: arn,
+      qualifier: 'DEFAULT',
+      runtimeSessionId: sessionId,
+      accept: 'text/event-stream',
+      payload: new TextEncoder().encode(payload),
+    }));
+  } catch (err) {
+    // The runtime never accepted the task, so nothing was spent.
+    await releaseHold(held.holdId);
+    throw err;
+  }
 
   initSSE(res);
   // The task's own ledger figures, read off the frames as they pass.
-  const taskId = randomUUID();
   let reportedUsd: number | null = null;
   let resultSeen = false;
   let usedModel: string | null = model ?? null;
@@ -642,7 +769,7 @@ export async function runTaskAndForward(opts: {
     const settled = settleRunCost(resultSeen ? reportedUsd : null, estimated);
     await recordSpend({
       source: opts.spend.source,
-      sourceId: `${fleetBox.id}:${taskId}`,
+      sourceId,
       initiativeId: fleetBox.projectId ?? null,
       boxId: fleetBox.id,
       actorId: opts.spend.actorId,
@@ -652,8 +779,28 @@ export async function runTaskAndForward(opts: {
       estimatedCostUsd: settled.estimatedCostUsd,
       inputTokens: u?.inputTokens ?? null,
       outputTokens: u?.outputTokens ?? null,
+      // An InvokeRuntime task is AgentCore Runtime by construction (DE-33).
+      provider: 'bedrock',
     });
   }
+}
+
+/**
+ * The answer to a money refusal from reserveSpend, in the dispatch route's
+ * shapes: 409 with the gate, its confirm flag and the figures; 403 for spend
+ * refused outright; 503 when holds cannot be recorded and the deployment
+ * fails closed. Sent before any SSE frame, so the caller sees plain JSON.
+ */
+export function sendSpendRefusal(res: Response, r: Exclude<ReserveSpendResult, { kind: 'held' }>): void {
+  if (r.kind === 'confirm') {
+    res.status(409).json({
+      error: r.reason, gate: r.gate, confirmFlag: r.confirmFlag, confidence: r.confidence,
+      ...(r.allocation ? { allocation: r.allocation } : {}),
+      ...(r.envelope ? { envelope: r.envelope } : {}),
+    });
+    return;
+  }
+  res.status(r.kind === 'refused' ? 403 : 503).json({ error: r.reason, gate: 'spend-hold' });
 }
 
 // Task mode: Claude Code headless run in /mnt/workspace, stream-json events
@@ -666,15 +813,24 @@ devboxRouter.post('/:sessionId/task', requireBoxAction('RunDevboxTask'), asyncHa
   const arn = await requireArn(res);
   if (!arn) return;
 
-  const body = (req.body ?? {}) as { prompt?: string; resume?: boolean; timeout?: number; model?: string };
+  const body = (req.body ?? {}) as {
+    prompt?: string; resume?: boolean; timeout?: number; model?: string;
+    confirmOverAllocation?: unknown; confirmOverEnvelope?: unknown;
+  };
   const prompt = (body.prompt ?? '').trim();
   if (!prompt) { res.status(400).json({ error: 'prompt is required' }); return; }
+
+  // The box's profile decides the model and the timeout ceiling (DE-40); the
+  // BFF always sends the model explicitly, so the container never falls back.
+  const governed = await applyTaskProfile(getBoxBySession(sessionId), body, res);
+  if (!governed) return;
 
   await runTaskAndForward({
     sessionId, prompt, resume: Boolean(body.resume), res, arn,
     spend: { source: 'box_task', actorId: req.session?.sub ?? null },
-    ...(body.model ? { model: body.model } : {}),
-    ...(body.timeout ? { timeout: body.timeout } : {}),
+    confirmed: { allocation: body.confirmOverAllocation === true, envelope: body.confirmOverEnvelope === true },
+    model: governed.model,
+    timeout: governed.timeout,
   });
 }));
 
@@ -957,6 +1113,13 @@ export async function runDevboxTask(opts: {
   prompt: string;
   resume?: boolean;
   model?: string;
+  /**
+   * Seconds this task may run (DE-48). The dispatcher passes the policy's
+   * `taskDefaultS` explicitly rather than leaving the container to pick;
+   * absent, the runner sends none and the image's own default applies.
+   * Clamped through the one cap either way.
+   */
+  timeoutSeconds?: number;
   onEvent?: (event: Record<string, unknown>) => void;
   /** The run's LAB_* context (lib/run-brief.ts); see DevboxRunOptions.lab. */
   lab?: DevboxLabContext;
@@ -1004,6 +1167,7 @@ export async function runDevboxTask(opts: {
     prompt: opts.prompt,
     ...(opts.resume !== undefined ? { resume: opts.resume } : {}),
     ...(opts.model ? { model: opts.model } : {}),
+    ...(opts.timeoutSeconds ? { timeoutSeconds: opts.timeoutSeconds } : {}),
     ...(opts.onEvent ? { onEvent: opts.onEvent } : {}),
     ...(opts.lab ? { lab: opts.lab } : {}),
     runtimeArn: arn,

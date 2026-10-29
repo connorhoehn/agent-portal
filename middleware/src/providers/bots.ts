@@ -10,7 +10,7 @@
 // Schema: schema/agent_bots_schema.sql.
 
 import { randomUUID } from 'node:crypto';
-import { exec } from './aurora.js';
+import { exec, withTransaction } from './aurora.js';
 import { config } from '../config.js';
 import { noteSearchWrite } from '../lib/search-index/writes.js';
 import { hasColumns } from './column-probe.js';
@@ -22,7 +22,7 @@ import type { ModelProvider } from '../lib/run-cost.js';
 // The attribution model of record for "which initiative did this run spend
 // against" (imported, never re-derived — two copies of that predicate is how
 // two surfaces come to disagree about the same dollar).
-import { spendPredicateSql } from './budgets.js';
+import { spendPredicateSql, attributionPredicateSql } from './budgets.js';
 // Mock-mode only, and read-only: listMarketplaceRuns keys a bot-less run to an
 // initiative THROUGH its work item, exactly as the Aurora statement's subquery
 // does. work-items.ts does not import this module, so this is a one-way edge.
@@ -41,7 +41,8 @@ import { type SqlParameter } from '@aws-sdk/client-rds-data';
 // providers/agentcore.ts and with the `degraded` marker routes/cost.ts put on
 // the wire. See lib/upstream.ts for why an envelope and not a throw.
 import { reached, unreachable, type Upstream } from '../lib/upstream.js';
-import { recordBotRunSpend, spendLedgerMode, mockStoredSpend } from './spend-ledger.js';
+import { recordBotRunSpend, spendLedgerMode, mockStoredSpend, mockUnknownSpend } from './spend-ledger.js';
+import { settleHold } from './spend-holds.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
@@ -289,6 +290,10 @@ export interface DispatchedSpend {
   spentUsd: number;
   /** false → the burn is UNKNOWN, not zero. */
   attributionAvailable: boolean;
+  /** Finished runs this subject dispatched in the window whose cost was never
+   *  recorded (DE-33). They spend nothing in `spentUsd`; the envelope brake
+   *  asks for a confirmation while this is non-zero. */
+  unknownCount: number;
 }
 
 /**
@@ -312,7 +317,7 @@ export async function dispatchedSpendInWindow(input: {
   endsOn: string | null;
 }): Promise<DispatchedSpend> {
   if (config.mock.aurora) return mockDispatchedSpend(input);
-  if (!(await attributionAvailable())) return { spentUsd: 0, attributionAvailable: false };
+  if (!(await attributionAvailable())) return { spentUsd: 0, attributionAvailable: false, unknownCount: 0 };
 
   const params: SqlParameter[] = [s('pid', input.orgProjectId), s('by', input.dispatchedBy)];
   let window = '';
@@ -329,26 +334,30 @@ export async function dispatchedSpendInWindow(input: {
   try {
     // Ledger mode (DE-30) counts every path this person spent through on the
     // initiative — ad-hoc box tasks and queued jobs as well as dispatches.
+    // The unknown count rides the same statement (DE-33): entries with no
+    // figure, or finished bot_runs with none, attributed by the same arms.
     const rows = await exec(
       spendLedgerMode() === 'ledger'
-        ? `SELECT COALESCE(SUM(se.cost_usd), 0)::float8 AS spent
+        ? `SELECT COALESCE(SUM(se.cost_usd), 0)::float8 AS spent,
+                  COUNT(*) FILTER (WHERE se.cost_usd IS NULL)::int AS unknown_count
              FROM spend_entries se
             WHERE se.actor_id = :by
               AND se.initiative_id = :pid${window.replace(/br\.started_at/g, 'se.occurred_at')}`
-        : `SELECT COALESCE(SUM(br.cost_usd), 0)::float8 AS spent
+        : `SELECT COALESCE(SUM(br.cost_usd), 0)::float8 AS spent,
+                  COUNT(*) FILTER (WHERE br.cost_usd IS NULL AND br.status IN ('done', 'failed'))::int AS unknown_count
          FROM bot_runs br
         WHERE br.dispatched_by = :by
-          AND (${spendPredicateSql(':pid')})${window}`,
+          AND (${attributionPredicateSql(':pid')})${window}`,
       params,
     );
-    return { spentUsd: toNum(rows[0]?.['spent']), attributionAvailable: true };
+    return { spentUsd: toNum(rows[0]?.['spent']), attributionAvailable: true, unknownCount: toNum(rows[0]?.['unknown_count']) };
   } catch (err) {
     // Schema-tolerant, like the safeExec reads: a cluster that raced ahead of
     // the migration reports an unknown burn rather than failing the dispatch.
     // Re-probe next time in case the migration lands mid-process.
     if (/does not exist|relation|column/i.test((err as Error).message ?? '')) {
       _attribution = null;
-      return { spentUsd: 0, attributionAvailable: false };
+      return { spentUsd: 0, attributionAvailable: false, unknownCount: 0 };
     }
     throw err;
   }
@@ -393,16 +402,19 @@ async function mockDispatchedSpend(input: {
   const from = input.startsOn ? Date.parse(`${input.startsOn}T00:00:00Z`) : null;
   const toExclusive = input.endsOn ? Date.parse(`${input.endsOn}T00:00:00Z`) + 86_400_000 : null;
 
-  const runs = allMockRuns().filter((r) => {
-    if (r.dispatchedBy !== input.dispatchedBy) return false;
-    if (r.costUsd == null) return false;
-    const at = Date.parse(r.startedAt);
+  const inWindow = (iso: string): boolean => {
+    const at = Date.parse(iso);
     if (from != null && at < from) return false;
     if (toExclusive != null && at >= toExclusive) return false;
     return true;
-  });
+  };
+  // Costed runs burn; finished runs with no figure are counted as unknown
+  // (DE-33) — the same `COUNT(*) FILTER` the statement above carries.
+  const runs = allMockRuns().filter((r) => r.dispatchedBy === input.dispatchedBy
+    && (r.costUsd != null || r.status === 'done' || r.status === 'failed') && inWindow(r.startedAt));
 
   let spent = 0;
+  let unknownCount = 0;
   for (const run of runs) {
     let attributed = false;
     if (run.workItemId) {
@@ -415,19 +427,19 @@ async function mockDispatchedSpend(input: {
       // targets its initiative directly, so arm 2 is the only one that fires.
       attributed = bot?.orgProjectId === input.orgProjectId;
     }
-    if (attributed) spent += run.costUsd ?? 0;
+    if (!attributed) continue;
+    if (run.costUsd == null) unknownCount++;
+    else spent += run.costUsd;
   }
 
   if (spendLedgerMode() === 'ledger') {
-    for (const e of mockStoredSpend((x) => x.actorId === input.dispatchedBy && x.initiativeId === input.orgProjectId)) {
-      const at = Date.parse(e.occurredAt);
-      if (from != null && at < from) continue;
-      if (toExclusive != null && at >= toExclusive) continue;
-      spent += e.costUsd ?? 0;
-    }
+    const mine = (x: { actorId: string | null; initiativeId: string | null; occurredAt: string }) =>
+      x.actorId === input.dispatchedBy && x.initiativeId === input.orgProjectId && inWindow(x.occurredAt);
+    for (const e of mockStoredSpend(mine)) spent += e.costUsd ?? 0;
+    unknownCount += mockUnknownSpend(mine).length;
   }
 
-  return { spentUsd: Math.round(spent * 10_000) / 10_000, attributionAvailable: true };
+  return { spentUsd: Math.round(spent * 10_000) / 10_000, attributionAvailable: true, unknownCount };
 }
 
 // ─── Mock roster (config.mock.aurora) ──────────────────────────────
@@ -947,6 +959,19 @@ export function mockAllRuns(): BotRun[] {
  * wants the first. Callers summing money apply `cost_usd IS NOT NULL`
  * themselves.
  */
+/**
+ * The ONE initiative a run's ledger entry is booked to offline, by the
+ * Aurora writer's first-arm order (providers/spend-ledger.ts botRunSpendSql):
+ * the work item's initiative, else the bot's target.
+ */
+export function mockBotRunInitiative(run: Pick<BotRun, 'workItemId' | 'botId'>): string | null {
+  if (run.workItemId) {
+    const pid = mockWorkItemProjectId(run.workItemId);
+    if (pid) return pid;
+  }
+  return MOCK_BOTS.find((b) => b.id === run.botId)?.orgProjectId ?? null;
+}
+
 export function mockRunsAttributedTo(orgProjectId: string): BotRun[] {
   const byId = new Map<string, BotRun>();
 
@@ -1080,17 +1105,25 @@ async function insertBotRun(input: {
   const cols = `bot_id, trigger, run_id, job_id, work_item_id, status, outcome, finished_at${withBy ? ', dispatched_by' : ''}`;
 
   if (status === 'running' && input.ceiling != null) {
-    // The TOCTOU-safe form: the count and the insert are one statement, so the
-    // database — not a racy pre-check — is what holds the ceiling. Same 24h
-    // window as countRunningRuns, so a stuck ancient row cannot wedge it shut.
-    const rows = await exec(
-      `INSERT INTO bot_runs (${cols})
-       SELECT :bid::uuid, :trigger, :run::uuid, :job, :work_item, :status, :outcome::jsonb, NULL${withBy ? ', :by' : ''}
-        WHERE (SELECT COUNT(*) FROM bot_runs
-                WHERE status = 'running' AND started_at > NOW() - INTERVAL '24 hours') < :ceiling
-       RETURNING *`,
-      [...params, int('ceiling', input.ceiling)],
-    );
+    // The count and the insert run in ONE transaction behind an advisory lock
+    // (DE-34). The previous single statement — INSERT … SELECT … WHERE COUNT(*)
+    // < :ceiling — was called TOCTOU-safe and was not: under READ COMMITTED two
+    // concurrent statements each read their own snapshot, neither sees the
+    // other's uncommitted row, and both insert. The lock serialises the
+    // count-and-insert; the statement itself is unchanged. Same 24h window as
+    // countRunningRuns, so a stuck ancient row cannot wedge it shut.
+    const ceiling = input.ceiling;
+    const rows = await withTransaction(async (tx) => {
+      await tx(`SELECT pg_advisory_xact_lock(hashtext('bot_runs:ceiling'))`);
+      return tx(
+        `INSERT INTO bot_runs (${cols})
+         SELECT :bid::uuid, :trigger, :run::uuid, :job, :work_item, :status, :outcome::jsonb, NULL${withBy ? ', :by' : ''}
+          WHERE (SELECT COUNT(*) FROM bot_runs
+                  WHERE status = 'running' AND started_at > NOW() - INTERVAL '24 hours') < :ceiling
+         RETURNING *`,
+        [...params, int('ceiling', ceiling)],
+      );
+    });
     return rows[0] ? rowToRun(rows[0]) : null;
   }
   const rows = await exec(
@@ -1139,6 +1172,12 @@ async function settleBotRun(id: string, result: {
     // insert's startedAt is — one clock, so a frozen test freezes both ends of
     // a run rather than half of it.
     run.finishedAt = clock.nowIso();
+    // The bot_run entry is derived from this row offline, so the hold the
+    // dispatch took settles here (DE-34) — once the cost is known; an unknown
+    // cost leaves it held until it expires (providers/spend-holds.ts).
+    if (result.status === 'done' || result.status === 'failed') {
+      await settleHold('bot_run', id, exec, run.costUsd != null);
+    }
     return;
   }
   if (!isUuid(id)) return;

@@ -11,12 +11,13 @@
 // the ad-hoc box writer runs only on the two routes no bot or job owns.
 
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
-import { exec } from './aurora.js';
+import { exec, withTransaction, type TxExec } from './aurora.js';
 import { config } from '../config.js';
 import { hasColumns } from './column-probe.js';
 import { clock } from '../mock/core/index.js';
 import { spendEntries } from '../mock/spend-ledger.js';
-import type { CostBasis } from '../lib/run-cost.js';
+import type { CostBasis, ModelProvider } from '../lib/run-cost.js';
+import { settleHold, SETTLE_HOLD_SQL } from './spend-holds.js';
 
 export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run';
 export type { CostBasis };
@@ -42,9 +43,16 @@ export interface SpendEntry {
   inputTokens: number | null;
   outputTokens: number | null;
   occurredAt: string;
+  /**
+   * Who served the tokens (DE-33): `local` makes a route-decided $0
+   * distinguishable from a Bedrock run that reported $0. Null when the
+   * writer does not know; never defaulted, never backfilled.
+   */
+  provider?: ModelProvider | null;
 }
 
-export type SpendInput = Omit<SpendEntry, 'costBasis' | 'occurredAt' | 'grantId' | 'trigger' | 'inputTokens' | 'outputTokens' | 'estimatedCostUsd'> & {
+export type SpendInput = Omit<SpendEntry, 'costBasis' | 'occurredAt' | 'grantId' | 'trigger' | 'inputTokens' | 'outputTokens' | 'estimatedCostUsd' | 'provider'> & {
+  provider?: ModelProvider | null;
   costBasis?: CostBasis;
   estimatedCostUsd?: number | null;
   grantId?: string | null;
@@ -103,6 +111,7 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
     costBasis: basisFor(input.costUsd, input.costBasis),
     estimatedCostUsd: input.estimatedCostUsd ?? null,
     occurredAt: input.occurredAt ?? clock.nowIso(),
+    provider: input.provider ?? null,
   };
   if (config.mock.aurora) {
     // bot_run entries are derived from the bot_runs fixture, never stored.
@@ -116,32 +125,36 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
         prior.costBasis = entry.costBasis;
         prior.estimatedCostUsd = entry.estimatedCostUsd;
       }
+      const stored = prior ?? entry;
+      // The hold for the same attempt settles with the entry (DE-34).
+      await settleHold(entry.source, entry.sourceId, exec, stored.costUsd != null);
     } catch (err) {
       console.warn(`[spend-ledger] mock write failed: ${(err as Error).message}`);
     }
     return;
   }
   try {
-    // `estimated_cost_usd` is an additive column (DE-32); a cluster that has
-    // not re-applied spend_ledger_schema.sql still takes the row without it.
+    // `estimated_cost_usd` (DE-32) and `provider` (DE-33) are additive
+    // columns; a cluster that has not re-applied them still takes the row.
     const withEstimate = await hasColumns('spend_entries', ['estimated_cost_usd']).catch(() => false);
-    await exec(
-      `INSERT INTO spend_entries
+    const withProvider = entry.provider != null && await hasColumns('spend_entries', ['provider']).catch(() => false);
+    const insert = `INSERT INTO spend_entries
          (source, source_id, initiative_id, grant_id, box_id, actor_id, trigger, model,
-          cost_usd, cost_basis, input_tokens, output_tokens, occurred_at${withEstimate ? ', estimated_cost_usd' : ''})
+          cost_usd, cost_basis, input_tokens, output_tokens, occurred_at${withEstimate ? ', estimated_cost_usd' : ''}${withProvider ? ', provider' : ''})
        SELECT :source, :sid, :init, :grant, :box, :actor, :trigger, :model,
-              :cost::numeric, :basis, :itok::bigint, :otok::bigint, :at::timestamptz${withEstimate ? ', :est::numeric' : ''}
-       ${opts.unlessBotRunOwnsJob ? 'WHERE NOT EXISTS (SELECT 1 FROM bot_runs WHERE job_id = :ownedjob)' : ''}${withEstimate ? UPSERT_TAIL_WITH_ESTIMATE : UPSERT_TAIL}`,
-      [
-        s('source', entry.source), s('sid', entry.sourceId), maybe('init', entry.initiativeId),
-        maybe('grant', entry.grantId), maybe('box', entry.boxId), maybe('actor', entry.actorId),
-        maybe('trigger', entry.trigger), maybe('model', entry.model), maybeNum('cost', entry.costUsd),
-        s('basis', entry.costBasis), maybeNum('itok', entry.inputTokens), maybeNum('otok', entry.outputTokens),
-        s('at', entry.occurredAt),
-        ...(withEstimate ? [maybeNum('est', entry.estimatedCostUsd)] : []),
-        ...(opts.unlessBotRunOwnsJob ? [s('ownedjob', opts.unlessBotRunOwnsJob)] : []),
-      ],
-    );
+              :cost::numeric, :basis, :itok::bigint, :otok::bigint, :at::timestamptz${withEstimate ? ', :est::numeric' : ''}${withProvider ? ', :provider' : ''}
+       ${opts.unlessBotRunOwnsJob ? 'WHERE NOT EXISTS (SELECT 1 FROM bot_runs WHERE job_id = :ownedjob)' : ''}${withEstimate ? UPSERT_TAIL_WITH_ESTIMATE : UPSERT_TAIL}`;
+    const params: SqlParameter[] = [
+      s('source', entry.source), s('sid', entry.sourceId), maybe('init', entry.initiativeId),
+      maybe('grant', entry.grantId), maybe('box', entry.boxId), maybe('actor', entry.actorId),
+      maybe('trigger', entry.trigger), maybe('model', entry.model), maybeNum('cost', entry.costUsd),
+      s('basis', entry.costBasis), maybeNum('itok', entry.inputTokens), maybeNum('otok', entry.outputTokens),
+      s('at', entry.occurredAt),
+      ...(withEstimate ? [maybeNum('est', entry.estimatedCostUsd)] : []),
+      ...(withProvider ? [s('provider', entry.provider!)] : []),
+      ...(opts.unlessBotRunOwnsJob ? [s('ownedjob', opts.unlessBotRunOwnsJob)] : []),
+    ];
+    await writeAndSettle(entry.source, entry.sourceId, (run) => run(insert, params));
   } catch (err) {
     if (missingTable(err)) return;
     console.warn(`[spend-ledger] write failed for ${entry.source}:${entry.sourceId}: ${(err as Error).message}`);
@@ -159,10 +172,14 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
  * `occurred_at` is the run's start, the instant the legacy readers window on.
  * Skipped runs never ran and write nothing.
  */
-export function botRunSpendSql(withDispatchedBy: boolean, where = 'br.id = :id::uuid', withEstimate = false): string {
+export function botRunSpendSql(withDispatchedBy: boolean, where = 'br.id = :id::uuid', withEstimate = false, withProvider = false): string {
+  // box_id (DE-31): the box the run claimed, from the outcome the dispatch
+  // wrote (governed runs: outcome.boxId) or the job it rode (agent_jobs.box_id),
+  // so one box's spend sums across bot runs, jobs and ad-hoc tasks without a
+  // second copy. provider (DE-33) is the run row's own, never inferred.
   return `
     INSERT INTO spend_entries
-      (source, source_id, initiative_id, actor_id, trigger, model, cost_usd, cost_basis, occurred_at${withEstimate ? ', estimated_cost_usd' : ''})
+      (source, source_id, initiative_id, actor_id, trigger, model, cost_usd, cost_basis, occurred_at, box_id${withEstimate ? ', estimated_cost_usd' : ''}${withProvider ? ', provider' : ''})
     SELECT 'bot_run', br.id::text,
            COALESCE(
              (SELECT w.project_id FROM work_items w WHERE w.id = br.work_item_id),
@@ -176,13 +193,31 @@ export function botRunSpendSql(withDispatchedBy: boolean, where = 'br.id = :id::
            CASE WHEN br.cost_usd IS NULL THEN 'unknown'
                 WHEN COALESCE(to_jsonb(apr)->>'cost_basis', aj.result->>'costBasis') = 'estimated' THEN 'estimated'
                 ELSE 'reported' END,
-           br.started_at
+           br.started_at,
+           COALESCE(br.outcome->>'boxId', aj.box_id)
            ${withEstimate ? ", COALESCE((to_jsonb(apr)->>'estimated_cost_usd')::numeric, (aj.result->>'estimatedCostUsd')::numeric)" : ''}
+           ${withProvider ? ', br.model_provider' : ''}
       FROM bot_runs br
       LEFT JOIN bots b ON b.id = br.bot_id
       LEFT JOIN agent_project_runs apr ON apr.id = br.run_id
       LEFT JOIN agent_jobs aj ON aj.id = br.job_id
      WHERE ${where} AND br.status IN ('done', 'failed')${withEstimate ? UPSERT_TAIL_WITH_ESTIMATE : UPSERT_TAIL}`;
+}
+
+/**
+ * Run a ledger write and settle the spend hold for the same attempt in ONE
+ * transaction (DE-34): held money becomes spent money in one commit, never
+ * both, never neither. SETTLE_HOLD_SQL settles only when the entry's cost is
+ * known; an unknown-cost entry leaves its hold to expire. A cluster without
+ * spend_holds writes the entry alone, exactly as before.
+ */
+async function writeAndSettle(source: SpendSource, sourceId: string, write: (run: TxExec) => Promise<unknown>): Promise<void> {
+  const withHolds = await hasColumns('spend_holds', ['source_id']).catch(() => false);
+  if (!withHolds) { await write(exec); return; }
+  await withTransaction(async (tx) => {
+    await write(tx);
+    await tx(SETTLE_HOLD_SQL, [s('source', source), s('sid', sourceId)]);
+  });
 }
 
 /** Write (or complete) the ledger entry for a settled bot run. Best-effort. */
@@ -191,7 +226,8 @@ export async function recordBotRunSpend(runId: string): Promise<void> {
   try {
     const withBy = await hasColumns('bot_runs', ['dispatched_by']);
     const withEstimate = await hasColumns('spend_entries', ['estimated_cost_usd']);
-    await exec(botRunSpendSql(withBy, undefined, withEstimate), [s('id', runId)]);
+    const withProvider = await hasColumns('spend_entries', ['provider']) && await hasColumns('bot_runs', ['model_provider']);
+    await writeAndSettle('bot_run', runId, (run) => run(botRunSpendSql(withBy, undefined, withEstimate, withProvider), [s('id', runId)]));
   } catch (err) {
     if (missingTable(err)) return;
     console.warn(`[spend-ledger] bot run ${runId} not recorded: ${(err as Error).message}`);
@@ -235,7 +271,7 @@ export async function recordAgentProjectRunSpend(runId: string): Promise<void> {
   try {
     const withBy = await hasColumns('agent_project_runs', ['dispatched_by']);
     const withEstimate = await hasColumns('spend_entries', ['estimated_cost_usd']);
-    await exec(agentProjectRunSpendSql(withBy, withEstimate), [s('id', runId)]);
+    await writeAndSettle('agent_project_run', runId, (run) => run(agentProjectRunSpendSql(withBy, withEstimate), [s('id', runId)]));
   } catch (err) {
     if (missingTable(err)) return;
     console.warn(`[spend-ledger] agent-project run ${runId} not recorded: ${(err as Error).message}`);
@@ -297,4 +333,166 @@ export function mockUnknownSpend(filter: (e: SpendEntry) => boolean = () => true
   } catch {
     return [];
   }
+}
+
+// ─── Box and actor rollups (DE-31) ───────────────────────────────────────────
+
+export interface BoxSpend {
+  /** Sum of the box's entries with a known cost. */
+  knownUsd: number;
+  /** Entries on the box whose cost is unknown — in neither sum, never zero. */
+  unknownCount: number;
+  /** Known dollars per source, so a box's spend reads as bot runs + jobs + tasks. */
+  bySource: Partial<Record<SpendSource, number>>;
+}
+
+const round4 = (n: number): number => Math.round(n * 10_000) / 10_000;
+
+function rollup(entries: ReadonlyArray<Pick<SpendEntry, 'source' | 'costUsd'>>): BoxSpend {
+  const out: BoxSpend = { knownUsd: 0, unknownCount: 0, bySource: {} };
+  for (const e of entries) {
+    if (e.costUsd == null) { out.unknownCount++; continue; }
+    out.knownUsd += e.costUsd;
+    out.bySource[e.source] = round4((out.bySource[e.source] ?? 0) + e.costUsd);
+  }
+  out.knownUsd = round4(out.knownUsd);
+  return out;
+}
+
+/**
+ * Offline, a bot_run entry is derived from the bot_runs fixture (never
+ * stored), booked to the box its outcome names. Same shape the Aurora
+ * writer resolves with `COALESCE(br.outcome->>'boxId', aj.box_id)`.
+ */
+async function mockBotRunEntriesOnBoxes(boxIds: ReadonlySet<string>): Promise<Array<Pick<SpendEntry, 'source' | 'costUsd' | 'boxId'>>> {
+  const { allMockRuns } = await import('../mock/bots.js');
+  return allMockRuns()
+    .filter((r) => (r.status === 'done' || r.status === 'failed')
+      && typeof r.outcome?.['boxId'] === 'string' && boxIds.has(String(r.outcome['boxId'])))
+    .map((r) => ({ source: 'bot_run' as const, costUsd: r.costUsd ?? null, boxId: String(r.outcome!['boxId']) }));
+}
+
+/**
+ * Each box's spend from the ledger, in one read for the whole list (DE-31):
+ * `spend_entries WHERE box_id IN (…)` across all three sources, so a bot run
+ * that teed into a box is counted once, as its bot_run entry, never again as
+ * box spend. A missing table answers an empty map (the caller keeps the
+ * in-memory figure).
+ */
+export async function getBoxSpend(boxIds: readonly string[]): Promise<Map<string, BoxSpend>> {
+  const out = new Map<string, BoxSpend>();
+  if (boxIds.length === 0) return out;
+  if (config.mock.aurora) {
+    const want = new Set(boxIds);
+    let stored: SpendEntry[] = [];
+    try { stored = spendEntries.rows().filter((e) => e.boxId != null && want.has(e.boxId)); } catch { stored = []; }
+    const all = [...stored, ...await mockBotRunEntriesOnBoxes(want)];
+    for (const id of boxIds) out.set(id, rollup(all.filter((e) => e.boxId === id)));
+    return out;
+  }
+  const params = boxIds.map((id, i) => s(`b${i}`, id));
+  try {
+    const rows = await exec(
+      `SELECT box_id, source,
+              COALESCE(SUM(cost_usd), 0)::float8 AS known,
+              COUNT(*) FILTER (WHERE cost_usd IS NULL)::int AS unknown
+         FROM spend_entries
+        WHERE box_id IN (${params.map((p) => `:${p.name}`).join(', ')})
+        GROUP BY box_id, source`,
+      params,
+    );
+    for (const id of boxIds) out.set(id, { knownUsd: 0, unknownCount: 0, bySource: {} });
+    for (const r of rows) {
+      const b = out.get(String(r['box_id']));
+      if (!b) continue;
+      const known = Number(r['known'] ?? 0);
+      b.knownUsd = round4(b.knownUsd + known);
+      b.unknownCount += Number(r['unknown'] ?? 0);
+      if (known) b.bySource[String(r['source']) as SpendSource] = round4(known);
+    }
+  } catch (err) {
+    if (missingTable(err)) return new Map();
+    throw err;
+  }
+  return out;
+}
+
+export interface ActorSpendRow {
+  initiativeId: string | null;
+  knownUsd: number;
+  unknownCount: number;
+  entries: number;
+  bySource: Partial<Record<SpendSource, number>>;
+}
+
+/** `?period=` for the per-person rollup: this calendar month (the budget window), or a trailing window. */
+export type SpendPeriod = 'month' | '7d' | '30d';
+
+export function periodStartIso(period: SpendPeriod, now: Date = clock.now()): string {
+  if (period === '7d') return new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  if (period === '30d') return new Date(now.getTime() - 30 * 86_400_000).toISOString();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+}
+
+/**
+ * What one person spent, per initiative, over the period (DE-31): every
+ * entry whose `actor_id` is them — the sender of a task on a shared box, the
+ * dispatcher of a run, the creator of a job — never the box owner by
+ * inference. `initiativeId: null` is their unattributed spend.
+ */
+export async function getActorSpend(actorId: string, period: SpendPeriod): Promise<ActorSpendRow[]> {
+  const since = periodStartIso(period);
+  const group = (entries: ReadonlyArray<Pick<SpendEntry, 'initiativeId' | 'source' | 'costUsd'>>): ActorSpendRow[] => {
+    const by = new Map<string | null, Array<Pick<SpendEntry, 'initiativeId' | 'source' | 'costUsd'>>>();
+    for (const e of entries) by.set(e.initiativeId, [...(by.get(e.initiativeId) ?? []), e]);
+    return [...by].map(([initiativeId, es]) => {
+      const r = rollup(es);
+      return { initiativeId, knownUsd: r.knownUsd, unknownCount: r.unknownCount, entries: es.length, bySource: r.bySource };
+    }).sort((a, b) => b.knownUsd - a.knownUsd || String(a.initiativeId).localeCompare(String(b.initiativeId)));
+  };
+  if (config.mock.aurora) {
+    const from = Date.parse(since);
+    let stored: SpendEntry[] = [];
+    try { stored = spendEntries.rows().filter((e) => e.actorId === actorId && Date.parse(e.occurredAt) >= from); } catch { stored = []; }
+    // bot_run entries offline are derived from the fixture, attributed by the
+    // same arms the Aurora writer resolves (work item, then bot target).
+    const { allMockRuns } = await import('../mock/bots.js');
+    const { mockBotRunInitiative } = await import('./bots.js');
+    const derived = allMockRuns()
+      .filter((r) => r.dispatchedBy === actorId && (r.status === 'done' || r.status === 'failed') && Date.parse(r.startedAt) >= from)
+      .map((r) => ({ source: 'bot_run' as const, costUsd: r.costUsd ?? null, initiativeId: mockBotRunInitiative(r) }));
+    return group([...stored, ...derived]);
+  }
+  try {
+    const rows = await exec(
+      `SELECT initiative_id, source,
+              COALESCE(SUM(cost_usd), 0)::float8 AS known,
+              COUNT(*) FILTER (WHERE cost_usd IS NULL)::int AS unknown,
+              COUNT(*)::int AS n
+         FROM spend_entries
+        WHERE actor_id = :actor AND occurred_at >= :since::timestamptz
+        GROUP BY initiative_id, source`,
+      [s('actor', actorId), s('since', since)],
+    );
+    const by = new Map<string | null, ActorSpendRow>();
+    for (const r of rows) {
+      const pid = r['initiative_id'] == null ? null : String(r['initiative_id']);
+      const row = by.get(pid) ?? { initiativeId: pid, knownUsd: 0, unknownCount: 0, entries: 0, bySource: {} };
+      const known = Number(r['known'] ?? 0);
+      row.knownUsd = round4(row.knownUsd + known);
+      row.unknownCount += Number(r['unknown'] ?? 0);
+      row.entries += Number(r['n'] ?? 0);
+      if (known) row.bySource[String(r['source']) as SpendSource] = round4(known);
+      by.set(pid, row);
+    }
+    return [...by.values()].sort((a, b) => b.knownUsd - a.knownUsd || String(a.initiativeId).localeCompare(String(b.initiativeId)));
+  } catch (err) {
+    if (missingTable(err)) return [];
+    throw err;
+  }
+}
+
+/** Offline the fixtures ARE the ledger, so readers that switch on SPEND_LEDGER read it regardless. */
+export function ledgerIsFixture(): boolean {
+  return config.mock.aurora === true;
 }

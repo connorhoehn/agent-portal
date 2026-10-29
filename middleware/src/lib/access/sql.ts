@@ -33,10 +33,29 @@
 //   ESCALATE_STEP_SQL      a current step escalates once per level.
 //   INSERT_DELEGATION_SQL / END_DELEGATION_SQL  a delegation and its event; ending once.
 
-/** One open grant request per beneficiary and item; RETURNING id is empty for the loser of a race. */
+/**
+ * The catalog as the route reads it: the seeded rows plus one DERIVED
+ * `envelope:<project>` row per initiative (lib/access/items.ts envelopeItem —
+ * the SQL below must say what that function says). providers/access.ts
+ * `listCatalog` is the mock twin.
+ */
+export const LIST_CATALOG_SQL = `
+SELECT id, kind, tenant, role, project_id, title, description, sensitive, default_duration, steward_rule
+  FROM access_catalog_items
+UNION ALL
+SELECT 'envelope:' || p.id, 'sprint-envelope', 'orgiq', NULL, p.id,
+       'Sprint envelope on ' || p.name,
+       'A spend envelope on ' || p.name || ': dispatch agent work against it inside the active sprint. Provisioned as a budget grant by the initiative''s budget holder.',
+       FALSE, 'standing', 'budget-holder'
+  FROM projects p
+ WHERE NOT EXISTS (SELECT 1 FROM access_catalog_items c WHERE c.id = 'envelope:' || p.id)
+ ORDER BY 1`;
+
+/** One open grant request per beneficiary and item; RETURNING id is empty for the loser of a race.
+ *  `requested_usd` / `forecast` (JSON text, CAST here) are a sprint envelope's; NULL for every other kind. */
 export const INSERT_REQUEST_SQL = `
-INSERT INTO access_requests (id, kind, requester_id, beneficiary_id, item_id, justification, duration, status, sod_verdict, submitted_at)
-VALUES (:id, 'grant', :requester_id, :beneficiary_id, :item_id, :justification, :duration, 'submitted', :sod_verdict, CAST(:at AS TIMESTAMPTZ))
+INSERT INTO access_requests (id, kind, requester_id, beneficiary_id, item_id, justification, duration, requested_usd, forecast, status, sod_verdict, submitted_at)
+VALUES (:id, 'grant', :requester_id, :beneficiary_id, :item_id, :justification, :duration, :requested_usd, CAST(:forecast AS JSONB), 'submitted', :sod_verdict, CAST(:at AS TIMESTAMPTZ))
 ON CONFLICT DO NOTHING
 RETURNING id`;
 

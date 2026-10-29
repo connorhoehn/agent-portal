@@ -158,6 +158,11 @@ async def stream_agui(
     """
     adapter = live_agent.ag_ui(name=agent_id)
     prompt_sha = live_agent.prompt_sha
+    # DE-4: the Bedrock version number and pointer arm, read once beside the
+    # sha so the trace joins to a published version without re-hashing.
+    prompt_resolved = getattr(live_agent, "resolved", None)
+    prompt_version_number = getattr(prompt_resolved, "version_number", "") or None
+    prompt_arm = getattr(prompt_resolved, "arm", "") or None
 
     ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
     token = ctx_var.set(ctx) if ctx_var is not None else None
@@ -184,6 +189,8 @@ async def stream_agui(
             agent_id=agent_id,
             agent_name=agent_name,
             prompt_version=prompt_sha,
+            prompt_version_number=prompt_version_number,
+            prompt_arm=prompt_arm,
             model_id=model_id,
             model_registry_version=getattr(live_agent, "registry_version", "") or None,
         ) as oi_span:

@@ -162,6 +162,7 @@ export function isAwaitingAnswer(sessionId: string): boolean {
 /** Release every held run and silence every stream in flight. */
 export function resetMockDevboxTransport(): void {
   epoch++;
+  clearDevboxRecordings();
   const runs = [...held.values()];
   held.clear();
   for (const run of runs) run.release();
@@ -315,6 +316,54 @@ function commandName(command: unknown): string {
   return (command as { constructor?: { name?: string } } | null)?.constructor?.name ?? '';
 }
 
+// ─── What the fake microVM was sent (DE-45) ──────────────────────────────────
+//
+// Every shell command the fake runtime receives (wrapper and decoded probe,
+// both), and every credentialed git op with its token reduced to a boolean.
+// Tests assert no command ever carried a credential: the token belongs in a
+// git op's payload, never in shell text.
+
+export interface RecordedGitOp { sessionId: string; op: string; repo: string; target: string; authenticated: boolean }
+
+const shellLog: string[] = [];
+const gitLog: RecordedGitOp[] = [];
+const LOG_CAP = 500;
+
+/** Shell commands received since the last reset, oldest first (wrapper, then decoded probe when wrapped). */
+export function recordedShellCommands(): readonly string[] { return [...shellLog]; }
+/** Credentialed git ops received since the last reset — never the token itself. */
+export function recordedGitOps(): readonly RecordedGitOp[] { return gitLog.map((g) => ({ ...g })); }
+export function clearDevboxRecordings(): void { shellLog.length = 0; gitLog.length = 0; }
+
+function record<T>(log: T[], entry: T): void {
+  log.push(entry);
+  if (log.length > LOG_CAP) log.splice(0, log.length - LOG_CAP);
+}
+
+/** The git entrypoint (agents/devbox/main.py `_run_git`), offline: a clone seeds the workspace. */
+async function* gitStream(sessionId: string, payload: Record<string, unknown>): AsyncGenerator<Uint8Array> {
+  const enc = new TextEncoder();
+  const op = String(payload['op'] ?? '');
+  const repo = String(payload['repo'] ?? '');
+  const target = String(payload['target'] ?? '');
+  record(gitLog, { sessionId, op, repo, target, authenticated: typeof payload['token'] === 'string' && payload['token'] !== '' });
+  const frame = (ev: Record<string, unknown>): Uint8Array => enc.encode(`data: ${JSON.stringify(ev)}\n`);
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !target.startsWith('/')) {
+    yield frame({ type: 'git_end', op, exit_code: 2, error: 'repo must be owner/name and target an absolute path' });
+    return;
+  }
+  yield frame({ type: 'git_start', op, repo, target, authenticated: gitLog[gitLog.length - 1]!.authenticated });
+  if (op === 'clone') {
+    const delay = provisionMs();
+    if (delay > 0) await sleep(delay);
+    const ws = workspaceFor(sessionId);
+    yield frame({ type: 'git_output', text: `Cloning into '${target}'...\n${ws.commits[0]!.slice(0, 7)} Initial import\n` });
+  } else {
+    yield frame({ type: 'git_output', text: `To https://github.com/${repo}.git\n * [new branch] ${String(payload['branch'] ?? '')}\n` });
+  }
+  yield frame({ type: 'git_end', op, exit_code: 0 });
+}
+
 export function mockDevboxClient(): BedrockAgentCoreClient {
   const client = {
     async send(command: unknown): Promise<unknown> {
@@ -324,6 +373,9 @@ export function mockDevboxClient(): BedrockAgentCoreClient {
       // The shell command API — `body: { command, timeout }`.
       const body = input['body'] as { command?: string } | undefined;
       if (body && typeof body.command === 'string') {
+        record(shellLog, body.command);
+        const decoded = unwrapProbe(body.command);
+        if (decoded !== body.command) record(shellLog, decoded);
         // The clone is what boots a microVM, so it is the one command that
         // takes a while — long enough for the lab to show the computer
         // `provisioning` (lib/bot-runner.ts ensureWorkspace).
@@ -334,9 +386,12 @@ export function mockDevboxClient(): BedrockAgentCoreClient {
       // The agent task API — `payload` is UTF-8 JSON.
       const payload = input['payload'] as Uint8Array | undefined;
       if (payload) {
-        let prompt = '';
-        try { prompt = String((JSON.parse(Buffer.from(payload).toString('utf8')) as { prompt?: unknown }).prompt ?? ''); }
-        catch { prompt = ''; }
+        let parsed: Record<string, unknown> = {};
+        try { parsed = JSON.parse(Buffer.from(payload).toString('utf8')) as Record<string, unknown>; }
+        catch { parsed = {}; }
+        // A credentialed git op (DE-45) — the image's other entrypoint.
+        if (parsed['op'] === 'clone' || parsed['op'] === 'push') return { response: gitStream(sessionId, parsed) };
+        const prompt = String(parsed['prompt'] ?? '');
         return { response: taskStream(planRun(sessionId, prompt)) };
       }
 

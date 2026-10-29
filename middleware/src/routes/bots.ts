@@ -16,6 +16,7 @@
 //               what it will cost first.
 
 import { Router } from 'express';
+import type express from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { degradedFields } from '../lib/upstream.js';
 import { readForRolesElseAction, requireAction, requireSession } from '../lib/authz.js';
@@ -27,14 +28,16 @@ import {
   type BotTemplate, type BotTrigger, type BotPatch,
 } from '../providers/bots.js';
 import {
-  fireBot, dispatchWorkItem, preflightWorkItem, decideRunBudget, decideAllocation,
-  decideEnvelope, loadEnvelope, grantScopedDispatchVerdict, resolveBotInitiativeId,
+  fireBot, dispatchWorkItem, preflightWorkItem, decideRunBudget,
+  grantScopedDispatchVerdict, resolveBotInitiativeId, dispatchHoldTtlMs,
 } from '../lib/bot-runner.js';
 import { requireInitiativeScope } from '../lib/initiative-scope.js';
 import {
   getWorkItem, recordWorkItemEstimate, reviewWorkItemEstimate,
 } from '../providers/work-items.js';
-import { getBudget, getMaintenance30d } from '../providers/budgets.js';
+import { deleteJobDraft, getJobDraft, saveJobDraft } from '../providers/work-item-job-drafts.js';
+import { getMaintenance30d } from '../providers/budgets.js';
+import { reserveSpend } from '../lib/spend-holds.js';
 import { listAgentProjects } from '../providers/agent-projects.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
 import { validateCronExpr } from '../lib/ingest-scheduler.js';
@@ -296,100 +299,51 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     }
   }
 
-  // ── 5. The initiative's allocation, as a brake rather than a report ───────
-  // Dispatching work whose forecast does not fit the money left this period
-  // demands the same explicit confirmation the per-run cap does.
-  //
-  // Two things this deliberately does NOT skip any more. It no longer needs a
-  // per-point basis: with zero runs bound to sized work items in this
-  // deployment, "no per-point basis" meant the brake could not fire at all,
-  // and could never fire on a FIRST dispatch — the one with no history and the
-  // best chance of blowing a small allocation. It now judges whatever forecast
-  // exists and says how much that forecast is worth (decideAllocation). Nor
-  // does it need the item to be pointed: an unsized story still spends money.
-  //
-  // Still skipped: an initiative with NO allocation row. Unbudgeted is not
-  // zero-budget — that surfaces as a blind spot on the Budgets page, and
-  // freezing an unfunded initiative here would be the wrong answer to it.
-  //
-  // The gate reads its own flag, so confirming the per-run cap above says
-  // nothing here — and the 409 names the flag that would open it.
-  const budgetRow = await getBudget(pre.item.projectId);
-  if (budgetRow?.allocatedUsd != null) {
-    const gate = decideAllocation(
-      { allocatedUsd: budgetRow.allocatedUsd, spentUsd: budgetRow.spentThisPeriodUsd },
-      {
-        costUsdP75: forecast.estimate.costUsdP75,
-        costUsdP25: forecast.estimate.costUsdP25,
-        confidence: forecast.confidence,
-      },
-      confirmed.allocation,
-    );
-    if (gate.kind === 'confirm') {
-      res.status(409).json({
-        error: gate.reason,
-        gate: 'allocation',
-        confirmFlag: 'confirmOverAllocation',
-        confidence: gate.confidence,
-        estimate: estimateBody(forecast),
-        allocation: {
-          orgProjectId: pre.item.projectId,
-          allocatedUsd: budgetRow.allocatedUsd,
-          spentUsd: budgetRow.spentThisPeriodUsd,
-          remainingUsd: budgetRow.allocatedUsd - budgetRow.spentThisPeriodUsd,
-        },
-      });
-      return;
-    }
+  // ── 5 + 6. Allocation and envelope, as ONE held decision (DE-34) ─────────
+  // The two soft brakes used to run here as reads with nothing written between
+  // them and the dispatch, so N concurrent dispatches on one initiative all saw
+  // the same remainder. reserveSpend takes the initiative lock (then the
+  // grant's), reads the allocation, the ledger spend, the unknown-cost count
+  // (DE-33) and the money other dispatches still hold, judges this forecast
+  // with the same decideAllocation / decideEnvelope, and writes the hold in
+  // the same transaction. Each gate still answers its own 409 and names its
+  // own flag; the allocation is still skipped for an initiative with no
+  // allocation row (unbudgeted is not zero-budget), and no grant is still no
+  // envelope brake. What is new in the bodies is `heldUsd` and
+  // `unknownCostCount`, the two figures the old remainder silently omitted.
+  const held = await reserveSpend({
+    initiativeId: pre.item.projectId, actorId: actor ?? null, source: 'bot_run',
+    forecast: {
+      costUsdP75: forecast.estimate.costUsdP75,
+      costUsdP25: forecast.estimate.costUsdP25,
+      confidence: forecast.confidence,
+    },
+    confirmed: { allocation: confirmed.allocation, envelope: confirmed.envelope },
+    // The one path whose caller (the portal's dispatch deck) can show "the
+    // remainder may be optimistic" to a person and confirm it (DE-33).
+    unknownCostTrips: true,
+    expiresInMs: dispatchHoldTtlMs(),
+  });
+  if (held.kind === 'confirm') {
+    res.status(409).json({
+      error: held.reason,
+      gate: held.gate,
+      confirmFlag: held.confirmFlag,
+      confidence: held.confidence,
+      estimate: estimateBody(forecast),
+      ...(held.allocation ? { allocation: held.allocation } : {}),
+      ...(held.envelope ? { envelope: held.envelope } : {}),
+    });
+    return;
   }
-
-  // ── 6. The caller's own sprint envelope ───────────────────────────────────
-  // The last brake, and the narrowest: a release manager granted THIS person a
-  // spend envelope for this sprint (budget_grants), and until now nothing
-  // checked it. Last on purpose — the initiative running out of money is the
-  // more fundamental fact and deserves to be said first; a person's envelope is
-  // only interesting while the initiative still has money to spend.
-  //
-  // No grant → no brake. Someone dispatching here without an envelope (a
-  // release manager, an hr-admin) is the allocation brake's business.
-  const envelope = await loadEnvelope(pre.item.projectId, actor);
-  if (envelope) {
-    const gate = decideEnvelope(
-      envelope,
-      {
-        costUsdP75: forecast.estimate.costUsdP75,
-        costUsdP25: forecast.estimate.costUsdP25,
-        confidence: forecast.confidence,
-      },
-      confirmed.envelope,
-    );
-    if (gate.kind === 'confirm') {
-      res.status(409).json({
-        error: gate.reason,
-        gate: 'envelope',
-        confirmFlag: 'confirmOverEnvelope',
-        confidence: gate.confidence,
-        estimate: estimateBody(forecast),
-        envelope: {
-          orgProjectId: pre.item.projectId,
-          grantId: envelope.grantId,
-          sprintId: envelope.sprintId,
-          sprintName: envelope.sprintName ?? null,
-          allocatedUsd: envelope.allocatedUsd,
-          // Named for what it is. Not "your spend" — only runs recorded as
-          // dispatched by this subject are counted, and none were before the
-          // attribution column existed.
-          attributedSpentUsd: envelope.attributedSpentUsd,
-          remainingUsd: envelope.allocatedUsd - envelope.attributedSpentUsd,
-          attributionAvailable: envelope.attributionAvailable,
-        },
-      });
-      return;
-    }
-  }
+  if (held.kind === 'refused') { res.status(403).json({ error: held.reason, gate: 'spend-hold' }); return; }
+  if (held.kind === 'unavailable') { res.status(503).json({ error: held.reason, gate: 'spend-hold' }); return; }
 
   const result = await dispatchWorkItem({
     workItemId, model, preflight: pre,
+    // The hold rides down and is bound to the bot_run once it exists; every
+    // failure after this point releases it inside dispatchWorkItem.
+    holdId: held.holdId,
     ...(body.agentProjectId ? { agentProjectId: String(body.agentProjectId) } : {}),
     ...(instruction ? { instruction } : {}),
     ...(actor ? { actor } : {}),
@@ -423,7 +377,78 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
       console.warn('[bots] estimate not recorded for', workItemId, err);
     });
   }
+  // A dispatched job clears its saved-for-later draft (schema/work_item_job_drafts_schema.sql):
+  // a draft always means "prepared, not yet run". Same posture as the estimate
+  // write above — bookkeeping after a live run never fails the response.
+  void deleteJobDraft(workItemId).catch((err: unknown) => {
+    console.warn('[bots] job draft not cleared for', workItemId, err);
+  });
   res.status(202).json({ run: result.run });
+}));
+
+// ─── Job drafts: the dispatch drawer's "Save for later" ───────────────────────
+//
+// GET / PUT / DELETE /api/bots/work-items/:id/job-draft — the prepared run on a
+// work item (model, per-run cap, instruction, codebase) kept server-side so the
+// setup survives the tab and reaches whoever dispatches it later
+// (schema/work_item_job_drafts_schema.sql, 2026-10-28). Gated like the estimate
+// beside it: DispatchAgentRun, then the item's initiative scope (DE-44) on the
+// writes AND the read — a draft names a model and a cap on an initiative's
+// money, which its stewards read, not every tenant member. Saving starts
+// nothing and spends nothing; a dispatch (above) clears it.
+
+const DRAFT_KEYS = ['model', 'budgetPerRunUsd', 'instruction', 'agentProjectId'] as const;
+const DRAFT_INSTRUCTION_MAX = 8000;
+
+/** The item behind `:id`, inside the caller's initiative scope; answers 404 / 403 itself. */
+async function itemInScope(req: express.Request, res: express.Response, action: string) {
+  const id = String(req.params['id'] ?? '').trim();
+  if (!id) throw new ValidationError('work item id is required');
+  const item = await getWorkItem(id);
+  if (!item) { res.status(404).json({ error: 'no such work item' }); return null; }
+  if (!await requireInitiativeScope(req, res, item.projectId, { action })) return null;
+  return item;
+}
+
+botsRouter.get('/work-items/:id/job-draft', dispatchGate, asyncHandler(async (req, res) => {
+  const item = await itemInScope(req, res, 'read job drafts');
+  if (!item) return;
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ draft: await getJobDraft(item.id) });
+}));
+
+botsRouter.put('/work-items/:id/job-draft', dispatchGate, asyncHandler(async (req, res) => {
+  const actor = req.session?.sub;
+  if (!actor) { res.status(401).json({ error: 'a session is required to save a job draft' }); return; }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (typeof body !== 'object' || Array.isArray(body)) throw new ValidationError('body must be a JSON object');
+  const stray = Object.keys(body).filter((k) => !(DRAFT_KEYS as readonly string[]).includes(k));
+  if (stray.length) throw new ValidationError(`unrecognised field${stray.length === 1 ? '' : 's'}: ${stray.join(', ')}`);
+  const model = String(body['model'] ?? '').trim();
+  if (!model) throw new ValidationError('model is required — a draft is a prepared run, and the run has a model');
+  const cap = body['budgetPerRunUsd'];
+  if (cap != null && (typeof cap !== 'number' || !Number.isFinite(cap) || cap < 0)) throw new ValidationError('budgetPerRunUsd must be a non-negative number, or null');
+  const instruction = body['instruction'];
+  if (instruction != null && typeof instruction !== 'string') throw new ValidationError('instruction must be a string, or null');
+  if (typeof instruction === 'string' && instruction.length > DRAFT_INSTRUCTION_MAX) throw new ValidationError(`instruction must be at most ${DRAFT_INSTRUCTION_MAX} characters`);
+  const agentProjectId = body['agentProjectId'];
+  if (agentProjectId != null && (typeof agentProjectId !== 'string' || !isUuid(agentProjectId))) throw new ValidationError('agentProjectId must be a codebase UUID, or null');
+
+  const item = await itemInScope(req, res, 'save job drafts');
+  if (!item) return;
+  const draft = await saveJobDraft(item.id, actor, {
+    model, budgetPerRunUsd: (cap as number | null | undefined) ?? null,
+    instruction: typeof instruction === 'string' && instruction.trim() ? instruction : null,
+    agentProjectId: (agentProjectId as string | null | undefined) ?? null,
+  });
+  res.json({ draft });
+}));
+
+botsRouter.delete('/work-items/:id/job-draft', dispatchGate, asyncHandler(async (req, res) => {
+  const item = await itemInScope(req, res, 'discard job drafts');
+  if (!item) return;
+  if (!await deleteJobDraft(item.id)) { res.status(404).json({ error: 'this work item has no saved job draft' }); return; }
+  res.status(204).end();
 }));
 
 /**
@@ -783,8 +808,25 @@ botsRouter.post('/:id/run', manageGate, asyncHandler(async (req, res) => {
     // A hand-driven firing has an author; a cron one does not. Recording it is
     // what lets a sprint envelope be burned down against a person at all.
     dispatchedBy: req.session?.sub ?? null,
+    // The allocation and envelope brakes now judge a manual firing too
+    // (DE-34), with the same flags the dispatch route takes.
+    confirmed: { allocation: confirmed.allocation, envelope: confirmed.envelope },
   });
-  if (!result.ok) { res.status(409).json({ error: result.reason }); return; }
+  if (!result.ok) {
+    if (result.refusal?.kind === 'confirm') {
+      const r = result.refusal;
+      res.status(409).json({
+        error: r.reason, gate: r.gate, confirmFlag: r.confirmFlag, confidence: r.confidence,
+        ...(r.allocation ? { allocation: r.allocation } : {}),
+        ...(r.envelope ? { envelope: r.envelope } : {}),
+      });
+      return;
+    }
+    if (result.refusal?.kind === 'refused') { res.status(403).json({ error: result.reason, gate: 'spend-hold' }); return; }
+    if (result.refusal?.kind === 'unavailable') { res.status(503).json({ error: result.reason, gate: 'spend-hold' }); return; }
+    res.status(409).json({ error: result.reason });
+    return;
+  }
   res.status(202).json({ run: result.run });
 }));
 

@@ -55,7 +55,9 @@ import {
   mintShellUrl,
   respondStopSession,
   buildDevboxStatusPayload,
+  applyTaskProfile,
 } from './devbox.js';
+import { profileForInitiative, profileStamp } from '../lib/devbox-profile.js';
 import { buildLoopMockFrames, loopMockPaceMs, clearMockWorkspace } from '../mock/devbox-agent-loop.js';
 import { randomUUID } from 'node:crypto';
 import { parseReportedCost, parseResultUsage, settleRunCost } from '../lib/run-cost.js';
@@ -185,14 +187,18 @@ internalDevboxRouter.post('/sessions', asyncHandler(async (req, res) => {
     return;
   }
   const sessionId = normalizeRuntimeSessionId();
+  // The rules the box is created under (DE-40): its initiative's profile,
+  // else `default`, stamped so a later edit never changes it mid-task.
+  const profile = await profileForInitiative(projectId || null);
   const box = registerBox({
     sessionId,
     ownerId: principal.requestedBy,
     source: principal.service,
     ...(body.label ? { label: body.label } : {}),
     ...(projectId ? { projectId } : {}),
+    profile: profileStamp(profile),
   });
-  res.status(201).json({ sessionId, boxId: box.id });
+  res.status(201).json({ sessionId, boxId: box.id, profile: profileStamp(profile) });
 }));
 
 // ─── POST /:sessionId/task ────────────────────────────────────────────────
@@ -220,8 +226,14 @@ internalDevboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
     return;
   }
 
+  // The box's profile decides the model and the timeout ceiling (DE-40) on
+  // this principal exactly as on the browser one — an unlisted model is a 400
+  // here too, before either transport is reached.
+  const governed = await applyTaskProfile(box, body, res);
+  if (!governed) return;
+
   if (mockAgentCore()) {
-    const frames = buildLoopMockFrames({ sessionId, prompt, resume, ...(body.model ? { model: body.model } : {}) });
+    const frames = buildLoopMockFrames({ sessionId, prompt, resume, model: governed.model });
     initSSE(res);
     const [taskStarted, ...rest] = frames;
     // Mirrors runTaskAndForward's own convention: task_started goes into the
@@ -239,7 +251,7 @@ internalDevboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
     // Same ledger entry the real path writes in runTaskAndForward (DE-30);
     // the mock result carries usage but no figure, so the mock price table
     // prices it (DE-32) — 'estimated', or 'unknown' when a scenario blanks it.
-    const model = body.model ?? 'sonnet';
+    const model = governed.model;
     const usage = result ? parseResultUsage(result) : null;
     const settled = settleRunCost(
       result ? parseReportedCost(result) : null,
@@ -266,8 +278,8 @@ internalDevboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
   await runTaskAndForward({
     sessionId, prompt, resume, res, arn,
     spend: { source: 'agent_loop', actorId: principal.requestedBy },
-    ...(body.model ? { model: body.model } : {}),
-    ...(body.timeout ? { timeout: body.timeout } : {}),
+    model: governed.model,
+    timeout: governed.timeout,
   });
 }));
 

@@ -17,7 +17,7 @@
 
 import { EventEmitter } from 'node:events';
 import {
-  claimNextJob, markRunning, completeJob, reapStaleJobs, listJobs, type AgentJob, type ClaimedAgentJob,
+  claimNextJob, markRunning, completeJob, reapStaleJobs, listJobs, unclaimJob, type AgentJob, type ClaimedAgentJob,
 } from '../providers/agent-jobs.js';
 import { listBoxes, appendEvent, getBox, registerBox, isReserved } from './devbox-fleet.js';
 import { isLocalBoxId } from './local-compute-fleet.js';
@@ -27,6 +27,10 @@ import type { DevboxRunOutcome } from './devbox-runner.js';
 import { freezeJobBrief } from './run-brief.js';
 import { maintainJobAttempt, type JobAttempt } from './job-attempt.js';
 import { recordSpend } from '../providers/spend-ledger.js';
+import { reserveSpend, forecastP75ForModel, HOLD_GRACE_MS } from './spend-holds.js';
+import { releaseHold } from '../providers/spend-holds.js';
+import { hasLifeFor, lifetimePolicy, type LifetimePolicy } from './devbox-lifetime.js';
+import { lifetimePoliciesFor } from './devbox-profile.js';
 
 const TICK_MS = Number(process.env['JOB_DISPATCH_INTERVAL_MS'] ?? 10_000);
 /**
@@ -88,10 +92,41 @@ async function recordJobSpend(
     estimatedCostUsd: cost.estimatedCostUsd ?? null,
     inputTokens: cost.usage?.inputTokens ?? null,
     outputTokens: cost.usage?.outputTokens ?? null,
+    // The dispatcher only runs jobs on cloud boxes (InvokeRuntime); local
+    // machines claim through routes/local-compute.ts, which books its own $0.
+    provider: 'bedrock',
   }, { unlessBotRunOwnsJob: job.id });
 }
 
-async function runJob(job: ClaimedAgentJob): Promise<void> {
+/** The last money refusal logged per job, so a job parked behind a brake
+ *  is said once per reason rather than every tick. */
+const heldBack = new Map<string, string>();
+
+/**
+ * The spend hold for one job attempt (DE-34), between the claim and
+ * markRunning. The initiative is the payload's (a promoted finding or a
+ * work-item job carries one; a free-text job may not, and then takes no hold,
+ * as before). A job a bot run owns is skipped: fireBot held its money and the
+ * bot_run settles it. A refusal hands the job back to the queue without
+ * burning an attempt; the next tick re-judges it once money frees.
+ */
+async function holdJobSpend(job: ClaimedAgentJob): Promise<{ ok: true; holdId: string | null } | { ok: false; reason: string }> {
+  if (job.botId) return { ok: true, holdId: null };
+  const initiative = job.payload['initiativeId'];
+  const model = typeof job.payload['model'] === 'string' ? job.payload['model'] : null;
+  const held = await reserveSpend({
+    initiativeId: typeof initiative === 'string' && initiative ? initiative : null,
+    actorId: job.createdBy,
+    source: 'job',
+    sourceId: `${job.id}:${job.attempts}`,
+    forecast: await forecastP75ForModel(model),
+    expiresInMs: STALE_MINUTES * 60_000 + HOLD_GRACE_MS,
+  });
+  if (held.kind === 'held') { heldBack.delete(job.id); return { ok: true, holdId: held.holdId }; }
+  return { ok: false, reason: held.reason };
+}
+
+async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePolicy()): Promise<void> {
   const { boxId, sessionId, claimToken } = job;
   if (!boxId || !sessionId) {
     await completeJob(job.id, { claimToken, status: 'failed', error: 'claimed without a box assignment' });
@@ -100,8 +135,21 @@ async function runJob(job: ClaimedAgentJob): Promise<void> {
   busy.add(boxId);
   let attempt: JobAttempt | undefined;
   let invoked = false;
+  let holdId: string | null = null;
   try {
-    if (!await markRunning(job.id, claimToken)) return;
+    const money = await holdJobSpend(job);
+    if (!money.ok) {
+      // Back to the queue, attempt un-burned; the box is free again.
+      await unclaimJob(job.id, claimToken);
+      if (heldBack.get(job.id) !== money.reason) {
+        heldBack.set(job.id, money.reason);
+        console.log(`[dispatcher] job ${job.id} held back: ${money.reason}`);
+      }
+      emit('held_back', job, { boxId, reason: money.reason });
+      return;
+    }
+    holdId = money.holdId;
+    if (!await markRunning(job.id, claimToken)) { await releaseHold(holdId); return; }
     attempt = await maintainJobAttempt(job.id, claimToken, STALE_MINUTES * 60_000);
     emit('running', job, { boxId });
     appendEvent(boxId, { type: 'job_started', jobId: job.id, title: job.title, kind: job.kind, ts: new Date().toISOString() });
@@ -121,6 +169,8 @@ async function runJob(job: ClaimedAgentJob): Promise<void> {
       sessionId, prompt, signal: guard.signal,
       ...(frozen ? { lab: { ...frozen.run, session_id: sessionId, box_id: boxId } } : {}),
       resume: Boolean(job.payload['resume']),
+      // The box's profile default, stated rather than left to the image (DE-48).
+      timeoutSeconds: policy.taskDefaultS,
       ...(typeof job.payload['model'] === 'string' ? { model: job.payload['model'] } : {}),
       onEvent: ev => { guard.assertLive(); appendEvent(boxId, ev); },
     }));
@@ -145,8 +195,11 @@ async function runJob(job: ClaimedAgentJob): Promise<void> {
     // the authoritative stale sweep and never publish a stale terminal event.
     if (!attempt || attempt.signal.aborted) return;
     if (await completeJob(job.id, { claimToken, status: 'failed', error: (err as Error).message })) {
-      // The task may have spent before it threw; how much is unknown, not zero.
+      // The task may have spent before it threw; how much is unknown, not zero
+      // — and an unknown-cost entry leaves the hold held until it expires.
+      // A failure BEFORE the invoke spent nothing, so that hold is released.
       if (invoked) await recordJobSpend(job, { costUsd: null, costBasis: 'unknown', estimatedCostUsd: null });
+      else await releaseHold(holdId);
       emit('failed', job, { boxId });
     }
   } finally {
@@ -172,14 +225,20 @@ async function tick(): Promise<void> {
     // `runDevboxTask`, which is hard-wired to AgentCore `InvokeRuntime`, against
     // a session id that only ever existed on somebody's laptop. A paired machine
     // gets work by CLAIMING it (routes/local-compute.ts), never by being pushed.
-    const idle = listBoxes().filter(
+    const free = listBoxes().filter(
       (b) => (b.status === 'idle' || b.status === 'waiting') && !busy.has(b.id) && !isReserved(b.id) && !isLocalBoxId(b.id),
     );
+    // A box without ceiling left for one default task plus grace is not handed
+    // a job (DE-48 rule 3): the reaper would stop it mid-task. Each box is
+    // judged by its own profile's policy (stamped version, tightened by a
+    // newer one), one lookup per profile.
+    const policies = free.length ? await lifetimePoliciesFor(free) : new Map<string, LifetimePolicy>();
+    const idle = free.filter((b) => hasLifeFor(b, policies.get(b.id) ?? lifetimePolicy()));
     for (const box of idle) {
       const job = await claimNextJob(box.id, box.sessionId);
       if (!job) break;                        // queue empty — stop probing
       emit('claimed', job, { boxId: box.id });
-      void runJob(job).catch(error => console.warn('[dispatcher] attempt failed:', (error as Error).message));                       // fire and forget; bounded by idle boxes
+      void runJob(job, policies.get(box.id) ?? lifetimePolicy()).catch(error => console.warn('[dispatcher] attempt failed:', (error as Error).message));                       // fire and forget; bounded by idle boxes
     }
   } catch (err) {
     console.warn('[dispatcher] tick failed:', (err as Error).message);

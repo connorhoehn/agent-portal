@@ -174,13 +174,17 @@ export const budgetGrants = defineFixture<MockGrantSeed>({
 /**
  * The Computer Lab demo's envelopes (mock/demo-director.ts): the seed's, with
  * Nora DaSilva's sprint-42 envelope on Auth Migration sized to the demo's
- * story. Her three agents' dispatches each fit it (nothing has burned yet, and
- * a run burns only once it settles); once two of them have settled, what is
- * left no longer covers the forecast for a fourth item, so the real envelope
- * brake in `POST /api/bots/dispatch-work` holds it. The size is the only
- * thing changed — the gate, the forecast and the burn are all the real ones.
+ * story. Her three agents' dispatches each fit it: each holds its $0.30 p75
+ * while in flight (DE-34 spend holds), and three holds ($0.90) fit. Once two
+ * of them have settled at their real figures, what they spent plus what the
+ * third still holds leaves less than a fourth item's forecast, so the real
+ * envelope brake in `POST /api/bots/dispatch-work` holds it. (Before holds
+ * existed this was $0.70, sized on settled burn alone; with holds a $0.70
+ * envelope refuses the THIRD agent, which is the race DE-34 closes.) The size
+ * is the only thing changed — the gate, the forecast and the burn are all the
+ * real ones.
  */
-export const DEMO_ENVELOPE_USD = 0.7;
+export const DEMO_ENVELOPE_USD = 0.95;
 function demoGrants(): MockGrantSeed[] {
   return seededGrants().map((g) => (g.id === 'bg-auth-3' ? { ...g, allocatedUsd: DEMO_ENVELOPE_USD } : g));
 }

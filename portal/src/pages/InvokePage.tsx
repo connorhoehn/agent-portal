@@ -171,7 +171,9 @@ interface SessionSummary {
 const WRITE_AGENT_RE = /(graph[-_]builder|ingestion|scoring)/;
 const isWriteAgent = (agentId: string): boolean => WRITE_AGENT_RE.test(agentId.toLowerCase());
 // The devbox runtime is a computer, not an org agent: offering it is the
-// ManageDevbox capability's call, the same gate the Computers surfaces use.
+// RunDevboxTask capability's call (DE-42) — the action POST /api/agents/:id/
+// invoke asks for it (middleware/src/routes/agents.ts `agentCapabilityGate`,
+// asked as `ownsBox` because a direct invoke starts a session the caller owns).
 const DEVBOX_AGENT_RE = /devbox/;
 const isDevboxAgent = (agentId: string): boolean => DEVBOX_AGENT_RE.test(agentId.toLowerCase());
 
@@ -227,11 +229,12 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], a
   const { can } = useCapabilities();
 
   // Hide the write agents from the selector unless the caller holds
-  // ManageIngest, and the devbox unless they hold ManageDevbox. While capabilities are still loading, can() is false, so the
-  // conservative default hides them (better than flashing an option the server
-  // will 403). Read agents always stay listed.
+  // ManageIngest, and the devbox unless they hold RunDevboxTask (DE-42; the
+  // invoke route's own gate). While capabilities are still loading, can() is
+  // false, so the conservative default hides them (better than flashing an
+  // option the server will 403). Read agents always stay listed.
   const canIngest = can('ManageIngest');
-  const canDevbox = can('ManageDevbox');
+  const canDevbox = can('RunDevboxTask');
   const visibleAgents = useMemo(
     () => agents?.filter((a) => (canIngest || !isWriteAgent(a.id)) && (canDevbox || !isDevboxAgent(a.id))),
     [agents, canIngest, canDevbox],

@@ -19,6 +19,33 @@ const TENANT_TITLES: Readonly<Record<AccessTenant, string>> = {
 /** The id a standing (tenant, role) grant is named by. */
 export const roleItemId = (tenant: string, role: string): string => `role:${tenant}:${role}`;
 
+// ── sprint envelopes (2026-10-28) ────────────────────────────────────────────
+//
+// "A sprint envelope on <initiative>" is requestable for EVERY initiative, so
+// the catalog item is DERIVED from the projects table rather than seeded: one
+// `envelope:<projectId>` row per initiative, built here from the initiative's
+// id and name (providers/access.ts `listCatalog` appends them; the cluster
+// statement is LIST_CATALOG_SQL in lib/access/sql.ts). A derived row is never
+// edited through PUT /configuration, and its duration is `standing`: the grant
+// lives until the release manager revokes it (DELETE /api/grants/:id) or the
+// request is revoked in Access, exactly like an envelope granted by hand.
+
+export const ENVELOPE_ITEM_PREFIX = 'envelope:';
+export const envelopeItemId = (projectId: string): string => `${ENVELOPE_ITEM_PREFIX}${projectId}`;
+export const isEnvelopeItemId = (id: string): boolean => id.startsWith(ENVELOPE_ITEM_PREFIX);
+/** `envelope:<projectId>` → the initiative id, else null. */
+export const envelopeProjectId = (id: string): string | null => (isEnvelopeItemId(id) ? id.slice(ENVELOPE_ITEM_PREFIX.length) || null : null);
+
+/** The derived catalog row for an initiative's sprint envelope. */
+export function envelopeItem(projectId: string, initiativeName: string): AccessCatalogRow {
+  return {
+    id: envelopeItemId(projectId), kind: 'sprint-envelope', tenant: 'orgiq', role: null, projectId,
+    title: `Sprint envelope on ${initiativeName}`,
+    description: `A spend envelope on ${initiativeName}: dispatch agent work against it inside the active sprint. Provisioned as a budget grant by the initiative's budget holder.`,
+    sensitive: false, defaultDuration: 'standing', stewardRule: 'budget-holder',
+  };
+}
+
 /**
  * The id a standing (tenant, entry) grant is named by in a review: the catalog
  * item that provisions it when there is one (a capability grant such as orgiq

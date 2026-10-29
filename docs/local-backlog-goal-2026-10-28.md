@@ -36,9 +36,9 @@ Rules for whoever continues:
 |---|------|-------------|-------|
 | 1 | DE-30 spend ledger | append-only ledger keyed by initiative/grant/run/box, written by bot runs, devbox tasks, internal tasks and work jobs; budgets read it | done (writers, readers behind `SPEND_LEDGER`, backfill, Postgres acceptance); direct `agent_project_run` writer built and Postgres-tested; remaining: `bff_call`, `grant_id`, direct-run history backfill and direct-run mock ledger parity |
 | 2 | DE-32 Claude pricing | per-model/profile prices from config, fallback estimate when no cost is reported | done (2026-10-28): `lib/model-prices.ts` + `lib/model-prices-defaults.ts` + `mock/model-prices.ts`; per-bucket `estimateUsageCost`; `costBasis`/`estimatedCostUsd` on the runner, box tasks, agent loop, jobs and the fleet; `spend_entries.estimated_cost_usd` (additive); SSM read grant + `MODEL_PRICES_PARAM` in the middleware stack; `cdk synth --no-lookups` confirms the grant; estimates survive direct/project/bot/job settlement and backfill |
-| 3 | DE-33 unknown cost gates | unknown cost routes to approval in SDLC `max_cost`; local runs record unknown, not $0 | |
-| 4 | DE-31 box spend rollup | box `spendUsd` lands in the ledger under its project and owner | |
-| 5 | DE-34 spend holds | reserve the p75 forecast at dispatch against allocation and envelope; settle on finish | |
+| 3 | DE-33 unknown cost gates | unknown cost routes to approval in SDLC `max_cost`; local runs record unknown, not $0 | done (2026-10-29): unknown cost → approval in SDLC `max_cost`; unknown-only brake trip on dispatch-work only; ledger `provider` column, local jobs write $0 `provider=local` |
+| 4 | DE-31 box spend rollup | box `spendUsd` lands in the ledger under its project and owner | done: ledger-backed box spend (`GET /api/devbox/boxes`), `GET /api/me/spend`; mock box `spendUsd` literals removed. Not built: the release manager's per-person view |
+| 5 | DE-34 spend holds | reserve the p75 forecast at dispatch against allocation and envelope; settle on finish | done: one `reserveSpend` before dispatch-work, fireBot, the job dispatcher, box tasks and governed runs; settle in the ledger transaction; ceiling insert under an advisory lock |
 | 6 | DE-35 mid-run cutoff | a run crossing its reserved ceiling is stopped with a recorded reason | |
 | 7 | DE-36 hard caps | non-overridable cap per initiative and grant; unreadable budget state fails closed | |
 | 8 | DE-39 bot-fire allocation brake | cron firings pass the allocation check | |
@@ -46,27 +46,64 @@ Rules for whoever continues:
 | 10 | DE-38 budget periods | sprint-aligned and rolling windows, carry-over rules | |
 | 11 | DE-50 kill switches and alerts | fleet and initiative pause; threshold/stuck-run/reaper alerts as events (CloudWatch alarm half synth-tested) | |
 | 12 | DE-53 initiative spend report | API plus portal view joining allocation, grants, holds, ledger, forecasts, outcomes | |
-| 13 | DE-40 policy profiles | versioned per-initiative profile (models, task time, lifetime, network mode, org access) read at dispatch | |
-| 14 | DE-48 one lifetime model | reaper, task timeout and AgentCore ceilings aligned and profile-driven | |
-| 15 | DE-42 Cedar box actions | split `ManageDevbox` into shell/task/delivery/policy-edit with initiative attributes || built and green (2026-10-28); **review when back**: the agent was stopped before reporting its defaults — check each Done-when and decision against the spec |
-| 16 | DE-43 separation of duties | author cannot decide own change; gated users cannot edit their own gate || built and green (2026-10-28); **review when back**: the agent was stopped before reporting its defaults — check each Done-when and decision against the spec |
-| 17 | DE-46 SDLC policy versioned | defaults as versioned per-initiative policy with an audit trail || built and green (2026-10-28); **review when back**: the agent was stopped before reporting its defaults — check each Done-when and decision against the spec |
+| 13 | DE-40 policy profiles | versioned per-initiative profile (models, task time, lifetime, network mode, org access) read at dispatch | done: versioned profiles per initiative (models, task time, lifetime), box stamp, unlisted model refused (400 `MODEL_NOT_ALLOWED`); IAM limited to `devboxModels` |
+| 14 | DE-48 one lifetime model | reaper, task timeout and AgentCore ceilings aligned and profile-driven | done: `lib/devbox-lifetime.ts` holds every ceiling; running boxes reaped only as task overrun; env set in both stacks |
+| 15 | DE-42 Cedar box actions | split `ManageDevbox` into shell/task/delivery/policy-edit with initiative attributes | done; reviewed 2026-10-29 (defaults below); portal re-pointed off `ManageDevbox` |
+| 16 | DE-43 separation of duties | author cannot decide own change; gated users cannot edit their own gate | done; reviewed 2026-10-29 (defaults below) |
+| 17 | DE-46 SDLC policy versioned | defaults as versioned per-initiative policy with an audit trail | done; reviewed 2026-10-29 (defaults below) |
 | 18 | DE-47 fleet state across replicas | busy flags, reservations, buffers in Redis/Aurora; leader-elected reaper (local Redis) | |
-| 19 | DE-45 credentials out of shell | token never in a command string on the BFF side; per-run token provider interface (GitHub App half needs the image) | |
+| 19 | DE-45 credentials out of shell | token never in a command string on the BFF side; per-run token provider interface (GitHub App half needs the image) | done locally: token provider interface (`github-app`, `pat`, `local`), audit rows, token only in the git child env; real runtime path off until the image rebuild (`docs/github-app-tokens-runbook.md`) |
 | 20 | DE-28 bug-class lint | lint for partial secret ARNs, uuid binds as text, second CommonJS editor stack | done |
 | 21 | DE-20 schema migrations | migration ledger with dry-run, tested against local Postgres | done |
 | 22 | DE-3 model registry | central versioned model config read by agents and BFF, env fallback | done (pricing.ts `us.` normalisation landed with row 2: `lib/__tests__/pricing.test.ts`) |
-| 23 | DE-4 prompt promotion | alias-based prompt reads and promotion through canary/eval (code + synth) | |
+| 23 | DE-4 prompt promotion | alias-based prompt reads and promotion through canary/eval (code + synth) | done except: the BFF gate is structural (no golden runner), `harness.ts` still keys promoted_at by sha |
 | 24 | DE-7 MCP tool registry | gateway tools from a manifest; synth tests | done (synth); `gateway_tools.py` not wired into an agent until the cloud check |
 | 25 | DE-8 memory config | per-tenant memory strategies and retention from config; synth tests | done (infra half); middleware actor-id step already shipped in deploy-hardening row 1 |
 | 26 | DE-17 parameterised environments | account/region/prefix/domain as config; synth tests for a second environment | done (infra); scripts outside infra/ (aws-env.mjs, agents build scripts, dump-stack-outputs.sh) still hard-code names |
-| 27 | DE-14 deploy orchestrator | one resumable command with recorded state, tested with a fake `aws`/`cdk` | |
+| 27 | DE-14 deploy orchestrator | one resumable command with recorded state, tested with a fake `aws`/`cdk` | done: `scripts/deploy/orchestrate.mjs` (plan/apply, recorded state, SSM lock), fake-aws tests |
 | 28 | DE-29 tenant manifest | one manifest drives TENANTS, Cedar seeds, routers and CDK | |
 
 ## Decisions taken by default
 
 Confirm or change each; every one is a config flag or a small edit.
 
+- **Dispatch UI (approved component)** — "Request budget" files a
+  `sprint-envelope` access request (`POST /api/access-requests/envelope`):
+  standing duration, amount = forecast p75 (disabled with no forecast),
+  approver = the allocation's last editor when they can decide in Access, else
+  org-leaders; the last approval creates the grant via the `POST /api/grants`
+  path. "Save for later" stores one job setup per work item. The message names
+  "the budget holder" (the page has no reliable name).
+- **DE-33/34 money** — an unknown-cost run trips the soft brakes only on
+  dispatch-work (where the deck confirms); box tasks, the agent loop, manual
+  runs, cron and jobs still take holds and refuse real over-allocation. An
+  unknown-cost hold stays open until expiry. Manual bot runs are now judged
+  like a dispatch (portal shows the refusal; no "run anyway" yet). Cron holds
+  money but is judged only with `enforceAllocation`. A task into a box a
+  governed run already holds is held, never refused. Demo envelope $0.70 →
+  $0.95. Kill switches: `SPEND_HOLDS=off`, `SPEND_HOLDS_FAIL_CLOSED=1`,
+  `SPEND_HOLDS_UNATTRIBUTED=refuse`.
+- **DE-40/48** — profile edits need `ManageBudgets` + an org-wide role;
+  assigning needs `ManageBudgets` + stewardship. An unknown or unlisted model
+  routes an SDLC change to approval. **Behaviour change:** bots and
+  dispatches on Nova models are now refused up front on the real devbox path
+  (they used to run silently on the default Claude model).
+- **DE-45** — `pat` stays the default provider until a GitHub App is
+  configured (`--context githubAppSecretArn=<complete ARN>`, `devboxGitEntrypoint=true`
+  after the image rebuild).
+- **DE-4** — candidate weight 10; promote/rollback gated `ManageCanary`.
+- **DE-42/43/46 authz** (reviewed 2026-10-29; full review in the commit
+  message): authors never decide their own change; nobody edits rules that
+  gate changes they caused (admin `override` skips both, now audited).
+  `EditSdlcPolicy` is hr-admin and admin only (sme lost policy editing).
+  hr-admin keeps shell and task (spec proposed removing them);
+  program-owner and org-leader did not get decide/deliver (spec proposed
+  adding them) — so unattributed changes are approvable in practice only by
+  hr-admin/admin, governance-code changes only by admin. Two-person rule on
+  for loosening edits (`SDLC_POLICY_TWO_PERSON=off`). Governance-path hits
+  need `org-leader,admin` approval (`require_approval`, not `block`).
+  **Open gap:** the portal still gates on `ManageDevbox` (65 sites), so an
+  SME sees the policy editor and gets 403 on save — needs a portal lane.
 - **DE-30 ledger** — readers stay on `bot_runs` until `SPEND_LEDGER=dual`
   (log drift) then `ledger`; default `off`. Ad-hoc box tasks with no
   initiative land unattributed and count only in the org total, never

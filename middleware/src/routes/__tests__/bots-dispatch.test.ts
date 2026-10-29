@@ -48,7 +48,13 @@ jest.mock('../../providers/bots.js', () => ({
 // budgets.ts is imported, never edited, by both the route (getBudget) and the
 // envelope brake (listGrants) — the SME is stopped by the same envelope figure
 // the Budgets page renders.
-jest.mock('../../providers/budgets.js', () => ({ getBudget: jest.fn(), listGrants: jest.fn() }));
+jest.mock('../../providers/budgets.js', () => ({
+  getBudget: jest.fn(), listGrants: jest.fn(), unknownCostCountInPeriod: jest.fn(async () => 0),
+}));
+// The brakes now run inside reserveSpend (DE-34); the hold store and its
+// concurrency are spend-holds-dispatch.test.ts's subject. Here the decisions
+// run unheld, exactly as they did before holds.
+process.env['SPEND_HOLDS'] = 'off';
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../../providers/work-items.js', () => ({
   getWorkItem: jest.fn(), updateWorkItem: jest.fn(), addWorkItemComment: jest.fn(),
@@ -73,6 +79,7 @@ import { runCostSamples, perPointCostSamples } from '../../providers/bots.js';
 import { getBudget, listGrants } from '../../providers/budgets.js';
 import { getUser } from '../../providers/identity.js';
 import { dispatchedSpendInWindow } from '../../providers/bots.js';
+import { unknownCostCountInPeriod as unknownCount } from '../../providers/budgets.js';
 import { getWorkItem } from '../../providers/work-items.js';
 import { listAgentProjects } from '../../providers/agent-projects.js';
 import { dispatchWorkItem, grantScopedDispatchVerdict } from '../../lib/bot-runner.js';
@@ -168,6 +175,8 @@ describe('the allocation brake with no history at all', () => {
     expect(res.body.allocation).toEqual({
       orgProjectId: 'p-rag-search', allocatedUsd: 5, spentUsd: 4.2,
       remainingUsd: expect.closeTo(0.8, 5) as number,
+      // DE-34 / DE-33: money other dispatches hold, and runs with no recorded cost.
+      heldUsd: 0, unknownCostCount: 0,
     });
     // Nothing ran: refused before any dispatch side effect.
     expect(dispatch).not.toHaveBeenCalled();
@@ -401,6 +410,7 @@ describe('the four 409s are distinguishable', () => {
       attributedSpentUsd: 29,
       remainingUsd: 1,
       attributionAvailable: true,
+      heldUsd: 0, unknownCostCount: 0,
     });
     expect(res.body.error).toMatch(/counting only runs recorded as dispatched by you/);
     expect(res.body.allocation).toBeUndefined();
@@ -423,6 +433,28 @@ describe('the four 409s are distinguishable', () => {
 
 describe('the sprint envelope brake', () => {
   beforeEach(() => { budget.mockResolvedValue(HEALTHY); });
+
+  // DE-33: a run with no recorded cost is in neither figure, so the envelope's
+  // remainder is optimistic by an unknown amount — the brake asks on its own.
+  it('answers the envelope brake while one of the caller\'s runs has no recorded cost, and confirmOverEnvelope dispatches', async () => {
+    grants.mockResolvedValue([grant()]);
+    burn.mockResolvedValue({ spentUsd: 1, attributionAvailable: true, unknownCount: 1 });
+    const res = await post(BODY);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ gate: 'envelope', confirmFlag: 'confirmOverEnvelope', envelope: { unknownCostCount: 1, remainingUsd: 29 } });
+    expect(res.body.error).toMatch(/1 run you dispatched in this window has no recorded cost/);
+    expect((await post({ ...BODY, confirmOverEnvelope: true })).status).toBe(202);
+  });
+
+  it('answers the allocation brake while the initiative has a run with no recorded cost (DE-33)', async () => {
+    (unknownCount as jest.Mock).mockResolvedValueOnce(2).mockResolvedValueOnce(2);
+    grants.mockResolvedValue([]);
+    const res = await post(BODY);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ gate: 'allocation', allocation: { unknownCostCount: 2 } });
+    expect(res.body.error).toMatch(/2 runs in this window have no recorded cost/);
+    expect((await post({ ...BODY, confirmOverAllocation: true })).status).toBe(202);
+  });
 
   it("does not brake someone with no grant here — that is the allocation's job", async () => {
     grants.mockResolvedValue([]);

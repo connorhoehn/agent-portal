@@ -78,6 +78,7 @@ import '../people.js';
 import '../promotions.js';
 import '../prompt-evals.js';
 import '../prompt-library.js';
+import '../prompt-pointers.js';
 import '../prompt-studio.js';
 import '../prompt-versions.js';
 import '../responses.js';

@@ -7,7 +7,10 @@ or HOLD the current traffic split. Honors manual overrides, cooldown windows,
 and minimum-sample gates so we don't act on noisy data.
 
 Input contract (from the Step Functions ParseMetrics task):
-  results : list of CW Logs Insights rows (one row per version_label bucket)
+  results : list of CW Logs Insights rows (one row per version_label bucket;
+            labels are A/B, or live/candidate from the DE-4 pointer controller)
+  mode    : optional, "pointer" for the DE-4 controller (the decision is the
+            same; PROMOTE there means "flip the pointer", not "step the weight")
   weight  : current weight_b as a string (SSM Parameter.Value)
   control : control flags JSON string (SSM Parameter.Value)
   config  : controller thresholds JSON string (SSM Parameter.Value)
@@ -39,6 +42,10 @@ logger.setLevel(logging.INFO)
 # ---------------------------------------------------------------------------
 
 _NONE_SENTINEL = "0"
+# DE-4: the per-agent promotion controller groups score events by the pointer
+# arm that served the run (`orgiq.prompt_arm`); live is the control (A) and
+# the candidate is the treatment (B). The A/B labels of the demo canary stay.
+_ARM_LABELS = {"live": "A", "candidate": "B"}
 _PROMOTE_LATENCY_HEADROOM = 1.25  # B's p95 must be <= A's p95 * 1.25 to promote
 _WEIGHT_MIN = 0
 _WEIGHT_MAX = 100
@@ -132,7 +139,7 @@ def _flatten_results(rows: list[list[dict]]) -> dict[str, dict[str, Any]]:
             if isinstance(field, str):
                 kv[field] = value
 
-        version = kv.get("version_label")
+        version = _ARM_LABELS.get(str(kv.get("version_label")), kv.get("version_label"))
         if version in ("A", "B"):
             out[version] = {
                 "composite": _coerce_float(kv.get("composite")),

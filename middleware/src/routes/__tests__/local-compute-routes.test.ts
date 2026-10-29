@@ -1147,6 +1147,20 @@ describe('GET /api/local-compute/events', () => {
     }
   });
 
+  it('books a finished local job to the ledger as a confident $0 with provider local (DE-33)', async () => {
+    const { mockStoredEntries } = await import('../../providers/spend-ledger.js');
+    const node = await readyWorker({ sub: 'u-mia' });
+    const handed = await request(as('member', 'u-mia')).post(`${BASE}/nodes/${node.nodeId}/work`).send({ prompt: 'distill yesterday' });
+    expect(handed.status).toBe(201);
+    const claimed = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    const done = await request(anon()).post(`${BASE}/jobs/${claimed.body.job.id}/complete`)
+      .set(bearer(node.nodeToken)).send({ claimToken: claimed.body.claimToken, status: 'done', costUsd: 4.2, model: 'sonnet' });
+    expect(done.status).toBe(200);
+    const entry = mockStoredEntries().find((e) => e.source === 'job' && e.sourceId.startsWith(`${claimed.body.job.id}:`));
+    // The worker's claimed $4.20 does not win: the route decides local is $0.
+    expect(entry).toMatchObject({ costUsd: 0, costBasis: 'reported', provider: 'local', actorId: 'u-mia', model: 'sonnet' });
+  });
+
   it('never leaks another owner\'s machine or job into the stream', async () => {
     await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
     const theirs = await readyWorker({ sub: 'u-raj', label: 'raj-mbp' });

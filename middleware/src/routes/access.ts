@@ -47,14 +47,15 @@ import { canFlags, decideRefusal, isParty, managesBeneficiary, mayRead, type Acc
 import { grantItemId, requestItem } from '../lib/access/items.js';
 import {
   ACCESS_KINDS, ACCESS_TENANTS, DURATIONS, REQUEST_STATUSES, requestThread,
-  type AccessDelegation, type AccessDirectory, type AccessDuration, type AccessEvent, type AccessRequestPreview, type Person, type AccessPolicy, type AccessRequest,
+  type AccessDelegation, type AccessDirectory, type AccessDuration, type AccessEvent, type AccessRequestPreview, type EnvelopeForecast, type Person, type AccessPolicy, type AccessRequest,
   type AccessReview, type AccessReviewItem, type AccessTenant, type CatalogItem, type Decision, type DirectoryUser,
 } from '../lib/access/types.js';
 import { recordUserId } from '../lib/record-owner.js';
+import { getWorkItem } from '../providers/work-items.js';
 import { expiresAtFor, provisionAccess, revokeAccess, SodBlockedError } from '../lib/access-provision.js';
 import { notifyAccessDelegation, notifyAccessRequest, type AccessNotifyKind } from '../lib/social-notify.js';
 import {
-  accessNow, casRequest, casReviewItem, closeReviewIfDecided, endDelegation, insertDelegation, insertRequest, insertReview, listCatalog, listDelegations, listEvents,
+  accessNow, casRequest, casReviewItem, closeReviewIfDecided, endDelegation, insertDelegation, insertRequest, insertReview, isDerivedCatalogItem, listCatalog, listDelegations, listEvents,
   listPolicies, listRequests, listReviewItems, listReviews, listSteps, loadDirectory, nextRequestId, saveTransition, updateCatalogItem, updatePolicy, withDirectoryUser,
   type AccessCatalogRow, type AccessDelegationRow, type AccessPolicyRow, type AccessRequestRow, type AccessReviewItemRow, type AccessReviewRow, type AccessStepRow,
 } from '../providers/access.js';
@@ -99,10 +100,16 @@ export async function context(req: Request): Promise<Ctx> {
   return { dir, self, actor: { id: actorId, personId: self?.personId ?? null, role: session.role, mayDecide, mayProvision, mayManagePolicy } };
 }
 
-/** Does `who` hold the item now (a tenant role, or a contribution on the initiative)? */
+/** Does `who` hold the item now (a tenant role, a contribution on the initiative, or an active sprint envelope on it)? */
 function holdsItem(item: AccessCatalogRow, who: DirectoryUser | null, dir: AccessDirectory): boolean {
   if (!who) return false;
   if (item.kind === 'tenant-role' || item.kind === 'capability') return !!item.role && (who.grants[item.tenant] ?? []).includes(item.role);
+  if (item.kind === 'sprint-envelope') {
+    // An ACTIVE budget grant on the initiative (lib/bot-runner.ts isActiveGrant): the same
+    // fact the dispatch gate reads, so "already holds" and "may dispatch" agree.
+    const holders = item.projectId ? dir.envelopeHolders?.(item.projectId) ?? [] : [];
+    return !!who.personId && holders.includes(who.personId);
+  }
   const members = item.projectId ? dir.initiative(item.projectId)?.memberPersonIds ?? [] : [];
   return !!who.personId && members.includes(who.personId);
 }
@@ -162,6 +169,8 @@ function present(r: AccessRequestRow, ctx: Ctx, w: World): AccessRequest {
     item: catalogItem(item, ctx, w.policies),
     justification: r.justification,
     duration: r.duration,
+    requestedUsd: r.requestedUsd,
+    forecast: r.forecast,
     status: r.status,
     steps: steps.map((s) => {
       const live = row && isOpen(r.status) && (s.status === 'current' || s.status === 'waiting' || s.status === 'info-requested')
@@ -488,7 +497,7 @@ async function revokeByReview(v: AccessReviewRow, i: AccessReviewItemRow, commen
   const itemId = grantItemId(i.tenant, i.role, listCatalog());
   insertRequest({
     id, kind: 'revocation', reviewId: v.id, requesterId: ctx.actor.id, beneficiaryId: i.userId, itemId,
-    justification: reason, duration: 'standing', status: 'active', sodVerdict: 'clear', sodOverriddenBy: null, sodOverrideReason: null,
+    justification: reason, duration: 'standing', requestedUsd: null, forecast: null, status: 'active', sodVerdict: 'clear', sodOverriddenBy: null, sodOverrideReason: null,
     submittedAt: now, decidedAt: now, provisionedAt: null, expiresAt: null, revokedAt: null, expiryWarnedAt: null,
   }, [{ requestId: id, step: 1, kind: 'access-admin', status: 'approved', decidedBy: ctx.actor.id, decidedAt: now, comment, currentSince: now, escalationLevel: 0, escalatedAt: null, delegatedFrom: null }], [
     { kind: 'submitted', before: 'draft', after: 'submitted', reason },
@@ -542,9 +551,30 @@ accessRouter.post('/reviews/:id/items/:itemId/decide', requireAction('DecideAcce
 // ─── writes ─────────────────────────────────────────────────────────────────
 
 /** A submission's fields, validated (unknown keys are refused by the caller's bodyOf). */
-export interface Submission { itemId: string; justification: string; duration: AccessDuration; beneficiaryId?: string }
+export interface Submission {
+  itemId: string; justification: string; duration: AccessDuration; beneficiaryId?: string;
+  /** `sprint-envelope` items only (2026-10-28): the dollars asked for, and the dispatch forecast behind them. */
+  requestedUsd?: number;
+  forecast?: EnvelopeForecast;
+}
 
-/** Validate a submission body's values: 400 on a missing item, a short justification or a bad duration. */
+/** The forecast an envelope request carries: every field optional, each typed when present, nothing else. */
+export function parseForecast(raw: unknown): EnvelopeForecast {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ValidationError('forecast must be an object');
+  const f = raw as Record<string, unknown>;
+  const allowed = ['workItemId', 'model', 'costUsdP25', 'costUsdP75'];
+  const unknown = Object.keys(f).filter((k) => !allowed.includes(k));
+  if (unknown.length) throw new ValidationError(`Unknown forecast field${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}`);
+  for (const k of ['workItemId', 'model'] as const) {
+    if (f[k] != null && typeof f[k] !== 'string') throw new ValidationError(`forecast.${k} must be a string`);
+  }
+  for (const k of ['costUsdP25', 'costUsdP75'] as const) {
+    if (f[k] != null && (typeof f[k] !== 'number' || !Number.isFinite(f[k] as number) || (f[k] as number) < 0)) throw new ValidationError(`forecast.${k} must be a finite number >= 0`);
+  }
+  return { workItemId: str(f['workItemId']) ?? null, model: str(f['model']) ?? null, costUsdP25: (f['costUsdP25'] as number | undefined) ?? null, costUsdP75: (f['costUsdP75'] as number | undefined) ?? null };
+}
+
+/** Validate a submission body's values: 400 on a missing item, a short justification, a bad duration, a bad amount or forecast. */
 export function parseSubmission(b: Record<string, unknown>): Submission {
   const itemId = str(b['itemId']);
   const justification = typeof b['justification'] === 'string' ? b['justification'].trim() : '';
@@ -555,7 +585,17 @@ export function parseSubmission(b: Record<string, unknown>): Submission {
   if (typeof duration !== 'string' || !(DURATIONS as readonly string[]).includes(duration)) throw new ValidationError(`duration must be one of ${DURATIONS.join(', ')}`);
   if (b['beneficiaryId'] !== undefined && typeof b['beneficiaryId'] !== 'string') throw new ValidationError('beneficiaryId must be a string');
   const beneficiaryId = str(b['beneficiaryId']);
-  return { itemId, justification, duration: duration as AccessDuration, ...(beneficiaryId ? { beneficiaryId } : {}) };
+  // Strictly a finite, positive number — never a coercible string (routes/grants.ts validAmount), and
+  // never zero: an empty envelope authorizes nothing and would still answer "already holds".
+  if (b['requestedUsd'] !== undefined && (typeof b['requestedUsd'] !== 'number' || !Number.isFinite(b['requestedUsd']) || b['requestedUsd'] <= 0)) {
+    throw new ValidationError('requestedUsd must be a finite number > 0');
+  }
+  const forecast = b['forecast'] !== undefined ? parseForecast(b['forecast']) : undefined;
+  return {
+    itemId, justification, duration: duration as AccessDuration, ...(beneficiaryId ? { beneficiaryId } : {}),
+    ...(b['requestedUsd'] !== undefined ? { requestedUsd: b['requestedUsd'] as number } : {}),
+    ...(forecast ? { forecast } : {}),
+  };
 }
 
 /** The outcome of filing: 201 with the request, or a refusal with its status and body. */
@@ -607,10 +647,25 @@ export async function fileRequest(ctx: Ctx, sub: Submission): Promise<FileOutcom
   if (a.refusal) return a.refusal;
   const { item, beneficiary, verdict } = a;
   const beneficiaryId = beneficiary.id;
+  // A sprint envelope (2026-10-28) is money: it needs an amount, a person to
+  // grant it to, and — when the forecast names a work item — that item must be
+  // on the initiative the envelope is for. Nothing else carries an amount.
+  if (item.kind === 'sprint-envelope') {
+    if (sub.requestedUsd == null) return { status: 400, body: { error: `${item.title} needs requestedUsd: the dollars the envelope should hold` } };
+    if (!beneficiary.personId) return { status: 400, body: { error: `${beneficiary.displayName} has no linked person; a sprint envelope is granted to a person` } };
+    if (sub.forecast?.workItemId) {
+      const wi = await getWorkItem(sub.forecast.workItemId);
+      if (!wi) return { status: 400, body: { error: `Unknown work item: ${sub.forecast.workItemId}` } };
+      if (wi.projectId !== item.projectId) return { status: 400, body: { error: `${wi.key ?? wi.id} is on ${wi.projectName}, not the initiative this envelope is for` } };
+    }
+  } else if (sub.requestedUsd != null || sub.forecast) {
+    return { status: 400, body: { error: `${item.title} carries no amount or forecast; only a sprint envelope does` } };
+  }
   const now = accessNow();
   const t = submitRows({
     id: nextRequestId(), requesterId: ctx.actor.id, beneficiaryId, itemId: item.id, justification: sub.justification,
-    duration: sub.duration, sodVerdict: verdict, sodOverriddenBy: null, sodOverrideReason: null, submittedAt: now,
+    duration: sub.duration, requestedUsd: sub.requestedUsd ?? null, forecast: sub.forecast ?? null,
+    sodVerdict: verdict, sodOverriddenBy: null, sodOverrideReason: null, submittedAt: now,
   }, a.kinds);
   insertRequest(t.request, t.steps, t.events, ctx.actor.id);
   await bellApprovers('submitted', t.request, ctx);
@@ -691,7 +746,7 @@ accessRouter.get('/beneficiaries', requireAction('RequestAccess'), asyncHandler(
 }));
 
 accessRouter.post('/requests', requireAction('RequestAccess'), asyncHandler(async (req, res) => {
-  const sub = parseSubmission(bodyOf(req, ['itemId', 'justification', 'duration', 'beneficiaryId']));
+  const sub = parseSubmission(bodyOf(req, ['itemId', 'justification', 'duration', 'beneficiaryId', 'requestedUsd', 'forecast']));
   const out = await fileRequest(await context(req), sub);
   if (out.status === 400) throw new ValidationError(String(out.body['error']));
   res.status(out.status).json(out.body);
@@ -932,9 +987,12 @@ function configurationBody() {
       ...ACCESS_TENANTS.map((tenant) => ({ scope: 'tenant-role' as const, tenant, rule: 'tenant-steward' as const, role: TENANT_STEWARD_ROLE[tenant]! })),
       { scope: 'initiative-membership' as const, tenant: null, rule: 'initiative-owner' as const, role: null },
       { scope: 'capability' as const, tenant: BUDGET_OWNER_ROLE.tenant, rule: 'budget-owner' as const, role: BUDGET_OWNER_ROLE.role },
+      // Sprint envelopes (2026-10-28): the initiative's budget holder (initiative_budgets.updated_by) when they decide in Access, else the org-leaders.
+      { scope: 'sprint-envelope' as const, tenant: BUDGET_OWNER_ROLE.tenant, rule: 'budget-holder' as const, role: BUDGET_OWNER_ROLE.role },
       { scope: 'sensitive' as const, tenant: 'access', rule: 'access-admin' as const, role: 'access-admin' },
     ],
-    items: listCatalog().map((i) => ({ id: i.id, title: i.title, kind: i.kind, tenant: i.tenant, defaultDuration: i.defaultDuration, stewardRule: i.stewardRule, sensitive: i.sensitive })),
+    // Derived envelope items are a projection of the initiatives, not settings: they are not listed here and PUT refuses them.
+    items: listCatalog().filter((i) => !isDerivedCatalogItem(i.id)).map((i) => ({ id: i.id, title: i.title, kind: i.kind, tenant: i.tenant, defaultDuration: i.defaultDuration, stewardRule: i.stewardRule, sensitive: i.sensitive })),
     // Fixed by deployment (ACCESS_ESCALATION_SLA_MS) and the design, shown read-only (2026-10-14).
     escalation: { stepSlaHours: Math.round((escalationSlaMs() / 3_600_000) * 100) / 100, tiers: ['access-admins', 'platform-admins'] as const },
     delegation: { maxDays: MAX_DELEGATION_DAYS },
@@ -961,6 +1019,7 @@ accessRouter.put('/configuration', requireAction('ManageAccessPolicy'), asyncHan
     if (extra.length) throw new ValidationError(`Unknown item field${extra.length > 1 ? 's' : ''}: ${extra.join(', ')}`);
     const id = str(it['id']);
     if (!id || !catalog.has(id)) throw new ValidationError(`Unknown catalog item: ${String(it['id'])}`);
+    if (isDerivedCatalogItem(id)) throw new ValidationError(`${id} is derived from its initiative (a sprint envelope) and is not editable here`);
     const row = catalog.get(id)!;
     // The descriptive fields may ride along (the GET shape echoed back) but never change here.
     for (const k of ['title', 'kind', 'tenant', 'stewardRule'] as const) {

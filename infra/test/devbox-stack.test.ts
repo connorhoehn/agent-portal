@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { Template } from 'aws-cdk-lib/assertions';
 import { devboxStack, SECRET_ARN, READONLY_SECRET_ARN } from './helpers/stacks';
 import { actionsOf, statementsForRole } from './helpers/cfn';
+import { DEFAULT_DEVBOX_MODELS, DEVBOX_TASK_TIMEOUT_S } from '../lib/devbox-stack';
 
 const phaseOne = Template.fromStack(devboxStack());
 const phaseTwo = Template.fromStack(devboxStack({ deployDevbox: 'true' }));
@@ -108,6 +109,55 @@ describe('org data access is opt-in', () => {
       .flatMap((st: any) => [].concat(st.Resource));
     assert.deepEqual(secretResources, [READONLY_SECRET_ARN]);
     assert.ok(!JSON.stringify(t.toJSON()).includes(SECRET_ARN), 'the master secret must not appear in the devbox stack');
+  });
+});
+
+describe('the model allowlist is backed by IAM (DE-40)', () => {
+  const invokeResources = (t: Template): string[] => {
+    const st = statementsForRole(t, 'orgiq-devbox-execution-role').find((x: any) => x.Sid === 'BedrockInvokeClaude');
+    assert.ok(st);
+    return [].concat(st.Resource).map((r: unknown) => JSON.stringify(r));
+  };
+
+  test('the Bedrock statement lists exactly the configured models, never a wildcard over anthropic', () => {
+    const t = Template.fromStack(devboxStack({
+      devboxModels: 'us.anthropic.claude-haiku-4-5-20251001-v1:0,us.anthropic.claude-sonnet-5',
+    }));
+    const resources = invokeResources(t).join(' ');
+    assert.ok(!resources.includes('*anthropic*') && !resources.includes('anthropic.*'), resources);
+    for (const m of ['claude-haiku-4-5-20251001-v1:0', 'claude-sonnet-5']) {
+      assert.ok(resources.includes(`inference-profile/us.anthropic.${m}`), `missing profile ${m}`);
+      assert.ok(resources.includes(`foundation-model/anthropic.${m}`), `missing foundation model ${m}`);
+    }
+    assert.ok(!resources.includes('opus'), 'a model no profile names must not be invocable');
+    // Two ARNs per model (profile + foundation model), two models.
+    assert.equal(invokeResources(t).length, 4);
+  });
+
+  test('the runtime env allowlist is the same union IAM grants', () => {
+    const t = Template.fromStack(devboxStack({ deployDevbox: 'true', devboxModels: 'us.anthropic.claude-haiku-4-5-20251001-v1:0' }));
+    const rt = Object.values<any>(t.findResources('AWS::BedrockAgentCore::Runtime'))[0];
+    assert.deepEqual(rt.Properties.EnvironmentVariables.DEVBOX_ALLOWED_MODELS.split(','), ['us.anthropic.claude-haiku-4-5-20251001-v1:0']);
+  });
+
+  test('a non-inference-profile model in the context refuses to synth', () => {
+    assert.throws(() => devboxStack({ devboxModels: 'anthropic.claude-sonnet-5' }), /inference-profile/);
+  });
+
+  test('the default is exactly the pre-profile allowlist', () => {
+    const rt = runtime();
+    assert.deepEqual(rt.Properties.EnvironmentVariables.DEVBOX_ALLOWED_MODELS.split(','), [...DEFAULT_DEVBOX_MODELS]);
+  });
+});
+
+describe('one lifetime model (DE-48)', () => {
+  test('the container task default is set explicitly and matches the middleware default', () => {
+    assert.equal(runtime().Properties.EnvironmentVariables.DEVBOX_TASK_TIMEOUT_S, String(DEVBOX_TASK_TIMEOUT_S));
+    assert.equal(DEVBOX_TASK_TIMEOUT_S, 840);
+  });
+
+  test('the platform clocks stay outside the reaper\'s (idle 1 h, max 8 h)', () => {
+    assert.deepEqual(runtime().Properties.LifecycleConfiguration, { IdleRuntimeSessionTimeout: 3600, MaxLifetime: 28800 });
   });
 });
 

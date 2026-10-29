@@ -176,3 +176,37 @@ export function overEnvelopeBody(over: OverEnvelope): string {
     : `This run is forecast at ${range}.`;
   return `${ledger} ${forecast} ${caveat}`;
 }
+
+/** The 409 body POST /api/bots/:id/run answers: the run cap, or (DE-34) the
+    allocation / sprint-envelope brake judged at the spend hold, or a plain
+    refusal (run cap per day, paused) with only `error`. */
+export interface BotRunRefusal {
+  error?: string;
+  gate?: 'run-budget' | 'allocation' | 'envelope' | string;
+  confirmFlag?: string;
+  confidence?: ForecastConfidence;
+  estimate?: WorkEstimate;
+  runBudget?: { budgetPerRunUsd: number; costUsdP25?: number; costUsdP75?: number };
+  allocation?: { allocatedUsd: number; spentUsd: number; remainingUsd: number };
+  envelope?: {
+    allocatedUsd: number; attributedSpentUsd: number; remainingUsd: number;
+    attributionAvailable: boolean; sprintName?: string | null;
+  };
+}
+
+/** One sentence for a refused manual bot run, in the operator's terms: the
+    same words the dispatch deck uses for the same gate, and never the remedy
+    half of the server's reason, which names an API flag. */
+export function botRunRefusalMessage(body: BotRunRefusal | null | undefined, fallback: string): string {
+  const reason = body?.error ?? '';
+  if (body?.gate === 'allocation' && body.allocation) {
+    return overAllocationBody({ reason, confidence: body.confidence, estimate: body.estimate, ...body.allocation });
+  }
+  if (body?.gate === 'envelope' && body.envelope) {
+    return overEnvelopeBody({ reason, confidence: body.confidence, estimate: body.estimate, ...body.envelope });
+  }
+  if (body?.gate === 'run-budget' && body.runBudget) {
+    return overRunBudgetBody({ reason, ...body.runBudget });
+  }
+  return reason ? reason.split(' — ')[0]! : fallback;
+}

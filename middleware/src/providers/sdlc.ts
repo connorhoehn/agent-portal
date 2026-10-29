@@ -13,7 +13,7 @@
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import {
-  evaluate, governancePathsTouched,
+  evaluate, governancePathsTouched, costFacts,
   type SdlcPolicy, type ChangeFacts, type ReviewVerdict, type Evaluation,
   type GateResult,
 } from '../lib/sdlc-policy.js';
@@ -21,7 +21,7 @@ import {
   mockCreateChange, mockSetCommitSha, mockGetChange, mockListChanges,
   mockHasNewerChangeForProject, mockSetChangeStatus, mockListReviews,
   mockRecordReview, mockListGates, mockListGateHistory, mockAppendGates, mockSetPolicyPin,
-  mockHasChangesRequestedBy, mockRunCostUsd,
+  mockHasChangesRequestedBy, mockRunCost,
   type JoinedChange, type StatusExtras,
 } from '../mock/sdlc.js';
 import {
@@ -506,21 +506,29 @@ export async function hasChangesRequestedBy(sub: string, scope: string): Promise
 }
 
 /**
- * The recorded dollar cost of the run behind a change — the max_cost fact.
+ * The recorded cost of the run behind a change, with its provenance — the
+ * max_cost facts (DE-33).
  *
- * Null when the change has no run, the run row is gone, or the run finished
- * without a cost being recorded. The engine treats a null cost as "cannot
- * judge" rather than "over budget"; see the max_cost case in sdlc-policy.ts.
+ * Cost is null when the change has no run, the run row is gone, or the run
+ * finished without a figure; the engine then routes the change to a person
+ * rather than waving it through. The basis is `local` for a run served on
+ * owned hardware (a route-decided $0, lib/run-cost.ts), `estimated` when the
+ * price table supplied the figure (DE-32), else `reported`. Read from
+ * `agent_project_runs` through to_jsonb so a cluster without the DE-32
+ * columns still answers.
  */
-async function runCostUsd(runId: string | null): Promise<number | null> {
-  if (config.mock.aurora) return mockRunCostUsd(runId);
-  if (!runId || !isUuid(runId)) return null;
+async function runCost(runId: string | null): Promise<Pick<ChangeFacts, 'costUsd' | 'costBasis'>> {
+  if (config.mock.aurora) return mockRunCost(runId);
+  if (!runId || !isUuid(runId)) return { costUsd: null, costBasis: 'unknown' };
   const rows = await exec(
-    `SELECT cost_usd::float8 AS cost_usd FROM agent_project_runs WHERE id = :id::uuid`,
+    `SELECT cost_usd::float8 AS cost_usd,
+            to_jsonb(apr)->>'cost_basis' AS cost_basis,
+            to_jsonb(apr)->>'model_provider' AS model_provider
+       FROM agent_project_runs apr WHERE id = :id::uuid`,
     [s('id', runId)],
   );
   const v = rows[0]?.['cost_usd'];
-  return v == null ? null : Number(v);
+  return costFacts(v == null ? null : Number(v), rows[0]?.['cost_basis'], rows[0]?.['model_provider']);
 }
 
 /**
@@ -561,13 +569,24 @@ export async function evaluateChange(changeId: string, opts: { repin?: boolean }
 
   const before = change.policyScope && change.policyVersion != null ? `${change.policyScope}@${change.policyVersion}` : null;
   const set = await pinnedPolicySet(change, opts.repin === true);
-  const policies = set.policies;
+  // DE-40 change 4: with no explicit `model_allowlist` row in the pinned set,
+  // the initiative's devbox profile supplies the list, so the gate that
+  // reviews a change agrees with the dispatch that refused or allowed its
+  // model. An explicit row wins; a profile lookup that fails leaves the set
+  // as pinned (the gate then has no model rule, exactly as before).
+  let policies = set.policies;
+  try {
+    const { withProfileModelAllowlist, profileForInitiative } = await import('../lib/devbox-profile.js');
+    policies = withProfileModelAllowlist(policies, await profileForInitiative(change.orgProjectId));
+  } catch (err) {
+    console.warn('[sdlc] could not read the devbox profile for the model gate:', (err as Error).message);
+  }
   const latestReview = change.reviews[0] ?? null;
   const facts: ChangeFacts = {
     files: change.files,
     model: change.model,
     reviewVerdict: latestReview?.verdict ?? null,
-    costUsd: await runCostUsd(change.runId),
+    ...await runCost(change.runId),
   };
   const evaluation = evaluate(policies, facts);
 
@@ -577,8 +596,11 @@ export async function evaluateChange(changeId: string, opts: { repin?: boolean }
   // the set is empty — refuse to auto-approve and route to a human instead.
   // Counting rows let a set of disabled defaults approve every change. A
   // governance layer must fail closed, never open.
-  if (!policies.some((policy) => policy.enabled) && evaluation.decision === 'approved') {
-    evaluation.decision = 'needs_approval';
+  // Judged on the PINNED set, not on the profile-derived model row: an
+  // inferred rule is not an operator's policy, so it must not mask "every
+  // rule was saved disabled".
+  if (!set.policies.some((policy) => policy.enabled) && evaluation.decision !== 'blocked') {
+    if (evaluation.decision === 'approved') evaluation.decision = 'needs_approval';
     evaluation.autoApproved = false;
     evaluation.gates.push({
       policyId: null,

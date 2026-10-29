@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-28T23:09:36.835Z",
-  "serverHandlerSha": "c418a3bbd05597278d44760f4d723de63c90703014bdecfbb011ceb45e9fb2d7",
+  "capturedAt": "2026-10-29T18:37:18.220Z",
+  "serverHandlerSha": "dce75dcf50480981fb26a7b073c1a2a437b63d56fc984aa11ed4a983b960ed06",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -239,6 +239,7 @@
         "items[].kind": [
           "capability",
           "initiative-membership",
+          "sprint-envelope",
           "tenant-role"
         ],
         "items[].role": [
@@ -442,6 +443,7 @@
         "decidedAt": "null",
         "duration": "string",
         "expiresAt": "null",
+        "forecast": "null",
         "id": "string",
         "item": "object",
         "item.defaultDuration": "string",
@@ -458,6 +460,7 @@
         "justification": "string",
         "kind": "string",
         "provisionedAt": "null",
+        "requestedUsd": "null",
         "requester": "object",
         "requester.displayName": "string",
         "requester.id": "string",
@@ -2265,6 +2268,9 @@
       },
       "values": {}
     },
+    "GET /api/bots/work-items/:id/job-draft": {
+      "skipped": "no value found for :id under /api/bots/work-items (orgiq/admin); no value found for :id under /api/bots/work-items (assessment/admin); no value found for :id under /api/bots/work-items (anonymous)"
+    },
     "GET /api/briefs": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -2930,9 +2936,12 @@
         "boxes[].ownerId": "string",
         "boxes[].projectId": "string",
         "boxes[].sessionId": "string",
+        "boxes[].spendLiveUsd": "number",
+        "boxes[].spendUnknownCount": "number",
         "boxes[].spendUsd": "number",
         "boxes[].status": "string",
         "boxes[].stopsInMs": "number",
+        "boxes[].taskMsLeft": "number",
         "boxes[].tokensUsed": "number"
       },
       "values": {
@@ -2946,6 +2955,63 @@
     },
     "GET /api/devbox/boxes/:boxId/tail": {
       "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); no value found for :boxId under /api/devbox/boxes (anonymous)"
+    },
+    "GET /api/devbox/profiles": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "profiles": "array",
+        "profiles[]": "object",
+        "profiles[].created_at": "string",
+        "profiles[].created_by": "string",
+        "profiles[].id": "string",
+        "profiles[].idle_minutes": "number",
+        "profiles[].max_lifetime_minutes": "number",
+        "profiles[].models": "array",
+        "profiles[].models[]": "string",
+        "profiles[].network_class": "string",
+        "profiles[].org_access": "string",
+        "profiles[].reason": "string",
+        "profiles[].task_timeout_s": "number",
+        "profiles[].version": "number"
+      },
+      "values": {}
+    },
+    "GET /api/devbox/profiles/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "profile": "object",
+        "profile.created_at": "string",
+        "profile.created_by": "string",
+        "profile.id": "string",
+        "profile.idle_minutes": "number",
+        "profile.max_lifetime_minutes": "number",
+        "profile.models": "array",
+        "profile.models[]": "string",
+        "profile.network_class": "string",
+        "profile.org_access": "string",
+        "profile.reason": "string",
+        "profile.task_timeout_s": "number",
+        "profile.version": "number",
+        "versions": "array",
+        "versions[]": "object",
+        "versions[].created_at": "string",
+        "versions[].created_by": "string",
+        "versions[].id": "string",
+        "versions[].idle_minutes": "number",
+        "versions[].max_lifetime_minutes": "number",
+        "versions[].models": "array",
+        "versions[].models[]": "string",
+        "versions[].network_class": "string",
+        "versions[].org_access": "string",
+        "versions[].reason": "string",
+        "versions[].task_timeout_s": "number",
+        "versions[].version": "number"
+      },
+      "values": {}
     },
     "GET /api/devbox/status": {
       "persona": "orgiq/admin",
@@ -3748,8 +3814,11 @@
         "$[].key": [
           "ORG-AUTH-1",
           "ORG-AUTH-2",
+          "ORG-AUTH-3",
           "ORG-AUTH-5",
+          "ORG-AUTH-7",
           "ORG-AUTH-8",
+          "ORG-AUTH-9",
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
@@ -3760,10 +3829,8 @@
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
+          "ORG-FS-4",
           "ORG-INF-1",
-          "ORG-INF-2",
-          "ORG-INF-3",
-          "ORG-INF-4",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -3771,20 +3838,19 @@
           "ORG-LLM-10",
           "ORG-LLM-3",
           "ORG-LLM-4",
-          "ORG-MOB-1",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
-          "ORG-OBS-1",
           "ORG-OBS-10",
+          "ORG-OBS-11",
           "ORG-OBS-12",
           "ORG-OBS-13",
           "ORG-OBS-14",
           "ORG-OBS-3",
           "ORG-OBS-4",
           "ORG-OBS-5",
+          "ORG-OBS-6",
           "ORG-OBS-8",
-          "ORG-RAG-2",
           "ORG-RAG-3",
           "ORG-RAG-4",
           "ORG-RTA-2",
@@ -3836,7 +3902,15 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "criteria": "array"
+        "criteria": "array",
+        "criteria[]": "object",
+        "criteria[].createdAt": "string",
+        "criteria[].done": "boolean",
+        "criteria[].id": "string",
+        "criteria[].position": "number",
+        "criteria[].text": "string",
+        "criteria[].updatedAt": "string",
+        "criteria[].workItemId": "string"
       },
       "values": {}
     },
@@ -4740,6 +4814,9 @@
     "GET /api/initiative-decks/:id/revisions/:rid/spec": {
       "skipped": "no value found for :id under /api/initiative-decks (orgiq/admin); no value found for :id under /api/initiative-decks (assessment/admin); no value found for :id under /api/initiative-decks (anonymous)"
     },
+    "GET /api/iq/prompts/:agent/pointers": {
+      "skipped": "no value found for :agent under /api/iq/prompts (orgiq/admin); no value found for :agent under /api/iq/prompts (assessment/admin); no value found for :agent under /api/iq/prompts (anonymous)"
+    },
     "GET /api/iq/prompts/experiments": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -5234,6 +5311,20 @@
     },
     "GET /api/me/groups": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 400 (anonymous)"
+    },
+    "GET /api/me/spend": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "actorId": "string",
+        "byInitiative": "array",
+        "knownUsd": "number",
+        "period": "string",
+        "since": "string",
+        "unknownCount": "number"
+      },
+      "values": {}
     },
     "GET /api/observability/approvals": {
       "persona": "orgiq/admin",
@@ -8330,7 +8421,7 @@
         "changes[].repoFullName": "string",
         "changes[].requestedBy": "string",
         "changes[].reviews": "array",
-        "changes[].runId": "null",
+        "changes[].runId": "null|string",
         "changes[].status": "string",
         "changes[].title": "string",
         "changes[].workItemId": "null|string"
@@ -8399,6 +8490,7 @@
       },
       "values": {
         "change.gates[].kind": [
+          "max_cost",
           "protected_paths",
           "require_review"
         ],
@@ -8438,6 +8530,7 @@
       },
       "values": {
         "evaluations[].gates[].kind": [
+          "max_cost",
           "protected_paths",
           "require_review"
         ],
@@ -8460,6 +8553,7 @@
         "policies[].config.globs[]": "string",
         "policies[].config.max": "number",
         "policies[].config.maxUsd": "number",
+        "policies[].config.onUnknown": "string",
         "policies[].enabled": "boolean",
         "policies[].id": "string",
         "policies[].kind": "string",
@@ -10446,6 +10540,7 @@
         "skill",
         "skill_library",
         "sod-blocked",
+        "sprint-envelope",
         "step-approved",
         "step-rejected",
         "steward",

@@ -50,5 +50,12 @@ export function rowToBox(r: Record<string, unknown>): FleetBox {
   if (r['active_model'] != null) box.activeModel = String(r['active_model']);
   if (r['spend_usd'] != null) box.spendUsd = Number(r['spend_usd']);
   if (r['tokens_used'] != null) box.tokensUsed = Number(r['tokens_used']);
+  // The profile stamp and task clock (DE-40 / DE-48). Both columns are
+  // additive, so a row from before devbox_profiles_schema.sql simply has none.
+  if (r['profile_id'] != null && r['profile_version'] != null && Number(r['profile_version']) > 0) {
+    box.profileId = String(r['profile_id']);
+    box.profileVersion = Number(r['profile_version']);
+  }
+  if (r['task_started_at'] != null && String(r['task_started_at']).trim()) box.taskStartedAt = utcIso(r['task_started_at']);
   return box;
 }

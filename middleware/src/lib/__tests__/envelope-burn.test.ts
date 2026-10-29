@@ -94,10 +94,10 @@ describe('the sprint envelope burns down in dev:mock', () => {
     // `work_item_id IN (SELECT … WHERE project_id = :pid)` does.
     expect(await dispatchedSpendInWindow({
       orgProjectId: 'p-observability', dispatchedBy: NORA, startsOn: null, endsOn: null,
-    })).toEqual({ spentUsd: 0, attributionAvailable: true });
+    })).toEqual({ spentUsd: 0, attributionAvailable: true, unknownCount: 0 });
     expect(await dispatchedSpendInWindow({
       orgProjectId: AUTH, dispatchedBy: NORA, startsOn: null, endsOn: null,
-    })).toEqual({ spentUsd: SIMULATED_COST, attributionAvailable: true });
+    })).toEqual({ spentUsd: SIMULATED_COST, attributionAvailable: true, unknownCount: 0 });
   });
 
   it('excludes a run that falls outside the sprint window', async () => {
@@ -107,7 +107,7 @@ describe('the sprint envelope burns down in dev:mock', () => {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     expect(await dispatchedSpendInWindow({
       orgProjectId: AUTH, dispatchedBy: NORA, startsOn: null, endsOn: yesterday,
-    })).toEqual({ spentUsd: 0, attributionAvailable: true });
+    })).toEqual({ spentUsd: 0, attributionAvailable: true, unknownCount: 0 });
   });
 
   it('counts nobody else’s dispatch, and no cron firing', async () => {
@@ -117,7 +117,7 @@ describe('the sprint envelope burns down in dev:mock', () => {
     // nobody's envelope; and another subject's sum here is zero.
     expect(await dispatchedSpendInWindow({
       orgProjectId: AUTH, dispatchedBy: 'u-release', startsOn: null, endsOn: null,
-    })).toEqual({ spentUsd: 0, attributionAvailable: true });
+    })).toEqual({ spentUsd: 0, attributionAvailable: true, unknownCount: 0 });
   });
 
   it('burns down across two dispatches and refuses the one that no longer fits', async () => {

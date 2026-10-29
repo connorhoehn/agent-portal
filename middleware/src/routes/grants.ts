@@ -17,8 +17,9 @@ import { readForRolesElseAction, requireAction, resolveSession } from '../lib/au
 import { initiativeExists } from '../providers/budgets.js';
 import { getSprint, personExists } from '../providers/sprints.js';
 import {
-  createGrant, updateGrant, revokeGrant, listGrantsForSprint,
+  updateGrant, revokeGrant, listGrantsForSprint,
 } from '../providers/grants.js';
+import { grantEnvelope } from '../lib/grant-envelope.js';
 
 export const grantsRouter: Router = Router();
 
@@ -81,13 +82,10 @@ grantsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
   }
 
   const grantedBy = resolveSession(req)?.sub ?? null;
-  const grant = await createGrant({ orgProjectId: initiativeId, sprintId, granteePersonId, amountUsd, grantedBy, note });
-  // Lazy: the producer pulls the identity store, which this route's unit tests do not load.
-  void import('../lib/social-notify.js')
-    .then((m) => m.notifyBudgetGranted({ grantId: grant.id, initiativeId, sprintId, granteePersonId, amountUsd, actorId: grantedBy }))
-    .catch(() => undefined);
-  // Content-free live hint for the activity graph (lib/work-graph/live.ts); lazy so this router's tests do not load the bots provider.
-  void import('../lib/work-graph/live.js').then(m => m.notifyWorkGraphChanged(initiativeId, 'sprint')).catch(() => undefined);
+  // The one grant path (lib/grant-envelope.ts): the row, the grantee's bell and
+  // the work graph's live hint — shared with the access tenant's provisioning of
+  // an approved sprint-envelope request, so both kinds of envelope read alike.
+  const grant = await grantEnvelope({ orgProjectId: initiativeId, sprintId, granteePersonId, amountUsd, grantedBy, note });
   res.status(201).json({ grant });
 }));
 

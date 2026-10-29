@@ -180,6 +180,13 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     });
     // Optional pin to an SSM parameter version while a DE-5 gate judges a change.
     const modelRegistryVersion = this.node.tryGetContext('modelRegistryVersion') as string | undefined;
+    // DE-4: a fleet-wide hard pin to one numbered Bedrock prompt version. DRAFT
+    // is refused here (and by prompt_source.py under APP_ENV=production): the
+    // working copy is never what the deployed fleet runs.
+    const systemPromptVersion = this.node.tryGetContext('systemPromptVersion') as string | undefined;
+    if (systemPromptVersion !== undefined && !/^[1-9]\d*$/.test(String(systemPromptVersion))) {
+      throw new Error(`systemPromptVersion must be a numbered Bedrock prompt version (got "${systemPromptVersion}"); DRAFT is not deployable`);
+    }
     const memoryId = props.memoryIdParameter
       ? ssm.StringParameter.valueForStringParameter(this, props.memoryIdParameter)
       : (props.memoryId ?? '');
@@ -340,6 +347,25 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         resources: [modelRegistryParam.parameterArn],
       }));
 
+      // DE-4: the agent's own prompt pointers (`/live`, `/candidate`), read
+      // with one GetParameters. Read-only, and scoped to this agent's path:
+      // no agent can read another's pointer, and none can move one. The
+      // pointers themselves are written by infra/scripts/prompt-pointers.ts
+      // (bootstrap, candidate, promote, rollback), never by CDK, because a
+      // pointer names a version number that only exists after a publish.
+      executionRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'PromptPointerRead',
+        actions: ['ssm:GetParameter', 'ssm:GetParameters'],
+        resources: [
+          cdk.Stack.of(this).formatArn({
+            service: 'ssm',
+            resource: 'parameter',
+            resourceName: `${prefix}/prompts/${agentName}/*`,
+            arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
+          }),
+        ],
+      }));
+
       // Supervisor needs A2A: list runtimes for discovery + invoke sub-agents
       if (agentName === 'supervisor') {
         executionRole.addToPolicy(new iam.PolicyStatement({
@@ -488,13 +514,19 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           OTEL_RESOURCE_ATTRIBUTES: `deployment.environment=dev,service.namespace=orgiq,agent.id=${prefix}-${agentName}`,
           OTEL_PYTHON_DISABLED_INSTRUMENTATIONS: '',
           AGENT_NAME: agentName,
-          // Live system prompts: each agent resolves `orgiq-<agent>-system-prompt`
-          // from Bedrock Prompt Management every PROMPT_REFRESH_S, so an edit in
-          // Prompt Studio reaches the deployed agent without an image rebuild.
-          // DRAFT is intentional — it is the studio's editable working copy.
+          // Live system prompts (DE-4): each agent reads the promoted version
+          // through its pointer, `/${prefix}/prompts/<agent>/live` (and the
+          // `/candidate` arm while a promotion is in flight), every
+          // PROMPT_REFRESH_S. The pointer carries the Bedrock prompt id and a
+          // numbered version, so the fleet never lists prompts and never runs
+          // the studio's DRAFT working copy: a `PUT …/draft` reaches production
+          // only once publish + promote move the pointer. SYSTEM_PROMPT_NAME
+          // stays for `agentcore dev` and the name lookup when no pointer is
+          // set; `--context systemPromptVersion=<n>` is a fleet-wide hard pin.
           // Set PROMPT_SOURCE_DISABLED=1 to pin an agent to its baked prompt.
           SYSTEM_PROMPT_NAME: `${prefix}-${agentName}-system-prompt`,
-          SYSTEM_PROMPT_VERSION: 'DRAFT',
+          SYSTEM_PROMPT_POINTER: `/${prefix}/prompts/${agentName}`,
+          ...(systemPromptVersion && { SYSTEM_PROMPT_VERSION: systemPromptVersion }),
           PROMPT_REFRESH_S: '60',
           MEMORY_ID: memoryId,
           // Sub-agents run without a guardrail — the supervisor enforces at the

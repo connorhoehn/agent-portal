@@ -23,6 +23,16 @@ export type Action =
   | 'EditSchema'
   | 'EditGuardrail'
   | 'ManageDevbox'
+  // The agent-code authorities split out of ManageDevbox (DE-42) — in
+  // CAPABILITY_ACTIONS server-side. The probe answers for the sme permits'
+  // conditions as if satisfied (on the initiative, owning the box, not the
+  // author); the real route still refuses per instance (403 NOT_ON_INITIATIVE,
+  // 409 self-approval), so a `true` here is "may ever", not "may this one".
+  | 'OpenDevboxShell'
+  | 'RunDevboxTask'
+  | 'DecideAgentChange'
+  | 'DeliverAgentChange'
+  | 'EditSdlcPolicy'
   | 'ManageBots'
   | 'DispatchAgentRun'
   | 'ManageIngest'

@@ -1237,6 +1237,28 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: ok({ role: null }),
   },
   {
+    route: 'PATCH /api/graph/projects/:id/devbox-profile',
+    persona: 'orgiq/admin',
+    safe: "Points an initiative at a devbox policy profile (DE-40). Under MOCK_AURORA `setInitiativeProfile` writes `devboxProfileId` on the registered `initiatives` fixture row, so reset puts it back. Sending `null` clears to `default`, which every seeded initiative already resolves to, so the round trip changes nothing a reader can see. No AWS, no timer.",
+    bodyFrom: 'routes/projects.ts: `profileId` is required as a key, a profile id or null; null is the one value that needs no published profile.',
+    intercepts: ['aurora'],
+    build: ok({ profileId: null }),
+  },
+  {
+    route: 'PUT /api/devbox/profiles/:id',
+    persona: 'orgiq/admin',
+    safe: "Appends the next version of a devbox policy profile (DE-40) to the registered `devbox-profiles` fixture (mock/devbox-profiles.ts); reset drops it and leaves the seeded ('default', 1). The body is the profile's current version copied back unchanged, so the new version grants nothing the old did not. No AWS, no timer.",
+    bodyFrom: "routes/devbox-profiles.ts: `profile` must pass parseProfileInput (it is the current version's fields, read off GET /api/devbox/profiles/:id), `baseVersion` must be that version, `reason` a non-blank string (`ctx.label()`).",
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const got = await ctx.get('/api/devbox/profiles/default') as { profile?: Record<string, Json> } | null;
+      const p = got?.profile;
+      if (!p || typeof p['version'] !== 'number') return unsynthesisable('GET /api/devbox/profiles/default returned no profile');
+      const { models, task_timeout_s, idle_minutes, max_lifetime_minutes, network_class, org_access } = p;
+      return { profile: { models, task_timeout_s, idle_minutes, max_lifetime_minutes, network_class, org_access }, baseVersion: p['version'], reason: ctx.label() };
+    },
+  },
+  {
     route: 'POST /api/sprints',
     persona: 'orgiq/admin',
     safe: 'Appends to the registered `sprints` fixture (mock/sprints.ts); reset drops the created sprint. No AWS, no timer.',
@@ -2103,7 +2125,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'POST /api/agent-projects/:id/clone-command',
     persona: 'orgiq/admin',
-    safe: 'It builds the clone command and runs it in the box server-side (the command carries the repository credential, so it no longer goes to the browser). Offline the box is the fake microVM in mock/devbox-shell.ts, which answers any `git clone`, and under MOCK_AGENTCORE `buildCloneCommand` leaves the token out rather than calling `borrowApiKey`. The persona is a fleet-wide role, so `requireBoxAccess` adopts the label session as an operator would. Deliberately NOT paired with `/cloned`: running the clone is not confirming it, and the handler must not mark the project cloned.',
+    safe: 'It runs the clone in the box server-side through lib/devbox-git.ts `cloneIntoBox` and returns only redacted text. Under MOCK_AGENTCORE the git entrypoint path is on (DE-45): a fake per-run token from the `local` provider goes in the invoke payload to the fake microVM in mock/devbox-shell.ts, never into a shell command, and the mint appends one row to the registered `credential-issues` fixture, which reset clears. No `borrowApiKey`, no GitHub. The persona is a fleet-wide role, so `requireBoxAccess` adopts the label session as an operator would. Deliberately NOT paired with `/cloned`: running the clone is not confirming it, and the handler must not mark the project cloned.',
     bodyFrom: 'routes/agent-projects.ts: `sessionId` must be a non-blank string the caller can reach (`requireBoxAccess`); a fleet-wide persona adopts an unknown one. `:id` is a repository off GET /api/agent-projects.',
     intercepts: ['aurora', 'agentcore'],
     build: async (ctx) => ({ sessionId: ctx.label() }),

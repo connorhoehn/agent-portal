@@ -39,7 +39,8 @@ export function twoPersonRuleOn(): boolean {
 const orgWide = (session: Session): boolean => ORG_WIDE_INITIATIVE_ROLES.includes(session.role);
 
 export type PolicyWriteOutcome =
-  | { kind: 'applied'; version: PolicySetVersion }
+  /** `overrode` is true when an admin's `override: true` was what let this through (the route audits it). */
+  | { kind: 'applied'; version: PolicySetVersion; overrode?: boolean }
   | { kind: 'pending'; proposal: PolicyProposal }
   | { kind: 'conflict'; currentVersion: number }
   | { kind: 'refused'; status: 400 | 403 | 404 | 409; error: string; gate?: string; code?: string };
@@ -64,12 +65,18 @@ export async function effectivePolicySet(scope: string): Promise<{ own: PolicySe
   return { own, effective: own ?? org };
 }
 
+/** The self-gate (rule 3) was hit and an admin override let it through. */
+const OVERRODE_SELF_GATE = 'overrode-self-gate';
+
 /**
- * Rules 2 and 3 for one caller on one scope; null means may edit. Used for
- * both proposing and approving, so a second person who is gated by the same
- * rules cannot wave a loosening through either.
+ * Rules 2 and 3 for one caller on one scope; null means may edit,
+ * OVERRODE_SELF_GATE means may edit only because of an admin override (the
+ * caller audits that). Used for both proposing and approving, so a second
+ * person who is gated by the same rules cannot wave a loosening through either.
  */
-async function editRefusal(session: Session, scope: string, override: boolean): Promise<PolicyWriteOutcome | null> {
+async function editRefusal(
+  session: Session, scope: string, override: boolean,
+): Promise<PolicyWriteOutcome | typeof OVERRODE_SELF_GATE | null> {
   if (scope === ORG_SCOPE) {
     if (!orgWide(session)) {
       return { kind: 'refused', status: 403, gate: 'org-wide-role', error: 'only an org-wide role may edit the org policy set' };
@@ -78,7 +85,7 @@ async function editRefusal(session: Session, scope: string, override: boolean): 
     return { kind: 'refused', status: 403, code: 'NOT_ON_INITIATIVE', error: 'you can only edit the policy set of an initiative you own or contribute to' };
   }
   if (await hasChangesRequestedBy(session.sub, scope)) {
-    if (override && session.role === 'admin') return null;
+    if (override && session.role === 'admin') return OVERRODE_SELF_GATE;
     return {
       kind: 'refused', status: 409, gate: 'self-gated',
       error: 'these rules gate changes you caused, so someone else must change them',
@@ -100,7 +107,8 @@ export async function submitPolicySet(input: {
   if (!reason) return { kind: 'refused', status: 400, error: 'reason is required' };
   const override = input.override === true && session.role === 'admin';
   const refused = await editRefusal(session, scope, override);
-  if (refused) return refused;
+  let overrode = refused === OVERRODE_SELF_GATE;
+  if (refused && refused !== OVERRODE_SELF_GATE) return refused;
 
   const { own, effective } = await effectivePolicySet(scope);
   if ((own?.version ?? 0) !== baseVersion) return { kind: 'conflict', currentVersion: own?.version ?? 0 };
@@ -119,14 +127,18 @@ export async function submitPolicySet(input: {
   }
 
   const loosening = looseningChanges(effective.policies, policies);
-  if (loosening.length > 0 && twoPersonRuleOn() && !override) {
-    const proposal = await createPolicyProposal({
-      scope, baseVersion, policies, loosening, proposedBy: session.sub, reason,
-    });
-    return { kind: 'pending', proposal };
+  if (loosening.length > 0 && twoPersonRuleOn()) {
+    if (!override) {
+      const proposal = await createPolicyProposal({
+        scope, baseVersion, policies, loosening, proposedBy: session.sub, reason,
+      });
+      return { kind: 'pending', proposal };
+    }
+    overrode = true;
   }
   const out = await writePolicySet({ scope, policies, baseVersion, changedBy: session.sub, reason });
-  return out.ok ? { kind: 'applied', version: out.version } : { kind: 'conflict', currentVersion: out.currentVersion };
+  if (!out.ok) return { kind: 'conflict', currentVersion: out.currentVersion };
+  return { kind: 'applied', version: out.version, ...(overrode ? { overrode: true } : {}) };
 }
 
 /**
@@ -150,7 +162,8 @@ export async function decidePolicyProposal(input: {
   // org-leader may approve an org loosening (DE-43 §4) though it holds no
   // EditSdlcPolicy; the scope rules still apply to it as to anyone.
   const refused = await editRefusal(input.session, proposal.scope, override);
-  if (refused) return refused;
+  const overrode = refused === OVERRODE_SELF_GATE;
+  if (refused && refused !== OVERRODE_SELF_GATE) return refused;
 
   if (input.decision === 'reject') {
     const ok = await closePolicyProposal(proposal.id, { status: 'rejected', decidedBy: input.session.sub, decisionNote: input.note, appliedVersion: null });
@@ -172,5 +185,5 @@ export async function decidePolicyProposal(input: {
   await closePolicyProposal(proposal.id, {
     status: 'approved', decidedBy: input.session.sub, decisionNote: input.note, appliedVersion: out.version.version,
   });
-  return { kind: 'applied', version: out.version };
+  return { kind: 'applied', version: out.version, ...(overrode ? { overrode: true } : {}) };
 }

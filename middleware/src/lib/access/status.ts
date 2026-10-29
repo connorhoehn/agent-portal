@@ -31,9 +31,14 @@ export interface Transition {
 }
 
 /** The rows a fresh submission writes: status `submitted`, step 1 current, the rest waiting. */
-export function submitRows(request: Omit<AccessRequestRow, 'kind' | 'reviewId' | 'status' | 'decidedAt' | 'provisionedAt' | 'expiresAt' | 'revokedAt' | 'expiryWarnedAt'>, kinds: readonly StepKind[]): Transition {
+export function submitRows(
+  request: Omit<AccessRequestRow, 'kind' | 'reviewId' | 'status' | 'decidedAt' | 'provisionedAt' | 'expiresAt' | 'revokedAt' | 'expiryWarnedAt' | 'requestedUsd' | 'forecast'>
+    & Partial<Pick<AccessRequestRow, 'requestedUsd' | 'forecast'>>,
+  kinds: readonly StepKind[],
+): Transition {
   return {
-    request: { kind: 'grant', reviewId: null, ...request, status: 'submitted', decidedAt: null, provisionedAt: null, expiresAt: null, revokedAt: null, expiryWarnedAt: null },
+    // A sprint envelope's amount and forecast (2026-10-28); null on every other kind.
+    request: { kind: 'grant', reviewId: null, requestedUsd: null, forecast: null, ...request, status: 'submitted', decidedAt: null, provisionedAt: null, expiresAt: null, revokedAt: null, expiryWarnedAt: null },
     steps: kinds.map((kind, i) => ({
       requestId: request.id, step: i + 1, kind, status: i === 0 ? 'current' : 'waiting', decidedBy: null, decidedAt: null, comment: null,
       // The escalation clock starts when a step becomes the one awaiting a decision.

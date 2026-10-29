@@ -456,3 +456,40 @@ test('browser network inspection and session operations are scoped to the config
   const browserPolicy = statements.find((s: any) => s.Sid === 'PublicBrowserCrawl');
   assert.ok(!browserPolicy.Action.includes('bedrock-agentcore:UpdateBrowser'));
 });
+
+describe('devbox lifetime and git wiring (DE-48, DE-45)', () => {
+  const envOf = (t: Template) => Object.fromEntries(((containerDefinition(t).Environment ?? []) as any[]).map((e) => [e.Name, e.Value]));
+  const secretNames = (t: Template) => ((containerDefinition(t).Secrets ?? []) as any[]).map((s) => s.Name);
+
+  test('the lifetime env equals the middleware defaults and the runtime task timeout', () => {
+    const env = envOf(closedTemplate);
+    assert.equal(env['DEVBOX_IDLE_TIMEOUT_MINUTES'], '20');
+    assert.equal(env['DEVBOX_MAX_LIFETIME_MINUTES'], '240');
+    assert.equal(env['DEVBOX_TASK_TIMEOUT_S'], '840');
+    assert.equal(env['DEVBOX_TASK_MAX_S'], '3300');
+    assert.equal(env['DEVBOX_REAP_GRACE_MINUTES'], '5');
+  });
+
+  test('the git entrypoint is off by default and on only with its context flag', () => {
+    assert.equal(envOf(closedTemplate)['DEVBOX_GIT_ENTRYPOINT'], 'off');
+    const on = Template.fromStack(middlewareServiceStack({ devboxGitEntrypoint: 'true' }));
+    assert.equal(envOf(on)['DEVBOX_GIT_ENTRYPOINT'], 'on');
+  });
+
+  test('without githubAppSecretArn no GitHub App secret is referenced — it does not exist yet', () => {
+    const names = secretNames(closedTemplate);
+    assert.ok(!names.includes('GITHUB_APP_ID'));
+    assert.ok(!names.includes('GITHUB_APP_PRIVATE_KEY'));
+    assert.ok(!JSON.stringify(closedTemplate.toJSON()).includes('github-app'));
+  });
+
+  test('githubAppSecretArn injects both fields as ECS secrets by complete ARN, never plaintext', () => {
+    const t = Template.fromStack(middlewareServiceStack({ githubAppSecretArn: 'arn:aws:secretsmanager:us-east-1:647757222309:secret:orgiq/github-app-AbCdEf' }));
+    const secrets = (containerDefinition(t).Secrets ?? []) as any[];
+    const byName = Object.fromEntries(secrets.map((s) => [s.Name, JSON.stringify(s.ValueFrom)]));
+    assert.match(byName['GITHUB_APP_ID'] ?? '', /orgiq\/github-app.*:appId::/);
+    assert.match(byName['GITHUB_APP_PRIVATE_KEY'] ?? '', /orgiq\/github-app.*:privateKey::/);
+    const env = envOf(t);
+    assert.ok(!('GITHUB_APP_ID' in env) && !('GITHUB_APP_PRIVATE_KEY' in env));
+  });
+});

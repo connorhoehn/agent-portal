@@ -10,11 +10,14 @@
 
 import { useCallback, useState } from 'react';
 import {
-  Button, Card, Chip, ConfirmDialog, FormField, Inline, Input, MetaLine, SectionLabel,
+  Button, Card, Chip, ConfirmDialog, FormField, Inline, InlineAlert, Input, MetaLine, SectionLabel,
   Select, Stack, Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
+
+/** Why the editor is read-only for this viewer — the server's gate, named (sdlc.ts `editGate`). */
+const READ_ONLY_REASON = 'You can read these policies but not change them: editing needs the EditSdlcPolicy capability, which platform operators hold.';
 
 type PolicyKind = 'require_review' | 'protected_paths' | 'max_files' | 'model_allowlist';
 type PolicyAction = 'require_approval' | 'block';
@@ -124,7 +127,14 @@ function configFor(form: FormState): Record<string, unknown> {
   }
 }
 
-export function PolicyEditor() {
+/**
+ * `canEdit`: whether the viewer holds EditSdlcPolicy (DE-42) — the action
+ * POST /api/sdlc/policies and DELETE /api/sdlc/policies/:id ask
+ * (middleware/src/routes/sdlc.ts `editGate`). Reading the list is the coarser
+ * ManageDevbox, which an SME holds without the edit right, so the editor is
+ * shown to them read-only with the reason rather than letting a save 403.
+ */
+export function PolicyEditor({ canEdit }: { canEdit: boolean }) {
   const { data, refresh } = useFetch<{ policies: Policy[] }>('/api/sdlc/policies', 60_000);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -201,12 +211,23 @@ export function PolicyEditor() {
           size="xs"
           items={["decide when an agent's change can ship on its own and when it needs a human — every change is evaluated against all enabled policies"]}
         />
-        <Button variant="secondary" size="sm" className="ml-auto" onClick={() => setCreating((v) => !v)}>
+        <Button
+          variant="secondary" size="sm" className="ml-auto"
+          disabled={!canEdit}
+          title={canEdit ? undefined : READ_ONLY_REASON}
+          onClick={() => setCreating((v) => !v)}
+        >
           {creating ? 'Cancel' : '+ Add policy'}
         </Button>
       </Inline>
 
-      {creating && (
+      {!canEdit && (
+        <InlineAlert tone="info" className="mx-3.5 my-3" data-testid="policy-editor-read-only">
+          {READ_ONLY_REASON}
+        </InlineAlert>
+      )}
+
+      {creating && canEdit && (
         <Inline gap="md" align="end" wrap className="px-3.5 py-3 border-b border-border">
           <FormField label="Name" className="flex-1 min-w-[200px]">
             {({ labelId: _l, ...w }) => (
@@ -321,7 +342,8 @@ export function PolicyEditor() {
               variant="ghost"
               size="sm"
               className="shrink-0"
-              title={p.enabled ? 'Disable policy' : 'Enable policy'}
+              disabled={!canEdit}
+              title={canEdit ? (p.enabled ? 'Disable policy' : 'Enable policy') : READ_ONLY_REASON}
               onClick={() => toggle(p)}
             >
               <Chip size="md" tone={p.enabled ? 'success' : 'neutral'}>
@@ -340,7 +362,8 @@ export function PolicyEditor() {
               variant="secondary"
               size="sm"
               className="shrink-0"
-              disabled={deletingId === p.id}
+              disabled={!canEdit || deletingId === p.id}
+              title={canEdit ? undefined : READ_ONLY_REASON}
               onClick={() => setConfirmDelete(p)}
             >
               Delete

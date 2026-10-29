@@ -15,6 +15,7 @@
 // machinery than a first version needs and is noted rather than built.
 
 import { runDevboxShell } from './project-runner.js';
+import { gitEntrypointEnabled, pushFromBox, redactUrlCredentials } from './devbox-git.js';
 import { openPullRequest } from './github-connector.js';
 import { buildDeliveryScript } from './delivery-script.js';
 import { config } from '../config.js';
@@ -36,6 +37,8 @@ export interface DeliveryInput {
   /** The captured commit to deliver (commit-per-capture). Null = legacy change
    *  whose work is uncommitted in the tree, delivered by snapshotting it. */
   commitSha: string | null;
+  /** Who asked for the delivery, for the token mint's audit row (DE-45). */
+  callerSub?: string | null;
 }
 
 export interface DeliveryResult {
@@ -106,12 +109,47 @@ export async function deliverChange(input: DeliveryInput): Promise<DeliveryResul
     });
   }
 
-  // 2. Branch, commit, push. The token is placed in the remote URL only for the
+  const commitMsg = `${input.title}\n\nProposed by an OrgIQ agent and reviewed before delivery.`;
+  const b64Msg = Buffer.from(commitMsg, 'utf8').toString('base64');
+
+  // 2a. The git entrypoint (DE-45, DEVBOX_GIT_ENTRYPOINT): a per-run write
+  //     token minted for this one repository goes in the agent-invoke payload,
+  //     never in a shell string or the remote URL. A legacy change (no captured
+  //     commit) is first snapshotted into a commit locally — no credential is
+  //     needed for that — and the push then branches from that sha.
+  if (gitEntrypointEnabled()) {
+    let commit = input.commitSha;
+    if (!commit) {
+      const snap = await runDevboxShell(input.client, input.runtimeArn, input.sessionId,
+        `${git} checkout -B ${branch} && ${git} add -A && { ${git} commit -m "$(echo ${b64Msg} | base64 -d)" || true; } && ${git} rev-parse HEAD`);
+      const sha = snap.trim().split('\n').pop()?.trim() ?? '';
+      if (!/^[0-9a-f]{40}$/.test(sha)) {
+        return { ok: false, error: `Could not commit the workspace changes — ${redactUrlCredentials(snap.split('\n')[0] ?? 'no output')}` };
+      }
+      commit = sha;
+    }
+    let pushed: Awaited<ReturnType<typeof pushFromBox>>;
+    try {
+      pushed = await pushFromBox({
+        client: input.client, arn: input.runtimeArn, sessionId: input.sessionId,
+        repo: input.repoFullName, target: input.checkout, branch, commit,
+        runRef: `deliver:${input.changeId}`, callerSub: input.callerSub ?? null,
+        connectionName: input.connectionName,
+      });
+    } catch (err) {
+      return { ok: false, error: `Push failed — ${redactUrlCredentials((err as Error).message)}` };
+    }
+    if (!pushed.ok || /^fatal:|^error:|rejected|denied/m.test(pushed.output)) {
+      const line = pushed.output.split('\n').find((l) => /fatal:|error:|rejected|denied/i.test(l)) ?? pushed.error ?? 'push failed';
+      return { ok: false, error: `Push failed — ${line}` };
+    }
+    return openPr(input, input.connectionName, owner, repo, branch);
+  }
+
+  // 2b. Legacy shell path. Branch, commit, push. The token is placed in the remote URL only for the
   //    push and stripped afterwards (see buildDeliveryScript in delivery-script.ts,
   //    where the strip's unconditional ordering is enforced and tested), so it is
   //    not persisted in .git/config — the same discipline the clone uses.
-  const commitMsg = `${input.title}\n\nProposed by an OrgIQ agent and reviewed before delivery.`;
-  const b64Msg = Buffer.from(commitMsg, 'utf8').toString('base64');
   const script = buildDeliveryScript({ git, branch, b64CommitMsg: b64Msg, repoFullName: input.repoFullName, commitSha: input.commitSha });
 
   // The token is interpolated into the command as a leading env assignment, so
@@ -127,9 +165,13 @@ export async function deliverChange(input: DeliveryInput): Promise<DeliveryResul
     return { ok: false, error: `Push failed — ${line}` };
   }
 
-  // 3. Open the PR.
+  return openPr(input, input.connectionName, owner, repo, branch);
+}
+
+/** 3. Open the PR — the same step after either push path. */
+async function openPr(input: DeliveryInput, connectionName: string, owner: string, repo: string, branch: string): Promise<DeliveryResult> {
   try {
-    const pr = await openPullRequest(input.connectionName, {
+    const pr = await openPullRequest(connectionName, {
       owner, repo, head: branch, base: input.defaultBranch,
       title: input.title,
       body: [
