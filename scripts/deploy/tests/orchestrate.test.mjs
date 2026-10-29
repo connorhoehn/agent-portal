@@ -17,7 +17,11 @@ import { readState, validateState, writeState, newState, stateFile, lockParamete
 const ROOT = resolve(new URL('../../..', import.meta.url).pathname);
 const ACCOUNT = '647757222309';
 const COMMIT = 'c'.repeat(40);
-const lab = loadEnvironment('lab');
+// The planner's fixtures: lab's identity with every optional feature off (the
+// core fleet), and Social on top. Pinned here, not read from lab.json's
+// features, which describe what the lab account runs (Social and documents).
+const labFile = loadEnvironment('lab');
+const lab = { ...labFile, features: { social: false, documents: false, devbox: false } };
 const social = { ...lab, features: { social: true, documents: false, devbox: false } };
 
 // A deterministic input key: the phase, its context, and a per-path "tree version" the test can bump.
@@ -434,3 +438,12 @@ test('collectProbes asks only read-only verbs', () => {
 
 // keep the temp dirs from leaking across runs
 process.on('exit', () => { try { mkdirSync(join(tmpdir(), 'orch-keep')); } catch { /* noop */ } });
+
+test('lab.json plans the Social and document phases: the lab account runs both', () => {
+  assert.deepEqual(labFile.features, { social: true, documents: true, devbox: false });
+  const plan = planDeploy(labFile, fresh(labFile), null, base);
+  for (const id of ['social-images', 'social-stacks', 'documents-build', 'documents-push', 'documents-deploy']) {
+    assert.notEqual(plan.phases.find((p) => p.id === id)?.action, 'disabled', id);
+  }
+  assert.equal(plan.phases.find((p) => p.id === 'devbox')?.action, 'disabled');
+});
