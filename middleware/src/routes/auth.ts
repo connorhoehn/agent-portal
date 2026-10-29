@@ -131,7 +131,10 @@ authRouter.get('/callback', loginLimit, asyncHandler(async (req, res) => {
     return;
   }
 
-  const session = mintSession({ id: user.id, displayName: user.displayName }, user.grants);
+  // The directory epoch rides in the cookie: without it the session reads as
+  // epoch 0, which every strict check (GET /api/session/me, the gateway's
+  // principal revalidation) refuses once the user has ever switched tenant.
+  const session = mintSession({ id: user.id, displayName: user.displayName, epoch: user.epoch }, user.grants);
   if (!session) {
     res.status(403).send('Your account holds no tenant grants.');
     return;

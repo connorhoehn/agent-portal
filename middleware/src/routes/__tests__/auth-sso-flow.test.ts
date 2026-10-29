@@ -64,7 +64,7 @@ import { errorHandler } from '../../lib/async-handler.js';
 import { cognitoEnabled, randomToken, exchangeCode, verifyIdToken } from '../../lib/oidc.js';
 import { getUserByExternalSub, getUserByEmail, linkExternalSub } from '../../providers/identity.js';
 import { logAuthz } from '../../lib/audit.js';
-import { signValue } from '../../lib/session.js';
+import { signValue, verifySession } from '../../lib/session.js';
 import { resetRateLimits } from '../../lib/rate-limit.js';
 
 const m = <T,>(fn: T): jest.Mock => fn as unknown as jest.Mock;
@@ -287,6 +287,18 @@ describe('GET /api/auth/callback', () => {
     expect(res.headers['location']).toBe('/iq/sprints');
     const cookies = res.headers['set-cookie'] as unknown as string[];
     expect(cookies.some((c) => c.startsWith('orgiq.session='))).toBe(true);
+  });
+
+  it('the minted session carries the directory epoch (a missing one reads as 0 and fails every strict check)', async () => {
+    m(exchangeCode).mockResolvedValue({ id_token: 'idt' });
+    m(verifyIdToken).mockResolvedValue({ sub: 'cognito-1' });
+    m(getUserByExternalSub).mockResolvedValue({ ...USER, epoch: 61 });
+    const res = await request(buildApp())
+      .get('/api/auth/callback?code=c&state=st-1')
+      .set('Cookie', await stateCookie({ returnTo: '/iq' }));
+    const cookie = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('orgiq.session='))!;
+    const value = decodeURIComponent(cookie.split(';')[0]!.slice('orgiq.session='.length));
+    expect((await verifySession(value))?.epoch).toBe(61);
   });
 
   it('falls back to the configured post-login URL when the state carries no destination', async () => {
