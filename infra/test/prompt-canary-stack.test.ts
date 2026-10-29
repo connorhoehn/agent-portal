@@ -32,6 +32,32 @@ function definitionText(value: any): string {
 const promotionDefinition = (t: Template) => definitionText(machinesOf(t).find((m) => m.Properties.StateMachineName === 'orgiq-prompt-promotion')!.Properties.DefinitionString);
 const schedulesOf = (t: Template) => Object.values<any>(t.findResources('AWS::Scheduler::Schedule'));
 
+// Step Functions validates what synth does not: a catcher or retrier naming
+// States.ALL must name it alone and be the last in its list. The promotion
+// machine broke that and its first deploy rolled OrgIQ-PromptCanary back.
+describe('every machine definition passes the Step Functions rules synth does not check', () => {
+  const t = canary(true);
+  const failures: string[] = [];
+  const walk = (states: Record<string, any>, at: string) => {
+    for (const [name, state] of Object.entries(states ?? {})) {
+      for (const key of ['Catch', 'Retry'] as const) {
+        const list: any[] = state[key] ?? [];
+        list.forEach((entry, i) => {
+          const errors: string[] = entry.ErrorEquals ?? [];
+          if (errors.includes('States.ALL') && (errors.length !== 1 || i !== list.length - 1)) failures.push(`${at}/${name}.${key}[${i}]`);
+        });
+      }
+      if (state.Iterator) walk(state.Iterator.States, `${at}/${name}/Iterator`);
+      if (state.ItemProcessor) walk(state.ItemProcessor.States, `${at}/${name}/ItemProcessor`);
+      for (const [b, branch] of (state.Branches ?? []).entries()) walk(branch.States, `${at}/${name}/Branches[${b}]`);
+    }
+  };
+  for (const machine of machinesOf(t)) walk(JSON.parse(definitionText(machine.Properties.DefinitionString)).States, machine.Properties.StateMachineName);
+  test('States.ALL stands alone and last in every Catch and Retry', () => {
+    assert.deepEqual(failures, []);
+  });
+});
+
 describe('the promotion controller exists beside the demo canary', () => {
   const t = canary();
   test('two Express machines: the A/B weight controller and the per-agent pointer controller', () => {

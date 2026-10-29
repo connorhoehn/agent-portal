@@ -705,7 +705,12 @@ export class PromptCanaryStack extends cdk.Stack {
           Parameters: { 'Name.$': `States.Format('/${prefix}/prompts/{}/candidate', $.agent)` },
           ResultSelector: { 'raw.$': '$.Parameter.Value', 'pointer.$': 'States.StringToJson($.Parameter.Value)' },
           ResultPath: '$.candidate',
-          Catch: [{ ErrorEquals: ['Ssm.ParameterNotFoundException', 'States.ALL'], ResultPath: '$.error', Next: 'NoCandidate' }],
+          // States.ALL must stand alone and last (Step Functions rejects the
+          // machine otherwise: the 2026-10-29 deploy rolled back on it).
+          Catch: [
+            { ErrorEquals: ['Ssm.ParameterNotFoundException'], ResultPath: '$.error', Next: 'NoCandidate' },
+            { ErrorEquals: ['States.ALL'], ResultPath: '$.error', Next: 'NoCandidate' },
+          ],
           Next: 'GetLive',
         },
         NoCandidate: { Type: 'Pass', Result: { action: 'NO_CANDIDATE' }, ResultPath: '$.decision', End: true },
