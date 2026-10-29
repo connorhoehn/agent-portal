@@ -43,7 +43,7 @@ other seeded Cognito users are still `FORCE_CHANGE_PASSWORD`.
 
 ## Open items
 
-### 1. Calls: a second joiner within ~9 s starts a parallel call
+### 1. Calls: a second joiner within ~9 s starts a parallel call — RESOLVED 2026-10-29
 
 **Update (2026-10-27, later, local only).** The split is a gateway race,
 reproduced locally and fixed in realtime-modules 0.140.0 (pinned in portal and
@@ -80,6 +80,18 @@ instead of per sub-check); (b) a bounded directory memo (e.g. ≤1 s, dropped on
 epoch bump; the BFF is the single writer while the single-gateway safeguard
 holds), which relaxes the "every decision starts a new read" rule in
 `providers/identity.ts`; (c) accept media starting ~10 s after Join.
+
+**Resolved (2026-10-29, AWS, `9c45e80f`).** Option (a), every check kept:
+the claim right after a first registration no longer reconciles again; each
+seat is checked once right before its own join, all seats together; the roster
+broadcast leaves the recipient check to `filterFrame` and no longer holds the
+seat; a directory read is handed to the policy engine's next load in the same
+event-loop turn only (`handOffLiveSession`); the call-seat proof drops the
+`currentLiveSession` reads that preceded an identical fresh read. Pinned by
+`lib/__tests__/call-chat-join-cost.test.ts`. Measured: locally join → seat
+11.1 s → ~1.6 s; in AWS, `cloud-call-smoke` with `CLOUD_SEAT_SETTLE_MS=0`,
+ws join → first accepted `call-binding` **~10–12 s → 2.2–3.0 s** per user,
+0–2 refused retries (was 4–6), 4/4 passes.
 
 **Symptom.** The first person to Join a hangout room is registered as the
 lobby's live call by the gateway ~9 s after they click (owner's call id minted
@@ -195,6 +207,10 @@ the `orgiq-documents-{gateway,platform,catalog,mq,redis}` ECR repos, secrets
 | deploy.sh's gate: page-thread migrator "Refusing to migrate into a process-local memory store" | the manifest left the chat-store env to the operator's shell | manifest entries carry `env` (outside the checksum) |
 | `PolicySupervisorFullAccess` NotStabilized "Target … does not exist" | Cedar actions used `<target>__<tool>`; the gateway names tools `<target>___<tool>` | `___` in `lib/agentcore-gateway-stack.ts` |
 | Every BFF boot added ~25–50 Cedar policies (244 in the store, ~9 copies per seed statement) | `seedPoliciesIfMissing` read only `ListPolicies`' first page; only the copy it saw was ever updated, so stale copies kept their old permits | `lib/avp-policies.ts` paginates and keeps one copy per seed description (the latest-updated); the seeder's client retries adaptively under AVP's throttle. Store cleaned to 40 policies on 2026-10-28 |
+| `./deploy.sh OrgIQ-SocialMedia` left OrgIQ-MiddlewareService UPDATE_FAILED and printed "all 1 expected stack(s) healthy" | a named stack deploys its dependencies, but the diff, the --no-rollback recovery and the reconciliation covered only the name | named stacks expand to their dependency closure (`cdk ls --show-dependencies`) for all three; `-e` keeps the old meaning |
+| Every `POST /api/video/sessions` 504 after an SFU-only deploy | the SFU host was replaced; OrgIQ-Social bakes its private IP (VIDEO_API_URL) and instance id (video ALB target) from SSM at deploy time | `READS_BY_NAME` in `deploy.sh`: deploying OrgIQ-SocialMedia also deploys OrgIQ-Social |
+| A CIDR-only deploy replaced the SFU (and would the TURN host) | `latestAmazonLinux2023()` resolved AWS's 2026-10-28 image; a new image replaces the instance | `hostImage`: `sfuAmiId` / `turnAmiId` pin it, carried forward from `SfuAmiId` / `TurnAmiId`; `latest` rolls it on purpose |
+| Media never flowed (WHEP 425) though WHIP succeeded | the tester's public IP changed overnight; the SFU admits only `sfuAllowCidr` | operational: redeploy OrgIQ-SocialMedia with `--context sfuAllowCidr=<new ip>/32` (the inference keeps the old one) |
 
 The 2026-10-28 rollout also applied the schema ledger baseline and the
 page-thread data migration (19 comments, 0 failures; `2026-09-05-drop-newsroom`

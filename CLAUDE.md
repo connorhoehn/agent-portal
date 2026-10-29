@@ -13,7 +13,7 @@ box, with no modal. This UI handoff supplements the general state below.
 
 **Current state:** read `docs/claude-code-handoff-2026-10-26.md` first, and
 `docs/aws-deploy-open-items-2026-10-27.md` for the live AWS deploy's open
-items (the call join window first). The 10-26 handoff
+items (the call join window is resolved; its fixed table lists what bit). The 10-26 handoff
 holds the current commits, pins, verified test scope and the open
 continuation items. The dated checkpoint prose that used to live here is in
 `docs/history/claude-md-checkpoints-2026-10.md`; treat it as history, not as

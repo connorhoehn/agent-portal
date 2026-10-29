@@ -132,9 +132,13 @@ same run showed the seeder duplicating Cedar policies on every start.
 - Call discovery and the lobby watch work on the deployed gateway.
 - Redis and in-memory call stores agree on register/lookup/accept.
 - `HUDDLE_CHAT_TENANTS` includes `social`.
-- The parallel-call split is fixed in AWS (0.140.0); what remains is the ~10 s
-  before a seat is accepted, with its cause measured: item 1 of
-  `docs/aws-deploy-open-items-2026-10-27.md`.
+- The parallel-call split is fixed in AWS (0.140.0), and the ~10 s before a
+  seat was accepted is now 2.2–3.0 s (`9c45e80f`; item 1 of
+  `docs/aws-deploy-open-items-2026-10-27.md`). `call-chat-join-cost.test.ts`
+  pins the directory-read count of one registration.
+- **Media not flowing (WHEP 425 while WHIP returns 201)** is the client's IP
+  outside `sfuAllowCidr` before it is anything in code: compare
+  `curl -s https://checkip.amazonaws.com` with the SFU security group.
 - The gateway's own admission is fast (~0.2–0.7 s even from a laptop); Redis
   logs no timeouts; the event loop p99 is ~11 ms.
 
