@@ -303,42 +303,42 @@
     {
       "method": "GET",
       "path": "/api/agent-projects",
-      "source": "src/routes/agent-projects.ts:33"
+      "source": "src/routes/agent-projects.ts:34"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects",
-      "source": "src/routes/agent-projects.ts:49"
+      "source": "src/routes/agent-projects.ts:50"
     },
     {
       "method": "DELETE",
       "path": "/api/agent-projects/:id",
-      "source": "src/routes/agent-projects.ts:71"
+      "source": "src/routes/agent-projects.ts:72"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/:id/clone-command",
-      "source": "src/routes/agent-projects.ts:99"
+      "source": "src/routes/agent-projects.ts:100"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/:id/cloned",
-      "source": "src/routes/agent-projects.ts:127"
+      "source": "src/routes/agent-projects.ts:128"
     },
     {
       "method": "GET",
       "path": "/api/agent-projects/:id/runs",
-      "source": "src/routes/agent-projects.ts:80"
+      "source": "src/routes/agent-projects.ts:81"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/:id/runs",
-      "source": "src/routes/agent-projects.ts:140"
+      "source": "src/routes/agent-projects.ts:141"
     },
     {
       "method": "POST",
       "path": "/api/agent-projects/runs/:runId/finish",
-      "source": "src/routes/agent-projects.ts:194"
+      "source": "src/routes/agent-projects.ts:190"
     },
     {
       "method": "GET",
@@ -933,102 +933,107 @@
     {
       "method": "GET",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:635"
+      "source": "src/routes/bots.ts:645"
     },
     {
       "method": "POST",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:640"
+      "source": "src/routes/bots.ts:650"
     },
     {
       "method": "DELETE",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:751"
+      "source": "src/routes/bots.ts:761"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:685"
+      "source": "src/routes/bots.ts:695"
     },
     {
       "method": "PATCH",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:691"
+      "source": "src/routes/bots.ts:701"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/bots/:id/essential",
+      "source": "src/routes/bots.ts:878"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/pause",
-      "source": "src/routes/bots.ts:833"
+      "source": "src/routes/bots.ts:837"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/resume",
-      "source": "src/routes/bots.ts:846"
+      "source": "src/routes/bots.ts:850"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/run",
-      "source": "src/routes/bots.ts:764"
+      "source": "src/routes/bots.ts:774"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id/runs",
-      "source": "src/routes/bots.ts:870"
+      "source": "src/routes/bots.ts:890"
     },
     {
       "method": "GET",
       "path": "/api/bots/active-runs",
-      "source": "src/routes/bots.ts:541"
+      "source": "src/routes/bots.ts:551"
     },
     {
       "method": "POST",
       "path": "/api/bots/dispatch-work",
-      "source": "src/routes/bots.ts:208"
+      "source": "src/routes/bots.ts:225"
     },
     {
       "method": "GET",
       "path": "/api/bots/estimate",
-      "source": "src/routes/bots.ts:195"
+      "source": "src/routes/bots.ts:212"
     },
     {
       "method": "GET",
       "path": "/api/bots/initiative-runs",
-      "source": "src/routes/bots.ts:579"
+      "source": "src/routes/bots.ts:589"
     },
     {
       "method": "GET",
       "path": "/api/bots/marketplace-runs",
-      "source": "src/routes/bots.ts:561"
+      "source": "src/routes/bots.ts:571"
     },
     {
       "method": "GET",
       "path": "/api/bots/runs",
-      "source": "src/routes/bots.ts:610"
+      "source": "src/routes/bots.ts:620"
     },
     {
       "method": "POST",
       "path": "/api/bots/work-items/:id/estimate",
-      "source": "src/routes/bots.ts:474"
+      "source": "src/routes/bots.ts:484"
     },
     {
       "method": "DELETE",
       "path": "/api/bots/work-items/:id/job-draft",
-      "source": "src/routes/bots.ts:447"
+      "source": "src/routes/bots.ts:457"
     },
     {
       "method": "GET",
       "path": "/api/bots/work-items/:id/job-draft",
-      "source": "src/routes/bots.ts:413"
+      "source": "src/routes/bots.ts:423"
     },
     {
       "method": "PUT",
       "path": "/api/bots/work-items/:id/job-draft",
-      "source": "src/routes/bots.ts:420"
+      "source": "src/routes/bots.ts:430"
     },
     {
       "method": "POST",
       "path": "/api/bots/work-items/:id/review-estimate",
-      "source": "src/routes/bots.ts:511"
+      "source": "src/routes/bots.ts:521"
     },
     {
       "method": "GET",
@@ -1038,22 +1043,22 @@
     {
       "method": "GET",
       "path": "/api/budgets",
-      "source": "src/routes/budgets.ts:26"
+      "source": "src/routes/budgets.ts:34"
     },
     {
       "method": "DELETE",
       "path": "/api/budgets/:orgProjectId",
-      "source": "src/routes/budgets.ts:71"
+      "source": "src/routes/budgets.ts:99"
     },
     {
       "method": "PUT",
       "path": "/api/budgets/:orgProjectId",
-      "source": "src/routes/budgets.ts:51"
+      "source": "src/routes/budgets.ts:59"
     },
     {
       "method": "GET",
       "path": "/api/budgets/grants",
-      "source": "src/routes/budgets.ts:44"
+      "source": "src/routes/budgets.ts:52"
     },
     {
       "method": "GET",
@@ -1623,17 +1628,17 @@
     {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
-      "source": "src/routes/devbox.ts:1087"
+      "source": "src/routes/devbox.ts:1090"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/command",
-      "source": "src/routes/devbox.ts:840"
+      "source": "src/routes/devbox.ts:843"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/shell-url",
-      "source": "src/routes/devbox.ts:1016"
+      "source": "src/routes/devbox.ts:1019"
     },
     {
       "method": "POST",
@@ -1643,27 +1648,27 @@
     {
       "method": "GET",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:424"
+      "source": "src/routes/devbox.ts:431"
     },
     {
       "method": "POST",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:507"
+      "source": "src/routes/devbox.ts:514"
     },
     {
       "method": "DELETE",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:553"
+      "source": "src/routes/devbox.ts:560"
     },
     {
       "method": "PATCH",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:540"
+      "source": "src/routes/devbox.ts:547"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes/:boxId/tail",
-      "source": "src/routes/devbox.ts:614"
+      "source": "src/routes/devbox.ts:621"
     },
     {
       "method": "GET",
@@ -1683,12 +1688,12 @@
     {
       "method": "POST",
       "path": "/api/devbox/sessions",
-      "source": "src/routes/devbox.ts:413"
+      "source": "src/routes/devbox.ts:420"
     },
     {
       "method": "GET",
       "path": "/api/devbox/status",
-      "source": "src/routes/devbox.ts:409"
+      "source": "src/routes/devbox.ts:416"
     },
     {
       "method": "GET",
@@ -1768,22 +1773,22 @@
     {
       "method": "GET",
       "path": "/api/grants",
-      "source": "src/routes/grants.ts:50"
+      "source": "src/routes/grants.ts:58"
     },
     {
       "method": "POST",
       "path": "/api/grants",
-      "source": "src/routes/grants.ts:59"
+      "source": "src/routes/grants.ts:67"
     },
     {
       "method": "DELETE",
       "path": "/api/grants/:id",
-      "source": "src/routes/grants.ts:119"
+      "source": "src/routes/grants.ts:142"
     },
     {
       "method": "PATCH",
       "path": "/api/grants/:id",
-      "source": "src/routes/grants.ts:98"
+      "source": "src/routes/grants.ts:110"
     },
     {
       "method": "GET",
@@ -1968,7 +1973,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:207"
+      "source": "src/index.ts:212"
     },
     {
       "method": "GET",
@@ -2508,7 +2513,7 @@
     {
       "method": "GET",
       "path": "/api/me/spend",
-      "source": "src/routes/me-spend.ts:20"
+      "source": "src/routes/me-spend.ts:45"
     },
     {
       "method": "GET",
@@ -3947,6 +3952,26 @@
     },
     {
       "method": "GET",
+      "path": "/api/user-budgets",
+      "source": "src/routes/user-budgets.ts:56"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/user-budgets/:userId",
+      "source": "src/routes/user-budgets.ts:107"
+    },
+    {
+      "method": "GET",
+      "path": "/api/user-budgets/:userId",
+      "source": "src/routes/user-budgets.ts:69"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/user-budgets/:userId",
+      "source": "src/routes/user-budgets.ts:77"
+    },
+    {
+      "method": "GET",
       "path": "/api/work-graph/initiatives/:id/graph",
       "source": "src/routes/work-graph.ts:37"
     },
@@ -4073,7 +4098,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:206"
+      "source": "src/index.ts:211"
     },
     {
       "method": "DELETE",
@@ -4158,7 +4183,7 @@
     {
       "method": "GET",
       "path": "/livez",
-      "source": "src/index.ts:208"
+      "source": "src/index.ts:213"
     }
   ],
   "unresolved": []

@@ -30,7 +30,8 @@ import {
   BedrockAgentCoreClient,
   StopRuntimeSessionCommand,
 } from '@aws-sdk/client-bedrock-agentcore';
-import { listBoxes, markStopped, appendEvent, type FleetBox } from './devbox-fleet.js';
+import { listBoxes, markStopped, appendEvent, refreshFromShared, type FleetBox } from './devbox-fleet.js';
+import { replicaFleet, type ReplicaFleet, type ReplicaLock } from './replica-fleet.js';
 import { isLocalBoxId } from './local-compute-fleet.js';
 import { lifetimePolicy, taskOverrunMs, type LifetimePolicy } from './devbox-lifetime.js';
 
@@ -135,6 +136,13 @@ export interface ReaperDeps {
    * decision, so `decideReaping` never awaits.
    */
   policies?: (boxes: FleetBox[]) => Promise<Map<string, LifetimePolicy>>;
+  /**
+   * Bring the local registry up to the shared fleet state before deciding
+   * (DE-47). Defaults to `refreshFromShared`, a no-op without shared state.
+   * A failure skips the sweep: reaping from a stale local view is how a
+   * replica stopped a box another replica was running a task on.
+   */
+  refresh?: () => Promise<void>;
 }
 
 let _timer: NodeJS.Timeout | null = null;
@@ -153,7 +161,14 @@ async function profilePolicies(boxes: FleetBox[]): Promise<Map<string, LifetimeP
  * Announces the stop into the box's own event stream before making the call,
  * so anyone watching sees a reason rather than a terminal that simply dies.
  */
-export async function sweepOnce(deps: ReaperDeps, now = Date.now()): Promise<ReapDecision[]> {
+export async function sweepOnce(deps: ReaperDeps, now = Date.now(), lease?: ReplicaLock): Promise<ReapDecision[]> {
+  try {
+    await (deps.refresh ?? refreshFromShared)();
+  } catch (err) {
+    console.warn('[devbox-reaper] shared fleet state unreadable — skipping this sweep:', (err as Error).message);
+    return [];
+  }
+  lease?.assertLive();
   const boxes = listBoxes();
   if (boxes.length === 0) return [];
   let policies: Map<string, LifetimePolicy>;
@@ -172,6 +187,9 @@ export async function sweepOnce(deps: ReaperDeps, now = Date.now()): Promise<Rea
 
   for (const d of decisions) {
     const detail = explain(d);
+    // A fenced leader stops here, before its next irreversible call: another
+    // replica may already hold the lock and be sweeping the same boxes.
+    lease?.assertLive();
     try {
       appendEvent(d.box.id, {
         type: 'devbox_reaped', reason: d.reason, minutes: d.minutes, detail,
@@ -204,12 +222,41 @@ export async function sweepOnce(deps: ReaperDeps, now = Date.now()): Promise<Rea
   return decisions;
 }
 
+const REAPER_LOCK = 'devbox-reaper';
+
+export type ReaperTick =
+  | { ran: 'swept'; decisions: ReapDecision[] }
+  | { ran: 'locked-elsewhere' | 'lock-unavailable'; decisions: [] };
+
+/**
+ * One reaper tick, single-flight across replicas (DE-47), following
+ * lib/access-expiry.ts: alone, sweep; with peers, sweep only under the fleet
+ * lock, whose lease is checked before every stop. Peers unknown (Redis down)
+ * means the lock is unreachable too, so the tick is skipped — never "alone".
+ */
+export async function reaperTick(deps: ReaperDeps, fleet: ReplicaFleet = replicaFleet(), now = Date.now()): Promise<ReaperTick> {
+  const peers = await fleet.peers();
+  if (peers.length === 0) return { ran: 'swept', decisions: await sweepOnce(deps, now) };
+  let decisions: ReapDecision[] | null;
+  try {
+    decisions = await fleet.withLock(REAPER_LOCK, Math.max(30_000, SWEEP_INTERVAL_MS), (lease) => sweepOnce(deps, now, lease));
+  } catch (err) {
+    console.warn(`[devbox-reaper] fleet lock unreachable or lost; skipping this sweep: ${(err as Error).message}`);
+    return { ran: 'lock-unavailable', decisions: [] };
+  }
+  return decisions ? { ran: 'swept', decisions } : { ran: 'locked-elsewhere', decisions: [] };
+}
+
+/** Start the periodic sweep (index.ts, beside the other sweepers). Idempotent. */
 export function startReaper(deps: ReaperDeps): void {
   if (_timer) return;
+  let ticking = false;
   _timer = setInterval(() => {
-    void sweepOnce(deps).catch((err) => {
+    if (ticking) return;
+    ticking = true;
+    void reaperTick(deps).catch((err) => {
       console.warn('[devbox-reaper] sweep failed:', (err as Error).message);
-    });
+    }).finally(() => { ticking = false; });
   }, SWEEP_INTERVAL_MS);
   // Never hold the process open for a sweep.
   _timer.unref?.();

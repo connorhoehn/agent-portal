@@ -25,6 +25,8 @@ jest.mock('../../providers/budgets.js', () => ({ initiativeExists: jest.fn() }))
 jest.mock('../../providers/sprints.js', () => ({ getSprint: jest.fn(), personExists: jest.fn() }));
 jest.mock('../../providers/grants.js', () => ({
   createGrant: jest.fn(), updateGrant: jest.fn(), revokeGrant: jest.fn(), listGrantsForSprint: jest.fn(),
+  // The DE-36 cap check reads the current grant; unknown here, so the route falls through to updateGrant.
+  getGrant: jest.fn(async () => null),
 }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';

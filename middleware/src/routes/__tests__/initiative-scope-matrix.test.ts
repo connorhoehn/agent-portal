@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 
 const ROUTES = resolve(__dirname, '..');
 const FILES = ['bots', 'work', 'agent-projects', 'sdlc', 'internal-devbox', 'work-items', 'work-documents',
-  'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints', 'prompt-pointers'];
+  'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints', 'prompt-pointers', 'user-budgets'];
 const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|sprintMoveAllowed|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(/;
 
 const SCOPED = [
@@ -52,6 +52,14 @@ const OPEN: Record<string, string> = {
   'grants POST /': 'DE-44 row 21: same program-owner decision',
   'grants PATCH /:id': 'DE-44 row 21',
   'grants DELETE /:id': 'DE-44 row 21',
+  // DE-54: a user budget spans every initiative the user spends on, so there is
+  // no initiative to scope to; ManageBudgets plus the self-set refusal (a user
+  // never sets or removes their own row) are the gate.
+  'user-budgets PUT /:userId': 'DE-54: a user budget spans initiatives (no initiative to scope); ManageBudgets and never on your own row',
+  'user-budgets DELETE /:userId': 'DE-54: same as PUT /:userId',
+  // DE-55: which bots are funded first is the release manager's money call,
+  // gated like budgets PUT (same program-owner decision, DE-44 row 20).
+  'bots PUT /:id/essential': 'DE-55: ManageBudgets marks a bot essential; whether program-owner is program-wide is the DE-44 row 20 decision',
   'initiative-decks POST /projects/:projectId': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
   'initiative-decks POST /:id/revisions': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
   'initiative-decks POST /:id/revise': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',

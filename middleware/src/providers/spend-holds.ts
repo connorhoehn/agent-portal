@@ -33,6 +33,8 @@ import { config } from '../config.js';
 import { clock } from '../mock/core/index.js';
 import { spendHolds } from '../mock/spend-holds.js';
 import type { SpendSource } from './spend-ledger.js';
+import { hasColumns } from './column-probe.js';
+import { budgetFailClosed } from '../lib/budget-decisions.js';
 
 export type HoldSource = SpendSource;
 export type HoldBasis = 'p75' | 'confirmed_over' | 'topup';
@@ -40,13 +42,16 @@ export type HoldStatus = 'held' | 'settled' | 'released' | 'expired';
 
 export interface SpendHold {
   id: string;
-  initiativeId: string;
+  /** Null = unattributed spend held only against its actor's user budget (DE-54). */
+  initiativeId: string | null;
   grantId: string | null;
   actorId: string | null;
   source: HoldSource;
   sourceId: string | null;
   amountUsd: number;
   basis: HoldBasis;
+  /** An essential bot's scheduled firing: floor money, counted against the maintenance reserve (DE-55). */
+  essential: boolean;
   status: HoldStatus;
   expiresAt: string;
   createdBy: string | null;
@@ -55,13 +60,14 @@ export interface SpendHold {
 }
 
 export interface HoldInput {
-  initiativeId: string;
+  initiativeId: string | null;
   grantId?: string | null;
   actorId?: string | null;
   source: HoldSource;
   sourceId?: string | null;
   amountUsd: number;
   basis: HoldBasis;
+  essential?: boolean;
   expiresAt: string;
 }
 
@@ -78,9 +84,11 @@ export function spendHoldsEnabled(): boolean {
   return (process.env['SPEND_HOLDS'] ?? '').trim().toLowerCase() !== 'off';
 }
 
-/** `SPEND_HOLDS_FAIL_CLOSED=1`: an unreadable hold store refuses the dispatch instead of proceeding unheld. */
+/** `SPEND_HOLDS_FAIL_CLOSED=1`: an unreadable hold store refuses the dispatch instead of proceeding unheld.
+ *  Also on wherever budget state fails closed (DE-36 `BUDGET_FAIL_CLOSED`, default on in production):
+ *  a hold store that cannot be read is budget state that cannot be read. */
 export function spendHoldsFailClosed(): boolean {
-  return (process.env['SPEND_HOLDS_FAIL_CLOSED'] ?? '').trim() === '1';
+  return (process.env['SPEND_HOLDS_FAIL_CLOSED'] ?? '').trim() === '1' || budgetFailClosed();
 }
 
 export function missingHoldsTable(err: unknown): boolean {
@@ -90,13 +98,15 @@ export function missingHoldsTable(err: unknown): boolean {
 function rowToHold(r: Record<string, unknown>): SpendHold {
   return {
     id: toStr(r['id']),
-    initiativeId: toStr(r['initiative_id']),
+    initiativeId: r['initiative_id'] != null ? toStr(r['initiative_id']) : null,
     grantId: r['grant_id'] != null ? toStr(r['grant_id']) : null,
     actorId: r['actor_id'] != null ? toStr(r['actor_id']) : null,
     source: toStr(r['source']) as HoldSource,
     sourceId: r['source_id'] != null ? toStr(r['source_id']) : null,
     amountUsd: toNum(r['amount_usd']),
     basis: toStr(r['basis']) as HoldBasis,
+    // Absent before maintenance_reserve_schema.sql: every hold was discretionary.
+    essential: r['essential'] === true || r['essential'] === 't' || r['essential'] === 'true',
     status: toStr(r['status']) as HoldStatus,
     expiresAt: toStr(r['expires_at']),
     createdBy: r['created_by'] != null ? toStr(r['created_by']) : null,
@@ -153,6 +163,7 @@ export async function withSpendLock<T>(keys: readonly string[], fn: (tx: SpendLo
             sourceId: input.sourceId ?? null,
             amountUsd: input.amountUsd,
             basis: input.basis,
+            essential: input.essential === true,
             status: 'held',
             expiresAt: input.expiresAt,
             createdBy: input.actorId ?? null,
@@ -168,6 +179,8 @@ export async function withSpendLock<T>(keys: readonly string[], fn: (tx: SpendLo
       for (const release of releases.reverse()) release();
     }
   }
+  // Probed outside the transaction (cached): an older cluster takes the row without the flag.
+  const withEssential = await hasColumns('spend_holds', ['essential']).catch(() => false);
   return withTransaction(async (tx: TxExec) => {
     const lock = async (key: string): Promise<void> => {
       await tx(`SELECT pg_advisory_xact_lock(hashtext(:k))`, [s('k', key)]);
@@ -177,13 +190,14 @@ export async function withSpendLock<T>(keys: readonly string[], fn: (tx: SpendLo
       lock,
       insertHold: async (input) => {
         const rows = await tx(
-          `INSERT INTO spend_holds (initiative_id, grant_id, actor_id, source, source_id, amount_usd, basis, expires_at, created_by)
-           VALUES (:pid, :gid, :actor, :source, :sid, :amount::numeric, :basis, :exp::timestamptz, :actor)
+          `INSERT INTO spend_holds (initiative_id, grant_id, actor_id, source, source_id, amount_usd, basis, expires_at, created_by${withEssential ? ', essential' : ''})
+           VALUES (:pid, :gid, :actor, :source, :sid, :amount::numeric, :basis, :exp::timestamptz, :actor${withEssential ? ', :essential' : ''})
            RETURNING *`,
           [
-            s('pid', input.initiativeId), maybe('gid', input.grantId), maybe('actor', input.actorId),
+            maybe('pid', input.initiativeId), maybe('gid', input.grantId), maybe('actor', input.actorId),
             s('source', input.source), maybe('sid', input.sourceId), num('amount', input.amountUsd),
             s('basis', input.basis), s('exp', input.expiresAt),
+            ...(withEssential ? [{ name: 'essential', value: { booleanValue: input.essential === true } }] : []),
           ],
         );
         if (!rows[0]) throw new Error('spend_holds insert returned no row');
@@ -208,6 +222,64 @@ export async function openHeldUsd(initiativeId: string): Promise<number> {
   const rows = await exec(
     `SELECT COALESCE(SUM(amount_usd), 0)::float8 AS held FROM spend_holds WHERE initiative_id = :pid AND status = 'held'`,
     [s('pid', initiativeId)],
+  );
+  return toNum(rows[0]?.['held']);
+}
+
+/** An initiative's open holds split into floor (essential firings) and discretionary money (DE-55). */
+export async function openHeldSplit(initiativeId: string): Promise<{ floorUsd: number; discretionaryUsd: number }> {
+  if (config.mock.aurora) {
+    const open = openMockHolds((h) => h.initiativeId === initiativeId);
+    return { floorUsd: sumUsd(open.filter((h) => h.essential)), discretionaryUsd: sumUsd(open.filter((h) => !h.essential)) };
+  }
+  const withEssential = await hasColumns('spend_holds', ['essential']).catch(() => false);
+  const rows = await exec(
+    withEssential
+      ? `SELECT COALESCE(SUM(amount_usd) FILTER (WHERE essential), 0)::float8 AS floor,
+                COALESCE(SUM(amount_usd) FILTER (WHERE NOT essential), 0)::float8 AS disc
+           FROM spend_holds WHERE initiative_id = :pid AND status = 'held'`
+      : `SELECT 0::float8 AS floor, COALESCE(SUM(amount_usd), 0)::float8 AS disc
+           FROM spend_holds WHERE initiative_id = :pid AND status = 'held'`,
+    [s('pid', initiativeId)],
+  );
+  return { floorUsd: toNum(rows[0]?.['floor']), discretionaryUsd: toNum(rows[0]?.['disc']) };
+}
+
+/** Every initiative's open holds, split, for the Budgets list. */
+export async function openHeldSplitAll(): Promise<Map<string, { floorUsd: number; discretionaryUsd: number }>> {
+  const out = new Map<string, { floorUsd: number; discretionaryUsd: number }>();
+  if (config.mock.aurora) {
+    for (const h of openMockHolds((x) => x.initiativeId != null)) {
+      const cur = out.get(h.initiativeId!) ?? { floorUsd: 0, discretionaryUsd: 0 };
+      if (h.essential) cur.floorUsd = Math.round((cur.floorUsd + h.amountUsd) * 10_000) / 10_000;
+      else cur.discretionaryUsd = Math.round((cur.discretionaryUsd + h.amountUsd) * 10_000) / 10_000;
+      out.set(h.initiativeId!, cur);
+    }
+    return out;
+  }
+  try {
+    const withEssential = await hasColumns('spend_holds', ['essential']).catch(() => false);
+    const rows = await exec(
+      `SELECT initiative_id,
+              ${withEssential ? 'COALESCE(SUM(amount_usd) FILTER (WHERE essential), 0)::float8' : '0::float8'} AS floor,
+              COALESCE(SUM(amount_usd)${withEssential ? ' FILTER (WHERE NOT essential)' : ''}, 0)::float8 AS disc
+         FROM spend_holds WHERE status = 'held' AND initiative_id IS NOT NULL GROUP BY initiative_id`,
+    );
+    for (const r of rows) out.set(toStr(r['initiative_id']), { floorUsd: toNum(r['floor']), discretionaryUsd: toNum(r['disc']) });
+  } catch (err) {
+    if (!missingHoldsTable(err)) throw err;
+  }
+  return out;
+}
+
+/** Money held by one actor across every initiative (the user budget's in-flight burn, DE-54). */
+export async function openHeldUsdForActor(actorId: string): Promise<number> {
+  if (config.mock.aurora) return sumUsd(openMockHolds((h) => h.actorId === actorId && !h.essential));
+  const withEssential = await hasColumns('spend_holds', ['essential']).catch(() => false);
+  const rows = await exec(
+    `SELECT COALESCE(SUM(amount_usd), 0)::float8 AS held FROM spend_holds
+      WHERE actor_id = :a AND status = 'held'${withEssential ? ' AND NOT essential' : ''}`,
+    [s('a', actorId)],
   );
   return toNum(rows[0]?.['held']);
 }

@@ -56,12 +56,38 @@ describe('#2 the realtime gateway runs as exactly one task', () => {
     });
   });
 
-  test('without the gateway nothing changes: 1→4 autoscaling, 100/200, 0.5 vCPU', () => {
-    off.resourceCountIs('AWS::ApplicationAutoScaling::ScalableTarget', 1);
+  test('without the gateway or a Redis: one task (DE-47), 100/200, 0.5 vCPU, no REDIS_URL', () => {
+    off.resourceCountIs('AWS::ApplicationAutoScaling::ScalableTarget', 0);
     off.hasResourceProperties('AWS::ECS::Service', {
       DeploymentConfiguration: Match.objectLike({ MinimumHealthyPercent: 100, MaximumPercent: 200 }),
     });
-    assert.equal(container(off, 'middleware').td.Properties.Cpu, '512');
+    const { td, c } = container(off, 'middleware');
+    assert.equal(td.Properties.Cpu, '512');
+    assert.equal(env(c, 'REDIS_URL'), undefined);
+  });
+
+  test('without the gateway, a Redis source brings back 1→4 autoscaling and hands the task REDIS_URL (DE-47)', () => {
+    const viaUrl = Template.fromStack(middlewareServiceStack({ realtimeRedisUrl: 'redis://10.0.0.9:6379' }));
+    viaUrl.resourceCountIs('AWS::ApplicationAutoScaling::ScalableTarget', 1);
+    viaUrl.hasResourceProperties('AWS::ApplicationAutoScaling::ScalableTarget', { MinCapacity: 1, MaxCapacity: 4 });
+    assert.equal(env(container(viaUrl, 'middleware').c, 'REDIS_URL'), 'redis://10.0.0.9:6379');
+
+    const viaSocial = Template.fromStack(middlewareServiceStack({ deploySocial: 'true' }));
+    viaSocial.resourceCountIs('AWS::ApplicationAutoScaling::ScalableTarget', 1);
+    const secrets = (container(viaSocial, 'middleware').c.Secrets ?? []) as Array<{ Name: string }>;
+    assert.ok(secrets.some((x) => x.Name === 'REDIS_URL'), 'REDIS_URL from the Social SSM parameter');
+
+    // Opting out stays possible with a Redis present.
+    Template.fromStack(middlewareServiceStack({ deploySocial: 'true', middlewareAutoscale: 'false' }))
+      .resourceCountIs('AWS::ApplicationAutoScaling::ScalableTarget', 0);
+  });
+
+  test('autoscale without a Redis source fails synth; the gateway still forces one task (DE-47)', () => {
+    assert.throws(() => middlewareServiceStack({ middlewareAutoscale: 'true' }), /needs a Redis for shared fleet state/);
+    assert.throws(() => middlewareServiceStack({ realtimeGateway: 'true', deploySocial: 'true', middlewareAutoscale: 'true' }),
+      /one-task realtime gateway safeguard/);
+    Template.fromStack(middlewareServiceStack({ realtimeGateway: 'true', deploySocial: 'true' }))
+      .resourceCountIs('AWS::ApplicationAutoScaling::ScalableTarget', 0);
   });
 
   test('middlewareCpu / middlewareMemoryMiB size it; asking to autoscale the gateway is refused', () => {

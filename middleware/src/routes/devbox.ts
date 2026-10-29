@@ -64,7 +64,7 @@ import {
   type FleetBox,
 } from '../lib/devbox-fleet.js';
 import { presignShellUrl, isValidShellId, MAX_FRAME_BYTES } from '../lib/devbox-shell.js';
-import { startReaper, timeLeft } from '../lib/devbox-reaper.js';
+import { timeLeft, type ReaperDeps } from '../lib/devbox-reaper.js';
 import {
   profileForBox, profileForInitiative, resolveTaskModel, lifetimeOf, profileStamp, lifetimePoliciesFor,
   type DevboxProfile,
@@ -74,6 +74,7 @@ import { mockDevboxClient } from '../mock/devbox-shell.js';
 import { randomUUID } from 'node:crypto';
 import { parseReportedCost, parseResultUsage, settleRunCost } from '../lib/run-cost.js';
 import { reserveSpend, forecastP75ForModel, HOLD_GRACE_MS, type ReserveSpendResult } from '../lib/spend-holds.js';
+import { spendRefusalResponse } from '../lib/spend-refusal.js';
 import { releaseHold } from '../providers/spend-holds.js';
 import { getBoxSpend, spendLedgerMode, ledgerIsFixture, type BoxSpend } from '../providers/spend-ledger.js';
 import { estimateUsageCost } from '../lib/model-prices.js';
@@ -82,9 +83,15 @@ import { recordSpend } from '../providers/spend-ledger.js';
 
 export const devboxRouter = Router();
 
-// Idle and maximum-lifetime enforcement. A devbox bills while it exists, and
-// until now only a person remembering to press stop ended one.
-startReaper({ client: dataClient, runtimeArn: resolveDevboxArn });
+/**
+ * What the devbox reaper needs from this router: the same client and ARN
+ * resolver the routes use. The reaper itself is started from index.ts beside
+ * the other sweepers, leader-elected across replicas (DE-47) — it used to start
+ * on import of this module, in every process that loaded it.
+ */
+export function devboxReaperDeps(): ReaperDeps {
+  return { client: dataClient, runtimeArn: resolveDevboxArn };
+}
 
 // ─── Clients (lazy; overridable for tests via _internal) ─────────────────────
 
@@ -649,7 +656,7 @@ export async function runTaskAndForward(opts: {
    *  or job owns call this function, so every call writes its own entry. */
   spend: { source: 'box_task' | 'agent_loop'; actorId: string | null };
   /** The caller's confirm flags for the held allocation/envelope brakes (DE-34). */
-  confirmed?: { allocation?: boolean; envelope?: boolean };
+  confirmed?: { allocation?: boolean; envelope?: boolean; userBudget?: boolean };
 }): Promise<void> {
   const { sessionId, prompt, resume, model, timeout, res, arn } = opts;
   const payload = JSON.stringify({
@@ -792,15 +799,8 @@ export async function runTaskAndForward(opts: {
  * fails closed. Sent before any SSE frame, so the caller sees plain JSON.
  */
 export function sendSpendRefusal(res: Response, r: Exclude<ReserveSpendResult, { kind: 'held' }>): void {
-  if (r.kind === 'confirm') {
-    res.status(409).json({
-      error: r.reason, gate: r.gate, confirmFlag: r.confirmFlag, confidence: r.confidence,
-      ...(r.allocation ? { allocation: r.allocation } : {}),
-      ...(r.envelope ? { envelope: r.envelope } : {}),
-    });
-    return;
-  }
-  res.status(r.kind === 'refused' ? 403 : 503).json({ error: r.reason, gate: 'spend-hold' });
+  const out = spendRefusalResponse(r);
+  res.status(out.status).json(out.body);
 }
 
 // Task mode: Claude Code headless run in /mnt/workspace, stream-json events
@@ -815,7 +815,7 @@ devboxRouter.post('/:sessionId/task', requireBoxAction('RunDevboxTask'), asyncHa
 
   const body = (req.body ?? {}) as {
     prompt?: string; resume?: boolean; timeout?: number; model?: string;
-    confirmOverAllocation?: unknown; confirmOverEnvelope?: unknown;
+    confirmOverAllocation?: unknown; confirmOverEnvelope?: unknown; confirmOverUserBudget?: unknown;
   };
   const prompt = (body.prompt ?? '').trim();
   if (!prompt) { res.status(400).json({ error: 'prompt is required' }); return; }
@@ -828,7 +828,10 @@ devboxRouter.post('/:sessionId/task', requireBoxAction('RunDevboxTask'), asyncHa
   await runTaskAndForward({
     sessionId, prompt, resume: Boolean(body.resume), res, arn,
     spend: { source: 'box_task', actorId: req.session?.sub ?? null },
-    confirmed: { allocation: body.confirmOverAllocation === true, envelope: body.confirmOverEnvelope === true },
+    confirmed: {
+      allocation: body.confirmOverAllocation === true, envelope: body.confirmOverEnvelope === true,
+      userBudget: body.confirmOverUserBudget === true,
+    },
     model: governed.model,
     timeout: governed.timeout,
   });

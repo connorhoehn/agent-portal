@@ -15,8 +15,16 @@ import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handl
 import { readForRolesElseAction, requireAction } from '../lib/authz.js';
 import {
   listBudgets, orgSummary, upsertAllocation, deleteAllocation, initiativeExists,
-  listGrants,
+  listGrants, getBudget, type AllocationExtras,
 } from '../providers/budgets.js';
+
+/** A money field that may be absent (leave alone), null (back to the default) or a finite number >= 0. */
+function optionalMoney(raw: unknown, name: string): number | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) throw new ValidationError(`${name} must be a finite number >= 0, or null`);
+  return raw;
+}
 
 export const budgetsRouter: Router = Router();
 
@@ -52,7 +60,8 @@ budgetsRouter.put('/:orgProjectId', manageGate, asyncHandler(async (req, res) =>
   const orgProjectId = String(req.params['orgProjectId'] ?? '').trim();
   if (!orgProjectId) throw new ValidationError('orgProjectId is required');
 
-  const raw = (req.body as { allocatedUsd?: unknown } ?? {}).allocatedUsd;
+  const reqBody = (req.body ?? {}) as { allocatedUsd?: unknown; hardCapUsd?: unknown; maintenanceReserveUsd?: unknown; allowFloorSpill?: unknown };
+  const raw = reqBody.allocatedUsd;
   // Strictly a finite non-negative number — a string that would coerce, NaN,
   // or Infinity must not become the ceiling every spend read is judged against.
   const allocatedUsd = typeof raw === 'number' ? raw : NaN;
@@ -60,10 +69,29 @@ budgetsRouter.put('/:orgProjectId', manageGate, asyncHandler(async (req, res) =>
     throw new ValidationError('allocatedUsd must be a finite number >= 0');
   }
 
+  // DE-36 hard cap and DE-55 reserve: each optional; null puts it back to the
+  // deployment default (allocated x factor / the auto reserve).
+  const extras: AllocationExtras = {};
+  const hardCapUsd = optionalMoney(reqBody.hardCapUsd, 'hardCapUsd');
+  if (hardCapUsd !== undefined) extras.hardCapUsd = hardCapUsd;
+  const reserve = optionalMoney(reqBody.maintenanceReserveUsd, 'maintenanceReserveUsd');
+  if (reserve !== undefined) extras.maintenanceReserveUsd = reserve;
+  if (reqBody.allowFloorSpill !== undefined) {
+    if (typeof reqBody.allowFloorSpill !== 'boolean') throw new ValidationError('allowFloorSpill must be a boolean');
+    extras.allowFloorSpill = reqBody.allowFloorSpill;
+  }
+
   if (!await initiativeExists(orgProjectId)) throw new NotFoundError('No such initiative');
 
+  // A cap never sits below its allocation (the column CHECK agrees); an omitted
+  // cap keeps the stored one, so it must still clear the new allocation.
+  const capAfter = hardCapUsd === undefined ? (await getBudget(orgProjectId))?.hardCapUsd ?? null : hardCapUsd;
+  if (capAfter != null && capAfter < allocatedUsd) {
+    throw new ValidationError(`hardCapUsd ($${capAfter}) must be at least allocatedUsd ($${allocatedUsd}); raise or clear it`);
+  }
+
   const updatedBy = req.session?.sub ?? null;
-  const budget = await upsertAllocation(orgProjectId, allocatedUsd, updatedBy);
+  const budget = await upsertAllocation(orgProjectId, allocatedUsd, updatedBy, extras);
   if (!budget) { res.status(503).json({ error: 'budgets require Aurora' }); return; }
   res.json({ budget });
 }));

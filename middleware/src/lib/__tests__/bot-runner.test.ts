@@ -21,11 +21,20 @@ jest.mock('../../providers/bots.js', () => ({
   countRunningRuns: jest.fn(),
   runCostSamples: jest.fn(),
 }));
-jest.mock('../../providers/budgets.js', () => ({
-  ...jest.requireActual('../../providers/budgets.js'),
-  getBudget: jest.fn(),
-  unknownCostCountInPeriod: jest.fn(async () => 0),
-}));
+jest.mock('../../providers/budgets.js', () => {
+  const getBudget = jest.fn();
+  return {
+    ...jest.requireActual('../../providers/budgets.js'),
+    getBudget,
+    // The gate's tri-state read (DE-36), over the same mocked row.
+    readBudgetGate: jest.fn(async (pid: string) => {
+      const row = await getBudget(pid);
+      return row ? { kind: 'ok', row } : { kind: 'none' };
+    }),
+    unknownCostCountInPeriod: jest.fn(async () => 0),
+  };
+});
+jest.mock('../../providers/user-budgets.js', () => ({ readUserBudgetGate: jest.fn(async () => ({ kind: 'none' })) }));
 jest.mock('../../providers/agent-jobs.js', () => ({
   ...jest.requireActual('../../providers/agent-jobs.js'),
   enqueueJob: jest.fn(),
@@ -627,7 +636,7 @@ function fireableBot(over: Partial<Bot> = {}): Bot {
   };
 }
 
-describe('fireBot — opt-in allocation brake', () => {
+describe('fireBot — the floor, and the opt-in allocation brake', () => {
   // The hold store is spend-holds.test.ts's subject; here the brakes run
   // without writing a hold (SPEND_HOLDS=off keeps every decision).
   beforeAll(() => { process.env['SPEND_HOLDS'] = 'off'; });
@@ -641,19 +650,81 @@ describe('fireBot — opt-in allocation brake', () => {
     mCreateBotRun.mockResolvedValue({ id: 'run-1' });
   });
 
-  it('default-off never brakes — no budget read, fires normally (its forecast is only held)', async () => {
+  it('an essential (cron) bot is judged against the maintenance reserve and fires while it is funded (DE-55)', async () => {
     mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: false }));
+    // $30 allocated, a $5 reserve, nothing spent: the reserve funds the firing.
+    mGetBudget.mockResolvedValue({ allocatedUsd: 30, spentThisPeriodUsd: 0, reserveUsd: 5, floorSpentUsd: 0, discretionarySpentUsd: 0 });
 
     const res = await fireBot('b-1', { trigger: 'cron' });
 
     expect(res.ok).toBe(true);
-    // The brake never ran: it read no allocation. The forecast IS read now —
-    // DE-34 holds the firing's p75 so other dispatches see the money in flight.
-    expect(mGetBudget).not.toHaveBeenCalled();
+    // The floor is judged now (DE-39 folded into DE-55): the allocation is read.
+    expect(mGetBudget).toHaveBeenCalled();
     // And the firing dispatched for real (queued a job), not a skipped row.
     expect(mEnqueueJob).toHaveBeenCalledTimes(1);
     expect(mCreateBotRun).toHaveBeenCalledWith(expect.objectContaining({ jobId: 'job-1' }));
     expect(mCreateBotRun).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'skipped' }));
+  });
+
+  it('an essential firing past the reserve spills into discretionary money while any is left', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: false }));
+    // Reserve spent out ($1 of $1); $30 - $1 - $0 = $29 discretionary left, spill allowed by default.
+    mGetBudget.mockResolvedValue({ allocatedUsd: 30, spentThisPeriodUsd: 1, reserveUsd: 1, floorSpentUsd: 1, discretionarySpentUsd: 0 });
+    expect((await fireBot('b-1', { trigger: 'cron' })).ok).toBe(true);
+    expect(mEnqueueJob).toHaveBeenCalledTimes(1);
+  });
+
+  it('an essential firing neither the reserve nor the remainder can fund records a skipped run, gate maintenance-reserve', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: false }));
+    // Reserve $1 spent; discretionary $2 - $1 - $0.90 = $0.10 left; the sonnet prior p75 ($1.50) cannot spill.
+    // A stored cap well above it, so the reserve (not DE-36's cap) is what answers.
+    mGetBudget.mockResolvedValue({
+      allocatedUsd: 2, hardCapUsd: 100, spentThisPeriodUsd: 1.9, reserveUsd: 1, floorSpentUsd: 1, discretionarySpentUsd: 0.9,
+    });
+    const res = await fireBot('b-1', { trigger: 'cron' });
+    expect(res.ok).toBe(false);
+    expect((res as { reason: string }).reason).toMatch(/^cron firing skipped: .*maintenance reserve/);
+    expect(mCreateBotRun).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'skipped', outcome: expect.objectContaining({ gate: 'maintenance-reserve' }),
+    }));
+    expect(mEnqueueJob).not.toHaveBeenCalled();
+  });
+
+  it('an essential firing with spill turned off stops at the reserve', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: false }));
+    mGetBudget.mockResolvedValue({
+      allocatedUsd: 30, spentThisPeriodUsd: 1, reserveUsd: 1, floorSpentUsd: 1, discretionarySpentUsd: 0, allowFloorSpill: false,
+    });
+    const res = await fireBot('b-1', { trigger: 'cron' });
+    expect(res.ok).toBe(false);
+    expect((res as { reason: string }).reason).toMatch(/does not let maintenance spill/);
+  });
+
+  it('a cron firing at the initiative hard cap is a skip, never a pause (DE-36)', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: false }));
+    // Cap $2.50 (allocated x 1.25); $2.40 spent; the $1.50 prior crosses it.
+    mGetBudget.mockResolvedValue({ allocatedUsd: 2, spentThisPeriodUsd: 2.4, reserveUsd: 5, floorSpentUsd: 2.4, discretionarySpentUsd: 0 });
+    const res = await fireBot('b-1', { trigger: 'cron' });
+    expect(res.ok).toBe(false);
+    expect(mCreateBotRun).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'skipped', outcome: expect.objectContaining({ gate: 'allocation-cap' }),
+    }));
+    expect(mEnqueueJob).not.toHaveBeenCalled();
+  });
+
+  it('an unbudgeted initiative leaves an essential firing alone', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: false }));
+    mGetBudget.mockResolvedValue(null);
+    expect((await fireBot('b-1', { trigger: 'cron' })).ok).toBe(true);
+    expect(mEnqueueJob).toHaveBeenCalledTimes(1);
+  });
+
+  it('a bot marked not essential is discretionary spend: judged against the remainder, skipped when over', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: false, essential: false }));
+    mGetBudget.mockResolvedValue({ allocatedUsd: 2, hardCapUsd: 100, spentThisPeriodUsd: 1.5 });
+    const res = await fireBot('b-1', { trigger: 'cron' });
+    expect(res.ok).toBe(false);
+    expect(mCreateBotRun).toHaveBeenCalledWith(expect.objectContaining({ status: 'skipped' }));
   });
 
   it('opted-in + projection over the remainder records a skipped run and does NOT dispatch', async () => {
@@ -696,7 +767,8 @@ describe('fireBot — opt-in allocation brake', () => {
     mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: false, trigger: 'manual' }));
     // $0.50 left; the sonnet prior p75 ($1.50) overruns it. A person pressed
     // run, so the allocation brake asks them — whatever enforceAllocation says.
-    mGetBudget.mockResolvedValue({ allocatedUsd: 2, spentThisPeriodUsd: 1.5 });
+    // (A stored cap above it, so the soft brake — not DE-36's cap — answers.)
+    mGetBudget.mockResolvedValue({ allocatedUsd: 2, hardCapUsd: 100, spentThisPeriodUsd: 1.5 });
 
     const refused = await fireBot('b-1', { trigger: 'manual', dispatchedBy: 'u-nora' });
     expect(refused.ok).toBe(false);

@@ -90,6 +90,13 @@ describe('listBudgets', () => {
       updatedAt: '2026-08-01T00:00:00Z', spentThisPeriodUsd: 42.5,
       runCountThisPeriod: 7, lastAgentActivityAt: '2026-08-20T12:00:00Z',
       maintenanceUsd: 12.25,
+      // DE-36: no stored cap → allocated x 1.25.
+      hardCapUsd: null, effectiveHardCapUsd: 312.5, hardCapSource: 'factor',
+      // DE-55: no essential-bot history in this mocked read, so the auto reserve is $0
+      // and every dollar spent is discretionary.
+      maintenanceReserveUsd: null, reserveUsd: 0, reserveSource: 'auto', allowFloorSpill: true,
+      floorSpentUsd: 0, discretionarySpentUsd: 42.5, floorHeldUsd: 0, discretionaryHeldUsd: 0,
+      discretionaryRemainingUsd: 207.5,
     });
     // The unallocated-but-spending row keeps null allocation — the signal.
     expect(rows[1]!.allocatedUsd).toBeNull();

@@ -1,5 +1,9 @@
 // Fleet registry unit tests — status machine, ring buffer, pub/sub.
 
+// The reaper's default fleet lock is never used here (DE-47 tests pass their
+// own); mocking it keeps realtime-modules out of every isolated module copy.
+jest.mock('../replica-fleet.js', () => ({ replicaFleet: jest.fn(), replicaId: () => 'test-replica' }));
+
 import {
   registerBox,
   listBoxes,
@@ -417,5 +421,255 @@ describe('hydration restores the fleet the reaper has to police', () => {
     hydrateBoxes([{ ...AGED, spendUsd: 0.42, tokensUsed: 1234 }]);
     expect(getBox('aged01')?.spendUsd).toBeCloseTo(0.42);
     expect(getBox('aged01')?.tokensUsed).toBe(1234);
+  });
+});
+
+// ─── DE-47: fleet state that survives replicas ──────────────────────────────
+//
+// Each "replica" is its own copy of the fleet and reaper modules
+// (jest.isolateModules), attached to ONE in-memory shared store — the shape
+// two middleware tasks have over one Redis.
+
+describe('fleet state shared across replicas (DE-47)', () => {
+  type FleetMod = typeof import('../devbox-fleet.js');
+  type ReaperMod = typeof import('../devbox-reaper.js');
+  type Replica = { fleet: FleetMod; reaper: ReaperMod };
+  type Fleet = import('../replica-fleet.js').ReplicaFleet;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { createMemoryFleetBackend } = require('../devbox-fleet-shared.js') as typeof import('../devbox-fleet-shared.js');
+
+  const replicas: Replica[] = [];
+  const replica = (id: string, world: ReturnType<typeof createMemoryFleetBackend>, holdTtlMs?: number): Replica => {
+    let out!: Replica;
+    jest.isolateModules(() => {
+      out = {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        fleet: require('../devbox-fleet.js') as FleetMod,
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        reaper: require('../devbox-reaper.js') as ReaperMod,
+      };
+    });
+    out.fleet.attachSharedFleet(world, { replicaId: id, touchFlushMs: 0, ...(holdTtlMs ? { holdTtlMs } : {}) });
+    replicas.push(out);
+    return out;
+  };
+  afterEach(() => { for (const r of replicas.splice(0)) r.fleet._resetFleet(); });
+
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  const stopper = () => {
+    const send = jest.fn(async (_cmd: unknown) => ({}));
+    return { send, deps: { client: () => ({ send }) as never, runtimeArn: async () => 'arn:runtime', policies: async () => new Map() } };
+  };
+  const stopsOf = (send: jest.Mock) => send.mock.calls.map(([cmd]) => {
+    const c = cmd as { constructor: { name: string }; input: { runtimeSessionId: string } };
+    return `${c.constructor.name}:${c.input.runtimeSessionId}`;
+  });
+
+  /** A box replica A created and is working on, which replica B only knows from an old boot-time row. */
+  async function boxOnABStale() {
+    const world = createMemoryFleetBackend();
+    const a = replica('task-a', world);
+    const b = replica('task-b', world);
+    const box = a.fleet.registerBox({ sessionId: SID, id: 'shared1', createdAt: ago(10) });
+    b.fleet.hydrateBoxes([{ ...box, lastActivityAt: ago(30) }]);   // the compute registry's copy
+    a.fleet.appendEvent('shared1', { type: 'thinking_tokens', n: 1 });
+    await settle();
+    return { world, a, b };
+  }
+
+  it('replica B does not reap a box whose stored activity is fresh', async () => {
+    const { b } = await boxOnABStale();
+    // B's own copy says idle for 30 minutes — the old failure: it reaped.
+    expect(b.reaper.decideReaping(b.fleet.listBoxes()).map((d) => d.reason)).toEqual(['idle']);
+
+    const { send, deps } = stopper();
+    expect(await b.reaper.sweepOnce(deps)).toEqual([]);
+    expect(send).not.toHaveBeenCalled();
+    expect(Date.parse(b.fleet.getBox('shared1')!.lastActivityAt)).toBeGreaterThan(Date.now() - 60_000);
+  });
+
+  it('B sees the run A started (status and task clock), and a tail on B sees A\'s events', async () => {
+    const { a, b } = await boxOnABStale();
+    const seen: unknown[] = [];
+    b.fleet.subscribe('shared1', (ev) => seen.push(ev['type']));
+    await settle();
+    a.fleet.appendEvent('shared1', { type: 'task_started', prompt: 'fix it' });
+    a.fleet.appendEvent('shared1', { type: 'assistant', text: 'working' });
+    await settle();
+    expect(seen).toEqual(['task_started', 'assistant']);
+    expect(b.fleet.replayEvents('shared1').map((e) => e['type'])).toEqual(['task_started', 'assistant']);
+
+    await b.fleet.refreshFromShared();
+    expect(b.fleet.getBox('shared1')?.status).toBe('running');
+    expect(b.fleet.getBox('shared1')?.taskStartedAt).toBe(a.fleet.getBox('shared1')?.taskStartedAt);
+    // A's own events are not echoed back into A's buffer.
+    expect(a.fleet.replayEvents('shared1').map((e) => e['type'])).toEqual(['thinking_tokens', 'task_started', 'assistant']);
+  });
+
+  it('an older snapshot never overwrites a newer one, and a stop elsewhere is a stop here', async () => {
+    const { a, b } = await boxOnABStale();
+    a.fleet.markStopped('shared1');
+    await settle();
+    await b.fleet.refreshFromShared();
+    expect(b.fleet.getBox('shared1')?.status).toBe('stopped');
+  });
+
+  it('a box registered on another replica is hydrated by the refresh, so the leader can police it', async () => {
+    const world = createMemoryFleetBackend();
+    const a = replica('task-a', world);
+    const b = replica('task-b', world);
+    a.fleet.registerBox({ sessionId: SID, id: 'only-a', createdAt: ago(5) });
+    await settle();
+    expect(b.fleet.getBox('only-a')).toBeNull();
+    await b.fleet.refreshFromShared();
+    expect(b.fleet.getBox('only-a')?.sessionId).toBe(SID);
+  });
+
+  it('claims are exclusive across replicas; reservations block claims; a dead replica\'s hold lapses', async () => {
+    let clock = Date.now();
+    const world = createMemoryFleetBackend({ now: () => clock });
+    const a = replica('task-a', world, 1_000);
+    const b = replica('task-b', world, 1_000);
+    for (const r of [a, b]) r.fleet.hydrateBoxes([{ id: 'box1', label: 'box1', sessionId: SID, status: 'idle', createdAt: ago(1), lastActivityAt: ago(1) }]);
+
+    expect(await a.fleet.claimBox('box1', 'dispatcher:task-a')).toBe(true);
+    expect(await b.fleet.claimBox('box1', 'dispatcher:task-b')).toBe(false);
+    a.fleet.releaseBox('box1', 'dispatcher:task-a');
+    await settle();
+    expect(await b.fleet.claimBox('box1', 'dispatcher:task-b')).toBe(true);
+    b.fleet.releaseBox('box1', 'dispatcher:task-b');
+
+    b.fleet.reserveBox('box1', 'sdlc:run-1');
+    await settle();
+    await a.fleet.refreshSharedHolds();
+    expect(a.fleet.isReserved('box1')).toBe(true);
+    expect(await a.fleet.claimBox('box1', 'dispatcher:task-a')).toBe(false);
+
+    // B dies holding it: nothing renews, and past the TTL the hold is gone.
+    b.fleet.attachSharedFleet(null);
+    clock += 2_000;
+    expect(await a.fleet.claimBox('box1', 'dispatcher:task-a')).toBe(true);
+    await a.fleet.refreshSharedHolds();
+    expect(a.fleet.allHolds().get('box1')).toEqual(['dispatcher:task-a']);
+  });
+
+  it('a run in flight on A holds its box, so B\'s dispatcher cannot claim it until the run ends', async () => {
+    const { a, b } = await boxOnABStale();
+    a.fleet.appendEvent('shared1', { type: 'task_started', prompt: 'go' });
+    await settle();
+    await b.fleet.refreshFromShared();
+    expect(b.fleet.isReserved('shared1')).toBe(true);
+    expect(await b.fleet.claimBox('shared1', 'dispatcher:task-b')).toBe(false);
+    a.fleet.appendEvent('shared1', { type: 'devbox_end' });
+    await settle();
+    await b.fleet.refreshFromShared();
+    expect(b.fleet.getBox('shared1')?.status).toBe('idle');
+    expect(await b.fleet.claimBox('shared1', 'dispatcher:task-b')).toBe(true);
+  });
+
+  it('a claim fails closed when the shared store cannot answer', async () => {
+    const world = createMemoryFleetBackend();
+    world.hold = async () => { throw new Error('redis down'); };
+    const a = replica('task-a', world);
+    a.fleet.hydrateBoxes([{ id: 'box1', label: 'box1', sessionId: SID, status: 'idle', createdAt: ago(1), lastActivityAt: ago(1) }]);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(await a.fleet.claimBox('box1', 'dispatcher:task-a')).toBe(false);
+      expect(a.fleet.isReserved('box1')).toBe(false);
+    } finally { warn.mockRestore(); }
+  });
+
+  it('the reaper skips a sweep when the shared state is unreadable, rather than reaping a stale view', async () => {
+    const world = createMemoryFleetBackend();
+    const a = replica('task-a', world);
+    a.fleet.hydrateBoxes([{ id: 'old', label: 'old', sessionId: SID, status: 'idle', createdAt: ago(30), lastActivityAt: ago(30) }]);
+    world.readAll = async () => { throw new Error('redis down'); };
+    const { send, deps } = stopper();
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(await a.reaper.sweepOnce(deps)).toEqual([]);
+    } finally { warn.mockRestore(); }
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  /** Two replicas over one lock, the way FencedLease behaves for one key. */
+  function lockPair(): { fleetFor: (id: string) => Fleet } {
+    let owner: string | null = null;
+    return {
+      fleetFor: (id) => ({
+        id,
+        heartbeat: async () => undefined,
+        members: async () => ['task-a', 'task-b'],
+        peers: async () => [id === 'task-a' ? 'task-b' : 'task-a'],
+        async withLock(_name, _ttl, fn) {
+          if (owner) return null;
+          owner = id;
+          try { return await fn({ signal: new AbortController().signal, token: 1, assertLive() {} }); } finally { owner = null; }
+        },
+        leave: async () => undefined,
+        stop: () => undefined,
+      }),
+    };
+  }
+
+  it('only the lock holder\'s sweep issues StopRuntimeSessionCommand', async () => {
+    const world = createMemoryFleetBackend();
+    const a = replica('task-a', world);
+    const b = replica('task-b', world);
+    const stale = { id: 'idle1', label: 'idle1', sessionId: SID, status: 'idle' as const, createdAt: ago(30), lastActivityAt: ago(30) };
+    for (const r of [a, b]) r.fleet.hydrateBoxes([stale]);
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const sendA = jest.fn(async (_cmd: unknown) => { await gate; return {}; });
+    const sendB = jest.fn(async (_cmd: unknown) => ({}));
+    const deps = (send: jest.Mock) => ({ client: () => ({ send }) as never, runtimeArn: async () => 'arn:runtime', policies: async () => new Map() });
+    const locks = lockPair();
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const tickA = a.reaper.reaperTick(deps(sendA), locks.fleetFor('task-a'));
+      for (let i = 0; i < 50 && sendA.mock.calls.length === 0; i++) await settle();
+      expect(sendA).toHaveBeenCalledTimes(1);
+
+      // B ticks while A holds the lock mid-sweep.
+      expect(await b.reaper.reaperTick(deps(sendB), locks.fleetFor('task-b'))).toEqual({ ran: 'locked-elsewhere', decisions: [] });
+      release();
+      const done = await tickA;
+      expect(done.ran).toBe('swept');
+      expect(done.decisions.map((d) => d.box.id)).toEqual(['idle1']);
+    } finally { warn.mockRestore(); }
+    expect(stopsOf(sendA)).toEqual([`StopRuntimeSessionCommand:${SID}`]);
+    expect(sendB).not.toHaveBeenCalled();
+  });
+
+  it('a fenced lease stops the sweep before the next stop call', async () => {
+    const world = createMemoryFleetBackend();
+    const a = replica('task-a', world);
+    const other = 'c'.repeat(40);
+    a.fleet.hydrateBoxes([
+      { id: 'idle1', label: 'idle1', sessionId: SID, status: 'idle', createdAt: ago(31), lastActivityAt: ago(31) },
+      { id: 'idle2', label: 'idle2', sessionId: other, status: 'idle', createdAt: ago(30), lastActivityAt: ago(30) },
+    ]);
+    let live = true;
+    // The first stop call outlives the lease (a Redis stall, a GC pause).
+    const send = jest.fn(async (_cmd: unknown) => { live = false; return {}; });
+    const fenced: Fleet = {
+      ...lockPair().fleetFor('task-a'),
+      async withLock(_name, _ttl, fn) {
+        return fn({
+          signal: new AbortController().signal, token: 7,
+          assertLive() { if (!live) throw new Error('Replica lock lost: expired'); },
+        });
+      },
+    };
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let tick;
+    try {
+      tick = await a.reaper.reaperTick({ client: () => ({ send }) as never, runtimeArn: async () => 'arn:runtime', policies: async () => new Map() }, fenced);
+    } finally { warn.mockRestore(); }
+    expect(tick.ran).toBe('lock-unavailable');
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(a.fleet.getBox('idle2')?.status).toBe('idle');   // never stopped, never marked
   });
 });

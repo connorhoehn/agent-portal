@@ -48,9 +48,21 @@ jest.mock('../../providers/bots.js', () => ({
 // budgets.ts is imported, never edited, by both the route (getBudget) and the
 // envelope brake (listGrants) — the SME is stopped by the same envelope figure
 // the Budgets page renders.
-jest.mock('../../providers/budgets.js', () => ({
-  getBudget: jest.fn(), listGrants: jest.fn(), unknownCostCountInPeriod: jest.fn(async () => 0),
-}));
+jest.mock('../../providers/budgets.js', () => {
+  const getBudget = jest.fn();
+  return {
+    getBudget, listGrants: jest.fn(), unknownCostCountInPeriod: jest.fn(async () => 0),
+    // The gate's tri-state read (DE-36), over the same mocked row.
+    readBudgetGate: jest.fn(async (pid: string) => {
+      try {
+        const row = await getBudget(pid);
+        return row ? { kind: 'ok', row } : { kind: 'none' };
+      } catch (error) { return { kind: 'unavailable', reason: (error as Error).message, error }; }
+    }),
+  };
+});
+// No user budgets here (DE-54 has its own suite): every caller is unbraked by one.
+jest.mock('../../providers/user-budgets.js', () => ({ readUserBudgetGate: jest.fn(async () => ({ kind: 'none' })) }));
 // The brakes now run inside reserveSpend (DE-34); the hold store and its
 // concurrency are spend-holds-dispatch.test.ts's subject. Here the decisions
 // run unheld, exactly as they did before holds.
@@ -177,6 +189,11 @@ describe('the allocation brake with no history at all', () => {
       remainingUsd: expect.closeTo(0.8, 5) as number,
       // DE-34 / DE-33: money other dispatches hold, and runs with no recorded cost.
       heldUsd: 0, unknownCostCount: 0,
+      // DE-36: the cap enforced (no stored cap: allocated x 1.25).
+      hardCapUsd: 6.25,
+      // DE-55: no reserve on this mocked row, so the discretionary figures are the whole allocation.
+      reserveUsd: 0, floorSpentUsd: 0, floorHeldUsd: 0, discretionarySpentUsd: 4.2, discretionaryHeldUsd: 0,
+      discretionaryRemainingUsd: expect.closeTo(0.8, 5) as number,
     });
     // Nothing ran: refused before any dispatch side effect.
     expect(dispatch).not.toHaveBeenCalled();
@@ -411,6 +428,7 @@ describe('the four 409s are distinguishable', () => {
       remainingUsd: 1,
       attributionAvailable: true,
       heldUsd: 0, unknownCostCount: 0,
+      hardCapUsd: 37.5,
     });
     expect(res.body.error).toMatch(/counting only runs recorded as dispatched by you/);
     expect(res.body.allocation).toBeUndefined();
@@ -474,7 +492,8 @@ describe('the sprint envelope brake', () => {
   });
 
   it('honours a standing initiative-level grant (no sprint, unbounded window)', async () => {
-    grants.mockResolvedValue([grant({ sprintId: null, sprintName: null, sprintStatus: null, allocatedUsd: 1 })]);
+    // A cap well above the forecast, so the soft envelope brake is what answers (not DE-36's cap).
+    grants.mockResolvedValue([grant({ sprintId: null, sprintName: null, sprintStatus: null, allocatedUsd: 1, hardCapUsd: 100 })]);
     burn.mockResolvedValue({ spentUsd: 0.5, attributionAvailable: true });
     const res = await post(BODY);
     expect(res.status).toBe(409);
@@ -519,7 +538,7 @@ describe('the sprint envelope brake', () => {
     });
 
     it('still brakes a forecast bigger than the envelope itself', async () => {
-      grants.mockResolvedValue([grant({ allocatedUsd: 1 })]);
+      grants.mockResolvedValue([grant({ allocatedUsd: 1, hardCapUsd: 100 })]);
       const res = await post(BODY);
       expect(res.status).toBe(409);
       expect(res.body.gate).toBe('envelope');

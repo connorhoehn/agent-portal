@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-29T18:37:30.021Z",
-  "serverHandlerSha": "dce75dcf50480981fb26a7b073c1a2a437b63d56fc984aa11ed4a983b960ed06",
+  "capturedAt": "2026-10-29T19:53:13.847Z",
+  "serverHandlerSha": "631f23db9ba4a7c79ff0dae4e187f8b9691b759e1fd4f026f69679c335ca5756",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -259,6 +259,12 @@
       }
     },
     "DELETE /api/sprints/:sprintId/items/:itemId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
+      }
+    },
+    "DELETE /api/user-budgets/:userId": {
       "refused": {
         "rule": "destructive",
         "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
@@ -2556,6 +2562,7 @@
         "grant.grantedBy": "string",
         "grant.granteeName": "string",
         "grant.granteePersonId": "string",
+        "grant.hardCapUsd": "null",
         "grant.id": "string",
         "grant.initiativeSpendInWindowUsd": "number",
         "grant.note": "null",
@@ -4648,6 +4655,12 @@
         "markdown"
       ]
     },
+    "PUT /api/bots/:id/essential": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "PUT /api/bots/work-items/:id/job-draft": {
       "refused": {
         "rule": "unclassified",
@@ -4661,11 +4674,23 @@
         "$": "object",
         "budget": "object",
         "budget.allocatedUsd": "number",
+        "budget.allowFloorSpill": "boolean",
+        "budget.discretionaryHeldUsd": "number",
+        "budget.discretionaryRemainingUsd": "number",
+        "budget.discretionarySpentUsd": "number",
+        "budget.effectiveHardCapUsd": "number",
+        "budget.floorHeldUsd": "number",
+        "budget.floorSpentUsd": "number",
+        "budget.hardCapSource": "string",
+        "budget.hardCapUsd": "null",
         "budget.lastAgentActivityAt": "string",
+        "budget.maintenanceReserveUsd": "null",
         "budget.maintenanceUsd": "number",
         "budget.orgProjectId": "string",
         "budget.orgProjectName": "string",
         "budget.period": "string",
+        "budget.reserveSource": "string",
+        "budget.reserveUsd": "number",
         "budget.runCountThisPeriod": "number",
         "budget.spentThisPeriodUsd": "number",
         "budget.updatedAt": "string",
@@ -4866,6 +4891,12 @@
     },
     "PUT /api/social/bindings": {
       "skipped": "no body: the context this binds is a query parameter (`?context=<kind>:<id>`), and this harness replays a write at its resolved path with a body only — it has no way to carry a query string. The GET side is captured with a QUERY_HINT; routes/__tests__/social-bindings.test.ts covers the write."
+    },
+    "PUT /api/user-budgets/:userId": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     }
   }
 }

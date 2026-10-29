@@ -184,7 +184,15 @@ the current behaviour lives; each item is the gap it closes.
 - **DE-39 The bot-fire allocation brake.** Spec:
   [`DE-39-bot-fire-allocation-brake.md`](deployment-enhancements/DE-39-bot-fire-allocation-brake.md). Documented as not built
   (`docs/program-operating-model.md`, `bots.enforce_allocation`); cron firings
-  spend without the allocation check unless opted in.
+  spend without the allocation check unless opted in. Folded into DE-55.
+- **DE-54 User budgets.** Spec:
+  [`DE-54-user-budgets.md`](deployment-enhancements/DE-54-user-budgets.md). No limit applied to a
+  person across initiatives; add a monthly allocation and hard cap per app
+  user, judged under a third `user:` lock inside every spend hold.
+- **DE-55 The maintenance reserve.** Spec:
+  [`DE-55-maintenance-reserve.md`](deployment-enhancements/DE-55-maintenance-reserve.md). Necessary
+  (essential) bots are funded first from a per-initiative reserve; every
+  other path is judged against the discretionary remainder. Folds DE-39.
 
 ### D3. Policy: what a box may do, per initiative
 

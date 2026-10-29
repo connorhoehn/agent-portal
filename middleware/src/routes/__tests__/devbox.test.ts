@@ -323,7 +323,7 @@ describe('POST /api/devbox/:sessionId/task', () => {
     // The confirm flag rides through to the hold.
     await request(buildApp()).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'fix it', confirmOverEnvelope: true });
     expect(reserveSpend).toHaveBeenLastCalledWith(expect.objectContaining({
-      initiativeId: 'p-auth-migration', actorId: 'u-test', source: 'box_task', confirmed: { allocation: false, envelope: true },
+      initiativeId: 'p-auth-migration', actorId: 'u-test', source: 'box_task', confirmed: { allocation: false, envelope: true, userBudget: false },
     }));
     expect(calls).toHaveLength(1);
   });

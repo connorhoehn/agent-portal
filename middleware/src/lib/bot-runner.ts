@@ -21,7 +21,7 @@ import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import {
   getBot, createBotRun, finalizeBotRun, setPausedReason, markBotRan, countRunningRuns,
-  dispatchedSpendInWindow, runCostSamples, mockRunBackedSettlements,
+  dispatchedSpendInWindow, runCostSamples, mockRunBackedSettlements, botIsEssential,
   type BotRun, type Bot,
 } from '../providers/bots.js';
 // Read-only imports. providers/budgets.ts owns the envelope's ledger shape and
@@ -275,6 +275,12 @@ export interface AllocationState {
    *  They are in neither figure above, so while this is non-zero the brake
    *  asks for the same confirmation an overrun would. */
   unknownCostCount?: number;
+  /** DE-55: what the maintenance floor takes off the top of the allocation —
+   *  max(reserve, essential spend + essential holds). When given, `spentUsd`
+   *  and `heldUsd` are the DISCRETIONARY figures, and the brake judges the
+   *  discretionary remainder: allocated - floor - spent - held. Absent = 0,
+   *  the arithmetic from before the reserve. */
+  floorUsd?: number;
 }
 
 /** What the brake is asked to judge. A bare number is read as a p75 it may
@@ -380,21 +386,24 @@ export function decideAllocation(
     };
   }
 
-  const remaining = allocatedUsd - spentUsd - heldUsd;
+  const floorUsd = allocation.floorUsd ?? 0;
+  const remaining = allocatedUsd - floorUsd - spentUsd - heldUsd;
   if (f.costUsdP75 <= remaining) return { kind: 'proceed' };
 
   const held = heldUsd > 0 ? ` and ${money(heldUsd)} held by runs in flight` : '';
+  // Said only when a floor is in play, so the pre-reserve sentences are unchanged.
+  const floor = floorUsd > 0 ? `, ${money(floorUsd)} of it kept for maintenance` : '';
   // Exhausted: no forecast could fit, so say nothing about the forecast.
   if (remaining <= 0) {
     return {
       kind: 'confirm',
-      reason: `this initiative's ${money(allocatedUsd)} allocation is exhausted (${money(spentUsd)} spent${held}) — raise the allocation or pass confirmOverAllocation`,
+      reason: `this initiative's ${money(allocatedUsd)} allocation is exhausted (${money(spentUsd)} ${floorUsd > 0 ? 'discretionary ' : ''}spent${held}${floor}) — raise the allocation or pass confirmOverAllocation`,
       confidence: f.confidence ?? 'scaled',
     };
   }
 
   const confidence = f.confidence ?? 'scaled';
-  const left = `the ${money(remaining)} left of this initiative's ${money(allocatedUsd)} allocation${heldUsd > 0 ? ` (${money(heldUsd)} held by runs in flight)` : ''}`;
+  const left = `the ${money(remaining)} left of this initiative's ${money(allocatedUsd)} allocation${floor}${heldUsd > 0 ? ` (${money(heldUsd)} held by runs in flight)` : ''}`;
   if (confidence === 'scaled' || f.costUsdP25 == null) {
     return {
       kind: 'confirm',
@@ -591,6 +600,8 @@ export interface ResolvedEnvelope extends EnvelopeState {
   startsOn: string | null;
   endsOn: string | null;
   sprintStatus: string | null;
+  /** DE-36: the grant's stored hard cap; null/absent = allocated x the factor. */
+  hardCapUsd?: number | null;
 }
 
 /**
@@ -686,23 +697,45 @@ export async function loadEnvelope(
   orgProjectId: string,
   sessionSub: string | undefined,
 ): Promise<ResolvedEnvelope | null> {
-  if (!sessionSub) return null;
+  const gate = await loadEnvelopeGate(orgProjectId, sessionSub);
+  if (gate.kind === 'ok') return gate.envelope;
+  if (gate.kind === 'unavailable') {
+    // A brake that cannot read its own inputs must not become a refusal — the
+    // allocation brake still stands behind it. (reserveSpend reads the gate
+    // form and fails closed where BUDGET_FAIL_CLOSED says so, DE-36.)
+    console.warn(`[bots] could not resolve the sprint envelope for ${orgProjectId}:`, gate.reason);
+  }
+  return null;
+}
+
+export type EnvelopeGate =
+  | { kind: 'ok'; envelope: ResolvedEnvelope }
+  /** Not an SME here: no session, no linked person, or no active grant. */
+  | { kind: 'none' }
+  /** The user, the grants or the burn could not be read. */
+  | { kind: 'unavailable'; reason: string; error: unknown };
+
+/**
+ * loadEnvelope's tri-state form (DE-36): "not an SME here" and "could not
+ * read" are different answers, and a money gate that fails closed must be
+ * able to tell them apart.
+ */
+export async function loadEnvelopeGate(orgProjectId: string, sessionSub: string | undefined): Promise<EnvelopeGate> {
+  if (!sessionSub) return { kind: 'none' };
   try {
     const user = await getUser(sessionSub);
     const personId = user?.personId;
-    if (!personId) return null;
+    if (!personId) return { kind: 'none' };
 
     const grants = await listGrants(orgProjectId);
     const grant = grants.find((g) => g.granteePersonId === personId && isActiveGrant(g));
-    if (!grant) return null;
+    if (!grant) return { kind: 'none' };
     // Same resolution listActiveEnvelopes uses, so the envelope that brakes a
     // dispatch and the envelope GET /api/sprints/envelopes shows are one row.
-    return await resolveEnvelope(grant, sessionSub, personId);
-  } catch (err) {
-    // A brake that cannot read its own inputs must not become a refusal — the
-    // allocation brake still stands behind it.
-    console.warn(`[bots] could not resolve the sprint envelope for ${orgProjectId}:`, (err as Error).message);
-    return null;
+    const envelope = await resolveEnvelope(grant, sessionSub, personId);
+    return { kind: 'ok', envelope: { ...envelope, hardCapUsd: grant.hardCapUsd ?? null } };
+  } catch (error) {
+    return { kind: 'unavailable', reason: (error as Error).message, error };
   }
 }
 
@@ -1014,7 +1047,7 @@ export async function fireBot(botId: string, opts: {
    *  an owner for them is exactly what the envelope brake must not do. */
   dispatchedBy?: string | null;
   /** The manual route's confirm flags, for the held allocation/envelope brakes. */
-  confirmed?: { allocation?: boolean; envelope?: boolean };
+  confirmed?: { allocation?: boolean; envelope?: boolean; userBudget?: boolean };
 }): Promise<FireResult> {
   const bot = await getBot(botId);
   if (!bot) return { ok: false, reason: 'no such bot' };
@@ -1033,32 +1066,36 @@ export async function fireBot(botId: string, opts: {
 
   // The spend hold (DE-34), before any side effect — markBotRan included. The
   // firing's p75 is held under the initiative lock so every other brake sees
-  // this money in flight. Whether the hold may REFUSE depends on who is
-  // spending: a manual firing is a person's dispatch and is judged like one
-  // (allocation and envelope, confirmable through the route's flags); a cron
-  // or pr_watch firing is judged only when the bot opted in
-  // (bot.enforceAllocation, OFF by default) — the documented design where a
-  // cron bot's spend is the maintenance floor an allocation is read against,
-  // kept until the reserve exists. An opted-in cron firing that is refused
-  // records a *skipped* bot_run (the same visible brake the run cap uses,
-  // never a self-pause) and the next cycle re-evaluates once money frees.
+  // this money in flight. Every firing is judged now, by the limit it spends:
+  //   - a manual firing is a person's dispatch: hard caps, the discretionary
+  //     allocation, their envelope and their user budget (confirmable through
+  //     the route's flags);
+  //   - a scheduled firing of an ESSENTIAL bot (COALESCE(essential, trigger =
+  //     'cron'), DE-55) is the maintenance floor: the initiative's hard cap,
+  //     then its maintenance reserve, spilling into discretionary money while
+  //     the initiative allows it — never an envelope or a user budget;
+  //   - a scheduled firing of a non-essential bot, or of a bot that opted into
+  //     `enforce_allocation`, is discretionary spend nobody can confirm.
+  // A refused scheduled firing records a *skipped* bot_run (never a
+  // self-pause) and the next cycle re-evaluates once money frees.
   const orgProjectId = await resolveBotInitiativeId(bot);
+  const scheduled = opts.trigger !== 'manual';
   const held = await reserveSpend({
     initiativeId: orgProjectId, actorId: opts.dispatchedBy ?? null, source: 'bot_run',
     forecast: await botFireForecast(bot.model, bot.agentProjectId),
     ...(opts.confirmed ? { confirmed: opts.confirmed } : {}),
-    judge: opts.trigger === 'manual' || bot.enforceAllocation,
+    essential: scheduled && botIsEssential(bot) && !bot.enforceAllocation,
     expiresInMs: dispatchHoldTtlMs(),
   });
   if (held.kind !== 'held') {
-    if (opts.trigger === 'manual') return { ok: false, reason: held.reason, refusal: held };
+    if (!scheduled) return { ok: false, reason: held.reason, refusal: held };
     // Nobody is there to pass a confirm flag for a scheduled firing, so the
     // refusal is a visible skip, said as one.
-    const reason = `${opts.trigger} firing skipped while allocation enforcement is on for this bot: ${held.reason}`;
+    const reason = `${opts.trigger} firing skipped: ${held.reason}`;
     const run = await createBotRun({
       botId: bot.id, trigger: opts.trigger, status: 'skipped',
       dispatchedBy: opts.dispatchedBy ?? null,
-      outcome: { reason },
+      outcome: { reason, ...('gate' in held && held.gate ? { gate: held.gate } : {}) },
     });
     return { ok: false, reason, refusal: held, ...(run ? { run } : {}) };
   }

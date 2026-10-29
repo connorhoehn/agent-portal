@@ -834,12 +834,35 @@ export class MiddlewareServiceStack extends cdk.Stack {
     const ctxOn = (k: string) => { const v = this.node.tryGetContext(k); return v === true || v === 'true'; };
     const realtimeEnabled = ctxOn('realtimeGateway');
     const socialDeployed = ctxOn('deploySocial');
+
+    // ── More than one task needs a Redis (DE-47) ───────────────────────────
+    // Devbox claims, reservations, the activity clock, cross-replica tails and
+    // the reaper's leader lock (lib/replica-fleet.ts withLock) all live in
+    // Redis. Without one every task believes it is alone: each reaps from its
+    // own stale copy of the fleet (stopping a box another task is running a
+    // task on) and each dispatcher pushes jobs onto boxes the others are
+    // using. So autoscaling defaults on only when a Redis source exists
+    // (`realtimeRedisUrl`, or OrgIQ-Social's ElastiCache via `deploySocial`),
+    // and asking for it without one is refused, like the gateway safeguard.
+    const fleetRedisSource = ctxStr('realtimeRedisUrl') ? 'override' : socialDeployed ? 'social' : null;
+    const autoscaleRaw = this.node.tryGetContext('middlewareAutoscale');
+    const autoscale = autoscaleRaw === undefined || autoscaleRaw === null || autoscaleRaw === ''
+      ? !realtimeEnabled && fleetRedisSource !== null
+      : (autoscaleRaw === true || autoscaleRaw === 'true');
+    if (realtimeEnabled && autoscale) {
+      throw new Error('middlewareAutoscale=true with realtimeGateway=true violates the one-task realtime gateway safeguard. '
+        + 'Native Redis peer routing does not establish full application/service-state scale-out readiness.');
+    }
+    if (autoscale && !fleetRedisSource) {
+      throw new Error('middlewareAutoscale=true needs a Redis for shared fleet state and the reaper\'s leader lock (DE-47): '
+        + 'pass deploySocial=true (OrgIQ-Social\'s ElastiCache) or realtimeRedisUrl=redis://…, or middlewareAutoscale=false.');
+    }
     const platformHost = ctxStr('socialPlatformHost');
     const sfuHost = ctxStr('socialSfuHost');
     const realtime = {
       enabled: realtimeEnabled,
       redisUrlOverride: ctxStr('realtimeRedisUrl'),
-      redisFromSocial: realtimeEnabled && socialDeployed && !ctxStr('realtimeRedisUrl'),
+      redisFromSocial: (realtimeEnabled || autoscale) && socialDeployed && !ctxStr('realtimeRedisUrl'),
       socialChat: realtimeEnabled && socialDeployed,
       gatewayUrl: ctxStr('realtimeGatewayUrl'),
       // Browser-facing URLs: explicit context wins; otherwise derived from
@@ -982,7 +1005,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // The middleware as its own realtime gateway (docs/social-calls-plan.md
       // step 7) — see `realtime` above for why it is opt-in.
       ...(realtime.enabled && { REALTIME_GATEWAY: 'on' }),
-      ...(realtime.enabled && realtime.redisUrlOverride && { REDIS_URL: realtime.redisUrlOverride }),
+      ...((realtime.enabled || autoscale) && realtime.redisUrlOverride && { REDIS_URL: realtime.redisUrlOverride }),
       // Social chat on OrgIQ-Social's DynamoDB tables (middleware/src/lib/
       // social-chat.ts reads exactly these two names).
       ...(realtime.socialChat && {
@@ -1138,12 +1161,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
     };
     const taskCpu = ctxNum('middlewareCpu', realtimePinned ? 1024 : 512);
     const taskMemory = ctxNum('middlewareMemoryMiB', realtimePinned ? 2048 : 1024);
-    const autoscaleRaw = this.node.tryGetContext('middlewareAutoscale');
-    const autoscale = autoscaleRaw === undefined ? !realtimePinned : (autoscaleRaw === true || autoscaleRaw === 'true');
-    if (realtimePinned && autoscale) {
-      throw new Error('middlewareAutoscale=true with realtimeGateway=true violates the one-task realtime gateway safeguard. '
-        + 'Native Redis peer routing does not establish full application/service-state scale-out readiness.');
-    }
+    // `autoscale` was decided above, with the Redis rule (DE-47).
 
     // ── Fargate service via L2 pattern ─────────────────────────────────────
     // ApplicationLoadBalancedFargateService handles the ALB, target group,

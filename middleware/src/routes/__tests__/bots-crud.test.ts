@@ -352,7 +352,7 @@ describe('POST /api/bots/:id/run', () => {
     expect(m(fireBot).mock.calls[0]![1]).toEqual({
       trigger: 'manual', instruction: 'focus on the flaky test', dispatchedBy: 'u-nora',
       // The route's confirm flags ride down to fireBot's spend hold (DE-34).
-      confirmed: { allocation: false, envelope: false },
+      confirmed: { allocation: false, envelope: false, userBudget: false },
     });
   });
 

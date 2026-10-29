@@ -100,7 +100,11 @@ import { workDocumentsRouter } from './routes/work-documents.js';
 import { workGraphRouter } from './routes/work-graph.js';
 import { kbAdminRouter } from './routes/kb-admin.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
-import { devboxRouter } from './routes/devbox.js';
+import { devboxRouter, devboxReaperDeps } from './routes/devbox.js';
+import { startReaper } from './lib/devbox-reaper.js';
+import { replicaId } from './lib/replica-fleet.js';
+import { attachSharedFleet } from './lib/devbox-fleet.js';
+import { createRedisFleetBackend, sharedFleetMode } from './lib/devbox-fleet-shared.js';
 import { devboxProfilesRouter } from './routes/devbox-profiles.js';
 import { localComputeRouter } from './routes/local-compute.js';
 import { dropRouter } from './routes/drop.js';
@@ -110,6 +114,7 @@ import { agentProjectsRouter } from './routes/agent-projects.js';
 import { sdlcRouter } from './routes/sdlc.js';
 import { environmentsRouter } from './routes/environments.js';
 import { budgetsRouter } from './routes/budgets.js';
+import { userBudgetsRouter } from './routes/user-budgets.js';
 import { sprintsRouter } from './routes/sprints.js';
 import { grantsRouter } from './routes/grants.js';
 import { botsRouter } from './routes/bots.js';
@@ -403,6 +408,10 @@ app.use('/api/environments', requireTenant('orgiq'), requireSession('ViewEnviron
 // Budgets — initiative spend allocations. Gated per-route (reads open to
 // org-leader, writes require ManageBudgets).
 app.use('/api/budgets', requireTenant('orgiq'), budgetsRouter);
+// User budgets (DE-54) — a monthly allocation + hard cap per app user, enforced
+// in every spend hold. Reads like /api/budgets; writes ManageBudgets and never
+// on the caller's own row. See routes/user-budgets.ts.
+app.use('/api/user-budgets', requireTenant('orgiq'), userBudgetsRouter);
 // Sprints — the SME's own cadence (their work, their envelope, their dates).
 // Any signed-in orgiq session may read `scope=mine`; the org-wide `scope=all`
 // carries the same money the ledger gates and is checked inside the router.
@@ -554,14 +563,28 @@ initCrawlTargets();
 // the boxes back on the Computers page instead of showing an empty fleet while
 // the microVMs are still up.
 //
-// Fire-and-forget, and deliberately not awaited: `routes/devbox.ts` starts the
-// reaper at import time, but its first sweep is a full interval away, so the
+// Fire-and-forget, and deliberately not awaited: the reaper (started below)
+// has its first sweep a full interval away, so the
 // load lands first in practice — and an Aurora that is slow, mocked, or
 // missing the table must not delay the listen() below or fail the boot.
 // The compute registry adopts shared registrations and publishes this
 // replica's fleet, so it runs after the fleet's own hydration settles.
 const fleetLoad = initFleetPersistence();
 const fleetInitialization = (mockRestartSnapshot() ? fleetLoad : fleetLoad.catch(() => 0)).then(() => initComputeRegistry());
+// Fleet state shared across replicas (DE-47): claims, reservations, the
+// activity clock and tails through Redis when there is one; nothing changes
+// for a single process. Attached after hydration so this replica publishes
+// what it restored without overwriting a sibling's newer record.
+void fleetLoad.catch(() => 0).then(() => {
+  const shared = sharedFleetMode(process.env, config.mock.aurora);
+  if (shared.mode === 'redis' && shared.url) {
+    attachSharedFleet(createRedisFleetBackend({ url: shared.url }), { replicaId: replicaId() });
+  }
+  console.warn(`[devbox-fleet] shared state ${shared.mode} (${shared.why})`);
+});
+// Idle, lifetime and overrun enforcement for devboxes, leader-elected across
+// replicas (DE-47). Its first sweep is an interval away, after the load above.
+startReaper(devboxReaperDeps());
 // Cloud boxes/jobs and paired local-machine sessions now emit only through the
 // authenticated platform ingestion boundary. The producer stays inert unless
 // its server-owned org/credential configuration is complete.

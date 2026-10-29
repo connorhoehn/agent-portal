@@ -203,6 +203,24 @@
       "why": "Spend holds (DE-34): the forecast held at dispatch under an advisory lock, settled by the ledger entry for the same attempt. FKs projects and budget_grants like the ledger, so it loads after spend_ledger_schema.sql."
     },
     {
+      "id": "user_budgets_schema",
+      "file": "user_budgets_schema.sql",
+      "kind": "repeatable",
+      "why": "User budgets (DE-54): one monthly allocation + optional hard cap per app user, burn derived from spend_entries.actor_id. FKs app_users and relaxes spend_holds.initiative_id, so it loads after spend_holds_schema.sql."
+    },
+    {
+      "id": "budget_hard_caps_schema",
+      "file": "budget_hard_caps_schema.sql",
+      "kind": "repeatable",
+      "why": "Hard caps (DE-36): hard_cap_usd on initiative_budgets and budget_grants. ALTERs tables agent_budgets_schema.sql and program_schema.sql create, so it loads after both."
+    },
+    {
+      "id": "maintenance_reserve_schema",
+      "file": "maintenance_reserve_schema.sql",
+      "kind": "repeatable",
+      "why": "Maintenance reserve (DE-55, folds DE-39): initiative_budgets.maintenance_reserve_usd/allow_floor_spill, bots.essential, spend_holds.essential. ALTERs bots, initiative_budgets and spend_holds, so it loads after spend_holds_schema.sql."
+    },
+    {
       "id": "assessment_schema",
       "file": "assessment_schema.sql",
       "kind": "repeatable",

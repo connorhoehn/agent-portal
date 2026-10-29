@@ -217,6 +217,8 @@ describe('unknown cost trips a brake only where someone can confirm it (DE-33)',
 
   it('a real overrun still refuses a box task, unknown cost or not', async () => {
     setAllocation(OBS, 0.01);
+    // A stored cap far above it: the soft brake, not DE-36's cap, is under test here.
+    initiativeBudgets.rows().find((r) => r.id === OBS)!.hardCapUsd = 1_000;
     jest.spyOn(budgetsProvider, 'unknownCostCountInPeriod').mockResolvedValue(2);
     const out = await box(5);
     expect(out).toMatchObject({ kind: 'confirm', gate: 'allocation' });

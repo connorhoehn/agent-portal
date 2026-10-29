@@ -18,6 +18,7 @@
 
 import { parseReportedCost, parseResultUsage } from './run-cost.js';
 import { estimateUsageCost } from './pricing.js';
+import type { FleetSharedBackend } from './devbox-fleet-shared.js';
 
 /**
  * `provisioning` — the box is minted in the registry but its microVM is not up
@@ -150,6 +151,14 @@ interface BoxState {
    * keeps climbing. A high-water mark, not a running total: context is a level.
    */
   contextTokens: number;
+  /**
+   * When this process last changed the box's structure (status, label, task
+   * clock), epoch ms. Compared with the shared record's `stateAt` (DE-47) so a
+   * refresh adopts another replica's newer status and never an older one.
+   */
+  stateAt: number;
+  /** Unsubscribe from the box's cross-replica event channel, while tailed. */
+  remoteTail?: Promise<(() => Promise<void>) | null>;
 }
 
 import { mockRestartMirror } from '../mock/restart-state.js';
@@ -258,6 +267,7 @@ export function hydrateBoxes(rows: readonly FleetBox[]): number {
       subscribers: new Set(),
       lastResultText: '',
       contextTokens: 0,
+      stateAt: 0,
     });
     bySession.set(box.sessionId, box.id);
     // A persisted box did not pass through registerBox in this process. Let
@@ -343,9 +353,9 @@ export function registerBox(opts: {
     status: opts.status ?? 'idle',
     lastActivityAt: now(),
   };
-  boxes.set(id, { box, events: [], subscribers: new Set(), lastResultText: '', contextTokens: 0 });
+  boxes.set(id, { box, events: [], subscribers: new Set(), lastResultText: '', contextTokens: 0, stateAt: 0 });
   bySession.set(opts.sessionId, id);
-  tellStores((s) => s.upsert(box));
+  structural(boxes.get(id)!);
   emitLifecycle('created', box);
   return box;
 }
@@ -368,7 +378,7 @@ export function renameBox(id: string, label: string): FleetBox | null {
   const s = boxes.get(id);
   if (!s) return null;
   s.box.label = label;
-  tellStores((t) => t.upsert(s.box));
+  structural(s);
   return s.box;
 }
 
@@ -384,7 +394,7 @@ export function setBoxProfile(id: string, profile: { id: string; version: number
   if (s.box.profileId && s.box.profileVersion) return { id: s.box.profileId, version: s.box.profileVersion };
   s.box.profileId = profile.id;
   s.box.profileVersion = profile.version;
-  tellStores((t) => t.upsert(s.box));
+  structural(s);
   return { ...profile };
 }
 
@@ -393,7 +403,8 @@ export function markStopped(id: string): void {
   if (!s) return;
   s.box.status = 'stopped';
   s.box.lastActivityAt = now();
-  tellStores((t) => t.upsert(s.box));
+  structural(s);
+  if (shared) releaseBox(id, taskHolder());
   emitLifecycle('updated', s.box);
 }
 
@@ -427,6 +438,8 @@ export function removeBox(id: string): boolean {
   bySession.delete(s.box.sessionId);
   boxes.delete(id);
   tellStores((t) => t.remove(id));
+  endRemoteTail(s);
+  sharedWrite((b) => b.removeBox(id));
   return true;
 }
 
@@ -455,7 +468,12 @@ export function subscribe(id: string, cb: (ev: FleetEvent) => void): () => void 
   const s = boxes.get(id);
   if (!s) return () => {};
   s.subscribers.add(cb);
-  return () => { s.subscribers.delete(cb); };
+  // A tail here must also see a run another replica is executing (DE-47).
+  if (shared && !s.remoteTail) startRemoteTail(id, s);
+  return () => {
+    s.subscribers.delete(cb);
+    if (s.subscribers.size === 0) endRemoteTail(s);
+  };
 }
 
 /**
@@ -541,6 +559,7 @@ export function appendEvent(id: string, ev: FleetEvent): void {
   // Every event moves the idle clock, so this is the hot path — the store is
   // responsible for throttling, not the caller.
   tellStores((t) => t.touch(s.box));
+  sharedTouch(id);
 
   const type = ev['type'];
 
@@ -583,13 +602,18 @@ export function appendEvent(id: string, ev: FleetEvent): void {
     // than coalesced — a crash between here and the next flush would leave a
     // running box with no start on its row.
     s.box.taskStartedAt = now();
-    tellStores((t) => t.upsert(s.box));
     s.box.currentTask = String(ev['prompt'] ?? '').slice(0, TASK_SNIPPET_LEN);
     s.lastResultText = '';
     // A new task is a new conversation from the model's point of view, even
     // though lifetime spend/tokensUsed on the box keep climbing across tasks.
     s.contextTokens = 0;
     s.box.contextUsed = 0;
+    structural(s);
+    // A run in flight is a hold every replica can see (DE-47): another
+    // replica's dispatcher, whose copy of this box may still read idle, must
+    // not push a job onto it. Only with shared state; one process already
+    // knows the box is running.
+    if (shared) reserveBox(id, taskHolder());
   } else if (type === 'result') {
     // One parser for the reported cost, shared with `lib/devbox-runner.ts`,
     // which reads the same event on the durable path. This was independently
@@ -618,18 +642,27 @@ export function appendEvent(id: string, ev: FleetEvent): void {
     if (s.box.status === 'running') {
       s.box.status = s.lastResultText.trimEnd().endsWith('?') ? 'waiting' : 'idle';
     }
+    if (shared) releaseBox(id, taskHolder());
   } else if (type === 'devbox_error') {
     s.box.status = 'error';
+    if (shared) releaseBox(id, taskHolder());
   }
 
-  if (s.box.status !== priorStatus) emitLifecycle('updated', s.box);
+  if (s.box.status !== priorStatus) {
+    // A status another replica must see (idle after a run, error) is
+    // structural for the shared record, though the Aurora mirror keeps
+    // coalescing it as it always has. task_started was written above.
+    if (type !== 'task_started') shareState(s);
+    emitLifecycle('updated', s.box);
+  }
 
   for (const cb of s.subscribers) {
     try { cb(ev); } catch { /* one bad subscriber must not break the fan-out */ }
   }
+  sharedWrite((b) => b.publish(id, JSON.stringify({ origin: shared!.replicaId, ev })));
 }
 
-// ─── Reservations ────────────────────────────────────────────────────────────
+// ─── Reservations and claims ─────────────────────────────────────────────────
 //
 // Status says what a box is DOING; it cannot say who is still counting on it.
 // A governed run waiting on its operator reads `waiting`, and the box a run
@@ -639,32 +672,323 @@ export function appendEvent(id: string, ev: FleetEvent): void {
 // missing fact: a holder names the box as theirs until it releases it, and
 // every claimer asks `isReserved` before taking one. Several holders may hold
 // one box; it is free when the last lets go.
+//
+// A CLAIM (`claimBox`) is the exclusive form the dispatcher takes before it
+// pushes a job: it succeeds only when nobody else holds the box. With shared
+// state attached (DE-47) both live in the shared store too, with an expiry
+// this process renews, so a dispatcher on another replica sees them and a
+// dead replica's holds lapse on their own. Without shared state they are this
+// process's Map, exactly as before.
 
-const reservations = new Map<string, Set<string>>(); // boxId → holders
+const reservations = new Map<string, Set<string>>(); // boxId → holders (this process)
+/** Holders other processes hold, per box, as of the last shared refresh. */
+let remoteHolds = new Map<string, string[]>();
 
-export function reserveBox(id: string, holder: string): void {
+function addLocalHold(id: string, holder: string): void {
   let holders = reservations.get(id);
   if (!holders) { holders = new Set(); reservations.set(id, holders); }
   holders.add(holder);
 }
 
-export function releaseBox(id: string, holder: string): void {
-  const holders = reservations.get(id);
-  if (!holders) return;
-  holders.delete(holder);
-  if (holders.size === 0) reservations.delete(id);
+export function reserveBox(id: string, holder: string): void {
+  addLocalHold(id, holder);
+  sharedWrite((b) => b.hold(id, holder, shared!.holdTtlMs, false).then(() => undefined));
 }
 
-/** Whether anyone holds this box — claimers must leave it alone. */
+export function releaseBox(id: string, holder: string): void {
+  const holders = reservations.get(id);
+  if (holders) {
+    holders.delete(holder);
+    if (holders.size === 0) reservations.delete(id);
+  }
+  const remote = remoteHolds.get(id);
+  if (remote?.includes(holder)) {
+    const rest = remote.filter((h) => h !== holder);
+    if (rest.length) remoteHolds.set(id, rest); else remoteHolds.delete(id);
+  }
+  sharedWrite((b) => b.release(id, holder));
+}
+
+/**
+ * Whether anyone holds this box — claimers must leave it alone. Synchronous:
+ * other replicas' holds are as fresh as the last `refreshSharedHolds`, which
+ * the dispatcher runs every tick and the reaper every sweep.
+ */
 export function isReserved(id: string): boolean {
-  return (reservations.get(id)?.size ?? 0) > 0;
+  return (reservations.get(id)?.size ?? 0) > 0 || (remoteHolds.get(id)?.length ?? 0) > 0;
+}
+
+/**
+ * Take the box exclusively for `holder`, or say no. No when anyone else holds
+ * it here; with shared state, also when anyone holds it elsewhere — and when
+ * the shared store cannot answer, because pushing work onto a box another
+ * replica may be using is the failure this exists to stop (fail closed).
+ */
+export async function claimBox(id: string, holder: string): Promise<boolean> {
+  const mine = reservations.get(id);
+  if (mine && [...mine].some((h) => h !== holder)) return false;
+  addLocalHold(id, holder);
+  if (!shared) return true;
+  let ok = false;
+  try {
+    ok = await shared.backend.hold(id, holder, shared.holdTtlMs, true);
+  } catch (err) {
+    sharedFailed(err);
+  }
+  if (!ok) {
+    const holders = reservations.get(id);
+    holders?.delete(holder);
+    if (holders && holders.size === 0) reservations.delete(id);
+  }
+  return ok;
+}
+
+/** Holders this process holds, per box (for a UI that shows who is busy). */
+export function localHolds(): Map<string, string[]> {
+  return new Map([...reservations].map(([id, h]) => [id, [...h]]));
+}
+
+/** Holders on every replica, per box, as of the last refresh. */
+export function allHolds(): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const [id, h] of reservations) out.set(id, [...h]);
+  for (const [id, h] of remoteHolds) out.set(id, [...new Set([...(out.get(id) ?? []), ...h])]);
+  return out;
+}
+
+/** Re-read other replicas' holds for `ids` (default: every known box). Throws when the store cannot answer. */
+export async function refreshSharedHolds(ids: readonly string[] = [...boxes.keys()]): Promise<void> {
+  if (!shared) return;
+  const read = await shared.backend.holders(ids);
+  const next = new Map(remoteHolds);
+  for (const id of ids) {
+    const mine = reservations.get(id);
+    const theirs = (read.get(id) ?? []).filter((h) => !mine?.has(h));
+    if (theirs.length) next.set(id, theirs); else next.delete(id);
+  }
+  remoteHolds = next;
+}
+
+// ─── Shared state across replicas (DE-47) ────────────────────────────────────
+
+interface SharedAttachment {
+  backend: FleetSharedBackend;
+  replicaId: string;
+  holdTtlMs: number;
+  touchFlushMs: number;
+  pendingTouch: Map<string, number>;
+  touchTimer: NodeJS.Timeout | null;
+  renewTimer: NodeJS.Timeout | null;
+}
+
+let shared: SharedAttachment | null = null;
+
+/** The hold a run in flight on this replica takes on its box. */
+const taskHolder = (): string => `task:${shared?.replicaId ?? 'local'}`;
+let lastSharedWarning = 0;
+
+function sharedFailed(err: unknown): void {
+  // Loud enough to see, quiet enough not to flood: a Redis outage would
+  // otherwise log once per fleet event.
+  if (Date.now() - lastSharedWarning < 60_000) return;
+  lastSharedWarning = Date.now();
+  console.warn('[devbox-fleet] shared state write failed:', (err as Error)?.message ?? String(err));
+}
+
+/** Fire-and-forget write to the shared store; a no-op without one. */
+function sharedWrite(op: (b: FleetSharedBackend) => Promise<unknown>): void {
+  if (!shared) return;
+  try { void op(shared.backend).catch(sharedFailed); } catch (err) { sharedFailed(err); }
+}
+
+/** Publish this box's structural snapshot to the other replicas. */
+function shareState(s: BoxState): void {
+  s.stateAt = Math.max(Date.now(), s.stateAt + 1);
+  if (!shared) return;
+  const rec = { box: { ...s.box }, stateAt: s.stateAt, origin: shared.replicaId };
+  sharedWrite((b) => b.putBox(rec));
+}
+
+/** A structural change: written through to every mirror and to the shared record. */
+function structural(s: BoxState): void {
+  tellStores((t) => t.upsert(s.box));
+  shareState(s);
+}
+
+function flushSharedTouches(): void {
+  if (!shared || shared.pendingTouch.size === 0) return;
+  const batch = [...shared.pendingTouch];
+  shared.pendingTouch.clear();
+  for (const [id, ms] of batch) sharedWrite((b) => b.touch(id, ms));
+}
+
+/**
+ * The activity clock, coalesced like the Aurora mirror's touch: every event
+ * calls this, and a write per event would be a storm. Staleness is bounded by
+ * the flush interval, which is small against any idle timeout.
+ */
+function sharedTouch(id: string): void {
+  if (!shared) return;
+  const s = boxes.get(id);
+  if (!s) return;
+  const ms = Date.parse(s.box.lastActivityAt) || Date.now();
+  if (shared.touchFlushMs <= 0) { sharedWrite((b) => b.touch(id, ms)); return; }
+  shared.pendingTouch.set(id, ms);
+}
+
+/** Another replica's event: into the buffer and to the tails, never through the status machine. */
+function ingestRemoteEvent(id: string, message: string): void {
+  if (!shared) return;
+  let parsed: { origin?: unknown; ev?: unknown };
+  try { parsed = JSON.parse(message) as typeof parsed; } catch { return; }
+  if (parsed.origin === shared.replicaId || !parsed.ev || typeof parsed.ev !== 'object') return;
+  const s = boxes.get(id);
+  if (!s) return;
+  const ev = parsed.ev as FleetEvent;
+  s.events.push(ev);
+  if (s.events.length > EVENT_BUFFER_CAP) s.events.shift();
+  // Activity seen is activity: the idle clock moves here too, without a write
+  // (the replica running the task owns the shared clock).
+  s.box.lastActivityAt = now();
+  for (const cb of s.subscribers) {
+    try { cb(ev); } catch { /* one bad subscriber must not break the fan-out */ }
+  }
+}
+
+function startRemoteTail(id: string, s: BoxState): void {
+  if (!shared) return;
+  const backend = shared.backend;
+  s.remoteTail = backend.subscribe(id, (m) => ingestRemoteEvent(id, m)).catch((err) => {
+    sharedFailed(err);
+    return null;
+  });
+}
+
+function endRemoteTail(s: BoxState): void {
+  const pending = s.remoteTail;
+  if (!pending) return;
+  s.remoteTail = undefined;
+  void pending.then((off) => off?.()).catch(() => undefined);
+}
+
+/**
+ * Bring this process's view up to the shared truth (DE-47). For every shared
+ * record: an unknown box is hydrated; a known one takes the newer activity
+ * clock, and the other replica's status, task clock and label when its
+ * snapshot is newer than ours. A box stopped elsewhere is stopped here. Then
+ * other replicas' holds are re-read.
+ *
+ * Throws when the shared store cannot answer: a caller deciding something
+ * irreversible (the reaper) must skip rather than act on a stale local view.
+ * A no-op without shared state — one process is its own truth.
+ */
+export async function refreshFromShared(): Promise<void> {
+  if (!shared) return;
+  const records = await shared.backend.readAll();
+  for (const rec of records) {
+    const s = boxes.get(rec.box.id);
+    const sharedAct = Math.max(rec.activityMs, Date.parse(rec.box.lastActivityAt) || 0);
+    if (!s) {
+      if (rec.box.status === 'stopped') continue;
+      hydrateBoxes([{ ...rec.box, lastActivityAt: new Date(sharedAct || Date.now()).toISOString() }]);
+      const hydrated = boxes.get(rec.box.id);
+      if (hydrated) hydrated.stateAt = rec.stateAt;
+      continue;
+    }
+    const prior = s.box.status;
+    if (rec.stateAt > s.stateAt) {
+      s.box.status = rec.box.status;
+      s.box.label = rec.box.label;
+      if (rec.box.taskStartedAt) s.box.taskStartedAt = rec.box.taskStartedAt;
+      if (rec.box.currentTask !== undefined) s.box.currentTask = rec.box.currentTask;
+      if (rec.box.profileId && !s.box.profileId) {
+        s.box.profileId = rec.box.profileId;
+        s.box.profileVersion = rec.box.profileVersion;
+      }
+      s.stateAt = rec.stateAt;
+    } else if (rec.box.status === 'stopped' && s.box.status !== 'stopped') {
+      // Stopped is terminal for the session, whoever's snapshot is newer.
+      s.box.status = 'stopped';
+    }
+    const localAct = Date.parse(s.box.lastActivityAt) || 0;
+    if (sharedAct > localAct) s.box.lastActivityAt = new Date(sharedAct).toISOString();
+    if (s.box.status !== prior) emitLifecycle('updated', s.box);
+  }
+  await refreshSharedHolds();
+}
+
+export interface SharedFleetOptions {
+  /** This replica's identity (lib/replica-fleet.ts replicaId()). */
+  replicaId: string;
+  /** How long a hold lives without renewal. Default DEVBOX_HOLD_TTL_MS or 10 min. */
+  holdTtlMs?: number;
+  /** Activity flush interval; 0 writes through. Default DEVBOX_SHARED_TOUCH_MS or 5 s. */
+  touchFlushMs?: number;
+}
+
+/**
+ * Attach (or with null, detach) the cross-replica store. On attach this
+ * process publishes what it already knows — without overwriting a newer
+ * record another replica wrote — and starts renewing its holds.
+ */
+export function attachSharedFleet(backend: FleetSharedBackend | null, opts?: SharedFleetOptions): void {
+  if (shared) {
+    flushSharedTouches();
+    if (shared.touchTimer) clearInterval(shared.touchTimer);
+    if (shared.renewTimer) clearInterval(shared.renewTimer);
+    for (const s of boxes.values()) endRemoteTail(s);
+    shared = null;
+    remoteHolds = new Map();
+  }
+  if (!backend || !opts) return;
+  const envNum = (k: string, d: number) => { const n = Number(process.env[k]); return Number.isFinite(n) && n >= 0 ? n : d; };
+  const holdTtlMs = Math.max(1_000, opts.holdTtlMs ?? envNum('DEVBOX_HOLD_TTL_MS', 600_000));
+  const touchFlushMs = opts.touchFlushMs ?? envNum('DEVBOX_SHARED_TOUCH_MS', 5_000);
+  const att: SharedAttachment = {
+    backend, replicaId: opts.replicaId, holdTtlMs, touchFlushMs,
+    pendingTouch: new Map(), touchTimer: null, renewTimer: null,
+  };
+  shared = att;
+  if (touchFlushMs > 0) {
+    att.touchTimer = setInterval(flushSharedTouches, touchFlushMs);
+    att.touchTimer.unref?.();
+  }
+  // Renew every hold this process holds well inside its expiry.
+  att.renewTimer = setInterval(() => {
+    for (const [id, holders] of reservations) {
+      for (const h of holders) sharedWrite((b) => b.hold(id, h, holdTtlMs, false));
+    }
+  }, Math.max(500, Math.floor(holdTtlMs / 3)));
+  att.renewTimer.unref?.();
+  for (const s of boxes.values()) {
+    // stateAt 0 for a box only hydrated here: any snapshot another replica
+    // wrote is newer, so this never clobbers it.
+    const rec = { box: { ...s.box }, stateAt: s.stateAt, origin: att.replicaId };
+    sharedWrite((b) => b.putBox(rec));
+    if (s.subscribers.size && !s.remoteTail) startRemoteTail(s.box.id, s);
+  }
+  for (const [id, holders] of reservations) {
+    for (const h of holders) sharedWrite((b) => b.hold(id, h, holdTtlMs, false));
+  }
+}
+
+/** Whether shared state is attached, and which kind. */
+export function sharedFleetKind(): FleetSharedBackend['kind'] | null {
+  return shared?.backend.kind ?? null;
+}
+
+/** Test/ops hook — write any coalesced activity now. */
+export function flushSharedFleet(): void {
+  flushSharedTouches();
 }
 
 /** Test hook — wipe all fleet state. */
 export function _resetFleet(): void {
+  attachSharedFleet(null);
   boxes.clear();
   bySession.clear();
   reservations.clear();
+  remoteHolds = new Map();
   store = null;
   lifecycleSubscribers.clear();
 }

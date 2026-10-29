@@ -51,6 +51,8 @@ export interface CreateGrantInput {
   amountUsd: number;
   grantedBy?: string | null;
   note?: string | null;
+  /** DE-36: null/absent = the deployment default (allocated x BUDGET_HARD_CAP_FACTOR). */
+  hardCapUsd?: number | null;
 }
 
 // ─── Mock overlay (config.mock.aurora === true) ──────────────────────────────
@@ -104,6 +106,7 @@ async function mockGrantRowFor(input: CreateGrantInput, id: string): Promise<Gra
     allocatedUsd: input.amountUsd,
     grantedBy: input.grantedBy ?? null,
     note: input.note ?? null,
+    hardCapUsd: input.hardCapUsd ?? null,
   });
 }
 
@@ -143,11 +146,13 @@ export async function createGrant(input: CreateGrantInput): Promise<GrantRow> {
     setMockGrant(id, row);
     return row;
   }
+  const withCap = input.hardCapUsd != null;
   const rows = await exec(
-    `INSERT INTO budget_grants (org_project_id, sprint_id, grantee_person_id, allocated_usd, granted_by, note)
-     VALUES (:pid, :sprint, :grantee, :amt, :by, :note)
+    `INSERT INTO budget_grants (org_project_id, sprint_id, grantee_person_id, allocated_usd, granted_by, note${withCap ? ', hard_cap_usd' : ''})
+     VALUES (:pid, :sprint, :grantee, :amt, :by, :note${withCap ? ', :cap' : ''})
      RETURNING id`,
     [
+      ...(withCap ? [num('cap', input.hardCapUsd!)] : []),
       s('pid', input.orgProjectId),
       maybe('sprint', input.sprintId),
       s('grantee', input.granteePersonId),
@@ -171,6 +176,8 @@ export async function createGrant(input: CreateGrantInput): Promise<GrantRow> {
 export interface UpdateGrantInput {
   amountUsd?: number;
   note?: string | null;
+  /** DE-36: undefined = leave alone; null = back to the default. */
+  hardCapUsd?: number | null;
 }
 
 /**
@@ -189,7 +196,8 @@ export interface UpdateGrantInput {
 export async function updateGrant(id: string, patch: UpdateGrantInput): Promise<GrantRow | null> {
   const setAmount = patch.amountUsd !== undefined;
   const setNote = patch.note !== undefined;
-  if (!setAmount && !setNote) return getGrant(id);
+  const setCap = patch.hardCapUsd !== undefined;
+  if (!setAmount && !setNote && !setCap) return getGrant(id);
 
   if (config.mock.aurora) {
     const current = mergedMockGrants().find((g) => g.id === id);
@@ -202,6 +210,7 @@ export async function updateGrant(id: string, patch: UpdateGrantInput): Promise<
       // Mirrors the real SET clause: only a provided field is written, so a
       // note-only patch leaves the amount alone and vice versa.
       ...(setNote ? { note: patch.note ?? null } : {}),
+      ...(setCap ? { hardCapUsd: patch.hardCapUsd ?? null } : {}),
     });
     setMockGrant(id, updated);
     return updated;
@@ -211,6 +220,10 @@ export async function updateGrant(id: string, patch: UpdateGrantInput): Promise<
   const params: SqlParameter[] = [];
   if (setAmount) { sets.push('allocated_usd = :amt'); params.push(num('amt', patch.amountUsd!)); }
   if (setNote) { sets.push('note = :note'); params.push(maybe('note', patch.note)); }
+  if (setCap) {
+    sets.push('hard_cap_usd = :cap::numeric');
+    params.push(patch.hardCapUsd == null ? nul('cap') : num('cap', patch.hardCapUsd));
+  }
   sets.push('updated_at = NOW()');
   params.push(s('id', id));
 

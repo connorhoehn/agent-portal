@@ -19,6 +19,7 @@ import {
   listRecentRunsForProjects, getRunProjectId,
 } from '../providers/agent-projects.js';
 import { dispatchGovernedRun } from '../lib/sdlc-pipeline.js';
+import { spendRefusalResponse } from '../lib/spend-refusal.js';
 
 export const agentProjectsRouter: Router = Router();
 
@@ -174,17 +175,12 @@ agentProjectsRouter.post('/:id/runs', writeGate, asyncHandler(async (req, res) =
     }
     // A money refusal (DE-34) is the same 409 / 403 / 503 the dispatch route
     // answers; anything else is the runtime's 503.
-    const r = started.refusal;
-    if (r?.kind === 'confirm') {
-      res.status(409).json({
-        error: r.reason, gate: r.gate, confirmFlag: r.confirmFlag, confidence: r.confidence,
-        ...(r.allocation ? { allocation: r.allocation } : {}),
-        ...(r.envelope ? { envelope: r.envelope } : {}),
-      });
+    if (started.refusal) {
+      const r = spendRefusalResponse(started.refusal);
+      res.status(r.status).json(r.body);
       return;
     }
-    if (r?.kind === 'refused') { res.status(403).json({ error: started.error, gate: 'spend-hold' }); return; }
-    res.status(503).json({ error: started.error, ...(r ? { gate: 'spend-hold' } : {}) });
+    res.status(503).json({ error: started.error });
     return;
   }
 

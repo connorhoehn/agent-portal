@@ -92,6 +92,9 @@ export interface Bot {
    *  monthly allocation is skipped (decideBotFireAllocation). False preserves
    *  the documented design where a bot's spend is the maintenance floor. */
   enforceAllocation: boolean;
+  /** DE-55: is this bot necessary (the maintenance floor)? The stored override;
+   *  null/absent = by trigger (cron is essential). Read through botIsEssential. */
+  essential?: boolean | null;
   createdBy: string | null;
   createdAt: string;
   lastRunAt: string | null;
@@ -152,6 +155,8 @@ function rowToBot(r: Record<string, unknown>): Bot {
     // Absent on a pre-migration cluster (SELECT * has no such key) → false, the
     // column's own default, so the brake stays off until it is really set.
     enforceAllocation: toBool(r['enforce_allocation']),
+    // Absent before maintenance_reserve_schema.sql; null = by trigger.
+    essential: r['essential'] == null ? null : toBool(r['essential']),
     createdBy: r['created_by'] ? toStr(r['created_by']) : null,
     createdAt: toStr(r['created_at']),
     lastRunAt: r['last_run_at'] ? toStr(r['last_run_at']) : null,
@@ -558,6 +563,32 @@ export async function listBotsResult(): Promise<Upstream<Bot[]>> {
  *  boot and has no response to mark) and for the parity harness. */
 export async function listBots(): Promise<Bot[]> {
   return (await listBotsResult()).items;
+}
+
+/** COALESCE(bots.essential, bots.trigger = 'cron'): whether a bot's scheduled firings are floor spend (DE-55). */
+export function botIsEssential(bot: Pick<Bot, 'trigger'> & { essential?: boolean | null }): boolean {
+  return bot.essential ?? bot.trigger === 'cron';
+}
+
+/**
+ * Mark a bot essential (or not; null = back to "by trigger"). The route gates
+ * it on ManageBudgets: which spend is funded first is a money decision, not a
+ * bot author's. Null when the bot does not exist.
+ */
+export async function setBotEssential(id: string, essential: boolean | null): Promise<Bot | null> {
+  if (config.mock.aurora) {
+    const bot = MOCK_BOTS.find((b) => b.id === id);
+    if (!bot) return null;
+    bot.essential = essential;
+    return bot;
+  }
+  if (!isUuid(id)) return null;
+  const rows = await exec(
+    `UPDATE bots SET essential = :e, updated_at = NOW() WHERE id = :id::uuid RETURNING id`,
+    [s('id', id), essential == null ? { name: 'e', value: { isNull: true } } : { name: 'e', value: { booleanValue: essential } }],
+  );
+  if (!rows[0]) return null;
+  return getBot(id);
 }
 
 export async function getBot(id: string): Promise<Bot | null> {

@@ -7,10 +7,20 @@ const fleet = { createdAt: new Date().toISOString() };
 jest.mock('../devbox-fleet.js', () => ({
   listBoxes: () => [{ id: 'box', sessionId: 'session', status: 'idle', createdAt: fleet.createdAt }],
   appendEvent: jest.fn(), getBox: () => ({ id: 'box' }), registerBox: jest.fn(), isReserved: () => false,
+  // The box claim (DE-47): this process's claim, released when the attempt ends.
+  ...(() => {
+    const held = new Set<string>();
+    return {
+      claimBox: jest.fn(async (id: string) => { if (held.has(id)) return false; held.add(id); return true; }),
+      releaseBox: jest.fn((id: string) => { held.delete(id); }),
+      refreshFromShared: jest.fn(async () => undefined),
+      allHolds: () => new Map([...held].map((id) => [id, ['dispatcher:r-test']])),
+    };
+  })(),
 }));
 // Per-box profile policies (DE-40): none resolved → the deployment default.
 jest.mock('../devbox-profile.js', () => ({ lifetimePoliciesFor: jest.fn(async () => new Map()) }));
-jest.mock('../replica-fleet.js', () => ({ replicaFleet: jest.fn() }));
+jest.mock('../replica-fleet.js', () => ({ replicaFleet: jest.fn(), replicaId: () => 'r-test' }));
 jest.mock('../../routes/devbox.js', () => ({ runDevboxTask: jest.fn() }));
 jest.mock('../run-brief.js', () => ({ freezeJobBrief: jest.fn(async () => null) }));
 jest.mock('../../providers/spend-ledger.js', () => ({

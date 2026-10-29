@@ -40,8 +40,8 @@ Rules for whoever continues:
 | 4 | DE-31 box spend rollup | box `spendUsd` lands in the ledger under its project and owner | done: ledger-backed box spend (`GET /api/devbox/boxes`), `GET /api/me/spend`; mock box `spendUsd` literals removed. Not built: the release manager's per-person view |
 | 5 | DE-34 spend holds | reserve the p75 forecast at dispatch against allocation and envelope; settle on finish | done: one `reserveSpend` before dispatch-work, fireBot, the job dispatcher, box tasks and governed runs; settle in the ledger transaction; ceiling insert under an advisory lock |
 | 6 | DE-35 mid-run cutoff | a run crossing its reserved ceiling is stopped with a recorded reason | |
-| 7 | DE-36 hard caps | non-overridable cap per initiative and grant; unreadable budget state fails closed | |
-| 8 | DE-39 bot-fire allocation brake | cron firings pass the allocation check | |
+| 7 | DE-36 hard caps | non-overridable cap per initiative and grant; unreadable budget state fails closed | done (2026-10-29): non-overridable caps per initiative, grant and user before the soft brakes; fail closed in production (`BUDGET_FAIL_CLOSED`); one refusal renderer `lib/spend-refusal.ts` |
+| 8 | DE-39 bot-fire allocation brake | cron firings pass the allocation check | done, folded into DE-55 (maintenance reserve): essential bots judged against the reserve, then spill |
 | 9 | DE-37 run limits | per-initiative/tenant concurrency, runs/day, $/hour | |
 | 10 | DE-38 budget periods | sprint-aligned and rolling windows, carry-over rules | |
 | 11 | DE-50 kill switches and alerts | fleet and initiative pause; threshold/stuck-run/reaper alerts as events (CloudWatch alarm half synth-tested) | |
@@ -51,7 +51,7 @@ Rules for whoever continues:
 | 15 | DE-42 Cedar box actions | split `ManageDevbox` into shell/task/delivery/policy-edit with initiative attributes | done; reviewed 2026-10-29 (defaults below); portal re-pointed off `ManageDevbox` |
 | 16 | DE-43 separation of duties | author cannot decide own change; gated users cannot edit their own gate | done; reviewed 2026-10-29 (defaults below) |
 | 17 | DE-46 SDLC policy versioned | defaults as versioned per-initiative policy with an audit trail | done; reviewed 2026-10-29 (defaults below) |
-| 18 | DE-47 fleet state across replicas | busy flags, reservations, buffers in Redis/Aurora; leader-elected reaper (local Redis) | |
+| 18 | DE-47 fleet state across replicas | busy flags, reservations, buffers in Redis/Aurora; leader-elected reaper (local Redis) | done: shared box state, claims, holds and tails in Redis; leader-locked reaper; dev:mock stays single-process |
 | 19 | DE-45 credentials out of shell | token never in a command string on the BFF side; per-run token provider interface (GitHub App half needs the image) | done locally: token provider interface (`github-app`, `pat`, `local`), audit rows, token only in the git child env; real runtime path off until the image rebuild (`docs/github-app-tokens-runbook.md`) |
 | 20 | DE-28 bug-class lint | lint for partial secret ARNs, uuid binds as text, second CommonJS editor stack | done |
 | 21 | DE-20 schema migrations | migration ledger with dry-run, tested against local Postgres | done |
@@ -61,12 +61,29 @@ Rules for whoever continues:
 | 25 | DE-8 memory config | per-tenant memory strategies and retention from config; synth tests | done (infra half); middleware actor-id step already shipped in deploy-hardening row 1 |
 | 26 | DE-17 parameterised environments | account/region/prefix/domain as config; synth tests for a second environment | done (infra); scripts outside infra/ (aws-env.mjs, agents build scripts, dump-stack-outputs.sh) still hard-code names |
 | 27 | DE-14 deploy orchestrator | one resumable command with recorded state, tested with a fake `aws`/`cdk` | done: `scripts/deploy/orchestrate.mjs` (plan/apply, recorded state, SSM lock), fake-aws tests |
+| 29 | DE-54 user budgets (new spec) | per-user allocation and cap, third lock in reserveSpend, `GET /api/me/spend` budget | done (2026-10-29) |
+| 30 | DE-55 maintenance reserve (new spec, folds DE-39) | reserve column, `bots.essential`, discretionary remainder on every brake | done (2026-10-29) |
 | 28 | DE-29 tenant manifest | one manifest drives TENANTS, Cedar seeds, routers and CDK | |
 
 ## Decisions taken by default
 
 Confirm or change each; every one is a config flag or a small edit.
 
+- **DE-54/36/55 (user budgets, hard caps, reserve)** — no user row =
+  unbraked, shown as a blind spot; user budget applies on top of envelopes;
+  cron never charges a user; nobody sets their own budget. Hard cap default =
+  allocation × 1.25 (`BUDGET_HARD_CAP_FACTOR`, `off` keeps explicit caps
+  only); `UNBUDGETED_HARD_CAP_USD` $25 in production; cron at a cap skips.
+  `BUDGET_FAIL_CLOSED` on in production (also turns on
+  `SPEND_HOLDS_FAIL_CLOSED`) — the schema must reach Aurora before the BFF
+  (deploy.sh's migrate step does this). Auto reserve = last month's essential
+  spend × 1.1 (`MAINTENANCE_RESERVE_FACTOR`), spill on, `MAINTENANCE_RESERVE=off`
+  restores the old arithmetic; PR-watch bots not essential; ManageBudgets marks
+  bots essential. Seed: u-nora has a $25 user budget offline.
+- **DE-47** — a deploy without Redis now runs one middleware task (it scaled
+  1–4 and could double-reap); `middlewareAutoscale=true` without Redis fails
+  synth. Cross-replica tails use Redis pub/sub; claims live in Redis, Aurora
+  stays the startup mirror. A non-leader replica's `GET /boxes` can lag ~10 s.
 - **Dispatch UI (approved component)** — "Request budget" files a
   `sprint-envelope` access request (`POST /api/access-requests/envelope`):
   standing duration, amount = forecast p75 (disabled with no forecast),

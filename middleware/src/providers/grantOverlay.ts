@@ -58,6 +58,7 @@ function toSeed(row: GrantRow): MockGrantSeed {
     allocatedUsd: row.allocatedUsd,
     grantedBy: row.grantedBy,
     note: row.note,
+    hardCapUsd: row.hardCapUsd ?? null,
   };
 }
 

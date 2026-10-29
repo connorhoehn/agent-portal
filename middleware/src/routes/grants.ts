@@ -17,7 +17,7 @@ import { readForRolesElseAction, requireAction, resolveSession } from '../lib/au
 import { initiativeExists } from '../providers/budgets.js';
 import { getSprint, personExists } from '../providers/sprints.js';
 import {
-  updateGrant, revokeGrant, listGrantsForSprint,
+  updateGrant, revokeGrant, listGrantsForSprint, getGrant,
 } from '../providers/grants.js';
 import { grantEnvelope } from '../lib/grant-envelope.js';
 
@@ -34,6 +34,14 @@ function validAmount(raw: unknown): number {
     throw new ValidationError('amountUsd must be a finite number >= 0');
   }
   return amount;
+}
+
+/** DE-36: an optional hard cap on the envelope, at or above its amount. */
+function validCap(raw: unknown, amountUsd: number): number | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) throw new ValidationError('hardCapUsd must be a finite number >= 0, or null');
+  if (raw < amountUsd) throw new ValidationError(`hardCapUsd ($${raw}) must be at least amountUsd ($${amountUsd})`);
+  return raw;
 }
 
 /** The free-text note on an envelope. A string within a sane bound; an empty
@@ -67,6 +75,7 @@ grantsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
   if (!sprintId) throw new ValidationError('sprintId is required');
   if (!granteePersonId) throw new ValidationError('granteePersonId is required');
   const amountUsd = validAmount(body['amountUsd']);
+  const hardCapUsd = validCap(body['hardCapUsd'], amountUsd);
 
   if (!await initiativeExists(initiativeId)) throw new NotFoundError('No such initiative');
   if (!await personExists(granteePersonId)) throw new NotFoundError('No such grantee');
@@ -85,7 +94,10 @@ grantsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
   // The one grant path (lib/grant-envelope.ts): the row, the grantee's bell and
   // the work graph's live hint — shared with the access tenant's provisioning of
   // an approved sprint-envelope request, so both kinds of envelope read alike.
-  const grant = await grantEnvelope({ orgProjectId: initiativeId, sprintId, granteePersonId, amountUsd, grantedBy, note });
+  const grant = await grantEnvelope({
+    orgProjectId: initiativeId, sprintId, granteePersonId, amountUsd, grantedBy, note,
+    ...(hardCapUsd != null ? { hardCapUsd } : {}),
+  });
   res.status(201).json({ grant });
 }));
 
@@ -98,13 +110,24 @@ grantsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
 grantsRouter.patch('/:id', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '').trim();
   if (!id) throw new ValidationError('grant id is required');
-  const body = (req.body ?? {}) as { amountUsd?: unknown; note?: unknown };
+  const body = (req.body ?? {}) as { amountUsd?: unknown; note?: unknown; hardCapUsd?: unknown };
 
-  const patch: { amountUsd?: number; note?: string } = {};
+  const patch: { amountUsd?: number; note?: string; hardCapUsd?: number | null } = {};
   if (body.amountUsd !== undefined) patch.amountUsd = validAmount(body.amountUsd);
   if (body.note !== undefined) patch.note = validNote(body.note);
-  if (patch.amountUsd === undefined && patch.note === undefined) {
-    throw new ValidationError('provide amountUsd and/or note to update');
+  if (body.hardCapUsd !== undefined) patch.hardCapUsd = body.hardCapUsd === null ? null : validCap(body.hardCapUsd, 0);
+  if (patch.amountUsd === undefined && patch.note === undefined && patch.hardCapUsd === undefined) {
+    throw new ValidationError('provide amountUsd and/or note (or hardCapUsd) to update');
+  }
+  // DE-36: the cap never sits below the envelope, whichever of the two moved.
+  if (patch.amountUsd !== undefined || patch.hardCapUsd != null) {
+    // An unknown id falls through to updateGrant, which answers the 404.
+    const current = await getGrant(id);
+    const amountAfter = patch.amountUsd ?? current?.allocatedUsd ?? 0;
+    const capAfter = patch.hardCapUsd === undefined ? current?.hardCapUsd ?? null : patch.hardCapUsd;
+    if (current && capAfter != null && capAfter < amountAfter) {
+      throw new ValidationError(`hardCapUsd ($${capAfter}) must be at least amountUsd ($${amountAfter}); raise or clear it`);
+    }
   }
 
   const grant = await updateGrant(id, patch);

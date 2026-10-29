@@ -19,9 +19,11 @@ import { EventEmitter } from 'node:events';
 import {
   claimNextJob, markRunning, completeJob, reapStaleJobs, listJobs, unclaimJob, type AgentJob, type ClaimedAgentJob,
 } from '../providers/agent-jobs.js';
-import { listBoxes, appendEvent, getBox, registerBox, isReserved } from './devbox-fleet.js';
+import {
+  listBoxes, appendEvent, getBox, registerBox, isReserved, claimBox, releaseBox, refreshFromShared, allHolds,
+} from './devbox-fleet.js';
 import { isLocalBoxId } from './local-compute-fleet.js';
-import { replicaFleet } from './replica-fleet.js';
+import { replicaFleet, replicaId } from './replica-fleet.js';
 import { runDevboxTask } from '../routes/devbox.js';
 import type { DevboxRunOutcome } from './devbox-runner.js';
 import { freezeJobBrief } from './run-brief.js';
@@ -61,8 +63,16 @@ dispatcherEvents.setMaxListeners(256);
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let ticking = false;
-/** Boxes currently executing a dispatched job — never double-assign. */
-const busy = new Set<string>();
+/** Boxes this process is executing a dispatched job on (the Work UI's busy list). */
+const running = new Set<string>();
+/**
+ * The claim this dispatcher takes on a box before pushing a job (DE-47). It
+ * used to be the `running` set alone, which another replica cannot see; the
+ * fleet's claim is shared when shared state is attached, so two dispatchers
+ * over one fleet hand a box one job.
+ */
+const DISPATCH_HOLDER_PREFIX = 'dispatcher:';
+const dispatchHolder = (): string => `${DISPATCH_HOLDER_PREFIX}${replicaId()}`;
 
 function emit(kind: string, job: AgentJob | { id: string }, extra: Record<string, unknown> = {}): void {
   dispatcherEvents.emit('job', { kind, jobId: job.id, ...extra, ts: new Date().toISOString() });
@@ -132,7 +142,7 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
     await completeJob(job.id, { claimToken, status: 'failed', error: 'claimed without a box assignment' });
     return;
   }
-  busy.add(boxId);
+  running.add(boxId);
   let attempt: JobAttempt | undefined;
   let invoked = false;
   let holdId: string | null = null;
@@ -204,7 +214,7 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
     }
   } finally {
     attempt?.stop();
-    busy.delete(boxId);
+    running.delete(boxId);
   }
 }
 
@@ -225,20 +235,38 @@ async function tick(): Promise<void> {
     // `runDevboxTask`, which is hard-wired to AgentCore `InvokeRuntime`, against
     // a session id that only ever existed on somebody's laptop. A paired machine
     // gets work by CLAIMING it (routes/local-compute.ts), never by being pushed.
-    const free = listBoxes().filter(
-      (b) => (b.status === 'idle' || b.status === 'waiting') && !busy.has(b.id) && !isReserved(b.id) && !isLocalBoxId(b.id),
+    // Other replicas' boxes, statuses and holds (a run in flight elsewhere
+    // holds its box), fresh for this tick (DE-47). A no-op for one process; a
+    // failed read leaves the last view, and claimBox below still fails closed.
+    await refreshFromShared().catch((err) => {
+      console.warn('[dispatcher] shared fleet state unreadable:', (err as Error).message);
+    });
+    const candidates = listBoxes().filter(
+      (b) => (b.status === 'idle' || b.status === 'waiting') && !running.has(b.id) && !isLocalBoxId(b.id),
     );
+    const free = candidates.filter((b) => !isReserved(b.id));
     // A box without ceiling left for one default task plus grace is not handed
     // a job (DE-48 rule 3): the reaper would stop it mid-task. Each box is
     // judged by its own profile's policy (stamped version, tightened by a
     // newer one), one lookup per profile.
     const policies = free.length ? await lifetimePoliciesFor(free) : new Map<string, LifetimePolicy>();
     const idle = free.filter((b) => hasLifeFor(b, policies.get(b.id) ?? lifetimePolicy()));
+    const holder = dispatchHolder();
     for (const box of idle) {
-      const job = await claimNextJob(box.id, box.sessionId);
-      if (!job) break;                        // queue empty — stop probing
+      // The box first, then a job: another dispatcher may hold this box.
+      if (!await claimBox(box.id, holder)) continue;
+      let job: ClaimedAgentJob | null;
+      try {
+        job = await claimNextJob(box.id, box.sessionId);
+      } catch (err) {
+        releaseBox(box.id, holder);
+        throw err;
+      }
+      if (!job) { releaseBox(box.id, holder); break; }   // queue empty — stop probing
       emit('claimed', job, { boxId: box.id });
-      void runJob(job, policies.get(box.id) ?? lifetimePolicy()).catch(error => console.warn('[dispatcher] attempt failed:', (error as Error).message));                       // fire and forget; bounded by idle boxes
+      void runJob(job, policies.get(box.id) ?? lifetimePolicy())
+        .catch(error => console.warn('[dispatcher] attempt failed:', (error as Error).message))
+        .finally(() => releaseBox(box.id, holder));     // fire and forget; bounded by idle boxes
     }
   } catch (err) {
     console.warn('[dispatcher] tick failed:', (err as Error).message);
@@ -319,5 +347,9 @@ export async function dispatchOnce(): Promise<void> {
 
 /** Which boxes the dispatcher currently considers busy (for the Work UI). */
 export function busyBoxes(): string[] {
-  return [...busy].filter((id) => getBox(id) !== null);
+  const ids = new Set(running);
+  for (const [id, holders] of allHolds()) {
+    if (holders.some((h) => h.startsWith(DISPATCH_HOLDER_PREFIX))) ids.add(id);
+  }
+  return [...ids].filter((id) => getBox(id) !== null);
 }

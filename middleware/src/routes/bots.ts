@@ -24,7 +24,7 @@ import {
   listBotsResult, getBot, createBot, updateBot, deleteBot, setPausedReason, listBotRunsResult,
   listBotRunsForBotsResult,
   listMarketplaceRuns,
-  listActiveRuns, runCostSamples, perPointCostSamples,
+  listActiveRuns, runCostSamples, perPointCostSamples, setBotEssential, botIsEssential,
   type BotTemplate, type BotTrigger, type BotPatch,
 } from '../providers/bots.js';
 import {
@@ -38,6 +38,7 @@ import {
 import { deleteJobDraft, getJobDraft, saveJobDraft } from '../providers/work-item-job-drafts.js';
 import { getMaintenance30d } from '../providers/budgets.js';
 import { reserveSpend } from '../lib/spend-holds.js';
+import { spendRefusalResponse } from '../lib/spend-refusal.js';
 import { listAgentProjects } from '../providers/agent-projects.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
 import { validateCronExpr } from '../lib/ingest-scheduler.js';
@@ -54,6 +55,8 @@ export const botsRouter: Router = Router();
 const readGate = readForRolesElseAction(['org-leader', 'hr-admin', 'program-owner'], 'ManageBots');
 const manageGate = requireAction('ManageBots');
 const dispatchGate = requireAction('DispatchAgentRun');
+// DE-55: which bots are funded first is a money decision, not a bot author's.
+const budgetGate = requireAction('ManageBudgets');
 // Reads that belong to the DISPATCH journey rather than to bot administration:
 // the estimator and the runs behind the initiative board. An SME holds
 // DispatchAgentRun and nothing else, so gating these on ManageDevbox locks the
@@ -178,16 +181,30 @@ interface ConfirmFlags {
   confirmOverRunBudget?: unknown;
   confirmOverAllocation?: unknown;
   confirmOverEnvelope?: unknown;
+  /** DE-54: the caller's own monthly user budget. Like the envelope, the
+   *  legacy flag never opens it. No flag opens a hard cap (DE-36). */
+  confirmOverUserBudget?: unknown;
 }
+
+let warnedLegacyConfirm = false;
 
 function readConfirmations(body: ConfirmFlags) {
   const legacy = body.confirmOverBudget === true;
+  if (legacy && !warnedLegacyConfirm) {
+    // DE-36: one release of warning, then removal — one click must not answer two questions.
+    warnedLegacyConfirm = true;
+    console.warn('[bots] confirmOverBudget is deprecated and will be removed: send confirmOverRunBudget and/or confirmOverAllocation');
+  }
   return {
     runBudget: body.confirmOverRunBudget === true || legacy,
     allocation: body.confirmOverAllocation === true || legacy,
     envelope: body.confirmOverEnvelope === true,
+    userBudget: body.confirmOverUserBudget === true,
   };
 }
+
+/** Test hook: let the deprecation warning fire again. */
+export function __resetLegacyConfirmWarning(): void { warnedLegacyConfirm = false; }
 
 // marketReadGate, not readGate: the estimate is what the Authorize button
 // waits on, so a role holding only DispatchAgentRun (sme) must be able to read
@@ -318,26 +335,19 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
       costUsdP25: forecast.estimate.costUsdP25,
       confidence: forecast.confidence,
     },
-    confirmed: { allocation: confirmed.allocation, envelope: confirmed.envelope },
+    confirmed: { allocation: confirmed.allocation, envelope: confirmed.envelope, userBudget: confirmed.userBudget },
     // The one path whose caller (the portal's dispatch deck) can show "the
     // remainder may be optimistic" to a person and confirm it (DE-33).
     unknownCostTrips: true,
     expiresInMs: dispatchHoldTtlMs(),
   });
-  if (held.kind === 'confirm') {
-    res.status(409).json({
-      error: held.reason,
-      gate: held.gate,
-      confirmFlag: held.confirmFlag,
-      confidence: held.confidence,
-      estimate: estimateBody(forecast),
-      ...(held.allocation ? { allocation: held.allocation } : {}),
-      ...(held.envelope ? { envelope: held.envelope } : {}),
-    });
+  if (held.kind !== 'held') {
+    // 409 soft brake (allocation / envelope / user-budget), 403 hard cap or
+    // refused, 503 unreadable — one renderer (lib/spend-holds.ts).
+    const r = spendRefusalResponse(held, held.kind === 'confirm' ? { estimate: estimateBody(forecast) } : {});
+    res.status(r.status).json(r.body);
     return;
   }
-  if (held.kind === 'refused') { res.status(403).json({ error: held.reason, gate: 'spend-hold' }); return; }
-  if (held.kind === 'unavailable') { res.status(503).json({ error: held.reason, gate: 'spend-hold' }); return; }
 
   const result = await dispatchWorkItem({
     workItemId, model, preflight: pre,
@@ -810,20 +820,14 @@ botsRouter.post('/:id/run', manageGate, asyncHandler(async (req, res) => {
     dispatchedBy: req.session?.sub ?? null,
     // The allocation and envelope brakes now judge a manual firing too
     // (DE-34), with the same flags the dispatch route takes.
-    confirmed: { allocation: confirmed.allocation, envelope: confirmed.envelope },
+    confirmed: { allocation: confirmed.allocation, envelope: confirmed.envelope, userBudget: confirmed.userBudget },
   });
   if (!result.ok) {
-    if (result.refusal?.kind === 'confirm') {
-      const r = result.refusal;
-      res.status(409).json({
-        error: r.reason, gate: r.gate, confirmFlag: r.confirmFlag, confidence: r.confidence,
-        ...(r.allocation ? { allocation: r.allocation } : {}),
-        ...(r.envelope ? { envelope: r.envelope } : {}),
-      });
+    if (result.refusal) {
+      const r = spendRefusalResponse(result.refusal);
+      res.status(r.status).json(r.body);
       return;
     }
-    if (result.refusal?.kind === 'refused') { res.status(403).json({ error: result.reason, gate: 'spend-hold' }); return; }
-    if (result.refusal?.kind === 'unavailable') { res.status(503).json({ error: result.reason, gate: 'spend-hold' }); return; }
     res.status(409).json({ error: result.reason });
     return;
   }
@@ -862,6 +866,22 @@ botsRouter.post('/:id/resume', manageGate, asyncHandler(async (req, res) => {
   // the scheduler still said 0.
   if (bot) registerBot(bot);
   res.json({ bot: bot ?? await getBot(id) });
+}));
+
+// ─── Essential (DE-55) ──────────────────────────────────────────────────────
+//   PUT /api/bots/:id/essential { essential: true | false | null } → { bot, essential }
+// An essential bot's scheduled firings are the maintenance floor: funded from
+// its initiative's reserve before any discretionary work. null = back to the
+// default (cron is essential). ManageBudgets only — the release manager's
+// action, like the allocation the reserve comes out of; not initiative-scoped,
+// for the same program-owner decision budgets PUT carries (DE-44 row 20).
+botsRouter.put('/:id/essential', budgetGate, asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const raw = (req.body ?? {} as { essential?: unknown }).essential;
+  if (raw !== null && typeof raw !== 'boolean') throw new ValidationError('essential must be true, false or null');
+  const bot = await setBotEssential(id, raw as boolean | null);
+  if (!bot) { res.status(404).json({ error: 'no such bot' }); return; }
+  res.json({ bot, essential: botIsEssential(bot) });
 }));
 
 /** One bot's firing history. Same two empties as the roster above — and here

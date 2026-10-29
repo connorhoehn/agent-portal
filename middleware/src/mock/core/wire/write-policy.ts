@@ -545,7 +545,7 @@ const FIRES: Family[] = [
   { pattern: 'POST /api/pipelines/definitions/*/dry-run', what: 'enqueues a `runbook:dry-run` agent job the running fleet dispatcher claims for an idle box and plays through, outliving the capture' },
   // Moved here out of `spends`, where it read "drives a devbox microVM" — it
   // does not drive one, it hands one to the reaper. `startReaper` is running
-  // from the moment routes/devbox.ts is imported, and a registered box enters
+  // from boot (index.ts, leader-elected since DE-47), and a registered box enters
   // its sweep: twenty idle minutes later the reaper sends
   // StopRuntimeSessionCommand for that box's session, through whatever
   // transport `dataClient()` resolved to. `lib/devbox-fleet.ts` holds the

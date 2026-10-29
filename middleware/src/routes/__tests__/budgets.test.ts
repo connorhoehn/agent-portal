@@ -23,6 +23,8 @@ jest.mock('../../providers/budgets.js', () => ({
   deleteAllocation: jest.fn(),
   initiativeExists: jest.fn(),
   listGrants: jest.fn(),
+  // The DE-36 cap check reads the stored row; none here.
+  getBudget: jest.fn(async () => null),
 }));
 
 import express from 'express';
@@ -89,7 +91,7 @@ describe('PUT /api/budgets/:orgProjectId', () => {
       .send({ allocatedUsd: 250 });
     expect(res.status).toBe(200);
     expect(res.body.budget).toEqual(BUDGET);
-    expect(upsertMock).toHaveBeenCalledWith('p-observability', 250, null);
+    expect(upsertMock).toHaveBeenCalledWith('p-observability', 250, null, {});
   });
 
   it('accepts zero — a real value meaning "no agent spend allowed"', async () => {
@@ -97,7 +99,7 @@ describe('PUT /api/budgets/:orgProjectId', () => {
     upsertMock.mockResolvedValue({ ...BUDGET, allocatedUsd: 0 });
     const res = await request(buildApp()).put('/api/budgets/p-observability').send({ allocatedUsd: 0 });
     expect(res.status).toBe(200);
-    expect(upsertMock).toHaveBeenCalledWith('p-observability', 0, null);
+    expect(upsertMock).toHaveBeenCalledWith('p-observability', 0, null, {});
   });
 
   it.each([

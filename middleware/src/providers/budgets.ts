@@ -37,6 +37,13 @@ import { displayNameForSubject } from './identity.js';
 // The spend ledger (DE-30). Readers answer from it only when SPEND_LEDGER says
 // so; until then they sum bot_runs exactly as before.
 import { spendLedgerMode, ledgerMismatches, mockStoredSpend, mockUnknownSpend } from './spend-ledger.js';
+// DE-36 caps and the DE-55 reserve: the stored columns are probed (additive
+// schema), the figures derived here, the decisions made in lib/spend-holds.ts.
+import { hasColumns } from './column-probe.js';
+import { mockHolds, openHeldSplit, openHeldSplitAll } from './spend-holds.js';
+import {
+  autoReserveUsd, discretionary, effectiveHardCap, maintenanceReserveEnabled, type CapSource,
+} from '../lib/budget-decisions.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
@@ -75,6 +82,90 @@ export interface BudgetRow {
   /** Ledger mode only (SPEND_LEDGER=ledger): this period's attributed task
    *  attempts whose cost is unknown. Counted, never summed as $0 (DE-30). */
   unknownCostCount?: number;
+
+  // ── DE-36 hard cap ───────────────────────────────────────────────────────
+  /** The stored cap (initiative_budgets.hard_cap_usd); null = the deployment default. */
+  hardCapUsd?: number | null;
+  /** The cap enforced: stored, else allocated x BUDGET_HARD_CAP_FACTOR, else the unbudgeted cap. */
+  effectiveHardCapUsd?: number | null;
+  hardCapSource?: CapSource | null;
+
+  // ── DE-55 maintenance reserve ────────────────────────────────────────────
+  /** The stored reserve; null = auto. */
+  maintenanceReserveUsd?: number | null;
+  /** The reserve in force: stored, else auto (last closed period's essential
+   *  spend x 1.1, else the trailing 30 days x 1.1); 0 with MAINTENANCE_RESERVE=off
+   *  and null on an initiative with no allocation. */
+  reserveUsd?: number | null;
+  reserveSource?: 'set' | 'auto' | 'off' | null;
+  /** May an essential firing past the reserve spend discretionary money. */
+  allowFloorSpill?: boolean;
+  /** Essential bots' scheduled spend this period (manual firings excluded). */
+  floorSpentUsd?: number;
+  /** spentThisPeriodUsd - floorSpentUsd. */
+  discretionarySpentUsd?: number;
+  floorHeldUsd?: number;
+  discretionaryHeldUsd?: number;
+  /** allocated - max(reserve, floorSpent + floorHeld) - discretionarySpent - discretionaryHeld.
+   *  What every human, job and box dispatch is judged against. Null without an allocation. */
+  discretionaryRemainingUsd?: number | null;
+}
+
+/** The floor history one initiative's reserve is derived from. */
+export interface FloorHistory {
+  thisPeriodUsd: number;
+  lastPeriodUsd: number;
+  trailing30dUsd: number;
+}
+
+/** The stored DE-36 / DE-55 columns of an allocation row. */
+export interface ReserveColumns {
+  hardCapUsd: number | null;
+  maintenanceReserveUsd: number | null;
+  allowFloorSpill: boolean;
+}
+
+const round4 = (n: number): number => Math.round(n * 10_000) / 10_000;
+
+/**
+ * Attach the cap and reserve figures to a row. Pure over its inputs, so the
+ * mock and the Aurora paths derive them identically.
+ */
+export function withReserveFigures(
+  row: BudgetRow, cols: ReserveColumns, floor: FloorHistory,
+  held: { floorUsd: number; discretionaryUsd: number } | null,
+): BudgetRow {
+  const cap = effectiveHardCap(row.allocatedUsd, cols.hardCapUsd, { unbudgeted: true });
+  const floorSpentUsd = round4(Math.min(floor.thisPeriodUsd, row.spentThisPeriodUsd));
+  const discretionarySpentUsd = round4(Math.max(0, row.spentThisPeriodUsd - floorSpentUsd));
+  let reserveUsd: number | null = null;
+  let reserveSource: BudgetRow['reserveSource'] = null;
+  if (row.allocatedUsd != null) {
+    if (!maintenanceReserveEnabled()) { reserveUsd = 0; reserveSource = 'off'; }
+    else if (cols.maintenanceReserveUsd != null) { reserveUsd = cols.maintenanceReserveUsd; reserveSource = 'set'; }
+    else { reserveUsd = autoReserveUsd(floor.lastPeriodUsd, floor.trailing30dUsd); reserveSource = 'auto'; }
+  }
+  const out: BudgetRow = {
+    ...row,
+    hardCapUsd: cols.hardCapUsd,
+    effectiveHardCapUsd: cap?.capUsd ?? null,
+    hardCapSource: cap?.source ?? null,
+    maintenanceReserveUsd: cols.maintenanceReserveUsd,
+    reserveUsd,
+    reserveSource,
+    allowFloorSpill: cols.allowFloorSpill,
+    floorSpentUsd,
+    discretionarySpentUsd,
+    discretionaryRemainingUsd: null,
+  };
+  if (held) { out.floorHeldUsd = held.floorUsd; out.discretionaryHeldUsd = held.discretionaryUsd; }
+  if (row.allocatedUsd != null && reserveUsd != null) {
+    out.discretionaryRemainingUsd = discretionary({
+      allocatedUsd: row.allocatedUsd, reserveUsd, floorSpentUsd, floorHeldUsd: held?.floorUsd ?? 0,
+      discretionarySpentUsd, discretionaryHeldUsd: held?.discretionaryUsd ?? 0,
+    }).discretionaryRemainingUsd;
+  }
+  return out;
 }
 
 export interface OrgBudgetSummary {
@@ -159,6 +250,12 @@ export interface MockBudget {
    *  so an offline write that kept naming the seed author was a lie. */
   updatedBy?: string | null;
   updatedAt?: string | null;
+  /** DE-36: the stored hard cap; absent/null = the deployment default. */
+  hardCapUsd?: number | null;
+  /** DE-55: the stored reserve; absent/null = auto. */
+  maintenanceReserveUsd?: number | null;
+  /** DE-55: absent = true, the column default. */
+  allowFloorSpill?: boolean;
 }
 
 /**
@@ -369,7 +466,48 @@ function mockPeriodRuns(): Array<{ run: BotRun; model: string }> {
     .map((run) => ({ run, model: (run.botId && modelByBot.get(run.botId)) || 'unknown' }));
 }
 
-export function mockBudgetRow(m: MockBudget): BudgetRow {
+/**
+ * Essential bots' scheduled spend on an initiative, this period, last period
+ * and trailing 30 days — the mock analogue of floorHistorySql, over the same
+ * attributed runs every other mock figure sums.
+ */
+export function mockFloorHistory(orgProjectId: string): FloorHistory {
+  const now = clock.now();
+  const thisStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const lastStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
+  const from30 = now.getTime() - 30 * 86_400_000;
+  const essential = new Map(MOCK_BOTS.map((b) => [b.id, botIsEssentialLocal(b)]));
+  const runs = costed(mockRunsAttributedTo(orgProjectId))
+    .filter((r) => r.botId != null && r.trigger !== 'manual' && essential.get(r.botId) === true);
+  const sum = (pred: (at: number) => boolean) => sumBy(runs.filter((r) => pred(Date.parse(r.startedAt))), 'costUsd', { digits: COST_SCALE });
+  return {
+    thisPeriodUsd: sum((at) => at >= thisStart),
+    lastPeriodUsd: sum((at) => at >= lastStart && at < thisStart),
+    trailing30dUsd: sum((at) => at > from30),
+  };
+}
+
+/** COALESCE(bots.essential, bots.trigger = 'cron') — kept local (bots.ts imports this module). */
+function botIsEssentialLocal(b: { essential?: boolean | null; trigger: string }): boolean {
+  return b.essential ?? b.trigger === 'cron';
+}
+
+function mockHeldSplit(orgProjectId: string): { floorUsd: number; discretionaryUsd: number } {
+  const open = mockHolds().filter((h) => h.status === 'held' && h.initiativeId === orgProjectId);
+  const sum = (hs: typeof open) => round4(hs.reduce((a, h) => a + h.amountUsd, 0));
+  return { floorUsd: sum(open.filter((h) => h.essential)), discretionaryUsd: sum(open.filter((h) => !h.essential)) };
+}
+
+export function mockBudgetRow(m: MockBudget, opts: { withHolds?: boolean } = {}): BudgetRow {
+  return withReserveFigures(
+    mockBudgetRowBase(m),
+    { hardCapUsd: m.hardCapUsd ?? null, maintenanceReserveUsd: m.maintenanceReserveUsd ?? null, allowFloorSpill: m.allowFloorSpill !== false },
+    mockFloorHistory(m.id),
+    opts.withHolds === false ? null : mockHeldSplit(m.id),
+  );
+}
+
+function mockBudgetRowBase(m: MockBudget): BudgetRow {
   const spend = mockInitiativeSpend(m.id);
   return {
     orgProjectId: m.id,
@@ -609,15 +747,92 @@ async function logLedgerDrift(legacy: readonly BudgetRow[], scopeToId: string | 
   }
 }
 
+// ─── Caps and the reserve over Aurora (DE-36, DE-55) ────────────────────────
+
+/** COALESCE(essential, trigger = 'cron'), or the cron proxy on a cluster without the column. */
+function essentialSql(alias: string, withColumn: boolean): string {
+  return withColumn ? `COALESCE(${alias}.essential, ${alias}.trigger = 'cron')` : `${alias}.trigger = 'cron'`;
+}
+
+/**
+ * Essential bots' scheduled spend per initiative: this period, the last closed
+ * period, and the trailing 30 days. Attributed by the bot's target (arms 2
+ * and 3 of spendPredicateSql) — a maintenance bot names its initiative or
+ * codebase, never a work item. Manual firings are a person's dispatch, so they
+ * are discretionary even on an essential bot. Read from bot_runs in every
+ * ledger mode: each settled run's ledger entry mirrors it.
+ */
+export function floorHistorySql(scoped: boolean, withEssential: boolean): string {
+  return `
+    SELECT COALESCE(b.org_project_id, ap.org_project_id) AS org_project_id,
+           COALESCE(SUM(br.cost_usd) FILTER (WHERE br.started_at >= ${PERIOD_START_SQL}), 0)::float8 AS this_period,
+           COALESCE(SUM(br.cost_usd) FILTER (WHERE br.started_at >= ${PERIOD_START_SQL} - INTERVAL '1 month'
+                                             AND br.started_at < ${PERIOD_START_SQL}), 0)::float8 AS last_period,
+           COALESCE(SUM(br.cost_usd) FILTER (WHERE br.started_at > NOW() - INTERVAL '30 days'), 0)::float8 AS trailing_30d
+      FROM bot_runs br
+      JOIN bots b ON b.id = br.bot_id
+      LEFT JOIN agent_projects ap ON ap.id = b.agent_project_id
+     WHERE br.cost_usd IS NOT NULL AND br.trigger <> 'manual' AND ${essentialSql('b', withEssential)}
+       AND br.started_at >= LEAST(${PERIOD_START_SQL} - INTERVAL '1 month', NOW() - INTERVAL '30 days')
+       ${scoped ? 'AND COALESCE(b.org_project_id, ap.org_project_id) = :pid' : 'AND COALESCE(b.org_project_id, ap.org_project_id) IS NOT NULL'}
+     GROUP BY 1`;
+}
+
+type Run = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
+
+async function readReserveInputs(scopeToId: string | null, run: Run): Promise<{
+  cols: Map<string, ReserveColumns>; floors: Map<string, FloorHistory>;
+}> {
+  const params = scopeToId ? [s('pid', scopeToId)] : [];
+  const cols = new Map<string, ReserveColumns>();
+  const [withCaps, withReserve, withEssential] = await Promise.all([
+    hasColumns('initiative_budgets', ['hard_cap_usd']),
+    hasColumns('initiative_budgets', ['maintenance_reserve_usd', 'allow_floor_spill']),
+    hasColumns('bots', ['essential']),
+  ]);
+  if (withCaps || withReserve) {
+    const rows = (await run(
+      `SELECT org_project_id,
+              ${withCaps ? 'hard_cap_usd::float8' : 'NULL::float8'} AS hard_cap_usd,
+              ${withReserve ? 'maintenance_reserve_usd::float8' : 'NULL::float8'} AS maintenance_reserve_usd,
+              ${withReserve ? 'allow_floor_spill' : 'TRUE'} AS allow_floor_spill
+         FROM initiative_budgets ${scopeToId ? 'WHERE org_project_id = :pid' : ''}`,
+      params,
+    )) ?? [];
+    for (const r of rows) {
+      cols.set(toStr(r['org_project_id']), {
+        hardCapUsd: r['hard_cap_usd'] == null ? null : toNum(r['hard_cap_usd']),
+        maintenanceReserveUsd: r['maintenance_reserve_usd'] == null ? null : toNum(r['maintenance_reserve_usd']),
+        allowFloorSpill: !(r['allow_floor_spill'] === false || r['allow_floor_spill'] === 'f' || r['allow_floor_spill'] === 'false'),
+      });
+    }
+  }
+  const floors = new Map<string, FloorHistory>();
+  for (const r of (await run(floorHistorySql(scopeToId != null, withEssential), params)) ?? []) {
+    floors.set(toStr(r['org_project_id']), {
+      thisPeriodUsd: toNum(r['this_period']), lastPeriodUsd: toNum(r['last_period']), trailing30dUsd: toNum(r['trailing_30d']),
+    });
+  }
+  return { cols, floors };
+}
+
+const NO_COLUMNS: ReserveColumns = { hardCapUsd: null, maintenanceReserveUsd: null, allowFloorSpill: true };
+const NO_FLOOR: FloorHistory = { thisPeriodUsd: 0, lastPeriodUsd: 0, trailing30dUsd: 0 };
+
 // ─── Provider functions ──────────────────────────────────────────────────────
 
 export async function listBudgets(): Promise<BudgetRow[]> {
-  if (config.mock.aurora) return MOCK_BUDGETS.map(mockBudgetRow);
+  if (config.mock.aurora) return MOCK_BUDGETS.map((m) => mockBudgetRow(m));
   const mode = spendLedgerMode();
   const rows = await safeExec(mode === 'ledger' ? ledgerBudgetSelectSql(false) : budgetSelectSql(false));
-  const out = rows.map(rowToBudget);
-  if (mode === 'dual') await logLedgerDrift(out, null);
-  return out;
+  const base = rows.map(rowToBudget);
+  if (mode === 'dual') await logLedgerDrift(base, null);
+  const { cols, floors } = await readReserveInputs(null, safeExec);
+  const held = await openHeldSplitAll();
+  return base.map((r) => withReserveFigures(
+    r, cols.get(r.orgProjectId) ?? NO_COLUMNS, floors.get(r.orgProjectId) ?? NO_FLOOR,
+    held.get(r.orgProjectId) ?? { floorUsd: 0, discretionaryUsd: 0 },
+  ));
 }
 
 /**
@@ -652,18 +867,45 @@ export async function unknownCostCountInPeriod(orgProjectId: string): Promise<nu
 }
 
 export async function getBudget(orgProjectId: string): Promise<BudgetRow | null> {
+  return fetchBudget(orgProjectId, { run: safeExec, withHolds: true });
+}
+
+async function fetchBudget(orgProjectId: string, opts: { run: Run; withHolds: boolean }): Promise<BudgetRow | null> {
   if (config.mock.aurora) {
     const m = MOCK_BUDGETS.find((b) => b.id === orgProjectId);
-    return m ? mockBudgetRow(m) : null;
+    return m ? mockBudgetRow(m, { withHolds: opts.withHolds }) : null;
   }
   const mode = spendLedgerMode();
-  const rows = await safeExec(
+  const rows = await opts.run(
     mode === 'ledger' ? ledgerBudgetSelectSql(true) : budgetSelectSql(true),
     [s('pid', orgProjectId)],
   );
   const out = rows[0] ? rowToBudget(rows[0]) : null;
   if (mode === 'dual') await logLedgerDrift(out ? [out] : [], orgProjectId);
-  return out;
+  if (!out) return null;
+  const { cols, floors } = await readReserveInputs(orgProjectId, opts.run);
+  const held = opts.withHolds ? await openHeldSplit(orgProjectId).catch(() => ({ floorUsd: 0, discretionaryUsd: 0 })) : null;
+  return withReserveFigures(out, cols.get(orgProjectId) ?? NO_COLUMNS, floors.get(orgProjectId) ?? NO_FLOOR, held);
+}
+
+export type BudgetGate =
+  | { kind: 'ok'; row: BudgetRow }
+  | { kind: 'none' }
+  | { kind: 'unavailable'; reason: string; error: unknown };
+
+/**
+ * The read a money gate makes (DE-36): never through safeExec, so a missing
+ * table or a Data API error is `unavailable`, not "no allocation". The caller
+ * (lib/spend-holds.ts) decides whether that fails closed. Holds are not read
+ * here: the gate reads them itself, under its lock.
+ */
+export async function readBudgetGate(orgProjectId: string): Promise<BudgetGate> {
+  try {
+    const row = await fetchBudget(orgProjectId, { run: (sql, params = []) => exec(sql, params), withHolds: false });
+    return row ? { kind: 'ok', row } : { kind: 'none' };
+  } catch (error) {
+    return { kind: 'unavailable', reason: (error as Error).message, error };
+  }
 }
 
 /** The recurring cron floor over the trailing 30 days — the mock analogue of
@@ -693,10 +935,18 @@ export async function initiativeExists(orgProjectId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+/** The optional DE-36 / DE-55 columns a PUT may move. undefined = leave alone; null = back to the default. */
+export interface AllocationExtras {
+  hardCapUsd?: number | null;
+  maintenanceReserveUsd?: number | null;
+  allowFloorSpill?: boolean;
+}
+
 export async function upsertAllocation(
   orgProjectId: string,
   allocatedUsd: number,
   updatedBy: string | null,
+  extras: AllocationExtras = {},
 ): Promise<BudgetRow | null> {
   if (config.mock.aurora) {
     // Used to `return null`, which routes/budgets.ts reads as "no Aurora" and
@@ -708,12 +958,18 @@ export async function upsertAllocation(
     const rows = initiativeBudgets.rows();
     const existing = rows.find((b) => b.id === orgProjectId);
     const stamp = clock.now().toISOString();
+    const applyExtras = (row: MockBudget): void => {
+      if (extras.hardCapUsd !== undefined) row.hardCapUsd = extras.hardCapUsd;
+      if (extras.maintenanceReserveUsd !== undefined) row.maintenanceReserveUsd = extras.maintenanceReserveUsd;
+      if (extras.allowFloorSpill !== undefined) row.allowFloorSpill = extras.allowFloorSpill;
+    };
     if (existing) {
       existing.allocated = allocatedUsd;
       existing.updatedBy = updatedBy;
       existing.updatedAt = stamp;
+      applyExtras(existing);
     } else {
-      rows.push({
+      const created: MockBudget = {
         id: orgProjectId,
         // The projects join the read-back does. Null rather than invented when
         // the initiative is outside the mock corpus — the ledger renders the id
@@ -722,20 +978,39 @@ export async function upsertAllocation(
         allocated: allocatedUsd,
         updatedBy,
         updatedAt: stamp,
-      });
+      };
+      applyExtras(created);
+      rows.push(created);
     }
     // Re-read through the list shape, exactly as the Aurora path does, so the
     // response carries this-period spend rather than just the number written.
     return getBudget(orgProjectId);
   }
+  // One statement, so the cap CHECK (hard_cap_usd >= allocated_usd) sees the
+  // allocation and the cap move together. The additive columns are named only
+  // when asked for, so a plain allocation write still works on an older cluster.
+  const cols = ['org_project_id', 'allocated_usd', 'updated_by'];
+  const vals = [':pid', ':alloc', ':by'];
+  const sets = ['allocated_usd = EXCLUDED.allocated_usd', 'updated_by = EXCLUDED.updated_by', 'updated_at = NOW()'];
+  const params: SqlParameter[] = [s('pid', orgProjectId), num('alloc', allocatedUsd), maybe('by', updatedBy)];
+  const extra = (col: string, name: string, param: SqlParameter, cast = ''): void => {
+    cols.push(col); vals.push(`:${name}${cast}`); sets.push(`${col} = EXCLUDED.${col}`); params.push(param);
+  };
+  if (extras.hardCapUsd !== undefined) {
+    extra('hard_cap_usd', 'cap', extras.hardCapUsd == null ? nul('cap') : num('cap', extras.hardCapUsd), '::numeric');
+  }
+  if (extras.maintenanceReserveUsd !== undefined) {
+    extra('maintenance_reserve_usd', 'reserve', extras.maintenanceReserveUsd == null ? nul('reserve') : num('reserve', extras.maintenanceReserveUsd), '::numeric');
+  }
+  if (extras.allowFloorSpill !== undefined) {
+    extra('allow_floor_spill', 'spill', { name: 'spill', value: { booleanValue: extras.allowFloorSpill } });
+  }
   await exec(
-    `INSERT INTO initiative_budgets (org_project_id, allocated_usd, updated_by)
-     VALUES (:pid, :alloc, :by)
+    `INSERT INTO initiative_budgets (${cols.join(', ')})
+     VALUES (${vals.join(', ')})
      ON CONFLICT (org_project_id) DO UPDATE
-       SET allocated_usd = EXCLUDED.allocated_usd,
-           updated_by = EXCLUDED.updated_by,
-           updated_at = NOW()`,
-    [s('pid', orgProjectId), num('alloc', allocatedUsd), maybe('by', updatedBy)],
+       SET ${sets.join(',\n           ')}`,
+    params,
   );
   // Re-read through the list shape so the returned budget carries its joined
   // name and this-period spend — the insert alone cannot compute them.
@@ -779,6 +1054,8 @@ export interface GrantRow {
    *  many GrantRow literals (mocks) need not carry it; surfaced on read so the
    *  UI can display and correct it. */
   note?: string | null;
+  /** DE-36: the stored hard cap; null/absent = allocated x BUDGET_HARD_CAP_FACTOR. */
+  hardCapUsd?: number | null;
   /** Spend attributed to the INITIATIVE inside this envelope's sprint window.
    *  Deliberately not called the grantee's burn: bot_runs record which
    *  initiative and which bot, never which person's envelope paid for them, so
@@ -819,8 +1096,12 @@ export async function listGrants(orgProjectId?: string): Promise<GrantRow[]> {
     scope = 'WHERE g.org_project_id = :pid';
     params.push(s('pid', orgProjectId));
   }
+  // DE-36's column is named only where it exists: a missing column would make
+  // safeExec answer [] — no grants at all — which the grant gate and the
+  // envelope brake would read as "no envelope here".
+  const withCap = await hasColumns('budget_grants', ['hard_cap_usd']);
   const rows = await safeExec(
-    `SELECT g.id, g.org_project_id, p.name AS org_project_name,
+    `SELECT g.id, g.org_project_id, p.name AS org_project_name,${withCap ? ' g.hard_cap_usd::float8 AS hard_cap_usd,' : ''}
             g.grantee_person_id, pe.name AS grantee_name,
             g.sprint_id, sp.name AS sprint_name,
             sp.starts_on::text AS starts_on, sp.ends_on::text AS ends_on,
@@ -858,6 +1139,8 @@ export async function listGrants(orgProjectId?: string): Promise<GrantRow[]> {
     allocatedUsd: toNum(r['allocated_usd']),
     grantedBy: r['granted_by'] != null ? toStr(r['granted_by']) : null,
     note: r['note'] != null ? toStr(r['note']) : null,
+    // Only where the DE-36 column was selected, so an older cluster's rows keep their shape.
+    ...(r['hard_cap_usd'] !== undefined ? { hardCapUsd: r['hard_cap_usd'] == null ? null : toNum(r['hard_cap_usd']) } : {}),
     initiativeSpendInWindowUsd: toNum(r['window_spend_usd']),
   }));
 }
