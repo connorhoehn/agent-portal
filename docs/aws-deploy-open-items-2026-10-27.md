@@ -211,6 +211,9 @@ the `orgiq-documents-{gateway,platform,catalog,mq,redis}` ECR repos, secrets
 | Every `POST /api/video/sessions` 504 after an SFU-only deploy | the SFU host was replaced; OrgIQ-Social bakes its private IP (VIDEO_API_URL) and instance id (video ALB target) from SSM at deploy time | `READS_BY_NAME` in `deploy.sh`: deploying OrgIQ-SocialMedia also deploys OrgIQ-Social |
 | A CIDR-only deploy replaced the SFU (and would the TURN host) | `latestAmazonLinux2023()` resolved AWS's 2026-10-28 image; a new image replaces the instance | `hostImage`: `sfuAmiId` / `turnAmiId` pin it, carried forward from `SfuAmiId` / `TurnAmiId`; `latest` rolls it on purpose |
 | Media never flowed (WHEP 425) though WHIP succeeded | the tester's public IP changed overnight; the SFU admits only `sfuAllowCidr` | operational: redeploy OrgIQ-SocialMedia with `--context sfuAllowCidr=<new ip>/32` (the inference keeps the old one) |
+| Every plan and diff showed OrgIQ-Foundation pending; lab.json said Social and documents were off | the environment record was template Metadata, which CloudFormation never applies alone; lab.json's features disagreed with DE-17 and the account | SSM `/orgiq/environment`; lab.json corrected (the orchestrator's phases read it); `DEPLOY_PLAN_ONLY=true` added to see a deploy without making it |
+| OrgIQ-PromptCanary rolled back (`2c352c95`) | the promotion machine's catcher listed `States.ALL` beside another error; Step Functions requires it alone and last | two catchers; a test walks every state machine for the rule |
+| `/api/session/me` 401 SESSION_INVALID right after a Cognito sign-in (lenient routes still 200) | the SSO callback minted the cookie without the directory epoch; any user who had ever switched tenant read as epoch 0 | `routes/auth.ts` passes `user.epoch`; regression test |
 
 The 2026-10-28 rollout also applied the schema ledger baseline and the
 page-thread data migration (19 comments, 0 failures; `2026-09-05-drop-newsroom`
