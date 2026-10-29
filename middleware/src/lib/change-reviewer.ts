@@ -13,6 +13,7 @@
 // still existing.
 
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import { config } from '../config.js';
 import { staticReview } from '../mock/static-review.js';
 import type { ReviewVerdict } from './sdlc-policy.js';
@@ -109,6 +110,7 @@ export async function reviewDiff(input: {
       messages: [{ role: 'user', content: [{ text: user }] }],
       inferenceConfig: { maxTokens: 1500, temperature: 0.2 },
     }));
+    void recordBffCall({ feature: 'sdlc-change-review', model: REVIEW_MODEL, usage: out.usage });
     const text = out.output?.message?.content?.[0]?.text ?? '';
     const json = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
     if (!json) {

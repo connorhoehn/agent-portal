@@ -77,11 +77,14 @@ def _resolve_workspace() -> tuple[str, bool]:
     return fallback, False
 
 
-def _kill_process_group(proc: asyncio.subprocess.Process, timeout_s: int) -> None:
+def _kill_process_group(proc: asyncio.subprocess.Process, timeout_s: int, why: str = "timeout") -> None:
     """Kill claude AND its descendants (they share the session started with
     start_new_session=True). Falls back to killing just the direct child if
     the group is already gone."""
-    log.warning("Task exceeded %ss — killing claude process group", timeout_s)
+    if why == "timeout":
+        log.warning("Task exceeded %ss — killing claude process group", timeout_s)
+    else:
+        log.warning("Task stopped (%s) — killing claude process group", why)
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
     except (ProcessLookupError, PermissionError):
@@ -191,7 +194,62 @@ def _subprocess_env(workspace: str, lab: object = None) -> dict:
     return env
 
 
-async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeout_s: int, lab: object = None) -> AsyncIterator[dict]:
+def _budget_tokens(budget: object) -> int | None:
+    """The fresh-token ceiling from the payload's `budget` (DE-35), or None.
+
+    The middleware converts its dollar ceiling (the run's spend hold plus the
+    top-ups it may still take) into tokens at the model's OUTPUT rate, the
+    pessimistic one, so this file needs no price table."""
+    if not isinstance(budget, dict):
+        return None
+    raw = budget.get("max_fresh_tokens")
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or raw <= 0:
+        return None
+    return int(raw)
+
+
+class _FreshTokenMeter:
+    """Fresh tokens so far: input + cache_creation + output, the rule the
+    middleware's extractUsage uses (cache reads are excluded: they were
+    counted on the turn that created them).
+
+    Claude Code repeats one message's usage on every content block it emits
+    for that message, so usage is kept per message id (the largest seen) and
+    summed across ids; the final `result` event's run total is ignored here."""
+
+    def __init__(self) -> None:
+        self._by_message: dict[str, int] = {}
+        self._anonymous = 0
+
+    @staticmethod
+    def _fresh(usage: dict) -> int:
+        def n(key: str) -> int:
+            v = usage.get(key)
+            return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else 0
+        return n("input_tokens") + n("cache_creation_input_tokens") + n("output_tokens")
+
+    def observe(self, ev: object) -> None:
+        if not isinstance(ev, dict) or ev.get("type") == "result":
+            return
+        message = ev.get("message") if isinstance(ev.get("message"), dict) else None
+        usage = ev.get("usage") if isinstance(ev.get("usage"), dict) else (
+            message.get("usage") if message and isinstance(message.get("usage"), dict) else None)
+        if not usage:
+            return
+        fresh = self._fresh(usage)
+        mid = message.get("id") if message else None
+        if isinstance(mid, str) and mid:
+            self._by_message[mid] = max(self._by_message.get(mid, 0), fresh)
+        else:
+            self._anonymous += fresh
+
+    @property
+    def total(self) -> int:
+        return self._anonymous + sum(self._by_message.values())
+
+
+async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeout_s: int, lab: object = None,
+                         budget: object = None) -> AsyncIterator[dict]:
     """Spawn claude and yield one dict per stream-json event line.
 
     Yield DICTS, not pre-serialised JSON strings: BedrockAgentCoreApp
@@ -226,38 +284,65 @@ async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeo
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout_s
     timed_out = False
+    # Why the group was killed: 'timeout' | 'budget' | 'cancelled' | None (DE-35).
+    killed: str | None = None
+    max_fresh = _budget_tokens(budget)
+    meter = _FreshTokenMeter()
+    finished = False
     assert proc.stdout is not None
-    while True:
-        remaining = deadline - loop.time()
-        if remaining <= 0:
-            timed_out = True
-            _kill_process_group(proc, timeout_s)
-            break
-        try:
-            raw_line = await asyncio.wait_for(proc.stdout.readline(), timeout=remaining)
-        except asyncio.TimeoutError:
-            timed_out = True
-            _kill_process_group(proc, timeout_s)
-            break
-        if not raw_line:
-            break  # EOF — claude exited and no child holds the pipe
-        line = raw_line.decode("utf-8", errors="replace").strip()
-        if not line:
-            continue
-        # Parse stream-json event lines back to dicts for the app to
-        # encode once; wrap anything that isn't JSON (stray CLI output)
-        # so consumers always receive JSON objects.
-        if line.startswith("{"):
+    try:
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                timed_out = True
+                killed = "timeout"
+                _kill_process_group(proc, timeout_s)
+                break
             try:
-                yield json.loads(line)
+                raw_line = await asyncio.wait_for(proc.stdout.readline(), timeout=remaining)
+            except asyncio.TimeoutError:
+                timed_out = True
+                killed = "timeout"
+                _kill_process_group(proc, timeout_s)
+                break
+            if not raw_line:
+                break  # EOF — claude exited and no child holds the pipe
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if not line:
                 continue
-            except json.JSONDecodeError:
-                pass
-        yield {"type": "devbox_raw", "text": line}
-    await proc.wait()
+            # Parse stream-json event lines back to dicts for the app to
+            # encode once; wrap anything that isn't JSON (stray CLI output)
+            # so consumers always receive JSON objects.
+            event: dict | None = None
+            if line.startswith("{"):
+                try:
+                    parsed = json.loads(line)
+                    event = parsed if isinstance(parsed, dict) else {"type": "devbox_raw", "text": line}
+                except json.JSONDecodeError:
+                    event = None
+            if event is None:
+                event = {"type": "devbox_raw", "text": line}
+            yield event
+            # The token ceiling (DE-35): checked after the event is forwarded,
+            # so the middleware sees the usage that crossed it.
+            if max_fresh is not None:
+                meter.observe(event)
+                if meter.total >= max_fresh:
+                    killed = "budget"
+                    _kill_process_group(proc, timeout_s, "budget")
+                    break
+        await proc.wait()
+        finished = True
+    finally:
+        # A closed stream (the caller aborted, AgentCore cancelled the
+        # request) lands here as GeneratorExit/CancelledError at the yield:
+        # without this, claude kept running — and billing — after nobody was
+        # listening.
+        if not finished and proc.returncode is None:
+            _kill_process_group(proc, timeout_s, "cancelled")
 
     stderr_tail = b""
-    if proc.stderr is not None and not timed_out:
+    if proc.stderr is not None and not timed_out and killed != "budget":
         try:
             stderr_tail = await asyncio.wait_for(proc.stderr.read(), timeout=5)
         except asyncio.TimeoutError:
@@ -267,6 +352,8 @@ async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeo
         "type": "devbox_end",
         "exit_code": proc.returncode,
         "timed_out": timed_out,
+        "killed_reason": killed,
+        **({"fresh_tokens": meter.total, "max_fresh_tokens": max_fresh} if max_fresh is not None else {}),
         "stderr": stderr_tail.decode("utf-8", errors="replace")[-4000:],
     }
 
@@ -443,7 +530,11 @@ async def handle(payload: dict) -> AsyncIterator | dict:
                         error and no `claude` process, DE-40),
       "lab":     dict  (optional — the run: run_ref, run_token, brief_id,
                         work_item_id, initiative_id, repo, session_id, box_id;
-                        set as LAB_* for every `lab` call, see _LAB_ENV)
+                        set as LAB_* for every `lab` call, see _LAB_ENV),
+      "budget":  dict  (optional, DE-35 — {"max_fresh_tokens": int,
+                        "reason_ref": str}: the process group is killed once
+                        the run's fresh tokens reach the ceiling, and
+                        devbox_end says killed_reason "budget")
     }
 
     Or a credentialed git op (DE-45), which never starts `claude`:
@@ -485,7 +576,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
 
     if stream:
         cmd = _build_cmd(prompt, resume, "stream-json", model)
-        return _run_streaming(cmd, workspace, persistent, timeout_s, payload.get("lab"))
+        return _run_streaming(cmd, workspace, persistent, timeout_s, payload.get("lab"), payload.get("budget"))
 
     cmd = _build_cmd(prompt, resume, "json", model)
     return await _run_sync(cmd, workspace, persistent, timeout_s, payload.get("lab"))

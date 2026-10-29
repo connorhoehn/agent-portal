@@ -38,6 +38,8 @@ import {
   enqueueJob, claimJob, markRunning, completeJob, cancelJob,
 } from '../providers/agent-jobs.js';
 import { asModelProvider } from './run-cost.js';
+import { cutoffMessage } from './run-meter.js';
+import { hasColumns } from '../providers/column-probe.js';
 import { dispatchGovernedRun } from './sdlc-pipeline.js';
 import { cloneIntoBox, CLONE_FAILURE } from './devbox-git.js';
 import { hasLifeFor, lifetimePolicy } from './devbox-lifetime.js';
@@ -1095,7 +1097,11 @@ export async function fireBot(botId: string, opts: {
     const run = await createBotRun({
       botId: bot.id, trigger: opts.trigger, status: 'skipped',
       dispatchedBy: opts.dispatchedBy ?? null,
-      outcome: { reason, ...('gate' in held && held.gate ? { gate: held.gate } : {}) },
+      outcome: {
+        reason,
+        ...(held.kind === 'limited' ? { gate: 'run-limit' } : held.kind === 'paused' ? { gate: 'paused' }
+          : 'gate' in held && held.gate ? { gate: held.gate } : {}),
+      },
     });
     return { ok: false, reason, refusal: held, ...(run ? { run } : {}) };
   }
@@ -1372,6 +1378,9 @@ export async function dispatchWorkItem(input: {
   /** The spend hold the route took (DE-34), or null when none was written.
    *  Bound to the bot_run once it exists; released on every failure below. */
   holdId?: string | null;
+  /** The operator's per-run cap from the request (DE-35): persisted on the
+   *  bot_run outcome so the reconcile's overRunBudget flag can judge it. */
+  budgetPerRunUsd?: number | null;
 }): Promise<DispatchWorkResult> {
   const holdId = input.holdId ?? null;
   const fail = async (result: Extract<DispatchWorkResult, { ok: false }>): Promise<DispatchWorkResult> => {
@@ -1445,6 +1454,7 @@ export async function dispatchWorkItem(input: {
   if (currentMockScope() !== undefined || !await resolveDevboxArn()) {
     return simulateMarketplaceDispatch({
       item, project, prompt, model: input.model, revertClaim, holdId,
+      ...(input.budgetPerRunUsd != null ? { budgetPerRunUsd: input.budgetPerRunUsd } : {}),
       ...(input.actor ? { actor: input.actor } : {}),
       ...(input.estimate ? { estimate: input.estimate } : {}),
     });
@@ -1489,6 +1499,7 @@ export async function dispatchWorkItem(input: {
       ...(input.actor ? { actor: input.actor } : {}),
       ...(input.estimate ? { estimate: input.estimate } : {}),
       ...(holdId ? { holdId } : {}),
+      ...(input.budgetPerRunUsd != null ? { budgetPerRunUsd: input.budgetPerRunUsd } : {}),
     },
   });
   if (!run) {
@@ -1590,6 +1601,7 @@ async function simulateMarketplaceDispatch(input: {
   revertClaim: () => Promise<void>;
   /** The route's spend hold, bound to the simulated bot_run (DE-34). */
   holdId: string | null;
+  budgetPerRunUsd?: number;
 }): Promise<DispatchWorkResult> {
   const { item, project } = input;
 
@@ -1663,6 +1675,7 @@ async function simulateMarketplaceDispatch(input: {
       ...(input.estimate ? { estimate: input.estimate } : {}),
       ...(frozen ? { brief_id: frozen.brief.id, brief_sha: frozen.brief.sha256 } : {}),
       ...(input.holdId ? { holdId: input.holdId } : {}),
+      ...(input.budgetPerRunUsd != null ? { budgetPerRunUsd: input.budgetPerRunUsd } : {}),
       // Said on the row, not only in this file. Every surface that renders a
       // run outcome can then tell a simulated dispatch from a real one, which
       // matters most for the money: this run's cost is a fixture, not a bill.
@@ -1826,6 +1839,23 @@ async function settleSimulatedRun(input: {
 
 // ─── Reconciliation ───────────────────────────────────────────────────────────
 
+/** The DE-35 cutoff block off a JSONB column (object, or text from the Data API), or null. */
+function parseCutoff(v: unknown): { reason: 'budget'; ceilingUsd: number; meteredUsd: number; holdIds: string[] } | null {
+  let o: unknown = v;
+  if (typeof v === 'string' && v.trim().startsWith('{')) {
+    try { o = JSON.parse(v); } catch { return null; }
+  }
+  if (!o || typeof o !== 'object') return null;
+  const c = o as Record<string, unknown>;
+  if (c['reason'] !== 'budget') return null;
+  return {
+    reason: 'budget',
+    ceilingUsd: Number(c['ceilingUsd'] ?? 0) || 0,
+    meteredUsd: Number(c['meteredUsd'] ?? 0) || 0,
+    holdIds: Array.isArray(c['holdIds']) ? (c['holdIds'] as unknown[]).map(String) : [],
+  };
+}
+
 /**
  * Settle finished governed runs — the run-backed arm of reconcileBotRuns, fed
  * either by the SQL join or, offline, by mockRunBackedSettlements in the same
@@ -1839,6 +1869,7 @@ async function settleRunBacked(runBacked: Record<string, unknown>[]): Promise<nu
     try {
       const done = toStr(row['run_status']) === 'done';
       const costUsd = row['cost_usd'] == null ? null : Number(row['cost_usd']);
+      const cutoff = parseCutoff(row['cutoff']);
 
       // Settle the bound work item FIRST, finalize the bot_run LAST: the
       // br.status='running' filter is what re-selects this row next tick, so
@@ -1853,8 +1884,13 @@ async function settleRunBacked(runBacked: Record<string, unknown>[]): Promise<nu
           });
         } else if (!done) {
           await updateWorkItem(workItemId, { status: 'open' });
+          // A run its spend ceiling stopped says so in the hold's own words (DE-35).
           const why = row['run_error'] ? toStr(row['run_error']) : 'the run failed without a recorded error';
-          await addWorkItemComment(workItemId, `Marketplace run failed: ${why}`, { isSystem: true });
+          await addWorkItemComment(
+            workItemId,
+            cutoff ? `Marketplace run ${cutoffMessage(cutoff)}.` : `Marketplace run failed: ${why}`,
+            { isSystem: true },
+          );
         } else {
           // Done but nothing captured: the agent committed no change. Back to
           // open with a comment, else the item is stuck in_progress forever.
@@ -1876,6 +1912,7 @@ async function settleRunBacked(runBacked: Record<string, unknown>[]): Promise<nu
           ...(row['pr_url'] ? { prUrl: toStr(row['pr_url']) } : {}),
           ...(row['files_changed'] == null ? {} : { filesChanged: Number(row['files_changed']) }),
           ...(overRunBudget ? { overRunBudget: true } : {}),
+          ...(cutoff ? { cutoff } : {}),
         },
       });
       settled++;
@@ -1942,10 +1979,15 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
   // a re-review appends reviews, not changes, so one run has at most one.
   // The bot's per-run budget joins in so the soft cap can be judged against
   // the actual cost the moment it is known.
+  // The marketplace's request-supplied per-run cap rides the bot_run outcome
+  // (no bot row carries one), so overRunBudget can fire for those runs too;
+  // the run's DE-35 cutoff joins when the column exists.
+  const withCutoff = await hasColumns('agent_project_runs', ['cutoff']).catch(() => false);
   const runBacked = await exec(
     `SELECT br.id, br.work_item_id, r.status AS run_status, r.cost_usd::float8 AS cost_usd,
             r.files_changed, r.error AS run_error, cr.change_id, cr.pr_url,
-            b.budget_per_run_usd::float8 AS budget_per_run_usd
+            ${withCutoff ? 'r.cutoff::text AS cutoff,' : ''}
+            COALESCE(b.budget_per_run_usd::float8, (br.outcome->>'budgetPerRunUsd')::float8) AS budget_per_run_usd
        FROM bot_runs br
        JOIN agent_project_runs r ON r.id = br.run_id
        LEFT JOIN bots b ON b.id = br.bot_id
@@ -1970,8 +2012,8 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
   // claiming a provenance nobody recorded.
   const jobBacked = await exec(
     `SELECT br.id, j.status AS job_status, (j.result->>'costUsd')::float8 AS cost_usd,
-            j.result->>'provider' AS provider,
-            b.budget_per_run_usd::float8 AS budget_per_run_usd
+            j.result->>'provider' AS provider, (j.result->'cutoff')::text AS cutoff,
+            COALESCE(b.budget_per_run_usd::float8, (br.outcome->>'budgetPerRunUsd')::float8) AS budget_per_run_usd
        FROM bot_runs br
        JOIN agent_jobs j ON j.id = br.job_id
        LEFT JOIN bots b ON b.id = br.bot_id
@@ -1996,6 +2038,7 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
         outcome: {
           ...(jobStatus === 'awaiting_review' ? { awaitingReview: true } : {}),
           ...(overRunBudget ? { overRunBudget: true } : {}),
+          ...(parseCutoff(row['cutoff']) ? { cutoff: parseCutoff(row['cutoff']) } : {}),
         },
       });
       settled++;

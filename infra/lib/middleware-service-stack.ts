@@ -15,6 +15,7 @@ import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 import { realtimeAlarm, realtimeAlarmsEnabled, realtimeAlarmTopicName } from './realtime-alarms';
+import { attachFleetAlarms, fleetAlarmsEnabled } from './fleet-alarms';
 import { capabilityParameterNames } from './agentcore-capabilities-stack';
 import { DEVBOX_TASK_TIMEOUT_S } from './devbox-stack';
 import type { Construct } from 'constructs';
@@ -1538,6 +1539,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
           + 'nothing writes the load line.');
       }
     }
+
+    // ── Devbox fleet alarms (fleetAlarms=true; lib/fleet-alarms.ts, DE-50) ─
+    if (fleetAlarmsEnabled(this)) attachFleetAlarms(this, prefix, logGroup);
 
     const deployDocuments = this.node.tryGetContext('deployDocumentWorkspace') === true
       || this.node.tryGetContext('deployDocumentWorkspace') === 'true';

@@ -301,5 +301,137 @@ class DevboxWrapperTests(unittest.TestCase):
             self.assertEqual(events[0]["exit_code"], 2)
 
 
+# ── DE-35: the token ceiling and a closed stream ─────────────────────────────
+
+# Streams usage turns forever and leaves a grandchild holding a pid file, so a
+# test can tell whether the whole process group died, not just claude.
+USAGE_STREAM = r"""
+sleep 300 &
+echo $! > "$PIDFILE"
+i=0
+while true; do
+  i=$((i+1))
+  echo "{\"type\":\"assistant\",\"message\":{\"id\":\"m$i\",\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":900,\"cache_read_input_tokens\":5000,\"output_tokens\":90}}}"
+  # The same message again (one event per content block): counted once.
+  echo "{\"type\":\"assistant\",\"message\":{\"id\":\"m$i\",\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":900,\"cache_read_input_tokens\":5000,\"output_tokens\":90}}}"
+  sleep 0.05
+done
+"""
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    # A zombie still answers kill(0); ask ps for its state.
+    import subprocess
+    state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    return bool(state) and not state.startswith("Z")
+
+
+def _wait_dead(pid: int, seconds: float = 3.0) -> bool:
+    import time
+    end = time.time() + seconds
+    while time.time() < end:
+        if not _alive(pid):
+            return True
+        time.sleep(0.05)
+    return not _alive(pid)
+
+
+class DevboxBudgetTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.workspace = os.path.join(self.tmp.name, "ws")
+        os.makedirs(self.workspace)
+        self.pidfile = os.path.join(self.tmp.name, "child.pid")
+        os.environ["PIDFILE"] = self.pidfile
+        self._orig_claude_bin = main._claude_bin
+        path = _make_stub(self.tmp.name, USAGE_STREAM)
+        main._claude_bin = lambda: path
+
+    def tearDown(self):
+        main._claude_bin = self._orig_claude_bin
+        os.environ.pop("PIDFILE", None)
+        self.tmp.cleanup()
+
+    def _child_pid(self) -> int:
+        with open(self.pidfile) as f:
+            return int(f.read().strip())
+
+    def test_crossing_the_token_ceiling_kills_the_group(self):
+        cmd = main._build_cmd("spend", resume=False, output_format="stream-json")
+        events = _collect(main._run_streaming(
+            cmd, self.workspace, True, timeout_s=30, budget={"max_fresh_tokens": 3000, "reason_ref": "hold-1"}))
+        end = events[-1]
+        self.assertEqual(end["type"], "devbox_end")
+        self.assertEqual(end["killed_reason"], "budget")
+        self.assertFalse(end["timed_out"])
+        # 1000 fresh per message (cache reads excluded, duplicates once): the
+        # third message crosses 3000.
+        self.assertEqual(end["fresh_tokens"], 3000)
+        self.assertEqual(len([e for e in events if e["type"] == "assistant"]), 5)
+        self.assertTrue(_wait_dead(self._child_pid()), "the grandchild outlived the budget kill")
+
+    def test_no_budget_means_no_budget_kill(self):
+        cmd = main._build_cmd("spend", resume=False, output_format="stream-json")
+        events = _collect(main._run_streaming(cmd, self.workspace, True, timeout_s=1, budget={"max_fresh_tokens": 0}))
+        self.assertEqual(events[-1]["killed_reason"], "timeout")
+        self.assertNotIn("fresh_tokens", events[-1])
+
+    def test_closing_the_stream_kills_the_group(self):
+        cmd = main._build_cmd("spend", resume=False, output_format="stream-json")
+
+        async def run():
+            gen = main._run_streaming(cmd, self.workspace, True, timeout_s=30)
+            seen = 0
+            async for ev in gen:
+                if ev["type"] == "assistant":
+                    seen += 1
+                    if seen == 2:
+                        break
+            await gen.aclose()
+
+        asyncio.run(run())
+        self.assertTrue(_wait_dead(self._child_pid()), "the grandchild outlived the closed stream")
+
+    def test_cancelling_the_task_kills_the_group(self):
+        cmd = main._build_cmd("spend", resume=False, output_format="stream-json")
+
+        async def consume():
+            async for _ in main._run_streaming(cmd, self.workspace, True, timeout_s=30):
+                pass
+
+        async def run():
+            task = asyncio.ensure_future(consume())
+            await asyncio.sleep(0.5)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+
+        asyncio.run(run())
+        self.assertTrue(_wait_dead(self._child_pid()), "the grandchild outlived the cancelled task")
+
+    def test_the_payload_budget_reaches_the_stream(self):
+        captured = {}
+        orig = main._run_streaming
+
+        def fake(cmd, workspace, persistent, timeout_s, lab=None, budget=None):
+            captured["budget"] = budget
+            return orig(cmd, workspace, persistent, timeout_s, lab, budget)
+
+        main._run_streaming = fake
+        try:
+            gen = asyncio.run(main.handle({"prompt": "x", "budget": {"max_fresh_tokens": 1500}}))
+            events = _collect(gen)
+        finally:
+            main._run_streaming = orig
+        self.assertEqual(captured["budget"], {"max_fresh_tokens": 1500})
+        self.assertEqual(events[-1]["killed_reason"], "budget")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -382,6 +382,9 @@ export async function finishRun(id: string, outcome: {
    * provenance is still a run worth recording.
    */
   modelProvider?: ModelProvider | null;
+  /** DE-35: the spend ceiling stopped this run. Dropped on a cluster without
+   *  schema/run_controls_schema.sql (the error text still says why). */
+  cutoff?: object | null;
 }): Promise<void> {
   // `duration_ms` is not written here in mock mode and is not stored in the
   // fixture: the row carries `started_at` and `finished_at`, and the duration
@@ -394,6 +397,7 @@ export async function finishRun(id: string, outcome: {
       diffSummary: outcome.diffSummary ?? null,
       error: outcome.error ?? null,
       costUsd: outcome.costUsd ?? null,
+      ...(outcome.cutoff ? { cutoff: outcome.cutoff as Record<string, unknown> } : {}),
     });
     return;
   }
@@ -410,6 +414,7 @@ export async function finishRun(id: string, outcome: {
   // An old cluster cannot retain the label. Leave its figure unknown rather
   // than let downstream readers present an estimate as reported spend.
   const costUsd = outcome.costBasis === 'estimated' && !withCostBasis ? null : outcome.costUsd;
+  const withCutoff = outcome.cutoff != null && await hasColumns('agent_project_runs', ['cutoff']);
   await exec(
     `UPDATE agent_project_runs
         SET status = :status,
@@ -420,11 +425,13 @@ export async function finishRun(id: string, outcome: {
             error = :err,
             ${provider ? 'model_provider = :provider,' : ''}
             ${withCostBasis ? 'cost_basis = :basis, estimated_cost_usd = :estimate,' : ''}
+            ${withCutoff ? 'cutoff = :cutoff::jsonb,' : ''}
             cost_usd = :cost
       WHERE id = :id::uuid`,
     [
       s('status', outcome.status), s('id', id),
       ...(provider ? [s('provider', provider)] : []),
+      ...(withCutoff ? [s('cutoff', JSON.stringify(outcome.cutoff))] : []),
       ...(withCostBasis ? [
         s('basis', costUsd == null ? 'unknown' : outcome.costBasis!),
         outcome.estimatedCostUsd == null ? nul('estimate') : { name: 'estimate', value: { doubleValue: outcome.estimatedCostUsd } },

@@ -345,6 +345,7 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     // 409 soft brake (allocation / envelope / user-budget), 403 hard cap or
     // refused, 503 unreadable — one renderer (lib/spend-holds.ts).
     const r = spendRefusalResponse(held, held.kind === 'confirm' ? { estimate: estimateBody(forecast) } : {});
+    if (r.headers) res.set(r.headers);
     res.status(r.status).json(r.body);
     return;
   }
@@ -354,6 +355,7 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     // The hold rides down and is bound to the bot_run once it exists; every
     // failure after this point releases it inside dispatchWorkItem.
     holdId: held.holdId,
+    ...(budgetPerRunUsd != null ? { budgetPerRunUsd } : {}),
     ...(body.agentProjectId ? { agentProjectId: String(body.agentProjectId) } : {}),
     ...(instruction ? { instruction } : {}),
     ...(actor ? { actor } : {}),
@@ -825,6 +827,7 @@ botsRouter.post('/:id/run', manageGate, asyncHandler(async (req, res) => {
   if (!result.ok) {
     if (result.refusal) {
       const r = spendRefusalResponse(result.refusal);
+      if (r.headers) res.set(r.headers);
       res.status(r.status).json(r.body);
       return;
     }

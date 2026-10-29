@@ -34,6 +34,7 @@ import { listBoxes, markStopped, appendEvent, refreshFromShared, type FleetBox }
 import { replicaFleet, type ReplicaFleet, type ReplicaLock } from './replica-fleet.js';
 import { isLocalBoxId } from './local-compute-fleet.js';
 import { lifetimePolicy, taskOverrunMs, type LifetimePolicy } from './devbox-lifetime.js';
+import { emitFleetMetric } from './fleet-metrics.js';
 
 const MINUTE = 60_000;
 
@@ -46,7 +47,8 @@ export const MAX_LIFETIME_MS = lifetimePolicy().boxCeilingMs;
 const SWEEP_INTERVAL_MS =
   Number(process.env['DEVBOX_REAPER_INTERVAL_SECONDS'] ?? 60) * 1000;
 
-export type ReapReason = 'idle' | 'max-lifetime' | 'task-overrun';
+/** `paused`: the fleet is paused (DE-50) and this box is not running a task. */
+export type ReapReason = 'idle' | 'max-lifetime' | 'task-overrun' | 'paused';
 
 export interface ReapDecision {
   box: FleetBox;
@@ -124,7 +126,24 @@ function explain(d: ReapDecision): string {
       return `Stopped at the ${Math.round(d.policy.boxCeilingMs / MINUTE)}-minute ceiling after ${d.minutes} minutes without a task running. A checkout this old is cheaper to re-clone than to keep.`;
     case 'task-overrun':
       return `Stopped after ${d.minutes} minutes on one task — past its ${d.policy.taskMaxS}-second limit plus ${Math.round(d.policy.graceMs / MINUTE)} minutes of grace. A task that runs this long is stuck.`;
+    case 'paused':
+      return 'Stopped because the agent fleet is paused. The workspace survives; the box resumes with its next task once the fleet is resumed.';
   }
+}
+
+/**
+ * With the fleet paused (DE-50), every cloud box that is not running a task
+ * stops too; running tasks finish (bounded by their own ceilings). Pure.
+ */
+export function pausedReaping(boxes: FleetBox[], already: ReapDecision[], now = Date.now(), policyFor: PolicyLookup = defaultLookup): ReapDecision[] {
+  const taken = new Set(already.map((d) => d.box.id));
+  const out: ReapDecision[] = [];
+  for (const box of boxes) {
+    if (taken.has(box.id) || box.status === 'stopped' || box.status === 'running' || isLocalBoxId(box.id)) continue;
+    const idle = now - new Date(box.lastActivityAt).getTime();
+    out.push({ box, reason: 'paused', minutes: Number.isFinite(idle) ? Math.round(idle / MINUTE) : 0, policy: policyFor(box) });
+  }
+  return out;
 }
 
 export interface ReaperDeps {
@@ -143,6 +162,14 @@ export interface ReaperDeps {
    * replica stopped a box another replica was running a task on.
    */
   refresh?: () => Promise<void>;
+  /** Whether the fleet is paused (DE-50); paused stops idle boxes. Default: not consulted. */
+  fleetPaused?: () => Promise<boolean>;
+  /**
+   * The leader's once-a-sweep housekeeping (DE-37/50): free dead run slots,
+   * emit the fleet stats line, sweep budget thresholds. Default: none, so a
+   * test of the reap decision runs nothing else; startReaper wires it.
+   */
+  housekeeping?: (boxes: FleetBox[], decisions: ReapDecision[], now: number) => Promise<void>;
 }
 
 let _timer: NodeJS.Timeout | null = null;
@@ -170,7 +197,12 @@ export async function sweepOnce(deps: ReaperDeps, now = Date.now(), lease?: Repl
   }
   lease?.assertLive();
   const boxes = listBoxes();
-  if (boxes.length === 0) return [];
+  if (boxes.length === 0) {
+    // The stats line is the reaper's heartbeat (alarm: reaper silent), so an
+    // empty fleet still runs the housekeeping.
+    if (deps.housekeeping) await deps.housekeeping([], [], now).catch(() => undefined);
+    return [];
+  }
   let policies: Map<string, LifetimePolicy>;
   try {
     policies = await (deps.policies ?? profilePolicies)(boxes);
@@ -179,7 +211,18 @@ export async function sweepOnce(deps: ReaperDeps, now = Date.now(), lease?: Repl
     policies = new Map();
   }
   const fallback = lifetimePolicy();
-  const decisions = decideReaping(boxes, now, (box) => policies.get(box.id) ?? fallback);
+  const lookup = (box: FleetBox): LifetimePolicy => policies.get(box.id) ?? fallback;
+  const decisions = decideReaping(boxes, now, lookup);
+  let paused = false;
+  if (deps.fleetPaused) {
+    try { paused = await deps.fleetPaused(); } catch { paused = false; }
+  }
+  if (paused) decisions.push(...pausedReaping(boxes, decisions, now, lookup));
+  if (deps.housekeeping) {
+    try { await deps.housekeeping(boxes, decisions, now); } catch (err) {
+      console.warn('[devbox-reaper] housekeeping failed:', (err as Error).message);
+    }
+  }
   if (decisions.length === 0) return [];
 
   const arn = await deps.runtimeArn();
@@ -200,7 +243,8 @@ export async function sweepOnce(deps: ReaperDeps, now = Date.now(), lease?: Repl
         runtimeSessionId: d.box.sessionId,
       }));
       markStopped(d.box.id);
-      console.warn(`[devbox-reaper] stopped ${d.box.label} (${d.reason}, ${d.minutes}m)`);
+      // A metric line, not a warn nobody reads (DE-50): ReaperKills by Reason.
+      emitFleetMetric('devbox-reaped', { reason: d.reason, boxId: d.box.id, label: d.box.label, minutes: d.minutes });
     } catch (err) {
       // "Already gone" is the goal, not a failure. AgentCore stops a session
       // on its own (its 1 h idle / 8 h maximum, and every runtime version
@@ -211,12 +255,12 @@ export async function sweepOnce(deps: ReaperDeps, now = Date.now(), lease?: Repl
       // pruning keys off `stopped`. Settling it converges instead.
       if ((err as { name?: string }).name === 'ResourceNotFoundException') {
         markStopped(d.box.id);
-        console.warn(`[devbox-reaper] ${d.box.label} was already gone — settled`);
+        emitFleetMetric('devbox-reaped', { reason: d.reason, boxId: d.box.id, label: d.box.label, minutes: d.minutes, alreadyGone: true });
         continue;
       }
       // A box that cannot be stopped is worth knowing about — it is the one
-      // still costing money.
-      console.warn(`[devbox-reaper] could not stop ${d.box.label}:`, (err as Error).message);
+      // still costing money: ReaperStopFailures, alarmed on any.
+      emitFleetMetric('devbox-reap-failed', { reason: d.reason, boxId: d.box.id, label: d.box.label, error: (err as Error).message });
     }
   }
   return decisions;

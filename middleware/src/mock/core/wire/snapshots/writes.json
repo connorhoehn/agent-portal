@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-29T19:53:13.847Z",
-  "serverHandlerSha": "631f23db9ba4a7c79ff0dae4e187f8b9691b759e1fd4f026f69679c335ca5756",
+  "capturedAt": "2026-10-29T21:09:52.466Z",
+  "serverHandlerSha": "0729aab07649a5c40a8e3cfc4a90019beae2941a3cf4c1868b9a62cc0e02e06a",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -535,9 +535,9 @@
         "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
-        "completedAt": "string",
+        "completedAt": "null",
         "createdAt": "string",
-        "description": "null",
+        "description": "string",
         "estimateForecast": "null",
         "estimateModel": "null",
         "estimateReviewedAt": "null",
@@ -554,25 +554,25 @@
         "nextStep": "null",
         "nextStepDetail": "null",
         "parentId": "string",
-        "prStatus": "string",
-        "prUrl": "string",
+        "prStatus": "null",
+        "prUrl": "null",
         "priority": "string",
         "projectId": "string",
         "projectName": "string",
-        "sprintId": "string",
+        "sprintId": "null",
         "status": "string",
         "storyPoints": "number",
-        "summary": "null",
+        "summary": "string",
         "title": "string",
         "type": "string",
         "updatedAt": "string"
       },
       "values": {
         "key": [
-          "ORG-LLM-10"
+          "ORG-OBS-13"
         ],
         "status": [
-          "done"
+          "open"
         ],
         "type": [
           "story"
@@ -4702,6 +4702,12 @@
         "allocatedUsd"
       ]
     },
+    "PUT /api/budgets/:orgProjectId/limits": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "PUT /api/calls/:callId/page": {
       "refused": {
         "rule": "active-call-state",
@@ -4808,6 +4814,12 @@
       "refused": {
         "rule": "spends",
         "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: writes the judge config to SSM, changing live judging for the whole fleet."
+      }
+    },
+    "PUT /api/ops/switches/:scope": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
     "PUT /api/pipelines/configuration": {

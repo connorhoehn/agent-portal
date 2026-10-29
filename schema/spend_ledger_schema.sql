@@ -58,4 +58,4 @@ ALTER TABLE agent_project_runs ADD COLUMN IF NOT EXISTS estimated_cost_usd NUMER
 -- POST /api/agent-projects/:id/runs, which writes no bot_runs row).
 ALTER TABLE spend_entries DROP CONSTRAINT IF EXISTS spend_entries_source_check;
 ALTER TABLE spend_entries ADD CONSTRAINT spend_entries_source_check
-  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run'));
+  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'bff_call'));

@@ -9,15 +9,12 @@ import { Link } from 'react-router';
 import {
   Button,
   Card,
-  CardHeader,
-  CatalogGrid,
   Chip,
   ConfirmDialog,
   DataTable,
   type DataTableColumn,
   EmptyState,
   IconButton,
-  InlinePlaceholder,
   Inline,
   Input,
   ProgressBar,
@@ -29,9 +26,12 @@ import {
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { usd, modelLabelFor, ago, rowBudgetStats } from './budgetsFormat';
-import type { BudgetRow, BudgetSummary, InitiativeOption } from './types';
+import { usd, ago, rowBudgetStats } from './budgetsFormat';
+import type { BudgetAccessLock, BudgetRow, InitiativeOption } from './types';
 import { absoluteTime } from '../../lib/relativeTime';
+import { LockedFigure } from '../projects/BudgetAccess';
+import { SpendFigureCell } from './SpendGroupTable';
+import { discretionaryBudget, floorFigure, moneyOrDash, remainingTone, type InitiativeLedgerRow } from './spendReportModel';
 
 async function putAllocation(orgProjectId: string, allocatedUsd: number): Promise<boolean> {
   const res = await writeJson(`/api/budgets/${encodeURIComponent(orgProjectId)}`, 'PUT', { allocatedUsd });
@@ -43,46 +43,6 @@ async function putAllocation(orgProjectId: string, allocatedUsd: number): Promis
   // re-renders, but the person is looking at the cell they just left.
   toastSuccess(null, 'Budget set', `$${allocatedUsd.toFixed(2)} / month`);
   return true;
-}
-
-// ─── Breakdown card (spend by model / by trigger) ────────────────────────────
-
-function BreakdownCard({ title, rows, emptyLabel }: {
-  title: string;
-  rows: Array<{ label: string; spentUsd: number; runCount: number }>;
-  /** What an empty card means. Both breakdowns now cut the same set of runs,
-   *  so empty means "no spend this period" and nothing else — but a card that
-   *  renders blank beside a populated one reads as broken, so it says so. */
-  emptyLabel?: string;
-}) {
-  const max = Math.max(...rows.map((r) => r.spentUsd), 0.000001);
-  return (
-    <Card padding="none" className="overflow-hidden">
-      <CardHeader inset title={title} />
-      <Stack gap="sm" className="px-3.5 py-2.5">
-        {rows.length === 0 ? (
-          <InlinePlaceholder>{emptyLabel ?? 'no spend this period'}</InlinePlaceholder>
-        ) : (
-          rows.map((r) => (
-            <Inline key={r.label} align="center" gap="sm" wrap={false} className="min-w-0">
-              <T size="xs" tone="secondary" className="w-24 shrink-0 truncate" title={r.label}>{r.label}</T>
-              <ProgressBar
-                value={Math.max((r.spentUsd / max) * 100, 2)}
-                size="sm"
-                showRatio={false}
-                className="flex-1 min-w-0"
-                aria-label={`${r.label} share of period spend`}
-              />
-              <T size="xs" weight="medium" tabular>{usd(r.spentUsd)}</T>
-              <T size="xs" tone="tertiary" className="w-14 justify-end">
-                {r.runCount} {r.runCount === 1 ? 'run' : 'runs'}
-              </T>
-            </Inline>
-          ))
-        )}
-      </Stack>
-    </Card>
-  );
 }
 
 // ─── Inline allocation editor ────────────────────────────────────────────────
@@ -248,8 +208,12 @@ function FirstBudgetForm({ initiatives, onSaved }: { initiatives: InitiativeOpti
 // ─── Report ────────────────────────────────────────────────────────────────
 
 export interface InitiativesReportProps {
-  budgets: BudgetRow[];
-  summary: BudgetSummary | undefined;
+  /** Budgets rows joined to the spend report's initiative groups (held, projected, unknown). */
+  budgets: InitiativeLedgerRow[];
+  /** Where an initiative's own report opens (the list rail's selection). */
+  reportHref: (orgProjectId: string) => string;
+  /** The spend report's lock when the reader is below the budgets tier. */
+  lock?: BudgetAccessLock | undefined;
   error: string | null;
   hasData: boolean;
   canManage: boolean;
@@ -266,7 +230,7 @@ export interface InitiativesReportProps {
 }
 
 export function InitiativesReport({
-  budgets, summary, error, hasData, canManage, refresh, initiatives, query = '',
+  budgets, reportHref, lock, error, hasData, canManage, refresh, initiatives, query = '',
 }: InitiativesReportProps) {
   const [confirmDelete, setConfirmDelete] = useState<BudgetRow | null>(null);
   const [showFirstBudget, setShowFirstBudget] = useState(false);
@@ -317,15 +281,16 @@ export function InitiativesReport({
   // in tabular figures, the burn meter INLINE beside the remaining figure,
   // and the maintenance share of spend a pill with its explanation in the
   // tooltip rather than a second line under the value.
-  const columns: DataTableColumn<BudgetRow>[] = [
+  const columns: DataTableColumn<InitiativeLedgerRow>[] = [
     {
       key: 'initiative',
       header: 'Initiative',
       render: (row) => (
         <Inline align="center" gap="sm" wrap={false} className="min-w-0">
           <Link
-            to={`/iq/projects/${row.orgProjectId}`}
+            to={reportHref(row.orgProjectId)}
             className="truncate text-text-primary no-underline hover:text-primary hover:underline"
+            title="Open this initiative’s spend report"
           >
             {row.orgProjectName ?? row.orgProjectId}
           </Link>
@@ -344,56 +309,76 @@ export function InitiativesReport({
       render: (row) => <AllocationCell row={row} canManage={canManage} onSaved={refresh} />,
     },
     {
-      key: 'spent',
-      header: 'Spent',
-      numeric: true,
-      render: (row) => (
-        <Inline align="center" justify="end" gap="sm" wrap={false}>
-          {/* The floor is a subset of the figure beside it, never extra spend:
-              a full floor says so in words instead of restating the number. */}
-          {row.maintenanceUsd > 0 && (
-            <Chip
-              tone="neutral"
-              size="xs"
-              title="Cron-triggered bot runs — the recurring floor of keeping this initiative's repos alive. Part of the spend figure, not additional to it."
-            >
-              {row.maintenanceUsd >= row.spentThisPeriodUsd ? 'all maintenance' : `${usd(row.maintenanceUsd)} maintenance`}
-            </Chip>
-          )}
-          <T tabular>{usd(row.spentThisPeriodUsd)}</T>
-        </Inline>
-      ),
-    },
-    {
-      key: 'remaining',
-      header: 'Remaining',
+      key: 'floor',
+      header: 'Floor',
       numeric: true,
       render: (row) => {
-        const { remaining, burn } = rowBudgetStats(row);
-        if (remaining == null || burn == null) return <T tone="tertiary">—</T>;
+        const f = floorFigure(row);
+        return <T tabular tone={f.text === '—' ? 'tertiary' : 'secondary'} title={f.title}>{f.text}</T>;
+      },
+    },
+    {
+      key: 'discretionarySpent',
+      header: 'Discretionary spent',
+      numeric: true,
+      sortable: true,
+      compare: (a, b) => (a.discretionarySpentUsd ?? a.spentThisPeriodUsd) - (b.discretionarySpentUsd ?? b.spentThisPeriodUsd),
+      render: (row) => <SpendFigureCell knownUsd={row.discretionarySpentUsd ?? row.spentThisPeriodUsd} unknownCount={row.ledgerUnknownCount} lock={lock} />,
+    },
+    {
+      key: 'discretionaryRemaining',
+      header: 'Discretionary left',
+      numeric: true,
+      sortable: true,
+      compare: (a, b) => (a.discretionaryRemainingUsd ?? Infinity) - (b.discretionaryRemainingUsd ?? Infinity),
+      render: (row) => {
+        // An older BFF has no reserve figures: fall back to allocated − spent.
+        const remaining = row.discretionaryRemainingUsd !== undefined ? row.discretionaryRemainingUsd : rowBudgetStats(row).remaining;
+        const budget = row.discretionaryRemainingUsd !== undefined ? discretionaryBudget(row) : row.allocatedUsd;
+        if (remaining == null || budget == null) return <T tone="tertiary">—</T>;
+        const used = Math.max(0, budget - remaining);
+        const tone = remainingTone(remaining, budget);
         return (
           <Inline align="center" justify="end" gap="sm" wrap={false}>
-            <T tabular weight={remaining < 0 ? 'semibold' : undefined} className={remaining < 0 ? 'text-danger' : undefined}>
+            <T tabular weight={tone === 'danger' ? 'semibold' : undefined} className={tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : undefined}>
               {usd(remaining)}
             </T>
             <ProgressBar
-              value={Math.min(row.spentThisPeriodUsd, row.allocatedUsd!)}
-              max={row.allocatedUsd!}
+              value={Math.min(used, budget)}
+              max={budget > 0 ? budget : 1}
               size="sm"
               showRatio={false}
               className="w-16 shrink-0"
-              color={burn > 1 ? 'var(--color-danger)' : burn > 0.8 ? 'var(--color-warning)' : undefined}
-              aria-label={`Burn: ${Math.round(burn * 100)}% of allocation`}
+              color={tone === 'danger' ? 'var(--color-danger)' : tone === 'warning' ? 'var(--color-warning)' : undefined}
+              aria-label={budget > 0 ? `Discretionary burn: ${Math.round((used / budget) * 100)}%` : 'No discretionary money after the floor'}
             />
           </Inline>
         );
       },
     },
     {
-      key: 'runs',
-      header: 'Runs',
+      key: 'held',
+      header: 'Held',
       numeric: true,
-      render: (row) => <T tabular>{row.runCountThisPeriod}</T>,
+      render: (row) => row.heldUsd === undefined && lock
+        ? <LockedFigure lock={lock} />
+        : <T tabular tone={row.heldUsd ? undefined : 'tertiary'} title="Forecast p75 reserved by dispatches still in flight">{row.heldUsd ? usd(row.heldUsd) : '—'}</T>,
+    },
+    {
+      key: 'projected',
+      header: 'Projected',
+      numeric: true,
+      sortable: true,
+      compare: (a, b) => (a.projectedPeriodEndUsd ?? 0) - (b.projectedPeriodEndUsd ?? 0),
+      render: (row) => {
+        if (row.projectedPeriodEndUsd === undefined) return lock ? <LockedFigure lock={lock} /> : <T tone="tertiary">—</T>;
+        const over = row.allocatedUsd != null && row.projectedPeriodEndUsd > row.allocatedUsd;
+        return (
+          <T tabular className={over ? 'text-danger' : undefined} title="Month-to-date spend plus the 7-day burn over the days left in the month">
+            {moneyOrDash(row.projectedPeriodEndUsd)}
+          </T>
+        );
+      },
     },
     {
       key: 'lastActivity',
@@ -404,32 +389,22 @@ export function InitiativesReport({
         <T tone="tertiary" title={absoluteTime(row.lastAgentActivityAt)}>{ago(row.lastAgentActivityAt)}</T>
       ),
     },
-    {
-      key: 'updatedBy',
-      header: 'Updated by',
-      render: (row) => (
-        <T tone="tertiary" title={row.updatedByName ? row.updatedBy ?? undefined : undefined}>
-          {row.updatedByName ?? row.updatedBy ?? '—'}
-        </T>
-      ),
-    },
   ];
 
   return (
     <>
       {/* ── Allocation table ──
-          This IS the report — it goes first, above the fold. The breakdown
-          cards below are a second cut of the same numbers for whoever wants
-          them, not a prerequisite to reading the ledger (DEFECTS.md #2: this
-          page used to stack a description, a stat strip AND two breakdown
-          cards above the table — three summary blocks before any row). */}
+          This IS the report — it goes first, above the fold. The by-model and
+          by-trigger cuts that used to sit under it as two breakdown cards are
+          the page's group selector now (person, model, source, trigger), each
+          one table over the spend ledger (DEFECTS.md #2). */}
       <DataTable
         data-testid="budgets-initiatives-table"
         data={budgets.filter((row) => matchesBudget(row, query))}
         emptyMessage="No initiative matches this search."
         columns={columns}
         keyField={(row) => row.orgProjectId}
-        {...(canManage ? { rowActions: (row: BudgetRow) => row.allocatedUsd != null ? (
+        {...(canManage ? { rowActions: (row: InitiativeLedgerRow) => row.allocatedUsd != null ? (
           <IconButton
             variant="ghost"
             size="sm"
@@ -440,32 +415,6 @@ export function InitiativesReport({
           />
         ) : null } : {})}
       />
-
-      {/* ── Breakdown ──
-          Two cuts of one set of runs, so they sum to the same total. By-model
-          used to join only run-backed rows and rendered permanently empty
-          beside a populated by-trigger card; it now resolves the model from
-          the run, the job payload or the bot, and buckets the unresolvable
-          as 'unknown' rather than dropping the spend. */}
-      <CatalogGrid columns={2} dense className="mt-4">
-        <BreakdownCard
-          title="Spend by model"
-          emptyLabel={(summary?.totalSpentThisPeriodUsd ?? 0) > 0
-            ? 'no model recorded for this period’s runs'
-            : 'no spend this period'}
-          rows={(summary?.byModel ?? []).map((m) => ({
-            label: m.model === 'unknown' ? 'unattributed' : modelLabelFor(m.model),
-            spentUsd: m.spentUsd,
-            runCount: m.runCount,
-          }))}
-        />
-        <BreakdownCard
-          title="Spend by trigger"
-          rows={(summary?.byTrigger ?? []).map((t) => ({
-            label: t.trigger, spentUsd: t.spentUsd, runCount: t.runCount,
-          }))}
-        />
-      </CatalogGrid>
 
       <ConfirmDialog
         open={confirmDelete != null}

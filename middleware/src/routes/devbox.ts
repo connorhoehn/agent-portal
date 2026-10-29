@@ -47,7 +47,8 @@ import {
   normalizeRuntimeSessionId,
   RUNTIME_SESSION_ID_MIN_LENGTH,
 } from '../lib/runtime-session.js';
-import { executeDevboxTask, type DevboxLabContext, type DevboxRunOutcome } from '../lib/devbox-runner.js';
+import { executeDevboxTask, scheduleCutoffBackstop, type DevboxLabContext, type DevboxRunOutcome } from '../lib/devbox-runner.js';
+import { anySignal, cutoffMessage, type RunMeter } from '../lib/run-meter.js';
 import {
   registerBox,
   listBoxes,
@@ -73,7 +74,7 @@ import { clampTaskTimeout, lifetimePolicy } from '../lib/devbox-lifetime.js';
 import { mockDevboxClient } from '../mock/devbox-shell.js';
 import { randomUUID } from 'node:crypto';
 import { parseReportedCost, parseResultUsage, settleRunCost } from '../lib/run-cost.js';
-import { reserveSpend, forecastP75ForModel, HOLD_GRACE_MS, type ReserveSpendResult } from '../lib/spend-holds.js';
+import { reserveSpend, forecastP75ForModel, meterForHold, HOLD_GRACE_MS, type ReserveSpendResult } from '../lib/spend-holds.js';
 import { spendRefusalResponse } from '../lib/spend-refusal.js';
 import { releaseHold } from '../providers/spend-holds.js';
 import { getBoxSpend, spendLedgerMode, ledgerIsFixture, type BoxSpend } from '../providers/spend-ledger.js';
@@ -90,7 +91,13 @@ export const devboxRouter = Router();
  * on import of this module, in every process that loaded it.
  */
 export function devboxReaperDeps(): ReaperDeps {
-  return { client: dataClient, runtimeArn: resolveDevboxArn };
+  return {
+    client: dataClient, runtimeArn: resolveDevboxArn,
+    // DE-50: a paused fleet stops its idle boxes; the leader frees dead run
+    // slots, writes the stats line and announces budget crossings.
+    fleetPaused: async () => (await import('../lib/fleet-switches.js')).fleetPaused(),
+    housekeeping: async (boxes, decisions, now) => (await import('../lib/fleet-housekeeping.js')).fleetHousekeeping(boxes, decisions, now),
+  };
 }
 
 // ─── Clients (lazy; overridable for tests via _internal) ─────────────────────
@@ -659,14 +666,6 @@ export async function runTaskAndForward(opts: {
   confirmed?: { allocation?: boolean; envelope?: boolean; userBudget?: boolean };
 }): Promise<void> {
   const { sessionId, prompt, resume, model, timeout, res, arn } = opts;
-  const payload = JSON.stringify({
-    prompt,
-    resume,
-    ...(model ? { model } : {}),
-    // The one cap (lib/devbox-lifetime.ts): the callers already clamped to the
-    // box's profile; this keeps the deploy-wide ceiling for any that did not.
-    ...(timeout ? { timeout: clampTaskTimeout(timeout) } : {}),
-  });
 
   // Fleet tee: auto-register unknown sessions (curl/notebook starts, and an
   // internal-router session that predates this call, show up in the herd
@@ -680,6 +679,8 @@ export async function runTaskAndForward(opts: {
   // ledger key is minted first so the entry written in `finally` settles it.
   const taskId = randomUUID();
   const sourceId = `${fleetBox.id}:${taskId}`;
+  const judged = !isReserved(fleetBox.id);
+  const holdTtlMs = (timeout ? clampTaskTimeout(timeout) : lifetimePolicy().taskMaxS) * 1000 + HOLD_GRACE_MS;
   const held = await reserveSpend({
     initiativeId: fleetBox.projectId ?? null,
     actorId: opts.spend.actorId,
@@ -691,13 +692,32 @@ export async function runTaskAndForward(opts: {
     // inside that run — a person answering its question — whose money the
     // run's own hold already covers. It is held for visibility, never
     // refused: refusing it would strand a run that is already spending.
-    judge: !isReserved(fleetBox.id),
-    expiresInMs: (timeout ? clampTaskTimeout(timeout) : lifetimePolicy().taskMaxS) * 1000 + HOLD_GRACE_MS,
+    judge: judged,
+    expiresInMs: holdTtlMs,
   });
   if (held.kind !== 'held') {
     sendSpendRefusal(res, held);
     return;
   }
+
+  // The hold is this task's ceiling (DE-35): metered as frames arrive, topped
+  // up near it, cut at it. A reply inside a governed run (judge: false) is
+  // the run's money and is not metered on its own.
+  const meter: RunMeter | null = judged ? await meterForHold({
+    holdId: held.holdId, amountUsd: held.amountUsd,
+    initiativeId: fleetBox.projectId ?? null, actorId: opts.spend.actorId,
+    source: opts.spend.source, sourceId, model: model ?? null, expiresInMs: holdTtlMs,
+  }) : null;
+  const budget = meter?.boxBudget(sourceId) ?? null;
+  const payload = JSON.stringify({
+    prompt,
+    resume,
+    ...(model ? { model } : {}),
+    // The one cap (lib/devbox-lifetime.ts): the callers already clamped to the
+    // box's profile; this keeps the deploy-wide ceiling for any that did not.
+    ...(timeout ? { timeout: clampTaskTimeout(timeout) } : {}),
+    ...(budget ? { budget } : {}),
+  });
 
   appendEvent(fleetBox.id, { type: 'task_started', prompt, ts: new Date().toISOString() });
 
@@ -709,7 +729,7 @@ export async function runTaskAndForward(opts: {
       runtimeSessionId: sessionId,
       accept: 'text/event-stream',
       payload: new TextEncoder().encode(payload),
-    }));
+    }), ...(meter ? [{ abortSignal: meter.signal }] : []));
   } catch (err) {
     // The runtime never accepted the task, so nothing was spent.
     await releaseHold(held.holdId);
@@ -722,7 +742,10 @@ export async function runTaskAndForward(opts: {
   let resultSeen = false;
   let usedModel: string | null = model ?? null;
   let usage: TokenUsage | null = null;
+  let endSeen = false;
   const observe = (ev: Record<string, unknown>): void => {
+    meter?.observe(ev);
+    if (ev['type'] === 'devbox_end') endSeen = true;
     if (ev['type'] === 'devbox_start' && typeof ev['model'] === 'string' && ev['model']) usedModel = ev['model'];
     if (ev['type'] === 'result') {
       resultSeen = true;
@@ -740,9 +763,10 @@ export async function runTaskAndForward(opts: {
     const decoder = new TextDecoder();
     let buffer = '';
     for await (const chunk of stream) {
+      if (meter?.cutoff) break;
       buffer += decoder.decode(chunk, { stream: true });
       let idx: number;
-      while ((idx = buffer.indexOf('\n')) >= 0) {
+      while (!meter?.cutoff && (idx = buffer.indexOf('\n')) >= 0) {
         let line = buffer.slice(0, idx).trim();
         buffer = buffer.slice(idx + 1);
         if (line.startsWith('data:')) line = line.slice(5).trim();
@@ -764,16 +788,44 @@ export async function runTaskAndForward(opts: {
       }
     }
   } catch (err) {
-    writeSSE(res, { type: 'devbox_error', error: (err as Error).message });
-    appendEvent(fleetBox.id, { type: 'devbox_error', error: (err as Error).message });
+    // The meter's own abort is a cut, not a failure of the transport.
+    if (!meter?.cutoff) {
+      writeSSE(res, { type: 'devbox_error', error: (err as Error).message });
+      appendEvent(fleetBox.id, { type: 'devbox_error', error: (err as Error).message });
+    }
   } finally {
+    if (meter) await meter.settled();
+    // The task is over: its concurrency slot frees now (DE-37).
+    if (held.holdId) await import('../providers/run-limits.js').then((m) => m.releaseRunSlots(held.holdId)).catch(() => undefined);
+    const cutoff = meter?.cutoff ?? null;
+    if (cutoff) {
+      // The recorded reason (DE-35): on the stream, in the box's log, and —
+      // with the metered figure — in the ledger entry below.
+      const ev = { type: 'run_cutoff', ...cutoff, error: cutoffMessage(cutoff), ts: new Date().toISOString() };
+      writeSSE(res, ev);
+      appendEvent(fleetBox.id, ev);
+      // The browser's existing error line; not teed, because the box is not
+      // broken — it stays `running` until the session stop below lands.
+      writeSSE(res, { type: 'devbox_error', error: cutoffMessage(cutoff), reason: 'budget' });
+      if (!endSeen) {
+        scheduleCutoffBackstop({
+          stop: async () => {
+            await dataClient().send(new StopRuntimeSessionCommand({ agentRuntimeArn: arn, runtimeSessionId: sessionId }));
+          },
+          onStopped: () => markStopped(fleetBox.id),
+        }, () => endSeen, (e) => appendEvent(fleetBox.id, e));
+      }
+    }
     endSSE(res);
     // The runtime accepted the task, so it may have spent: a run that never
     // reported a result is unknown cost, not zero. When it reported tokens but
-    // no figure, the table prices them (DE-32) and the basis says so.
+    // no figure, the table prices them (DE-32) and the basis says so. A cut
+    // run with no result books the metered figure as an estimate (DE-35).
     const u = usage as TokenUsage | null;
     const estimated = resultSeen && u && usedModel ? estimateUsageCost(usedModel, u) : null;
-    const settled = settleRunCost(resultSeen ? reportedUsd : null, estimated);
+    const settled = !resultSeen && cutoff && cutoff.meteredUsd > 0
+      ? { costUsd: cutoff.meteredUsd, costBasis: 'estimated' as const, estimatedCostUsd: cutoff.meteredUsd }
+      : settleRunCost(resultSeen ? reportedUsd : null, estimated);
     await recordSpend({
       source: opts.spend.source,
       sourceId,
@@ -800,6 +852,7 @@ export async function runTaskAndForward(opts: {
  */
 export function sendSpendRefusal(res: Response, r: Exclude<ReserveSpendResult, { kind: 'held' }>): void {
   const out = spendRefusalResponse(r);
+  if (out.headers) res.set(out.headers);
   res.status(out.status).json(out.body);
 }
 
@@ -1126,8 +1179,12 @@ export async function runDevboxTask(opts: {
   onEvent?: (event: Record<string, unknown>) => void;
   /** The run's LAB_* context (lib/run-brief.ts); see DevboxRunOptions.lab. */
   lab?: DevboxLabContext;
+  /** DE-35: the hold's meter, and the box a cut run's session stop marks stopped. */
+  meter?: RunMeter | null;
+  boxId?: string;
 }): Promise<DevboxRunOutcome> {
   opts.signal?.throwIfAborted();
+  const meter = opts.meter ?? null;
   // Offline, a dispatched job plays a scripted run instead of dead-ending.
   // Without this the one journey the Work page exists for — pick a suggested
   // card, queue it, watch it run — ended in a red "job failed" on every
@@ -1137,12 +1194,32 @@ export async function runDevboxTask(opts: {
   if (mockAgentCore()) {
     const { playDispatchedRun } = await import('../lib/mock-bot-runner.js');
     const firstLine = opts.prompt.split('\n')[0] ?? '';
-    const played = await playDispatchedRun({
-      title: firstLine.slice(0, 120) || 'queued job',
-      ...(opts.signal ? { signal: opts.signal } : {}),
-      prompt: opts.prompt,
-      ...(opts.onEvent ? { onEvent: opts.onEvent } : {}),
-    });
+    const signal = anySignal([opts.signal, meter?.signal]);
+    const onEvent = (ev: Record<string, unknown>): void => { opts.onEvent?.(ev); meter?.observe(ev); };
+    let played: Awaited<ReturnType<typeof playDispatchedRun>>;
+    try {
+      played = await playDispatchedRun({
+        title: firstLine.slice(0, 120) || 'queued job',
+        ...(signal ? { signal } : {}),
+        prompt: opts.prompt,
+        onEvent,
+      });
+    } catch (err) {
+      if (!meter?.cutoff) throw err;
+      // The same cut the real path records (DE-35), offline.
+      await meter.settled();
+      const cutoff = meter.cutoff;
+      opts.onEvent?.({ type: 'run_cutoff', ...cutoff, ts: new Date().toISOString() });
+      return {
+        ok: false, summary: '', turns: 0, durationMs: 0,
+        costUsd: cutoff.meteredUsd > 0 ? cutoff.meteredUsd : null,
+        costBasis: cutoff.meteredUsd > 0 ? 'estimated' : 'unknown',
+        estimatedCostUsd: cutoff.meteredUsd > 0 ? cutoff.meteredUsd : null,
+        model: opts.model ?? null, usage: null, toolCalls: 0, exitCode: null,
+        error: cutoffMessage(cutoff), transcript: [], cutoff,
+      };
+    }
+    if (meter) await meter.settled();
     return {
       ok: true, summary: played.summary, turns: played.turns,
       durationMs: played.durationMs, costUsd: played.costUsd, costBasis: 'reported', estimatedCostUsd: null,
@@ -1173,6 +1250,15 @@ export async function runDevboxTask(opts: {
     ...(opts.timeoutSeconds ? { timeoutSeconds: opts.timeoutSeconds } : {}),
     ...(opts.onEvent ? { onEvent: opts.onEvent } : {}),
     ...(opts.lab ? { lab: opts.lab } : {}),
+    ...(meter ? {
+      meter,
+      cutoffBackstop: {
+        stop: async () => {
+          await dataClient().send(new StopRuntimeSessionCommand({ agentRuntimeArn: arn, runtimeSessionId: opts.sessionId }));
+        },
+        ...(opts.boxId ? { onStopped: () => markStopped(opts.boxId!) } : {}),
+      },
+    } : {}),
     runtimeArn: arn,
     client: dataClient(),
   });

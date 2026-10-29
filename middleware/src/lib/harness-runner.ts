@@ -36,6 +36,7 @@
 
 import { BedrockAgentCoreClient, InvokeAgentRuntimeCommand } from '@aws-sdk/client-bedrock-agentcore';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import { exec } from '../providers/aurora.js';
 import { agentcore as agentCoreProvider } from '../providers/index.js';
 import { config } from '../config.js';
@@ -350,6 +351,7 @@ async function judge(
       messages: [{ role: 'user', content: [{ text: prompt }] }],
       inferenceConfig: { maxTokens: 600, temperature: 0 },
     }));
+    void recordBffCall({ feature: 'harness-judge', model: modelId, usage: out.usage });
     const text = (out.output?.message?.content ?? []).map((c) => c.text ?? '').join('');
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');

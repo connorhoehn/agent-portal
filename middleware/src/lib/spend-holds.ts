@@ -46,8 +46,13 @@ import {
 import { runCostSamples } from '../providers/bots.js';
 import {
   withSpendLock, openHeldSplit, openHeldUsdForActor, openHeldUsdForGrant, spendHoldsEnabled, spendHoldsFailClosed,
-  missingHoldsTable, type HoldSource, type HoldBasis, type SpendLockTx,
+  missingHoldsTable, getHold, topUpSourceId, type HoldSource, type HoldBasis, type SpendLockTx,
 } from '../providers/spend-holds.js';
+import { RunMeter, runCutoffEnabled, type RunCutoff } from './run-meter.js';
+import { pauseFor, pauseMessage } from './fleet-switches.js';
+import { emitFleetMetric } from './fleet-metrics.js';
+import { decideRunLimits, runLimitsEnabled, scopesFor, type LimitKind, type ScopeState } from './run-limits.js';
+import { readRunLimits, scopeUsage, scopeKey, slotLockKey, type RunScope } from '../providers/run-limits.js';
 import {
   decideAllocation, decideEnvelope, loadEnvelopeGate,
   type AllocationForecast, type ResolvedEnvelope,
@@ -83,6 +88,11 @@ export interface ReserveSpendInput {
   unknownCostTrips?: boolean;
   /** How long the hold may stay open: the path's run ceiling plus grace. */
   expiresInMs: number;
+  /** 'topup' = one more p75 asked for mid-run by the run meter (DE-35): judged
+   *  exactly like the start, with nothing confirmed, and recorded as a top-up. */
+  basis?: 'topup';
+  /** The tenant charged for run limits (DE-37). Default 'orgiq', the only tenant that dispatches devbox work. */
+  tenant?: string;
 }
 
 export interface AllocationGateBody {
@@ -156,9 +166,22 @@ export type ReserveSpendResult =
   }
   /** Not allowed to spend here at all (unattributed, refused by config): 403. */
   | { kind: 'refused'; reason: string }
+  /** A run limit (DE-37): concurrency, runs per day or dollars per hour. 429 + Retry-After, no confirm flag. */
+  | { kind: 'limited'; reason: string; scope: RunScope; limitKind: LimitKind; limit: number; current: number; retryAfterS: number }
+  /** A kill switch (DE-50): the fleet or this initiative is paused. 423. */
+  | { kind: 'paused'; reason: string; scope: string }
   /** The hold store (`spend-hold`) or the budget state (`budget-state`, DE-36)
    *  could not be read and the deployment fails closed: 503. */
   | { kind: 'unavailable'; reason: string; gate?: 'spend-hold' | 'budget-state' };
+
+class SlotTakenError extends Error {
+  constructor(readonly key: string) { super(`run slot at ${key} was taken concurrently`); }
+}
+
+function parseScopeKey(key: string): RunScope {
+  const at = key.indexOf(':');
+  return { kind: key.slice(0, at) as RunScope['kind'], id: key.slice(at + 1) };
+}
 
 /** Five minutes of grace past a path's run ceiling before a hold expires. */
 export const HOLD_GRACE_MS = 5 * 60_000;
@@ -264,6 +287,15 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
   const judgeUser = judge && actor != null;
   const pid = input.initiativeId;
 
+  // ── 0. Kill switches (DE-50): before anything else, every path ────────────
+  try {
+    const paused = await pauseFor(pid);
+    if (paused) return { kind: 'paused', scope: paused.scope, reason: pauseMessage(paused) };
+  } catch (err) {
+    if (failClosed) return { kind: 'unavailable', gate: 'budget-state', reason: BUDGET_STATE_REASON };
+    console.warn(`[spend-holds] could not read the kill switches: ${(err as Error).message}`);
+  }
+
   if (!pid) {
     if (unattributedRule() === 'refuse') {
       return { kind: 'refused', reason: 'this spend is charged to no initiative, and unattributed spend is refused here' };
@@ -334,7 +366,34 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
     const forEnvelope = envBody ? { envelope: envBody } : {};
     const forUser = userBody ? { userBudget: userBody } : {};
 
-    let basis: HoldBasis = 'p75';
+    // ── 3b. Run limits (DE-37): hard, before every money gate ──────────────
+    // Slot locks come after the money locks, narrowest scope first, so the
+    // order is total: initiative → grant → user → slots.
+    const slotted: string[] = [];
+    if (judge && input.basis !== 'topup' && runLimitsEnabled()) {
+      const plan = scopesFor({
+        initiativeId: pid, tenant: input.tenant ?? 'orgiq',
+        boxTask: input.source === 'box_task' || input.source === 'agent_loop',
+      });
+      const limits = await readRunLimits(plan.map((p) => p.scope));
+      if (limits.length > 0) {
+        const states: ScopeState[] = [];
+        for (const p of plan) {
+          const limit = limits.find((l) => l.scopeKind === p.scope.kind && l.scopeId === p.scope.id);
+          if (!limit) continue;
+          const key = scopeKey(p.scope);
+          const holdsSlot = p.takesSlot && limit.maxConcurrent != null;
+          if (holdsSlot && tx) { await tx.lock(slotLockKey(key)); slotted.push(key); }
+          states.push({ scope: p.scope, limit, usage: await scopeUsage(p.scope), takesSlot: holdsSlot });
+        }
+        const v = decideRunLimits(states, amountUsd);
+        if (v.kind === 'refuse') {
+          return { kind: 'limited', reason: v.reason, scope: v.scope, limitKind: v.limitKind, limit: v.limit, current: v.current, retryAfterS: v.retryAfterS };
+        }
+      }
+    }
+
+    let basis: HoldBasis = input.basis === 'topup' ? 'topup' : 'p75';
     let spill = false;
     if (judge) {
       // ── 4. Hard caps (DE-36): before the soft brakes, no confirm flag ─────
@@ -426,11 +485,16 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
 
     const grantId = envelope?.grantId ?? null;
     if (!tx) return { kind: 'held', holdId: null, initiativeId: pid, grantId, amountUsd, ...(spill ? { spill } : {}) };
+    const expiresAt = new Date(clock.now().getTime() + input.expiresInMs).toISOString();
     const hold = await tx.insertHold({
       initiativeId: pid, grantId, actorId: input.actorId, source: input.source,
-      sourceId: input.sourceId ?? null, amountUsd, basis, essential,
-      expiresAt: new Date(clock.now().getTime() + input.expiresInMs).toISOString(),
+      sourceId: input.sourceId ?? null, amountUsd, basis, essential, expiresAt,
     });
+    // The concurrency leases (DE-37), held by the hold: they free when the run
+    // releases them, when the hold closes, or at the hold's expiry.
+    for (const key of slotted) {
+      if (!await tx.insertSlot(key, hold.id, expiresAt)) throw new SlotTakenError(key);
+    }
     return { kind: 'held', holdId: hold.id, initiativeId: pid, grantId, amountUsd, ...(spill ? { spill } : {}) };
   };
 
@@ -438,6 +502,11 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
   try {
     return await withSpendLock([pid ? `spend:${pid}` : `user:${actor}`], body);
   } catch (err) {
+    // The slot's primary key refused us despite the lock (a writer that did
+    // not take it): the whole hold rolled back; say so as the limit it is.
+    if (err instanceof SlotTakenError) {
+      return { kind: 'limited', reason: `a concurrent run took the last slot at ${err.key}; try again`, scope: parseScopeKey(err.key), limitKind: 'concurrency', limit: 0, current: 0, retryAfterS: 30 };
+    }
     if (missingHoldsTable(err)) {
       if (spendHoldsFailClosed()) {
         return { kind: 'unavailable', gate: 'spend-hold', reason: 'Spend holds could not be recorded, so nothing was started. Apply schema/spend_holds_schema.sql or set SPEND_HOLDS=off.' };
@@ -453,6 +522,80 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
 }
 
 export { spendRefusalResponse } from './spend-refusal.js';
+
+/**
+ * The mid-run meter for a run that holds money (DE-35): the hold is the
+ * ceiling, and a top-up is one more p75 through `reserveSpend` under the same
+ * lock order and brakes, keyed `<attempt>#topup-<n>` so the attempt's ledger
+ * entry settles it with the parent. Null — unmetered — when the run holds
+ * nothing (holds off, unattributed and unbudgeted, `judge: false`), the hold
+ * is gone, or `RUN_CUTOFF=off`.
+ */
+export async function meterForHold(input: {
+  holdId: string | null;
+  /** The hold's amount when the caller has it; else read from the hold. */
+  amountUsd?: number;
+  initiativeId: string | null;
+  actorId: string | null;
+  source: HoldSource;
+  /** The attempt's ledger key, when known now; else the parent's binding at top-up time. */
+  sourceId?: string | null;
+  model: string | null;
+  agentProjectId?: string | null;
+  essential?: boolean;
+  expiresInMs: number;
+  onCut?: (cutoff: RunCutoff) => void;
+}): Promise<RunMeter | null> {
+  if (!runCutoffEnabled() || !input.holdId) return null;
+  let amount = input.amountUsd;
+  let essential = input.essential === true;
+  if (amount === undefined) {
+    try {
+      const parent = await getHold(input.holdId);
+      if (!parent || parent.status !== 'held') return null;
+      amount = parent.amountUsd;
+      essential = input.essential ?? parent.essential;
+    } catch (err) {
+      console.warn(`[spend-holds] run meter: hold ${input.holdId} unreadable: ${(err as Error).message}`);
+      return null;
+    }
+  }
+  if (!(amount > 0)) return null;
+  const holdId = input.holdId;
+  return new RunMeter({
+    ceilingUsd: amount,
+    holdIds: [holdId],
+    model: input.model,
+    onCut: (c) => {
+      // DE-50: a cut is an alert as well as a record.
+      emitFleetMetric('devbox-run-cutoff', {
+        InitiativeId: input.initiativeId ?? 'unattributed', ActorId: input.actorId ?? 'none',
+        source: input.source, ceilingUsd: c.ceilingUsd, meteredUsd: c.meteredUsd,
+      });
+      input.onCut?.(c);
+    },
+    topUp: async (n) => {
+      // The parent's binding NOW: a bot run binds its hold once its row exists.
+      const parent = await getHold(holdId).catch(() => null);
+      const sid = parent?.sourceId ?? input.sourceId ?? null;
+      const held = await reserveSpend({
+        initiativeId: input.initiativeId,
+        actorId: input.actorId,
+        source: parent?.source ?? input.source,
+        sourceId: sid ? topUpSourceId(sid, n) : topUpSourceId(`hold:${holdId}`, n),
+        forecast: await forecastP75ForModel(input.model, input.agentProjectId ?? null),
+        ...(essential ? { essential: true } : {}),
+        basis: 'topup',
+        expiresInMs: input.expiresInMs,
+      });
+      if (held.kind !== 'held') {
+        console.log(`[spend-holds] top-up ${n} for hold ${holdId} refused: ${held.reason}`);
+        return null;
+      }
+      return { holdId: held.holdId, amountUsd: held.amountUsd };
+    },
+  });
+}
 
 /** A fresh ledger key for an ad-hoc box task, minted before the hold so the settle matches. */
 export function newTaskSourceId(boxId: string): string {

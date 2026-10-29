@@ -328,11 +328,15 @@ async function enqueueJobRow(input: {
     emitJobChange(job);
     return job;
   }
+  // DE-37: the initiative as a column the claim filters on, when the cluster has it.
+  const initiative = typeof input.payload?.['initiativeId'] === 'string' && input.payload['initiativeId'] ? input.payload['initiativeId'] : null;
+  const withInitiative = initiative !== null && await hasColumns('agent_jobs', ['initiative_id']).catch(() => false);
   const rows = await exec(
-    `INSERT INTO agent_jobs (kind, title, payload, priority, created_by, max_attempts, bot_id)
-     VALUES (:kind, :title, :payload::jsonb, :priority, :created_by, :max_attempts, :bot_id::uuid)
+    `INSERT INTO agent_jobs (kind, title, payload, priority, created_by, max_attempts, bot_id${withInitiative ? ', initiative_id' : ''})
+     VALUES (:kind, :title, :payload::jsonb, :priority, :created_by, :max_attempts, :bot_id::uuid${withInitiative ? ', :initiative' : ''})
      RETURNING ${COLUMNS}`,
     [
+      ...(withInitiative ? [strParam('initiative', initiative!)] : []),
       strParam('kind', input.kind),
       strParam('title', input.title),
       strParam('payload', JSON.stringify(input.payload ?? {})),
@@ -517,13 +521,19 @@ export async function getJob(id: string): Promise<AgentJob | null> {
  * covered by construction, present and future. Claims require the existing
  * token/heartbeat migration for both push and pull executors.
  */
-export async function claimNextJob(boxId: string, sessionId: string): Promise<ClaimedAgentJob | null> {
+export async function claimNextJob(
+  boxId: string, sessionId: string,
+  /** DE-37: initiatives at their concurrency limit — their jobs stay queued and the next one is taken. */
+  opts?: { skipInitiatives?: readonly string[] },
+): Promise<ClaimedAgentJob | null> {
   await requireClaimSchema();
   const claimToken = mintClaimToken();
   const pullOnly = LOCAL_JOB_KINDS as readonly string[];
+  const skip = (opts?.skipInitiatives ?? []).slice(0, 200);
   if (config.mock.aurora) {
     const next = mockJobs
       .filter((j) => j.status === 'queued' && j.attempts < j.maxAttempts && !pullOnly.includes(j.kind))
+      .filter((j) => !skip.includes(String(j.payload['initiativeId'] ?? '')))
       .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
     if (!next) return null;
     next.status = 'claimed';
@@ -540,6 +550,10 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Cl
   // uses. Bounded by LOCAL_JOB_KINDS, which is a module constant.
   const kindParams = pullOnly.map((k, i) => strParam(`x${i}`, k));
   const kindList = pullOnly.map((_, i) => `:x${i}`).join(', ');
+  const skipParams = skip.map((id, i) => strParam(`si${i}`, id));
+  const withInitiative = skip.length > 0 && await hasColumns('agent_jobs', ['initiative_id']).catch(() => false);
+  const initiativeExpr = withInitiative ? `COALESCE(initiative_id, payload->>'initiativeId', '')` : `COALESCE(payload->>'initiativeId', '')`;
+  const skipClause = skip.length ? ` AND ${initiativeExpr} NOT IN (${skip.map((_, i) => `:si${i}`).join(', ')})` : '';
   const rows = await exec(
     `UPDATE agent_jobs
         SET status = 'claimed', box_id = :box, session_id = :session,
@@ -547,12 +561,12 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Cl
             attempts = attempts + 1, updated_at = NOW()
       WHERE id = (
             SELECT id FROM agent_jobs
-             WHERE status = 'queued' AND attempts < max_attempts AND kind NOT IN (${kindList})
+             WHERE status = 'queued' AND attempts < max_attempts AND kind NOT IN (${kindList})${skipClause}
              ORDER BY priority, created_at
              FOR UPDATE SKIP LOCKED
              LIMIT 1)
       RETURNING ${COLUMNS}`,
-    [strParam('box', boxId), strParam('session', sessionId), strParam('token', claimToken), ...kindParams],
+    [strParam('box', boxId), strParam('session', sessionId), strParam('token', claimToken), ...kindParams, ...skipParams],
   );
   const job = rows[0] ? rowToJob(rows[0]) : null;
   if (job) emitJobChange(job);

@@ -489,6 +489,11 @@ import {
  * cost. Joins are the SQL's: the run row by `run_id`, the newest change request
  * captured from that run, the bot's per-run budget.
  */
+function numOrNull(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function mockRunBackedSettlements(): Promise<Record<string, unknown>[]> {
   const { agentProjectRuns } = await import('../mock/agent-project-runs.js');
   const { sdlcChanges } = await import('../mock/sdlc.js');
@@ -510,7 +515,8 @@ export async function mockRunBackedSettlements(): Promise<Record<string, unknown
       run_error: run.error ?? null,
       change_id: change?.id ?? null,
       pr_url: change?.prUrl ?? null,
-      budget_per_run_usd: bot?.budgetPerRunUsd ?? null,
+      cutoff: run.cutoff ?? null,
+      budget_per_run_usd: bot?.budgetPerRunUsd ?? numOrNull((br.outcome as Record<string, unknown> | null)?.['budgetPerRunUsd']),
     });
   }
   return out;

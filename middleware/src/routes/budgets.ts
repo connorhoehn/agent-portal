@@ -13,6 +13,9 @@
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { readForRolesElseAction, requireAction } from '../lib/authz.js';
+import type { RunLimitPatch } from '../providers/run-limits.js';
+// Loaded on first use (DE-37): the route's tests mock providers/budgets, not this.
+const runLimits = () => import('../providers/run-limits.js');
 import {
   listBudgets, orgSummary, upsertAllocation, deleteAllocation, initiativeExists,
   listGrants, getBudget, type AllocationExtras,
@@ -54,6 +57,61 @@ budgetsRouter.get('/grants', readGate, asyncHandler(async (req, res) => {
   const limit = clampGrantsLimit(req.query['limit']);
   const grants = await listGrants(orgProjectId || undefined);
   res.json({ grants: grants.slice(0, limit) });
+}));
+
+// ── Run limits (DE-37) ─────────────────────────────────────────────────────
+// Per-initiative concurrency, runs per day and dollars per hour, judged inside
+// every spend hold (lib/spend-holds.ts reserveSpend). Absent = no limit beyond
+// the global bot-run ceiling. Declared before '/:orgProjectId'.
+
+/** A limit field: absent (leave alone), null (clear) or a finite number >= 0 (integers for counts). */
+function optionalLimit(raw: unknown, name: string, integer: boolean): number | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0 || (integer && !Number.isInteger(raw))) {
+    throw new ValidationError(`${name} must be a${integer ? 'n integer' : ' finite number'} >= 0, or null`);
+  }
+  return raw;
+}
+
+async function limitsBody(orgProjectId: string) {
+  const { getRunLimit, scopeUsage } = await runLimits();
+  const [limit, usage] = await Promise.all([
+    getRunLimit('initiative', orgProjectId),
+    scopeUsage({ kind: 'initiative', id: orgProjectId }),
+  ]);
+  return {
+    orgProjectId,
+    maxConcurrent: limit?.maxConcurrent ?? null,
+    maxRunsPerDay: limit?.maxRunsPerDay ?? null,
+    maxUsdPerHour: limit?.maxUsdPerHour ?? null,
+    updatedBy: limit?.updatedBy ?? null,
+    updatedAt: limit?.updatedAt ?? null,
+    usage: { liveSlots: usage.liveSlots, runsToday: usage.runsToday, usdLastHour: usage.usdLastHour },
+  };
+}
+
+budgetsRouter.get('/:orgProjectId/limits', readGate, asyncHandler(async (req, res) => {
+  const orgProjectId = String(req.params['orgProjectId'] ?? '').trim();
+  if (!orgProjectId) throw new ValidationError('orgProjectId is required');
+  res.json({ limits: await limitsBody(orgProjectId) });
+}));
+
+budgetsRouter.put('/:orgProjectId/limits', manageGate, asyncHandler(async (req, res) => {
+  const orgProjectId = String(req.params['orgProjectId'] ?? '').trim();
+  if (!orgProjectId) throw new ValidationError('orgProjectId is required');
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const patch: RunLimitPatch = {};
+  const mc = optionalLimit(body['maxConcurrent'], 'maxConcurrent', true);
+  if (mc !== undefined) patch.maxConcurrent = mc;
+  const rpd = optionalLimit(body['maxRunsPerDay'], 'maxRunsPerDay', true);
+  if (rpd !== undefined) patch.maxRunsPerDay = rpd;
+  const uph = optionalLimit(body['maxUsdPerHour'], 'maxUsdPerHour', false);
+  if (uph !== undefined) patch.maxUsdPerHour = uph;
+  if (Object.keys(patch).length === 0) throw new ValidationError('send at least one of maxConcurrent, maxRunsPerDay, maxUsdPerHour');
+  if (!await initiativeExists(orgProjectId)) throw new NotFoundError('No such initiative');
+  await (await runLimits()).upsertRunLimit('initiative', orgProjectId, patch, req.session?.sub ?? null);
+  res.json({ limits: await limitsBody(orgProjectId) });
 }));
 
 budgetsRouter.put('/:orgProjectId', manageGate, asyncHandler(async (req, res) => {

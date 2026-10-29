@@ -39,13 +39,13 @@ Rules for whoever continues:
 | 3 | DE-33 unknown cost gates | unknown cost routes to approval in SDLC `max_cost`; local runs record unknown, not $0 | done (2026-10-29): unknown cost → approval in SDLC `max_cost`; unknown-only brake trip on dispatch-work only; ledger `provider` column, local jobs write $0 `provider=local` |
 | 4 | DE-31 box spend rollup | box `spendUsd` lands in the ledger under its project and owner | done: ledger-backed box spend (`GET /api/devbox/boxes`), `GET /api/me/spend`; mock box `spendUsd` literals removed. Not built: the release manager's per-person view |
 | 5 | DE-34 spend holds | reserve the p75 forecast at dispatch against allocation and envelope; settle on finish | done: one `reserveSpend` before dispatch-work, fireBot, the job dispatcher, box tasks and governed runs; settle in the ledger transaction; ceiling insert under an advisory lock |
-| 6 | DE-35 mid-run cutoff | a run crossing its reserved ceiling is stopped with a recorded reason | |
+| 6 | DE-35 mid-run cutoff | a run crossing its reserved ceiling is stopped with a recorded reason | done (2026-10-29): hold = ceiling, metered per frame, top-ups at 80 %, cut at 100 % with a recorded reason; box token backstop |
 | 7 | DE-36 hard caps | non-overridable cap per initiative and grant; unreadable budget state fails closed | done (2026-10-29): non-overridable caps per initiative, grant and user before the soft brakes; fail closed in production (`BUDGET_FAIL_CLOSED`); one refusal renderer `lib/spend-refusal.ts` |
 | 8 | DE-39 bot-fire allocation brake | cron firings pass the allocation check | done, folded into DE-55 (maintenance reserve): essential bots judged against the reserve, then spill |
-| 9 | DE-37 run limits | per-initiative/tenant concurrency, runs/day, $/hour | |
+| 9 | DE-37 run limits | per-initiative/tenant concurrency, runs/day, $/hour | done: per-initiative/tenant concurrency slots, runs/day, $/hour inside reserveSpend; 429 `run-limit`. Gaps: PR-watch enqueue takes no slot |
 | 10 | DE-38 budget periods | sprint-aligned and rolling windows, carry-over rules | |
-| 11 | DE-50 kill switches and alerts | fleet and initiative pause; threshold/stuck-run/reaper alerts as events (CloudWatch alarm half synth-tested) | |
-| 12 | DE-53 initiative spend report | API plus portal view joining allocation, grants, holds, ledger, forecasts, outcomes | |
+| 11 | DE-50 kill switches and alerts | fleet and initiative pause; threshold/stuck-run/reaper alerts as events (CloudWatch alarm half synth-tested) | done: fleet and initiative pause (423 at every path), metric lines, 50/80/100 % alerts, CloudWatch alarms behind `fleetAlarms`. Gap: no `PauseFleet` Cedar action (ManageBudgets reused) |
+| 12 | DE-53 initiative spend report | API plus portal view joining allocation, grants, holds, ledger, forecasts, outcomes | done: `GET /api/spend/report` grouped by initiative/actor/model/source/trigger; budgets page rolls up and drills down through the rails (floor / discretionary / held / projected, fit per open item); includes DE-31's per-person view |
 | 13 | DE-40 policy profiles | versioned per-initiative profile (models, task time, lifetime, network mode, org access) read at dispatch | done: versioned profiles per initiative (models, task time, lifetime), box stamp, unlisted model refused (400 `MODEL_NOT_ALLOWED`); IAM limited to `devboxModels` |
 | 14 | DE-48 one lifetime model | reaper, task timeout and AgentCore ceilings aligned and profile-driven | done: `lib/devbox-lifetime.ts` holds every ceiling; running boxes reaped only as task overrun; env set in both stacks |
 | 15 | DE-42 Cedar box actions | split `ManageDevbox` into shell/task/delivery/policy-edit with initiative attributes | done; reviewed 2026-10-29 (defaults below); portal re-pointed off `ManageDevbox` |
@@ -69,6 +69,20 @@ Rules for whoever continues:
 
 Confirm or change each; every one is a config flag or a small edit.
 
+- **DE-35/37/50 run controls** — `RUN_CUTOFF` on, 2 top-ups max, 30 s
+  grace; the box's token backstop is hold × 3 at the output rate (cache-heavy
+  runs cut there first). Run limits are hard 429s, none seeded,
+  `BOT_MAX_CONCURRENT` kept as the global ceiling. **Auto-pause at 100 % is
+  off** (`BUDGET_AUTO_PAUSE`) — your call. Spend-rate alarm $10 / 15 min;
+  pause bells go to org-leaders only; initiative pause needs ManageBudgets +
+  stewardship, fleet pause an org-wide role.
+- **DE-53 spend report** — projection always to month end; fit ordered by
+  priority then age; Runs and Updated-by columns and the two breakdown cards
+  were replaced by the group selector. Until `SPEND_LEDGER=ledger` the
+  drill-in's ledger spend includes box tasks the allocation's "spent" omits.
+- **BFF metering** — 11 middleware Bedrock call sites write `bff_call`
+  entries (unattributed; prompt-ARN models unpriced). Decks/summaries reach
+  models another way and are not metered yet.
 - **DE-54/36/55 (user budgets, hard caps, reserve)** — no user row =
   unbraked, shown as a blind spot; user budget applies on top of envelopes;
   cron never charges a user; nobody sets their own budget. Hard cap default =

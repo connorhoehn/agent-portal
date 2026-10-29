@@ -26,6 +26,7 @@ import { publicWebFetch, assertPublicWebTarget } from './public-web-fetch.js';
 
 import { randomUUID } from 'node:crypto';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import { agentcore } from '../providers/index.js';
 import { extractFromScreenshot } from './vision-extractor.js';
 import { config } from '../config.js';
@@ -387,6 +388,7 @@ async function classifySections(
       messages: [{ role: 'user', content: [{ text: prompt }] }],
       inferenceConfig: { maxTokens: 2000, temperature: 0.2 },
     }));
+    void recordBffCall({ feature: 'site-survey', model: MODEL_ID, usage: out.usage });
     const text = out.output?.message?.content?.[0]?.text ?? '';
     const json = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
     const parsed = JSON.parse(json) as {

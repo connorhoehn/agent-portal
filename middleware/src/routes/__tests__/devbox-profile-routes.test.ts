@@ -56,6 +56,8 @@ jest.mock('../../lib/spend-holds.js', () => ({
   reserveSpend: jest.fn(async () => ({ kind: 'held', holdId: null, initiativeId: null, grantId: null, amountUsd: 0 })),
   forecastP75ForModel: jest.fn(async () => null),
   HOLD_GRACE_MS: 60_000,
+  // DE-35's meter is run-meter.test.ts's business; a null meter leaves the task unmetered.
+  meterForHold: jest.fn(async () => null),
 }));
 jest.mock('../../providers/spend-holds.js', () => ({ releaseHold: jest.fn(async () => undefined), settleHold: jest.fn(async () => undefined) }));
 

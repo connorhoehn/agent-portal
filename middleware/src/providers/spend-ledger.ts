@@ -18,8 +18,11 @@ import { clock } from '../mock/core/index.js';
 import { spendEntries } from '../mock/spend-ledger.js';
 import type { CostBasis, ModelProvider } from '../lib/run-cost.js';
 import { settleHold, SETTLE_HOLD_SQL } from './spend-holds.js';
+import { emitSpendMetric } from '../lib/fleet-metrics.js';
+import { estimateUsageCost } from '../lib/model-prices.js';
+import { randomUUID } from 'node:crypto';
 
-export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run';
+export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call';
 export type { CostBasis };
 
 export interface SpendEntry {
@@ -113,6 +116,8 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
     occurredAt: input.occurredAt ?? clock.nowIso(),
     provider: input.provider ?? null,
   };
+  // DE-50: the spend-rate metric line, with InitiativeId/ActorId dimensions.
+  emitSpendMetric(entry);
   if (config.mock.aurora) {
     // bot_run entries are derived from the bot_runs fixture, never stored.
     if (entry.source === 'bot_run') return;
@@ -158,6 +163,60 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
   } catch (err) {
     if (missingTable(err)) return;
     console.warn(`[spend-ledger] write failed for ${entry.source}:${entry.sourceId}: ${(err as Error).message}`);
+  }
+}
+
+/** A Bedrock usage block as the SDKs report it (Converse or InvokeModel). */
+export interface BffUsage {
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  cacheReadInputTokens?: number | null;
+  cacheWriteInputTokens?: number | null;
+}
+
+/**
+ * Meter one of the BFF's own Bedrock calls (reviewers, judges, embeddings,
+ * titles, extractors). One row per call, source 'bff_call', a fresh uuid as
+ * source_id. Cost comes from the price table; an unpriced model keeps its
+ * token counts with a null cost ('unknown'), never 0. Best-effort: never
+ * throws, so a ledger failure cannot fail the feature. A call with no usage
+ * block records nothing.
+ */
+export async function recordBffCall(call: {
+  feature: string;
+  model: string;
+  usage: BffUsage | null | undefined;
+  actorId?: string | null;
+  initiativeId?: string | null;
+}): Promise<void> {
+  try {
+    const u = call.usage;
+    if (!u) return;
+    const inputTokens = Number.isFinite(u.inputTokens) ? Number(u.inputTokens) : 0;
+    const outputTokens = Number.isFinite(u.outputTokens) ? Number(u.outputTokens) : 0;
+    const costUsd = estimateUsageCost(call.model, {
+      inputTokens,
+      outputTokens,
+      ...(u.cacheWriteInputTokens ? { cacheWriteTokens: u.cacheWriteInputTokens } : {}),
+      ...(u.cacheReadInputTokens ? { cacheReadTokens: u.cacheReadInputTokens } : {}),
+    });
+    await recordSpend({
+      source: 'bff_call',
+      sourceId: randomUUID(),
+      initiativeId: call.initiativeId ?? null,
+      boxId: null,
+      actorId: call.actorId ?? null,
+      trigger: call.feature,
+      model: call.model,
+      costUsd,
+      costBasis: costUsd == null ? 'unknown' : 'estimated',
+      estimatedCostUsd: costUsd,
+      inputTokens,
+      outputTokens,
+      provider: 'bedrock',
+    });
+  } catch (err) {
+    console.warn(`[spend-ledger] bff_call ${call.feature} not recorded: ${(err as Error).message}`);
   }
 }
 

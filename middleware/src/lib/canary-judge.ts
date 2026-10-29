@@ -18,6 +18,7 @@ import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import {
   BedrockAgentClient,
   GetPromptCommand,
@@ -191,6 +192,7 @@ export function fireJudge(params: JudgeParams): void {
               },
             }),
       );
+      void recordBffCall({ feature: 'canary-judge', model: template ? cfg.modelId : JUDGE_PROMPT_ARN, usage: res.usage });
       const text = res.output?.message?.content?.[0]?.text ?? '{}';
       // Judges occasionally wrap the JSON in prose or a fence — extract the
       // first {...} block rather than requiring a perfectly clean payload.

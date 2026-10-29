@@ -34,6 +34,16 @@ jest.mock('../../lib/spend-holds.js', () => ({
   HOLD_GRACE_MS: 300_000,
 }));
 jest.mock('../../providers/spend-holds.js', () => ({ releaseHold: jest.fn(async () => undefined), bindHoldSource: jest.fn(async () => undefined) }));
+// Run limits and kill switches (DE-37/50): nothing limited or paused unless a test says so.
+const controls = { fleetPaused: false, saturated: [] as string[], paused: null as null | { scope: string; reason: string | null } };
+jest.mock('../../providers/run-limits.js', () => ({
+  saturatedInitiatives: jest.fn(async () => controls.saturated),
+  releaseRunSlots: jest.fn(async () => undefined),
+}));
+jest.mock('../fleet-switches.js', () => ({
+  fleetPaused: jest.fn(async () => controls.fleetPaused),
+  pauseFor: jest.fn(async () => controls.paused),
+}));
 import { recordSpend } from '../../providers/spend-ledger.js';
 import { claimNextJob, completeJob, heartbeatJob, markRunning, unclaimJob } from '../../providers/agent-jobs.js';
 import { reserveSpend } from '../spend-holds.js';
@@ -163,4 +173,38 @@ it('a claim revoked after the hold gives the money back', async () => {
   (markRunning as jest.Mock).mockResolvedValue(false);
   await dispatchOnce(); await untilIdle();
   expect(releaseHold).toHaveBeenCalledWith('hold-1');
+});
+
+
+// ─── DE-37 / DE-50 ────────────────────────────────────────────────────────────
+
+describe('run limits and kill switches at the dispatcher', () => {
+  afterEach(() => { controls.fleetPaused = false; controls.saturated = []; controls.paused = null; });
+
+  it('a run-limit refusal hands the job back to the queue with its attempt unburned', async () => {
+    (reserveSpend as jest.Mock).mockResolvedValueOnce({
+      kind: 'limited', reason: 'initiative p-auth-migration is at its limit of 1 concurrent run', limitKind: 'concurrency',
+      scope: { kind: 'initiative', id: 'p-auth-migration' }, limit: 1, current: 1, retryAfterS: 30,
+    });
+    await dispatchOnce(); await untilIdle();
+    expect(unclaimJob).toHaveBeenCalledWith('job', 'private-attempt');
+    expect(markRunning).not.toHaveBeenCalled();
+    expect(runDevboxTask).not.toHaveBeenCalled();
+    expect(events).toContainEqual(expect.objectContaining({ kind: 'held_back', reason: expect.stringContaining('limit of 1') }));
+  });
+
+  it('a paused fleet claims nothing', async () => {
+    controls.fleetPaused = true;
+    (claimNextJob as jest.Mock).mockClear();
+    await dispatchOnce(); await untilIdle();
+    expect(claimNextJob).not.toHaveBeenCalled();
+    expect(runDevboxTask).not.toHaveBeenCalled();
+  });
+
+  it('a saturated initiative\'s jobs are skipped by the claim, not at the queue head', async () => {
+    controls.saturated = ['p-auth-migration'];
+    (claimNextJob as jest.Mock).mockClear();
+    await dispatchOnce(); await untilIdle();
+    expect(claimNextJob).toHaveBeenCalledWith('box', 'session', { skipInitiatives: ['p-auth-migration'] });
+  });
 });

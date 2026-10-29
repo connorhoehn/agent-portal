@@ -24,6 +24,7 @@
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { exec } from './aurora.js';
+import { recordBffCall } from './spend-ledger.js';
 import { config } from '../config.js';
 import { proposeGraphChange, type GraphProposal } from './graph-proposals.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
@@ -272,7 +273,9 @@ export async function analyzeDocumentLinks(
         inferenceConfig: { maxTokens: 1500, temperature: 0 },
       }),
     }));
-    modelText = extractModelText(JSON.parse(new TextDecoder().decode(res.body)));
+    const decoded = JSON.parse(new TextDecoder().decode(res.body)) as { usage?: { inputTokens?: number; outputTokens?: number } };
+    void recordBffCall({ feature: 'doc-linker', model: MODEL_ID, usage: decoded.usage });
+    modelText = extractModelText(decoded);
   } catch (err) {
     return { ...base, problem: `extraction model failed: ${(err as Error).message}` };
   }

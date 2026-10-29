@@ -29,8 +29,13 @@ import type { DevboxRunOutcome } from './devbox-runner.js';
 import { freezeJobBrief } from './run-brief.js';
 import { maintainJobAttempt, type JobAttempt } from './job-attempt.js';
 import { recordSpend } from '../providers/spend-ledger.js';
-import { reserveSpend, forecastP75ForModel, HOLD_GRACE_MS } from './spend-holds.js';
-import { releaseHold } from '../providers/spend-holds.js';
+import { reserveSpend, forecastP75ForModel, meterForHold, HOLD_GRACE_MS } from './spend-holds.js';
+import { releaseHold, openHoldOwningJob } from '../providers/spend-holds.js';
+// Run limits and kill switches (DE-37/50), loaded on first use: both read
+// config, which this module's CommonJS test build must not load statically.
+const runLimits = () => import('../providers/run-limits.js');
+const switches = () => import('./fleet-switches.js');
+import type { RunMeter } from './run-meter.js';
 import { hasLifeFor, lifetimePolicy, type LifetimePolicy } from './devbox-lifetime.js';
 import { lifetimePoliciesFor } from './devbox-profile.js';
 
@@ -120,7 +125,7 @@ const heldBack = new Map<string, string>();
  * bot_run settles it. A refusal hands the job back to the queue without
  * burning an attempt; the next tick re-judges it once money frees.
  */
-async function holdJobSpend(job: ClaimedAgentJob): Promise<{ ok: true; holdId: string | null } | { ok: false; reason: string }> {
+async function holdJobSpend(job: ClaimedAgentJob): Promise<{ ok: true; holdId: string | null; amountUsd?: number } | { ok: false; reason: string }> {
   if (job.botId) return { ok: true, holdId: null };
   const initiative = job.payload['initiativeId'];
   const model = typeof job.payload['model'] === 'string' ? job.payload['model'] : null;
@@ -132,8 +137,48 @@ async function holdJobSpend(job: ClaimedAgentJob): Promise<{ ok: true; holdId: s
     forecast: await forecastP75ForModel(model),
     expiresInMs: STALE_MINUTES * 60_000 + HOLD_GRACE_MS,
   });
-  if (held.kind === 'held') { heldBack.delete(job.id); return { ok: true, holdId: held.holdId }; }
+  if (held.kind === 'held') { heldBack.delete(job.id); return { ok: true, holdId: held.holdId, amountUsd: held.amountUsd }; }
   return { ok: false, reason: held.reason };
+}
+
+/** A job a bot run owns takes no hold here, so its pause is checked here (DE-50). */
+async function pausedFor(job: ClaimedAgentJob): Promise<string | null> {
+  if (!job.botId) return null;
+  const initiative = typeof job.payload['initiativeId'] === 'string' && job.payload['initiativeId'] ? job.payload['initiativeId'] : null;
+  try {
+    const hit = await (await switches()).pauseFor(initiative);
+    return hit ? `paused (${hit.scope})${hit.reason ? `: ${hit.reason}` : ''}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The job's mid-run meter (DE-35): its own hold, or — for a job a bot run
+ * owns — the hold fireBot took and bound to that run. Null = unmetered.
+ */
+async function jobMeter(job: ClaimedAgentJob, money: { holdId: string | null; amountUsd?: number }): Promise<RunMeter | null> {
+  const initiative = typeof job.payload['initiativeId'] === 'string' && job.payload['initiativeId'] ? job.payload['initiativeId'] : null;
+  const model = typeof job.payload['model'] === 'string' ? job.payload['model'] : null;
+  const expiresInMs = STALE_MINUTES * 60_000 + HOLD_GRACE_MS;
+  try {
+    if (job.botId) {
+      const owner = await openHoldOwningJob(job.id);
+      if (!owner) return null;
+      return await meterForHold({
+        holdId: owner.id, amountUsd: owner.amountUsd, initiativeId: owner.initiativeId, actorId: owner.actorId,
+        source: owner.source, sourceId: owner.sourceId, model, essential: owner.essential, expiresInMs,
+      });
+    }
+    return await meterForHold({
+      holdId: money.holdId, ...(money.amountUsd !== undefined ? { amountUsd: money.amountUsd } : {}),
+      initiativeId: initiative, actorId: job.createdBy, source: 'job', sourceId: `${job.id}:${job.attempts}`,
+      model, expiresInMs,
+    });
+  } catch (err) {
+    console.warn(`[dispatcher] job ${job.id} runs unmetered: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePolicy()): Promise<void> {
@@ -146,8 +191,10 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
   let attempt: JobAttempt | undefined;
   let invoked = false;
   let holdId: string | null = null;
+  let slotHolder: string | null = null;
   try {
-    const money = await holdJobSpend(job);
+    const pausedReason = await pausedFor(job);
+    const money = pausedReason ? { ok: false as const, reason: pausedReason } : await holdJobSpend(job);
     if (!money.ok) {
       // Back to the queue, attempt un-burned; the box is free again.
       await unclaimJob(job.id, claimToken);
@@ -159,6 +206,7 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
       return;
     }
     holdId = money.holdId;
+    slotHolder = holdId;
     if (!await markRunning(job.id, claimToken)) { await releaseHold(holdId); return; }
     attempt = await maintainJobAttempt(job.id, claimToken, STALE_MINUTES * 60_000);
     emit('running', job, { boxId });
@@ -174,9 +222,12 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
       tokens: frozen.brief.used_tokens, ts: new Date().toISOString(),
     });
     const guard = attempt;
+    const meter = await jobMeter(job, money);
+    // A bot-owned job's slot is its bot run's hold (DE-37): freed when the job ends.
+    if (!slotHolder && meter) slotHolder = meter.holdIds[0] ?? null;
     invoked = true;
     const outcome = await attempt.run(() => runDevboxTask({
-      sessionId, prompt, signal: guard.signal,
+      sessionId, prompt, signal: guard.signal, meter, boxId,
       ...(frozen ? { lab: { ...frozen.run, session_id: sessionId, box_id: boxId } } : {}),
       resume: Boolean(job.payload['resume']),
       // The box's profile default, stated rather than left to the image (DE-48).
@@ -193,6 +244,8 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
         summary: outcome.summary, turns: outcome.turns, durationMs: outcome.durationMs,
         costUsd: outcome.costUsd, costBasis: outcome.costBasis, estimatedCostUsd: outcome.estimatedCostUsd,
         toolCalls: outcome.toolCalls, transcript: outcome.transcript,
+        // DE-35: the run was stopped at its spend ceiling.
+        ...(outcome.cutoff ? { cutoff: outcome.cutoff } : {}),
       },
     });
     if (committed) {
@@ -215,6 +268,7 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
   } finally {
     attempt?.stop();
     running.delete(boxId);
+    if (slotHolder) await (await runLimits()).releaseRunSlots(slotHolder).catch(() => undefined);
   }
 }
 
@@ -252,12 +306,16 @@ async function tick(): Promise<void> {
     const policies = free.length ? await lifetimePoliciesFor(free) : new Map<string, LifetimePolicy>();
     const idle = free.filter((b) => hasLifeFor(b, policies.get(b.id) ?? lifetimePolicy()));
     const holder = dispatchHolder();
+    // A paused fleet claims nothing (DE-50); a saturated initiative's jobs
+    // stay queued without holding the queue head (DE-37).
+    if (idle.length && await switches().then((m) => m.fleetPaused()).catch(() => false)) return;
+    const skipInitiatives = idle.length ? await runLimits().then((m) => m.saturatedInitiatives()).catch(() => [] as string[]) : [];
     for (const box of idle) {
       // The box first, then a job: another dispatcher may hold this box.
       if (!await claimBox(box.id, holder)) continue;
       let job: ClaimedAgentJob | null;
       try {
-        job = await claimNextJob(box.id, box.sessionId);
+        job = await claimNextJob(box.id, box.sessionId, skipInitiatives.length ? { skipInitiatives } : undefined);
       } catch (err) {
         releaseBox(box.id, holder);
         throw err;

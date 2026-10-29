@@ -115,6 +115,8 @@ import { sdlcRouter } from './routes/sdlc.js';
 import { environmentsRouter } from './routes/environments.js';
 import { budgetsRouter } from './routes/budgets.js';
 import { userBudgetsRouter } from './routes/user-budgets.js';
+import { opsSwitchesRouter } from './routes/ops-switches.js';
+import { spendReportRouter } from './routes/spend-report.js';
 import { sprintsRouter } from './routes/sprints.js';
 import { grantsRouter } from './routes/grants.js';
 import { botsRouter } from './routes/bots.js';
@@ -412,6 +414,14 @@ app.use('/api/budgets', requireTenant('orgiq'), budgetsRouter);
 // in every spend hold. Reads like /api/budgets; writes ManageBudgets and never
 // on the caller's own row. See routes/user-budgets.ts.
 app.use('/api/user-budgets', requireTenant('orgiq'), userBudgetsRouter);
+// Kill switches (DE-50): fleet and per-initiative pause, checked in every spend
+// hold. Writes ManageBudgets (+ org-wide role for the fleet, stewardship for an initiative).
+app.use('/api/ops', requireTenant('orgiq'), opsSwitchesRouter);
+// The spend report — the ledger grouped by initiative, person, model, source or
+// trigger, with burn, projection and holds; one initiative's DE-53 blocks with
+// ?initiativeId=. Session floor only: the body is shaped by the budgets read
+// tier (dollars withheld below it, your own figures kept). routes/spend-report.ts.
+app.use('/api/spend', requireTenant('orgiq'), requireSession('ViewSpendReport'), spendReportRouter);
 // Sprints — the SME's own cadence (their work, their envelope, their dates).
 // Any signed-in orgiq session may read `scope=mine`; the org-wide `scope=all`
 // carries the same money the ledger gates and is checked inside the router.

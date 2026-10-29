@@ -14,7 +14,8 @@ import { resolve } from 'node:path';
 
 const ROUTES = resolve(__dirname, '..');
 const FILES = ['bots', 'work', 'agent-projects', 'sdlc', 'internal-devbox', 'work-items', 'work-documents',
-  'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints', 'prompt-pointers', 'user-budgets'];
+  'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints', 'prompt-pointers', 'user-budgets',
+  'ops-switches'];
 const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|sprintMoveAllowed|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(/;
 
 const SCOPED = [
@@ -40,6 +41,9 @@ const SCOPED = [
   'work DELETE /jobs/:id', 'work POST /findings/:id/promote', 'work POST /jobs', 'work POST /jobs/:id/requeue',
   'work POST /jobs/:id/review', 'work POST /sweeps/run',
   'work-items PATCH /work-items/:id', 'work-items POST /work-items',
+  // DE-50: an initiative pause is its stewards' (ManageBudgets + requireInitiativeScope);
+  // the fleet scope needs an org-wide role instead.
+  'ops-switches PUT /switches/:scope',
 ];
 
 /** Not scoped yet, each with why. Fixing one moves it to SCOPED. */
@@ -49,6 +53,8 @@ const OPEN: Record<string, string> = {
   'prompt-pointers POST /:agent/rollback': 'DE-4: same as candidate: org-wide, ManageCanary',
   'budgets PUT /:orgProjectId': 'DE-44 row 20: whether program-owner is program-wide is a user decision',
   'budgets DELETE /:orgProjectId': 'DE-44 row 20: same decision',
+  // DE-37: run limits sit beside the allocation, behind the same manageGate.
+  'budgets PUT /:orgProjectId/limits': 'DE-37: gated like budgets PUT (ManageBudgets); whether program-owner is program-wide is the DE-44 row 20 decision',
   'grants POST /': 'DE-44 row 21: same program-owner decision',
   'grants PATCH /:id': 'DE-44 row 21',
   'grants DELETE /:id': 'DE-44 row 21',

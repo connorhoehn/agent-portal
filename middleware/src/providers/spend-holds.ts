@@ -35,6 +35,7 @@ import { spendHolds } from '../mock/spend-holds.js';
 import type { SpendSource } from './spend-ledger.js';
 import { hasColumns } from './column-probe.js';
 import { budgetFailClosed } from '../lib/budget-decisions.js';
+import { insertRunSlot } from './run-limits.js';
 
 export type HoldSource = SpendSource;
 export type HoldBasis = 'p75' | 'confirmed_over' | 'topup';
@@ -140,6 +141,8 @@ export interface SpendLockTx {
   lock(key: string): Promise<void>;
   /** Write the hold under the lock; the commit releases the lock. */
   insertHold(input: HoldInput): Promise<SpendHold>;
+  /** Write a concurrency slot (DE-37) under the lock; false = its primary key refused it. */
+  insertSlot(key: string, holder: string, expiresAt: string): Promise<boolean>;
 }
 
 /**
@@ -173,6 +176,7 @@ export async function withSpendLock<T>(keys: readonly string[], fn: (tx: SpendLo
           spendHolds.rows().push(row);
           return { ...row };
         },
+        insertSlot: (key, holder, expiresAt) => insertRunSlot(null, key, holder, expiresAt),
       });
     } finally {
       // Release in reverse order, as the transaction's commit does at once.
@@ -203,6 +207,7 @@ export async function withSpendLock<T>(keys: readonly string[], fn: (tx: SpendLo
         if (!rows[0]) throw new Error('spend_holds insert returned no row');
         return rowToHold(rows[0]);
       },
+      insertSlot: (key, holder, expiresAt) => insertRunSlot(tx, key, holder, expiresAt),
     });
   });
 }
@@ -304,6 +309,52 @@ export async function listOpenHolds(initiativeId: string): Promise<SpendHold[]> 
   return rows.map(rowToHold);
 }
 
+/** One hold by id (the run meter reads its parent's amount and binding, DE-35). */
+export async function getHold(holdId: string): Promise<SpendHold | null> {
+  if (config.mock.aurora) {
+    const h = spendHolds.rows().find((x) => x.id === holdId);
+    return h ? { ...h } : null;
+  }
+  const rows = await exec(`SELECT * FROM spend_holds WHERE id = :id::uuid`, [s('id', holdId)]);
+  return rows[0] ? rowToHold(rows[0]) : null;
+}
+
+/**
+ * The open hold of the bot run that owns a queued job (fireBot held it and
+ * bound it to the bot_run), so the dispatcher can meter the job against it
+ * (DE-35). Null when the job has no owning run or the hold is closed.
+ */
+export async function openHoldOwningJob(jobId: string): Promise<SpendHold | null> {
+  if (config.mock.aurora) {
+    const { liveBotRuns } = await import('../mock/bots.js');
+    const run = liveBotRuns.rows().find((r) => r.jobId === jobId);
+    if (!run) return null;
+    const h = openMockHolds((x) => x.source === 'bot_run' && x.sourceId === run.id)[0];
+    return h ? { ...h } : null;
+  }
+  try {
+    const rows = await exec(
+      `SELECT h.* FROM spend_holds h JOIN bot_runs br ON h.source = 'bot_run' AND h.source_id = br.id::text
+        WHERE br.job_id = :jid AND h.status = 'held' ORDER BY h.created_at LIMIT 1`,
+      [s('jid', jobId)],
+    );
+    return rows[0] ? rowToHold(rows[0]) : null;
+  } catch (err) {
+    if (missingHoldsTable(err)) return null;
+    throw err;
+  }
+}
+
+/** The ledger key of a top-up taken mid-run for attempt `sourceId` (DE-35). */
+export function topUpSourceId(sourceId: string, n: number): string {
+  return `${sourceId}#topup-${n}`;
+}
+
+/** True when `holdSourceId` is the attempt itself or one of its top-ups. */
+export function isAttemptHold(holdSourceId: string | null, sourceId: string): boolean {
+  return holdSourceId === sourceId || (holdSourceId?.startsWith(`${sourceId}#topup-`) ?? false);
+}
+
 // ─── Writes after the hold ────────────────────────────────────────────────────
 
 /** Name the row the hold is for, once that row exists (the bot_run id, the run id). */
@@ -337,10 +388,11 @@ export async function releaseHold(holdId: string | null | undefined): Promise<vo
   }
 }
 
-/** The statement `settleHold` runs: settle the hold whose ledger entry has a KNOWN cost. */
+/** The statement `settleHold` runs: settle the hold whose ledger entry has a KNOWN cost,
+ *  with every mid-run top-up taken for the same attempt (`<sid>#topup-<n>`, DE-35). */
 export const SETTLE_HOLD_SQL = `
   UPDATE spend_holds SET status = 'settled', closed_at = NOW()
-   WHERE source = :source AND source_id = :sid AND status = 'held'
+   WHERE source = :source AND (source_id = :sid OR starts_with(source_id, :sid || '#topup-')) AND status = 'held'
      AND EXISTS (SELECT 1 FROM spend_entries se
                   WHERE se.source = :source AND se.source_id = :sid AND se.cost_usd IS NOT NULL)`;
 
@@ -355,8 +407,10 @@ export async function settleHold(
 ): Promise<void> {
   if (config.mock.aurora) {
     if (costKnown === false) return;
-    const h = spendHolds.rows().find((x) => x.source === source && x.sourceId === sourceId && x.status === 'held');
-    if (h) { h.status = 'settled'; h.closedAt = clock.nowIso(); }
+    for (const h of spendHolds.rows()) {
+      if (h.source !== source || h.status !== 'held' || !isAttemptHold(h.sourceId, sourceId)) continue;
+      h.status = 'settled'; h.closedAt = clock.nowIso();
+    }
     return;
   }
   try {
@@ -401,9 +455,9 @@ export async function expireHoldsWithTerminalOwners(): Promise<number> {
       `UPDATE spend_holds h SET status = 'expired', closed_at = NOW()
         WHERE h.status = 'held' AND h.source_id IS NOT NULL AND (
           (h.source = 'bot_run' AND EXISTS (
-             SELECT 1 FROM bot_runs br WHERE br.id::text = h.source_id AND br.status <> 'running'))
+             SELECT 1 FROM bot_runs br WHERE br.id::text = split_part(h.source_id, '#', 1) AND br.status <> 'running'))
           OR (h.source = 'agent_project_run' AND EXISTS (
-             SELECT 1 FROM agent_project_runs r WHERE r.id::text = h.source_id AND r.status IN ('done', 'failed')))
+             SELECT 1 FROM agent_project_runs r WHERE r.id::text = split_part(h.source_id, '#', 1) AND r.status IN ('done', 'failed')))
           OR (h.source = 'job' AND EXISTS (
              SELECT 1 FROM agent_jobs j WHERE j.id = split_part(h.source_id, ':', 1)
                 AND j.status IN ('done', 'awaiting_review', 'failed', 'cancelled')))

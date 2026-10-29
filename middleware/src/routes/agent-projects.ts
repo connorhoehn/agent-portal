@@ -177,6 +177,7 @@ agentProjectsRouter.post('/:id/runs', writeGate, asyncHandler(async (req, res) =
     // answers; anything else is the runtime's 503.
     if (started.refusal) {
       const r = spendRefusalResponse(started.refusal);
+      if (r.headers) res.set(r.headers);
       res.status(r.status).json(r.body);
       return;
     }

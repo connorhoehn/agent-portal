@@ -22,6 +22,7 @@ import {
   BedrockRuntimeClient,
   ConverseStreamCommand,
 } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import {
   BedrockAgentRuntimeClient,
   OptimizePromptCommand,
@@ -690,6 +691,7 @@ canaryLibraryRouter.post(
 
       if (out.stream) {
         for await (const event of out.stream) {
+          if (event.metadata?.usage) void recordBffCall({ feature: 'canary-library-test', model: modelId, usage: event.metadata.usage });
           if (event.contentBlockDelta?.delta?.text) {
             res.write(JSON.stringify({ text: event.contentBlockDelta.delta.text }) + '\n');
           }

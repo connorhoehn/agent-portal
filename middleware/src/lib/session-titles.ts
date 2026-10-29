@@ -24,6 +24,7 @@ import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import { config } from '../config.js';
 
 // Bounded so neither map/set grows without limit on a long-lived process (one
@@ -152,6 +153,7 @@ async function generateTitle(sessionId: string, firstUserMessage: string): Promi
       inferenceConfig: { maxTokens: 24, temperature: 0.2 },
     }),
   );
+  void recordBffCall({ feature: 'session-title', model: TITLE_MODEL, usage: resp.usage });
   const blocks = resp.output?.message?.content ?? [];
   const raw = blocks.map((c) => ('text' in c ? c.text : '')).join('').trim();
   // Strip leading/trailing quotes/punctuation and limit to ~50 chars.

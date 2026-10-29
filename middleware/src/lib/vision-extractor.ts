@@ -10,6 +10,7 @@ import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import { config } from '../config.js';
 import type { DiscoveredLink, VisionExtractionResult } from './crawler-types.js';
 
@@ -143,6 +144,7 @@ async function runConverse(pngBytes: Buffer, prompt: string): Promise<ConverseAt
       inferenceConfig: { maxTokens: 4000, temperature: 0.1 },
     }),
   );
+  void recordBffCall({ feature: 'vision-extractor', model: VISION_MODEL, usage: resp.usage });
   const blocks = resp.output?.message?.content ?? [];
   const text = blocks.map((c) => ('text' in c ? c.text ?? '' : '')).join('').trim();
   return {

@@ -18,6 +18,7 @@ import {
   ConverseCommand,
   type Message,
 } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import { config } from '../config.js';
 import { measureAnswer, offlineVerdict } from '../mock/answer-check.js';
 
@@ -147,6 +148,8 @@ Reply with the JSON object only.`;
         },
       }),
     );
+
+    void recordBffCall({ feature: 'judge', model: NOVA_PRO_MODEL_ID, usage: resp.usage });
 
     const text = resp.output?.message?.content
       ?.map((c) => c.text ?? '')

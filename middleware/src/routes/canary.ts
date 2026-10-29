@@ -17,6 +17,7 @@ import {
   BedrockRuntimeClient,
   ConverseStreamCommand,
 } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import {
   BedrockAgentClient,
   GetPromptCommand,
@@ -151,6 +152,7 @@ canaryRouter.post('/ask', asyncHandler(async (req, res) => {
       if (out.stream) {
         for await (const event of out.stream) {
           if (res.writableEnded) break;
+          if (event.metadata?.usage) void recordBffCall({ feature: 'canary-ask', model: promptArn, usage: event.metadata.usage });
           const deltaText = event.contentBlockDelta?.delta?.text;
           if (typeof deltaText === 'string' && deltaText.length > 0) {
             fullText += deltaText;

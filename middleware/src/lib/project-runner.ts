@@ -18,7 +18,8 @@ import {
   // rather than running a shell command.
   InvokeAgentRuntimeCommandCommand as RunRuntimeCommand,
 } from '@aws-sdk/client-bedrock-agentcore';
-import { executeDevboxTask, type DevboxLabContext } from './devbox-runner.js';
+import { executeDevboxTask, type DevboxLabContext, type DevboxRunOptions } from './devbox-runner.js';
+import type { RunMeter } from './run-meter.js';
 import { finishRun } from '../providers/agent-projects.js';
 import { recordAgentProjectRunSpend } from '../providers/spend-ledger.js';
 
@@ -160,6 +161,9 @@ export interface ProjectRunRequest {
   onChanged?: (filesChanged: number) => void;
   /** The run's LAB_* context (lib/run-brief.ts); the box's `lab brief` reads it. */
   lab?: DevboxLabContext;
+  /** DE-35: the run's hold as its ceiling, and the session stop after a cut. */
+  meter?: RunMeter | null;
+  cutoffBackstop?: DevboxRunOptions['cutoffBackstop'];
 }
 
 /**
@@ -184,6 +188,9 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
       client: req.client,
       ...(req.onEvent ? { onEvent: req.onEvent } : {}),
       ...(req.lab ? { lab: req.lab } : {}),
+      // A governed run used to pass no signal at all; the meter's is its stop.
+      ...(req.meter ? { meter: req.meter } : {}),
+      ...(req.meter && req.cutoffBackstop ? { cutoffBackstop: req.cutoffBackstop } : {}),
     });
 
     // Measure the repository even when the agent reported failure — a run that
@@ -211,6 +218,9 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
       // see which executor called it, and that is exactly the gap that let a
       // local run's self-reported first-party price look like Bedrock spend.
       modelProvider: 'bedrock',
+      // DE-35: why the run stopped, when its ceiling cut it. The working tree
+      // is kept and measured above; nothing is committed for it.
+      ...(outcome.cutoff ? { cutoff: outcome.cutoff } : {}),
     });
     // The ledger entry (DE-30): this path writes no bot_runs row of its own.
     await recordAgentProjectRunSpend(req.runId);

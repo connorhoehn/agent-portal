@@ -221,6 +221,12 @@
       "why": "Maintenance reserve (DE-55, folds DE-39): initiative_budgets.maintenance_reserve_usd/allow_floor_spill, bots.essential, spend_holds.essential. ALTERs bots, initiative_budgets and spend_holds, so it loads after spend_holds_schema.sql."
     },
     {
+      "id": "run_controls_schema",
+      "file": "run_controls_schema.sql",
+      "kind": "repeatable",
+      "why": "Run controls (DE-35/37/50): agent_project_runs.cutoff, run_limits + run_slots, agent_jobs.initiative_id (backfilled from payload), fleet_switches, initiative_budgets threshold memory. ALTERs agent_project_runs, agent_jobs and initiative_budgets, so it loads after maintenance_reserve_schema.sql."
+    },
+    {
       "id": "assessment_schema",
       "file": "assessment_schema.sql",
       "kind": "repeatable",

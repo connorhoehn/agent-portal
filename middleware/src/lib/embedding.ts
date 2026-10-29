@@ -12,6 +12,7 @@ import {
   BedrockRuntimeClient,
   InvokeModelCommand,
 } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import { config } from '../config.js';
 
 export const TITAN_V2_MODEL_ID = 'amazon.titan-embed-text-v2:0';
@@ -50,7 +51,10 @@ export async function embedText(text: string): Promise<number[] | null> {
     );
 
     const decoded = new TextDecoder().decode(resp.body);
-    const parsed = JSON.parse(decoded) as { embedding?: unknown };
+    const parsed = JSON.parse(decoded) as { embedding?: unknown; inputTextTokenCount?: unknown };
+    if (typeof parsed.inputTextTokenCount === 'number') {
+      void recordBffCall({ feature: 'embedding', model: TITAN_V2_MODEL_ID, usage: { inputTokens: parsed.inputTextTokenCount, outputTokens: 0 } });
+    }
     const arr = parsed.embedding;
     if (!Array.isArray(arr) || arr.length !== EMBEDDING_DIMENSIONS) return null;
     // Ensure all entries are finite numbers — defensive against partial responses.

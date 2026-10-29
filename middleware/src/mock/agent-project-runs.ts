@@ -40,6 +40,8 @@ export interface ProjectRunSeed {
   workItemId?: string | null;
   /** `agent_project_runs.dispatched_by` (DE-43). A column, not part of the run wire shape. */
   dispatchedBy?: string | null;
+  /** `agent_project_runs.cutoff` (DE-35): why the run's spend ceiling stopped it. Read by the reconcile only. */
+  cutoff?: Record<string, unknown> | null;
 }
 
 /** The wire shape both routes return — `durationMs` computed, everything else carried. */
@@ -171,7 +173,7 @@ function durationMs(seed: ProjectRunSeed): number | null {
 
 function toRow(seed: ProjectRunSeed): ProjectRunRow {
   // `rowToRun` does not read dispatched_by, so the offline wire does not carry it either.
-  const { dispatchedBy: _dispatchedBy, ...run } = seed;
+  const { dispatchedBy: _dispatchedBy, cutoff: _cutoff, ...run } = seed;
   return { ...run, durationMs: durationMs(seed) };
 }
 
@@ -255,7 +257,7 @@ export function mockRunProjectId(id: string): string | null {
 
 export function mockFinishRun(id: string, outcome: {
   status: 'done' | 'failed'; filesChanged?: number | null; diffSummary?: string | null;
-  error?: string | null; costUsd?: number | null;
+  error?: string | null; costUsd?: number | null; cutoff?: Record<string, unknown> | null;
 }): boolean {
   const run = agentProjectRuns.rows().find((r) => r.id === id);
   if (!run) return false;
@@ -265,5 +267,6 @@ export function mockFinishRun(id: string, outcome: {
   run.diffSummary = outcome.diffSummary ?? null;
   run.error = outcome.error ?? null;
   run.costUsd = outcome.costUsd ?? null;
+  if (outcome.cutoff) run.cutoff = outcome.cutoff;
   return true;
 }

@@ -20,7 +20,9 @@ import {
   hydrateBoxes,
   _resetFleet,
 } from '../devbox-fleet.js';
-import { decideReaping, MAX_LIFETIME_MS } from '../devbox-reaper.js';
+import { decideReaping, MAX_LIFETIME_MS, sweepOnce, type ReaperDeps } from '../devbox-reaper.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const SID = 'a'.repeat(40);
 
@@ -671,5 +673,68 @@ describe('fleet state shared across replicas (DE-47)', () => {
     expect(tick.ran).toBe('lock-unavailable');
     expect(send).toHaveBeenCalledTimes(1);
     expect(a.fleet.getBox('idle2')?.status).toBe('idle');   // never stopped, never marked
+  });
+});
+
+
+// ─── DE-50: the reaper speaks in metric lines ────────────────────────────────
+
+describe('reaper alerts (DE-50)', () => {
+  const old = new Date(Date.now() - 10 * MAX_LIFETIME_MS).toISOString();
+  const deps = (send: jest.Mock, extra: Partial<ReaperDeps> = {}): ReaperDeps => ({
+    client: () => ({ send }) as never,
+    runtimeArn: async () => 'arn:aws:bedrock-agentcore:us-east-1:1:runtime/devbox',
+    policies: async () => new Map(),
+    refresh: async () => undefined,
+    ...extra,
+  });
+  let log: jest.SpyInstance;
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => { log.mockRestore(); warn.mockRestore(); });
+  const lines = (type: string) => log.mock.calls.map((c) => String(c[0]))
+    .filter((l) => l.startsWith('{')).map((l) => JSON.parse(l) as Record<string, unknown>).filter((l) => l['type'] === type);
+
+  it('a successful stop writes a devbox-reaped JSON line with its reason, and no console.warn', async () => {
+    const box = registerBox({ sessionId: 'r'.repeat(40), createdAt: old });
+    const send = jest.fn(async () => ({}));
+    const decisions = await sweepOnce(deps(send));
+    expect(decisions.map((d) => d.reason)).toEqual(['max-lifetime']);
+    expect(lines('devbox-reaped')).toEqual([expect.objectContaining({ reason: 'max-lifetime', boxId: box.id })]);
+    expect(warn).not.toHaveBeenCalled();
+    expect(getBox(box.id)?.status).toBe('stopped');
+  });
+
+  it('a stop that fails writes devbox-reap-failed', async () => {
+    const box = registerBox({ sessionId: 's'.repeat(40), createdAt: old });
+    const send = jest.fn(async () => { throw Object.assign(new Error('throttled'), { name: 'ThrottlingException' }); });
+    await sweepOnce(deps(send));
+    expect(lines('devbox-reap-failed')).toEqual([expect.objectContaining({ boxId: box.id, error: 'throttled' })]);
+  });
+
+  it('a paused fleet stops idle boxes (reason paused) and leaves running ones', async () => {
+    const idle = registerBox({ sessionId: 'i'.repeat(40) });
+    const busy = registerBox({ sessionId: 'b'.repeat(40) });
+    appendEvent(busy.id, { type: 'task_started', prompt: 'x' });
+    const send = jest.fn(async () => ({}));
+    const decisions = await sweepOnce(deps(send, { fleetPaused: async () => true }));
+    expect(decisions.map((d) => [d.box.id, d.reason])).toEqual([[idle.id, 'paused']]);
+    expect(getBox(busy.id)?.status).toBe('running');
+    expect(lines('devbox-reaped')).toEqual([expect.objectContaining({ reason: 'paused', boxId: idle.id })]);
+  });
+
+  it('housekeeping runs every sweep, even over an empty fleet (the stats line is the heartbeat)', async () => {
+    const housekeeping = jest.fn(async () => undefined);
+    await sweepOnce(deps(jest.fn(), { housekeeping }));
+    expect(housekeeping).toHaveBeenCalledTimes(1);
+  });
+
+  it('no console.warn remains on the reaper\'s successful-stop path', () => {
+    const src = readFileSync(resolve(__dirname, '../devbox-reaper.ts'), 'utf8');
+    const stop = src.slice(src.indexOf('markStopped(d.box.id);'), src.indexOf('} catch (err) {', src.indexOf('markStopped(d.box.id);')));
+    expect(stop).not.toMatch(/console\.warn/);
   });
 });

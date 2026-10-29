@@ -4,6 +4,7 @@ import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from '@aws-sdk/client-bedrock-runtime';
+import { recordBffCall } from '../providers/spend-ledger.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { degradedFields } from '../lib/upstream.js';
 import { guardrails, agentcore, cloudwatch } from '../providers/index.js';
@@ -310,6 +311,7 @@ capabilitiesRouter.post('/browser/web-qa', asyncHandler(async (req, res) => {
             inferenceConfig: { maxTokens: 400, temperature: 0.2 },
           }),
         );
+        void recordBffCall({ feature: 'browser-vision-answer', model: VISION_MODEL, usage: visionResp.usage });
         const blocks = visionResp.output?.message?.content ?? [];
         answer = blocks.map((c) => ('text' in c ? c.text : '')).join('').trim();
       } catch (err) {

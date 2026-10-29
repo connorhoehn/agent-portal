@@ -338,7 +338,7 @@
     {
       "method": "POST",
       "path": "/api/agent-projects/runs/:runId/finish",
-      "source": "src/routes/agent-projects.ts:190"
+      "source": "src/routes/agent-projects.ts:191"
     },
     {
       "method": "GET",
@@ -933,57 +933,57 @@
     {
       "method": "GET",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:645"
+      "source": "src/routes/bots.ts:647"
     },
     {
       "method": "POST",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:650"
+      "source": "src/routes/bots.ts:652"
     },
     {
       "method": "DELETE",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:761"
+      "source": "src/routes/bots.ts:763"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:695"
+      "source": "src/routes/bots.ts:697"
     },
     {
       "method": "PATCH",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:701"
+      "source": "src/routes/bots.ts:703"
     },
     {
       "method": "PUT",
       "path": "/api/bots/:id/essential",
-      "source": "src/routes/bots.ts:878"
+      "source": "src/routes/bots.ts:881"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/pause",
-      "source": "src/routes/bots.ts:837"
+      "source": "src/routes/bots.ts:840"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/resume",
-      "source": "src/routes/bots.ts:850"
+      "source": "src/routes/bots.ts:853"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/run",
-      "source": "src/routes/bots.ts:774"
+      "source": "src/routes/bots.ts:776"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id/runs",
-      "source": "src/routes/bots.ts:890"
+      "source": "src/routes/bots.ts:893"
     },
     {
       "method": "GET",
       "path": "/api/bots/active-runs",
-      "source": "src/routes/bots.ts:551"
+      "source": "src/routes/bots.ts:553"
     },
     {
       "method": "POST",
@@ -998,42 +998,42 @@
     {
       "method": "GET",
       "path": "/api/bots/initiative-runs",
-      "source": "src/routes/bots.ts:589"
+      "source": "src/routes/bots.ts:591"
     },
     {
       "method": "GET",
       "path": "/api/bots/marketplace-runs",
-      "source": "src/routes/bots.ts:571"
+      "source": "src/routes/bots.ts:573"
     },
     {
       "method": "GET",
       "path": "/api/bots/runs",
-      "source": "src/routes/bots.ts:620"
+      "source": "src/routes/bots.ts:622"
     },
     {
       "method": "POST",
       "path": "/api/bots/work-items/:id/estimate",
-      "source": "src/routes/bots.ts:484"
+      "source": "src/routes/bots.ts:486"
     },
     {
       "method": "DELETE",
       "path": "/api/bots/work-items/:id/job-draft",
-      "source": "src/routes/bots.ts:457"
+      "source": "src/routes/bots.ts:459"
     },
     {
       "method": "GET",
       "path": "/api/bots/work-items/:id/job-draft",
-      "source": "src/routes/bots.ts:423"
+      "source": "src/routes/bots.ts:425"
     },
     {
       "method": "PUT",
       "path": "/api/bots/work-items/:id/job-draft",
-      "source": "src/routes/bots.ts:430"
+      "source": "src/routes/bots.ts:432"
     },
     {
       "method": "POST",
       "path": "/api/bots/work-items/:id/review-estimate",
-      "source": "src/routes/bots.ts:521"
+      "source": "src/routes/bots.ts:523"
     },
     {
       "method": "GET",
@@ -1043,22 +1043,32 @@
     {
       "method": "GET",
       "path": "/api/budgets",
-      "source": "src/routes/budgets.ts:34"
+      "source": "src/routes/budgets.ts:37"
     },
     {
       "method": "DELETE",
       "path": "/api/budgets/:orgProjectId",
-      "source": "src/routes/budgets.ts:99"
+      "source": "src/routes/budgets.ts:157"
     },
     {
       "method": "PUT",
       "path": "/api/budgets/:orgProjectId",
-      "source": "src/routes/budgets.ts:59"
+      "source": "src/routes/budgets.ts:117"
+    },
+    {
+      "method": "GET",
+      "path": "/api/budgets/:orgProjectId/limits",
+      "source": "src/routes/budgets.ts:94"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/budgets/:orgProjectId/limits",
+      "source": "src/routes/budgets.ts:100"
     },
     {
       "method": "GET",
       "path": "/api/budgets/grants",
-      "source": "src/routes/budgets.ts:52"
+      "source": "src/routes/budgets.ts:55"
     },
     {
       "method": "GET",
@@ -1093,117 +1103,117 @@
     {
       "method": "GET",
       "path": "/api/capabilities/browser-sessions",
-      "source": "src/routes/capabilities.ts:146"
+      "source": "src/routes/capabilities.ts:147"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser-sessions",
-      "source": "src/routes/capabilities.ts:151"
+      "source": "src/routes/capabilities.ts:152"
     },
     {
       "method": "DELETE",
       "path": "/api/capabilities/browser-sessions/:sessionId",
-      "source": "src/routes/capabilities.ts:186"
+      "source": "src/routes/capabilities.ts:187"
     },
     {
       "method": "DELETE",
       "path": "/api/capabilities/browser-sessions/:sessionId/journey",
-      "source": "src/routes/capabilities.ts:249"
+      "source": "src/routes/capabilities.ts:250"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/browser-sessions/:sessionId/journey",
-      "source": "src/routes/capabilities.ts:244"
+      "source": "src/routes/capabilities.ts:245"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser-sessions/:sessionId/navigate",
-      "source": "src/routes/capabilities.ts:203"
+      "source": "src/routes/capabilities.ts:204"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser-sessions/:sessionId/screenshot",
-      "source": "src/routes/capabilities.ts:355"
+      "source": "src/routes/capabilities.ts:357"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/browser/crawl",
-      "source": "src/routes/capabilities.ts:392"
+      "source": "src/routes/capabilities.ts:394"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser/crawl",
-      "source": "src/routes/capabilities.ts:375"
+      "source": "src/routes/capabilities.ts:377"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/browser/crawl/:crawlId",
-      "source": "src/routes/capabilities.ts:396"
+      "source": "src/routes/capabilities.ts:398"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser/crawl/:crawlId/cancel",
-      "source": "src/routes/capabilities.ts:402"
+      "source": "src/routes/capabilities.ts:404"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/browser/crawl/:crawlId/stream",
-      "source": "src/routes/capabilities.ts:408"
+      "source": "src/routes/capabilities.ts:410"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser/web-qa",
-      "source": "src/routes/capabilities.ts:257"
+      "source": "src/routes/capabilities.ts:258"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/code-interpreter/execute",
-      "source": "src/routes/capabilities.ts:115"
+      "source": "src/routes/capabilities.ts:116"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/code-sessions",
-      "source": "src/routes/capabilities.ts:104"
+      "source": "src/routes/capabilities.ts:105"
     },
     {
       "method": "DELETE",
       "path": "/api/capabilities/code-sessions/:sessionId",
-      "source": "src/routes/capabilities.ts:109"
+      "source": "src/routes/capabilities.ts:110"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/guardrail",
-      "source": "src/routes/capabilities.ts:46"
+      "source": "src/routes/capabilities.ts:47"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/guardrail/metrics",
-      "source": "src/routes/capabilities.ts:51"
+      "source": "src/routes/capabilities.ts:52"
     },
     {
       "method": "PATCH",
       "path": "/api/capabilities/guardrail/pii",
-      "source": "src/routes/capabilities.ts:57"
+      "source": "src/routes/capabilities.ts:58"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/guardrail/topics",
-      "source": "src/routes/capabilities.ts:71"
+      "source": "src/routes/capabilities.ts:72"
     },
     {
       "method": "DELETE",
       "path": "/api/capabilities/guardrail/topics/:name",
-      "source": "src/routes/capabilities.ts:78"
+      "source": "src/routes/capabilities.ts:79"
     },
     {
       "method": "PATCH",
       "path": "/api/capabilities/guardrail/topics/:name",
-      "source": "src/routes/capabilities.ts:64"
+      "source": "src/routes/capabilities.ts:65"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/reconcile",
-      "source": "src/routes/capabilities.ts:439"
+      "source": "src/routes/capabilities.ts:441"
     },
     {
       "method": "POST",
@@ -1628,47 +1638,47 @@
     {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
-      "source": "src/routes/devbox.ts:1090"
+      "source": "src/routes/devbox.ts:1143"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/command",
-      "source": "src/routes/devbox.ts:843"
+      "source": "src/routes/devbox.ts:896"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/shell-url",
-      "source": "src/routes/devbox.ts:1019"
+      "source": "src/routes/devbox.ts:1072"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/task",
-      "source": "src/routes/devbox.ts:809"
+      "source": "src/routes/devbox.ts:862"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:431"
+      "source": "src/routes/devbox.ts:438"
     },
     {
       "method": "POST",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:514"
+      "source": "src/routes/devbox.ts:521"
     },
     {
       "method": "DELETE",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:560"
+      "source": "src/routes/devbox.ts:567"
     },
     {
       "method": "PATCH",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:547"
+      "source": "src/routes/devbox.ts:554"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes/:boxId/tail",
-      "source": "src/routes/devbox.ts:621"
+      "source": "src/routes/devbox.ts:628"
     },
     {
       "method": "GET",
@@ -1688,12 +1698,12 @@
     {
       "method": "POST",
       "path": "/api/devbox/sessions",
-      "source": "src/routes/devbox.ts:420"
+      "source": "src/routes/devbox.ts:427"
     },
     {
       "method": "GET",
       "path": "/api/devbox/status",
-      "source": "src/routes/devbox.ts:416"
+      "source": "src/routes/devbox.ts:423"
     },
     {
       "method": "GET",
@@ -1973,7 +1983,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:212"
+      "source": "src/index.ts:214"
     },
     {
       "method": "GET",
@@ -2598,82 +2608,82 @@
     {
       "method": "POST",
       "path": "/api/observability/canary/ask",
-      "source": "src/routes/canary.ts:73"
+      "source": "src/routes/canary.ts:74"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/events",
-      "source": "src/routes/canary.ts:210"
+      "source": "src/routes/canary.ts:212"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/halt",
-      "source": "src/routes/canary.ts:339"
+      "source": "src/routes/canary.ts:341"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/library",
-      "source": "src/routes/canary-library.ts:73"
+      "source": "src/routes/canary-library.ts:74"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/library",
-      "source": "src/routes/canary-library.ts:277"
+      "source": "src/routes/canary-library.ts:278"
     },
     {
       "method": "PUT",
       "path": "/api/observability/canary/library/:promptId/draft",
-      "source": "src/routes/canary-library.ts:386"
+      "source": "src/routes/canary-library.ts:387"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/library/:promptId/invoke",
-      "source": "src/routes/canary-library.ts:592"
+      "source": "src/routes/canary-library.ts:593"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/library/:promptId/optimize",
-      "source": "src/routes/canary-library.ts:727"
+      "source": "src/routes/canary-library.ts:729"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/library/:promptId/publish",
-      "source": "src/routes/canary-library.ts:515"
+      "source": "src/routes/canary-library.ts:516"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/library/:promptId/version/:version",
-      "source": "src/routes/canary-library.ts:205"
+      "source": "src/routes/canary-library.ts:206"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/library/:promptId/versions",
-      "source": "src/routes/canary-library.ts:133"
+      "source": "src/routes/canary-library.ts:134"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/prompts",
-      "source": "src/routes/canary.ts:266"
+      "source": "src/routes/canary.ts:268"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/reset",
-      "source": "src/routes/canary.ts:400"
+      "source": "src/routes/canary.ts:402"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/start",
-      "source": "src/routes/canary.ts:365"
+      "source": "src/routes/canary.ts:367"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/weight",
-      "source": "src/routes/canary.ts:298"
+      "source": "src/routes/canary.ts:300"
     },
     {
       "method": "PUT",
       "path": "/api/observability/canary/weight",
-      "source": "src/routes/canary.ts:311"
+      "source": "src/routes/canary.ts:313"
     },
     {
       "method": "GET",
@@ -3014,6 +3024,16 @@
       "method": "GET",
       "path": "/api/observability/traffic/top-users",
       "source": "src/routes/traffic.ts:203"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ops/switches",
+      "source": "src/routes/ops-switches.ts:31"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/ops/switches/:scope",
+      "source": "src/routes/ops-switches.ts:36"
     },
     {
       "method": "GET",
@@ -3917,6 +3937,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/spend/report",
+      "source": "src/routes/spend-report.ts:72"
+    },
+    {
+      "method": "GET",
       "path": "/api/sprints",
       "source": "src/routes/sprints.ts:95"
     },
@@ -4098,7 +4123,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:211"
+      "source": "src/index.ts:213"
     },
     {
       "method": "DELETE",
@@ -4183,7 +4208,7 @@
     {
       "method": "GET",
       "path": "/livez",
-      "source": "src/index.ts:213"
+      "source": "src/index.ts:215"
     }
   ],
   "unresolved": []

@@ -12,7 +12,7 @@
 // concern, not a run concern: the runner's job is to run the agent and record
 // what changed; whether that change is allowed to ship is this file's job.
 
-import { reserveSpend, forecastP75ForModel, type ReserveSpendResult } from './spend-holds.js';
+import { reserveSpend, forecastP75ForModel, meterForHold, type ReserveSpendResult } from './spend-holds.js';
 import { bindHoldSource, releaseHold } from '../providers/spend-holds.js';
 import { dispatchHoldTtlMs } from './bot-runner.js';
 import { runDevboxShell, executeProjectRun } from './project-runner.js';
@@ -28,10 +28,10 @@ import { deliverChange } from './change-delivery.js';
 import { deliveryBlockReason } from './delivery-guard.js';
 import { isGitFailure, parsePorcelainFiles } from './capture-parse.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
-import { registerBox, getBoxBySession, appendEvent, reserveBox, releaseBox, setBoxProfile } from './devbox-fleet.js';
+import { registerBox, getBoxBySession, appendEvent, reserveBox, releaseBox, setBoxProfile, markStopped } from './devbox-fleet.js';
 import { profileForBox, resolveTaskModel, profileStamp } from './devbox-profile.js';
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
-import type { DevboxLabContext } from './devbox-runner.js';
+import { stopDevboxSession, type DevboxLabContext } from './devbox-runner.js';
 
 export interface CaptureInput {
   client: BedrockAgentCoreClient;
@@ -183,7 +183,31 @@ export async function dispatchGovernedRun(input: {
   // its operator — so no queued job is handed a checkout mid-run.
   const holder = `run:${run.id}`;
   reserveBox(box.id, holder);
+  // The run's hold is its ceiling (DE-35): the caller's (bound to its bot_run
+  // once that row exists) or the one taken here (bound to this run above).
+  const runHold = 'holdId' in input ? input.holdId ?? null : ownHold;
+  const meter = await meterForHold({
+    holdId: runHold,
+    initiativeId: input.project.orgProjectId ?? null,
+    actorId: input.dispatchedBy ?? null,
+    source: ownHold ? 'agent_project_run' : 'bot_run',
+    sourceId: ownHold ? run.id : null,
+    model, agentProjectId: input.project.id,
+    expiresInMs: dispatchHoldTtlMs(),
+  }).catch((err: unknown) => {
+    console.warn(`[sdlc] run ${run.id} runs unmetered: ${(err as Error).message}`);
+    return null;
+  });
   void executeProjectRun({
+    ...(meter ? {
+      meter,
+      cutoffBackstop: {
+        stop: async () => {
+          await stopDevboxSession(devboxDataClient(), arn, input.sessionId);
+        },
+        onStopped: () => markStopped(box.id),
+      },
+    } : {}),
     runId: run.id,
     sessionId: input.sessionId,
     checkout,
@@ -202,7 +226,11 @@ export async function dispatchGovernedRun(input: {
         requestedBy,
       }).catch((err) => console.warn('[sdlc] capture failed:', (err as Error).message));
     },
-  }).finally(() => releaseBox(box.id, holder));
+  }).finally(() => {
+    releaseBox(box.id, holder);
+    // The run is over: its concurrency slot frees now (DE-37).
+    if (runHold) void import('../providers/run-limits.js').then((m) => m.releaseRunSlots(runHold)).catch(() => undefined);
+  });
 
   return { ok: true, runId: run.id, checkout, briefId };
 }

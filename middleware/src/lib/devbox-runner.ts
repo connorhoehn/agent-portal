@@ -9,6 +9,7 @@
 import {
   BedrockAgentCoreClient,
   InvokeAgentRuntimeCommand as InvokeRuntime,
+  StopRuntimeSessionCommand,
 } from '@aws-sdk/client-bedrock-agentcore';
 import {
   parseReportedCost, parseResultUsage, resultEventError, resultEventSucceeded, settleRunCost, type CostBasis,
@@ -16,6 +17,7 @@ import {
 import { estimateUsageCost } from './model-prices.js';
 import type { TokenUsage } from './pricing.js';
 import { clampTaskTimeout } from './devbox-lifetime.js';
+import { RunCutoffError, anySignal, cutoffGraceMs, cutoffMessage, type RunCutoff, type RunMeter } from './run-meter.js';
 
 /**
  * One line of what the worker actually did.
@@ -92,6 +94,8 @@ export interface DevboxRunOutcome {
   error?: string;
   /** Bounded record of the run, for review after the event buffer rolls. */
   transcript: ActivityEntry[];
+  /** DE-35: set when the run was stopped at its spend ceiling. */
+  cutoff?: RunCutoff;
 }
 
 export interface DevboxRunOptions {
@@ -115,6 +119,49 @@ export interface DevboxRunOptions {
    * and `lab propose`, plus attribution. Absent → the box has no run brief.
    */
   lab?: DevboxLabContext;
+  /**
+   * The mid-run meter (DE-35, lib/run-meter.ts). Every parsed event is fed to
+   * it; when it cuts, the invoke is aborted (closing the stream, which the box
+   * turns into a process-group kill) and the run returns `ok: false` with
+   * `cutoff`. Its token ceiling rides the payload as `budget`.
+   */
+  meter?: RunMeter | null;
+  /**
+   * Layer 3: after a cut with no `devbox_end` seen, wait `graceMs` (default
+   * RUN_CUTOFF_GRACE_MS, 30 s) and stop the runtime session — the reaper's
+   * StopRuntimeSession. `onStopped` runs after a successful stop.
+   */
+  cutoffBackstop?: { stop: () => Promise<void>; graceMs?: number; onStopped?: () => void };
+}
+
+/** Stop one runtime session (the cutoff backstop's AWS call lives here with the other devbox transport). */
+export async function stopDevboxSession(client: BedrockAgentCoreClient, runtimeArn: string, sessionId: string): Promise<void> {
+  // Mocked AgentCore has no runtime session to stop.
+  // Lazy: config.ts cannot load statically under the CommonJS test build.
+  const { config } = await import('../config.js');
+  if (config.mock.agentcore) return;
+  await client.send(new StopRuntimeSessionCommand({ agentRuntimeArn: runtimeArn, runtimeSessionId: sessionId }));
+}
+
+/**
+ * Stop a cut run's session after the grace period unless it ended on its own
+ * (DE-35 layer 3). Fire-and-forget, unref'd; once per cut.
+ */
+export function scheduleCutoffBackstop(
+  backstop: NonNullable<DevboxRunOptions['cutoffBackstop']>,
+  ended: () => boolean,
+  onEvent?: (event: Record<string, unknown>) => void,
+): void {
+  const timer = setTimeout(() => {
+    if (ended()) return;
+    void backstop.stop()
+      .then(() => {
+        try { onEvent?.({ type: 'devbox_reaped', reason: 'budget', ts: new Date().toISOString() }); } catch { /* best effort */ }
+        backstop.onStopped?.();
+      })
+      .catch((err: unknown) => console.warn('[devbox] cutoff session stop failed:', (err as Error).message));
+  }, backstop.graceMs ?? cutoffGraceMs());
+  timer.unref?.();
 }
 
 export interface DevboxLabContext {
@@ -150,6 +197,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
     if (outcome.transcript.length < TRANSCRIPT_MAX_ENTRIES) outcome.transcript.push(entry);
   };
 
+  const budget = opts.meter?.boxBudget(opts.lab?.run_ref ?? opts.sessionId) ?? null;
   const payload = JSON.stringify({
     prompt: opts.prompt,
     resume: Boolean(opts.resume),
@@ -158,17 +206,24 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
     // own defence.
     ...(opts.timeoutSeconds ? { timeout: clampTaskTimeout(opts.timeoutSeconds) } : {}),
     ...(opts.lab ? { lab: opts.lab } : {}),
+    ...(budget ? { budget } : {}),
   });
 
+  const meter = opts.meter ?? null;
+  const signal = anySignal([opts.signal, meter?.signal]);
+  let endSeen = false;
+  let resultSeen = false;
+  let boxBudgetKill = false;
+
   try {
-    opts.signal?.throwIfAborted();
+    signal?.throwIfAborted();
     const resp = await opts.client.send(new InvokeRuntime({
       agentRuntimeArn: opts.runtimeArn,
       qualifier: 'DEFAULT',
       runtimeSessionId: opts.sessionId,
       accept: 'text/event-stream',
       payload: new TextEncoder().encode(payload),
-    }), ...(opts.signal ? [{ abortSignal: opts.signal }] : []));
+    }), ...(signal ? [{ abortSignal: signal }] : []));
 
     const stream = resp.response as AsyncIterable<Uint8Array> | undefined;
     if (!stream) {
@@ -180,7 +235,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
     const decoder = new TextDecoder();
     let buffer = '';
     for await (const chunk of stream) {
-      opts.signal?.throwIfAborted();
+      signal?.throwIfAborted();
       buffer += decoder.decode(chunk, { stream: true });
       let idx: number;
       while ((idx = buffer.indexOf('\n')) >= 0) {
@@ -199,6 +254,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
         let ev: Record<string, unknown>;
         try { ev = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
         opts.onEvent?.(ev);
+        meter?.observe(ev);
 
         const type = ev['type'];
         const ts = new Date().toISOString();
@@ -225,6 +281,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
             }
           }
         } else if (type === 'result') {
+          resultSeen = true;
           outcome.turns = Number(ev['num_turns'] ?? 0);
           // Reported figure first; when Claude Code reports none, the usage
           // block priced through the table (DE-32), each cache bucket at its
@@ -246,6 +303,9 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
             }
           }
         } else if (type === 'devbox_end') {
+          endSeen = true;
+          // The box's own token ceiling (DE-35 layer 1) fired.
+          if (ev['killed_reason'] === 'budget') boxBudgetKill = true;
           outcome.exitCode = (ev['exit_code'] ?? null) as number | null;
           if (outcome.exitCode !== 0 && outcome.exitCode !== null) {
             outcome.ok = false;
@@ -256,10 +316,37 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
           outcome.error = String(ev['error'] ?? 'devbox error');
           record({ t: 'error', detail: clip(outcome.error), ts });
         }
+        // The meter cut on this event: stop reading now (the abort has
+        // already gone to the SDK, which closes the stream).
+        if (meter?.cutoff) throw new RunCutoffError(meter.cutoff);
       }
     }
   } catch (err) {
-    outcome.error = (err as Error).message;
+    if (!(err instanceof RunCutoffError) && !meter?.cutoff) outcome.error = (err as Error).message;
+  }
+
+  // A top-up still being decided lands before the caller writes the ledger
+  // entry that settles it.
+  if (meter) await meter.settled();
+  const cutoff: RunCutoff | null = meter?.cutoff ?? (boxBudgetKill ? {
+    reason: 'budget', ceilingUsd: meter?.ceilingUsd ?? 0, meteredUsd: meter?.meteredUsd ?? 0,
+    holdIds: meter?.holdIds ?? [], at: new Date().toISOString(),
+  } : null);
+  if (cutoff) {
+    outcome.ok = false;
+    outcome.cutoff = cutoff;
+    outcome.error = cutoffMessage(cutoff);
+    record({ t: 'error', detail: outcome.error, ts: new Date().toISOString() });
+    // No result arrived: the metered figure, labelled an estimate.
+    if (!resultSeen && meter && meter.meteredUsd > 0) {
+      outcome.costUsd = meter.meteredUsd;
+      outcome.costBasis = 'estimated';
+      outcome.estimatedCostUsd = meter.meteredUsd;
+    }
+    try {
+      opts.onEvent?.({ type: 'run_cutoff', ...cutoff, ts: new Date().toISOString() });
+    } catch { /* the tee is best effort */ }
+    if (opts.cutoffBackstop && !endSeen) scheduleCutoffBackstop(opts.cutoffBackstop, () => endSeen, opts.onEvent);
   }
 
   outcome.durationMs = Date.now() - started;
