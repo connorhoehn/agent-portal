@@ -3,7 +3,7 @@
 import { AppError } from './async-handler.js';
 import { activeCallParticipant, currentCallChatGrant, type CallAuthority, type CallAccessOptions } from './call-access.js';
 import { admitLobbyRead, admitMeetingRoom, splitMeetingRoom } from './gateway/authority.js';
-import { currentLiveSession, sessionGatewayContext } from './live-principal.js';
+import { sessionGatewayContext } from './live-principal.js';
 import type { Session } from './session.js';
 import { assessmentSourceFromCallChannel, readAssessmentDocument } from './assessment-document-context.js';
 
@@ -28,6 +28,11 @@ export class CallMediaProofRuntime {
    * B3): a room's media leg is the same call's seat, so every check below
    * runs on the call's lobby, and the room must admit this user now at each
    * re-read. The proof names the lobby asked for, the one the leg is in.
+   *
+   * `session` is one the caller has just read live from the directory (the
+   * route's getLivePrincipal). Each re-check below starts with
+   * activeCallParticipant, whose first act is a fresh read of the same
+   * epoch/grant/actor rule, so no separate currentLiveSession precedes it.
    */
   async get(session: Session, callId: string, lobbyName: string, clientId: string, documentSourceId?: string): Promise<CallMediaSeatProof> {
     const room = splitMeetingRoom(lobbyName);
@@ -40,7 +45,7 @@ export class CallMediaProofRuntime {
     const documentAllowed = async (channel: unknown): Promise<boolean> => !isDocument || (session.tenant === 'assessment'
       && assessmentSourceFromCallChannel(channel) === documentSourceId
       && !!await readAssessmentDocument(documentSourceId!, lobbyName));
-    let current = await currentLiveSession(session);
+    const current = session;
     const accepted = this.options.calls.isAccepted;
     if (!accepted || !await accepted.call(this.options.calls, callId)) throw new AppError(403, 'Accepted call seat required');
     const first = await activeCallParticipant(this.options, callId, current, seatOptions);
@@ -50,14 +55,12 @@ export class CallMediaProofRuntime {
       || !await documentAllowed(first.call.channel)) throw new AppError(403, 'Accepted call seat required');
     // Directory/resource I/O can outlive leaving, socket replacement, a tenant
     // switch or a terminal call. Re-read all proofs immediately before reply.
-    current = await currentLiveSession(current);
     const latest = await activeCallParticipant(this.options, callId, current, seatOptions);
     if (latest.call.lobbyName !== callLobby || !latest.clientIds.includes(clientId)
       || !await accepted.call(this.options.calls, callId)
       || !await this.hostAllowed(current, latest.authority, callLobby)
       || !await roomAllowed(current.sub)
       || !await documentAllowed(latest.call.channel)) throw new AppError(403, 'Accepted call seat required');
-    current = await currentLiveSession(current);
     const final = await activeCallParticipant(this.options, callId, current, seatOptions);
     if (final.call.lobbyName !== callLobby || !final.clientIds.includes(clientId)
       || !await accepted.call(this.options.calls, callId)

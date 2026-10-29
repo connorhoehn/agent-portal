@@ -47,6 +47,18 @@ function authoritativeUser(userId: string): Promise<UserInfo | null> {
   return getUser(userId, { authoritative: true }).then(user => user ? structuredClone(user) : null);
 }
 
+// A session the caller read from the directory a moment ago, handed to the
+// very next principal load of this context instead of a second read. It lives
+// only until the event loop turns (setImmediate): network I/O completes in
+// the poll phase before that, so no I/O can have finished between the read
+// and its use, and every later load of the context (the engine's recheck
+// after its own I/O) reads fresh.
+const handedOff = new WeakMap<object, Session>();
+export function handOffLiveSession(ctx: Record<string, unknown>, session: Session): void {
+  handedOff.set(ctx, session);
+  setImmediate(() => handedOff.delete(ctx));
+}
+
 /** No directory outage or missing user falls back to a seed account. */
 export async function currentLiveSession(session: Session): Promise<Session> {
   provenance(session);
@@ -101,8 +113,18 @@ function socketSession(ctx: Context): Session {
     ...(act ? { act: { sub: act.sub as string, epoch: epoch(act.epoch), role: 'admin', tenant: 'orgiq', grants: {} } } : {}),
   };
 }
+/** The handed-off read, held to the same provenance as the context it answers for. */
+function handedOffSession(signed: Session, read: Session): Session {
+  provenance(signed);
+  if (read.sub !== signed.sub || read.tenant !== signed.tenant || read.role !== signed.role
+    || epoch(read.epoch) !== signed.epoch || (read.act?.sub ?? null) !== (signed.act?.sub ?? null)
+    || !read.grants[signed.tenant]?.includes(signed.role)) throw new SessionInvalidError();
+  return { ...signed, name: read.name, grants: detachedGrants(read.grants), epoch: signed.epoch };
+}
 export async function getLivePrincipal(ctx: Context): Promise<LiveGatewayPrincipal> {
-  const session = await currentLiveSession(socketSession(ctx));
+  const fresh = ctx && typeof ctx === 'object' ? handedOff.get(ctx) : undefined;
+  if (fresh) handedOff.delete(ctx as object);
+  const session = fresh ? handedOffSession(socketSession(ctx), fresh) : await currentLiveSession(socketSession(ctx));
   // The directory-checked session is strict about its epoch (`epoch`); REST
   // routes holding a freshly signed session use the lenient default below.
   return { session, auth: { ...ctx, ...sessionGatewayContext(session, epoch) } as LiveGatewayPrincipal['auth'] };

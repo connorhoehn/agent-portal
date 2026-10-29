@@ -79,6 +79,16 @@ export async function resolveConnectedCallSession(router: RealtimeRouter, client
   } catch { throw new AppError(503, 'The call connection directory is unavailable'); }
 }
 
+// The authority activeCallParticipant just re-read, for the grant that
+// follows it in the same turn (see handOffLiveSession): consumed once, gone
+// when the event loop turns.
+const justRead = new WeakSet<CallAuthority>();
+function markJustRead(authority: CallAuthority): CallAuthority {
+  justRead.add(authority);
+  setImmediate(() => justRead.delete(authority));
+  return authority;
+}
+
 export interface CallAccessOptions {
   calls: CallStateStore;
   router: RealtimeRouter;
@@ -90,8 +100,11 @@ export async function activeCallParticipant(opts: CallAccessOptions, callId: str
   call: ActiveCallStateView; authority: CallAuthority; clientIds: string[];
 }> {
   const readAuthority = opts.authority ?? (value => currentCallAuthority(value, HUDDLE_CHAT_TENANTS));
-  const authority = await readAuthority(session);
-  const call = await opts.calls.getCall(callId);
+  // Independent reads, together; a refused authority still wins over a missing call.
+  const [authorityRead, callRead] = await Promise.allSettled([readAuthority(session), opts.calls.getCall(callId)]);
+  if (authorityRead.status === 'rejected') throw authorityRead.reason;
+  if (callRead.status === 'rejected') throw callRead.reason;
+  const authority = authorityRead.value, call = callRead.value;
   if (!call) throw new AppError(404, 'Call is no longer active');
   // A huddle belongs to its lobby's tenant; a session standing elsewhere is not a seat of it.
   const tenant = huddleLobbyTenant(call.lobbyName)
@@ -107,7 +120,7 @@ export async function activeCallParticipant(opts: CallAccessOptions, callId: str
   const latest = await readAuthority(session);
   if (!opts.lobbyAllowed({ userId: session.sub, org: session.tenant, role: session.role,
     tenants: Object.keys(latest.grants) }, call.lobbyName)) throw new AppError(403, 'Join this call before opening its conversation');
-  return { call, authority: latest, clientIds };
+  return { call, authority: markJustRead(latest), clientIds };
 }
 
 /**
@@ -124,9 +137,12 @@ export async function currentCallChatGrant(session: Session, authority: CallAuth
     // Social keeps its current action and conversation membership rules. The
     // call runtime additionally requires this exact connected seat.
     const { admitChannel } = await import('./gateway/authority.js');
-    const { sessionGatewayContext } = await import('./live-principal.js');
-    return admitChannel({ ctx: sessionGatewayContext({ ...session, grants: authority.grants }),
-      channel: lobbyName, kind: action === 'PostMessage' ? 'publish' : 'subscribe', clientId: 'http' });
+    const { handOffLiveSession, sessionGatewayContext } = await import('./live-principal.js');
+    const ctx = sessionGatewayContext({ ...session, grants: authority.grants });
+    // The engine's first load would re-read what activeCallParticipant read a
+    // moment ago; its recheck after the policy and membership reads stays fresh.
+    if (justRead.delete(authority)) handOffLiveSession(ctx, { ...session, name: authority.displayName, grants: authority.grants });
+    return admitChannel({ ctx, channel: lobbyName, kind: action === 'PostMessage' ? 'publish' : 'subscribe', clientId: 'http' });
   }
   // DMs have no tenant family; the caller's ID membership is lobbyGuard's.
   if (!tenantChannelFamily(lobbyName)) return tenant === 'orgiq' && parseDmLobby(lobbyName, { prefix: 'orgiq:' })?.kind === 'dm';

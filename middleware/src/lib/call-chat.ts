@@ -49,6 +49,11 @@ export function huddleChatOf(channel: string): { callId: string; roomId: string 
 // tenant, and activeCallParticipant pins each to its lobby's tenant.
 const connectedCallSession = (router: RealtimeRouter, clientId: string) => connectedAnyCallSession(router, clientId, HUDDLE_CHAT_TENANTS);
 const resolveConnectedCallSession = (router: RealtimeRouter, clientId: string) => resolveAnyCallSession(router, clientId, HUDDLE_CHAT_TENANTS);
+/** A settled result's value, or its rejection rethrown (the first in input order wins, as a loop's would). */
+function settled<T>(result: PromiseSettledResult<T>): T {
+  if (result.status === 'rejected') throw result.reason;
+  return result.value;
+}
 const huddleAuthority = (session: Session) => currentCallAuthority(session, HUDDLE_CHAT_TENANTS);
 /** Does this lobby's call carry a huddle conversation? (Not document/pipelines calls.) */
 const huddleLobby = (lobbyName: string) => huddleLobbyTenant(lobbyName) !== null && !inCallChatNamespace(lobbyName);
@@ -59,10 +64,13 @@ export interface CallChatSnapshot {
 }
 export type CallChatPageReference = ({ status: 'available' } & CanonicalCallPage) | ({ status: 'unavailable' } & CallPageDescriptor);
 interface Seat { clientId: string; session: Session; authority: CallAuthority }
+interface CheckedSeats { seats: Seat[]; generation: number }
 interface Control { generation: number; ended: boolean; departed: Set<string>; seats: Map<string, number>; users: Map<string, string>;
   lobbyName: string | null; provenance: Map<string, string>; until: number;
   /** Meeting rooms whose chat this call has admitted someone to: finished with the huddle. */
-  rooms: Set<string> }
+  rooms: Set<string>;
+  /** The seat the last registration fully reconciled, at the generation it ended on. */
+  reconciled?: { clientId: string; generation: number; seat: number } }
 class CallMembershipChanged extends AppError {
   constructor() { super(409, 'Call membership changed. Refresh the conversation.'); }
 }
@@ -136,13 +144,19 @@ export class CallChatRuntime implements CallLifecycleObserver {
   private async participant(callId: string, session: Session, write = false) {
     this.check(callId);
     const result = await activeCallParticipant(this.opts, callId, session);
-    if (!await this.grant(session, result.authority, 'ViewSocial', result.call.lobbyName)
-      || (write && !await this.grant(session, result.authority, 'PostMessage', result.call.lobbyName))) {
-      throw new AppError(403, 'This call is no longer available to your current session');
-    }
-    const current = await this.opts.calls.getCall(callId); this.check(callId);
+    // The grant and the call/state reads do not depend on each other, and the
+    // latest re-read below follows all of them, so they run together; a
+    // refused grant still wins over what the reads found.
+    const [granted, currentRead, stateRead] = await Promise.allSettled([
+      (async () => await this.grant(session, result.authority, 'ViewSocial', result.call.lobbyName)
+        && (!write || await this.grant(session, result.authority, 'PostMessage', result.call.lobbyName)))(),
+      this.opts.calls.getCall(callId),
+      this.opts.state.get(callId),
+    ]);
+    if (settled(granted) !== true) throw new AppError(403, 'This call is no longer available to your current session');
+    const current = settled(currentRead); this.check(callId);
     if (!current) throw new AppError(404, 'Call is no longer active');
-    const state = await this.opts.state.get(callId); this.check(callId);
+    const state = settled(stateRead); this.check(callId);
     if (state.ended) throw new AppError(404, 'Call conversation has ended');
     const provenance = callProvenance(session);
     const connections = await Promise.all(current.participantClientIds.map(id => resolveConnectedCallSession(this.opts.router, id)));
@@ -170,18 +184,20 @@ export class CallChatRuntime implements CallLifecycleObserver {
     const call = await this.opts.calls.getCall(callId); this.check(callId);
     if (!call) throw new AppError(404, 'Call is no longer active');
     if (!huddleLobby(call.lobbyName)) throw new AppError(403, 'This call cannot open a huddle conversation');
-    const seats: Seat[] = [];
-    for (const clientId of call.participantClientIds) {
+    // Every seat is checked at once: each check is its own fresh read, and
+    // reads queued together share one directory query instead of one each.
+    const checked = await Promise.allSettled(call.participantClientIds.map(async (clientId): Promise<Seat | null> => {
       const session = await resolveConnectedCallSession(this.opts.router, clientId);
-      if (!session || this.control(callId).departed.has(clientId)) continue;
+      if (!session || this.control(callId).departed.has(clientId)) return null;
       try {
         const result = await this.participant(callId, session);
-        if (result.clientIds.includes(clientId)) seats.push({ clientId, session, authority: result.authority });
+        return result.clientIds.includes(clientId) ? { clientId, session, authority: result.authority } : null;
       } catch (error) {
         if (!(error instanceof AppError) || error.status >= 500) throw error;
+        return null;
       }
-    }
-    return seats;
+    }));
+    return checked.map(settled).filter((seat): seat is Seat => seat !== null);
   }
   private peers(seats: Seat[]): CallChatPeer[] {
     return [...new Map(seats.map(seat => [seat.session.sub, { userId: seat.session.sub, displayName: seat.authority.displayName }])).values()]
@@ -227,6 +243,13 @@ export class CallChatRuntime implements CallLifecycleObserver {
     return true;
   }
   async registered(callId: string, clientId: string, preserveHistory = false) {
+    // A call's first join registers its seat, then claims it: the claim's
+    // registration (history preserved) right after the first one's full
+    // reconciliation repeats checks that just passed. Anything in between (a
+    // departure, a restore, another seat's registration) moves the generation.
+    const control = this.controls.get(callId); const done = control?.reconciled;
+    if (preserveHistory && done && control && done.clientId === clientId && done.generation === control.generation
+      && done.seat === (control.seats.get(clientId) ?? 0) && !control.departed.has(clientId) && !control.ended) return;
     return this.lifecycle(() => this.registeredCurrent(callId, clientId, preserveHistory));
   }
   private async registeredCurrent(callId: string, clientId: string, preserveHistory: boolean) {
@@ -247,13 +270,16 @@ export class CallChatRuntime implements CallLifecycleObserver {
     const others = session ? await Promise.all(call.participantClientIds.map(id => resolveConnectedCallSession(this.opts.router, id))) : [];
     const anotherSeat = session && call.participantClientIds.some((id, index) => id !== clientId && !control.departed.has(id)
       && others[index] && callProvenance(others[index]!) === callProvenance(session));
-    if (session && !preserveHistory && !anotherSeat) {
-      const generation = control.generation;
-      await this.participant(callId, session); this.fence(callId, generation);
-      await this.opts.state.join(callId, session.sub, new Date(this.now()).toISOString(), false); this.fence(callId, generation);
-    }
-    await this.reconcile(callId, true);
-    await this.broadcastMembers(callId);
+    // That reset is this seat's join inside the reconcile, under the same
+    // check every seat gets right before its join.
+    const reset = session && !preserveHistory && !anotherSeat ? clientId : undefined;
+    const generation = control.generation;
+    const known = await this.reconcile(callId, true, reset);
+    if (control.generation === generation) control.reconciled = { clientId, generation, seat: control.seats.get(clientId) ?? 0 };
+    // The roster notice is not part of the seat: membership is settled above,
+    // and every delivery is re-derived for its recipient (filterFrame).
+    void this.lifecycle(() => this.broadcastMembers(callId, known))
+      .catch(error => console.warn('[call-chat] roster broadcast failed', error));
   }
   async removed(callId: string, clientId: string) {
     const call = await this.opts.calls.getCall(callId);
@@ -282,25 +308,43 @@ export class CallChatRuntime implements CallLifecycleObserver {
       control.departed.delete(id);
       const session = await resolveConnectedCallSession(this.opts.router, id); if (session) control.users.set(id, session.sub);
     }
-    await this.reconcile(callId, true); await this.broadcastMembers(callId);
+    await this.broadcastMembers(callId, await this.reconcile(callId, true));
   }
-  private async reconcile(callId: string, preserveHistory: boolean) {
+  /**
+   * Every connected seat checked once, right before its own join (an atomic
+   * update), all seats together; members with no passing seat leave. `reset`
+   * is a seat whose person's history floor starts now (an explicit join). The
+   * seats it checked come back with their generation, for the broadcast.
+   */
+  private async reconcile(callId: string, preserveHistory: boolean, reset?: string): Promise<CheckedSeats> {
     const generation = this.control(callId).generation;
-    const seats = await this.seats(callId); this.fence(callId, generation);
-    const users = new Set(seats.map(seat => seat.session.sub));
+    this.check(callId);
+    const call = await this.opts.calls.getCall(callId); this.check(callId);
+    if (!call) throw new AppError(404, 'Call is no longer active');
+    if (!huddleLobby(call.lobbyName)) throw new AppError(403, 'This call cannot open a huddle conversation');
     const state = await this.opts.state.get(callId); this.fence(callId, generation);
-    for (const seat of seats) {
-      await this.participant(callId, seat.session); this.fence(callId, generation);
-      await this.opts.state.join(callId, seat.session.sub, new Date(this.now()).toISOString(), preserveHistory);
+    const checked = await Promise.allSettled(call.participantClientIds.map(async (clientId): Promise<Seat | null> => {
+      const session = await resolveConnectedCallSession(this.opts.router, clientId);
+      if (!session || this.control(callId).departed.has(clientId)) return null;
+      let result: Awaited<ReturnType<CallChatRuntime['participant']>>;
+      try { result = await this.participant(callId, session); }
+      catch (error) { if (!(error instanceof AppError) || error.status >= 500) throw error; return null; }
       this.fence(callId, generation);
-      this.control(callId).users.set(seat.clientId, seat.session.sub);
-    }
+      if (!result.clientIds.includes(clientId)) return null;
+      await this.opts.state.join(callId, session.sub, new Date(this.now()).toISOString(), preserveHistory && clientId !== reset);
+      this.fence(callId, generation);
+      this.control(callId).users.set(clientId, session.sub);
+      return { clientId, session, authority: result.authority };
+    }));
+    const seats = checked.map(settled).filter((seat): seat is Seat => seat !== null);
+    const users = new Set(seats.map(seat => seat.session.sub));
     for (const [userId, member] of Object.entries(state.members)) {
       if (member.active && !users.has(userId)) {
         this.fence(callId, generation); await this.opts.state.leave(callId, userId);
         invalidateChannel(callChatChannel(callId), 'huddle-seat');
       }
     }
+    return { seats, generation };
   }
   /** Initiative/work page references belong to OrgIQ huddles; an assessment huddle carries none. */
   async pageReferencesAllowed(callId: string): Promise<boolean> {
@@ -471,8 +515,10 @@ export class CallChatRuntime implements CallLifecycleObserver {
         ? { type: 'call-chat', action: 'ended', callId, channel: callChatChannel(callId), revision: state.revision } : null;
     }
     if (frame.type !== 'call-chat' || frame.action !== 'members') return null;
-    await this.participant(callId, session);
+    // seats() checks this recipient's own seat afresh with everyone else's;
+    // the recipient's recheck after it is the last word, as before.
     const seats = await this.seats(callId);
+    if (!seats.some(seat => seat.clientId === clientId)) return null;
     const current = await this.participant(callId, session);
     return { ...frame, revision: current.state.revision, participants: this.peers(seats) };
   }
@@ -490,16 +536,22 @@ export class CallChatRuntime implements CallLifecycleObserver {
     const current = await resolveConnectedCallSession(this.opts.router, clientId);
     return !!current && callProvenance(current) === callProvenance(session);
   }
-  private async broadcastMembers(callId: string) {
+  /**
+   * Tell every seat the roster. `known` is the seat list a reconcile just
+   * checked: while its generation stands, nobody left or re-registered since,
+   * so it is not derived again. No recipient is checked here: every frame to
+   * a client passes `filterFrame` (the gateway's filterClientMessage, with the
+   * recipient's principal revalidated around it), which re-derives this
+   * recipient's seat, the roster and the revision before delivering.
+   */
+  private async broadcastMembers(callId: string, known?: CheckedSeats) {
     const generation = this.control(callId).generation;
-    const seats = await this.seats(callId); const participants = this.peers(seats);
-    for (const seat of seats) {
-      try {
-        const current = await this.participant(callId, seat.session); this.fence(callId, generation);
-        if (current.clientIds.includes(seat.clientId)) await this.opts.router.sendToClient(seat.clientId,
-          { type: 'call-chat', action: 'members', callId, channel: callChatChannel(callId), revision: current.state.revision, participants });
-      } catch (error) { if (!(error instanceof AppError) || error.status >= 500) throw error; }
-    }
+    const seats = known && known.generation === generation ? known.seats : await this.seats(callId);
+    const participants = this.peers(seats);
+    const { revision } = await this.opts.state.get(callId); this.fence(callId, generation);
+    const sent = await Promise.allSettled(seats.map(seat => this.opts.router.sendToClient(seat.clientId,
+      { type: 'call-chat', action: 'members', callId, channel: callChatChannel(callId), revision, participants })));
+    sent.forEach(settled);
   }
   async finish(callId: string, participantClientIds: string[] = []) {
     const control = this.control(callId); control.ended = true; control.generation += 1;
