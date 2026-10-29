@@ -5,6 +5,12 @@ on Amazon Bedrock AgentCore that ingests org docs, builds a knowledge graph,
 scores expertise and serves conversational search across four tenants
 (`orgiq`, `assessment`, `social`, `pipelines`). `CONSTITUTION.md` is the spec.
 
+**UI continuation (2026-10-28):** read
+`docs/claude-code-handoff-2026-10-28-ui.md` for the user-approved dispatch
+response component. Changes must stay within individual components; revision
+5's page redesign was rejected. Request confirmation stays inline in the response
+box, with no modal. This UI handoff supplements the general state below.
+
 **Current state:** read `docs/claude-code-handoff-2026-10-26.md` first, and
 `docs/aws-deploy-open-items-2026-10-27.md` for the live AWS deploy's open
 items (the call join window first). The 10-26 handoff

@@ -1,0 +1,49 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Button, WorkflowStepper } from '@connorhoehnslalom/ui-components/shared';
+import { ComposerPromptDeck, RichChatComposer, type ComposerPrompt, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { money } from './revision3';
+import { BudgetRequestFlow, DecisionPath } from './budget-request-flow';
+
+type Step = 'funding'|'request'|'preview'|'model'|'cap'|'instruction'|'saved'|'ready'|'queued';
+export function DispatchResponseFlow() {
+  const [mode,setMode]=useState<'agent'|'chat'>('agent');
+  const [step,setStep]=useState<Step>('funding');
+  const [funded,setFunded]=useState(false);
+  const [model,setModel]=useState('Haiku');
+  const [cap,setCap]=useState('No cap');
+  const [instruction,setInstruction]=useState('Stop duplicate alerts during a dependency outage. Preserve the first alert and the recovery notification.');
+  const [answer,setAnswer]=useState('');
+  const [draft,setDraft]=useState<RichChatDraft>({html:'',files:[]});
+  const [receipt,setReceipt]=useState('');
+  const [requestMessage,setRequestMessage]=useState('');
+  const response=useRef<HTMLDivElement>(null);
+  const typed=step==='cap'||step==='instruction';
+  useEffect(()=>{
+    if(mode!=='agent'||step==='request')return;
+    if(typed)document.getElementById('agent-answer')?.focus();
+    else response.current?.focus({preventScroll:true});
+  },[step,mode,typed]);
+  const promptInput={
+    isEmpty:()=>!typed,
+    contains:(node:Node|null)=>node instanceof HTMLElement &&
+      (node===document.body||!!response.current?.contains(node)) &&
+      !node.closest('input,textarea,select,[contenteditable="true"],button,a,summary'),
+    focus:()=>{const field=response.current?.querySelector<HTMLTextAreaElement|HTMLInputElement>('textarea,input');(field??response.current)?.focus({preventScroll:true});},
+  };
+  const next=()=>{setStep(funded?'ready':'funding');setAnswer('');};
+  const edit=(s:Step)=>{setStep(s);setMode('agent');setAnswer(s==='instruction'?instruction:'');};
+  const titles:Record<Step,string>={funding:'This job needs a sprint envelope',request:'Prepare an envelope request',preview:'Envelope request preview',model:'Choose the model',cap:'Set the maximum run cost',instruction:'What should the agent change?',saved:'Job draft saved',ready:'Review and queue this job',queued:'Job queued in this preview'};
+  const options:ComposerPrompt['options']=step==='funding'?[{id:'request',label:'Request budget',emphasis:'primary'},{id:'save',label:'Save for later'}]:step==='request'?[{id:'preview',label:'Preview request',emphasis:'primary'},{id:'back',label:'Back'}]:step==='model'?[{id:'Haiku',label:'Haiku'},{id:'Nova',label:'Nova'},{id:'back',label:'Cancel'}]:step==='ready'?[{id:'queue',label:'Queue job',emphasis:'primary',disabledReason:model!=='Haiku'?'Recalculate the forecast before queueing.':undefined},{id:'save',label:'Save for later'}]:['saved','preview','queued'].includes(step)?[{id:'back',label:'Back to preparation'}]:[];
+  const prompt:ComposerPrompt={id:`prepare-${step}`,eyebrow:'Agent dialogue · ORG-OBS-11',title:titles[step],question:step==='funding'?'Nora needs funding on Observability Platform before this job can run.':step==='request'?'Recipient: Sienna Garcia. The request includes the work item and the current forecast.':step==='preview'?'Sienna, please grant Nora an envelope for ORG-OBS-11 on Observability Platform.':step==='ready'?`Use ${model}, ${cap==='No cap'?'no run cap':`a ${cap} run cap`}, and Nora’s active sprint envelope?`:step==='model'?'Changing the model invalidates the current forecast.':step==='cap'?'Enter an amount in USD.':step==='instruction'?'Describe the desired change.':step==='queued'?'This illustrates the handoff to the run. No real job was created.':'The job settings are retained in this preview.',kind:step==='cap'?'number':step==='instruction'?'text':'choice',options,onAnswer:a=>{if(!('optionId'in a))return;const id=a.optionId;if(id==='back')next();else if(id==='save')setStep('saved');else if(id==='queue')setStep('queued');else if(step==='model'){setModel(id!);next();}else {if(id==='request'&&!requestMessage)setRequestMessage(`Sienna, please grant Nora a sprint envelope for ORG-OBS-11 on Observability Platform. ${model==='Haiku'?'The estimated run cost is $0.03–$0.30.':'The forecast needs updating.'}`);setStep(id as Step);}}};
+  const composer=<div className="review-composer" data-mode={mode} ref={response} tabIndex={-1}>
+    <div className="review-composer-heading"><strong>{mode==='agent'?'Respond to agent':'Initiative discussion'}</strong><button onClick={()=>setMode(mode==='agent'?'chat':'agent')}>{mode==='agent'?'Switch to discussion':'Return to agent response'}</button></div>
+    {mode==='agent'?step==='request'?<BudgetRequestFlow message={requestMessage} onMessageChange={setRequestMessage} onBack={next}/>:<>{(step==='funding'||step==='saved')&&<DecisionPath stage={step==='saved'?'saved':'choose'}/>}<ComposerPromptDeck key={step} prompts={[prompt]} input={promptInput} variant="inset" data-testid="review-prompt"/>{['cap','instruction'].includes(step)&&<form className="review-answer" onSubmit={e=>{e.preventDefault();if(step==='cap')setCap(money(Number(answer)));else setInstruction(answer);next();}}><label htmlFor="agent-answer">{step==='cap'?'Run cap (USD)':'Job instruction'}</label>{step==='cap'?<input id="agent-answer" type="number" min="0.01" step="0.01" required value={answer} onChange={e=>setAnswer(e.target.value)}/>:<textarea id="agent-answer" required rows={3} value={answer} onChange={e=>setAnswer(e.target.value)}/>}<Button size="sm" type="submit">Save answer</Button><Button size="sm" variant="ghost" onClick={next}>Cancel</Button></form>}{step==='preview'&&<p className="review-receipt" role="status">{model==='Haiku'?'Forecast $0.03–$0.30.':'Forecast must be recalculated.'} Preview only; nothing sent.</p>}</>:<RichChatComposer draft={draft} onDraftChange={setDraft} onSend={()=>{setReceipt('Discussion draft preview only. Nothing sent.');return false;}} toolbar="basic" inputLabel="Initiative discussion message" placeholder="Discuss this work…" allowAttachments={false} allowEmoji={false}/>}
+    {receipt&&<p role="status" className="review-receipt">{receipt}</p>}
+  </div>;
+  return <><div className="review-page refine-dispatch"><div className="refine-study-controls"><p className="review-note">Design review · interactive local example</p><label>Preview state <select value={funded?'funded':'blocked'} aria-label="Preview funding state" onChange={e=>{const yes=e.target.value==='funded';setFunded(yes);setStep(yes?'ready':'funding');}}><option value="blocked">Missing funding</option><option value="funded">Funding available</option></select></label></div>
+    <header className="review-heading"><div><p className="review-id">ORG-OBS-11 · Bug · 2 points</p><h1>Stop duplicate alerts during a dependency outage</h1><p>Observability Platform · Eli Garcia</p></div></header>
+    <div className="refine-step-band"><h2>Prepare job</h2><WorkflowStepper size="compact" steps={[{step:1,label:'Configure',done:true,active:false},{step:2,label:'Funding',done:funded,active:!funded},{step:3,label:'Confirm',done:step==='queued',active:funded&&step!=='queued'},{step:4,label:'Queue',done:step==='queued',active:false}]} aria-label="Dispatch readiness"/></div>
+    <section className="review-detail-section"><div className="refine-section-title"><h2>Job settings</h2><span>{model==='Haiku'?'Forecast ready':'Forecast needs updating'}</span></div><dl className="review-facts"><div><dt>Codebase</dt><dd>connorhoehnslalom/orgiq-observability</dd></div><div><dt>Model</dt><dd>{model}<button onClick={()=>edit('model')}>Change model</button></dd></div><div><dt>Run cap</dt><dd>{cap}<button onClick={()=>edit('cap')}>Change cap</button></dd></div><div><dt>Forecast</dt><dd>{model==='Haiku'?'$0.03–$0.30 · 1–6 minutes':'Recalculation required'}{model==='Haiku'&&<small>Limited history on this codebase</small>}</dd></div><div><dt>Funding</dt><dd>{funded?<span>Nora’s sprint envelope · $12.00 available <small>Illustrative funded state</small></span>:<span className="warning">No active sprint envelope</span>}</dd></div></dl><div className="refine-section-title"><h2>Instruction</h2><button onClick={()=>edit('instruction')}>Edit instruction</button></div><p>{instruction}</p></section>
+  </div>{createPortal(composer,document.getElementById('review-composer')!)}</>;
+}

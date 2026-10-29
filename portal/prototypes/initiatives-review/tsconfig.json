@@ -1,0 +1,4 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["main-v3.tsx", "v4.tsx", "v5.tsx", "main-response-flow.tsx"]
+}

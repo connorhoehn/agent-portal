@@ -1,0 +1,62 @@
+/* Revision 4 composition. The approved run artifact retains revision 3 exactly. */
+.review-context-rail { width:224px; min-width:224px; flex:none; min-height:0; overflow:auto; border-right:1px solid var(--color-border); background:var(--color-surface-panel); }
+#review-rail { min-height:100%; }
+.refine-rail { font-size:13px; color:var(--color-text-primary); }
+.refine-rail-heading { display:flex; flex-direction:column; gap:4px; padding:16px; border-bottom:1px solid var(--color-border); }
+.refine-rail-heading span { font-size:12px; color:var(--color-text-secondary); }
+.refine-rail-heading strong { font-size:14px; font-weight:600; }
+.refine-rail-section { padding:12px 0; border-bottom:1px solid var(--color-border); }
+.refine-rail-section>h2 { font-size:12px; font-weight:600; color:var(--color-text-secondary); padding:0 16px 8px; margin:0; }
+.refine-rail-balance { display:flex; flex-direction:column; padding:8px 16px 0; gap:2px; }
+.refine-rail-balance strong { font-size:16px; font-weight:600; }
+.refine-rail-balance span,.refine-rail-balance small { font-size:12px; color:var(--color-text-secondary); }
+.refine-rail-about { padding:12px 16px; font-size:12px; }
+.refine-rail-about summary { cursor:pointer; }
+.refine-rail-about p { margin:8px 0; color:var(--color-text-secondary); }
+.refine-heading-row { display:flex; justify-content:space-between; gap:16px; align-items:flex-end; margin-bottom:16px; }
+.refine-record-heading { margin-top:12px; }
+.refine-crumbs { padding:8px 24px; margin:0; min-height:36px; }
+.refine-subtitle { margin-top:12px !important; font-size:13px; }
+.review-page .review-table.refine-work-table th,.review-page .review-table.refine-work-table td { padding-top:8px; padding-bottom:8px; }
+.refine-section-title { display:flex; align-items:baseline; gap:16px; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--color-border); margin-bottom:12px; }
+.refine-section-title span,.refine-section-title button { font-size:12px; color:var(--color-text-secondary); }
+.refine-section-title button { color:var(--color-primary); }
+.refine-sprint-nav>button { display:flex; flex-direction:column; width:100%; padding:9px 16px; text-align:left; gap:3px; border-left:3px solid transparent; }
+.refine-sprint-nav>button span { font-size:13px; font-weight:500; line-height:18px; }
+.refine-sprint-nav>button small { font-size:12px; color:var(--color-text-secondary); }
+.refine-sprint-nav>button.is-selected { border-left-color:var(--color-primary); background:var(--color-primary-bg,var(--color-surface-inset)); }
+.refine-sprint-subnav { margin:2px 8px 8px 18px; border-left:1px solid var(--color-border); }
+.refine-budget-child { margin:0 12px 8px 20px; border-left:2px solid var(--color-border); padding:10px 12px 6px; }
+.refine-child-title { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; margin-bottom:6px; }
+.refine-child-title h2 { font-size:13px; }
+.refine-child-title>span { color:var(--color-text-secondary); font-size:12px; }
+.review-table.refine-compact-table th,.review-table.refine-compact-table td { padding:6px 12px; }
+.review-table.refine-compact-table thead th { padding-top:5px; padding-bottom:5px; }
+.refine-unknown { margin-left:8px; white-space:nowrap; color:var(--color-warning); font-size:12px; }
+.refine-reserve-line { display:flex; justify-content:space-between; align-items:center; padding:8px 12px 6px; font-size:12px; gap:16px; border-top:1px solid var(--color-border); }
+.refine-reserve-line strong { font-weight:600; font-variant-numeric:tabular-nums; }
+.review-page .refine-balance-help { margin:4px 12px 0; font-size:12px; }
+.review-page .refine-balance-help p { font-size:12px; max-width:80ch; margin-top:6px; }
+body[data-review-page=work] [data-testid=shell-split-primary] { flex:1 1 0% !important; }
+body[data-review-page=work] [data-testid=shell-split-secondary] { flex:0 0 400px !important; width:400px; min-width:0; }
+body[data-review-page=work][data-discussion=closed] [data-testid=shell-split-secondary] { display:none !important; }
+#review-discussion,.refine-discussion { height:100%; min-height:0; display:flex; flex-direction:column; }
+.refine-discussion>header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--color-border); }
+.refine-discussion h2 { margin:0; font-size:14px; font-weight:600; }
+.refine-discussion header span { color:var(--color-text-secondary); font-size:12px; }
+.refine-receipt { padding:4px 12px; font-size:12px; }
+.refine-study-controls { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; align-items:baseline; margin-bottom:12px; }
+.refine-study-controls label { display:flex; gap:8px; align-items:center; font-size:12px; color:var(--color-text-secondary); }
+.refine-study-controls select { border:1px solid var(--color-border); background:var(--color-surface); border-radius:4px; padding:4px; font:inherit; color:var(--color-text-primary); }
+.refine-step-band { padding:12px 0 18px; border-bottom:1px solid var(--color-border); margin-bottom:12px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
+.refine-dispatch .refine-study-controls .review-note { margin-bottom:0; }
+.refine-dispatch .review-facts { margin:8px 0 12px; }
+.refine-dispatch .review-facts>div { padding:6px 0; }
+.refine-dispatch .refine-section-title { padding:8px 0; margin-bottom:8px; }
+.refine-dispatch .refine-step-band { padding:8px 0 12px; margin-bottom:8px; }
+.review-answer textarea { flex:1 1 100%; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface); padding:8px; font:inherit; font-size:13px; }
+@media(max-width:1100px) {
+  .refine-crumbs { padding-left:18px; padding-right:18px; }
+  .review-context-rail { width:200px; min-width:200px; }
+  body[data-review-page=work][data-discussion=open] [data-testid=shell-split-secondary] { display:flex !important; position:fixed; right:12px; top:56px; bottom:56px; width:360px; height:auto; z-index:30; border:1px solid var(--color-border); background:var(--color-surface); }
+}

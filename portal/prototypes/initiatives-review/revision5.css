@@ -1,0 +1,64 @@
+/* Composition and type hierarchy; controls, avatars and prompt behavior use the library. */
+body[data-review-revision="5"] .refine-crumbs { font-size:13px; color:var(--color-text-secondary); }
+.v5-rail-section { padding:14px 16px; border-bottom:1px solid var(--color-border); }
+.v5-rail-section h2 { font-size:12px; font-weight:600; color:var(--color-text-secondary); margin:0 0 10px; }
+.v5-person { display:flex; align-items:center; gap:9px; min-width:0; }
+.v5-person>div { min-width:0; }
+.v5-person strong { display:block; font-size:13px; font-weight:600; }
+.v5-person span { font-size:12px; color:var(--color-text-secondary); }
+.v5-person .v5-last-used { display:block; font-family:Georgia,'Times New Roman',serif; font-size:12px; font-style:italic; font-weight:400; line-height:17px; color:var(--color-text-secondary); margin-top:2px; }
+.v5-job-settings { margin:0; }
+.v5-job-settings>div+div { margin-top:14px; }
+.v5-job-settings dt { color:var(--color-text-secondary); font-size:12px; margin-bottom:3px; }
+.v5-job-settings dd { margin:0; display:flex; align-items:baseline; flex-wrap:wrap; justify-content:space-between; gap:2px 6px; }
+.v5-job-settings strong { font-size:13px; font-weight:500; }
+.v5-job-settings button,.v5-instruction button,.v5-dialogue>header button { font-size:12px; color:var(--color-primary); cursor:pointer; }
+.v5-job-settings small { flex-basis:100%; font-size:12px; color:var(--color-text-secondary); }
+.v5-rail-note { font-size:12px; line-height:18px; color:var(--color-text-secondary); margin:5px 0 0; }
+.v5-repo { font-size:13px; font-weight:500; margin:0; }
+.v5-preview-state { padding:16px; }
+.v5-preview-state label { display:block; font-size:12px; color:var(--color-text-secondary); margin-bottom:6px; }
+.v5-preview-state select { font:inherit; font-size:12px; width:100%; padding:6px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; }
+.v5-dispatch { max-width:1120px; }
+.v5-dispatch-heading { margin-bottom:14px; }
+.v5-dispatch-heading .review-id { margin-bottom:5px; }
+.v5-dispatch-heading .v5-assignee { margin-top:8px; gap:7px; }
+.v5-progress { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:10px 0; border-top:1px solid var(--color-border); border-bottom:1px solid var(--color-border); }
+.v5-instruction { padding:12px 0; }
+.v5-instruction>div { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:4px; }
+.v5-instruction p { font-size:13px; max-width:90ch; }
+#review-composer.v5-dialogue { margin-top:4px; padding:0; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface); overflow:hidden; }
+.v5-dialogue>header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; border-bottom:1px solid var(--color-border); }
+.v5-dialogue>header>div { display:flex; align-items:center; gap:8px; font-size:13px; }
+.v5-response-surface { outline:none; }
+.v5-response-surface:focus-visible { box-shadow:inset 2px 0 var(--color-primary); }
+.review-page .v5-preview-note { margin-top:12px; color:var(--color-text-tertiary); font-size:12px; }
+body[data-review-revision="5"][data-review-page=dispatch] [data-testid=shell-split-primary] { flex:1 1 0% !important; }
+body[data-review-revision="5"][data-review-page=dispatch] [data-testid=shell-split-secondary] { display:none !important; }
+.v5-program-total { display:flex; flex-direction:column; gap:3px; }
+.v5-program-total strong { font-size:18px; font-weight:600; font-variant-numeric:tabular-nums; }
+.v5-program-total span { color:var(--color-text-secondary); font-size:12px; }
+.v5-rail-search { padding:8px 12px; }
+.v5-rail-search input { width:100%; min-width:0; border:1px solid var(--color-border); border-radius:4px; background:var(--color-surface); font-size:12px; padding:6px 8px; }
+.review-page .v5-eyebrow { margin:0 0 5px; font-size:12px; color:var(--color-text-secondary); }
+.v5-balances { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:18px 0 22px; padding-bottom:18px; border-bottom:1px solid var(--color-border); gap:12px; }
+.v5-balances dt { font-size:12px; color:var(--color-text-secondary); margin-bottom:5px; }
+.v5-balances dd { margin:0; font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; }
+.v5-funding-section>header { display:flex; justify-content:space-between; gap:16px; align-items:baseline; margin-bottom:10px; }
+.v5-funding-section>header p,.v5-funding-section>header>span { font-size:12px; color:var(--color-text-secondary); margin-top:2px; }
+.review-table.v5-funding-table th,.review-table.v5-funding-table td { padding-top:9px; padding-bottom:9px; }
+.review-table.v5-funding-table thead th { padding-top:7px; padding-bottom:7px; }
+.v5-funding-meta { display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; margin-top:8px; font-size:12px; color:var(--color-text-secondary); }
+.v5-automation { display:grid; grid-template-columns:1fr auto; align-items:baseline; gap:2px 20px; border-top:1px solid var(--color-border); border-bottom:1px solid var(--color-border); padding:12px 0; margin-top:20px; }
+.v5-automation p { margin-top:2px; font-size:12px; }
+.v5-automation>strong { font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; }
+.v5-automation details { grid-column:1/-1; margin-top:6px; font-size:12px; }
+.v5-automation ul { list-style:none; margin:8px 0 0; padding:0; color:var(--color-text-secondary); font-size:12px; line-height:22px; }
+.v5-budget-footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px 12px; padding-top:12px; font-size:12px; color:var(--color-text-secondary); }
+.v5-budget-footer strong { color:var(--color-text-primary); font-weight:500; }
+.v5-active-sprint { padding:6px 16px 0; display:flex; flex-direction:column; gap:3px; }
+.v5-active-sprint strong { font-size:12px; font-weight:500; }
+.v5-active-sprint span { font-size:12px; color:var(--color-text-secondary); }
+@media(max-width:1100px) {
+  body[data-review-revision="5"] .review-context-rail { width:224px !important; min-width:224px !important; }
+}
