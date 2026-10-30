@@ -285,7 +285,14 @@ accessRouter.get('/catalog', requireAction('ViewAccess'), asyncHandler(async (re
   const q = str(req.query['q'])?.toLowerCase();
   if (kind && !(ACCESS_KINDS as readonly string[]).includes(kind)) throw new ValidationError(`Unknown kind: ${kind}`);
   if (tenant && !(ACCESS_TENANTS as readonly string[]).includes(tenant)) throw new ValidationError(`Unknown tenant: ${tenant}`);
+  // The derived sprint envelopes (one per initiative, lib/access/items.ts) are
+  // listed only when asked for by kind (`?kind=sprint-envelope`). They are filed
+  // from the dispatch drawer (POST /api/access-requests/envelope), which carries
+  // the amount and forecast; the Access catalog and its request form cannot (a
+  // sprint-envelope item requires `requestedUsd`, which the form never asks), so
+  // listing them there offered fourteen rows the form would refuse to file.
   const items = listCatalog()
+    .filter((i) => kind === 'sprint-envelope' || !isDerivedCatalogItem(i.id))
     .filter((i) => (!kind || i.kind === kind) && (!tenant || i.tenant === tenant)
       && (!q || i.title.toLowerCase().includes(q) || i.description.toLowerCase().includes(q) || i.id.includes(q)))
     .map((i) => catalogItem(i, ctx, policies));

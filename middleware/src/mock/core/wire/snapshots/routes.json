@@ -73,17 +73,17 @@
     {
       "method": "GET",
       "path": "/api/access/approvals",
-      "source": "src/routes/access.ts:330"
+      "source": "src/routes/access.ts:337"
     },
     {
       "method": "GET",
       "path": "/api/access/audit",
-      "source": "src/routes/access.ts:344"
+      "source": "src/routes/access.ts:351"
     },
     {
       "method": "GET",
       "path": "/api/access/beneficiaries",
-      "source": "src/routes/access.ts:733"
+      "source": "src/routes/access.ts:740"
     },
     {
       "method": "GET",
@@ -93,102 +93,102 @@
     {
       "method": "GET",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:1002"
+      "source": "src/routes/access.ts:1009"
     },
     {
       "method": "PUT",
       "path": "/api/access/configuration",
-      "source": "src/routes/access.ts:1007"
+      "source": "src/routes/access.ts:1014"
     },
     {
       "method": "GET",
       "path": "/api/access/delegates",
-      "source": "src/routes/access.ts:915"
+      "source": "src/routes/access.ts:922"
     },
     {
       "method": "GET",
       "path": "/api/access/delegations",
-      "source": "src/routes/access.ts:902"
+      "source": "src/routes/access.ts:909"
     },
     {
       "method": "POST",
       "path": "/api/access/delegations",
-      "source": "src/routes/access.ts:925"
+      "source": "src/routes/access.ts:932"
     },
     {
       "method": "POST",
       "path": "/api/access/delegations/:id/end",
-      "source": "src/routes/access.ts:956"
+      "source": "src/routes/access.ts:963"
     },
     {
       "method": "GET",
       "path": "/api/access/policies",
-      "source": "src/routes/access.ts:338"
+      "source": "src/routes/access.ts:345"
     },
     {
       "method": "PUT",
       "path": "/api/access/policies/:id",
-      "source": "src/routes/access.ts:1036"
+      "source": "src/routes/access.ts:1043"
     },
     {
       "method": "GET",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:296"
+      "source": "src/routes/access.ts:303"
     },
     {
       "method": "POST",
       "path": "/api/access/requests",
-      "source": "src/routes/access.ts:748"
+      "source": "src/routes/access.ts:755"
     },
     {
       "method": "GET",
       "path": "/api/access/requests/:id",
-      "source": "src/routes/access.ts:320"
+      "source": "src/routes/access.ts:327"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/revoke",
-      "source": "src/routes/access.ts:865"
+      "source": "src/routes/access.ts:872"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/sod-override",
-      "source": "src/routes/access.ts:839"
+      "source": "src/routes/access.ts:846"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/steps/:step/decide",
-      "source": "src/routes/access.ts:778"
+      "source": "src/routes/access.ts:785"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/:id/withdraw",
-      "source": "src/routes/access.ts:755"
+      "source": "src/routes/access.ts:762"
     },
     {
       "method": "POST",
       "path": "/api/access/requests/preview",
-      "source": "src/routes/access.ts:690"
+      "source": "src/routes/access.ts:697"
     },
     {
       "method": "GET",
       "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:439"
+      "source": "src/routes/access.ts:446"
     },
     {
       "method": "POST",
       "path": "/api/access/reviews",
-      "source": "src/routes/access.ts:460"
+      "source": "src/routes/access.ts:467"
     },
     {
       "method": "GET",
       "path": "/api/access/reviews/:id",
-      "source": "src/routes/access.ts:449"
+      "source": "src/routes/access.ts:456"
     },
     {
       "method": "POST",
       "path": "/api/access/reviews/:id/items/:itemId/decide",
-      "source": "src/routes/access.ts:512"
+      "source": "src/routes/access.ts:519"
     },
     {
       "method": "GET",

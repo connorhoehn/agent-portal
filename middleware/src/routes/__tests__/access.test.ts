@@ -134,9 +134,13 @@ describe('reads', () => {
     users.find((x) => x.id === 'u-rhea')!.grants = { access: ['requester'], orgiq: ['sme'] };
     const res = await get('/api/access/catalog', 'u-rhea');
     const items = (res.body as { items: CatalogItem[] }).items;
-    // The nine seeded items, plus one DERIVED sprint envelope per initiative (2026-10-28, lib/access/items.ts).
-    expect(items.filter((i) => i.kind !== 'sprint-envelope')).toHaveLength(9);
-    expect(items.filter((i) => i.kind === 'sprint-envelope').map((i) => i.id).sort()).toEqual(initiatives.rows().map((p) => `envelope:${p.id}`).sort());
+    // The nine seeded items. The DERIVED sprint envelopes (one per initiative, 2026-10-28,
+    // lib/access/items.ts) are listed only when asked for by kind: the Access form cannot file one.
+    expect(items).toHaveLength(9);
+    expect(items.some((i) => i.kind === 'sprint-envelope')).toBe(false);
+    expect(ids(await get('/api/access/catalog?q=pipeline', 'u-rhea'))).toEqual(['role:pipelines:operator']);
+    const envelopes = (await get('/api/access/catalog?kind=sprint-envelope', 'u-rhea')).body as { items: CatalogItem[] };
+    expect(envelopes.items.map((i) => i.id).sort()).toEqual(initiatives.rows().map((p) => `envelope:${p.id}`).sort());
     expect(items.find((i) => i.id === 'role:orgiq:sme')).toMatchObject({ heldByActor: true, sodConflicts: [] });
     expect(items.find((i) => i.id === 'role:orgiq:org-leader')?.sodConflicts).toEqual([expect.objectContaining({ policyId: 'sod-001', severity: 'block' })]);
     expect(ids(await get('/api/access/catalog?kind=initiative-membership', 'u-rhea'))).toEqual(['initiative:p-auth-migration', 'initiative:p-observability']);

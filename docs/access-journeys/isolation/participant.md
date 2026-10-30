@@ -1,15 +1,36 @@
 role: participant
 user: u-sana (Sana Iqbal)
+url: /social/channels; /access/requests; /access/requests/req-0001; /access/approvals; /access/configuration
+map: docs/journeys/maps/access/isolation/participant.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-10-13 16:40–16:41 local, Chromium (Playwright headless from portal/node_modules, a fresh context for this identity, not the shared Chrome tab), 1680x940, middleware dev:mock on :3001, Vite :5183, ui-components 2.442.4
-identity: sub u-sana, tenant social, role participant, grants {"social":["participant"]}
-access-tile-visible: no        # /select: "Workspaces 1"; the word Access appears nowhere on the page; 0 anchors toward /access; no horizontal scroll (1680/1680)
-access-nav-visible: no        # rail on /social/channels: 10 anchors, 0 toward /access (all anchors on the page: 11, 0 /access); tenant switcher menu: "No other tenants are available for your account." (0 Access entries, 0 links); ⌘K: 'Access' 12 rows, 'Requests' 0, 'Approvals' 4, 'Catalog' 9, 'Policies' 11, 'Audit' 4; none of those rows is an Access page (no "What access can be requested", "Your access requests…", "Separation-of-duties rules", "Every request transition", "Access review campaigns", "Ask for a role or a membership" or "Access settings" row); header bell popover: "Notifications 2 Unread (2) Farah Osei sent you a message, Social · Message" (0 links toward /access)
-direct-route-result: redirect  # /access/requests, /access/requests/req-0001, /access/approvals, /access/catalog, /access/policies/sod-001, /access/configuration → each lands on /social/channels (h1 “Channels”); no Access record content rendered (no "SME in Work", "req-0001", "Separation-of-duties" or "Spend and allocate" text); the landing holds 0 /access anchors
-api-status: 403               # GET /api/access/summary, /catalog, /requests, /requests/req-0001, /approvals, /policies, /policies/sod-001, /audit, /reviews → 403 each
-write-status: 403             # POST /api/access/requests (a complete body) 403, POST /api/access/requests/req-0001/steps/1/decide {decision:approve} 403, PUT /api/access/policies/sod-001 {severity:warn} 403, POST /api/session/tenant {access} 403 (session after the tenant probe: u-sana/social/participant)
-nothing-written: yes          # read at 16:42:51 through u-priya's session (after every isolation probe; mock last reset at 16:39:24): GET /api/access/requests?scope=all lists 6 requests whose requesters/beneficiaries are only u-rhea, u-omar and u-nora, and /api/access/audit's 15 events have actors u-rhea, u-omar, u-priya, u-nora and the system — none of u-theo, u-asha, u-sana, u-ines
-console errors: 28 — all 502 Bad Gateway from this identity's own Social workspace requests (/api/social/{teams,rooms,calls,recordings}; the Social platform-api upstream is not running on this stack); none touches /api/access
-screenshot: participant.jpg         # /select as this identity; participant-direct-route.jpg is where the last direct route left it
+audited: 2026-10-29 21:17–21:17 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-e84288de), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-sana-clone-e84288de, tenant social, role participant, grants {"social":["participant"]}
+access-tile-visible: no — The workspace chooser offers no Access workspace (/select → /workspaces)
+access-nav-visible: no — The rail on /social/channels holds no link toward /access; Back on the home landing, still no link toward /access
+direct-route-result: redirect — Type /access/requests: the route sends this identity away (/access/requests → /social/channels); Type /access/requests/req-0001: the route sends this identity away (/access/requests/req-0001 → /social/channels); Type /access/approvals: the route sends this identity away (/access/approvals → /social/channels); Type /access/configuration: the route sends this identity away (/access/configuration → /social/channels)
+api-status: 403 — GET /api/access/summary answers 403 (GET /api/access/summary → 403); GET /api/access/catalog answers 403 (GET /api/access/catalog → 403); GET /api/access/requests answers 403 (GET /api/access/requests → 403); GET /api/access/requests/req-0001 answers 403 (GET /api/access/requests/req-0001 → 403)
+write-status: 403 — POST /api/access/requests is refused (POST /api/access/requests → 403); POST …/req-0001/steps/1/decide is refused (POST /api/access/requests/req-0001/steps/1/decide → 403)
+nothing-written: yes — every write probe was refused, and each carried a body the route rejects even past the gate — POST /api/access/requests is refused (POST /api/access/requests → 403); POST …/req-0001/steps/1/decide is refused (POST /api/access/requests/req-0001/steps/1/decide → 403)
+console errors: 0
+dom-audit: 0 failing finding(s) at 6 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+screenshot: participant.jpg
 verdict: pass
-notes: Every field above was observed in this pass (the landing is her own Social front door; still no Access tile). The only palette word matches for 'Access' are generic rows such as 'Search workspace: Access'.
+notes: Sana (social participant) holds no grant in Access: no tile, no link, no route and no API answers. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/access/isolation/participant).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | The workspace chooser offers no Access workspace (/select → /workspaces) | default | pass | not measured: outside the route inventory (no app frame for the audit contract to judge) | /workspaces |
+| 2 | The rail on /social/channels holds no link toward /access | default | pass | 0 finding(s) | /social/channels |
+| 3 | Type /access/requests: the route sends this identity away (/access/requests → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 4 | Type /access/requests/req-0001: the route sends this identity away (/access/requests/req-0001 → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 5 | Type /access/approvals: the route sends this identity away (/access/approvals → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 6 | Type /access/configuration: the route sends this identity away (/access/configuration → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 7 | Back on the home landing, still no link toward /access | default | pass | 0 finding(s) | /social/channels |
+| 8 | GET /api/access/summary answers 403 (GET /api/access/summary → 403) |  | pass | — | /social/channels |
+| 9 | GET /api/access/catalog answers 403 (GET /api/access/catalog → 403) |  | pass | — | /social/channels |
+| 10 | GET /api/access/requests answers 403 (GET /api/access/requests → 403) |  | pass | — | /social/channels |
+| 11 | GET /api/access/requests/req-0001 answers 403 (GET /api/access/requests/req-0001 → 403) |  | pass | — | /social/channels |
+| 12 | POST /api/access/requests is refused (POST /api/access/requests → 403) |  | pass | — | /social/channels |
+| 13 | POST …/req-0001/steps/1/decide is refused (POST /api/access/requests/req-0001/steps/1/decide → 403) |  | pass | — | /social/channels |

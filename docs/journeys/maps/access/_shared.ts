@@ -76,15 +76,17 @@ export const api = (url: string, status: number, field = 'role-gating'): Step =>
 /**
  * The steps of each surface, per role, walked as a CLONE of the persona (lane M;
  * no seed personas). A clone carries the persona's grants and person link but
- * its own user id, and access records are keyed by user id (requester,
- * beneficiary, actor) — so a requester clone owns no request on the shared
- * data. Since b060f172 a clone stands in the access directory as its
- * persona's person, so an approver or access-admin clone decides what the
- * persona decides (manager, steward) and its inbox and reports are the persona's. Each map proves the role's
- * gates (rail, routes, controls, API) and the states that world honestly shows:
- * empty lists, records it may not read. The persona-owned flows (withdraw, the
- * inbox with a row, a decision) need either a clone that owns its persona's
- * records or a scoped write that reaches no shared mirror (approver/decision-walk.ts).
+ * its own user id (its own session epoch). For RECORD OWNERSHIP a clone acts as
+ * its persona (b9a4471e, 2026-10-15, middleware/src/lib/record-owner.ts,
+ * docs/demo-content-goal.md rule 4): a clone of Rhea reads Rhea's requests,
+ * audit events and Withdraw; a clone of Omar decides as Omar. These maps were
+ * written the day before (ff5f3c2b) and first walked on 2026-10-29, so the
+ * requester's "a fresh clone owns nothing" steps were rewritten then to the
+ * persona's world. Each map proves the role's gates (rail, routes, controls,
+ * API) and the states that world honestly shows. Nothing here writes: the
+ * Withdraw and Approve dialogs are opened and dismissed with Escape. A real
+ * decision needs a scoped write that reaches no shared mirror
+ * (approver/decision-walk.ts).
  */
 export const SURFACES = {
   catalog: (role: AccessRole): Step[] => [
@@ -104,7 +106,8 @@ export const SURFACES = {
     const steps: Step[] = [
       admin(role)
         ? { do: 'navigate', url, name: 'Open Requests on Everyone’s', expect: { visible: [{ role: 'heading', name: 'Requests', level: 1 }, { testId: 'access-new-request' }], count: [{ target: rows('access-requests-table'), min: 1 }] } }
-        : { do: 'navigate', url, name: 'Open Requests: the clone has asked for nothing, and the table says so', state: 'empty', proves: 'empty-state', expect: { visible: [{ role: 'heading', name: 'Requests', level: 1 }, { testId: 'access-new-request' }], text: ['You have not requested any access yet.'] } },
+        // A clone reads its persona's own requests (lib/record-owner.ts): Rhea's four, Omar's expired operator grant.
+        : { do: 'navigate', url, name: 'Open Requests: the persona’s own requests, newest first', expect: { visible: [{ role: 'heading', name: 'Requests', level: 1 }, { testId: 'access-new-request' }], count: [{ target: rows('access-requests-table'), min: 1 }] } },
       railGating(role, url),
       { do: 'click', target: { role: 'button', name: /^Filters/ }, name: decides(role) ? 'Open Filters: Whose (mine, reports’, everyone’s) sits beside Status' : 'Open Filters: Status only, no Whose filter', state: 'filters-open', proves: 'role-gating', expect: decides(role) ? { text: ['Whose', 'Status'] } : { text: ['Status'], hidden: [{ text: 'Whose', exact: true }] } },
       { do: 'press', key: 'Escape', name: 'Escape closes the Filters popover and returns focus to Filters', proves: 'keyboard', expect: { focused: { role: 'button', name: /^Filters/ } } },
@@ -119,7 +122,11 @@ export const SURFACES = {
       enterRow('access-requests-table', /^\/access\/requests\/req-/),
       back(url),
     );
-    else steps.push(...composerSteps('show closed requests', /of \d+ requests/));
+    else steps.push(
+      searchEmpty('Search requests', 'No request matches this search and status.'),
+      searchClear('Search requests', 'access-requests-table'),
+      ...composerSteps('show closed requests', /of \d+ requests/),
+    );
     return steps;
   },
 
@@ -140,17 +147,23 @@ export const SURFACES = {
     const steps: Step[] = [];
     if (decides(role)) {
       // A clone stands in the access directory as its persona's person (manager, steward), so it decides what the persona decides.
-      const id = admin(role) ? 'req-0002' : 'req-0001';
+      // The access admin's own step is req-0007's access-admin step (Eli's Org leader request, sod-001 warns):
+      // since 6562ff6c (2026-10-15) req-0002's steward step names Vera Green and is no longer escalated to access admins.
+      const id = admin(role) ? 'req-0007' : 'req-0001';
       steps.push(
-        { do: 'navigate', url: `/access/requests/${id}`, name: admin(role) ? 'Open req-0002, whose steward step is escalated to access admins' : 'Open Rhea’s req-0001, whose manager step is this approver’s', expect: { visible: [{ role: 'heading', level: 1 }, { testId: 'access-request-chain' }] } },
+        { do: 'navigate', url: `/access/requests/${id}`, name: admin(role) ? 'Open Eli’s req-0007, whose access-admin step is this access admin’s' : 'Open Rhea’s req-0001, whose manager step is this approver’s', expect: { visible: [{ role: 'heading', level: 1 }, { testId: 'access-request-chain' }] } },
         { do: 'navigate', url: `/access/requests/${id}`, name: 'Your decision is offered on the step this identity may decide, and Withdraw is not (it is not the requester’s)', proves: 'role-gating', audit: false, auditReason: 'the resting state step 1 measured', expect: { visible: [{ testId: 'access-request-decision' }, { testId: 'access-request-approve' }], absent: [{ testId: 'access-request-withdraw' }] } },
         { do: 'click', target: { testId: 'access-request-approve' }, name: 'Approve asks for confirmation first (nothing is decided)', state: 'dialog-open', expect: { visible: [{ role: 'dialog', name: 'Approve this step?' }] } },
         { do: 'press', key: 'Escape', name: 'Escape closes the dialog and focus returns to Approve', proves: 'keyboard', expect: { hidden: [{ role: 'dialog', name: 'Approve this step?' }], focused: { testId: 'access-request-approve' } } },
       );
       if (admin(role)) steps.push({ do: 'navigate', url: '/access/requests/req-0001', name: 'req-0001 waits on its manager step: an access admin reads it but has no decision there', state: 'read-only', proves: 'role-gating', expect: { visible: [{ testId: 'access-request-chain' }], absent: [{ testId: 'access-request-decision' }] } });
     } else steps.push(
-      { do: 'navigate', url: '/access/requests/req-0001', name: 'Open req-0001, Rhea’s request: outside a fresh clone’s read rule (records are keyed by user id), the page says Request not found and shows nothing of it', state: 'not-found', proves: ['role-gating', 'empty-state'], expectConsole: NOT_FOUND, expect: { text: ['Request not found'], noText: ['SME in Work'], absent: [{ testId: 'access-request-decision' }, { testId: 'access-request-withdraw' }] } },
+      // A clone of Rhea owns Rhea's requests (lib/record-owner.ts), so req-0001 is hers: Withdraw is offered, a decision is not.
+      { do: 'navigate', url: '/access/requests/req-0001', name: 'Open req-0001, Rhea’s own request: its approval chain, Withdraw offered, no decision (she is not an approver)', proves: 'role-gating', expect: { visible: [{ role: 'heading', level: 1 }, { testId: 'access-request-chain' }, { testId: 'access-request-withdraw' }], absent: [{ testId: 'access-request-decision' }, { testId: 'access-request-approve' }] } },
+      { do: 'click', target: { testId: 'access-request-withdraw' }, name: 'Withdraw asks for confirmation first (nothing is withdrawn)', state: 'dialog-open', expect: { visible: [{ role: 'dialog', name: 'Withdraw this request?' }] } },
+      { do: 'press', key: 'Escape', name: 'Escape closes the dialog and focus returns to Withdraw', proves: 'keyboard', expect: { hidden: [{ role: 'dialog', name: 'Withdraw this request?' }], focused: { testId: 'access-request-withdraw' } } },
       { do: 'api', method: 'POST', url: '/api/access/requests/req-0001/steps/1/decide', body: {}, refusal: 'the body carries no decision, which the route rejects even past the gate', name: 'Deciding is refused for a role without DecideAccess', proves: 'role-gating', expect: { status: [403] } },
+      { do: 'navigate', url: '/access/requests/req-0007', name: 'Open req-0007, Eli’s request: outside a requester’s read rule, the page says Request not found and shows nothing of it', state: 'not-found', proves: ['role-gating', 'empty-state'], expectConsole: NOT_FOUND, expect: { text: ['Request not found'], noText: ['The Observability dispatches wait'], absent: [{ testId: 'access-request-decision' }, { testId: 'access-request-withdraw' }] } },
       { do: 'tab-walk', name: 'Tab through the not-found page', proves: 'keyboard', expect: { minVisited: 3 } },
     );
     steps.push(notFound('/access/requests/req-missing', 'Request not found'));
@@ -214,10 +227,13 @@ export const SURFACES = {
     enterRow('access-audit-table', /^\/access\/(requests|policies|reviews)\//),
     back('/access/audit'),
   ] : [
-    { do: 'navigate', url: '/access/audit', name: 'Open the audit trail: no event of a request this identity may read, and the table says so', state: 'empty', proves: ['empty-state', 'role-gating'], expect: { visible: [{ role: 'heading', name: 'Audit', level: 1 }], text: ['No access events have been recorded yet.'] } },
+    // A clone reads its persona's records (lib/record-owner.ts): the events of Rhea's own requests.
+    { do: 'navigate', url: '/access/audit', name: 'Open the audit trail: the events of the requests this requester may read (her own)', proves: 'role-gating', expect: { visible: [{ role: 'heading', name: 'Audit', level: 1 }], count: [{ target: rows('access-audit-table'), min: 1 }] } },
     railGating(role, '/access/audit'),
     api('/api/access/audit', 200),
     tabWalk(5),
+    searchEmpty('Search events', 'No event matches this search and kind.'),
+    searchClear('Search events', 'access-audit-table'),
     ...composerSteps('search events for submitted', /of \d+ events/),
   ],
 
@@ -250,13 +266,13 @@ export const PAGES: Record<keyof typeof SURFACES, string> = {
 export const GOALS: Record<AccessRole, Record<keyof typeof SURFACES, string>> = {
   requester: {
     catalog: 'Rhea browses what she can request, narrows it, and starts a request for one item without submitting it',
-    requests: 'A requester sees her own requests (none, as a fresh clone), filters them by status, and is never offered Whose',
+    requests: 'A requester sees her own requests, filters them by status, and is never offered Whose',
     'new-request': 'Rhea opens the wizard to ask for access for herself, and sees what stops her submitting an incomplete request',
-    request: 'A requester cannot read a request that is not hers: Rhea’s req-0001 is not found for a clone, and deciding it is refused',
+    request: 'Rhea reads her own req-0001 and may withdraw it (and backs out), cannot decide it, and cannot read Eli’s req-0007',
     approvals: 'Rhea has no approvals inbox: rail, route and API all refuse it',
     policies: 'Rhea reads the separation-of-duties rules without being able to change them',
     reviews: 'Rhea reads the review campaigns without being able to open or decide one',
-    audit: 'A requester reads the audit events of the requests she may see (none for a fresh clone)',
+    audit: 'A requester reads the audit events of the requests she may see (her own)',
     configuration: 'Rhea has no Configuration: rail and route refuse it, the read the wizard needs stays open',
   },
   approver: {
@@ -274,7 +290,7 @@ export const GOALS: Record<AccessRole, Record<keyof typeof SURFACES, string>> = 
     catalog: 'Priya browses the catalog and starts a request for one item without submitting it',
     requests: 'Priya reads everyone’s requests and filters them',
     'new-request': 'Priya opens the wizard, which may file for a report as well as for herself',
-    request: 'An access admin decides the escalated steward step (and backs out), and reads a request whose step is not hers without a decision',
+    request: 'An access admin is offered the decision on her own access-admin step (and backs out), and reads a request whose step is not hers without a decision',
     approvals: 'An access admin works the inbox of steps escalated to access admins',
     policies: 'Priya reads a policy and is offered Save on it',
     reviews: 'Priya reads the campaigns and may open a new one',
@@ -289,9 +305,14 @@ export const PERSONA: Record<AccessRole, Persona> = { requester: REQUESTER, appr
 
 const anchorsTo = (prefix: string): Target => ({ css: `a[href^="${prefix}"]` });
 const FORBIDDEN = /403|Forbidden/i;
-const away = (url: string, from: RegExp, field: string): Step => ({
+// `noText` names content of the tenant the identity may NOT reach. Inbound (another tenant's role
+// typing an /access URL) it is access content; outbound the redirect lands on the identity's own
+// access pages, where "SME in Work" is honestly its persona's own request (a clone reads as its
+// persona, lib/record-owner.ts), so outbound proves the redirect by URL alone.
+const ACCESS_CONTENT = ['SME in Work', 'Separation-of-duties'];
+const away = (url: string, from: RegExp, field: string, noText: string[] = ACCESS_CONTENT): Step => ({
   do: 'navigate', url, name: `Type ${url}: the route sends this identity away`, state: 'refused', proves: field, expectConsole: FORBIDDEN,
-  expect: { urlNot: from, noText: ['SME in Work', 'Separation-of-duties'] },
+  expect: { urlNot: from, ...(noText.length ? { noText } : {}) },
 });
 const forbidden = (url: string, field: string): Step => ({ do: 'api', url, name: `GET ${url} answers 403`, proves: field, expect: { status: 403 } });
 
@@ -321,15 +342,15 @@ export function outbound(): Step[] {
   return [
     { do: 'navigate', url: '/access/requests', name: 'The access rail and page hold no link toward another tenant', proves: 'other-nav-visible', expect: { absent: foreign } },
     { do: 'navigate', url: '/select', name: 'The workspace chooser offers no other workspace', proves: 'other-nav-visible', expect: { absent: foreign } },
-    away('/iq/projects', /^\/iq/, 'iq-route-result'),
-    away('/admin/identity/users', /^\/admin/, 'iq-route-result'),
+    away('/iq/projects', /^\/iq/, 'iq-route-result', []),
+    away('/admin/identity/users', /^\/admin/, 'iq-route-result', []),
     forbidden('/api/graph/teams', 'iq-api-status'),
     forbidden('/api/bots', 'iq-api-status'),
-    away('/assessment/teams', /^\/assessment/, 'assessment-route-result'),
+    away('/assessment/teams', /^\/assessment/, 'assessment-route-result', []),
     forbidden('/api/assessment/teams', 'assessment-api-status'),
-    away('/social/channels', /^\/social/, 'social-route-result'),
+    away('/social/channels', /^\/social/, 'social-route-result', []),
     forbidden('/api/social/channels', 'social-api-status'),
-    away('/pipelines/runs', /^\/pipelines/, 'pipelines-route-result'),
+    away('/pipelines/runs', /^\/pipelines/, 'pipelines-route-result', []),
     forbidden('/api/pipelines/runs', 'pipelines-api-status'),
   ];
 }

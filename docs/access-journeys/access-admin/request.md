@@ -1,14 +1,28 @@
 surface: request
 role: access-admin
 user: u-priya (Priya Venkataraman)
-url: /access/requests/req-0002
-pages: portal/src/pages/access/RequestRecordPage.tsx,portal/src/lib/accessRequests.ts,portal/src/lib/relativeTime.ts,middleware/src/routes/access.ts
-audited: 2026-10-13 16:38–16:39 local, Chromium 1680x940 (Playwright headless from portal/node_modules, a fresh context per script signed in by POST /api/session/login, not the shared Chrome tab), middleware dev:mock :3001, Vite :5183, ui-components 2.442.4; GET /api/session/me: sub u-priya, tenant access, role access-admin, grants {"access":["access-admin"]}; no 401 or 429 during the walk
+url: /access/requests/req-0007; /access/requests/req-0001; /access/requests/req-missing
+map: docs/journeys/maps/access/access-admin/request.ts
+pages: portal/src/pages/access/RequestRecordPage.tsx,portal/src/lib/accessRequests.ts
+audited: 2026-10-29 21:14–21:14 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-priya-clone-71756ce5), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-priya-clone-71756ce5, tenant access, role access-admin, grants {"access":["access-admin"]}
 screenshot: request.jpg
 verdict: pass
-console errors: 0 on page loads; the only console lines are the network 404s of the req-missing probe and the pre-filing req-0007 lookup
-layout: pass — no horizontal scroll (1680/1680); 1 <main>; primary rail folded (main left 44); trail "Request › Requests › req-0002 · Member of Auth Migration" first row at 68/68; h1 20/600 at 108/111; section headings Request, Approval chain, Your decision, Policy check, Audit all h3 14/600; steps and audit rows 44px one line; Discussion is the far-right pane and the composer is docked at the bottom of the content column (y 818–858)
-keyboard: pass — Tab from the title visits Requests, About, the comment textarea, Approve, Chat, the composer, Bold, the pane's resize / minimize / collapse; Approve opens "Approve this step? Approve step 2 (Steward) of req-0002." (Keep it / Approve); Escape closes it and focus returns to Approve; on req-0004 Escape closes the Revoke dialog and focus returns to Revoke
-empty-state: pass — /access/requests/req-missing renders "Request not found — No request req-missing that you may read. You can read a request you made or benefit from, one you may decide, or any as an access admin."; an access admin reads every request, so no unreadable request exists to probe
-role-gating: pass — DECIDED req-0002 (Rhea, Member of Auth Migration): step 1 Manager approved by Omar 1d ago; step 2 Steward current, "escalated"; approved with a comment through the dialog at 16:38:32 → status active, "Recorded: approve on step 2.", the decision section gone, Revoke appears, Audit 2 → 5 events (Provisioned, Approved, Step approved); GET /api/access/requests/req-0002 expiresAt 2026-11-12T20:38:30.383Z and the summary reads "Expires Nov 12, 2026". Replay POST steps/2/decide → 409 "Step 2 of req-0002 was already decided"; steps/1 → 409. OWN request req-0007 (filed by me at 16:38:47 for SME in Work, 7 days): sections Request, Approval chain, Policy check, Audit — no decision section; Withdraw present, no Revoke; its one step escalated to the platform admins "every access admin is a party to this request"; POST steps/1/decide → 403 "You cannot decide your own request — you submitted and benefit from req-0007". ACTIVE grant req-0004 (Nora, SME in Work, standing): Expires "Standing", Revoke present, no decision section; Revoke opens "Revoke this access now? SME in Work is removed from Nora DaSilva at once…" with a required Reason, confirm disabled while empty; not confirmed
-notes: FIXED AND VERIFIED — the provisioned grant's Audit row reads "just now · Provisioned · system · approved → active · Expires Nov 12, 2026", matching the summary's "Expires Nov 12, 2026"; no ISO timestamp appears anywhere in the record (request.jpg is req-0002 right after the approval). request-own.jpg is req-0007; request-active.jpg is the open Revoke dialog on req-0004. Also re-verified: a policy-updated audit row (from my PUT /policies/sod-003 reason edit) opens /access/policies/sod-003 by click and by Enter; the review record /access/reviews/rev-0001 trail reads "Govern › Reviews › rev-0001 · Q4 SME certification — Work". Small, not failing: "1 steps" and "1 events" on req-0007. Mock reset by me at 16:39:24.
+console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) [)
+layout: pass — ui-dom-audit 0 failing findings at 5 measured step(s) (burn-down findings are listed under dom-audit:); at /access/requests/req-0007: no horizontal scroll (1680/1680), 1 h1 "Org leader in Work" 20/600 at 108/111, table body rows 44px ×5, first-row-top: 379px, composer at y 813–871 of 940
+keyboard: pass — Escape closes the dialog and focus returns to Approve
+empty-state: pass — Open /access/requests/req-missing: the page says "Request not found"
+role-gating: pass — Your decision is offered on the step this identity may decide, and Withdraw is not (it is not the requester’s); req-0001 waits on its manager step: an access admin reads it but has no decision there
+dom-audit: 0 failing finding(s) at 5 measured step(s); 8 more owed by docs/journeys/audit-burndown.tsv (a11y.contrast ×3, a11y.heading-order ×4, composer.presence ×1) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: An access admin is offered the decision on her own access-admin step (and backs out), and reads a request whose step is not hers without a decision. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/access/access-admin/request).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Eli’s req-0007, whose access-admin step is this access admin’s | default | pass | 0 finding(s) | /access/requests/req-0007 |
+| 2 | Your decision is offered on the step this identity may decide, and Withdraw is not (it is not the requester’s) | default | pass | not measured: the resting state step 1 measured | /access/requests/req-0007 |
+| 3 | Approve asks for confirmation first (nothing is decided) | dialog-open | pass | 0 finding(s) | /access/requests/req-0007 |
+| 4 | Escape closes the dialog and focus returns to Approve |  | pass | 0 finding(s) | /access/requests/req-0007 |
+| 5 | req-0001 waits on its manager step: an access admin reads it but has no decision there | read-only | pass | 0 finding(s) | /access/requests/req-0001 |
+| 6 | Open /access/requests/req-missing: the page says "Request not found" | not-found | pass | 0 finding(s) | /access/requests/req-missing |

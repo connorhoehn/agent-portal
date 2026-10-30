@@ -207,17 +207,21 @@ if (SUBJECTS.length) {
   if (!user) { console.log('RAIL_PARITY_SUBJECT needs RAIL_PARITY_USER'); process.exit(2); }
   const tenant = process.env.RAIL_PARITY_TENANT ?? 'social';
   const ALWAYS = (process.env.RAIL_PARITY_CAPTIONS ?? 'Active now').split(',').map((v) => v.trim()).filter(Boolean);
-  // Mirrors portal/src/pages/social/socialChat.ts ROUTE_RAIL_CAPTION / SOCIAL_SECTION_CAPTIONS.
-  const SECTION_CAPTIONS = ['Teams', 'Rooms', 'Direct messages', 'Channels'];
-  const ROUTE_CAPTION = { channels: 'Channels', dms: 'Direct messages', teams: 'Teams', rooms: 'Rooms', calls: null, recordings: null };
+  // Mirrors portal/src/pages/social/socialChat.ts ROUTE_RAIL_CAPTION / SOCIAL_SECTION_CAPTIONS /
+  // railSectionsFor. Since 6c5c0557 the rooms route is the focused Hangouts list: its own section
+  // only — no Active now, no shelf (portal/e2e/social-navigation.spec.ts asserts the same).
+  const SECTION_CAPTIONS = ['Teams', 'Hangouts', 'Direct messages', 'Channels'];
+  const ROUTE_CAPTION = { channels: 'Channels', dms: 'Direct messages', teams: 'Teams', rooms: 'Hangouts', calls: null, recordings: null };
+  const FOCUSED_ROUTES = new Set(['rooms']);
   const captionsFor = (path) => {
     const pathname = new URL(path, 'http://x').pathname.replace(/\/+$/, '');
     const m = pathname.match(/^\/(?:social|[a-z]+\/communication)(?:\/([a-z]+))?/);
-    if (!m) return { expected: [...ALWAYS, ...SECTION_CAPTIONS], forbidden: [] };
+    if (!m) return { expected: [...ALWAYS, ...SECTION_CAPTIONS], forbidden: [], shelf: true };
     // The plane's home keeps every section; a route without a sub-route segment under /social is not a chat page.
-    if (!m[1]) return { expected: [...ALWAYS, ...SECTION_CAPTIONS], forbidden: [] };
+    if (!m[1]) return { expected: [...ALWAYS, ...SECTION_CAPTIONS], forbidden: [], shelf: true };
     const own = ROUTE_CAPTION[m[1]] ?? null;
-    return { expected: [...ALWAYS, ...(own ? [own] : [])], forbidden: SECTION_CAPTIONS.filter((c) => c !== own) };
+    const focused = FOCUSED_ROUTES.has(m[1]);
+    return { expected: [...(focused ? [] : ALWAYS), ...(own ? [own] : [])], forbidden: SECTION_CAPTIONS.filter((c) => c !== own), shelf: !focused };
   };
   const SHELF = (process.env.RAIL_PARITY_SHELF ?? 'Activity,Mentions,Calls,Recordings').split(',');
   const browser = await chromium.launch();
@@ -228,7 +232,8 @@ if (SUBJECTS.length) {
   let failed = 0;
   for (const path of SUBJECTS) {
     await page.goto(BASE + path); await page.waitForTimeout(3500);
-    const { expected: CAPTIONS, forbidden: FORBIDDEN } = captionsFor(path);
+    const { expected: CAPTIONS, forbidden: FORBIDDEN, shelf: wantShelf } = captionsFor(path);
+    const SHELF_HERE = wantShelf ? SHELF : [];
     const m = await page.evaluate(({ CAPTIONS, FORBIDDEN, SHELF }) => {
       const main = document.querySelector('main');
       const rail = document.querySelector('nav[aria-label="Chat"]') ?? document.querySelector('[data-testid$="chat-rail"]');
@@ -251,7 +256,7 @@ if (SUBJECTS.length) {
         missingShelf: SHELF.filter((c) => !text.includes(c.toLowerCase())),
         hScroll: document.documentElement.scrollWidth > innerWidth,
       };
-    }, { CAPTIONS, FORBIDDEN, SHELF });
+    }, { CAPTIONS, FORBIDDEN, SHELF: SHELF_HERE });
     console.log(`subject ${path} as ${user}:`, JSON.stringify(m));
     const problems = [];
     if (!m) problems.push('no chat rail (nav[aria-label=Chat]) or no <main>');

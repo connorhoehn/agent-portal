@@ -1,15 +1,30 @@
 surface: new-request
 role: approver
-user: u-omar (Omar Haddad, Rhea's manager)
-url: /access/requests/new
+user: u-omar (Omar Haddad, Rhea’s manager)
+url: /access/requests/new; /access/requests/new?item=bogus
+map: docs/journeys/maps/access/approver/new-request.ts
 pages: portal/src/pages/access/RequestNewPage.tsx,portal/src/lib/accessRequests.ts
-audited: 2026-10-13 15:05–15:07 local (re-walk on ui-components 2.442.2), Chromium 1456×940 (Playwright headless from portal/, a fresh context per run signed in through portal/e2e/realSession.ts openAs as u-omar — not the shared Chrome tab), Vite :5183 + middleware dev:mock :3001 (shared; u-rhea and u-priya walked concurrently; no 401 on my session)
-session: /api/session/me sub u-omar, tenant access, role approver, grants {"access":["approver"]}
+audited: 2026-10-29 21:15–21:15 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-omar-clone-f91f3cb9), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-omar-clone-f91f3cb9, tenant access, role approver, grants {"access":["approver"]}
 screenshot: new-request.jpg
 verdict: pass
-console errors: 0 (all four steps, Submit, and the record it landed on; the 4xx below are my deliberate API probes)
-layout: pass — content column left 200 w 1256; trail "Request › Requests › New request" at left 224 top 68; one h1 "New request" 20/600 (left 264 after the back arrow, top 111); each step title an h2 at 14/600; radios on the 14/12 scale — labels 14/500 ("Myself (Omar Haddad)", "Someone who reports to me", "8 hours" … "Standing"), descriptions 12/400 ("Approvers may request on behalf of a report.", "This item's default"); no horizontal scroll (1456/1456); 1 <main>; no composer on this page (none expected)
-keyboard: pass — Who step Tab order: Requests back link, About, the radio group (one stop), Next; ArrowDown moves the radio to "Someone who reports to me" and reveals the Report select; What step: back link, About, the Catalog item select, Back, Next; Next stays disabled with "Say why in at least 20 characters (9 so far)." at 9 characters and enables at 98; Standing reveals "Why standing access?" and keeps Submit disabled with "Standing access needs its own reason of at least 20 characters."
-empty-state: pass — Submit landed on the new record /access/requests/req-0007; req-missing is covered in request.md
-role-gating: pass — step 1 offers "Myself (Omar Haddad)" and "Someone who reports to me"; the Report select lists exactly u-rhea Rhea Castellanos. Filed for Rhea: Operator in Pipelines (pre-check "No separation-of-duties conflict with the access you hold now."), a 98-character justification, 7 days → req-0007 (requester u-omar, beneficiary u-rhea, submitted, policy check clear). Its chain: step 1 Manager current and step 2 Steward waiting, both "Priya Venkataraman" escalated — "Step 1 (Manager): Escalated to the access admins: the manager is a party to this request." and "Step 2 (Steward): Escalated to the access admins: the steward holds no deciding role in Access."; can.decide false, Withdraw present, no decision section. A non-report is refused (by API, since the UI cannot name one): beneficiary u-priya → 403 "Priya Venkataraman is not one of your reports"; u-kofi → 403 "Kofi Mensah is not one of your reports"; u-nobody → 400 "Unknown beneficiary: u-nobody". Also: the same item for Rhea again → 409 "req-0007 already asks for Operator in Pipelines and is still open"; justification "short" → 400; duration 9y → 400 "duration must be one of 8h, 24h, 7d, 30d, standing"; {} → 400
-notes: Reached from the catalog with ?item=, the item is preselected (title chip "Operator in Pipelines" in the header). The Report select only lists reports who already have a request; the policy pre-check evaluates Omar's grants, not the report's. Mock reset by me at 15:05:44 after this and request.md's writes.
+console errors: 0
+layout: pass — ui-dom-audit 0 failing findings at 4 measured step(s) (burn-down findings are listed under dom-audit:); at /access/requests/new: no horizontal scroll (1680/1680), 1 h1 "New request" 20/600 at 264/111
+keyboard: pass — Tab from the top of the page through every control (Tab visited 24 distinct visible controls of 33 focusable, focus lost 1×, 1 invisible stop(s))
+empty-state: pass — With nothing chosen, the summary says what is missing; A nine-character justification: the counter says 9 of at least 20; Submit an incomplete request: the form names what is missing and sends nothing; An unknown ?item= is ignored: the form opens with nothing chosen
+role-gating: pass — The rail shows Catalog, Requests, Approvals and no Configuration; This role may read its reports’ requests, the people it may also request for (GET /api/access/requests?scope=reports → 200)
+dom-audit: 0 failing finding(s) at 4 measured step(s); 4 more owed by docs/journeys/audit-burndown.tsv (a11y.contrast ×4) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Omar opens the wizard, which may file for a report as well as for himself. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/access/approver/new-request).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open the request form: what, why, for how long, and the request summary | default | pass | 0 finding(s) | /access/requests/new |
+| 2 | The rail shows Catalog, Requests, Approvals and no Configuration | default | pass | not measured: the same resting state the first step measured | /access/requests/new |
+| 3 | This role may read its reports’ requests, the people it may also request for (GET /api/access/requests?scope=reports → 200) |  | pass | — | /access/requests/new |
+| 4 | Tab from the top of the page through every control (Tab visited 24 distinct visible controls of 33 focusable, focus lost 1×, 1 invisible stop(s)) |  | pass | — | /access/requests/new |
+| 5 | With nothing chosen, the summary says what is missing | incomplete | pass | not measured: the resting state step 1 measured | /access/requests/new |
+| 6 | A nine-character justification: the counter says 9 of at least 20 | invalid | pass | 0 finding(s) | /access/requests/new |
+| 7 | Submit an incomplete request: the form names what is missing and sends nothing | invalid | pass | 0 finding(s) | /access/requests/new |
+| 8 | An unknown ?item= is ignored: the form opens with nothing chosen | bad-link | pass | 0 finding(s) | /access/requests/new?item=bogus |

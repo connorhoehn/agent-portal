@@ -1,16 +1,36 @@
 surface: catalog
 role: requester
 user: u-rhea (Rhea Castellanos)
-url: /access/catalog
-pages: portal/src/pages/access/CatalogPage.tsx,portal/src/pages/access/accessCollectionCommands.ts,portal/src/lib/accessRequests.ts
-audited: 2026-10-13 14:56–15:03 local, Chromium 1680x940 (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), middleware dev:mock :3001, Vite :5183, ui-components 2.442.2
-session: /api/session/me sub u-rhea, tenant access, role requester, grants {"access":["requester"]}
+url: /access/catalog; /access/requests/new?item=role%3Aorgiq%3Asme
+map: docs/journeys/maps/access/requester/catalog.ts
+pages: portal/src/pages/access/CatalogPage.tsx,portal/src/pages/access/accessColumns.tsx,portal/src/pages/access/accessCollectionCommands.ts
+audited: 2026-10-29 21:17–21:17 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rhea-clone-cba6d6a0), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-rhea-clone-cba6d6a0, tenant access, role requester, grants {"access":["requester"]}
 screenshot: catalog.jpg
 verdict: pass
-console errors: 0 (before the surface, after Tab, after every composer phrase, the Filters popover, the row clicks and the Request icon)
-layout: pass — content col left 200 w 1480, top 44, bottom 891; trail "Request › Catalog" at 224/68 (24px gutter); title "Catalog" 224/111 at 20/600; no horizontal scroll (scrollWidth 1680 = innerWidth 1680); 1 <main>; 8 body rows each 44px, one line; command composer docked at y 842–882 inside the column
-type: title 20/600 (h1); sizes in main (size/weight x text nodes): 14/400x26, 12/400x24, 12/600x10, 10/600x10, 14/500x1, 20/600x1
-keyboard: pass — 23 Tab stops visited in main (About Catalog, search, Filters, About results, Refresh, each of the 8 rows and its Request icon, Agent mode, composer) plus Bold; Enter on the focused second row opened /access/requests/new?item=role%3Aorgiq%3Aorg-leader; Escape on the Filters popover returns focus to "Filters (1 active)" after choosing Social; the composer help is inline text, no popover to close (0 overlays after Escape)
-empty-state: pass — searching "zzzzqq" leaves "No catalog item matches this search and workspace." (0 of 8); composer `show work catalog items` after a "moderator" search honestly reports the intersection (0 of 8) and keeps the search; Workspace select (Every workspace/Work/Assessment/Social/Pipelines): Social = 1 of 8
-role-gating: pass — rail has no Approvals or Configuration anchors (Catalog, Requests, Policies, Reviews, Audit, Settings), no Save, no decision controls; YOU HOLD and POLICY show — for all eight items; no row checkboxes, so no selection toolbar for this role; API: GET /api/access/catalog 200; PUT /api/access/policies/no-such {} 403 (ManageAccessPolicy); GET /api/access/approvals 403 (DecideAccess); POST /requests/req-0001/steps/1/decide {} 403; PUT /api/access/configuration {} 403; POST /api/access/requests {} 400 "itemId is required"; composer `approve req-0001` -> "Command not recognized … No changes were made." and req-0001 unchanged
-notes: Rows open the wizard now: a click on the first row opened /access/requests/new?item=role%3Aorgiq%3Asme with "SME in Work" pre-selected (wizard on the Who step); browser Back returned to the catalog. The row's Request icon ("Request Moderator in Social") opens the same wizard at ?item=role%3Asocial%3Amoderator. Composer: help lists search/show work|assessment|social|pipelines/reset/refresh/open; `search catalog items for moderator` -> 1 of 8; `reset filters` -> 8 of 8; `open role:orgiq:sme` -> the wizard at ?item=role%3Aorgiq%3Asme. Minor wording: the workspace filter notice reads "Filter: orgiq." (the tenant id) where the chip says "Work" (DEFECTS.md). Every field above was observed in this re-walk, not carried forward.
+console errors: 0
+layout: pass — ui-dom-audit 0 failing findings at 7 measured step(s) (burn-down findings are listed under dom-audit:); at /access/catalog: no horizontal scroll (1680/1680), 1 h1 "Catalog" 20/600 at 224/111, table body rows 44px ×9, first-row-top: 237px, composer at y 837–895 of 940
+keyboard: pass — Tab from the top of the page through every control (Tab visited 40 distinct visible controls of 50 focusable); Press Enter on the first row: its record opens as a page
+empty-state: pass — Search for zzzzqq: the table says "No catalog item matches this search and workspace."
+role-gating: pass — The rail shows Catalog, Requests and no Approvals or Configuration; The composer refuses the mutation and says nothing changed
+dom-audit: 0 failing finding(s) at 7 measured step(s); 9 more owed by docs/journeys/audit-burndown.tsv (a11y.contrast ×6, control.font-size ×3) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Rhea browses what she can request, narrows it, and starts a request for one item without submitting it. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/access/requester/catalog).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open the catalog | default | pass | 0 finding(s) | /access/catalog |
+| 2 | The rail shows Catalog, Requests and no Approvals or Configuration | default | pass | not measured: the same resting state the first step measured | /access/catalog |
+| 3 | Tab from the top of the page through every control (Tab visited 40 distinct visible controls of 50 focusable) |  | pass | — | /access/catalog |
+| 4 | Search for zzzzqq: the table says "No catalog item matches this search and workspace." | filtered-empty | pass | 0 finding(s) | /access/catalog |
+| 5 | Clear the search: the rows come back |  | pass | not measured: the resting state again | /access/catalog |
+| 6 | Type help into the command composer |  | pass | not measured: the composer holds a half-typed command | /access/catalog |
+| 7 | Run help: the composer answers with the phrases it understands | composer-help | pass | 0 finding(s) | /access/catalog |
+| 8 | Type "search catalog items for pipeline" |  | pass | not measured: the composer holds a half-typed command | /access/catalog |
+| 9 | Run "search catalog items for pipeline" | filtered | pass | 0 finding(s) | /access/catalog |
+| 10 | Type the mutation phrase "approve req-0001" |  | pass | not measured: the composer holds a half-typed command | /access/catalog |
+| 11 | The composer refuses the mutation and says nothing changed |  | pass | 0 finding(s) | /access/catalog |
+| 12 | Reload the catalog | default | pass | not measured: the resting state step 1 measured | /access/catalog |
+| 13 | Press Enter on the first row: its record opens as a page | row-open | pass | 0 finding(s) | /access/requests/new?item=role%3Aorgiq%3Asme |
+| 14 | Browser Back returns to the list |  | pass | 0 finding(s) | /access/catalog |

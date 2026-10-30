@@ -59,7 +59,7 @@ export default function RoomDirectory({ rooms, read, nameOf, activeLobby, mayCre
           {matches.map(room => <Card key={room.slug} padding="sm" data-testid="social-room-card"><Stack gap="md" className="h-full">
             <Inline justify="between" gap="sm"><Chip tone={room.visibility === 'private' ? 'warning' : 'neutral'} size="sm">{room.visibility === 'private' ? 'Members only' : 'Open to the workspace'}</Chip>
               {activeLobby === room.lobbyName && <Chip tone="success" size="sm">You’re in this call</Chip>}</Inline>
-            <Stack gap="sm"><T size="lg" weight="semibold" wrap>{room.name}</T>{room.description && <T size="sm" tone="secondary" wrap>{room.description}</T>}</Stack>
+            <Stack gap="sm"><T size="sm" weight="semibold" wrap>{room.name}</T>{room.description && <T size="sm" tone="secondary" wrap>{room.description}</T>}</Stack>
             <KeyValue items={[{ label: 'Opened by', value: nameOf(room.createdBy) === room.createdBy ? 'Name unavailable' : nameOf(room.createdBy) }, { label: 'Call', value: room.settings.audioOnly ? 'Cameras off on entry' : 'Audio and video' }]} />
             <Button variant="secondary" size="sm" className="mt-auto self-start" aria-label={`Open ${room.name}`} onClick={() => onOpen(room.slug)}>Open hangout</Button>
           </Stack></Card>)}

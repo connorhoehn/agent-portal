@@ -1,15 +1,27 @@
 surface: request
 role: approver
-user: u-omar (Omar Haddad, Rhea's manager)
-url: /access/requests/req-0001; req-0002 (after it was provisioned); req-0003 (his own); req-missing, req-0004
+user: u-omar (Omar Haddad, Rhea’s manager)
+url: /access/requests/req-0001; /access/requests/req-missing
+map: docs/journeys/maps/access/approver/request.ts
 pages: portal/src/pages/access/RequestRecordPage.tsx,portal/src/lib/accessRequests.ts
-audited: 2026-10-13 16:38–16:39 local, Chromium 1456x940 (Playwright headless from portal/node_modules, a fresh context for this identity signed in by POST /api/session/login, not the shared Chrome tab), middleware dev:mock :3001, Vite :5183, ui-components 2.442.4
-session: /api/session/me sub u-omar, tenant access, role approver, grants {"access":["approver"]}
+audited: 2026-10-29 21:15–21:15 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-omar-clone-206653dc), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-omar-clone-206653dc, tenant access, role approver, grants {"access":["approver"]}
 screenshot: request.jpg
 verdict: pass
-console errors: 0 on load of req-0001, req-0002, req-0003 and through the dialog, Escape and the approve flow; the two 404s are the expected req-missing / req-0004 lookups
-layout: pass — primary rail folded to the 44px strip (main left 44 w 1412); trail "Request › Requests › req-0001 · SME in Work" at 68/68; title "SME in Work" 20/600 at 108/111; section headings Request, Approval chain, Your decision, Policy check, Audit all h3 14/600; steps rows 44px; composer docked at y 818–858; Discussion pane text from x 1051; no horizontal scroll (1456/1456); 1 <main>. Why wraps in the 479px column: white-space normal, two lines (40px), read in full
-keyboard: pass — Tab from the title visits Requests, About SME in Work, the comment textarea, Approve, Chat, the composer, Bold, the pane's resize / minimize / collapse; Reject and Request information are disabled until a comment is typed, then enabled; Approve opens "Approve this step? Approve step 1 (Manager) of req-0001." (Keep it / Approve); Escape closes it and focus returns to Approve
-empty-state: pass — /access/requests/req-missing renders "Request not found — No request req-missing that you may read. You can read a request you made or benefit from, one you may decide, or any as an access admin."; req-0004 (Nora's) renders the same state with no contents
-role-gating: pass — Your decision only where can.decide: present on req-0001 (step 1 current, Omar is Rhea's manager); absent on req-0003 (he submitted and benefits; its sections are Request, Approval chain, Policy check, Audit), on req-0002 (step 2 is not his) and on req-0001 after his decision. Decision walk at 16:38:11: comment "Rhea needs this for the SSO cutover; approved as her manager.", Approve → dialog quoting the comment → Approve; notice "Recorded: approve on step 1."; status pending; step 1 approved by Omar Haddad just now with the comment, step 2 Steward current (Priya Venkataraman, escalated); Audit 1 → 2 events. Replays: POST …/req-0001/steps/1/decide approve → 409 "Step 1 of req-0001 was already decided"; reject → 409 the same; step 2 → 403 "You are not eligible to decide step 2 (steward) of req-0001"; req-0003 → 403 "You cannot decide your own request — you submitted and benefit from req-0003"; req-missing → 404
-notes: FIXED AND VERIFIED — after Priya approved step 2 of req-0002 (16:38:32), Omar's view of req-0002 at 16:39:07 reads status active, "Expires Nov 12, 2026", and the Audit row "Provisioned · system · approved → active · Expires Nov 12, 2026" (no ISO timestamp in the record). request.jpg is req-0001 before his decision (step 1 current, Your decision open). Small, not failing: the notice says "approve" rather than "approved"; the decision Comment field's hint ("Recorded on the step and in the audit trail…") renders 11/400, the library FormField hint size, which the type-scale contract does not flag (0 offenders on /access/requests/:id). Mock reset at 16:39:24 (mine).
+console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) [)
+layout: pass — ui-dom-audit 0 failing findings at 4 measured step(s) (burn-down findings are listed under dom-audit:); at /access/requests/req-0001: no horizontal scroll (1680/1680), 1 h1 "SME in Work" 20/600 at 108/111, table body rows 44px ×3, first-row-top: 379px, composer at y 813–871 of 940
+keyboard: pass — Escape closes the dialog and focus returns to Approve
+empty-state: pass — Open /access/requests/req-missing: the page says "Request not found"
+role-gating: pass — Your decision is offered on the step this identity may decide, and Withdraw is not (it is not the requester’s)
+dom-audit: 0 failing finding(s) at 4 measured step(s); 7 more owed by docs/journeys/audit-burndown.tsv (a11y.contrast ×3, a11y.heading-order ×3, composer.presence ×1) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: An approver reads Rhea’s request and is offered the manager step’s decision (and backs out). Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/access/approver/request).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Rhea’s req-0001, whose manager step is this approver’s | default | pass | 0 finding(s) | /access/requests/req-0001 |
+| 2 | Your decision is offered on the step this identity may decide, and Withdraw is not (it is not the requester’s) | default | pass | not measured: the resting state step 1 measured | /access/requests/req-0001 |
+| 3 | Approve asks for confirmation first (nothing is decided) | dialog-open | pass | 0 finding(s) | /access/requests/req-0001 |
+| 4 | Escape closes the dialog and focus returns to Approve |  | pass | 0 finding(s) | /access/requests/req-0001 |
+| 5 | Open /access/requests/req-missing: the page says "Request not found" | not-found | pass | 0 finding(s) | /access/requests/req-missing |

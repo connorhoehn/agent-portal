@@ -1,16 +1,29 @@
 surface: request
 role: requester
 user: u-rhea (Rhea Castellanos)
-url: /access/requests/req-0001 (own, submitted); req-0005 (own, rejected); req-0002 (own, after it was provisioned); req-missing, req-0003, req-0004 (not readable)
+url: /access/requests/req-0001; /access/requests/req-0007; /access/requests/req-missing
+map: docs/journeys/maps/access/requester/request.ts
 pages: portal/src/pages/access/RequestRecordPage.tsx,portal/src/lib/accessRequests.ts
-audited: 2026-10-13 16:36–16:39 local, Chromium 1680x940 (Playwright headless from portal/node_modules, a fresh context for this identity signed in by POST /api/session/login, not the shared Chrome tab), middleware dev:mock :3001, Vite :5183, ui-components 2.442.4
-session: /api/session/me sub u-rhea, tenant access, role requester, grants {"access":["requester"]}
+audited: 2026-10-29 21:17–21:18 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rhea-clone-4befa8e7), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-rhea-clone-4befa8e7, tenant access, role requester, grants {"access":["requester"]}
 screenshot: request.jpg
 verdict: pass
-console errors: 0 on arrival at req-0001, req-0005 and req-0002, after the Tab walk and after the Withdraw dialog; the three unreadable ids log only the expected 404 of their own lookup (3 total)
-layout: pass — primary rail folded to the 44px strip (main left 44 w 1636); trail "Request › Requests › req-0001 · SME in Work" at 68/68 (44+24); title "SME in Work" 20/600 at 108/111; no horizontal scroll (1680/1680); 1 <main>; steps and audit rows 44px one line; composer "Message the request discussion" docked at y 818–858. Why wraps (white-space normal, dd 560 wide, 40px tall, two lines) and reads in full
-type: title 20/600; section headings Request / Approval chain / Policy check / Audit all h3 14/600; sizes in main 14/400x23, 12/600x16, 12/400x14, 14/600x6, 10/600x5 (status chips), 14/500x1, 20/600x1
-keyboard: pass — Tab from the shell reaches Requests, About SME in Work, Withdraw, Chat, the composer; Withdraw opens the ConfirmDialog "Withdraw this request? req-0001 stops here: no approver can decide it and nothing is provisioned. You can submit a new request later." (Keep it / Withdraw); Escape closes it and focus returns to Withdraw; nothing withdrawn
-empty-state: pass — /access/requests/req-missing renders "Request not found — No request req-missing that you may read. You can read a request you made or benefit from, one you may decide, or any as an access admin."; req-0003 (Omar's) and req-0004 (Nora's) render the identical state, with no contents
-role-gating: pass — Withdraw only where can.withdraw holds (present on submitted req-0001; absent on rejected req-0005 and on active req-0002, which offers no Revoke to her either); no "Your decision" section and 0 Approve/Reject/Request information controls in the DOM; API: POST …/req-0001/steps/1/decide {decision:approve} 403 (DecideAccess); POST /requests/req-0003/withdraw 404 "No request req-0003"; PUT /policies/sod-001 {} 403 (ManageAccessPolicy)
-notes: FIXED AND VERIFIED — req-0002 was made active by this walk's own writes (Omar approved req-0001 step 1 at 16:38:11; Priya approved req-0002 step 2 at 16:38:32). As Rhea at 16:39:03 its summary reads "Expires Nov 12, 2026" and the Audit row reads "just now · Provisioned · system · approved → active · Expires Nov 12, 2026" — no ISO timestamp anywhere in the record. Remaining small things, not failing: the Audit count pill reads "1 events" on req-0001. Mock reset at 16:36:35 before and 16:39:24 after (mine). Every field above was observed in this walk.
+console errors: 0 unexpected; 2 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) [)
+layout: pass — ui-dom-audit 0 failing findings at 5 measured step(s) (burn-down findings are listed under dom-audit:); at /access/requests/req-0001: no horizontal scroll (1680/1680), 1 h1 "SME in Work" 20/600 at 108/111, table body rows 44px ×3, first-row-top: 379px, composer at y 813–871 of 940
+keyboard: pass — Escape closes the dialog and focus returns to Withdraw; Tab through the not-found page (Tab visited 17 distinct visible controls of 19 focusable)
+empty-state: pass — Open req-0007, Eli’s request: outside a requester’s read rule, the page says Request not found and shows nothing of it; Open /access/requests/req-missing: the page says "Request not found"
+role-gating: pass — Open req-0001, Rhea’s own request: its approval chain, Withdraw offered, no decision (she is not an approver); Deciding is refused for a role without DecideAccess (POST /api/access/requests/req-0001/steps/1/decide → 403); Open req-0007, Eli’s request: outside a requester’s read rule, the page says Request not found and shows nothing of it
+dom-audit: 0 failing finding(s) at 5 measured step(s); 5 more owed by docs/journeys/audit-burndown.tsv (a11y.heading-order ×3, composer.presence ×2) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Rhea reads her own req-0001 and may withdraw it (and backs out), cannot decide it, and cannot read Eli’s req-0007. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/access/requester/request).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open req-0001, Rhea’s own request: its approval chain, Withdraw offered, no decision (she is not an approver) | default | pass | 0 finding(s) | /access/requests/req-0001 |
+| 2 | Withdraw asks for confirmation first (nothing is withdrawn) | dialog-open | pass | 0 finding(s) | /access/requests/req-0001 |
+| 3 | Escape closes the dialog and focus returns to Withdraw |  | pass | 0 finding(s) | /access/requests/req-0001 |
+| 4 | Deciding is refused for a role without DecideAccess (POST /api/access/requests/req-0001/steps/1/decide → 403) |  | pass | — | /access/requests/req-0001 |
+| 5 | Open req-0007, Eli’s request: outside a requester’s read rule, the page says Request not found and shows nothing of it | not-found | pass | 0 finding(s) | /access/requests/req-0007 |
+| 6 | Tab through the not-found page (Tab visited 17 distinct visible controls of 19 focusable) |  | pass | — | /access/requests/req-0007 |
+| 7 | Open /access/requests/req-missing: the page says "Request not found" | not-found | pass | 0 finding(s) | /access/requests/req-missing |

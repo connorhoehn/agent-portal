@@ -1,14 +1,37 @@
 surface: policies
 role: access-admin
 user: u-priya (Priya Venkataraman)
-url: /access/policies
-pages: portal/src/pages/access/PoliciesPage.tsx,portal/src/components/collections/CollectionRecordFrame.tsx,portal/src/pages/access/accessCollectionCommands.ts,middleware/src/routes/access.ts
-audited: 2026-10-13 14:52–15:01 local, Chromium 148.0.7778.96 1680x940 (Playwright headless from portal/node_modules, fresh context per script, signed in by POST /api/session/login, not the shared Chrome tab), middleware dev:mock :3001, Vite :5183, ui-components 2.442.2; GET /api/session/me: sub u-priya, tenant access, role access-admin, grants {"access":["access-admin"]}; no 401 during the walk
+url: /access/policies; /access/policies/sod-001; /access/policies/sod-missing
+map: docs/journeys/maps/access/access-admin/policies.ts
+pages: portal/src/pages/access/PoliciesPage.tsx,portal/src/pages/access/accessCollectionCommands.ts
+audited: 2026-10-29 21:14–21:14 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-priya-clone-139a4ecc), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-priya-clone-139a4ecc, tenant access, role access-admin, grants {"access":["access-admin"]}
 screenshot: policies.jpg
 verdict: pass
-console errors: 0 on the surface (1 network 400 from this walk's deliberate invalid-severity PUT)
-layout: no horizontal scroll (scrollWidth 1680 = innerWidth 1680); 1 <main>; trail (nav Breadcrumb) is the first row of the content column at top 68, left 224 = 200px rail + 24px gutter; h1 20/600 at left 224, top 111; trail 'Govern › Policies'; table body rows 4 at 44px, one line each; command composer docked at the bottom of the content column (input top 842 of 940, 782px wide). The policy RECORD page (sod-001): no horizontal scroll; section rail folded; the policies list as a flush list rail (Blocking 2 / Warning 2, 'Find a policy'); trail 'Govern › Policies › Spend and allocate' at left 332 = list rail edge + 24px, top 52; h1 'Policies' 20/600 under it; the composer stays docked at the column bottom (top 842)
-keyboard: pass — list: Tab visited 37 stops (16 inside main) against 15 really-visible focusable; Enter on a focused row opens /access/policies/sod-002; record page: 8 stops in main; no drawer exists any more, so there is nothing for Escape to close
-empty-state: pass — search 'zzzz' renders 'No policy matches this search and severity.'; /access/policies/sod-missing renders 'Policy not found — No separation-of-duties policy has the id "sod-missing".' with '← Policies'
-role-gating: Save present for access-admin: 4 Edit icons on the list; a row opens the record PAGE /access/policies/sod-001 (no drawer); the record has the Severity radios (labels 14/500, descriptions 12/400), Why textarea, Discard changes and Save; Save disabled until a field changes. Changed Blocking → Warning and saved at 14:58:08 → toast 'Policy saved — Spend and allocate is now a warning.', GET warn by u-priya, the rail regrouped (Blocking 1 / Warning 3); AUDIT gained evt-0020 kind policy-updated (actor u-priya, policyId sod-001, block → warn, 'Spend and allocate: reason unchanged'), 19 → 20 events. Restored to Blocking through the same Save: severity block and reason identical to the original. PUT severity 'bogus' → 400 'severity must be warn or block'. Rail click opens another policy (sod-003) and Back returns
-notes: Composer: help; 'search policies for spend' → 1 row; 'show blocking policies' → 1 row (search kept); 'reset filters' → 4; 'approve req-0001' refused, nothing changed; 'open sod-001' → /access/policies/sod-001. On the record page the record's own title 'Spend and allocate' renders 18/400 and the list rail rows 13px — off the 20/14/12 scale (DEFECTS.md); /access/policies/:id is not in the route inventory, so no sweep measures it. policies-record.jpg is the record; policies-saved.jpg right after Save.
+console errors: 0
+layout: pass — ui-dom-audit 0 failing findings at 8 measured step(s) (burn-down findings are listed under dom-audit:); at /access/policies: no horizontal scroll (1680/1680), 1 h1 "Policies" 20/600 at 224/111, table body rows 44px ×4, first-row-top: 237px, composer at y 837–895 of 940
+keyboard: pass — Tab from the top of the page through every control (Tab visited 39 distinct visible controls of 39 focusable); Press Enter on the first row: its record opens as a page
+empty-state: pass — Search for zzzzqq: the table says "No policy matches this search and severity."; Open /access/policies/sod-missing: the page says "Policy not found"
+role-gating: pass — The rail shows Catalog, Requests, Approvals, Configuration; The composer refuses the mutation and says nothing changed; The policy record offers Save to the access admin, disabled until something changes
+dom-audit: 0 failing finding(s) at 8 measured step(s); 6 more owed by docs/journeys/audit-burndown.tsv (control.font-size ×3, a11y.heading-order ×3) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Priya reads a policy and is offered Save on it. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/access/access-admin/policies).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open the separation-of-duties policies | default | pass | 0 finding(s) | /access/policies |
+| 2 | The rail shows Catalog, Requests, Approvals, Configuration | default | pass | not measured: the same resting state the first step measured | /access/policies |
+| 3 | Tab from the top of the page through every control (Tab visited 39 distinct visible controls of 39 focusable) |  | pass | — | /access/policies |
+| 4 | Search for zzzzqq: the table says "No policy matches this search and severity." | filtered-empty | pass | 0 finding(s) | /access/policies |
+| 5 | Clear the search: the rows come back |  | pass | not measured: the resting state again | /access/policies |
+| 6 | Type help into the command composer |  | pass | not measured: the composer holds a half-typed command | /access/policies |
+| 7 | Run help: the composer answers with the phrases it understands | composer-help | pass | 0 finding(s) | /access/policies |
+| 8 | Type "search policies for spend" |  | pass | not measured: the composer holds a half-typed command | /access/policies |
+| 9 | Run "search policies for spend" | filtered | pass | 0 finding(s) | /access/policies |
+| 10 | Type the mutation phrase "approve req-0001" |  | pass | not measured: the composer holds a half-typed command | /access/policies |
+| 11 | The composer refuses the mutation and says nothing changed |  | pass | 0 finding(s) | /access/policies |
+| 12 | Reload the policies | default | pass | not measured: the resting state step 1 measured | /access/policies |
+| 13 | Press Enter on the first row: its record opens as a page | row-open | pass | 0 finding(s) | /access/policies/sod-001 |
+| 14 | The policy record offers Save to the access admin, disabled until something changes |  | pass | 0 finding(s) | /access/policies/sod-001 |
+| 15 | Open /access/policies/sod-missing: the page says "Policy not found" | not-found | pass | 0 finding(s) | /access/policies/sod-missing |

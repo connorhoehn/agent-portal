@@ -282,7 +282,8 @@ type AccessKind = 'tenant-role' | 'initiative-membership' | 'capability' | 'spri
 type StewardRule = 'tenant-steward' | 'initiative-owner' | 'budget-owner' | 'budget-holder';
 
 // One DERIVED catalog item per initiative — never seeded, never edited through
-// PUT /configuration (400), listed by GET /catalog like any other item:
+// PUT /configuration (400), listed by GET /catalog only when asked for by kind
+// (`?kind=sprint-envelope`; 2026-10-29, see below):
 { id: 'envelope:<projectId>', kind: 'sprint-envelope', tenant: 'orgiq', projectId,
   title: 'Sprint envelope on <initiative name>', sensitive: false,
   defaultDuration: 'standing',          // the grant lives until revoked, like one granted by hand
@@ -324,6 +325,19 @@ decider), `note` = the request id. The grantee's bell (`budget-grant`) and the
 work graph's live hint fire as they do for `POST /api/grants`. Revocation in
 Access (`POST /requests/:id/revoke`, expiry) deletes that row, found by its
 note; the request's `can.revoke` and the ordinary refusals are unchanged.
+The Access catalog does not list the derived envelopes (2026-10-29). Plain
+`GET /catalog` (and its `q`/`tenant` filters) returns the seeded items only;
+`GET /catalog?kind=sprint-envelope` returns the envelopes. Reason: the Access
+catalog page and request form cannot file one — a sprint-envelope item requires
+`requestedUsd`, which the form never asks — so listing them offered one row per
+initiative that the form would refuse, and pushed the seeded items' counts
+(`search catalog items for pipeline` read 2 of 23, "Real-time Analytics
+Pipeline" among them). Envelopes stay requestable from the dispatch drawer
+(`POST /api/access-requests/envelope`), and a filed envelope request still
+names its item everywhere it is read (records, approvals, audit), because the
+server resolves items through the full catalog (`providers/access.ts`
+`listCatalog`).
+
 `GET /configuration.stewards` gains `{ scope: 'sprint-envelope', tenant: 'orgiq',
 rule: 'budget-holder', role: 'org-leader' }`; derived items are not in `items`.
 
