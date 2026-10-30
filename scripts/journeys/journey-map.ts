@@ -129,6 +129,13 @@ export interface Persona {
   /** Switch into tenant/role after sign-in (an epoch bump — avoid unless the role is not the user's landing). */
   switchTenant?: boolean;
   switchRole?: boolean;
+  /**
+   * A PEER's identity (default `clone`). `persona` signs the peer in as the seed user itself (a plain login, no
+   * switch): presence a clone cannot show — the portal draws presence only for ids in the people directory,
+   * which holds no clone (EmbeddedSocial.tsx `validIds`). Needs the map's `identityReason`; such a map walks only
+   * with --allow-persona, like a persona map.
+   */
+  identity?: 'clone' | 'persona';
 }
 
 /** A request-scoped mock world (lane M, `withMockScope`): a scenario for every fixture, or per fixture. Copy-on-write: writes stay in the scope. */
@@ -162,8 +169,11 @@ export interface JourneyMap {
    * seed user itself, needed when the surface shows records keyed by user id
    * (my requests, my inbox), which a clone does not own; such a map waits while
    * a ui-dom-audit run holds the seed identities.
+   *
+   * `demo`: the cookie-less demo identity (persona.user `demo-user`), no sign-in at all — the isolation logs'
+   * demo row. It cannot be cloned or switched, so such a map is read-only and lands where demo-user lands.
    */
-  identity?: 'clone' | 'persona';
+  identity?: 'clone' | 'persona' | 'demo';
   /** Why the map needs the seed persona (required with identity: 'persona'). */
   identityReason?: string;
   /** True when any step writes; requires a scoped or cloned meeting scenario. */

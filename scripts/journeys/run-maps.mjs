@@ -64,7 +64,9 @@ function laneM() {
 const auditRunning = () => { try { return execFileSync('pgrep', ['-f', 'audit\.mjs'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).filter((p) => Number(p) !== process.pid); } catch { return []; } };
 
 /** Maps that sign in as the seed persona itself (no clones yet, or the map needs the persona's own records). */
-const needsPersona = (m, map) => !m.clones || map.identity === 'persona';
+const needsPersona = (m, map) => map.identity !== 'demo' && (!m.clones || map.identity === 'persona' || Object.values(map.peers ?? {}).some((p) => p.identity === 'persona'));
+/** The seed users a map signs in as itself (its persona, and any persona peers). */
+const personaUsers = (m, map) => [...(!m.clones || map.identity === 'persona' ? [map.persona.user] : []), ...Object.values(map.peers ?? {}).filter((p) => p.identity === 'persona').map((p) => p.user)];
 
 async function waitForBrowserIdentity(o) {
   const deadline = Date.now() + Number(o.wait ?? 0) * 60_000;
@@ -153,6 +155,16 @@ async function open(browser, map, { viewport }) {
   const persona = map.persona;
   const opts = { ...(persona.switchTenant ? { tenant: persona.tenant } : { expectTenant: persona.tenant }), ...(persona.switchRole ? { role: persona.role } : { expectRole: persona.role }) };
   const scope = typeof map.scenario === 'object' ? map.scenario.scope : null;
+  if (map.identity === 'demo') {
+    // The cookie-less demo identity: no sign-in, no switch (a switch would bump demo-user's shared epoch); /me says where it landed.
+    const context = await browser.newContext({ baseURL: ${JSON.stringify(BASE)}, viewport, reducedMotion: 'reduce', ...VIDEO(map, viewport) });
+    try {
+      const me = await context.request.get('/api/session/me');
+      const principal = await me.json();
+      if (principal.sub !== 'demo-user') throw new Error('the cookie-less identity is ' + principal.sub + ', not demo-user');
+      return { context, principal, close: () => context.close() };
+    } catch (e) { await context.close(); throw e; }
+  }
   if (LANE_M.clones && (map.identity ?? 'clone') === 'clone') {
     // Lane M: a clone of the persona (same grants and person link, its own id and epoch), in the map's scope when it has one.
     const person = await rs.openAsClone(browser, persona.user, { ...opts, viewport, baseURL: ${JSON.stringify(BASE)}, landing: null, label: 'run-maps ' + map.family + '/' + map.log, contextOptions: { reducedMotion: 'reduce', ...VIDEO(map, viewport) }, ...(scope ? { scope } : {}), ...(map.media === 'meeting-fixture' ? { preJoin: 'remembered', prepare: context => fakeMeetingMedia(context, persona.user) } : {}) });
@@ -295,7 +307,7 @@ async function main() {
     // Clones are the rule (lane M); a map that needs the seed persona runs only with --allow-persona.
     if (!o.allowPersona) {
       const persona = maps.filter(({ map }) => needsPersona(m, map));
-      for (const { map } of persona) console.log(`  · ${map.family}/${map.log}: not walked — it needs the seed persona ${map.persona.user} (${m.clones ? map.identityReason : 'no clones in realSession.ts'}); rerun with --allow-persona`);
+      for (const { map } of persona) console.log(`  · ${map.family}/${map.log}: not walked — it needs the seed persona ${personaUsers(m, map).join(', ')} (${m.clones ? map.identityReason : 'no clones in realSession.ts'}); rerun with --allow-persona`);
       maps.splice(0, maps.length, ...maps.filter((x) => !persona.includes(x)));
       if (!maps.length) process.exit(3);
     }
@@ -305,7 +317,7 @@ async function main() {
       maps.splice(0, maps.length, ...maps.filter((x) => !deferred.includes(x)));
       if (!maps.length) { console.error(`${deferred.length} map(s) deferred; nothing to walk`); process.exit(3); }
     }
-    const release = lockIdentities([...new Set(maps.filter(({ map }) => needsPersona(m, map)).map(({ map }) => map.persona.user))]);
+    const release = lockIdentities([...new Set(maps.filter(({ map }) => needsPersona(m, map)).flatMap(({ map }) => personaUsers(m, map)))]);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-maps-'));
     try {
       for (const { map } of maps) fs.rmSync(outDirOf(o, map), { recursive: true, force: true });

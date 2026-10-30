@@ -1,16 +1,37 @@
 surface: runbooks
 role: pipeline-admin
-user: u-dara (Dara)
-url: /pipelines/runbooks
+user: u-dara (Dara Whitfield)
+url: /pipelines/runbooks; /pipelines/definitions/runbook%3Apromo-custodian-sg-drift; /pipelines/runbooks/does-not-exist
+map: docs/journeys/maps/pipelines/pipeline-admin/runbooks.ts
 pages: portal/src/pages/pipelines/RunbooksPage.tsx,portal/src/lib/pipelineDefinitions.ts
-audited: 2026-10-08 10:50Z → 2026-10-08 10:50Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, Tilt stack: middleware dev:mock on :3001, Vite :5183
-session: /api/session/me sub u-dara, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
+audited: 2026-10-29 21:46–21:46 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-dara-clone-0554a6de), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-dara-clone-0554a6de, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
 screenshot: runbooks.jpg
-verdict: pass
+verdict: fail — 2 of 15 steps failed; step 9 (The opened record has loaded): 1 ui-dom-audit finding(s): a11y.contrast ×1
 console errors: 0
-layout: pass — content col left 224px w 1432px, top 70px, bottom 893px; no horizontal scroll (scrollWidth 1680 / innerWidth 1680); h1 “Runbooks”; 1 <main>
-type: title 20/600; sizes in main (size/weight×text nodes): 14/400×21, 12/600×7, 10/600×3, 14/600×2, 14/500×1, 20/600×1
-keyboard: pass — 7 really-visible focusables in main (6 Tab stops, the rest roving tabindex=-1 members), Tab visited 6; Enter on the first row (focus on TR) opened /pipelines/definitions?open=runbook%3Apromo-custodian-sg-drift; browser Back returned to /pipelines/runbooks
-empty-state: pass — a read-only list with no filter; /pipelines/runbooks/does-not-exist renders “Catalog › Runbooks Page not found Nothing lives at /pipelines/runbooks/does-not-”
-role-gating: pass — holds ViewPipelines, RunPipeline, ApproveStep, CancelRun, ManagePipelineConfig; forbidden AuthorDefinition. Controls in main: ["Dry-run Custodian revokes open s","Dry-run Pin Fargate tasks to ARM","Dry-run Retry the Data API throu"]; Approve/Reject absent from the DOM, Cancel run absent, New definition absent, Configuration rail row present; invalid-body write probes (403 = refused by Cedar, anything else = past the gate, nothing written): PUT /configuration {} → 400; PUT /definitions/no-such-definition/approvers {} → 403; POST /approvals/no-such-step/decide {} → 400; POST /runs/no-such-run/cancel {} → 404
-notes: Every field above was observed in this pass, not carried forward.  Main text on arrival: Catalog › Runbooks Runbooks Runbooks on their way to becoming skills. A runbook becomes a skill only after a completed dry-run of its own definition. 3 runbooks • 0 with a completed dry-run RUNBOOK RUNG STEPS LAST DRY-RUN DRY-RUN AT PROMOTI
+layout: fail — 4 ui-dom-audit finding(s) at 2 of 5 measured step(s) (a11y.contrast ×2, keyboard.typography ×1, a11y.heading-order ×1); at /pipelines/runbooks: no horizontal scroll (1680/1680), 1 h1 "Runbooks" 20/600 at 224/111, table body rows 44px ×3, first-row-top: 237px, composer at y 837–895 of 940
+keyboard: pass — Tab from the top of the page through every control (Tab visited 40 distinct visible controls of 40 focusable); Press Enter on the first row: its definition opens; Browser Back returns to the list
+empty-state: fail — step 11 (Open /pipelines/runbooks/does-not-exist: the shell says Page not found): 3 ui-dom-audit finding(s): keyboard.typography ×1, a11y.contrast ×1, a11y.heading-order ×1
+role-gating: pass — The rail shows Definitions, Runbooks, Runs, Approvals, Artifacts, Agents, Bots, Commands, Configuration; no Approve, Reject, Cancel run or New definition on the list; A Dry-run control is offered on the runbook rows (this role holds RunPipeline); PUT /api/pipelines/configuration {} answers 400: past the gate (ManagePipelineConfig held), the request is rejected and nothing is written (PUT /api/pipelines/configuration → 400); PUT …/definitions/no-such-definition/approvers {} answers 403: refused: this role lacks AuthorDefinition (PUT /api/pipelines/definitions/no-such-definition/approvers → 403); POST …/approvals/no-such-step/decide {} answers 400: past the gate (ApproveStep held), the request is rejected and nothing is written (POST /api/pipelines/approvals/no-such-step/decide → 400); POST …/runs/no-such-run/cancel {} answers 404: past the gate (CancelRun held), the request is rejected and nothing is written (POST /api/pipelines/runs/no-such-run/cancel → 404)
+dom-audit: 4 failing finding(s) at 5 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21; composer policy unclassified at step(s) 9, 11
+notes: Dara (pipeline admin) reads the runbooks with their last dry-run, each offered a dry-run, and opens one. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/pipelines/pipeline-admin/runbooks).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Runbooks: each with its last dry-run | default | pass | 0 finding(s) | /pipelines/runbooks |
+| 2 | The rail shows Definitions, Runbooks, Runs, Approvals, Artifacts, Agents, Bots, Commands, Configuration; no Approve, Reject, Cancel run or New definition on the list | default | pass | not measured: the same resting state the first step measured | /pipelines/runbooks |
+| 3 | A Dry-run control is offered on the runbook rows (this role holds RunPipeline) | default | pass | not measured: the same resting state the first step measured | /pipelines/runbooks |
+| 4 | Tab from the top of the page through every control (Tab visited 40 distinct visible controls of 40 focusable) |  | pass | — | /pipelines/runbooks |
+| 5 | Search for zzzzqq: the table says "No runbooks match these filters." | filtered-empty | pass | 0 finding(s) | /pipelines/runbooks |
+| 6 | Clear the search: the rows come back |  | pass | not measured: the same resting state the first step measured | /pipelines/runbooks |
+| 7 | Reload Runbooks | default | pass | not measured: the same resting state the first step measured | /pipelines/runbooks |
+| 8 | Press Enter on the first row: its definition opens | row-open | pass | not measured: measured on the next step, once the record has loaded | /pipelines/definitions/runbook%3Apromo-custodian-sg-drift |
+| 9 | The opened record has loaded | row-open | fail: 1 ui-dom-audit finding(s): a11y.contrast ×1 | 1 finding(s) | /pipelines/definitions/runbook%3Apromo-custodian-sg-drift |
+| 10 | Browser Back returns to the list |  | pass | 0 finding(s) | /pipelines/runbooks |
+| 11 | Open /pipelines/runbooks/does-not-exist: the shell says Page not found | not-found | fail: 3 ui-dom-audit finding(s): keyboard.typography ×1, a11y.contrast ×1, a11y.heading-order ×1 | 3 finding(s) | /pipelines/runbooks/does-not-exist |
+| 12 | PUT /api/pipelines/configuration {} answers 400: past the gate (ManagePipelineConfig held), the request is rejected and nothing is written (PUT /api/pipelines/configuration → 400) |  | pass | — | /pipelines/runbooks/does-not-exist |
+| 13 | PUT …/definitions/no-such-definition/approvers {} answers 403: refused: this role lacks AuthorDefinition (PUT /api/pipelines/definitions/no-such-definition/approvers → 403) |  | pass | — | /pipelines/runbooks/does-not-exist |
+| 14 | POST …/approvals/no-such-step/decide {} answers 400: past the gate (ApproveStep held), the request is rejected and nothing is written (POST /api/pipelines/approvals/no-such-step/decide → 400) |  | pass | — | /pipelines/runbooks/does-not-exist |
+| 15 | POST …/runs/no-such-run/cancel {} answers 404: past the gate (CancelRun held), the request is rejected and nothing is written (POST /api/pipelines/runs/no-such-run/cancel → 404) |  | pass | — | /pipelines/runbooks/does-not-exist |

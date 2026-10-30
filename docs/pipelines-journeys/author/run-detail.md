@@ -1,16 +1,31 @@
 surface: run-detail
 role: author
 user: u-ines (Ines Moreau)
-url: /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3
+url: /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3; /pipelines/runs/does-not-exist
+map: docs/journeys/maps/pipelines/author/run-detail.ts
 pages: portal/src/pages/pipelines/RunDetailPage.tsx,portal/src/pages/pipelines/PipelineRunLive.tsx,portal/src/components/runs/RunTimeline.tsx,portal/src/lib/pipelineRuns.ts
-audited: 2026-10-08 10:49Z → 2026-10-08 10:49Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, Tilt stack: middleware dev:mock on :3001, Vite :5183
-session: /api/session/me sub u-ines, tenant pipelines, role author, grants {"pipelines":["author"]}
+audited: 2026-10-29 21:40–21:40 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-6bb81873), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-ines-clone-6bb81873, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: run-detail.jpg
-verdict: pass
-console errors: 0 — plus 2 expected 404 resource line(s) from the deliberate not-found probe
-layout: pass — content col left 68px w 1588px, top 70px, bottom 893px; no horizontal scroll (scrollWidth 1680 / innerWidth 1680); h1 “Run”; 1 <main>; sections pipeline-run ×1, pipeline-steps ×1, pipeline-artifacts ×1, pipeline-events ×1; 3 step row(s), 1 artifact row(s); selected step marker (aria-current/selected) count 1; timeline width 1588px; page height 1226px
-type: title 20/600; sizes in main (size/weight×text nodes): 11/400×20, 14/400×17, 10/600×13, 12/400×12, 12/600×12, 6/600×6, 11/500×6, 10/400×6, 13/400×5, 10/500×3, 12/500×2, 14/500×1, 20/600×1, 18/400×1
-keyboard: pass — 13 really-visible focusables in main (8 Tab stops, the rest roving tabindex=-1 members), Tab visited 9;
-empty-state: pass — /pipelines/runs/does-not-exist renders “Run not found No run with id does-not-exist — it may belong to a source that was pruned.”
-role-gating: pass — holds ViewPipelines, AuthorDefinition, RunPipeline; forbidden ApproveStep, CancelRun, ManagePipelineConfig. Controls in main: ["Runs","Collapse header","Run","Activity","Run report deck","Chat","Pinned","Files","Calls","Send"]; Approve/Reject absent from the DOM, Cancel run absent, New definition absent, Configuration rail row absent; invalid-body write probes (403 = refused by Cedar, anything else = past the gate, nothing written): PUT /configuration {} → 403; PUT /definitions/no-such-definition/approvers {} → 400; POST /approvals/no-such-step/decide {} → 403; POST /runs/no-such-run/cancel {} → 403
-notes: Every field above was observed in this pass, not carried forward. events: EVENTS Sy System started run.started 1h ago Sy System started step.started 1h ago Sy System completed step.completed 1h ago Sy System started step.started 1h ag Main text on arrival: Pipelines › Runs › Run bot-run%… Runs Run One run: its context, its steps, what it produced and its events. Run Activity RUN marketplace work wi-obs-e1-s3 running Agent · manual trigger · started 1h ago Run bot-run:run-inflight-obs-e1-s3 De
+verdict: fail — 2 of 9 steps failed; step 1 (Open the in-flight bot-sourced run: its header, steps, artifacts and events): 5 ui-dom-audit finding(s): a11y.contrast ×4, a11y.heading-order ×1
+console errors: 0 unexpected; 2 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) [)
+layout: fail — 6 ui-dom-audit finding(s) at 2 of 2 measured step(s) (a11y.contrast ×4, a11y.heading-order ×1, composer.presence ×1); at /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3: no horizontal scroll (1680/1680), 1 h1 "Run" 20/600 at 108/111, table body rows 44px ×3, first-row-top: 111px, composer at y 1436–1494 of 940
+keyboard: pass — Tab from the top of the page through every control (Tab visited 19 distinct visible controls of 23 focusable, focus lost 1×)
+empty-state: fail — step 5 (Open /pipelines/runs/does-not-exist: the page says Run not found): 1 ui-dom-audit finding(s): composer.presence ×1
+role-gating: pass — No Cancel run, Approve or Reject in the DOM (an author holds no CancelRun or ApproveStep); PUT /api/pipelines/configuration {} answers 403: refused: this role lacks ManagePipelineConfig (PUT /api/pipelines/configuration → 403); PUT …/definitions/no-such-definition/approvers {} answers 400: past the gate (AuthorDefinition held), the request is rejected and nothing is written (PUT /api/pipelines/definitions/no-such-definition/approvers → 400); POST …/approvals/no-such-step/decide {} answers 403: refused: this role lacks ApproveStep (POST /api/pipelines/approvals/no-such-step/decide → 403); POST …/runs/no-such-run/cancel {} answers 403: refused: this role lacks CancelRun (POST /api/pipelines/runs/no-such-run/cancel → 403)
+dom-audit: 6 failing finding(s) at 2 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Ines (author) reads one in-flight run end to end, without a Cancel run control. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/pipelines/author/run-detail).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open the in-flight bot-sourced run: its header, steps, artifacts and events | default | fail: 5 ui-dom-audit finding(s): a11y.contrast ×4, a11y.heading-order ×1 | 5 finding(s) | /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 |
+| 2 | The events section lists the run’s step events without a refresh |  | pass | not measured: the same resting state the first step measured | /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 |
+| 3 | No Cancel run, Approve or Reject in the DOM (an author holds no CancelRun or ApproveStep) | default | pass | not measured: the same resting state the first step measured | /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 |
+| 4 | Tab from the top of the page through every control (Tab visited 19 distinct visible controls of 23 focusable, focus lost 1×) |  | pass | — | /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 |
+| 5 | Open /pipelines/runs/does-not-exist: the page says Run not found | not-found | fail: 1 ui-dom-audit finding(s): composer.presence ×1 | 1 finding(s) | /pipelines/runs/does-not-exist |
+| 6 | PUT /api/pipelines/configuration {} answers 403: refused: this role lacks ManagePipelineConfig (PUT /api/pipelines/configuration → 403) |  | pass | — | /pipelines/runs/does-not-exist |
+| 7 | PUT …/definitions/no-such-definition/approvers {} answers 400: past the gate (AuthorDefinition held), the request is rejected and nothing is written (PUT /api/pipelines/definitions/no-such-definition/approvers → 400) |  | pass | — | /pipelines/runs/does-not-exist |
+| 8 | POST …/approvals/no-such-step/decide {} answers 403: refused: this role lacks ApproveStep (POST /api/pipelines/approvals/no-such-step/decide → 403) |  | pass | — | /pipelines/runs/does-not-exist |
+| 9 | POST …/runs/no-such-run/cancel {} answers 403: refused: this role lacks CancelRun (POST /api/pipelines/runs/no-such-run/cancel → 403) |  | pass | — | /pipelines/runs/does-not-exist |

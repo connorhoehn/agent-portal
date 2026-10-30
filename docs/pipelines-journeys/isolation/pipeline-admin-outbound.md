@@ -1,19 +1,45 @@
 role: pipeline-admin
-user: u-dara
-pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx
-audited: 2026-10-08 11:00Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, middleware dev:mock on :3001, Vite :5183
-identity: sub u-dara, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
-other-nav-visible: no         # rail on /pipelines/runs: 12 anchors, 0 matching /^\/(iq|admin)/; ⌘K "Initiatives" lists 5 commands, 0 of them a orgiq page
-iq-route-result: redirect   # /iq/projects → /pipelines/runs (h1 “Runs”); /iq/runs → /pipelines/runs (h1 “Runs”); /iq/search → /pipelines/runs (h1 “Runs”)
-iq-api-status: 403   # /api/bots 403, /api/graph/people?limit=1 403, /api/work/summary 403, /api/runs 403, /api/search?q=auth 403; POST /api/session/tenant {orgiq} 403 (session after: u-dara/pipelines/pipeline-admin)
-assessment-route-result: redirect   # /assessment/teams → /pipelines/runs (h1 “Runs”); /assessment/workspace?doc=page%3A100002 → /pipelines/runs (h1 “Runs”)
-assessment-api-status: 403   # /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403; POST /api/session/tenant {assessment} 403 (session after: u-dara/pipelines/pipeline-admin)
-social-route-result: redirect   # /social/channels → /pipelines/runs (h1 “Runs”); /social/dms → /pipelines/runs (h1 “Runs”)
-social-api-status: 403   # /api/social/summary 403, /api/social/channels 403, /api/social/bindings?context=initiative%3Ap-auth-migration 403; POST /api/session/tenant {social} 403 (session after: u-dara/pipelines/pipeline-admin)
-page-family-receipts: refused   # own realtime token (tenants ["pipelines"]): 11 chat/presence frames on assessment:doc:page:100002, orgiq:initiative:p-auth-migration and social:ch:general → 11 AUTHZ_CHANNEL_DENIED, 0 frames naming a probed channel that were not a refusal (2 unrelated session/presence/notification frames the socket sends on its own, none naming a probed channel)
+user: u-dara (Dara Whitfield)
+url: /pipelines/runs; /iq/projects; /iq/runs; /iq/search; /assessment/teams; /assessment/workspace?doc=page%3A100002; /social/channels; /social/dms
+map: docs/journeys/maps/pipelines/isolation/pipeline-admin-outbound.ts
+pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
+audited: 2026-10-29 21:43–21:43 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-dara-clone-86a780d9), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-dara-clone-86a780d9, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
+other-nav-visible: no — The pipelines rail and page hold no link toward another tenant; The workspace chooser offers no other workspace (/select → /workspaces)
+iq-route-result: redirect — Type /iq/projects: the route sends this identity away (/iq/projects → /pipelines/runs); Type /iq/runs: the route sends this identity away (/iq/runs → /pipelines/runs); Type /iq/search: the route sends this identity away (/iq/search → /pipelines/runs)
+iq-api-status: 403 — GET /api/bots answers 403 (GET /api/bots → 403); GET /api/graph/people?limit=1 answers 403 (GET /api/graph/people?limit=1 → 403); GET /api/work/summary answers 403 (GET /api/work/summary → 403); GET /api/runs answers 403 (GET /api/runs → 403); GET /api/search?q=auth answers 403 (GET /api/search?q=auth → 403)
+assessment-route-result: redirect — Type /assessment/teams: the route sends this identity away (/assessment/teams → /pipelines/runs); Type /assessment/workspace?doc=page%3A100002: the route sends this identity away (/assessment/workspace?doc=page%3A100002 → /pipelines/runs)
+assessment-api-status: 403 — GET /api/assessment/teams answers 403 (GET /api/assessment/teams → 403); GET /api/assessment/knowledge/tree answers 403 (GET /api/assessment/knowledge/tree → 403); GET /api/assessment/pipeline-runs answers 403 (GET /api/assessment/pipeline-runs → 403)
+social-route-result: redirect — Type /social/channels: the route sends this identity away (/social/channels → /pipelines/runs); Type /social/dms: the route sends this identity away (/social/dms → /pipelines/runs)
+social-api-status: 403 — GET /api/social/summary answers 403 (GET /api/social/summary → 403); GET /api/social/channels answers 403 (GET /api/social/channels → 403); GET /api/social/bindings?context=initiative%3Ap-auth-migration answers 403 (GET /api/social/bindings?context=initiative%3Ap-auth-migration → 403)
 console errors: 0
-screenshot: pipeline-admin-outbound.jpg   # where the last typed URL leaves you
+dom-audit: 0 failing finding(s) at 8 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+screenshot: pipeline-admin-outbound.jpg
 verdict: pass
-notes: Every field above was taken in this pass. The header bell popover reads: “Nothing new Activity will appear here.” (0 link(s) toward another tenant). No horizontal scroll (1680 / 1680).
-assessment-nav-visible: no         # rail on /pipelines/runs: 12 anchors, 0 matching /^\/assessment/; ⌘K "Teams" lists 4 commands, 1 of them a assessment page
-social-nav-visible: no         # rail on /pipelines/runs: 12 anchors, 0 matching /^\/social/; ⌘K "Channels" lists 4 commands, 1 of them a social page
+notes: A pipelines pipeline-admin holds no grant elsewhere: no other tenant’s link, route or API answers. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/pipelines/isolation/pipeline-admin-outbound).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | The pipelines rail and page hold no link toward another tenant | default | pass | 0 finding(s) | /pipelines/runs |
+| 2 | The workspace chooser offers no other workspace (/select → /workspaces) | default | pass | not measured: outside the route inventory (no app frame for the audit contract to judge) | /workspaces |
+| 3 | Type /iq/projects: the route sends this identity away (/iq/projects → /pipelines/runs) | refused | pass | 0 finding(s) | /pipelines/runs |
+| 4 | Type /iq/runs: the route sends this identity away (/iq/runs → /pipelines/runs) | refused | pass | 0 finding(s) | /pipelines/runs |
+| 5 | Type /iq/search: the route sends this identity away (/iq/search → /pipelines/runs) | refused | pass | 0 finding(s) | /pipelines/runs |
+| 6 | GET /api/bots answers 403 (GET /api/bots → 403) |  | pass | — | /pipelines/runs |
+| 7 | GET /api/graph/people?limit=1 answers 403 (GET /api/graph/people?limit=1 → 403) |  | pass | — | /pipelines/runs |
+| 8 | GET /api/work/summary answers 403 (GET /api/work/summary → 403) |  | pass | — | /pipelines/runs |
+| 9 | GET /api/runs answers 403 (GET /api/runs → 403) |  | pass | — | /pipelines/runs |
+| 10 | GET /api/search?q=auth answers 403 (GET /api/search?q=auth → 403) |  | pass | — | /pipelines/runs |
+| 11 | Type /assessment/teams: the route sends this identity away (/assessment/teams → /pipelines/runs) | refused | pass | 0 finding(s) | /pipelines/runs |
+| 12 | Type /assessment/workspace?doc=page%3A100002: the route sends this identity away (/assessment/workspace?doc=page%3A100002 → /pipelines/runs) | refused | pass | 0 finding(s) | /pipelines/runs |
+| 13 | GET /api/assessment/teams answers 403 (GET /api/assessment/teams → 403) |  | pass | — | /pipelines/runs |
+| 14 | GET /api/assessment/knowledge/tree answers 403 (GET /api/assessment/knowledge/tree → 403) |  | pass | — | /pipelines/runs |
+| 15 | GET /api/assessment/pipeline-runs answers 403 (GET /api/assessment/pipeline-runs → 403) |  | pass | — | /pipelines/runs |
+| 16 | Type /social/channels: the route sends this identity away (/social/channels → /pipelines/runs) | refused | pass | 0 finding(s) | /pipelines/runs |
+| 17 | Type /social/dms: the route sends this identity away (/social/dms → /pipelines/runs) | refused | pass | 0 finding(s) | /pipelines/runs |
+| 18 | GET /api/social/summary answers 403 (GET /api/social/summary → 403) |  | pass | — | /pipelines/runs |
+| 19 | GET /api/social/channels answers 403 (GET /api/social/channels → 403) |  | pass | — | /pipelines/runs |
+| 20 | GET /api/social/bindings?context=initiative%3Ap-auth-migration answers 403 (GET /api/social/bindings?context=initiative%3Ap-auth-migration → 403) |  | pass | — | /pipelines/runs |
+| 21 | Back on Runs, where every typed URL left this identity | default | pass | not measured: the same resting state the first step measured | /pipelines/runs |

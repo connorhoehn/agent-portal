@@ -1,18 +1,37 @@
 role: sme
-user: u-nora
+user: u-nora (Nora DaSilva)
+url: /iq/projects; /social/channels; /social/rooms; /social/dms
+map: docs/journeys/maps/social/isolation/sme.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-10-22 18:52–18:53 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-nora (u-nora-clone-14761cce) standing in its own tenant, no second context; Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: sub u-nora-clone-14761cce, tenant orgiq, role sme
-identity: sub u-nora-clone-14761cce, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
-social-grant: yes                 # /api/session/me grants {"orgiq":["sme"],"social":["participant"]}
-social-tile-visible: yes          # /select Workspaces tab: tiles ["orgiq","social"] (data-testid select-roles-*)
-social-nav-visible: no            # /iq/projects (h1 “My initiatives”): 18 anchors in the shell nav, 0 toward /social; 19 anchors on the whole page, 0 toward /social; ⌘K "Direct messages" lists 2 commands, 0 matching a social page name; ⌘K "Runbooks" lists 7 commands, 0 matching a social page name; ⌘K "Rubric" lists 11 commands, 0 matching a social page name; ⌘K "Channels" lists 6 commands, 0 matching a social page name
-direct-route-result: redirect      # /social/channels → /iq/projects (h1 “My initiatives”, 0 social-* test ids); /social/rooms → /iq/projects (h1 “My initiatives”, 0 social-* test ids); /social/dms → /iq/projects (h1 “My initiatives”, 0 social-* test ids)
-api-status: 403                   # /api/social/summary 403, /api/social/channels 403, /api/social/rooms 403, /api/social/teams 403, /api/social/recordings 403, /api/social/calls 403; /api/social/bindings?context=initiative%3Ap-auth-migration 200; POST /api/session/tenant {social} skipped (the identity holds the grant; switching is not the probe)
-activity-leak: none               # bell opened on /iq/projects: “Notifications UnreadAllNothing newActivity will appear here.”; 0 link(s), 0 toward /social (this identity holds a social grant, so Social items are its own), 0 toward /pipelines
-page-family-receipts: refused   # own realtime token (tenants ["orgiq","social"]): 5 chat/presence frames (join, history, read, receipts, presence subscribe) on pipelines:run:bot-run:run-inflight-obs-e1-s3, a channel this identity cannot read → 5 AUTHZ_CHANNEL_DENIED, 0 non-refusal frames naming it (2 unrelated socket-own frames: ["presence/set","session"])
-console errors: 0 — the API probes go through the context request client, so their 403s never reach the page console
-screenshot: sme.jpg                # /select as this identity
-screenshot-direct-route: sme-direct-route.jpg   # where the last typed social URL leaves you
+audited: 2026-10-29 21:49–21:49 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-f2065a33), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-nora-clone-f2065a33, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+social-grant: yes — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
+social-tile-visible: yes — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
+social-nav-visible: no — The shell on /iq/projects, its own tenant, holds no link toward /social; Back on its own landing, still no link toward /social
+direct-route-result: redirect — Type /social/channels: the route sends this identity away (/social/channels → /iq/projects); Type /social/rooms: the route sends this identity away (/social/rooms → /iq/projects); Type /social/dms: the route sends this identity away (/social/dms → /iq/projects)
+api-status: 403 — GET /api/social/summary answers 403 (GET /api/social/summary → 403); GET /api/social/channels answers 403 (GET /api/social/channels → 403); GET /api/social/rooms answers 403 (GET /api/social/rooms → 403); GET /api/social/teams answers 403 (GET /api/social/teams → 403); GET /api/social/recordings answers 403 (GET /api/social/recordings → 403); GET /api/social/calls answers 403 (GET /api/social/calls → 403)
+activity-leak: none — The bell opens on /iq/projects; no item in it links into a tenant this identity holds no grant in; Escape closes the bell
+console errors: 0
+dom-audit: 0 failing finding(s) at 5 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+screenshot: sme.jpg
 verdict: pass
-notes: POST /api/session/login {userId:u-nora-clone-14761cce} → 200 for the clone (grants copied from u-nora: {"orgiq":["sme"],"social":["participant"]}), then sessionStorage['orgiq.contextChosen'] set to the sub before entering the shell. The clone stands for u-nora everywhere probed here; the /select card list is the clone's own grants, which equal the persona's, and the People tab (if shown) lists the clone's view, not exercised. The bell is the clone's own feed (a fresh clone has no notifications), so activity-leak is judged on what this clone's bell holds, not on the persona's accumulated items. Every field above was taken in this pass. ⌘K entries for "Direct messages": ["CommunicationSocial channels","Search workspace: Direct mes"]; for "Channels": ["Local compute configurationS","Local computeYour paired mac","RunbooksProcedures the fleet","CommunicationSocial channels","SearchFind records, ask ques","Search workspace: ChannelsRe"] — "Communication" is the tenant's own Communication page (/iq/communication or /assessment/communication), not a /social route. This identity holds a social grant, so the picker shows the Social tile; its realtime token admits social:ch:general (same hand-built join/history/subscribe: 0 refusals, 4 non-refusal frames naming it: ["chat/joined:social:ch:general","presence/subscribed:social:ch:general","chat/history:social:ch:general","chat/history:social:ch:general"]), and the session standing in its own tenant still cannot reach /social/* pages or the tenant-gated /api/social/* surface. No horizontal scroll (1680 / 1680). Session after the pass: u-nora-clone-14761cce/orgiq/sme. Not exercised: the Social bottom bar contents and keyboard traversal of the shell (not fields of an isolation log).
+notes: Nora (orgiq sme) holds a social grant (a curated participant), yet standing in its own tenant reaches no Social link, route or API, and the bell carries nothing from a tenant it does not hold. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/social/isolation/sme).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces) | default | pass | not measured: outside the route inventory (no app frame for the audit contract to judge) | /workspaces |
+| 2 | The shell on /iq/projects, its own tenant, holds no link toward /social | default | pass | 0 finding(s) | /iq/projects |
+| 3 | Type /social/channels: the route sends this identity away (/social/channels → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
+| 4 | Type /social/rooms: the route sends this identity away (/social/rooms → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
+| 5 | Type /social/dms: the route sends this identity away (/social/dms → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
+| 6 | Back on its own landing, still no link toward /social | default | pass | not measured: the landing step 2 measured | /iq/projects |
+| 7 | GET /api/social/summary answers 403 (GET /api/social/summary → 403) |  | pass | — | /iq/projects |
+| 8 | GET /api/social/channels answers 403 (GET /api/social/channels → 403) |  | pass | — | /iq/projects |
+| 9 | GET /api/social/rooms answers 403 (GET /api/social/rooms → 403) |  | pass | — | /iq/projects |
+| 10 | GET /api/social/teams answers 403 (GET /api/social/teams → 403) |  | pass | — | /iq/projects |
+| 11 | GET /api/social/recordings answers 403 (GET /api/social/recordings → 403) |  | pass | — | /iq/projects |
+| 12 | GET /api/social/calls answers 403 (GET /api/social/calls → 403) |  | pass | — | /iq/projects |
+| 13 | The bell opens on /iq/projects; no item in it links into a tenant this identity holds no grant in | dialog-open | pass | 0 finding(s) | /iq/projects |
+| 14 | Escape closes the bell |  | pass | not measured: the landing again | /iq/projects |

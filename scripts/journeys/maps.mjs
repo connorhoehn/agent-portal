@@ -25,10 +25,30 @@ export const PROFILES = {
     'isolation-inbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'access-tile-visible', 'access-nav-visible', 'direct-route-result', 'api-status', 'write-status', 'nothing-written', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
     'isolation-outbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'other-nav-visible', 'iq-route-result', 'iq-api-status', 'assessment-route-result', 'assessment-api-status', 'social-route-result', 'social-api-status', 'pipelines-route-result', 'pipelines-api-status', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
   },
+  // docs/assessment-journeys/PROTOCOL.md and scripts/validate-assessment-tenant.sh: a role × surface log carries
+  // keyboard, empty-state and role-gating; an inbound isolation log (an orgiq role meeting the assessment tenant)
+  // the tile / nav / direct-route / API fields; an outbound one (an assessment role meeting orgiq) the orgiq ones.
+  assessment: {
+    surface: SURFACE,
+    'isolation-inbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'assessment-tile-visible', 'assessment-nav-visible', 'direct-route-result', 'api-status', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
+    'isolation-outbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'orgiq-nav-visible', 'orgiq-route-result', 'orgiq-api-status', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
+  },
   pipelines: {
     surface: SURFACE,
     'isolation-inbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'pipelines-tile-visible', 'pipelines-nav-visible', 'direct-route-result', 'api-status', 'events-status', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
     'isolation-outbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'other-nav-visible', 'iq-route-result', 'iq-api-status', 'assessment-route-result', 'assessment-api-status', 'social-route-result', 'social-api-status', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
+    // PROTOCOL "Plus one cross-tenant slice log": slice/bot-detail.md, an orgiq page rendering the bot's firing as
+    // Run → Steps → Artifact → Events; validate-pipelines-tenant.sh reads its four extra fields.
+    slice: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'run-rendered', 'steps-rendered', 'artifact-rendered', 'events-streamed', 'verdict', 'console errors', 'layout', 'keyboard', 'empty-state', 'role-gating', 'dom-audit', 'notes'],
+  },
+  // docs/social-journeys/PROTOCOL.md and scripts/validate-social-tenant.sh: a role × surface log adds `realtime`
+  // (pass, or n/a for a surface with nothing live) to keyboard / empty-state / role-gating; an inbound isolation
+  // log (another tenant's role reaching for Social) the grant / tile / nav / route / API / bell fields; an
+  // outbound one (a social role reaching for orgiq and assessment) the six orgiq-* and assessment-* fields.
+  social: {
+    surface: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'keyboard', 'empty-state', 'realtime', 'role-gating', 'dom-audit', 'notes'],
+    'isolation-inbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'social-grant', 'social-tile-visible', 'social-nav-visible', 'direct-route-result', 'api-status', 'activity-leak', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
+    'isolation-outbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'orgiq-nav-visible', 'orgiq-route-result', 'orgiq-api-status', 'assessment-nav-visible', 'assessment-route-result', 'assessment-api-status', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
   },
   // docs/demo-journeys/PROTOCOL.md (docs/demo-content-goal.md): one story per tenant a peer follows in five
   // minutes; each step asserts a fact of the story is on screen (story-facts) and that the records it names
@@ -81,14 +101,20 @@ export function validateMap(map, file = '(map)') {
   if (!map.persona?.user || !map.persona?.tenant || !map.persona?.role) at('persona needs user, tenant and role');
   if (!map.goal) at('goal is required');
   if (map.scenario !== 'shared' && map.scenario?.realtime !== 'meeting' && !(map.scenario && map.scenario.scope && ['string', 'object'].includes(typeof map.scenario.scope))) at("scenario is 'shared', { scope }, or { realtime: 'meeting' }");
-  if (map.identity && !['clone', 'persona'].includes(map.identity)) at("identity is 'clone' or 'persona'");
+  if (map.identity && !['clone', 'persona', 'demo'].includes(map.identity)) at("identity is 'clone', 'persona' or 'demo'");
+  // The cookie-less demo identity: no sign-in at all, so it can be neither switched nor cloned, and it never writes.
+  if (map.identity === 'demo' && (map.persona?.user !== 'demo-user' || map.persona?.switchTenant || map.persona?.switchRole || map.writes || map.peers)) at("identity: 'demo' walks the cookie-less demo-user as it lands (persona.user demo-user, no switch, no writes, no peers)");
   if (map.identity === 'persona' && !map.identityReason) at("identity: 'persona' needs an identityReason (why a clone cannot walk it)");
   if (map.scenario?.realtime === 'meeting' && (map.identity !== 'clone' || !Object.keys(map.peers ?? {}).length || map.media !== 'meeting-fixture' || !map.writes)) at('meeting scenarios require clone peers, writes and the meeting media fixture');
   if (map.media && map.media !== 'meeting-fixture') at('unknown media fixture');
-  if (map.peers && (map.identity === 'persona' || !map.writes || map.scenario === 'shared')) at('peer walks require clone identities and a scoped write scenario');
+  // Peers are clones. A peer that only looks (presence: a second identity opening a page) may walk the shared mock
+  // read-only — every actor's non-GET is blocked like the walker's; a peer walk that writes needs a scope.
+  if (map.peers && (map.identity === 'persona' || map.identity === 'demo' || (map.writes && map.scenario === 'shared'))) at('peer walks require clone identities, and a scoped scenario when they write');
   for (const [name, persona] of Object.entries(map.peers ?? {})) {
     if (!/^[a-z][a-z0-9-]*$/.test(name) || name === 'main') at('peer names must be lowercase identifiers other than main');
     if (!persona?.user || !persona?.tenant || !persona?.role) at(`peer ${name} needs user, tenant and role`);
+    if (persona?.identity && !['clone', 'persona'].includes(persona.identity)) at(`peer ${name}: identity is 'clone' or 'persona'`);
+    if (persona?.identity === 'persona' && (!map.identityReason || map.writes)) at(`peer ${name} signs in as the seed persona: the map needs an identityReason and must not write`);
   }
   const steps = map.steps ?? [];
   if (!steps.length) at('no steps');
@@ -238,7 +264,7 @@ export function composeLog(result) {
     url: urls.join('; '),
     map: result.mapFile,
     pages: map.fields?.pages,
-    audited: `${day(result.startedAt)} ${hhmm(result.startedAt)}–${hhmm(result.endedAt)} local, Chromium ${result.browser ?? ''} ${result.viewport.width}x${result.viewport.height} (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts${result.clone ? ` as clone ${result.clone}` : ''}), ${result.scenario}, ${result.stack ?? ''}`.replace(/\s+,/g, ','),
+    audited: `${day(result.startedAt)} ${hhmm(result.startedAt)}–${hhmm(result.endedAt)} local, Chromium ${result.browser ?? ''} ${result.viewport.width}x${result.viewport.height} (scripts/journeys/run-maps.mjs: Playwright headless, ${map.identity === 'demo' ? 'a fresh context as the cookie-less demo identity, no sign-in' : `a fresh context signed in through portal/e2e/realSession.ts${result.clone ? ` as clone ${result.clone}` : ''}`}), ${result.scenario}, ${result.stack ?? ''}`.replace(/\s+,/g, ','),
     session: result.session ? `/api/session/me sub ${result.session.sub}, tenant ${result.session.tenant}, role ${result.session.role}, grants ${JSON.stringify(result.session.grants ?? {})}` : 'not read',
     screenshot: result.screenshot ?? '(none)',
     verdict,

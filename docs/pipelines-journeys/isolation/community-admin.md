@@ -1,15 +1,36 @@
 role: community-admin
-user: u-mira
+user: u-mira (Mira Okafor)
+url: /social/channels; /pipelines/runs; /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3; /pipelines/configuration; /pipelines/calls
+map: docs/journeys/maps/pipelines/isolation/community-admin.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-10-08 10:58Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, middleware dev:mock on :3001, Vite :5183
-identity: sub u-mira, tenant social, role community-admin, grants {"social":["community-admin"]}
-pipelines-tile-visible: no        # /select: tiles ["social"]; the word Pipelines appears nowhere on the page
-pipelines-nav-visible: no        # rail on /social/channels: 10 anchors, 0 toward /pipelines; ⌘K "Initiatives" lists 2 commands, pipelines-page hits 0; ⌘K "Runbooks" lists 0 commands, runbook-named hits 0; ⌘K "Teams" lists 7 commands, pipelines-page hits 0; ⌘K "Pipelines" hits 0 of 7
-direct-route-result: redirect     # /pipelines/runs → /social/channels (h1 “Channels”); /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 → /social/channels (h1 “Channels”); /pipelines/configuration → /social/channels (h1 “Channels”); /pipelines/calls → /social/channels (h1 “Channels”); 0 pipeline-run section(s) rendered
-api-status: 403                   # /api/pipelines/summary 403, /api/pipelines/runs 403, /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 403, /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3/steps 403, /api/pipelines/artifacts 403; POST /api/session/tenant {pipelines} 403 (session after: u-mira/social/community-admin)
-events-status: 403                # GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3/events (Accept: text/event-stream), the SSE door separately
-console errors: 0                  # read after /select, home, the palette queries, the bell and every direct route; the API probes go through the context's request client, outside the page console
-screenshot: community-admin.jpg                # /select as this identity; community-admin-direct-route.jpg is where the last direct route left it
-page-family-receipts: refused   # own realtime token (tenants ["social"]), 5 chat/presence frames on pipelines:run:bot-run:run-inflight-obs-e1-s3 → 5 AUTHZ_CHANNEL_DENIED (chat/subscribe:pipelines:run:bot-run:run-inflight-obs-e1-s3, presence/subscribe:pipelines:run:bot-run:run-inflight-obs-e1-s3), 0 frames naming a probed channel that were not a refusal (3 unrelated session/presence/notification frames the socket sends on its own, none naming a probed channel)
+audited: 2026-10-29 21:41–21:41 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mira-clone-216197cf), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-mira-clone-216197cf, tenant social, role community-admin, grants {"social":["community-admin"]}
+pipelines-tile-visible: no — The workspace chooser offers no Pipelines workspace (/select → /workspaces)
+pipelines-nav-visible: no — The rail on /social/channels holds no link toward /pipelines; Back on the home landing, still no link toward /pipelines
+direct-route-result: redirect — Type /pipelines/runs: the route sends this identity away (/pipelines/runs → /social/channels); Type /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3: the route sends this identity away (/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 → /social/channels); Type /pipelines/configuration: the route sends this identity away (/pipelines/configuration → /social/channels); Type /pipelines/calls: the route sends this identity away (/pipelines/calls → /social/channels)
+api-status: 403 — GET /api/pipelines/summary answers 403 (GET /api/pipelines/summary → 403); GET /api/pipelines/runs answers 403 (GET /api/pipelines/runs → 403); GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 answers 403 (GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 → 403); GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3/steps answers 403 (GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3/steps → 403); GET /api/pipelines/artifacts answers 403 (GET /api/pipelines/artifacts → 403); POST /api/session/tenant {pipelines} is refused (POST /api/session/tenant → 403)
+events-status: 403 — GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3/events answers 403 (GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3/events → 403)
+console errors: 0
+dom-audit: 0 failing finding(s) at 6 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+screenshot: community-admin.jpg
 verdict: pass
-notes: POST /api/session/login {userId:u-mira} → 200, then sessionStorage['orgiq.contextChosen'] set to the sub. Every field above was taken in this pass. The header bell popover reads: “Notifications1 Mark all read Clear all Unread (1) All Farah Osei mentioned you in #general Social · Mention — @Mira Okafor can I get added to the events team? I would like to help with the call notes. 2d ago” (0 link(s), 0 toward /pipelines). No horizontal scroll (1680 / 1680).
+notes: Mira Okafor (social community-admin) holds no grant in Pipelines: no tile, no link, no route and no API answers, the events stream included. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/pipelines/isolation/community-admin).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | The workspace chooser offers no Pipelines workspace (/select → /workspaces) | default | pass | not measured: outside the route inventory (no app frame for the audit contract to judge) | /workspaces |
+| 2 | The rail on /social/channels holds no link toward /pipelines | default | pass | 0 finding(s) | /social/channels |
+| 3 | Type /pipelines/runs: the route sends this identity away (/pipelines/runs → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 4 | Type /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3: the route sends this identity away (/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 5 | Type /pipelines/configuration: the route sends this identity away (/pipelines/configuration → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 6 | Type /pipelines/calls: the route sends this identity away (/pipelines/calls → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 7 | Back on the home landing, still no link toward /pipelines | default | pass | 0 finding(s) | /social/channels |
+| 8 | GET /api/pipelines/summary answers 403 (GET /api/pipelines/summary → 403) |  | pass | — | /social/channels |
+| 9 | GET /api/pipelines/runs answers 403 (GET /api/pipelines/runs → 403) |  | pass | — | /social/channels |
+| 10 | GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 answers 403 (GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 → 403) |  | pass | — | /social/channels |
+| 11 | GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3/steps answers 403 (GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3/steps → 403) |  | pass | — | /social/channels |
+| 12 | GET /api/pipelines/artifacts answers 403 (GET /api/pipelines/artifacts → 403) |  | pass | — | /social/channels |
+| 13 | POST /api/session/tenant {pipelines} is refused (POST /api/session/tenant → 403) |  | pass | — | /social/channels |
+| 14 | GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3/events answers 403 (GET /api/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3/events → 403) |  | pass | — | /social/channels |

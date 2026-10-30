@@ -150,7 +150,8 @@ export async function walkMap(browser, map, ctx) {
   try {
     let current = null;
     for (const [name, persona] of [['main', map.persona], ...Object.entries(map.peers ?? {})]) {
-      const actorMap = { ...map, persona };
+      // A peer is a clone unless it names its own identity (a seed persona, for presence a clone cannot show).
+      const actorMap = { ...map, persona, ...(name === 'main' ? {} : { identity: persona.identity ?? 'clone' }) };
       const person = await ctx.open(browser, actorMap, { viewport });
       const actor = { ...person, page: null, scopeHandle: null };
       actors.set(name, actor);

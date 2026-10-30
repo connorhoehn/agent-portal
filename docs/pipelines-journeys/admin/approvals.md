@@ -1,16 +1,37 @@
 surface: approvals
 role: admin
-user: u-operator
-url: /pipelines/approvals
+user: u-operator (Platform Operator)
+url: /pipelines/approvals; /pipelines/approvals/consult%3Acon-mock-1; /pipelines/approvals/does-not-exist
+map: docs/journeys/maps/pipelines/admin/approvals.ts
 pages: portal/src/pages/pipelines/ApprovalsPage.tsx,portal/src/lib/pipelineDefinitions.ts
-audited: 2026-10-08 10:50Z → 2026-10-08 10:50Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, Tilt stack: middleware dev:mock on :3001, Vite :5183
-session: /api/session/me sub u-operator, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"]}
+audited: 2026-10-29 21:38–21:38 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-9e310598), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-operator-clone-9e310598, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
 screenshot: approvals.jpg
-verdict: pass
+verdict: fail — 1 of 15 steps failed; step 11 (Open /pipelines/approvals/does-not-exist: the page says Nothing is waiting here): 1 ui-dom-audit finding(s): a11y.heading-order ×1
 console errors: 0
-layout: pass — content col left 224px w 1432px, top 70px, bottom 893px; no horizontal scroll (scrollWidth 1680 / innerWidth 1680); h1 “Approvals”; 1 <main>
-type: title 20/600; sizes in main (size/weight×text nodes): 14/400×7, 12/600×5, 14/500×1, 20/600×1, 11/400×1, 10/600×1
-keyboard: pass — 2 really-visible focusables in main (1 Tab stops, the rest roving tabindex=-1 members), Tab visited 1; Enter on the first row opened a drawer; Escape closed it
-empty-state: pass — a read-only list with no filter; /pipelines/approvals/does-not-exist renders “Runs › Approvals Page not found Nothing lives at /pipelines/approvals/does-not-e”
-role-gating: pass — admin holds every action. Controls in main: ["Reject","Approve"]; Approve/Reject present, Cancel run absent, New definition absent, Configuration rail row present; opening a waiting step shows a drawer with buttons ["Reject","Approve"] reading “Change gate change:9f2c17a0-5b64-4de1-8a03-6c1de4f27b58 The policy gates require a person to approve this change before it is delivered. connorhoehnslalom/orgiq”; invalid-body write probes (403 = refused by Cedar, anything else = past the gate, nothing written): PUT /configuration {} → 400; PUT /definitions/no-such-definition/approvers {} → 400; POST /approvals/no-such-step/decide {} → 400; POST /runs/no-such-run/cancel {} → 404
-notes: Every field above was observed in this pass, not carried forward.  Main text on arrival: Runs › Approvals Approvals Steps waiting on a person — a job at review, a change the gates held, an agent's question. 1 waiting WAITING STEP ASKED BY STEP APPROVED BY WAITING SINCE Suppress downstream pages during a cluster-wide outage Chan
+layout: fail — 1 ui-dom-audit finding(s) at 1 of 6 measured step(s) (a11y.heading-order ×1); at /pipelines/approvals: no horizontal scroll (1680/1680), 1 h1 "Approvals" 20/600 at 224/111, table body rows 44px ×2, first-row-top: 237px, composer at y 837–895 of 940
+keyboard: pass — Tab from the top of the page through every control (Tab visited 34 distinct visible controls of 34 focusable); Press Enter on the first row: the waiting step opens; Browser Back returns to the list
+empty-state: fail — step 11 (Open /pipelines/approvals/does-not-exist: the page says Nothing is waiting here): 1 ui-dom-audit finding(s): a11y.heading-order ×1
+role-gating: pass — The rail shows Definitions, Runbooks, Runs, Approvals, Artifacts, Agents, Bots, Commands, Configuration; no Approve, Reject, Cancel run or New definition on the list; The waiting step offers Approve and Reject (this role may decide it); pressing neither, nothing is decided; PUT /api/pipelines/configuration {} answers 400: past the gate (ManagePipelineConfig held), the request is rejected and nothing is written (PUT /api/pipelines/configuration → 400); PUT …/definitions/no-such-definition/approvers {} answers 400: past the gate (AuthorDefinition held), the request is rejected and nothing is written (PUT /api/pipelines/definitions/no-such-definition/approvers → 400); POST …/approvals/no-such-step/decide {} answers 400: past the gate (ApproveStep held), the request is rejected and nothing is written (POST /api/pipelines/approvals/no-such-step/decide → 400); POST …/runs/no-such-run/cancel {} answers 404: past the gate (CancelRun held), the request is rejected and nothing is written (POST /api/pipelines/runs/no-such-run/cancel → 404)
+dom-audit: 1 failing finding(s) at 6 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21; composer policy unclassified at step(s) 8, 9, 11
+notes: The platform admin reads what waits on a person and opens one step, where Approve and Reject are offered (and neither is pressed). Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/pipelines/admin/approvals).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Approvals: the steps waiting on a person | default | pass | 0 finding(s) | /pipelines/approvals |
+| 2 | The rail shows Definitions, Runbooks, Runs, Approvals, Artifacts, Agents, Bots, Commands, Configuration; no Approve, Reject, Cancel run or New definition on the list | default | pass | not measured: the same resting state the first step measured | /pipelines/approvals |
+| 3 | Tab from the top of the page through every control (Tab visited 34 distinct visible controls of 34 focusable) |  | pass | — | /pipelines/approvals |
+| 4 | Search for zzzzqq: the table says "No approvals match this search." | filtered-empty | pass | 0 finding(s) | /pipelines/approvals |
+| 5 | Clear the search: the rows come back |  | pass | not measured: the same resting state the first step measured | /pipelines/approvals |
+| 6 | Reload Approvals | default | pass | not measured: the same resting state the first step measured | /pipelines/approvals |
+| 7 | Press Enter on the first row: the waiting step opens | row-open | pass | not measured: measured on the next step, once the record has loaded | /pipelines/approvals/consult%3Acon-mock-1 |
+| 8 | The opened record has loaded | row-open | pass | 0 finding(s) | /pipelines/approvals/consult%3Acon-mock-1 |
+| 9 | The waiting step offers Approve and Reject (this role may decide it); pressing neither, nothing is decided |  | pass | 0 finding(s) | /pipelines/approvals/consult%3Acon-mock-1 |
+| 10 | Browser Back returns to the list |  | pass | 0 finding(s) | /pipelines/approvals |
+| 11 | Open /pipelines/approvals/does-not-exist: the page says Nothing is waiting here | not-found | fail: 1 ui-dom-audit finding(s): a11y.heading-order ×1 | 1 finding(s) | /pipelines/approvals/does-not-exist |
+| 12 | PUT /api/pipelines/configuration {} answers 400: past the gate (ManagePipelineConfig held), the request is rejected and nothing is written (PUT /api/pipelines/configuration → 400) |  | pass | — | /pipelines/approvals/does-not-exist |
+| 13 | PUT …/definitions/no-such-definition/approvers {} answers 400: past the gate (AuthorDefinition held), the request is rejected and nothing is written (PUT /api/pipelines/definitions/no-such-definition/approvers → 400) |  | pass | — | /pipelines/approvals/does-not-exist |
+| 14 | POST …/approvals/no-such-step/decide {} answers 400: past the gate (ApproveStep held), the request is rejected and nothing is written (POST /api/pipelines/approvals/no-such-step/decide → 400) |  | pass | — | /pipelines/approvals/does-not-exist |
+| 15 | POST …/runs/no-such-run/cancel {} answers 404: past the gate (CancelRun held), the request is rejected and nothing is written (POST /api/pipelines/runs/no-such-run/cancel → 404) |  | pass | — | /pipelines/approvals/does-not-exist |

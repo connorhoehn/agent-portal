@@ -1,19 +1,37 @@
 role: moderator
-user: u-lena
+user: u-lena (Lena Brandt)
+url: /social/channels; /iq/projects; /iq/runs; /iq/search; /assessment/teams; /assessment/workspace?doc=page%3A100002
+map: docs/journeys/maps/social/isolation/moderator-outbound.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx
-audited: 2026-10-22 23:33–23:33 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-lena (u-lena-clone-e534e6e2) in the social tenant, no second context; Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: sub u-lena-clone-e534e6e2, tenant social, role moderator
-identity: sub u-lena-clone-e534e6e2, tenant social, role moderator, grants {"social":["moderator"]}
-orgiq-nav-visible: no         # /social/channels (h1 “Channels”): 10 anchors in the shell nav, 0 matching /^\/(iq|admin)/; 11 on the whole page, 0 matching; ⌘K "Initiatives" lists 4 commands, 0 of them an orgiq page
-orgiq-route-result: redirect   # /iq/projects → /social/channels (h1 “Channels”); /iq/runs → /social/channels (h1 “Channels”); /iq/search → /social/channels (h1 “Channels”)
-orgiq-api-status: 403   # /api/bots 403, /api/graph/people?limit=1 403, /api/work/summary 403, /api/runs 403, /api/search?q=auth 403; POST /api/session/tenant {orgiq} 403 (session after: u-lena-clone-e534e6e2/social/moderator)
-assessment-nav-visible: no         # same page: 0 shell-nav anchors and 0 page anchors matching /^\/assessment/; ⌘K "Teams" lists 13 commands, 0 of them an assessment page
-assessment-route-result: redirect   # /assessment/teams → /social/channels (h1 “Channels”); /assessment/workspace?doc=page%3A100002 → /social/channels (h1 “Channels”)
-assessment-api-status: 403   # /api/assessment/teams 403, /api/assessment/knowledge/tree 403, /api/assessment/pipeline-runs 403; POST /api/session/tenant {assessment} 403 (session after: u-lena-clone-e534e6e2/social/moderator)
-activity-leak: none   # bell opened on /social/channels: “Notifications UnreadAllNothing newActivity will appear here.”; 0 link(s), 0 toward /iq or /admin, 0 toward /assessment, 0 toward /pipelines
-page-family-receipts: refused   # own realtime token (tenants ["social"]): 10 hand-built chat/presence frames (join, history, read, receipts, presence subscribe on each of assessment:doc:page:100002, orgiq:initiative:p-auth-migration) → 10 AUTHZ_CHANNEL_DENIED, 0 frames naming a probed channel that were not a refusal (2 unrelated socket-own frames: ["presence/set","session"])
+audited: 2026-10-29 21:48–21:48 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-lena-clone-9381b06c), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-lena-clone-9381b06c, tenant social, role moderator, grants {"social":["moderator"]}
+orgiq-nav-visible: no — The Social shell holds no link toward /iq or /admin
+orgiq-route-result: redirect — Type /iq/projects: the route sends this identity away (/iq/projects → /social/channels); Type /iq/runs: the route sends this identity away (/iq/runs → /social/channels); Type /iq/search: the route sends this identity away (/iq/search → /social/channels)
+orgiq-api-status: 403 — GET /api/bots answers 403 (GET /api/bots → 403); GET /api/graph/people?limit=1 answers 403 (GET /api/graph/people?limit=1 → 403); GET /api/work/summary answers 403 (GET /api/work/summary → 403); GET /api/runs answers 403 (GET /api/runs → 403)
+assessment-nav-visible: no — Nor toward /assessment
+assessment-route-result: redirect — Type /assessment/teams: the route sends this identity away (/assessment/teams → /social/channels); Type /assessment/workspace?doc=page%3A100002: the route sends this identity away (/assessment/workspace?doc=page%3A100002 → /social/channels)
+assessment-api-status: 403 — GET /api/assessment/teams answers 403 (GET /api/assessment/teams → 403); GET /api/assessment/knowledge/tree answers 403 (GET /api/assessment/knowledge/tree → 403); GET /api/assessment/pipeline-runs answers 403 (GET /api/assessment/pipeline-runs → 403)
 console errors: 0
-screenshot: moderator-outbound.jpg   # where the last typed orgiq URL leaves you
-screenshot-direct-route: moderator-outbound-direct-route.jpg   # where the last typed assessment URL leaves you
+dom-audit: 0 failing finding(s) at 6 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+screenshot: moderator-outbound.jpg
 verdict: pass
-notes: POST /api/session/login {userId:u-lena-clone-e534e6e2} → 200 for the clone (grants copied from u-lena: {"social":["moderator"]}); the clone holds only a social grant, so the refused tenant switches touch no real session. Every field above was taken in this pass. ⌘K entries for "Initiatives": ["ChannelsConversations the te","Work graphYour conversations","#auth-migrationAuth migratio","@Asha Nair this one for rele"]; for "Teams": ["ChannelsConversations the te","Direct messagesOne-to-one an","CallsStart or join a call","RoomsStanding rooms you can ","TeamsTeams and their channel","ProfileHow you appear to oth","ConfigurationRetention, room","Journey participant 185623Te","Journey moderator 185350Team","Journey moderator 184919Team","Journey moderator 184637Team","ModerationTeam · 2 members: "]. The bell is the clone's own feed (a fresh clone has no notifications), so activity-leak is judged on what this clone's bell holds. No horizontal scroll on /social/channels (1680 / 1680). Not exercised: the Social bottom bar and keyboard traversal (not fields of an isolation log).
+notes: A social moderator holds no grant elsewhere: no orgiq or assessment link, route or API answers. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/social/isolation/moderator-outbound).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | The Social shell holds no link toward /iq or /admin | default | pass | 0 finding(s) | /social/channels |
+| 2 | Nor toward /assessment | default | pass | not measured: the landing step 1 measured | /social/channels |
+| 3 | Type /iq/projects: the route sends this identity away (/iq/projects → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 4 | Type /iq/runs: the route sends this identity away (/iq/runs → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 5 | Type /iq/search: the route sends this identity away (/iq/search → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 6 | GET /api/bots answers 403 (GET /api/bots → 403) |  | pass | — | /social/channels |
+| 7 | GET /api/graph/people?limit=1 answers 403 (GET /api/graph/people?limit=1 → 403) |  | pass | — | /social/channels |
+| 8 | GET /api/work/summary answers 403 (GET /api/work/summary → 403) |  | pass | — | /social/channels |
+| 9 | GET /api/runs answers 403 (GET /api/runs → 403) |  | pass | — | /social/channels |
+| 10 | Type /assessment/teams: the route sends this identity away (/assessment/teams → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 11 | Type /assessment/workspace?doc=page%3A100002: the route sends this identity away (/assessment/workspace?doc=page%3A100002 → /social/channels) | refused | pass | 0 finding(s) | /social/channels |
+| 12 | GET /api/assessment/teams answers 403 (GET /api/assessment/teams → 403) |  | pass | — | /social/channels |
+| 13 | GET /api/assessment/knowledge/tree answers 403 (GET /api/assessment/knowledge/tree → 403) |  | pass | — | /social/channels |
+| 14 | GET /api/assessment/pipeline-runs answers 403 (GET /api/assessment/pipeline-runs → 403) |  | pass | — | /social/channels |

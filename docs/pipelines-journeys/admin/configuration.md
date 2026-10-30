@@ -2,13 +2,31 @@ surface: configuration
 role: admin
 user: u-operator (Platform Operator)
 url: /pipelines/configuration
-pages: portal/src/pages/pipelines/ConfigurationPage.tsx,portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/components/shell/portalCommands.ts
-audited: 2026-10-07 13:08Z, Chromium 148.0.7778.96 1680×940 (Playwright headless from portal/node_modules, one context per identity — not the shared Chrome tab), middleware dev:mock on :3001, Vite :5183, realtime-modules 0.115.0 (tenant Discussions keep per-reader read cursors); GET /api/session/me: sub u-operator, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"]}
+map: docs/journeys/maps/pipelines/admin/configuration.ts
+pages: portal/src/pages/pipelines/ConfigurationPage.tsx,portal/src/App.tsx,portal/src/components/shell/Layout.tsx
+audited: 2026-10-29 21:39–21:39 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-0c009116), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-operator-clone-0c009116, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
 screenshot: configuration.jpg
-verdict: pass
+verdict: fail — 1 of 10 steps failed; step 1 (Open Configuration: the default approver): 1 ui-dom-audit finding(s): a11y.contrast ×1
 console errors: 0
-layout: pass — content col left 224px w 1432px; no horizontal scroll (scrollWidth 1680 = innerWidth 1680); 1 <main>; h1 “Configuration”, 1 select, 1 Save
-keyboard: pass — 1 really-visible focusable control(s) in main, 1 accept focus (the Default approver select; Save is disabled until the value changes); the rail's Configuration row is reachable from the shell
-empty-state: n/a — the setting always has a value (the design default, operator, when nobody has changed it); a failed read renders ErrorState “Configuration unavailable”
-role-gating: pass — admin holds Search, ViewOrgChart, ViewLeaderboard, ViewObservability, ViewIdentityAdmin, ManageUsers, EditPolicy, EditSchema, EditGuardrail, ManageDevbox, ManageBots, DispatchAgentRun, ManageIngest, ManageKB, ManageCanary, LabelFeedback, ApproveTransaction, Masquerade, ManageBudgets, ManageSprints, EnterEnvironment, ManageEnvironments, ConnectLocalCompute, ViewAssessment, ScoreAssessment, ApproveException, PublishReport, ManageSubmissions, RunAssessmentAgent, ManageKnowledge, ManageAssessmentConfig, ViewSocial, PostMessage, StartCall, ManageChannels, ManageTeams, ManageRecordings, ManageSocialConfig, ViewPipelines, AuthorDefinition, RunPipeline, ApproveStep, CancelRun, ManagePipelineConfig; forbidden nothing. Configuration is rendered (1 select, 1 Save in main; rail lists 12 anchors incl. /pipelines/configuration: true). API: GET /api/pipelines/configuration 200; a PUT with an out-of-range value answers 400 (a holder gets a validation refusal, not a write)
-notes: Main: System › Configuration Configuration How this workspace decides who approves a step. Default approver Who approves a step when its definition names nobody. A definition's own approver roles always win. Now Operator Last changed by Nobody — the design default (operator) Operator Pipeline admin Save Calls: same rail entry as the other pipelines roles; not separately re-driven as admin.
+layout: fail — 1 ui-dom-audit finding(s) at 1 of 1 measured step(s) (a11y.contrast ×1); at /pipelines/configuration: no horizontal scroll (1680/1680), 1 h1 "Configuration" 20/600 at 224/111
+keyboard: pass — Tab from the top of the page through every control (Tab visited 29 distinct visible controls of 29 focusable)
+empty-state: n/a — the setting always has a value — The setting always has a value: the select holds a role, so there is no empty state to show
+role-gating: pass — The rail shows Definitions, Runbooks, Runs, Approvals, Artifacts, Agents, Bots, Commands, Configuration; no Approve, Reject, Cancel run or New definition on the list; The Default approver select is offered, and Save waits for a change; GET /api/pipelines/configuration answers 200 (GET /api/pipelines/configuration → 200); PUT /api/pipelines/configuration {} answers 400: past the gate (ManagePipelineConfig held), the request is rejected and nothing is written (PUT /api/pipelines/configuration → 400); PUT …/definitions/no-such-definition/approvers {} answers 400: past the gate (AuthorDefinition held), the request is rejected and nothing is written (PUT /api/pipelines/definitions/no-such-definition/approvers → 400); POST …/approvals/no-such-step/decide {} answers 400: past the gate (ApproveStep held), the request is rejected and nothing is written (POST /api/pipelines/approvals/no-such-step/decide → 400); POST …/runs/no-such-run/cancel {} answers 404: past the gate (CancelRun held), the request is rejected and nothing is written (POST /api/pipelines/runs/no-such-run/cancel → 404)
+dom-audit: 1 failing finding(s) at 1 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: The platform admin reads the default approver, whose Save waits for a change. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/pipelines/admin/configuration).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Configuration: the default approver | default | fail: 1 ui-dom-audit finding(s): a11y.contrast ×1 | 1 finding(s) | /pipelines/configuration |
+| 2 | The rail shows Definitions, Runbooks, Runs, Approvals, Artifacts, Agents, Bots, Commands, Configuration; no Approve, Reject, Cancel run or New definition on the list | default | pass | not measured: the same resting state the first step measured | /pipelines/configuration |
+| 3 | The Default approver select is offered, and Save waits for a change | default | pass | not measured: the same resting state the first step measured | /pipelines/configuration |
+| 4 | The setting always has a value: the select holds a role, so there is no empty state to show | default | pass | not measured: the same resting state the first step measured | /pipelines/configuration |
+| 5 | Tab from the top of the page through every control (Tab visited 29 distinct visible controls of 29 focusable) |  | pass | — | /pipelines/configuration |
+| 6 | GET /api/pipelines/configuration answers 200 (GET /api/pipelines/configuration → 200) |  | pass | — | /pipelines/configuration |
+| 7 | PUT /api/pipelines/configuration {} answers 400: past the gate (ManagePipelineConfig held), the request is rejected and nothing is written (PUT /api/pipelines/configuration → 400) |  | pass | — | /pipelines/configuration |
+| 8 | PUT …/definitions/no-such-definition/approvers {} answers 400: past the gate (AuthorDefinition held), the request is rejected and nothing is written (PUT /api/pipelines/definitions/no-such-definition/approvers → 400) |  | pass | — | /pipelines/configuration |
+| 9 | POST …/approvals/no-such-step/decide {} answers 400: past the gate (ApproveStep held), the request is rejected and nothing is written (POST /api/pipelines/approvals/no-such-step/decide → 400) |  | pass | — | /pipelines/configuration |
+| 10 | POST …/runs/no-such-run/cancel {} answers 404: past the gate (CancelRun held), the request is rejected and nothing is written (POST /api/pipelines/runs/no-such-run/cancel → 404) |  | pass | — | /pipelines/configuration |

@@ -223,6 +223,13 @@ summary are in `.scratch/resume-2026-10-28/`.
 
 ## Next session
 
+**Journeys (2026-10-30):** access re-walked and sealed (b9507421). Journey
+maps for pipelines, social and assessment were being written when the session
+stopped: `run-maps.mjs check` passes (364 maps) and the runner tests pass, but
+those families are not fully walked or sealed yet. Resume with
+`node scripts/journeys/run-maps.mjs walk --family <pipelines|social|assessment> --no-seal`,
+fix or report failures (never weaken an expectation), then a sealing walk.
+
 **Follow-ups (2026-10-29): done** — PR-watch takes a hold/slot; the spend
 metric fires for SQL settles; `GET /api/harness/promoted-versions` reports
 the live prompt pointers; deck/summary model calls run inside AgentCore

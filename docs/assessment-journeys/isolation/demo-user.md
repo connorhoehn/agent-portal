@@ -1,13 +1,32 @@
-role: demo-user (cookie-less fallback identity, dev only)
-user: demo-user
-audited: 2026-10-24 14:12–14:12 local, headless Chromium 1680x940 (Playwright), Tilt stack: Vite :5183 over middleware :3001 (dev:mock); mock state not reset (shared stack); a fresh cookie-less context
-session: sub demo-user, tenant orgiq, role sme, grants {"orgiq":["sme"]}
-assessment-tile-visible: yes        # /api/session/me availableTenants ["orgiq"]; the word "assessment" appears 2 time(s) on /select — by design: the picker keeps offering every persona to the dev-only demo identity (SelectContextPage.tsx, the accounts memo), while the narrowed session holds no assessment grant
-assessment-nav-visible: no         # rail on /iq/projects: 16 anchors, 0 toward /assessment; the word appears 0 times in the page
-direct-route-result: redirect      # /assessment/teams → /iq/projects (h1 "My initiatives", 709 chars of main); /assessment/workspace?doc=page%3A100002 → /iq/projects (h1 "My initiatives", 709 chars of main); /assessment/prompts → /iq/projects (h1 "My initiatives", 709 chars of main)
-api-status: 403                    # GET /teams 403, GET /knowledge/tree 403, POST /knowledge/canvas 403, GET /knowledge/doc/workflows/comments?id=page%3A100002 403, POST /knowledge/doc/workflows/comments?id=page%3A100002 403, PATCH /knowledge/doc/workflows/comments/kc-rubric-01 403, DELETE /knowledge/doc/workflows/comments/kc-rubric-01 403, POST /knowledge/doc/reaction 403; POST /api/session/tenant {assessment} 200 — by design for the permissive cookie-less demo identity (switchable grants) (session after: demo-user/assessment/assessor)
+role: member
+user: demo-user (Demo User (cookie-less, dev only))
+url: /iq/projects; /assessment/teams; /assessment/workspace?doc=page%3A100002; /assessment/prompts
+map: docs/journeys/maps/assessment/isolation/demo-user.ts
+pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
+audited: 2026-10-29 21:36–21:36 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context as the cookie-less demo identity, no sign-in), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub demo-user, tenant orgiq, role member, grants {"orgiq":["member","sme","program-owner","org-leader","hr-admin","admin"],"assessment":["assessor","lead-assessor","program-lead","admin"]}
+assessment-tile-visible: yes, by design for the dev-only cookie-less identity — The chooser offers the Assessment workspace to the dev-only cookie-less identity, by design (SelectContextPage keeps every workspace for it) (/select → /workspaces)
+assessment-nav-visible: no — The rail on /iq/projects holds no link toward /assessment; Back on the home landing, still no link toward /assessment
+direct-route-result: redirect — Type /assessment/teams: the route sends this identity away (/assessment/teams → /iq/projects); Type /assessment/workspace?doc=page%3A100002: the route sends this identity away (/assessment/workspace?doc=page%3A100002 → /iq/projects); Type /assessment/prompts: the route sends this identity away (/assessment/prompts → /iq/projects)
+api-status: 403 — GET /api/assessment/teams answers 403 (GET /api/assessment/teams → 403); GET /api/assessment/knowledge/tree answers 403 (GET /api/assessment/knowledge/tree → 403); GET /api/assessment/knowledge/doc/workflows/comments?id=page%3A100002 answers 403 (GET /api/assessment/knowledge/doc/workflows/comments?id=page%3A100002 → 403); POST /api/assessment/knowledge/canvas is refused: no document session for this identity (POST /api/assessment/knowledge/canvas → 403); POST a document comment is refused (POST /api/assessment/knowledge/doc/workflows/comments?id=page%3A100002 → 403)
+console errors: 0
+dom-audit: 0 failing finding(s) at 5 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
 screenshot: demo-user.jpg
-screenshot-direct-route: demo-user-direct-route.jpg
-verdict: pass — walked 2026-10-24: no tile, no nav entry, the direct routes redirect and the assessment REST and document-comment routes answer 403; 0 page errors
-picker-before-choice: /api/session/me = sub demo-user, role member, availableTenants ["orgiq","assessment"], grants {"orgiq":["member","sme","program-owner","org-leader","hr-admin","admin"],"assessment":["assessor","lead-assessor","program-lead","admin"]}; after the picker's two-step to Org · SME the session reads demo-user/orgiq/sme
-notes: The cookie-less demo identity, narrowed with the picker's own two-step (POST /api/session/tenant orgiq, /role sme). Mutating assessment calls were sent only to prove the 403; no row changed. Not re-observed in this pass: the realtime token's refusal to join assessment channels (the 2026-10-08 record has it).
+verdict: pass
+notes: The cookie-less demo identity, outside the assessment tenant, reaches no assessment route or API even though the dev chooser offers it the workspace. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys-assessment/assessment/isolation/demo-user).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | The chooser offers the Assessment workspace to the dev-only cookie-less identity, by design (SelectContextPage keeps every workspace for it) (/select → /workspaces) | default | pass | not measured: outside the route inventory (no app frame for the audit contract to judge) | /workspaces |
+| 2 | The rail on /iq/projects holds no link toward /assessment | default | pass | 0 finding(s) | /iq/projects |
+| 3 | Type /assessment/teams: the route sends this identity away (/assessment/teams → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
+| 4 | Type /assessment/workspace?doc=page%3A100002: the route sends this identity away (/assessment/workspace?doc=page%3A100002 → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
+| 5 | Type /assessment/prompts: the route sends this identity away (/assessment/prompts → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
+| 6 | Back on the home landing, still no link toward /assessment | default | pass | 0 finding(s) | /iq/projects |
+| 7 | GET /api/assessment/teams answers 403 (GET /api/assessment/teams → 403) |  | pass | — | /iq/projects |
+| 8 | GET /api/assessment/knowledge/tree answers 403 (GET /api/assessment/knowledge/tree → 403) |  | pass | — | /iq/projects |
+| 9 | GET /api/assessment/knowledge/doc/workflows/comments?id=page%3A100002 answers 403 (GET /api/assessment/knowledge/doc/workflows/comments?id=page%3A100002 → 403) |  | pass | — | /iq/projects |
+| 10 | POST /api/assessment/knowledge/canvas is refused: no document session for this identity (POST /api/assessment/knowledge/canvas → 403) |  | pass | — | /iq/projects |
+| 11 | POST a document comment is refused (POST /api/assessment/knowledge/doc/workflows/comments?id=page%3A100002 → 403) |  | pass | — | /iq/projects |

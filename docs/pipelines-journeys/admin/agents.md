@@ -1,16 +1,36 @@
 surface: agents
 role: admin
-user: u-operator
-url: /pipelines/agents
-pages: portal/src/pages/pipelines/AgentsPage.tsx
-audited: 2026-10-08 10:49Z → 2026-10-08 10:49Z, Chromium (Playwright headless from portal/node_modules, a fresh context per identity, not the shared Chrome tab), 1680×940, Tilt stack: middleware dev:mock on :3001, Vite :5183
-session: /api/session/me sub u-operator, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"]}
+user: u-operator (Platform Operator)
+url: /pipelines/agents; /pipelines/definitions/agent%3Aorgiq-advisor; /pipelines/agents/does-not-exist
+map: docs/journeys/maps/pipelines/admin/agents.ts
+pages: portal/src/pages/pipelines/SourcesPage.tsx
+audited: 2026-10-29 21:38–21:38 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-54415c6f), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-operator-clone-54415c6f, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
 screenshot: agents.jpg
-verdict: pass
+verdict: fail — 1 of 14 steps failed; step 10 (Open /pipelines/agents/does-not-exist: the shell says Page not found): 3 ui-dom-audit finding(s): keyboard.typography ×1, a11y.contrast ×1, a11y.heading-order ×1
 console errors: 0
-layout: pass — content col left 224px w 1432px, top 70px, bottom 893px; no horizontal scroll (scrollWidth 1680 / innerWidth 1680); h1 “Agents”; 1 <main>
-type: title 20/600; sizes in main (size/weight×text nodes): 14/400×58, 10/600×21, 12/600×9, 12/400×9, 14/600×2, 14/500×1, 20/600×1
-keyboard: pass — 11 really-visible focusables in main (10 Tab stops, the rest roving tabindex=-1 members), Tab visited 10; Enter on the first row (focus on TR) opened /pipelines/definitions?open=agent%3Aorgiq-advisor; browser Back returned to /pipelines/agents
-empty-state: pass — a read-only list with no filter; /pipelines/agents/does-not-exist renders “Sources › Agents Page not found Nothing lives at /pipelines/agents/does-not-exis”
-role-gating: pass — admin holds every action. Controls in main: []; Approve/Reject absent from the DOM, Cancel run absent, New definition absent, Configuration rail row present; invalid-body write probes (403 = refused by Cedar, anything else = past the gate, nothing written): PUT /configuration {} → 400; PUT /definitions/no-such-definition/approvers {} → 400; POST /approvals/no-such-step/decide {} → 400; POST /runs/no-such-run/cancel {} → 404
-notes: Every field above was observed in this pass, not carried forward.  Main text on arrival: Sources › Agents Agents Read-only The agent fleet — every deployed agent is a definition, and each invocation that carried a run id is one of its runs. 9 agents • 105 recorded runs AGENT RUNTIME WORKSPACE MODEL TOOLS STATUS RUNS LAST RUN LA
+layout: fail — 3 ui-dom-audit finding(s) at 1 of 5 measured step(s) (keyboard.typography ×1, a11y.contrast ×1, a11y.heading-order ×1); at /pipelines/agents: no horizontal scroll (1680/1680), 1 h1 "Agents" 20/600 at 224/111, table body rows 44px ×9, first-row-top: 237px, composer at y 837–895 of 940
+keyboard: pass — Tab from the top of the page through every control (Tab visited 40 distinct visible controls of 51 focusable); Press Enter on the first row: its definition opens; Browser Back returns to the list
+empty-state: fail — step 10 (Open /pipelines/agents/does-not-exist: the shell says Page not found): 3 ui-dom-audit finding(s): keyboard.typography ×1, a11y.contrast ×1, a11y.heading-order ×1
+role-gating: pass — The rail shows Definitions, Runbooks, Runs, Approvals, Artifacts, Agents, Bots, Commands, Configuration; no Approve, Reject, Cancel run or New definition on the list; PUT /api/pipelines/configuration {} answers 400: past the gate (ManagePipelineConfig held), the request is rejected and nothing is written (PUT /api/pipelines/configuration → 400); PUT …/definitions/no-such-definition/approvers {} answers 400: past the gate (AuthorDefinition held), the request is rejected and nothing is written (PUT /api/pipelines/definitions/no-such-definition/approvers → 400); POST …/approvals/no-such-step/decide {} answers 400: past the gate (ApproveStep held), the request is rejected and nothing is written (POST /api/pipelines/approvals/no-such-step/decide → 400); POST …/runs/no-such-run/cancel {} answers 404: past the gate (CancelRun held), the request is rejected and nothing is written (POST /api/pipelines/runs/no-such-run/cancel → 404)
+dom-audit: 3 failing finding(s) at 5 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21; composer policy unclassified at step(s) 8, 10
+notes: The platform admin reads the agent fleet registry, read-only, and opens one agent’s definition. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/pipelines/admin/agents).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Agents | default | pass | 0 finding(s) | /pipelines/agents |
+| 2 | The rail shows Definitions, Runbooks, Runs, Approvals, Artifacts, Agents, Bots, Commands, Configuration; no Approve, Reject, Cancel run or New definition on the list | default | pass | not measured: the same resting state the first step measured | /pipelines/agents |
+| 3 | Tab from the top of the page through every control (Tab visited 40 distinct visible controls of 51 focusable) |  | pass | — | /pipelines/agents |
+| 4 | Search for zzzzqq: the table says "No agents match "zzzzqq"." | filtered-empty | pass | 0 finding(s) | /pipelines/agents |
+| 5 | Clear the search: the rows come back |  | pass | not measured: the same resting state the first step measured | /pipelines/agents |
+| 6 | Reload Agents | default | pass | not measured: the same resting state the first step measured | /pipelines/agents |
+| 7 | Press Enter on the first row: its definition opens | row-open | pass | not measured: measured on the next step, once the record has loaded | /pipelines/definitions/agent%3Aorgiq-advisor |
+| 8 | The opened record has loaded | row-open | pass | 0 finding(s) | /pipelines/definitions/agent%3Aorgiq-advisor |
+| 9 | Browser Back returns to the list |  | pass | 0 finding(s) | /pipelines/agents |
+| 10 | Open /pipelines/agents/does-not-exist: the shell says Page not found | not-found | fail: 3 ui-dom-audit finding(s): keyboard.typography ×1, a11y.contrast ×1, a11y.heading-order ×1 | 3 finding(s) | /pipelines/agents/does-not-exist |
+| 11 | PUT /api/pipelines/configuration {} answers 400: past the gate (ManagePipelineConfig held), the request is rejected and nothing is written (PUT /api/pipelines/configuration → 400) |  | pass | — | /pipelines/agents/does-not-exist |
+| 12 | PUT …/definitions/no-such-definition/approvers {} answers 400: past the gate (AuthorDefinition held), the request is rejected and nothing is written (PUT /api/pipelines/definitions/no-such-definition/approvers → 400) |  | pass | — | /pipelines/agents/does-not-exist |
+| 13 | POST …/approvals/no-such-step/decide {} answers 400: past the gate (ApproveStep held), the request is rejected and nothing is written (POST /api/pipelines/approvals/no-such-step/decide → 400) |  | pass | — | /pipelines/agents/does-not-exist |
+| 14 | POST …/runs/no-such-run/cancel {} answers 404: past the gate (CancelRun held), the request is rejected and nothing is written (POST /api/pipelines/runs/no-such-run/cancel → 404) |  | pass | — | /pipelines/agents/does-not-exist |
