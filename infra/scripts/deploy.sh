@@ -657,8 +657,14 @@ if [[ ${#NAMED_STACKS[@]} -gt 0 ]]; then
       [[ -n "$stack" ]] && SELECTED_STACKS+=("$stack")
     done < <("${CDK[@]}" ls "${NAMED_STACKS[@]}" --show-dependencies --json "${ENV_CONTEXT[@]}" ${OTHER_ARGS[@]+"${OTHER_ARGS[@]}"} ${INFERRED[@]+"${INFERRED[@]}"} 2>/dev/null \
       | node -e 'for (const s of JSON.parse(require("fs").readFileSync(0, "utf8"))) console.log(s.id)' 2>/dev/null || true)
-    # Unreadable closure: fall back to the names, as before, rather than guess.
-    [[ ${#SELECTED_STACKS[@]} -eq 0 ]] && SELECTED_STACKS=("${NAMED_STACKS[@]}")
+    # No closure means cdk could not synthesize (2026-10-30: node lost a
+    # library mid-run and every cdk call aborted). Deploying the names alone
+    # would skip their dependencies and readers, so stop here instead.
+    if [[ ${#SELECTED_STACKS[@]} -eq 0 ]]; then
+      echo "  ✗ Could not list ${NAMED_STACKS[*]} with their dependencies (cdk ls failed); not deploying." >&2
+      echo "    Run: ${CDK[*]} ls ${NAMED_STACKS[*]} --show-dependencies" >&2
+      exit 1
+    fi
     if [[ ${#SELECTED_STACKS[@]} -gt ${#NAMED_STACKS[@]} ]]; then
       echo "  ${NAMED_STACKS[*]} deploys with its dependencies: ${SELECTED_STACKS[*]}"
       echo "  (-e / --exclusively deploys only the named stacks)"
@@ -953,6 +959,13 @@ for stack in "${EXPECTED_STACKS[@]}"; do
       FAILURES+=("${stack}: ${st}") ;;
   esac
 done
+
+# A non-zero cdk exit is always a failure, even when every stack still reads
+# healthy from an earlier deploy (an aborted cdk changes nothing, and the old
+# statuses reconcile clean). Exit 0 is the case that cannot be trusted alone.
+if [[ "$DEPLOY_RC" -ne 0 ]]; then
+  FAILURES+=("cdk deploy exited ${DEPLOY_RC}: nothing above may have been deployed")
+fi
 
 echo ""
 if [[ ${#FAILURES[@]} -gt 0 ]]; then

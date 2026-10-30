@@ -153,6 +153,13 @@ describe('deploy.sh: a later deploy keeps the second-phase gates that are live',
     assert.ok(script.indexOf('run_migrate apply') > script.indexOf('Plan only — nothing deployed'), 'migrations come after the plan exit');
   });
 
+  test('an aborted cdk is a failure even when the old stack statuses reconcile clean', () => {
+    // 2026-10-30: node lost a library mid-run, every cdk call aborted, and the
+    // script printed "Deploy complete" over stacks still healthy from before.
+    assert.match(script, /if \[\[ "\$DEPLOY_RC" -ne 0 \]\]; then\n\s+FAILURES\+=/);
+    assert.match(script, /Could not list .* with their dependencies \(cdk ls failed\); not deploying/);
+  });
+
   test('a value the caller passed wins over an inferred one', () => {
     assert.match(script, /infer\(\) \{[^}]*ctx_given "\$1" && return 0/);
   });
