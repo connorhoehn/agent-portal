@@ -235,4 +235,12 @@ describe('GET /api/observability/harness/promoted-versions', () => {
     expect(stamps.every(Boolean)).toBe(true);
     expect([...stamps].sort().reverse()).toEqual(stamps);
   });
+
+  it('reports the live prompt pointer per agent, null when there is none (day-one fallback)', async () => {
+    const res = await request(buildApp(member)).get('/api/observability/harness/promoted-versions');
+    const agents = (res.body.versions as Array<{ agentId: string }>).map((v) => v.agentId);
+    for (const a of agents) expect(res.body.livePointers).toHaveProperty(a);
+    // The mock seed has no pointers, so every entry falls back to null.
+    expect(Object.values(res.body.livePointers).every((p) => p === null)).toBe(true);
+  });
 });

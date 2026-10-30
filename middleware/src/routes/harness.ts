@@ -54,6 +54,7 @@ import { randomUUID } from 'node:crypto';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { readPointers, AGENT_RE, type Pointer } from '../lib/prompt-pointers.js';
 import { processTrace, type TraceInput } from '../lib/trace-sink.js';
 import { judgeResponse } from '../lib/judge.js';
 import { executeRun, loadCasesForRun } from '../lib/harness-runner.js';
@@ -1675,6 +1676,24 @@ function rowToPromotedVersion(r: Record<string, unknown>): PromotedPromptVersion
   };
 }
 
+/**
+ * The live prompt pointer (DE-4, `/orgiq/prompts/<agent>/live`) for each agent
+ * on the list, so a reader can tell which promoted SHA is serving by what the
+ * runtime actually reads, not by the promoted_at stamp alone. An agent with no
+ * pointer (day-one state, an unreadable parameter, an id that is not an agent
+ * name) maps to null and the stamp order is the only signal, as before. A
+ * pointer names a Bedrock prompt id + version, not a content SHA, so this is
+ * reported beside the list rather than matched into it.
+ */
+export async function livePointersFor(agentIds: readonly string[]): Promise<Record<string, Pointer | null>> {
+  const out: Record<string, Pointer | null> = {};
+  await Promise.all([...new Set(agentIds)].map(async (agent) => {
+    if (!AGENT_RE.test(agent)) { out[agent] = null; return; }
+    try { out[agent] = (await readPointers(agent)).live; } catch { out[agent] = null; }
+  }));
+  return out;
+}
+
 harnessRouter.get('/promoted-versions', requireAction('ViewObservability'), asyncHandler(async (_req, res) => {
   // Same registry the prompt-version chip reads (mock/prompt-versions.ts),
   // filtered to the SHAs a human promoted. A raw exec() here reached the RDS
@@ -1682,7 +1701,7 @@ harnessRouter.get('/promoted-versions', requireAction('ViewObservability'), asyn
   // offline and there was no way to audit it.
   if (config.mock.aurora) {
     const versions: PromotedPromptVersion[] = mockListPromotedVersions(200);
-    res.json({ versions });
+    res.json({ versions, livePointers: await livePointersFor(versions.map((v) => v.agentId)) });
     return;
   }
   const rows = await exec(
@@ -1696,5 +1715,6 @@ harnessRouter.get('/promoted-versions', requireAction('ViewObservability'), asyn
       LIMIT 200`,
     [],
   );
-  res.json({ versions: rows.map(rowToPromotedVersion) });
+  const versions = rows.map(rowToPromotedVersion);
+  res.json({ versions, livePointers: await livePointersFor(versions.map((v) => v.agentId)) });
 }));

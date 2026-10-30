@@ -31,8 +31,9 @@
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { borrowApiKey } from '../providers/connected-sources.js';
-import { createBotRun } from '../providers/bots.js';
-import { checkConcurrency, botMaxConcurrent } from './bot-runner.js';
+import { createBotRun, getBot } from '../providers/bots.js';
+import { checkConcurrency, botMaxConcurrent, reserveBotFiring, refusalGate } from './bot-runner.js';
+import { bindHoldSource, releaseHold } from '../providers/spend-holds.js';
 import { listPulls, getPullStatus, type PullSummary } from './github-connector.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { firstLine } from './upstream.js';
@@ -135,7 +136,7 @@ async function tokenFor(cache: Map<string, string | null>, connectionName: strin
   }
 }
 
-interface WatchedBot {
+export interface WatchedBot {
   id: string;
   name: string;
   promptTemplate: string;
@@ -209,32 +210,56 @@ async function setWatermark(botId: string, watermark: number, ran: boolean): Pro
  * payload parks the artifact at awaiting_review exactly as initiative-target
  * bot runs do — a PR-watch run gains no ungoverned path.
  */
-async function dispatchPrRun(bot: WatchedBot, pr: PullSummary): Promise<void> {
-  const prompt = renderPrReviewPrompt(bot.promptTemplate, pr);
-  const jobRows = await exec(
-    `INSERT INTO agent_jobs (kind, title, payload, created_by)
-     VALUES ('devbox:task', :title, :payload::jsonb, 'pr-watch') RETURNING id`,
-    [
-      s('title', `PR #${pr.number}: ${pr.title}`.slice(0, 300)),
-      // model rides the payload so the job dispatcher runs the bot's configured
-      // model, not its own default.
-      s('payload', JSON.stringify({ prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model })),
-    ],
-  );
-  const jobId = toStr(jobRows[0]?.['id']);
-  // Through the provider's ceiling-guarded insert — the same atomic guard the
-  // manual/cron/marketplace paths use, so a pr_watch dispatch cannot slip past
-  // the global concurrency ceiling in a race.
-  const run = await createBotRun({
-    botId: bot.id, trigger: 'pr_watch', jobId, ceiling: botMaxConcurrent(),
-    outcome: { prNumber: pr.number, prUrl: pr.url },
-  });
-  if (!run) {
-    // Ceiling refused the row: un-enqueue the job so it does not run untracked,
-    // and fail the dispatch — the watermark stays behind and retries next tick.
-    await exec(`DELETE FROM agent_jobs WHERE id = :jid AND status = 'queued'`, [s('jid', jobId)]);
-    throw new Error('concurrency ceiling reached');
+export type PrDispatch = { kind: 'dispatched' } | { kind: 'refused'; reason: string; gate?: string };
+
+export async function dispatchPrRun(bot: WatchedBot, pr: PullSummary): Promise<PrDispatch> {
+  // The spend hold and run limits first (DE-34/37), before any side effect —
+  // the same reserveSpend path fireBot takes, so a PR-watch firing counts
+  // against the concurrency / runs-per-day / dollars-per-hour limits, the
+  // kill switches and the initiative's caps like cron does. Nobody can
+  // confirm a soft brake here, so any refusal is a visible skip.
+  const full = await getBot(bot.id);
+  if (!full) throw new Error('no such bot');
+  const held = await reserveBotFiring(full, 'pr_watch', null);
+  if (held.kind !== 'held') {
+    return { kind: 'refused', reason: `pr_watch firing skipped: ${held.reason}`, ...refusalGate(held) };
   }
+  const holdId = held.holdId;
+  const prompt = renderPrReviewPrompt(bot.promptTemplate, pr);
+  let jobId = '';
+  try {
+    const jobRows = await exec(
+      `INSERT INTO agent_jobs (kind, title, payload, created_by)
+       VALUES ('devbox:task', :title, :payload::jsonb, 'pr-watch') RETURNING id`,
+      [
+        s('title', `PR #${pr.number}: ${pr.title}`.slice(0, 300)),
+        // model rides the payload so the job dispatcher runs the bot's configured
+        // model, not its own default.
+        s('payload', JSON.stringify({ prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model })),
+      ],
+    );
+    jobId = toStr(jobRows[0]?.['id']);
+    // Through the provider's ceiling-guarded insert — the same atomic guard the
+    // manual/cron/marketplace paths use, so a pr_watch dispatch cannot slip past
+    // the global concurrency ceiling in a race.
+    const run = await createBotRun({
+      botId: bot.id, trigger: 'pr_watch', jobId, ceiling: botMaxConcurrent(),
+      outcome: { prNumber: pr.number, prUrl: pr.url, ...(holdId ? { holdId } : {}) },
+    });
+    if (!run) {
+      // Ceiling refused the row: un-enqueue the job so it does not run untracked,
+      // and fail the dispatch — the watermark stays behind and retries next tick.
+      await exec(`DELETE FROM agent_jobs WHERE id = :jid AND status = 'queued'`, [s('jid', jobId)]);
+      throw new Error('concurrency ceiling reached');
+    }
+    // The job dispatcher skips the hold for a bot-owned job, so this hold is
+    // the only money held for the firing.
+    if (holdId) await bindHoldSource(holdId, 'bot_run', run.id);
+  } catch (err) {
+    await releaseHold(holdId);
+    throw err;
+  }
+  return { kind: 'dispatched' };
 }
 
 /** The PR-watch half of a tick: one bot at a time, brakes per dispatch. */
@@ -317,7 +342,19 @@ async function pollWatchedBots(tokens: Map<string, string | null>): Promise<{ di
         break;
       }
       try {
-        await dispatchPrRun(bot, pr);
+        const result = await dispatchPrRun(bot, pr);
+        if (result.kind === 'refused') {
+          // A run limit, kill switch or cap refused the hold. Like cron: a
+          // visible skipped run naming the PRs, and the trigger is consumed
+          // (the watermark lands past them below) — re-trying every tick
+          // would write a skipped row per tick for one event.
+          await recordSkippedRun(bot.id, {
+            reason: result.reason,
+            ...(result.gate ? { gate: result.gate } : {}),
+            prNumbers: toDispatch.filter((p) => p.number >= pr.number).map((p) => p.number),
+          });
+          break;
+        }
       } catch (err) {
         console.warn(`[pr-watch] dispatch failed for ${bot.repoFullName}#${pr.number}:`, (err as Error).message);
         errors++;

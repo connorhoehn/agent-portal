@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 import {
   usd, modelLabelFor, ago, maintenanceStats, maintenanceTitle,
-  mergeInitiativesWithBudgets, remainingHint, remainingTitle, rowBudgetStats,
+  budgetPeriodLabel, mergeInitiativesWithBudgets, remainingHint, remainingTitle, rowBudgetStats,
 } from '../budgetsFormat.ts';
 import type { BudgetRow } from '../types.ts';
 
@@ -157,4 +157,10 @@ test('mergeInitiativesWithBudgets: a budget row missing from the initiative list
 test('ago() reads a Postgres `+00` stamp instead of printing an em dash', () => {
   const out = ago(new Date(Date.now() - 3 * 3_600_000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '+00'));
   assert.equal(out, '3h ago');
+});
+
+test('budgetPeriodLabel: between sprints is flagged, the key names an open window, absent says nothing', () => {
+  assert.deepEqual(budgetPeriodLabel({ periodKey: null, periodState: 'between-sprints' }), { betweenSprints: true, key: null });
+  assert.deepEqual(budgetPeriodLabel({ periodKey: '2026-Q4', periodState: 'open' }), { betweenSprints: false, key: '2026-Q4' });
+  assert.deepEqual(budgetPeriodLabel({}), { betweenSprints: false, key: null });
 });

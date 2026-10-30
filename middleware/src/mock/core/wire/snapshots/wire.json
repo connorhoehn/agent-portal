@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-29T22:57:27.968Z",
-  "serverHandlerSha": "59642a0ef4a25ad752c924bef6cdef3a57090654daaaf5fdf1e672dd36bea305",
+  "capturedAt": "2026-10-30T00:05:06.424Z",
+  "serverHandlerSha": "37ac68c04ae0f304cedcfcb02e04eb7cb29cbed1a967b357fae0d9a1747294c9",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -2986,12 +2986,12 @@
         "boxes[].status": "string",
         "boxes[].stopsInMs": "number",
         "boxes[].taskMsLeft": "number",
+        "boxes[].taskStartedAt": "string",
         "boxes[].tokensUsed": "number"
       },
       "values": {
         "boxes[].status": [
           "idle",
-          "provisioning",
           "running",
           "waiting"
         ]
@@ -3858,11 +3858,15 @@
         "$[].key": [
           "ORG-AUTH-1",
           "ORG-AUTH-2",
+          "ORG-AUTH-3",
           "ORG-AUTH-5",
+          "ORG-AUTH-7",
           "ORG-AUTH-8",
+          "ORG-AUTH-9",
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
+          "ORG-DS-1",
           "ORG-DS-3",
           "ORG-DS-4",
           "ORG-DSAPI-1",
@@ -3870,10 +3874,8 @@
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
+          "ORG-FS-4",
           "ORG-INF-1",
-          "ORG-INF-2",
-          "ORG-INF-3",
-          "ORG-INF-4",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -3881,9 +3883,6 @@
           "ORG-LLM-10",
           "ORG-LLM-3",
           "ORG-LLM-4",
-          "ORG-LLM-5",
-          "ORG-LLM-7",
-          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
@@ -3900,6 +3899,7 @@
           "ORG-RTA-2",
           "ORG-RTA-3",
           "ORG-RTA-5",
+          "ORG-SOC2-1",
           "ORG-SOC2-2",
           "ORG-SOC2-3",
           "ORG-SOC2-4",
@@ -3946,7 +3946,15 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "criteria": "array"
+        "criteria": "array",
+        "criteria[]": "object",
+        "criteria[].createdAt": "string",
+        "criteria[].done": "boolean",
+        "criteria[].id": "string",
+        "criteria[].position": "number",
+        "criteria[].text": "string",
+        "criteria[].updatedAt": "string",
+        "criteria[].workItemId": "string"
       },
       "values": {}
     },
@@ -6070,6 +6078,9 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "livePointers": "object",
+        "livePointers.orgiq-search": "null",
+        "livePointers.orgiq-supervisor": "null",
         "versions": "array",
         "versions[]": "object|object(dictionary)",
         "versions[].agentId": "string",
@@ -7541,7 +7552,6 @@
       "values": {
         "edges[].status": [
           "completed",
-          "error",
           "idle",
           "running",
           "waiting"
@@ -7554,7 +7564,6 @@
         ],
         "nodes[].status": [
           "completed",
-          "error",
           "idle",
           "running",
           "waiting"

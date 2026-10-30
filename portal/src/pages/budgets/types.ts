@@ -31,6 +31,11 @@ export interface BudgetRow {
   discretionaryHeldUsd?: number;
   /** What every human, job and box dispatch is judged against; null without an allocation. */
   discretionaryRemainingUsd?: number | null;
+  // ── DE-38 budget periods (absent on an older BFF) ──
+  /** 'YYYY-MM' | 'YYYY-Qn' | sprint id; null for rolling and between sprints. */
+  periodKey?: string | null;
+  /** 'between-sprints': a sprint-period allocation with no sprint open, so it is not in force. */
+  periodState?: 'open' | 'between-sprints';
 }
 
 export interface BudgetSummary {
@@ -140,6 +145,8 @@ export interface InitiativeSpend {
   allocation?: {
     allocatedUsd: number | null;
     period: string | null;
+    periodKey?: string | null;
+    periodState?: 'open' | 'between-sprints';
     spentUsd: number;
     runCount: number;
     unknownCount: number;

@@ -140,3 +140,13 @@ export function rowBudgetStats(row: Pick<BudgetRow, 'allocatedUsd' | 'spentThisP
     : null;
   return { blindSpot, remaining, burn };
 }
+
+/**
+ * How a budget's period reads on the page (DE-38): a sprint-period allocation
+ * with no sprint open is "between sprints" (not in force), otherwise the
+ * period key ('2026-10', '2026-Q4', a sprint id) names the window. Absent
+ * fields (an older BFF, a rolling period) say nothing.
+ */
+export function budgetPeriodLabel(p: { periodKey?: string | null | undefined; periodState?: 'open' | 'between-sprints' | undefined }): { betweenSprints: boolean; key: string | null } {
+  return { betweenSprints: p.periodState === 'between-sprints', key: p.periodKey ?? null };
+}

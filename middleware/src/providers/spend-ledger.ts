@@ -270,13 +270,38 @@ export function botRunSpendSql(withDispatchedBy: boolean, where = 'br.id = :id::
  * known; an unknown-cost entry leaves its hold to expire. A cluster without
  * spend_holds writes the entry alone, exactly as before.
  */
-async function writeAndSettle(source: SpendSource, sourceId: string, write: (run: TxExec) => Promise<unknown>): Promise<void> {
+async function writeAndSettle(source: SpendSource, sourceId: string, write: (run: TxExec) => Promise<Record<string, any>[]>): Promise<Record<string, any>[]> {
   const withHolds = await hasColumns('spend_holds', ['source_id']).catch(() => false);
-  if (!withHolds) { await write(exec); return; }
-  await withTransaction(async (tx) => {
-    await write(tx);
+  if (!withHolds) return write(exec);
+  return withTransaction(async (tx) => {
+    const rows = await write(tx);
     await tx(SETTLE_HOLD_SQL, [s('source', source), s('sid', sourceId)]);
+    return rows;
   });
+}
+
+/** The columns the SQL ledger writers hand back, for the spend-rate metric. */
+const SPEND_RETURNING = ' RETURNING cost_usd, initiative_id, actor_id';
+
+/**
+ * The spend-rate line (DE-50) for a ledger row written through SQL, which
+ * recordSpend never sees. RETURNING yields a row only when the statement
+ * inserted or completed it, so a retried write that changed nothing emits
+ * nothing. Best-effort: never throws.
+ */
+function emitSqlSpendMetric(source: SpendSource, rows: Record<string, any>[], provider?: string | null): void {
+  try {
+    const r = rows[0];
+    if (!r) return;
+    const cost = r['cost_usd'] == null ? null : Number(r['cost_usd']);
+    emitSpendMetric({
+      costUsd: cost != null && Number.isFinite(cost) ? cost : null,
+      initiativeId: r['initiative_id'] == null ? null : String(r['initiative_id']),
+      actorId: r['actor_id'] == null ? null : String(r['actor_id']),
+      source,
+      provider: provider ?? (r['provider'] == null ? null : String(r['provider'])),
+    });
+  } catch { /* a metric must never fail the ledger write */ }
 }
 
 /** Write (or complete) the ledger entry for a settled bot run. Best-effort. */
@@ -286,7 +311,8 @@ export async function recordBotRunSpend(runId: string): Promise<void> {
     const withBy = await hasColumns('bot_runs', ['dispatched_by']);
     const withEstimate = await hasColumns('spend_entries', ['estimated_cost_usd']);
     const withProvider = await hasColumns('spend_entries', ['provider']) && await hasColumns('bot_runs', ['model_provider']);
-    await writeAndSettle('bot_run', runId, (run) => run(botRunSpendSql(withBy, undefined, withEstimate, withProvider), [s('id', runId)]));
+    const rows = await writeAndSettle('bot_run', runId, (run) => run(botRunSpendSql(withBy, undefined, withEstimate, withProvider) + SPEND_RETURNING + (withProvider ? ', provider' : ''), [s('id', runId)]));
+    emitSqlSpendMetric('bot_run', rows);
   } catch (err) {
     if (missingTable(err)) return;
     console.warn(`[spend-ledger] bot run ${runId} not recorded: ${(err as Error).message}`);
@@ -330,7 +356,8 @@ export async function recordAgentProjectRunSpend(runId: string): Promise<void> {
   try {
     const withBy = await hasColumns('agent_project_runs', ['dispatched_by']);
     const withEstimate = await hasColumns('spend_entries', ['estimated_cost_usd']);
-    await writeAndSettle('agent_project_run', runId, (run) => run(agentProjectRunSpendSql(withBy, withEstimate), [s('id', runId)]));
+    const rows = await writeAndSettle('agent_project_run', runId, (run) => run(agentProjectRunSpendSql(withBy, withEstimate) + SPEND_RETURNING, [s('id', runId)]));
+    emitSqlSpendMetric('agent_project_run', rows);
   } catch (err) {
     if (missingTable(err)) return;
     console.warn(`[spend-ledger] agent-project run ${runId} not recorded: ${(err as Error).message}`);

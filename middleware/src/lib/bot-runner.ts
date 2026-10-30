@@ -1029,6 +1029,35 @@ async function botFireForecast(model: string, agentProjectId: string | null): Pr
   return { costUsdP75: f.estimate.costUsdP75, costUsdP25: f.estimate.costUsdP25, confidence: f.confidence };
 }
 
+/**
+ * The spend hold for one firing of a bot, whatever the trigger: manual, cron
+ * and pr_watch all go through here so none takes a run slot another path
+ * cannot see. A scheduled trigger (anything but manual) is judged without
+ * confirm flags; an essential bot's scheduled firing spends the maintenance
+ * reserve (DE-55).
+ */
+export async function reserveBotFiring(
+  bot: Bot,
+  trigger: 'manual' | 'cron' | 'pr_watch',
+  dispatchedBy: string | null,
+  confirmed?: { allocation?: boolean; envelope?: boolean; userBudget?: boolean },
+): Promise<ReserveSpendResult> {
+  const scheduled = trigger !== 'manual';
+  return reserveSpend({
+    initiativeId: await resolveBotInitiativeId(bot), actorId: dispatchedBy, source: 'bot_run',
+    forecast: await botFireForecast(bot.model, bot.agentProjectId),
+    ...(confirmed ? { confirmed } : {}),
+    essential: scheduled && botIsEssential(bot) && !bot.enforceAllocation,
+    expiresInMs: dispatchHoldTtlMs(),
+  });
+}
+
+/** The skipped-run outcome gate tag for a refused hold (shared by cron and pr_watch). */
+export function refusalGate(held: Exclude<ReserveSpendResult, { kind: 'held' }>): { gate?: string } {
+  return held.kind === 'limited' ? { gate: 'run-limit' } : held.kind === 'paused' ? { gate: 'paused' }
+    : 'gate' in held && held.gate ? { gate: held.gate } : {};
+}
+
 /** Dispatch one run of a bot. The single entry point for every trigger. */
 /**
  * Who a change captured by a bot run answers to (DE-43): the person who
@@ -1080,15 +1109,8 @@ export async function fireBot(botId: string, opts: {
   //     `enforce_allocation`, is discretionary spend nobody can confirm.
   // A refused scheduled firing records a *skipped* bot_run (never a
   // self-pause) and the next cycle re-evaluates once money frees.
-  const orgProjectId = await resolveBotInitiativeId(bot);
   const scheduled = opts.trigger !== 'manual';
-  const held = await reserveSpend({
-    initiativeId: orgProjectId, actorId: opts.dispatchedBy ?? null, source: 'bot_run',
-    forecast: await botFireForecast(bot.model, bot.agentProjectId),
-    ...(opts.confirmed ? { confirmed: opts.confirmed } : {}),
-    essential: scheduled && botIsEssential(bot) && !bot.enforceAllocation,
-    expiresInMs: dispatchHoldTtlMs(),
-  });
+  const held = await reserveBotFiring(bot, opts.trigger, opts.dispatchedBy ?? null, opts.confirmed);
   if (held.kind !== 'held') {
     if (!scheduled) return { ok: false, reason: held.reason, refusal: held };
     // Nobody is there to pass a confirm flag for a scheduled firing, so the
@@ -1097,11 +1119,7 @@ export async function fireBot(botId: string, opts: {
     const run = await createBotRun({
       botId: bot.id, trigger: opts.trigger, status: 'skipped',
       dispatchedBy: opts.dispatchedBy ?? null,
-      outcome: {
-        reason,
-        ...(held.kind === 'limited' ? { gate: 'run-limit' } : held.kind === 'paused' ? { gate: 'paused' }
-          : 'gate' in held && held.gate ? { gate: held.gate } : {}),
-      },
+      outcome: { reason, ...refusalGate(held) },
     });
     return { ok: false, reason, refusal: held, ...(run ? { run } : {}) };
   }

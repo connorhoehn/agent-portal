@@ -24,7 +24,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { LockedFigure } from '../projects/BudgetAccess';
-import { ago, modelLabelFor, usd } from './budgetsFormat';
+import { ago, budgetPeriodLabel, modelLabelFor, usd } from './budgetsFormat';
 import { SpendFigureCell } from './SpendGroupTable';
 import {
   basisLabel, envelopeBurn, fitPill, moneyOrDash, peopleWithEnvelopes, remainingTone, spendReportUrl,
@@ -59,6 +59,9 @@ function AllocationStrip({ ini }: { ini: InitiativeSpend }) {
           ...(a.allocatedUsd == null ? { tone: 'danger' as const } : {}),
           title: a.effectiveHardCapUsd != null ? `Monthly allocation for ${MONTH_LABEL}; hard cap ${usd(a.effectiveHardCapUsd)}` : `Monthly allocation for ${MONTH_LABEL}`,
         },
+        ...(budgetPeriodLabel(a).betweenSprints
+          ? [{ label: 'period', value: 'between sprints', title: 'No sprint is open, so this sprint allocation is not in force; the spend shown is the calendar month’s' }]
+          : budgetPeriodLabel(a).key ? [{ label: 'period', value: budgetPeriodLabel(a).key as string, title: 'The budget period this allocation is in force for' }] : []),
         {
           label: 'maintenance floor',
           value: r.reserveUsd == null ? usd(r.floorSpentUsd) : `${usd(r.floorSpentUsd)} of ${usd(r.reserveUsd)}`,

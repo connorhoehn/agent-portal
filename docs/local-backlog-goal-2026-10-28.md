@@ -223,10 +223,11 @@ summary are in `.scratch/resume-2026-10-28/`.
 
 ## Next session
 
-**Follow-ups (2026-10-29):** PR-watch enqueue takes no run-limit slot; the
-spend metric line skips bot-run/governed-run settles (SQL path); `harness.ts`
-still keys promoted_at by prompt sha (DE-4); decks/summaries are not metered;
-the budgets page does not label "between sprints"; journey logs need a walk.
+**Follow-ups (2026-10-29): done** — PR-watch takes a hold/slot; the spend
+metric fires for SQL settles; `GET /api/harness/promoted-versions` reports
+the live prompt pointers; deck/summary model calls run inside AgentCore
+runtimes (no BFF usage to meter; their traces carry tokens); the budgets
+page labels the period and "between sprints". Journey logs need a walk.
 
 Read `docs/budget-system-analysis-2026-10-28.md` first: it re-orders the money
 rows (2–12) toward the intended model (real Bedrock dollars, per-user budgets,

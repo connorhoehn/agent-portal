@@ -26,7 +26,7 @@ import {
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { usd, ago, rowBudgetStats } from './budgetsFormat';
+import { usd, ago, rowBudgetStats, budgetPeriodLabel } from './budgetsFormat';
 import type { BudgetAccessLock, BudgetRow, InitiativeOption } from './types';
 import { absoluteTime } from '../../lib/relativeTime';
 import { LockedFigure } from '../projects/BudgetAccess';
@@ -299,6 +299,11 @@ export function InitiativesReport({
               blind spot
             </Chip>
           )}
+          {budgetPeriodLabel(row).betweenSprints && (
+            <Chip tone="neutral" size="xs" title="No sprint is open, so this sprint allocation is not in force and the spend shown is the calendar month’s">
+              between sprints
+            </Chip>
+          )}
         </Inline>
       ),
     },
@@ -306,7 +311,14 @@ export function InitiativesReport({
       key: 'allocated',
       header: 'Allocated',
       numeric: true,
-      render: (row) => <AllocationCell row={row} canManage={canManage} onSaved={refresh} />,
+      render: (row) => (
+        <Inline align="center" justify="end" gap="sm" wrap={false}>
+          {budgetPeriodLabel(row).key && row.allocatedUsd != null && (
+            <T size="xs" tone="tertiary" title="The budget period this allocation is in force for">{budgetPeriodLabel(row).key}</T>
+          )}
+          <AllocationCell row={row} canManage={canManage} onSaved={refresh} />
+        </Inline>
+      ),
     },
     {
       key: 'floor',

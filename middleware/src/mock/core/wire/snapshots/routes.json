@@ -2793,92 +2793,92 @@
     {
       "method": "GET",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:450"
+      "source": "src/routes/harness.ts:451"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:519"
+      "source": "src/routes/harness.ts:520"
     },
     {
       "method": "DELETE",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:676"
+      "source": "src/routes/harness.ts:677"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:478"
+      "source": "src/routes/harness.ts:479"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:594"
+      "source": "src/routes/harness.ts:595"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/coverage",
-      "source": "src/routes/harness.ts:1193"
+      "source": "src/routes/harness.ts:1194"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/promote",
-      "source": "src/routes/harness.ts:1568"
+      "source": "src/routes/harness.ts:1569"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/promoted-versions",
-      "source": "src/routes/harness.ts:1678"
+      "source": "src/routes/harness.ts:1697"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/results/:invocationId/rejudge",
-      "source": "src/routes/harness.ts:1140"
+      "source": "src/routes/harness.ts:1141"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:807"
+      "source": "src/routes/harness.ts:808"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:706"
+      "source": "src/routes/harness.ts:707"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:830"
+      "source": "src/routes/harness.ts:831"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:1051"
+      "source": "src/routes/harness.ts:1052"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:id/execute",
-      "source": "src/routes/harness.ts:765"
+      "source": "src/routes/harness.ts:766"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id/status",
-      "source": "src/routes/harness.ts:888"
+      "source": "src/routes/harness.ts:889"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:runId/results",
-      "source": "src/routes/harness.ts:949"
+      "source": "src/routes/harness.ts:950"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:runIdA/compare/:runIdB",
-      "source": "src/routes/harness.ts:1431"
+      "source": "src/routes/harness.ts:1432"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/trace",
-      "source": "src/routes/harness.ts:336"
+      "source": "src/routes/harness.ts:337"
     },
     {
       "method": "GET",
