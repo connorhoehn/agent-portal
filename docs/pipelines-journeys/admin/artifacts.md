@@ -4,8 +4,8 @@ user: u-operator (Platform Operator)
 url: /pipelines/artifacts; /pipelines/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb
 map: docs/journeys/maps/pipelines/admin/artifacts.ts
 pages: portal/src/pages/pipelines/ArtifactsPage.tsx
-audited: 2026-10-29 21:38–21:38 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-b276ffd0), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-operator-clone-b276ffd0, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
+audited: 2026-10-31 19:13–19:13 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-91cd735d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-operator-clone-91cd735d, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
 screenshot: artifacts.jpg
 verdict: fail — 1 of 13 steps failed; step 8 (The opened record has loaded): 5 ui-dom-audit finding(s): a11y.contrast ×4, a11y.heading-order ×1
 console errors: 0

@@ -20,7 +20,7 @@ const surface = (over = {}) => ({
 
 test('the social profile carries the PROTOCOL fields validate-social-tenant.sh greps', () => {
   assert.deepEqual(claimFields('social', 'surface'), ['keyboard', 'empty-state', 'realtime', 'role-gating']);
-  assert.deepEqual(claimFields('social', 'isolation-inbound'), ['social-grant', 'social-tile-visible', 'social-nav-visible', 'direct-route-result', 'api-status', 'activity-leak']);
+  assert.deepEqual(claimFields('social', 'isolation-inbound'), ['social-grant', 'social-tile-visible', 'social-nav-visible', 'direct-route-result', 'api-status', 'activity-leak', 'forged-subscribe']);
   assert.deepEqual(claimFields('social', 'isolation-outbound'), ['orgiq-nav-visible', 'orgiq-route-result', 'orgiq-api-status', 'assessment-nav-visible', 'assessment-route-result', 'assessment-api-status']);
   for (const kind of Object.keys(PROFILES.social)) for (const f of ['verdict', 'console errors', 'screenshot', 'pages']) assert.ok(PROFILES.social[kind].includes(f), `${kind} has ${f}`);
 });
@@ -66,6 +66,10 @@ test('every social map validates: 36 role × surface maps and 12 isolation maps,
   assert.equal(maps.filter(({ map }) => map.kind === 'surface').length, 36);
   assert.equal(maps.filter(({ map }) => map.kind.startsWith('isolation')).length, 12);
   for (const { map } of maps) {
+    if (map.kind === 'isolation-inbound' && map.claims['social-grant'] === 'no') {
+      assert.equal(map.claims['forged-subscribe'], 'AUTHZ_CHANNEL_DENIED');
+      assert.ok(map.steps.some(s => s.do === 'gateway-refusal' && s.channel === 'social:ch:general' && s.proves === 'forged-subscribe'), `${map.log} proves the gateway refusal`);
+    }
     // Only a hangout's call is joined (by a clone peer, on the gateway, signalling-only media); nothing else writes.
     if (map.log.endsWith('/rooms')) assert.deepEqual([map.scenario, map.media, map.identity], [{ realtime: 'meeting' }, 'meeting-fixture', 'clone']);
     else { assert.ok(!map.writes, `${map.log} writes nothing`); assert.equal(map.scenario, 'shared', `${map.log} walks the shared mock read-only`); }

@@ -83,6 +83,14 @@ a constant, the visible count of a target, or another element's number),
 and `noHscroll` (on by default). `expectConsole` names console errors a step
 expects (a 404 lookup); any other console error fails the step.
 
+`gateway-refusal {channel}` proves tenant isolation over the actual WebSocket:
+chat history and presence subscription must return `AUTHZ_CHANNEL_DENIED`,
+and chat join must be refused by that gate or its earlier `not-a-member`
+check, with no channel data received. Each refusal is recorded. It sends no message,
+closes its socket on success or failure, and logs counts without tokens or
+disclosed content. Social inbound maps require this proof when the identity
+holds no Social grant.
+
 `check` refuses a map where a claim field of its kind is proven by no step, a
 step writes without `writes: true`, a writing map has no scope, a non-GET api
 call in a read-only map is not a 4xx refusal probe with a `refusal` reason

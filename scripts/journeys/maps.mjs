@@ -47,7 +47,7 @@ export const PROFILES = {
   // outbound one (a social role reaching for orgiq and assessment) the six orgiq-* and assessment-* fields.
   social: {
     surface: ['surface', 'role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'screenshot', 'verdict', 'console errors', 'layout', 'keyboard', 'empty-state', 'realtime', 'role-gating', 'dom-audit', 'notes'],
-    'isolation-inbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'social-grant', 'social-tile-visible', 'social-nav-visible', 'direct-route-result', 'api-status', 'activity-leak', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
+    'isolation-inbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'social-grant', 'social-tile-visible', 'social-nav-visible', 'direct-route-result', 'api-status', 'activity-leak', 'forged-subscribe', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
     'isolation-outbound': ['role', 'user', 'url', 'map', 'pages', 'audited', 'session', 'orgiq-nav-visible', 'orgiq-route-result', 'orgiq-api-status', 'assessment-nav-visible', 'assessment-route-result', 'assessment-api-status', 'console errors', 'dom-audit', 'screenshot', 'verdict', 'notes'],
   },
   // docs/demo-journeys/PROTOCOL.md (docs/demo-content-goal.md): one story per tenant a peer follows in five
@@ -130,7 +130,7 @@ export function validateMap(map, file = '(map)') {
     const n = `step ${i + 1}`;
     if (!s.name) at(`${n} has no name`);
     if (s.actor && !Object.hasOwn(map.peers ?? {}, s.actor)) at(`${n}: unknown peer ${s.actor}`);
-    if (!['navigate', 'click', 'press', 'fill', 'back', 'wait', 'tab-walk', 'api', 'reload', 'viewport', 'theme', 'scope'].includes(s.do)) at(`${n}: unknown action ${s.do}`);
+    if (!['navigate', 'click', 'press', 'fill', 'back', 'wait', 'tab-walk', 'api', 'gateway-refusal', 'reload', 'viewport', 'theme', 'scope'].includes(s.do)) at(`${n}: unknown action ${s.do}`);
     if (s.do === 'viewport' && !(s.width > 0 && s.height > 0)) at(`${n}: viewport needs width and height`);
     if (s.do === 'theme' && !['light', 'dark'].includes(s.value)) at(`${n}: theme is light or dark`);
     if (s.do === 'scope' && !(typeof s.scope === 'string' || (s.scope && typeof s.scope === 'object'))) at(`${n}: scope needs a scope request (a scenario name or { scenario, fixture, fixtures })`);
@@ -141,6 +141,7 @@ export function validateMap(map, file = '(map)') {
     if (s.do === 'fill' && typeof s.value !== 'string') at(`${n}: fill needs a value`);
     if (s.do === 'press' && !s.key) at(`${n}: press needs a key`);
     if (s.audit === false && !s.auditReason) at(`${n}: audit: false needs an auditReason`);
+    if (s.do === 'gateway-refusal' && !/^[a-z][a-z0-9-]*:[^\s]+$/.test(s.channel ?? '')) at(`${n}: gateway-refusal needs a channel`);
     if (s.do === 'api') {
       const method = s.method ?? 'GET';
       if (!/^\/api\//.test(s.url ?? '')) at(`${n}: api needs an /api/ path`);
@@ -195,6 +196,7 @@ const failureOf = (s) => s.failures?.[0] ?? (s.unexpectedConsole?.length ? `cons
 /** The sentence a step contributes to a field: its name plus what it observed. */
 export function stepSentence(s) {
   const extra = [];
+  if (s.gateway) extra.push(`${s.gateway.channel}: ${s.gateway.denied.map(d => d === 'chat/not-a-member' ? 'chat join: not-a-member' : `${d}: AUTHZ_CHANNEL_DENIED`).join(', ')}; ${s.gateway.leaked} disclosed frames`);
   if (s.api) extra.push(`${s.api.method} ${s.api.url} → ${s.api.status}`);
   if (s.keyboard) extra.push(`Tab visited ${s.keyboard.visited} distinct visible controls of ${s.keyboard.total} focusable${s.keyboard.lost ? `, focus lost ${s.keyboard.lost}×` : ''}${s.keyboard.invisible ? `, ${s.keyboard.invisible} invisible stop(s)` : ''}`);
   if (s.do === 'navigate' && s.landed && s.landed !== s.url) extra.push(`${s.url} → ${s.landed}`);
@@ -305,7 +307,7 @@ export function stepRoutes(map, routeKey) {
   for (const s of map.steps) {
     if (s.do === 'navigate' || (s.do === 'scope' && s.url)) at = s.url;
     if (typeof s.expect?.url === 'string') at = s.expect.url;
-    if (s.do === 'api' || s.do === 'tab-walk' || (s.do === 'scope' && !s.url)) continue;
+    if (s.do === 'api' || s.do === 'gateway-refusal' || s.do === 'tab-walk' || (s.do === 'scope' && !s.url)) continue;
     const key = at ? routeKey(at) : null;
     if (!key) continue;
     const refused = s.expect?.urlNot && s.expect.urlNot.test(at);
@@ -369,10 +371,11 @@ export function coverageMarkdown(model, { families, pending = [] }) {
     '`docs/journeys/maps/` and the route inventory (`portal/e2e/route-inventory.ts`); do not edit',
     'by hand. A cell lists the UI states a map shows that route in, for that tenant:role. Only maps',
     'count — a hand-walked log is not a map. See docs/journeys.md "Journey maps".',
+    'This is static map coverage, not a count of executed or passing walks.',
     '',
     `- **${t.maps} maps** (families: ${families.join(', ') || 'none'})`,
     `- **routes:** ${t.visited} of ${t.routes} inventoried routes visited by a map (${t.routes ? Math.round((100 * t.visited) / t.routes) : 0}%)${t.offInventory ? `; ${t.offInventory} visited route(s) are not in the inventory` : ''}`,
-    `- **roles:** ${t.rolesWalked} of ${t.roles} tenant roles walked`,
+    `- **roles:** ${t.rolesWalked} of ${t.roles} tenant roles mapped (including cross-tenant roles in each tenant)`,
     `- **cells:** ${t.roleCells} route × role cells, ${t.stateCells} route × role × state cells, ${t.distinctStates} distinct states`,
     '',
     '## Covered',

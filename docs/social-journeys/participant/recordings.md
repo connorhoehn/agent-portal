@@ -1,20 +1,30 @@
 surface: recordings
 role: participant
-user: u-sana
-url: /social/recordings
+user: u-sana (Sana Iqbal)
+url: /social/recordings; /social/recordings?recording=no-such-recording
+map: docs/journeys/maps/social/participant/recordings.ts
 pages: portal/src/pages/social/RecordingsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/RecordingsPane.tsx
-audited: 2026-10-24 14:13–14:16 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-sana (u-sana-clone-bba97303), second context none for this seeded unavailable-media walk; Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: /api/session/me sub u-sana-clone-bba97303 (a clone of u-sana), tenant social, role participant
+audited: 2026-10-31 19:29–19:29 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-564710bd), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-sana-clone-564710bd, tenant social, role participant, grants {"social":["participant"]}
 screenshot: recordings.jpg
 verdict: pass
 console errors: 0
-layout: pass — rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940
-keyboard: pass — 8 distinct Tab stops against 8 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity); Enter on the focused Design reviews row opened ?recording=2026-10-24T16-38-54-409Z-journeydd14a9
-empty-state: pass — a browser-side stub of GET /api/social/recordings answering zero rows (this context only) rendered "No recordings yet A recorded call lands here for everyone who was on it. Nothing you were on has been recorded in this workspace."; ?recording=no-such-recording rendered "This recording is not available It does not exist, or you were not on the call."
-realtime: n/a — the list polls every 30s; no push delivery is claimed
-role-gating: no ManageRecordings: Share controls 0, Delete controls 0 in the DOM with two recordings listed; POST /api/social/recordings/<a listed id>/share → 403, DELETE /api/social/recordings/<a listed id> → 403
-list: 2 recordings from source "platform"; rows: "Failed 5m 12s Mira Okafor 2 Oct 24, 1:44 PM Failed 12m 34s design-reviews 2 Oct 24, 12:38 PM"
-player: opened 2026-10-24T16-38-54-409Z-journeydd14a9: "design-reviews Summarize 10/24/2026, 12:38:54 PM Nothing to play There is no playable file for this recording. Length 12m 34s People Sana Iqbal, Mira Okafor Started by u-sana-clone-bba97303 Expires 11"; the player area read "Nothing to play There is no playable file for this recording." (GET …/playback → 200 {"recordingId":"2026-10-24T16-38-54-409Z-journeydd14a9","playlistUrl":null,"mediaState":"unavailable"}); facts "Length 12m 34s People Sana Iqbal, Mira Okafor Started by u-sana-clone-bba97303 Expires 11/23/2026"; Summarize disabled ("The transcript is not ready yet.")
-seeded: the two rows on this walk were seeded (seed.sh, through platform-api's CallRecordingRepository.putRecording into the Social DynamoDB): 2026-10-24T16-38-54-409Z-journeydd14a9, 2026-10-24T17-44-03-905Z-journey023f0b; they carry no media and composeStatus failed, so the stage reads failed and the player has nothing to play. This is not a media playback. Both rows were removed afterwards with unseed-recordings.ts.
-real-path: Real capture and playback are tracked separately in .scratch/social-handoff-2026-10-24/real-recording.json; this log exercises rows intentionally seeded without media.
-notes: Not exercised: real media playback (these seeded rows have no media), the Summarize run (disabled while the stage is not ready). 84 /api/social requests on this walk.
+layout: pass — ui-dom-audit 0 failing findings at 2 measured step(s) (burn-down findings are listed under dom-audit:); at /social/recordings: no horizontal scroll (1680/1680), 2 h1 "Recordings" 16/400 at 199/43, first-row-top: 84px
+keyboard: pass — Tab from the top of the page through every control (Tab visited 31 distinct visible controls of 31 focusable)
+empty-state: pass — Open Recordings: the shelf’s list, empty for a fresh identity; An unknown recording id still shows the honest empty list, not a broken player
+realtime: n/a — the list is fetched on open and on refresh; no push delivery is claimed — The list is fetched and refreshed, not pushed: nothing on it is live
+role-gating: pass — The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration; Sharing a recording is refused by Cedar (no ManageRecordings) (POST /api/social/recordings/no-such-recording/share → 403); Deleting a recording is refused by Cedar (DELETE /api/social/recordings/no-such-recording → 403)
+dom-audit: 0 failing finding(s) at 2 measured step(s); 2 more owed by docs/journeys/audit-burndown.tsv (a11y.heading-order ×2) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Sana (participant) reads the recordings list, whose share and delete gates refuse this role. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/social/participant/recordings).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Recordings: the shelf’s list, empty for a fresh identity | empty | pass | 0 finding(s) | /social/recordings |
+| 2 | The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration | default | pass | not measured: the resting state the first step measured | /social/recordings |
+| 3 | Sharing a recording is refused by Cedar (no ManageRecordings) (POST /api/social/recordings/no-such-recording/share → 403) |  | pass | — | /social/recordings |
+| 4 | Deleting a recording is refused by Cedar (DELETE /api/social/recordings/no-such-recording → 403) |  | pass | — | /social/recordings |
+| 5 | Tab from the top of the page through every control (Tab visited 31 distinct visible controls of 31 focusable) |  | pass | — | /social/recordings |
+| 6 | An unknown recording id still shows the honest empty list, not a broken player | not-found | pass | 0 finding(s) | /social/recordings?recording=no-such-recording |
+| 7 | The list is fetched and refreshed, not pushed: nothing on it is live | default | pass | not measured: the resting state the first step measured | /social/recordings |

@@ -3,8 +3,8 @@ user: u-dara (Dara Whitfield)
 url: /pipelines/runs; /iq/projects; /iq/runs; /iq/search; /assessment/teams; /assessment/workspace?doc=page%3A100002; /social/channels; /social/dms
 map: docs/journeys/maps/pipelines/isolation/pipeline-admin-outbound.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-10-29 21:43–21:43 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-dara-clone-86a780d9), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-dara-clone-86a780d9, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
+audited: 2026-10-31 19:17–19:18 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-dara-clone-c17530b2), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-dara-clone-c17530b2, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
 other-nav-visible: no — The pipelines rail and page hold no link toward another tenant; The workspace chooser offers no other workspace (/select → /workspaces)
 iq-route-result: redirect — Type /iq/projects: the route sends this identity away (/iq/projects → /pipelines/runs); Type /iq/runs: the route sends this identity away (/iq/runs → /pipelines/runs); Type /iq/search: the route sends this identity away (/iq/search → /pipelines/runs)
 iq-api-status: 403 — GET /api/bots answers 403 (GET /api/bots → 403); GET /api/graph/people?limit=1 answers 403 (GET /api/graph/people?limit=1 → 403); GET /api/work/summary answers 403 (GET /api/work/summary → 403); GET /api/runs answers 403 (GET /api/runs → 403); GET /api/search?q=auth answers 403 (GET /api/search?q=auth → 403)

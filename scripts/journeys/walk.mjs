@@ -10,6 +10,7 @@
 //     measure(page, step) -> { findings, rules, issues, unclassified } | null,
 //     focusWalk(page, { count }) -> { total, steps },   // the skill's probe
 //     api?(context, { method, url, body }) -> status,   // default: the context's own APIRequestContext (its cookies)
+//     gatewayRefusal?(page, channel) -> { denied, leaked }, // bounded, read-only subscription/history proof
 //     scoped: boolean,                                   // open() puts the context under a request-scoped mock scenario (lane M)
 //     setScope?(context, scope) -> { dispose },          // a `scope` step: move this context into another scoped mock world
 //   }
@@ -89,8 +90,13 @@ export async function checkExpect(page, e = {}, ctx = {}) {
   for (const t of asList(e.hidden)) { const n = await visibleCount(locate(page, t)); if (n) f.push(`visible (expected hidden): ${describe(t)} ×${n}`); }
   for (const x of asList(e.text)) if (!(await page.getByText(x).first().waitFor({ state: 'visible', timeout: T.expect }).then(() => true, () => false))) f.push(`text not visible: ${x}`);
   if (e.noText?.length) {
-    const body = await page.evaluate(() => document.body.innerText);
-    for (const x of e.noText) if (x instanceof RegExp ? x.test(body) : body.includes(x)) f.push(`text present (expected none): ${x}`);
+    for (const x of e.noText) {
+      const absent = await poll(async () => {
+        const body = await page.evaluate(() => document.body.innerText);
+        return !(x instanceof RegExp ? new RegExp(x.source, x.flags).test(body) : body.includes(x));
+      });
+      if (!absent) f.push(`text present (expected none): ${x}`);
+    }
   }
   for (const t of asList(e.disabled)) if (!(await poll(() => locate(page, t).first().isDisabled({ timeout: 1000 })))) f.push(`not disabled: ${describe(t)}`);
   for (const t of asList(e.enabled)) if (!(await poll(() => locate(page, t).first().isEnabled({ timeout: 1000 })))) f.push(`not enabled: ${describe(t)}`);
@@ -226,15 +232,22 @@ export async function walkMap(browser, map, ctx) {
             if ([401, 410].includes(status)) result.authLost = `${status} ${step.url}`;
             break;
           }
+          case 'gateway-refusal': {
+            if (!ctx.gatewayRefusal) throw new Error('no gateway refusal probe configured');
+            s.gateway = await ctx.gatewayRefusal(page, step.channel);
+            if (s.gateway.leaked !== 0) s.failures.push(`gateway disclosed ${s.gateway.leaked} channel frame(s)`);
+            if (!s.gateway.denied.includes('chat/subscribe') || s.gateway.denied.filter(x => x === 'chat/subscribe' || x === 'chat/not-a-member').length < 2 || !s.gateway.denied.includes('presence/subscribe')) s.failures.push('gateway did not deny every subscription/history request');
+            break;
+          }
           default: throw new Error(`unknown action ${step.do}`);
         }
       } catch (e) { s.failures.push(`${step.do} failed: ${String(e.message).split('\n')[0]}`); }
-      if (step.do !== 'api' && !step.noSettle) await settle(page);
+      if (!['api', 'gateway-refusal'].includes(step.do) && !step.noSettle) await settle(page);
       if (before) { s.stable = await rects(page, step.stable); s.failures.push(...shifted(step.stable, before, s.stable)); }
       s.failures.push(...await checkExpect(page, step.expect, { status, keyboard: s.keyboard }).catch((e) => [`expectation error: ${e.message.split('\n')[0]}`]));
       const u = new URL(page.url());
       s.landed = u.pathname + u.search;
-      const pageStep = step.do !== 'api' && step.do !== 'tab-walk' && !(step.do === 'scope' && !step.url);
+      const pageStep = !['api', 'gateway-refusal', 'tab-walk'].includes(step.do) && !(step.do === 'scope' && !step.url);
       if (pageStep) {
         s.facts = await layoutFacts(page).catch(() => null);
         if (step.expect?.noHscroll !== false && s.facts && s.facts.scrollWidth > s.facts.innerWidth) s.failures.push(`horizontal scroll (${s.facts.scrollWidth} > ${s.facts.innerWidth})`);

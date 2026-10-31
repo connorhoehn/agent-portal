@@ -6,7 +6,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { walkMap } from '../walk.mjs';
+import { walkMap, checkExpect } from '../walk.mjs';
+import { gatewayRefusal } from '../gateway-refusal.mjs';
 
 const require = createRequire(new URL('../../../portal/package.json', import.meta.url));
 let chromium = null;
@@ -53,6 +54,66 @@ async function harness(t) {
   return { browser, ctx, writes, scopes };
 }
 const map = (steps, over = {}) => ({ family: 'access', log: 'r/s', kind: 'surface', scenario: 'shared', persona: { user: 'u-x', tenant: 'access', role: 'requester' }, goal: 'g', steps, ...over });
+
+test('negative text expectations wait for a live update but fail if the text remains', async (t) => {
+  const h = await harness(t); if (!h) return;
+  const context = await h.browser.newContext();
+  const page = await context.newPage();
+  await page.setContent('<p id="status">Nobody is here</p>');
+  await page.evaluate(() => setTimeout(() => { document.querySelector('#status').textContent = 'A peer arrived'; }, 250));
+  assert.deepEqual(await checkExpect(page, { noText: ['Nobody is here'] }), []);
+  assert.deepEqual(await checkExpect(page, { noText: [/A peer arrived/g] }), ['text present (expected none): /A peer arrived/g']);
+  await context.close();
+});
+
+test('gateway refusal requires every denial and no channel disclosure, and always closes its socket', async (t) => {
+  const h = await harness(t); if (!h) return;
+  const open = h.ctx.open;
+  h.ctx.open = async (...args) => {
+    const actor = await open(...args);
+    await actor.context.addInitScript(() => {
+      const original = window.fetch;
+      window.fetch = (url, options) => url === '/api/session/realtime-token'
+        ? Promise.resolve(new Response(JSON.stringify({ token: 'test-token', ...(window.probeMode === 'no-endpoint' ? {} : { gatewayUrl: location.origin }) })))
+        : original(url, options);
+      window.probeSent = []; window.probeClosed = 0;
+      window.WebSocket = class {
+        constructor(url) { window.probeSocketUrl = url; setTimeout(() => this.onopen?.(), 0); }
+        send(data) {
+          const frame = JSON.parse(data); window.probeSent.push(frame);
+          if (window.probeMode === 'silent' || (window.probeMode === 'missing-presence' && frame.service === 'presence')) return;
+          if (window.probeMode === 'membership-denied' && frame.action === 'join') {
+            this.onmessage?.({ data: JSON.stringify({ type: 'error', service: 'chat', channel: frame.channel, error: { code: 'not-a-member' } }) }); return;
+          }
+          this.onmessage?.({ data: JSON.stringify({ type: 'error', code: 'AUTHZ_CHANNEL_DENIED', service: frame.service, kind: 'subscribe', channel: window.probeMode === 'wrong-channel' ? 'elsewhere' : frame.channel }) });
+          if (window.probeMode === 'leak' && frame.action === 'history') this.onmessage?.({ data: JSON.stringify({ type: 'chat', action: 'history', channel: frame.channel, messages: ['must not appear in the result'] }) });
+        }
+        close() { window.probeClosed++; }
+      };
+    });
+    return actor;
+  };
+  for (const mode of ['denied', 'membership-denied', 'no-endpoint', 'leak', 'wrong-channel', 'missing-presence', 'silent']) {
+    let observed;
+    h.ctx.gatewayRefusal = async (page, channel) => {
+      await page.evaluate(mode => { window.probeMode = mode; }, mode);
+      try { return await gatewayRefusal(page, channel, 500, 'http://configured-gateway.test/ws'); }
+      finally { observed = await page.evaluate(() => ({ sent: window.probeSent, closed: window.probeClosed, url: window.probeSocketUrl })); }
+    };
+    const result = await walkMap(h.browser, map([
+      { do: 'navigate', url: '/list', name: 'open' },
+      { do: 'gateway-refusal', channel: 'social:ch:general', name: 'refusal' },
+    ]), h.ctx);
+    const step = result.steps[1];
+    assert.equal(step.status, ['denied', 'membership-denied', 'no-endpoint'].includes(mode) ? 'pass' : 'fail', `${mode}: ${JSON.stringify(step)}`);
+    assert.equal(observed.closed, 1, mode);
+    assert.equal(observed.url, mode === 'no-endpoint' ? 'ws://configured-gateway.test/ws' : 'ws://journeys.test/ws');
+    assert.deepEqual(observed.sent.map(f => `${f.service}/${f.action}`), ['chat/join', 'chat/history', 'presence/subscribe']);
+    assert.ok(!JSON.stringify(result).includes('must not appear in the result'));
+    if (mode === 'denied') assert.equal(step.gateway.denied.length, 3);
+    if (mode === 'leak') assert.match(step.failures.join(' '), /disclosed 1 channel frame/);
+  }
+});
 
 test('steps act, expectations judge, and every step gets a screenshot', async (t) => {
   const h = await harness(t); if (!h) return;

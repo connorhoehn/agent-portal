@@ -4,8 +4,8 @@ user: u-nora (Nora DaSilva)
 url: /admin/bots/32970d0a-e28e-5100-8fb0-a5cbb87dac99
 map: docs/journeys/maps/pipelines/slice/bot-detail.ts
 pages: portal/src/pages/bots/BotDetailPage.tsx,portal/src/components/runs/PipelineRunParts.tsx,portal/src/components/runs/RunTimeline.tsx,portal/src/lib/pipelineRuns.ts
-audited: 2026-10-29 21:46–21:47 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-60a84333), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-nora-clone-60a84333, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-10-31 19:20–19:21 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-668a1f1b), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-nora-clone-668a1f1b, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: bot-detail.jpg
 run-rendered: yes — Open the obs-nightly-maintenance bot: the Runs tab shows its latest firing as a pipeline run
 steps-rendered: 3+ (at least three step rows) — The firing’s steps render as rows

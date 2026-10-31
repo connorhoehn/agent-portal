@@ -4,8 +4,8 @@ user: u-kofi (Kofi Mensah)
 url: /pipelines/configuration; /pipelines/runs
 map: docs/journeys/maps/pipelines/operator/configuration.ts
 pages: portal/src/pages/pipelines/ConfigurationPage.tsx,portal/src/App.tsx,portal/src/components/shell/Layout.tsx
-audited: 2026-10-29 21:44–21:44 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-7106d59e), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-kofi-clone-7106d59e, tenant pipelines, role operator, grants {"pipelines":["operator"]}
+audited: 2026-10-31 19:19–19:19 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-4797b2d8), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-kofi-clone-4797b2d8, tenant pipelines, role operator, grants {"pipelines":["operator"]}
 screenshot: configuration.jpg
 verdict: pass
 console errors: 0

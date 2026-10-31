@@ -1,19 +1,34 @@
 surface: teams
 role: moderator
 user: u-lena (Lena Brandt)
-url: /social/teams?channel=social%3Ateam%3Ajourney-moderator-185350%3Ageneral
-pages: portal/src/pages/social/TeamsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialConversation.tsx
-audited: 2026-10-22 18:51–18:54 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-lena (u-lena-clone-69668981), second context u-sana (the seed persona in its own Playwright context, already in tenant social); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: /api/session/me sub u-lena-clone-69668981 (a clone of u-lena), tenant social, role moderator
+url: /social/teams; /social/teams?channel=social%3Ateam%3Ano-such-team%3Ageneral
+map: docs/journeys/maps/social/moderator/teams.ts
+pages: portal/src/pages/social/TeamsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx
+audited: 2026-10-31 19:28–19:28 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-lena-clone-38f66d2a), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-lena-clone-38f66d2a, tenant social, role moderator, grants {"social":["moderator"]}
 screenshot: teams.jpg
 verdict: pass
 console errors: 0
-layout: pass — rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940; conversation pane x=500, width 1180px; composer y=841–883px, in view without the body scrolling: true; h1 count 1
-keyboard: pass — 18 distinct Tab stops against 21 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity) in the chat workspace; Enter on the Documents tab set ?view=documents, Enter on Chat brought the composer back (true)
-empty-state: pass — /social/teams?channel=social%3Ateam%3Ano-such-team%3Ageneral rendered: Pick a channel Choose a team's channel on the left to read it, or open a team's ⋯ menu to see who is on it.
-realtime: pass — the clone's "journey moderator teams 18:54:08 out" reached u-sana in 0.020s, the reply came back in 0.024s, no reload; own message present after a reload: true
-role-gating: can manage channels/teams: on this route's DOM (the rail draws only this route's section) Create channel controls 0, Create team/New team 1, New room 0, New message 1; POST /api/social/channels {} → 400, POST /api/social/teams {} → 400 (403 = refused by Cedar, 400 = validation past the gate); message actions: this clone's own row Edit 0 / Delete 0; u-sana's own row (seed persona) Edit 1 / Delete 1; u-sana's view of the clone's row Edit 0 / Delete 0; the clone's view of u-sana's row Edit 0 / Delete 0 — a clone-only artifact of the dev:mock clone tooling, not judged: the gateway stamps a clone's message with its persona (recordUserId) while the page compares against the clone's session sub, so the clone sees its own message as someone else's; own-row Edit/Delete is judged on the seed persona above
-header: JM Journey moderator 185350 · General 2 members · Created by the 2026-10-22 chat journey walk. Chat Documents Pinned Calls LB Work graph; tabs present [chat, documents, pins, calls] = [true,true,true,true]; call actions [audio, video] = [true,true]
-team-tree: JM Journey moderator 185350 ⋯ # General
-team-detail: team “Journey moderator 185350” (mock-team-mvk5101b-5, this clone's role owner, 1 channel(s)), created for this walk by the clone (POST /api/social/teams → 201), added u-sana (→ 201); members: u-lena-clone-69668981 (owner), u-sana (member)
-notes: Every field above was observed in this pass. A second clone-only artifact, most likely the same persona-vs-clone id mismatch as the Edit/Delete gap: the clone's composer keeps the sent text after the message is delivered, so the screenshot shows the sent line still in the composer; a seed persona's composer clears on send (checked separately with u-sana on #general). No team was shared by this clone and u-sana before the walk (a clone's teams are keyed by its own id), so one was created; it is left in place (mock write). The unknown team id renders the generic "Pick a channel" prompt rather than a not-found state. Not exercised: membership edit through the UI, pins, forward, attachments.
+layout: pass — ui-dom-audit 0 failing findings at 5 measured step(s); at /social/teams: no horizontal scroll (1680/1680), 1 h1 "Teams" 16/400 at 199/43, first-row-top: 84px
+keyboard: pass — Escape closes it; Tab from the top of the page through every control (Tab visited 33 distinct visible controls of 34 focusable, focus lost 1×)
+empty-state: pass — Open Teams: on no team yet, the pane offers New team; An unknown team channel says it is not available
+realtime: pass — Without a reload, Sana appears under Active now in the walker’s rail
+role-gating: pass — The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration; Create a team is offered in the rail and New team in the pane; POST /api/social/teams with an empty body answers 400: the gate admits this role to creating teams, and validation refuses the empty body (POST /api/social/teams → 400)
+dom-audit: 0 failing finding(s) at 5 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Lena (moderator) meets Teams on no team yet, is offered a new one (and backs out), and sees a second identity arrive live. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/social/moderator/teams).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Teams: on no team yet, the pane offers New team | empty | pass | 0 finding(s) | /social/teams |
+| 2 | The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration | default | pass | not measured: the resting state the first step measured | /social/teams |
+| 3 | Create a team is offered in the rail and New team in the pane | default | pass | not measured: the resting state the first step measured | /social/teams |
+| 4 | POST /api/social/teams with an empty body answers 400: the gate admits this role to creating teams, and validation refuses the empty body (POST /api/social/teams → 400) |  | pass | — | /social/teams |
+| 5 | New team opens the create form (nothing is created) | dialog-open | pass | 0 finding(s) | /social/teams |
+| 6 | Escape closes it |  | pass | 0 finding(s) | /social/teams |
+| 7 | Tab from the top of the page through every control (Tab visited 33 distinct visible controls of 34 focusable, focus lost 1×) |  | pass | — | /social/teams |
+| 8 | An unknown team channel says it is not available | not-found | pass | 0 finding(s) | /social/teams?channel=social%3Ateam%3Ano-such-team%3Ageneral |
+| 9 | Back on Teams | default | pass | not measured: the resting state the first step measured | /social/teams |
+| 10 | Sana Iqbal opens /social/teams in her own browser | default | pass | not measured: the peer’s page; the walker’s is measured | /social/teams |
+| 11 | Without a reload, Sana appears under Active now in the walker’s rail | live | pass | 0 finding(s) | /social/teams |

@@ -4,8 +4,8 @@ user: u-kofi (Kofi Mensah)
 url: /pipelines/artifacts; /pipelines/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb
 map: docs/journeys/maps/pipelines/operator/artifacts.ts
 pages: portal/src/pages/pipelines/ArtifactsPage.tsx
-audited: 2026-10-29 21:44–21:44 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-ccba2686), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-kofi-clone-ccba2686, tenant pipelines, role operator, grants {"pipelines":["operator"]}
+audited: 2026-10-31 19:18–19:19 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-0e680e1b), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-kofi-clone-0e680e1b, tenant pipelines, role operator, grants {"pipelines":["operator"]}
 screenshot: artifacts.jpg
 verdict: fail — 1 of 13 steps failed; step 8 (The opened record has loaded): 5 ui-dom-audit finding(s): a11y.contrast ×4, a11y.heading-order ×1
 console errors: 0

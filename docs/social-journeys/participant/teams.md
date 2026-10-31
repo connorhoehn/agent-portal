@@ -1,19 +1,32 @@
 surface: teams
 role: participant
 user: u-sana (Sana Iqbal)
-url: /social/teams?channel=social%3Ateam%3Ajourney-participant-233732%3Ageneral
-pages: portal/src/pages/social/TeamsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialConversation.tsx
-audited: 2026-10-22 23:37–23:37 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-sana (u-sana-clone-6f5326dc), second contexts u-sana and u-mira (the seed persona in its own Playwright context, already in tenant social); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: /api/session/me sub u-sana-clone-6f5326dc (a clone of u-sana), tenant social, role participant
+url: /social/teams; /social/teams?channel=social%3Ateam%3Ano-such-team%3Ageneral
+map: docs/journeys/maps/social/participant/teams.ts
+pages: portal/src/pages/social/TeamsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx
+audited: 2026-10-31 19:29–19:29 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-e3f938db), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-sana-clone-e3f938db, tenant social, role participant, grants {"social":["participant"]}
 screenshot: teams.jpg
 verdict: pass
 console errors: 0
-layout: pass — the clone on /social/teams: rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940; u-sana on the team channel: rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940; conversation pane x=500, width 1180px; composer y=841–883px, in view without the body scrolling: true; h1 count 1
-keyboard: pass — the clone: 8 distinct Tab stops against 8 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity) in the chat workspace; u-sana on the team channel: Enter on the Documents tab set ?view=documents, Enter on Chat brought the composer back (true)
-empty-state: pass — /social/teams?channel=social%3Ateam%3Ano-such-team%3Ageneral rendered for the clone: You are not on a team yet A team groups people and their channels. A moderator adds you to one.; the clone's own /social/teams (GET /api/social/teams → 0 teams) rendered: You are not on a team yet A team groups people and their channels. A moderator adds you to one.
-realtime: pass — on social:team:journey-participant-233732:general, u-sana's "journey participant teams 23:37:48 out" reached u-mira in 0.020s, the reply came back in 0.014s, no reload; own message present after a reload: true
-role-gating: cannot manage channels/teams: on this route's DOM (the rail draws only this route's section) Create channel controls 0, Create team/New team 0, New room 0, New message 1; POST /api/social/channels {} → 403, POST /api/social/teams {} → 403 (403 = refused by Cedar, 400 = validation past the gate) (read as the clone); message actions on the team channel: u-sana's own row Edit 1 / Delete 1, u-mira's view of it Edit 0 / Delete 0, u-mira's own row Edit 1 / Delete 1, u-sana's view of it Edit 0 / Delete 0; the clone opening the shared team channel read: You are not on a team yet A team groups people and their channels. A moderator adds you to one.
-header: JP Journey participant 233732 · General 2 members · Created by the 2026-10-22 chat journey walk. Chat Documents Pinned Calls Work graph; tabs present [chat, documents, pins, calls] = [true,true,true,true]; call actions [audio, video] = [true,true]
-team-tree: u-sana: JP Journey participant 233732 ⋯ # General JA Journey admin 190106 ⋯ # General JC Journey community-admin 185930 ⋯ # General JM Journey moderator 184311 ⋯ # General
-team-detail: team “Journey participant 233732” (01M5KDBNVP7598CPC47HJWH49P, u-sana's role member, 1 channel(s)); u-mira created it for this walk (POST /api/social/teams → 201) and added u-sana (→ 201); adding this clone answered 404 "u-sana-clone-6f5326dc is not in this workspace"
-notes: Every field above was observed in this pass. A clone cannot be on a team: u-mira adding this clone to a new team answered 404 "<clone> is not in this workspace" (the Social roster holds no clones, and teams are keyed by the session sub rather than the persona), so the clone walked the route as itself (layout, Tab sweep, gating, the unknown-team state) and the team channel's header, keyboard, round trip and message actions were read on the seed persona u-sana in a second context, with u-mira as the other side; no tenant switch for either. The team and its messages are left in place (shared-stack writes). Not exercised: membership edit (participant cannot), pins, forward, attachments.
+layout: pass — ui-dom-audit 0 failing findings at 3 measured step(s); at /social/teams: no horizontal scroll (1680/1680), 1 h1 "Teams" 16/400 at 199/43, first-row-top: 84px
+keyboard: pass — Tab from the top of the page through every control (Tab visited 32 distinct visible controls of 32 focusable)
+empty-state: pass — Open Teams: on no team yet, the pane says a moderator adds you to one; An unknown team channel says it is not available
+realtime: pass — Without a reload, Mira appears under Active now in the walker’s rail
+role-gating: pass — The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration; No Create a team or New team control in the DOM for a participant; POST /api/social/teams with an empty body answers 403: Cedar refuses this role creating teams (POST /api/social/teams → 403)
+dom-audit: 0 failing finding(s) at 3 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Sana (participant) meets Teams on no team yet, is told a moderator adds people, and sees a second identity arrive live. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/social/participant/teams).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Teams: on no team yet, the pane says a moderator adds you to one | empty | pass | 0 finding(s) | /social/teams |
+| 2 | The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration | default | pass | not measured: the resting state the first step measured | /social/teams |
+| 3 | No Create a team or New team control in the DOM for a participant | default | pass | not measured: the resting state the first step measured | /social/teams |
+| 4 | POST /api/social/teams with an empty body answers 403: Cedar refuses this role creating teams (POST /api/social/teams → 403) |  | pass | — | /social/teams |
+| 5 | Tab from the top of the page through every control (Tab visited 32 distinct visible controls of 32 focusable) |  | pass | — | /social/teams |
+| 6 | An unknown team channel says it is not available | not-found | pass | 0 finding(s) | /social/teams?channel=social%3Ateam%3Ano-such-team%3Ageneral |
+| 7 | Back on Teams | default | pass | not measured: the resting state the first step measured | /social/teams |
+| 8 | Mira Okafor opens /social/teams in her own browser | default | pass | not measured: the peer’s page; the walker’s is measured | /social/teams |
+| 9 | Without a reload, Mira appears under Active now in the walker’s rail | live | pass | 0 finding(s) | /social/teams |

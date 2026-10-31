@@ -1,18 +1,37 @@
 surface: dms
 role: moderator
 user: u-lena (Lena Brandt)
-url: /social/dms/social%3Adm%3Au-lena-clone-69668981%3Au-sana
+url: /social/dms; /social/dms/social%3Adm%3Au-farah%3Au-lena-clone-2d8432ff; /social/dms/social%3Adm%3Au-farah%3Au-lena-clone-2d8432ff?view=documents; /social/dms/social%3Adm%3Au-nobody%3Au-nothere
+map: docs/journeys/maps/social/moderator/dms.ts
 pages: portal/src/pages/social/DmsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialConversation.tsx,portal/src/pages/social/socialChat.ts
-audited: 2026-10-22 18:51–18:53 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-lena (u-lena-clone-69668981), second context u-sana (the seed persona in its own Playwright context, already in tenant social); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: /api/session/me sub u-lena-clone-69668981 (a clone of u-lena), tenant social, role moderator
+audited: 2026-10-31 19:27–19:27 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-lena-clone-2d8432ff), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-lena-clone-2d8432ff, tenant social, role moderator, grants {"social":["moderator"]}
 screenshot: dms.jpg
-verdict: pass
-console errors: 0
-layout: pass — rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940; conversation pane x=500, width 1180px; composer y=841–883px, in view without the body scrolling: true; h1 count 1
-keyboard: pass — 20 distinct Tab stops against 40 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity) in the chat workspace; Enter on the Documents tab set ?view=documents, Enter on Chat brought the composer back (true); Enter on New message opened the picker (true, focus in social-dm-picker-query), Escape closed it (true), focus afterwards on BODY
-empty-state: pass — /social/dms/social%3Adm%3Au-nobody%3Au-nothere rendered: This conversation is not yours A direct message opens only for the people it names.
-realtime: pass — the clone's "journey moderator dms 18:53:16 out" reached u-sana in 0.051s, the reply came back in 0.032s, no reload; own message present after a reload: true; a further line from u-sana while the clone sat on /social/dms with no DM open left the DM row marked unread (data-unread=null, count conversation-unread="1"): "Sana Iqbal 18:53 journey moderator dms unread 18:53:31 1"
-role-gating: can manage channels/teams: on this route's DOM (the rail draws only this route's section) Create channel controls 0, Create team/New team 0, New room 0, New message 2; POST /api/social/channels {} → 400, POST /api/social/teams {} → 400 (403 = refused by Cedar, 400 = validation past the gate); message actions: this clone's own row Edit 0 / Delete 0; u-sana's own row (seed persona) Edit 1 / Delete 1; u-sana's view of the clone's row Edit 0 / Delete 0; the clone's view of u-sana's row Edit 0 / Delete 0 — a clone-only artifact of the dev:mock clone tooling, not judged: the gateway stamps a clone's message with its persona (recordUserId) while the page compares against the clone's session sub, so the clone sees its own message as someone else's; own-row Edit/Delete is judged on the seed persona above
-header: Sana Iqbal Chat Documents Pinned Calls LB Work graph; tabs present [chat, documents, pins, calls] = [true,true,true,true]; call actions [audio, video] = [true,true]
-picker: New message picker opened: true (16 people listed, including Lena Brandt, the clone's own persona); Escape closed it: true; choosing Sana Iqbal opened social:dm:u-lena-clone-69668981:u-sana
-notes: Every field above was observed in this pass. A second clone-only artifact, most likely the same persona-vs-clone id mismatch as the Edit/Delete gap: the clone's composer keeps the sent text after the message is delivered, so the screenshot shows the sent line still in the composer; a seed persona's composer clears on send (checked separately with u-sana on #general). The DM is the clone's own lobby (social:dm:u-lena-clone-69668981:u-sana); u-sana opened the same lobby (composer drawn: true). Not exercised: pins, forward, slash commands, attachments, calls from the DM.
+verdict: fail — 6 of 14 steps failed; step 5 (Open the newest DM: its header and composer): 2 ui-dom-audit finding(s): conversation.metadata ×2
+console errors: 0 unexpected; 2 expected by the map (Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector)
+layout: fail — 42 ui-dom-audit finding(s) at 6 of 8 measured step(s) (conversation.metadata ×12, control.font-size ×30); at /social/dms: no horizontal scroll (1680/1680), 1 h1 "Direct messages" 16/400 at 199/43, first-row-top: 84px
+keyboard: fail — step 7 (Enter on Chat brings the messages and the composer back): 2 ui-dom-audit finding(s): conversation.metadata ×2; step 8 (Enter on New message opens the person picker): 32 ui-dom-audit finding(s): control.font-size ×30, conversation.metadata ×2; step 9 (Escape closes the picker): 2 ui-dom-audit finding(s): conversation.metadata ×2
+empty-state: fail — step 11 (A DM that names neither of this identity’s ids says it is not yours): 2 ui-dom-audit finding(s): conversation.metadata ×2
+realtime: pass — Without a reload, Sana appears under Active now in the walker’s rail
+role-gating: pass — The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration; The DM route draws only its own section: no Create a channel, no Create a team; POST /api/social/channels with an empty body answers 400: the gate admits this role to creating channels, and validation refuses the empty body (POST /api/social/channels → 400)
+dom-audit: 42 failing finding(s) at 8 measured step(s); 4 more owed by docs/journeys/audit-burndown.tsv (conversation.metadata ×4) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Lena (moderator) works the DM list, opens a conversation and the new-message picker, and sees a second identity arrive live. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/social/moderator/dms). Writes the page attempted and the read-only walk blocked: POST /api/social/dms/read.
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Direct messages: the DM list in the rail, newest first | default | pass | 0 finding(s) | /social/dms |
+| 2 | The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration | default | pass | not measured: the resting state the first step measured | /social/dms |
+| 3 | The DM route draws only its own section: no Create a channel, no Create a team | default | pass | not measured: the resting state the first step measured | /social/dms |
+| 4 | POST /api/social/channels with an empty body answers 400: the gate admits this role to creating channels, and validation refuses the empty body (POST /api/social/channels → 400) |  | pass | — | /social/dms |
+| 5 | Open the newest DM: its header and composer | row-open | fail: 2 ui-dom-audit finding(s): conversation.metadata ×2 | 2 finding(s) | /social/dms/social%3Adm%3Au-farah%3Au-lena-clone-2d8432ff |
+| 6 | Documents shows the conversation’s documents | tab-documents | fail: 2 ui-dom-audit finding(s): conversation.metadata ×2 | 2 finding(s) | /social/dms/social%3Adm%3Au-farah%3Au-lena-clone-2d8432ff?view=documents |
+| 7 | Enter on Chat brings the messages and the composer back |  | fail: 2 ui-dom-audit finding(s): conversation.metadata ×2 | 2 finding(s) | /social/dms/social%3Adm%3Au-farah%3Au-lena-clone-2d8432ff |
+| 8 | Enter on New message opens the person picker | dialog-open | fail: 32 ui-dom-audit finding(s): control.font-size ×30, conversation.metadata ×2 | 32 finding(s) | /social/dms/social%3Adm%3Au-farah%3Au-lena-clone-2d8432ff |
+| 9 | Escape closes the picker |  | fail: 2 ui-dom-audit finding(s): conversation.metadata ×2 | 2 finding(s) | /social/dms/social%3Adm%3Au-farah%3Au-lena-clone-2d8432ff |
+| 10 | Tab from the top of the page through every control (Tab visited 37 distinct visible controls of 75 focusable, focus lost 1×) |  | pass | — | /social/dms/social%3Adm%3Au-farah%3Au-lena-clone-2d8432ff |
+| 11 | A DM that names neither of this identity’s ids says it is not yours | not-found | fail: 2 ui-dom-audit finding(s): conversation.metadata ×2 | 2 finding(s) | /social/dms/social%3Adm%3Au-nobody%3Au-nothere |
+| 12 | Back on Direct messages | default | pass | not measured: the resting state the first step measured | /social/dms |
+| 13 | Sana Iqbal opens /social/dms in her own browser | default | pass | not measured: the peer’s page; the walker’s is measured | /social/dms |
+| 14 | Without a reload, Sana appears under Active now in the walker’s rail | live | pass | 0 finding(s) | /social/dms |

@@ -4,8 +4,8 @@ user: u-ines (Ines Moreau)
 url: /pipelines/runbooks; /pipelines/definitions/runbook%3Apromo-custodian-sg-drift; /pipelines/runbooks/does-not-exist
 map: docs/journeys/maps/pipelines/author/runbooks.ts
 pages: portal/src/pages/pipelines/RunbooksPage.tsx,portal/src/lib/pipelineDefinitions.ts
-audited: 2026-10-29 21:40–21:41 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-477bc834), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-ines-clone-477bc834, tenant pipelines, role author, grants {"pipelines":["author"]}
+audited: 2026-10-31 19:15–19:15 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-6f99f1fe), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-ines-clone-6f99f1fe, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: runbooks.jpg
 verdict: fail — 2 of 15 steps failed; step 9 (The opened record has loaded): 1 ui-dom-audit finding(s): a11y.contrast ×1
 console errors: 0

@@ -4,8 +4,8 @@ user: u-dara (Dara Whitfield)
 url: /pipelines/runbooks; /pipelines/definitions/runbook%3Apromo-custodian-sg-drift; /pipelines/runbooks/does-not-exist
 map: docs/journeys/maps/pipelines/pipeline-admin/runbooks.ts
 pages: portal/src/pages/pipelines/RunbooksPage.tsx,portal/src/lib/pipelineDefinitions.ts
-audited: 2026-10-29 21:46–21:46 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-dara-clone-0554a6de), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-dara-clone-0554a6de, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
+audited: 2026-10-31 19:20–19:20 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-dara-clone-e76440ca), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-dara-clone-e76440ca, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
 screenshot: runbooks.jpg
 verdict: fail — 2 of 15 steps failed; step 9 (The opened record has loaded): 1 ui-dom-audit finding(s): a11y.contrast ×1
 console errors: 0

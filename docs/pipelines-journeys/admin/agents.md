@@ -4,8 +4,8 @@ user: u-operator (Platform Operator)
 url: /pipelines/agents; /pipelines/definitions/agent%3Aorgiq-advisor; /pipelines/agents/does-not-exist
 map: docs/journeys/maps/pipelines/admin/agents.ts
 pages: portal/src/pages/pipelines/SourcesPage.tsx
-audited: 2026-10-29 21:38–21:38 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-54415c6f), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-operator-clone-54415c6f, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
+audited: 2026-10-31 19:13–19:13 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-547a9e7d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-operator-clone-547a9e7d, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
 screenshot: agents.jpg
 verdict: fail — 1 of 14 steps failed; step 10 (Open /pipelines/agents/does-not-exist: the shell says Page not found): 3 ui-dom-audit finding(s): keyboard.typography ×1, a11y.contrast ×1, a11y.heading-order ×1
 console errors: 0

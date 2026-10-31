@@ -3,8 +3,8 @@ user: u-sana (Sana)
 url: /social/channels; /pipelines/runs; /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3; /pipelines/configuration; /pipelines/calls
 map: docs/journeys/maps/pipelines/isolation/participant.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-10-29 21:43–21:43 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-b96a51c4), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-sana-clone-b96a51c4, tenant social, role participant, grants {"social":["participant"]}
+audited: 2026-10-31 19:17–19:17 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-6354d17e), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-sana-clone-6354d17e, tenant social, role participant, grants {"social":["participant"]}
 pipelines-tile-visible: no — The workspace chooser offers no Pipelines workspace (/select → /workspaces)
 pipelines-nav-visible: no — The rail on /social/channels holds no link toward /pipelines; Back on the home landing, still no link toward /pipelines
 direct-route-result: redirect — Type /pipelines/runs: the route sends this identity away (/pipelines/runs → /social/channels); Type /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3: the route sends this identity away (/pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3 → /social/channels); Type /pipelines/configuration: the route sends this identity away (/pipelines/configuration → /social/channels); Type /pipelines/calls: the route sends this identity away (/pipelines/calls → /social/channels)

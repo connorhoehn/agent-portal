@@ -4,8 +4,8 @@ user: u-operator (Platform Operator)
 url: /pipelines/configuration
 map: docs/journeys/maps/pipelines/admin/configuration.ts
 pages: portal/src/pages/pipelines/ConfigurationPage.tsx,portal/src/App.tsx,portal/src/components/shell/Layout.tsx
-audited: 2026-10-29 21:39–21:39 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-0c009116), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-operator-clone-0c009116, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
+audited: 2026-10-31 19:14–19:14 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-6091823d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-operator-clone-6091823d, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
 screenshot: configuration.jpg
 verdict: fail — 1 of 10 steps failed; step 1 (Open Configuration: the default approver): 1 ui-dom-audit finding(s): a11y.contrast ×1
 console errors: 0

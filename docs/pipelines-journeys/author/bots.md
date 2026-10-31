@@ -4,8 +4,8 @@ user: u-ines (Ines Moreau)
 url: /pipelines/bots; /pipelines/definitions/bot%3Aa0a4b025-3e67-5004-8b8a-05a3d4f2028d; /pipelines/bots/does-not-exist
 map: docs/journeys/maps/pipelines/author/bots.ts
 pages: portal/src/pages/pipelines/SourcesPage.tsx
-audited: 2026-10-29 21:40–21:40 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-09c2746b), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-ines-clone-09c2746b, tenant pipelines, role author, grants {"pipelines":["author"]}
+audited: 2026-10-31 19:15–19:15 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-c6690cf5), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-ines-clone-c6690cf5, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: bots.jpg
 verdict: fail — 2 of 14 steps failed; step 8 (The opened record has loaded): 1 ui-dom-audit finding(s): content.honesty ×1
 console errors: 0

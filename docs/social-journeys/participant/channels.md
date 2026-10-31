@@ -1,18 +1,36 @@
 surface: channels
 role: participant
 user: u-sana (Sana Iqbal)
-url: /social/channels/general
+url: /social/channels/general; /social/channels/general?view=documents; /social/channels/random; /social/channels/no-such-channel
+map: docs/journeys/maps/social/participant/channels.ts
 pages: portal/src/pages/social/ChannelsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialConversation.tsx,portal/src/pages/social/socialChat.ts
-audited: 2026-10-22 23:32–23:32 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-sana (u-sana-clone-24998d23), second context u-mira (the seed persona in its own Playwright context, already in tenant social); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: /api/session/me sub u-sana-clone-24998d23 (a clone of u-sana), tenant social, role participant
+audited: 2026-10-31 19:32–19:33 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-6ddc1a25), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-sana-clone-6ddc1a25, tenant social, role participant, grants {"social":["participant"]}
 screenshot: channels.jpg
-verdict: pass
+verdict: fail — 1 of 13 steps failed; step 7 (Documents shows the channel’s documents): 1 ui-dom-audit finding(s): coverage.stability ×1
 console errors: 0
-layout: pass — rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940; conversation pane x=500, width 1180px; composer y=841–883px, in view without the body scrolling: true; h1 count 1
-keyboard: pass — 39 distinct Tab stops against 171 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity) in the chat workspace; Enter on the Documents tab set ?view=documents, Enter on Chat brought the composer back (true); Enter on the #random row opened /social/channels/random
-empty-state: pass — /social/channels/no-such-channel rendered: #no-such-channel is not available This channel does not exist, or it is private and you are not a member.
-realtime: pass — the clone's "journey participant channels 23:32:33 out" reached u-mira in 0.056s, u-mira's reply came back in 0.053s, no reload; own message present after a reload: true
-role-gating: cannot manage channels/teams: on this route's DOM (the rail draws only this route's section) Create channel controls 0, Create team/New team 0, New room 0, New message 1; POST /api/social/channels {} → 403, POST /api/social/teams {} → 403 (403 = refused by Cedar, 400 = validation past the gate); message actions: this clone's own row Edit 0 / Delete 0; u-mira's own row (seed persona) Edit 1 / Delete 1; u-mira's view of the clone's row Edit 0 / Delete 0; the clone's view of u-mira's row Edit 0 / Delete 0 — a clone-only artifact of the dev:mock clone tooling, not judged: the gateway stamps a clone's message with its persona (recordUserId) while the page compares against the clone's session sub, so the clone sees its own message as someone else's; own-row Edit/Delete is judged on the seed persona above
-header: #g #general 13 members · Release trains, change freezes, office hours and new runbooks. Questions without a home start here. Chat Documents Pinned Calls SI Work; tabs present [chat, documents, pins, calls] = [true,true,true,true]; call actions [audio, video] = [true,true]
-rail-sections: Chat Activity Mentions Calls Recordings ACTIVE NOW 2 Mira Sana CHANNELS # general 23:31 journey community-admin channels 23:31:44 back ⋯ # auth-migration Yesterday Then I decide the order once the retry is clean. Expect it tomorrow. ⋯ # design-reviews Yesterda
-notes: Every field above was observed in this pass. A second clone-only artifact, most likely the same persona-vs-clone id mismatch as the Edit/Delete gap: the clone's composer keeps the sent text after the message is delivered, so the screenshot shows the sent line still in the composer; a seed persona's composer clears on send (checked separately with u-sana on #general). Messages in #general were posted by this walk and left in place. Not exercised: pins, forward, slash commands, attachments, channel creation itself (only its control and the Cedar probe).
+layout: fail — 1 ui-dom-audit finding(s) at 1 of 6 measured step(s) (coverage.stability ×1); at /social/channels/general: no horizontal scroll (1680/1680), 1 h1 "Channels" 16/400 at 199/43, first-row-top: 84px, composer at y 837–895 of 940
+keyboard: pass — Tab from the top of the page through every control (Tab visited 38 distinct visible controls of 196 focusable); Enter on Chat brings the messages and the composer back; Enter on the #random row opens it
+empty-state: pass — An unknown channel says it is not available
+realtime: pass — Without a reload, Mira appears under Active now in the walker’s rail
+role-gating: pass — The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration; No Create a channel control in the DOM for a participant; POST /api/social/channels with an empty body answers 403: Cedar refuses this role creating channels (POST /api/social/channels → 403); POST /api/social/teams with an empty body answers 403: Cedar refuses this role creating teams (POST /api/social/teams → 403)
+dom-audit: 1 failing finding(s) at 6 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Sana (participant) reads #general, moves between channels from the keyboard, is never offered channel creation, and sees a second identity arrive live. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/social/participant/channels).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open #general: the rail, the channel header with Chat, Documents, Pinned and Calls, the call actions and the composer | default | pass | 0 finding(s) | /social/channels/general |
+| 2 | The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration | default | pass | not measured: the resting state the first step measured | /social/channels/general |
+| 3 | No Create a channel control in the DOM for a participant | default | pass | not measured: the resting state the first step measured | /social/channels/general |
+| 4 | POST /api/social/channels with an empty body answers 403: Cedar refuses this role creating channels (POST /api/social/channels → 403) |  | pass | — | /social/channels/general |
+| 5 | POST /api/social/teams with an empty body answers 403: Cedar refuses this role creating teams (POST /api/social/teams → 403) |  | pass | — | /social/channels/general |
+| 6 | Tab from the top of the page through every control (Tab visited 38 distinct visible controls of 196 focusable) |  | pass | — | /social/channels/general |
+| 7 | Documents shows the channel’s documents | tab-documents | fail: 1 ui-dom-audit finding(s): coverage.stability ×1 | 1 finding(s) | /social/channels/general?view=documents |
+| 8 | Enter on Chat brings the messages and the composer back |  | pass | 0 finding(s) | /social/channels/general |
+| 9 | Enter on the #random row opens it | row-open | pass | 0 finding(s) | /social/channels/random |
+| 10 | An unknown channel says it is not available | not-found | pass | 0 finding(s) | /social/channels/no-such-channel |
+| 11 | Back on #general | default | pass | not measured: the resting state the first step measured | /social/channels/general |
+| 12 | Mira Okafor opens /social/channels/general in her own browser | default | pass | not measured: the peer’s page; the walker’s is measured | /social/channels/general |
+| 13 | Without a reload, Mira appears under Active now in the walker’s rail | live | pass | 0 finding(s) | /social/channels/general |

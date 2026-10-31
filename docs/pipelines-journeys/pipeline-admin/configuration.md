@@ -4,8 +4,8 @@ user: u-dara (Dara Whitfield)
 url: /pipelines/configuration
 map: docs/journeys/maps/pipelines/pipeline-admin/configuration.ts
 pages: portal/src/pages/pipelines/ConfigurationPage.tsx,portal/src/App.tsx,portal/src/components/shell/Layout.tsx
-audited: 2026-10-29 21:45–21:46 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-dara-clone-a53e93bf), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-dara-clone-a53e93bf, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
+audited: 2026-10-31 19:20–19:20 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-dara-clone-e6bbf6c2), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-dara-clone-e6bbf6c2, tenant pipelines, role pipeline-admin, grants {"pipelines":["pipeline-admin"]}
 screenshot: configuration.jpg
 verdict: fail — 1 of 10 steps failed; step 1 (Open Configuration: the default approver): 1 ui-dom-audit finding(s): a11y.contrast ×1
 console errors: 0

@@ -1,6 +1,7 @@
 // node --test scripts/journeys/tests/ — the pure half of the journey-map runner.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { validateMap, composeLog, coverageModel, coverageMarkdown, stepRoutes, layoutLine, claimFields, mapFiles, loadMaps } from '../maps.mjs';
 
 const surface = (over = {}) => ({
@@ -17,6 +18,27 @@ const surface = (over = {}) => ({
 });
 
 test('a complete map validates', () => assert.deepEqual(validateMap(surface()), []));
+
+test('coverage CLI reads manifest roles and the checked-in coverage is current', () => {
+  const r = spawnSync(process.execPath, ['scripts/journeys/run-maps.mjs', 'coverage', '--check'], { cwd: new URL('../../../', import.meta.url), encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /coverage.md is current/);
+});
+
+test('coverage includes cross-tenant roles in the denominator and in missing roles', () => {
+  const model = coverageModel([{ map: surface({ persona: { user: 'u-admin', tenant: 'access', role: 'admin' } }) }], {
+    inventory: [], rolesByTenant: { access: ['requester', 'admin'] }, routeKey: () => null,
+  });
+  assert.equal(model.totals.rolesWalked, 1);
+  assert.equal(model.totals.roles, 2);
+  assert.deepEqual(model.rolesNever, [{ tenant: 'access', roles: ['requester'] }]);
+});
+
+test('gateway refusal probes need a channel', () => {
+  const probe = { do: 'gateway-refusal', channel: 'social:ch:general', name: 'refused' };
+  assert.deepEqual(validateMap(surface({ steps: [...surface().steps, probe] })), []);
+  assert.match(validateMap(surface({ steps: [...surface().steps, { ...probe, channel: '' }] })).join(' '), /needs a channel/);
+});
 
 test('every claim field of the kind must be proven by a step', () => {
   const m = surface({ steps: surface().steps.filter((s) => s.proves !== 'keyboard') });

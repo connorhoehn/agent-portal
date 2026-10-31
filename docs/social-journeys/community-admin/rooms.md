@@ -1,20 +1,39 @@
 surface: rooms
 role: community-admin
-user: u-mira (walked as its clone u-mira-clone-a0006735)
-url: /social/rooms
-pages: portal/src/pages/social/RoomsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialRoomsSection.tsx,portal/src/pages/social/RoomPane.tsx,portal/src/pages/social/useSocialCall.ts
-audited: 2026-10-24 08:48–08:50 local, headless Chromium 1680×940 (Playwright) with fake capture devices, a fresh signed-in clone of u-mira (u-mira-clone-a0006735), second context u-sana-clone-a80d47c6 (a second fresh clone, its own Playwright context); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: /api/session/me sub u-mira-clone-a0006735 (a fresh clone of u-mira), tenant social, role community-admin
+user: u-mira (Mira Okafor)
+url: /social/rooms; /social/rooms?room=design-studio; /social/rooms?room=no-such-room; /social/rooms?room=design-studio&hangoutView=call
+map: docs/journeys/maps/social/community-admin/rooms.ts
+pages: portal/src/pages/social/RoomsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialRoomsSection.tsx,portal/src/pages/social/RoomDirectory.tsx,portal/src/pages/social/RoomPane.tsx
+audited: 2026-10-31 19:31–19:31 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mira-clone-1882c8b4), scenario: shared meeting gateway, clone identities, signalling media fixture; HTTP business writes blocked, middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-mira-clone-1882c8b4, tenant social, role community-admin, grants {"social":["community-admin"]}
 screenshot: rooms.jpg
-verdict: pass — real SFU media (fake devices) observed
-console errors: 0
-layout: pass — rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940
-keyboard: pass — 15 distinct Tab stops against 15 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity); Escape closed the New room dialog (true)
-empty-state: pass — this context's GET /api/social/rooms stubbed empty (page.route, this context only): pane "Pick a room Choose a room under Rooms on the left to see who can join it, then join its call. A room stays open between calls, so a group can gather in the same"; rail "No rooms yet Create one to start an ongoing hangout. Create room"; an unknown room id (?room=no-such-room-…) rendered "This room is not available It does not exist, or it is private and you are not one of its members."
-realtime: pass — real room call on the local SFU/platform-api with fake devices: the dock read 1 joined 0.08s after Join; u-sana-clone-a80d47c6's join showed "2 joined" 0.11s after she pressed the room's Join call (her pre-join dialog followed it); her leave showed "1 joined" 0.10s after her Leave
-role-gating: ManageChannels capability true, StartCall true; New room control present (rail) and present (pane); created "journey-community-admin-mvmeby6i", listed 1×; POST /api/social/rooms {} → 400 (expected 400, validation: the role may open rooms)
-room-detail: journey-community-admin-mvmeby6i Open to the workspace Join call Who can join Everyone in this workspace Opened by u-mira-clone-a0006735 Call Audio and video Recording Off Lobby social:room:journey-community-admin-mvmeby6i; lobby social:room:journey-community-admin-mvmeby6i shown: true
-call-tiles: 0 tile element(s): "You Sana Iqbal"
-media: join enabled: true; the dock with both in it read "journey-community-admin-mvmeby6i huddle 00:02 2 joined Message"; peer joined: true; after Leave the footer returned to its idle row (true): "Social MO 1 online Huddle Message". Real SFU media with fake capture devices; no audio content is verifiable headless.
-huddle-chat: during the room call the huddle chat pane read "(no error)"; visible Leave controls while in the call: 2
-notes: Every field was observed in this pass. "Opened by" names the walking clone by its raw id, because a clone is not in the people directory; a seed persona shows its display name. The room made by this walk was left in platform-api (it has no reset). The second context is fresh clone u-sana-clone-a80d47c6; no mock reset (shared stack).
+verdict: pass
+console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) [)
+layout: pass — ui-dom-audit 0 failing findings at 8 measured step(s); at /social/rooms?room=design-studio: no horizontal scroll (1680/1680), 1 h1 "Design studio" 20/600 at 524/88
+keyboard: pass — Escape closes the dialog; Tab from the top of the page through every control (Tab visited 35 distinct visible controls of 36 focusable, focus lost 1×); Enter on a hangout’s Open opens its record: access, host, call, recording and Join call
+empty-state: pass — Find a hangout for zzzzqq: the directory says nothing matches; An unknown hangout says it is not available
+realtime: pass — Without a reload, the walker’s Active now stops saying no one is in the call: the peer is in it
+role-gating: pass — The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration; New hangout is offered in the directory and New room in the rail; POST /api/social/rooms with an empty body answers 400: the gate admits this role to opening hangouts, and validation refuses the empty body (POST /api/social/rooms → 400)
+dom-audit: 0 failing finding(s) at 8 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Mira (community admin) browses the hangouts, opens one, is offered a new one (and backs out), and sees a second identity join its call live. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/social/community-admin/rooms).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Hangouts: the focused Hangouts rail and the hangout directory | default | pass | 0 finding(s) | /social/rooms |
+| 2 | The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration | default | pass | not measured: the resting state the first step measured | /social/rooms |
+| 3 | New hangout is offered in the directory and New room in the rail | default | pass | not measured: the resting state the first step measured | /social/rooms |
+| 4 | POST /api/social/rooms with an empty body answers 400: the gate admits this role to opening hangouts, and validation refuses the empty body (POST /api/social/rooms → 400) |  | pass | — | /social/rooms |
+| 5 | New hangout opens the create dialog (nothing is created) | dialog-open | pass | 0 finding(s) | /social/rooms |
+| 6 | Escape closes the dialog |  | pass | 0 finding(s) | /social/rooms |
+| 7 | Tab from the top of the page through every control (Tab visited 35 distinct visible controls of 36 focusable, focus lost 1×) |  | pass | — | /social/rooms |
+| 8 | Find a hangout for zzzzqq: the directory says nothing matches | filtered-empty | pass | 0 finding(s) | /social/rooms |
+| 9 | Clear the search: the hangouts come back |  | pass | not measured: the resting state again | /social/rooms |
+| 10 | Enter on a hangout’s Open opens its record: access, host, call, recording and Join call | row-open | pass | 0 finding(s) | /social/rooms?room=design-studio |
+| 11 | All hangouts returns to the directory |  | pass | 0 finding(s) | /social/rooms |
+| 12 | An unknown hangout says it is not available | not-found | pass | 0 finding(s) | /social/rooms?room=no-such-room |
+| 13 | Open the Design studio hangout: nobody is in its call | default | pass | not measured: the record step measured above | /social/rooms?room=design-studio |
+| 14 | Sana Iqbal (a second clone) opens the same hangout in her own browser | default | pass | not measured: the peer’s page; the walker’s is measured | /social/rooms?room=design-studio |
+| 15 | Sana Iqbal (the clone) joins the hangout’s call (signalling-only media) |  | pass | not measured: the peer’s page; the walker’s is measured | /social/rooms?room=design-studio&hangoutView=call |
+| 16 | Without a reload, the walker’s Active now stops saying no one is in the call: the peer is in it | live | pass | 0 finding(s) | /social/rooms?room=design-studio |

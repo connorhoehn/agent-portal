@@ -4,8 +4,8 @@ user: u-operator (Platform Operator)
 url: /pipelines/approvals; /pipelines/approvals/consult%3Acon-mock-1; /pipelines/approvals/does-not-exist
 map: docs/journeys/maps/pipelines/admin/approvals.ts
 pages: portal/src/pages/pipelines/ApprovalsPage.tsx,portal/src/lib/pipelineDefinitions.ts
-audited: 2026-10-29 21:38–21:38 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-9e310598), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-operator-clone-9e310598, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
+audited: 2026-10-31 19:13–19:13 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-a27f61b3), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-operator-clone-a27f61b3, tenant pipelines, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
 screenshot: approvals.jpg
 verdict: fail — 1 of 15 steps failed; step 11 (Open /pipelines/approvals/does-not-exist: the page says Nothing is waiting here): 1 ui-dom-audit finding(s): a11y.heading-order ×1
 console errors: 0

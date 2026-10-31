@@ -4,8 +4,8 @@ user: u-ines (Ines Moreau)
 url: /pipelines/runs/bot-run%3Arun-inflight-obs-e1-s3; /pipelines/runs/does-not-exist
 map: docs/journeys/maps/pipelines/author/run-detail.ts
 pages: portal/src/pages/pipelines/RunDetailPage.tsx,portal/src/pages/pipelines/PipelineRunLive.tsx,portal/src/components/runs/RunTimeline.tsx,portal/src/lib/pipelineRuns.ts
-audited: 2026-10-29 21:40–21:40 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-6bb81873), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-ines-clone-6bb81873, tenant pipelines, role author, grants {"pipelines":["author"]}
+audited: 2026-10-31 19:15–19:15 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-3244765d), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-ines-clone-3244765d, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: run-detail.jpg
 verdict: fail — 2 of 9 steps failed; step 1 (Open the in-flight bot-sourced run: its header, steps, artifacts and events): 5 ui-dom-audit finding(s): a11y.contrast ×4, a11y.heading-order ×1
 console errors: 0 unexpected; 2 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) [)

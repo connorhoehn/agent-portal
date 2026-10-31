@@ -1,18 +1,36 @@
 surface: channels
 role: moderator
 user: u-lena (Lena Brandt)
-url: /social/channels/general
+url: /social/channels/general; /social/channels/general?view=documents; /social/channels/random; /social/channels/no-such-channel
+map: docs/journeys/maps/social/moderator/channels.ts
 pages: portal/src/pages/social/ChannelsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialConversation.tsx,portal/src/pages/social/socialChat.ts
-audited: 2026-10-22 18:51–18:52 local, headless Chromium 1680×940 (Playwright), a fresh signed-in clone of u-lena (u-lena-clone-69668981), second context u-sana (the seed persona in its own Playwright context, already in tenant social); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: /api/session/me sub u-lena-clone-69668981 (a clone of u-lena), tenant social, role moderator
+audited: 2026-10-31 19:32–19:32 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-lena-clone-f1e701fc), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-lena-clone-f1e701fc, tenant social, role moderator, grants {"social":["moderator"]}
 screenshot: channels.jpg
 verdict: pass
 console errors: 0
-layout: pass — rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940; conversation pane x=500, width 1180px; composer y=841–883px, in view without the body scrolling: true; h1 count 1
-keyboard: pass — 39 distinct Tab stops against 173 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity) in the chat workspace; Enter on the Documents tab set ?view=documents, Enter on Chat brought the composer back (true); Enter on the #random row opened /social/channels/random
-empty-state: pass — /social/channels/no-such-channel rendered: #no-such-channel is not available This channel does not exist, or it is private and you are not a member.
-realtime: pass — the clone's "journey moderator channels 18:52:39 out" reached u-sana in 0.056s, u-sana's reply came back in 0.057s, no reload; own message present after a reload: true
-role-gating: can manage channels/teams: on this route's DOM (the rail draws only this route's section) Create channel controls 1, Create team/New team 0, New room 0, New message 1; POST /api/social/channels {} → 400, POST /api/social/teams {} → 400 (403 = refused by Cedar, 400 = validation past the gate); message actions: this clone's own row Edit 0 / Delete 0; u-sana's own row (seed persona) Edit 1 / Delete 1; u-sana's view of the clone's row Edit 0 / Delete 0; the clone's view of u-sana's row Edit 0 / Delete 0 — a clone-only artifact of the dev:mock clone tooling, not judged: the gateway stamps a clone's message with its persona (recordUserId) while the page compares against the clone's session sub, so the clone sees its own message as someone else's; own-row Edit/Delete is judged on the seed persona above
-header: #g #general 12 members · Release trains, change freezes, office hours and new runbooks. Questions without a home start here. Chat Documents Pinned Calls LB Work; tabs present [chat, documents, pins, calls] = [true,true,true,true]; call actions [audio, video] = [true,true]
-rail-sections: Chat Activity Mentions Calls Recordings ACTIVE NOW 1 Sana CHANNELS # general 18:48 journey moderator channels 18:48:15 back ⋯ # auth-migration Yesterday Then I decide the order once the retry is clean. Expect it tomorrow. ⋯ # design-reviews Yesterday Revised r
-notes: Every field above was observed in this pass. A second clone-only artifact, most likely the same persona-vs-clone id mismatch as the Edit/Delete gap: the clone's composer keeps the sent text after the message is delivered, so the screenshot shows the sent line still in the composer; a seed persona's composer clears on send (checked separately with u-sana on #general). Messages in #general were posted by this walk and left in place. Not exercised: pins, forward, slash commands, attachments, channel creation itself (only its control and the Cedar probe).
+layout: pass — ui-dom-audit 0 failing findings at 6 measured step(s); at /social/channels/general: no horizontal scroll (1680/1680), 1 h1 "Channels" 16/400 at 199/43, first-row-top: 84px, composer at y 837–895 of 940
+keyboard: pass — Tab from the top of the page through every control (Tab visited 39 distinct visible controls of 199 focusable); Enter on Chat brings the messages and the composer back; Enter on the #random row opens it
+empty-state: pass — An unknown channel says it is not available
+realtime: pass — Without a reload, Sana appears under Active now in the walker’s rail
+role-gating: pass — The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration; Create a channel is offered in the Channels section; POST /api/social/channels with an empty body answers 400: the gate admits this role to creating channels, and validation refuses the empty body (POST /api/social/channels → 400); POST /api/social/teams with an empty body answers 400: the gate admits this role to creating teams, and validation refuses the empty body (POST /api/social/teams → 400)
+dom-audit: 0 failing finding(s) at 6 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Lena (moderator) reads #general, moves between channels from the keyboard, is offered channel creation, and sees a second identity arrive live. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/social/moderator/channels).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open #general: the rail, the channel header with Chat, Documents, Pinned and Calls, the call actions and the composer | default | pass | 0 finding(s) | /social/channels/general |
+| 2 | The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration | default | pass | not measured: the resting state the first step measured | /social/channels/general |
+| 3 | Create a channel is offered in the Channels section | default | pass | not measured: the resting state the first step measured | /social/channels/general |
+| 4 | POST /api/social/channels with an empty body answers 400: the gate admits this role to creating channels, and validation refuses the empty body (POST /api/social/channels → 400) |  | pass | — | /social/channels/general |
+| 5 | POST /api/social/teams with an empty body answers 400: the gate admits this role to creating teams, and validation refuses the empty body (POST /api/social/teams → 400) |  | pass | — | /social/channels/general |
+| 6 | Tab from the top of the page through every control (Tab visited 39 distinct visible controls of 199 focusable) |  | pass | — | /social/channels/general |
+| 7 | Documents shows the channel’s documents | tab-documents | pass | 0 finding(s) | /social/channels/general?view=documents |
+| 8 | Enter on Chat brings the messages and the composer back |  | pass | 0 finding(s) | /social/channels/general |
+| 9 | Enter on the #random row opens it | row-open | pass | 0 finding(s) | /social/channels/random |
+| 10 | An unknown channel says it is not available | not-found | pass | 0 finding(s) | /social/channels/no-such-channel |
+| 11 | Back on #general | default | pass | not measured: the resting state the first step measured | /social/channels/general |
+| 12 | Sana Iqbal opens /social/channels/general in her own browser | default | pass | not measured: the peer’s page; the walker’s is measured | /social/channels/general |
+| 13 | Without a reload, Sana appears under Active now in the walker’s rail | live | pass | 0 finding(s) | /social/channels/general |

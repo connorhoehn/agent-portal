@@ -4,8 +4,8 @@ user: u-ines (Ines Moreau)
 url: /pipelines/configuration; /pipelines/runs
 map: docs/journeys/maps/pipelines/author/configuration.ts
 pages: portal/src/pages/pipelines/ConfigurationPage.tsx,portal/src/App.tsx,portal/src/components/shell/Layout.tsx
-audited: 2026-10-29 21:40–21:40 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-4a7987ce), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-ines-clone-4a7987ce, tenant pipelines, role author, grants {"pipelines":["author"]}
+audited: 2026-10-31 19:15–19:15 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-1a7d72f9), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-ines-clone-1a7d72f9, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: configuration.jpg
 verdict: pass
 console errors: 0

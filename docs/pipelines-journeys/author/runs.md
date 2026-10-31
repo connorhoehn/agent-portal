@@ -4,8 +4,8 @@ user: u-ines (Ines Moreau)
 url: /pipelines/runs; /pipelines/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb
 map: docs/journeys/maps/pipelines/author/runs.ts
 pages: portal/src/pages/pipelines/RunsPage.tsx,portal/src/components/runs/RunsLedger.tsx,portal/src/lib/pipelineRuns.ts
-audited: 2026-10-29 21:41–21:41 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-2a7831da), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-ines-clone-2a7831da, tenant pipelines, role author, grants {"pipelines":["author"]}
+audited: 2026-10-31 19:15–19:15 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-ines-clone-2d11d965), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-ines-clone-2d11d965, tenant pipelines, role author, grants {"pipelines":["author"]}
 screenshot: runs.jpg
 verdict: fail — 1 of 13 steps failed; step 8 (The opened record has loaded): 5 ui-dom-audit finding(s): a11y.contrast ×4, a11y.heading-order ×1
 console errors: 0

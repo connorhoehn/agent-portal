@@ -95,9 +95,11 @@ function lockIdentities(users) {
 
 const outDirOf = (o, map) => path.join(o.out, map.family, map.log);
 
-function writeSpec(dir, o, maps, m) {
+async function writeSpec(dir, o, maps, m) {
   const req = createRequire(path.join(PORTAL, 'package.json'));
   const testModule = req.resolve('@playwright/test');
+  const { loadEnv } = await import(pathToFileURL(req.resolve('vite')).href);
+  const gatewayFallback = loadEnv('development', PORTAL).VITE_GATEWAY_URL;
   const imp = (p) => JSON.stringify(pathToFileURL(p).href);
   const entries = maps.map(({ file, map }) => ({ file: path.join(ROOT, file), rel: file, out: outDirOf(o, map), title: `${map.family}/${map.log}` }));
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
@@ -112,6 +114,8 @@ import { measureDOM } from ${imp(path.join(SKILL, 'scripts/measure.mjs'))};
 import { probes } from ${imp(path.join(SKILL, 'scripts/probes.mjs'))};
 import { validateContract } from ${imp(path.join(SKILL, 'scripts/run.mjs'))};
 import { walkMap } from ${imp(path.join(HERE, 'walk.mjs'))};
+import { gatewayRefusal as probeGatewayRefusal } from ${imp(path.join(HERE, 'gateway-refusal.mjs'))};
+const gatewayRefusal = (page, channel) => probeGatewayRefusal(page, channel, 8000, ${JSON.stringify(gatewayFallback ?? null)});
 const { test } = playwright;
 const ENTRIES = ${JSON.stringify(entries)};
 const LANE_M = ${JSON.stringify(m)};
@@ -190,7 +194,7 @@ for (const e of ENTRIES) test(e.title, async ({ browser }) => {
   const map = (await import(e.file)).default;
   // 10 minutes, or 20 s a step for a map with many (the work family's refusals maps walk ~70 refused deep links).
   test.setTimeout(Math.max(10 * 60_000, map.steps.length * 20_000));
-  const ctx = { baseURL: ${JSON.stringify(BASE)}, outDir: e.out, fixtureOrigins: map.media === 'meeting-fixture' ? ['http://meeting-media.test'] : [], open, measure, focusWalk: probes.focusWalk, scoped: (LANE_M.scopes && !!map.scenario?.scope) || (LANE_M.clones && map.scenario?.realtime === 'meeting'), setScope: LANE_M.scopes ? (context, scope) => rs.withMockScope(context, scope) : undefined };
+  const ctx = { baseURL: ${JSON.stringify(BASE)}, outDir: e.out, gatewayRefusal, fixtureOrigins: map.media === 'meeting-fixture' ? ['http://meeting-media.test'] : [], open, measure, focusWalk: probes.focusWalk, scoped: (LANE_M.scopes && !!map.scenario?.scope) || (LANE_M.clones && map.scenario?.realtime === 'meeting'), setScope: LANE_M.scopes ? (context, scope) => rs.withMockScope(context, scope) : undefined };
   let result = await walkMap(browser, map, ctx);
   // A BFF reload (Tilt restarts it on any middleware edit) drops in-memory clones and scopes: re-mint and walk once more.
   if (result.authLost || /^setup failed/.test(result.error ?? '')) {
@@ -262,9 +266,10 @@ async function main() {
     if (problems.length) { problems.forEach((p) => console.error(`  ✗ ${p}`)); process.exit(1); }
     const seen = new Set(); const inventory = [];
     for (const r of [...inv.staticInventory(), ...inv.paramInventory()]) { const key = r.pattern ?? inv.routeKey(r.path) ?? r.path; if (seen.has(key)) continue; seen.add(key); inventory.push({ key, tenant: r.tenant, kind: r.kind ?? 'page' }); }
-    const src = fs.readFileSync(path.join(ROOT, 'middleware/src/lib/session.ts'), 'utf8');
-    const block = src.match(/ROLES_BY_TENANT[^=]*=\s*\{([\s\S]*?)\n\};/)[1];
-    const rolesByTenant = Object.fromEntries([...block.matchAll(/^\s*(\w+):\s*\[([^\]]*)\]/gm)].map(([, t, rs]) => [t, [...rs.matchAll(/'([^']+)'/g)].map((x) => x[1])]));
+    // DE-29 moved registration out of session.ts: consume the generated
+    // manifest data, without importing the session runtime or parsing its source.
+    const { ROLES_BY_TENANT, CROSS_TENANT_ROLES } = await import(pathToFileURL(path.join(ROOT, 'middleware/src/lib/tenants.generated.ts')).href);
+    const rolesByTenant = Object.fromEntries(Object.entries(ROLES_BY_TENANT).map(([tenant, roles]) => [tenant, [...roles, ...CROSS_TENANT_ROLES]]));
     // A map that writes counts only once lane M's scopes let it run.
     const m = laneM();
     const runnable = maps.filter(({ map }) => !map.hold && (!map.writes || m.scopes));
@@ -321,7 +326,7 @@ async function main() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-maps-'));
     try {
       for (const { map } of maps) fs.rmSync(outDirOf(o, map), { recursive: true, force: true });
-      const cli = writeSpec(dir, o, maps, m);
+      const cli = await writeSpec(dir, o, maps, m);
       console.log(`walking ${maps.length} map(s)${m.clones ? ' as clones' : ''} …`);
       const r = spawnSync(process.execPath, [cli, 'test', '--config', path.join(dir, 'playwright.config.cjs')], { stdio: 'inherit', cwd: PORTAL });
       if (r.status !== 0) console.error(`the Playwright run exited ${r.status} — logs are written for every map that produced a result`);

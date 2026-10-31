@@ -3,7 +3,7 @@ user: demo-user (Demo User)
 url: /iq/projects; /social/channels; /social/rooms; /social/dms
 map: docs/journeys/maps/social/isolation/demo-user.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-10-29 21:47–21:47 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context as the cookie-less demo identity, no sign-in), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+audited: 2026-10-31 19:32–19:32 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context as the cookie-less demo identity, no sign-in), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
 session: /api/session/me sub demo-user, tenant orgiq, role member, grants {"orgiq":["member","sme","program-owner","org-leader","hr-admin","admin"],"assessment":["assessor","lead-assessor","program-lead","admin"]}
 social-grant: no — The workspace chooser shows no Social tile: this identity holds no social grant (/select → /workspaces)
 social-tile-visible: no — The workspace chooser shows no Social tile: this identity holds no social grant (/select → /workspaces)
@@ -11,6 +11,7 @@ social-nav-visible: no — The shell on /iq/projects, its own tenant, holds no l
 direct-route-result: redirect — Type /social/channels: the route sends this identity away (/social/channels → /iq/projects); Type /social/rooms: the route sends this identity away (/social/rooms → /iq/projects); Type /social/dms: the route sends this identity away (/social/dms → /iq/projects)
 api-status: 403 — GET /api/social/summary answers 403 (GET /api/social/summary → 403); GET /api/social/channels answers 403 (GET /api/social/channels → 403); GET /api/social/rooms answers 403 (GET /api/social/rooms → 403); GET /api/social/teams answers 403 (GET /api/social/teams → 403); GET /api/social/recordings answers 403 (GET /api/social/recordings → 403); GET /api/social/calls answers 403 (GET /api/social/calls → 403)
 activity-leak: none — The bell opens on /iq/projects; no item in it links into a tenant this identity holds no grant in; Escape closes the bell
+forged-subscribe: AUTHZ_CHANNEL_DENIED — Forged chat join, history and presence subscriptions are all denied with no channel data disclosed (social:ch:general: chat join: not-a-member, chat/subscribe: AUTHZ_CHANNEL_DENIED, presence/subscribe: AUTHZ_CHANNEL_DENIED; 0 disclosed frames)
 console errors: 0
 dom-audit: 0 failing finding(s) at 5 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
 screenshot: demo-user.jpg
@@ -23,15 +24,16 @@ notes: The cookie-less demo identity holds no social grant: no Social tile, link
 |---|---|---|---|---|---|
 | 1 | The workspace chooser shows no Social tile: this identity holds no social grant (/select → /workspaces) | default | pass | not measured: outside the route inventory (no app frame for the audit contract to judge) | /workspaces |
 | 2 | The shell on /iq/projects, its own tenant, holds no link toward /social | default | pass | 0 finding(s) | /iq/projects |
-| 3 | Type /social/channels: the route sends this identity away (/social/channels → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
-| 4 | Type /social/rooms: the route sends this identity away (/social/rooms → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
-| 5 | Type /social/dms: the route sends this identity away (/social/dms → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
-| 6 | Back on its own landing, still no link toward /social | default | pass | not measured: the landing step 2 measured | /iq/projects |
-| 7 | GET /api/social/summary answers 403 (GET /api/social/summary → 403) |  | pass | — | /iq/projects |
-| 8 | GET /api/social/channels answers 403 (GET /api/social/channels → 403) |  | pass | — | /iq/projects |
-| 9 | GET /api/social/rooms answers 403 (GET /api/social/rooms → 403) |  | pass | — | /iq/projects |
-| 10 | GET /api/social/teams answers 403 (GET /api/social/teams → 403) |  | pass | — | /iq/projects |
-| 11 | GET /api/social/recordings answers 403 (GET /api/social/recordings → 403) |  | pass | — | /iq/projects |
-| 12 | GET /api/social/calls answers 403 (GET /api/social/calls → 403) |  | pass | — | /iq/projects |
-| 13 | The bell opens on /iq/projects; no item in it links into a tenant this identity holds no grant in | dialog-open | pass | 0 finding(s) | /iq/projects |
-| 14 | Escape closes the bell |  | pass | not measured: the landing again | /iq/projects |
+| 3 | Forged chat join, history and presence subscriptions are all denied with no channel data disclosed (social:ch:general: chat join: not-a-member, chat/subscribe: AUTHZ_CHANNEL_DENIED, presence/subscribe: AUTHZ_CHANNEL_DENIED; 0 disclosed frames) |  | pass | — | /iq/projects |
+| 4 | Type /social/channels: the route sends this identity away (/social/channels → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
+| 5 | Type /social/rooms: the route sends this identity away (/social/rooms → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
+| 6 | Type /social/dms: the route sends this identity away (/social/dms → /iq/projects) | refused | pass | 0 finding(s) | /iq/projects |
+| 7 | Back on its own landing, still no link toward /social | default | pass | not measured: the landing step 2 measured | /iq/projects |
+| 8 | GET /api/social/summary answers 403 (GET /api/social/summary → 403) |  | pass | — | /iq/projects |
+| 9 | GET /api/social/channels answers 403 (GET /api/social/channels → 403) |  | pass | — | /iq/projects |
+| 10 | GET /api/social/rooms answers 403 (GET /api/social/rooms → 403) |  | pass | — | /iq/projects |
+| 11 | GET /api/social/teams answers 403 (GET /api/social/teams → 403) |  | pass | — | /iq/projects |
+| 12 | GET /api/social/recordings answers 403 (GET /api/social/recordings → 403) |  | pass | — | /iq/projects |
+| 13 | GET /api/social/calls answers 403 (GET /api/social/calls → 403) |  | pass | — | /iq/projects |
+| 14 | The bell opens on /iq/projects; no item in it links into a tenant this identity holds no grant in | dialog-open | pass | 0 finding(s) | /iq/projects |
+| 15 | Escape closes the bell |  | pass | not measured: the landing again | /iq/projects |

@@ -4,8 +4,8 @@ user: u-kofi (Kofi Mensah)
 url: /pipelines/runbooks; /pipelines/definitions/runbook%3Apromo-custodian-sg-drift; /pipelines/runbooks/does-not-exist
 map: docs/journeys/maps/pipelines/operator/runbooks.ts
 pages: portal/src/pages/pipelines/RunbooksPage.tsx,portal/src/lib/pipelineDefinitions.ts
-audited: 2026-10-29 21:45–21:45 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-56996fdd), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-kofi-clone-56996fdd, tenant pipelines, role operator, grants {"pipelines":["operator"]}
+audited: 2026-10-31 19:19–19:19 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-kofi-clone-9dec0b31), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-kofi-clone-9dec0b31, tenant pipelines, role operator, grants {"pipelines":["operator"]}
 screenshot: runbooks.jpg
 verdict: fail — 2 of 15 steps failed; step 9 (The opened record has loaded): 1 ui-dom-audit finding(s): a11y.contrast ×1
 console errors: 0

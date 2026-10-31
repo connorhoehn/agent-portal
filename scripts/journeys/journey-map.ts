@@ -69,7 +69,7 @@ interface StepBase {
   /** The PROTOCOL fields this step is evidence for. */
   proves?: Field | Field[];
   expect?: Expect;
-  /** Measure with the ui-dom-audit (default: true for page steps, false for api and tab-walk). `false` needs `auditReason`. */
+  /** Measure with the ui-dom-audit (default: true for page steps, false for api, gateway-refusal and tab-walk). `false` needs `auditReason`. */
   audit?: boolean;
   auditReason?: string;
   /** Extra required regions for the audit (`$alias` selectors of the adapter). */
@@ -99,6 +99,8 @@ export type Step = StepBase & (
   | { do: 'wait'; target: Target }
   /** Tab through the page from the top (the skill's focusWalk probe); proves keyboard reach. */
   | { do: 'tab-walk'; max?: number }
+  /** Read-only forged chat/history/presence requests: all must be denied, with no channel data returned. */
+  | { do: 'gateway-refusal'; channel: string }
   /** Reload the page (a write read back after reload). */
   | { do: 'reload' }
   /** Resize the viewport mid-walk (the 1440/900 frames). */

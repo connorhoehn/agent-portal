@@ -122,7 +122,7 @@ export const SURFACES = {
       { do: 'click', target: { testId: 'social-chat-panel-tab-documents' }, name: 'Documents shows the channel’s documents', state: 'tab-documents', expect: { url: /view=documents/ } },
       { do: 'press', key: 'Enter', target: { testId: 'social-chat-panel-tab-chat' }, name: 'Enter on Chat brings the messages and the composer back', proves: 'keyboard', expect: { visible: [{ testId: 'social-chat-composer' }] } },
     ] as Step[]),
-    { do: 'press', key: 'Enter', target: { role: 'button', name: /^#random/, within: { testId: 'social-chat-rail-list-channels' } }, name: 'Enter on the #random row opens it', state: 'row-open', proves: 'keyboard', expect: { url: '/social/channels/random' } },
+    { do: 'press', key: 'Enter', target: { role: 'button', name: /^random(?:\s|$)/, within: { testId: 'social-chat-rail-list-channels' } }, name: 'Enter on the #random row opens it', state: 'row-open', proves: 'keyboard', expect: { url: '/social/channels/random' } },
     { do: 'navigate', url: '/social/channels/no-such-channel', name: 'An unknown channel says it is not available', state: 'not-found', proves: 'empty-state', expect: { visible: [{ testId: 'social-channel-missing' }], text: [/is not available/] } },
     { do: 'navigate', url: '/social/channels/general', name: 'Back on #general', audit: false, auditReason: 'the resting state the first step measured' },
     ...presence(role, '/social/channels/general', 'rail'),
@@ -183,7 +183,7 @@ export const SURFACES = {
     { do: 'fill', target: { role: 'textbox', name: 'Find a hangout', exact: true }, value: '', name: 'Clear the search: the hangouts come back', audit: false, auditReason: 'the resting state again', expect: { count: [{ target: { testId: 'social-room-card' }, min: 1 }] } },
     { do: 'press', key: 'Enter', target: { role: 'button', name: /^Open /, within: { testId: 'social-room-directory' } }, name: 'Enter on a hangout’s Open opens its record: access, host, call, recording and Join call', state: 'row-open', proves: 'keyboard', expect: { url: /room=/, visible: [{ testId: 'social-room-detail' }, { testId: 'social-room-facts' }, { testId: 'social-room-join' }] } },
     { do: 'click', target: { testId: 'social-room-back' }, name: 'All hangouts returns to the directory', expect: { visible: [{ testId: 'social-room-directory' }] } },
-    { do: 'navigate', url: '/social/rooms?room=no-such-room', name: 'An unknown hangout says it is not available', state: 'not-found', proves: 'empty-state', expect: { visible: [{ testId: 'social-room-missing' }], text: ['This hangout is not available'] } },
+    { do: 'navigate', url: '/social/rooms?room=no-such-room', name: 'An unknown hangout says it is not available', state: 'not-found', proves: 'empty-state', expectConsole: /404 GET \/api\/social\/rooms\/no-such-room\b/, expect: { visible: [{ testId: 'social-room-missing' }], text: ['This hangout is not available'] } },
     { do: 'navigate', url: '/social/rooms?room=design-studio', name: 'Open the Design studio hangout: nobody is in its call', audit: false, auditReason: 'the record step measured above', expect: { visible: [{ testId: 'hangout-active-people' }], text: ['No one is in this call right now.'] } },
     { do: 'navigate', actor: 'peer', url: '/social/rooms?room=design-studio', name: `${PEER_CLONE[role].name} (a second clone) opens the same hangout in her own browser`, audit: false, auditReason: 'the peer’s page; the walker’s is measured' },
     // The gateway owns call state (no mock scope reaches it); the meeting fixture fakes platform-api, so nothing is recorded there, and the runner leaves the call on close.
@@ -323,8 +323,9 @@ export function inbound(landing: string, grant: boolean, foreign: string[]): Ste
   const tile: Target = { testId: 'select-roles-social' };
   return [
     { do: 'navigate', url: '/select', name: grant ? 'The workspace chooser shows the Social tile: this identity holds a social grant' : 'The workspace chooser shows no Social tile: this identity holds no social grant',
-      proves: ['social-grant', 'social-tile-visible'], expect: grant ? { visible: [{ testId: 'select-workspace-grid' }, tile] } : { visible: [{ testId: 'select-workspace-grid' }], absent: [tile] } },
+      proves: ['social-grant', 'social-tile-visible', ...(grant ? ['forged-subscribe'] : [])], expect: grant ? { visible: [{ testId: 'select-workspace-grid' }, tile] } : { visible: [{ testId: 'select-workspace-grid' }], absent: [tile] } },
     { do: 'navigate', url: landing, name: `The shell on ${landing}, its own tenant, holds no link toward /social`, proves: 'social-nav-visible', screenshot: 'log', expect: { absent: [anchorsTo('/social')] } },
+    ...(!grant ? [{ do: 'gateway-refusal', channel: 'social:ch:general', name: 'Forged chat join, history and presence subscriptions are all denied with no channel data disclosed', proves: 'forged-subscribe' } satisfies Step] : []),
     away('/social/channels', /^\/social/, 'direct-route-result', SOCIAL_CONTENT),
     away('/social/rooms', /^\/social/, 'direct-route-result', SOCIAL_CONTENT),
     away('/social/dms', /^\/social/, 'direct-route-result', SOCIAL_CONTENT),
@@ -336,7 +337,7 @@ export function inbound(landing: string, grant: boolean, foreign: string[]): Ste
   ];
 }
 export function inboundClaims(grant: boolean): Record<string, string> {
-  return { 'social-grant': grant ? 'yes' : 'no', 'social-tile-visible': grant ? 'yes' : 'no', 'social-nav-visible': 'no', 'direct-route-result': 'redirect', 'api-status': '403', 'activity-leak': 'none' };
+  return { 'social-grant': grant ? 'yes' : 'no', 'social-tile-visible': grant ? 'yes' : 'no', 'social-nav-visible': 'no', 'direct-route-result': 'redirect', 'api-status': '403', 'activity-leak': 'none', 'forged-subscribe': grant ? 'n/a — this identity holds a social grant' : 'AUTHZ_CHANNEL_DENIED' };
 }
 
 /** Outbound: a social role reaches for orgiq and assessment. */

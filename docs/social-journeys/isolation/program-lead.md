@@ -3,14 +3,15 @@ user: u-farah (Farah Osei)
 url: /assessment/teams; /social/channels; /social/rooms; /social/dms
 map: docs/journeys/maps/social/isolation/program-lead.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-10-29 21:48–21:48 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-farah-clone-48cc520b), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-farah-clone-48cc520b, tenant assessment, role program-lead, grants {"assessment":["program-lead","lead-assessor"],"social":["participant"]}
+audited: 2026-10-31 19:26–19:26 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-farah-clone-5b444bf1), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-farah-clone-5b444bf1, tenant assessment, role program-lead, grants {"assessment":["program-lead","lead-assessor"],"social":["participant"]}
 social-grant: yes — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
 social-tile-visible: yes — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
 social-nav-visible: no — The shell on /assessment/teams, its own tenant, holds no link toward /social; Back on its own landing, still no link toward /social
 direct-route-result: redirect — Type /social/channels: the route sends this identity away (/social/channels → /assessment/teams); Type /social/rooms: the route sends this identity away (/social/rooms → /assessment/teams); Type /social/dms: the route sends this identity away (/social/dms → /assessment/teams)
 api-status: 403 — GET /api/social/summary answers 403 (GET /api/social/summary → 403); GET /api/social/channels answers 403 (GET /api/social/channels → 403); GET /api/social/rooms answers 403 (GET /api/social/rooms → 403); GET /api/social/teams answers 403 (GET /api/social/teams → 403); GET /api/social/recordings answers 403 (GET /api/social/recordings → 403); GET /api/social/calls answers 403 (GET /api/social/calls → 403)
 activity-leak: none — The bell opens on /assessment/teams; no item in it links into a tenant this identity holds no grant in; Escape closes the bell
+forged-subscribe: n/a — this identity holds a social grant — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
 console errors: 0
 dom-audit: 0 failing finding(s) at 5 measured step(s); 20 more owed by docs/journeys/audit-burndown.tsv (a11y.contrast ×20) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
 screenshot: program-lead.jpg

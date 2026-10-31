@@ -223,12 +223,15 @@ summary are in `.scratch/resume-2026-10-28/`.
 
 ## Next session
 
-**Journeys (2026-10-30):** access re-walked and sealed (b9507421). Journey
-maps for pipelines, social and assessment were being written when the session
-stopped: `run-maps.mjs check` passes (364 maps) and the runner tests pass, but
-those families are not fully walked or sealed yet. Resume with
-`node scripts/journeys/run-maps.mjs walk --family <pipelines|social|assessment> --no-seal`,
-fix or report failures (never weaken an expectation), then a sealing walk.
+**Journeys (2026-10-31):** access was re-walked and sealed (b9507421).
+Pipelines now has 55 walked maps: 17 passing and sealed, 38 failed. Social
+has 44 walked maps: 31 passing and sealed, 13 failed; four activity maps stay
+held because the gateway cannot isolate their chat writes. Findings and runner
+repairs are in [the continuation report](journeys/continuation-2026-10-31.md).
+Assessment's 57 maps are being walked; do not treat its older seals as this
+continuation's evidence. All 364 maps validate and 45 runner tests pass.
+Continue the Assessment walk and targeted map repairs, then fix or report
+remaining failures (never weaken an expectation). Seal only passing walks.
 
 **Follow-ups (2026-10-29): done** — PR-watch takes a hold/slot; the spend
 metric fires for SQL settles; `GET /api/harness/promoted-versions` reports

@@ -1,20 +1,33 @@
 surface: calls
 role: community-admin
-user: u-mira (walked as its clone u-mira-clone-a0006735)
-url: /social/calls (plus a DM call from /social/dms/social%3Adm%3Au-mira-clone-a0006735%3Au-sana-clone-a80d47c6)
-pages: portal/src/pages/social/CallsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/CallLogPane.tsx,portal/src/pages/social/useSocialCall.ts,portal/src/pages/social/socialCallLog.ts
-audited: 2026-10-24 08:48–08:49 local, headless Chromium 1680×940 (Playwright) with fake capture devices, a fresh signed-in clone of u-mira (u-mira-clone-a0006735), second context u-sana-clone-a80d47c6 (a second fresh clone, its own Playwright context); Tilt stack: Vite :5183 over middleware :3001 (dev:mock), Social platform-api :23002, SFU :3902; mock not reset (shared stack)
-session: /api/session/me sub u-mira-clone-a0006735 (a fresh clone of u-mira), tenant social, role community-admin
+user: u-mira (Mira Okafor)
+url: /social/calls; /social/channels/general; /social/contacts
+map: docs/journeys/maps/social/community-admin/calls.ts
+pages: portal/src/pages/social/CallsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/CallLogPane.tsx,portal/src/pages/social/useSocialCall.ts
+audited: 2026-10-31 19:23–19:23 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mira-clone-ad49d8c4), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-mira-clone-ad49d8c4, tenant social, role community-admin, grants {"social":["community-admin"]}
 screenshot: calls.jpg
-verdict: pass
+verdict: fail — 2 of 10 steps failed; step 1 (Open Calls: the shelf’s call log, empty for a fresh identity, with Call someone): 1 ui-dom-audit finding(s): a11y.heading-order ×1
 console errors: 0
-layout: pass — rail 300px at x=200, y=44, height 847px (primary rail open); content (SectionContent) starts x=500, width 1180px (gap from the rail's right edge: 0px); scrollWidth 1680 / viewport 1680; body scrollHeight 940 / 940; footer row y=891–940; the shelf's Calls button state: true
-keyboard: pass — 8 distinct Tab stops against 8 visible interactive controls (first stops: social-chat-rail-search-toggle, social-new-dm, social-chat-rail-shelf-activity); Enter on the focused Missed filter applied it (pressed); the DM header's audio call opened the pre-join dialog ("u-sana-clone-a80d47c6 Joining as Mira Okafor Microphone Fake Default Audio Input Input level Test mic Noise reduction Speakers Fake Default ") and Escape closed it without starting a call (true)
-empty-state: pass — this context's GET /api/social/calls stubbed empty (page.route, this context only) rendered "No calls yet Calls you place or receive in this workspace, and the ones you missed, are listed here. Call someone"; on the live log the Missed filter shows 1 row(s) and All 2
-realtime: pass — real DM call to u-sana-clone-a80d47c6: the callee's incoming-call toast appeared 0.01s after the caller's invite frame left (0.13s after the caller pressed Join in the pre-join dialog, which includes platform-api opening the video session); Accept + Join drew "2 joined" in both docks 0.12s after Accept; after Leave the callee's dock went 4.05s after the caller left; second ring: the toast appeared 0.18s after Join and cleared 0.04s after the caller cancelled
-role-gating: StartCall capability true; the DM header's audio call enabled and video call enabled; the call log is readable; Call someone in the header (true)
-call-log: source platform; 0 rows before the walk (0 drawn), 2 after (2 drawn); missed chip "none"; Missed filter after: 1 row(s); newest: ["u-sana-clone-a80d47c6 Outgoing Missed Oct 24, 8:49 AM — Call back","u-sana-clone-a80d47c6 Outgoing Answered Oct 24, 8:48 AM 3s Call back"]
-media: callee toast: "Mira Okafor is calling Audio call Decline Accept"; the caller's dock while ringing: "u-sana-clone-a80d47c6 huddle Calling u-sana-clone-a80d47c6… 1 joined · 1 ringing"; with fake devices the docks read "u-sana-clone-a80d47c6 huddle 00:03 2 joined Message" (caller) and "Mira Okafor huddle 00:02 2 joined Message" (callee); 2 participant tile(s) on the caller's side (MO You, SI Sana Iqbal); media elements with live tracks: video:audio/live, video:audio/live; mic control present: 1. Real SFU media with fake capture devices; no audio content is verifiable headless. After Leave: the shell dock count 1, the conversation dock read "Call ended Dismiss"
-in-call-on-dm: pass — with the call connected on /social/dms/…: the composer dock's header (title, mic, camera, Leave) is display:flex, Leave visible true; the conversation header's call button reads "Join the call with audio"; the huddle chat pane reads "(none)". The same dock on /social/calls draws its controls: "u-sana-clone-a80d47c6 2 people · 00:03 Leave MO You SI Sana Iqbal" — the walk left the call from there. After the caller left, the callee's dock read "(gone)"; the second ring was cancelled from there too (button title "Cancel the call")
-missed: pass — the ring the caller hung up before an answer, checked on u-sana-clone-a80d47c6's side: her missed count 0 → 1; her Missed filter's newest row "Mira Okafor Incoming Missed Oct 24, 8:49 AM — Call back"; her bell "Activity" → "Activity, 1 unread", its newest missed-call item "Missed call from Mira Okafor Social · Missed call — The call ended before anyone answered."; the caller's own log row for that ring: "u-sana-clone-a80d47c6 Outgoing Missed Oct 24, 8:49 AM — Call back"; the caller's page reported these call-log events to platform-api: invite→200, accepted→200, ended→200, invite→200, missed→200
-notes: Every field was observed in this pass. The second context is fresh clone u-sana-clone-a80d47c6; no real seed persona session was used. Recording playback is a separate surface (recordings logs). 
+layout: fail — 2 ui-dom-audit finding(s) at 2 of 4 measured step(s) (a11y.heading-order ×2); at /social/calls: no horizontal scroll (1680/1680), 2 h1 "Calls" 16/400 at 199/43, first-row-top: 84px
+keyboard: pass — Tab from the top of the page through every control (Tab visited 33 distinct visible controls of 33 focusable); Enter on Call someone leaves the log for a place to start one
+empty-state: fail — step 1 (Open Calls: the shelf’s call log, empty for a fresh identity, with Call someone): 1 ui-dom-audit finding(s): a11y.heading-order ×1
+realtime: fail — step 10 (Without a reload, Sana appears under Active now in the walker’s rail): 1 ui-dom-audit finding(s): a11y.heading-order ×1
+role-gating: pass — The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration; Call someone is offered (every role may StartCall); A conversation’s header offers an audio and a video call, both enabled
+dom-audit: 2 failing finding(s) at 4 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
+notes: Mira (community admin) reads the call log and finds where a call starts, and sees a second identity arrive live. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/social/community-admin/calls).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Calls: the shelf’s call log, empty for a fresh identity, with Call someone | empty | fail: 1 ui-dom-audit finding(s): a11y.heading-order ×1 | 1 finding(s) | /social/calls |
+| 2 | The Social navigation lists Direct messages, Channels, Calls, Hangouts, Contacts, Teams, Recordings, Configuration | default | pass | not measured: the resting state the first step measured | /social/calls |
+| 3 | Call someone is offered (every role may StartCall) | default | pass | not measured: the resting state the first step measured | /social/calls |
+| 4 | A conversation’s header offers an audio and a video call, both enabled | default | pass | 0 finding(s) | /social/channels/general |
+| 5 | Back on Calls | default | pass | not measured: the resting state the first step measured | /social/calls |
+| 6 | Tab from the top of the page through every control (Tab visited 33 distinct visible controls of 33 focusable) |  | pass | — | /social/calls |
+| 7 | Enter on Call someone leaves the log for a place to start one |  | pass | 0 finding(s) | /social/contacts |
+| 8 | Back on Calls again | default | pass | not measured: the resting state the first step measured | /social/calls |
+| 9 | Sana Iqbal opens /social/calls in her own browser | default | pass | not measured: the peer’s page; the walker’s is measured | /social/calls |
+| 10 | Without a reload, Sana appears under Active now in the walker’s rail | live | fail: 1 ui-dom-audit finding(s): a11y.heading-order ×1 | 1 finding(s) | /social/calls |

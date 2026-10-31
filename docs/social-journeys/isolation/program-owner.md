@@ -3,14 +3,15 @@ user: u-mia (Mia Singh)
 url: /iq/projects; /social/channels; /social/rooms; /social/dms
 map: docs/journeys/maps/social/isolation/program-owner.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-10-29 21:48–21:49 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-2e309258), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-mia-clone-2e309258, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-31 19:26–19:26 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-f2762d0b), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-mia-clone-f2762d0b, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 social-grant: yes — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
 social-tile-visible: yes — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
 social-nav-visible: no — The shell on /iq/projects, its own tenant, holds no link toward /social; Back on its own landing, still no link toward /social
 direct-route-result: redirect — Type /social/channels: the route sends this identity away (/social/channels → /iq/projects); Type /social/rooms: the route sends this identity away (/social/rooms → /iq/projects); Type /social/dms: the route sends this identity away (/social/dms → /iq/projects)
 api-status: 403 — GET /api/social/summary answers 403 (GET /api/social/summary → 403); GET /api/social/channels answers 403 (GET /api/social/channels → 403); GET /api/social/rooms answers 403 (GET /api/social/rooms → 403); GET /api/social/teams answers 403 (GET /api/social/teams → 403); GET /api/social/recordings answers 403 (GET /api/social/recordings → 403); GET /api/social/calls answers 403 (GET /api/social/calls → 403)
 activity-leak: none — The bell opens on /iq/projects; no item in it links into a tenant this identity holds no grant in; Escape closes the bell
+forged-subscribe: n/a — this identity holds a social grant — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
 console errors: 0
 dom-audit: 0 failing finding(s) at 5 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21
 screenshot: program-owner.jpg
