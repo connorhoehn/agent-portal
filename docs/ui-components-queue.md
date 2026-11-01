@@ -7,6 +7,7 @@ TODO list for it.
 
 | primitive | why | where used |
 |---|---|---|
+| Assessment document headers start 4px left of the host breadcrumb | EditorShell's default 20px header inset needs a 24px page-gutter option when the host owns the trail. | Resolved in 2.485.0 (`968eb7ad`, release `8625d56c`) with `headerInset="page"`, adopted by `knowledge/DocumentShell.tsx`. All 16 Assessment slash routes pass the focused packed layout sweep; the existing editor inset remains the default. The separate flush-inset request for deck editors below remains open. |
 | Work activity card summaries squeezed beside status badges; effort titles clipped vertically | Keep the 200px card and existing graph composition while giving summaries the full body width and effort labels a 16px line box. | Resolved in 2.484.2 (`e0176631`, release `644dec46`); all 17 administrator scorecard journey steps pass, including the populated Activity graph, with zero DOM findings. |
 | `PageHeader` always emits h1 when a library is embedded in a record tab | Preserve the existing header size and composition while allowing a subordinate heading. | Resolved in 2.484.0 (`eaba6a91`, release `855e01eb`); packed h2 API verified and adopted by Assessment TeamFiles through DocumentLibrary. |
 | `DetailSection` / `CardHeader` fixed h3 skips h2 directly below page titles | Add a semantic `as` prop independent of visual size, preserving h3 as the default. | Resolved in 2.483.0 (`65141352`, release `0ce6ba0b`); packed APIs verified, adopted in Pipelines run sections and Assessment Stories. |

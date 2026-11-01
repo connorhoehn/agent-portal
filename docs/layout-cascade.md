@@ -445,3 +445,9 @@ light/dark, narrow width), not by repeatedly patching individual screenshots.
 Compact headers with a leading back control align that control/title group
 to the trail. The browser judge measures the actual group edge, so adding
 an accessible back action does not require a route-specific pixel exception.
+The same rule applies to EditorShell's leading FileKindMark (`data-kind`,
+`data-variant`, decorative SVG) in its heading row: the mark and title form
+one group. Its visible mark must precede the title's containing sibling and
+overlap the heading vertically. Ordinary headings and incidental preceding
+content keep their own measured edge. Browser fixtures retain failures for
+a shifted group and a shifted ordinary heading; no pixel tolerance changes.

@@ -98,14 +98,20 @@ async function measure(page: Page): Promise<Measure> {
       const b = h.getBoundingClientRect();
       const cs = getComputedStyle(h);
       const hidden = b.width <= 1 || b.height <= 1 || cs.clip === 'rect(0px, 0px, 0px, 0px)' || cs.clipPath === 'inset(50%)';
-      // A compact PageHeader may lead with its back control. The header
-      // group aligns to the trail; its title text naturally follows the icon.
-      // Measure that real leading control, not a hard-coded pixel exemption.
+      // PageHeader's back action and EditorShell's FileKindMark belong to
+      // their title group. Measure the actual leading member on the same
+      // line; an unrelated preceding element never moves the title's edge.
       const row = h.closest('[data-testid$="-row"]');
       const leading = row?.firstElementChild;
       const backLink = leading?.matches('a[aria-label]') ? leading : leading?.querySelector('a[aria-label]');
-      const back = backLink && leading?.nextElementSibling?.contains(h) ? backLink : null;
-      title = { left: Math.round(back?.getBoundingClientRect().left ?? b.left), top: Math.round(b.top), hidden, text: (h.textContent ?? '').slice(0, 60) };
+      const kindMark = row?.matches('[data-testid$="-head-row"]')
+        && leading?.matches('[data-kind][data-variant][aria-hidden="true"]')
+        && leading.querySelector('svg') ? leading : null;
+      const candidate = backLink ?? kindMark;
+      const cb = candidate?.getBoundingClientRect();
+      const grouped = cb && cb.width > 0 && cb.height > 0 && cb.top < b.bottom && cb.bottom > b.top
+        && leading?.nextElementSibling?.contains(h) ? cb : null;
+      title = { left: Math.round(grouped?.left ?? b.left), top: Math.round(b.top), hidden, text: (h.textContent ?? '').slice(0, 60) };
     }
     return {
       landed: location.pathname + location.search,
@@ -173,6 +179,25 @@ async function settle(page: Page) {
 }
 
 const inventory = staticInventory();
+
+test('title alignment measures declared leading groups and still rejects shifted headings', async ({ page }) => {
+  const fixture = (leading: string) => `<style>body{margin:0}main{padding:24px}nav{height:20px}#row{display:flex;align-items:center;gap:8px;margin-top:16px}h1{margin:0;font:600 20px/24px sans-serif}[data-kind]{display:block;width:36px;height:36px}</style><main><nav aria-label="Breadcrumb">Library</nav><div id="row" data-testid="fixture-head-row">${leading}<div><h1>Document title</h1></div></div></main>`;
+  const failures = async () => judge('/fixture', await measure(page), new Set()).filter(v => v.inv === 'title');
+  await page.setContent(fixture('<span data-kind="document" data-variant="outline" aria-hidden="true"><svg width="36" height="36"></svg></span>'));
+  expect((await measure(page)).title?.left).toBe(24);
+  expect(await failures()).toEqual([]);
+  await page.locator('#row').evaluate(el => { el.style.marginLeft = '-4px'; });
+  expect(await failures()).toHaveLength(1);
+  await page.locator('#row').evaluate(el => { el.style.marginLeft = '0'; });
+  await page.locator('[data-kind]').evaluate(el => { el.removeAttribute('data-variant'); });
+  expect(await failures()).toHaveLength(1);
+  await page.setContent(fixture('<a aria-label="Back to library" href="#">Back</a>'));
+  expect(await failures()).toEqual([]);
+  await page.setContent(fixture(''));
+  expect(await failures()).toEqual([]);
+  await page.locator('h1').evaluate(el => { el.style.marginLeft = '12px'; });
+  expect(await failures()).toHaveLength(1);
+});
 
 test('inventory covers every tenant', () => {
   for (const t of TENANTS) expect(inventory.filter((r) => r.tenant === t).length, t).toBeGreaterThan(0);

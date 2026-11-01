@@ -295,3 +295,28 @@ both directions, leave cleanup and both outsider refusals; an earlier run
 missed the second movement. Keep that failure visible, retain cursor frame
 diagnostics, and repeat the proof after the final contract measurement before
 renewing its durable record. No final tenant acceptance or seal is claimed.
+
+### Document header alignment follow-up (2026-11-01 UTC)
+
+The 2.484.2 rail measurement passed, and all six type-scale tests passed with
+zero new offenders. The cascade sweep exposed four Assessment document
+headers after the duplicate hidden headings were removed. The title is a
+FileKindMark/title group, like the existing back-action/title variant; the
+judge now measures that declared leading group and a browser fixture rejects
+both a shifted group (including the actual 4px offset) and an ordinary shifted
+heading. No tolerance or route exemption changes.
+
+That classification exposed a real spacing defect: EditorShell's fixed 20px
+header inset is 4px left of the host's 24px breadcrumb gutter. The additive
+`headerInset="page"` option shipped in 2.485.0 (`968eb7ad`, release `8625d56c`)
+and is adopted by Assessment's DocumentShell. The older editor inset stays
+the default. The owner passed all 11,251 tests (two existing skips), lint and
+build; the consumer typecheck and component-discipline judge pass.
+
+The packed confirming sweep passed all 16 Assessment slash routes, including
+the four headers, and the positive/negative geometry fixture. The cursor
+preflight also passed in 15.5s with persisted diagnostics: both directions,
+leave cleanup, two outsider refusals, zero disclosed cursors, blocked writes
+or console errors. Its earlier missed-movement observation remains above.
+The full 2.485.0 rendered-contract measurement is now running; final map walks
+and the post-measurement cursor proof remain before sealing.

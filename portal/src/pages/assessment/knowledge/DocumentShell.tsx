@@ -50,7 +50,7 @@ export function DocumentShell({ title, path, tab, onTab, commentCount, statusPil
     ...(panels[id] === undefined ? { disabled: true } : {}),
   }));
   const active: DocumentTab = panels[tab] === undefined ? 'editor' : tab;
-  return <EditorShell title={title} kind="page" path={path} label="Document editor"
+  return <EditorShell title={title} kind="page" path={path} label="Document editor" headerInset="page"
     {...(statusPill ? { statusPill } : {})} {...(saveState ? { saveState } : {})}
     headActions={headActions} tabs={tabs} activeTab={active}
     {...(participants?.length ? { participants } : {})}
