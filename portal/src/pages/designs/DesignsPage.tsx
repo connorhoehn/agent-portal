@@ -117,14 +117,14 @@ export default function DesignsPage() {
   // table's rows side by side and pushed the title 4px off its breadcrumb.
   return (
     <StackedCatalogLayout
-      catalogOverview title="Designs" basePath="/iq/designs" listTitle={filter === 'all' ? 'All designs' : FILTERS.find((f) => f.value === filter)?.label ?? 'Designs'}
+      catalogOverview navigation="combined" recordHeading title="Designs" basePath="/iq/designs" listTitle={filter === 'all' ? 'All designs' : FILTERS.find((f) => f.value === filter)?.label ?? 'Designs'}
       overviewDescription="Agents restate the problem, iterate a plan, and raise questions when intent is unclear; people answer and sign off. An approved design is an ADR — logged to the knowledge base, and a gate for the designs built on it."
       items={FILTERS.map((f) => ({ path: `/iq/designs?${new URLSearchParams({ status: f.value, ...(initiative ? { initiative } : {}) })}`, label: f.label === 'All' ? 'All designs' : f.label, group: 'Status', active: filter === f.value }))}
       rows={reviews.map((review) => ({ id: review.id, title: review.title, subline: STATUS_LABEL[review.status] }))}
       selectedId={id} selectedTitle={data?.reviews.find((review) => review.id === id)?.title}
       onSelect={(next) => navigate(`/iq/designs/${encodeURIComponent(next)}?${searchParams}`)}
       footer={id ? <CollectionCommandHost inPlace adapter={adapter} /> : undefined}
-      railNotice={designsFailure ? <UnavailableNotice error={designsFailure} what="designs" source={DESIGNS_SOURCE} onRetry={refresh} /> : isLoading && !data ? <LoadingState label="Loading designs…" /> : reviews.length === 0 ? <EmptyState title="No designs in this view" /> : undefined}
+      railNotice={designsFailure ? <UnavailableNotice error={designsFailure} what="designs" source={DESIGNS_SOURCE} onRetry={refresh} /> : isLoading && !data ? <LoadingState label="Loading designs…" /> : reviews.length === 0 ? <EmptyState align="start" title="No designs in this view" /> : undefined}
     >
     {id ? <DesignThreadPage key={id} /> : (
       // The overview owns the table's command input; the input docks at the

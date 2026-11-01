@@ -36,6 +36,8 @@ export function pipelineComposerPolicy(path: string, view: PipelineViewEvidence 
  * static evidence: it marks the app's list pages (docs/layout-cascade.md).
  */
 export interface TenantViewEvidence {
+  /** A read-only document visibly occupies the column while its primary page is hidden. */
+  focusedDocument?: boolean;
   /** The Assessment Add submissions view contains its upload wizard. */
   submissionWizard?: boolean;
   /** The route carries the inventory's `table` judge (a list page). */
@@ -150,6 +152,7 @@ export function tenantComposerPolicy(spec: TenantRouteSpec, view: TenantViewEvid
   // evidence and never let it exempt a visible collection or composer.
   if (spec.tenant === 'assessment' && pathname === '/assessment/submissions' && url.searchParams.get('view') === 'add'
     && view.submissionWizard && !view.collection && !view.table && !view.composer) return { mode: 'exempt', reason: 'Add submissions is the visible upload wizard with explicit preview, evidence and processing steps; its form controls replace the collection command composer in this view.' };
+  if (view.focusedDocument && !view.composer) return { mode: 'exempt', reason: 'A read-only document preview occupies the column at this width. Closing it restores the mounted work item and its composer.' };
   if (view.listRoute || spec.judges?.includes('table') || view.collection) return { mode: 'required' };
   if (REVIEWED_COLLECTIONS.has(pathname)) return { mode: 'required' };
   if (view.tableSearch) return { mode: 'required' };

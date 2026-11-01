@@ -104,6 +104,7 @@ export function InitiativesExplorer({
           <ExplorerLayout
             className="min-h-0 min-w-0 flex-1"
             railWidth={focusedWork ? 'md' : 'ms'}
+            railResize={focusedWork ? { minPx: 260, maxPx: 560, storageKey: 'work.item-rail.width' } : undefined}
             railHeading="caption"
             railCountStyle="plain"
             railTitle={focusedWork ? rail.title : 'Initiatives'}

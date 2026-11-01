@@ -28,7 +28,8 @@ export { isNotFoundError } from './notFound';
 interface Props {
   /**
    * The error text. Either `useFetch`'s transport `error` or its `degraded`
-   * line — rendered verbatim, because both name the actual failure.
+   * line. Specific diagnostics are retained; a generic HTTP 500 gets a plain
+   * retry message.
    */
   error: string;
   /** What could not be loaded, as a noun phrase: "the cost history". */
@@ -47,6 +48,7 @@ interface Props {
 export function UnavailableNotice({
   error, what, source, onRetry, className, 'data-testid': testId,
 }: Props) {
+  const message = /internal server error/i.test(error) ? 'The service could not complete this request. Try again' : error;
   return (
     <Card
       padding="md"
@@ -67,10 +69,10 @@ export function UnavailableNotice({
             and drop our own separator period when one is already there —
             otherwise the banner reads "alarms: could not…. Alarms and
             incidents are computed from…". */}
-        {error.replace(/\.\s*$/, '')}
+        {message.replace(/\.\s*$/, '')}
         {source
-          ? `${/…\s*$/.test(error) ? ' ' : '. '}${source}, so this is unknown rather than empty.`
-          : /…\s*$/.test(error) ? '' : '.'}
+          ? `${/…\s*$/.test(message) ? ' ' : '. '}${source}, so this is unknown rather than empty.`
+          : /…\s*$/.test(message) ? '' : '.'}
       </div>
       {onRetry && (
         <div className="mt-3">

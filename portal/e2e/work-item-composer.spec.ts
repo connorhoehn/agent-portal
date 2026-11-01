@@ -43,9 +43,13 @@ for (const itemId of ['wi-obs-e3-s1', 'wi-obs-e2-b4']) test(`Work item ${itemId}
     await expect(pane.getByTestId('brief-document')).toBeVisible();
     await expect(page.getByTestId('work-item-detail').getByTestId('brief-document')).toHaveCount(0);
     expect(await pane.evaluate(el => getComputedStyle(el).overflowY)).toBe('auto');
-    await page.getByTestId('initiative-pane').getByRole('tab', { name: 'Discussion', exact: true }).click();
-    await expect(page.getByTestId('initiative-pane').getByRole('tab', { name: 'Brief preview', exact: true })).toBeVisible();
-    await page.getByTestId('initiative-pane').getByRole('tab', { name: 'Brief preview', exact: true }).click();
+    await expect(page.getByTestId('initiative-pane').getByRole('tablist')).toHaveCount(0);
+    const toggle = page.getByTestId('work-item-brief-preview').getByRole('button');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await toggle.click();
+    await expect(pane).toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await toggle.click();
     await expect(pane.getByTestId('brief-document')).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('work-item-brief-pane.png') });
     // Drag to the header, reload to prove device persistence, then use the

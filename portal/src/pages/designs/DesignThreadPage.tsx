@@ -14,14 +14,12 @@ import { Link, useNavigate, useParams } from 'react-router';
 import {
   Avatar,
   Button,
-  Card,
   Chip,
   Divider,
   Inline,
   InlineAlert,
   LoadingState,
   MetaLine,
-  PageSection,
   RailLayout,
   RailSection,
   ReviewThread,
@@ -178,15 +176,7 @@ export default function DesignThreadPage() {
   );
 
   return (
-    // The catalog layout's trail band draws the page's one 20px h1; the
-    // thread's own headline is a 14/600 section heading under it.
-    <PageSection
-      size="sm"
-      title={thread.title}
-      actions={
-        <Link to="/iq/designs" className="text-xs text-primary no-underline hover:underline">← All designs</Link>
-      }
-    >
+    <Stack gap="none" data-testid="design-thread">
       <Stack gap="md">
         <Inline align="center" gap="sm">
           <Chip tone={STATUS_TONE[thread.status]} size="sm" dot="static">
@@ -204,22 +194,21 @@ export default function DesignThreadPage() {
 
         {/* ── The summary band — what the thread decides, where it stands,
                and its blast radius, BEFORE a single post is read. ── */}
-        <Card padding="md">
-          <Stack gap="md" className="lg:flex-row">
+        <Stack gap="md" className="border-y border-border py-4 @container">
+          <Stack gap="md" className="@3xl:flex-row">
             <Stack gap="none" className="min-w-0 flex-[2]">
               <SectionLabel as="div" className="mb-1.5">Summary</SectionLabel>
               <T size="sm" as="div" className="m-0 leading-relaxed text-text-secondary" wrap>{thread.summary}</T>
               <Inline align="start" gap="sm" className="mt-2.5">
-                <T size="sm" role="img" aria-label="next step">👉</T>
                 <T size="xs" className="font-medium text-text-primary">{nextStep(thread, undefined, canSteer)}</T>
               </Inline>
             </Stack>
-            <Stack gap="none" className="min-w-0 lg:hidden">
+            <Stack gap="none" className="min-w-0 @3xl:hidden">
               {/* Stacked below lg, the two halves of the band have no boundary
                   at all — the border-l only exists side by side. */}
               <Divider spacing="sm" />
             </Stack>
-            <Stack gap="none" className="min-w-0 flex-1 lg:border-l lg:border-border lg:pl-4">
+            <Stack gap="none" className="min-w-0 flex-1 @3xl:border-l @3xl:border-border @3xl:pl-4">
               <SectionLabel as="div" className="mb-1.5">
                 Initiatives affected
               </SectionLabel>
@@ -238,7 +227,7 @@ export default function DesignThreadPage() {
               </Stack>
             </Stack>
           </Stack>
-        </Card>
+        </Stack>
 
         {thread.status === 'approved' && (
           <InlineAlert tone="success">
@@ -247,9 +236,10 @@ export default function DesignThreadPage() {
           </InlineAlert>
         )}
 
-        <RailLayout rail={rail}>
+        <RailLayout rail={rail} variant="plain">
           <Stack gap="md">
             <ReviewThread
+              variant="inline"
               posts={thread.posts.map((p) => ({
                 id: p.id,
                 authorKind: p.authorKind,
@@ -265,6 +255,7 @@ export default function DesignThreadPage() {
             />
 
             <SignoffPanel
+              variant="inline"
               signoffs={signoffs.map((s) => ({ name: s.personName, role: s.role, decision: s.decision }))}
               required={2}
               {...(canSteer && !isTerminal ? {
@@ -283,6 +274,6 @@ export default function DesignThreadPage() {
           </Stack>
         </RailLayout>
       </Stack>
-    </PageSection>
+    </Stack>
   );
 }

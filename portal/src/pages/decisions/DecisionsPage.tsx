@@ -74,7 +74,7 @@ export default function DecisionsPage() {
     {
       key: 'projectId', header: 'Initiative', sortable: true,
       compare: (a, b) => (nameOf(a.projectId) ?? '').localeCompare(nameOf(b.projectId) ?? ''),
-      render: (d) => <T size="xs" tone="secondary" className="whitespace-nowrap">{nameOf(d.projectId) ?? 'Organisation-wide'}</T>,
+      render: (d) => <T size="xs" tone="secondary" className="block max-w-48 truncate" title={nameOf(d.projectId) ?? 'Organisation-wide'}>{nameOf(d.projectId) ?? 'Organisation-wide'}</T>,
     },
     {
       key: 'status', header: 'Status', sortable: true,
@@ -94,7 +94,7 @@ export default function DecisionsPage() {
   const current = FILTERS.find((f) => f.value === filter)?.label ?? 'All decisions';
   return (
     <StackedCatalogLayout
-      catalogOverview title="Decisions" group="Plan" basePath="/iq/decisions" listTitle={current}
+      catalogOverview navigation="combined" title="Decisions" group="Plan" basePath="/iq/decisions" listTitle={current}
       overviewDescription="The calls the organisation has made or still has to make — who decides, what it holds up, and how it was settled."
       items={FILTERS.map((f) => ({ path: `/iq/decisions?status=${f.value}`, label: f.label, group: 'Status', active: filter === f.value }))}
       rows={rows.map((d) => ({ id: d.id, title: d.topic, subline: statusLabel(d.status) }))}
@@ -103,7 +103,7 @@ export default function DecisionsPage() {
       footer={id ? <CollectionCommandHost inPlace adapter={adapter} /> : undefined}
       railNotice={failure ? <UnavailableNotice error={failure} what="decisions" source={DECISIONS_SOURCE} onRetry={refresh} />
         : isLoading && !data ? <LoadingState label="Loading decisions…" />
-        : rows.length === 0 ? <EmptyState title="No decisions in this view" /> : undefined}
+        : rows.length === 0 ? <EmptyState align="start" title="No decisions in this view" /> : undefined}
     >
       {id ? <DecisionRecordPage key={id} /> : (
         <Stack gap="sm" className="min-w-0">

@@ -230,7 +230,7 @@ cursor stretch proof is renewed; its older chat/call/edit history is preserved
 separately, not claimed as renewed. Access was already re-walked and sealed
 (`b9507421`). All 364 maps validate and all 49 runner tests pass.
 
-The application is on shared UI 2.486.3. The earlier targeted batch fixed an
+That journey acceptance used shared UI 2.486.3. The earlier targeted batch fixed an
 Artifacts long-title overflow (`3e8dd398`). The broader follow-up renewed 15
 Pipelines walks after its Configuration readiness assertions changed. Final
 rail, layout and typography measurements pass, and all three tenant judges pass with
@@ -245,6 +245,18 @@ dragging or keyboard, with placement saved on this device. The owner components
 and Storybook are updated. All 77 strict Work/Brief/Configuration audit cases,
 14 app interaction checks and five Storybook checks pass. The continuation
 report records the full scope and retained failed attempts.
+
+**Latest layout refinement (2026-11-01):** shared UI is now 2.488.0. The Work
+rail has a compact header, smaller indicators and a saved adjustable width.
+Brief preview is a dedicated wider document pane with a toggle; narrow screens
+give it the available column. Designs uses one navigation rail and plain thread
+sections. Decisions and Initiatives share rail width and content insets. The
+Chat/Agent mode menu no longer contains formatting commands. Owner components,
+Storybook and the packed application are updated. All 134 targeted strict deep
+cases pass; see [the refinement evidence](journeys/layout-refinement-2026-11-01.json)
+and the continuation report for interaction checks and retained failures.
+This UI revision did not renew all 160 journey logs against its new source digest;
+the full journey acceptance above belongs to the earlier checkpoint.
 
 The budget defaults under "Decisions taken by default" and the deploy-machine
 items below remain open. No cloud rollout was performed by these local goals.

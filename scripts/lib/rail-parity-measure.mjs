@@ -1,3 +1,4 @@
+import { listRailPlacementProblems } from './list-rail-profile.mjs';
 // Headless measurement for docs/rail-parity-goal.md: the second rail on the
 // Assessment workspace (or another app's /documents with --other) must agree
 // with /iq/library's concise stacked rail on width, caption, row type, pitch
@@ -162,6 +163,7 @@ if (LIST_SUBJECTS.length) {
       .find((e) => !lr || e.getBoundingClientRect().left >= lr.right - 2) ?? null;
     const cb = crumbEl?.getBoundingClientRect();
     return {
+      combined: !!list?.closest('[data-catalog-navigation="combined"]'),
       contentLeft: Math.round(content.left), contentTop: Math.round(content.top), contentHeight: Math.round(content.bottom - content.top),
       section: section ? { left: Math.round(section.left), right: Math.round(section.right), width: Math.round(section.width) } : null,
       list: lr ? { left: Math.round(lr.left), right: Math.round(lr.right), top: Math.round(lr.top), width: Math.round(lr.width), height: Math.round(lr.height), radius } : null,
@@ -181,8 +183,7 @@ if (LIST_SUBJECTS.length) {
     if (!m) problems.push('no <main>');
     else if (!m.list) problems.push('no list rail (nav[aria-label="Explorer"]) on the page');
     else {
-      if (!m.section) problems.push('no section rail at the content edge');
-      else if (m.list.left - m.section.right < -1 || m.list.left - m.section.right > 2) problems.push(`list rail at x=${m.list.left}, ${m.list.left - m.section.right}px from the section rail's right ${m.section.right} — not stacked beside it`);
+      problems.push(...listRailPlacementProblems(m));
       if (Math.abs(m.list.top - m.contentTop) > 2) problems.push(`list rail top ${m.list.top} vs content top ${m.contentTop} — something sits above it (a trail, a title)`);
       if (Math.abs(m.list.height - m.contentHeight) > 4) problems.push(`list rail height ${m.list.height} vs content ${m.contentHeight} — not full height`);
       if (m.list.radius > 2) problems.push(`the list rail floats in a rounded box (radius ${m.list.radius}px)`);
@@ -196,7 +197,7 @@ if (LIST_SUBJECTS.length) {
     }
     record(path, problems);
     if (problems.length) { failed += 1; console.log(`DIFFERS ${path}:`); for (const p of problems) console.log(' - ' + p); }
-    else console.log(`MATCH ${path} — list rail ${m.list.width}px at x=${m.list.left} (section rail ends ${m.section.right}), top ${m.list.top}, height ${m.list.height} of ${m.contentHeight}; trail at x=${m.crumb.left}`);
+    else console.log(`MATCH ${path} — list rail ${m.list.width}px at x=${m.list.left} (section rail ends ${m.section?.right ?? 'combined'}), top ${m.list.top}, height ${m.list.height} of ${m.contentHeight}; trail at x=${m.crumb.left}`);
   }
   await browser.close();
   process.exit(failed ? 1 : 0);

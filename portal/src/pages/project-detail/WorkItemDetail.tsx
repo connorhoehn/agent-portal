@@ -143,6 +143,7 @@ export interface WorkItemDetailProps {
   /** Reveal the persistent initiative dialogue, available to readers too. */
   onOpenDiscussion: () => void;
   onOpenBrief: () => void;
+  briefOpen?: boolean;
   /** The live gateway discussion for this item, shown under the stored comments. */
   discussion?: ReactNode;
   /**
@@ -174,6 +175,7 @@ export function WorkItemDetail({
   onAddNote,
   onOpenDiscussion,
   onOpenBrief,
+  briefOpen = false,
   discussion,
   liveNotes = null,
   headActions,
@@ -274,7 +276,7 @@ export function WorkItemDetail({
   }));
 
   return (
-    <Stack gap="none" className="h-full min-h-0" data-testid="work-item-detail">
+    <Stack gap="none" className="h-full min-h-0 outline-none" tabIndex={-1} data-testid="work-item-detail">
     <ScopeHeader
       titleSize="md"
       title={item.title}
@@ -377,10 +379,10 @@ export function WorkItemDetail({
             )}
             {brief.showTable && (
               <DetailSection as="h2" variant="heading" title={BRIEF_TITLE} description={BRIEF_BODY} data-testid="brief-table">
-                <KeyValue layout="row" divided labelWidth="w-72" items={briefItems} aria-label={BRIEF_TITLE} />
+                <KeyValue layout="row" divided responsive labelWidth="w-52" items={briefItems} aria-label={BRIEF_TITLE} />
               </DetailSection>
             )}
-            <WorkItemBriefPreview onOpen={onOpenBrief} />
+            <WorkItemBriefPreview open={briefOpen} onToggle={onOpenBrief} />
           </>
         )}
         {tab === 'docs' && <WorkDocumentLinks workItemId={item.id} canEdit={canEdit} />}

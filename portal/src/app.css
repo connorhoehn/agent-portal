@@ -743,30 +743,6 @@ tbody tr:focus-within .row-reveal,
   height: 148px;
   overflow: hidden;
 }
-[data-testid="initiative-work-rail"] [data-testid*="-row-"]:has([data-testid^="initiative-work-rail-tag-"]),
-[data-testid="initiative-work-rail"] [data-testid*="-item-"]:has([data-testid^="initiative-work-rail-tag-"]) {
-  position: relative;
-}
-[data-testid="initiative-work-rail"] span:has(> [data-testid^="initiative-work-rail-tag-"]) {
-  position: absolute;
-  right: 6px;
-  top: 9px;
-  padding-left: 24px;
-  pointer-events: none;
-  background: linear-gradient(to right, transparent, var(--color-surface-panel) 28%);
-}
-[data-testid="initiative-work-rail"] [data-current="true"] span:has(> [data-testid^="initiative-work-rail-tag-"]) {
-  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--color-primary) 10%, var(--color-surface-panel)) 28%);
-}
-[data-testid="initiative-work-rail"] [data-testid^="initiative-work-rail-tag-"] {
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 16px;
-  padding: 1px 4px;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-secondary);
-}
 .work-item-metadata { row-gap: 8px; }
 .deck-document-actions { gap: 6px; }
 .deck-document-actions > button,

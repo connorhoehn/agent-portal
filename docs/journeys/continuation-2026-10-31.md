@@ -5,7 +5,11 @@ The initial checkpoint below is the pushed `aae11cda` baseline. Subsequent
 repairs are recorded later in this document. No expectation or audit burn-down
 entry was relaxed.
 
-## Current checkpoint — 2026-11-01
+Latest application UI: **2.488.0**, with the Work/Brief/catalog refinement and
+its targeted validation recorded at the end of this document. Historical journey
+freshness below is scoped to its recorded source revision.
+
+## Journey checkpoint — 2026-11-01
 
 | Family | Complete passing maps | Failed | Held |
 |---|---:|---:|---:|
@@ -491,3 +495,71 @@ The final Assessment, Pipelines and Social judges all exit 0 with
 goal is complete. This is local browser and quick-judge acceptance; the budget
 decisions and deploy-machine work remain open in the backlog. No AWS rollout
 or live SFU media proof is claimed.
+
+## Work rail, document pane and catalog refinement — 2026-11-01
+
+Shared UI 2.488.0 (source `38b025e5`, release `34e0cd27`) follows the screenshot
+feedback. The Work rail replaces the large status/Views/segmented controls with
+a compact initiative selector, underline tabs and a small overflow menu. Sort is
+a compact menu. Six-pixel indicators and a separate metadata line leave more
+room for titles. The reader can drag the rail edge, use arrow keys on its divider,
+or widen/reset it from the header; the width persists on the device.
+
+Brief preview is a dedicated document pane without initiative tabs. Its trigger
+shows the open state and toggles it closed. Wide layouts preserve at least 640px
+for the page; below 1240px of split space the document takes the column, with the
+mounted page and draft restored on close. Document tables wrap their prose and
+align cells at the top. Open work in initiative Details closes the pane and
+selects the item, including when it was already selected. A new item's active
+question may take keyboard focus, as the prompt interaction requires.
+
+Designs combines its status selector and record list in one rail. Its record
+uses plain summary, discussion and context sections that stack by available
+column width. Decisions uses the same 264px rail and 24px content inset as
+Initiatives. The Chat/Agent mode dropdown contains no formatting section.
+
+[Retained refinement evidence](layout-refinement-2026-11-01.json) indexes five
+strict deep matrices: Work 26, Brief 25, Designs 24, Decisions 27 and Initiatives
+32 cases. All **134 cases have zero findings and zero unclassified composer
+policies**, in light/dark at 1440/900. Visual samples include narrow, dark,
+long-data and open-layer states; interaction screenshots also show the expanded
+Work rail. These targeted matrices do not certify every application route.
+
+Validation:
+
+- Owner: 11,259 tests pass with two existing skips; lint and build pass. Four
+  Storybook checks cover resizing, persistence, document width, narrow content,
+  plain review sections and the mode dropdown. Seven packaging checks pass;
+  all 339 archived build files match owner `dist`.
+- Portal: 1,816 tests and typecheck pass. Five application interaction tests
+  cover the above behavior, compact prompts and Today relocation; one browser
+  mutation fixture retains ordinary and adjustable column checks. Nineteen
+  policy/rail unit tests, component discipline and static rail checks pass.
+- Rendered rail parity confirms Designs and Decisions match Initiatives. The
+  audit self-test passes its 56 mutations plus additional transition/fixture
+  checks; the skill validates. No tolerances were widened.
+- Optional owner static-style and raw-node-control guards still fail on the
+  exact same entries as baseline `87bb34b9`, verified against an isolated archive.
+  Hex-color checks pass. Those existing guard findings were not suppressed.
+
+The audit now measures the logical children of an adjustable split, keeps
+content-row tables on an explicit document profile, and resets the keyboard
+walk's starting point. Snapshot preparation finishes finite CSS transitions:
+a fading selected Brief button had appeared in only one of two fingerprints.
+The endpoint is still checked and recurring script-driven movement still fails.
+Each profile has valid and deliberately broken fixture coverage; ordinary
+neighboring tables, dividers and toolbars remain checked.
+
+Raw reports, screenshots, self-tests and failed attempts remain under
+`.scratch/layout-refinement-2026-11-01/`. The final reports are `verified-*`;
+`audit-*` and `accepted-*` retain earlier failures. The original Brief Details
+cases were unstable, so the comparison correctly leaves their four old findings
+unverified rather than calling them resolved. Both current Details cases were
+executed and pass. Earlier interaction failures assumed focus must leave a new
+item's active question; the corrected assertions verify its selected item,
+visible title and closed pane while preserving prompt focus.
+
+The source digest for the UI is recorded per matrix. This change did not rewalk
+or reseal all 160 journeys against the new digest; the earlier complete journey
+acceptance remains historical evidence. Budget defaults and deploy-machine AWS
+steps remain open, and no cloud rollout was performed.

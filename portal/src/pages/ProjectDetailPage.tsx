@@ -32,6 +32,7 @@ import {
   IconButton,
   Inline,
   LoadingState,
+  MoreIcon,
   Modal,
   PageHeader,
   PageSection,
@@ -250,6 +251,8 @@ function ProjectDetailPage() {
       const p = new URLSearchParams(prev);
       p.set('tab', 'work');
       p.set('item', itemId);
+      p.delete('view');
+      if (p.get('pane') === 'brief') p.set('paneRecord', `work-item:${itemId}`);
       return p;
     });
   }, [setSearchParams]);
@@ -481,6 +484,18 @@ function ProjectDetailPage() {
   const conversationPane = useSidePane();
   // The pane's tabs (Discussion | Details | Docs | a run's Log…): the library pane contract, `?pane=` / `?paneRecord=`.
   const paneControl = useInitiativePane(project?.id ?? null);
+  const [paneItemFocus, setPaneItemFocus] = useState<string | null>(null);
+  useEffect(() => {
+    if (!paneItemFocus || current?.id !== paneItemFocus) return;
+    const frame = requestAnimationFrame(() => {
+      const detail = document.querySelector<HTMLElement>('[data-testid="work-item-detail"]');
+      detail?.focus({ preventScroll: true });
+      detail?.scrollIntoView({ block: 'start' });
+      setPaneItemFocus(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [paneItemFocus, current?.id]);
+  const openItemFromPane = (itemId: string) => { openItem(itemId); paneControl.close(); setPaneItemFocus(itemId); };
   const agentPanel = useRef<InitiativeAgentHandle | null>(null);
   // The header's density (library `useHeaderDensity`): one density for every
   // tab, so clicking a tab never moves the header, the tab strip or the pane
@@ -759,28 +774,30 @@ function ProjectDetailPage() {
     <WorkTableView {...workListProps} groupColors={{ done: 'var(--color-success)' }} data-testid="initiative-work-list" />
   </Stack>;
   const workRail = <WorkListView {...workListProps} groups={WORK_GROUPS.map(group => ({ ...group, defaultOpen: true }))}
-    chrome="embedded" metaStyle="text" pointsLabel="points" data-testid="initiative-work-rail" />;
+    chrome="embedded" layout="rail" sortStyle="menu" onToggleDone={undefined} metaStyle="text" pointsLabel="points" data-testid="initiative-work-rail" />;
   const workRailHeader = <Stack gap="sm" data-testid="focused-work-navigation">
     <Select aria-label="Initiative" value={project.id} disabled={listRail.list.isLoading}
       options={[project, ...(listRail.list.data ?? []).filter(row => row.id !== project.id)]
         .map(row => ({ value: row.id, label: row.name }))}
       onChange={event => navigate(initiativeHref(event.target.value, searchParams, listRail.scope, 'work'))} />
-    <Inline justify="between" gap="sm">
-      {statusLabel && <StatusPill label={statusLabel} tone={project.status === 'archived' ? 'neutral' : 'info'} variant="label" />}
-      <DropdownMenu trigger="Views" triggerLabel="Initiative views" sections={[{ items: [
+    <Inline justify="between" align="center" gap="sm" wrap={false}>
+      <Tabs aria-label="Work views" variant="underline" size="sm" value="work"
+        items={[{ id: 'work', label: 'Work' }, { id: 'decisions', label: 'Decisions' }]} onValueChange={setTab} />
+      <DropdownMenu trigger={<MoreIcon size={16} />} triggerLabel="More initiative views" triggerVariant="link" sections={[{ items: [
         { label: 'Overview', onSelect: () => setTab('overview') },
         { label: 'Agents', onSelect: () => setTab('agents') },
         { label: 'Contributors', onSelect: () => setTab('contributors') },
       ] }]} />
     </Inline>
-    <Tabs aria-label="Work views" variant="segmented" size="sm" value="work"
-      items={[{ id: 'work', label: 'Work' }, { id: 'decisions', label: 'Decisions' }]}
-      onValueChange={setTab} />
   </Stack>;
 
   const workPane = current ? (
     <WorkItemDetail
-      onOpenBrief={() => { if (current) paneControl.open('brief', current.id); }}
+      briefOpen={paneControl.isOpen && paneControl.tab === 'brief' && paneControl.recordId === current.id}
+      onOpenBrief={() => {
+        if (paneControl.isOpen && paneControl.tab === 'brief' && paneControl.recordId === current.id) paneControl.close();
+        else paneControl.open('brief', current.id);
+      }}
       item={current}
       // A focused item's header is only the action cluster, on the item's own
       // title row — nothing between the trail and the item's title.
@@ -907,13 +924,14 @@ function ProjectDetailPage() {
       <InitiativeSidePane
         control={paneControl}
         subtitle={project.name}
+        workItemLabel={current ? `${current.key ?? 'Work item'} · ${current.title}` : undefined}
         agent={<InitiativeAgentPanel key={`${session?.tenant}:${session?.sub}:${session?.role}:${project.id}`} projectId={project.id} ref={agentPanel} onOpenWorkItem={openItem} />}
         facts={facts}
         overview={overview}
         decisions={decisions ?? null}
         workItemIds={treeRead && !workFailure ? [...new Set([...workTree.map((epic) => epic.id), ...flattenWorkItems(workTree).map((row) => row.id)])] : null}
         workspaceHref={workspaceHref}
-        onOpenWorkItem={openItem}
+        onOpenWorkItem={openItemFromPane}
         onOpenDecisions={() => setTab('decisions')}
         onOpenDocuments={() => setTab('docs')}
         onOpenActivity={() => setTab('activity')}

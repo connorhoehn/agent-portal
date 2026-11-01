@@ -24,7 +24,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
-  SidePane, usePaneState, useSidePane, type PaneStateControl, type PaneTabSpec, type PersonDetail, type PersonEvidenceDocument,
+  SidePane, usePaneState, useSidePane, useSidePaneHost, type PaneStateControl, type PaneTabSpec, type PersonDetail, type PersonEvidenceDocument,
 } from '@connorhoehnslalom/ui-components';
 import {
   ActivityIcon, Button, Card, Chip, DocumentIcon, EmptyState, IconButton, Inline, InlineAlert, KeyValue, LoadingState, MetaLine, PageSection, Stack, StatusPill, T, Tooltip,
@@ -67,16 +67,17 @@ export interface InitiativePaneControl {
   recordId: string | null;
   /** Open a tab in the pane (revealing it), naming its record. */
   open(tab: InitiativePaneTab, id?: string): void;
+  isOpen: boolean;
+  close(): void;
 }
 
 /** The initiative's pane state: the library contract with this page's tabs, restored per device once the pane is on screen. */
 export function useInitiativePane(projectId: string | null): InitiativePaneControl {
   const [params, setParams] = useSearchParams();
   const sidePane = useSidePane();
+  const host = useSidePaneHost();
   const pane = usePaneState({
     tabs: INITIATIVE_PANE_TABS, defaultTab: 'discussion', params, setParams,
-    // Keep the preview available while checking the discussion or agent output.
-    keepRecord: params.get('paneRecord')?.startsWith('work-item:'),
     rememberKey: 'initiative.pane.tab', restore: { when: sidePane.visible, subject: projectId }, onOpen: sidePane.reveal,
   });
   useEffect(() => {
@@ -93,6 +94,8 @@ export function useInitiativePane(projectId: string | null): InitiativePaneContr
     pane,
     tab: pane.tab as InitiativePaneTab,
     recordId: pane.record?.id ?? null,
+    isOpen: host.shown && !host.folded,
+    close: host.collapse,
     open: (tab, id) => {
       const kind = RECORD_KIND[tab];
       pane.open(tab, kind && id ? { kind, id } : null);
@@ -108,6 +111,7 @@ export interface InitiativeSidePaneProps {
   agent: ReactNode;
   /** The second line under the pane's title. */
   subtitle: string;
+  workItemLabel?: string;
   facts: InitiativeFactsInput;
   overview: OverviewModel;
   decisions: ProjectDecision[] | null;
@@ -131,9 +135,12 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
   // shown while Discussion is the tab — never a second tab bar under this one.
   const [viewsSlot, setViewsSlot] = useState<HTMLElement | null>(null);
   return (
-    <SidePane title={tab === 'discussion' && inHuddle ? 'Huddle dialogue' : TAB_LABEL[tab]} subtitle={tab === 'discussion' && inHuddle ? huddle?.title : subtitle} closeLabel="Collapse discussion" explores={control.pane.away}
-      paneId="initiative-dialogue" widthPx={{ min: 480, max: 960 }}
-      tabs={control.pane.tabs.map(t => t.id === 'discussion' && inHuddle ? { ...t, label: 'Huddle' } : t)} value={tab} onValueChange={control.pane.select}
+    <SidePane title={tab === 'discussion' && inHuddle ? 'Huddle dialogue' : tab === 'details' ? 'Initiative details' : TAB_LABEL[tab]}
+      subtitle={tab === 'brief' ? props.workItemLabel ?? subtitle : tab === 'discussion' && inHuddle ? huddle?.title : subtitle}
+      closeLabel={tab === 'brief' ? 'Close brief preview' : 'Close initiative pane'} explores={control.pane.away}
+      paneId={tab === 'brief' ? 'work-item-brief' : 'initiative-dialogue'} widthPx={tab === 'brief' ? { min: 960, max: 1280 } : { min: 480, max: 960 }}
+      presentation={tab === 'brief' ? 'document' : undefined}
+      tabs={tab === 'brief' ? undefined : control.pane.tabs.filter(t => t.id !== 'brief').map(t => t.id === 'discussion' && inHuddle ? { ...t, label: 'Huddle' } : t)} value={tab} onValueChange={control.pane.select}
       trailing={<Inline gap="xs" align="center" wrap={false}>
         <Inline ref={setViewsSlot} gap="none" align="center" wrap={false} hidden={tab !== 'discussion'} className="shrink-0" data-testid="initiative-pane-views" />
         {tab === 'details' && <>

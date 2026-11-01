@@ -26,7 +26,7 @@ const selectors = {
   header: '.shell-header', footer: '[data-testid="shell-footer"]', footerRow: '[data-testid="shell-footer-row"]',
   shellColumns: '[data-shell-nav] > div',
   nestedColumns: 'div:has(> [data-subnav-content]):not([data-shell-nav] > div)',
-  workspaceColumns: '[data-testid="social-chat-workspace"], [data-testid="explorer-layout"]',
+  workspaceColumns: '[data-testid="social-chat-workspace"], [data-testid="explorer-layout"]:not(:has(> [data-testid$="-rail-split"]))',
   splitColumns: '[data-testid$="-split"]:has(> [data-testid$="-primary"])',
   controls: 'button, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]), select, textarea, [role="button"]',
   // Dropdowns (ui-components 2.445.0, contracts.md "Dropdowns"): any <select>
@@ -229,6 +229,7 @@ export default {
       const pathname = auditAliasTarget(new URL(spec.path, 'http://audit.local').pathname);
       const controls = await visible('select, [data-ui-control="select"], [role="switch"], input[type="checkbox"], input[type="radio"], [data-testid$="-save"], button[type="submit"]');
       const policy = tenantComposerPolicy({ tenant: spec.tenant, path: auditAliasTarget(new URL(spec.path, 'http://audit.local').pathname) + new URL(spec.path, 'http://audit.local').search, kind: spec.kind, judges: spec.judges, pattern: spec.pattern }, {
+        focusedDocument: await visible('[data-testid="initiative-pane-brief"]') && await page.locator('[data-testid$="-split-primary"][hidden]').count() > 0,
         submissionWizard: await visible('[data-testid="assessment-submission-wizard"] [data-testid="wizard"]'),
         collection: await visible(`${selectors.collections}, ${selectors.collectionToolbars}`),
         table,
@@ -400,7 +401,7 @@ export default {
       await expect(p.getByRole('menu', { name: 'Change who runs this initiative' })).toBeVisible();
     } });
     const info = page.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ });
-    if (await info.count() === 1 && await info.isVisible()) states.push({ name: 'details-pane', required: ['$rightPane'], enter: async p => { await p.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ }).click(); await expect(p.locator(selectors.rightPane)).toBeVisible(); } });
+    if (await info.count() === 1 && await info.isVisible()) states.push({ name: 'details-pane', required: ['$rightPane'], enter: async p => { await p.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ }).click(); await expect(p.locator(selectors.rightPane)).toBeVisible(); if (await p.getByTestId('initiative-pane').count()) { await expect(p.getByTestId('initiative-pane-details')).toBeVisible(); await expect(p.getByTestId('initiative-pane').getByRole('tab', { name: 'Details', exact: true })).toHaveAttribute('aria-selected', 'true'); } } });
     // A conversation's other views (Documents, Pinned, Calls …): each tab is a state, so a view's own
     // layout (its tab row, empty state, panel) is measured on every plane and Social route that shows it.
     // The composer belongs to the Chat view, so the other views declare it absent with that reason.

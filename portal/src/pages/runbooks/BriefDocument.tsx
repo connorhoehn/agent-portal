@@ -29,12 +29,12 @@ export function BriefDocument({ brief, frozen, onOpen, skills }: { brief: Brief;
     {
       key: 'ref', header: 'Reference',
       render: (s) => s.kind === 'runbook' && s.ref ? (
-        <Link href={runbookHref(s.ref)} className="block max-w-40 truncate" title={refText(s)}
+        <Link href={runbookHref(s.ref)} className="block max-w-xs whitespace-normal break-words" title={refText(s)}
           onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onOpen(runbookHref(s.ref!)); }}>{refText(s)}</Link>
-      ) : <T as="div" className="max-w-40 truncate" title={refText(s)}>{refText(s)}</T>,
+      ) : <T as="div" className="max-w-xs whitespace-normal break-words" title={refText(s)}>{refText(s)}</T>,
     },
     { key: 'tokens', header: 'Tokens', numeric: true, render: (s) => s.tokens.toLocaleString('en-US') },
-    { key: 'reason', header: 'Why it is here', render: (s) => <T as="div" className="max-w-44 truncate" title={s.reason}>{s.reason}</T> },
+    { key: 'reason', header: 'Why it is here', render: (s) => <T as="div" className="max-w-sm whitespace-normal break-words" title={s.reason}>{s.reason}</T> },
   ];
   return (
     <Stack gap="md" data-testid="brief-document">
@@ -62,7 +62,7 @@ export function BriefDocument({ brief, frozen, onOpen, skills }: { brief: Brief;
         </Banner>
       )}
       <DetailSection as="h2" variant="heading" first title="Sections" hint={`${brief.sections.length}`}>
-        <DataTable data={brief.sections} columns={columns} keyField={(s) => `${s.kind}:${s.ref ?? ""}:${s.reason}`} frameless emptyMessage="No sections." staticRows="Brief contents describe assembled text; runbook references have their own links." data-testid="brief-sections" />
+        <DataTable rowHeight="content" data={brief.sections} columns={columns.map(column => ({ ...column, className: 'align-top' }))} keyField={(s) => `${s.kind}:${s.ref ?? ""}:${s.reason}`} frameless emptyMessage="No sections." staticRows="Brief contents describe assembled text; runbook references have their own links." data-testid="brief-sections" />
       </DetailSection>
       {brief.skill_library && <BriefSkills library={brief.skill_library} skills={skills} frozen={frozen} onOpen={onOpen} />}
       <DetailSection

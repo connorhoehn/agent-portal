@@ -153,3 +153,10 @@ test('configuration without editing controls needs positive read-only setting ev
   assert.equal(pipelineComposerPolicy('/pipelines/configuration', { configurationReadOnly: true })?.mode, 'exempt');
   assert.deepEqual(pipelineComposerPolicy('/pipelines/runs', { configurationReadOnly: true }), { mode: 'required' });
 });
+
+test('a document occupying the primary column has no separate message input', () => {
+  const spec = { tenant: 'orgiq', path: '/iq/projects/p-observability?pane=brief', kind: 'record', judges: ['table'] };
+  assert.equal(tenantComposerPolicy(spec, { focusedDocument: true })?.mode, 'exempt');
+  assert.equal(tenantComposerPolicy(spec, {})?.mode, 'required');
+  assert.equal(tenantComposerPolicy(spec, { focusedDocument: true, composer: true })?.mode, 'required');
+});

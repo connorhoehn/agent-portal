@@ -223,6 +223,27 @@ matches, honest loading / failure / note), with `useRailSectionMemory`
 (`social.chatRail.folded` / `.layout`) — the Social workspace and the
 Communication plane's groups and org teams share it.
 
+## Work and document layout refinement (2026-11-01)
+
+Designs and Decisions use one combined catalog rail: status views and records
+share the same 264px Explorer rail as Initiatives. The named
+`data-catalog-navigation="combined"` profile starts at the content edge and
+forbids a redundant section rail. Other list pages retain their section/list
+adjacency contract. Both profiles have valid and broken fixtures.
+
+Focused Work starts with a 300px rail, adjustable from 260px to 560px while
+preserving at least 480px for its content. Its status indicator reserves 8px;
+item IDs sit on the metadata line. Initiative selection, Work/Decisions tabs,
+and search/sort are separate compact rows.
+
+Brief preview is a dedicated document pane with its own scroll region and a
+selected open/close trigger. It requests 960–1280px while preserving 640px for
+the main page; below 1240px of split space it occupies the column until closed.
+The page stays mounted, and close returns focus to the trigger. A document
+occupying the column owns the h1 and does not show a second message composer.
+Document tables explicitly use content-height rows; cell type and padding
+remain checked. Divided brief fields wrap their labels in narrow columns.
+
 ## Records open as pages; selections stay put (2026-10-13)
 
 The user, on `/assessment/submissions`: rows did not open, "Revision history"
