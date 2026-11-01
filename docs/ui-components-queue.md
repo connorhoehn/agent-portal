@@ -7,6 +7,7 @@ TODO list for it.
 
 | primitive | why | where used |
 |---|---|---|
+| Work activity card summaries squeezed beside status badges; effort titles clipped vertically | Keep the 200px card and existing graph composition while giving summaries the full body width and effort labels a 16px line box. | Resolved in 2.484.2 (`e0176631`, release `644dec46`); all 17 administrator scorecard journey steps pass, including the populated Activity graph, with zero DOM findings. |
 | `PageHeader` always emits h1 when a library is embedded in a record tab | Preserve the existing header size and composition while allowing a subordinate heading. | Resolved in 2.484.0 (`eaba6a91`, release `855e01eb`); packed h2 API verified and adopted by Assessment TeamFiles through DocumentLibrary. |
 | `DetailSection` / `CardHeader` fixed h3 skips h2 directly below page titles | Add a semantic `as` prop independent of visual size, preserving h3 as the default. | Resolved in 2.483.0 (`65141352`, release `0ce6ba0b`); packed APIs verified, adopted in Pipelines run sections and Assessment Stories. |
 | `DataTableColumn.header` has no tooltip/description slot | The spend report's Floor / Discretionary / Held / Projected columns need a one-line explanation each (2026-10-29, DE-53). Without a header slot the explanation went into each cell's `title`, which drifts from the column and is invisible on empty cells. Wants a `description` (rendered as the header's tooltip) on `DataTableColumn`. | `portal/src/pages/budgets/InitiativesReport.tsx`, `SpendGroupTable.tsx` |

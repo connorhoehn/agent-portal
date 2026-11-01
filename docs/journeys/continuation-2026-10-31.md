@@ -275,7 +275,22 @@ hard cap while testing soft confirmation; `fb1459e9` corrects only their setup.
 Both affected suites then passed all 69 tests. Spending policy was unchanged.
 Journey runner tests pass 49/49 and all 364 maps validate.
 
-Assessment's full map walk is in progress. A provisional cursor rerun passed
+Assessment's first full map walk was stopped after 18 complete results: 15
+passed, with 39 maps not written. The three failures were the administrator
+scorecard's populated graph and two reader maps using native `selectOption`
+on the shared custom Zoom dropdown. The maps now open and choose its actual
+options, retaining sheet-scale and Fit width assertions. UI-components 2.484.2
+(`e0176631`, release `644dec46`) gives graph summaries the full card width and
+effort titles a 16px line box. All 11,251 owner tests, lint and build passed;
+the packed artifact is installed, Vite refreshed, and all 17 administrator
+scorecard steps now pass with zero DOM findings. The assessor's 16-step
+Enterprise reader and lead assessor's eight-step Enterprise editor both pass;
+the reader opens the custom dropdown, verifies 50% on the sheet, then verifies
+Fit width and a changed sheet scale. Portal typecheck and 17 map tests pass.
+Final contract measurement is running on this frozen application source;
+unfinished maps must still be walked.
+
+A provisional cursor rerun passed
 both directions, leave cleanup and both outsider refusals; an earlier run
 missed the second movement. Keep that failure visible, retain cursor frame
 diagnostics, and repeat the proof after the final contract measurement before
