@@ -1,3 +1,4 @@
+import { runbookDisplayTitle } from './runbookTitles.ts';
 // Names for the ids the runbooks API speaks in. A person reads "Eli Garcia", "Auth Migration" and
 // "auth-dep-watch run", never `p-011`, `p-auth-migration` or `job-auth-maint-2`; the id belongs in a hover
 // title. The lookups come from lists other pages already read (/api/graph/entities, /api/graph/projects,
@@ -28,7 +29,7 @@ export function buildNames(src: NameSources = {}): Names {
   const people = new Map((src.people ?? []).map((p) => [p.id, clean(p.name)]));
   const initiatives = new Map((src.initiatives ?? []).map((p) => [p.id, clean(p.name)]));
   const jobs = new Map((src.jobs ?? []).map((j) => [j.id, clean(j.title)]));
-  const runbooks = new Map((src.runbooks ?? []).map((r) => [r.id, clean(r.title)]));
+  const runbooks = new Map((src.runbooks ?? []).map((r) => [r.id, runbookDisplayTitle(clean(r.title))]));
   return {
     person: (id) => (id && people.get(id)) || 'A colleague',
     initiative: (id) => (id && initiatives.get(id)) || 'An initiative',

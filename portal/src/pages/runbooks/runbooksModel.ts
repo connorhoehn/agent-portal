@@ -1,3 +1,4 @@
+import { runbookDisplayTitle } from './runbookTitles.ts';
 // Pure model of the Runbooks destination (docs/distillation-runbooks-design.md §4):
 // hrefs, list grouping, health, proposal rows, brief rows, the step markers
 // derived from applications, the honest messages for the API's refusals, the
@@ -64,7 +65,7 @@ export function libraryRows(runbooks: readonly RunbookRow[], q = '', status: str
   return runbooks
     .filter((r) => matchesRunbook(r, q, names) && (!status || r.status === status))
     .map((r) => ({
-      id: r.id, groupId: r.scope.kind, title: r.title, health: r.health.status, status: r.status,
+      id: r.id, groupId: r.scope.kind, title: runbookDisplayTitle(r.title), health: r.health.status, status: r.status,
       subline: `${scopeTarget(r.scope, names)} · v${r.current_version}${r.status !== 'published' ? ` · ${r.status}` : r.health.status === 'drifting' ? ' · drifting' : ''}${r.open_proposals ? ` · ${r.open_proposals} open` : ''}`,
     }));
 }
@@ -126,8 +127,9 @@ export const PROPOSAL_STATUS_LABEL: Record<Proposal['status'], string> = { open:
 export const PROPOSAL_STATUS_TONE: Record<Proposal['status'], 'info' | 'success' | 'error' | 'neutral'> = { open: 'info', accepted: 'success', rejected: 'error', merged: 'neutral' };
 
 export function proposalTitle(p: Proposal, titles: ReadonlyMap<string, string>): string {
-  if (p.kind === 'new') return p.proposed?.title ?? 'New runbook';
-  return (p.runbook_id && titles.get(p.runbook_id)) || p.proposed?.title || p.runbook_id || 'Runbook';
+  const title = p.kind === 'new' ? p.proposed?.title ?? 'New runbook'
+    : (p.runbook_id && titles.get(p.runbook_id)) || p.proposed?.title || p.runbook_id || 'Runbook';
+  return runbookDisplayTitle(title);
 }
 
 export function proposalAuthor(p: Proposal, names: Names = NO_NAMES): { name: string; kind: 'human' | 'agent' } {

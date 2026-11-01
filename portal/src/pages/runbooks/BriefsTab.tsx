@@ -58,7 +58,7 @@ export default function BriefsTab() {
     >
       {ref ? (
         <EditorShell
-          titleSize="sm" titleAs="h2"
+          headerInset="page" titleSize="md" titleAs="h1" titleOverflow="wrap"
           title={names.run(ref)}
           statusPill={current ? <StatusPill tone="neutral" label={`sha ${shortSha(current.sha256)}`} size="sm" /> : undefined}
           subtitle={<T size="xs" tone="tertiary">{current ? `${current.initiative_id ? `${names.initiative(current.initiative_id)} · ` : ''}frozen ${relativeTime(current.assembled_at)}` : 'A frozen brief'}</T>}
@@ -67,7 +67,7 @@ export default function BriefsTab() {
           label="Brief"
           data-testid="brief-record"
         >
-          <Stack gap="md" className="w-full max-w-4xl px-5 py-4">
+          <Stack gap="md" className="w-full px-6 py-4">
             <RunBriefPanel key={ref} runRef={ref} />
           </Stack>
         </EditorShell>

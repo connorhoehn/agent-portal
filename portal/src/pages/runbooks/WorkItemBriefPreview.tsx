@@ -1,6 +1,6 @@
 // A preview opens beside the work item, with its own scrolling surface.
 import { useNavigate } from 'react-router';
-import { Button, ChevronIcon, Inline, LoadingState, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, ChevronIcon, Inline, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -25,7 +25,7 @@ export function WorkItemBriefPane({ workItemId }: { workItemId: string }) {
   const allowed = can('ViewSessionBrief');
   const feed = useFetch<{ brief: Brief; skills?: BriefSkillDetail[] }>(allowed ? `/api/work-items/${encodeURIComponent(workItemId)}/brief-preview` : null, 0);
   if (!allowed) return <T size="sm" tone="secondary">Your role cannot view this brief.</T>;
-  return <div id="work-item-brief-pane">{feed.error ? <UnavailableNotice error={feed.error} what="the brief preview" source="The preview is assembled from the runbook store and this work item" onRetry={feed.refresh} />
+  return <Stack gap="none" id="work-item-brief-pane" className="min-h-0 flex-1">{feed.error ? <UnavailableNotice error={feed.error} what="the brief preview" source="The preview is assembled from the runbook store and this work item" onRetry={feed.refresh} />
     : !feed.data ? <LoadingState label="Assembling the brief…" />
-      : <BriefDocument brief={feed.data.brief} frozen={false} skills={feed.data.skills} onOpen={(href) => navigate(href)} />}</div>;
+      : <BriefDocument presentation="pane" brief={feed.data.brief} frozen={false} skills={feed.data.skills} onOpen={(href) => navigate(href)} />}</Stack>;
 }

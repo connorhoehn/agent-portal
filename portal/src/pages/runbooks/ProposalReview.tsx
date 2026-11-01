@@ -2,17 +2,18 @@
 // diff of the canonical markdown), the linter's findings, what it looks like, and — for a reviewer who
 // owns the scope — Accept, Reject (a note is required) and Merge into another runbook. Everyone else
 // reads it with an AccessNotice. A refused write says why in a sentence, never a bare status.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AccessNotice, ChangeReviewCard, SourceList } from '@connorhoehnslalom/ui-components';
-import { EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
+import { DocumentOutline, EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
 import {
-  Banner, Button, DetailSection, Disclosure, DiffViewer, FormField, Inline, Input, LoadingState, Select, Stack, StatusPill, T,
+  Banner, Button, Chip, DetailSection, DiffViewer, FormField, Inline, Input, Select, Spinner, Stack, StatusPill, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
+import { runbookDisplayTitle } from './runbookTitles';
 import { RunbookDocView } from './RunbookDocView';
 import { RunbookFiles } from './RunbookFiles';
 import { useRunbookNames } from './useRunbookNames';
@@ -41,6 +42,8 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
   onOpen: (href: string) => void;
   onDecided: () => void;
 }) {
+  const pageBody = useRef<HTMLElement | null>(null);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
   const detail = useFetch<ProposalResponse>(`/api/runbooks/proposals/${encodeURIComponent(pid)}`, 0);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [scopeKind, setScopeKind] = useState<ScopeKind>('org');
@@ -50,25 +53,29 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
   const names = useRunbookNames();
   const data = detail.data;
   const titles = new Map(published.map((r) => [r.id, r.title]));
-  useCrumbLabel(pid, data ? proposalTitle(data.proposal, titles) : undefined);
+  useCrumbLabel(pid, data ? runbookDisplayTitle(proposalTitle(data.proposal, titles)) : undefined);
 
   if (detail.error && !data) {
     return (
+      <EditorShell title="Runbook proposal" titleAs="h1" titleSize="md" headerInset="page" surface="plain" label="Proposal">
       <Stack className="p-6" data-testid="proposal-missing">
         <UnavailableNotice error={isNotFoundError(detail.error) ? 'That proposal does not exist.' : detail.error} what="this proposal" source="Proposals are read from the runbook store" onRetry={detail.refresh} />
       </Stack>
+      </EditorShell>
     );
   }
-  if (!data) return <LoadingState label="Loading proposal…" />;
+  if (!data) return <EditorShell title="Runbook proposal" titleAs="h1" titleSize="md" headerInset="page" surface="plain" label="Proposal">
+    <Inline role="status" gap="sm" className="px-6 py-4" data-testid="loading-state"><Spinner size="sm" decorative /><T size="sm" tone="secondary">Loading proposal…</T></Inline>
+  </EditorShell>;
   const { proposal: p, runbook, can_review: canReview } = data;
   const open = p.status === 'open';
-  const title = proposalTitle(p, titles);
+  const title = runbookDisplayTitle(proposalTitle(p, titles));
   const author = proposalAuthor(p, names);
   const counts = lintCounts(p.lint);
   const stale = open && runbook != null && p.base_version != null && p.base_version !== runbook.current_version;
   const retired = runbook?.status === 'retired';
   const needsScope = p.kind === 'new';
-  const mergeTargets = published.filter((r) => r.status === 'published' && r.id !== p.runbook_id).map((r) => ({ value: r.id, label: r.title }));
+  const mergeTargets = published.filter((r) => r.status === 'published' && r.id !== p.runbook_id).map((r) => ({ value: r.id, label: runbookDisplayTitle(r.title) }));
 
   // The card's summary pair; the real change is the diff beneath it.
   const cardPairs = p.kind === 'retire'
@@ -112,17 +119,46 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
     ...p.source.lab_experience_ids.map((l, k) => ({ id: `lab:${l}`, title: `Run note ${k + 1}`, kind: 'transcript' as const, meta: 'Evidence cited' })),
   ];
 
+  const sections = [
+    { id: 'summary', title: 'Change summary' },
+    ...(p.kind !== 'retire' ? [{ id: 'changes', title: 'Document changes' }] : []),
+    ...(data.files_diff?.text || data.proposed_files?.length ? [{ id: 'files', title: 'File changes' }] : []),
+    { id: 'checks', title: 'Review checks' },
+    ...(p.proposed ? [{ id: 'preview', title: 'Proposed runbook' }] : []),
+    ...(sources.length ? [{ id: 'sources', title: 'Sources' }] : []),
+    ...(open && canReview && p.kind !== 'retire' && mergeTargets.length ? [{ id: 'merge', title: 'Merge proposal' }] : []),
+  ];
+  const sectionTitle = (id: string) => {
+    const index = sections.findIndex(section => section.id === id);
+    return `${index + 1}. ${sections[index]!.title}`;
+  };
+  const goToSection = (id: string) => {
+    const root = pageBody.current;
+    const section = root?.querySelector<HTMLElement>(`[data-testid="proposal-section-${id}"]`);
+    const target = section?.querySelector<HTMLElement>('h2') ?? section;
+    const scroller = root?.closest<HTMLElement>('[data-testid="proposal-review-scroller"]');
+    if (!target || !scroller) return;
+    target.tabIndex = -1; target.focus({ preventScroll: true });
+    scroller.scrollTo({ top: scroller.scrollTop + target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 16, behavior: 'smooth' });
+    setActiveSection(id === 'contents' ? null : id);
+  };
+
   return (
     <EditorShell
-      titleSize="sm" titleAs="h2"
+      headerInset="page" titleSize="md" titleAs="h1" titleOverflow="wrap"
       title={title}
-      statusPill={<StatusPill tone={PROPOSAL_STATUS_TONE[p.status]} label={PROPOSAL_STATUS_LABEL[p.status]} size="sm" />}
+      statusPill={<Inline gap="sm"><Chip tone="neutral" size="md">Runbook proposal</Chip><StatusPill tone={PROPOSAL_STATUS_TONE[p.status]} label={PROPOSAL_STATUS_LABEL[p.status]} size="sm" /></Inline>}
       subtitle={<T size="xs" tone="tertiary">{`${KIND_LABEL[p.kind]} · ${author.name} · ${relativeTime(p.created_at)}${p.base_version != null ? ` · against v${p.base_version}` : ''}`}</T>}
       surface="plain"
       label="Proposal"
+      footer={<Stack className="px-6 py-2"><Button variant="ghost" size="sm" onClick={() => goToSection('contents')} data-testid="proposal-back-to-contents">Back to contents ↑</Button></Stack>}
       data-testid="proposal-review"
     >
-      <Stack gap="md" className="w-full max-w-4xl px-5 py-4">
+      <Stack ref={pageBody} gap="lg" className="w-full px-6 py-4">
+        <DetailSection as="h2" variant="heading" title="On this page" className="border-b border-border pb-4" data-testid="proposal-section-contents">
+          <DocumentOutline aria-label="On this page" entries={sections.map(section => ({ id: section.id, text: sectionTitle(section.id), level: 1 }))}
+            activeId={activeSection} onSelect={goToSection} wrap data-testid="proposal-contents" />
+        </DetailSection>
         {!open && (
           <Banner variant={p.status === 'accepted' ? 'success' : 'info'} layout="callout" icon title={`${PROPOSAL_STATUS_LABEL[p.status]}${p.decided_by ? ` by ${names.person(p.decided_by)}` : ''}${p.decided_at ? ` ${relativeTime(p.decided_at)}` : ''}`} data-testid="proposal-decided">
             {p.note ?? (p.merged_into ? 'Merged into another proposal for review.' : 'No note was left.')}
@@ -152,6 +188,8 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
         )}
         {refusal && <Banner variant="error" layout="callout" icon title="Not done" data-testid="proposal-refusal">{refusal}</Banner>}
 
+        <DetailSection as="h2" variant="heading" title={sectionTitle('summary')} className="border-b border-border pb-6" data-testid="proposal-section-summary">
+        <Stack gap="md">
         <ChangeReviewCard
           category={KIND_LABEL[p.kind]}
           author={{ name: author.name, kind: author.kind }}
@@ -195,50 +233,48 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
           </DetailSection>
         )}
 
+        </Stack>
+        </DetailSection>
+
         {p.kind !== 'retire' && (
-          <DetailSection variant="heading" first title="What it changes" hint={data.diff ? `+${data.diff.added} −${data.diff.removed}` : undefined}>
+          <DetailSection as="h2" variant="heading" first title={sectionTitle('changes')} data-testid="proposal-section-changes" hint={data.diff ? `+${data.diff.added} −${data.diff.removed}` : undefined}>
             {data.diff?.text
               ? <DiffViewer diff={viewerDiff(data.diff.text, `${title}.md`)} data-testid="proposal-diff" />
               : <T size="sm" tone="secondary">The proposal has no textual change.</T>}
           </DetailSection>
         )}
 
-        {data.files_diff?.text && (
-          <DetailSection variant="heading" title="Files this proposal carries" hint={filesDiffSummary(data.files_diff)}>
-            <DiffViewer diff={data.files_diff.text} defaultCollapsed={data.files_diff.files.length > 3} data-testid="proposal-files-diff" />
-          </DetailSection>
-        )}
-
-        {data.proposed_files && data.proposed_files.length > 0 && (
-          <Disclosure summary={`Read the proposed files (${data.proposed_files.length})`} variant="plain" density="compact" data-testid="proposal-files">
-            <RunbookFiles files={data.proposed_files} testId="proposal-files-list" />
-          </Disclosure>
-        )}
-
-        {p.lint.length > 0 && (
-          <DetailSection variant="heading" title="Lint findings" hint={`${counts.errors} errors · ${counts.warnings} warnings`}>
-            <Stack gap="xs" data-testid="proposal-lint">
-              {p.lint.map((f: LintFinding, i) => (
-                <Banner key={`${i}:${f.rule}:${f.path}`} variant={f.severity === 'error' ? 'error' : 'warning'} title={`${f.rule} · ${f.path}`}>{f.message}</Banner>
-              ))}
+        {(data.files_diff?.text || Boolean(data.proposed_files?.length)) && (
+          <DetailSection as="h2" variant="heading" title={sectionTitle('files')} data-testid="proposal-section-files" hint={data.files_diff ? filesDiffSummary(data.files_diff) : undefined}>
+            <Stack gap="md">
+              {data.files_diff?.text && <DiffViewer diff={data.files_diff.text} defaultCollapsed={data.files_diff.files.length > 3} data-testid="proposal-files-diff" />}
+              {data.proposed_files && data.proposed_files.length > 0 && <RunbookFiles files={data.proposed_files} testId="proposal-files-list" />}
             </Stack>
           </DetailSection>
         )}
 
+        <DetailSection as="h2" variant="heading" title={sectionTitle('checks')} data-testid="proposal-section-checks" hint={`${counts.errors} errors · ${counts.warnings} warnings`}>
+          <Stack gap="xs" data-testid="proposal-lint">
+            {p.lint.length ? p.lint.map((f: LintFinding, i) => (
+              <Banner key={`${i}:${f.rule}:${f.path}`} variant={f.severity === 'error' ? 'error' : 'warning'} title={`${f.rule} · ${f.path}`}>{f.message}</Banner>
+            )) : <T size="sm" tone="secondary">No findings were reported for this proposal.</T>}
+          </Stack>
+        </DetailSection>
+
         {p.proposed && (
-          <Disclosure summary="Read the proposed runbook" variant="plain" density="compact" data-testid="proposal-preview">
-            <RunbookDocView doc={p.proposed} {...(data.proposed_markdown ? { markdown: data.proposed_markdown } : {})} />
-          </Disclosure>
+          <DetailSection as="h2" variant="heading" title={sectionTitle('preview')} data-testid="proposal-section-preview">
+            <RunbookDocView doc={{ ...p.proposed, title: runbookDisplayTitle(p.proposed.title) }} {...(data.proposed_markdown ? { markdown: data.proposed_markdown } : {})} />
+          </DetailSection>
         )}
 
         {sources.length > 0 && (
-          <DetailSection variant="heading" title="Where it came from">
+          <DetailSection as="h2" variant="heading" title={sectionTitle('sources')} data-testid="proposal-section-sources">
             <SourceList aria-label="Proposal sources" items={sources} />
           </DetailSection>
         )}
 
         {open && canReview && p.kind !== 'retire' && mergeTargets.length > 0 && (
-          <DetailSection variant="heading" title="Merge instead" description="Re-aim this proposal as an edit of another runbook; it stays open there for review.">
+          <DetailSection as="h2" variant="heading" title={sectionTitle('merge')} data-testid="proposal-section-merge" description="Re-aim this proposal as an edit of another runbook; it stays open there for review.">
             <Inline gap="sm" align="center">
               <Select size="sm" aria-label="Merge into" className="w-auto min-w-64" value={mergeInto} placeholder="Choose a runbook…" options={mergeTargets} onChange={(e) => setMergeInto(e.target.value)} />
               <Button variant="secondary" size="sm" disabled={!mergeInto || busy} onClick={() => { void merge(); }} data-testid="proposal-merge">Merge into…</Button>

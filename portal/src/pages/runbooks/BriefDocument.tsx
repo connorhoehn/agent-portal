@@ -3,88 +3,47 @@
 // description, version, the library sha) and the exact markdown the box received.
 // Shared by Runbooks → Briefs, the run page's Brief tab and the work item's Brief preview.
 import { useState } from 'react';
-import { KeyValue } from '@connorhoehnslalom/ui-components';
-import { Banner, Button, DataTable, DetailSection, Inline, Link, Stack, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
-import { SafeMarkdown } from './SafeMarkdown';
+import { briefDocumentMarkdown } from './briefDocumentMarkdown';
+import { ReadOnlyDocument } from '../../components/documents/ReadOnlyDocument';
 import { briefTaskTitle } from './runbookNames';
-import { SECTION_KIND_LABEL, runbookHref } from './runbooksModel';
+import { SECTION_KIND_LABEL } from './runbooksModel';
 import { useRunbookNames } from './useRunbookNames';
-import { BriefSkills } from './BriefSkills';
 import type { Brief, BriefSection, BriefSkillDetail } from './types';
 
-export function BriefDocument({ brief, frozen, onOpen, skills }: { brief: Brief; frozen: boolean; onOpen: (href: string) => void; skills?: BriefSkillDetail[] }) {
+export function BriefDocument({ brief, frozen, onOpen, skills, presentation = 'page' }: { brief: Brief; frozen: boolean; onOpen: (href: string) => void; skills?: BriefSkillDetail[]; presentation?: 'page' | 'pane' }) {
   const [copied, setCopied] = useState(false);
   const names = useRunbookNames();
   const task = briefTaskTitle(brief.markdown);
-  // What a section points at, by name. Long values truncate (the full text is the hover title) so a row stays one line.
+  // Reference labels stay readable in the document’s supporting sections.
   const refText = (s: BriefSection): string => {
     if (s.kind === 'runbook') return `${names.runbook(s.ref)}${s.version ? ` v${s.version}` : ''}`;
     if (s.kind === 'initiative') return names.initiative(s.ref ?? brief.initiative_id);
     if (s.kind === 'work_item') return task ?? 'The work item';
     return '';
   };
-  const columns: DataTableColumn<BriefSection>[] = [
-    { key: 'kind', header: 'Section', render: (s) => SECTION_KIND_LABEL[s.kind] ?? s.kind },
-    {
-      key: 'ref', header: 'Reference',
-      render: (s) => s.kind === 'runbook' && s.ref ? (
-        <Link href={runbookHref(s.ref)} className="block max-w-xs whitespace-normal break-words" title={refText(s)}
-          onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onOpen(runbookHref(s.ref!)); }}>{refText(s)}</Link>
-      ) : <T as="div" className="max-w-xs whitespace-normal break-words" title={refText(s)}>{refText(s)}</T>,
-    },
-    { key: 'tokens', header: 'Tokens', numeric: true, render: (s) => s.tokens.toLocaleString('en-US') },
-    { key: 'reason', header: 'Why it is here', render: (s) => <T as="div" className="max-w-sm whitespace-normal break-words" title={s.reason}>{s.reason}</T> },
-  ];
+  const markdown = briefDocumentMarkdown(brief, {
+    frozen, skills, sectionLabel: section => SECTION_KIND_LABEL[section.kind] ?? section.kind,
+    referenceLabel: refText, runbookLabel: names.runbook,
+    workItemLabel: task ?? 'The work item', initiativeLabel: names.initiative(brief.initiative_id),
+  });
   return (
-    <Stack gap="md" data-testid="brief-document">
-      <KeyValue
-        layout="row"
-        labelWidth="w-32"
-        items={[
-          { label: 'sha256', value: brief.sha256, mono: true, title: brief.sha256 },
-          { label: 'Tokens', value: `${brief.used_tokens.toLocaleString('en-US')} of ${brief.budget_tokens.toLocaleString('en-US')}` },
-          { label: frozen ? 'Frozen' : 'Assembled', value: relativeTime(brief.assembled_at), title: brief.assembled_at },
-          ...(brief.work_item_id ? [{ label: 'Work item', value: task ?? 'The work item', title: brief.work_item_id }] : []),
-          ...(brief.initiative_id ? [{ label: 'Initiative', value: names.initiative(brief.initiative_id), title: brief.initiative_id }] : []),
-          ...(brief.repo ? [{ label: 'Repository', value: brief.repo }] : []),
-          ...(brief.skill_library ? [{ label: 'Skill library', value: brief.skill_library.sha256, mono: true, title: `${brief.skill_library.sha256}${brief.skill_library.dir ? ` in ${brief.skill_library.dir}` : ''}` }] : []),
-        ]}
-      />
-      {!frozen && (
-        <Banner variant="info" layout="callout" icon title="A preview, not a run’s brief">
-          This is what a run would be given if it started now. It is assembled fresh each time and stored nowhere; a real run freezes its own at claim.
-        </Banner>
-      )}
-      {brief.omitted.length > 0 && (
-        <Banner variant="warning" layout="callout" icon title={`${brief.omitted.length} left out`} data-testid="brief-omitted">
-          {brief.omitted.map((o) => `${names.runbook(o.runbook_id)} (${o.reason === 'budget' ? 'over the token budget' : o.reason === 'scope' ? 'out of scope' : 'drifting, excluded'})`).join(' · ')}
-        </Banner>
-      )}
-      <DetailSection as="h2" variant="heading" first title="Sections" hint={`${brief.sections.length}`}>
-        <DataTable rowHeight="content" data={brief.sections} columns={columns.map(column => ({ ...column, className: 'align-top' }))} keyField={(s) => `${s.kind}:${s.ref ?? ""}:${s.reason}`} frameless emptyMessage="No sections." staticRows="Brief contents describe assembled text; runbook references have their own links." data-testid="brief-sections" />
-      </DetailSection>
-      {brief.skill_library && <BriefSkills library={brief.skill_library} skills={skills} frozen={frozen} onOpen={onOpen} />}
-      <DetailSection
-        as="h2"
-        variant="heading"
-        title={frozen ? 'The exact text the box received' : 'The text a box would receive'}
-        actions={(
-          <Inline gap="sm" align="center">
-            <Button size="sm" variant="secondary" data-testid="brief-copy"
-              onClick={() => { void navigator.clipboard?.writeText(brief.markdown).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }, () => undefined); }}>
-              {copied ? 'Copied' : 'Copy markdown'}
-            </Button>
-          </Inline>
-        )}
-      >
-        <Stack gap="sm">
-          <T size="xs" tone="tertiary">{frozen ? 'Byte for byte; the sha256 above is the hash of exactly this text.' : 'Assembled by the same code the dispatcher uses.'}</T>
-          <Stack role="document" aria-label="Session brief text">
-            <SafeMarkdown markdown={brief.markdown} scale="md" testId="brief-markdown" />
+    <Stack gap="sm" className={presentation === 'pane' ? 'h-full min-h-0 flex-1' : 'h-[75vh] min-h-96'} data-testid="brief-document">
+      <Stack gap="xs" className="shrink-0">
+        <Inline justify="between" align="start" gap="md" wrap>
+          <Stack gap="xs">
+            <T size="sm" weight="semibold" wrap>{frozen ? 'Saved run instructions' : 'Instructions for the next run'}</T>
+            <T size="xs" tone="secondary">{`${brief.used_tokens.toLocaleString('en-US')} of ${brief.budget_tokens.toLocaleString('en-US')} tokens · ${frozen ? 'Saved' : 'Assembled'} ${relativeTime(brief.assembled_at)}`}</T>
           </Stack>
-        </Stack>
-      </DetailSection>
+          <Button size="sm" variant="secondary" data-testid="brief-copy"
+            onClick={() => { void navigator.clipboard?.writeText(brief.markdown).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }, () => undefined); }}>
+            {copied ? 'Copied' : 'Copy markdown'}
+          </Button>
+        </Inline>
+        {!frozen && <T size="xs" tone="secondary">Preview · A run saves its own copy when it starts.</T>}
+      </Stack>
+      <ReadOnlyDocument markdown={markdown} presentation={presentation} testId="brief-markdown" onOpen={onOpen} />
     </Stack>
   );
 }

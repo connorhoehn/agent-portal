@@ -379,7 +379,7 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
   // the sheet sized to the shell's scroller (fitHeight="parent"). Readers
   // have no formatting toolbar: retain the status bar so they can fit/zoom.
   return shell(<DocumentImageProvider loadImage={loadImage} requiresAuthentication={isProtectedImage}><CanvasDocumentView key={doc.docVersion} isCanvas body={canvas.body} ydoc={doc.ydoc} provider={doc.provider}
-    user={user} editable={editable} extensions={extensions} showRuler showStatusBar={!editable} toolbarStyle="card" pageMargin="narrow" fitHeight="parent" paginate showOutline={!context}
+    user={user} editable={editable} extensions={extensions} showRuler showStatusBar={!editable} toolbarStyle="card" pageMargin="narrow" fitHeight="parent" paginate showOutline={!context && editable} readingNavigation={!editable}
     onInsertImage={editable ? () => { setImageError(null); setImageOpen(true); } : undefined}
     gutterItems={margin.gutterItems} gutterLead={call.dock} gutterVisible={gutterVisible} onToggleGutter={toggleGutter}
     onFocusGutterItem={margin.onFocusGutterItem} onHoverGutterItem={margin.onHoverGutterItem}

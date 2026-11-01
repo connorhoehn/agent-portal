@@ -7,7 +7,7 @@ import { useSearchParams } from 'react-router';
 import { ProcedureSteps, SourceList } from '@connorhoehnslalom/ui-components';
 import { EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
 import {
-  Banner, Button, DataTable, DetailSection, DiffViewer, FormField, Inline, Input, LoadingState, Select, Stack, StatusPill, T,
+  Banner, Button, Chip, DataTable, DetailSection, Disclosure, DiffViewer, EmptyState, FormField, Inline, Input, LoadingState, Select, Spinner, Stack, StatusPill, T,
   Textarea, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
@@ -15,11 +15,11 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
-import { RunbookDocView } from './RunbookDocView';
+import { runbookDisplayTitle, runbookReadingMarkdown } from './runbookTitles';
+import { ReadOnlyDocument } from '../../components/documents/ReadOnlyDocument';
 import { useRunbookNames } from './useRunbookNames';
 import type { Names } from './runbookNames';
 import { RunbookFiles } from './RunbookFiles';
-import { SafeMarkdown } from './SafeMarkdown';
 import {
   HEALTH_LABEL, HEALTH_TONE, OUTCOME_LABEL, RECORD_TABS, briefHref, parseTab, proposalHref, refusalMessage, runPageHref,
   runbookHref, scopeLabel, shortSha, stepMarkers, viewerDiff, type RecordTab,
@@ -42,10 +42,11 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
   const applications = useFetch<{ applications: RunbookApplication[] }>(tab === 'runs' ? `/api/runbooks/${encodeURIComponent(id)}/applications` : null, 0);
   const names = useRunbookNames();
   const title = record.data?.runbook.title ?? summary?.title;
-  useCrumbLabel(id, title);
+  useCrumbLabel(id, title ? runbookDisplayTitle(title) : undefined);
 
   if (record.error && !record.data) {
     return (
+      <EditorShell headerInset="page" title={title ? runbookDisplayTitle(title) : 'Runbook'} titleAs="h1" titleSize="md" titleOverflow="wrap" surface="plain" label="Runbook">
       <Stack className="p-6" data-testid="runbook-missing">
         <UnavailableNotice
           error={isNotFoundError(record.error) ? 'That runbook does not exist.' : record.error}
@@ -54,9 +55,12 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
           onRetry={record.refresh}
         />
       </Stack>
+      </EditorShell>
     );
   }
-  if (!record.data || !record.data.current) return <LoadingState label="Loading runbook…" />;
+  if (!record.data || !record.data.current) return <EditorShell headerInset="page" title={title ? runbookDisplayTitle(title) : 'Runbook'} titleAs="h1" titleSize="md" titleOverflow="wrap" surface="plain" label="Runbook">
+    <Stack className="px-6 py-4">{!record.data ? <Inline role="status" gap="sm" data-testid="loading-state"><Spinner size="sm" decorative /><T size="sm" tone="secondary">Loading runbook…</T></Inline> : <EmptyState align="start" title="No published version" description="This runbook does not have a version to read yet." />}</Stack>
+  </EditorShell>;
   const { runbook, current } = record.data;
   const setTab = (next: string) => setParams((prev) => { const p = new URLSearchParams(prev); if (next === 'read') p.delete('tab'); else p.set('tab', next); return p; }, { replace: true });
   const retired = runbook.status === 'retired';
@@ -67,9 +71,10 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
 
   return (
     <EditorShell
-      titleSize="sm" titleAs="h2"
-      title={runbook.title}
-      statusPill={<StatusPill tone={pill.tone} label={pill.label} size="sm" />}
+      headerInset="page"
+      titleSize="md" titleOverflow="wrap" titleAs="h1"
+      title={runbookDisplayTitle(runbook.title)}
+      statusPill={<Inline gap="sm"><Chip tone="neutral" size="md">Runbook</Chip><StatusPill tone={pill.tone} label={pill.label} size="sm" /></Inline>}
       subtitle={<T size="xs" tone="tertiary">{`${scopeLabel(runbook.scope, names)} · owner ${names.person(runbook.owner_person_id)} · v${runbook.current_version} · updated ${relativeTime(runbook.updated_at)}`}</T>}
       tabs={tabs}
       activeTab={tab}
@@ -79,7 +84,7 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
       label="Runbook"
       data-testid="runbook-record"
     >
-      <Stack gap="md" className="w-full max-w-4xl px-5 py-4">
+      <Stack gap="md" className={tab === 'read' ? 'h-full min-h-0 w-full px-6 py-4' : 'w-full max-w-4xl px-6 py-4'}>
         {tab === 'read' && <ReadTab runbook={runbook} version={current} names={names} onOpen={onOpen} />}
         {tab === 'history' && <HistoryTab runbook={runbook} names={names} />}
         {tab === 'runs' && <RunsTab runbook={runbook} version={current} names={names} applications={applications.data?.applications ?? null} error={applications.error} onOpen={onOpen} />}
@@ -123,23 +128,31 @@ function ReadTab({ runbook, version, names, onOpen }: { runbook: RunbookRow; ver
       )}
       {runbook.area && <T size="xs" tone="tertiary" data-testid="runbook-area">{`Area: ${names.initiative(runbook.area)}`}</T>}
       <T size="xs" tone="tertiary" data-testid="runbook-health">{runbook.health.reason}</T>
-      {version.doc
-        ? <RunbookDocView doc={version.doc} markdown={version.markdown} sha256={version.sha256} />
-        : <SafeMarkdown markdown={version.markdown} scale="md" testId="runbook-markdown" />}
-      {version.files && version.files.length > 0 && (
-        <DetailSection variant="heading" title="Files" hint={`${version.files.length}`} description={`Skill name: ${runbook.id}. Every box receives this runbook as a skill in ~/.claude/skills.`}>
+      <Stack gap="xs" className="shrink-0">
+          <T size="sm" tone="secondary" wrap>{version.doc?.summary ?? runbook.summary}</T>
+          {version.doc && <T size="xs" tone="secondary">{`${version.doc.steps.length} steps · ${version.doc.verify.length} checks · ${version.doc.rollback.length} rollback steps`}</T>}
+      </Stack>
+      <ReadOnlyDocument markdown={runbookReadingMarkdown(version.markdown)} testId="runbook-reader" />
+      <Stack gap="none" className="shrink-0 max-h-[40%] overflow-y-auto">
+      <Disclosure summary="Files and provenance" variant="plain" density="compact" summaryClassName="px-0">
+        <Stack gap="lg">
+        {version.files && version.files.length > 0 && (
+          <DetailSection as="h2" variant="heading" title="Files" hint={`${version.files.length}`} description={`Skill name: ${runbook.id}. Every box receives this runbook as a skill in ~/.claude/skills.`}>
+            <Stack gap="sm">
+              <T size="xs" tone="tertiary" className="font-mono" data-testid="runbook-bundle-sha">{`bundle sha256 ${version.bundle_sha256 ? shortSha(version.bundle_sha256) : 'not recorded'}`}</T>
+              <RunbookFiles files={version.files} />
+            </Stack>
+          </DetailSection>
+        )}
+        <DetailSection as="h2" variant="heading" title="Where it came from" hint={`v${version.version}`}>
           <Stack gap="sm">
-            <T size="xs" tone="tertiary" className="font-mono" data-testid="runbook-bundle-sha">{`bundle sha256 ${version.bundle_sha256 ? shortSha(version.bundle_sha256) : 'not recorded'}`}</T>
-            <RunbookFiles files={version.files} />
+            <T size="xs" tone="tertiary" className="font-mono">{`sha256 ${shortSha(version.sha256)}${version.accepted_at ? ` · accepted ${relativeTime(version.accepted_at)}${version.accepted_by ? ` by ${names.person(version.accepted_by)}` : ''}` : ''}`}</T>
+            <SourceList aria-label="Provenance" emptyLabel="Written by hand; no run is cited." items={sources} data-testid="runbook-provenance" />
           </Stack>
         </DetailSection>
-      )}
-      <DetailSection variant="heading" title="Where it came from" hint={`v${version.version}`}>
-        <Stack gap="sm">
-          <T size="xs" tone="tertiary" className="font-mono">{`sha256 ${shortSha(version.sha256)}${version.accepted_at ? ` · accepted ${relativeTime(version.accepted_at)}${version.accepted_by ? ` by ${names.person(version.accepted_by)}` : ''}` : ''}`}</T>
-          <SourceList aria-label="Provenance" emptyLabel="Written by hand; no run is cited." items={sources} data-testid="runbook-provenance" />
         </Stack>
-      </DetailSection>
+      </Disclosure>
+      </Stack>
     </>
   );
 }

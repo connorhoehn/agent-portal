@@ -3,7 +3,7 @@
 // title, then the record, and the collection command composer docks at the bottom of the column.
 // A record is a page at its own URL — never a drawer.
 import type { ComponentProps, ReactNode } from 'react';
-import { ListRailLayout, useRailFold, useViewportWidth } from '@connorhoehnslalom/ui-components';
+import { ListRailLayout, ScopeHeader, useRailFold, useViewportWidth } from '@connorhoehnslalom/ui-components';
 import {
   EmptyState, GroupedList, Inline, LoadingState, SearchInput, Stack, T, type GroupedListRow,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -56,7 +56,7 @@ export function RunbooksListFrame(p: ListFrameProps) {
   ) : p.loading ? (
     <LoadingState label={`Loading ${p.listLabel}…`} />
   ) : p.rows.length === 0 ? (
-    <EmptyState
+    <EmptyState align="start"
       title={p.query ? 'No matches' : p.emptyTitle}
       description={p.query ? 'Nothing in this list matches the search.' : p.emptyDescription}
       {...(p.query && p.onClear ? { actionLabel: 'Clear search', onAction: p.onClear } : {})}
@@ -76,7 +76,7 @@ export function RunbooksListFrame(p: ListFrameProps) {
   );
   return (
     <ListRailLayout
-      header={<SectionHeader breadcrumbs={p.breadcrumbs} title={p.title} {...(p.description ? { description: p.description } : {})} />}
+      header={p.currentId ? <ScopeHeader variant="crumbs" breadcrumbs={p.breadcrumbs} data-testid="section-crumbs" /> : <SectionHeader breadcrumbs={p.breadcrumbs} title={p.title} {...(p.description ? { description: p.description } : {})} />}
       list={{
         title: p.listTitle,
         ...(p.count != null ? { count: p.count } : {}),

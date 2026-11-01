@@ -57,11 +57,11 @@ const selectors = {
   // composer.last: the column a composer must be the last content of (the same hosts), and the dock
   // that holds it (content inside the dock — a call strip — is the dock's, not "below the composer").
   composerColumns: '[data-docked-column], [data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-section-content], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
-  composerDocks: '[data-column-dock], [data-floating-composer-dock]',
+  composerDocks: '[data-column-dock], [data-floating-composer-dock], [data-testid$="-pane-footer"]:has([data-composer-surface])',
   rightPane: '[data-testid="page-conversation-pane"]',
   // The content column (the trail's parent: SectionContent, or a ListRailLayout header's column) and its
   // reading edge (the trail band, padded by the page gutter): content.gutter, header-alignment, single-title.
-  contentColumns: ':has(> [data-testid="section-crumbs"])', trail: '[data-testid="section-crumbs"]',
+  contentColumns: ':has(> [data-testid="section-crumbs"]):not([data-testid$="-pane-header"]), [data-testid$="-pane-column"]:has(> [data-testid$="-pane-header"] > [data-testid="section-crumbs"])', trail: '[data-testid="section-crumbs"]',
   // layout.contained-controls: every visible control inside the viewport, its column and its clipping ancestors.
   containedControls: ':is(button, a[href], [role="tab"], select, textarea, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]))',
   containmentRegions: '[data-section-content], [data-subnav-content], [data-shell-nav] aside, .shell-header, [data-testid="shell-footer"]',
@@ -402,6 +402,20 @@ export default {
     } });
     const info = page.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ });
     if (await info.count() === 1 && await info.isVisible()) states.push({ name: 'details-pane', required: ['$rightPane'], enter: async p => { await p.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ }).click(); await expect(p.locator(selectors.rightPane)).toBeVisible(); if (await p.getByTestId('initiative-pane').count()) { await expect(p.getByTestId('initiative-pane-details')).toBeVisible(); await expect(p.getByTestId('initiative-pane').getByRole('tab', { name: 'Details', exact: true })).toHaveAttribute('aria-selected', 'true'); } } });
+    // Reading panes need their own measured state; an initiative Details tab
+    // does not exercise the document's contents, scrollport or sources section.
+    const briefPreview = page.getByRole('button', { name: 'Open brief preview in side pane', exact: true });
+    if (await briefPreview.count() === 1 && await briefPreview.isVisible()) {
+      for (const sources of [false, true]) states.push({ name: sources ? 'brief-sources' : 'brief-document', required: ['$rightPane'], enter: async p => {
+        await p.getByRole('button', { name: 'Open brief preview in side pane', exact: true }).click();
+        await expect(p.getByTestId('brief-markdown-contents')).toBeVisible();
+        if (sources) {
+          await p.getByTestId('brief-markdown-contents').getByRole('button', { name: /^\d+\. Sources$/ }).click();
+          await expect(p.getByTestId('brief-markdown-body').getByRole('heading', { name: /^\d+\. Sources$/ })).toBeFocused();
+          await expect(p.getByTestId('brief-markdown-body').getByRole('heading', { name: /^\d+\. Sources$/ })).toBeInViewport();
+        }
+      } });
+    }
     // A conversation's other views (Documents, Pinned, Calls …): each tab is a state, so a view's own
     // layout (its tab row, empty state, panel) is measured on every plane and Social route that shows it.
     // The composer belongs to the Chat view, so the other views declare it absent with that reason.

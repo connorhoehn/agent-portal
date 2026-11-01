@@ -160,7 +160,7 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
       <Stack gap="none" className="min-h-0 flex-1" hidden={tab !== 'agent'} data-testid="initiative-pane-agent">{props.agent}</Stack>
       {tab !== 'discussion' && tab !== 'agent' && (
         // One inset (16px, the pane header's): every tab's body.
-        <Stack gap="sm" className="min-h-0 flex-1 overflow-y-auto px-4 py-3 @container" data-testid={`initiative-pane-${tab}`}>
+        <Stack gap="sm" className={tab === 'brief' ? 'min-h-0 flex-1 px-4 py-3 @container' : 'min-h-0 flex-1 overflow-y-auto px-4 py-3 @container'} data-testid={`initiative-pane-${tab}`}>
           {tab === 'details' && <InitiativeDetailsSummary {...props} />}
           {tab === 'brief' && id && <WorkItemBriefPane key={id} workItemId={id} />}
           {tab === 'log' && id && <LogTab jobId={id} />}
