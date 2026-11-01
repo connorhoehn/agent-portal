@@ -5,6 +5,7 @@
 // chat-rail variant's frame on those pages instead (below). Run from portal/
 // (Playwright is installed there).
 import { createRequire } from 'node:module';
+import { BREADCRUMB_SELECTOR } from './breadcrumb-selector.mjs';
 // Playwright is installed in portal/, wherever this script is run from.
 const require = createRequire(new URL('../../portal/package.json', import.meta.url));
 const { chromium } = require('playwright');
@@ -144,7 +145,7 @@ if (LIST_SUBJECTS.length) {
   const ctx = await browser.newContext({ viewport: { width: 1672, height: 941 } });
   const page = await ctx.newPage();
   await signIn(page, BASE, user, tenant, null);
-  const frame = () => {
+  const frame = (breadcrumbSelector) => {
     const main = document.querySelector('[data-shell-nav] main') ?? document.querySelector('main');
     if (!main) return null;
     const mr = main.getBoundingClientRect(); const mcs = getComputedStyle(main);
@@ -157,7 +158,7 @@ if (LIST_SUBJECTS.length) {
       .find((b) => Math.abs(b.left - content.left) <= 2 && b.width >= 120 && b.width <= 340 && b.height >= (content.bottom - content.top) * 0.6) ?? null;
     let radius = 0;
     for (let el = list; el && el !== main; el = el.parentElement) radius = Math.max(radius, parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0);
-    const crumbEl = [...main.querySelectorAll('nav[aria-label*="readcrumb"]')].filter(visible)
+    const crumbEl = [...main.querySelectorAll(breadcrumbSelector)].filter(visible)
       .find((e) => !lr || e.getBoundingClientRect().left >= lr.right - 2) ?? null;
     const cb = crumbEl?.getBoundingClientRect();
     return {
@@ -169,12 +170,12 @@ if (LIST_SUBJECTS.length) {
     };
   };
   await page.goto(BASE + '/iq/projects'); await page.waitForTimeout(3000);
-  const ref = await page.evaluate(frame);
+  const ref = await page.evaluate(frame, BREADCRUMB_SELECTOR);
   console.log('reference /iq/projects:', JSON.stringify(ref?.list));
   let failed = 0;
   for (const path of LIST_SUBJECTS) {
     await page.goto(BASE + path); await page.waitForTimeout(3000);
-    const m = await page.evaluate(frame);
+    const m = await page.evaluate(frame, BREADCRUMB_SELECTOR);
     console.log(`list ${path}:`, JSON.stringify(m));
     const problems = [];
     if (!m) problems.push('no <main>');

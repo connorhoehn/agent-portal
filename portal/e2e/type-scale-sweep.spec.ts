@@ -55,6 +55,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { BREADCRUMB_SELECTOR } from '../../scripts/lib/breadcrumb-selector.mjs';
 import { OBSERVED_ROUTES, PARAM_ROUTES, STATE_ROUTES, SWEEP_USER, TENANTS, resolveParam, sourceDigest, staticInventory, type InventoryRoute, type Tenant } from './route-inventory';
 import { DEFAULT_DUE, ownerOf, readRows, writeRows, type Row } from './burndown';
 import { finishParts, recordPart } from './contracts';
@@ -84,7 +85,7 @@ interface Walk { landed: string; els: TextEl[]; siblings: SiblingGroup[]; button
 
 /** Walks the page. Runs in the browser; self-contained. */
 async function walk(page: Page, withPrimary: boolean): Promise<Walk> {
-  return page.evaluate((withPrimary) => {
+  return page.evaluate(({ withPrimary, breadcrumbSelector }) => {
     const visible = (e: Element) => {
       const b = e.getBoundingClientRect();
       if (b.width <= 1 || b.height <= 1) return false;
@@ -169,7 +170,7 @@ async function walk(page: Page, withPrimary: boolean): Promise<Walk> {
     }
     for (const band of main.querySelectorAll('[data-testid="section-crumbs"]')) {
       for (const c of band.querySelectorAll(':scope > *, :scope > * > *')) {
-        if (c.matches('nav') || c.querySelector('nav[aria-label*="readcrumb"]') || c.closest('nav[aria-label*="readcrumb"]')) continue;
+        if (c.matches('nav') || c.querySelector(breadcrumbSelector) || c.closest(breadcrumbSelector)) continue;
         if (!actionRoots.some((r) => r.el.contains(c))) actionRoots.push({ el: c, kind: 'trail-band' });
       }
     }
@@ -238,7 +239,7 @@ async function walk(page: Page, withPrimary: boolean): Promise<Walk> {
       }
     }
     return { landed: location.pathname + location.search, els, siblings, buttons };
-  }, withPrimary) as Promise<Walk>;
+  }, { withPrimary, breadcrumbSelector: BREADCRUMB_SELECTOR }) as Promise<Walk>;
 }
 
 interface Offender { rule: Rule; region: Region; path: string; sw: string; text: string }
@@ -326,7 +327,7 @@ async function goto(page: Page, url: string) {
 
 async function settle(page: Page) {
   await page.getByTestId('shell-footer').first().waitFor({ timeout: 15_000 }).catch(() => {});
-  await page.locator('main h1, main nav[aria-label="Breadcrumb"]').first().waitFor({ timeout: 8_000 }).catch(() => {});
+  await page.locator('main').locator(`h1, ${BREADCRUMB_SELECTOR}`).first().waitFor({ timeout: 8_000 }).catch(() => {});
   await page.waitForLoadState('networkidle', { timeout: 4_000 }).catch(() => {});
   // Lazy panes and loading states settle into the page's real content.
   await page.locator('main [aria-busy="true"], main [data-testid$="-loading"]').first().waitFor({ state: 'detached', timeout: 4_000 }).catch(() => {});

@@ -21,6 +21,7 @@
 // route as the cascade half of the routes' rendered contract
 // (docs/journeys/contracts/cascade.json, docs/journeys.md).
 import { test, expect, type Page } from '@playwright/test';
+import { BREADCRUMB_SELECTOR } from '../../scripts/lib/breadcrumb-selector.mjs';
 import {
   DEPTH_PAIRS, LIST_PAGES, OBSERVED_ROUTES, PARAM_ROUTES, SWEEP_USER, TENANTS, exemptions, resolveParam, routeKey, sourceDigest, staticInventory,
   type Invariant, type InventoryRoute, type Tenant,
@@ -59,7 +60,7 @@ interface Measure {
 }
 
 async function measure(page: Page): Promise<Measure> {
-  return page.evaluate(() => {
+  return page.evaluate((breadcrumbSelector) => {
     const visible = (e: Element) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
     const main = document.querySelector('[data-shell-nav] main') ?? document.querySelector('main');
     const m = main?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
@@ -86,7 +87,7 @@ async function measure(page: Page): Promise<Measure> {
       listRail = { left: Math.round(b.left), right: Math.round(b.right), top: Math.round(b.top), height: Math.round(b.height), width: Math.round(b.width), radius };
       for (const r of rails) if (Math.abs(r.left - listRail.left) <= 2) r.list = true;
     }
-    const crumbEl = [...(main ?? document).querySelectorAll('nav[aria-label="Breadcrumb"], nav[aria-label="breadcrumb"], nav[aria-label*="readcrumb"]')].find(visible) ?? null;
+    const crumbEl = [...(main ?? document).querySelectorAll(breadcrumbSelector)].find(visible) ?? null;
     const cb = crumbEl?.getBoundingClientRect();
     const crumb = cb ? { left: Math.round(cb.left), top: Math.round(cb.top), bottom: Math.round(cb.bottom), text: (crumbEl!.textContent ?? '').slice(0, 80) } : null;
     // The title: the first h1 after the trail in document order.
@@ -120,7 +121,7 @@ async function measure(page: Page): Promise<Measure> {
       footers: document.querySelectorAll('[data-testid="shell-footer"]').length,
       scrollW: document.documentElement.scrollWidth, innerW: innerWidth,
     };
-  });
+  }, BREADCRUMB_SELECTOR);
 }
 
 interface Violation { inv: Invariant; line: string }
@@ -172,13 +173,30 @@ async function resolveParams(page: Page, tenant: Tenant): Promise<InventoryRoute
 
 async function settle(page: Page) {
   await page.getByTestId('shell-footer').first().waitFor({ timeout: 15_000 }).catch(() => {});
-  await page.locator('main h1, main nav[aria-label="Breadcrumb"]').first().waitFor({ timeout: 8_000 }).catch(() => {});
+  await page.locator('main').locator(`h1, ${BREADCRUMB_SELECTOR}`).first().waitFor({ timeout: 8_000 }).catch(() => {});
   // Let lazy panes and count fetches land before measuring.
   await page.waitForLoadState('networkidle', { timeout: 4_000 }).catch(() => {});
   await page.waitForTimeout(300);
 }
 
 const inventory = staticInventory();
+
+test('named breadcrumb trails retain placement checks without accepting unrelated navigation', async ({ page }) => {
+  await page.setContent(`<style>body{margin:0}main{padding:24px}nav,ol{margin:0;height:20px}h1{margin:16px 0 0}</style><main><nav aria-label="Work location" data-testid="scope-header-crumbs"><ol><li>Library</li></ol></nav><h1>Document</h1></main>`);
+  const failures = async () => judge('/fixture', await measure(page), new Set()).filter(v => v.inv === 'crumbs-first' || v.inv === 'gutter');
+  expect((await measure(page)).crumb?.text).toBe('Library');
+  expect(await failures()).toEqual([]);
+  await page.locator('nav').evaluate(el => { el.style.marginLeft = '12px'; });
+  expect((await failures()).map(v => v.inv)).toContain('gutter');
+  await page.locator('nav').evaluate(el => { el.style.marginLeft = '0'; el.style.marginTop = '30px'; });
+  expect((await failures()).map(v => v.inv)).toContain('crumbs-first');
+  await page.locator('nav').evaluate(el => { el.style.marginTop = '0'; el.removeAttribute('data-testid'); });
+  expect((await failures()).map(v => v.inv)).toContain('crumbs-first');
+  await page.locator('nav').evaluate(el => { el.setAttribute('data-testid', 'scope-header-crumbs'); el.querySelector('ol')!.remove(); });
+  expect((await failures()).map(v => v.inv)).toContain('crumbs-first');
+  await page.locator('nav').evaluate(el => { el.setAttribute('aria-label', 'Breadcrumb'); el.textContent = 'Library'; });
+  expect(await failures()).toEqual([]);
+});
 
 test('title alignment measures declared leading groups and still rejects shifted headings', async ({ page }) => {
   const fixture = (leading: string) => `<style>body{margin:0}main{padding:24px}nav{height:20px}#row{display:flex;align-items:center;gap:8px;margin-top:16px}h1{margin:0;font:600 20px/24px sans-serif}[data-kind]{display:block;width:36px;height:36px}</style><main><nav aria-label="Breadcrumb">Library</nav><div id="row" data-testid="fixture-head-row">${leading}<div><h1>Document title</h1></div></div></main>`;
@@ -271,7 +289,7 @@ test('a loaded deck editor carries one trail, first, and one h1', async ({ page 
   await expect(page.getByTestId('deck-editor')).toBeVisible({ timeout: 45_000 });
   await page.waitForTimeout(300);
   const m = await measure(page);
-  const crumbs = await page.locator('main nav[aria-label*="readcrumb"]').count();
+  const crumbs = await page.locator('main').locator(BREADCRUMB_SELECTOR).count();
   const h1s = await page.locator('main h1').count();
   console.log(`deck editor: crumbs=${crumbs} h1=${h1s} ${JSON.stringify({ crumb: m.crumb, title: m.title, rails: m.rails.length, mainLeft: m.mainLeft })}`);
   expect(crumbs, 'breadcrumb navs in main').toBe(1);
@@ -508,7 +526,7 @@ test('list pages draw a flush list rail beside the section rail, trail first aft
       if (f.sectionState !== 'open') lines.push(`${path}  the section rail folded`);
     }
     if (entry.editor) {
-      const inset = await page.evaluate(() => {
+      const inset = await page.evaluate((breadcrumbSelector) => {
         const pane = document.querySelector('[data-list-rail] [data-testid$="-pane"]');
         if (!pane) return null;
         const textLeft = (el: Element | null | undefined) => {
@@ -521,9 +539,9 @@ test('list pages draw a flush list rail beside the section rail, trail first aft
         const section = [...pane.querySelectorAll('h2, h3, [role="heading"]')].find((e) => e !== heading && e.getBoundingClientRect().width > 1);
         const dock = pane.querySelector('[data-testid$="-composer"]');
         const frame = dock ? [...dock.querySelectorAll('*')].find((e) => parseFloat(getComputedStyle(e).borderLeftWidth) > 0 && e.getBoundingClientRect().width > 300) : null;
-        const crumbs = [...pane.querySelectorAll('nav[aria-label*="readcrumb"]')].map((e) => (e.textContent ?? '').trim());
+        const crumbs = [...pane.querySelectorAll(breadcrumbSelector)].map((e) => (e.textContent ?? '').trim());
         return { header: textLeft(heading), body: textLeft(section), composer: frame ? Math.round(frame.getBoundingClientRect().left) : null, crumbs };
-      });
+      }, BREADCRUMB_SELECTOR);
       if (!inset) lines.push(`${path}  no record pane`);
       else {
         if (inset.crumbs.length) lines.push(`${path}  a second breadcrumb inside the record: ${inset.crumbs.join(' | ')}`);
