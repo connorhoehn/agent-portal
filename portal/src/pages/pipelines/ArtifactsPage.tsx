@@ -8,7 +8,7 @@ import {
   Banner,
   Chip,
   DataTable,
-  MetaLine,
+  T,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
@@ -30,8 +30,8 @@ const KIND_OPTIONS = [
 
 const COLUMNS: DataTableColumn<PipelineArtifact>[] = [
   { key: 'kind', header: 'Kind', render: (a) => <Chip tone="neutral" size="xs">{artifactKindLabel(a.kind)}</Chip> },
-  { key: 'title', header: 'Artifact', render: (a) => a.title, sortable: true, compare: (x, y) => x.title.localeCompare(y.title) },
-  { key: 'runId', header: 'Run', render: (a) => (a.runId ? <MetaLine size="xs" tone="secondary" items={[a.runTitle ?? a.runId]} /> : 'no run') },
+  { key: 'title', header: 'Artifact', render: (a) => <T size="sm" title={a.title} className="block max-w-[24rem] truncate">{a.title}</T>, sortable: true, compare: (x, y) => x.title.localeCompare(y.title) },
+  { key: 'runId', header: 'Run', render: (a) => (a.runId ? <T size="xs" tone="secondary" title={a.runTitle ?? a.runId} className="block max-w-[24rem] truncate">{a.runTitle ?? a.runId}</T> : 'no run') },
   { key: 'runStatus', header: 'Run status', width: '128px', render: (a) => (a.runStatus ? <PipelineRunStatusChip status={a.runStatus} /> : '—') },
   { key: 'contextTenant', header: 'Workspace', render: (a) => a.contextTenant ?? '—' },
   {

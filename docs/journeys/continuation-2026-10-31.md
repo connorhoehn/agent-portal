@@ -320,3 +320,28 @@ leave cleanup, two outsider refusals, zero disclosed cursors, blocked writes
 or console errors. Its earlier missed-movement observation remains above.
 The full 2.485.0 rendered-contract measurement is now running; final map walks
 and the post-measurement cursor proof remain before sealing.
+
+### Final-walk checkpoint (2026-11-01 04:05 UTC)
+
+The full 2.485.0 measurement passed: 19 rail routes, 19 layout tests and six
+typography tests. No route values changed from the accepted contract baseline.
+All 364 maps validate, all 49 runner tests pass, and static coverage is current.
+The official sealer accepted 84 complete target records and refused 26 older
+passing records whose assertions changed after their walks. Those 26 join
+50 failed/incomplete records in a 76-map targeted renewal queue.
+
+The final cursor proof passed in 14.6s after measurement and was sealed.
+Both directions, movement, self-pointer exclusion, leave cleanup and outsider
+refusals are recorded with current screenshots and JSON evidence. The former
+mixed historical log is preserved verbatim under `docs/history/assessment-stretch/`;
+its older chat/call/edit observations are explicitly outside the renewed cursor
+verdict, as they were in the previous 2026-10-24 active record.
+
+The targeted walks then found a new Artifacts overflow: a long run title made
+the Run column 5,267px wide. `ArtifactsPage` now uses the existing `T` primitive
+to bound Artifact and Run text, preserving complete values in their titles and
+the row's run navigation. Its confirming administrator map passes all 13 steps;
+the screenshot shows all six columns again. Portal typecheck and component
+discipline pass. The application changed after the measurement above, so it
+needs another measurement after the remaining provisional walks and any repairs.
+Do not treat this checkpoint as final tenant acceptance.
