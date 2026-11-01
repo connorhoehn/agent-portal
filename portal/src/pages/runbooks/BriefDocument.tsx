@@ -4,7 +4,7 @@
 // Shared by Runbooks → Briefs, the run page's Brief tab and the work item's Brief preview.
 import { useState } from 'react';
 import { KeyValue } from '@connorhoehnslalom/ui-components';
-import { Banner, Button, DataTable, DetailSection, Inline, Stack, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { Banner, Button, DataTable, DetailSection, Inline, Link, Stack, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
 import { SafeMarkdown } from './SafeMarkdown';
 import { briefTaskTitle } from './runbookNames';
@@ -27,11 +27,14 @@ export function BriefDocument({ brief, frozen, onOpen, skills }: { brief: Brief;
   const columns: DataTableColumn<BriefSection>[] = [
     { key: 'kind', header: 'Section', render: (s) => SECTION_KIND_LABEL[s.kind] ?? s.kind },
     {
-      key: 'ref', header: 'Reference', className: 'max-w-xs truncate',
-      render: (s) => <T title={s.ref ?? undefined}>{refText(s)}</T>,
+      key: 'ref', header: 'Reference',
+      render: (s) => s.kind === 'runbook' && s.ref ? (
+        <Link href={runbookHref(s.ref)} className="block max-w-40 truncate" title={refText(s)}
+          onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onOpen(runbookHref(s.ref!)); }}>{refText(s)}</Link>
+      ) : <T as="div" className="max-w-40 truncate" title={refText(s)}>{refText(s)}</T>,
     },
     { key: 'tokens', header: 'Tokens', numeric: true, render: (s) => s.tokens.toLocaleString('en-US') },
-    { key: 'reason', header: 'Why it is here', className: 'max-w-sm truncate', render: (s) => <T title={s.reason}>{s.reason}</T> },
+    { key: 'reason', header: 'Why it is here', render: (s) => <T as="div" className="max-w-44 truncate" title={s.reason}>{s.reason}</T> },
   ];
   return (
     <Stack gap="md" data-testid="brief-document">
@@ -58,11 +61,12 @@ export function BriefDocument({ brief, frozen, onOpen, skills }: { brief: Brief;
           {brief.omitted.map((o) => `${names.runbook(o.runbook_id)} (${o.reason === 'budget' ? 'over the token budget' : o.reason === 'scope' ? 'out of scope' : 'drifting, excluded'})`).join(' · ')}
         </Banner>
       )}
-      <DetailSection variant="heading" first title="Sections" hint={`${brief.sections.length}`}>
-        <DataTable data={brief.sections} columns={columns} keyField={(s) => `${s.kind}:${s.ref ?? ""}:${s.reason}`} frameless emptyMessage="No sections." onRowClick={(s) => { if (s.kind === 'runbook' && s.ref) onOpen(runbookHref(s.ref)); }} data-testid="brief-sections" />
+      <DetailSection as="h2" variant="heading" first title="Sections" hint={`${brief.sections.length}`}>
+        <DataTable data={brief.sections} columns={columns} keyField={(s) => `${s.kind}:${s.ref ?? ""}:${s.reason}`} frameless emptyMessage="No sections." staticRows="Brief contents describe assembled text; runbook references have their own links." data-testid="brief-sections" />
       </DetailSection>
       {brief.skill_library && <BriefSkills library={brief.skill_library} skills={skills} frozen={frozen} onOpen={onOpen} />}
       <DetailSection
+        as="h2"
         variant="heading"
         title={frozen ? 'The exact text the box received' : 'The text a box would receive'}
         actions={(
@@ -76,7 +80,9 @@ export function BriefDocument({ brief, frozen, onOpen, skills }: { brief: Brief;
       >
         <Stack gap="sm">
           <T size="xs" tone="tertiary">{frozen ? 'Byte for byte; the sha256 above is the hash of exactly this text.' : 'Assembled by the same code the dispatcher uses.'}</T>
-          <SafeMarkdown markdown={brief.markdown} scale="md" testId="brief-markdown" />
+          <Stack role="document" aria-label="Session brief text">
+            <SafeMarkdown markdown={brief.markdown} scale="md" testId="brief-markdown" />
+          </Stack>
         </Stack>
       </DetailSection>
     </Stack>

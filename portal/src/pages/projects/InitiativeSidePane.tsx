@@ -43,6 +43,7 @@ import type { ProjectDecision } from '../project-detail/types';
 import { RecordLink } from '../decisions/RecordLink';
 import { InitiativeFacts, type InitiativeFactsInput } from './InitiativeDetailsCard';
 import { jobIsLive, logLines, type LogJob } from './initiativePaneModel';
+import { WorkItemBriefPane } from '../runbooks/WorkItemBriefPreview';
 import { isDetailsShortcut } from './detailsShortcut';
 
 /** The initiative pane's tabs: three resting tabs, and a record tab per kind a link on the page opens. */
@@ -51,11 +52,12 @@ export const INITIATIVE_PANE_TABS: readonly PaneTabSpec[] = [
   { id: 'agent', label: 'Agent' },
   { id: 'details', label: 'Details', remember: true },
   { id: 'log', label: 'Log', recordKinds: ['run'] },
+  { id: 'brief', label: 'Brief preview', recordKinds: ['work-item'] },
   { id: 'decision', label: 'Decision', recordKinds: ['decision'] },
   { id: 'person', label: 'Person', recordKinds: ['person'] },
 ];
-export type InitiativePaneTab = 'discussion' | 'agent' | 'details' | 'log' | 'decision' | 'person';
-const RECORD_KIND: Partial<Record<InitiativePaneTab, string>> = { log: 'run', decision: 'decision', person: 'person' };
+export type InitiativePaneTab = 'discussion' | 'agent' | 'details' | 'log' | 'decision' | 'person' | 'brief';
+const RECORD_KIND: Partial<Record<InitiativePaneTab, string>> = { brief: 'work-item', log: 'run', decision: 'decision', person: 'person' };
 const TAB_LABEL = Object.fromEntries(INITIATIVE_PANE_TABS.map((t) => [t.id, t.label])) as Record<InitiativePaneTab, string>;
 
 export interface InitiativePaneControl {
@@ -73,6 +75,8 @@ export function useInitiativePane(projectId: string | null): InitiativePaneContr
   const sidePane = useSidePane();
   const pane = usePaneState({
     tabs: INITIATIVE_PANE_TABS, defaultTab: 'discussion', params, setParams,
+    // Keep the preview available while checking the discussion or agent output.
+    keepRecord: params.get('paneRecord')?.startsWith('work-item:'),
     rememberKey: 'initiative.pane.tab', restore: { when: sidePane.visible, subject: projectId }, onOpen: sidePane.reveal,
   });
   useEffect(() => {
@@ -151,6 +155,7 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
         // One inset (16px, the pane header's): every tab's body.
         <Stack gap="sm" className="min-h-0 flex-1 overflow-y-auto px-4 py-3 @container" data-testid={`initiative-pane-${tab}`}>
           {tab === 'details' && <InitiativeDetailsSummary {...props} />}
+          {tab === 'brief' && id && <WorkItemBriefPane key={id} workItemId={id} />}
           {tab === 'log' && id && <LogTab jobId={id} />}
           {tab === 'decision' && id && <DecisionTab id={id} decisions={props.decisions} onOpenWorkItem={props.onOpenWorkItem} onOpenDecisions={props.onOpenDecisions} />}
           {tab === 'person' && id && <PersonTab personId={id} onClose={() => control.open('discussion')}

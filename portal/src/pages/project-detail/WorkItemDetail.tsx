@@ -142,6 +142,7 @@ export interface WorkItemDetailProps {
   onAddNote: () => void;
   /** Reveal the persistent initiative dialogue, available to readers too. */
   onOpenDiscussion: () => void;
+  onOpenBrief: () => void;
   /** The live gateway discussion for this item, shown under the stored comments. */
   discussion?: ReactNode;
   /**
@@ -172,6 +173,7 @@ export function WorkItemDetail({
   onAddContext,
   onAddNote,
   onOpenDiscussion,
+  onOpenBrief,
   discussion,
   liveNotes = null,
   headActions,
@@ -318,6 +320,7 @@ export function WorkItemDetail({
         {tab === 'brief' && (
           <>
             <OutcomeSection
+              as="h2"
               first
               size="md"
               className="text-sm"
@@ -350,6 +353,7 @@ export function WorkItemDetail({
             )}
             {showCriteria && (
               <ChecklistSection
+                as="h2"
                 title="Acceptance criteria"
                 items={thread.criteria.map((c) => ({ id: c.id, text: c.text, done: c.done }))}
                 readOnlyReason={readOnly}
@@ -365,17 +369,18 @@ export function WorkItemDetail({
             )}
             {filled('decisions') && (
               <LinkedItemsSection
+                as="h2"
                 title="Dependencies and decisions"
                 items={links}
                 emptyLabel="No decisions or pull requests linked yet"
               />
             )}
             {brief.showTable && (
-              <DetailSection variant="heading" title={BRIEF_TITLE} description={BRIEF_BODY} data-testid="brief-table">
+              <DetailSection as="h2" variant="heading" title={BRIEF_TITLE} description={BRIEF_BODY} data-testid="brief-table">
                 <KeyValue layout="row" divided labelWidth="w-72" items={briefItems} aria-label={BRIEF_TITLE} />
               </DetailSection>
             )}
-            <WorkItemBriefPreview workItemId={item.id} />
+            <WorkItemBriefPreview onOpen={onOpenBrief} />
           </>
         )}
         {tab === 'docs' && <WorkDocumentLinks workItemId={item.id} canEdit={canEdit} />}

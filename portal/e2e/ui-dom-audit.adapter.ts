@@ -96,9 +96,14 @@ type AuditState = { name: string; enter: (p: Page, ctx: { probes: Probes }) => P
 /** The shell regions every page keeps, including the record a probe navigated to. */
 const SHELL_REQUIRED = ['$header', '$footer', '$shellColumns'];
 /** After a probe navigated or opened something, wait (bounded) for its loading rows to settle. */
-async function settled(page: Page) {
-  await expect(page.getByTestId('loading-state')).toHaveCount(0, { timeout: 15000 });
-  await expect(page.locator('[data-testid="datatable-loading-row"]')).toHaveCount(0, { timeout: 15000 });
+export async function settled(page: Page) {
+  // React can update the URL before a lazy record and its loading fallback
+  // mount. A zero loader count in that gap does not mean the record is ready.
+  if (/^\/iq\/runbooks\/(?!proposals(?:\/|$)|briefs(?:\/|$))[^/]+$/.test(new URL(page.url()).pathname)) {
+    await expect(page.locator('[data-testid="runbook-record"], [data-testid="runbook-missing"]')).toBeVisible({ timeout: 15000 });
+  }
+  await expect(page.locator('[data-testid="loading-state"]:visible')).toHaveCount(0, { timeout: 15000 });
+  await expect(page.locator('[data-testid="datatable-loading-row"]:visible')).toHaveCount(0, { timeout: 15000 });
 }
 
 /** Each tenant's deck detail API, so a missing report is observed (404), never assumed. */
@@ -120,15 +125,15 @@ async function assertRoute(page: Page, spec: InventoryRoute) {
 async function ready(page: Page, spec: InventoryRoute & { required?: string[] }) {
   await expect(page.locator(selectors.header)).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-tenant', spec.tenant);
-  await expect(page.getByTestId('loading-state')).toHaveCount(0, { timeout: 15000 });
+  await expect(page.locator('[data-testid="loading-state"]:visible')).toHaveCount(0, { timeout: 15000 });
   if (spec.required?.includes('$conversationState')) await expect(page.locator(selectors.conversationState).first()).toBeVisible({ timeout: 15000 });
   if (spec.required?.includes('$composers')) await expect(page.locator(selectors.composers).first()).toBeVisible({ timeout: 15000 });
   if (spec.judges?.includes('table')) await expect(page.locator(selectors.tables).first()).toBeVisible();
-  await expect(page.locator('[data-testid="datatable-loading-row"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="datatable-loading-row"]:visible')).toHaveCount(0);
   // Absence of a loading indicator can precede the lazy page mounting. Wait
   // for the actual configuration control before classifying its form policy.
   if (auditAliasTarget(new URL(spec.path, 'http://audit.local').pathname) === '/pipelines/configuration') {
-    await expect(page.getByTestId('pipelines-default-approver')).toBeVisible();
+    await expect(page.locator('[data-testid="pipelines-configuration-details"], [data-testid="pipelines-configuration"] [data-testid="error-state"]')).toBeVisible();
   }
   await assertRoute(page, spec);
 }
@@ -262,6 +267,7 @@ export default {
         communicationOverview: await page.getByTestId('communication-overview').isVisible(),
         socialAccessRequired: await page.getByTestId('communication-no-social').isVisible(),
         configurationForm: await page.getByTestId('pipelines-default-approver').isVisible(),
+        configurationReadOnly: await page.getByTestId('pipelines-configuration-details').isVisible() && !(await page.getByTestId('pipelines-default-approver').isVisible()),
         settingsPlaceholder: await page.getByTestId('pipelines-empty-settings').isVisible(),
         missingDeck: !!spec.auditMissingDeck && await page.getByText("Couldn't open the report", { exact: true }).isVisible(),
       });

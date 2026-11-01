@@ -147,3 +147,9 @@ test('access policy: the wizard, configuration and settings are exempt only on t
   assert.equal(tenantComposerPolicy({ tenant: 'access', path: '/access/requests/new', kind: 'page' }, { placeholder: true }), undefined);
   assert.equal(tenantComposerPolicy({ tenant: 'access', path: '/access/unknown', kind: 'page' }, { form: true, placeholder: true, settingsSurface: true }), undefined);
 });
+
+test('configuration without editing controls needs positive read-only setting evidence', () => {
+  assert.equal(pipelineComposerPolicy('/pipelines/configuration'), undefined);
+  assert.equal(pipelineComposerPolicy('/pipelines/configuration', { configurationReadOnly: true })?.mode, 'exempt');
+  assert.deepEqual(pipelineComposerPolicy('/pipelines/runs', { configurationReadOnly: true }), { mode: 'required' });
+});

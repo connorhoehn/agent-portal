@@ -20,7 +20,7 @@
 import { useId, useLayoutEffect, useRef } from 'react';
 import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
 import { Button, IconButton, Inline, Stack, Tooltip } from '@connorhoehnslalom/ui-components/shared';
-import { FooterTodayStrip } from './FooterTodayStrip';
+import { TodayStripSlot } from './FooterTodayStrip';
 import { SettingsGearIcon } from '@connorhoehnslalom/ui-components';
 import { useSidePaneHost } from '@connorhoehnslalom/ui-components';
 import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehnslalom/ui-components/video';
@@ -201,7 +201,7 @@ export function SocialFooter() {
     <ShellCallMedia id={mediaId} />
     <Inline gap="md" align="center" justify="between" wrap={false} className="min-h-11 min-w-0 overflow-x-auto px-4 py-1" data-testid="shell-footer-row">
       <EmbeddedSocialEntry />
-      <FooterTodayStrip activeCall={drawn} />
+      <TodayStripSlot placement="footer" activeCall={drawn} />
       {drawn
         ? <FooterCall mediaOpen={!!media?.open} onToggleMedia={() => media?.toggle()} />
         : <FooterIdle />}

@@ -66,6 +66,7 @@ import { tenantEnabled } from '../../lib/features';
 import { ShellCallHost } from './ShellCallHost';
 import { CallBlock } from '../../lib/conversationCall';
 import { EmbeddedSocialProvider } from './EmbeddedSocial';
+import { TodayPlacementProvider, TodayStripSlot } from './FooterTodayStrip';
 import { SocialFooter } from './SocialFooter';
 import { HuddleChatSplit } from './HuddleChat';
 import { MeetingRoomBanner } from './CallMeeting';
@@ -489,6 +490,7 @@ function ShellLayout() {
   return (
     <ConversationInputProvider>
     <ShellCallHost onDialogueChange={setHuddleDialogueOpen}>
+    <TodayPlacementProvider>
     <EmbeddedSocialProvider>
     <CommandPaletteProvider commands={commands} getDynamicCommands={getDynamicCommands}>
       <Stack ref={shellRef} gap="none" data-tenant={tenantAttr} className="h-screen">
@@ -498,7 +500,10 @@ function ShellLayout() {
         <SkipLink targetId="main-content" />
         <AmbientVisitorTargets scope={shellRef} selector='[data-shell-nav] > div > aside:first-child nav > section:has(> button[aria-expanded="true"])' />
         <Inline as="header" justify="between" align="center" wrap className="shell-header px-4 border-b border-border shrink-0">
-          <TenantSwitcher label={tenantLabel} healthy={health?.status === 'ok' && !credsExpired && !dbDown && !checkingHealth} />
+          <Inline gap="md" align="center" wrap={false} className="min-w-0 flex-1">
+            <TenantSwitcher label={tenantLabel} healthy={health?.status === 'ok' && !credsExpired && !dbDown && !checkingHealth} />
+            <TodayStripSlot placement="header" />
+          </Inline>
             <Inline gap="md" wrap>
               <DropdownMenu
                 trigger="Navigation"
@@ -660,6 +665,7 @@ function ShellLayout() {
       </Stack>
     </CommandPaletteProvider>
     </EmbeddedSocialProvider>
+    </TodayPlacementProvider>
     </ShellCallHost>
     </ConversationInputProvider>
   );

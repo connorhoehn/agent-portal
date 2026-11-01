@@ -5,6 +5,7 @@ export interface PipelineViewEvidence {
   communicationOverview?: boolean;
   socialAccessRequired?: boolean;
   configurationForm?: boolean;
+  configurationReadOnly?: boolean;
   settingsPlaceholder?: boolean;
   missingDeck?: boolean;
   /** The run API returned 404 and the visible view says Run not found. */
@@ -19,6 +20,7 @@ export function pipelineComposerPolicy(path: string, view: PipelineViewEvidence 
     if (view.socialAccessRequired) return { mode: 'exempt', reason: 'Social access is unavailable for this viewer; the visible access state explains how to obtain it.' };
     if (view.communicationOverview) return { mode: 'exempt', reason: 'The communication directory has no selected conversation. Selecting a channel or person opens its contextual composer.' };
   }
+  if (pathname === '/pipelines/configuration' && view.configurationReadOnly) return { mode: 'exempt', reason: 'The default approver details are visible without editing controls for this role; this read-only setting has no message input.' };
   if (pathname === '/pipelines/configuration' && view.configurationForm) return { mode: 'exempt', reason: 'This single-setting approval-authority form uses an explicit role selector and Save action, rather than a searchable collection.' };
   if (pathname === '/pipelines/settings' && view.settingsPlaceholder) return { mode: 'exempt', reason: 'The preferences feature is not available yet; the page displays its registration state and exposes no configurable data.' };
   if (/^\/pipelines\/decks\/[^/]+$/.test(pathname)) return view.missingDeck

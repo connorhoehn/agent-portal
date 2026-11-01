@@ -40,29 +40,32 @@ async function fixture(page: Page, query = '', dispatchAnswers: Array<{ status: 
 const deck = (page: Page) => page.getByTestId('prepare-job-deck');
 const card = (page: Page) => page.getByTestId('prepare-job-deck-card');
 
-test('the agent composer takes focus and bare cap shortcuts; custom dollars remain typed input', async ({ page }) => {
+test('the compact prompt owns focus and bare cap shortcuts; only custom dollars reveal an input', async ({ page }) => {
   const result = await fixture(page, '?composer=1');
-  const input = page.getByTestId('prepare-job-editor').locator('.ProseMirror');
+  const input = page.getByTestId('prepare-job-conversation-prompts-answer');
+  const editor = page.getByTestId('prepare-job-editor');
   const prompt = page.getByTestId('prepare-job-conversation-prompts-card');
-  await expect(input).toBeFocused();
+  await expect(prompt.locator('[data-composer-prompt-option]:focus')).toHaveCount(1);
   await page.keyboard.press('3');
   await expect(prompt).toContainText('Run cap');
-  await expect(input).toBeFocused();
+  await expect(prompt.locator('[data-composer-prompt-option]:focus')).toHaveCount(1);
   await page.keyboard.press('2');
   await expect(prompt).toContainText('Dispatch with these settings?');
   await expect(prompt).toContainText('$1.50');
-  await expect(input).toHaveText('');
+  await expect(editor).toHaveCount(0);
+  await expect(page.getByRole('toolbar', { name: 'Message formatting' })).toHaveCount(0);
   await page.keyboard.press('3');
   await expect(prompt).toContainText('Run cap');
   await page.keyboard.press('3');
   await expect(prompt).toHaveAttribute('data-composer-prompt-kind', 'number');
   await expect(input).toBeFocused();
   await page.keyboard.type('2.50');
-  await expect(input).toHaveText('2.50');
+  await expect(input).toHaveValue('2.50');
   await page.keyboard.press('Enter');
   await expect(prompt).toContainText('Dispatch with these settings?');
   await expect(prompt).toContainText('$2.50');
-  await expect(input).toHaveText('');
+  await expect(editor).toHaveCount(0);
+  await expect(page.getByRole('toolbar', { name: 'Message formatting' })).toHaveCount(0);
   expect(result.requests.every(request => request.method === 'GET')).toBe(true);
   expect(result.unexpected).toEqual([]);
   expect(result.errors).toEqual([]);

@@ -45,12 +45,13 @@ export default function ConfigurationPage() {
     <Stack gap="md" className="min-w-0" data-testid="pipelines-configuration">
       <PageHeader density="compact" title="Configuration" description="How this workspace decides who approves a step." />
       {error ? (
-        <ErrorState title="Configuration unavailable" body={error} />
+        <ErrorState title="Configuration unavailable" body="The workspace settings could not be loaded. Try again in a moment." action={<Button variant="secondary" size="sm" onClick={refresh}>Try again</Button>} />
       ) : !data ? (
         <LoadingState label={isLoading ? 'Loading configuration…' : 'Loading…'} />
       ) : (
         <PageSection
           size="sm"
+          data-testid="pipelines-configuration-details"
           title="Default approver"
           description="Who approves a step when its definition names nobody. A definition's own approver roles always win."
         >

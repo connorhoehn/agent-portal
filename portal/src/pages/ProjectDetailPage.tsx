@@ -490,26 +490,26 @@ function ProjectDetailPage() {
   const headerDensity = useHeaderDensity({ contentKind: 'detail', headerId: 'initiative' });
 
   if (projLoading) {
-    return <PageSection title="Initiative"><LoadingState label="Loading initiative…" /></PageSection>;
+    return <PageSection title="Initiative" size="lg"><LoadingState label="Loading initiative…" /></PageSection>;
   }
   // A 404 is an answer (no such initiative), not an outage.
   if (projError && /\b404\b|not found/i.test(projError)) {
     return (
-      <PageSection title="Initiative">
+      <PageSection title="Initiative" size="lg">
         <ErrorState title="Initiative not found" body={`No initiative has the id "${id}".`} action={<BackToProjects />} />
       </PageSection>
     );
   }
   if (projError) {
     return (
-      <PageSection title="Initiative">
-        <ErrorState title="Failed to load this initiative" body={projError} action={<BackToProjects />} />
+      <PageSection title="Initiative" size="lg">
+        <ErrorState title="Failed to load this initiative" body="The initiative could not be loaded. Try again in a moment." action={<BackToProjects />} />
       </PageSection>
     );
   }
   if (!project) {
     return (
-      <PageSection title="Initiative">
+      <PageSection title="Initiative" size="lg">
         <ErrorState title="Initiative not found" action={<BackToProjects />} />
       </PageSection>
     );
@@ -780,6 +780,7 @@ function ProjectDetailPage() {
 
   const workPane = current ? (
     <WorkItemDetail
+      onOpenBrief={() => { if (current) paneControl.open('brief', current.id); }}
       item={current}
       // A focused item's header is only the action cluster, on the item's own
       // title row — nothing between the trail and the item's title.
@@ -809,10 +810,13 @@ function ProjectDetailPage() {
       onOpenDiscussion={() => paneControl.open('discussion')}
     />
   ) : (
-    <EmptyState
-      title={workLoading ? 'Loading work…' : wantedItem ? 'Work item unavailable' : 'Select a work item'}
-      body={workLoading ? undefined : wantedItem ? 'This item is not in the current work list. Choose another item from the rail.' : 'Choose an item from the Work list to see its brief, discussion, and activity.'}
-    />
+    <Stack gap="sm" className="px-6 py-4">
+      {focusedWork && <PageHeader title="Work item" density="compact" />}
+      <EmptyState
+        title={workLoading ? 'Loading work…' : wantedItem ? 'Work item unavailable' : 'Select a work item'}
+        body={workLoading ? undefined : wantedItem ? 'This item is not in the current work list. Choose another item from the rail.' : 'Choose an item from the Work list to see its brief, discussion, and activity.'}
+      />
+    </Stack>
   );
 
   return (

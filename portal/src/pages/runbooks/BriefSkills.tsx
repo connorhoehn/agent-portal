@@ -19,11 +19,11 @@ export function BriefSkills({ library, skills, frozen, onOpen }: { library: Skil
   const rows: BriefSkillDetail[] = library.skills.map((k) => detail.get(k.name) ?? { name: k.name, version: k.version, title: null, description: null, current_version: null });
   const columns: DataTableColumn<BriefSkillDetail>[] = [
     {
-      key: 'name', header: 'Skill', className: 'max-w-xs truncate',
+      key: 'name', header: 'Skill',
       render: (k) => {
         const to = runbookHref(k.name);
         return (
-          <Link href={to} title={k.title ?? k.name} data-testid={`brief-skill-${k.name}`}
+          <Link href={to} className="block max-w-40 truncate" title={k.title ?? k.name} data-testid={`brief-skill-${k.name}`}
             onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); e.stopPropagation(); onOpen(to); }}>
             {k.name}
           </Link>
@@ -31,8 +31,8 @@ export function BriefSkills({ library, skills, frozen, onOpen }: { library: Skil
       },
     },
     {
-      key: 'description', header: 'Description', className: 'max-w-md truncate',
-      render: (k) => <T tone={k.description ? undefined : 'tertiary'} title={k.description ?? undefined}>{k.description ?? 'That version is no longer in the store.'}</T>,
+      key: 'description', header: 'Description',
+      render: (k) => <T as="div" className="max-w-44 truncate" tone={k.description ? undefined : 'tertiary'} title={k.description ?? undefined}>{k.description ?? 'That version is no longer in the store.'}</T>,
     },
     {
       key: 'version', header: 'Version', numeric: true,
@@ -44,7 +44,7 @@ export function BriefSkills({ library, skills, frozen, onOpen }: { library: Skil
     },
   ];
   return (
-    <DetailSection variant="heading" title={frozen ? 'Skills the box received' : 'Skills a box would receive'} hint={`${rows.length}`} data-testid="brief-skills">
+    <DetailSection as="h2" variant="heading" title={frozen ? 'Skills the box received' : 'Skills a box would receive'} hint={`${rows.length}`} data-testid="brief-skills">
       <Stack gap="sm">
         <T size="xs" tone="tertiary" data-testid="brief-skills-where">{skillLibraryWhere(library, frozen)}</T>
         <DataTable data={rows} columns={columns} keyField={(k) => k.name} frameless emptyMessage="The org had no established skills yet." data-testid="brief-skills-table" />
