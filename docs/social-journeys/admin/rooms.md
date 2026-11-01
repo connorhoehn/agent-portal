@@ -4,8 +4,8 @@ user: u-operator (Platform Operator)
 url: /social/rooms; /social/rooms?room=design-studio; /social/rooms?room=no-such-room; /social/rooms?room=design-studio&hangoutView=call
 map: docs/journeys/maps/social/admin/rooms.ts
 pages: portal/src/pages/social/RoomsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialRoomsSection.tsx,portal/src/pages/social/RoomDirectory.tsx,portal/src/pages/social/RoomPane.tsx
-audited: 2026-10-31 19:31–19:31 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-a87f1e57), scenario: shared meeting gateway, clone identities, signalling media fixture; HTTP business writes blocked, middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-operator-clone-a87f1e57, tenant social, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
+audited: 2026-10-31 22:27–22:27 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-49613174), scenario: shared meeting gateway, clone identities, signalling media fixture; HTTP business writes blocked, middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.484.0
+session: /api/session/me sub u-operator-clone-49613174, tenant social, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
 screenshot: rooms.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) [)

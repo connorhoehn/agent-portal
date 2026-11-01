@@ -4,8 +4,8 @@ user: u-operator (Platform Operator)
 url: /social/contacts
 map: docs/journeys/maps/social/admin/contacts.ts
 pages: portal/src/pages/social/ContactsPage.tsx
-audited: 2026-10-31 19:22–19:22 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-ea17018a), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-operator-clone-ea17018a, tenant social, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
+audited: 2026-10-31 22:26–22:26 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-7ce4f0ac), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.484.0
+session: /api/session/me sub u-operator-clone-7ce4f0ac, tenant social, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
 screenshot: contacts.jpg
 verdict: pass
 console errors: 0

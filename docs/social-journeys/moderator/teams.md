@@ -4,8 +4,8 @@ user: u-lena (Lena Brandt)
 url: /social/teams; /social/teams?channel=social%3Ateam%3Ano-such-team%3Ageneral
 map: docs/journeys/maps/social/moderator/teams.ts
 pages: portal/src/pages/social/TeamsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx
-audited: 2026-10-31 19:28–19:28 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-lena-clone-38f66d2a), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-lena-clone-38f66d2a, tenant social, role moderator, grants {"social":["moderator"]}
+audited: 2026-10-31 22:31–22:31 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-lena-clone-70a52cb6), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.484.0
+session: /api/session/me sub u-lena-clone-70a52cb6, tenant social, role moderator, grants {"social":["moderator"]}
 screenshot: teams.jpg
 verdict: pass
 console errors: 0

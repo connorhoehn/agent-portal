@@ -3,8 +3,8 @@ user: u-vera (Vera Green)
 url: /iq/projects; /social/channels; /social/rooms; /social/dms
 map: docs/journeys/maps/social/isolation/org-leader.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-10-31 19:25–19:26 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-fd385bcc), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-vera-clone-fd385bcc, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-10-31 22:29–22:30 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-b19c17e0), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.484.0
+session: /api/session/me sub u-vera-clone-b19c17e0, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 social-grant: yes — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
 social-tile-visible: yes — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
 social-nav-visible: no — The shell on /iq/projects, its own tenant, holds no link toward /social; Back on its own landing, still no link toward /social

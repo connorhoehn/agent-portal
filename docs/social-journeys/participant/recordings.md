@@ -4,8 +4,8 @@ user: u-sana (Sana Iqbal)
 url: /social/recordings; /social/recordings?recording=no-such-recording
 map: docs/journeys/maps/social/participant/recordings.ts
 pages: portal/src/pages/social/RecordingsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/RecordingsPane.tsx
-audited: 2026-10-31 19:29–19:29 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-564710bd), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-sana-clone-564710bd, tenant social, role participant, grants {"social":["participant"]}
+audited: 2026-10-31 22:32–22:33 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-17349ee6), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.484.0
+session: /api/session/me sub u-sana-clone-17349ee6, tenant social, role participant, grants {"social":["participant"]}
 screenshot: recordings.jpg
 verdict: pass
 console errors: 0

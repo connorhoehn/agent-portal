@@ -3,8 +3,8 @@ user: u-mia (Mia Singh)
 url: /iq/projects; /social/channels; /social/rooms; /social/dms
 map: docs/journeys/maps/social/isolation/program-owner.ts
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-10-31 19:26–19:26 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-f2762d0b), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-mia-clone-f2762d0b, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-10-31 22:30–22:30 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-ad059b05), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.484.0
+session: /api/session/me sub u-mia-clone-ad059b05, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 social-grant: yes — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
 social-tile-visible: yes — The workspace chooser shows the Social tile: this identity holds a social grant (/select → /workspaces)
 social-nav-visible: no — The shell on /iq/projects, its own tenant, holds no link toward /social; Back on its own landing, still no link toward /social

@@ -223,35 +223,30 @@ summary are in `.scratch/resume-2026-10-28/`.
 
 ## Next session
 
-**Active repair goal:** Codex resumed the remaining journey repairs on 2026-10-31.
-See the active repair section in [the continuation report](journeys/continuation-2026-10-31.md).
-Do not treat the prior passing seals as acceptance of unmeasured source changes.
+**Local journey goal complete (2026-11-01):** all 160 target maps have complete,
+passing, sealed and fresh logs: Pipelines 55, Social 48, Assessment 57. The four Social activity
+maps are unblocked through disposable clone DM/inbox isolation. Assessment's
+cursor stretch proof is renewed; its older chat/call/edit history is preserved
+separately, not claimed as renewed. Access was already re-walked and sealed
+(`b9507421`). All 364 maps validate and all 49 runner tests pass.
 
-**Journeys (2026-10-31):** access was re-walked and sealed (b9507421).
-Pipelines now has 55 walked maps: 17 passing and sealed, 38 failed. Social
-has 44 walked maps: 31 passing and sealed, 13 failed; four activity maps stay
-held because the gateway cannot isolate their chat writes. Findings and runner
-repairs are in [the continuation report](journeys/continuation-2026-10-31.md).
-Assessment has all 57 maps walked: 17 passing and sealed, 40 failed. Across
-these families, all 156 runnable maps are complete and all 65 passing logs
-are fresh; four Social maps remain held. All 364 maps validate and 45 runner
-tests pass. The tenant judges remain red for the documented failures, held
-proofs and Assessment's older `stretch/realtime.md`.
+The application is on shared UI 2.485.0. The final targeted batch found and
+fixed an Artifacts long-title overflow (`3e8dd398`). Final rail, layout and
+typography measurements pass, and all three tenant judges pass with
+`--quick --no-time`. See [the continuation report](journeys/continuation-2026-10-31.md)
+for the scope, validation and retained failure evidence. Never weaken an
+expectation or seal a failed/incomplete walk to clear the judge.
 
-Next: repair the repeated UI/component findings and review the narrowly
-identified audit-policy/reader-control mismatches in the report. Prove write
-isolation before allowing DM receipts or activity writes. If rendered app
-code changes, run `scripts/journeys/measure.sh`, then walk affected maps with
-`node scripts/journeys/run-maps.mjs walk --family <family> --no-seal` and seal
-only passing logs with `scripts/journeys/seal.sh <log>`. Never weaken an
-expectation or seal a failed walk to clear the judge. The budget defaults and
-deploy-machine items below remain open.
+The budget defaults under "Decisions taken by default" and the deploy-machine
+items below remain open. Broader Work and Pipelines configuration deep-audit
+follow-ups remain recorded in the continuation report; they are outside the
+completed map goal. No cloud rollout was performed by this local goal.
 
 **Follow-ups (2026-10-29): done** — PR-watch takes a hold/slot; the spend
 metric fires for SQL settles; `GET /api/harness/promoted-versions` reports
 the live prompt pointers; deck/summary model calls run inside AgentCore
 runtimes (no BFF usage to meter; their traces carry tokens); the budgets
-page labels the period and "between sprints". Remaining journey work is above.
+page labels the period and "between sprints". The local journey goal is closed above.
 
 Read `docs/budget-system-analysis-2026-10-28.md` first: it re-orders the money
 rows (2–12) toward the intended model (real Bedrock dollars, per-user budgets,

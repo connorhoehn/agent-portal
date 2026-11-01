@@ -4,8 +4,8 @@ user: u-sana (Sana Iqbal)
 url: /social/contacts
 map: docs/journeys/maps/social/participant/contacts.ts
 pages: portal/src/pages/social/ContactsPage.tsx
-audited: 2026-10-31 19:28–19:29 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-ed114e5c), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-sana-clone-ed114e5c, tenant social, role participant, grants {"social":["participant"]}
+audited: 2026-10-31 22:32–22:32 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-ec4e192a), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.484.0
+session: /api/session/me sub u-sana-clone-ec4e192a, tenant social, role participant, grants {"social":["participant"]}
 screenshot: contacts.jpg
 verdict: pass
 console errors: 0

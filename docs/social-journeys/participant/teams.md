@@ -4,8 +4,8 @@ user: u-sana (Sana Iqbal)
 url: /social/teams; /social/teams?channel=social%3Ateam%3Ano-such-team%3Ageneral
 map: docs/journeys/maps/social/participant/teams.ts
 pages: portal/src/pages/social/TeamsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx
-audited: 2026-10-31 19:29–19:29 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-e3f938db), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-sana-clone-e3f938db, tenant social, role participant, grants {"social":["participant"]}
+audited: 2026-10-31 22:33–22:33 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-sana-clone-86154691), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.484.0
+session: /api/session/me sub u-sana-clone-86154691, tenant social, role participant, grants {"social":["participant"]}
 screenshot: teams.jpg
 verdict: pass
 console errors: 0

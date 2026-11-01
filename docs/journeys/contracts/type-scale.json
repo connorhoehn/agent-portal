@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "4839d484e0e31119f8cea67777520d043ab375f3875060910a2776de5e2412df",
-  "at": "2026-10-30T01:13:54.850Z"
+  "sourceDigest": "e7a7ca072559d590e461250a5f9f1558c26ac442e5f36fea7d3f7fd376a1f78e",
+  "at": "2026-11-01T04:54:51.112Z"
  },
  "routes": {
   "/access": {
@@ -242,7 +242,7 @@
     "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-15T03:26:09.972Z"
+   "changedAt": "2026-11-01T04:03:18.946Z"
   },
   "/admin/observability": {
    "value": {

@@ -1,10 +1,36 @@
 # Journey continuation — 2026-10-31
 
 Resumed from `7dd22dc9` and `docs/local-backlog-goal-2026-10-28.md`.
-The initial checkpoint below is the pushed `aae11cda` baseline, before the
-active repair batches described later in this document. Its rendered contracts
-were measured at that checkpoint. The repair source still needs final measurement
-and sealing; passing maps alone are eligible for sealing. No expectation or audit burn-down entry was relaxed.
+The initial checkpoint below is the pushed `aae11cda` baseline. Subsequent
+repairs are recorded later in this document. No expectation or audit burn-down
+entry was relaxed.
+
+## Current checkpoint — 2026-11-01
+
+| Family | Complete passing maps | Failed | Held |
+|---|---:|---:|---:|
+| Pipelines | 55 / 55 | 0 | 0 |
+| Social | 48 / 48 | 0 | 0 |
+| Assessment | 57 / 57 | 0 | 0 |
+
+All 160 target logs have a passing verdict and the complete step count of
+their current map. Seventy-six targeted renewals completed after the last
+assertion changes; already-valid completed evidence was retained. The final
+renewal batch found and repaired the Artifacts long-title overflow (`3e8dd398`),
+then passed every remaining walk. Shared UI is pinned to 2.485.0.
+
+Assessment's cursor stretch proof is renewed with two directions, movement,
+leave cleanup and outsider refusals, screenshots and JSON diagnostics
+(`6c2ced65`). Its older chat/call/edit history is preserved separately and is
+not claimed as renewed. All 364 maps validate, all 49 runner tests pass, and
+the static coverage report is current (355 runnable maps across all families;
+that number is not an execution count).
+
+Final measurement for the Artifacts change passed. All 160 target records are
+sealed and fresh, and the Assessment, Pipelines and Social judges pass with
+`--quick --no-time`. This local journey goal is complete. The product/money
+defaults, deploy-machine AWS work and broader deep-audit follow-ups recorded
+below remain open; no cloud rollout was performed.
 
 ## Initial execution checkpoint (before active repairs)
 
@@ -345,3 +371,39 @@ the screenshot shows all six columns again. Portal typecheck and component
 discipline pass. The application changed after the measurement above, so it
 needs another measurement after the remaining provisional walks and any repairs.
 Do not treat this checkpoint as final tenant acceptance.
+
+## Final local acceptance — 2026-11-01
+
+- Final rendered contracts all match source digest
+  `e7a7ca072559d590e461250a5f9f1558c26ac442e5f36fea7d3f7fd376a1f78e`:
+  rail at 04:40:48 UTC, cascade at 04:48:35 UTC and typography at 04:54:51 UTC.
+  All 19 rail routes, all 19 layout tests and all six typography tests passed.
+  No route contract values changed from the accepted baseline. Typography has
+  zero new offenders; the granted Communication "Pinned" marker remains a
+  report-only observation, not a newly cleared finding.
+- All 76 required renewals completed. The Artifacts overflow failed on its
+  first attempt, was fixed, and passed confirmation; the earlier failing
+  screenshot/result and log remain under `.scratch/journey-repair-2026-10-31/`.
+  Existing valid walks were retained. Every one of the 160 target logs has a
+  passing verdict and the full current map step count.
+- The official sealer accepts Pipelines 55/55, Social 48/48 and Assessment
+  57/57, with zero remaining walks. Assessment's renewed cursor stretch proof
+  is also fresh; its older accessibility and agent-run stretch contracts still
+  match their existing evidence.
+- `validate-assessment-tenant.sh`, `validate-pipelines-tenant.sh` and
+  `validate-social-tenant.sh` all exit 0 with `--quick --no-time`. Social's
+  Assessment, navigation and retired-tenant sibling checks are green too.
+  These are quick local judges, not cloud or full infrastructure acceptance.
+- All 364 maps validate, all 49 runner tests pass, and coverage drift is zero.
+  Final portal typecheck and component-discipline checks pass. The shared
+  2.485.0 library release passed 11,251 tests (two existing skips), lint and
+  build. Earlier portal and middleware verification details, including the
+  corrected middleware test fixtures and confirming runs, remain above.
+
+Scope remains local Chromium 148 at 1680×940, light theme, real local services
+and disposable clone identities (with explicit cookie-less demo probes).
+The original Work toolbar/composer fixes also have their separate responsive
+light/dark fixture and live keyboard proof described above. The broader Work
+deep-audit findings and Pipelines configuration deep-probe follow-ups were not
+silently cleared by these map passes. No budget default changed and no AWS
+rollout or SFU media validation is claimed.

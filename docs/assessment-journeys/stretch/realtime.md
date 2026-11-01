@@ -9,8 +9,8 @@ screenshots: realtime-cursors.jpg (Jonas sees Farah), realtime-cursors-reverse.j
 verdict: pass — both readers receive the other reader's labelled pointer, follow a second movement, draw no self pointer and remove the peer on leave; the outsider receives two channel refusals and no cursor data
 console errors: 0; blocked business writes: 0
 
-The final proof ran after the current rail, layout and typography contracts
-were measured. `portal/e2e/document-cursors.spec.ts` passed with no retries.
+This proof ran after the 2.485.0 header-fix rail, layout and typography
+measurement. `portal/e2e/document-cursors.spec.ts` passed with no retries.
 The screenshots were inspected. Machine-readable observations are in
 [realtime-cursor-proof.json](realtime-cursor-proof.json), and the cursor-only
 wire capture is in [realtime-cursor-diagnostics.json](realtime-cursor-diagnostics.json).

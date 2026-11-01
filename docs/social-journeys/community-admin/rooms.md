@@ -4,8 +4,8 @@ user: u-mira (Mira Okafor)
 url: /social/rooms; /social/rooms?room=design-studio; /social/rooms?room=no-such-room; /social/rooms?room=design-studio&hangoutView=call
 map: docs/journeys/maps/social/community-admin/rooms.ts
 pages: portal/src/pages/social/RoomsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/SocialRoomsSection.tsx,portal/src/pages/social/RoomDirectory.tsx,portal/src/pages/social/RoomPane.tsx
-audited: 2026-10-31 19:31–19:31 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mira-clone-1882c8b4), scenario: shared meeting gateway, clone identities, signalling media fixture; HTTP business writes blocked, middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-mira-clone-1882c8b4, tenant social, role community-admin, grants {"social":["community-admin"]}
+audited: 2026-10-31 22:28–22:28 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mira-clone-b2897d11), scenario: shared meeting gateway, clone identities, signalling media fixture; HTTP business writes blocked, middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.484.0
+session: /api/session/me sub u-mira-clone-b2897d11, tenant social, role community-admin, grants {"social":["community-admin"]}
 screenshot: rooms.jpg
 verdict: pass
 console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) [)

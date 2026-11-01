@@ -4,8 +4,8 @@ user: u-mira (Mira Okafor)
 url: /social/recordings; /social/recordings?recording=no-such-recording
 map: docs/journeys/maps/social/community-admin/recordings.ts
 pages: portal/src/pages/social/RecordingsPage.tsx,portal/src/pages/social/SocialChatWorkspace.tsx,portal/src/pages/social/RecordingsPane.tsx
-audited: 2026-10-31 19:24–19:24 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mira-clone-21abe23e), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
-session: /api/session/me sub u-mira-clone-21abe23e, tenant social, role community-admin, grants {"social":["community-admin"]}
+audited: 2026-10-31 22:28–22:28 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mira-clone-ed385282), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.484.0
+session: /api/session/me sub u-mira-clone-ed385282, tenant social, role community-admin, grants {"social":["community-admin"]}
 screenshot: recordings.jpg
 verdict: pass
 console errors: 0
