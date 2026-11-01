@@ -4,7 +4,7 @@
 //   CLOUD_PORTAL_URL=https://<id>.cloudfront.net
 //   CLOUD_LOGIN_A=<email>:<password>   (social community-admin)
 //   CLOUD_LOGIN_B=<email>:<password>   (social participant)
-import { test, expect, type Browser, type Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { cloudSignIn, cloudUseTenant } from './cloudSession';
 
 const base = process.env.CLOUD_PORTAL_URL;
@@ -14,8 +14,8 @@ test.use({ launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake
 
 const bindings: number[] = [];
 
-async function signIn(browser: Browser, login: string, label: string): Promise<Page> {
-  return cloudSignIn(browser, login, label, async (page) => {
+function instrumentCallPage(label: string) {
+  return async (page: Page) => {
     await page.addInitScript(() => {
       const peers: RTCPeerConnection[] = [];
       (window as any).__pcs = peers;
@@ -40,7 +40,7 @@ async function signIn(browser: Browser, login: string, label: string): Promise<P
         console.log(`[${label}] binding body ${JSON.stringify(body)} → call-seat replay ${replay.status} ${(await replay.text()).slice(0, 200)}`);
       }
     });
-  });
+  };
 }
 
 // A fresh account gets the pre-join device check before every join.
@@ -65,8 +65,8 @@ async function inboundAudio(page: Page): Promise<number> {
 test('two signed-in users hear each other through the deployed SFU', async ({ browser }) => {
   test.setTimeout(180000);
   const out = test.info().outputPath('cloud-call');
-  const owner = await signIn(browser, logins[0]!, 'owner');
-  const guest = await signIn(browser, logins[1]!, 'guest');
+  const owner = await cloudSignIn(browser, logins[0]!, 'owner', instrumentCallPage('owner'));
+  const guest = await cloudSignIn(browser, logins[1]!, 'guest', instrumentCallPage('guest'));
   for (const p of [owner, guest]) {
     // Sign-in lands on the user's first tenant; the room lives in Social.
     await cloudUseTenant(p, 'social');
