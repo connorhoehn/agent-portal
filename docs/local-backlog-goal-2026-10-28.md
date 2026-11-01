@@ -230,17 +230,24 @@ cursor stretch proof is renewed; its older chat/call/edit history is preserved
 separately, not claimed as renewed. Access was already re-walked and sealed
 (`b9507421`). All 364 maps validate and all 49 runner tests pass.
 
-The application is on shared UI 2.485.0. The final targeted batch found and
-fixed an Artifacts long-title overflow (`3e8dd398`). Final rail, layout and
-typography measurements pass, and all three tenant judges pass with
+The application is on shared UI 2.486.3. The earlier targeted batch fixed an
+Artifacts long-title overflow (`3e8dd398`). The broader follow-up renewed 15
+Pipelines walks after its Configuration readiness assertions changed. Final
+rail, layout and typography measurements pass, and all three tenant judges pass with
 `--quick --no-time`. See [the continuation report](journeys/continuation-2026-10-31.md)
 for the scope, validation and retained failure evidence. Never weaken an
 expectation or seal a failed/incomplete walk to clear the judge.
 
+**Broader UI/audit follow-ups complete (2026-11-01):** prompt dialogues show
+numbered answers directly and a plain input only for manual answers. Brief
+preview opens the right pane. Today moves between the header and footer by
+dragging or keyboard, with placement saved on this device. The owner components
+and Storybook are updated. All 77 strict Work/Brief/Configuration audit cases,
+14 app interaction checks and five Storybook checks pass. The continuation
+report records the full scope and retained failed attempts.
+
 The budget defaults under "Decisions taken by default" and the deploy-machine
-items below remain open. Broader Work and Pipelines configuration deep-audit
-follow-ups remain recorded in the continuation report; they are outside the
-completed map goal. No cloud rollout was performed by this local goal.
+items below remain open. No cloud rollout was performed by these local goals.
 
 **Follow-ups (2026-10-29): done** — PR-watch takes a hold/slot; the spend
 metric fires for SQL settles; `GET /api/harness/promoted-versions` reports

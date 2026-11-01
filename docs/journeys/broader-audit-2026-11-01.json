@@ -1,0 +1,888 @@
+{
+  "version": 1,
+  "applicationCommit": "92728a36",
+  "uiComponentsCommit": "87bb34b9",
+  "uiComponents": "2.486.3",
+  "matrices": [
+    {
+      "report": ".scratch/broader-audit-2026-11-01/work-accepted/report.json",
+      "revision": {
+        "uiComponents": "2.486.3",
+        "commit": "256c3f33a81cd3b8417dd60660c88ac671ed5b59",
+        "sourceDigest": "9853f346d0a59cff30cf34d50e91a24f0b325ca6294074a34c8e5747fceec1e3",
+        "dirty": true
+      },
+      "strictCoverage": true,
+      "findings": 0,
+      "unclassified": [],
+      "cases": [
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "default",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "details-pane",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "dropdown-open",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:focus-walk",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:tabs:Metric cardinality budgets views",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:tabs:Pane sections",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:layer:Activity",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:layer:Platform Operator\u00b7 Admin \u25be",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:layer:Observability Platform menu",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:layer:Status",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:layer:Owner: Eli Garcia. Change owner",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:data:empty",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:data:error",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:data:loading",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:data:long",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:data:many",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "deep:data:denied",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "default",
+          "theme": "light",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "details-pane",
+          "theme": "light",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "dropdown-open",
+          "theme": "light",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "default",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "details-pane",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "dropdown-open",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "default",
+          "theme": "dark",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "details-pane",
+          "theme": "dark",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "tenant": "orgiq",
+          "state": "dropdown-open",
+          "theme": "dark",
+          "width": 900,
+          "findings": 0
+        }
+      ],
+      "visualReviews": [
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "state": "default",
+          "theme": "light",
+          "width": 1440,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/649125866ff75685.png"
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "state": "deep:layer:Status",
+          "theme": "light",
+          "width": 1440,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/2a07d82a456709b4.png"
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "state": "deep:data:error",
+          "theme": "light",
+          "width": 1440,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/dde07140a89e4313.png"
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e3-s1",
+          "state": "default",
+          "theme": "dark",
+          "width": 900,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/8a087b85742005df.png"
+        }
+      ]
+    },
+    {
+      "report": ".scratch/broader-audit-2026-11-01/configuration-accepted/report.json",
+      "revision": {
+        "uiComponents": "2.486.3",
+        "commit": "256c3f33a81cd3b8417dd60660c88ac671ed5b59",
+        "sourceDigest": "9853f346d0a59cff30cf34d50e91a24f0b325ca6294074a34c8e5747fceec1e3",
+        "dirty": true
+      },
+      "strictCoverage": true,
+      "findings": 0,
+      "unclassified": [],
+      "cases": [
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "default",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "sidebar-collapsed",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "sidebar-expanded",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "dropdown-open",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:focus-walk",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:layer:Activity",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:layer:Platform Operator\u00b7 Admin \u25be",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:layer:Social activity",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:layer:About Configuration",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:data:empty",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:data:error",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:data:loading",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:data:long",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:data:many",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "deep:data:denied",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "default",
+          "theme": "light",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "dropdown-open",
+          "theme": "light",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "default",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "sidebar-collapsed",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "sidebar-expanded",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "dropdown-open",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "default",
+          "theme": "dark",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/pipelines/configuration",
+          "tenant": "pipelines",
+          "state": "dropdown-open",
+          "theme": "dark",
+          "width": 900,
+          "findings": 0
+        }
+      ],
+      "visualReviews": [
+        {
+          "route": "/pipelines/configuration",
+          "state": "default",
+          "theme": "light",
+          "width": 1440,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/1fd0a1a08f4b9a0c.png"
+        },
+        {
+          "route": "/pipelines/configuration",
+          "state": "deep:layer:Social activity",
+          "theme": "light",
+          "width": 1440,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/27da68253b1443c7.png"
+        },
+        {
+          "route": "/pipelines/configuration",
+          "state": "deep:data:error",
+          "theme": "light",
+          "width": 1440,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/32827968f2ae21c8.png"
+        },
+        {
+          "route": "/pipelines/configuration",
+          "state": "default",
+          "theme": "dark",
+          "width": 900,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/2fa808eceafb23a8.png"
+        }
+      ]
+    },
+    {
+      "report": ".scratch/broader-audit-2026-11-01/brief-pane-accepted-2/report.json",
+      "revision": {
+        "uiComponents": "2.486.3",
+        "commit": "256c3f33a81cd3b8417dd60660c88ac671ed5b59",
+        "sourceDigest": "9853f346d0a59cff30cf34d50e91a24f0b325ca6294074a34c8e5747fceec1e3",
+        "dirty": true
+      },
+      "strictCoverage": true,
+      "findings": 0,
+      "unclassified": [],
+      "cases": [
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "default",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "details-pane",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "row-activate",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "reached": "/iq/runbooks/rb-adot-span-export",
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "dropdown-open",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:focus-walk",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:tabs:Stop duplicate alerts during a dependency outage views",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:tabs:Pane sections",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:layer:Activity",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:layer:Platform Operator\u00b7 Admin \u25be",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:layer:Observability Platform menu",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:layer:Status",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:layer:Owner: Eli Garcia. Change owner",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:data:empty",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:data:error",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:data:loading",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:data:long",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:data:many",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "deep:data:denied",
+          "theme": "light",
+          "width": 1440,
+          "findings": 0,
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "default",
+          "theme": "light",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "details-pane",
+          "theme": "light",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "dropdown-open",
+          "theme": "light",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "default",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "details-pane",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "row-activate",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0,
+          "reached": "/iq/runbooks/rb-adot-span-export",
+          "blockedWrites": []
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "dropdown-open",
+          "theme": "dark",
+          "width": 1440,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "default",
+          "theme": "dark",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "details-pane",
+          "theme": "dark",
+          "width": 900,
+          "findings": 0
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "tenant": "orgiq",
+          "state": "dropdown-open",
+          "theme": "dark",
+          "width": 900,
+          "findings": 0
+        }
+      ],
+      "visualReviews": [
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "state": "default",
+          "theme": "light",
+          "width": 1440,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/d47e3841a14c10b2.png"
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "state": "deep:layer:Status",
+          "theme": "light",
+          "width": 1440,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/b927fa6787605af9.png"
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "state": "deep:data:long",
+          "theme": "light",
+          "width": 1440,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/47552fa2a50e84b4.png"
+        },
+        {
+          "route": "/iq/projects/p-observability?scope=all&tab=work&item=wi-obs-e2-b4&pane=brief&paneRecord=work-item:wi-obs-e2-b4",
+          "state": "default",
+          "theme": "dark",
+          "width": 900,
+          "region": "content, shell, pane and composer",
+          "class": "visual-review",
+          "verdict": "pass",
+          "description": "Reviewed resting, opened layer, data state and narrow dark captures; controls remain readable, bounded and aligned.",
+          "screenshot": "review/f365d43ce588da4d.png"
+        }
+      ]
+    }
+  ],
+  "probeCommit": "cdd224a3",
+  "validation": {
+    "deepAuditCases": 77,
+    "appInteractionChecks": 14,
+    "storybookChecks": 5,
+    "ownerTests": {
+      "passed": 11254,
+      "skipped": 2
+    },
+    "portalTests": 1816,
+    "railRoutes": 19,
+    "layoutChecks": 20,
+    "typographyChecks": 6,
+    "mapsValid": 364,
+    "runnerTests": 49,
+    "renewedPipelinesWalks": 15,
+    "sealedFreshMaps": {
+      "pipelines": 55,
+      "social": 48,
+      "assessment": 57
+    },
+    "quickJudges": {
+      "assessment": "pass",
+      "pipelines": "pass",
+      "social": "pass"
+    }
+  },
+  "renderedContracts": {
+    "rail": {
+      "sourceDigest": "9853f346d0a59cff30cf34d50e91a24f0b325ca6294074a34c8e5747fceec1e3",
+      "at": "2026-11-01T14:37:38.214Z"
+    },
+    "cascade": {
+      "sourceDigest": "9853f346d0a59cff30cf34d50e91a24f0b325ca6294074a34c8e5747fceec1e3",
+      "at": "2026-11-01T14:45:29.443Z"
+    },
+    "type-scale": {
+      "sourceDigest": "9853f346d0a59cff30cf34d50e91a24f0b325ca6294074a34c8e5747fceec1e3",
+      "at": "2026-11-01T14:51:49.173Z"
+    }
+  }
+}

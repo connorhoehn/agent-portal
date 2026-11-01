@@ -276,12 +276,13 @@ owned canvas streams. Older e2e assumptions about hidden stack controls and
 Artifacts: `.scratch/journey-repair-2026-10-31/toolbar-*`. Deep route sweep and
 remaining tenant journey work continue; this is not an overall goal completion.
 
-The broader Work item deep audit is **not clean**: eight cases, ten findings,
+At this checkpoint the broader Work item deep audit was **not clean**: eight cases, ten findings,
 zero unclassified composer policies. Seven cases could not settle a loading
 state, and the one measured case showed the existing 13px Add criterion
 control, h1→h3 outline jump and duplicate Breadcrumb navigation name. These
 are recorded in `.scratch/journey-repair-2026-10-31/work-composer-deep`; the
-focused call/prompt fixes do not claim these broader page issues are fixed.
+focused call/prompt fixes did not clear these broader page issues. Their later
+repairs and confirming matrices are recorded in the broader follow-up below.
 
 ### Confirming checks (2026-11-01 UTC)
 
@@ -407,3 +408,86 @@ light/dark fixture and live keyboard proof described above. The broader Work
 deep-audit findings and Pipelines configuration deep-probe follow-ups were not
 silently cleared by these map passes. No budget default changed and no AWS
 rollout or SFU media validation is claimed.
+
+## Broader Work and Configuration follow-ups — 2026-11-01
+
+Application commit `92728a36` adopts ui-components 2.486.3 (source
+`e7d143bf`, release `87bb34b9`). Choice and confirmation prompts now replace
+the discussion composer with their numbered answers. They receive keyboard
+focus directly; manual answers get a plain input only when the prompt permits
+them. Hiding the prompt restores the unsent discussion draft. Shared component
+stories cover model selection, a custom run cap, an instruction and confirmation.
+The meeting toolbar's spacing and count badges also have responsive coverage.
+
+Brief preview opens the existing right pane with its own scrolling and keeps
+the brief available while switching between Discussion and Agent. Today has a
+drag handle and header/footer drop zones; clicking or keyboard-activating the
+handle also moves it. Its placement persists on this device, and focus follows
+the handle after a move. Shared stories cover both positions.
+
+The broader audit repairs include bounded brief text and runbook links,
+non-overlapping code-copy controls, stable side-pane headers, named navigation
+landmarks, heading semantics, and Configuration loading/error/read-only states.
+The readiness probe now waits for the actual destination record after lazy
+navigation. The audit engine recognizes only declared, exercised prompt and
+nonmodal focus profiles; broken fixtures and ordinary neighboring controls
+remain checked.
+
+Accepted evidence is indexed in
+[broader-audit-2026-11-01.json](broader-audit-2026-11-01.json). All three strict
+matrices report zero findings and zero unclassified states: Work detail 26,
+Brief pane 28, and Pipelines Configuration 23 cases. These are 77 executed cases
+in light/dark at 1440/900, not a claim that every application route was deeply
+audited. Every report has visual reviews covering default, layer, data and narrow
+states. The initial Configuration discovery failure remains historical rather
+than being counted as a verified case; its current ready and denied/read-only
+states were executed successfully.
+
+Validation on the packed release:
+
+- 14 application browser interaction checks and five Storybook checks pass.
+  The latter include 390px layouts, actual light/dark contrast, restored drafts,
+  direct numeric selection, manual input and both ticker positions. Live Work
+  checks include dragging, reload persistence, keyboard relocation and no
+  business writes or console errors.
+- Owner tests: 11,254 passed, two existing skips; lint and build pass. The
+  archive matches all 340 packed build files. Portal tests: 1,816 passed;
+  typecheck, 16 audit-policy tests and component discipline pass.
+- Audit engine self-test passes all 55 mutation checks plus its additional
+  fixtures; skill validation passes. The final serial owner gate supersedes
+  an earlier export-surface failure caused by reading an in-progress build.
+- Raw accepted reports, screenshots and logs are retained under
+  `.scratch/broader-audit-2026-11-01/`. Failed attempts are retained too,
+  including the first Brief-pane cold-navigation timeout and initial Storybook
+  theme/animation measurement failures. The accepted runs exercise their
+  corrected readiness and theme behavior.
+
+All accepted matrices share rendered source digest
+`9853f346d0a59cff30cf34d50e91a24f0b325ca6294074a34c8e5747fceec1e3`.
+Their pre-commit revision metadata is preserved; it describes the exact content
+subsequently committed as `92728a36`.
+
+The first contract renewal exposed a legacy breadcrumb probe that depended on
+the literal accessible label. The shared probe now also recognizes ScopeHeader's
+declared breadcrumb marker with an ordered list; an unrelated location label
+alone is rejected. Browser fixtures retain missing-trail and shifted-trail
+failures, with no geometry tolerance or route exemption changes. Final rendered
+contract renewal passed on the digest above: 19 rail routes at 14:37:38 UTC,
+20 layout tests at 14:45:29 UTC and six typography tests at 14:51:49 UTC. The
+layout and typography sweeps each judged 143 inventoried routes, also recording
+their additional observed routes. No accepted route contract value changed.
+The granted Communication "Pinned" observation remains report-only. The
+optional realtime-examples server was not running and was not measured.
+
+The official sealer required 15 Pipelines renewals because the Configuration
+readiness assertions changed: four Configuration roles and 11 outsider checks.
+All 15 were walked again and passed. Final seal checks accept all 160 target
+records: Pipelines 55/55, Social 48/48 and Assessment 57/57, with no remaining
+walks. Existing valid walks were retained. All 364 maps validate, all 49 runner
+tests pass, and coverage drift is zero.
+
+The final Assessment, Pipelines and Social judges all exit 0 with
+`--quick --no-time`, including Social's sibling checks. The broader follow-up
+goal is complete. This is local browser and quick-judge acceptance; the budget
+decisions and deploy-machine work remain open in the backlog. No AWS rollout
+or live SFU media proof is claimed.
