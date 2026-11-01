@@ -1,0 +1,1319 @@
+{
+  "continuation": "2026-10-31",
+  "scope": "Latest local clone walks at 1680x940, light theme, mock backend. Gating findings only; not the full responsive/theme matrix. Occurrences count repeated measurements, not unique product defects.",
+  "families": {
+    "pipelines": {
+      "counts": {
+        "fail": 38,
+        "pass": 17
+      },
+      "observations": [
+        {
+          "route": "/pipelines/*",
+          "rule": "a11y.contrast",
+          "occurrences": 16,
+          "logs": [
+            "docs/pipelines-journeys/admin/agents.md",
+            "docs/pipelines-journeys/admin/bots.md",
+            "docs/pipelines-journeys/admin/commands.md",
+            "docs/pipelines-journeys/admin/runbooks.md",
+            "docs/pipelines-journeys/author/agents.md",
+            "docs/pipelines-journeys/author/bots.md",
+            "docs/pipelines-journeys/author/commands.md",
+            "docs/pipelines-journeys/author/runbooks.md",
+            "docs/pipelines-journeys/operator/agents.md",
+            "docs/pipelines-journeys/operator/bots.md",
+            "docs/pipelines-journeys/operator/commands.md",
+            "docs/pipelines-journeys/operator/runbooks.md",
+            "docs/pipelines-journeys/pipeline-admin/agents.md",
+            "docs/pipelines-journeys/pipeline-admin/bots.md",
+            "docs/pipelines-journeys/pipeline-admin/commands.md",
+            "docs/pipelines-journeys/pipeline-admin/runbooks.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"empty-state\"] > div:nth-of-type(1)",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.2:1 (rgb(100, 116, 139) on rgb(238, 241, 246), 14px): \"Page not found\""
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/admin/agents.md",
+            "step": 10
+          }
+        },
+        {
+          "route": "/pipelines/*",
+          "rule": "a11y.heading-order",
+          "occurrences": 16,
+          "logs": [
+            "docs/pipelines-journeys/admin/agents.md",
+            "docs/pipelines-journeys/admin/bots.md",
+            "docs/pipelines-journeys/admin/commands.md",
+            "docs/pipelines-journeys/admin/runbooks.md",
+            "docs/pipelines-journeys/author/agents.md",
+            "docs/pipelines-journeys/author/bots.md",
+            "docs/pipelines-journeys/author/commands.md",
+            "docs/pipelines-journeys/author/runbooks.md",
+            "docs/pipelines-journeys/operator/agents.md",
+            "docs/pipelines-journeys/operator/bots.md",
+            "docs/pipelines-journeys/operator/commands.md",
+            "docs/pipelines-journeys/operator/runbooks.md",
+            "docs/pipelines-journeys/pipeline-admin/agents.md",
+            "docs/pipelines-journeys/pipeline-admin/bots.md",
+            "docs/pipelines-journeys/pipeline-admin/commands.md",
+            "docs/pipelines-journeys/pipeline-admin/runbooks.md"
+          ],
+          "example": {
+            "rule": "a11y.heading-order",
+            "selector": "body",
+            "property": "h1 count",
+            "expected": 1,
+            "actual": "0"
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/admin/agents.md",
+            "step": 10
+          }
+        },
+        {
+          "route": "/pipelines/*",
+          "rule": "keyboard.typography",
+          "occurrences": 16,
+          "logs": [
+            "docs/pipelines-journeys/admin/agents.md",
+            "docs/pipelines-journeys/admin/bots.md",
+            "docs/pipelines-journeys/admin/commands.md",
+            "docs/pipelines-journeys/admin/runbooks.md",
+            "docs/pipelines-journeys/author/agents.md",
+            "docs/pipelines-journeys/author/bots.md",
+            "docs/pipelines-journeys/author/commands.md",
+            "docs/pipelines-journeys/author/runbooks.md",
+            "docs/pipelines-journeys/operator/agents.md",
+            "docs/pipelines-journeys/operator/bots.md",
+            "docs/pipelines-journeys/operator/commands.md",
+            "docs/pipelines-journeys/operator/runbooks.md",
+            "docs/pipelines-journeys/pipeline-admin/agents.md",
+            "docs/pipelines-journeys/pipeline-admin/bots.md",
+            "docs/pipelines-journeys/pipeline-admin/commands.md",
+            "docs/pipelines-journeys/pipeline-admin/runbooks.md"
+          ],
+          "example": {
+            "rule": "keyboard.typography",
+            "selector": "[data-testid=\"empty-state\"] > div:nth-of-type(2) > kbd",
+            "property": "fontSize",
+            "expected": 11,
+            "actual": "14px"
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/admin/agents.md",
+            "step": 10
+          }
+        },
+        {
+          "route": "/pipelines/approvals/:approvalId",
+          "rule": "a11y.contrast",
+          "occurrences": 2,
+          "logs": [
+            "docs/pipelines-journeys/author/approvals.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"pipelines-approval-record\"] > div:nth-of-type(5) > span",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.24:1 (rgb(37, 99, 235) on rgb(219, 234, 254), 14px): \"Only an operator or a pipeline admin de…\""
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/author/approvals.md",
+            "step": 8
+          }
+        },
+        {
+          "route": "/pipelines/approvals/:approvalId",
+          "rule": "a11y.heading-order",
+          "occurrences": 4,
+          "logs": [
+            "docs/pipelines-journeys/admin/approvals.md",
+            "docs/pipelines-journeys/author/approvals.md",
+            "docs/pipelines-journeys/operator/approvals.md",
+            "docs/pipelines-journeys/pipeline-admin/approvals.md"
+          ],
+          "example": {
+            "rule": "a11y.heading-order",
+            "selector": "[data-testid=\"record-not-found\"] > div:nth-of-type(1) > div > h1",
+            "property": "h1 count",
+            "expected": 1,
+            "actual": "2: \"Approvals\", \"Approval\""
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/admin/approvals.md",
+            "step": 11
+          }
+        },
+        {
+          "route": "/pipelines/approvals",
+          "rule": "coverage.stability",
+          "occurrences": 2,
+          "logs": [
+            "docs/pipelines-journeys/operator/approvals.md",
+            "docs/pipelines-journeys/pipeline-admin/approvals.md"
+          ],
+          "example": {
+            "rule": "coverage.stability",
+            "selector": "document",
+            "property": "measurement",
+            "expected": "stable",
+            "actual": "moved between two frames"
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/operator/approvals.md",
+            "step": 4
+          }
+        },
+        {
+          "route": "/pipelines/configuration",
+          "rule": "a11y.contrast",
+          "occurrences": 2,
+          "logs": [
+            "docs/pipelines-journeys/admin/configuration.md",
+            "docs/pipelines-journeys/pipeline-admin/configuration.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"pipelines-configuration\"] > section > div:nth-of-type(1) > div > p",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.2:1 (rgb(100, 116, 139) on rgb(238, 241, 246), 14px): \"Who approves a step when its definition…\""
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/admin/configuration.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/pipelines/definitions/:definitionId",
+          "rule": "a11y.contrast",
+          "occurrences": 12,
+          "logs": [
+            "docs/pipelines-journeys/admin/definitions.md",
+            "docs/pipelines-journeys/admin/runbooks.md",
+            "docs/pipelines-journeys/author/definitions.md",
+            "docs/pipelines-journeys/author/runbooks.md",
+            "docs/pipelines-journeys/operator/definitions.md",
+            "docs/pipelines-journeys/operator/runbooks.md",
+            "docs/pipelines-journeys/pipeline-admin/definitions.md",
+            "docs/pipelines-journeys/pipeline-admin/runbooks.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"pipelines-runbook-verdict\"] > div:nth-of-type(2) > span",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "2.86:1 (rgb(217, 119, 6) on rgb(254, 243, 199), 14px): \"Needs a completed dry-run — a skill nee…\""
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/admin/definitions.md",
+            "step": 8
+          }
+        },
+        {
+          "route": "/pipelines/definitions/:definitionId",
+          "rule": "content.honesty",
+          "occurrences": 4,
+          "logs": [
+            "docs/pipelines-journeys/admin/bots.md",
+            "docs/pipelines-journeys/author/bots.md",
+            "docs/pipelines-journeys/operator/bots.md",
+            "docs/pipelines-journeys/pipeline-admin/bots.md"
+          ],
+          "example": {
+            "rule": "content.honesty",
+            "selector": "[data-testid=\"pipelines-definition-record\"] > div:nth-of-type(1) > div:nth-of-type(1) > p",
+            "property": "raw UUID",
+            "expected": "the record's name",
+            "actual": "\"a0a4b025-3e67-5004-8b8a-05a3d4f2028d\" in \"Bot · bot:a0a4b025-3e67-5004-8b8a-05a3d…\""
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/admin/bots.md",
+            "step": 8
+          }
+        },
+        {
+          "route": "/pipelines/runs/:id",
+          "rule": "a11y.contrast",
+          "occurrences": 72,
+          "logs": [
+            "docs/pipelines-journeys/admin/artifacts.md",
+            "docs/pipelines-journeys/admin/run-detail.md",
+            "docs/pipelines-journeys/admin/runs.md",
+            "docs/pipelines-journeys/author/artifacts.md",
+            "docs/pipelines-journeys/author/run-detail.md",
+            "docs/pipelines-journeys/author/runs.md",
+            "docs/pipelines-journeys/operator/artifacts.md",
+            "docs/pipelines-journeys/operator/run-detail.md",
+            "docs/pipelines-journeys/operator/runs.md",
+            "docs/pipelines-journeys/pipeline-admin/artifacts.md",
+            "docs/pipelines-journeys/pipeline-admin/run-detail.md",
+            "docs/pipelines-journeys/pipeline-admin/runs.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"pipeline-events\"] > div:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(5)",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "1.97:1 (rgb(166, 173, 200) on rgb(238, 241, 246), 12px): \"3m ago\""
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/admin/artifacts.md",
+            "step": 8
+          }
+        },
+        {
+          "route": "/pipelines/runs/:id",
+          "rule": "a11y.heading-order",
+          "occurrences": 18,
+          "logs": [
+            "docs/pipelines-journeys/admin/artifacts.md",
+            "docs/pipelines-journeys/admin/run-detail.md",
+            "docs/pipelines-journeys/admin/runs.md",
+            "docs/pipelines-journeys/author/artifacts.md",
+            "docs/pipelines-journeys/author/run-detail.md",
+            "docs/pipelines-journeys/author/runs.md",
+            "docs/pipelines-journeys/operator/artifacts.md",
+            "docs/pipelines-journeys/operator/run-detail.md",
+            "docs/pipelines-journeys/operator/runs.md",
+            "docs/pipelines-journeys/pipeline-admin/artifacts.md",
+            "docs/pipelines-journeys/pipeline-admin/run-detail.md",
+            "docs/pipelines-journeys/pipeline-admin/runs.md"
+          ],
+          "example": {
+            "rule": "a11y.heading-order",
+            "selector": "[data-testid=\"pipeline-run\"] > div:nth-of-type(1) > h3",
+            "property": "heading level skipped",
+            "expected": "h2 or higher after an h1",
+            "actual": "h3: \"Run\""
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/admin/artifacts.md",
+            "step": 8
+          }
+        },
+        {
+          "route": "/pipelines/runs/:id",
+          "rule": "composer.presence",
+          "occurrences": 4,
+          "logs": [
+            "docs/pipelines-journeys/admin/run-detail.md",
+            "docs/pipelines-journeys/author/run-detail.md",
+            "docs/pipelines-journeys/operator/run-detail.md",
+            "docs/pipelines-journeys/pipeline-admin/run-detail.md"
+          ],
+          "example": {
+            "rule": "composer.presence",
+            "selector": "[data-composer-surface]",
+            "property": "composer count",
+            "expected": ">= 1",
+            "actual": 0
+          },
+          "evidence": {
+            "log": "docs/pipelines-journeys/admin/run-detail.md",
+            "step": 7
+          }
+        }
+      ],
+      "failedSteps": [],
+      "held": []
+    },
+    "social": {
+      "counts": {
+        "held": 4,
+        "fail": 13,
+        "pass": 31
+      },
+      "observations": [
+        {
+          "route": "/social/calls",
+          "rule": "a11y.heading-order",
+          "occurrences": 8,
+          "logs": [
+            "docs/social-journeys/admin/calls.md",
+            "docs/social-journeys/community-admin/calls.md",
+            "docs/social-journeys/moderator/calls.md",
+            "docs/social-journeys/participant/calls.md"
+          ],
+          "example": {
+            "rule": "a11y.heading-order",
+            "selector": "[data-testid=\"page-header\"] > div > div:nth-of-type(1) > h1",
+            "property": "h1 count",
+            "expected": 1,
+            "actual": "2: \"Calls\", \"Calls\""
+          },
+          "evidence": {
+            "log": "docs/social-journeys/admin/calls.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/social/channels/:slug",
+          "rule": "coverage.stability",
+          "occurrences": 1,
+          "logs": [
+            "docs/social-journeys/participant/channels.md"
+          ],
+          "example": {
+            "rule": "coverage.stability",
+            "selector": "document",
+            "property": "measurement",
+            "expected": "stable",
+            "actual": "moved between two frames"
+          },
+          "evidence": {
+            "log": "docs/social-journeys/participant/channels.md",
+            "step": 7
+          }
+        },
+        {
+          "route": "/social/configuration",
+          "rule": "a11y.contrast",
+          "occurrences": 4,
+          "logs": [
+            "docs/social-journeys/admin/configuration.md",
+            "docs/social-journeys/community-admin/configuration.md",
+            "docs/social-journeys/moderator/configuration.md",
+            "docs/social-journeys/participant/configuration.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"social-configuration-readonly\"] > span",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.24:1 (rgb(37, 99, 235) on rgb(219, 234, 254), 14px): \"Only a community admin can change this …\""
+          },
+          "evidence": {
+            "log": "docs/social-journeys/moderator/configuration.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/social/configuration",
+          "rule": "content.honesty",
+          "occurrences": 24,
+          "logs": [
+            "docs/social-journeys/admin/configuration.md",
+            "docs/social-journeys/community-admin/configuration.md"
+          ],
+          "example": {
+            "rule": "content.honesty",
+            "selector": "[data-testid=\"social-configuration-matrix\"] > div > table > tbody > tr:nth-of-type(1) > td:nth-of-type(3) > span",
+            "property": "duplicated adjacent label",
+            "expected": "each label once",
+            "actual": "\"Yes\" twice in a row (also [data-testid=\"social-configuration-matrix\"] > div > table > tbody > tr:nth-of-type(1) > td:nth-of-type(2) > span)"
+          },
+          "evidence": {
+            "log": "docs/social-journeys/admin/configuration.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/social/dms/:lobby",
+          "rule": "control.font-size",
+          "occurrences": 90,
+          "logs": [
+            "docs/social-journeys/community-admin/dms.md",
+            "docs/social-journeys/moderator/dms.md",
+            "docs/social-journeys/participant/dms.md"
+          ],
+          "example": {
+            "rule": "control.font-size",
+            "selector": "[data-testid=\"social-dm-picker\"] > ul > li:nth-of-type(1) > button > span > span:nth-of-type(1)",
+            "property": "fontSize",
+            "expected": [
+              12,
+              14
+            ],
+            "actual": "13px"
+          },
+          "evidence": {
+            "log": "docs/social-journeys/community-admin/dms.md",
+            "step": 8
+          }
+        },
+        {
+          "route": "/social/dms/:lobby",
+          "rule": "conversation.metadata",
+          "occurrences": 13,
+          "logs": [
+            "docs/social-journeys/moderator/dms.md",
+            "docs/social-journeys/participant/dms.md"
+          ],
+          "example": {
+            "rule": "conversation.metadata",
+            "selector": "[data-testid=\"social-chat-rail-list-dms\"] > div > div > div:nth-of-type(2) > ul > li:nth-of-type(2) > button > span:nth-of-type(3)",
+            "property": "fontSize",
+            "expected": 12,
+            "actual": "11px"
+          },
+          "evidence": {
+            "log": "docs/social-journeys/moderator/dms.md",
+            "step": 5
+          }
+        },
+        {
+          "route": "/social/dms",
+          "rule": "control.font-size",
+          "occurrences": 32,
+          "logs": [
+            "docs/social-journeys/admin/dms.md"
+          ],
+          "example": {
+            "rule": "control.font-size",
+            "selector": "[data-testid=\"social-dm-picker\"] > ul > li:nth-of-type(1) > button > span > span:nth-of-type(1)",
+            "property": "fontSize",
+            "expected": [
+              12,
+              14
+            ],
+            "actual": "13px"
+          },
+          "evidence": {
+            "log": "docs/social-journeys/admin/dms.md",
+            "step": 5
+          }
+        }
+      ],
+      "failedSteps": [
+        {
+          "log": "docs/social-journeys/community-admin/dms.md",
+          "failures": [
+            {
+              "step": 5,
+              "name": "Open the newest DM: its header and composer",
+              "reason": "the action tried to write (blocked): POST /api/social/dms/read"
+            },
+            {
+              "step": 9,
+              "name": "Escape closes the picker",
+              "reason": "the action tried to write (blocked): POST /api/social/dms/read"
+            }
+          ]
+        },
+        {
+          "log": "docs/social-journeys/moderator/dms.md",
+          "failures": [
+            {
+              "step": 5,
+              "name": "Open the newest DM: its header and composer",
+              "reason": "the action tried to write (blocked): POST /api/social/dms/read"
+            },
+            {
+              "step": 9,
+              "name": "Escape closes the picker",
+              "reason": "the action tried to write (blocked): POST /api/social/dms/read"
+            }
+          ]
+        },
+        {
+          "log": "docs/social-journeys/participant/dms.md",
+          "failures": [
+            {
+              "step": 5,
+              "name": "Open the newest DM: its header and composer",
+              "reason": "the action tried to write (blocked): POST /api/social/dms/read"
+            },
+            {
+              "step": 9,
+              "name": "Escape closes the picker",
+              "reason": "the action tried to write (blocked): POST /api/social/dms/read"
+            }
+          ]
+        }
+      ],
+      "held": [
+        {
+          "log": "docs/social-journeys/admin/activity.md",
+          "reason": "the bell’s live item needs a second identity to send the walker a DM or mention — a chat write over the realtime gateway, which no request-scoped mock world reaches, so it would land in the shared chat store; the runner has no peer step that delivers a notification without that write"
+        },
+        {
+          "log": "docs/social-journeys/community-admin/activity.md",
+          "reason": "the bell’s live item needs a second identity to send the walker a DM or mention — a chat write over the realtime gateway, which no request-scoped mock world reaches, so it would land in the shared chat store; the runner has no peer step that delivers a notification without that write"
+        },
+        {
+          "log": "docs/social-journeys/moderator/activity.md",
+          "reason": "the bell’s live item needs a second identity to send the walker a DM or mention — a chat write over the realtime gateway, which no request-scoped mock world reaches, so it would land in the shared chat store; the runner has no peer step that delivers a notification without that write"
+        },
+        {
+          "log": "docs/social-journeys/participant/activity.md",
+          "reason": "the bell’s live item needs a second identity to send the walker a DM or mention — a chat write over the realtime gateway, which no request-scoped mock world reaches, so it would land in the shared chat store; the runner has no peer step that delivers a notification without that write"
+        }
+      ]
+    },
+    "assessment": {
+      "counts": {
+        "fail": 40,
+        "pass": 17
+      },
+      "observations": [
+        {
+          "route": "/assessment/configuration",
+          "rule": "a11y.contrast",
+          "occurrences": 20,
+          "logs": [
+            "docs/assessment-journeys/admin/configuration.md",
+            "docs/assessment-journeys/assessor/configuration.md",
+            "docs/assessment-journeys/lead-assessor/configuration.md",
+            "docs/assessment-journeys/program-lead/configuration.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"command-palette-hint\"] > kbd",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.26:1 (rgb(90, 114, 114) on rgb(226, 236, 232), 11px): \"⌘K\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/configuration.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/enterprise",
+          "rule": "a11y.contrast",
+          "occurrences": 140,
+          "logs": [
+            "docs/assessment-journeys/admin/enterprise.md",
+            "docs/assessment-journeys/assessor/enterprise.md",
+            "docs/assessment-journeys/lead-assessor/enterprise.md",
+            "docs/assessment-journeys/program-lead/enterprise.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"command-palette-hint\"] > kbd",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.26:1 (rgb(90, 114, 114) on rgb(226, 236, 232), 11px): \"⌘K\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/enterprise.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/enterprise",
+          "rule": "a11y.heading-order",
+          "occurrences": 24,
+          "logs": [
+            "docs/assessment-journeys/admin/enterprise.md",
+            "docs/assessment-journeys/assessor/enterprise.md",
+            "docs/assessment-journeys/lead-assessor/enterprise.md",
+            "docs/assessment-journeys/program-lead/enterprise.md"
+          ],
+          "example": {
+            "rule": "a11y.heading-order",
+            "selector": "[data-testid=\"document-shell-title\"]",
+            "property": "h1 count",
+            "expected": 1,
+            "actual": "3: \"Enterprise\", \"CI/CD Standards\", \"CI/CD Standards\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/enterprise.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/enterprise",
+          "rule": "a11y.landmarks",
+          "occurrences": 24,
+          "logs": [
+            "docs/assessment-journeys/admin/enterprise.md",
+            "docs/assessment-journeys/assessor/enterprise.md",
+            "docs/assessment-journeys/lead-assessor/enterprise.md",
+            "docs/assessment-journeys/program-lead/enterprise.md"
+          ],
+          "example": {
+            "rule": "a11y.landmarks",
+            "selector": "[data-testid=\"document-shell-path-crumbs\"]",
+            "property": "navigation landmark names",
+            "expected": "each of the 5 navigation landmarks named distinctly",
+            "actual": "\"breadcrumb\" repeated"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/enterprise.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/enterprise",
+          "rule": "control.border-style",
+          "occurrences": 4,
+          "logs": [
+            "docs/assessment-journeys/admin/enterprise.md",
+            "docs/assessment-journeys/assessor/enterprise.md",
+            "docs/assessment-journeys/lead-assessor/enterprise.md",
+            "docs/assessment-journeys/program-lead/enterprise.md"
+          ],
+          "example": {
+            "rule": "control.border-style",
+            "selector": "[data-testid=\"reactions-bar-add\"]",
+            "property": "borderTopStyle",
+            "expected": [
+              "solid",
+              "none"
+            ],
+            "actual": "dashed"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/enterprise.md",
+            "step": 5
+          }
+        },
+        {
+          "route": "/assessment/enterprise",
+          "rule": "control.font-family",
+          "occurrences": 15,
+          "logs": [
+            "docs/assessment-journeys/admin/enterprise.md",
+            "docs/assessment-journeys/lead-assessor/enterprise.md",
+            "docs/assessment-journeys/program-lead/enterprise.md"
+          ],
+          "example": {
+            "rule": "control.font-family",
+            "selector": "[data-testid=\"document-toolbar-italic\"] > span",
+            "property": "fontFamily",
+            "expected": "system-ui, -apple-system, sans-serif",
+            "actual": "ui-serif, Georgia, Cambria, \"Times New Roman\", Times, serif"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/enterprise.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/feedback/:taskId",
+          "rule": "a11y.contrast",
+          "occurrences": 16,
+          "logs": [
+            "docs/assessment-journeys/admin/feedback.md",
+            "docs/assessment-journeys/assessor/feedback.md",
+            "docs/assessment-journeys/lead-assessor/feedback.md",
+            "docs/assessment-journeys/program-lead/feedback.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"command-palette-hint\"] > kbd",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.26:1 (rgb(90, 114, 114) on rgb(226, 236, 232), 11px): \"⌘K\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/feedback.md",
+            "step": 6
+          }
+        },
+        {
+          "route": "/assessment/prompts",
+          "rule": "a11y.contrast",
+          "occurrences": 136,
+          "logs": [
+            "docs/assessment-journeys/admin/prompts.md",
+            "docs/assessment-journeys/assessor/prompts.md",
+            "docs/assessment-journeys/lead-assessor/prompts.md",
+            "docs/assessment-journeys/program-lead/prompts.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"command-palette-hint\"] > kbd",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.26:1 (rgb(90, 114, 114) on rgb(226, 236, 232), 11px): \"⌘K\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/prompts.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/prompts",
+          "rule": "a11y.heading-order",
+          "occurrences": 28,
+          "logs": [
+            "docs/assessment-journeys/admin/prompts.md",
+            "docs/assessment-journeys/assessor/prompts.md",
+            "docs/assessment-journeys/lead-assessor/prompts.md",
+            "docs/assessment-journeys/program-lead/prompts.md"
+          ],
+          "example": {
+            "rule": "a11y.heading-order",
+            "selector": "[data-testid=\"document-shell-title\"]",
+            "property": "h1 count",
+            "expected": 1,
+            "actual": "2: \"Prompts\", \"Classify Transcript\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/prompts.md",
+            "step": 5
+          }
+        },
+        {
+          "route": "/assessment/prompts",
+          "rule": "a11y.landmarks",
+          "occurrences": 24,
+          "logs": [
+            "docs/assessment-journeys/admin/prompts.md",
+            "docs/assessment-journeys/assessor/prompts.md",
+            "docs/assessment-journeys/lead-assessor/prompts.md",
+            "docs/assessment-journeys/program-lead/prompts.md"
+          ],
+          "example": {
+            "rule": "a11y.landmarks",
+            "selector": "[data-testid=\"document-shell-path-crumbs\"]",
+            "property": "navigation landmark names",
+            "expected": "each of the 5 navigation landmarks named distinctly",
+            "actual": "\"breadcrumb\" repeated"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/prompts.md",
+            "step": 5
+          }
+        },
+        {
+          "route": "/assessment/prompts",
+          "rule": "control.border-style",
+          "occurrences": 8,
+          "logs": [
+            "docs/assessment-journeys/admin/prompts.md",
+            "docs/assessment-journeys/assessor/prompts.md",
+            "docs/assessment-journeys/lead-assessor/prompts.md",
+            "docs/assessment-journeys/program-lead/prompts.md"
+          ],
+          "example": {
+            "rule": "control.border-style",
+            "selector": "[data-testid=\"document-comments\"] > div:nth-of-type(1) > button:nth-of-type(2)",
+            "property": "borderTopStyle",
+            "expected": [
+              "solid",
+              "none"
+            ],
+            "actual": "dashed"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/prompts.md",
+            "step": 5
+          }
+        },
+        {
+          "route": "/assessment/prompts",
+          "rule": "control.font-family",
+          "occurrences": 15,
+          "logs": [
+            "docs/assessment-journeys/admin/prompts.md",
+            "docs/assessment-journeys/lead-assessor/prompts.md",
+            "docs/assessment-journeys/program-lead/prompts.md"
+          ],
+          "example": {
+            "rule": "control.font-family",
+            "selector": "[data-testid=\"document-toolbar-italic\"] > span",
+            "property": "fontFamily",
+            "expected": "system-ui, -apple-system, sans-serif",
+            "actual": "ui-serif, Georgia, Cambria, \"Times New Roman\", Times, serif"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/prompts.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/prompts",
+          "rule": "control.font-size",
+          "occurrences": 180,
+          "logs": [
+            "docs/assessment-journeys/admin/prompts.md",
+            "docs/assessment-journeys/assessor/prompts.md",
+            "docs/assessment-journeys/lead-assessor/prompts.md",
+            "docs/assessment-journeys/program-lead/prompts.md"
+          ],
+          "example": {
+            "rule": "control.font-size",
+            "selector": "[data-testid=\"comment-context\"]",
+            "property": "fontSize",
+            "expected": [
+              12,
+              14
+            ],
+            "actual": "11px"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/prompts.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/rules",
+          "rule": "a11y.contrast",
+          "occurrences": 112,
+          "logs": [
+            "docs/assessment-journeys/admin/rules.md",
+            "docs/assessment-journeys/assessor/rules.md",
+            "docs/assessment-journeys/lead-assessor/rules.md",
+            "docs/assessment-journeys/program-lead/rules.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"command-palette-hint\"] > kbd",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.26:1 (rgb(90, 114, 114) on rgb(226, 236, 232), 11px): \"⌘K\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/rules.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/rules",
+          "rule": "a11y.heading-order",
+          "occurrences": 24,
+          "logs": [
+            "docs/assessment-journeys/admin/rules.md",
+            "docs/assessment-journeys/assessor/rules.md",
+            "docs/assessment-journeys/lead-assessor/rules.md",
+            "docs/assessment-journeys/program-lead/rules.md"
+          ],
+          "example": {
+            "rule": "a11y.heading-order",
+            "selector": "[data-testid=\"document-shell-title\"]",
+            "property": "h1 count",
+            "expected": 1,
+            "actual": "3: \"Rules\", \"Scoring Guardrails\", \"Scoring Guardrails\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/rules.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/rules",
+          "rule": "a11y.landmarks",
+          "occurrences": 24,
+          "logs": [
+            "docs/assessment-journeys/admin/rules.md",
+            "docs/assessment-journeys/assessor/rules.md",
+            "docs/assessment-journeys/lead-assessor/rules.md",
+            "docs/assessment-journeys/program-lead/rules.md"
+          ],
+          "example": {
+            "rule": "a11y.landmarks",
+            "selector": "[data-testid=\"document-shell-path-crumbs\"]",
+            "property": "navigation landmark names",
+            "expected": "each of the 5 navigation landmarks named distinctly",
+            "actual": "\"breadcrumb\" repeated"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/rules.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/rules",
+          "rule": "control.border-style",
+          "occurrences": 4,
+          "logs": [
+            "docs/assessment-journeys/admin/rules.md",
+            "docs/assessment-journeys/assessor/rules.md",
+            "docs/assessment-journeys/lead-assessor/rules.md",
+            "docs/assessment-journeys/program-lead/rules.md"
+          ],
+          "example": {
+            "rule": "control.border-style",
+            "selector": "[data-testid=\"reactions-bar-add\"]",
+            "property": "borderTopStyle",
+            "expected": [
+              "solid",
+              "none"
+            ],
+            "actual": "dashed"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/rules.md",
+            "step": 5
+          }
+        },
+        {
+          "route": "/assessment/rules",
+          "rule": "control.font-family",
+          "occurrences": 15,
+          "logs": [
+            "docs/assessment-journeys/admin/rules.md",
+            "docs/assessment-journeys/lead-assessor/rules.md",
+            "docs/assessment-journeys/program-lead/rules.md"
+          ],
+          "example": {
+            "rule": "control.font-family",
+            "selector": "[data-testid=\"document-toolbar-italic\"] > span",
+            "property": "fontFamily",
+            "expected": "system-ui, -apple-system, sans-serif",
+            "actual": "ui-serif, Georgia, Cambria, \"Times New Roman\", Times, serif"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/rules.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/runs/:runId",
+          "rule": "a11y.contrast",
+          "occurrences": 16,
+          "logs": [
+            "docs/assessment-journeys/admin/runs.md",
+            "docs/assessment-journeys/assessor/runs.md",
+            "docs/assessment-journeys/lead-assessor/runs.md",
+            "docs/assessment-journeys/program-lead/runs.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"command-palette-hint\"] > kbd",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.26:1 (rgb(90, 114, 114) on rgb(226, 236, 232), 11px): \"⌘K\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/runs.md",
+            "step": 6
+          }
+        },
+        {
+          "route": "/assessment/submissions/:submissionId",
+          "rule": "a11y.contrast",
+          "occurrences": 16,
+          "logs": [
+            "docs/assessment-journeys/admin/submissions.md",
+            "docs/assessment-journeys/assessor/submissions.md",
+            "docs/assessment-journeys/lead-assessor/submissions.md",
+            "docs/assessment-journeys/program-lead/submissions.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"command-palette-hint\"] > kbd",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.26:1 (rgb(90, 114, 114) on rgb(226, 236, 232), 11px): \"⌘K\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/submissions.md",
+            "step": 7
+          }
+        },
+        {
+          "route": "/assessment/submissions",
+          "rule": "composer.presence",
+          "occurrences": 4,
+          "logs": [
+            "docs/assessment-journeys/admin/submissions-wizard.md",
+            "docs/assessment-journeys/assessor/submissions-wizard.md",
+            "docs/assessment-journeys/lead-assessor/submissions-wizard.md",
+            "docs/assessment-journeys/program-lead/submissions-wizard.md"
+          ],
+          "example": {
+            "rule": "composer.presence",
+            "selector": "[data-composer-surface]",
+            "property": "composer count",
+            "expected": ">= 1",
+            "actual": 0
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/submissions-wizard.md",
+            "step": 2
+          }
+        },
+        {
+          "route": "/assessment/submissions",
+          "rule": "control.font-size",
+          "occurrences": 16,
+          "logs": [
+            "docs/assessment-journeys/admin/submissions-wizard.md",
+            "docs/assessment-journeys/assessor/submissions-wizard.md",
+            "docs/assessment-journeys/lead-assessor/submissions-wizard.md",
+            "docs/assessment-journeys/program-lead/submissions-wizard.md"
+          ],
+          "example": {
+            "rule": "control.font-size",
+            "selector": "[data-testid=\"wizard-step-drop\"] > span:nth-of-type(1)",
+            "property": "fontSize",
+            "expected": [
+              12,
+              14
+            ],
+            "actual": "11px"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/submissions-wizard.md",
+            "step": 2
+          }
+        },
+        {
+          "route": "/assessment/teams/:teamId",
+          "rule": "a11y.heading-order",
+          "occurrences": 16,
+          "logs": [
+            "docs/assessment-journeys/admin/team-scorecard.md",
+            "docs/assessment-journeys/assessor/team-scorecard.md",
+            "docs/assessment-journeys/lead-assessor/team-scorecard.md",
+            "docs/assessment-journeys/program-lead/team-scorecard.md"
+          ],
+          "example": {
+            "rule": "a11y.heading-order",
+            "selector": "#main-content > div > div:nth-of-type(4) > div > div:nth-of-type(1) > div > div > h3",
+            "property": "heading level skipped",
+            "expected": "h2 or higher after an h1",
+            "actual": "h3: \"1 story has been drafted from this team…\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/team-scorecard.md",
+            "step": 6
+          }
+        },
+        {
+          "route": "/assessment/teams/:teamId",
+          "rule": "collection.row-activatable",
+          "occurrences": 4,
+          "logs": [
+            "docs/assessment-journeys/admin/team-scorecard.md",
+            "docs/assessment-journeys/assessor/team-scorecard.md",
+            "docs/assessment-journeys/lead-assessor/team-scorecard.md",
+            "docs/assessment-journeys/program-lead/team-scorecard.md"
+          ],
+          "example": {
+            "rule": "collection.row-activatable",
+            "selector": "#main-content > div > div:nth-of-type(5) > div > div:nth-of-type(2) > div:nth-of-type(2) > div > table > tbody > tr:nth-of-type(1)",
+            "property": "row activation",
+            "expected": "focusable pointer row with a click target or a row link, or data-collection-rows=\"static\" with a reason",
+            "actual": "17 of 17 rows inert"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/team-scorecard.md",
+            "step": 7
+          }
+        },
+        {
+          "route": "/assessment/teams/:teamId",
+          "rule": "composer.last",
+          "occurrences": 40,
+          "logs": [
+            "docs/assessment-journeys/admin/team-scorecard.md",
+            "docs/assessment-journeys/assessor/team-scorecard.md",
+            "docs/assessment-journeys/lead-assessor/team-scorecard.md",
+            "docs/assessment-journeys/program-lead/team-scorecard.md"
+          ],
+          "example": {
+            "rule": "composer.last",
+            "selector": "[data-testid=\"team-discussion-composer-dock\"] > div",
+            "property": "band left margin",
+            "expected": "the composer band spans [data-testid=\"shell-split-primary\"] > div > div:nth-of-type(1) (0px)",
+            "actual": "24px"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/team-scorecard.md",
+            "step": 5
+          }
+        },
+        {
+          "route": "/assessment/teams/:teamId",
+          "rule": "composer.surface",
+          "occurrences": 40,
+          "logs": [
+            "docs/assessment-journeys/admin/team-scorecard.md",
+            "docs/assessment-journeys/assessor/team-scorecard.md",
+            "docs/assessment-journeys/lead-assessor/team-scorecard.md",
+            "docs/assessment-journeys/program-lead/team-scorecard.md"
+          ],
+          "example": {
+            "rule": "composer.surface",
+            "selector": "[data-testid=\"team-discussion-composer-dock\"] > div",
+            "property": "shelf left",
+            "expected": 0,
+            "actual": 24
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/team-scorecard.md",
+            "step": 5
+          }
+        },
+        {
+          "route": "/assessment/workspace",
+          "rule": "a11y.contrast",
+          "occurrences": 108,
+          "logs": [
+            "docs/assessment-journeys/admin/workspace.md",
+            "docs/assessment-journeys/assessor/workspace.md",
+            "docs/assessment-journeys/lead-assessor/workspace.md",
+            "docs/assessment-journeys/program-lead/workspace.md"
+          ],
+          "example": {
+            "rule": "a11y.contrast",
+            "selector": "[data-testid=\"command-palette-hint\"] > kbd",
+            "property": "text contrast",
+            "expected": ">= 4.5:1",
+            "actual": "4.26:1 (rgb(90, 114, 114) on rgb(226, 236, 232), 11px): \"⌘K\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/workspace.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/workspace",
+          "rule": "a11y.heading-order",
+          "occurrences": 24,
+          "logs": [
+            "docs/assessment-journeys/admin/workspace.md",
+            "docs/assessment-journeys/assessor/workspace.md",
+            "docs/assessment-journeys/lead-assessor/workspace.md",
+            "docs/assessment-journeys/program-lead/workspace.md"
+          ],
+          "example": {
+            "rule": "a11y.heading-order",
+            "selector": "[data-testid=\"document-shell-title\"]",
+            "property": "h1 count",
+            "expected": 1,
+            "actual": "3: \"Workspace\", \"Northstar Payments: close the CI claim …\", \"Add a pipeline to northstar-payments-in…\""
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/workspace.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/workspace",
+          "rule": "a11y.landmarks",
+          "occurrences": 24,
+          "logs": [
+            "docs/assessment-journeys/admin/workspace.md",
+            "docs/assessment-journeys/assessor/workspace.md",
+            "docs/assessment-journeys/lead-assessor/workspace.md",
+            "docs/assessment-journeys/program-lead/workspace.md"
+          ],
+          "example": {
+            "rule": "a11y.landmarks",
+            "selector": "[data-testid=\"document-shell-path-crumbs\"]",
+            "property": "navigation landmark names",
+            "expected": "each of the 5 navigation landmarks named distinctly",
+            "actual": "\"breadcrumb\" repeated"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/workspace.md",
+            "step": 1
+          }
+        },
+        {
+          "route": "/assessment/workspace",
+          "rule": "control.border-style",
+          "occurrences": 4,
+          "logs": [
+            "docs/assessment-journeys/admin/workspace.md",
+            "docs/assessment-journeys/assessor/workspace.md",
+            "docs/assessment-journeys/lead-assessor/workspace.md",
+            "docs/assessment-journeys/program-lead/workspace.md"
+          ],
+          "example": {
+            "rule": "control.border-style",
+            "selector": "[data-testid=\"reactions-bar-add\"]",
+            "property": "borderTopStyle",
+            "expected": [
+              "solid",
+              "none"
+            ],
+            "actual": "dashed"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/workspace.md",
+            "step": 5
+          }
+        },
+        {
+          "route": "/assessment/workspace",
+          "rule": "control.font-family",
+          "occurrences": 15,
+          "logs": [
+            "docs/assessment-journeys/admin/workspace.md",
+            "docs/assessment-journeys/lead-assessor/workspace.md",
+            "docs/assessment-journeys/program-lead/workspace.md"
+          ],
+          "example": {
+            "rule": "control.font-family",
+            "selector": "[data-testid=\"document-toolbar-italic\"] > span",
+            "property": "fontFamily",
+            "expected": "system-ui, -apple-system, sans-serif",
+            "actual": "ui-serif, Georgia, Cambria, \"Times New Roman\", Times, serif"
+          },
+          "evidence": {
+            "log": "docs/assessment-journeys/admin/workspace.md",
+            "step": 1
+          }
+        }
+      ],
+      "failedSteps": [
+        {
+          "log": "docs/assessment-journeys/assessor/enterprise.md",
+          "failures": [
+            {
+              "step": 6,
+              "name": "Back to the Editor tab: the outline (On this page) and reading-width (Full width) controls are there",
+              "reason": "not visible: button \"On this page\""
+            },
+            {
+              "step": 6,
+              "name": "Back to the Editor tab: the outline (On this page) and reading-width (Full width) controls are there",
+              "reason": "not visible: button \"Full width\""
+            }
+          ]
+        },
+        {
+          "log": "docs/assessment-journeys/assessor/prompts.md",
+          "failures": [
+            {
+              "step": 6,
+              "name": "Back to the Editor tab: the outline (On this page) and reading-width (Full width) controls are there",
+              "reason": "not visible: button \"On this page\""
+            },
+            {
+              "step": 6,
+              "name": "Back to the Editor tab: the outline (On this page) and reading-width (Full width) controls are there",
+              "reason": "not visible: button \"Full width\""
+            }
+          ]
+        },
+        {
+          "log": "docs/assessment-journeys/assessor/rules.md",
+          "failures": [
+            {
+              "step": 6,
+              "name": "Back to the Editor tab: the outline (On this page) and reading-width (Full width) controls are there",
+              "reason": "not visible: button \"On this page\""
+            },
+            {
+              "step": 6,
+              "name": "Back to the Editor tab: the outline (On this page) and reading-width (Full width) controls are there",
+              "reason": "not visible: button \"Full width\""
+            }
+          ]
+        },
+        {
+          "log": "docs/assessment-journeys/assessor/workspace.md",
+          "failures": [
+            {
+              "step": 6,
+              "name": "Back to the Editor tab: the outline (On this page) and reading-width (Full width) controls are there",
+              "reason": "not visible: button \"On this page\""
+            },
+            {
+              "step": 6,
+              "name": "Back to the Editor tab: the outline (On this page) and reading-width (Full width) controls are there",
+              "reason": "not visible: button \"Full width\""
+            }
+          ]
+        }
+      ],
+      "held": []
+    }
+  }
+}

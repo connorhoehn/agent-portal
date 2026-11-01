@@ -40,7 +40,8 @@ export const READ_ONLY_POSTS = [
 
 const NOT_FOUND = /404|Not Found/i;
 const rail = (name: string): Target => ({ role: 'link', name, exact: true, within: { css: '[data-shell-nav]' } });
-const rows = (testId: string): Target => ({ css: 'tbody tr', within: { testId } });
+// Empty-state rows have one spanning cell. They are not evidence that records returned after a debounced search.
+const rows = (testId: string): Target => ({ css: 'tbody tr:has(td:not([colspan]))', within: { testId } });
 const search = (name: string): Target => ({ role: 'textbox', name, exact: true });
 const resting = { audit: false as const, auditReason: 'the resting state the first step measured' };
 
@@ -48,7 +49,7 @@ export const tabWalk = (min: number): Step => ({ do: 'tab-walk', name: 'Tab from
 const searchEmpty = (box: string, sentence: string | RegExp): Step => ({
   do: 'fill', target: search(box), value: 'zzznoexist', name: `Search for zzznoexist: the page says "${sentence instanceof RegExp ? sentence.source : sentence}"`, state: 'filtered-empty', proves: 'empty-state', expect: { text: [sentence] },
 });
-const searchClear = (box: string, table: Target): Step => ({ do: 'fill', target: search(box), value: '', name: 'Clear the search: the rows come back', ...resting, expect: { count: [{ target: table, min: 1 }] } });
+const searchClear = (box: string, table: Target): Step => ({ do: 'fill', target: search(box), value: '', name: 'Clear the search: the rows come back', ...resting, expect: { visible: [{ ...table, nth: 0 }], count: [{ target: table, min: 1 }] } });
 const enterRow = (table: string, opens: RegExp, what = 'its record opens'): Step => ({
   do: 'press', key: 'Enter', target: { css: 'tbody tr a', within: { testId: table }, nth: 0 }, name: `Press Enter on the first row’s link: ${what}`, state: 'row-open', proves: 'keyboard', expect: { url: opens },
 });
@@ -106,7 +107,8 @@ export const SURFACES: Record<string, (role: Role) => Step[]> = {
   'team-scorecard': (role) => [
     { do: 'navigate', url: '/assessment/teams/TEAM-001', name: 'Open Northstar Payments: the header, its tabs and the dimension master-detail', expect: { visible: [{ role: 'heading', name: 'Northstar Payments', level: 1 }, { testId: 'assessment-dimension-master-detail' }, { role: 'tab', name: 'Certification' }], count: [{ target: { css: '[data-verified][data-claimed]', within: { testId: 'dimension-rail' } }, min: 15 }] } },
     { do: 'click', target: { testId: 'dimension-rail-row-open-1' }, name: 'Select dimension 01: the pane names the enterprise standard it is measured against', state: 'row-open', expect: { visible: [{ testId: 'dimension-standard' }], text: ['Measured against'] } },
-    { do: 'navigate', url: '/assessment/teams/TEAM-001', ...resting, name: 'The Certification tab carries the evidence coverage strip', expect: { visible: [{ testId: 'evidence-coverage' }] } },
+    { do: 'click', target: { role: 'button', name: 'About Northstar Payments', exact: true }, name: 'Open the team’s About card: it carries the evidence coverage strip', state: 'dialog-open', expect: { visible: [{ testId: 'evidence-coverage' }] } },
+    { do: 'press', key: 'Escape', name: 'Escape closes the About card', proves: 'keyboard', ...resting, expect: { hidden: [{ testId: 'evidence-coverage' }] } },
     ...([['Improvement Plan', 'plan'], ['Stories', 'stories'], ['Evidence & Intake', 'evidence'], ['Documents', 'documents'], ['Activity', 'activity']] as const).map(([tab, key]): Step => ({ do: 'click', target: { role: 'tab', name: tab, exact: true }, name: `Open the ${tab} tab`, state: `tab-${key}`, expect: { url: new RegExp(`[?&]tab=${key}`) } })),
     { do: 'click', target: { role: 'tab', name: 'Certification', exact: true }, name: 'Back to the Certification tab', ...resting },
     { do: 'click', target: { role: 'button', name: 'Team details' }, name: 'Open Team details: the drawer names the team’s repos as links', state: 'dialog-open', expect: { visible: [{ role: 'dialog', name: 'Team details' }, { testId: 'team-repos' }] } },
@@ -169,7 +171,8 @@ export const SURFACES: Record<string, (role: Role) => Step[]> = {
     tabWalk(20),
     { do: 'fill', target: search('Search loaded run titles'), value: 'zzznoexist', name: 'Search the ledger for zzznoexist: no row is left', state: 'filtered-empty', proves: 'empty-state', expect: { count: [{ target: { css: 'tbody tr:not(:has([colspan]))', within: { testId: 'assessment-pipeline-runs' } }, eq: 0 }] } },
     searchClear('Search loaded run titles', rows('assessment-pipeline-runs')),
-    enterRow('assessment-pipeline-runs', /^\/assessment\/runs\/run-/, 'the run record opens'),
+    // The facade ledger below the launcher is read-only (detailBase=null). Assessment's own run links live in the first table.
+    { do: 'press', key: 'Enter', target: { css: 'main tbody tr a[href^="/assessment/runs/"]', nth: 0 }, name: 'Press Enter on the first Assessment run link: the run record opens', state: 'row-open', proves: 'keyboard', expect: { url: /^\/assessment\/runs\/run-/, visible: [{ testId: 'assessment-run-record' }] } },
     back('/assessment/runs'),
   ],
 

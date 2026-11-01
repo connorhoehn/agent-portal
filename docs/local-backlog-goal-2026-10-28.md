@@ -228,16 +228,26 @@ Pipelines now has 55 walked maps: 17 passing and sealed, 38 failed. Social
 has 44 walked maps: 31 passing and sealed, 13 failed; four activity maps stay
 held because the gateway cannot isolate their chat writes. Findings and runner
 repairs are in [the continuation report](journeys/continuation-2026-10-31.md).
-Assessment's 57 maps are being walked; do not treat its older seals as this
-continuation's evidence. All 364 maps validate and 45 runner tests pass.
-Continue the Assessment walk and targeted map repairs, then fix or report
-remaining failures (never weaken an expectation). Seal only passing walks.
+Assessment has all 57 maps walked: 17 passing and sealed, 40 failed. Across
+these families, all 156 runnable maps are complete and all 65 passing logs
+are fresh; four Social maps remain held. All 364 maps validate and 45 runner
+tests pass. The tenant judges remain red for the documented failures, held
+proofs and Assessment's older `stretch/realtime.md`.
+
+Next: repair the repeated UI/component findings and review the narrowly
+identified audit-policy/reader-control mismatches in the report. Prove write
+isolation before allowing DM receipts or activity writes. If rendered app
+code changes, run `scripts/journeys/measure.sh`, then walk affected maps with
+`node scripts/journeys/run-maps.mjs walk --family <family> --no-seal` and seal
+only passing logs with `scripts/journeys/seal.sh <log>`. Never weaken an
+expectation or seal a failed walk to clear the judge. The budget defaults and
+deploy-machine items below remain open.
 
 **Follow-ups (2026-10-29): done** — PR-watch takes a hold/slot; the spend
 metric fires for SQL settles; `GET /api/harness/promoted-versions` reports
 the live prompt pointers; deck/summary model calls run inside AgentCore
 runtimes (no BFF usage to meter; their traces carry tokens); the budgets
-page labels the period and "between sprints". Journey logs need a walk.
+page labels the period and "between sprints". Remaining journey work is above.
 
 Read `docs/budget-system-analysis-2026-10-28.md` first: it re-orders the money
 rows (2–12) toward the intended model (real Bedrock dollars, per-user budgets,

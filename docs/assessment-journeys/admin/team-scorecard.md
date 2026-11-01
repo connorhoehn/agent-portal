@@ -1,14 +1,39 @@
 surface: team-scorecard
 role: admin
-user: u-operator
-url: /assessment/teams/TEAM-001
-audited: 2026-10-24 14:51–14:51 local, headless Chromium 1680x940 (Playwright), a fresh signed-in clone of u-operator (u-operator-clone-113050c7); Tilt stack: Vite :5183 over middleware :3001 (dev:mock); ui-components 2.480.5; mock state not reset (shared stack)
-session: sub u-operator-clone-113050c7, tenant assessment, role admin
+user: u-operator (Platform Operator)
+url: /assessment/teams/TEAM-001; /assessment/teams/TEAM-001?tab=plan; /assessment/teams/TEAM-001?tab=stories; /assessment/teams/TEAM-001?tab=evidence; /assessment/teams/TEAM-001?tab=documents; /assessment/teams/TEAM-001?tab=activity; /assessment/teams/TEAM-999
+map: docs/journeys/maps/assessment/admin/team-scorecard.ts
+pages: portal/src/pages/assessment/dashboard/TeamScorecard.tsx,portal/src/pages/assessment/dashboard/DimensionMasterDetail.tsx,portal/src/pages/assessment/dashboard/ExceptionsModal.tsx
+audited: 2026-10-31 19:49–19:49 local, Chromium 148.0.7778.96 1680x940 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-operator-clone-7ada9fb2), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.482.0
+session: /api/session/me sub u-operator-clone-7ada9fb2, tenant assessment, role admin, grants {"orgiq":["admin"],"assessment":["admin"],"social":["admin"],"pipelines":["admin"],"access":["admin"]}
 screenshot: team-scorecard.jpg
-verdict: pass — walked 2026-10-24 as a clone of u-operator (admin); every field below was observed in this pass, none carried forward
-console errors: 0 — collected from the load through every interaction below, including the empty-state probe
-layout: pass — content col left 44px w 1636px; no horizontal scroll (scrollWidth 1680 vs innerWidth 1680); body scrollHeight 940 <= 940; 1 <main>; h1 "Northstar Payments" 20/600; breadcrumb "Assess›Dashboard›NorthstarPayments"; 17 dimension rows carry data-verified/data-claimed and 15 confidence meters; 5 elements aria-selected/current after selecting dimension 01
-keyboard: pass — 86 really-visible controls in main; a 70-press Tab walk (page.keyboard, headless) visited 41 distinct stops (28 inside main, the rest are shell chrome); Escape leaves 0 dialogs open; tabs clicked: Certification -> default; Improvement Plan -> plan; Stories -> stories; Evidence & Intake -> evidence; Documents -> documents; Activity -> activity; Team details drawer opened (1 dialog, 2 repo links) and Escape closed it (0 open)
-empty-state: pass — /assessment/teams/TEAM-999 reads "Assess › Dashboard › TEAM-999 No team TEAM-999 There is no team with this id. It may have been deleted, or the link is out of date. Back to the dashboard" (the probe's own request logged 1 expected console error: Failed to load resource: the server responded with a status of 404 (Not Found))
-role-gating: capabilities true: ViewAssessment, ScoreAssessment, ApproveException, PublishReport, ManageSubmissions, RunAssessmentAgent, LabelFeedback, ManageKnowledge, ManageAssessmentConfig; false: none. Dimension pane names its standard: "Measured against CI/CD Standards · CI on every push; a passing build before merge"
-notes: Signed in as a clone (POST /api/__mock/identity/clone from u-operator, then POST /api/session/login), so the real persona's session epoch was not touched. Not exercised: writes (no run launched, no answer recorded, nothing published or saved).
+verdict: fail — 6 of 17 steps failed; step 5 (Open the Improvement Plan tab): 4 ui-dom-audit finding(s): composer.surface ×2, composer.last ×2
+console errors: 0 unexpected; 1 expected by the map (Failed to load resource: the server responded with a status of 404 (Not Found) [)
+layout: fail — 25 ui-dom-audit finding(s) at 6 of 14 measured step(s) (composer.surface ×10, composer.last ×10, a11y.heading-order ×4, collection.row-activatable ×1); at /assessment/teams/TEAM-001: no horizontal scroll (1680/1680), 1 h1 "Northstar Payments" 20/600 at 68/92, first-row-top: 348px, composer at y 752–895 of 940
+keyboard: pass — Escape closes the About card; Escape closes the Team details drawer; Escape closes the exceptions dialog; Tab from the top of the page through every control (Tab visited 36 distinct visible controls of 98 focusable, focus lost 1×)
+empty-state: fail — step 17 (Open TEAM-999: the page says there is no such team and links back to the dashboard): 1 ui-dom-audit finding(s): a11y.heading-order ×1
+role-gating: pass — Open N/A exceptions: Approve and Deny are offered (ApproveException)
+dom-audit: 25 failing finding(s) at 14 measured step(s); 115 more owed by docs/journeys/audit-burndown.tsv (a11y.contrast ×75, text.leading-separator ×40) — ui-dom-audit measureDOM, contract Work shared UI compact layout 4d68370d87906e21; composer policy unclassified at step(s) 17
+notes: The platform operator (admin in Assessment) works through Northstar Payments’ scorecard: a dimension, every tab, the team details and the N/A exceptions, which this role may decide. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/assessment/admin/team-scorecard).
+
+## Steps
+
+| # | step | state | result | audit | evidence |
+|---|---|---|---|---|---|
+| 1 | Open Northstar Payments: the header, its tabs and the dimension master-detail | default | pass | 0 finding(s) | /assessment/teams/TEAM-001 |
+| 2 | Select dimension 01: the pane names the enterprise standard it is measured against | row-open | pass | 0 finding(s) | /assessment/teams/TEAM-001 |
+| 3 | Open the team’s About card: it carries the evidence coverage strip | dialog-open | pass | 0 finding(s) | /assessment/teams/TEAM-001 |
+| 4 | Escape closes the About card |  | pass | not measured: the resting state the first step measured | /assessment/teams/TEAM-001 |
+| 5 | Open the Improvement Plan tab | tab-plan | fail: 4 ui-dom-audit finding(s): composer.surface ×2, composer.last ×2 | 4 finding(s) | /assessment/teams/TEAM-001?tab=plan |
+| 6 | Open the Stories tab | tab-stories | fail: 5 ui-dom-audit finding(s): composer.surface ×2, composer.last ×2, a11y.heading-order ×1 | 5 finding(s) | /assessment/teams/TEAM-001?tab=stories |
+| 7 | Open the Evidence & Intake tab | tab-evidence | fail: 6 ui-dom-audit finding(s): composer.surface ×2, collection.row-activatable ×1, composer.last ×2, a11y.heading-order ×1 | 6 finding(s) | /assessment/teams/TEAM-001?tab=evidence |
+| 8 | Open the Documents tab | tab-documents | fail: 5 ui-dom-audit finding(s): composer.surface ×2, composer.last ×2, a11y.heading-order ×1 | 5 finding(s) | /assessment/teams/TEAM-001?tab=documents |
+| 9 | Open the Activity tab | tab-activity | fail: 4 ui-dom-audit finding(s): composer.surface ×2, composer.last ×2 | 4 finding(s) | /assessment/teams/TEAM-001?tab=activity |
+| 10 | Back to the Certification tab |  | pass | not measured: the resting state the first step measured | /assessment/teams/TEAM-001 |
+| 11 | Open Team details: the drawer names the team’s repos as links | dialog-open | pass | 0 finding(s) | /assessment/teams/TEAM-001 |
+| 12 | Escape closes the Team details drawer |  | pass | 0 finding(s) | /assessment/teams/TEAM-001 |
+| 13 | Open the Review menu | menu-open | pass | 0 finding(s) | /assessment/teams/TEAM-001 |
+| 14 | Open N/A exceptions: Approve and Deny are offered (ApproveException) | dialog-open | pass | 0 finding(s) | /assessment/teams/TEAM-001 |
+| 15 | Escape closes the exceptions dialog |  | pass | 0 finding(s) | /assessment/teams/TEAM-001 |
+| 16 | Tab from the top of the page through every control (Tab visited 36 distinct visible controls of 98 focusable, focus lost 1×) |  | pass | — | /assessment/teams/TEAM-001 |
+| 17 | Open TEAM-999: the page says there is no such team and links back to the dashboard | not-found | fail: 1 ui-dom-audit finding(s): a11y.heading-order ×1 | 1 finding(s) | /assessment/teams/TEAM-999 |
