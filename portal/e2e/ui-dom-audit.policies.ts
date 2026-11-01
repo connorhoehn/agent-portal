@@ -7,9 +7,12 @@ export interface PipelineViewEvidence {
   configurationForm?: boolean;
   settingsPlaceholder?: boolean;
   missingDeck?: boolean;
+  /** The run API returned 404 and the visible view says Run not found. */
+  missingRun?: boolean;
 }
 export function pipelineComposerPolicy(path: string, view: PipelineViewEvidence = {}): ComposerPolicy | undefined {
   const pathname = new URL(path, 'http://audit.local').pathname;
+  if (/^\/pipelines\/runs\/[^/]+$/.test(pathname) && view.missingRun) return { mode: 'exempt', reason: 'The run endpoint returned 404 and Run not found is visible; there is no run discussion to compose in. Loaded runs and the Runs collection still require their composer.' };
   if (/^\/pipelines(?:\/(?:runs(?:\/[^/]+)?|definitions|runbooks|queues|artifacts|approvals|agents|bots|commands))?$/.test(pathname)) return { mode: 'required' };
   if (pathname === '/pipelines/activity' && view.graph) return { mode: 'exempt', reason: 'The spatial work graph uses its own date, focus and node controls; collection commands are available in Runs.' };
   if (pathname === '/pipelines/communication') {
@@ -31,6 +34,8 @@ export function pipelineComposerPolicy(path: string, view: PipelineViewEvidence 
  * static evidence: it marks the app's list pages (docs/layout-cascade.md).
  */
 export interface TenantViewEvidence {
+  /** The Assessment Add submissions view contains its upload wizard. */
+  submissionWizard?: boolean;
   /** The route carries the inventory's `table` judge (a list page). */
   listRoute?: boolean;
   /** `[data-collection-page]` or a collection toolbar is visible. */
@@ -128,7 +133,8 @@ export function tenantComposerPolicy(spec: TenantRouteSpec, view: TenantViewEvid
   // Pipelines routes keep their own reviewed policy (pipelineComposerPolicy);
   // only a pipelines record a row probe reached is classified here, by evidence.
   if (!TENANTS.has(spec.tenant) && !(spec.tenant === 'pipelines' && spec.kind === 'record')) return undefined;
-  const pathname = new URL(spec.path, 'http://audit.local').pathname;
+  const url = new URL(spec.path, 'http://audit.local');
+  const pathname = url.pathname;
   const record = spec.kind === 'record' || spec.kind === 'editor';
   if (spec.tenant === 'access') return accessComposerPolicy(pathname, view);
   // Runbooks (docs/distillation-runbooks-design.md §4): the library, the proposals and the briefs are each a
@@ -137,6 +143,11 @@ export function tenantComposerPolicy(spec: TenantRouteSpec, view: TenantViewEvid
   if (/^\/iq\/runbooks(?:\/(?:proposals|briefs))?(?:\/[^/]+)?$/.test(pathname)) return { mode: 'required' };
   // Decisions (L6): the register and every record keep the shared command composer docked under the column; a record with no evidence of one still owes it.
   if (/^\/iq\/decisions(?:\/[^/]+)?$/.test(pathname)) return { mode: 'required' };
+  // This query switches the submissions collection to its upload form. The
+  // route inventory still describes the collection, so require positive view
+  // evidence and never let it exempt a visible collection or composer.
+  if (spec.tenant === 'assessment' && pathname === '/assessment/submissions' && url.searchParams.get('view') === 'add'
+    && view.submissionWizard && !view.collection && !view.table && !view.composer) return { mode: 'exempt', reason: 'Add submissions is the visible upload wizard with explicit preview, evidence and processing steps; its form controls replace the collection command composer in this view.' };
   if (view.listRoute || spec.judges?.includes('table') || view.collection) return { mode: 'required' };
   if (REVIEWED_COLLECTIONS.has(pathname)) return { mode: 'required' };
   if (view.tableSearch) return { mode: 'required' };

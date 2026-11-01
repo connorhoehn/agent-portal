@@ -1,9 +1,8 @@
 import type { JourneyMap } from '../../../../../scripts/journeys/journey-map.ts';
-import { SURFACES, PAGES, PERSONA, goal, claims, PEER, PEER_REASON, ACTIVITY_HOLD } from '../_shared.ts';
+import { SURFACES, PAGES, PERSONA, goal, claims, PEER_CLONE } from '../_shared.ts';
 
 export default {
-  family: 'social', log: 'community-admin/activity', kind: 'surface', persona: PERSONA['community-admin'], peers: { peer: PEER['community-admin'] }, identityReason: PEER_REASON, scenario: 'shared',
-  hold: ACTIVITY_HOLD,
+  family: 'social', log: 'community-admin/activity', kind: 'surface', persona: PERSONA['community-admin'], peers: { peer: PEER_CLONE['community-admin'] }, identity: 'clone', scenario: { realtime: 'clone-dm' }, writes: true,
   goal: goal('community-admin', 'activity'),
   fields: { surface: 'activity', pages: PAGES['activity'] },
   claims: claims('activity'),

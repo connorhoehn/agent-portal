@@ -100,12 +100,13 @@ export function validateMap(map, file = '(map)') {
   if (!/^[\w-]+\/[\w-]+$/.test(map.log ?? '')) at(`log must be <dir>/<name> (got ${map.log})`);
   if (!map.persona?.user || !map.persona?.tenant || !map.persona?.role) at('persona needs user, tenant and role');
   if (!map.goal) at('goal is required');
-  if (map.scenario !== 'shared' && map.scenario?.realtime !== 'meeting' && !(map.scenario && map.scenario.scope && ['string', 'object'].includes(typeof map.scenario.scope))) at("scenario is 'shared', { scope }, or { realtime: 'meeting' }");
+  if (map.scenario !== 'shared' && !['meeting', 'clone-dm'].includes(map.scenario?.realtime) && !(map.scenario && map.scenario.scope && ['string', 'object'].includes(typeof map.scenario.scope))) at("scenario is 'shared', { scope }, or { realtime: 'meeting' | 'clone-dm' }");
   if (map.identity && !['clone', 'persona', 'demo'].includes(map.identity)) at("identity is 'clone', 'persona' or 'demo'");
   // The cookie-less demo identity: no sign-in at all, so it can be neither switched nor cloned, and it never writes.
   if (map.identity === 'demo' && (map.persona?.user !== 'demo-user' || map.persona?.switchTenant || map.persona?.switchRole || map.writes || map.peers)) at("identity: 'demo' walks the cookie-less demo-user as it lands (persona.user demo-user, no switch, no writes, no peers)");
   if (map.identity === 'persona' && !map.identityReason) at("identity: 'persona' needs an identityReason (why a clone cannot walk it)");
   if (map.scenario?.realtime === 'meeting' && (map.identity !== 'clone' || !Object.keys(map.peers ?? {}).length || map.media !== 'meeting-fixture' || !map.writes)) at('meeting scenarios require clone peers, writes and the meeting media fixture');
+  if (map.scenario?.realtime === 'clone-dm' && (map.family !== 'social' || map.identity !== 'clone' || map.persona?.tenant !== 'social' || map.media || map.readOnlyPosts?.length || !map.writes || !Object.keys(map.peers ?? {}).length || Object.values(map.peers ?? {}).some(p => p.identity === 'persona' || p.readOnly || p.tenant !== 'social'))) at('clone-dm scenarios require writable Social clones for every actor');
   if (map.media && map.media !== 'meeting-fixture') at('unknown media fixture');
   // Peers are clones. A peer that only looks (presence: a second identity opening a page) may walk the shared mock
   // read-only — every actor's non-GET is blocked like the walker's; a peer walk that writes needs a scope.
@@ -114,7 +115,8 @@ export function validateMap(map, file = '(map)') {
     if (!/^[a-z][a-z0-9-]*$/.test(name) || name === 'main') at('peer names must be lowercase identifiers other than main');
     if (!persona?.user || !persona?.tenant || !persona?.role) at(`peer ${name} needs user, tenant and role`);
     if (persona?.identity && !['clone', 'persona'].includes(persona.identity)) at(`peer ${name}: identity is 'clone' or 'persona'`);
-    if (persona?.identity === 'persona' && (!map.identityReason || map.writes)) at(`peer ${name} signs in as the seed persona: the map needs an identityReason and must not write`);
+    if (persona?.identity === 'persona' && (!map.identityReason || (map.writes && persona.readOnly !== true))) at(`peer ${name} signs in as the seed persona: the map needs an identityReason and the peer must not write (readOnly: true on a scoped write journey)`);
+    if (persona?.readOnly !== undefined && typeof persona.readOnly !== 'boolean') at(`peer ${name}: readOnly must be boolean`);
   }
   const steps = map.steps ?? [];
   if (!steps.length) at('no steps');
@@ -130,18 +132,20 @@ export function validateMap(map, file = '(map)') {
     const n = `step ${i + 1}`;
     if (!s.name) at(`${n} has no name`);
     if (s.actor && !Object.hasOwn(map.peers ?? {}, s.actor)) at(`${n}: unknown peer ${s.actor}`);
-    if (!['navigate', 'click', 'press', 'fill', 'back', 'wait', 'tab-walk', 'api', 'gateway-refusal', 'reload', 'viewport', 'theme', 'scope'].includes(s.do)) at(`${n}: unknown action ${s.do}`);
+    if (s.actor && map.peers?.[s.actor]?.readOnly && s.writes) at(`${n}: a readOnly peer cannot write`);
+    if (!['navigate', 'click', 'press', 'fill', 'select', 'back', 'wait', 'tab-walk', 'api', 'gateway-refusal', 'gateway-send-dm', 'reload', 'viewport', 'theme', 'scope'].includes(s.do)) at(`${n}: unknown action ${s.do}`);
     if (s.do === 'viewport' && !(s.width > 0 && s.height > 0)) at(`${n}: viewport needs width and height`);
     if (s.do === 'theme' && !['light', 'dark'].includes(s.value)) at(`${n}: theme is light or dark`);
     if (s.do === 'scope' && !(typeof s.scope === 'string' || (s.scope && typeof s.scope === 'object'))) at(`${n}: scope needs a scope request (a scenario name or { scenario, fixture, fixtures })`);
     if (s.do === 'scope' && s.url != null && !/^\//.test(s.url)) at(`${n}: scope's url must be a same-origin path`);
     if (s.stable != null && !(Array.isArray(s.stable) && s.stable.length)) at(`${n}: stable lists the targets whose boxes must not move`);
     if (s.do === 'navigate' && !/^\//.test(s.url ?? '')) at(`${n}: navigate needs a same-origin path`);
-    if (['click', 'fill', 'wait'].includes(s.do) && !s.target) at(`${n}: ${s.do} needs a target`);
-    if (s.do === 'fill' && typeof s.value !== 'string') at(`${n}: fill needs a value`);
+    if (['click', 'fill', 'select', 'wait'].includes(s.do) && !s.target) at(`${n}: ${s.do} needs a target`);
+    if (['fill', 'select'].includes(s.do) && typeof s.value !== 'string') at(`${n}: ${s.do} needs a value`);
     if (s.do === 'press' && !s.key) at(`${n}: press needs a key`);
     if (s.audit === false && !s.auditReason) at(`${n}: audit: false needs an auditReason`);
     if (s.do === 'gateway-refusal' && !/^[a-z][a-z0-9-]*:[^\s]+$/.test(s.channel ?? '')) at(`${n}: gateway-refusal needs a channel`);
+    if (s.do === 'gateway-send-dm' && (map.scenario?.realtime !== 'clone-dm' || !s.writes || !s.actor || s.recipient === s.actor || !(s.recipient === 'main' || Object.hasOwn(map.peers ?? {}, s.recipient)) || typeof s.message !== 'string' || !s.message.trim() || s.message.length > 200)) at(`${n}: gateway-send-dm requires the clone-dm scenario, writes, a sending peer, another actor and a message of 1–200 characters`);
     if (s.do === 'api') {
       const method = s.method ?? 'GET';
       if (!/^\/api\//.test(s.url ?? '')) at(`${n}: api needs an /api/ path`);
@@ -196,6 +200,7 @@ const failureOf = (s) => s.failures?.[0] ?? (s.unexpectedConsole?.length ? `cons
 /** The sentence a step contributes to a field: its name plus what it observed. */
 export function stepSentence(s) {
   const extra = [];
+  if (s.dm) extra.push(`${s.dm.channel}: gateway acknowledged message ${s.dm.messageId} from ${s.dm.sender}`);
   if (s.gateway) extra.push(`${s.gateway.channel}: ${s.gateway.denied.map(d => d === 'chat/not-a-member' ? 'chat join: not-a-member' : `${d}: AUTHZ_CHANNEL_DENIED`).join(', ')}; ${s.gateway.leaked} disclosed frames`);
   if (s.api) extra.push(`${s.api.method} ${s.api.url} → ${s.api.status}`);
   if (s.keyboard) extra.push(`Tab visited ${s.keyboard.visited} distinct visible controls of ${s.keyboard.total} focusable${s.keyboard.lost ? `, focus lost ${s.keyboard.lost}×` : ''}${s.keyboard.invisible ? `, ${s.keyboard.invisible} invisible stop(s)` : ''}`);
@@ -307,7 +312,7 @@ export function stepRoutes(map, routeKey) {
   for (const s of map.steps) {
     if (s.do === 'navigate' || (s.do === 'scope' && s.url)) at = s.url;
     if (typeof s.expect?.url === 'string') at = s.expect.url;
-    if (s.do === 'api' || s.do === 'gateway-refusal' || s.do === 'tab-walk' || (s.do === 'scope' && !s.url)) continue;
+    if (s.do === 'api' || s.do === 'gateway-refusal' || s.do === 'gateway-send-dm' || s.do === 'tab-walk' || (s.do === 'scope' && !s.url)) continue;
     const key = at ? routeKey(at) : null;
     if (!key) continue;
     const refused = s.expect?.urlNot && s.expect.urlNot.test(at);

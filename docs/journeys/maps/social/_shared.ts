@@ -43,7 +43,7 @@ const SECOND: Record<SocialRole, Persona> = {
  * draws presence only for ids in the people directory (EmbeddedSocial.tsx `validIds`), which holds no clone, so a
  * second clone's arrival is invisible to everyone (probed 2026-10-29: 35 s, no change; the seed persona: 0.25 s).
  */
-export const PEER: Record<SocialRole, Persona> = Object.fromEntries(Object.entries(SECOND).map(([r, p]) => [r, { ...p, identity: 'persona' as const }])) as Record<SocialRole, Persona>;
+export const PEER: Record<SocialRole, Persona> = Object.fromEntries(Object.entries(SECOND).map(([r, p]) => [r, { ...p, identity: 'persona' as const, readOnly: true }])) as Record<SocialRole, Persona>;
 /** A hangout's call is joined by a clone (the meeting scenario writes gateway call state; a seed persona never writes). */
 export const PEER_CLONE = SECOND;
 export const PEER_REASON = 'the second identity must be its seed persona: the portal draws presence only for people in the directory, which holds no clone; it only opens pages';
@@ -256,8 +256,15 @@ export const SURFACES = {
     { do: 'press', key: 'Escape', name: 'Escape closes the popover and focus returns to the bell', proves: 'keyboard', expect: { focused: { testId: 'activity-bell-button' }, noText: ['Nothing new'] } },
     { do: 'navigate', url: '/social/channels', name: 'The bell is the same control for every role; items are filtered to the tenants the session holds', proves: 'role-gating', audit: false, auditReason: 'the resting state the first step measured', expect: { visible: [{ testId: 'activity-bell' }] } },
     tabWalk(8),
-    { do: 'navigate', actor: 'peer', url: '/social/dms', name: `${PEER[role].name} opens Direct messages to write to the walker`, audit: false, auditReason: 'the peer’s page' },
-    { do: 'wait', target: { role: 'button', name: /Activity, 1 unread/ }, state: 'live', proves: 'realtime', name: 'Her DM turns the walker’s bell to 1 unread without a reload' },
+    { do: 'navigate', actor: 'peer', url: '/social/channels', name: `${PEER_CLONE[role].name} opens Social as a second fresh clone`, audit: false, auditReason: 'the peer’s page; the primary walker remains on Channels' },
+    { do: 'gateway-send-dm', actor: 'peer', recipient: 'main', message: 'Journey activity delivery proof.', writes: true, name: 'The peer sends a DM through the authenticated local gateway to this walker’s clone only' },
+    { do: 'wait', target: { role: 'button', name: /Activity, 1 unread/ }, state: 'live', proves: 'realtime', name: 'The DM turns the walker’s bell to 1 unread without a reload' },
+    { do: 'reload', name: 'Reload: the gateway replays the clone’s unread item', state: 'replayed', proves: 'realtime', expect: { visible: [{ role: 'button', name: /Activity, 1 unread/ }] } },
+    { do: 'click', target: { testId: 'activity-bell-button' }, name: 'Open the live item: sender, Social category and message body are readable', state: 'dialog-live', expect: { text: [/sent you a message/, 'Social · Message — Journey activity delivery proof.'], visible: [{ role: 'button', name: 'Mark all read' }] } },
+    { do: 'click', target: { role: 'button', name: 'Mark all read' }, writes: true, name: 'Mark all read clears this clone’s unread badge', state: 'read', expect: { attr: [{ target: { testId: 'activity-bell-button' }, name: 'aria-label', value: 'Activity' }] } },
+    { do: 'click', target: { role: 'button', name: 'Clear all' }, name: 'Clear removes the displayed items from this tab', state: 'cleared', expect: { text: ['Nothing new'] } },
+    { do: 'press', key: 'Escape', name: 'Escape closes the cleared popover and returns focus', proves: 'keyboard', expect: { focused: { testId: 'activity-bell-button' }, hidden: [{ testId: 'activity-bell-popover' }] } },
+    { do: 'reload', name: 'Reload after marking read: no unread item replays', state: 'read-replayed', expect: { visible: [{ testId: 'social-chat-rail' }], attr: [{ target: { testId: 'activity-bell-button' }, name: 'aria-label', value: 'Activity' }] } },
   ],
 } satisfies Record<string, (role: SocialRole) => Step[]>;
 
@@ -298,8 +305,9 @@ export function claims(surface: Surface): Record<string, string> | undefined {
   return undefined;
 }
 
-/** Why the activity maps are held (journey-map.ts `hold`). */
-export const ACTIVITY_HOLD = 'the bell’s live item needs a second identity to send the walker a DM or mention — a chat write over the realtime gateway, which no request-scoped mock world reaches, so it would land in the shared chat store; the runner has no peer step that delivers a notification without that write';
+// Activity uses a canonical DM between two fresh clones. The runner verifies
+// memory stores; gateway isolation and clone cleanup are tested in middleware.
+// It never sends to the real peer in a copied persona DM.
 
 // ── Isolation (PROTOCOL "Isolation logs") ─────────────────────────────────
 

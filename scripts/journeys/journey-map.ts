@@ -95,12 +95,16 @@ export type Step = StepBase & (
   | { do: 'press'; key: string; target?: Target }
   /** Type into a UI-local control (a search box, the palette, a filter, the command composer). In a read-only map every non-GET request it triggers is blocked and fails the step. */
   | { do: 'fill'; target: Target; value: string }
+  /** Choose a value in a native select through its UI control. */
+  | { do: 'select'; target: Target; value: string }
   | { do: 'back' }
   | { do: 'wait'; target: Target }
   /** Tab through the page from the top (the skill's focusWalk probe); proves keyboard reach. */
   | { do: 'tab-walk'; max?: number }
   /** Read-only forged chat/history/presence requests: all must be denied, with no channel data returned. */
   | { do: 'gateway-refusal'; channel: string }
+  /** Send a bounded proof message to another fresh clone; requires the clone-dm realtime scenario. */
+  | { do: 'gateway-send-dm'; recipient: string; message: string }
   /** Reload the page (a write read back after reload). */
   | { do: 'reload' }
   /** Resize the viewport mid-walk (the 1440/900 frames). */
@@ -138,6 +142,8 @@ export interface Persona {
    * with --allow-persona, like a persona map.
    */
   identity?: 'clone' | 'persona';
+  /** A presence-only peer may never write, even when the primary clone has a scoped write journey. */
+  readOnly?: boolean;
 }
 
 /** A request-scoped mock world (lane M, `withMockScope`): a scenario for every fixture, or per fixture. Copy-on-write: writes stay in the scope. */
@@ -162,8 +168,10 @@ export interface JourneyMap {
    * is, read-only (every non-GET the page sends is blocked). `{ scope }` = a
    * request-scoped mock scenario (lane M's withMockScope). `{ realtime: meeting }`
    * uses cloned peers on the gateway, with HTTP business writes blocked.
+   * `clone-dm` posts only to a channel derived from two fresh clone ids; only
+   * their receipts on that exact channel may write over HTTP.
    */
-  scenario: 'shared' | { scope: ScopeRequest } | { realtime: 'meeting' };
+  scenario: 'shared' | { scope: ScopeRequest } | { realtime: 'meeting' | 'clone-dm' };
   /**
    * Who signs in. `clone` (the default once lane M's clones exist): a fresh
    * clone of the persona — same grants and person link, its own id and session

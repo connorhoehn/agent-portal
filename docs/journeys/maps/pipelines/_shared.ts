@@ -75,8 +75,10 @@ export function writeProbes(role: PipelinesRole): Step[] {
 }
 
 const tabWalk = (min: number): Step => ({ do: 'tab-walk', name: 'Tab from the top of the page through every control', proves: 'keyboard', expect: { minVisited: min } });
+// The preceding keyboard walk can open About. Filtering moves focus into the
+// search box; the final filtered state must also finish closing that card.
 const searchEmpty = (box: string, sentence: string): Step => ({
-  do: 'fill', target: search(box), value: 'zzzzqq', name: `Search for zzzzqq: the table says "${sentence}"`, state: 'filtered-empty', proves: 'empty-state', expect: { text: [sentence] },
+  do: 'fill', target: search(box), value: 'zzzzqq', name: `Search for zzzzqq: the table says "${sentence}"`, state: 'filtered-empty', proves: 'empty-state', expect: { text: [sentence], hidden: [{ testId: 'page-header-description-card' }] },
 });
 const searchClear = (box: string, table: string): Step => ({
   do: 'fill', target: search(box), value: '', name: 'Clear the search: the rows come back', ...RESTING, expect: { count: [{ target: rows(table), min: 1 }] },

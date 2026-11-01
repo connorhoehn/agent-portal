@@ -24,6 +24,24 @@ test('loaded reports require composers; verified unavailable records are distinc
   assert.equal(pipelineComposerPolicy('/pipelines/decks/report')?.mode, 'required');
   assert.equal(pipelineComposerPolicy('/pipelines/decks/report', { missingDeck: true })?.mode, 'exempt');
 });
+test('only a verified missing run can omit its discussion composer', () => {
+  assert.equal(pipelineComposerPolicy('/pipelines/runs/does-not-exist')?.mode, 'required');
+  assert.equal(pipelineComposerPolicy('/pipelines/runs/does-not-exist', { missingRun: true })?.mode, 'exempt');
+  assert.equal(pipelineComposerPolicy('/pipelines/runs/loaded', { missingRun: false })?.mode, 'required');
+  assert.equal(pipelineComposerPolicy('/pipelines/runs', { missingRun: true })?.mode, 'required');
+  assert.equal(pipelineComposerPolicy('/pipelines/approvals', { missingRun: true })?.mode, 'required');
+});
+test('the submission wizard needs its route, query and visible form; collection states remain required', () => {
+  const spec = { tenant: 'assessment', path: '/assessment/submissions?view=add', kind: 'page', judges: ['table'] };
+  assert.equal(tenantComposerPolicy(spec, { submissionWizard: true })?.mode, 'exempt');
+  assert.equal(tenantComposerPolicy(spec, {})?.mode, 'required');
+  for (const evidence of [{ collection: true }, { table: true }, { composer: true }]) {
+    assert.equal(tenantComposerPolicy(spec, { submissionWizard: true, ...evidence })?.mode, 'required');
+  }
+  for (const path of ['/assessment/submissions', '/assessment/submissions?view=list', '/assessment/runs?view=add']) {
+    assert.equal(tenantComposerPolicy({ ...spec, path }, { submissionWizard: true })?.mode, 'required');
+  }
+});
 test('unknown tenant routes never inherit a blanket exemption', () => {
   assert.equal(pipelineComposerPolicy('/iq/settings', { settingsPlaceholder: true }), undefined);
   assert.equal(pipelineComposerPolicy('/pipelines/new-page'), undefined);

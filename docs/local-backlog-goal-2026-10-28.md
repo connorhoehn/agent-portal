@@ -223,6 +223,10 @@ summary are in `.scratch/resume-2026-10-28/`.
 
 ## Next session
 
+**Active repair goal:** Codex resumed the remaining journey repairs on 2026-10-31.
+See the active repair section in [the continuation report](journeys/continuation-2026-10-31.md).
+Do not treat the prior passing seals as acceptance of unmeasured source changes.
+
 **Journeys (2026-10-31):** access was re-walked and sealed (b9507421).
 Pipelines now has 55 walked maps: 17 passing and sealed, 38 failed. Social
 has 44 walked maps: 31 passing and sealed, 13 failed; four activity maps stay

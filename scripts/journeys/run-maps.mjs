@@ -110,11 +110,12 @@ import * as rs from ${JSON.stringify(path.join(PORTAL, 'e2e/realSession.ts'))};
 import adapter from ${JSON.stringify(path.join(PORTAL, 'e2e/ui-dom-audit.adapter.ts'))};
 import { fakeMeetingMedia } from ${JSON.stringify(path.join(PORTAL, 'e2e/meetingMedia.ts'))};
 import * as inv from ${JSON.stringify(path.join(PORTAL, 'e2e/route-inventory.ts'))};
-import { measureDOM } from ${imp(path.join(SKILL, 'scripts/measure.mjs'))};
 import { probes } from ${imp(path.join(SKILL, 'scripts/probes.mjs'))};
-import { validateContract } from ${imp(path.join(SKILL, 'scripts/run.mjs'))};
+import { measureCase, validateContract } from ${imp(path.join(SKILL, 'scripts/run.mjs'))};
 import { walkMap } from ${imp(path.join(HERE, 'walk.mjs'))};
 import { gatewayRefusal as probeGatewayRefusal } from ${imp(path.join(HERE, 'gateway-refusal.mjs'))};
+import { sendCloneDm as probeCloneDm } from ${imp(path.join(HERE, 'clone-dm.mjs'))};
+const sendCloneDm = (page, channel, sender, message) => probeCloneDm(page, channel, sender, message, ${JSON.stringify(gatewayFallback ?? null)});
 const gatewayRefusal = (page, channel) => probeGatewayRefusal(page, channel, 8000, ${JSON.stringify(gatewayFallback ?? null)});
 const { test } = playwright;
 const ENTRIES = ${JSON.stringify(entries)};
@@ -127,9 +128,7 @@ const routeFor = (p) => { const key = inv.routeKey(p); return key ? routes.find(
 const SHELL = ['$header', '$footer', '$shellColumns'];
 // docs/journeys/audit-burndown.tsv: route-key, rule, owner, reason — findings recorded in the log but not failing the walk.
 const BURNDOWN = new Set((() => { try { return fs.readFileSync(${JSON.stringify(path.join(ROOT, 'docs/journeys/audit-burndown.tsv'))}, 'utf8').split('\\n').filter((l) => l && !l.startsWith('#')).map((l) => l.split('\\t').slice(0, 2).join('\\t')); } catch { return []; } })());
-const PAUSE = '*,*::before,*::after { animation-play-state: paused !important; transition-duration: 0s !important; caret-color: transparent !important; }';
-// The skill's measurement, as run.mjs applies it to one case: pause motion, wait for fonts and two frames,
-// measure twice, report instability. (The skill has no single-case entry point yet — docs/journeys.md.)
+// Use the shared two-frame measurement, including precise evidence of any movement.
 async function measure(page, step) {
   const u = new URL(page.url()); const p = u.pathname + u.search;
   // The contract is the app frame of inventoried routes; /select and /workspaces sit outside it.
@@ -139,20 +138,14 @@ async function measure(page, step) {
   const spec = r ? { ...r, path: p } : { tenant: inv.tenantOf(u.pathname), path: p, kind: 'page', source: 'static' };
   const composerExpectation = shell ? await adapter.composerExpectation?.(page, spec) : undefined;
   const required = [...(shell ? SHELL : []), ...(step.required ?? [])];
-  await page.addStyleTag({ content: PAUSE });
-  await page.evaluate(async () => { await document.fonts.ready; await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); });
-  const payload = { contract, selectors: adapter.selectors, required, composerExpectation };
-  const first = await page.evaluate(measureDOM, payload);
-  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-  const second = await page.evaluate(measureDOM, payload);
-  const issues = [...second.issues];
-  if (JSON.stringify(first.samples) !== JSON.stringify(second.samples)) issues.push({ rule: 'coverage.stability', selector: 'document', property: 'measurement', expected: 'stable', actual: 'moved between two frames' });
+  const measured = await measureCase(page, { contract, selectors: adapter.selectors, required, composerExpectation });
+  const issues = [...measured.issues];
   const key = inv.routeKey(p) ?? u.pathname;
   const owed = issues.filter((i) => BURNDOWN.has(key + '\\t' + i.rule));
   const gating = issues.filter((i) => !owed.includes(i));
   const count = (list) => { const o = {}; for (const i of list) o[i.rule] = (o[i.rule] ?? 0) + 1; return o; };
-  const brief = (i) => ({ rule: i.rule, selector: i.selector, property: i.property, expected: i.expected, actual: i.actual });
-  return { routeKey: key, findings: gating.length, rules: count(gating), recorded: owed.length, recordedRules: count(owed), issues: gating.slice(0, 12).map(brief), recordedIssues: owed.slice(0, 6).map(brief), unclassified: second.coverage.filter((c) => c.status === 'unclassified').length };
+  const brief = (i) => ({ rule: i.rule, selector: i.selector, property: i.property, expected: i.expected, actual: i.actual, ...(i.moved ? { moved: i.moved } : {}) });
+  return { routeKey: key, findings: gating.length, rules: count(gating), recorded: owed.length, recordedRules: count(owed), issues: gating.slice(0, 12).map(brief), recordedIssues: owed.slice(0, 6).map(brief), unclassified: measured.coverage.filter((c) => c.status === 'unclassified').length };
 }
 const VIDEO = (map, size) => (${JSON.stringify(o.video ?? null)} ? { recordVideo: { dir: path.join(${JSON.stringify(o.video ?? '')}, map.family, map.log), size } } : {});
 async function open(browser, map, { viewport }) {
@@ -194,7 +187,7 @@ for (const e of ENTRIES) test(e.title, async ({ browser }) => {
   const map = (await import(e.file)).default;
   // 10 minutes, or 20 s a step for a map with many (the work family's refusals maps walk ~70 refused deep links).
   test.setTimeout(Math.max(10 * 60_000, map.steps.length * 20_000));
-  const ctx = { baseURL: ${JSON.stringify(BASE)}, outDir: e.out, gatewayRefusal, fixtureOrigins: map.media === 'meeting-fixture' ? ['http://meeting-media.test'] : [], open, measure, focusWalk: probes.focusWalk, scoped: (LANE_M.scopes && !!map.scenario?.scope) || (LANE_M.clones && map.scenario?.realtime === 'meeting'), setScope: LANE_M.scopes ? (context, scope) => rs.withMockScope(context, scope) : undefined };
+  const ctx = { baseURL: ${JSON.stringify(BASE)}, outDir: e.out, gatewayRefusal, sendCloneDm, fixtureOrigins: map.media === 'meeting-fixture' ? ['http://meeting-media.test'] : [], open, measure, focusWalk: probes.focusWalk, scoped: (LANE_M.scopes && !!map.scenario?.scope) || (LANE_M.clones && ['meeting', 'clone-dm'].includes(map.scenario?.realtime)), setScope: LANE_M.scopes ? (context, scope) => rs.withMockScope(context, scope) : undefined };
   let result = await walkMap(browser, map, ctx);
   // A BFF reload (Tilt restarts it on any middleware edit) drops in-memory clones and scopes: re-mint and walk once more.
   if (result.authLost || /^setup failed/.test(result.error ?? '')) {
@@ -229,7 +222,7 @@ function writeLogs(o, maps) {
     const result = JSON.parse(fs.readFileSync(f, 'utf8'));
     if (result.skipped) { skipped.push(`${map.family}/${map.log}: skipped — ${result.error}`); continue; }
     if (result.error && !result.steps?.length) { skipped.push(`${map.family}/${map.log}: no walk happened (${result.error}) — the log is left as it was`); continue; }
-    result.scenario = result.map.scenario?.realtime === 'meeting' ? 'scenario: shared meeting gateway, clone identities, signalling media fixture; HTTP business writes blocked' : result.map.scenario === 'shared' ? 'scenario: the shared mock, read-only (every non-GET the page sent was blocked)' : `scenario: scope ${result.map.scenario.scope}`;
+    result.scenario = result.map.scenario?.realtime === 'clone-dm' ? 'scenario: local gateway, two fresh Social clones, clone-only DM delivery and receipts; other HTTP business writes blocked; clone deletion removes DM and memory inbox state' : result.map.scenario?.realtime === 'meeting' ? 'scenario: shared meeting gateway, clone identities, signalling media fixture; HTTP business writes blocked' : result.map.scenario === 'shared' ? 'scenario: the shared mock, read-only (every non-GET the page sent was blocked)' : `scenario: scope ${result.map.scenario.scope}`;
     result.stack = stackLine();
     const target = path.join(ROOT, familyDir(map.family), `${map.log}.md`);
     const shotName = `${path.basename(map.log)}.jpg`;

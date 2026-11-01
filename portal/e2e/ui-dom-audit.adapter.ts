@@ -224,6 +224,7 @@ export default {
       const pathname = auditAliasTarget(new URL(spec.path, 'http://audit.local').pathname);
       const controls = await visible('select, [data-ui-control="select"], [role="switch"], input[type="checkbox"], input[type="radio"], [data-testid$="-save"], button[type="submit"]');
       const policy = tenantComposerPolicy({ tenant: spec.tenant, path: auditAliasTarget(new URL(spec.path, 'http://audit.local').pathname) + new URL(spec.path, 'http://audit.local').search, kind: spec.kind, judges: spec.judges, pattern: spec.pattern }, {
+        submissionWizard: await visible('[data-testid="assessment-submission-wizard"] [data-testid="wizard"]'),
         collection: await visible(`${selectors.collections}, ${selectors.collectionToolbars}`),
         table,
         tableSearch: table && await visible('[data-toolbar-variant], input[type="search"], input[aria-label^="Search"], input[placeholder^="Search"]'),
@@ -249,7 +250,14 @@ export default {
       if (policy) return policy;
     }
     if (spec.tenant === 'pipelines') {
+      // A journey may reach a missing record outside inventory resolution.
+      // Observe its actual API status as well as its visible missing state;
+      // neither a route spelling nor a missing composer proves a 404.
+      const runPath = /^\/pipelines\/runs\/([^/]+)$/.exec(new URL(spec.path, 'http://audit.local').pathname);
+      const missingRunView = runPath && await page.getByTestId('pipeline-run-missing').getByText('Run not found', { exact: true }).isVisible();
+      const runResponse = missingRunView ? await page.request.get(`/api/pipelines/runs/${runPath![1]}`) : null;
       const policy = pipelineComposerPolicy(spec.path, {
+        missingRun: runResponse?.status() === 404,
         graph: await page.locator('[data-testid=work-activity-canvas], [data-testid=work-graph-canvas], [data-testid=work-graph-empty]').first().isVisible(),
         communicationOverview: await page.getByTestId('communication-overview').isVisible(),
         socialAccessRequired: await page.getByTestId('communication-no-social').isVisible(),

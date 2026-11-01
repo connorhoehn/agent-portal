@@ -14,6 +14,7 @@
 //     scoped: boolean,                                   // open() puts the context under a request-scoped mock scenario (lane M)
 //     setScope?(context, scope) -> { dispose },          // a `scope` step: move this context into another scoped mock world
 //   }
+import { cloneDmChannel } from './clone-dm.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -87,7 +88,12 @@ export async function checkExpect(page, e = {}, ctx = {}) {
   }
   for (const t of asList(e.visible)) if (!(await locate(page, t).first().waitFor({ state: 'visible', timeout: T.expect }).then(() => true, () => false))) f.push(`not visible: ${describe(t)}`);
   for (const t of asList(e.absent)) { const n = await locate(page, t).count(); if (n) f.push(`present (expected absent from the DOM): ${describe(t)} ×${n}`); }
-  for (const t of asList(e.hidden)) { const n = await visibleCount(locate(page, t)); if (n) f.push(`visible (expected hidden): ${describe(t)} ×${n}`); }
+  for (const t of asList(e.hidden)) {
+    if (!(await poll(async () => (await visibleCount(locate(page, t))) === 0))) {
+      const n = await visibleCount(locate(page, t));
+      f.push(`visible (expected hidden): ${describe(t)} ×${n}`);
+    }
+  }
   for (const x of asList(e.text)) if (!(await page.getByText(x).first().waitFor({ state: 'visible', timeout: T.expect }).then(() => true, () => false))) f.push(`text not visible: ${x}`);
   if (e.noText?.length) {
     for (const x of e.noText) {
@@ -153,13 +159,14 @@ export async function walkMap(browser, map, ctx) {
   }
   fs.mkdirSync(ctx.outDir, { recursive: true });
   const actors = new Map();
+  const cloneDmChannels = new Set();
   try {
     let current = null;
     for (const [name, persona] of [['main', map.persona], ...Object.entries(map.peers ?? {})]) {
       // A peer is a clone unless it names its own identity (a seed persona, for presence a clone cannot show).
       const actorMap = { ...map, persona, ...(name === 'main' ? {} : { identity: persona.identity ?? 'clone' }) };
       const person = await ctx.open(browser, actorMap, { viewport });
-      const actor = { ...person, page: null, scopeHandle: null };
+      const actor = { ...person, page: null, scopeHandle: null, readOnly: readOnly || (name !== 'main' && persona.readOnly === true) };
       actors.set(name, actor);
       if (name === 'main') {
         result.session = person.principal; result.clone = person.clone;
@@ -169,13 +176,16 @@ export async function walkMap(browser, map, ctx) {
         result.error = `actor ${name} signed in as ${principal.sub} ${principal.tenant}/${principal.role}, the map wants ${persona.tenant}/${persona.role}`;
         return result;
       }
-      if (readOnly || map.scenario?.realtime === 'meeting') await person.context.route('**/*', (route) => {
+      if (actor.readOnly || ['meeting', 'clone-dm'].includes(map.scenario?.realtime)) await person.context.route('**/*', (route) => {
         const r = route.request();
         if (SAFE.has(r.method())) return route.fallback();
+        if (!actor.readOnly && map.scenario?.realtime === 'clone-dm' && r.method() === 'POST' && new URL(r.url()).pathname === '/api/social/dms/read') {
+          try { if (cloneDmChannels.has(r.postDataJSON()?.channel)) return route.fallback(); } catch { /* malformed receipt is blocked */ }
+        }
         if ((ctx.fixtureOrigins ?? []).includes(new URL(r.url()).origin)) return route.fallback();
         // The gateway owns call state outside mock scopes. Only the call's page binding
         // may write over HTTP in a meeting walk; business-record writes stay blocked.
-        if (map.scenario?.realtime === 'meeting' && /^(PUT|DELETE)$/.test(r.method()) && /^\/api\/calls\/[^/]+\/page$/.test(new URL(r.url()).pathname)) return route.fallback();
+        if (!actor.readOnly && map.scenario?.realtime === 'meeting' && /^(PUT|DELETE)$/.test(r.method()) && /^\/api\/calls\/[^/]+\/page$/.test(new URL(r.url()).pathname)) return route.fallback();
         if ((map.readOnlyPosts ?? []).some((p) => new URL(r.url()).pathname === p.path)) return route.fallback();
         const what = `${r.method()} ${new URL(r.url()).pathname}`;
         result.blockedWrites.push(what); current?.blocked.push(what);
@@ -215,6 +225,7 @@ export async function walkMap(browser, map, ctx) {
           case 'navigate': await page.goto(step.url, { waitUntil: 'domcontentloaded', timeout: T.settle }); break;
           case 'click': await locate(page, step.target).first().click({ timeout: T.action }); break;
           case 'press': if (step.target) await locate(page, step.target).first().press(step.key, { timeout: T.action }); else await page.keyboard.press(step.key); break;
+          case 'select': await locate(page, step.target).first().selectOption(step.value, { timeout: T.action }); break;
           case 'fill': await locate(page, step.target).first().fill(step.value, { timeout: T.action }); break;
           case 'back': await page.goBack({ waitUntil: 'domcontentloaded', timeout: T.settle }); break;
           case 'wait': await locate(page, step.target).first().waitFor({ state: 'visible', timeout: T.settle }); break;
@@ -226,10 +237,20 @@ export async function walkMap(browser, map, ctx) {
           }
           case 'api': {
             const method = step.method ?? 'GET';
+            if ((actor.readOnly || map.scenario?.realtime === 'clone-dm') && !SAFE.has(method) && !step.refusal) throw new Error('a read-only actor cannot make an API write without a refusal proof');
             status = ctx.api ? await ctx.api(context, { method, url: step.url, body: step.body })
               : (await context.request.fetch(step.url, { method, ...(step.body !== undefined ? { data: step.body } : {}), failOnStatusCode: false })).status();
             s.api = { method, url: step.url, status };
             if ([401, 410].includes(status)) result.authLost = `${status} ${step.url}`;
+            break;
+          }
+          case 'gateway-send-dm': {
+            if (map.scenario?.realtime !== 'clone-dm' || !map.writes || !step.writes || !ctx.sendCloneDm) throw new Error('clone DM delivery is not enabled');
+            const recipient = actors.get(step.recipient);
+            const channel = cloneDmChannel(actor, recipient);
+            cloneDmChannels.add(channel);
+            s.dm = await ctx.sendCloneDm(page, channel, actor.clone, step.message);
+            if (!s.dm.acknowledged) s.failures.push('gateway did not acknowledge the clone DM');
             break;
           }
           case 'gateway-refusal': {
@@ -242,12 +263,12 @@ export async function walkMap(browser, map, ctx) {
           default: throw new Error(`unknown action ${step.do}`);
         }
       } catch (e) { s.failures.push(`${step.do} failed: ${String(e.message).split('\n')[0]}`); }
-      if (!['api', 'gateway-refusal'].includes(step.do) && !step.noSettle) await settle(page);
+      if (!['api', 'gateway-refusal', 'gateway-send-dm'].includes(step.do) && !step.noSettle) await settle(page);
       if (before) { s.stable = await rects(page, step.stable); s.failures.push(...shifted(step.stable, before, s.stable)); }
       s.failures.push(...await checkExpect(page, step.expect, { status, keyboard: s.keyboard }).catch((e) => [`expectation error: ${e.message.split('\n')[0]}`]));
       const u = new URL(page.url());
       s.landed = u.pathname + u.search;
-      const pageStep = !['api', 'gateway-refusal', 'tab-walk'].includes(step.do) && !(step.do === 'scope' && !step.url);
+      const pageStep = !['api', 'gateway-refusal', 'gateway-send-dm', 'tab-walk'].includes(step.do) && !(step.do === 'scope' && !step.url);
       if (pageStep) {
         s.facts = await layoutFacts(page).catch(() => null);
         if (step.expect?.noHscroll !== false && s.facts && s.facts.scrollWidth > s.facts.innerWidth) s.failures.push(`horizontal scroll (${s.facts.scrollWidth} > ${s.facts.innerWidth})`);

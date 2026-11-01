@@ -60,7 +60,7 @@ test('read-only presence peers may walk the shared mock; a writing peer walk sti
   assert.deepEqual(validateMap({ ...m, writes: true, scenario: { scope: 'default' } }), []);
 });
 
-test('every social map validates: 36 role × surface maps and 12 isolation maps, the activity maps held', async () => {
+test('every social map validates: 36 role × surface maps and 12 isolation maps, the activity maps isolated between clones', async () => {
   const { maps, problems } = await loadMaps(mapFiles('social'));
   assert.deepEqual(problems, []);
   assert.equal(maps.filter(({ map }) => map.kind === 'surface').length, 36);
@@ -70,10 +70,19 @@ test('every social map validates: 36 role × surface maps and 12 isolation maps,
       assert.equal(map.claims['forged-subscribe'], 'AUTHZ_CHANNEL_DENIED');
       assert.ok(map.steps.some(s => s.do === 'gateway-refusal' && s.channel === 'social:ch:general' && s.proves === 'forged-subscribe'), `${map.log} proves the gateway refusal`);
     }
-    // Only a hangout's call is joined (by a clone peer, on the gateway, signalling-only media); nothing else writes.
+    // Hangouts use clone call state; opening a copied DM advances the primary clone's scoped receipt, while its presence peer remains read-only.
     if (map.log.endsWith('/rooms')) assert.deepEqual([map.scenario, map.media, map.identity], [{ realtime: 'meeting' }, 'meeting-fixture', 'clone']);
+    else if (map.log.endsWith('/dms') && map.persona.role !== 'admin') {
+      assert.deepEqual(map.scenario, { scope: 'default' }); assert.equal(map.writes, true);
+      assert.equal(map.peers.peer.readOnly, true);
+      assert.ok(!map.readOnlyPosts?.some(p => p.path === '/api/social/dms/read'), 'a receipt is a write');
+    }
+    else if (map.log.endsWith('/activity')) {
+      assert.deepEqual(map.scenario, { realtime: 'clone-dm' }); assert.equal(map.writes, true); assert.ok(!map.hold);
+      assert.ok(map.steps.some(s => s.do === 'gateway-send-dm' && s.recipient === 'main'));
+      assert.notEqual(map.peers.peer.identity, 'persona');
+    }
     else { assert.ok(!map.writes, `${map.log} writes nothing`); assert.equal(map.scenario, 'shared', `${map.log} walks the shared mock read-only`); }
-    if (map.log.endsWith('/activity')) assert.ok(map.hold, `${map.log} is held`);
   }
 });
 
@@ -83,5 +92,8 @@ test('a peer may sign in as its seed persona (presence a clone cannot show) only
   assert.match(validateMap(m).join(' '), /needs an identityReason/);
   assert.deepEqual(validateMap({ ...m, identityReason: 'the directory holds no clone' }), []);
   assert.match(validateMap({ ...m, identityReason: 'x', writes: true, scenario: { scope: 'default' } }).join(' '), /must not write/);
+  const scoped = { ...m, identityReason: 'presence only', writes: true, scenario: { scope: 'default' }, peers: { peer: { ...peer.peer, readOnly: true } } };
+  assert.deepEqual(validateMap(scoped), []);
+  assert.match(validateMap({ ...scoped, steps: [...scoped.steps, { do: 'click', actor: 'peer', target: { role: 'button', name: 'Save' }, writes: true, name: 'Forbidden peer write' }] }).join(' '), /readOnly peer cannot write/);
   assert.match(validateMap({ ...m, identityReason: 'x', peers: { peer: { ...peer.peer, identity: 'robot' } } }).join(' '), /identity is 'clone' or 'persona'/);
 });

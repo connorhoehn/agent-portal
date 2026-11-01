@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { walkMap, checkExpect } from '../walk.mjs';
+import { cloneDmChannel } from '../clone-dm.mjs';
 import { gatewayRefusal } from '../gateway-refusal.mjs';
 
 const require = createRequire(new URL('../../../portal/package.json', import.meta.url));
@@ -63,6 +64,17 @@ test('negative text expectations wait for a live update but fail if the text rem
   await page.evaluate(() => setTimeout(() => { document.querySelector('#status').textContent = 'A peer arrived'; }, 250));
   assert.deepEqual(await checkExpect(page, { noText: ['Nobody is here'] }), []);
   assert.deepEqual(await checkExpect(page, { noText: [/A peer arrived/g] }), ['text present (expected none): /A peer arrived/g']);
+  await context.close();
+});
+
+test('hidden expectations wait for a disclosure to close and reject one that remains visible', async (t) => {
+  const h = await harness(t); if (!h) return;
+  const context = await h.browser.newContext();
+  const page = await context.newPage();
+  await page.setContent('<div data-testid="about-card">About this page</div><div data-testid="stuck-card">Still open</div>');
+  await page.evaluate(() => setTimeout(() => { document.querySelector('[data-testid="about-card"]').remove(); }, 250));
+  assert.deepEqual(await checkExpect(page, { hidden: [{ testId: 'about-card' }] }), []);
+  assert.match((await checkExpect(page, { hidden: [{ testId: 'stuck-card' }] })).join(' '), /visible \(expected hidden\)/);
   await context.close();
 });
 
@@ -243,6 +255,22 @@ test('shared meeting walks still block HTTP business writes', async (t) => {
   assert.equal(r.steps[1].status, 'fail');
 });
 
+test('a read-only presence peer stays read-only beside a primary scoped writer', async (t) => {
+  const h = await harness(t); if (!h) return;
+  h.ctx.scoped = true;
+  const result = await walkMap(h.browser, map([
+    { do: 'navigate', url: '/list', name: 'primary opens list' },
+    { do: 'click', target: { role: 'button', name: 'Save' }, writes: true, name: 'primary scoped write' },
+    { do: 'navigate', actor: 'peer', url: '/list', name: 'presence peer opens list' },
+    { do: 'click', actor: 'peer', target: { role: 'button', name: 'Save' }, name: 'peer click cannot write' },
+    { do: 'api', actor: 'peer', method: 'POST', url: '/api/peer-write', body: {}, name: 'peer API cannot write' },
+  ], { writes: true, scenario: { scope: 'default' }, peers: { peer: { user: 'u-peer', tenant: 'access', role: 'approver', readOnly: true } } }), h.ctx);
+  assert.equal(h.writes.filter(w => w === 'POST /api/save').length, 1, 'only the primary write reached the server');
+  assert.ok(!h.writes.some(w => w.includes('/api/peer-write')));
+  assert.deepEqual(result.steps.map(s => s.status), ['pass', 'pass', 'pass', 'fail', 'fail']);
+  assert.match(result.steps[4].failures.join(' '), /read-only actor/);
+});
+
 test('expected console failures match HTTP paths and cannot hide an unrelated 404', async (t) => {
   const h = await harness(t); if (!h) return;
   const expectConsole = /^Failed to load resource:.*404.*\[404 GET \/api\/calls\/[^/]+\/chat\]$/;
@@ -254,4 +282,33 @@ test('expected console failures match HTTP paths and cannot hide an unrelated 40
   assert.equal(r.steps[0].expectedConsole.length, 1);
   assert.equal(r.steps[1].status, 'fail');
   assert.match(r.steps[1].unexpectedConsole[0], /404 GET \/api\/unrelated/);
+});
+
+
+test('clone DM channel binding rejects seed peers, mismatched identities and self delivery', () => {
+  const actor = (id, extra = {}) => ({ clone: id, principal: { sub: id, tenant: 'social' }, readOnly: false, ...extra });
+  const a = actor('u-a-clone-123'), b = actor('u-b-clone-456');
+  assert.equal(cloneDmChannel(b, a), 'social:dm:u-a-clone-123:u-b-clone-456');
+  for (const invalid of [actor('u-b'), actor('u-b-clone-456', { readOnly: true }), actor('u-b-clone-456', { clone: null }), actor('u-b-clone-456', { principal: { sub: 'u-other', tenant: 'social' } }), actor('u-b-clone-456', { principal: { sub: 'u-b-clone-456', tenant: 'assessment' } })]) {
+    assert.throws(() => cloneDmChannel(a, invalid), /requires two writable Social clones/);
+  }
+  assert.throws(() => cloneDmChannel(a, a), /distinct clones/);
+});
+
+test('clone DM scenario delivers between minted actors while blocking other HTTP and API writes', async (t) => {
+  const h = await harness(t); if (!h) return;
+  const delivered = [];
+  h.ctx.scoped = true;
+  h.ctx.sendCloneDm = async (_page, channel, sender, message) => { delivered.push({ channel, sender, message }); return { channel, sender, messageId: 'proof-1', acknowledged: true }; };
+  const r = await walkMap(h.browser, map([
+    { do: 'navigate', url: '/list', name: 'Walker opens' },
+    { do: 'navigate', actor: 'peer', url: '/list', name: 'Peer opens' },
+    { do: 'gateway-send-dm', actor: 'peer', recipient: 'main', message: 'Proof', writes: true, name: 'Deliver' },
+    { do: 'click', target: { css: '#save' }, name: 'An unrelated form may not write' },
+    { do: 'api', method: 'POST', url: '/api/save', writes: true, name: 'Nor may a direct API step' },
+  ], { family: 'social', persona: { user: 'u-x', tenant: 'social', role: 'participant' }, peers: { peer: { user: 'u-y', tenant: 'social', role: 'participant' } }, identity: 'clone', writes: true, scenario: { realtime: 'clone-dm' } }), h.ctx);
+  assert.equal(r.steps[2].status, 'pass');
+  assert.deepEqual(delivered, [{ channel: 'social:dm:u-x-clone-1:u-y-clone-1', sender: 'u-y-clone-1', message: 'Proof' }]);
+  assert.equal(r.steps[3].status, 'fail'); assert.equal(r.steps[4].status, 'fail');
+  assert.deepEqual(h.writes, []);
 });

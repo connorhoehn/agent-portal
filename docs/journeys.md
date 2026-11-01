@@ -55,6 +55,7 @@ only where the separation of duties says they must.
 | `goal` | one sentence; it opens the log's `notes:` |
 | `scenario` | `'shared'` (the shared mock, read-only) or `{ scope }` — a request-scoped mock world (`withMockScope`, copy-on-write); a map that writes must have one |
 | `identity` | `clone` (default): a fresh clone of the persona per walk (`openAsClone`), so walks run beside audits and each other. `persona` (with `identityReason`): the seed user itself — the runner walks it only with `--allow-persona`, and never while `pgrep -f audit.mjs` shows an audit |
+| `peers.<name>.readOnly` | keeps a presence peer read-only even beside a primary clone that writes in a mock scope; its browser requests and API steps cannot make business writes. Seed-persona peers require this flag on a writing map, plus `identityReason`. |
 | `writes`, `hold` | a map whose steps write declares `writes: true` (and a scope); `hold: '<why>'` keeps a map from being walked at all (e.g. a write that reaches state no scope covers) |
 | `fields`, `claims` | static fields (`surface`, `pages`); the value each claim field states when its proving steps pass (default `pass`) |
 | `steps` | ordered; the first navigates |
@@ -109,12 +110,11 @@ first-row-top), measure with the skill, screenshot to
 `.scratch/journeys/<family>/<log>/NN-<action>.jpg`. One protocol rule holds
 throughout: a failed step is recorded and the walk keeps going.
 
-The audit is the skill's own: the runner imports `measureDOM` from
-`.claude/skills/ui-dom-audit/scripts/measure.mjs`, the contract
+The audit is the skill's own: the runner imports `measureCase` from
+`.claude/skills/ui-dom-audit/scripts/run.mjs`, the contract
 `references/work-ui.contract.json` (validated by `run.mjs`'s
 `validateContract`), the adapter's selectors and its composer policy
-(`portal/e2e/ui-dom-audit.adapter.ts`), and applies them the way `run.mjs`
-applies one case (motion paused, fonts and two frames, measured twice,
+(`portal/e2e/ui-dom-audit.adapter.ts`), and invokes that single-case API directly (motion paused, fonts and two frames, measured twice,
 instability reported). No rule is forked.
 
 A finding fails the step — except one the **audit burn-down**
@@ -138,6 +138,24 @@ each directory whose every log was written by this run and passed — the same
 seal as for a hand walk, with the same refusals (contracts not measured on the
 current source, the walk proof). A directory with a failed walk is left
 unsealed and its judge stays red.
+
+### Clone-only DM delivery
+
+Social activity maps use `scenario: { realtime: 'clone-dm' }` and fresh cloned
+peers. `gateway-send-dm {recipient, message}` derives the canonical channel from
+those two authenticated clone ids. It refuses seed identities, a self-DM,
+non-Social actors, a remote app/gateway, or health evidence other than local
+mock memory chat and inbox stores. The gateway must acknowledge the send;
+the primary walk then proves live delivery, replay, mark-read and cleared UI.
+It does not send into a copied persona DM, whose peer is a real person.
+
+All HTTP business writes stay blocked except a receipt naming that exact
+clone DM. The gateway stamps the clone as sender in its own DM; notification
+recipients stay those exact ids. Clone deletion/expiry removes the channel's
+fixture rows and that clone's memory inbox, including late inbox writes.
+Gateway and cleanup tests prove other clones and both seed personas retain
+their data. `select {target, value}` operates a native UI select; reader maps
+use it to exercise the canvas's current zoom and Fit width controls.
 
 ### What a clone can and cannot walk
 
