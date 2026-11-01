@@ -4,7 +4,7 @@ import '../../src/app.css';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { conversationCallDockProps, type ConversationCallDockState } from '@connorhoehn/realtime-modules/client/video';
-import { CallDock, StreamVideo } from '@connorhoehnslalom/ui-components/video';
+import { CallDock, StreamVideo, MeetingToolbar, ChatBubbleIcon, UsersIcon, MeetingHandIcon, MeetingReactIcon } from '@connorhoehnslalom/ui-components/video';
 import { ConversationComposer } from '../../src/lib/conversationComposer';
 import { separateCallScreenTiles } from '../../src/lib/callScreenTiles';
 
@@ -17,6 +17,7 @@ function source(label: string, color: string) {
 }
 const noop = () => {};
 function Fixture() {
+  const meeting = new URLSearchParams(location.search).has('meeting');
   const [sources, setSources] = useState<MediaStream[] | null>(null);
   const [sharing, setSharing] = useState(false), [cameraOn, setCameraOn] = useState(true);
   useEffect(() => {
@@ -43,10 +44,18 @@ function Fixture() {
   return <div className="p-6">
     <button onClick={() => setSharing(value => !value)}>{sharing ? 'Stop screen sharing' : 'Start screen sharing'}</button>
     <button onClick={() => setCameraOn(value => !value)}>Toggle camera</button>
-    <div className="initiative-composer-dock max-w-3xl">
+    <div className={meeting ? 'initiative-composer-dock max-w-6xl' : 'initiative-composer-dock max-w-3xl'}>
       <ConversationComposer channel={null} context={{ kind: 'initiative', id: 'fixture', title: '' }} capabilities={{ maySend: false, agent: { allowed: true } }}
         onAgent={() => true} defaultMode="agent" expanded allowEmoji={false} className="conversation-call-composer" data-testid="fixture-composer"
-        callBlock={<div data-testid="shell-call-media" data-placement="composer"><CallDock {...dock} layout="stack" data-testid="fixture-call-dock" /></div>} />
+        callBlock={<div data-testid="shell-call-media" data-placement="composer">
+          {meeting && <MeetingToolbar start={<span>Recording · by attending you agree to be included</span>} items={[
+            { id: 'chat', label: 'Chat', icon: <ChatBubbleIcon />, onClick: noop },
+            { id: 'people', label: 'People', icon: <UsersIcon />, count: 1, badge: 1, onClick: noop },
+            { id: 'raise', label: 'Lower hand', icon: <MeetingHandIcon />, pressed: true, count: 1, onClick: noop },
+            { id: 'react', label: 'React', icon: <MeetingReactIcon />, onClick: noop },
+          ]} />}
+          <CallDock {...dock} layout={meeting ? 'shelf' : 'stack'} data-testid="fixture-call-dock" />
+        </div>} />
     </div>
   </div>;
 }

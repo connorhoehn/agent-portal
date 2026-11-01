@@ -36,7 +36,7 @@ import { SidePane, useSidePane } from '@connorhoehnslalom/ui-components';
 import {
   Button,
   Chip,
-  EmptyState,
+  PageSection,
   DropdownMenu,
   Drawer,
   T,
@@ -159,12 +159,10 @@ export function TeamScorecard({ teamId, tab, onTabChange, revealDiscussion = fal
   // the way back, rather than the outage copy a real failure gets below.
   if (notFound) {
     return (
-      <EmptyState
-        title={`No team ${teamId ?? ''}`.trim()}
-        body="There is no team with this id. It may have been deleted, or the link is out of date."
-        actionLabel="Back to the dashboard"
-        onAction={() => navigate('/assessment/teams')}
-      />
+      <PageSection title={`No team ${teamId ?? ''}`.trim()}>
+        <ErrorState title="Team not found" body="There is no team with this id. It may have been deleted, or the link is out of date."
+          actionLabel="Back to the dashboard" onAction={() => navigate('/assessment/teams')} />
+      </PageSection>
     );
   }
   if (isError || !data) {
@@ -302,7 +300,7 @@ export function TeamScorecard({ teamId, tab, onTabChange, revealDiscussion = fal
           bottom of the content column (the pane beside it is the thread). */}
       {channel && <ConversationOwner key={channel} channel={channel} maySend={mayRead} onChange={setConversation} />}
       {teamComposerShown && channel && conversation && (
-        <Stack gap="none" className="shrink-0 px-6 pb-3 pt-2" data-testid="team-discussion-composer-dock">
+        <Stack gap="none" className="shrink-0 pt-2" data-testid="team-discussion-composer-dock">
           <ConversationComposer key={huddleComposer.editorKey} channel={channel} chat={conversation.chat} context={{ kind: 'conversation', id: team.id, title: team.name }}
             capabilities={{ maySend: mayRead, readOnlyReason: READER_REASON }} label="Team discussion composer"
             offline={conversation.connected ? null : 'The realtime gateway is not connected, so the discussion is unavailable.'}

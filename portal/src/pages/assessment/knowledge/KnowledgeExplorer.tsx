@@ -348,11 +348,10 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
         ? <ActivityBar node={selectedNode} sectionKey={selectedSectionKey} sseEvents={sse.events} />
         : undefined}
     >
-      {/* The page title is the view's name, first after the trail in every
-          state (docs/layout-cascade.md rule 3); an open document's own
-          headline stays in the pane, so the title does not jump as the reader
-          moves through the library. */}
-      {!libraryOpen && <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>}
+      {/* A document's EditorShell owns the primary heading. Other explorer
+          states retain the workspace heading when no document is open. */}
+      {!libraryOpen && !(view.kind === 'node' && selectedNode && isPage && selectedNode.viewable !== false)
+        && <VisuallyHidden as="h1">{modeLabel}</VisuallyHidden>}
       <NewDraftDialog destination={creating} onClose={() => setCreating(null)} onCreated={id => { treeFetch.refresh(); handleSelectNode(id); }} />
 
       {libraryOpen && <DocumentLibrary key={presentationsOpen ? 'presentations' : 'library'} sections={sections} files={files} onSelect={handleSelectNode} onOpenFile={openPresentation}

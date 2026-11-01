@@ -42,6 +42,8 @@ export interface DocumentLibraryProps {
   sections: KnowledgeSection[];
   files?: readonly LibraryFile[];
   title?: string;
+  /** Use h2 when this library is a tab inside a record page. */
+  headingAs?: 'h1' | 'h2';
   description?: ReactNode;
   notices?: ReactNode;
   initialType?: string;
@@ -62,7 +64,7 @@ export interface DocumentLibraryProps {
   onOpenWorkspace?: () => void;
 }
 
-export function DocumentLibrary({ sections, files = [], title = 'All documents', description, notices, initialType, documentHref, onOpenFile, onSelect, onNewPage, onUpload, uploading, uploadError, onDismissUploadError, draftSectionTitle, onRefresh, refreshing, onOpenWorkspace }: DocumentLibraryProps) {
+export function DocumentLibrary({ sections, files = [], title = 'All documents', headingAs = 'h1', description, notices, initialType, documentHref, onOpenFile, onSelect, onNewPage, onUpload, uploading, uploadError, onDismissUploadError, draftSectionTitle, onRefresh, refreshing, onOpenWorkspace }: DocumentLibraryProps) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [view, setView] = useState<FileView>('list');
@@ -108,7 +110,7 @@ export function DocumentLibrary({ sections, files = [], title = 'All documents',
 
   return <Stack gap="none" className="h-full min-h-0 min-w-0" data-testid="document-list-page">
     <Stack gap="md" className="px-6 pb-2 pt-3">
-      <PageHeader title={title} badge={<Chip size="md" data-testid="document-list-total">{rows.length}</Chip>}
+      <PageHeader as={headingAs} title={title} badge={<Chip size="md" data-testid="document-list-total">{rows.length}</Chip>}
         actions={<>
           {onUpload && <FilePickerButton accept=".md,.markdown,.txt,text/markdown,text/plain" multiple icon={<UploadIcon size={18} />}
             size="sm" disabled={uploading} onFiles={files => void onUpload(files)} data-testid="document-upload">

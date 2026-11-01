@@ -306,7 +306,7 @@ export default function SubmissionsPage() {
 
   if (adding) {
     return (
-      <Stack gap="lg">
+      <Stack gap="lg" data-testid="assessment-submission-wizard">
         <PageHeader
           title="Add submissions"
           description="Upload a Microsoft Forms export, match each row to a team, then collect the linked evidence and process it."

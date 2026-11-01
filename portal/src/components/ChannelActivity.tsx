@@ -30,7 +30,7 @@ function Feed({ channel, recorded, visibleCount }: { channel: string; recorded?:
   return <WrappedActivityPanel activity={recorded?.length ? { ...activity, events: merged } : activity} {...(visibleCount ? { visibleCount } : {})} />;
 }
 
-type SectionProps = Pick<ComponentProps<typeof DetailSection>, 'variant' | 'size' | 'className' | 'description'>;
+type SectionProps = Pick<ComponentProps<typeof DetailSection>, 'as' | 'variant' | 'size' | 'className' | 'description'>;
 
 export function ChannelActivity({ channel, title = 'Activity', graph, onPopOutGraph, recorded, visibleCount, ...rest }: {
   channel: string; title?: string; 'data-testid'?: string;

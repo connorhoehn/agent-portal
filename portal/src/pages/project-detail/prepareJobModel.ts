@@ -382,19 +382,33 @@ export function prepareJobPrompts(view: PrepareJobView, actions: PrepareJobActio
 
   if (step.kind === 'cap') {
     const high = forecast.estimate?.costUsdP75;
+    const capFields = fields.filter((f) => f.label === 'Run cap' || f.label === 'Forecast');
+    const saveCap = (cap: number | null) => {
+      actions.setCap(cap);
+      return { receipt: `Run cap → ${cap == null ? 'no cap' : usd(cap)}` };
+    };
     return [{
-      id: id('cap'), eyebrow, title: 'Run cap', fields: fields.filter((f) => f.label === 'Run cap' || f.label === 'Forecast'),
-      question: 'Cap this run at how many dollars? Type an amount in the composer, or pick one. A cap below the forecast asks you to confirm at dispatch.',
-      kind: 'number', min: 0, placeholder: 'A dollar amount, e.g. 2.50',
+      id: id('cap'), eyebrow, title: 'Run cap', fields: capFields,
+      question: 'Choose a cap for this run. A cap below the forecast asks you to confirm at dispatch.',
+      kind: 'choice',
       options: [
         { id: 'none', label: 'No cap' },
         ...(high != null ? [{ id: 'forecast', label: `Forecast high (${usd(high)})` }] : []),
+        { id: 'custom', label: 'Custom amount' },
       ],
       defaultOptionId: job.capUsd == null ? 'none' : undefined,
       onAnswer: (answer) => {
-        const cap = answer.kind === 'number' ? Math.round(answer.value * 100) / 100 : answer.optionId === 'forecast' && high != null ? high : null;
-        actions.setCap(cap);
-        return { receipt: `Run cap → ${cap == null ? 'no cap' : usd(cap)}` };
+        if (answer.optionId === 'none') return saveCap(null);
+        if (answer.optionId === 'forecast' && high != null) return saveCap(high);
+        if (answer.optionId === 'custom') return { next: {
+          id: id('cap-amount'), eyebrow, title: 'Custom run cap', fields: capFields,
+          question: 'Type the dollar amount below and press Enter. A cap below the forecast asks you to confirm at dispatch.',
+          kind: 'number', min: 0, placeholder: 'A dollar amount, e.g. 2.50',
+          onAnswer: (typed) => typed.kind === 'number'
+            ? saveCap(Math.round(typed.value * 100) / 100)
+            : { error: 'Type a dollar amount.' },
+        } };
+        return { error: 'Choose a cap or Custom amount.' };
       },
     }];
   }

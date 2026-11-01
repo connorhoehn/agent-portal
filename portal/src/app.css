@@ -284,8 +284,9 @@ html[data-theme="dark"] [data-tenant="orgiq"] {
   --color-border-emphasis: #B7C9C4;
 
   --color-text-primary: #1A2D2D;     /* sdlc ink */
-  --color-text-secondary: #5A7272;   /* sdlc slate */
-  --color-text-tertiary: #8CA3A3;
+  /* Body and metadata ink clear 4.5:1 on the darkest light surface (#E2ECE8). */
+  --color-text-secondary: #4E6565;
+  --color-text-tertiary: #4F6565;
   --color-text-disabled: #B4C6C2;
 
   /* State and status, from the same palette. Without these the step dots and
@@ -381,8 +382,9 @@ html[data-theme="dark"] [data-tenant="assessment"] {
   --color-border-emphasis: #2E6565;
 
   --color-text-primary: #F3F7F5;
-  --color-text-secondary: #8DA5A5;
-  --color-text-tertiary: #6E8A8A;
+  /* Both remain readable on the lightest dark surface (#224F4F). */
+  --color-text-secondary: #B9CFCF;
+  --color-text-tertiary: #A8BEBE;
   --color-text-disabled: #476363;
 
   /* On the teal night these are read as foreground against #0A3D3D/#0D4A4A,
@@ -837,6 +839,12 @@ tbody tr:focus-within .row-reveal,
 .conversation-call-composer [data-testid$="-dock-slot"] section[data-phase] {
   padding: 0;
   gap: 0;
+}
+/* The enclosing card supplies the horizontal inset. A visible call header
+   still needs room below the meeting toolbar and above the participant tiles. */
+.conversation-call-composer [data-testid$="-dock-slot"] section[data-phase][data-call-dock] {
+  padding-top: 8px;
+  gap: 8px;
 }
 .conversation-call-composer [data-testid$="-dock-slot"] + *,
 .conversation-call-composer [data-testid$="-dock-slot"] + * .uic-composer {

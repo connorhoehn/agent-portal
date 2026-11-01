@@ -36,7 +36,7 @@ export function DocumentReader({ markdown, reactions }: { markdown: string; reac
       {reactions}
       <Button variant="ghost" size="sm" onClick={() => context ? context.open('outline') : setOutlineOpen(true)}>On this page</Button>
     </Toolbar>
-    <Stack ref={root} className={wide ? 'min-w-0' : 'mx-auto w-full max-w-3xl'}>
+    <Stack ref={root} role="document" aria-label="Document content" className={wide ? 'min-w-0' : 'mx-auto w-full max-w-3xl'}>
       <MarkdownView markdown={markdown} className="doc-markdown" />
     </Stack>
     <DocumentStatusBar wordCount={wordCount} />

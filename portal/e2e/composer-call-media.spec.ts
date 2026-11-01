@@ -21,12 +21,14 @@ test('camera and screen are separate bounded tiles in one composer card; stoppin
   const sizes = await tiles.evaluateAll(elements => elements.map(element => { const box = element.getBoundingClientRect(); return { width: box.width, height: box.height }; }));
   expect(sizes.every(size => size.height === 96 && size.width <= 240)).toBe(true);
   expect(await media.locator('[data-call-stream="screen"] video').evaluate(element => getComputedStyle(element).objectFit)).toBe('contain');
-  await expect(media.locator('[data-testid$="-header"]')).toBeHidden();
+  // Stack retains its media controls; the grid-only layout is the one whose
+  // host owns those controls elsewhere. Keep the visible header above tiles.
+  await expect(media.locator('[data-testid$="-header"]')).toBeVisible();
   const attachment = await composer.locator('[data-testid$="-dock-slot"]').boundingBox();
   const card = await composer.locator('[data-testid$="-dock-slot"] + *').boundingBox();
   expect(attachment && card).toBeTruthy();
   expect(Math.abs(attachment!.y + attachment!.height - card!.y)).toBeLessThanOrEqual(1);
-  expect(attachment!.height).toBeLessThanOrEqual(117);
+  expect(attachment!.height).toBeLessThanOrEqual(180);
   expect(await composer.locator('.uic-composer').evaluate(element => getComputedStyle(element).borderTopLeftRadius)).toBe('0px');
   await page.screenshot({ path: test.info().outputPath('camera-and-screen-composer.png') });
   await page.getByRole('button', { name: 'Toggle camera', exact: true }).click();

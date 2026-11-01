@@ -61,7 +61,7 @@ export function DocumentComments({ sourceId, title, userId, comments, onBackToPa
         actionLabel="Back to the page" onAction={onBackToPage} />
       : groups.map(group => (
         <Card key={group.key} padding="md" data-testid={`document-comments-group-${group.key}`}>
-          <CardHeader title={group.title} meta={`${group.open} open · ${group.threads.length} total`} />
+          <CardHeader as="h2" title={group.title} meta={`${group.open} open · ${group.threads.length} total`} />
           <Stack gap="md">{group.threads.map(threadCard)}</Stack>
         </Card>
       ))}

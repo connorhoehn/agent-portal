@@ -155,21 +155,21 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
       )}
       {!onActivity && !onBrief && (
         <Stack gap="md">
-        <DetailSection first title="Run" data-testid="pipeline-run">
+        <DetailSection as="h2" first title="Run" data-testid="pipeline-run">
           <PipelineRunSummary run={run} />
         </DetailSection>
-        <DetailSection title="Steps" hint={`${steps.length}`} data-testid="pipeline-steps">
+        <DetailSection as="h2" title="Steps" hint={`${steps.length}`} data-testid="pipeline-steps">
           <PipelineRunSteps steps={steps} />
         </DetailSection>
-        <DetailSection title="Artifacts" hint={`${artifacts.length}`} data-testid="pipeline-artifacts">
+        <DetailSection as="h2" title="Artifacts" hint={`${artifacts.length}`} data-testid="pipeline-artifacts">
           <PipelineRunArtifacts artifacts={artifacts} />
         </DetailSection>
         {cancelable && <RunReportDecks runId={run.id} runTitle={run.context.title} />}
         {realtime && live && <PipelineRunLive key={run.id} runId={run.id} pipelineId={run.definitionId ?? ''} recordedStatus={run.status} onMoved={refresh} />}
         {realtime && live ? (
-          <ChannelActivity channel={runChannel(run.id)} title="Events" recorded={recorded} visibleCount={8} data-testid="pipeline-events" />
+          <ChannelActivity as="h2" channel={runChannel(run.id)} title="Events" recorded={recorded} visibleCount={8} data-testid="pipeline-events" />
         ) : (
-          <DetailSection title="Events" data-testid="pipeline-events">
+          <DetailSection as="h2" title="Events" data-testid="pipeline-events">
             {/* Gateway offline (or a tenant façade with no gateway channel): the
                 run's SSE stream, recorded history replayed then live frames. */}
             <RunTimeline
@@ -184,7 +184,7 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
         {/* The discussion is the page's last section: its composer is the column's
             last content, with nothing laid out below it (docs/layout-cascade.md). */}
         {realtime && (
-          <DetailSection title="Discussion" data-testid="pipeline-run-discussion">
+          <DetailSection as="h2" title="Discussion" data-testid="pipeline-run-discussion">
             <PipelineDiscussion channel={runChannel(run.id)} focusTarget />
           </DetailSection>
         )}

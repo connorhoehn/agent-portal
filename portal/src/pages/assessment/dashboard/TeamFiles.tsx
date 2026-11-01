@@ -26,7 +26,7 @@ export function TeamFiles({ teamId, teamName }: { teamId: string; teamName: stri
     const next = new URLSearchParams(params); next.set('tab', 'documents'); if (id) next.set('recording', id); else next.delete('recording'); setParams(next);
   }} />;
   if (Boolean(params.get('recording'))) return <Stack gap="sm" className="min-h-0 overflow-y-auto p-4">{recordings}</Stack>;
-  return <Stack gap="md" className="min-h-0 overflow-y-auto"><DocumentLibrary sections={sections} files={files} title="Documents & files"
+  return <Stack gap="md" className="min-h-0 overflow-y-auto"><DocumentLibrary headingAs="h2" sections={sections} files={files} title="Documents & files"
     description={<T size="sm" tone="secondary">Presentations for {teamName} and shared Workspace documents.</T>}
     onRefresh={() => { decks.refresh(); tree.refresh(); }} refreshing={decks.isLoading || tree.isLoading}
     onOpenWorkspace={() => void navigate('/assessment/workspace?view=library')}

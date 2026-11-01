@@ -96,7 +96,7 @@ export function DefinitionRecord({ id, onChanged }: { id: string; onChanged: () 
     <Stack gap="md" data-testid="pipelines-definition-record">
       <DetailHeader
         title={def?.title ?? 'Definition'}
-        description={def ? `${kindLabel(def.kind)} · ${def.id}` : id}
+        description={def ? kindLabel(def.kind) : undefined}
         {...(def ? {
           aside: (
             <Inline gap="sm" align="center" justify="end">

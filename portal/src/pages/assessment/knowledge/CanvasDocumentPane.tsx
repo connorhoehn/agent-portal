@@ -376,9 +376,10 @@ function ConnectedCanvas({ grant, mode, sourceConfigured, accessValid, userId, t
   if (!canvas.isCanvas) return shell(<ErrorState title="Document migration is incomplete" body="The server has not supplied a rich document snapshot. No changes have been made." />);
   // Same surface settings as realtime-examples' page editor: the toolbar as a
   // card on the workspace grey, ruler on, zoom in the toolbar's overflow, and
-  // the sheet sized to the shell's scroller (fitHeight="parent").
+  // the sheet sized to the shell's scroller (fitHeight="parent"). Readers
+  // have no formatting toolbar: retain the status bar so they can fit/zoom.
   return shell(<DocumentImageProvider loadImage={loadImage} requiresAuthentication={isProtectedImage}><CanvasDocumentView key={doc.docVersion} isCanvas body={canvas.body} ydoc={doc.ydoc} provider={doc.provider}
-    user={user} editable={editable} extensions={extensions} showRuler showStatusBar={false} toolbarStyle="card" pageMargin="narrow" fitHeight="parent" paginate showOutline={!context}
+    user={user} editable={editable} extensions={extensions} showRuler showStatusBar={!editable} toolbarStyle="card" pageMargin="narrow" fitHeight="parent" paginate showOutline={!context}
     onInsertImage={editable ? () => { setImageError(null); setImageOpen(true); } : undefined}
     gutterItems={margin.gutterItems} gutterLead={call.dock} gutterVisible={gutterVisible} onToggleGutter={toggleGutter}
     onFocusGutterItem={margin.onFocusGutterItem} onHoverGutterItem={margin.onHoverGutterItem}

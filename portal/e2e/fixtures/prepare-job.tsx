@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { DropdownMenu, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { ComposerPromptDeck } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { ConversationComposer } from '../../src/lib/conversationComposer';
 import { usePrepareJobDeck } from '../../src/pages/project-detail/usePrepareJobDeck';
 import { node } from '../../src/pages/project-detail/__tests__/obsFixture';
 import type { EstimateProvenance } from '../../src/components/marketplace/EstimateDrawer';
@@ -35,7 +36,12 @@ function Fixture() {
       label: canDispatch ? 'Prepare job' : 'View job setup', 'data-testid': 'work-item-prepare-job',
       onSelect: () => setRequest(previous => ({ itemId: item.id, revision: (previous?.revision ?? 0) + 1 })),
     }] }]} />
-    <ComposerPromptDeck prompts={prompts} data-testid="prepare-job-deck" />
+    {params.has('composer') ? <ConversationComposer
+      context={{ kind: 'initiative', id: 'fixture', title: 'Observability' }} channel={null}
+      capabilities={{ maySend: false, agent: { allowed: true } }} defaultMode="agent"
+      expanded prompts={prompts} composerTestId="prepare-job-editor" data-testid="prepare-job-conversation"
+      onAgent={() => { throw new Error('A setup answer must not invoke the agent'); }}
+    /> : <ComposerPromptDeck prompts={prompts} data-testid="prepare-job-deck" />}
     <output data-testid="dispatched-run" className="sr-only">{JSON.stringify(dispatched)}</output>
   </Stack>;
 }

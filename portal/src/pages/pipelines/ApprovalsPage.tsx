@@ -182,7 +182,7 @@ function ApprovalsWorkspace() {
         ) : isLoading || !data ? (
           <LoadingState label="Loading the waiting step…" />
         ) : (
-          <RecordNotFound heading="Approval" title="Nothing is waiting here"
+          <RecordNotFound heading="Approval" size="md" title="Nothing is waiting here"
             body={`No waiting step has the id "${openId}" — it may already have been decided.`}
             backLabel="Approvals" onBack={() => setOpenId(null)} />
         )}

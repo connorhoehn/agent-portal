@@ -1,5 +1,5 @@
-import { useLocation } from 'react-router';
-import { EmptyState } from '@connorhoehnslalom/ui-components/shared';
+import { useLocation, useNavigate } from 'react-router';
+import { Button, CommandPaletteHint, Inline, PageSection, T } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../lib/auth';
 import { resolveHome } from '../lib/tenantHome';
 
@@ -9,21 +9,21 @@ import { resolveHome } from '../lib/tenantHome';
 
 export default function NotFoundPage() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const { session } = useSession();
   // Wherever `/` would send them — one home resolution, not a local guess.
   const home = resolveHome(session);
 
   return (
-    <EmptyState
-      title="Page not found"
-      description={
-        <>
-          Nothing lives at <code>{pathname}</code>. The link may be stale,
-          or the page may have moved. Everything reachable is in the rail
-          on the left, and <kbd>⌘K</kbd> jumps anywhere by name.
-        </>
-      }
-      actions={[{ label: '← Back to home', href: home }]}
-    />
+    <PageSection title="Page not found">
+      <T size="sm">
+        Nothing lives at {pathname}. The link may be stale, or the page may
+        have moved. Use the rail or search to find a page by name.
+      </T>
+      <Inline gap="sm">
+        <Button onClick={() => navigate(home)}>← Back to home</Button>
+        <CommandPaletteHint />
+      </Inline>
+    </PageSection>
   );
 }

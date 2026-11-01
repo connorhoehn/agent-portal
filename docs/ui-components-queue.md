@@ -7,6 +7,8 @@ TODO list for it.
 
 | primitive | why | where used |
 |---|---|---|
+| `PageHeader` always emits h1 when a library is embedded in a record tab | Preserve the existing header size and composition while allowing a subordinate heading. | Resolved in 2.484.0 (`eaba6a91`, release `855e01eb`); packed h2 API verified and adopted by Assessment TeamFiles through DocumentLibrary. |
+| `DetailSection` / `CardHeader` fixed h3 skips h2 directly below page titles | Add a semantic `as` prop independent of visual size, preserving h3 as the default. | Resolved in 2.483.0 (`65141352`, release `0ce6ba0b`); packed APIs verified, adopted in Pipelines run sections and Assessment Stories. |
 | `DataTableColumn.header` has no tooltip/description slot | The spend report's Floor / Discretionary / Held / Projected columns need a one-line explanation each (2026-10-29, DE-53). Without a header slot the explanation went into each cell's `title`, which drifts from the column and is invisible on empty cells. Wants a `description` (rendered as the header's tooltip) on `DataTableColumn`. | `portal/src/pages/budgets/InitiativesReport.tsx`, `SpendGroupTable.tsx` |
 | `StatusPill` has no `title` | The spend report's open-work "fits / does not fit the remaining money" pill needs the reason on hover; `StatusPill` takes no `title`, so it is wrapped in `T title=…`. Wants a `title` prop passed to its root. | `portal/src/pages/budgets/InitiativeSpendReport.tsx` |
 | `RecordResults` / `CitedRecordItem` have no `team` record type (`RecordResultType` is closed to person/initiative/work/decision/knowledge/recording/asset) | The search projection (docs/user-search-goal.md U4, S1, 2026-10-15) indexes org teams: `/api/search` returns `team:t-*` rows and lifts their members, and the Answer tab's team answer names the team. The portal's `SearchRecordType` cannot grow `team` until the library's result and citation types do, so the Results tab skips team rows (their members still rank first) and the team answer cites only the members. Wants `team` (and, for S2, the other tenants' U4 types) added to `RecordResultType` with a label/icon, batched with the palette record group (L7). | `portal/src/pages/search/searchTypes.ts`, `resultsModel.ts`, `SearchPage.tsx`; server side `middleware/src/lib/search-index/orgiq.ts` `teamDoc`. |
@@ -357,3 +359,10 @@ with 2.477.0. What is still open:
 | primitive | why | where used |
 |---|---|---|
 | No live "this call records" signal for `RecordingConsentNotice` | realtime-modules `useConversationCall` reports `recordingBinding` (whether a finished recording can be tied to the call), not that recording or transcription is on now, nor who started it, so the notice has nothing to open on. Wanted on the realtime-modules side: a recording state on the call (kind, startedBy, session id for `useConsentDismissal`). | not composed; U3's consent notice waits for it |
+
+- Resolved 2026-10-31 — MeetingToolbar count/attention badges no longer spill
+  outside their button; ComposerPromptDeck focuses a new/reopened question's
+  input and prints Alt on typed-answer options. Released 2.484.1
+  (`8b0c5141`, `97fac1c5`), adopted in portal. DOM mutation checks cover badge
+  containment and call-header top inset; live Work item and responsive fixture
+  proofs are in the journey continuation.

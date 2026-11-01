@@ -181,11 +181,15 @@ test('changing a value is its own prompt', async () => {
   assert.deepEqual(model.calls, [`model:${DEVBOX_MODELS[2]!.id}`]);
 
   const cap = harness({ step: { kind: 'cap' } });
-  assert.equal(cap.prompts[0]!.kind, 'number');
-  assert.deepEqual(cap.prompts[0]!.options!.map((o) => o.label), ['No cap', 'Forecast high ($1.10)']);
-  await cap.prompts[0]!.onAnswer({ kind: 'number', value: 2.499 });
-  await cap.prompts[0]!.onAnswer({ kind: 'option', optionId: 'none' });
-  await cap.prompts[0]!.onAnswer({ kind: 'option', optionId: 'forecast' });
+  assert.equal(cap.prompts[0]!.kind, 'choice');
+  assert.deepEqual(cap.prompts[0]!.options!.map((o) => o.label), ['No cap', 'Forecast high ($1.10)', 'Custom amount']);
+  const custom = await cap.prompts[0]!.onAnswer({ kind: 'choice', optionId: 'custom' });
+  assert.ok(custom && 'next' in custom);
+  assert.equal(custom.next.kind, 'number');
+  assert.equal(custom.next.options, undefined, 'digits in the custom amount never select a preset');
+  await custom.next.onAnswer({ kind: 'number', value: 2.499 });
+  await cap.prompts[0]!.onAnswer({ kind: 'choice', optionId: 'none' });
+  await cap.prompts[0]!.onAnswer({ kind: 'choice', optionId: 'forecast' });
   assert.deepEqual(cap.calls, ['cap:2.5', 'cap:null', 'cap:1.1']);
 
   const text = harness({ step: { kind: 'instruction' } });

@@ -450,24 +450,8 @@ function ProjectDetailPage() {
     onEstimateSaved: handleEstimateSaved,
   });
 
-  // The menu's "Prepare job" / "View job setup" re-asks the question (a new
-  // prompt id reopens a hidden deck) and puts the keyboard on its answers, so
-  // 1–4 / Enter work at once.
-  useEffect(() => {
-    if (!prepareJobRequest) return;
-    // The request re-renders the deck (its hook's effect) before it is focusable; a deck that was folded takes a few
-    // more frames to open again, so look for it for up to ~20 frames instead of exactly two.
-    let frame = 0; let tries = 0;
-    const focusDeck = () => {
-      const deck = document.querySelector('[data-testid="initiative-central-composer"] [data-composer-prompt-deck="expanded"]');
-      const target = deck?.querySelector<HTMLElement>('[data-composer-prompt-option][data-default]:not(:disabled)')
-        ?? deck?.querySelector<HTMLElement>('[data-composer-prompt-option]:not(:disabled), [data-testid$="-hide"]');
-      if (target) { target.focus(); return; }
-      if (++tries < 20) frame = requestAnimationFrame(focusDeck);
-    };
-    frame = requestAnimationFrame(() => { frame = requestAnimationFrame(focusDeck); });
-    return () => cancelAnimationFrame(frame);
-  }, [prepareJobRequest]);
+  // ComposerPromptDeck owns focus for new and reopened questions. Keeping a
+  // second page-level focus loop here moved the caret back onto an answer.
 
   // The call (docs/social-calls-plan.md step 5): owner + SMEs, overrides
   // applied, computed before the early returns because it is a hook.

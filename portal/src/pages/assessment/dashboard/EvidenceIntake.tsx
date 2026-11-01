@@ -297,7 +297,7 @@ export function EvidenceIntake({ teamId }: EvidenceIntakeProps) {
   return (
     <Stack gap="lg">
       <Card padding="md">
-        <CardHeader title="Add evidence" subtitle="Where new evidence for this team comes from." className="mb-4" />
+        <CardHeader as="h2" title="Add evidence" subtitle="Where new evidence for this team comes from." className="mb-4" />
         <Inline gap="md" wrap align="start">
           <Stack gap="none" className="min-w-[280px] flex-1">
             <TouchpointForm teamId={teamId} onSaved={refresh} />
@@ -312,7 +312,7 @@ export function EvidenceIntake({ teamId }: EvidenceIntakeProps) {
       </Card>
 
       <Card padding="md">
-        <CardHeader
+        <CardHeader as="h2"
           title="Lineage ledger"
           subtitle="Every input ingested for this team, with provenance back to its source."
           className="mb-4"
@@ -334,6 +334,7 @@ export function EvidenceIntake({ teamId }: EvidenceIntakeProps) {
         ) : (
           <DataTable<LedgerItem>
             data={items}
+            staticRows="Provenance entries summarize captured evidence; they have no separate record page."
             columns={LEDGER_COLUMNS}
             keyField={(item) => item.provenance_id}
             loading={isLoading}

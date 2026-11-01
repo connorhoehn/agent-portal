@@ -21,6 +21,8 @@ async function fixture(page: Page, query = '', dispatchAnswers: Array<{ status: 
     const body = request.method() === 'POST' ? request.postDataJSON() as unknown : null;
     requests.push({ method: request.method(), path: url.pathname, body });
     if (url.pathname === '/api/bots/estimate' && request.method() === 'GET') return route.fulfill({ json: forecast });
+    if (url.pathname === '/api/bots/work-items/fixture-item/job-draft' && request.method() === 'GET') return route.fulfill({ json: { draft: null } });
+    if (url.pathname === '/api/access-requests/mine' && request.method() === 'GET') return route.fulfill({ json: { items: [] } });
     if (url.pathname === '/api/sprints/envelopes') return route.fulfill({ json: envelopes });
     if (url.pathname === '/api/bots/dispatch-work' && request.method() === 'POST') {
       const answer = dispatchAnswers.shift();
@@ -37,6 +39,34 @@ async function fixture(page: Page, query = '', dispatchAnswers: Array<{ status: 
 
 const deck = (page: Page) => page.getByTestId('prepare-job-deck');
 const card = (page: Page) => page.getByTestId('prepare-job-deck-card');
+
+test('the agent composer takes focus and bare cap shortcuts; custom dollars remain typed input', async ({ page }) => {
+  const result = await fixture(page, '?composer=1');
+  const input = page.getByTestId('prepare-job-editor').locator('.ProseMirror');
+  const prompt = page.getByTestId('prepare-job-conversation-prompts-card');
+  await expect(input).toBeFocused();
+  await page.keyboard.press('3');
+  await expect(prompt).toContainText('Run cap');
+  await expect(input).toBeFocused();
+  await page.keyboard.press('2');
+  await expect(prompt).toContainText('Dispatch with these settings?');
+  await expect(prompt).toContainText('$1.50');
+  await expect(input).toHaveText('');
+  await page.keyboard.press('3');
+  await expect(prompt).toContainText('Run cap');
+  await page.keyboard.press('3');
+  await expect(prompt).toHaveAttribute('data-composer-prompt-kind', 'number');
+  await expect(input).toBeFocused();
+  await page.keyboard.type('2.50');
+  await expect(input).toHaveText('2.50');
+  await page.keyboard.press('Enter');
+  await expect(prompt).toContainText('Dispatch with these settings?');
+  await expect(prompt).toContainText('$2.50');
+  await expect(input).toHaveText('');
+  expect(result.requests.every(request => request.method === 'GET')).toBe(true);
+  expect(result.unexpected).toEqual([]);
+  expect(result.errors).toEqual([]);
+});
 
 test('a dispatcher sees the derived job on one card and dispatches from the keyboard, through a gate', async ({ page }) => {
   const result = await fixture(page, '', [
@@ -97,10 +127,21 @@ test('Esc hides the deck without answering; the menu re-asks', async ({ page }) 
 });
 
 test('a refusal that cannot be confirmed stays on the card', async ({ page }) => {
+  const result = await fixture(page, '', [{ status: 403, json: { error: 'This work item is not available for dispatch.' } }]);
+  await page.getByTestId('prepare-job-deck-option-dispatch').click();
+  await expect(page.getByTestId('prepare-job-deck-error')).toHaveText('This work item is not available for dispatch.');
+  await expect(card(page)).toContainText('Dispatch with these settings?');
+  expect(result.errors).toEqual([]);
+});
+
+test('a missing sprint grant routes to the funding choices without dispatching again', async ({ page }) => {
   const result = await fixture(page, '', [{ status: 403, json: { error: 'You hold no active sprint grant on this initiative.' } }]);
   await page.getByTestId('prepare-job-deck-option-dispatch').click();
-  await expect(page.getByTestId('prepare-job-deck-error')).toHaveText('You hold no active sprint grant on this initiative.');
-  await expect(card(page)).toContainText('Dispatch with these settings?');
+  await expect(card(page)).toContainText('This job needs a sprint envelope');
+  await expect(page.getByTestId('prepare-job-deck-option-request')).toBeVisible();
+  await expect(page.getByTestId('prepare-job-deck-option-save')).toBeVisible();
+  expect(result.requests.filter(request => request.method === 'POST')).toHaveLength(1);
+  expect(result.unexpected).toEqual([]);
   expect(result.errors).toEqual([]);
 });
 

@@ -816,9 +816,13 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     </>;
   }
 
+  // These panes render their own visible h1; shelf and picker states still need the workspace heading.
+  const paneHasHeading = !shelf && !picking && (route === 'calls'
+    || (route === 'rooms' && !!roomsFetch.data && (!roomSlug || rooms.some(room => room.slug === roomSlug))));
+
   return (
     <Stack gap="none" className="min-h-0 min-w-0 bg-surface" data-shell-flush data-testid={PAGE_TESTID[route]}>
-      {!embedding && !(route === 'rooms' && !shelf && !picking && roomsFetch.data && (!roomSlug || rooms.some(room => room.slug === roomSlug))) && <VisuallyHidden as="h1">{PAGE_TITLE[route]}</VisuallyHidden>}
+      {!embedding && !paneHasHeading && <VisuallyHidden as="h1">{PAGE_TITLE[route]}</VisuallyHidden>}
       <ViewportFillRegion className="flex min-w-0" data-testid="social-chat-workspace">
         {railNode}
         {embedding ? (

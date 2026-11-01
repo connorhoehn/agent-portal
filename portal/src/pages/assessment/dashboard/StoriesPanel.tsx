@@ -100,6 +100,7 @@ export function StoriesPanel({ teamId }: { teamId: string }) {
   return (
     <Stack gap="lg">
       <CardHeader
+        as="h2"
         title={
           stories.length === 0
             ? 'Nothing has been drafted for this team yet.'
