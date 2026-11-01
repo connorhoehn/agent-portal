@@ -29,6 +29,9 @@ import { notificationsFixture } from '../../mock/notifications.js';
 import { signRealtimeToken, realtimeClaims } from '../realtime-token.js';
 import type { Session } from '../session.js';
 import { getUser } from '../../providers/identity.js';
+import { identityClonesFixture, removeClone } from '../../mock/identity-clones.js';
+import { socialChat } from '../social-chat.js';
+import { socialChannelMessagesFixture } from '../../mock/social-channels.js';
 
 const SECRET = 'test-realtime-secret';
 type Frame = Record<string, unknown> & { type?: string };
@@ -193,5 +196,40 @@ describe('the missed-call producer', () => {
       });
       expect(newItems(vera).filter((n) => n['type'] === 'call-missed')).toEqual([]);
     } finally { vera.ws.close(); nora.ws.close(); }
+  });
+});
+
+
+describe('clone-to-clone DM isolation', () => {
+  it('delivers only to the other clone, refuses an outsider, and deletes only disposable history', async () => {
+    const ids = ['u-lena-clone-a1111111', 'u-sana-clone-b2222222', 'u-sana-clone-c3333333'];
+    for (const [i, id] of ids.entries()) identityClonesFixture.rows().push({ id, from: i === 0 ? 'u-lena' : 'u-sana', label: 'isolation',
+      displayName: i === 0 ? 'Lena' : 'Sana', email: null, personId: null, grants: { social: ['participant'] }, epoch: 0,
+      createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() });
+    const channel = `social:dm:${ids.slice(0, 2).sort().join(':')}`;
+    const before = structuredClone(socialChannelMessagesFixture.rows());
+    const clients = await Promise.all([...ids, 'u-lena', 'u-sana'].map(id => connectAs(id, id === ids[0] ? 'Lena' : 'Sana', 'social')));
+    const [sender, recipient, outsider] = clients;
+    try {
+      await settle();
+      const prior = clients.map(c => newItems(c).length);
+      sender!.ws.send(JSON.stringify({ service: 'chat', action: 'join', channel }));
+      await until(() => sender!.frames.some(f => f.type === 'chat' && f['action'] === 'joined' && f['channel'] === channel));
+      sender!.ws.send(JSON.stringify({ service: 'chat', action: 'send', channel, message: 'Clone isolation proof' }));
+      await until(() => newItems(recipient!).length === prior[1]! + 1);
+      expect(newItems(recipient!).at(-1)).toMatchObject({ title: 'Lena sent you a message', payload: { actorId: ids[0], channel, tenant: 'social' } });
+      outsider!.ws.send(JSON.stringify({ service: 'chat', action: 'history', channel, limit: 10 }));
+      await until(() => outsider!.frames.some(f => f.type === 'error' && f['channel'] === channel));
+      await settle();
+      for (const i of [0, 2, 3, 4]) expect(newItems(clients[i]!).length).toBe(prior[i]);
+      expect(outsider!.frames.filter(f => f.type === 'chat' && f['channel'] === channel)).toEqual([]);
+      expect(await socialChat().chatStore.listMessages(channel, 10)).toHaveLength(1);
+      expect(socialChannelMessagesFixture.rows().filter(row => row.channel !== channel)).toEqual(before);
+    } finally {
+      for (const client of clients) client.ws.close();
+      for (const id of ids) removeClone(id);
+    }
+    expect(await socialChat().chatStore.listMessages(channel, 10)).toEqual([]);
+    expect(socialChannelMessagesFixture.rows()).toEqual(before);
   });
 });

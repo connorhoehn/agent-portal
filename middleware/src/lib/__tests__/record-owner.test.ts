@@ -36,3 +36,13 @@ it('the chat sender is the persona, with the context\'s name, avatar and org', (
     .toEqual({ userId: 'u-theo', displayName: 'Theo Chang', avatarUrl: '/a.jpg' });
   expect(recordOwnerSender({ displayName: 'nobody' })).toBeNull();
 });
+
+
+it('keeps the authenticated clone as sender in its own disposable DM, ignoring forged sender fields', () => {
+  const id = 'u-vera-clone-1'; clone(id, 'u-vera');
+  const ctx = { userId: id, displayName: 'Vera', org: 'social' };
+  expect(recordOwnerSender(ctx, { channel: `social:dm:${id}:u-theo-clone-2`, userId: 'u-theo', metadata: { userId: 'u-theo' } }))
+    .toEqual({ userId: id, displayName: 'Vera', org: 'social' });
+  expect(recordOwnerSender(ctx, { channel: 'social:dm:u-theo-clone-2:u-vera-clone-other' })?.userId).toBe('u-vera');
+  expect(recordOwnerSender(ctx, { channel: 'social:ch:general' })?.userId).toBe('u-vera');
+});

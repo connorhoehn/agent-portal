@@ -47,6 +47,19 @@ export const DEFAULT_CLONE_TTL_MS = 2 * 60 * 60_000;
 export const MAX_CLONE_TTL_MS = 12 * 60 * 60_000;
 export const MAX_CLONES = 200;
 
+const cleanupListeners = new Set<(id: string) => void>();
+/** Disposable stores can remove this exact clone's state on deletion or expiry. */
+export function onCloneRemoved(listener: (id: string) => void): () => void {
+  cleanupListeners.add(listener);
+  return () => { cleanupListeners.delete(listener); };
+}
+function cleanup(id: string): void {
+  removeCloneDmFixtures(id);
+  for (const listener of cleanupListeners) {
+    try { listener(id); } catch (error) { console.warn('[identity-clones] cleanup failed', error); }
+  }
+}
+
 /** Live clones; expired rows are dropped on the way. */
 export function liveClones(): IdentityCloneRow[] {
   const rows = identityClonesFixture.rows();
@@ -54,7 +67,7 @@ export function liveClones(): IdentityCloneRow[] {
   for (let i = rows.length - 1; i >= 0; i--) {
     if (Date.parse(rows[i]!.expiresAt) <= now) {
       const [expired] = rows.splice(i, 1);
-      removeCloneDmFixtures(expired!.id);
+      cleanup(expired!.id);
     }
   }
   return rows;
@@ -69,6 +82,6 @@ export function removeClone(id: string): boolean {
   const at = rows.findIndex((c) => c.id === id);
   if (at < 0) return false;
   rows.splice(at, 1);
-  removeCloneDmFixtures(id);
+  cleanup(id);
   return true;
 }

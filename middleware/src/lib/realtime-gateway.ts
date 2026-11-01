@@ -157,7 +157,7 @@ function revalidatedRecipientFilter(inner: ClientMessageFilter): ClientMessageFi
   };
 }
 
-let status: { gateway: 'on' | 'off'; store: RealtimeGatewayStore | null } = { gateway: 'off', store: null };
+let status: { gateway: 'on' | 'off'; store: RealtimeGatewayStore | null; chatStore?: 'memory' | 'dynamo' } = { gateway: 'off', store: null };
 let ready: (() => boolean) | null = null;
 
 /** For /api/health. */
@@ -346,7 +346,8 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
       withHuddleChat(withAssessmentPageReferences(withDmPageReferences(chat({ ...chatOpts, chatStore: chatOpts.chatStore,
         membershipStore: huddleMembershipStore(chatOpts.membershipStore, () => chatRuntime),
         // The sender is the record owner: an identity clone chats as its
-        // persona (membership, history, authorship), its socket epoch its own.
+        // persona for shared records, but keeps its own identity in a DM
+        // whose members explicitly name the clone; its socket epoch is its own.
         resolveSender: recordOwnerSender,
         // Page discussions keep a cursor per current reader, with no member
         // list, and the service makes their "new messages" items
@@ -439,7 +440,7 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     await handle.services.chat?.appendServerMessage(message.channel, message);
   });
   if (inbox.memory) void seedMockNotifications().catch(() => undefined);
-  status = { gateway: 'on', store };
+  status = { gateway: 'on', store, chatStore: chatBackend.kind };
   ready = clusterRouter ? () => clusterRouter.isReady() : null;
   const where = redis ? (redisUrl ? `redis (${redisUrl.replace(/\/\/[^@/]*@/, '//***@')})` : 'redis (provided connection)') : 'memory';
   console.log(`[realtime-gateway] serving ${REALTIME_GATEWAY_PATH} (chat, presence, cursor, calls, meeting, notifications, work-graph); call state + inbox: ${where}; chat store: ${chatBackend.kind}`);

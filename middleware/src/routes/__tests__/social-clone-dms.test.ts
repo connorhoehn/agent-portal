@@ -101,3 +101,41 @@ it('a clone-shaped id with no live row gets nothing copied', async () => {
   expect(res.body.conversations).toEqual([]);
   expect(await chat.chatStore.listMessages('social:dm:alice-clone-gone:bob', 5)).toEqual([]);
 });
+
+it('a clone receipt advances only its own copied channel and leaves both real people and another clone unchanged', async () => {
+  cloneRow('alice-clone-1', 'alice'); cloneRow('alice-clone-2', 'alice');
+  await get('alice-clone-1'); await get('alice-clone-2');
+  const own = 'social:dm:alice-clone-1:bob';
+  const other = 'social:dm:alice-clone-2:bob';
+  const original = 'social:dm:alice:bob';
+  const beforeAt = '2026-10-03T11:00:00.000Z';
+  for (const [channel, userId] of [[original, 'alice'], [original, 'bob'], [other, 'alice-clone-2']]) {
+    await chat.readReceiptStore.advance({ channel, userId, readAt: beforeAt, updatedAt: beforeAt });
+  }
+  const originalBefore = await chat.readReceiptStore.listReceipts(original);
+  const otherBefore = await chat.readReceiptStore.listReceipts(other);
+  const messagesBefore = await chat.chatStore.listMessages(original, 100);
+  const peopleBefore = [(await get('alice')).body.conversations, (await get('bob')).body.conversations];
+
+  const read = await request(app).post('/api/social/dms/read').set('x-user', 'alice-clone-1').send({ channel: own });
+  expect(read.status).toBe(200);
+  expect(await chat.readReceiptStore.listReceipts(own)).toEqual([
+    expect.objectContaining({ channel: own, userId: 'alice-clone-1', readAt: read.body.readAt }),
+  ]);
+  expect((await get('alice-clone-1')).body.conversations[0].unreadCount).toBe(0);
+  expect(await chat.readReceiptStore.listReceipts(original)).toEqual(originalBefore);
+  expect(await chat.readReceiptStore.listReceipts(other)).toEqual(otherBefore);
+  expect(await chat.chatStore.listMessages(original, 100)).toEqual(messagesBefore);
+  expect([(await get('alice')).body.conversations, (await get('bob')).body.conversations]).toEqual(peopleBefore);
+});
+
+it('a clone cannot mark the persona or another clone conversation read', async () => {
+  cloneRow('alice-clone-1', 'alice'); cloneRow('alice-clone-2', 'alice');
+  await get('alice-clone-1'); await get('alice-clone-2');
+  for (const channel of ['social:dm:alice:bob', 'social:dm:alice-clone-2:bob']) {
+    const before = await chat.readReceiptStore.listReceipts(channel);
+    const read = await request(app).post('/api/social/dms/read').set('x-user', 'alice-clone-1').send({ channel });
+    expect(read.status).toBe(404);
+    expect(await chat.readReceiptStore.listReceipts(channel)).toEqual(before);
+  }
+});

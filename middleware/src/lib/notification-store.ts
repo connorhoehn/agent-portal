@@ -19,6 +19,12 @@ import { notificationRedisClient, type NotificationRedisLike, type GatewayRedisS
 import { holdsGrant, shapeNotification } from './social-notify.js';
 import { notificationsFixture } from '../mock/notifications.js';
 import { mockRestartMirror } from '../mock/restart-state.js';
+import { onCloneRemoved } from '../mock/identity-clones.js';
+
+// Explicitly own the library's key prefixes so mock cleanup never guesses at
+// its private state or touches a real Redis inbox.
+const LIST_PREFIX = 'notif:list:';
+const READ_PREFIX = 'notif:read:';
 
 type Entry = { score: number; value: string };
 
@@ -26,6 +32,7 @@ type Entry = { score: number; value: string };
 export class MemoryNotificationRedis implements NotificationRedisLike {
   private readonly zsets = new Map<string, Entry[]>();
   private readonly hashes = new Map<string, Map<string, string>>();
+  private readonly retiredKeys = new Set<string>();
 
   private sorted(key: string): Entry[] {
     return this.zsets.get(key) ?? [];
@@ -41,6 +48,7 @@ export class MemoryNotificationRedis implements NotificationRedisLike {
   }
 
   async zAdd(key: string, member: Entry): Promise<number> {
+    if (this.retiredKeys.has(key)) return 0;
     const list = this.sorted(key).filter((m) => m.value !== member.value);
     const added = list.length === this.sorted(key).length ? 1 : 0;
     list.push({ score: member.score, value: member.value });
@@ -69,6 +77,7 @@ export class MemoryNotificationRedis implements NotificationRedisLike {
   }
 
   async hSet(key: string, field: string, value: string): Promise<number> {
+    if (this.retiredKeys.has(key)) return 0;
     const h = this.hashes.get(key) ?? new Map<string, string>();
     const added = h.has(field) ? 0 : 1;
     h.set(field, value);
@@ -99,6 +108,15 @@ export class MemoryNotificationRedis implements NotificationRedisLike {
     this.zsets.clear();
     this.hashes.clear();
   }
+
+  /** Synchronous, exact-user cleanup; an in-flight append/read cannot recreate it. */
+  removeClone(userId: string): void {
+    for (const key of [LIST_PREFIX + userId, READ_PREFIX + userId]) {
+      this.retiredKeys.add(key);
+      this.zsets.delete(key);
+      this.hashes.delete(key);
+    }
+  }
 }
 
 const logger = {
@@ -109,11 +127,12 @@ const logger = {
 };
 
 let active: { store: RedisNotificationStore; memory: MemoryNotificationRedis | null; restoredRestart?: boolean } | null = null;
+onCloneRemoved(id => { if (config.mock?.aurora) active?.memory?.removeClone(id); });
 
 /** Build the inbox the gateway's `notifications({ store })` feature persists into. */
 export function createGatewayNotificationStore(redis: GatewayRedisStore | null): { store: RedisNotificationStore; memory: MemoryNotificationRedis | null } {
   const memory = redis ? null : new MemoryNotificationRedis();
-  const store = new RedisNotificationStore({ redisClient: redis ? notificationRedisClient(redis) : memory, logger });
+  const store = new RedisNotificationStore({ redisClient: redis ? notificationRedisClient(redis) : memory, logger, listKeyPrefix: LIST_PREFIX, readKeyPrefix: READ_PREFIX });
   const snapshot = config.mock.aurora ? mockRestartMirror('notifications') : undefined;
   if (memory && snapshot) memory.restore(snapshot);
   active = { store, memory, restoredRestart: !!(memory && snapshot) };

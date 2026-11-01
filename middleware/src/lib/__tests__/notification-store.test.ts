@@ -13,7 +13,8 @@ import {
   releaseGatewayNotificationStore, seedMockNotifications,
 } from '../notification-store.js';
 import { notificationsFixture } from '../../mock/notifications.js';
-import { fixtureRegistry } from '../../mock/core/index.js';
+import { fixtureRegistry, freezeClock, unfreezeClock } from '../../mock/core/index.js';
+import { identityClonesFixture, removeClone, liveClones } from '../../mock/identity-clones.js';
 
 const logger = { info: () => undefined, warn: () => undefined, error: () => undefined, debug: () => undefined };
 
@@ -75,5 +76,30 @@ describe('the dev:mock seed', () => {
   it('never seeds a Redis-backed inbox', async () => {
     releaseGatewayNotificationStore();
     expect(await seedMockNotifications()).toBe(0);
+  });
+});
+
+
+describe('disposable clone inboxes', () => {
+  afterEach(() => { identityClonesFixture.reset(); releaseGatewayNotificationStore(); unfreezeClock(); });
+  it.each(['delete', 'expire'])('%s removes only that clone inbox and cannot be repopulated by a late write', async how => {
+    freezeClock('2026-10-31T12:00:00.000Z');
+    const clone = 'u-sana-clone-1234abcd';
+    identityClonesFixture.rows().push({ id: clone, from: 'u-sana', label: 'test', displayName: 'Sana', email: null, personId: null,
+      grants: { social: ['participant'] }, epoch: 0, createdAt: '2026-10-31T11:00:00Z', expiresAt: '2026-10-31T13:00:00Z' });
+    const { store, memory } = createGatewayNotificationStore(null);
+    const users = [clone, 'u-sana', 'u-lena', clone + '-other'];
+    for (const user of users) {
+      await store.append(user, { id: user, type: 'message', title: 'Keep', timestamp: '2026-10-31T12:00:00Z' });
+      await store.markRead(user, user);
+    }
+    const original = await Promise.all(users.slice(1).map(user => store.list(user)));
+    if (how === 'delete') expect(removeClone(clone)).toBe(true);
+    else { freezeClock('2026-10-31T13:00:00.000Z'); expect(liveClones()).toEqual([]); }
+    await store.append(clone, { id: 'late', type: 'message', title: 'Late', timestamp: '2026-10-31T13:00:00Z' });
+    await store.markRead(clone, 'late');
+    expect(await store.list(clone)).toEqual([]);
+    expect(await memory!.hGetAll('notif:read:' + clone)).toEqual({});
+    expect(await Promise.all(users.slice(1).map(user => store.list(user)))).toEqual(original);
   });
 });

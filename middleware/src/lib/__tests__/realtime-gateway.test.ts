@@ -128,7 +128,7 @@ describe('handshake', () => {
       expect(r.ws.protocol).toBe('bearer-token-v1');
       await until(() => r.frames.some((f) => f.type === 'session'));
       expect(r.frames.find((f) => f.type === 'session')).toMatchObject({ type: 'session', status: 'connected', clientId: expect.any(String) });
-      expect(realtimeGatewayStatus()).toEqual({ gateway: 'on', store: 'memory' });
+      expect(realtimeGatewayStatus()).toEqual({ gateway: 'on', store: 'memory', chatStore: 'memory' });
     } finally { r.ws.close(); }
   });
 

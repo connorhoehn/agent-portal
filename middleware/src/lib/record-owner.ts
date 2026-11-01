@@ -18,6 +18,7 @@
 // identity function.
 
 import { findClone } from '../mock/identity-clones.js';
+import { parseDmLobby } from '@connorhoehn/realtime-modules/call';
 
 /** The user id records are keyed by for `userId`: a live clone's persona, else `userId` itself. */
 export function recordUserId(userId: string): string;
@@ -46,15 +47,21 @@ export interface RecordOwnerSender { userId: string; displayName?: string; avata
  * context itself — and so the live principal's epoch check — keeps the
  * clone's id.
  */
-export function recordOwnerSender(ctx: Record<string, unknown>): RecordOwnerSender | null {
+export function recordOwnerSender(ctx: Record<string, unknown>, frame: Record<string, unknown> = {}): RecordOwnerSender | null {
   const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
   const userId = str(ctx['userId']);
   if (!userId) return null;
+  // A disposable DM is owned by the clone itself. The untrusted channel
+  // only chooses between the context's own identity and its known persona;
+  // it never supplies a different sender or bypasses channel authorization.
+  const channel = str(frame['channel']);
+  const dm = channel ? parseDmLobby(channel, { prefix: `${channel.split(':', 1)[0]}:` }) : null;
+  const ownsDm = dm?.kind === 'dm' && dm.members.includes(userId);
   const displayName = str(ctx['displayName']) ?? str(ctx['name']);
   const avatarUrl = str(ctx['avatarUrl']) ?? str(ctx['picture']);
   const org = str(ctx['org']);
   return {
-    userId: recordUserId(userId),
+    userId: ownsDm ? userId : recordUserId(userId),
     ...(displayName ? { displayName } : {}),
     ...(avatarUrl ? { avatarUrl } : {}),
     ...(org ? { org } : {}),
