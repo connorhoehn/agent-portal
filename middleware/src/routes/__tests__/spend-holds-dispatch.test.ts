@@ -80,6 +80,13 @@ function setAllocation(id: string, allocated: number): void {
   row.allocated = allocated;
 }
 
+/** Leave this much for discretionary dispatches after the maintenance reserve. */
+async function setDiscretionaryRoom(id: string, room: number): Promise<void> {
+  const budget = (await getBudget(id))!;
+  const maintenance = Math.max(budget.reserveUsd ?? 0, budget.floorSpentUsd ?? 0);
+  setAllocation(id, maintenance + (budget.discretionarySpentUsd ?? budget.spentThisPeriodUsd) + room);
+}
+
 /** The p75 a dispatch of ITEM_A holds, read off the hold one real dispatch writes. */
 async function heldForOneDispatch(): Promise<number> {
   resetWorld();
@@ -105,12 +112,12 @@ describe('two concurrent dispatches against money that fits one', () => {
   it('allocation: exactly one 202, the other 409 gate allocation naming the held money', async () => {
     const p75 = await heldForOneDispatch();
     resetWorld();
-    const budget = (await getBudget(OBS))!;
     // Room for one p75 and a half — never two.
-    setAllocation(OBS, budget.spentThisPeriodUsd + p75 * 1.5);
+    await setDiscretionaryRoom(OBS, p75 * 1.5);
 
     const [a, b] = await inFlight(() => Promise.all([dispatch(vera(), ITEM_A), dispatch(vera(), ITEM_B)]));
     const statuses = [a.status, b.status].sort();
+    if (statuses.join(',') !== '202,409') throw new Error(JSON.stringify({ a: a.body, b: b.body }));
     expect(statuses).toEqual([202, 409]);
     const refused = a.status === 409 ? a : b;
     expect(refused.body).toMatchObject({ gate: 'allocation', confirmFlag: 'confirmOverAllocation' });
@@ -137,9 +144,12 @@ describe('two concurrent dispatches against money that fits one', () => {
   it('a confirmed-over dispatch still takes a hold, so the next caller sees it', async () => {
     const p75 = await heldForOneDispatch();
     resetWorld();
-    const budget = (await getBudget(OBS))!;
-    setAllocation(OBS, budget.spentThisPeriodUsd + p75 * 0.5);
+    await setDiscretionaryRoom(OBS, p75 * 0.5);
+    // This exercises confirmation of the soft allocation brake. A separate
+    // hard ceiling must leave room: no confirmation can bypass that ceiling.
+    initiativeBudgets.rows().find((row) => row.id === OBS)!.hardCapUsd = 1_000;
     const res = await inFlight(() => dispatch(vera(), ITEM_A, { confirmOverAllocation: true }));
+    if (res.status !== 202) throw new Error(JSON.stringify(res.body));
     expect(res.status).toBe(202);
     expect(mockHolds().filter((h) => h.status === 'held')).toEqual([
       expect.objectContaining({ initiativeId: OBS, basis: 'confirmed_over', source: 'bot_run', sourceId: res.body.run.id }),
