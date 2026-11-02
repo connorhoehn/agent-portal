@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 // What GET /api/today answers in this inert fixture: one item per category, so
 // rotation, priority and the settings checkboxes have five to work with.
 const TODAY = [
-  { category: 'review', label: 'Needs review', summary: '1 agent question waiting for an answer', detail: 'Auth Migration: which customer tenant goes first after the rehearsals?' },
+  { category: 'review', label: 'Needs review', summary: '1 agent question waiting for an answer', detail: 'Auth Migration: which customer tenant goes first after the rehearsals?', action: { label: 'Open question', href: '/iq/work?consult=con-mock-1' } },
   { category: 'agenda', label: 'Agenda', summary: 'Initiative review at 2 PM', detail: 'The review covers the cutover order.' },
   { category: 'goals', label: 'Goals', summary: 'Sprint 42 · 3 of 5 stories done', detail: 'Session hardening is the next story.' },
   { category: 'automation', label: 'Automation', summary: '8 agent computers · 3 running · 1 waiting', detail: '3 computers working, 1 waiting for a person and 4 idle.' },
@@ -15,7 +15,7 @@ async function mount(page: Page, query = '') {
   page.on('pageerror', error => errors.push(error.message));
   for (const [path, names] of [
     ['src/lib/conversationCall.tsx', 'useCallHost, useCallBlockPlacement, useCallMediaPanel, callCounts, callDrawn'],
-    ['src/components/shell/HuddleChat.tsx', 'useHuddleChatToggle, HuddleReactionBar'],
+    ['src/components/shell/HuddleChat.tsx', 'useHuddleChatToggle, useHuddleChat, useHuddleReact, HuddleReactionBar'],
     ['src/components/shell/ShellCallHost.tsx', 'ShellCallMedia'],
     ['src/components/shell/EmbeddedSocial.tsx', 'EmbeddedSocialEntry'],
   ]) await page.route(`**/${path}*`, route => route.fulfill({ contentType: 'text/javascript', body: `export { ${names} } from '/e2e/fixtures/footer-today.tsx';` }));
@@ -56,7 +56,7 @@ test('today is visible in spare footer space with native floating icons, anchore
   await expect(detail).toContainText(TODAY[0]!.detail); await expect(detail).not.toContainText('Sample');
   expect((await detail.boundingBox())!.y + (await detail.boundingBox())!.height).toBeLessThan((await summary(page).boundingBox())!.y);
   await page.screenshot({ path: test.info().outputPath('today-demo-details.png') });
-  await detail.getByRole('button', { name: 'Open workspace' }).click(); await expect(page.getByTestId('today-location')).toHaveText('/iq/projects');
+  await detail.getByRole('button', { name: 'Open question' }).click(); await expect(page.getByTestId('today-location')).toHaveText('/iq/work');
   expect(fixture.errors).toEqual([]); expect(fixture.mutations).toEqual([]);
 });
 

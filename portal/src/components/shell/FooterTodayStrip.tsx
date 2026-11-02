@@ -4,7 +4,6 @@ import { ActivityTicker, Button, Inline, T, ChartIcon, ChecklistIcon, ChevronIco
 import { callDrawn, useCallHost } from '../../lib/conversationCall';
 import { useSession } from '../../lib/auth';
 import { useFetch } from '../../hooks/useFetch';
-import { tenantHome } from '../../lib/tenantHome';
 import { todayCategories, todayItemsFromWire, todayPreferencesKey } from './footerTodayModel';
 type Placement = 'header' | 'footer';
 const PLACEMENT_KEY = 'work.today-placement.v1';
@@ -50,5 +49,8 @@ export function FooterTodayStrip({ activeCall = false }: { activeCall?: boolean 
   if (items.length === 0) return null;
   return <ActivityTicker placement={dock?.placement} onPlacementChange={dock?.setPlacement} onMoveStart={() => dock?.setMoving(true)} onMoveEnd={() => dock?.setMoving(false)} items={items} categories={categories} activeCall={callActive} preferencesKey={preferencesKey} data-testid="footer-today"
     preferencesHint={preferencesKey ? 'Saved for your identity in this workspace on this browser.' : 'Preferences are not saved until your identity is ready.'}
-    renderActions={(_, close) => <Button variant="ghost" size="sm" disabled={!session?.tenant} onClick={() => { close(); if (session?.tenant) navigate(tenantHome(session.tenant)); }}>Open workspace<ChevronIcon dir="right" size={14} /></Button>} />;
+    renderActions={(item, close) => {
+      const action = items.find(candidate => candidate.category === item?.category)?.action;
+      return action ? <Button variant="secondary" size="sm" onClick={() => { close(); navigate(action.href); }}>{action.label}<ChevronIcon dir="right" size={14} /></Button> : null;
+    }} />;
 }

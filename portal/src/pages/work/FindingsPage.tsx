@@ -26,9 +26,10 @@ import {
   Stack,
   Toolbar,
   ToolbarGroup,
-  ToolbarLabel,
+  Tabs,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useUrlState } from '../../lib/useUrlState';
 import { useFetch } from '../../hooks/useFetch';
 import { useWorkEvents } from '../../hooks/useWorkEvents';
 import { useCapabilities } from '../../lib/capabilities';
@@ -84,6 +85,7 @@ export default function FindingsPage() {
   );
 
   const [findingStatus, setFindingStatus] = useState<FindingStatus>('open');
+  const [view, setView] = useUrlState<string>('view', raw => raw === 'failed' ? 'failed' : 'findings', value => value === 'findings' ? null : value);
 
   const {
     data: findingsData, isLoading: findingsLoading, error: findingsError, degraded: findingsDegraded,
@@ -280,7 +282,7 @@ export default function FindingsPage() {
         <Link
           to={`/iq/work/${j.id}`}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
-          className="text-xs font-medium text-text-primary no-underline hover:text-primary truncate"
+          className="text-sm font-medium text-text-primary no-underline hover:text-primary truncate"
           title={j.error ? `${j.title} — ${j.error}` : j.title}
         >
           {j.title}
@@ -309,12 +311,11 @@ export default function FindingsPage() {
         ? <Button size="sm" variant="secondary" onClick={() => void runSweeps()}>Run sweeps now</Button>
         : undefined}
     >
-      {/* ── Dead-letter queue first: failed work is the lane a person has to
-             clear, and it has exactly one verb. ── */}
-      <Inline align="baseline" gap="sm" className="mb-2">
-        <T size="sm" className="font-semibold text-text-primary">Dead-letter queue</T>
-        <T size="xs" className="text-text-tertiary">jobs that failed or were cancelled — requeue puts a clone back on the queue</T>
-      </Inline>
+      <Tabs badgeStyle="plain" aria-label="Finding views" value={view} onValueChange={setView} items={[
+        { id: 'findings', label: 'Findings' },
+        { id: 'failed', label: 'Failed runs', badge: deadLettered.length || undefined },
+      ]} />
+      {view === 'failed' && <PageSection size="sm" title="Failed runs" description="Failed or cancelled runs. Requeue creates a new attempt.">
       <Stack gap="none" className="mb-6">
         <DataTable<Job>
           data={deadLettered}
@@ -331,22 +332,20 @@ export default function FindingsPage() {
             />
           ) : undefined}
           pageSize={10}
-          emptyMessage="Nothing dead-lettered. Failed jobs land here with their error and a requeue action."
+          emptyMessage="No failed or cancelled runs."
           loading={jobsLoadingFirst}
         />
       </Stack>
 
+      </PageSection>}
+      {view === 'findings' && (
       <Stack gap="sm" className="min-w-0">
         {/* ── Sweep findings, grouped. The group header is the unit of
                attention; the rows are the drill-in. ── */}
         <Toolbar wrap aria-label="Finding filters">
           <ToolbarGroup aria-label="Status">
-            <ToolbarLabel>Findings</ToolbarLabel>
-            {(['open', 'promoted', 'resolved', 'dismissed'] as const).map((st) => (
-              <FilterChip key={st} active={findingStatus === st} onClick={() => setFindingStatus(st)} size="sm">
-                {st}
-              </FilterChip>
-            ))}
+            <Tabs aria-label="Finding status" variant="segmented" value={findingStatus} onValueChange={value => setFindingStatus(value as FindingStatus)}
+              items={(['open', 'promoted', 'resolved', 'dismissed'] as const).map(status => ({ id: status, label: status[0]!.toUpperCase() + status.slice(1) }))} />
           </ToolbarGroup>
           <ToolbarGroup aria-label="Search">
             <SearchInput size="sm" value={searchParams.get('q') ?? ''} onChange={setFindingQuery} placeholder="Search findings…" aria-label="Search findings" className="w-56 max-w-full" />
@@ -383,7 +382,7 @@ export default function FindingsPage() {
         )}
 
         {!findingsFailure && (
-        <Card padding="none" className="overflow-hidden">
+        <Card padding="none" className="overflow-hidden @container">
           {findingsLoadingFirst ? (
             // Findings render as grouped, custom rows (CollapsibleSection +
             // hand-rolled row markup below), not a DataTable — there's no
@@ -411,7 +410,7 @@ export default function FindingsPage() {
               <CollapsibleSection
                 key={sweep}
                 className="rounded-none border-x-0 border-t-0 last:border-b-0"
-                defaultOpen={items.some((f) => f.id === findingParam)}
+                defaultOpen
                 badge={<SeverityChip severity={worst} size="md" />}
                 title={
                   <Inline align="center" gap="sm">
@@ -425,7 +424,7 @@ export default function FindingsPage() {
                 {/* Bounded to ten per press so the cost of a click stays
                     predictable; the toast says how many remain. */}
                 {canManageFindings && findingStatus === 'open' && items.some((f) => f.entityType === 'document') && (
-                  <Stack gap="none" align="start" className="px-3.5 pt-2.5 pl-10">
+                  <Stack gap="none" align="start" className="px-4 py-3">
                     <Button
                       size="sm"
                       variant="primary"
@@ -442,17 +441,16 @@ export default function FindingsPage() {
                     id={`finding-${f.id}`}
                     align="center"
                     gap="sm"
-                    className={`px-3.5 py-2.5 pl-10 border-t border-border min-w-0 ${
+                    className={`px-4 py-3 border-t border-border min-w-0 flex-col items-stretch @3xl:flex-row @3xl:items-center ${
                       f.id === findingParam ? 'bg-primary/10 ring-1 ring-inset ring-primary' : 'bg-surface-hover/30'
                     }`}
                   >
-                    <SeverityChip severity={f.severity} />
-                    <Stack gap="none" className="flex-1 min-w-0">
-                      <T size="xs" className="text-text-primary truncate" title={f.title}>{f.title}</T>
-                      {f.detail && <T size="xs" className="text-text-tertiary truncate" title={f.detail}>{f.detail}</T>}
+                    <Stack gap="xs" className="flex-1 min-w-0">
+                      <Inline gap="sm" align="start"><SeverityChip severity={f.severity} /><T size="sm" weight="medium" tone="primary" wrap>{f.title}</T></Inline>
+                      {f.detail && <T size="xs" tone="secondary" wrap>{f.detail}</T>}
                     </Stack>
                     {f.jobId ? (
-                      <Link to={`/iq/work/${f.jobId}`} className="text-xs text-primary no-underline hover:underline shrink-0">
+                      <Link to={`/iq/work/${f.jobId}`} className="text-sm text-primary no-underline hover:underline shrink-0">
                         see the work →
                       </Link>
                     ) : canManageFindings && findingStatus === 'open' ? (
@@ -488,8 +486,8 @@ export default function FindingsPage() {
           })}
         </Card>
         )}
-        <CollectionCommandHost adapter={findingsAdapter} />
-      </Stack>
+      </Stack>)}
+      <CollectionCommandHost adapter={findingsAdapter} />
     </PageSection>
   );
 }

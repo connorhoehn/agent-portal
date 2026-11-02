@@ -15,18 +15,17 @@ import {
   Avatar,
   Button,
   Chip,
-  Divider,
   Inline,
   InlineAlert,
   LoadingState,
   MetaLine,
-  RailLayout,
   RailSection,
   ReviewThread,
   SectionLabel,
   SignoffPanel,
   Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
+import { SidePane, useSidePaneHost } from '@connorhoehnslalom/ui-components';
 import { useFetch } from '../../hooks/useFetch';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -49,6 +48,7 @@ export default function DesignThreadPage() {
   const { can, ready } = useCapabilities();
   const canSteer = ready && can('DispatchAgentRun');
   const [busy, setBusy] = useState(false);
+  const infoPane = useSidePaneHost();
 
   const { data: thread, isLoading, error, refresh } =
     useFetch<DesignThread>(id ? `/api/designs/${encodeURIComponent(id)}` : null, 20_000);
@@ -114,14 +114,30 @@ export default function DesignThreadPage() {
 
   const rail = (
     <>
-      <RailSection title="Initiative">
+      <RailSection variant="plain" title="Initiative">
         <Link to={`/iq/projects/${encodeURIComponent(thread.orgProjectId)}`} className="text-primary no-underline hover:underline">
           {thread.orgProjectName}
         </Link>
         <T as="div" className="text-text-tertiary" wrap>This decision steers the initiative’s design — approved, it binds the work built on it.</T>
       </RailSection>
 
-      <RailSection title="People">
+      <RailSection variant="plain" title="Initiatives affected">
+        <Stack gap="xs">
+          {thread.affected.map((a) => (
+            <Stack gap="none" key={a.orgProjectId} className="min-w-0">
+              <Link to={`/iq/projects/${encodeURIComponent(a.orgProjectId)}`} className="text-xs font-medium text-primary no-underline hover:underline">
+                {a.orgProjectName}
+              </Link>
+              <T size="xs" as="div" className="text-text-tertiary">{a.impact}</T>
+            </Stack>
+          ))}
+          {thread.affected.length === 0 && (
+            <T size="xs" className="text-text-tertiary">only its home initiative</T>
+          )}
+        </Stack>
+      </RailSection>
+
+      <RailSection variant="plain" title="People">
         {owner && (
           <Inline align="center" gap="xs">
             <Avatar name={owner} src={ownerPhoto} size={24} />
@@ -150,7 +166,7 @@ export default function DesignThreadPage() {
       </RailSection>
 
       {(thread.dependsOn.length > 0 || thread.gates.length > 0) && (
-        <RailSection title="Gates">
+        <RailSection variant="plain" title="Gates">
           {thread.dependsOn.length > 0 && (
             <Stack gap="xs">
               <SectionLabel as="div">Gated by</SectionLabel>
@@ -172,7 +188,7 @@ export default function DesignThreadPage() {
         </RailSection>
       )}
 
-      <RailSection title="Record">
+      <RailSection variant="plain" title="Record">
         <T>{thread.postCount} posts · {thread.openQuestions} open question{thread.openQuestions === 1 ? '' : 's'}</T>
         <T>opened {relativeTime(thread.createdAt)} · updated {relativeTime(thread.updatedAt)}</T>
         {thread.kbSynced
@@ -184,7 +200,7 @@ export default function DesignThreadPage() {
 
   return (
     <Stack gap="none" data-testid="design-thread">
-      <Stack gap="md">
+      <Stack gap="md" className="max-w-4xl">
         <Inline align="center" gap="sm">
           <Chip tone={STATUS_TONE[thread.status]} size="sm" dot="static">
             {STATUS_LABEL[thread.status]}
@@ -197,43 +213,14 @@ export default function DesignThreadPage() {
               thread.openQuestions > 0 ? `${thread.openQuestions} open question${thread.openQuestions === 1 ? '' : 's'}` : null,
             ]}
           />
+          <Button size="sm" variant="secondary" className="ml-auto" aria-expanded={infoPane.shown && !infoPane.folded}
+            onClick={() => infoPane.shown && !infoPane.folded ? infoPane.collapse() : infoPane.reveal()}>Design details</Button>
         </Inline>
 
-        {/* ── The summary band — what the thread decides, where it stands,
-               and its blast radius, BEFORE a single post is read. ── */}
-        <Stack gap="md" className="border-y border-border py-4 @container">
-          <Stack gap="md" className="@3xl:flex-row">
-            <Stack gap="none" className="min-w-0 flex-[2]">
-              <SectionLabel as="div" className="mb-1.5">Summary</SectionLabel>
-              <T size="sm" as="div" className="m-0 leading-relaxed text-text-secondary" wrap>{thread.summary}</T>
-              <Inline align="start" gap="sm" className="mt-2.5">
-                <T size="xs" className="font-medium text-text-primary">{nextStep(thread, undefined, canSteer)}</T>
-              </Inline>
-            </Stack>
-            <Stack gap="none" className="min-w-0 @3xl:hidden">
-              {/* Stacked below lg, the two halves of the band have no boundary
-                  at all — the border-l only exists side by side. */}
-              <Divider spacing="sm" />
-            </Stack>
-            <Stack gap="none" className="min-w-0 flex-1 @3xl:border-l @3xl:border-border @3xl:pl-4">
-              <SectionLabel as="div" className="mb-1.5">
-                Initiatives affected
-              </SectionLabel>
-              <Stack gap="xs">
-                {thread.affected.map((a) => (
-                  <Stack gap="none" key={a.orgProjectId} className="min-w-0">
-                    <Link to={`/iq/projects/${encodeURIComponent(a.orgProjectId)}`} className="text-xs font-medium text-primary no-underline hover:underline">
-                      {a.orgProjectName}
-                    </Link>
-                    <T size="xs" as="div" className="text-text-tertiary">{a.impact}</T>
-                  </Stack>
-                ))}
-                {thread.affected.length === 0 && (
-                  <T size="xs" className="text-text-tertiary">only its home initiative</T>
-                )}
-              </Stack>
-            </Stack>
-          </Stack>
+        <Stack gap="sm" className="border-y border-border py-4">
+          <SectionLabel as="div">Summary</SectionLabel>
+          <T size="sm" as="div" className="m-0 leading-relaxed text-text-secondary" wrap>{thread.summary}</T>
+          <T size="xs" weight="medium" tone="primary" wrap>{nextStep(thread, undefined, canSteer)}</T>
         </Stack>
 
         {thread.status === 'approved' && (
@@ -243,44 +230,45 @@ export default function DesignThreadPage() {
           </InlineAlert>
         )}
 
-        <RailLayout rail={rail} variant="plain">
-          <Stack gap="md">
-            <ReviewThread
-              variant="inline"
-              posts={thread.posts.map((p) => ({
-                id: p.id,
-                authorKind: p.authorKind,
-                authorName: p.authorName,
-                avatarUrl: p.authorKind === 'human' ? photoFor(p.authorName) : undefined,
-                kind: p.kind,
-                body: p.body,
-                resolved: p.resolvedBy != null,
-                artifact: p.artifact ? { name: p.artifact.name, type: p.artifact.type, url: p.artifact.url } : null,
-                timeLabel: relativeTime(p.createdAt),
-              }))}
-              {...(canSteer && !isTerminal ? { onAnswer: (postId: string, body: string) => void answer(postId, body) } : {})}
-              answerBusy={busy}
-            />
+        <SidePane title="Design details" subtitle={thread.title} paneId="design-details" explores widthPx={{ min: 360, max: 440 }} data-testid="design-details-pane">
+          <Stack gap="none" className="min-h-0 flex-1 overflow-y-auto p-4">{rail}</Stack>
+        </SidePane>
+        <Stack gap="md">
+          <ReviewThread
+            variant="inline"
+            posts={thread.posts.map((p) => ({
+              id: p.id,
+              authorKind: p.authorKind,
+              authorName: p.authorName,
+              avatarUrl: p.authorKind === 'human' ? photoFor(p.authorName) : undefined,
+              kind: p.kind,
+              body: p.body,
+              resolved: p.resolvedBy != null,
+              artifact: p.artifact ? { name: p.artifact.name, type: p.artifact.type, url: p.artifact.url } : null,
+              timeLabel: relativeTime(p.createdAt),
+            }))}
+            {...(canSteer && !isTerminal ? { onAnswer: (postId: string, body: string) => void answer(postId, body) } : {})}
+            answerBusy={busy}
+          />
 
-            <SignoffPanel
-              variant="inline"
-              signoffs={signoffs.map((s) => ({ name: s.personName, avatarUrl: photoFor(s.personName), role: s.role, decision: s.decision }))}
-              required={2}
-              {...(canSteer && !isTerminal ? {
-                actions: (
-                  <Inline gap="sm">
-                    <Button size="sm" variant="primary" disabled={busy} onClick={() => void signoff('approve')}>
-                      Approve
-                    </Button>
-                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => void signoff('reject')}>
-                      Reject
-                    </Button>
-                  </Inline>
-                ),
-              } : {})}
-            />
-          </Stack>
-        </RailLayout>
+          <SignoffPanel
+            variant="inline"
+            signoffs={signoffs.map((s) => ({ name: s.personName, avatarUrl: photoFor(s.personName), role: s.role, decision: s.decision }))}
+            required={2}
+            {...(canSteer && !isTerminal ? {
+              actions: (
+                <Inline gap="sm">
+                  <Button size="sm" variant="primary" disabled={busy} onClick={() => void signoff('approve')}>
+                    Approve
+                  </Button>
+                  <Button size="sm" variant="secondary" disabled={busy} onClick={() => void signoff('reject')}>
+                    Reject
+                  </Button>
+                </Inline>
+              ),
+            } : {})}
+          />
+        </Stack>
       </Stack>
     </Stack>
   );

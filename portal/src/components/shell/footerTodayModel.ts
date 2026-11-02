@@ -7,7 +7,7 @@
  */
 export const TODAY_CATEGORIES = ['review', 'agenda', 'goals', 'automation', 'budget'] as const;
 export type TodayCategory = typeof TODAY_CATEGORIES[number];
-export interface TodayItem { category: TodayCategory; label: string; summary: string; detail: string }
+export interface TodayItem { category: TodayCategory; label: string; summary: string; detail: string; action?: { label: string; href: string } }
 
 export function todayPreferencesKey(actor: string | null | undefined, tenant: string | null | undefined): string | null {
   const identity = actor?.trim(), workspace = tenant?.trim();
@@ -22,7 +22,13 @@ export function todayItemsFromWire(body: unknown): TodayItem[] {
   const items = raw.filter((i): i is TodayItem => !!i && typeof i === 'object'
     && known.has((i as TodayItem).category) && typeof (i as TodayItem).label === 'string'
     && typeof (i as TodayItem).summary === 'string' && typeof (i as TodayItem).detail === 'string');
-  return TODAY_CATEGORIES.flatMap((c) => items.filter((i) => i.category === c));
+  return TODAY_CATEGORIES.flatMap((c) => items.filter((i) => i.category === c)).map(item => {
+    const { action, ...content } = item;
+    // Navigation belongs to this workspace; malformed or external actions never become clickable.
+    return action && typeof action.label === 'string' && action.label.trim()
+      && typeof action.href === 'string' && /^\/(?:iq|admin)\/[a-z][a-z0-9/-]*(?:\?[^#\\\s]*)?$/.test(action.href)
+      ? { ...content, action } : content;
+  });
 }
 
 /** The categories the settings list offers: only those that have an item. */

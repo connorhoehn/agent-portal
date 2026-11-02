@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { selectAuditRoutes, matchesAuditLocation } from './ui-dom-audit.routes.ts';
+import { staticInventory } from './route-inventory.ts';
+
+test('table requirements belong to the URL that actually opens the table view', () => {
+  const inventory = staticInventory();
+  assert.equal(inventory.find(route => route.path === '/iq/work/findings')?.judges?.includes('table'), false);
+  assert.equal(inventory.find(route => route.path === '/iq/work/findings?view=failed')?.judges?.includes('table'), true);
+  assert.equal(inventory.find(route => route.path === '/iq/projects?scope=all&view=table')?.judges?.includes('table'), true);
+});
 const routes = [
   { path: '/pipelines/runs', source: 'static' },
   { path: '/pipelines/runs/seed', pattern: '/pipelines/runs/:id', source: 'param' },

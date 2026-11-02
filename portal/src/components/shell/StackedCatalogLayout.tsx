@@ -63,21 +63,21 @@ export function StackedCatalogLayout({
     },
   });
   const breadcrumbs = [
-    { label: group },
+    ...(group.toLowerCase() === title.toLowerCase().replace(/s$/, '') ? [] : [{ label: group }]),
     ...([crumb(title, sectionHref),
-      ...(selectedId ? [crumb(listTitle, listHref), { label: selectedTitle ?? 'Record' }] : [{ label: listTitle }])]),
+      ...(selectedId ? [...(listTitle.toLowerCase().replace(/^all /, '') === title.toLowerCase() ? [] : [crumb(listTitle, listHref)]), { label: selectedTitle ?? 'Record' }] : [{ label: listTitle }])]),
   ];
   if (navigation === 'combined') {
     const active = items.find(item => item.active) ?? items[0];
     const header = <Stack gap="none">
-      <ScopeHeader variant="crumbs" breadcrumbs={selectedId ? breadcrumbs : [{ label: group }, { label: title }]} />
+      <ScopeHeader variant="crumbs" breadcrumbs={selectedId ? breadcrumbs : breadcrumbs.filter((item, index) => index === 0 || item.label !== breadcrumbs[index - 1]?.label)} />
       <PageHeader title={selectedId && recordHeading ? selectedTitle ?? title : title}
         description={selectedId ? undefined : overviewDescription} actions={selectedId ? undefined : overviewActions}
         className={`border-b border-border px-6 pb-3 ${UNDER_CRUMBS_BAND}`} data-testid="catalog-pane-header" />
     </Stack>;
     return <ViewportFillRegion bottomGap={0} data-testid="stacked-catalog">
       <Stack gap="none" className="h-full min-h-0 bg-surface" data-shell-flush data-catalog-navigation="combined">
-        <ListRailLayout fold={{ folded: fold.folded, onToggle: fold.toggle }} header={header} footer={footer}
+        <ListRailLayout railWidth="ml" fold={{ folded: fold.folded, onToggle: fold.toggle }} header={header} footer={footer}
           list={{ title, count: rows.length, label: `${title.toLowerCase()} records`,
             header: <Stack gap="md">
               {selectedId ? <Select aria-label={`${title} view`} value={active?.path ?? ''}
@@ -87,7 +87,7 @@ export function StackedCatalogLayout({
               {railHeader}
             </Stack>,
             body: selectedId ? railNotice ?? <GroupedList size="md" rowStyle="ruled" currentStyle="bar" groupHeading="title" groupCountAlign="inline"
-              groups={groupsOf(rows, listTitle)} rows={rows.map(row => ({ id: row.id, title: row.title, groupId: row.subline ?? listTitle, subline: row.description, leadingSize: 'none' }))}
+              groups={groupsOf(rows, listTitle)} rows={rows.map(row => ({ id: row.id, title: row.title, groupId: row.subline ?? listTitle, subline: row.description }))}
               currentId={selectedId} onOpenRow={row => onSelect(row.id)} /> : null,
           }} data-testid="catalog-explorer">
           {selectedId ? <Stack gap="md" className="min-w-0 px-6 py-5">{children}</Stack>

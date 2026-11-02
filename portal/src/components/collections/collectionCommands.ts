@@ -54,6 +54,8 @@ export function parseCollectionCommand(text: string, grammar: CollectionGrammar)
 }
 
 export interface CollectionControls {
+  /** Concise input hint for a narrow collection dock; command help retains the full grammar. */
+  placeholder?: string;
   setQuery(value: string): void;
   setFilter?(value: string): void;
   refresh(): void;
@@ -84,7 +86,7 @@ export function collectionCommandAdapter(grammar: CollectionGrammar, controls: C
   return {
     id: controls.id ?? `${noun.replace(/\s+/g, '-')}-commands`, label, examples, scopeNote: controls.scopeNote,
     ...(controls.showAnswer ? { showAnswer: controls.showAnswer } : {}),
-    placeholder: `Search ${noun}${Object.keys(filters).length ? ', filter' : ''}${controls.open ? ', open a record' : ''}, or refresh…`,
+    placeholder: controls.placeholder ?? `Search ${noun}${Object.keys(filters).length ? ', filter' : ''}${controls.open ? ', open a record' : ''}, or refresh…`,
     async execute(text) {
       const command = parseCollectionCommand(text, grammar);
       switch (command.kind) {

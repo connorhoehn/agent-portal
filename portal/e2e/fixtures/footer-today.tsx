@@ -8,6 +8,7 @@ import { Button, ChatIcon, Inline, Stack, T } from '@connorhoehnslalom/ui-compon
 import { SidePaneProvider } from '@connorhoehnslalom/ui-components';
 import { callCounts, callDrawn } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { SessionProvider, useSession } from '../../src/lib/auth';
+import { TodayPlacementProvider } from '../../src/components/shell/FooterTodayStrip';
 import { SocialFooter } from '../../src/components/shell/SocialFooter';
 export { callCounts, callDrawn };
 type Model = { phase: 'idle' | 'live'; micOn: boolean; cameraOn: boolean; starts: number; leaves: number };
@@ -30,6 +31,8 @@ export function useCallHost() {
 }
 export function useCallBlockPlacement() { return 'footer'; }
 export function useCallMediaPanel() { return { open: false, toggle: noop }; }
+export function useHuddleChat() { return null; }
+export function useHuddleReact() { return null; }
 export function useHuddleChatToggle() { return null; }
 export function HuddleReactionBar() { return null; }
 export function ShellCallMedia() { return null; }
@@ -47,4 +50,4 @@ function Surface() {
     <output data-testid="today-call">{JSON.stringify(state)}</output>
   </main><SocialFooter /></Stack>;
 }
-createRoot(document.getElementById('root')!).render(<BrowserRouter><SessionProvider><SidePaneProvider><Surface /></SidePaneProvider></SessionProvider></BrowserRouter>);
+createRoot(document.getElementById('root')!).render(<BrowserRouter><SessionProvider><SidePaneProvider><TodayPlacementProvider><Surface /></TodayPlacementProvider></SidePaneProvider></SessionProvider></BrowserRouter>);

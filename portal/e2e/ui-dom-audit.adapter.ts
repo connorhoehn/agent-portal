@@ -85,7 +85,7 @@ const RECORD_DETAIL_ACTION = /^(revision history|version history|history|revisio
 /** Buttons that can be a record's detail action: in the page, not a navigation rail's disclosure heading. */
 const RECORD_ACTION_CANDIDATES = '[data-shell-nav] :is(button, [role="button"]):not([aria-expanded]):not(nav *):not([data-testid="subnav-group-header"])';
 /** Details buttons the `details-pane` state already opens into the right pane. */
-const DETAILS_PANE = /^(Initiative details|Open initiative details|Show details)$/;
+const DETAILS_PANE = /^(Initiative details|Open initiative details|Show details|Design details)$/;
 /** A conversation surface's view tabs (ConversationSurface: Chat | Documents | Pinned | Calls). */
 const CONVERSATION_VIEW_TABS = '[role="tablist"][aria-label="Views of this conversation"] [role="tab"]';
 type Probes = { activateRow: (page: Page, o: { rows: string }) => Promise<unknown>; recordAction: (page: Page, o: { scope: string; name: RegExp; candidates?: string }) => Promise<unknown>; toggleSelection: (page: Page, o: { checkbox: string }) => Promise<unknown> };
@@ -400,8 +400,8 @@ export default {
       await trigger.click();
       await expect(p.getByRole('menu', { name: 'Change who runs this initiative' })).toBeVisible();
     } });
-    const info = page.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ });
-    if (await info.count() === 1 && await info.isVisible()) states.push({ name: 'details-pane', required: ['$rightPane'], enter: async p => { await p.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details)$/ }).click(); await expect(p.locator(selectors.rightPane)).toBeVisible(); if (await p.getByTestId('initiative-pane').count()) { await expect(p.getByTestId('initiative-pane-details')).toBeVisible(); await expect(p.getByTestId('initiative-pane').getByRole('tab', { name: 'Details', exact: true })).toHaveAttribute('aria-selected', 'true'); } } });
+    const info = page.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details|Design details)$/ });
+    if (await info.count() === 1 && await info.isVisible()) states.push({ name: 'details-pane', required: ['$rightPane'], enter: async p => { const toggle = p.getByRole('button', { name: /^(Initiative details|Open initiative details|Show details|Design details)$/ }); if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click(); await expect(p.locator(selectors.rightPane)).toBeVisible(); if (await p.getByTestId('initiative-pane').count()) { await expect(p.getByTestId('initiative-pane-details')).toBeVisible(); await expect(p.getByTestId('initiative-pane').getByRole('tab', { name: 'Details', exact: true })).toHaveAttribute('aria-selected', 'true'); } } });
     // Reading panes need their own measured state; an initiative Details tab
     // does not exercise the document's contents, scrollport or sources section.
     const briefPreview = page.getByRole('button', { name: 'Open brief preview in side pane', exact: true });

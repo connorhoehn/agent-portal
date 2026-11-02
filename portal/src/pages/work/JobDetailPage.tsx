@@ -16,12 +16,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   Button, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, LoadingState, PageSection,
-  Stack, PageHeader, StatStrip, Tabs, Disclosure,
+  Stack, PageHeader, StatStrip, Tabs, WorkflowStepper,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { crumbLabel, useCrumbLabel } from '../../lib/crumbLabels';
-import { absoluteTime, durationLabel } from '../../lib/relativeTime';
+import { durationLabel } from '../../lib/relativeTime';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { JobStatusPill, LIVE_STATUSES, T, type JobToolCall } from './workShared';
 import { usd } from '../../lib/format';
@@ -31,6 +31,7 @@ import { KeyValue } from '../../components/KeyValue';
 import { RecordNotFound } from '../../components/UnavailableNotice';
 import { isNotFoundFetchError } from './jobFetchStatus';
 import { JobConversation } from './JobConversation';
+import { jobTimingSteps } from './jobTiming';
 import { callScopeKey } from '../../components/shell/callShellModel';
 import { UNDER_CRUMBS_BAND } from '../../components/shell/headerRhythm';
 
@@ -297,7 +298,7 @@ function JobDetailContent() {
         <Stack gap="none" className={RUN_GUTTER}><PageSection title={crumbLabel(jobId) ?? 'Job'}>
           <ErrorState
             title="Failed to load job"
-            body={error}
+            body={/internal server error/i.test(error) ? "The run could not be loaded. Try again." : error}
             actionLabel="Retry"
             onAction={refresh}
           />
@@ -350,6 +351,9 @@ function JobDetailContent() {
             <Button size="sm" variant="secondary" onClick={() => void review('reject')}>Reject</Button>
           </>}
         </Inline>} />
+        <PageSection size="sm" title="Timing">
+          <WorkflowStepper steps={jobTimingSteps(job)} size="compact" aria-label="Run timing" data-testid="job-timing" />
+        </PageSection>
       <StatStrip variant="line" aria-label="Run metrics" items={[
         { label: 'Duration', value: durationLabel(job.result?.durationMs) },
         { label: 'Cost', value: job.result?.costUsd == null ? '—' : usd(job.result.costUsd, { precision: 2 }) },
@@ -359,35 +363,27 @@ function JobDetailContent() {
       {/* shrink-0: the tab strip clips its own overflow, so in this scrolling column it is the one child
           a long summary squeezes to its 1px border. */}
       <Stack gap="none" className="shrink-0">
-        <Tabs value={tab} onValueChange={changeTab} aria-label="Run details" items={[
+        <Tabs badgeStyle="plain" value={tab} onValueChange={changeTab} aria-label="Run details" items={[
           { id: 'summary', label: 'Summary' }, { id: 'activity', label: 'Activity' },
-          { id: 'outputs', label: 'Outputs' }, { id: 'changes', label: 'Changes', badge: proposalCount || undefined },
+          { id: 'outputs', label: 'Outputs', badge: tools.length || undefined }, { id: 'changes', label: 'Changes', badge: proposalCount || undefined },
         ]} />
       </Stack>
-      {tab === 'summary' && <Stack gap="lg">
+      {tab === 'summary' && <Stack gap="lg" className="max-w-4xl">
         <PageSection size="sm" title="Outcome">
           <T wrap className={`text-sm ${job.error ? 'text-danger' : 'text-text-primary'}`}>
             {job.error ?? job.result?.summary ?? (job.status === 'queued' ? 'Waiting for a worker.' : isLive ? 'This run is in progress.' : 'No outcome recorded.')}
           </T>
-          {activityUnavailable && job.result && <T size="xs" className="mt-1 text-text-tertiary">The recorded result is shown below. Detailed activity is unavailable for this run.</T>}
         </PageSection>
         <PageSection size="sm" title="Task"><T size="sm" wrap className="text-text-secondary whitespace-pre-wrap">{prompt || 'No prompt recorded.'}</T></PageSection>
-        {toolResults}
-        {unavailable}
-        <PageSection size="sm" title="Timing">
-          <Stack gap="xs" className="max-w-lg">
-            {([['Queued', job.createdAt], ['Claimed', job.claimedAt], ['Started', job.startedAt], ['Finished', job.finishedAt]] as const).filter(([, at]) => at).map(([label, at]) => <KeyValue key={label} layout="row" labelWidth="w-28" label={label} value={absoluteTime(at)} />)}
-          </Stack>
-        </PageSection>
-        <Disclosure summary="Technical details" variant="plain" density="compact">
+        <PageSection size="sm" title="Technical details">
           <Stack gap="sm">
-            <KeyValue label="Run ID" value={job.id} /><KeyValue label="Kind" value={job.kind} />
+            <KeyValue mono label="Run ID" value={job.id} /><KeyValue mono label="Kind" value={job.kind} />
             <KeyValue label="Priority" value={String(job.priority)} />
-            <KeyValue label="Session" value={job.sessionId ?? '—'} />
+            <KeyValue mono label="Session" value={job.sessionId ?? '—'} />
             {job.boxId && (canOpenWorker ? <Link to={`/admin/devbox?box=${encodeURIComponent(job.boxId)}`} className="text-primary text-sm hover:underline">Worker {job.boxId} ↗</Link> : <KeyValue label="Worker" value={job.boxId} />)}
             {typeof job.payload.findingId === 'string' && <Link to="/iq/work/findings" className="text-primary text-sm hover:underline">Source finding: {job.payload.findingId}</Link>}
           </Stack>
-        </Disclosure>
+        </PageSection>
       </Stack>}
       {tab === 'activity' && <Stack gap="sm">
         {isLive && <T size="sm" className="text-text-secondary">{tailState === 'unavailable' ? 'Worker log unavailable' : tailState === 'retrying' ? 'Reconnecting…' : 'Live activity'}</T>}

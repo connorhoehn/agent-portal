@@ -39,6 +39,7 @@ it('the budget item is the Budgets page summary, for the roles that may read it'
   const mia = await items({ sub: 'u-mia', role: 'program-owner', tenant: 'orgiq' });
   const budget = mia.find((i) => i.category === 'budget')!;
   const s = await orgSummary();
+  expect(budget.action).toEqual({ label: 'View budgets', href: '/admin/budgets' });
   expect(budget.summary).toContain(`$${s.totalSpentThisPeriodUsd.toFixed(2)} of $${s.totalAllocatedUsd.toFixed(2)} spent this month`);
   // A member is not shown figures the Budgets read gate hides from them.
   const theo = await items({ sub: 'u-theo', role: 'member', tenant: 'orgiq' });
@@ -49,10 +50,15 @@ it('the review item counts the pending consults and names the question', async (
   const pending = await listConsults({ status: 'pending' });
   const review = (await items({ sub: 'u-vera', role: 'org-leader', tenant: 'orgiq' })).find((i) => i.category === 'review')!;
   if (pending.length === 0) expect(review.summary).toBe('Nothing is waiting on a person');
-  else expect(review.summary).toBe(`${pending.length} agent question${pending.length === 1 ? '' : 's'} waiting for an answer`);
+  else {
+    expect(review.summary).toBe(`${pending.length} agent question${pending.length === 1 ? '' : 's'} waiting for an answer`);
+    expect(review.detail).toContain(pending[0]!.question);
+    expect(review.action).toEqual({ label: 'Open question', href: `/iq/work?consult=${encodeURIComponent(pending[0]!.id)}` });
+  }
   labConsults.rows().splice(0);
   const none = (await items({ sub: 'u-vera', role: 'org-leader', tenant: 'orgiq' })).find((i) => i.category === 'review')!;
   expect(none.summary).toBe('Nothing is waiting on a person');
+  expect(none.action).toBeUndefined();
 });
 
 it('another tenant gets no items, so the strip stays hidden rather than inventing one', async () => {

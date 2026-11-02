@@ -102,8 +102,8 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         if (!b) return [{ label: 'Plan' }, { label: 'Decisions' }];
         return [{ label: 'Plan' }, { label: 'Decisions', path: '/iq/decisions' }, { label: shortId(b), id: b }];
       case 'designs':
-        if (!b) return [{ label: 'Design' }, { label: 'Designs' }];
-        return [{ label: 'Design' }, { label: 'Designs', path: '/iq/designs' }, { label: shortId(b), id: b }];
+        if (!b) return [{ label: 'Designs' }];
+        return [{ label: 'Designs', path: '/iq/designs' }, { label: shortId(b), id: b }];
       case 'library':
         if (!b) return [{ label: 'Build' }, { label: 'Agent library' }];
         return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: shortId(b), id: b }];

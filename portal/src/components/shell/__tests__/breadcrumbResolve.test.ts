@@ -22,10 +22,10 @@ const RAIL_PATHS = [
   '/settings',
 ];
 
-test('every rail path resolves to a section and a page', () => {
+test('every rail path resolves to a named location', () => {
   for (const path of RAIL_PATHS) {
     const crumbs = resolveBreadcrumbs(path);
-    assert.ok(crumbs.length >= (path === '/assessment/workspace' ? 1 : 2), `${path} → ${JSON.stringify(crumbs)}`);
+    assert.ok(crumbs.length >= 1 && crumbs.every(crumb => crumb.label.trim()), `${path} → ${JSON.stringify(crumbs)}`);
   }
 });
 
@@ -100,4 +100,9 @@ test('Runbooks trails: Library, a runbook, Proposals and a proposal, Briefs and 
   assert.deepEqual(resolveBreadcrumbs('/iq/runbooks/proposals').map((c) => c.label), ['Build', 'Runbooks', 'Proposals']);
   assert.equal(resolveBreadcrumbs('/iq/runbooks/proposals/prop-1')[2]?.path, '/iq/runbooks/proposals');
   assert.deepEqual(resolveBreadcrumbs('/iq/runbooks/briefs/job-0002').map((c) => c.label), ['Build', 'Runbooks', 'Briefs', 'job-0002']);
+});
+
+
+test('design breadcrumbs name the collection once', () => {
+  assert.deepEqual(resolveBreadcrumbs('/iq/designs/des-obs-dashboards').map(c => c.label).slice(0, -1), ['Designs']);
 });

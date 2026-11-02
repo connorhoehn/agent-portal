@@ -29,6 +29,7 @@ export interface TodayItem {
   label: string;
   summary: string;
   detail: string;
+  action?: { label: string; href: string };
 }
 
 /** The roles the Budgets page's read gate admits without ManageBudgets (routes/budgets.ts readGate). */
@@ -55,6 +56,7 @@ async function reviewItem(): Promise<TodayItem> {
     category: 'review', label: 'Needs review',
     summary: `${plural(pending.length, 'agent question')} waiting for an answer`,
     detail: `${where ? `${where}: ` : ''}${first.question}`,
+    action: { label: 'Open question', href: `/iq/work?consult=${encodeURIComponent(first.id)}` },
   };
 }
 
@@ -67,6 +69,7 @@ async function automationItem(req: Request): Promise<TodayItem | null> {
     category: 'automation', label: 'Automation',
     summary: `${plural(boxes.length, 'agent computer')} · ${running} running · ${waiting} waiting`,
     detail: `${plural(running, 'computer')} working, ${waiting} waiting for a person and ${idle} idle, out of the ${plural(boxes.length, 'computer')} you can see.`,
+    action: { label: 'View runs', href: '/iq/work/queue' },
   };
 }
 
@@ -77,6 +80,7 @@ async function budgetItem(): Promise<TodayItem> {
     category: 'budget', label: 'Budget',
     summary: `${usd(s.totalSpentThisPeriodUsd)} of ${usd(s.totalAllocatedUsd)} spent this month${pct === null ? '' : ` (${pct}%)`}`,
     detail: `Agent spend this month across every initiative, ${usd(s.totalMaintenanceUsd)} of it scheduled maintenance, against the allocations on the Budgets page.`,
+    action: { label: 'View budgets', href: '/admin/budgets' },
   };
 }
 

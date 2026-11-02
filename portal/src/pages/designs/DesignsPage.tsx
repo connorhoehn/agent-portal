@@ -51,7 +51,7 @@ export default function DesignsPage() {
   );
   const openDesign = (designId: string) => navigate(`/iq/designs/${encodeURIComponent(designId)}?${searchParams}`);
   const adapter = collectionCommandAdapter(DESIGN_GRAMMAR, {
-    setQuery, setFilter: (value) => setFilter(value || 'all'), refresh, id: 'designs-commands',
+    placeholder: 'Search designs…', setQuery, setFilter: (value) => setFilter(value || 'all'), refresh, id: 'designs-commands',
     scopeNote: 'Commands search the loaded design reviews, pick a Status view and open one design; they never answer, sign off or edit a design.',
     open: (target) => {
       const review = resolveCollectionTarget(target, reviews);

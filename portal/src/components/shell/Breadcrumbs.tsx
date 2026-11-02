@@ -75,7 +75,7 @@ export function Breadcrumbs() {
       // always sits the same distance under the same rule, so a list page and
       // a detail page line up instead of the detail title landing lower.
       minItems={2}
-      className="shell-breadcrumbs shrink-0 mb-4 pb-1.5 border-b border-border text-xs overflow-x-auto whitespace-nowrap"
+      className="shell-breadcrumbs shrink-0 mb-4 pb-1.5 border-b border-border text-xs min-w-0 overflow-hidden whitespace-nowrap"
     />
   );
 }

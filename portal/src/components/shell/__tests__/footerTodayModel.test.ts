@@ -21,3 +21,13 @@ test('wire items come back in priority order, malformed ones dropped, and nothin
   assert.deepEqual(todayCategories(items), [{ id: 'review', label: 'Needs review' }, { id: 'budget', label: 'Budget' }]);
   for (const body of [null, {}, { items: 'x' }, { items: [] }]) assert.deepEqual(todayItemsFromWire(body), []);
 });
+
+test('only valid workspace actions are retained and no generic destination is invented', () => {
+  const item = { category: 'review', label: 'Needs review', summary: 'One question', detail: 'Which tenant first?' };
+  const action = { label: 'Open question', href: '/iq/work?consult=con-123' };
+  assert.deepEqual(todayItemsFromWire({ items: [{ ...item, action }] })[0]?.action, action);
+  for (const href of ['https://example.com', '//example.com', 'javascript:alert(1)', '/iq/../admin', '/iq/\\evil']) {
+    assert.equal(todayItemsFromWire({ items: [{ ...item, action: { ...action, href } }] })[0]?.action, undefined);
+  }
+  assert.equal(todayItemsFromWire({ items: [item] })[0]?.action, undefined);
+});

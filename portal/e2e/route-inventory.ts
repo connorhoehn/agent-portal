@@ -205,7 +205,7 @@ export const TABLE_ROUTES: ReadonlyArray<{ tenant: Tenant; path: string; stats?:
   { tenant: 'assessment', path: '/assessment/runs' },
   { tenant: 'orgiq', path: '/iq/work' },
   { tenant: 'orgiq', path: '/iq/work/queue' },
-  { tenant: 'orgiq', path: '/iq/work/findings' },
+  { tenant: 'orgiq', path: '/iq/work/findings?view=failed' },
   { tenant: 'orgiq', path: '/iq/projects?scope=all&view=table' },
   { tenant: 'orgiq', path: '/iq/projects?lens=sprints' },
   { tenant: 'orgiq', path: '/iq/runs' },
@@ -294,7 +294,7 @@ function kindOf(r: InventoryRoute): RouteKind {
   const list = LIST_PAGES.find((l) => l.path === r.path || (l.param && l.param.pattern === r.pattern));
   if (list) return list.editor ? 'editor' : list.record ? 'record' : 'list';
   if (/\/decks\/[^/]+$/.test(bare)) return 'editor';
-  if (TABLE_ROUTES.some((t) => t.path.split('?')[0] === r.path)) return 'list';
+  if (TABLE_ROUTES.some((t) => t.path === r.path)) return 'list';
   if (r.source === 'param') return 'record';
   return 'page';
 }
@@ -306,7 +306,7 @@ function judgesOf(r: InventoryRoute): Judge[] {
   if (Object.values(RAIL_CHAT_SETS).some((s) => s.paths.includes(r.path))) out.push('rail-chat');
   if (DEPTH_PAIRS.some((d) => d.shallow === r.path || d.key === key || d.deep === r.path)) out.push('depth');
   if (STATE_ROUTES.some((s) => s.path === r.path)) out.push('state');
-  if (TABLE_ROUTES.some((t) => t.path.split('?')[0] === r.path)) out.push('table');
+  if (TABLE_ROUTES.some((t) => t.path === r.path)) out.push('table');
   if (sources().pages.some((p) => p.path === r.path)) out.push('palette');
   return out;
 }
@@ -327,6 +327,8 @@ export function staticInventory(): InventoryRoute[] {
   for (const p of sources().registryPaths) add({ tenant: tenantOf(p), path: p, source: 'registry' });
   for (const id of SOCIAL_SURFACE_IDS) add({ tenant: 'social', path: `/social/${id}`, source: 'surface' });
   for (const id of PIPELINES_SURFACE_IDS) add({ tenant: 'pipelines', path: `/pipelines/${id}`, source: 'surface' });
+  // Table-specific views are measured at their own URLs, not inferred for a different default view.
+  for (const t of TABLE_ROUTES) add({ tenant: t.tenant, path: t.path, source: 'registry' });
   for (const [tenant, p] of LANDINGS) add({ tenant, path: p, source: 'landing' });
   return out;
 }

@@ -7,7 +7,7 @@
 // the archive.
 
 import { useCallback, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Button, Card, CollectionToolbar, InlineAlert, PageSection, Stack, StatStrip,
   DataTable, Divider, PageHeader, Disclosure, type DataTableColumn,
@@ -41,6 +41,8 @@ interface RediscoveryStats {
 
 export default function WorkHomePage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const requestedConsult = params.get('consult');
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
 
@@ -48,8 +50,10 @@ export default function WorkHomePage() {
   const summaryFailure = summaryError ?? summaryDegraded;
   // Pending consults poll on the same cadence as the summary: each one is a
   // RUNNING agent blocked on a human, which outranks everything else here.
-  const { data: consultData, refresh: refreshConsults } =
+  const { data: consultData, error: consultError, refresh: refreshConsults } =
     useFetch<{ consults: LabConsult[] }>('/api/lab/consults?status=pending', 8_000);
+  const { data: linkedConsultData, error: linkedConsultError, refresh: refreshLinkedConsult } =
+    useFetch<{ consult: LabConsult }>(requestedConsult ? `/api/lab/consults/${encodeURIComponent(requestedConsult)}` : null, 8_000);
   const { data: jobsData, error: jobsError, isLoading: jobsLoading, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=50', 8_000);
   // The header's "N running" counts dispatched runs, which this queue never
   // holds (dispatchedRuns.ts) — so the queue section says so rather than
@@ -61,13 +65,16 @@ export default function WorkHomePage() {
   // scale of decisions made, not queue churn.
   const { data: rediscovery } = useFetch<RediscoveryStats>('/api/rediscovery/stats', 60_000);
 
-  const pendingConsults = consultData?.consults ?? [];
+  const linkedConsult = linkedConsultData?.consult?.id === requestedConsult ? linkedConsultData.consult : null;
+  const pendingConsults = (consultData?.consults ?? []).filter(consult => consult.id !== linkedConsult?.id || linkedConsult.status === 'pending');
+  const consultsForPrompts = linkedConsult?.status === 'pending' && !pendingConsults.some(consult => consult.id === linkedConsult.id)
+    ? [linkedConsult, ...pendingConsults] : pendingConsults;
   // Recent runs' search: one state for the toolbar box and the composer.
   const [runQuery, setRunQuery] = useState('');
 
   const refreshAll = useCallback(() => {
-    refreshSummary(); refreshJobs(); refreshProposals(); refreshConsults();
-  }, [refreshSummary, refreshJobs, refreshProposals, refreshConsults]);
+    refreshSummary(); refreshJobs(); refreshProposals(); refreshConsults(); refreshLinkedConsult();
+  }, [refreshSummary, refreshJobs, refreshProposals, refreshConsults, refreshLinkedConsult]);
 
   useWorkEvents(refreshAll);
 
@@ -109,13 +116,19 @@ export default function WorkHomePage() {
       if (body.status === 'failed') throw new Error(body.applyError ?? 'The change could not be applied.');
     },
   };
-  const waiting = attentionCount(pendingConsults, jobs, proposals);
-  const prompts = attentionPrompts({ consults: pendingConsults, jobs, proposals, canDecide: canManage, money, label: (kind) => PROPOSAL_LABELS[kind] ?? kind }, deckHandlers);
+  const waiting = attentionCount(consultsForPrompts, jobs, proposals);
+  const prompts = attentionPrompts({ consults: consultsForPrompts, jobs, proposals, canDecide: canManage, money, label: (kind) => PROPOSAL_LABELS[kind] ?? kind }, deckHandlers);
+  const selectedPromptId = requestedConsult ? `consult:${requestedConsult}` : null;
+  const selectedPrompt = prompts.find(prompt => prompt.id === selectedPromptId);
+  const orderedPrompts = selectedPrompt ? [selectedPrompt, ...prompts.filter(prompt => prompt.id !== selectedPromptId)] : prompts;
 
   return (
     <Stack gap="md" data-testid="automate-inbox">
       <PageHeader title="Inbox" description="Questions and approvals waiting for you."
         actions={canManage ? <Button size="sm" variant="primary" onClick={() => navigate('/iq/work/queue?compose=1')}>New run</Button> : undefined} />
+      {consultError && <InlineAlert tone="error">Agent questions could not be loaded. {consultError}</InlineAlert>}
+      {requestedConsult && linkedConsultError && <InlineAlert tone="error">The linked question could not be loaded. {linkedConsultError}</InlineAlert>}
+      {linkedConsult && linkedConsult.status !== 'pending' && <InlineAlert tone="info">This question is {linkedConsult.status}. The inbox below shows what still needs attention.</InlineAlert>}
       {/* What needs a person is answered in the docked composer's prompt deck
           (agent questions, work to review, proposed graph changes — paged with
           the keyboard), so this section is one row: its count and where to
@@ -158,7 +171,7 @@ export default function WorkHomePage() {
             search={{ value: runQuery, onChange: setRunQuery, placeholder: 'Search recent runs', 'aria-label': 'Search recent runs' }}
             onRefresh={refreshJobs} refreshing={jobsLoading} />
           {jobsError ? <InlineAlert tone="error">{jobsError}</InlineAlert> : <DataTable data={recent} columns={recentColumns} keyField={(job) => job.id} onRowClick={(job) => openRun(job.id)} frameless loading={jobsLoading && !jobsData} emptyMessage={runQuery.trim() ? 'No finished run matches this search' : 'No completed runs yet'} />}
-          <CollectionCommandHost adapter={runsAdapter} prompts={prompts} />
+          <CollectionCommandHost key={requestedConsult ?? 'inbox'} adapter={runsAdapter} prompts={orderedPrompts} />
         </Stack>
       </PageSection>
       <Link to="/iq/work/findings" className="text-sm text-primary hover:underline">{s && !summaryFailure ? `${s.findings.open} open findings` : 'View findings'} →</Link>
