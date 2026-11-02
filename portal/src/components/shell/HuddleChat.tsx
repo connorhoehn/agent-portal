@@ -38,6 +38,7 @@ import { settleHuddleDraft } from '../../lib/huddleDraft';
 import { HuddleDraftMemory, type SavedHuddleDraft } from '../../lib/huddleDraftMemory';
 
 export type RetiredHuddleDraft = SavedHuddleDraft<RichChatDraft, CallPageDescriptor>;
+export interface HuddlePaneControl { visible: boolean; hide(): void }
 
 export interface HuddleChatState {
   participants: readonly HuddleParticipant[];
@@ -47,7 +48,8 @@ export interface HuddleChatState {
 export interface HuddleChatContextValue {
   /** A page places this transcript in its registered dialogue pane. */
   paneOwned: boolean;
-  registerPaneOwner(): () => void;
+  registerPaneOwner(pane?: HuddlePaneControl): () => void;
+  ownedPane: HuddlePaneControl | null;
   /** Only an accepted active OrgIQ call is an eligible destination. */
   callId: string | null;
   /**
@@ -173,10 +175,11 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
   const [store] = useState(channelStore);
   const rosterState = useSyncExternalStore(roster.subscribe, roster.getSnapshot, roster.getSnapshot);
   const [view, setView] = useState<HuddleChatView>('closed');
-  const [paneOwners, setPaneOwners] = useState(0);
-  const registerPaneOwner = useCallback(() => {
-    setPaneOwners(n => n + 1);
-    return () => setPaneOwners(n => Math.max(0, n - 1));
+  const [paneOwners, setPaneOwners] = useState<ReadonlyMap<symbol, HuddlePaneControl | undefined>>(() => new Map());
+  const registerPaneOwner = useCallback((pane?: HuddlePaneControl) => {
+    const id = Symbol('huddle pane');
+    setPaneOwners(previous => new Map(previous).set(id, pane));
+    return () => setPaneOwners(previous => { const next = new Map(previous); next.delete(id); return next; });
   }, []);
   const [draftMemory] = useState(() => new HuddleDraftMemory<RichChatDraft, CallPageDescriptor>(EMPTY_DRAFT));
   const draftSnapshot = useSyncExternalStore(draftMemory.subscribe, draftMemory.getSnapshot, draftMemory.getSnapshot);
@@ -336,7 +339,7 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
   } : { participants: [], loaded: false, refreshing: false, pending: false, ended: false, error: null },
   [current, rosterState, pending, sendError]);
   const value = useMemo<HuddleChatContextValue>(() => ({
-    paneOwned: paneOwners > 0, registerPaneOwner,
+    paneOwned: paneOwners.size > 0, ownedPane: [...paneOwners.values()].find(pane => !!pane) ?? null, registerPaneOwner,
     callId: current ? callId : null, channel: current ? channel : null, actorId: current ? actorId : null,
     title: host?.lobby?.title ?? 'Huddle', participants: state.participants, state,
     canSend: current && !unavailableReason && !pending, unavailableReason,

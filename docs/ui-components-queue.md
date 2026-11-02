@@ -369,3 +369,7 @@ with 2.477.0. What is still open:
   (`8b0c5141`, `97fac1c5`), adopted in portal. DOM mutation checks cover badge
   containment and call-header top inset; live Work item and responsive fixture
   proofs are in the journey continuation.
+
+### 2026-11-02 — composer folding and hangout gallery
+
+Delivered in ui-components 2.497.0: ContextComposer explicit collapse with retained drafts/files and focus recovery, enabled by ConversationComposer; bounded CallDock stage gallery; persistent media node on camera-off transitions. Stories and portable audit mutations cover both. Social now hosts People/Conversation in the call's right sidebar. See [validation and remaining screen-share presentation follow-up](composer-gallery-2026-11-02.md).

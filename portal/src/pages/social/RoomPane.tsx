@@ -1,8 +1,10 @@
 // A persistent hangout owns its saved configuration; a call owns live rooms.
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button, Chip, DataTable, EmptyState, Inline, InlineAlert, KeyValue, PageSection, Stack, T, Tabs, TabPanel } from '@connorhoehnslalom/ui-components/shared';
-import { WrappedBreakoutRoomsPanel } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { RosterPanel } from '@connorhoehnslalom/ui-components/video';
+import { HangoutCallView, type HangoutCallPane } from './HangoutCallView';
+import { WrappedBreakoutRoomsPanel, meetingRosterProps } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import type { NameOf, SocialRoom } from './socialPlatform';
 import type { SocialCall } from './useSocialCall';
 import { CallBlock, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
@@ -11,7 +13,7 @@ import { HuddleChatBody, useHuddleChat } from '../../components/shell/HuddleChat
 import RoomConfiguration from './RoomConfiguration';
 import RoomActivity from './RoomActivity';
 import { useLobbyCall } from '@connorhoehn/realtime-modules/client/video';
-const VIEWS = ['overview', 'call', 'conversation', 'rooms', 'activity'];
+const VIEWS = ['overview', 'call', 'rooms', 'activity'];
 
 export default function RoomPane({ selected, room, nameOf, call, onBrowse, inset = false, people = [], mayConfigure = false, onSaved }: {
   selected: string | null;
@@ -28,20 +30,28 @@ export default function RoomPane({ selected, room, nameOf, call, onBrowse, inset
   const [editingLayout, setEditingLayout] = useState(false);
   const [roomView, setRoomView] = useState('saved');
   const [params, setParams] = useSearchParams();
-  const view = VIEWS.includes(params.get('hangoutView') ?? '') ? params.get('hangoutView')! : 'overview';
-  const changeView = (next: string, replace = false) => setParams(previous => {
+  const requestedView = params.get('hangoutView');
+  const view = requestedView === 'conversation' ? 'call' : VIEWS.includes(requestedView ?? '') ? requestedView! : 'overview';
+  const [callPane, setCallPane] = useState<HangoutCallPane>(requestedView === 'conversation' ? 'conversation' : 'people');
+  const changeView = useCallback((next: string, replace = false) => setParams(previous => {
     const updated = new URLSearchParams(previous); updated.set('hangoutView', next); return updated;
-  }, { replace });
+  }, { replace }), [setParams]);
   const host = useCallHost();
   const media = useCallMediaPanel();
   const chat = useHuddleChat();
+  const changeCallPane = useCallback((next: HangoutCallPane) => {
+    setCallPane(next);
+    if (next === 'conversation') chat?.openPane({ focus: false });
+    else chat?.closeMessage();
+  }, [chat?.openPane, chat?.closeMessage]);
   const occupancy = useLobbyCall(room?.lobbyName);
   const meeting = useCallMeeting();
   const here = !!room && call.activeLobby === room.lobbyName;
   const live = here ? meeting : null;
   const currentRoomName = live?.meeting.myRoom?.name ?? 'Main call';
   const registerPane = chat?.registerPaneOwner;
-  useEffect(() => here ? registerPane?.() : undefined, [here, registerPane]);
+  const hideConversation = useCallback(() => setCallPane(null), []);
+  useEffect(() => here ? registerPane?.({ visible: view === 'call' && callPane === 'conversation', hide: hideConversation }) : undefined, [here, registerPane, view, callPane, hideConversation]);
   const joined = useRef(false);
   useEffect(() => {
     if (here && !joined.current) changeView('call', true);
@@ -49,24 +59,25 @@ export default function RoomPane({ selected, room, nameOf, call, onBrowse, inset
   }, [here]); // A join selects Call once; later tab choices remain the reader's.
   const lastFocus = useRef(chat?.focusRequest ?? 0);
   useEffect(() => {
-    if (here && chat && chat.focusRequest !== lastFocus.current) changeView('conversation');
+    if (here && chat && chat.focusRequest !== lastFocus.current) { setCallPane('conversation'); changeView('call'); }
     lastFocus.current = chat?.focusRequest ?? 0;
   }, [here, chat?.focusRequest]);
   useEffect(() => { if (here && media?.open) media.setOpen(false); }, [here, media?.open, media?.setOpen]);
   useEffect(() => {
+    if (here && meeting?.pane === 'people') { setCallPane('people'); changeView('call'); meeting.close(); }
     if (here && meeting?.pane === 'rooms') { setRoomView('live'); changeView('rooms'); meeting.close(); }
   }, [here, meeting?.pane]);
-  const active = here ? (host?.call.call?.participants ?? []).filter(p => p.state === 'in-call') : [];
+  const active = here ? (host?.call.call?.participants ?? []).filter(p => p.state === 'in-call' || p.state === 'reconnecting') : [];
   const label = (id: string) => nameOf(id) !== id ? nameOf(id)
     : active.find(person => person.userId === id)?.displayName
       || (host?.self?.userId === id ? host.self.displayName : undefined) || 'Name unavailable';
-  const bodyClass = `min-h-0 min-w-0 flex-1 ${view === 'conversation' ? 'overflow-hidden' : 'overflow-y-auto pb-6'}${inset ? ` pt-4${view === 'conversation' ? '' : ' px-[var(--ui-page-gutter,1.5rem)]'}` : ''}`;
+  const bodyClass = `min-h-0 min-w-0 flex-1 ${view === 'call' ? 'overflow-hidden' : 'overflow-y-auto pb-6'}${inset ? ' pt-4 px-[var(--ui-page-gutter,1.5rem)]' : ''}`;
   if (!room) return <Stack gap="lg" className={bodyClass} data-page-body={inset ? 'inset' : undefined}><EmptyState align="start" testId={selected ? 'social-room-missing' : 'social-room-pick'}
     title={selected ? 'This hangout is not available' : 'Pick a hangout'}
     description={selected ? 'It does not exist, or you do not have access.' : 'Choose a hangout to see its rooms and join its call.'}
     action={<Button variant="secondary" size="sm" onClick={onBrowse}>All hangouts</Button>} /></Stack>;
-  return <Stack gap="lg" className={bodyClass} data-page-body={inset && view !== 'conversation' ? 'inset' : undefined} data-testid="social-room-detail">
-    <Stack gap="md" className={inset && view === 'conversation' ? 'px-[var(--ui-page-gutter,1.5rem)]' : undefined}>
+  return <Stack gap="lg" className={bodyClass} data-page-body={inset ? 'inset' : undefined} data-testid="social-room-detail">
+    <Stack gap="md" className="shrink-0">
     <Button variant="link" size="sm" className="self-start" onClick={onBrowse} data-testid="social-room-back">All hangouts</Button>
     <PageSection size={inset ? 'lg' : 'md'} title={room.name} description={room.description}
       actions={<Inline gap="sm">{mayConfigure && <Button variant="secondary" size="sm" onClick={() => setConfiguring(true)}>Configure hangout</Button>}
@@ -75,12 +86,14 @@ export default function RoomPane({ selected, room, nameOf, call, onBrowse, inset
     <Tabs idPrefix="hangout-view" aria-label="Hangout views" variant="underline" value={view} onValueChange={changeView}
       items={VIEWS.map(id => ({ id, label: id[0]!.toUpperCase() + id.slice(1) }))} />
     </Stack>
-    <TabPanel id="call" when={view} idPrefix="hangout-view" className="min-w-0">
-      {here ? <Stack gap="md" data-testid="hangout-call-stage">
-        <PageSection size="sm" title={currentRoomName} description={`${active.length} connected to this hangout`}
-          actions={<Button variant="secondary" size="sm" onClick={() => changeView('conversation')}>Conversation</Button>} />
-        <CallBlock placement="stage" />
-      </Stack> : <EmptyState align="start" title="Ready when you are" description="Join the call to meet here. Check your camera and microphone before entering." />}
+    <TabPanel id="call" when={view} idPrefix="hangout-view" className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {here ? <HangoutCallView title={currentRoomName} count={active.length} pane={callPane} onPaneChange={changeCallPane}
+        stage={<CallBlock placement="stage" className="min-h-0 flex-1" />}
+        conversation={<HuddleChatBody showCall={false} />}
+        people={<RosterPanel {...(live ? meetingRosterProps(live.meeting, live.roster) : {
+          participants: active.map(p => ({ id: p.userId, displayName: label(p.userId), avatarUrl: p.avatarUrl, isLocal: p.isLocal, isMuted: !p.audioOn, isScreenSharing: p.screenSharing })),
+        })} title="Participants" className="w-full border-l-0" />} />
+        : <EmptyState align="start" title="Ready when you are" description="Join the call to meet here. Check your camera and microphone before entering." />}
     </TabPanel>
     <TabPanel id="overview" when={view} idPrefix="hangout-view"><Stack gap="lg">
     <KeyValue items={[
@@ -121,10 +134,6 @@ export default function RoomPane({ selected, room, nameOf, call, onBrowse, inset
           <T size="sm" tone="secondary">Saved assignments do not mark people as present. Live participation appears under This call.</T>
         </Stack>}
     </Stack></TabPanel>
-    <TabPanel id="conversation" when={view} idPrefix="hangout-view" className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {here ? <><Stack gap="none" className={inset ? 'px-[var(--ui-page-gutter,1.5rem)]' : undefined}><PageSection size="sm" title={`${currentRoomName} conversation`} description="Messages follow the room you are in. Only its participants receive them." /></Stack><HuddleChatBody showCall={false} /></>
-        : <EmptyState align="start" title="Join the call to take part" description="The conversation follows the call and the room you are in." />}
-    </TabPanel>
     <TabPanel id="activity" when={view} idPrefix="hangout-view"><RoomActivity key={`activity:${room.slug}`} slug={room.slug} /></TabPanel>
     {configuring && <RoomConfiguration key={`configuration:${room.slug}`} scope="settings" room={room} people={people} nameOf={nameOf} onClose={() => setConfiguring(false)} onSaved={updated => onSaved?.(updated)} />}
   </Stack>;
