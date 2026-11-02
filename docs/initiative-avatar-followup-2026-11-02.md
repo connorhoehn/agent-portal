@@ -110,6 +110,23 @@ retained alongside the confirming run, rather than removed from coverage.
 This is a rendered portrait/data audit, not an assertion that every application
 interaction or live production record has been verified.
 
+### Needs attention alignment
+
+The attention row now shares the title/subline and trailing-column layout of
+Up next and Recent activity. Its leading key/status badges and accent bar are
+removed; the key, red Blocked label and reason sit below the title. The full
+reason remains available on hover when the narrow layout truncates it. The
+warning surface remains, and the same chevron as the other sections keeps the
+avatar/points columns aligned. Clicking anywhere in the row still opens the item.
+
+Evidence: `.scratch/attention-alignment-2026-11-02/`. Browser checks compare title,
+subline and avatar edges across all three sections at 1440/900px in light/dark,
+verify the preserved reason, and open the blocked item's Work view. The portal
+type check and component-discipline gate pass. A strict shared-UI sweep of the
+Auth Migration Overview also passes all four theme/width cases with zero findings
+and no unclassified composer policies. Existing shared primitives cover
+this composition; no package release or new technical debt is introduced.
+
 ### Remaining technical debt
 
 - **PEOPLE-03 remains open for deployment.** Seeded Aurora `people.avatar_url`

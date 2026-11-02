@@ -115,23 +115,18 @@ export function InitiativeOverview({
               <ActionRowList
                 aria-label="Needs attention"
                 tone="warning"
-                accent="bar"
-                action="Open"
                 columns={COLUMNS}
                 items={model.attention.map((a) => ({
                   id: a.id,
                   title: a.title,
-                  // The tag of the mockup: pale red fill, soft red border, red text
-                  // (outline soft since ui-components 2.396.0) at the 12px
-                  // tag step of the compact rows.
-                  leading: <Inline gap="xs" align="center" wrap={false}>
-                    {a.key && <Chip tone="neutral" size="sm" mono>{a.key}</Chip>}
-                    <Chip tone="danger" size="md" outline="soft">Blocked</Chip>
+                  // Keep the same title/subline and trailing columns as Up next
+                  // and Recent activity. Status belongs beside the item key,
+                  // not in a leading cell that pushes the title to the right.
+                  description: <Inline as="span" gap="sm" align="center" wrap={false}>
+                    {a.key && <T size="xs" tone="secondary" className="shrink-0 font-mono">{a.key}</T>}
+                    <T size="xs" weight="medium" className="shrink-0 text-danger">Blocked</T>
+                    {a.reason && <T size="xs" tone="secondary" className="block truncate" title={a.reason}>{a.reason}</T>}
                   </Inline>,
-                  // The row truncates its description to one line, and a
-                  // blocked reason is a sentence (Cannot be written until the
-                  // cu... at 1440px): whole on hover.
-                  ...(a.reason ? { description: <T title={a.reason}>{a.reason}</T> } : {}),
                   cells: cells(a.assigneeName, a.assigneeAvatarUrl, a.points),
                 }))}
                 onOpen={hrefOf(model.attention)}

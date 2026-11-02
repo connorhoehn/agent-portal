@@ -104,7 +104,26 @@ for (const width of [1440, 900]) for (const theme of ['light', 'dark']) test(`in
       expect(Math.abs(box.x - avatarX)).toBeLessThanOrEqual(1);
       expect(box.width).toBe(24);
     }
+    if (project === 'p-observability') {
+      const attention = overview.getByTestId('overview-attention');
+      const attentionTitle = attention.locator('button > span > span[title]').first();
+      const attentionDescription = attention.getByTestId('action-row-description').first();
+      const attentionAvatar = attention.getByTestId('action-row-person').locator('[data-ui-text="avatar"]').first();
+      await expect(attention.getByTestId('action-row-leading')).toHaveCount(0);
+      await expect(attention.getByTestId('action-row-action')).toHaveCount(0);
+      await expect(attentionDescription).toContainText('ORG-OBS-11');
+      await expect(attentionDescription).toContainText('Blocked');
+      await expect(attentionDescription.locator('[title]')).toHaveAttribute('title', /dependency map/);
+      expect(Math.abs((await attentionTitle.boundingBox())!.x - titleBox.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs((await attentionDescription.boundingBox())!.x - keyBox.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs((await attentionAvatar.boundingBox())!.x - avatarX)).toBeLessThanOrEqual(1);
+      await expect(attention.getByRole('button').first()).toHaveCSS('box-shadow', 'none');
+    }
     await page.screenshot({ path: test.info().outputPath(`${project}-${theme}.png`) });
+    if (project === 'p-observability') {
+      await overview.getByTestId('overview-attention').getByRole('button').first().click();
+      await expect(page).toHaveURL(/tab=work&item=wi-obs-e2-b4/);
+    }
   }
   const directory = await page.request.get('/api/people/shared');
   expect((await directory.json()).me.avatarUrl).toBe('/avatars/photos/demo-user.jpg');
