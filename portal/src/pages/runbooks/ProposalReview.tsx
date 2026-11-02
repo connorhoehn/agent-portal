@@ -35,10 +35,12 @@ interface ProposalResponse {
   can_review: boolean;
 }
 
-export function ProposalReview({ pid, published, onOpen, onDecided }: {
+export function ProposalReview({ pid, published, publishedLoading = false, onOpen, onDecided }: {
   pid: string;
   /** Published runbooks, for "Merge into…". */
   published: readonly RunbookRow[];
+  /** Navigation sections depend on the initial library lookup (merge targets). */
+  publishedLoading?: boolean;
   onOpen: (href: string) => void;
   onDecided: () => void;
 }) {
@@ -67,7 +69,7 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
     const schedule = () => { clearTimeout(timer); timer = setTimeout(update, 120); };
     scroller.addEventListener('scroll', schedule, { passive: true });
     return () => { clearTimeout(timer); scroller.removeEventListener('scroll', schedule); };
-  }, [data]);
+  }, [data, publishedLoading]);
   useCrumbLabel(pid, data ? runbookDisplayTitle(proposalTitle(data.proposal, titles)) : undefined);
 
   if (detail.error && !data) {
@@ -79,8 +81,8 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
       </EditorShell>
     );
   }
-  if (!data) return <EditorShell title="Runbook proposal" titleAs="h1" titleSize="md" headerInset="page" surface="plain" label="Proposal">
-    <Inline role="status" gap="sm" className="px-6 py-4" data-testid="loading-state"><Spinner size="sm" decorative /><T size="sm" tone="secondary">Loading proposal…</T></Inline>
+  if (!data || publishedLoading) return <EditorShell title="Runbook proposal" titleAs="h1" titleSize="md" headerInset="page" surface="plain" label="Proposal">
+    <Inline role="status" gap="sm" className="px-6 py-4" data-testid="loading-state"><Spinner size="md" decorative /><T size="sm" tone="secondary">Loading proposal…</T></Inline>
   </EditorShell>;
   const { proposal: p, runbook, can_review: canReview } = data;
   const open = p.status === 'open';
@@ -286,7 +288,7 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
 
         {sources.length > 0 && (
           <DetailSection as="h2" variant="heading" title={sectionTitle('sources')} data-testid="proposal-section-sources">
-            <SourceList aria-label="Proposal sources" items={sources} />
+            <SourceList layout="row" aria-label="Proposal sources" items={sources} />
           </DetailSection>
         )}
 

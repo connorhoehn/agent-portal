@@ -59,7 +59,7 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
     );
   }
   if (!record.data || !record.data.current) return <EditorShell headerInset="page" title={title ? runbookDisplayTitle(title) : 'Runbook'} titleAs="h1" titleSize="md" titleOverflow="wrap" surface="plain" label="Runbook">
-    <Stack className="px-6 py-4">{!record.data ? <Inline role="status" gap="sm" data-testid="loading-state"><Spinner size="sm" decorative /><T size="sm" tone="secondary">Loading runbook…</T></Inline> : <EmptyState align="start" title="No published version" description="This runbook does not have a version to read yet." />}</Stack>
+    <Stack className="px-6 py-4">{!record.data ? <Inline role="status" gap="sm" data-testid="loading-state"><Spinner size="md" decorative /><T size="sm" tone="secondary">Loading runbook…</T></Inline> : <EmptyState align="start" title="No published version" description="This runbook does not have a version to read yet." />}</Stack>
   </EditorShell>;
   const { runbook, current } = record.data;
   const setTab = (next: string) => setParams((prev) => { const p = new URLSearchParams(prev); if (next === 'read') p.delete('tab'); else p.set('tab', next); return p; }, { replace: true });

@@ -48,3 +48,12 @@ read the current loader manifest. Journey measurements and ten old sealed walks
 remain stale; this work does not claim those historical journeys were re-walked.
 The active runbook/code-diff and broader follow-ups remain in
 [work-social-ui-todo.md](work-social-ui-todo.md).
+
+
+## Shared package follow-up
+
+Rechecked against ui-components 2.499.4 after the runbook review repairs:
+21 deep cases pass with zero findings and zero unclassified policies across
+light/dark and 900/1440px. The report is
+`.scratch/scoped-search-2026-11-02-release-verified/report.json`.
+The earlier Search provider/model validation remains unchanged.

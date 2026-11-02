@@ -173,3 +173,16 @@ already-authorized identities. No name-based global photo lookup was added.
   acceptance belongs to its recorded UI revision. This release does not renew
   every journey's source digest. Budget choices and AWS deploy-machine items
   remain in `local-backlog-goal-2026-10-28.md`; no cloud rollout is claimed.
+
+
+### Audit closure — 2026-11-02
+
+DOC-AUDIT-01, DOC-AUDIT-02 and DOC-AUDIT-03 are now closed for their reported
+Work surfaces. ui-components 2.499.4 supplies measured diff/procedure/control
+profiles, readable review labels, inline prose flow and consistent spacing.
+Proposals pass 24 deep cases and runbooks 25, with zero findings and zero
+unclassified policies. The delayed contents-list race was reproduced and fixed
+in the consumer. Composer keyboard focus was verified in both themes on Runs,
+Designs and Decisions. See [the current TODO](work-social-ui-todo.md) and
+[runbook validation](runbook-review-followup-2026-11-02.md); earlier failures above
+remain historical evidence. Deployment and broader journey work remain open.

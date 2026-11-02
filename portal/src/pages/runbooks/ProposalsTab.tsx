@@ -80,6 +80,7 @@ export default function ProposalsTab() {
           key={pid}
           pid={pid}
           published={library.data?.runbooks ?? []}
+          publishedLoading={library.isLoading && !library.data}
           onOpen={(href) => navigate(href)}
           onDecided={() => { feed.refresh(); library.refresh(); refreshProposals(); }}
         />

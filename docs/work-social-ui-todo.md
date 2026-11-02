@@ -22,11 +22,16 @@ retain historical evidence; this file carries the open work forward.
   themes plus selected/unselected states.
   Fixed in ui-components 2.499.1; Findings passes all four light/dark 1440/900px
   rest cases, and the scoped Search deep audit also passes selected rail counts.
-- [ ] **DOC-AUDIT-02 — command-help alignment.** Reproduce the four 4px runbook
+- [x] **DOC-AUDIT-02 — command-help alignment.** Reproduce the four 4px runbook
   command-help findings, repair the owner if still present and rerun the audit.
-- [ ] **DOC-AUDIT-01 — proposal/code-diff review.** Separate code-diff geometry
+  Closed: shared composer inset profile and runbook spacing repairs; 25 deep
+  cases pass with zero findings on ui-components 2.499.4.
+- [x] **DOC-AUDIT-01 — proposal/code-diff review.** Separate code-diff geometry
   from ordinary collection tables using an evidenced shared profile and mutation
   fixtures. Repair actual contrast, control and prose issues; rerun proposals.
+  Closed: 24 deep cases pass with zero findings; delayed library lookup also
+  waits before revealing the contents, preventing a measured section-list jump.
+  [Validation and ownership](runbook-review-followup-2026-11-02.md).
 
 ## Remaining follow-ups
 
@@ -64,6 +69,7 @@ retain historical evidence; this file carries the open work forward.
 
 - [Work UI findings](work-ui-followup-2026-11-02.md)
 - [Document reading and retained debt](ui-document-reading-2026-11-01.md)
+- [Runbook review audit closure](runbook-review-followup-2026-11-02.md)
 - [Scoped Search and shared focus validation](scoped-search-2026-11-02.md)
 - [Portrait and row alignment coverage](initiative-avatar-followup-2026-11-02.md)
 - [Work list consistency and transcript candidates](work-list-consistency-2026-11-02.md)
@@ -71,7 +77,7 @@ retain historical evidence; this file carries the open work forward.
 - [Composer/gallery validation](composer-gallery-2026-11-02.md)
 - [Social collection validation](social-collection-controls-2026-11-02.md)
 
-The app currently pins ui-components 2.499.1. Fix shared behavior in the library,
+The app currently pins ui-components 2.499.4. Fix shared behavior in the library,
 verify the packed distribution and rendered app, record exact remaining findings,
 and commit/push only this session's changes. Other work in the shared checkout
 remains independently owned.
