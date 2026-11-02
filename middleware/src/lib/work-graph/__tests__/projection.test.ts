@@ -233,13 +233,15 @@ describe('sprints, decisions and flow runs', () => {
   it('draws a decision only on an instant it carries, linked to its initiative and the work it shapes', () => {
     const p = projectWorkGraph(input({
       decisions: [
-        decision('d-today'),
+        decision('d-today', { participants: [{ personId: 'p-005', name: 'Sienna Garcia', role: 'decider', avatarUrl: '/portraits/sienna.jpg' }] }),
         decision('d-old', { decidedAt: '2026-03-12' }),
         decision('d-esc', { status: 'escalated', decidedAt: null, escalatedAt: '2026-10-06T13:30:00.000Z', workItemId: null, projectId: null }),
         decision('d-none', { status: 'open', decidedAt: null, escalatedAt: null }),
       ],
     }));
     expect(kinds(p, 'change')).toEqual(['decision:d-esc', 'decision:d-today']);
+    expect(p.details.find(detail => detail.nodeId === 'decision:d-today')?.participants)
+      .toEqual([{ id: 'p-005', label: 'Sienna Garcia', avatarUrl: '/portraits/sienna.jpg' }]);
     const rel = (from: string, to: string) => p.edges.find(e => e.fromId === from && e.toId === to)?.relation;
     expect(rel('decision:d-today', 'initiative:p-a')).toBe('works-on');
     expect(rel('decision:d-today', 'work:wi-open')).toBe('discussed');

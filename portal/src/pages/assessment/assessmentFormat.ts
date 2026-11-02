@@ -106,19 +106,21 @@ export function filterAndSortTeams(teams: TeamSummary[], filters: TeamListFilter
 export interface ContributorAvatar {
   id: string;
   name: string;
+  avatarUrl?: string;
 }
 
 /** Maps a team's static contributor roster onto the shape the library's
  *  `PresenceAvatars` needs. There is deliberately no person id on a
  *  contributor row (types.ts: "No person ids on a team, deliberately") — a
- *  contributor is `{initials,name}`, nothing more — so `name`+index makes a
+ *  contributor carries a name, initials and an optional presentation portrait.
+ *  The `name`+index pair makes a
  *  stable-enough key for a short, order-stable array sourced from one API
  *  response. `initials` is not carried through: `Avatar` derives the same
  *  initials from `name` on its own (`nameToInitials`), and passing a plain
  *  name lets a contributor whose stored initials disagree with their name
  *  (a stale row) still render consistently. */
 export function contributorAvatars(contributors: TeamSummary['contributors']): ContributorAvatar[] {
-  return (contributors ?? []).map((c, i) => ({ id: `${c.name}-${i}`, name: c.name }));
+  return (contributors ?? []).map((c, i) => ({ id: `${c.name}-${i}`, name: c.name, ...(c.avatarUrl ? { avatarUrl: c.avatarUrl } : {}) }));
 }
 
 export function statusOptions(teams: TeamSummary[]): string[] {

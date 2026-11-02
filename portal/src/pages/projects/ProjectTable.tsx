@@ -2,6 +2,7 @@ import {
   AvatarGroup,
   Chip,
   DataTable,
+  Inline,
   ProgressBar,
   StatusDot,
   type DataTableColumn, T,
@@ -90,13 +91,13 @@ export function ProjectTable({
       ),
     },
     {
-      // Faces only: each avatar's own tooltip names its person, and the rail
-      // row beside this table already prints the owner's name.
+      // The API carries identified people; names alone cannot select a portrait.
       key: 'team', header: 'Team',
       render: (p) => {
-        const team = p.ownerName ? [p.ownerName, ...(p.smeNames ?? [])] : (p.smeNames ?? []);
+        const team = p.team?.map(person => ({ name: person.name, src: person.avatarUrl ?? undefined }))
+          ?? [p.ownerName, ...(p.smeNames ?? [])].filter((name): name is string => !!name).map(name => ({ name }));
         return team.length > 0
-          ? <AvatarGroup names={team} size={20} maxVisible={4} />
+          ? <AvatarGroup items={team} size={20} maxVisible={4} />
           : <T size="xs" className="text-text-tertiary">—</T>;
       },
     },
@@ -119,21 +120,29 @@ export function ProjectTable({
       ),
     },
     {
-      key: 'agentSpendUsd', header: 'Spend (MTD)', numeric: true, sortable: true,
+      key: 'agentSpendUsd', header: 'Spend (MTD)', numeric: true, sortable: true, className: 'text-left',
       compare: (a, b) => (a.agentSpendUsd ?? 0) - (b.agentSpendUsd ?? 0),
       render: (p) => {
         // Below the budgets read tier the server withheld the figures: a lock, never a zero.
-        if (p.budgetAccess) return <LockedFigure lock={p.budgetAccess} testId="spend-locked" />;
         const spend = p.agentSpendUsd ?? 0;
-        if (spend <= 0) return <T size="xs" className="text-text-tertiary">—</T>;
         const burn = allocationFraction(p);
+        // Labels scan from the left; amounts share a right edge. Column classes
+        // affect both th and td, so align the value within the existing cell.
         return (
-          <T
-            className={`text-xs font-semibold tabular-nums whitespace-nowrap ${burn != null && burn > 1 ? 'text-danger' : 'text-text-secondary'}`}
-            title={SPEND_TITLE}
-          >
-            {p.allocatedUsd != null ? `${usd(spend)} of ${usd(p.allocatedUsd)}` : usd(spend)}
-          </T>
+          <Inline justify="end" data-testid="initiative-spend-value">
+            {p.budgetAccess ? (
+              <LockedFigure lock={p.budgetAccess} testId="spend-locked" />
+            ) : spend <= 0 ? (
+              <T size="xs" tone="tertiary">—</T>
+            ) : (
+              <T
+                className={`text-xs font-semibold tabular-nums whitespace-nowrap ${burn != null && burn > 1 ? 'text-danger' : 'text-text-secondary'}`}
+                title={SPEND_TITLE}
+              >
+                {p.allocatedUsd != null ? `${usd(spend)} of ${usd(p.allocatedUsd)}` : usd(spend)}
+              </T>
+            )}
+          </Inline>
         );
       },
     },

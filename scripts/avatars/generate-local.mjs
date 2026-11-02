@@ -211,7 +211,10 @@ function avatarSvg(person) {
 
 function main() {
   const check = process.argv.includes('--check');
-  const cast = [...readPeople(), ...readUnlinkedUsers(), { id: 'demo-user', name: 'Demo User', kind: 'demo' }];
+  const assessmentSource = readFileSync(join(ROOT, 'middleware/src/mock/assessment-portrait-people.ts'), 'utf8');
+  const assessmentPeople = [...assessmentSource.matchAll(/\{ id: '(assessment-[a-z]+)', name: '([^']+)' \}/g)]
+    .map(([, id, name]) => ({ id, name, kind: 'assessment-contributor' }));
+  const cast = [...readPeople(), ...readUnlinkedUsers(), { id: 'demo-user', name: 'Demo User', kind: 'demo' }, ...assessmentPeople];
   const ids = new Set();
   for (const p of cast) {
     if (ids.has(p.id)) throw new Error(`duplicate avatar id ${p.id}`);
@@ -234,7 +237,7 @@ function main() {
   }
 
   const files = new Map();
-  for (const p of cast) files.set(`${p.id}.svg`, avatarSvg(p));
+  for (const p of cast.filter(p => p.kind !== 'assessment-contributor')) files.set(`${p.id}.svg`, avatarSvg(p));
   const index = {
     generator: 'scripts/avatars/generate-local.mjs',
     note: 'Photographic synthetic portraits from photos/personas.json for all seeded identities; unknown people retain initials. Legacy SVG assets are retained but are not selected by the app.',
@@ -267,7 +270,7 @@ function main() {
   }
   for (const [name, body] of files) writeFileSync(join(OUT_DIR, name), body);
   const people = cast.filter(p => p.kind === 'person').length;
-  console.log(`wrote ${cast.length} avatars (${people} people, ${cast.filter(p => p.kind === 'user').length} unlinked users, 1 demo session) + index.json → ${OUT_DIR}`);
+  console.log(`wrote ${cast.length} avatars (${people} people, ${cast.filter(p => p.kind === 'user').length} unlinked users, 1 demo session, ${cast.filter(p => p.kind === 'assessment-contributor').length} assessment contributors) + index.json → ${OUT_DIR}`);
 }
 
 main();

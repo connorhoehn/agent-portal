@@ -443,7 +443,7 @@ export function projectWorkGraph(input: ProjectionInput): Projection {
     details.set(id, {
       nodeId: id, summary: clip(`Decision · ${words(decision.status)}`), badge: words(decision.status),
       lines: [decision.summary ? clip(decision.summary) : null, decision.requiredRole ? `Needs · ${decision.requiredRole}` : null].filter((l): l is string => !!l),
-      ...(decision.participants.length ? { participants: decision.participants.filter(p => ID.test(p.personId)).slice(0, 5).map(p => ({ id: p.personId, label: clip(p.name) })) } : {}),
+      ...(decision.participants.length ? { participants: decision.participants.filter(p => ID.test(p.personId)).slice(0, 5).map(p => ({ id: p.personId, label: clip(p.name), ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}) })) } : {}),
       ...(workNode && workItem ? { workItem: { nodeId: workNode, label: clip(workItem.title || workItem.id) } } : {}),
       footer: { label: clip(decision.projectId && initiatives.get(decision.projectId)?.name ? `Decision · ${initiatives.get(decision.projectId)!.name}` : 'Decision · organisation-wide') },
     });

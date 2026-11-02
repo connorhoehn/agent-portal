@@ -121,7 +121,7 @@ function rowToTeam(r: Record<string, unknown>, exceptions: M.TeamException[]): M
     exceptions,
     created_at: toStr(r['created_at']),
     updated_at: toStr(r['updated_at']),
-    contributors: parseJson<{ initials: string; name: string }[]>(r['contributors'], []),
+    contributors: parseJson<{ initials: string; name: string; avatarUrl?: string | null }[]>(r['contributors'], []),
   };
 }
 

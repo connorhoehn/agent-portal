@@ -64,6 +64,8 @@ describe('initiatives fixture — default', () => {
       expect(detail?.activeAgentRuns).toBe(row.activeAgentRuns);
       expect(detail?.allocatedUsd).toBe(row.allocatedUsd);
       expect(detail?.agentSpendUsd).toBe(row.agentSpendUsd);
+      expect(row.team.map(person => [person.personId, person.name, person.avatarUrl]))
+        .toEqual(detail?.contributors.map(person => [person.personId, person.name, person.avatarUrl]));
     }
   });
 

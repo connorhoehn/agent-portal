@@ -13,11 +13,21 @@ jest.mock('../../config.js', () => ({
 }));
 
 import { freezeClock, fixtureRegistry } from '../../mock/core/index.js';
-import { getDesignThread, listDesignReviews } from '../design-reviews.js';
+import { answerQuestion, getDesignThread, listDesignReviews, signoffDesign } from '../design-reviews.js';
 
 afterEach(() => fixtureRegistry.resetAll('default'));
 
 describe('design-review rows', () => {
+  it('preserves portraits for external signers and new signed authors', async () => {
+    const seeded = await getDesignThread('des-obs-sampling');
+    expect(seeded?.signoffs.find(s => s.personName === 'Sienna Garcia')?.avatarUrl).toBe('/avatars/photos/p-005.jpg');
+    const open = await getDesignThread('des-auth-rotation');
+    const question = open!.posts.find(p => p.kind === 'question' && !p.resolvedBy)!;
+    const answered = await answerQuestion(open!.id, question.id, 'Use the agreed window.', 'New author', '/new-author.jpg');
+    expect(answered?.posts.find(p => p.authorName === 'New author')?.avatarUrl).toBe('/new-author.jpg');
+    const signed = await signoffDesign(open!.id, 'reject', 'New signer', 'sme', '/new-signer.jpg');
+    expect(signed?.thread?.signoffs.find(s => s.personName === 'New signer')?.avatarUrl).toBe('/new-signer.jpg');
+  });
   it('date themselves from the moment they are READ, not from import', async () => {
     const restore = freezeClock('2026-09-06T00:05:00.000Z');
     fixtureRegistry.resetAll('default');

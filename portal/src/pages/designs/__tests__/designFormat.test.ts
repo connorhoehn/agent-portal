@@ -3,8 +3,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { reviewStateLine, latestSignoffs, filterDesigns } from '../designFormat.ts';
+import { reviewStateLine, latestSignoffs, filterDesigns, designParticipantPortrait } from '../designFormat.ts';
 import type { DesignReview } from '../types.ts';
+
+test('design portraits retain an external signer and do not borrow a namesake photo', () => {
+  const thread = { posts: [], signoffs: [{ personName: 'Alex', avatarUrl: '/external.jpg' as string | null }] };
+  const contributors = [{ name: 'Alex', avatarUrl: '/other.jpg' }];
+  assert.equal(designParticipantPortrait('Alex', thread, contributors), '/external.jpg');
+  thread.signoffs[0]!.avatarUrl = null;
+  assert.equal(designParticipantPortrait('Alex', thread, contributors), undefined);
+  thread.signoffs.push({ personName: 'Alex', avatarUrl: '/external.jpg' });
+  assert.equal(designParticipantPortrait('Alex', thread, contributors), undefined);
+});
+
+test('legacy design portraits resolve only one matching initiative contributor', () => {
+  const thread = { posts: [{ authorKind: 'human' as const, authorName: 'Alex' }], signoffs: [] };
+  const contributors = [{ name: 'Alex', avatarUrl: '/one.jpg' }];
+  assert.equal(designParticipantPortrait('Alex', thread, contributors), '/one.jpg');
+  assert.equal(designParticipantPortrait('Unknown', thread, contributors), undefined);
+  contributors.push({ name: 'Alex', avatarUrl: '/two.jpg' });
+  assert.equal(designParticipantPortrait('Alex', thread, contributors), undefined);
+});
 
 function review(over: Partial<DesignReview> = {}): DesignReview {
   return {

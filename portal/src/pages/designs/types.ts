@@ -11,6 +11,7 @@ export interface DesignPost {
   id: string;
   authorKind: 'agent' | 'human';
   authorName: string;
+  avatarUrl?: string | null;
   kind: PostKind;
   body: string;
   resolvedBy: string | null;
@@ -20,6 +21,7 @@ export interface DesignPost {
 
 export interface DesignSignoff {
   personName: string;
+  avatarUrl?: string | null;
   role: string;
   decision: 'approve' | 'reject';
   at: string;

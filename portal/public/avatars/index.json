@@ -433,6 +433,54 @@
       "kind": "demo",
       "name": "Demo User",
       "url": "/avatars/photos/demo-user.jpg"
+    },
+    {
+      "id": "assessment-deepa",
+      "kind": "assessment-contributor",
+      "name": "Deepa Natarajan",
+      "url": "/avatars/photos/assessment-deepa.jpg"
+    },
+    {
+      "id": "assessment-idris",
+      "kind": "assessment-contributor",
+      "name": "Idris Diallo",
+      "url": "/avatars/photos/assessment-idris.jpg"
+    },
+    {
+      "id": "assessment-jordan",
+      "kind": "assessment-contributor",
+      "name": "Jordan Lee",
+      "url": "/avatars/photos/assessment-jordan.jpg"
+    },
+    {
+      "id": "assessment-lucia",
+      "kind": "assessment-contributor",
+      "name": "Lucia Romero",
+      "url": "/avatars/photos/assessment-lucia.jpg"
+    },
+    {
+      "id": "assessment-sam",
+      "kind": "assessment-contributor",
+      "name": "Sam Okafor",
+      "url": "/avatars/photos/assessment-sam.jpg"
+    },
+    {
+      "id": "assessment-elena",
+      "kind": "assessment-contributor",
+      "name": "Elena Marsh",
+      "url": "/avatars/photos/assessment-elena.jpg"
+    },
+    {
+      "id": "assessment-bruno",
+      "kind": "assessment-contributor",
+      "name": "Bruno Vega",
+      "url": "/avatars/photos/assessment-bruno.jpg"
+    },
+    {
+      "id": "assessment-martina",
+      "kind": "assessment-contributor",
+      "name": "Martina Kovacs",
+      "url": "/avatars/photos/assessment-martina.jpg"
     }
   ]
 }

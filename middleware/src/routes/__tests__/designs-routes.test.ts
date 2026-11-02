@@ -38,11 +38,15 @@ jest.mock('../../providers/design-reviews.js', () => ({
   answerQuestion: jest.fn(),
   signoffDesign: jest.fn(),
 }));
+jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
+jest.mock('../../providers/user-avatars.js', () => ({ userAvatars: jest.fn() }));
 
 import express from 'express';
 import request from '../../test-support/http.js';
 import { designsRouter } from '../designs.js';
 import { errorHandler } from '../../lib/async-handler.js';
+import { getUser } from '../../providers/identity.js';
+import { userAvatars } from '../../providers/user-avatars.js';
 import {
   listDesignReviews, getDesignThread, answerQuestion, signoffDesign,
 } from '../../providers/design-reviews.js';
@@ -69,6 +73,8 @@ function buildApp() {
 
 beforeEach(() => {
   listMock.mockReset(); threadMock.mockReset(); answerMock.mockReset(); signoffMock.mockReset();
+  (getUser as jest.Mock).mockReset().mockResolvedValue({ id: 'u-1', personId: 'p-1' });
+  (userAvatars as jest.Mock).mockReset().mockResolvedValue(new Map([['u-1', '/avatars/photos/p-1.jpg']]));
   // Answer and signoff resolve the thread's home initiative first (DE-44 row 30).
   threadMock.mockResolvedValue(THREAD);
   scopeDeny.clear();
@@ -132,9 +138,11 @@ describe('POST /api/designs/:id/answer', () => {
     answerMock.mockResolvedValue(THREAD);
     const res = await request(buildApp())
       .post('/api/designs/dr-1/answer')
-      .send({ questionPostId: 'po-1', body: '  hourly  ', authorName: 'forged' });
+      .send({ questionPostId: 'po-1', body: '  hourly  ', authorName: 'forged', avatarUrl: '/forged.jpg' });
     expect(res.status).toBe(200);
-    expect(answerMock).toHaveBeenCalledWith('dr-1', 'po-1', 'hourly', 'Nora Vance');
+    expect(getUser).toHaveBeenCalledWith('u-1');
+    expect(userAvatars).toHaveBeenCalledWith([{ id: 'u-1', personId: 'p-1' }]);
+    expect(answerMock).toHaveBeenCalledWith('dr-1', 'po-1', 'hourly', 'Nora Vance', '/avatars/photos/p-1.jpg');
   });
 
   it('409s (not 404) when the question is gone or already answered', async () => {
@@ -159,17 +167,19 @@ describe('POST /api/designs/:id/signoff', () => {
   it('records the signer NAME and ROLE from the session — the quorum rests on it', async () => {
     signoffMock.mockResolvedValue({ thread: { ...THREAD, status: 'approved' } });
     const res = await request(buildApp())
-      .post('/api/designs/dr-1/signoff').send({ decision: 'approve', role: 'admin' });
+      .post('/api/designs/dr-1/signoff').send({ decision: 'approve', role: 'admin', avatarUrl: '/forged.jpg' });
     expect(res.status).toBe(200);
-    expect(signoffMock).toHaveBeenCalledWith('dr-1', 'approve', 'Nora Vance', 'sme');
+    expect(signoffMock).toHaveBeenCalledWith('dr-1', 'approve', 'Nora Vance', 'sme', '/avatars/photos/p-1.jpg');
     expect(res.body.status).toBe('approved');
   });
 
   it('defaults a role-less session to member rather than inheriting the body', async () => {
     sessionValue = { sub: 'u-9' };
+    (getUser as jest.Mock).mockResolvedValue(null);
     signoffMock.mockResolvedValue({ thread: THREAD });
     await request(buildApp()).post('/api/designs/dr-1/signoff').send({ decision: 'reject', role: 'admin' });
-    expect(signoffMock).toHaveBeenCalledWith('dr-1', 'reject', 'u-9', 'member');
+    expect(userAvatars).toHaveBeenCalledWith([{ id: 'u-9', personId: null }]);
+    expect(signoffMock).toHaveBeenCalledWith('dr-1', 'reject', 'u-9', 'member', null);
   });
 
   it('409s a blocked approval and forwards blockingId so the drawer can link it', async () => {

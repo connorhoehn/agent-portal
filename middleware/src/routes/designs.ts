@@ -10,6 +10,8 @@ import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
 import { requireInitiativeScope } from '../lib/initiative-scope.js';
+import { getUser } from '../providers/identity.js';
+import { userAvatars } from '../providers/user-avatars.js';
 import {
   listDesignReviews, getDesignThread, answerQuestion, signoffDesign,
 } from '../providers/design-reviews.js';
@@ -17,6 +19,12 @@ import {
 export const designsRouter: Router = Router();
 
 const steerGate = requireAction('DispatchAgentRun');
+
+async function actorPortrait(userId: string | undefined): Promise<string | null> {
+  if (!userId) return null;
+  const user = await getUser(userId);
+  return (await userAvatars([user ?? { id: userId, personId: null }])).get(userId) ?? null;
+}
 
 // GET /api/designs?initiative=&status=
 designsRouter.get('/', asyncHandler(async (req, res) => {
@@ -58,6 +66,7 @@ designsRouter.post('/:id/answer', steerGate, asyncHandler(async (req, res) => {
   const thread = await answerQuestion(
     String(req.params['id'] ?? ''), questionPostId, String(body).trim(),
     session?.name ?? session?.sub ?? 'someone',
+    await actorPortrait(session?.sub),
   );
   if (!thread) {
     res.status(409).json({ error: 'question not found or already answered' });
@@ -80,6 +89,7 @@ designsRouter.post('/:id/signoff', steerGate, asyncHandler(async (req, res) => {
   const result = await signoffDesign(
     String(req.params['id'] ?? ''), decision,
     session?.name ?? session?.sub ?? 'someone', session?.role ?? 'member',
+    await actorPortrait(session?.sub),
   );
   if (!result) throw new NotFoundError('design review not found');
   if ('error' in result && result.error) {

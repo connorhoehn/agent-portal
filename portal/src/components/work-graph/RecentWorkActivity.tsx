@@ -10,6 +10,7 @@ import { recentWorkEvents, type WorkGraphSubject } from '../../lib/workGraph';
 import { relativeTime } from '../../lib/relativeTime';
 import { useWorkGraphSource } from './WorkGraphActivity';
 
+// Same widths as InitiativeOverview: the person column aligns across sections.
 const COLUMNS: ActionRowColumn[] = [
   { id: 'who', width: 'xl', label: 'Who' },
   { id: 'when', width: 'sm', label: 'When' },

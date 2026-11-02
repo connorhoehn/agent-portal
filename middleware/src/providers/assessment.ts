@@ -113,7 +113,7 @@ export interface TeamSummary {
   dimensions_total: number;
   followups_open: number;
   updated_at: string;
-  contributors: { initials: string; name: string }[];
+  contributors: { initials: string; name: string; avatarUrl?: string | null }[];
 }
 
 export interface TeamDetail {

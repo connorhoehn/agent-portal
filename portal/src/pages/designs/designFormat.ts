@@ -1,7 +1,27 @@
 // Pure derivations for the design-review pages. No React — testable under
 // node:test like the other format modules.
 
-import type { DesignReview, DesignSignoff, DesignStatus, PostKind } from './types';
+import type { DesignPost, DesignReview, DesignSignoff, DesignStatus, PostKind } from './types';
+
+/** Legacy participant labels have no IDs. Use recorded portraits only when
+ * they agree; an explicit missing photo or conflicting snapshots stay unknown. */
+export function designParticipantPortrait(
+  name: string,
+  thread: {
+    posts: Pick<DesignPost, 'authorKind' | 'authorName' | 'avatarUrl'>[];
+    signoffs: Pick<DesignSignoff, 'personName' | 'avatarUrl'>[];
+  },
+  contributors: Array<{ name: string; avatarUrl?: string | null }>,
+): string | undefined {
+  const snapshots = [...thread.posts.filter(p => p.authorKind === 'human' && p.authorName === name),
+    ...thread.signoffs.filter(s => s.personName === name)].filter(p => p.avatarUrl !== undefined);
+  if (snapshots.length) {
+    const urls = new Set(snapshots.map(p => p.avatarUrl ?? null));
+    return urls.size === 1 ? snapshots[0]?.avatarUrl ?? undefined : undefined;
+  }
+  const people = contributors.filter(person => person.name === name);
+  return people.length === 1 ? people[0]?.avatarUrl ?? undefined : undefined;
+}
 
 export const STATUS_LABEL: Record<DesignStatus, string> = {
   ideating: 'Ideating',

@@ -503,6 +503,54 @@
       "name": "Demo User",
       "portraitUrl": "/avatars/photos/demo-user.jpg",
       "biography": "Fictional generic demo-session identity; not a directory person."
+    },
+    {
+      "subjectId": "assessment-deepa",
+      "name": "Deepa Natarajan",
+      "portraitUrl": "/avatars/photos/assessment-deepa.jpg",
+      "biography": "Fictional Assessment team contributor."
+    },
+    {
+      "subjectId": "assessment-idris",
+      "name": "Idris Diallo",
+      "portraitUrl": "/avatars/photos/assessment-idris.jpg",
+      "biography": "Fictional Assessment team contributor."
+    },
+    {
+      "subjectId": "assessment-jordan",
+      "name": "Jordan Lee",
+      "portraitUrl": "/avatars/photos/assessment-jordan.jpg",
+      "biography": "Fictional Assessment team contributor."
+    },
+    {
+      "subjectId": "assessment-lucia",
+      "name": "Lucia Romero",
+      "portraitUrl": "/avatars/photos/assessment-lucia.jpg",
+      "biography": "Fictional Assessment team contributor."
+    },
+    {
+      "subjectId": "assessment-sam",
+      "name": "Sam Okafor",
+      "portraitUrl": "/avatars/photos/assessment-sam.jpg",
+      "biography": "Fictional Assessment team contributor."
+    },
+    {
+      "subjectId": "assessment-elena",
+      "name": "Elena Marsh",
+      "portraitUrl": "/avatars/photos/assessment-elena.jpg",
+      "biography": "Fictional Assessment team contributor."
+    },
+    {
+      "subjectId": "assessment-bruno",
+      "name": "Bruno Vega",
+      "portraitUrl": "/avatars/photos/assessment-bruno.jpg",
+      "biography": "Fictional Assessment team contributor."
+    },
+    {
+      "subjectId": "assessment-martina",
+      "name": "Martina Kovacs",
+      "portraitUrl": "/avatars/photos/assessment-martina.jpg",
+      "biography": "Fictional Assessment team contributor."
     }
   ]
 }

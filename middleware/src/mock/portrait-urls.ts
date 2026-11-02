@@ -72,5 +72,13 @@ export const PORTRAIT_URLS: Readonly<Record<string, string>> = {
   "p-055": "/avatars/photos/p-055.jpg",
   "p-056": "/avatars/photos/p-056.jpg",
   "p-rhea": "/avatars/photos/p-rhea.jpg",
-  "demo-user": "/avatars/photos/demo-user.jpg"
+  "demo-user": "/avatars/photos/demo-user.jpg",
+  "assessment-deepa": "/avatars/photos/assessment-deepa.jpg",
+  "assessment-idris": "/avatars/photos/assessment-idris.jpg",
+  "assessment-jordan": "/avatars/photos/assessment-jordan.jpg",
+  "assessment-lucia": "/avatars/photos/assessment-lucia.jpg",
+  "assessment-sam": "/avatars/photos/assessment-sam.jpg",
+  "assessment-elena": "/avatars/photos/assessment-elena.jpg",
+  "assessment-bruno": "/avatars/photos/assessment-bruno.jpg",
+  "assessment-martina": "/avatars/photos/assessment-martina.jpg"
 };

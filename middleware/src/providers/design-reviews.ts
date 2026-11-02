@@ -31,6 +31,8 @@ export interface DesignPost {
   /** 'agent' posts come from the fleet; 'human' from a signed-in person. */
   authorKind: 'agent' | 'human';
   authorName: string;
+  /** Portrait captured from the signed author, never guessed from a name. */
+  avatarUrl?: string | null;
   kind: PostKind;
   body: string;
   /** question posts: null while open; the answer post id once resolved. */
@@ -42,6 +44,7 @@ export interface DesignPost {
 
 export interface DesignSignoff {
   personName: string;
+  avatarUrl?: string | null;
   role: string;
   decision: 'approve' | 'reject';
   at: string;
@@ -189,7 +192,7 @@ export async function getDesignThread(id: string): Promise<DesignThread | null> 
  * the revision is synchronous; on Aurora it will be an enqueued agent job.
  */
 export async function answerQuestion(
-  id: string, questionPostId: string, body: string, byName: string,
+  id: string, questionPostId: string, body: string, byName: string, avatarUrl?: string | null,
 ): Promise<DesignThread | null> {
   const doc = docs().find((d) => d.id === id);
   if (!doc) return null;
@@ -197,7 +200,7 @@ export async function answerQuestion(
   if (!q || q.resolvedBy != null) return null;
 
   const answer = newPost({
-    authorKind: 'human', authorName: byName, kind: 'answer', body,
+    authorKind: 'human', authorName: byName, avatarUrl, kind: 'answer', body,
     createdAt: new Date().toISOString(),
   });
   q.resolvedBy = answer.id;
@@ -233,7 +236,7 @@ export async function answerQuestion(
  * approved ADR and is logged to the knowledge base.
  */
 export async function signoffDesign(
-  id: string, decision: 'approve' | 'reject', byName: string, role: string,
+  id: string, decision: 'approve' | 'reject', byName: string, role: string, avatarUrl?: string | null,
 ): Promise<{ thread: DesignThread; error?: never } | { thread?: never; error: string; blockingId?: string } | null> {
   const doc = docs().find((d) => d.id === id);
   if (!doc) return null;
@@ -248,7 +251,7 @@ export async function signoffDesign(
   }
 
   doc.signoffs = doc.signoffs.filter((s) => s.personName !== byName);
-  doc.signoffs.push({ personName: byName, role, decision, at: new Date().toISOString() });
+  doc.signoffs.push({ personName: byName, avatarUrl, role, decision, at: new Date().toISOString() });
 
   const tally = tallySignoffs(doc.signoffs);
   if (decision === 'reject') {

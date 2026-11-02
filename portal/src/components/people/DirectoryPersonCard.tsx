@@ -7,7 +7,9 @@ import { demoPublicProfiles } from './demoPublicProfiles';
 
 /** Everyday people lookup shows what the person shares about their work.
  * HR retains the separate inferred-specialty and relationship analysis. */
-export function DirectoryPersonCard(props: PersonDetailCardProps) {
+export function DirectoryPersonCard(props: Omit<PersonDetailCardProps, 'person'> & {
+  person: (NonNullable<PersonDetailCardProps['person']> & { avatarUrl?: string | null }) | null | undefined;
+}) {
   const { session } = useSession();
   if (session?.role === 'hr-admin') return <PersonDetailCard {...props} showInfluence />;
   const { person, loading, error, onAsk, askLabel, onClose, className, 'data-testid': testId } = props;
@@ -17,7 +19,7 @@ export function DirectoryPersonCard(props: PersonDetailCardProps) {
     {loading ? <LoadingState label="Loading profile…" /> : error ? <InlineAlert tone="error">{error}</InlineAlert> : !person ? <EmptyState title="Profile unavailable" /> : <>
       <Inline gap="md" align="start" justify="between">
         <Inline gap="sm" align="center">
-          <Avatar name={person.name} {...(persona ? { src: persona.portraitUrl } : {})} size={44} />
+          <Avatar name={person.name} src={person.avatarUrl ?? undefined} size={44} />
           <Stack gap="xs">
             <T size="base" weight="semibold">{person.name}</T>
             <T size="sm" tone="secondary" wrap>{[person.title, person.department].filter(Boolean).join(' · ')}</T>

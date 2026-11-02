@@ -1,9 +1,7 @@
 // Projects provider — reads project data from Aurora PostgreSQL via RDS Data API.
 // Tables: projects(id, name, status, created_at), project_contributions(person_id, project_id, role, weight), people(id, name, title, team)
-// Does NOT import from or modify types.ts or aurora.ts — all types and exec are
-// local. The single exception is the budget window (lib/budget-periods.ts, via
-// budgets.ts): the agent spend window is one fact and duplicating it is what
-// let the two pages disagree in the first place.
+// Project types and SQL execution stay local. Shared readers own budget
+// windows, work-item counts and portraits so list/detail views agree.
 
 import { noteSearchWrite } from '../lib/search-index/writes.js';
 import {
@@ -14,8 +12,7 @@ import {
 } from '@aws-sdk/client-rds-data';
 
 import { config } from '../config.js';
-// The one exception to the "nothing shared" note above, and a deliberate one:
-// the budget period is a single fact and this rollup must not have its own copy
+// The budget period is a single fact and this rollup must not have its own copy
 // of it. See PERIOD_START_SQL in lib/budget-periods.ts for why the windows were unified.
 import { MOCK_BUDGETS, mockBudgetRow } from './budgets.js';
 // DE-38: each initiative's spend window is its budget period (monthly unless
@@ -33,6 +30,7 @@ import { clock, countBy } from '../mock/core/index.js';
 import { initiatives, findInitiative, type MockInitiative } from '../mock/initiatives.js';
 import { mockAvatarUrl } from '../mock/avatars.js';
 import { devboxBoxes } from '../mock/devbox-fleet.js';
+import { fetchAvatarsById } from './aurora.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -50,6 +48,8 @@ export interface ProjectSummary {
   ownerId: string | null;
   ownerName: string | null;
   smeNames: string[];
+  /** Identified owner/SMEs with their optional portraits, in display order. */
+  team: Array<{ personId: string; name: string; role: 'owner' | 'sme'; avatarUrl: string | null }>;
   openStories: number | null;
   openBugs: number | null;
   pointsDone: number | null;
@@ -82,10 +82,10 @@ export interface ProjectSummary {
 
 /** The rollup fields defaulted for mock mode and the legacy fallback. */
 const EMPTY_ROLLUPS: Pick<ProjectSummary,
-  'ownerId' | 'ownerName' | 'smeNames' | 'openStories' | 'openBugs'
+  'ownerId' | 'ownerName' | 'smeNames' | 'team' | 'openStories' | 'openBugs'
   | 'pointsDone' | 'pointsTotal' | 'agentSpendUsd' | 'lastAgentActivityAt' | 'repoFullName'
   | 'activeAgentRuns' | 'priority' | 'allocatedUsd'> = {
-  ownerId: null, ownerName: null, smeNames: [],
+  ownerId: null, ownerName: null, smeNames: [], team: [],
   openStories: null, openBugs: null, pointsDone: null, pointsTotal: null,
   agentSpendUsd: null, lastAgentActivityAt: null, repoFullName: null,
   activeAgentRuns: null, priority: null, allocatedUsd: null,
@@ -411,6 +411,10 @@ export async function listProjects(opts: {
         ownerId: cast.owner,
         ownerName: p.topContributorNames[0] ?? null,
         smeNames: p.topContributorNames.slice(1),
+        team: [cast.owner, ...cast.smes.filter(id => id !== cast.owner)].map(personId => ({
+          personId, name: castName(personId), role: personId === cast.owner ? 'owner' as const : 'sme' as const,
+          avatarUrl: mockAvatarUrl(personId),
+        })),
         repoFullName: cast.repo,
         agentSpendUsd: row ? row.spentThisPeriodUsd : 0,
         lastAgentActivityAt: row ? row.lastAgentActivityAt : null,
@@ -506,13 +510,13 @@ export async function listProjects(opts: {
   const rollupSelect = `,
       p.owner_id,
       own.name AS owner_name,
-      (SELECT STRING_AGG(sn.name, '|||')
+      (SELECT JSON_AGG(JSON_BUILD_OBJECT('personId', sn.id, 'name', sn.name))::text
        FROM (
-         SELECT pe3.name FROM project_contributions pc3
+         SELECT pe3.id, pe3.name FROM project_contributions pc3
          JOIN people pe3 ON pe3.id = pc3.person_id
          WHERE pc3.project_id = p.id AND pc3.role = 'sme'
-         ORDER BY pc3.weight DESC NULLS LAST LIMIT 3
-       ) sn) AS sme_names,
+         ORDER BY pc3.weight DESC NULLS LAST, pe3.id LIMIT 3
+       ) sn) AS sme_people,
       (SELECT COUNT(*) FROM work_items w WHERE w.project_id = p.id AND w.type = 'story'
         AND w.status IN ('open','in_progress','in_review'))::int AS open_stories,
       (SELECT COUNT(*) FROM work_items w WHERE w.project_id = p.id AND w.type = 'bug'
@@ -569,10 +573,13 @@ export async function listProjects(opts: {
     rows = await exec(buildSql(false), params);
   }
 
-  return rows.map((r) => {
+  const summaries: ProjectSummary[] = rows.map((r) => {
     const createdAt = r['created_at'] != null ? String(r['created_at']) : null;
     const rawTopNames = r['top_names'] != null ? String(r['top_names']) : null;
-    const rawSmeNames = r['sme_names'] != null ? String(r['sme_names']) : null;
+    const smes: Array<{ personId: string; name: string }> = r['sme_people']
+      ? JSON.parse(String(r['sme_people'])) : [];
+    const ownerId = r['owner_id'] != null ? String(r['owner_id']) : null;
+    const ownerName = r['owner_name'] != null ? String(r['owner_name']) : null;
     const lastAgent = r['last_agent_activity_at'] != null ? String(r['last_agent_activity_at']) : null;
     return {
       id: String(r['id'] ?? ''),
@@ -585,9 +592,12 @@ export async function listProjects(opts: {
         : [],
       lastActivityAt: lastAgent ?? createdAt,
       ...(hasRollups ? {
-        ownerId: r['owner_id'] != null ? String(r['owner_id']) : null,
-        ownerName: r['owner_name'] != null ? String(r['owner_name']) : null,
-        smeNames: rawSmeNames ? rawSmeNames.split('|||').filter((n) => n.length > 0) : [],
+        ownerId, ownerName,
+        smeNames: smes.map(person => person.name),
+        team: [
+          ...(ownerId && ownerName ? [{ personId: ownerId, name: ownerName, role: 'owner' as const, avatarUrl: null }] : []),
+          ...smes.filter(person => person.personId !== ownerId).map(person => ({ ...person, role: 'sme' as const, avatarUrl: null })),
+        ],
         openStories: Number(r['open_stories'] ?? 0),
         openBugs: Number(r['open_bugs'] ?? 0),
         pointsDone: Number(r['points_done'] ?? 0),
@@ -601,6 +611,14 @@ export async function listProjects(opts: {
       } : EMPTY_ROLLUPS),
     };
   });
+  // One optional read for the returned people. A missing additive avatar column
+  // must not discard initiative rollups or change which records are visible.
+  const personIds = [...new Set(summaries.flatMap(project => project.team.map(person => person.personId)))];
+  if (personIds.length) {
+    const portraits = await fetchAvatarsById(personIds);
+    for (const project of summaries) for (const person of project.team) person.avatarUrl = portraits.get(person.personId) ?? null;
+  }
+  return summaries;
 }
 
 /** projects.summary for many initiatives in ONE read, keyed by id — for

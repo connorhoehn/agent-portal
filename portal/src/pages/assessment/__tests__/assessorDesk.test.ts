@@ -55,6 +55,8 @@ test('contributorAvatars is empty for undefined or empty contributors', () => {
 });
 
 test('contributorAvatars keeps two same-named contributors distinct by index', () => {
-  const avatars = contributorAvatars([{ initials: 'JL', name: 'Jordan Lee' }, { initials: 'JL', name: 'Jordan Lee' }]);
+  const avatars = contributorAvatars([{ initials: 'JL', name: 'Jordan Lee', avatarUrl: '/jordan.jpg' }, { initials: 'JL', name: 'Jordan Lee' }]);
   assert.equal(new Set(avatars.map((a) => a.id)).size, 2);
+  assert.equal(avatars[0]?.avatarUrl, '/jordan.jpg');
+  assert.equal(avatars[1]?.avatarUrl, undefined);
 });

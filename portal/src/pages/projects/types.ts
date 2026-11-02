@@ -14,6 +14,7 @@ export interface ProjectSummary {
   ownerId?: string | null;
   ownerName?: string | null;
   smeNames?: string[];
+  team?: Array<{ personId: string; name: string; role: 'owner' | 'sme'; avatarUrl: string | null }>;
   openStories?: number | null;
   openBugs?: number | null;
   pointsDone?: number | null;

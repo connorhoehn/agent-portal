@@ -33,7 +33,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { DESIGNS_SOURCE, STATUS_LABEL, STATUS_TONE, latestSignoffs, nextStep } from './designFormat';
+import { DESIGNS_SOURCE, STATUS_LABEL, STATUS_TONE, designParticipantPortrait, latestSignoffs, nextStep } from './designFormat';
 import type { DesignThread } from './types';
 
 interface InitiativeLite {
@@ -105,11 +105,7 @@ export default function DesignThreadPage() {
   const participants = [...new Map(thread.posts.map((p) => [p.authorName, p.authorKind])).entries()];
   const owner = initiative?.ownerName ?? null;
   const ownerPhoto = initiative?.contributors.find(person => person.personId === initiative.ownerId)?.avatarUrl ?? undefined;
-  // Legacy posts carry names only. Resolve a photo only for a unique contributor; never guess between namesakes.
-  const photoFor = (name: string) => {
-    const people = initiative?.contributors.filter(person => person.name === name) ?? [];
-    return people.length === 1 ? people[0]?.avatarUrl ?? undefined : undefined;
-  };
+  const photoFor = (name: string) => designParticipantPortrait(name, thread, initiative?.contributors ?? []);
   const smes = (initiative?.contributors ?? []).filter((c) => (c.role ?? '').toLowerCase() === 'sme');
 
   const rail = (
@@ -240,7 +236,7 @@ export default function DesignThreadPage() {
               id: p.id,
               authorKind: p.authorKind,
               authorName: p.authorName,
-              avatarUrl: p.authorKind === 'human' ? photoFor(p.authorName) : undefined,
+              avatarUrl: p.authorKind === 'human' ? (p.avatarUrl === undefined ? photoFor(p.authorName) : p.avatarUrl ?? undefined) : undefined,
               kind: p.kind,
               body: p.body,
               resolved: p.resolvedBy != null,
@@ -253,7 +249,7 @@ export default function DesignThreadPage() {
 
           <SignoffPanel
             variant="inline"
-            signoffs={signoffs.map((s) => ({ name: s.personName, avatarUrl: photoFor(s.personName), role: s.role, decision: s.decision }))}
+            signoffs={signoffs.map((s) => ({ name: s.personName, avatarUrl: s.avatarUrl === undefined ? photoFor(s.personName) : s.avatarUrl ?? undefined, role: s.role, decision: s.decision }))}
             required={2}
             {...(canSteer && !isTerminal ? {
               actions: (

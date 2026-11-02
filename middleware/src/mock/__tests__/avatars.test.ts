@@ -14,7 +14,7 @@ import { join, resolve } from 'node:path';
 import { fixtureRegistry } from '../core/index.js';
 import { avatars, mockAvatarUrl, UNLINKED_USER_IDS } from '../avatars.js';
 import { seededPeople } from '../people.js';
-import { listUsers } from '../../providers/identity.js';
+import { listUsers, cloneIdentity } from '../../providers/identity.js';
 import { userAvatars } from '../../providers/user-avatars.js';
 import { claimableAvatarUrl, realtimeClaims } from '../../lib/realtime-token.js';
 
@@ -62,6 +62,13 @@ describe('mock avatars', () => {
     expect(map.get('u-mira')).toBe('/avatars/photos/u-mira.jpg');
     expect(map.get('u-new')).toBeNull();
     expect(map.get('demo-user')).toBe('/avatars/photos/demo-user.jpg');
+  });
+
+  it('uses the explicit clone source for an unlinked test account, never an ID-prefix guess', async () => {
+    const clone = cloneIdentity('u-operator');
+    const map = await userAvatars([{ id: clone.id, personId: null }, { id: 'u-operator-clone-invented', personId: null }]);
+    expect(map.get(clone.id)).toBe('/avatars/photos/u-operator.jpg');
+    expect(map.get('u-operator-clone-invented')).toBeNull();
   });
 });
 

@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS assessment_teams (
   assessment_lead  TEXT NOT NULL DEFAULT '',
   contacts         TEXT[] NOT NULL DEFAULT '{}',
   repos            JSONB NOT NULL DEFAULT '[]',     -- RepoRef[] {name, gitlab_url}
-  contributors     JSONB NOT NULL DEFAULT '[]',     -- {initials, name}[]
+  contributors     JSONB NOT NULL DEFAULT '[]',     -- {initials, name, avatarUrl?}[] (presentation only)
   archetype        TEXT,                            -- ARCHETYPES.key or NULL
   rubric_version   TEXT NOT NULL DEFAULT 'v1',
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),

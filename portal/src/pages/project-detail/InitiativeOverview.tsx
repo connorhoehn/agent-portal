@@ -41,10 +41,11 @@ function statItem(s: OverviewStat): StatStripItem {
   };
 }
 
-/** Person ┆ points, declared once so the cells line up down both lists. */
+/** Match RecentWorkActivity's person + trailing fact widths so avatars share
+ * an edge across Up next and Recent activity, including narrow panes. */
 const COLUMNS: ActionRowColumn[] = [
   { id: 'person', width: 'xl', label: 'Assignee' },
-  { id: 'points', width: 'xs', label: 'Points' },
+  { id: 'points', width: 'sm', label: 'Points' },
 ];
 
 function cells(assigneeName: string | null, avatarUrl: string | null, points: string | null): Record<string, ReactNode> {
@@ -174,7 +175,12 @@ export function InitiativeOverview({
               aria-label="Up next"
               className="work-overview-striped-rows"
               columns={COLUMNS}
-              items={model.upNext.map((r) => ({ id: r.id, title: r.title, leading: r.key ? <Chip tone="neutral" size="sm" mono>{r.key}</Chip> : undefined, cells: cells(r.assigneeName, r.assigneeAvatarUrl, r.points) }))}
+              items={model.upNext.map((r) => ({
+                id: r.id,
+                title: r.title,
+                description: r.key ? <T size="xs" tone="secondary" className="font-mono">{r.key}</T> : undefined,
+                cells: cells(r.assigneeName, r.assigneeAvatarUrl, r.points),
+              }))}
               onOpen={hrefOf(model.upNext)}
               emptyLabel="Nothing is up next."
             />

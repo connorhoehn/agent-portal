@@ -10,6 +10,7 @@
 import { RDSDataClient, ExecuteStatementCommand, type Field, type SqlParameter } from '@aws-sdk/client-rds-data';
 import { config } from '../config.js';
 import { mockAvatarUrl } from '../mock/avatars.js';
+import { findClone } from '../mock/identity-clones.js';
 
 let client: RDSDataClient | null = null;
 const rds = (): RDSDataClient => (client ??= new RDSDataClient({ region: config.region }));
@@ -23,7 +24,7 @@ export async function userAvatars(
   if (users.length === 0) return out;
   const aurora = config.aurora;
   if (config.mock?.aurora || !aurora?.clusterArn || !aurora?.secretArn) {
-    for (const user of users) out.set(user.id, mockAvatarUrl(user.personId ?? user.id));
+    for (const user of users) out.set(user.id, mockAvatarUrl(user.personId ?? findClone(user.id)?.from ?? user.id));
     return out;
   }
   const ids = [...new Set(users.map((user) => user.id))];

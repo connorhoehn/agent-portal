@@ -37,6 +37,7 @@
 // An `empty` rubric would empty DIMENSION_IDS and take every surface with it.
 
 import { clock, countBy, defineFixture } from './core/index.js';
+import { mockAvatarUrl } from './avatars.js';
 import {
   at, buildEvidenceLog, ENVELOPE, buildScores, buildScoringLogs, buildSubmissions, HB, RUN_ID, runId, runStamp, stampOf,
   type ContentContext,
@@ -3087,7 +3088,7 @@ export interface MockTeam {
   exceptions: TeamException[];
   created_at: string;
   updated_at: string;
-  contributors: { initials: string; name: string }[];
+  contributors: { initials: string; name: string; avatarUrl?: string | null }[];
 }
 const seedArchetypes = (): ArchetypeOption[] => [
  {
@@ -3151,15 +3152,18 @@ const seedTeams = (): MockTeam[] => [
   "contributors": [
    {
     "initials": "DN",
-    "name": "Deepa Natarajan"
+    "name": "Deepa Natarajan",
+    "avatarUrl": mockAvatarUrl('assessment-deepa')
    },
    {
     "initials": "ID",
-    "name": "Idris Diallo"
+    "name": "Idris Diallo",
+    "avatarUrl": mockAvatarUrl('assessment-idris')
    },
    {
     "initials": "AN",
-    "name": "Asha Nair"
+    "name": "Asha Nair",
+    "avatarUrl": mockAvatarUrl('u-asha')
    }
   ]
  },
@@ -3186,11 +3190,13 @@ const seedTeams = (): MockTeam[] => [
   "contributors": [
    {
     "initials": "JL",
-    "name": "Jordan Lee"
+    "name": "Jordan Lee",
+    "avatarUrl": mockAvatarUrl('assessment-jordan')
    },
    {
     "initials": "LR",
-    "name": "Lucia Romero"
+    "name": "Lucia Romero",
+    "avatarUrl": mockAvatarUrl('assessment-lucia')
    }
   ]
  },
@@ -3217,7 +3223,8 @@ const seedTeams = (): MockTeam[] => [
   "contributors": [
    {
     "initials": "SO",
-    "name": "Sam Okafor"
+    "name": "Sam Okafor",
+    "avatarUrl": mockAvatarUrl('assessment-sam')
    }
   ]
  },
@@ -3245,11 +3252,13 @@ const seedTeams = (): MockTeam[] => [
   "contributors": [
    {
     "initials": "EM",
-    "name": "Elena Marsh"
+    "name": "Elena Marsh",
+    "avatarUrl": mockAvatarUrl('assessment-elena')
    },
    {
     "initials": "BV",
-    "name": "Bruno Vega"
+    "name": "Bruno Vega",
+    "avatarUrl": mockAvatarUrl('assessment-bruno')
    }
   ]
  },
@@ -3271,7 +3280,8 @@ const seedTeams = (): MockTeam[] => [
   "contributors": [
    {
     "initials": "MK",
-    "name": "Martina Kovacs"
+    "name": "Martina Kovacs",
+    "avatarUrl": mockAvatarUrl('assessment-martina')
    }
   ]
  },

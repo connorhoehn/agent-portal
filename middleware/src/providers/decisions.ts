@@ -234,7 +234,7 @@ export interface DecisionActivityRow {
   decidedAt: string | null;
   /** ISO timestamp, or null. */
   escalatedAt: string | null;
-  participants: Array<{ personId: string; name: string; role: string | null }>;
+  participants: Array<{ personId: string; name: string; role: string | null; avatarUrl?: string | null }>;
 }
 
 export const DECISION_ACTIVITY_LIMIT = 200;
@@ -275,9 +275,10 @@ export async function listDecisionActivity(opts: { projectId?: string } = {}): P
     heads.map((h, i) => strParam(`d${i}`, String(h['id']))),
   );
   const mine = new Map<string, DecisionActivityRow['participants']>();
+  const portraits = await fetchAvatarsById([...new Set(people.map(person => String(person['person_id'])))]);
   for (const r of people) {
     const list = mine.get(String(r['decision_id'])) ?? [];
-    list.push({ personId: String(r['person_id']), name: String(r['name'] ?? ''), role: r['role'] != null ? String(r['role']) : null });
+    list.push({ personId: String(r['person_id']), name: String(r['name'] ?? ''), role: r['role'] != null ? String(r['role']) : null, avatarUrl: portraits.get(String(r['person_id'])) ?? null });
     mine.set(String(r['decision_id']), list);
   }
   return heads.map((r) => ({

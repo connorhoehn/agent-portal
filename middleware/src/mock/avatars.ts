@@ -17,6 +17,7 @@
 import { defineFixture } from './core/index.js';
 import { seededPeople } from './people.js';
 import { PORTRAIT_URLS } from './portrait-urls.js';
+import { ASSESSMENT_PORTRAIT_PEOPLE } from './assessment-portrait-people.js';
 
 export interface MockAvatar {
   /** A `people.id` (p-NNN) or an unlinked `app_users.id` (u-*). */
@@ -45,7 +46,7 @@ export function localAvatarPath(subjectId: string): string | null {
 export const avatars = defineFixture<MockAvatar>({
   key: 'avatars',
   scenarios: {
-    default: () => [...seededPeople.map((p) => p.id), ...UNLINKED_USER_IDS, 'demo-user']
+    default: () => [...seededPeople.map((p) => p.id), ...UNLINKED_USER_IDS, 'demo-user', ...ASSESSMENT_PORTRAIT_PEOPLE.map(p => p.id)]
       .map((subjectId) => ({ subjectId, url: localAvatarPath(subjectId) })),
     empty: () => [],
   },

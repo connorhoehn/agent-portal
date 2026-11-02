@@ -142,7 +142,7 @@ function attentionOf(projectId: string, row: FlatWorkItem, avatarUrl: string | n
 
 // ─── Up next ─────────────────────────────────────────────────────────────────
 
-/** Title only (U2); the person and points sit in the row's columns. */
+/** Title with its item key below; person and points sit in aligned columns. */
 export interface UpNextRow {
   id: string;
   key?: string | null;

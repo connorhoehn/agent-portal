@@ -1,7 +1,7 @@
 {
   "version": 1,
   "brand": "Work",
-  "scope": "All 71 seeded demo identities: 59 people and 12 unlinked app users",
+  "scope": "80 fictional portraits: 59 graph people, 12 unlinked accounts, 1 demo session and 8 Assessment contributors",
   "style": "Photographic synthetic adult professionals, natural skin texture, soft window daylight, muted office backgrounds",
   "generator": "Built-in image_gen; original generation files retained in Codex generated_images",
   "personas": [
@@ -933,6 +933,158 @@
         "sourceSha256": "c4768dedb6b7831bbf22b87c7db75fa9729211f56263500540a6ea08fb151aa6",
         "processing": "Converted to 256px JPEG; no other identity portrait reused."
       }
+    },
+    {
+      "subjectId": "assessment-deepa",
+      "name": "Deepa Natarajan",
+      "portraitUrl": "/avatars/photos/assessment-deepa.jpg",
+      "biography": "Fictional Assessment team contributor.",
+      "promptFile": "scripts/avatars/prompts/2026-11-02-assessment-grid.txt",
+      "sourceSha256": "3201f0be57a55a74e950c3ff351c9fb69ebf9b3e936832701930a9a8d77dffa3",
+      "gridCell": {
+        "row": 1,
+        "column": 1,
+        "crop": [
+          0,
+          0,
+          444,
+          444
+        ]
+      },
+      "processing": "Crop equal 4×2 grid cell; resize to 256×256 JPEG."
+    },
+    {
+      "subjectId": "assessment-idris",
+      "name": "Idris Diallo",
+      "portraitUrl": "/avatars/photos/assessment-idris.jpg",
+      "biography": "Fictional Assessment team contributor.",
+      "promptFile": "scripts/avatars/prompts/2026-11-02-assessment-grid.txt",
+      "sourceSha256": "3201f0be57a55a74e950c3ff351c9fb69ebf9b3e936832701930a9a8d77dffa3",
+      "gridCell": {
+        "row": 1,
+        "column": 2,
+        "crop": [
+          444,
+          0,
+          887,
+          444
+        ]
+      },
+      "processing": "Crop equal 4×2 grid cell; resize to 256×256 JPEG."
+    },
+    {
+      "subjectId": "assessment-jordan",
+      "name": "Jordan Lee",
+      "portraitUrl": "/avatars/photos/assessment-jordan.jpg",
+      "biography": "Fictional Assessment team contributor.",
+      "promptFile": "scripts/avatars/prompts/2026-11-02-assessment-grid.txt",
+      "sourceSha256": "3201f0be57a55a74e950c3ff351c9fb69ebf9b3e936832701930a9a8d77dffa3",
+      "gridCell": {
+        "row": 1,
+        "column": 3,
+        "crop": [
+          887,
+          0,
+          1330,
+          444
+        ]
+      },
+      "processing": "Crop equal 4×2 grid cell; resize to 256×256 JPEG."
+    },
+    {
+      "subjectId": "assessment-lucia",
+      "name": "Lucia Romero",
+      "portraitUrl": "/avatars/photos/assessment-lucia.jpg",
+      "biography": "Fictional Assessment team contributor.",
+      "promptFile": "scripts/avatars/prompts/2026-11-02-assessment-grid.txt",
+      "sourceSha256": "3201f0be57a55a74e950c3ff351c9fb69ebf9b3e936832701930a9a8d77dffa3",
+      "gridCell": {
+        "row": 1,
+        "column": 4,
+        "crop": [
+          1330,
+          0,
+          1774,
+          444
+        ]
+      },
+      "processing": "Crop equal 4×2 grid cell; resize to 256×256 JPEG."
+    },
+    {
+      "subjectId": "assessment-sam",
+      "name": "Sam Okafor",
+      "portraitUrl": "/avatars/photos/assessment-sam.jpg",
+      "biography": "Fictional Assessment team contributor.",
+      "promptFile": "scripts/avatars/prompts/2026-11-02-assessment-grid.txt",
+      "sourceSha256": "3201f0be57a55a74e950c3ff351c9fb69ebf9b3e936832701930a9a8d77dffa3",
+      "gridCell": {
+        "row": 2,
+        "column": 1,
+        "crop": [
+          0,
+          444,
+          444,
+          887
+        ]
+      },
+      "processing": "Crop equal 4×2 grid cell; resize to 256×256 JPEG."
+    },
+    {
+      "subjectId": "assessment-elena",
+      "name": "Elena Marsh",
+      "portraitUrl": "/avatars/photos/assessment-elena.jpg",
+      "biography": "Fictional Assessment team contributor.",
+      "promptFile": "scripts/avatars/prompts/2026-11-02-assessment-grid.txt",
+      "sourceSha256": "3201f0be57a55a74e950c3ff351c9fb69ebf9b3e936832701930a9a8d77dffa3",
+      "gridCell": {
+        "row": 2,
+        "column": 2,
+        "crop": [
+          444,
+          444,
+          887,
+          887
+        ]
+      },
+      "processing": "Crop equal 4×2 grid cell; resize to 256×256 JPEG."
+    },
+    {
+      "subjectId": "assessment-bruno",
+      "name": "Bruno Vega",
+      "portraitUrl": "/avatars/photos/assessment-bruno.jpg",
+      "biography": "Fictional Assessment team contributor.",
+      "promptFile": "scripts/avatars/prompts/2026-11-02-assessment-grid.txt",
+      "sourceSha256": "3201f0be57a55a74e950c3ff351c9fb69ebf9b3e936832701930a9a8d77dffa3",
+      "gridCell": {
+        "row": 2,
+        "column": 3,
+        "crop": [
+          887,
+          444,
+          1330,
+          887
+        ]
+      },
+      "processing": "Crop equal 4×2 grid cell; resize to 256×256 JPEG."
+    },
+    {
+      "subjectId": "assessment-martina",
+      "name": "Martina Kovacs",
+      "portraitUrl": "/avatars/photos/assessment-martina.jpg",
+      "biography": "Fictional Assessment team contributor.",
+      "promptFile": "scripts/avatars/prompts/2026-11-02-assessment-grid.txt",
+      "sourceSha256": "3201f0be57a55a74e950c3ff351c9fb69ebf9b3e936832701930a9a8d77dffa3",
+      "gridCell": {
+        "row": 2,
+        "column": 4,
+        "crop": [
+          1330,
+          444,
+          1774,
+          887
+        ]
+      },
+      "processing": "Crop equal 4×2 grid cell; resize to 256×256 JPEG."
     }
   ]
 }
