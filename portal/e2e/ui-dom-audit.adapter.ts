@@ -128,7 +128,7 @@ async function ready(page: Page, spec: InventoryRoute & { required?: string[] })
   await expect(page.locator('[data-testid="loading-state"]:visible')).toHaveCount(0, { timeout: 15000 });
   if (spec.required?.includes('$conversationState')) await expect(page.locator(selectors.conversationState).first()).toBeVisible({ timeout: 15000 });
   if (spec.required?.includes('$composers')) await expect(page.locator(selectors.composers).first()).toBeVisible({ timeout: 15000 });
-  if (spec.judges?.includes('table')) await expect(page.locator(selectors.tables).first()).toBeVisible();
+  if (spec.judges?.includes('table')) await expect(page.locator(`${selectors.tables}, [data-collection-page] [data-ui-empty], [data-collection-page] [data-testid="error-state"]`).filter({ visible: true }).first()).toBeVisible();
   await expect(page.locator('[data-testid="datatable-loading-row"]:visible')).toHaveCount(0);
   // Absence of a loading indicator can precede the lazy page mounting. Wait
   // for the actual configuration control before classifying its form policy.
@@ -434,9 +434,13 @@ export default {
     // Interaction probes (read-only: every non-GET request is blocked and reported).
     // record-popout: activating a collection row must route the record into the
     // page, never open a drawer or modal.
-    const row = page.locator(collectionRows).first();
+    // Presence may reorder a roster between theme cases. Capture a named record
+    // alphabetically so the parity check compares the same person in both themes.
+    const names = await page.locator(`:is(${collectionRows}) [data-record-name]`).evaluateAll(nodes => nodes.map(node => node.getAttribute('data-record-name')!).filter(Boolean).sort());
+    const probeRows = names.length ? `:is(${collectionRows}):has([data-record-name=${JSON.stringify(names[0])}])` : collectionRows;
+    const row = page.locator(probeRows).first();
     if (await row.count() && await row.isVisible()) states.push({ name: 'row-activate', navigates: true, required: SHELL_REQUIRED, enter: async (p, { probes }) => {
-      const probe = await probes.activateRow(p, { rows: collectionRows });
+      const probe = await probes.activateRow(p, { rows: probeRows });
       await settled(p);
       return probe;
     } });

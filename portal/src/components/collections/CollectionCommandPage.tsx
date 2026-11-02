@@ -8,7 +8,7 @@ export function CollectionCommandPage(props: ComponentProps<typeof CollectionPag
   // Inside a section layout the trail is already the column's first row; a second one
   // here would push the title past 64px under the trail (docs/layout-cascade.md).
   return <Stack gap="none" className="h-full min-h-0 min-w-0" data-shell-flush>
-    <FlushTrail />
+    <FlushTrail compact />
     <CollectionPage {...props}
       className="min-h-0 flex-1 [&>[data-testid=page-header]]:px-[var(--ui-page-gutter)]" />
   </Stack>;

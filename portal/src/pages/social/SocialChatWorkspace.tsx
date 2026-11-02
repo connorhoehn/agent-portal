@@ -535,7 +535,6 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     <ConversationRail
       title={route === 'rooms' ? 'Hangouts' : 'Chat'}
       actions={route === 'rooms' ? undefined : <>
-        {rooms.some(room => room.state === 'active') && <Button variant="secondary" size="sm" onClick={() => navigate(`${base}/rooms`)} data-testid="social-browse-rooms">Browse hangouts</Button>}
         <IconButton aria-label="New message" title="New message" size="sm" variant="ghost" icon={<PlusIcon size={14} />}
           ref={newDmButton} onClick={openNewDm} data-testid="social-new-dm" />
       </>}

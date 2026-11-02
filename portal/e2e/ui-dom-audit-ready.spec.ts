@@ -31,3 +31,13 @@ for (const body of [
   await page.goto(spec.path);
   await adapter.ready(page, spec);
 });
+
+for (const body of [
+  '<div data-ui-empty>No contacts yet</div>',
+  '<div data-testid="error-state">Contacts unavailable. Try again.</div>',
+]) test(`collection readiness accepts a settled ${body.includes('error-state') ? 'error' : 'empty'} result without a table`, async ({ page }) => {
+  const spec = { tenant: 'social' as const, path: '/social/contacts', source: 'static' as const, kind: 'page' as const, judges: ['table' as const] };
+  await page.route('**/social/contacts', route => route.fulfill({ contentType: 'text/html', body: `<html data-tenant="social"><header class="shell-header">Social</header><main data-collection-page>${body}</main></html>` }));
+  await page.goto(spec.path);
+  await adapter.ready(page, spec);
+});

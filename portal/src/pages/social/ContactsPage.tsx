@@ -27,7 +27,6 @@ import {
   Inline,
   InlineAlert,
   LoadingState,
-  PageSection,
   PresenceAvatars,
   Stack,
   T,
@@ -138,7 +137,7 @@ function ContactsWorkspace() {
       render: (r) => (
         <Inline gap="sm" align="center">
           <PresenceAvatars size={24} maxVisible={1} users={[{ id: r.userId, name: r.displayName, ...(r.avatarUrl ? { avatarUrl: r.avatarUrl } : {}), ...(r.online && !r.idle ? {} : { idle: true }) }]} />
-          <T size="sm">{r.displayName}{r.userId === me ? ' (you)' : ''}</T>
+          <T size="sm" data-record-name={r.displayName}>{r.displayName}{r.userId === me ? ' (you)' : ''}</T>
         </Inline>
       ),
     },
@@ -224,22 +223,22 @@ function ContactsWorkspace() {
           onChange: presence => setFilters(current => ({ ...current, presence: presence as ContactPresence })),
           options: [{ value: 'all', label: 'All people' }, { value: 'here', label: 'Here now' }, { value: 'away', label: 'Away' }, { value: 'offline', label: 'Offline' }] }]}
         summary={data ? `${filtered.length} of ${rows.length} people` : undefined}
-        notices={[scopeNote]} onRefresh={refresh} refreshing={isLoading} />
+        notices={[scopeNote]} onRefresh={refresh} refreshing={isLoading}>
+        <Inline gap="xs" align="center" data-testid="social-contacts-here">
+          <T size="xs" tone="secondary">Here now {here.length}</T>
+          {here.length > 0 && <PresenceAvatars size={20} maxVisible={6} users={here} />}
+        </Inline>
+      </CollectionToolbar>
       {(problem || call.notice) && (
         <InlineAlert tone="warning" onDismiss={() => { setProblem(null); call.clearNotice(); }}>{problem ?? call.notice}</InlineAlert>
       )}
       {isLoading && !data ? <LoadingState label="Loading people…" /> : error && !data ? (
-        <ErrorState title="People could not be loaded" description={error} actionLabel="Try again" onAction={refresh} />
+        <ErrorState title="People could not be loaded" description="The workspace contact list is unavailable right now. Try again in a moment." actionLabel="Try again" onAction={refresh} />
       ) : rows.length === 0 ? (
         <EmptyState testId="social-empty-contacts" align="start" title="Nobody here yet"
           description="People appear here once they hold a role in this workspace. An admin grants that from Identity." />
       ) : (
         <Stack gap="md">
-          <PageSection size="sm" title="Here now" count={here.length} data-testid="social-contacts-here">
-            {here.length
-              ? <PresenceAvatars size={32} maxVisible={12} users={here} />
-              : <T size="sm" tone="secondary">Nobody else is connected right now. People show up here while Social is open in their workspace.</T>}
-          </PageSection>
           <DataTable
             data={filtered}
             columns={columns}

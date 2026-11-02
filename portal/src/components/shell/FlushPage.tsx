@@ -5,13 +5,13 @@ import { useSectionTrailDrawn } from './sectionTrail';
 
 /** The trail row a flush page prints as its first row — unless a section layout
  * already drew it (docs/layout-cascade.md rules 1–2). Shared by every flush frame. */
-export function FlushTrail() {
+export function FlushTrail({ compact = false }: { compact?: boolean } = {}) {
   const breadcrumbs = useShellBreadcrumbItems();
   const trailDrawn = useSectionTrailDrawn();
   if (trailDrawn) return null;
-  return <Stack gap="none" className="shrink-0 px-[var(--ui-page-gutter)] pt-[var(--ui-page-gutter)]">
+  return <Stack gap="none" className={`shrink-0 px-[var(--ui-page-gutter)] ${compact ? 'pt-3' : 'pt-[var(--ui-page-gutter)]'}`}>
     <Breadcrumbs items={breadcrumbs} separator="›" minItems={2}
-      className="mb-4 pb-1.5 border-b border-border overflow-x-auto whitespace-nowrap" />
+      className={`${compact ? 'mb-2' : 'mb-4'} pb-1.5 border-b border-border overflow-x-auto whitespace-nowrap`} />
   </Stack>;
 }
 

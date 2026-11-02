@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { ROUTE_RAIL_CAPTION, SOCIAL_SECTION_CAPTIONS, type SocialChatRouteId } from '../src/pages/social/socialChat';
 test.use({ baseURL: 'http://127.0.0.1:5183', viewport: { width: 1440, height: 900 } });
-async function fixture(page: Page, opts: { failedLists?: boolean; savedLayout?: boolean; path?: string; emptyRooms?: boolean; mayCreateRooms?: boolean } = {}) {
+async function fixture(page: Page, opts: { failedLists?: boolean; savedLayout?: boolean; path?: string; emptyRooms?: boolean; mayCreateRooms?: boolean; populatedCalls?: boolean } = {}) {
   const errors: string[] = [], mutations: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   if (opts.savedLayout) await page.addInitScript(() => {
@@ -25,7 +25,7 @@ async function fixture(page: Page, opts: { failedLists?: boolean; savedLayout?: 
     if (path === '/api/social/rooms') return json({ source: 'mock', rooms: opts.emptyRooms ? [] : [{ orgId: 'social', roomId: 'fixture-room', slug: 'lounge', name: 'Fixture Lounge', visibility: 'org', createdBy: 'fixture-reader', createdAt: '2026-10-10T12:00:00Z', state: 'active', lobbyName: 'social:room:lounge', settings: { audioOnly: false, recordingEnabled: false, softCap: 8 }, lastActiveAt: '2026-10-10T12:00:00Z' }], counts: { total: opts.emptyRooms ? 0 : 1, open: opts.emptyRooms ? 0 : 1, private: 0 } });
     if (path === '/api/social/rooms/lounge') return json({ room: { orgId: 'social', roomId: 'fixture-room', slug: 'lounge', name: 'Fixture Lounge', visibility: 'org', createdBy: 'fixture-reader', createdAt: '2026-10-10T12:00:00Z', state: 'active', lobbyName: 'social:room:lounge', settings: { audioOnly: false, recordingEnabled: false, softCap: 8 }, lastActiveAt: '2026-10-10T12:00:00Z' } });
     if (path === '/api/social/rooms/lounge/activity') return json({ sessions: [] });
-    if (path === '/api/social/calls') return json({ calls: [], counts: { total: 0, missed: 0 } });
+    if (path === '/api/social/calls') return json({ calls: opts.populatedCalls ? ['answered', 'missed'].map((outcome, index) => ({ callId: `fixture-call-${index}`, direction: 'incoming', callerId: 'fixture-peer', callerName: `Fixture caller ${index + 1}`, targetUserIds: ['fixture-reader'], lobbyName: 'social:dm:fixture-peer:fixture-reader', audioOnly: true, outcome, startedAt: '2026-11-02T12:00:00Z', durationMs: index ? undefined : 60000 })) : [], counts: { total: opts.populatedCalls ? 2 : 0, missed: opts.populatedCalls ? 1 : 0 } });
     if (path === '/api/social/recordings') return json({ source: 'mock', recordings: [], counts: { total: 0, ready: 0 } });
     return route.fulfill({ status: 503, json: { error: 'Unmocked social navigation API refused' } });
   });
@@ -69,6 +69,7 @@ for (const route of ROUTES) {
     if (own) await expect.poll(() => railCaptions(rail), { timeout: 10_000 }).toEqual([own]);
     else await expect.poll(() => railCaptions(rail), { timeout: 10_000 }).toEqual([]);
     // The hangout directory has a focused list; conversation tools remain on conversation routes.
+    await expect(rail.getByTestId('social-browse-rooms')).toHaveCount(0);
     if (route === 'rooms') {
       await expect(rail.locator('[data-rail-section="active-now"]')).toHaveCount(0);
       await expect(rail.getByTestId('social-chat-rail-shelf')).toHaveCount(0);
@@ -103,7 +104,7 @@ test('Rooms route opens its own section expanded; the primary nav moves between 
 });
 test('room directory opens a real workspace record and returns without starting a call', async ({ page }) => {
   const setup = await fixture(page, { path: '/social/channels' });
-  await page.getByTestId('social-browse-rooms').click();
+  await page.getByRole('link', { name: 'Hangouts', exact: true }).first().click();
   await expect(page).toHaveURL(/\/social\/rooms$/);
   const directory = page.getByTestId('social-room-directory');
   await expect(directory).toBeVisible();
@@ -186,3 +187,26 @@ test('conversation header is compact and composer sky reaches parent edges in st
   await page.goto('/social/embedded/dms/social%3Adm%3Afixture-peer%3Afixture-reader'); await verifyGutters('embedded');
   expect(setup.errors).toEqual([]); expect(setup.mutations).toEqual([]);
 });
+
+for (const width of [1440, 900]) for (const theme of ['light', 'dark']) {
+  test(`Calls filter is compact and keyboard-operable at ${width}/${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const setup = await fixture(page, { path: '/social/calls', populatedCalls: true });
+    await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+    const filter = page.getByRole('radiogroup', { name: 'Which calls' });
+    await expect(filter).toHaveAttribute('data-segmented-width', 'content');
+    const group = (await filter.boundingBox())!;
+    const last = (await filter.getByRole('radio').last().boundingBox())!;
+    expect(Math.abs(group.x + group.width - last.x - last.width - 3)).toBeLessThanOrEqual(1);
+    const heights = await filter.getByRole('radio').evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().height));
+    expect(heights[0]).toBe(heights[1]);
+    await expect(page.getByText('Fixture caller 1', { exact: true })).toBeVisible();
+    await filter.getByRole('radio', { name: 'All', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(filter.getByRole('radio').last()).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByText('Fixture caller 1', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Fixture caller 2', { exact: true })).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`calls-${width}-${theme}.png`) });
+    expect(setup.errors).toEqual([]); expect(setup.mutations).toEqual([]);
+  });
+}
