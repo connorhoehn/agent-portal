@@ -67,7 +67,7 @@ const selectors = {
   containmentRegions: '[data-section-content], [data-subnav-content], [data-shell-nav] aside, .shell-header, [data-testid="shell-footer"]',
   // people.sparse-row: tile lists (ActivePeopleGrid and other role="list" grids) in the app.
   tileLists: '[data-shell-nav] [role="list"]',
-  conversationState: '[data-composer-surface], [data-testid="social-channel-not-joined"], [data-testid="social-shared-work"]',
+  conversationState: '[data-composer-surface], [data-testid="social-channel-not-joined"], [data-testid="social-shared-work"], [data-testid="social-conversation-state"]',
   // popover.fit: an open InlinePopover panel; board.lane-*: CatalogGrid variant="lanes" and its BoardColumn lanes (ui-components 2.443.1).
   popovers: '[data-ui-dialog="popover"]', boards: '[data-ui-board]', boardLanes: '[data-ui-board-lane]',
   // panel.inset / panel.empty-height: every anchored panel (popover, dialog, drawer) and the library

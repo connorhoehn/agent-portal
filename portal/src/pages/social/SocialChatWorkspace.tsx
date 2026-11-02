@@ -46,8 +46,8 @@ import {
   type ActivePerson, type ConversationRailSection, type CreateChannelDialogInput, type CreateTeamDialogInput, type RailSelection,
 } from '@connorhoehnslalom/ui-components/social';
 import {
-  ActivityIcon, AtIcon, Button, ChannelHeader, EmptyState, ErrorState, IconButton, InlineAlert, LoadingState,
-  PhoneIcon, PlayCircleIcon, PlusIcon, Stack, VisuallyHidden,
+  ActivityIcon, AtIcon, Button, ChannelHeader, EmptyState, ErrorState, IconButton, Inline, InlineAlert, LoadingState,
+  PhoneIcon, PlayCircleIcon, PlusIcon, Spinner, Stack, T, VisuallyHidden,
 } from '@connorhoehnslalom/ui-components/shared';
 import { WrappedNotificationCenter } from '@connorhoehnslalom/ui-components/integrations/realtime';
 import { useSharedNotifications } from '../../components/shell/SharedNotifications';
@@ -227,6 +227,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   // Embedded, the plane's own actions (Your work, Open in Social) join the open conversation's header row:
   // the conversation is the page's one header, so they have no title band to sit in.
   const graphPropsFor = (channel: string, name: string) => ({
+    ...(embedding ? { headingLevel: 1 as const } : {}),
     ...(embedding?.actions ? { headerActions: embedding.actions } : {}),
     ...(sharedWork ? {
       graphOpen: graph, graphLabel: 'Shared work', onToggleGraph: () => setView(graph ? 'chat' : 'shared'),
@@ -643,7 +644,12 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     const ownsRoomInset = isValidElement(node) && (node.type === RoomDirectory || node.type === RoomPane);
     if (!embedding && !conversationOpen && !ownsRoomInset) return <Stack gap="md" className="min-h-0 min-w-0 flex-1 overflow-y-auto px-[var(--ui-page-gutter,1.5rem)] pt-4 pb-6" data-page-body="inset" data-testid="social-workspace-content">{node}</Stack>;
     if (!conversationOpen || (isValidElement(node) && (node.type === SocialConversation || (node.props as { 'data-conversation-frame'?: string })['data-conversation-frame']))) return node;
-    return <Stack gap="md" className={CONVERSATION_STATE_INSET} data-testid="social-conversation-state">{node}</Stack>;
+    const state = <Stack gap="md" className={CONVERSATION_STATE_INSET} data-testid="social-conversation-state">{node}</Stack>;
+    return embedding ? <Stack gap="md" className="min-h-0 min-w-0 flex-1">
+      <ChannelHeader headingLevel={1} name={slug ? `#${slug}` : embedding.title}
+        className="px-[var(--ui-content-gutter,1rem)]" actions={embedding.actions} />
+      {state}
+    </Stack> : state;
   }
 
   function pane() {
@@ -687,8 +693,8 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
           channels, conversations, activePeople: activeTiles,
         });
       }
-      if (channelsFetch.isLoading && !channelsFetch.data) return <LoadingState label="Loading channels…" />;
-      if (channelsFetch.error && !channelsFetch.data) return <ErrorState title="Channels could not be loaded" description={channelsFetch.error} actionLabel="Try again" onAction={channelsFetch.refresh} />;
+      if (channelsFetch.isLoading && !channelsFetch.data) return <Inline gap="sm" role="status" data-testid="loading-state"><Spinner size="md" decorative /><T>Loading channels…</T></Inline>;
+      if (channelsFetch.error && !channelsFetch.data) return <ErrorState title="Channels could not be loaded" description="We couldn’t retrieve the channels available to you. Try again in a moment." actionLabel="Try again" onAction={channelsFetch.refresh} />;
       if (!slug) {
         return channels.length === 0
           ? <EmptyState testId="social-empty-channels" align="start" title="No channels yet"
@@ -711,7 +717,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       }
       return (
         <Stack gap="md" className="min-w-0 flex-1" data-conversation-frame="not-joined">
-          <ChannelHeader name={`#${openChannel.slug}`} {...(openChannel.description ? { description: openChannel.description } : {})} memberCount={openChannel.memberCount}
+          <ChannelHeader headingLevel={embedding ? 1 : 2} name={`#${openChannel.slug}`} {...(openChannel.description ? { description: openChannel.description } : {})} memberCount={openChannel.memberCount}
             className="px-[var(--ui-content-gutter,1rem)]" {...(embedding?.actions ? { actions: embedding.actions } : {})} />
           <Stack gap="none" className={CONVERSATION_STATE_INSET}>
           <EmptyState align="start" testId="social-channel-not-joined" title={`You are not in #${openChannel.slug}`}

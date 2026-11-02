@@ -121,6 +121,8 @@ export interface SocialConversationProps {
   graphOpen?: boolean;
   /** The toggle's word ("Work graph" by default; the Communication plane's "Shared work"). */
   graphLabel?: string;
+  /** The embedded Communication page owns one visible page heading. */
+  headingLevel?: 1 | 2;
   /** What fills the pane while the toggle is on, given the thread's messages; the conversation's work graph by default. */
   renderGraph?: (messages: readonly { id?: string; userId?: string; timestamp?: string; metadata?: Record<string, unknown> }[]) => ReactNode;
   /**
@@ -177,7 +179,7 @@ export default function SocialConversation(props: SocialConversationProps) {
 function SocialConversationInner({
   channel, name, description, online, avatarUrl, menu, headerActions, onStartCall, callInProgress, recordings, onOpenRecording,
   view, onViewChange, userId, displayName, nameOf, placeholder, onMessages, onLatestMessage,
-  renderSurface, draft, onDraftChange, maySend = false, onRuntimeChange, onSendText, declaredViews, autoRun, onAutoRunDone, focusTarget = false, onToggleGraph, graphOpen = false, graphLabel = 'Work graph', renderGraph, compactCallDock = false,
+  renderSurface, draft, onDraftChange, maySend = false, onRuntimeChange, onSendText, declaredViews, autoRun, onAutoRunDone, focusTarget = false, onToggleGraph, graphOpen = false, graphLabel = 'Work graph', headingLevel, renderGraph, compactCallDock = false,
 }: SocialConversationProps) {
   const chat = useChat(channel);
   // While this conversation holds the shell's call: the call bar and tiles above the input.
@@ -348,6 +350,7 @@ function SocialConversationInner({
         className="min-h-0 min-w-0 flex-1"
         headerClassName="px-[var(--ui-content-gutter,1rem)] py-2"
         name={name}
+        headingLevel={headingLevel}
         {...(description ? { description } : {})}
         {...(online !== undefined ? { online } : {})}
         {...(avatarUrl ? { avatarUrl } : {})}

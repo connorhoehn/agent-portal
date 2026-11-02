@@ -168,7 +168,7 @@ export function InitiativeOverview({
           >
             <ActionRowList
               aria-label="Up next"
-              className="work-overview-striped-rows"
+              striped
               columns={COLUMNS}
               items={model.upNext.map((r) => ({
                 id: r.id,

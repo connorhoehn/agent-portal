@@ -700,16 +700,6 @@ tbody tr:focus-within .row-reveal,
 .search-composer textarea { min-height: 48px; }
 .search-composer > div { border-top: 0; }
 
-/* Overview lists keep the library's row actions, focus ring and semantic tones.
-   Alternating neutral surfaces make long titles easier to track to their cells.
-   The owning library's striped/compact-chrome gaps are logged in the UI queue. */
-.work-overview-striped-rows > ul > li:nth-child(even):not([data-tone]) {
-  background: var(--color-surface-panel);
-}
-.work-overview-striped-rows > ul > li:nth-child(odd):not([data-tone]) {
-  background: var(--color-surface);
-}
-
 /* A conversation preview is a distinct modal, not another composer layered
    over the work. The backdrop is dimmed/blurred by the shared Modal. */
 .messages-overview-sky {

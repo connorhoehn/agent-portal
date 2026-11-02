@@ -56,10 +56,10 @@ export default function SharedWorkView({ channel, name, messages, plane, onOpenI
     : { id: item.key, title: `${sharedKindLabel(item)} unavailable`, description: sharedRowLine(item), disabled: true, disabledReason: sharedUnavailableReason(item) }));
 
   return (
-    <Stack gap="md" className="min-h-0 min-w-0 flex-1 overflow-auto" data-testid="social-shared-work">
-      {/* A floor, never a fixed height (see PersonSharedWork): the plain canvas sizes itself and the list sits below it. */}
+    <Stack gap="md" className="min-h-0 min-w-0 flex-1 overflow-auto px-6 pb-6" data-testid="social-shared-work">
+      {/* The graph owns its canvas minimum; errors and empty states use their natural height. */}
       <WorkGraphActivity subject={{ kind: 'conversation', id: channel, plane }} mode="split" title={`Shared in ${name}`}
-        className="min-h-[360px] shrink-0" {...(onOpenNode ? { onOpenNode } : {})} />
+        className="shrink-0" {...(onOpenNode ? { onOpenNode } : {})} />
       <Stack gap="sm">
         <SectionLabel as="h2">Shared here</SectionLabel>
         {shared.error && <InlineAlert tone="warning">{shared.error}</InlineAlert>}

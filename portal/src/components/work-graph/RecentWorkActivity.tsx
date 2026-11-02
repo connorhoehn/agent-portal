@@ -42,7 +42,7 @@ export function RecentWorkActivity({ subject, limit = 5, people = [], onOpenActi
       {liveHints}
       <ActionRowList
         aria-label="Recent activity"
-        className="work-overview-striped-rows"
+        striped
         columns={COLUMNS}
         items={events.map(e => ({
           id: e.id,
