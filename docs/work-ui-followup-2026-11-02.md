@@ -59,6 +59,25 @@ remain nonzero until the debt below is repaired.
 These checks do not refresh journey seals or verify deployed AWS behavior.
 The earlier backlog and deploy-machine obligations remain separate.
 
+## Initiative spacing follow-up
+
+The initiative rail now places search first, separates search, views and results
+with the shared Divider, and uses the same order on list and record routes.
+The My initiatives empty state no longer adds 36px on top of the pane's standard
+20px inset. The All initiatives breadcrumb also stops repeating the collection
+level; returning from a record still preserves list filters.
+
+Evidence: `.scratch/initiative-spacing-2026-11-02/`. Direct browser measurements
+cover My initiatives in light/dark at 1440/900px: the empty-state gap is 20px,
+search precedes the view links, and both section dividers are visible. Search
+and navigation through the populated list to a record were also verified.
+The seven navigation tests, portal type check and component-discipline gate pass.
+The final strict deep audit (`audit-final/`) covers 32 Initiatives cases with
+zero findings and no unclassified composer policies; the initial report is
+retained in `audit/` and records the 24 duplicate-breadcrumb instances resolved.
+These are app composition changes using existing library APIs; no new library
+release or Storybook variant is required. Existing debt below remains open.
+
 ## Technical debt
 
 - **WORK-UI-01 — composer focus indicator.** Run and Designs deep audits retain

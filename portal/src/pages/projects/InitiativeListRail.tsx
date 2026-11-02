@@ -203,20 +203,16 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
     },
   ];
 
-  const header = (
-    <Stack gap="md">
-      {lens === 'initiatives' ? (
-        <SearchInput
-          size="md"
-          value={searchText}
-          onChange={onSearchChange}
-          placeholder="Find an initiative…"
-          aria-label="Find an initiative"
-          className="w-full"
-        />
-      ) : null}
-    </Stack>
-  );
+  const header = lens === 'initiatives' ? (
+    <SearchInput
+      size="md"
+      value={searchText}
+      onChange={onSearchChange}
+      placeholder="Find an initiative…"
+      aria-label="Find an initiative"
+      className="w-full"
+    />
+  ) : null;
 
   let body: ReactNode;
   let footer: string | null = null;

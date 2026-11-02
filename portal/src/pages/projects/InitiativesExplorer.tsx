@@ -11,7 +11,7 @@ import {
   useSidePaneHost,
   type ListRail,
 } from '@connorhoehnslalom/ui-components';
-import { Breadcrumbs, Modal, RailNavList, Stack, useRailFold, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
+import { Breadcrumbs, Divider, Modal, RailNavList, Stack, useRailFold, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
 import { initiativeBreadcrumbs, initiativeListHref, type InitiativeCrumb } from './initiativeNavigation';
 import { useDialogueRailFold } from '../../components/shell/useDialogueRailFold';
 
@@ -92,6 +92,13 @@ export function InitiativesExplorer({
       },
     }))} />
   );
+  const navigationHeader = (
+    <Stack gap="sm" className="pt-3">
+      {rail.header && <>{rail.header}<Divider spacing="none" /></>}
+      {viewsNav}
+      <Divider spacing="none" />
+    </Stack>
+  );
   // The trail is the content column's first row at the 24px gutter: the
   // padding is on its row, so the trail's own box starts at the gutter.
   const crumbs = <Stack gap="none" className="px-6 pb-1 pt-3"><Breadcrumbs items={trail} separator="›" data-testid="initiative-breadcrumbs" /></Stack>;
@@ -113,7 +120,7 @@ export function InitiativesExplorer({
             railLabel={focusedWork ? rail.label : 'initiatives'}
             railCollapsed={folded || (focusedWork && narrow)}
             onToggleRail={collapsible ? focusedWork && narrow ? () => setMobileWorkOpen(true) : toggle : undefined}
-            railHeader={focusedWork ? rail.header : <Stack gap="md">{viewsNav}{rail.header}</Stack>}
+            railHeader={focusedWork ? rail.header : navigationHeader}
             rail={rail.body}
             railFooter={rail.footer}
             panePadding="none"
@@ -125,7 +132,7 @@ export function InitiativesExplorer({
         // rail as an initiative: the views over the list, never a views rail
         // beside a list rail (docs/layout-cascade.md — at most two rails).
         <ListRailLayout
-          list={{ ...rail, header: <Stack gap="md">{viewsNav}{rail.header}</Stack> }}
+          list={{ ...rail, header: navigationHeader }}
           {...(collapsible ? { fold: { folded, onToggle: toggle } } : {})}
           header={band}
           footer={composer}

@@ -21,12 +21,11 @@ test('Agent output stays visible when moving through initiative content', () => 
 
 test('work trail names every level and links to each parent', () => {
   const trail = initiativeBreadcrumbs({ search, scope: 'all', project: { id: 'p-auth', name: 'Auth Migration' }, tab: 'work', item: 'Migrate users' });
-  assert.deepEqual(trail.map((c) => c.label), ['Plan', 'Initiatives', 'All initiatives', 'Auth Migration', 'Work', 'Migrate users']);
-  assert.equal(trail[1].href, '/iq/projects?nav=section');
-  assert.equal(trail[2].href, initiativeListHref(search, 'all'));
-  assert.equal(trail[3].href, initiativeHref('p-auth', search, 'all'));
-  assert.equal(trail[4].href, initiativeHref('p-auth', search, 'all', 'work'));
-  assert.equal(trail[5].href, undefined);
+  assert.deepEqual(trail.map((c) => c.label), ['Plan', 'Initiatives', 'Auth Migration', 'Work', 'Migrate users']);
+  assert.equal(trail[1].href, initiativeListHref(search, 'all'));
+  assert.equal(trail[2].href, initiativeHref('p-auth', search, 'all'));
+  assert.equal(trail[3].href, initiativeHref('p-auth', search, 'all', 'work'));
+  assert.equal(trail[4].href, undefined);
 });
 
 test('every project tab keeps the same ancestors', () => {

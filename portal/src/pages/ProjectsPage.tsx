@@ -258,7 +258,7 @@ function MineEmpty({
   onRefresh: () => void;
 }) {
   return (
-    <Stack gap="none" className="pt-9">
+    <Stack gap="none">
       <EmptyState
         align="start"
         testId="mine-empty"

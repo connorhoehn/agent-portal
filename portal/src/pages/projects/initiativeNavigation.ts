@@ -37,9 +37,18 @@ export function initiativeBreadcrumbs({ search, scope, sprints = false, project,
   item?: string;
   sprint?: string;
 }): InitiativeCrumb[] {
-  const base: InitiativeCrumb[] = [{ label: 'Plan' }, { label: 'Initiatives', href: '/iq/projects?nav=section' }];
-  const label = sprints ? 'Sprints' : scope === 'all' ? 'All initiatives' : 'My initiatives';
-  base.push({ label, ...(project || sprint ? { href: initiativeListHref(search, scope, sprints) } : {}) });
+  const scopedView = sprints || scope === 'mine';
+  const base: InitiativeCrumb[] = [{ label: 'Plan' }, {
+    label: 'Initiatives',
+    ...(scopedView ? { href: '/iq/projects?nav=section' }
+      : project ? { href: initiativeListHref(search, scope) } : {}),
+  }];
+  // All is the collection itself, not another level beneath it. My initiatives
+  // and Sprints are distinct views and keep their own parent links.
+  if (scopedView) base.push({
+    label: sprints ? 'Sprints' : 'My initiatives',
+    ...(project || sprint ? { href: initiativeListHref(search, scope, sprints) } : {}),
+  });
   if (sprint) base.push({ label: sprint });
   if (project) {
     base.push({ label: project.name, ...(tab !== 'overview' ? { href: initiativeHref(project.id, search, scope) } : {}) });
