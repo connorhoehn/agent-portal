@@ -269,14 +269,15 @@ test('stacked Search menus and composer fit desktop and narrower layouts', async
   }
 });
 
-test('Results group by type with counts, highlights and a URL-bound sort', async ({ page }) => {
+test('Results retain one ranked list with counts, highlights and a URL-bound sort', async ({ page }) => {
   // The chips and sort collapse into the header menu below ~1536px; audit them at the walk width.
   await page.setViewportSize({ width: 1672, height: 941 });
   await mockWorkspace(page);
   await page.goto(`/iq/search?q=${encodeURIComponent('Auth Migration')}`);
   const list = page.getByTestId('record-result-list');
-  await expect(list).toContainText('People');
-  await expect(list).toContainText('Initiatives');
+  await expect(list.locator('[data-group]')).toHaveCount(1);
+  await expect(list.locator('[data-group]')).toHaveAttribute('data-group', 'all');
+  await expect(list.locator('[data-record-key]').first()).toHaveAttribute('data-record-key', 'initiative:auth');
   await expect(list.locator('mark').first()).toBeVisible();
   await expect(list).toContainText('5 results');
   await expect(list).toContainText('Select results to ask about them or view their connections.');

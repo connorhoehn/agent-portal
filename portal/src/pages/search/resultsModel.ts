@@ -1,37 +1,33 @@
 import { SEARCH_LABELS, SEARCH_TYPES, type SearchRecord, type SearchRecordType, type SearchSort } from './searchTypes.ts';
 
-/** The Results tab's group order — the order the mockup draws. */
-export const RESULT_GROUP_ORDER: SearchRecordType[] = SEARCH_TYPES;
+/** A scoped browse starts with its work. Explicit filters and text searches
+ * keep their meaning, including an explicit All results choice. */
+export function searchResultType(value: string | null, scope: string, query: string): SearchRecordType | 'all' {
+  if (value === 'all' || SEARCH_TYPES.includes(value as SearchRecordType)) return value as SearchRecordType | 'all';
+  return scope && !query.trim() ? 'work' : 'all';
+}
 
 export interface ResultGroup {
-  id: SearchRecordType;
+  id: SearchRecordType | 'all';
   label: string;
   count: number;
   records: SearchRecord[];
-  seeAllHref?: string;
 }
 
 /**
- * Group one page of results by type, in display order. Each group's count is
- * the server's per-type count (the whole result set, not this page) and its
- * "See all" narrows the search to that type. A type with no rows on this page
- * is left out rather than drawn as an empty heading.
+ * One collection per view. The rail owns type navigation; All results keeps
+ * the server's relevance/recent ordering instead of regrouping each page into
+ * successive People, Work, Documents, etc. Pagination applies to this list.
  */
 export function groupResults(
   results: SearchRecord[],
-  counts: Partial<Record<SearchRecordType | 'all', number>>,
-  seeAllHref: (type: SearchRecordType) => string,
+  type: SearchRecordType | 'all',
+  total: number,
   lowerBound = false,
 ): ResultGroup[] {
-  return RESULT_GROUP_ORDER.flatMap(type => {
-    const records = results.filter(record => record.type === type);
-    if (!records.length) return [];
-    const count = Math.max(counts[type] ?? records.length, records.length);
-    // The group heading draws `count` as a bare number, so a floor says so in
-    // the label it sits beside: "Decisions, at least 2".
-    const label = lowerBound ? `${SEARCH_LABELS[type]}, at least` : SEARCH_LABELS[type];
-    return [{ id: type, label, count, records, ...(count > records.length ? { seeAllHref: seeAllHref(type) } : {}) }];
-  });
+  if (!results.length) return [];
+  return [{ id: type, label: `${SEARCH_LABELS[type]}${lowerBound ? ', at least' : ''}`,
+    count: Math.max(total, results.length), records: results }];
 }
 
 /**

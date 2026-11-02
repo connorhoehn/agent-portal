@@ -77,7 +77,7 @@ test('Search menus expose current choices with compact native icons and retain q
 });
 
 test('every Search result type has compact native navigation and consistent subordinate typography', async ({ page }) => {
-  const proof = await mount(page, 'scope=p-design-system-api');
+  const proof = await mount(page, 'scope=p-design-system-api&type=all');
   for (const record of records) {
     const row = page.locator(`[data-record-key="${record.type}:${record.id}"]`);
     await expect(row.getByRole('button', { name: `Open ${record.title}`, exact: true })).toHaveText('');
@@ -105,7 +105,7 @@ test('narrow dark Search retains native menu choices without horizontal overflow
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(640);
   await page.getByRole('button', { name: 'Search actions', exact: true }).click();
   await page.getByRole('menuitem', { name: /Record type filter/ }).click();
-  await page.getByRole('menuitem', { name: 'Knowledge', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Documents', exact: true }).click();
   await expect(page.getByTestId('fixture-route')).toContainText('type=knowledge');
   await expect(page.getByLabel('Unsent fixture inquiry')).toHaveValue('Unsent fixture inquiry');
   await page.screenshot({ path: test.info().outputPath('search-dark-compact.png') });

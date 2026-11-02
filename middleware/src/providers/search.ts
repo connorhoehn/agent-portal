@@ -170,7 +170,12 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
       for (const n of await index.neighbours(tenant, frontier)) {
         const other = n.edge.source === n.from ? n.edge.target : n.edge.source;
         const follows = n.edge.source === n.from ? !other.startsWith('initiative:') : other.startsWith('person:');
-        if (follows && !scoped.has(other)) { scoped.add(other); next.push(other); keep(n.doc); }
+        if (follows && !scoped.has(other)) {
+          scoped.add(other); keep(n.doc);
+          // People belong in the scope, but are terminal: following their
+          // assignments/collaborations pulls in unrelated initiatives' work.
+          if (!other.startsWith('person:')) next.push(other);
+        }
       }
       frontier = next;
     }

@@ -29,7 +29,7 @@ import { searchWorkflows } from './searchWorkflows';
 import {
   assistantStripText, nextQueryAfterSend, nextTabAfterSend, parseRecordKeys, readSearchEvidence, readSearchEdges, searchTitle,
 } from './searchModel';
-import { countedLabel, groupResults, parseSort, partialSourcesTitle, resultsFooter } from './resultsModel';
+import { countedLabel, groupResults, parseSort, partialSourcesTitle, resultsFooter, searchResultType } from './resultsModel';
 import { recordKey, SEARCH_LABELS, SEARCH_TYPES, type SearchRecord, type SearchRecordType, type SearchResponse, type SearchTab } from './searchTypes';
 import { SearchControls, searchControlsMenu, type SearchControlsProps } from './SearchControls';
 import { SearchResults } from './SearchResults';
@@ -120,9 +120,9 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   const [params, setParams]=useSearchParams();
   const navigate=useNavigate();
   const query=params.get('q') ?? '';
-  const type=SEARCH_TYPES.includes(params.get('type') as SearchRecordType) ? params.get('type') as SearchRecordType : 'all';
   const tab=(['results','answer','connections'].includes(params.get('tab') ?? '') ? params.get('tab') : 'results') as SearchTab;
   const scope=params.get('scope') ?? '';
+  const type=searchResultType(params.get('type'),scope,query);
   const sort=parseSort(params.get('sort'));
   const offset=Math.max(0,Number(params.get('offset'))||0);
   const selected=useMemo(()=>parseRecordKeys(params.get('selection')).map(recordKey),[params]);
@@ -143,7 +143,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   const requestedKeys=[...new Set([...selected,...attached.map(recordKey)])].slice(0,30);
   const {data:resolved}=useFetch<{records:SearchRecord[];edges:SearchResponse['edges']}>(requestedKeys.length?`/api/search/records?${new URLSearchParams({keys:requestedKeys.join(',')})}`:null);
   const scopeRecord=scope?(scopes?.results??[]).find(r=>r.id===scope) ?? resolved?.records.find(r=>r.type==='initiative'&&r.id===scope):undefined;
-  const scopeName=scope?(scopeRecord?.title ?? scope):null;
+  const scopeName=scope?(scopeRecord?.title ?? 'Selected initiative'):null;
   const allRecords=useMemo(()=>{
     const records=new Map<string,SearchRecord>();
     for(const r of [...(data?.results??[]),...(data?.related??[]),...(scopes?.results??[]),...(resolved?.records??[]),...api.messages.flatMap(m=>readSearchEvidence(m.toolCalls))]) records.set(recordKey(r),r);
@@ -181,7 +181,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
 
   // ── Rail ───────────────────────────────────────────────────────────────────
   const typeRows:RailNavListItem[]=[...MAIN_TYPES,...(moreTypes?['asset' as const]:[])].map(kind=>{
-    const href=searchHref({type:kind==='all'?null:kind});
+    const href=searchHref({type:kind});
     return {id:kind,href,onNavigate:go(href),current:type===kind,
       ...countedLabel(SEARCH_LABELS[kind],!error&&data?data.counts[kind]:undefined,data?.totalIsLowerBound)};
   });
@@ -265,7 +265,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
     <ShellTrail data-testid="search-trail" tail={trailTail} />
     <ScopeHeader variant="inline" {...headerDensity.headerProps} className="border-b border-border" data-testid="search-header"
       title={selectionCrumb??title} titleHint={query||undefined}
-      tabs={[{id:'results',...countedLabel('Results',data&&!error?data.counts.all:undefined,data?.totalIsLowerBound),...(data?.partial?.length?{dot:'warning' as const}:{})},{id:'answer',label:'Answer'},{id:'connections',label:'Connections'}]}
+      tabs={[{id:'results',...countedLabel('Results',data&&!error&&!isLoading?data.total:undefined,data?.totalIsLowerBound),...(data?.partial?.length?{dot:'warning' as const}:{})},{id:'answer',label:'Answer'},{id:'connections',label:'Connections'}]}
       activeTab={tab} onTabChange={value=>update({tab:value})}
       controls={<SearchControls {...searchControlProps} />} controlsMenu={searchControlsMenu(searchControlProps)}
       menuLabel="Search actions"
@@ -285,19 +285,19 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
 
   // ── Results ────────────────────────────────────────────────────────────────
   const presentedResults=useSearchPeoplePresentation(data&&!error?data.results:[]);
-  const groups=data&&!error?groupResults(presentedResults.map(record=>publicSearchResult(record, session?.role === 'hr-admin')),data.counts,kind=>searchHref({type:kind,tab:'results'}),data.totalIsLowerBound):[];
-  const resultKeys=(data?.results??[]).map(recordKey);
+  const groups=data&&!error?groupResults(presentedResults.map(record=>publicSearchResult(record, session?.role === 'hr-admin')),type,data.total,data.totalIsLowerBound):[];
+  const resultKeys=(isLoading?[]:data?.results??[]).map(recordKey);
   const results=<Stack gap="sm" className="flex-1 min-h-0 overflow-auto px-6 py-3" data-testid="search-results">
     {!!data?.partial?.length&&<Banner variant="warning" title={partialSourcesTitle(data.partial)} data-testid="search-partial-sources">{data.partial.join(' · ')}</Banner>}
     <SearchResults aria-label="Search results" groups={groups} selectedKeys={selected}
       onToggleSelect={record=>{const key=recordResultKey(record);setSelection(selected.includes(key)?selected.filter(k=>k!==key):[...selected,key]);}}
       onOpen={record=>navigate(record.href)}
       highlightTerms={query.split(/\s+/).filter(term=>term.length>1)}
-      loading={isLoading&&!data} error={error??null} onRetry={refresh}
-      emptyState={query||scope?{title:'No matching records',description:'Try another phrase or clear a filter.'}:{title:'Search your workspace',description:'Find people, initiatives, work, decisions, and knowledge.'}}
+      loading={isLoading} error={error?'Search is unavailable. Try again in a moment.':null} onRetry={refresh}
+      emptyState={query||scope||type!=='all'?{title:`No matching ${type==='all'?'records':SEARCH_LABELS[type].toLowerCase()}`,description:scope?'Try another phrase or choose another record type in this initiative.':'Try another phrase or choose another record type.'}:{title:'Search your workspace',description:'Find people, initiatives, work, decisions, and documents.'}}
       footer={data&&!error&&data.total?<Inline gap="sm" align="center" wrap><T as="span" size="xs">{resultsFooter(data.total,scopeName,data.totalIsLowerBound)}</T>{scope&&<Button variant="link" size="sm" className="whitespace-nowrap text-xs" data-testid="search-scope-all" onClick={()=>update({scope:null,offset:null})}>Search entire workspace</Button>}</Inline>:undefined}
       hint="Select results to ask about them or view their connections." />
-    {!!data?.total&&data.total>PAGE_SIZE&&<Inline justify="between" gap="sm">
+    {!isLoading&&!!data?.total&&data.total>PAGE_SIZE&&<Inline justify="between" gap="sm">
       <T className="text-xs text-text-tertiary">{offset+1}–{Math.min(offset+PAGE_SIZE,data.total)} of {data.total}{data.totalIsLowerBound?'+':''}</T>
       <Inline gap="xs"><Button size="sm" variant="secondary" disabled={!offset} onClick={()=>update({offset:String(Math.max(0,offset-PAGE_SIZE))})}>Previous</Button><Button size="sm" variant="secondary" disabled={offset+PAGE_SIZE>=data.total} onClick={()=>update({offset:String(offset+PAGE_SIZE)})}>Next</Button></Inline>
     </Inline>}

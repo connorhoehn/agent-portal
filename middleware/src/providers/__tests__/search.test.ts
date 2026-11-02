@@ -229,6 +229,29 @@ test('a text-only hit is a Text match; no query and no scope carries no reason',
   const browse = await searchRecords(principal);
   expect(browse.results.every(x => x.matchReason === undefined && x.highlights === undefined)).toBe(true);
 });
+test('initiative scope includes its members but never expands through their unrelated work or colleagues', async () => {
+  mock(searchWorkItems).mockResolvedValue([
+    { id: 'cutover', projectId: 'auth', projectName: 'Auth Migration', title: 'Tenant cutover', status: 'open', assigneeId: 'nora' },
+    { id: 'other-task', projectId: 'other', projectName: 'Other initiative', title: 'Unrelated task', status: 'open', assigneeId: 'nora' },
+  ]);
+  mock(aurora.fetchGraph).mockResolvedValue({ peopleTotal: 3, nodes: [
+    { id: 'vera', name: 'Vera Green', title: 'Engineer', department: 'Platform', skills: [] },
+    { id: 'nora', name: 'Simone Chang', title: 'Engineer', department: 'Design', skills: [] },
+    { id: 'colleague', name: 'Unrelated colleague', title: 'Engineer', department: 'Design', skills: [] },
+  ], edges: [{ source: 'nora', target: 'colleague', type: 'collaborates', strength: 1 }] });
+  const scoped = await searchRecords(principal, { scope: 'auth' });
+  expect(scoped.counts.work).toBe(1);
+  expect(scoped.counts.person).toBe(2);
+  expect(scoped.results).toEqual(expect.arrayContaining([
+    expect.objectContaining({ id: 'cutover' }), expect.objectContaining({ id: 'nora' }),
+  ]));
+  expect([...scoped.results, ...scoped.related].map(record => record.id)).not.toEqual(expect.arrayContaining(['other-task']));
+  expect([...scoped.results, ...scoped.related].map(record => record.id)).not.toContain('colleague');
+  expect(scoped.edges.some(edge => /other-task|colleague/.test(`${edge.source} ${edge.target}`))).toBe(false);
+  const entire = await searchRecords(principal, { type: 'work' });
+  expect(entire.results.map(record => record.id)).toContain('other-task');
+});
+
 test('scope-only browsing marks every row In scope', async () => {
   const r = await searchRecords(principal, { scope: 'auth' });
   expect(r.results.length).toBeGreaterThan(0);

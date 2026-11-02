@@ -12,7 +12,7 @@ test('project files show the saved presentation with bounded cards and a unified
   await page.goto('/iq/projects/p-observability?scope=all&pane=discussion&tab=docs');
   const files = page.getByTestId('initiative-files'); await expect(files).toBeVisible();
   await expect(files.getByText('Loading project files…')).toHaveCount(0, { timeout: 20000 });
-  await expect(files.getByTestId('initiative-files-toolbar').getByRole('button', { name: 'Open workspace' })).toBeVisible();
+  await expect(files.getByTestId('initiative-files-toolbar').getByRole('button', { name: 'Search initiative' })).toBeVisible();
   const saved = files.getByTestId('initiative-file').filter({ hasText: 'Observability review' });
   await expect(saved).toBeVisible();
   const cards = await files.getByTestId('initiative-file').evaluateAll(elements => elements.map(e => ({ width: e.getBoundingClientRect().width, height: e.getBoundingClientRect().height })));

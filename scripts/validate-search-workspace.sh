@@ -122,7 +122,8 @@ for tab in results answer connections; do grep -q "'$tab'" "$PAGE" 2>/dev/null |
 ok "Results / Answer / Connections tabs named"
 grep -q "Search entire workspace" "$PAGE" 2>/dev/null && ok "scoped header offers 'Search entire workspace'" || fail "SearchPage.tsx has no 'Search entire workspace' for a scoped search"
 grep -rqE "/iq/search\?[^'\"\`]*scope=" portal/src/pages/ProjectDetailPage.tsx portal/src/pages/projects 2>/dev/null && ok "initiative pages link into a scoped search" || fail "no initiative page links to /iq/search?scope=<id>"
-grep -q "See all" "$PAGE" 2>/dev/null || grep -q "See all" "$LIB/dist/index.js" 2>/dev/null && ok "grouped results carry 'See all'" || fail "no 'See all N' on grouped results"
+# 2026-11-02: one collection, type navigation in the rail; All preserves rank.
+grep -q 'searchResultType' "$PAGE" && grep -q "All results is one list in the server rank order" "$PAGES/__tests__/resultsModel.test.ts" && ok "focused result type and rank preservation have model coverage" || fail "missing focused Search result model or rank-preservation coverage"
 
 # ─────────────────────────────────────────────────────────────────────────────
 section "middleware contract"
@@ -132,7 +133,7 @@ grep -qE "sort" "$ROUTER" && grep -qE "relevance|recent" "$ROUTER" && ok "sort=r
 grep -q "matchReason" middleware/src/providers/search.ts && ok "records carry matchReason" || fail "providers/search.ts: no matchReason on records"
 grep -q "highlights" middleware/src/providers/search.ts && ok "records carry highlights" || fail "providers/search.ts: no highlights on records"
 grep -q "matchReason" middleware/src/providers/__tests__/search.test.ts 2>/dev/null && ok "matchReason is tested" || fail "providers/__tests__/search.test.ts does not assert matchReason"
-[ -f schema/search_workspace_schema.sql ] && grep -q "search_workspace_schema.sql" schema/load_schema.py && ok "schema registered" || fail "schema/search_workspace_schema.sql missing or not registered"
+[ -f schema/search_workspace_schema.sql ] && python3 -c "from schema.schema_manifest import schema_files; assert 'search_workspace_schema.sql' in schema_files()" && ok "schema registered in the loader manifest" || fail "schema/search_workspace_schema.sql missing or not registered"
 TESTS=middleware/src/routes/__tests__
 missing=0
 for pair in "search:searchRouter:/api/search" "saved-searches:savedSearchesRouter:/api/saved-searches"; do

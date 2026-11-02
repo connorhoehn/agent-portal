@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Button, FolderIcon, IconButton, Inline, RepeatIcon, Tooltip } from '@connorhoehnslalom/ui-components/shared';
+import { Button, IconButton, Inline, RepeatIcon, SearchIcon, Tooltip } from '@connorhoehnslalom/ui-components/shared';
 import { FileViewToggle, type FileView } from './FileCards';
 
 /** Shared file chrome only; readers, filters and navigation remain with each host. */
@@ -32,9 +32,9 @@ export function FileToolbar({ children, view, onViewChange, onRefresh, refreshin
     <Inline gap="xs" align="center" wrap={false} className="shrink-0">
       <FileViewToggle value={view} onChange={onViewChange} />
       {onRefresh && <FileRefreshAction onRefresh={onRefresh} refreshing={refreshing} />}
-      {onOpenWorkspace && <Tooltip content="Open Workspace" placement="bottom">
-        <Button size="sm" variant="ghost" aria-label="Open workspace" onClick={onOpenWorkspace}
-          className="text-xs text-text-secondary"><FolderIcon size={16} />Workspace</Button>
+      {onOpenWorkspace && <Tooltip content="Search across this initiative" placement="bottom">
+        <Button size="sm" variant="ghost" onClick={onOpenWorkspace}
+          className="text-xs text-text-secondary"><SearchIcon size={16} />Search initiative</Button>
       </Tooltip>}
     </Inline>
   </Inline>;

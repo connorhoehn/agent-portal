@@ -1,5 +1,20 @@
 # Goal: `/iq/search` is the five-panel Search workspace in `docs/design/search-*.png`, drawn entirely from ui-components
 
+## Current layout amendment — 2026-11-02
+
+The user rejected the concatenated People / Work / Documents sections. Results
+now show one collection per view: a scoped, query-free entry defaults to Work;
+the type rail selects People, Decisions, Documents and the other collections.
+An explicit `type=all` shows one ranked list in server order, without regrouping
+by type. Queries without an explicit type search all types. The result count and
+pagination describe the visible collection, while rail counts describe all types
+inside the current scope. Empty views retain scope and offer type navigation.
+
+The initiative file toolbar says **Search initiative**, matching its destination.
+People are terminal nodes when expanding an initiative scope: include its members
+and work assignees, but do not follow them into unrelated assignments/colleagues.
+These rules supersede the grouped-results parts of the historical mockups below.
+
 `scripts/validate-search-workspace.sh` is the only judge. Work the backlog in
 order, run the script after every slice, and treat each failing line as the
 next task. The rules every other goal carries apply here too: no hand-rolled

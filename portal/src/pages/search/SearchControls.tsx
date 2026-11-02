@@ -26,7 +26,7 @@ function controls({ scope, scopeName, scopeOptions, type, sort, onChange }: Sear
     { label: 'Record type filter', value: type === 'all' ? 'All types' : SEARCH_LABELS[type], icon: <FilterIcon size={16} />, testId: 'search-type', active: type !== 'all',
       sections: [{ label: 'Record type', items: (['all', ...SEARCH_TYPES] as Array<SearchRecordType | 'all'>).map(kind => ({
         label: kind === 'all' ? 'Any type' : SEARCH_LABELS[kind], active: kind === type,
-        onSelect: () => onChange({ type: kind === 'all' ? null : kind, offset: null }),
+        onSelect: () => onChange({ type: kind, offset: null }),
       })) }] },
     { label: 'Sort results', value: sort === 'recent' ? 'Recent' : 'Relevance', icon: <ArrowUpIcon size={16} />, testId: 'search-sort', active: sort === 'recent',
       sections: [{ items: [

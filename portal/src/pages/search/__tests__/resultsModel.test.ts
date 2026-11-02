@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countedLabel, groupResults, openLabelFor, parseSort, partialSourcesTitle, resultsFooter } from '../resultsModel.ts';
+import { countedLabel, groupResults, openLabelFor, parseSort, partialSourcesTitle, resultsFooter, searchResultType } from '../resultsModel.ts';
 import type { SearchRecord } from '../searchTypes.ts';
 
 const records: SearchRecord[] = [
@@ -11,20 +11,30 @@ const records: SearchRecord[] = [
   { id: 'w2', type: 'work', title: 'Logout cookie', href: '/iq/work/w2' },
 ];
 
-test('groups follow People, Initiatives, Work, Decisions, Knowledge, Agent library and skip empty types', () => {
-  const groups = groupResults(records, { person: 1, initiative: 1, work: 2, knowledge: 1 }, type => `?type=${type}`);
-  assert.deepEqual(groups.map(group => group.id), ['person', 'initiative', 'work', 'knowledge']);
-  assert.deepEqual(groups.map(group => group.label), ['People', 'Initiatives', 'Work', 'Knowledge']);
-  assert.deepEqual(groups[2].records.map(record => record.id), ['w1', 'w2']);
+test('All results is one list in the server rank order, with a whole-result count', () => {
+  const groups = groupResults(records, 'all', 38);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].id, 'all');
+  assert.equal(groups[0].label, 'All results');
+  assert.equal(groups[0].count, 38);
+  assert.deepEqual(groups[0].records.map(record => record.id), ['w1', 'k1', 'p1', 'i1', 'w2']);
 });
 
-test('a group counts the whole result set and offers See all only when the page holds fewer', () => {
-  const groups = groupResults(records, { person: 3, work: 2 }, type => `/iq/search?type=${type}`);
-  assert.equal(groups[0].count, 3);
-  assert.equal(groups[0].seeAllHref, '/iq/search?type=person');
-  assert.equal(groups.find(group => group.id === 'work')!.seeAllHref, undefined);
-  // A missing or stale count never reads lower than the rows on screen.
-  assert.equal(groups.find(group => group.id === 'initiative')!.count, 1);
+test('a typed view has one heading and pagination counts, and empty views have no groups', () => {
+  const work = records.filter(record => record.type === 'work');
+  assert.deepEqual(groupResults(work, 'work', 20), [{ id: 'work', label: 'Work', count: 20, records: work }]);
+  assert.equal(groupResults(work, 'work', 0)[0].count, work.length);
+  assert.deepEqual(groupResults([], 'person', 0), []);
+});
+
+test('scoped browsing starts with Work, while explicit types and queries retain their meaning', () => {
+  assert.equal(searchResultType(null, 'auth', ''), 'work');
+  assert.equal(searchResultType(null, 'auth', '  '), 'work');
+  assert.equal(searchResultType('all', 'auth', ''), 'all');
+  assert.equal(searchResultType('person', 'auth', ''), 'person');
+  assert.equal(searchResultType(null, 'auth', 'cutover'), 'all');
+  assert.equal(searchResultType(null, '', ''), 'all');
+  assert.equal(searchResultType('invalid', 'auth', ''), 'work');
 });
 
 test('footer copy names the scope and pluralises honestly', () => {
@@ -50,9 +60,9 @@ test('a count that is a floor reads "N+" everywhere a count is drawn', () => {
   assert.deepEqual(countedLabel('Results', 44, true), { label: 'Results 44+' });
   assert.deepEqual(countedLabel('Decisions', 0, true), { label: 'Decisions 0+' });
   assert.deepEqual(countedLabel('Decisions', undefined, true), { label: 'Decisions' });
-  const groups = groupResults(records, { person: 1, initiative: 1, work: 2, knowledge: 1 }, type => `?type=${type}`, true);
-  assert.deepEqual(groups.map(group => group.label), ['People, at least', 'Initiatives, at least', 'Work, at least', 'Knowledge, at least']);
-  assert.equal(groupResults(records, { work: 2 }, type => `?type=${type}`)[2].label, 'Work');
+  const groups = groupResults(records, 'all', 5, true);
+  assert.deepEqual(groups.map(group => group.label), ['All results, at least']);
+  assert.equal(groupResults(records.filter(record => record.type === 'work'), 'work', 2)[0].label, 'Work');
   assert.equal(partialSourcesTitle(['Approved design decisions unavailable']), 'One source is incomplete — counts are minimums');
   assert.equal(partialSourcesTitle(['Work source window is limited', 'Decisions unavailable']), '2 sources are incomplete — counts are minimums');
 });
@@ -60,7 +70,7 @@ test('a count that is a floor reads "N+" everywhere a count is drawn', () => {
 
 test('recording results retain a distinct group, action and canonical file link', () => {
   const recording: SearchRecord = { id: 'rec-7', type: 'recording', title: 'Auth huddle', href: '/iq/projects/auth?tab=docs&recording=rec-7', description: 'Transcript excerpt' };
-  const group = groupResults([recording], { recording: 1 }, type => `?type=${type}`)[0];
+  const group = groupResults([recording], 'recording', 1)[0];
   assert.equal(group.label, 'Recordings');
   assert.equal(group.id, 'recording');
   assert.equal(group.records[0].href, recording.href);
