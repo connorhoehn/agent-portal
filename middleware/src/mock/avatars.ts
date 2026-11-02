@@ -2,7 +2,8 @@
 // `people`, schema/identity_schema.sql `app_users`) as the offline world fills it.
 //
 // The selectable demo cast uses commissioned photographic synthetic
-// portraits under /avatars/photos/. People awaiting a photograph use initials.
+// portraits under /avatars/photos/. All 71 seeded identities are covered;
+// unknown people and the empty fixture still use initials.
 // generate-local.mjs preserves photo selection and checks the manifest/files.
 // Linked users show their PERSON's face (personId ?? userId).
 //
@@ -14,6 +15,7 @@
 
 import { defineFixture } from './core/index.js';
 import { seededPeople } from './people.js';
+import { PORTRAIT_URLS } from './portrait-urls.js';
 
 export interface MockAvatar {
   /** A `people.id` (p-NNN) or an unlinked `app_users.id` (u-*). */
@@ -33,21 +35,10 @@ export const UNLINKED_USER_IDS = [
   'u-ines', 'u-kofi', 'u-dara', 'u-tomas',
 ] as const;
 
-// The selectable demo cast has photographic synthetic portraits. A linked
-// user keeps their person's identity on every surface. Other directory people
-// use initials until their photographs are commissioned as well.
-const PHOTOGRAPHIC_SUBJECT_IDS = new Set([
-  'p-008', 'p-011',
-  'u-operator', 'p-005', 'p-002', 'u-asha', 'u-jonas', 'u-farah',
-  'p-030', 'p-004', 'p-012', 'p-001', 'u-mira', 'u-lena', 'u-sana',
-  'u-ines', 'u-kofi', 'u-dara', 'u-tomas',
-]);
-
+// One generated index owns portrait selection for the fixture and portal.
 /** The served portrait path; generate-local.mjs preserves this selection. */
 export function localAvatarPath(subjectId: string): string | null {
-  return PHOTOGRAPHIC_SUBJECT_IDS.has(subjectId)
-    ? `/avatars/photos/${subjectId}.jpg`
-    : null;
+  return PORTRAIT_URLS[subjectId] ?? null;
 }
 
 export const avatars = defineFixture<MockAvatar>({

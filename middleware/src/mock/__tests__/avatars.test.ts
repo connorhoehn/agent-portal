@@ -1,5 +1,5 @@
 // The mock avatar fixture holds three things in step: the people fixture, the
-// identity fallback's unlinked users, and the SVG files
+// identity fallback's unlinked users, and the photographic assets
 // `scripts/avatars/generate-local.mjs` checks in under portal/public/avatars.
 // A URL with no file behind it would render a broken image instead of
 // initials, so every row must name a file that exists.
@@ -9,6 +9,7 @@ jest.mock('../../config.js', () => ({
 }));
 
 import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { fixtureRegistry } from '../core/index.js';
 import { avatars, mockAvatarUrl, UNLINKED_USER_IDS } from '../avatars.js';
@@ -32,11 +33,16 @@ describe('mock avatars', () => {
   it('names a checked-in file for every row, and the generator index agrees', () => {
     const index = JSON.parse(readFileSync(join(PUBLIC, 'avatars', 'index.json'), 'utf8')) as { avatars: Array<{ id: string; url: string | null }> };
     const indexed = new Map(index.avatars.map((a) => [a.id, a.url]));
+    const hashes = new Set<string>();
     for (const row of avatars.rows()) {
-      if (row.url) {
-        expect(existsSync(join(PUBLIC, row.url))).toBe(true);
-        expect(row.url).toMatch(/^\/avatars\/photos\/.+\.jpg$/);
-      }
+      expect(row.url).toBe(`/avatars/photos/${row.subjectId}.jpg`);
+      const path = join(PUBLIC, row.url!);
+      expect(existsSync(path)).toBe(true);
+      const bytes = readFileSync(path);
+      expect([...bytes.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
+      const hash = createHash('sha256').update(bytes).digest('hex');
+      expect(hashes.has(hash)).toBe(false);
+      hashes.add(hash);
       expect(indexed.get(row.subjectId)).toBe(row.url);
     }
     expect(indexed.size).toBe(avatars.rows().length);

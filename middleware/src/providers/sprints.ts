@@ -33,7 +33,8 @@
 
 import { AppError } from '../lib/async-handler.js';
 import { sprintLowerSql, sprintUpperSql } from '../lib/budget-periods.js';
-import { exec } from './aurora.js';
+import { exec, fetchAvatarsById } from './aurora.js';
+import { mockAvatarUrl } from '../mock/avatars.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 // The attribution model of record for "what did this initiative spend" — one
@@ -68,6 +69,7 @@ export interface SprintRow {
   /** The SME accountable for the sprint; the envelope points at them. */
   stewardPersonId: string | null;
   stewardName: string | null;
+  stewardAvatarUrl?: string | null;
   startsOn: string | null;
   endsOn: string | null;
   status: string;
@@ -161,6 +163,7 @@ async function buildMockSprintRow(m: MockSprintBase, personId: string | null): P
     goal: m.goal,
     stewardPersonId: m.stewardPersonId,
     stewardName: m.stewardName,
+    stewardAvatarUrl: mockAvatarUrl(m.stewardPersonId),
     startsOn: m.startsOn,
     endsOn: m.endsOn,
     status: m.status,
@@ -331,7 +334,10 @@ export async function listSprints(opts: ListSprintsOpts = {}): Promise<SprintRow
       LIMIT ${limit}`,
     params,
   );
-  return rows.map(rowToSprint);
+  const sprints = rows.map(rowToSprint);
+  const stewardIds = [...new Set(sprints.flatMap(row => row.stewardPersonId ? [row.stewardPersonId] : []))];
+  const portraits = stewardIds.length ? await fetchAvatarsById(stewardIds) : new Map<string, string>();
+  return sprints.map(row => ({ ...row, stewardAvatarUrl: portraits.get(row.stewardPersonId ?? '') ?? null }));
 }
 
 /** A sprint is the caller's when they steward it, hold an envelope on it, or

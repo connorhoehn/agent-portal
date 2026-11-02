@@ -50,7 +50,7 @@ export function SprintCard({ s, selected, onSelect }: {
         {/* Who answers for it. A sprint without a steward is itself a finding. */}
         {s.stewardName ? (
           <Inline gap="xs" wrap={false} className="min-w-0">
-            <Avatar name={s.stewardName} size={18} />
+            <Avatar name={s.stewardName} src={s.stewardAvatarUrl ?? undefined} size={18} />
             <T size="xs" className="truncate text-text-secondary">{s.stewardName}</T>
           </Inline>
         ) : (

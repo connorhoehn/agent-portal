@@ -40,8 +40,8 @@ test('curated summary keeps one work action, authorized portraits, and honest em
   const pane = page.getByTestId('initiative-pane-details');
   await expect(pane.getByTestId('initiative-details-action')).toHaveCount(1);
   await expect(pane).not.toContainText('THIS MONTH'); await expect(pane).not.toContainText('Repository'); await expect(pane).not.toContainText('Nothing is blocked.');
-  await expect(pane.getByTestId('initiative-details-people').locator('img[src="/__pane-avatar-owner.svg"]')).toHaveCount(1);
-  await expect(pane.getByTestId('initiative-details-people').locator('img[src="/__pane-avatar-sme.svg"]')).toHaveCount(1);
+  await expect(pane.getByTestId('initiative-facts').locator('img[src="/__pane-avatar-owner.svg"]')).toHaveCount(1);
+  await expect(pane.getByTestId('initiative-facts').locator('img[src="/__pane-avatar-sme.svg"]')).toHaveCount(1);
   await pane.getByRole('button', { name: /Open work item/ }).click(); await expect(page.getByTestId('fixture-opened')).toHaveText('wi-obs-e2-b4');
   await page.getByRole('button', { name: 'Show next work' }).click(); await expect(pane.getByTestId('initiative-details-action')).toContainText('Verify collector coverage');
   await pane.getByRole('button', { name: /Open work item/ }).click(); await expect(page.getByTestId('fixture-opened')).toHaveText('inert-next-work');

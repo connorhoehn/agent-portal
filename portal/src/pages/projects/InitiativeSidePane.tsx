@@ -27,7 +27,7 @@ import {
   SidePane, usePaneState, useSidePane, useSidePaneHost, type PaneStateControl, type PaneTabSpec, type PersonDetail, type PersonEvidenceDocument,
 } from '@connorhoehnslalom/ui-components';
 import {
-  ActivityIcon, Button, Card, Chip, DocumentIcon, EmptyState, IconButton, Inline, InlineAlert, KeyValue, LoadingState, MetaLine, PageSection, Stack, StatusPill, T, Tooltip,
+  ActivityIcon, ArrowRightIcon, Button, Chip, DetailSection, DocumentIcon, EmptyState, IconButton, Inline, InlineAlert, KeyValue, LoadingState, MetaLine, PageSection, Stack, StatusPill, T, Tooltip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { ConversationViewsSlot } from '../../components/chat/useChatPins';
 import { ConversationPaneBody, useConversationPane } from '../../components/shell/ConversationPane';
@@ -143,10 +143,6 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
       tabs={tab === 'brief' ? undefined : control.pane.tabs.filter(t => t.id !== 'brief').map(t => t.id === 'discussion' && inHuddle ? { ...t, label: 'Huddle' } : t)} value={tab} onValueChange={control.pane.select}
       trailing={<Inline gap="xs" align="center" wrap={false}>
         <Inline ref={setViewsSlot} gap="none" align="center" wrap={false} hidden={tab !== 'discussion'} className="shrink-0" data-testid="initiative-pane-views" />
-        {tab === 'details' && <>
-          <Tooltip content="Docs and files"><IconButton variant="ghost" size="sm" onClick={props.onOpenDocuments} aria-label="Open initiative docs and files" icon={<DocumentIcon size={14} />} data-testid="initiative-details-docs" /></Tooltip>
-          <Tooltip content="Activity"><IconButton variant="ghost" size="sm" onClick={props.onOpenActivity} aria-label="Open initiative activity" icon={<ActivityIcon size={14} />} data-testid="initiative-details-activity" /></Tooltip>
-        </>}
       </Inline>}
       data-testid="initiative-pane">
       {/* The thread stays subscribed while another detail tab is selected. */}
@@ -175,35 +171,40 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
 
 // ─── Details ────────────────────────────────────────────────────────────────
 
-export function InitiativeDetailsSummary({ facts, overview, onOpenWorkItem }: Pick<InitiativeSidePaneProps, 'facts' | 'overview' | 'onOpenWorkItem'>) {
+export function InitiativeDetailsSummary({ facts, overview, onOpenWorkItem, onOpenDocuments, onOpenActivity }: Pick<InitiativeSidePaneProps, 'facts' | 'overview' | 'onOpenWorkItem' | 'onOpenDocuments' | 'onOpenActivity'>) {
+  const navigate = useNavigate();
   const ready = overview.state === 'ready' ? overview : null;
   const next = ready?.upNext[0] ?? null;
   const risks = ready?.attention ?? [];
   const action = risks[0] ?? next;
   const openItem = (href: string) => {
     const item = new URLSearchParams(href.split('?')[1] ?? '').get('item');
-    if (item) onOpenWorkItem(item);
+    if (item) onOpenWorkItem(item); else navigate(href);
   };
   return (
-    <>
-      {facts.project.summary && <T size="sm" tone="secondary" wrap as="p" className="line-clamp-2" title={facts.project.summary} data-testid="initiative-details-summary">{facts.project.summary}</T>}
+    <Stack gap="lg">
+      {facts.project.summary && <T size="sm" tone="secondary" wrap as="p" data-testid="initiative-details-summary">{facts.project.summary}</T>}
       <InitiativeFacts input={facts} />
-      {action && <Card className="border-primary/20 bg-primary/5 px-3 py-2" data-testid="initiative-details-action">
-        <Stack gap="xs">
-          <Inline justify="between" align="center" gap="sm">
-            <T size="xs" weight="semibold" tone="secondary">{risks.length ? 'Needs attention' : 'Up next'}</T>
-            <T as="span" size="xs"><Button variant="link" size="sm" onClick={() => openItem(action.href)} aria-label={`Open work item ${action.key ?? action.title}`}>Open work</Button></T>
-          </Inline>
-          <T size="sm" weight="medium" wrap className="line-clamp-2" title={action.title}>{action.title}</T>
+      {action && <DetailSection as="h2" variant="heading" title={risks.length ? 'Needs attention' : 'Next work item'} className="border-t border-border pt-4" data-testid="initiative-details-action">
+        <Stack gap="sm">
+          <T size="sm" weight="medium" wrap>{action.title}</T>
           <Inline gap="sm" align="center">
-            {action.key && <Chip size="xs" tone="neutral" mono>{action.key}</Chip>}
-            <T size="xs" tone="secondary" className="truncate">{action.assigneeName ?? 'Unassigned'}{action.points ? ` · ${action.points}` : ''}</T>
+            {action.key && <Chip size="md" tone="neutral" mono>{action.key}</Chip>}
+            <T size="xs" tone="secondary" wrap>{action.assigneeName ?? 'Unassigned'}{action.points ? ` · ${action.points}` : ''}</T>
           </Inline>
-          {'reason' in action && action.reason && <T size="xs" tone="secondary" wrap className="line-clamp-2" title={action.reason}>{action.reason}</T>}
+          {'reason' in action && action.reason && <T size="sm" tone="secondary" wrap>{action.reason}</T>}
+          <Inline><Button variant="secondary" size="sm" onClick={() => openItem(action.href)} aria-label={`Open work item ${action.key ?? action.title}`}>
+            {action.key ? `Open ${action.key}` : 'Open work item'}<ArrowRightIcon size={14} />
+          </Button></Inline>
         </Stack>
-      </Card>}
-      {!ready && <T size="xs" tone="secondary">{overview.state === 'loading' ? 'Loading work…' : 'Work could not be read.'}</T>}
-    </>
+      </DetailSection>}
+      {!ready && <T size="sm" tone="secondary">{overview.state === 'loading' ? 'Loading work…' : 'Work could not be read.'}</T>}
+      {ready && !action && <T size="sm" tone="secondary">No work is waiting for attention.</T>}
+      <Inline gap="sm" className="border-t border-border pt-3">
+        <Button variant="ghost" size="sm" onClick={onOpenDocuments} aria-label="Open initiative docs and files" data-testid="initiative-details-docs"><DocumentIcon size={14} />Docs and files</Button>
+        <Button variant="ghost" size="sm" onClick={onOpenActivity} aria-label="Open initiative activity" data-testid="initiative-details-activity"><ActivityIcon size={14} />Activity</Button>
+      </Inline>
+    </Stack>
   );
 }
 

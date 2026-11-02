@@ -17,6 +17,7 @@ jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', mock: { aurora: true, agentcore: true } },
 }));
 
+import { mockAvatarUrl } from '../../mock/avatars.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
 import { getDecision, listDecisions } from '../decisions.js';
 
@@ -61,7 +62,10 @@ describe('decision records in dev:mock', () => {
       }));
       // Every participant resolves to a person in the shared cast — the JOIN
       // the SQL does, rather than a bare id rendered as a name.
-      for (const p of detail!.participants) expect(p.name).not.toBe('');
+      for (const p of detail!.participants) {
+        expect(p.name).not.toBe('');
+        expect(p.avatarUrl).toBe(mockAvatarUrl(p.personId));
+      }
     }
   });
 

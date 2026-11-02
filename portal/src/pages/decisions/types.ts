@@ -17,6 +17,7 @@ export interface DecisionSummary {
 }
 
 export interface DecisionParticipant {
+  avatarUrl?: string | null;
   personId: string;
   name: string;
   title: string | null;

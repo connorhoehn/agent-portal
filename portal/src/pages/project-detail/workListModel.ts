@@ -124,6 +124,7 @@ export interface WorkListItemOptions {
    * `kindLabel`, so the Bug chip would say it twice and is dropped.
    */
   metaStyle?: 'chips' | 'text';
+  ownerAvatarUrl?: string;
 }
 
 /** One list row. The run is this item's latest marketplace run, if any. */
@@ -152,7 +153,7 @@ export function toWorkListItem(
     done: item.status === 'done',
     donePending: pending,
     points: item.storyPoints,
-    owner: item.assigneeId && item.assigneeName ? { id: item.assigneeId, name: item.assigneeName } : null,
+    owner: item.assigneeId && item.assigneeName ? { id: item.assigneeId, name: item.assigneeName, ...(opts.ownerAvatarUrl ? { avatarUrl: opts.ownerAvatarUrl } : {}) } : null,
     chips,
     signal,
     // A story is the default kind of work, so its row names only the owner

@@ -6,10 +6,10 @@
 // window includes its final day, and that an account with no linked person
 // cannot fall through to the whole org's board under a "mine" label.
 
-jest.mock('../aurora.js', () => ({ exec: jest.fn() }));
+jest.mock('../aurora.js', () => ({ exec: jest.fn(), fetchAvatarsById: jest.fn() }));
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: false } } }));
 
-import { exec } from '../aurora.js';
+import { exec, fetchAvatarsById } from '../aurora.js';
 import { config } from '../../config.js';
 import { spendPredicateSql, MOCK_GRANTS, mockInitiativeWindowSpendUsd } from '../budgets.js';
 import { searchWorkItems } from '../work-items.js';
@@ -23,6 +23,15 @@ const execMock = exec as unknown as jest.Mock;
 beforeEach(() => {
   execMock.mockReset();
   execMock.mockResolvedValue([]);
+  jest.mocked(fetchAvatarsById).mockReset().mockResolvedValue(new Map());
+});
+
+it('resolves portraits only for stewards on the returned sprint rows', async () => {
+  execMock.mockResolvedValue([{ id: 'spr-a', steward_person_id: 'p-049', steward_name: 'Paolo Mancini' }]);
+  jest.mocked(fetchAvatarsById).mockResolvedValue(new Map([['p-049', '/avatars/photos/p-049.jpg']]));
+  const rows = await listSprints({ personId: 'p-049', mineOnly: true });
+  expect(fetchAvatarsById).toHaveBeenCalledWith(['p-049']);
+  expect(rows[0]?.stewardAvatarUrl).toBe('/avatars/photos/p-049.jpg');
 });
 
 async function sql(opts: Parameters<typeof listSprints>[0] = {}): Promise<string> {
@@ -133,6 +142,7 @@ describe('rollups', () => {
     expect(row).toEqual({
       id: 'spr-obs-s3', orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
       name: 'Sprint 98', goal: 'RED dashboards', stewardPersonId: 'p-008', stewardName: 'Layla Hassan',
+      stewardAvatarUrl: null,
       startsOn: '2026-08-10', endsOn: '2026-08-24', status: 'active',
       itemCount: 5, doneItemCount: 2, pointsTotal: 21, pointsDone: 8, estimatedCostUsd: 31.07,
       grantedUsd: 30, grantCount: 1, initiativeSpendInWindowUsd: 2.74,

@@ -1,0 +1,837 @@
+{
+  "generator": "Built-in image_gen",
+  "date": "2026-11-01",
+  "requestCount": 1,
+  "prompt": "prompts/2026-11-01-grid.txt",
+  "sourceFile": "exec-c6cf00e0-0232-47c9-a1fa-fe1bfa22919e.png",
+  "sourceSha256": "481641c5e88397116be1238a9301f6321eeeaaf7a38e28b2aa878543a2041129",
+  "sourceSize": [
+    1341,
+    1173
+  ],
+  "grid": {
+    "columns": 8,
+    "rows": 7,
+    "occupiedCells": 51,
+    "blankCells": 5
+  },
+  "processing": "Inspected actual grid boundaries; inset two pixels to remove seams; square crops without upscaling, JPEG quality 92. Existing 19 portraits preserved. Rhea was generated separately before the grid request.",
+  "portraits": [
+    {
+      "subjectId": "p-051",
+      "row": 1,
+      "column": 1,
+      "crop": [
+        3,
+        2,
+        164,
+        163
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "a8f1556b2fed2ab46b9e3a58a4df352b2b2284976368171a9972949b322e79a1"
+    },
+    {
+      "subjectId": "p-049",
+      "row": 1,
+      "column": 2,
+      "crop": [
+        171,
+        2,
+        332,
+        163
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "0b16bd245bd56ddab4d7dee0f707afff304326e87d587e2781a3af8097273326"
+    },
+    {
+      "subjectId": "p-013",
+      "row": 1,
+      "column": 3,
+      "crop": [
+        338,
+        2,
+        499,
+        163
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "1a840d153a50bb1cf4727b6d8e34756c706663222492a0443e4d7341802fe7fa"
+    },
+    {
+      "subjectId": "p-043",
+      "row": 1,
+      "column": 4,
+      "crop": [
+        506,
+        2,
+        667,
+        163
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "e5cb4d2848bef20d135a62dae9c7a4d80f4f4ee31ce481a8a2682560711903cd"
+    },
+    {
+      "subjectId": "p-priya",
+      "row": 1,
+      "column": 5,
+      "crop": [
+        674,
+        2,
+        835,
+        163
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "aeeb6a3c03375bc6a1070d64ba106e77fdfb130c15265e074e9b664354a5147e"
+    },
+    {
+      "subjectId": "p-omar",
+      "row": 1,
+      "column": 6,
+      "crop": [
+        841,
+        2,
+        1002,
+        163
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "de997d440b18826f824be0ff410cbddee3251734e19ffe1a76104e9ae324415f"
+    },
+    {
+      "subjectId": "u-hr",
+      "row": 1,
+      "column": 7,
+      "crop": [
+        1009,
+        2,
+        1170,
+        163
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "40a182f94cd3436b4431929074688257456aa4ff0319ebfa154b46f482f5d7cf"
+    },
+    {
+      "subjectId": "p-003",
+      "row": 1,
+      "column": 8,
+      "crop": [
+        1177,
+        2,
+        1338,
+        163
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "b5ad0016622c3345a8bac4ab0d2e7f8182560f997e017671d08a704845d4f4f4"
+    },
+    {
+      "subjectId": "p-006",
+      "row": 2,
+      "column": 1,
+      "crop": [
+        4,
+        167,
+        164,
+        327
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "bc0f3b9741e9e950a474144fe5990fe65ed9c465f4ff506b6a1fecc4ef86312c"
+    },
+    {
+      "subjectId": "p-007",
+      "row": 2,
+      "column": 2,
+      "crop": [
+        171,
+        167,
+        331,
+        327
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "6da59df7ff9540c42ea2b44403ba91d3206ce6669df7a9c29aa82dfc6383b57d"
+    },
+    {
+      "subjectId": "p-009",
+      "row": 2,
+      "column": 3,
+      "crop": [
+        339,
+        167,
+        499,
+        327
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "eed5dfe09d98e090975bb645fd29c634180098ba97c078a286ddf89ae50eb65f"
+    },
+    {
+      "subjectId": "p-010",
+      "row": 2,
+      "column": 4,
+      "crop": [
+        507,
+        167,
+        667,
+        327
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "f2cc4187df9855e9d0fb6c6e16bdba1bdfa287787ec0d452b1ca73e9437b7ac6"
+    },
+    {
+      "subjectId": "p-014",
+      "row": 2,
+      "column": 5,
+      "crop": [
+        674,
+        167,
+        834,
+        327
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "72328d10e6a0d071acc3537d99864f6de1ea2a0c151cc2233ef12dd855b87042"
+    },
+    {
+      "subjectId": "p-015",
+      "row": 2,
+      "column": 6,
+      "crop": [
+        842,
+        167,
+        1002,
+        327
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "c0bc982accd04db725669cab72322ca12930d559e2a18ba93fd745e26b7b5e1f"
+    },
+    {
+      "subjectId": "p-016",
+      "row": 2,
+      "column": 7,
+      "crop": [
+        1010,
+        167,
+        1170,
+        327
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "7a796f208c3ab13da59c5b8fd8456f091d93dad68fde150788b80d955f1c87b0"
+    },
+    {
+      "subjectId": "p-017",
+      "row": 2,
+      "column": 8,
+      "crop": [
+        1177,
+        167,
+        1337,
+        327
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "41f2f720e9e2e2b9ddb50b9a8463704c953f60029e8d537a475273bf1c6a14f7"
+    },
+    {
+      "subjectId": "p-018",
+      "row": 3,
+      "column": 1,
+      "crop": [
+        3,
+        331,
+        164,
+        492
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "a4565384a77c2e638981504e641568bbcd88030d633dcd942f1150068394d3bd"
+    },
+    {
+      "subjectId": "p-019",
+      "row": 3,
+      "column": 2,
+      "crop": [
+        171,
+        331,
+        332,
+        492
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "23a732ddb7098b41387dd9f98ee42266438a5a059e04da3eb33af87295b61c7f"
+    },
+    {
+      "subjectId": "p-020",
+      "row": 3,
+      "column": 3,
+      "crop": [
+        338,
+        331,
+        499,
+        492
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "fb2f0defea1a51e6b58bf49732891ae19b4f472c51bc07aa45519df2fde97665"
+    },
+    {
+      "subjectId": "p-021",
+      "row": 3,
+      "column": 4,
+      "crop": [
+        506,
+        331,
+        667,
+        492
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "863975daf64fadbdaeb862a8149de465fc1c589f912a095ee87333bcf528d5b3"
+    },
+    {
+      "subjectId": "p-022",
+      "row": 3,
+      "column": 5,
+      "crop": [
+        674,
+        331,
+        835,
+        492
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "e2c8620e9bc4e25d0dc0981a06373ad3d6d20422880b9fbc300b0a489a8695a5"
+    },
+    {
+      "subjectId": "p-023",
+      "row": 3,
+      "column": 6,
+      "crop": [
+        841,
+        331,
+        1002,
+        492
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "135ffb693d41efc5f213a70c44fa00b8fb82d2a0b5023ab8a86f43dc10fc9cf9"
+    },
+    {
+      "subjectId": "p-024",
+      "row": 3,
+      "column": 7,
+      "crop": [
+        1009,
+        331,
+        1170,
+        492
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "ce85aec67fc805ba1db8044002e49ff0831dde880e9ae9cfaadf49c00ccb1f4b"
+    },
+    {
+      "subjectId": "p-025",
+      "row": 3,
+      "column": 8,
+      "crop": [
+        1177,
+        331,
+        1338,
+        492
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "ef0ddb2a2318b094d2de2d0bba1ee439bfa4f6c32f204472713c552d4385c3b3"
+    },
+    {
+      "subjectId": "p-026",
+      "row": 4,
+      "column": 1,
+      "crop": [
+        3,
+        496,
+        164,
+        657
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "5777e65083616baa37deaa11ee6ec8a5a9c973c8d38eccf04609026c39ca8879"
+    },
+    {
+      "subjectId": "p-027",
+      "row": 4,
+      "column": 2,
+      "crop": [
+        171,
+        496,
+        332,
+        657
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "e8984801bb6a3587156b61d07db6f12af7bf83a72e8d36e476509bb2ee85e5ce"
+    },
+    {
+      "subjectId": "p-028",
+      "row": 4,
+      "column": 3,
+      "crop": [
+        338,
+        496,
+        499,
+        657
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "ab61949ecf58991b215614bb49f0ebbc31f3cf296f8c732db30c54bd36865936"
+    },
+    {
+      "subjectId": "p-029",
+      "row": 4,
+      "column": 4,
+      "crop": [
+        506,
+        496,
+        667,
+        657
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "c05793ca3879b9a411bd37574ed53e9d9d8ef9291c3940d89781f00b357e5441"
+    },
+    {
+      "subjectId": "p-031",
+      "row": 4,
+      "column": 5,
+      "crop": [
+        674,
+        496,
+        835,
+        657
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "29c4e8c051fcbd43349d3180419cbe20053ee6e4006ca0cec2335bfb98d7594e"
+    },
+    {
+      "subjectId": "p-032",
+      "row": 4,
+      "column": 6,
+      "crop": [
+        841,
+        496,
+        1002,
+        657
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "6ae08b883c82e7f076c3d665996b94da6bd2dfb5a4d3b9d55f1e855bfe8a8639"
+    },
+    {
+      "subjectId": "p-033",
+      "row": 4,
+      "column": 7,
+      "crop": [
+        1009,
+        496,
+        1170,
+        657
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "935d4da554aeb6f8817e475dffe7b739197252b8319b26bfa24de507c5bee732"
+    },
+    {
+      "subjectId": "p-034",
+      "row": 4,
+      "column": 8,
+      "crop": [
+        1177,
+        496,
+        1338,
+        657
+      ],
+      "size": [
+        161,
+        161
+      ],
+      "sha256": "0c2abe297e94843fd3870e6d1a705b58b1b716746f49aeec9ed93012dfd7a5dd"
+    },
+    {
+      "subjectId": "p-035",
+      "row": 5,
+      "column": 1,
+      "crop": [
+        4,
+        661,
+        164,
+        821
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "4302737813661ff91bb33bb897cf777c38a76754845ad961c23cd9af69db34c6"
+    },
+    {
+      "subjectId": "p-036",
+      "row": 5,
+      "column": 2,
+      "crop": [
+        171,
+        661,
+        331,
+        821
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "a205af55c8ebfb836f04b65c546bcc12946d14bfe04c24f03e24a490f52858f2"
+    },
+    {
+      "subjectId": "p-037",
+      "row": 5,
+      "column": 3,
+      "crop": [
+        339,
+        661,
+        499,
+        821
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "fb8404bfc72a9f8134e5c72b63a21a621c50f7b4ec7a3d46fed18018671e9324"
+    },
+    {
+      "subjectId": "p-038",
+      "row": 5,
+      "column": 4,
+      "crop": [
+        507,
+        661,
+        667,
+        821
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "065026a6105e9fef4da33032e017f19a3f58b7e9a64f61c01106f576aa9b2ce5"
+    },
+    {
+      "subjectId": "p-039",
+      "row": 5,
+      "column": 5,
+      "crop": [
+        674,
+        661,
+        834,
+        821
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "95537343977f93971d3157f5fa376094fe4062abc6ee9adc0a977c1c6cb5a2a7"
+    },
+    {
+      "subjectId": "p-040",
+      "row": 5,
+      "column": 6,
+      "crop": [
+        842,
+        661,
+        1002,
+        821
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "cd16299f9768b642bf98652e35a4cedac76e06eb33206acaa31a73c005a2335a"
+    },
+    {
+      "subjectId": "p-041",
+      "row": 5,
+      "column": 7,
+      "crop": [
+        1010,
+        661,
+        1170,
+        821
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "3913c2ff7fb6b49a12cfba5915fe3f3439d3d36450057c75ac882182e7d5eb03"
+    },
+    {
+      "subjectId": "p-042",
+      "row": 5,
+      "column": 8,
+      "crop": [
+        1177,
+        661,
+        1337,
+        821
+      ],
+      "size": [
+        160,
+        160
+      ],
+      "sha256": "7622d4f73151ed1715068c093dd64528a6b94d50e0fc0a67cb61de1bfae6c493"
+    },
+    {
+      "subjectId": "p-044",
+      "row": 6,
+      "column": 1,
+      "crop": [
+        4,
+        825,
+        163,
+        984
+      ],
+      "size": [
+        159,
+        159
+      ],
+      "sha256": "39ae30552fdd31409032e113d2febda9d2db57ccbf55f1af0ae7e604e31f7bfc"
+    },
+    {
+      "subjectId": "p-045",
+      "row": 6,
+      "column": 2,
+      "crop": [
+        172,
+        825,
+        331,
+        984
+      ],
+      "size": [
+        159,
+        159
+      ],
+      "sha256": "e44da297d1bb7ff9f0875fc45d6ed0268c6b85b862d2965dad8186b10b74c7e2"
+    },
+    {
+      "subjectId": "p-046",
+      "row": 6,
+      "column": 3,
+      "crop": [
+        339,
+        825,
+        498,
+        984
+      ],
+      "size": [
+        159,
+        159
+      ],
+      "sha256": "06dd1d48e936463b6dbf7e3f2ea0b4990410fe2d337fee3d4a7410e337ab7f7d"
+    },
+    {
+      "subjectId": "p-047",
+      "row": 6,
+      "column": 4,
+      "crop": [
+        507,
+        825,
+        666,
+        984
+      ],
+      "size": [
+        159,
+        159
+      ],
+      "sha256": "c42a33c9870e88c761a0cb8958990c3149257934d3828fc2df4cf18092413b59"
+    },
+    {
+      "subjectId": "p-048",
+      "row": 6,
+      "column": 5,
+      "crop": [
+        675,
+        825,
+        834,
+        984
+      ],
+      "size": [
+        159,
+        159
+      ],
+      "sha256": "2a3b11302750a6fb21811c3d3c46603fd49e41e18f048ec9bf7dc712c1575577"
+    },
+    {
+      "subjectId": "p-050",
+      "row": 6,
+      "column": 6,
+      "crop": [
+        842,
+        825,
+        1001,
+        984
+      ],
+      "size": [
+        159,
+        159
+      ],
+      "sha256": "9a67ae8bcdaa5e2e1b6be593c66beb70fe373cc04e42d4b65b5f746cd6703d19"
+    },
+    {
+      "subjectId": "p-052",
+      "row": 6,
+      "column": 7,
+      "crop": [
+        1010,
+        825,
+        1169,
+        984
+      ],
+      "size": [
+        159,
+        159
+      ],
+      "sha256": "19dacb8fa64b5294d372c4b050e34679aa7e767182f2590ce99cb381156c486a"
+    },
+    {
+      "subjectId": "p-053",
+      "row": 6,
+      "column": 8,
+      "crop": [
+        1178,
+        825,
+        1337,
+        984
+      ],
+      "size": [
+        159,
+        159
+      ],
+      "sha256": "3ee24e31a5808ab66b8071b35e7142f52fd6b1614fdd0fe40e81b83416a50c6d"
+    },
+    {
+      "subjectId": "p-054",
+      "row": 7,
+      "column": 1,
+      "crop": [
+        2,
+        988,
+        166,
+        1152
+      ],
+      "size": [
+        164,
+        164
+      ],
+      "sha256": "beb648236e6e22ebef45573112d24fd1d243e65f9ec0d377afd109c35261181b"
+    },
+    {
+      "subjectId": "p-055",
+      "row": 7,
+      "column": 2,
+      "crop": [
+        170,
+        988,
+        333,
+        1151
+      ],
+      "size": [
+        163,
+        163
+      ],
+      "sha256": "3967e14365a0761049cce0ba7329be14d52f343105d47779b8de4aefd9d18d25"
+    },
+    {
+      "subjectId": "p-056",
+      "row": 7,
+      "column": 3,
+      "crop": [
+        337,
+        988,
+        501,
+        1152
+      ],
+      "size": [
+        164,
+        164
+      ],
+      "sha256": "245f3de13899ab682fb09c9a87db0bde05a56fb69c28fb522e2d4ead060b522b"
+    }
+  ]
+}

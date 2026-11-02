@@ -130,7 +130,7 @@ describe('GET /api/graph/decisions/:id', () => {
     );
     expect(res.body.participants).toHaveLength(first.participantCount);
     for (const p of res.body.participants) {
-      expect(Object.keys(p).sort()).toEqual(['name', 'personId', 'role', 'title', 'weight']);
+      expect(Object.keys(p).sort()).toEqual(['avatarUrl', 'name', 'personId', 'role', 'title', 'weight']);
       // The SQL JOINs `people`, so a participant always resolves to a name.
       expect(p.name).not.toBe('');
     }

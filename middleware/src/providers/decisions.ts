@@ -11,7 +11,8 @@
 
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { config } from '../config.js';
-import { exec } from './aurora.js';
+import { exec, fetchAvatarsById } from './aurora.js';
+import { mockAvatarUrl } from '../mock/avatars.js';
 import { countBy } from '../mock/core/index.js';
 import { decisionRows, decisionParticipantRows } from '../mock/decisions.js';
 import { mockPeople } from '../mock/people.js';
@@ -49,6 +50,7 @@ export interface DecisionDetail {
   decidedAt: string | null;
   participants: Array<{
     personId: string;
+    avatarUrl: string | null;
     name: string;
     title: string | null;
     role: string | null;
@@ -115,7 +117,7 @@ function mockGetDecision(id: string): DecisionDetail | null {
       .flatMap((p) => {
         const person = byId.get(p.personId);
         return person
-          ? [{ personId: p.personId, name: person.name, title: person.title, role: p.role, weight: p.weight }]
+          ? [{ personId: p.personId, avatarUrl: mockAvatarUrl(p.personId), name: person.name, title: person.title, role: p.role, weight: p.weight }]
           : [];
       })
       // ORDER BY dp.weight DESC NULLS LAST, p.name
@@ -192,6 +194,7 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
     [strParam('id', id)],
   );
 
+  const avatars = await fetchAvatarsById(partRows.map(row => String(row['person_id'])));
   return {
     id: String(head['id']),
     topic: String(head['topic'] ?? ''),
@@ -201,6 +204,7 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
     decidedAt: head['decided_at'] != null ? String(head['decided_at']) : null,
     participants: partRows.map((r) => ({
       personId: String(r['person_id']),
+      avatarUrl: avatars.get(String(r['person_id'])) ?? null,
       name: String(r['name'] ?? ''),
       title: r['title'] != null ? String(r['title']) : null,
       role: r['role'] != null ? String(r['role']) : null,
@@ -244,7 +248,7 @@ export async function listDecisionActivity(opts: { projectId?: string } = {}): P
         id: d.id, topic: d.topic, summary: d.summary, status: d.status, projectId: d.projectId, workItemId: d.workItemId,
         requiredRole: d.requiredRole, decidedAt: d.decidedAt, escalatedAt: d.escalatedAt,
         participants: decisionParticipantRows.rows().filter((p) => p.decisionId === d.id)
-          .flatMap((p) => { const person = byId.get(p.personId); return person ? [{ personId: p.personId, name: person.name, role: p.role }] : []; }),
+          .flatMap((p) => { const person = byId.get(p.personId); return person ? [{ personId: p.personId, avatarUrl: mockAvatarUrl(p.personId), name: person.name, role: p.role }] : []; }),
       }))
       .sort((a, b) => (b.escalatedAt ?? b.decidedAt ?? '').localeCompare(a.escalatedAt ?? a.decidedAt ?? ''))
       .slice(0, DECISION_ACTIVITY_LIMIT);

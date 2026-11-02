@@ -296,7 +296,7 @@ const PEOPLE_GRAPH_LIMIT = 500;
  * that predates it must lose faces (initials), not the org graph. `ids`
  * narrows the read; omitted means every person with a portrait.
  */
-async function fetchAvatarsById(ids?: string[]): Promise<Map<string, string>> {
+export async function fetchAvatarsById(ids?: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   try {
     if (ids && ids.length === 0) return out;

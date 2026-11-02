@@ -132,6 +132,370 @@
       "name": "Eli Garcia",
       "portraitUrl": "/avatars/photos/p-011.jpg",
       "biography": "Turns noisy alerting into useful signals and validates reliability changes against real failure cases."
+    },
+    {
+      "subjectId": "p-051",
+      "userId": null,
+      "name": "Simone Chang",
+      "portraitUrl": "/avatars/photos/p-051.jpg",
+      "biography": "Senior Security Engineer · Security"
+    },
+    {
+      "subjectId": "p-049",
+      "userId": null,
+      "name": "Paolo Mancini",
+      "portraitUrl": "/avatars/photos/p-049.jpg",
+      "biography": "Engineering Manager · ML / AI"
+    },
+    {
+      "subjectId": "p-013",
+      "userId": "u-caleb",
+      "name": "Caleb Turner",
+      "portraitUrl": "/avatars/photos/p-013.jpg",
+      "biography": "Senior Engineer · Platform Engineering"
+    },
+    {
+      "subjectId": "p-043",
+      "userId": null,
+      "name": "Bria Petrov",
+      "portraitUrl": "/avatars/photos/p-043.jpg",
+      "biography": "Staff ML Engineer · ML / AI"
+    },
+    {
+      "subjectId": "p-priya",
+      "userId": "u-priya",
+      "name": "Priya Venkataraman",
+      "portraitUrl": "/avatars/photos/p-priya.jpg",
+      "biography": "Identity Governance Lead · Security"
+    },
+    {
+      "subjectId": "p-omar",
+      "userId": "u-omar",
+      "name": "Omar Haddad",
+      "portraitUrl": "/avatars/photos/p-omar.jpg",
+      "biography": "Engineering Manager · Security"
+    },
+    {
+      "subjectId": "u-hr",
+      "userId": "u-hr",
+      "name": "Helen Desai",
+      "portraitUrl": "/avatars/photos/u-hr.jpg",
+      "biography": "HR Administrator · People Operations"
+    },
+    {
+      "subjectId": "p-003",
+      "userId": null,
+      "name": "Owen Brooks",
+      "portraitUrl": "/avatars/photos/p-003.jpg",
+      "biography": "Senior Engineer · Platform Engineering"
+    },
+    {
+      "subjectId": "p-006",
+      "userId": null,
+      "name": "Maria Johnson",
+      "portraitUrl": "/avatars/photos/p-006.jpg",
+      "biography": "Principal Engineer · Platform Engineering"
+    },
+    {
+      "subjectId": "p-007",
+      "userId": null,
+      "name": "Marcus Müller",
+      "portraitUrl": "/avatars/photos/p-007.jpg",
+      "biography": "Engineer · Platform Engineering"
+    },
+    {
+      "subjectId": "p-009",
+      "userId": null,
+      "name": "Arjun Shah",
+      "portraitUrl": "/avatars/photos/p-009.jpg",
+      "biography": "SRE · Platform Engineering"
+    },
+    {
+      "subjectId": "p-010",
+      "userId": null,
+      "name": "Kenji Chen",
+      "portraitUrl": "/avatars/photos/p-010.jpg",
+      "biography": "Staff Engineer · Platform Engineering"
+    },
+    {
+      "subjectId": "p-014",
+      "userId": null,
+      "name": "Grace Singh",
+      "portraitUrl": "/avatars/photos/p-014.jpg",
+      "biography": "Senior Engineer · Platform Engineering"
+    },
+    {
+      "subjectId": "p-015",
+      "userId": null,
+      "name": "Raj Mehta",
+      "portraitUrl": "/avatars/photos/p-015.jpg",
+      "biography": "Data Engineer · Data Platform"
+    },
+    {
+      "subjectId": "p-016",
+      "userId": null,
+      "name": "Tara Wright",
+      "portraitUrl": "/avatars/photos/p-016.jpg",
+      "biography": "Data Analyst · Data Platform"
+    },
+    {
+      "subjectId": "p-017",
+      "userId": null,
+      "name": "Daniel Chang",
+      "portraitUrl": "/avatars/photos/p-017.jpg",
+      "biography": "Staff Data Engineer · Data Platform"
+    },
+    {
+      "subjectId": "p-018",
+      "userId": null,
+      "name": "Yusuf Ahmed",
+      "portraitUrl": "/avatars/photos/p-018.jpg",
+      "biography": "Data Engineer · Data Platform"
+    },
+    {
+      "subjectId": "p-019",
+      "userId": null,
+      "name": "Camille Dubois",
+      "portraitUrl": "/avatars/photos/p-019.jpg",
+      "biography": "Senior Data Engineer · Data Platform"
+    },
+    {
+      "subjectId": "p-020",
+      "userId": null,
+      "name": "Henry Hassan",
+      "portraitUrl": "/avatars/photos/p-020.jpg",
+      "biography": "Senior Engineer · Data Platform"
+    },
+    {
+      "subjectId": "p-021",
+      "userId": null,
+      "name": "James Thompson",
+      "portraitUrl": "/avatars/photos/p-021.jpg",
+      "biography": "Data Engineer · Data Platform"
+    },
+    {
+      "subjectId": "p-022",
+      "userId": null,
+      "name": "Sarah Thompson",
+      "portraitUrl": "/avatars/photos/p-022.jpg",
+      "biography": "Senior Engineer · Data Platform"
+    },
+    {
+      "subjectId": "p-023",
+      "userId": null,
+      "name": "Hiro Green",
+      "portraitUrl": "/avatars/photos/p-023.jpg",
+      "biography": "Data Analyst · Data Platform"
+    },
+    {
+      "subjectId": "p-024",
+      "userId": null,
+      "name": "Andre Williams",
+      "portraitUrl": "/avatars/photos/p-024.jpg",
+      "biography": "Staff Engineer · Data Platform"
+    },
+    {
+      "subjectId": "p-025",
+      "userId": null,
+      "name": "Anika Mehta",
+      "portraitUrl": "/avatars/photos/p-025.jpg",
+      "biography": "Principal Engineer · Data Platform"
+    },
+    {
+      "subjectId": "p-026",
+      "userId": null,
+      "name": "Mateo Green",
+      "portraitUrl": "/avatars/photos/p-026.jpg",
+      "biography": "Senior UX Researcher · Product"
+    },
+    {
+      "subjectId": "p-027",
+      "userId": null,
+      "name": "Sasha Kim",
+      "portraitUrl": "/avatars/photos/p-027.jpg",
+      "biography": "UX Researcher · Product"
+    },
+    {
+      "subjectId": "p-028",
+      "userId": null,
+      "name": "Felix Rivera",
+      "portraitUrl": "/avatars/photos/p-028.jpg",
+      "biography": "UX Researcher · Product"
+    },
+    {
+      "subjectId": "p-029",
+      "userId": null,
+      "name": "Ezra Park",
+      "portraitUrl": "/avatars/photos/p-029.jpg",
+      "biography": "Senior PM · Product"
+    },
+    {
+      "subjectId": "p-031",
+      "userId": null,
+      "name": "Fatima Ahmed",
+      "portraitUrl": "/avatars/photos/p-031.jpg",
+      "biography": "Senior PM · Product"
+    },
+    {
+      "subjectId": "p-032",
+      "userId": null,
+      "name": "Ruth Foster",
+      "portraitUrl": "/avatars/photos/p-032.jpg",
+      "biography": "Technical Writer · Product"
+    },
+    {
+      "subjectId": "p-033",
+      "userId": null,
+      "name": "Iris Patel",
+      "portraitUrl": "/avatars/photos/p-033.jpg",
+      "biography": "Senior PM · Product"
+    },
+    {
+      "subjectId": "p-034",
+      "userId": null,
+      "name": "Miles Wright",
+      "portraitUrl": "/avatars/photos/p-034.jpg",
+      "biography": "Accessibility Specialist · Design Systems"
+    },
+    {
+      "subjectId": "p-035",
+      "userId": null,
+      "name": "Ben Okafor",
+      "portraitUrl": "/avatars/photos/p-035.jpg",
+      "biography": "Staff Designer · Design Systems"
+    },
+    {
+      "subjectId": "p-036",
+      "userId": null,
+      "name": "David Tanaka",
+      "portraitUrl": "/avatars/photos/p-036.jpg",
+      "biography": "Head of Design · Design Systems"
+    },
+    {
+      "subjectId": "p-037",
+      "userId": null,
+      "name": "Oscar Foster",
+      "portraitUrl": "/avatars/photos/p-037.jpg",
+      "biography": "Senior Designer · Design Systems"
+    },
+    {
+      "subjectId": "p-038",
+      "userId": null,
+      "name": "Isabel Vasquez",
+      "portraitUrl": "/avatars/photos/p-038.jpg",
+      "biography": "Design Engineer · Design Systems"
+    },
+    {
+      "subjectId": "p-039",
+      "userId": null,
+      "name": "Nils Andersson",
+      "portraitUrl": "/avatars/photos/p-039.jpg",
+      "biography": "Senior Designer · Design Systems"
+    },
+    {
+      "subjectId": "p-040",
+      "userId": null,
+      "name": "Jordan O'Brien",
+      "portraitUrl": "/avatars/photos/p-040.jpg",
+      "biography": "Senior Designer · Design Systems"
+    },
+    {
+      "subjectId": "p-041",
+      "userId": null,
+      "name": "Rosa Ahmed",
+      "portraitUrl": "/avatars/photos/p-041.jpg",
+      "biography": "ML Engineer · ML / AI"
+    },
+    {
+      "subjectId": "p-042",
+      "userId": null,
+      "name": "Katya Petrov",
+      "portraitUrl": "/avatars/photos/p-042.jpg",
+      "biography": "Staff ML Engineer · ML / AI"
+    },
+    {
+      "subjectId": "p-044",
+      "userId": null,
+      "name": "Zoe Thompson",
+      "portraitUrl": "/avatars/photos/p-044.jpg",
+      "biography": "Staff Engineer · ML / AI"
+    },
+    {
+      "subjectId": "p-045",
+      "userId": null,
+      "name": "Noah Vasquez",
+      "portraitUrl": "/avatars/photos/p-045.jpg",
+      "biography": "Senior Engineer · ML / AI"
+    },
+    {
+      "subjectId": "p-046",
+      "userId": null,
+      "name": "Vikram Patel",
+      "portraitUrl": "/avatars/photos/p-046.jpg",
+      "biography": "Senior Engineer · ML / AI"
+    },
+    {
+      "subjectId": "p-047",
+      "userId": null,
+      "name": "Nina Rivera",
+      "portraitUrl": "/avatars/photos/p-047.jpg",
+      "biography": "Staff ML Engineer · ML / AI"
+    },
+    {
+      "subjectId": "p-048",
+      "userId": null,
+      "name": "Lucas Kim",
+      "portraitUrl": "/avatars/photos/p-048.jpg",
+      "biography": "Staff ML Engineer · ML / AI"
+    },
+    {
+      "subjectId": "p-050",
+      "userId": null,
+      "name": "Ava Lee",
+      "portraitUrl": "/avatars/photos/p-050.jpg",
+      "biography": "Engineer · ML / AI"
+    },
+    {
+      "subjectId": "p-052",
+      "userId": null,
+      "name": "Diego Ortiz",
+      "portraitUrl": "/avatars/photos/p-052.jpg",
+      "biography": "Security Lead · Security"
+    },
+    {
+      "subjectId": "p-053",
+      "userId": null,
+      "name": "Ingrid Larsen",
+      "portraitUrl": "/avatars/photos/p-053.jpg",
+      "biography": "Engineer · Security"
+    },
+    {
+      "subjectId": "p-054",
+      "userId": null,
+      "name": "Kevin Garcia",
+      "portraitUrl": "/avatars/photos/p-054.jpg",
+      "biography": "Senior Engineer · Security"
+    },
+    {
+      "subjectId": "p-055",
+      "userId": null,
+      "name": "Joy Chen",
+      "portraitUrl": "/avatars/photos/p-055.jpg",
+      "biography": "Senior Security Engineer · Security"
+    },
+    {
+      "subjectId": "p-056",
+      "userId": null,
+      "name": "Hugo Lee",
+      "portraitUrl": "/avatars/photos/p-056.jpg",
+      "biography": "Security Engineer · Security"
+    },
+    {
+      "subjectId": "p-rhea",
+      "userId": "u-rhea",
+      "name": "Rhea Castellanos",
+      "portraitUrl": "/avatars/photos/p-rhea.jpg",
+      "biography": "Security Engineer"
     }
   ]
 }

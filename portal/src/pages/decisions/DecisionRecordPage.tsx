@@ -62,16 +62,16 @@ export default function DecisionRecordPage() {
       <RailSection title="People">
         {who && (
           <Inline align="center" gap="xs">
-            <Avatar name={who.name} size={18} />
+            <Avatar name={who.name} src={who.avatarUrl ?? undefined} size={24} />
             <T>{who.name}</T>
             <Chip tone="accent" size="xs">decider</Chip>
           </Inline>
         )}
         {others.map((p) => (
-          <Inline key={p.personId} align="center" gap="xs">
-            <Avatar name={p.name} size={18} />
-            <T className="truncate">{p.name}</T>
-            {p.title && <T tone="tertiary" className="truncate">{p.title}</T>}
+          <Inline key={p.personId} align="start" gap="sm" wrap={false}>
+            <Avatar name={p.name} src={p.avatarUrl ?? undefined} size={24} />
+            <Stack gap="none" className="min-w-0"><T wrap>{p.name}</T>
+            {p.title && <T size="xs" tone="secondary" wrap>{p.title}</T>}</Stack>
           </Inline>
         ))}
         {decision.participants.length === 0 && <T tone="tertiary">Nobody is recorded on this decision yet.</T>}

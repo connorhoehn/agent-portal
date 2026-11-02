@@ -97,7 +97,7 @@ export default function DecisionsPage() {
       catalogOverview navigation="combined" title="Decisions" group="Plan" basePath="/iq/decisions" listTitle={current}
       overviewDescription="The calls the organisation has made or still has to make — who decides, what it holds up, and how it was settled."
       items={FILTERS.map((f) => ({ path: `/iq/decisions?status=${f.value}`, label: f.label, group: 'Status', active: filter === f.value }))}
-      rows={rows.map((d) => ({ id: d.id, title: d.topic, subline: statusLabel(d.status) }))}
+      rows={rows.map((d) => ({ id: d.id, title: d.topic, subline: statusLabel(d.status), description: nameOf(d.projectId) ?? 'Organisation-wide' }))}
       selectedId={id} selectedTitle={data?.find((d) => d.id === id)?.topic}
       onSelect={open}
       footer={id ? <CollectionCommandHost inPlace adapter={adapter} /> : undefined}

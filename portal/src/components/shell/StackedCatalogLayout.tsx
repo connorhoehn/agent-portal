@@ -31,7 +31,7 @@ export function StackedCatalogLayout({
   group?: string;
   basePath: string;
   items: Array<SubNavItem & { active?: boolean }>;
-  rows: Array<{ id: string; title: string; subline?: string }>;
+  rows: Array<{ id: string; title: string; subline?: string; description?: string }>;
   selectedId?: string | null;
   selectedTitle?: string;
   listTitle: string;
@@ -86,8 +86,8 @@ export function StackedCatalogLayout({
                     onNavigate: event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return; event.preventDefault(); navigate(item.path); } }))} />}
               {railHeader}
             </Stack>,
-            body: selectedId ? railNotice ?? <GroupedList size="md" rowStyle="plain" currentStyle="bar" groupHeading="label" groupCountAlign="end"
-              groups={groupsOf(rows, listTitle)} rows={rows.map(row => ({ id: row.id, title: row.title, groupId: row.subline ?? listTitle, leadingSize: 'none' }))}
+            body: selectedId ? railNotice ?? <GroupedList size="md" rowStyle="ruled" currentStyle="bar" groupHeading="title" groupCountAlign="inline"
+              groups={groupsOf(rows, listTitle)} rows={rows.map(row => ({ id: row.id, title: row.title, groupId: row.subline ?? listTitle, subline: row.description, leadingSize: 'none' }))}
               currentId={selectedId} onOpenRow={row => onSelect(row.id)} /> : null,
           }} data-testid="catalog-explorer">
           {selectedId ? <Stack gap="md" className="min-w-0 px-6 py-5">{children}</Stack>

@@ -2,7 +2,7 @@
 // diff of the canonical markdown), the linter's findings, what it looks like, and — for a reviewer who
 // owns the scope — Accept, Reject (a note is required) and Merge into another runbook. Everyone else
 // reads it with an AccessNotice. A refused write says why in a sentence, never a bare status.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AccessNotice, ChangeReviewCard, SourceList } from '@connorhoehnslalom/ui-components';
 import { DocumentOutline, EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
 import {
@@ -53,6 +53,21 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
   const names = useRunbookNames();
   const data = detail.data;
   const titles = new Map(published.map((r) => [r.id, r.title]));
+  useEffect(() => {
+    const root = pageBody.current;
+    const scroller = root?.closest<HTMLElement>('[data-testid="proposal-review-scroller"]');
+    if (!data || !root || !scroller) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const update = () => {
+      const sections = [...root.querySelectorAll<HTMLElement>(':scope > [data-testid^="proposal-section-"]:not([data-testid="proposal-section-contents"])')];
+      const bottom = scroller.scrollTop > 0 && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+      const current = bottom ? sections.at(-1) : sections.filter(section => section.getBoundingClientRect().top <= scroller.getBoundingClientRect().top + 32).at(-1);
+      setActiveSection(current?.dataset.testid?.replace('proposal-section-', '') ?? null);
+    };
+    const schedule = () => { clearTimeout(timer); timer = setTimeout(update, 120); };
+    scroller.addEventListener('scroll', schedule, { passive: true });
+    return () => { clearTimeout(timer); scroller.removeEventListener('scroll', schedule); };
+  }, [data]);
   useCrumbLabel(pid, data ? runbookDisplayTitle(proposalTitle(data.proposal, titles)) : undefined);
 
   if (detail.error && !data) {
@@ -151,7 +166,9 @@ export function ProposalReview({ pid, published, onOpen, onDecided }: {
       subtitle={<T size="xs" tone="tertiary">{`${KIND_LABEL[p.kind]} · ${author.name} · ${relativeTime(p.created_at)}${p.base_version != null ? ` · against v${p.base_version}` : ''}`}</T>}
       surface="plain"
       label="Proposal"
-      footer={<Stack className="px-6 py-2"><Button variant="ghost" size="sm" onClick={() => goToSection('contents')} data-testid="proposal-back-to-contents">Back to contents ↑</Button></Stack>}
+      footer={<Stack className="px-6 py-2"><DocumentOutline entries={sections.map(section => ({ id: section.id, text: sectionTitle(section.id), level: 1 }))}
+        activeId={activeSection} onSelect={goToSection} presentation="controls" onContents={() => goToSection('contents')}
+        aria-label="Section navigation" data-testid="proposal-section-navigation" /></Stack>}
       data-testid="proposal-review"
     >
       <Stack ref={pageBody} gap="lg" className="w-full px-6 py-4">

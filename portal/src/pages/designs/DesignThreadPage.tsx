@@ -38,8 +38,9 @@ import { DESIGNS_SOURCE, STATUS_LABEL, STATUS_TONE, latestSignoffs, nextStep } f
 import type { DesignThread } from './types';
 
 interface InitiativeLite {
+  ownerId: string | null;
   ownerName: string | null;
-  contributors: Array<{ personId: string; name: string; role: string | null }>;
+  contributors: Array<{ personId: string; name: string; role: string | null; avatarUrl?: string | null }>;
 }
 
 export default function DesignThreadPage() {
@@ -103,6 +104,12 @@ export default function DesignThreadPage() {
   // Everyone who actually spoke in the thread — humans and the agents.
   const participants = [...new Map(thread.posts.map((p) => [p.authorName, p.authorKind])).entries()];
   const owner = initiative?.ownerName ?? null;
+  const ownerPhoto = initiative?.contributors.find(person => person.personId === initiative.ownerId)?.avatarUrl ?? undefined;
+  // Legacy posts carry names only. Resolve a photo only for a unique contributor; never guess between namesakes.
+  const photoFor = (name: string) => {
+    const people = initiative?.contributors.filter(person => person.name === name) ?? [];
+    return people.length === 1 ? people[0]?.avatarUrl ?? undefined : undefined;
+  };
   const smes = (initiative?.contributors ?? []).filter((c) => (c.role ?? '').toLowerCase() === 'sme');
 
   const rail = (
@@ -117,14 +124,14 @@ export default function DesignThreadPage() {
       <RailSection title="People">
         {owner && (
           <Inline align="center" gap="xs">
-            <Avatar name={owner} size={18} />
+            <Avatar name={owner} src={ownerPhoto} size={24} />
             <T>{owner}</T>
             <Chip tone="accent" size="xs">owner</Chip>
           </Inline>
         )}
         {smes.map((c) => (
           <Inline key={c.personId} align="center" gap="xs">
-            <Avatar name={c.name} size={18} />
+            <Avatar name={c.name} src={c.avatarUrl ?? undefined} size={24} />
             <T>{c.name}</T>
             <Chip tone="info" size="xs">SME</Chip>
           </Inline>
@@ -134,7 +141,7 @@ export default function DesignThreadPage() {
             <SectionLabel as="div" className="mt-1">In this thread</SectionLabel>
             {participants.map(([name, kind]) => (
               <Inline key={name} align="center" gap="xs">
-                {kind === 'human' ? <Avatar name={name} size={18} /> : <T role="img" aria-label="agent">🤖</T>}
+                {kind === 'human' ? <Avatar name={name} src={photoFor(name)} size={24} /> : <T role="img" aria-label="agent">🤖</T>}
                 <T className="truncate">{name}</T>
               </Inline>
             ))}
@@ -244,6 +251,7 @@ export default function DesignThreadPage() {
                 id: p.id,
                 authorKind: p.authorKind,
                 authorName: p.authorName,
+                avatarUrl: p.authorKind === 'human' ? photoFor(p.authorName) : undefined,
                 kind: p.kind,
                 body: p.body,
                 resolved: p.resolvedBy != null,
@@ -256,7 +264,7 @@ export default function DesignThreadPage() {
 
             <SignoffPanel
               variant="inline"
-              signoffs={signoffs.map((s) => ({ name: s.personName, role: s.role, decision: s.decision }))}
+              signoffs={signoffs.map((s) => ({ name: s.personName, avatarUrl: photoFor(s.personName), role: s.role, decision: s.decision }))}
               required={2}
               {...(canSteer && !isTerminal ? {
                 actions: (

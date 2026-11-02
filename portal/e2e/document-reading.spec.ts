@@ -12,8 +12,12 @@ async function navigateDocument(page: Page, id: string) {
   await last.click();
   await expect(workspace.locator('[data-reading-number]').filter({ hasText: title }).last()).toBeFocused();
   await expect.poll(() => workspace.evaluate(el => el.scrollTop)).toBeGreaterThan(100);
-  await expect(page.getByTestId(`${id}-back-to-top`)).toBeVisible();
-  await page.getByTestId(`${id}-back-to-top`).click();
+  const controls = page.getByTestId(`${id}-section-navigation`);
+  await expect(controls.getByRole('button', { name: 'Next section' })).toBeDisabled();
+  await controls.getByRole('button', { name: 'Previous section' }).click();
+  await expect(controls.getByRole('button', { name: 'Next section' })).toBeEnabled();
+  await expect(page.getByTestId(`${id}-section-navigation-contents`)).toBeVisible();
+  await page.getByTestId(`${id}-section-navigation-contents`).click();
   await expect(contents).toBeFocused();
   await expect.poll(() => workspace.evaluate(el => el.scrollTop)).toBe(0);
   await expect(workspace.getByRole('textbox')).toHaveAttribute('contenteditable', 'false');
@@ -27,7 +31,7 @@ for (const theme of ['light', 'dark']) test(`document reading in page and pane: 
   const person = await openAsClone(browser, 'u-release', {
     role: 'org-leader', expectTenant: 'orgiq', landing: null, viewport: { width: 1440, height: 1000 },
     prepare: async context => {
-      await context.addInitScript(value => { localStorage.setItem('theme', value); localStorage.setItem('shell.conversation-pane.open', '0'); }, theme);
+      await context.addInitScript(value => { localStorage.setItem('orgiq:preferences:v1', JSON.stringify({ theme: value })); localStorage.setItem('shell.conversation-pane.open', '0'); }, theme);
       await context.route('**/api/**', route => {
         if (['GET', 'HEAD', 'OPTIONS'].includes(route.request().method())) return route.continue();
         writes.push(route.request().url()); return route.abort();
@@ -37,6 +41,7 @@ for (const theme of ['light', 'dark']) test(`document reading in page and pane: 
   try {
     const page = person.page;
     await page.goto('/iq/runbooks/rb-ui-components-release');
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme === 'dark')).toBe(theme === 'dark');
     await expect(page.getByRole('heading', { name: 'Library release and consumer updates', exact: true }).first()).toBeVisible();
     await navigateDocument(page, 'runbook-reader');
     await page.screenshot({ path: test.info().outputPath(`runbook-${theme}.png`) });
@@ -56,7 +61,7 @@ for (const theme of ['light', 'dark']) test(`document reading in page and pane: 
     await expect(page.getByTestId('brief-markdown-body').getByRole('heading', { name: /^\d+\. Sources$/ })).toBeFocused();
     await expect(page.getByTestId('brief-markdown-body').getByRole('heading', { name: /^\d+\. Sources$/ })).toBeInViewport();
     await page.screenshot({ path: test.info().outputPath(`brief-sources-${theme}.png`) });
-    await page.getByTestId('brief-markdown-back-to-top').click();
+    await page.getByTestId('brief-markdown-section-navigation-contents').click();
     await page.getByTestId('brief-markdown-contents').getByRole('button', { name: /Assembly details$/ }).click();
     await expect(page.getByTestId('brief-markdown-body').getByRole('heading', { name: /^\d+\. Assembly details$/ })).toBeFocused();
     await expect(page.getByTestId('brief-markdown-body').getByRole('heading', { name: /^\d+\. Assembly details$/ })).toBeInViewport();
@@ -75,13 +80,20 @@ for (const theme of ['light', 'dark']) test(`document reading in page and pane: 
     expect(await contentsHeading.evaluate(el => getComputedStyle(el).fontSize)).toBe(await firstHeading.evaluate(el => getComputedStyle(el).fontSize));
     expect(await page.getByTestId('proposal-review').locator('.doc-page').count()).toBe(0);
     await page.screenshot({ path: test.info().outputPath(`proposal-${theme}.png`) });
+    const controls = page.getByTestId('proposal-section-navigation');
+    await controls.getByRole('button', { name: 'Next section' }).click();
+    await expect(page.getByTestId('proposal-section-summary').getByRole('heading').first()).toBeFocused();
+    await controls.getByRole('button', { name: 'Next section' }).click();
+    await expect(page.getByTestId('proposal-section-changes').getByRole('heading', { level: 2 })).toBeFocused();
+    await controls.getByRole('button', { name: 'Previous section' }).click();
+    await expect(page.getByTestId('proposal-section-summary').getByRole('heading').first()).toBeFocused();
     await proposalContents.getByRole('button', { name: /Document changes$/ }).click();
     await expect(page.getByTestId('proposal-section-changes').getByRole('heading', { level: 2 })).toBeFocused();
-    await page.getByTestId('proposal-back-to-contents').click();
+    await page.getByTestId('proposal-section-navigation-contents').click();
     await expect(page.getByTestId('proposal-section-contents').getByRole('heading')).toBeFocused();
     await proposalContents.getByRole('button', { name: /Proposed runbook$/ }).click();
     await expect(page.getByTestId('proposal-section-preview').getByRole('heading', { level: 2 }).first()).toBeFocused();
-    await page.getByTestId('proposal-back-to-contents').click();
+    await page.getByTestId('proposal-section-navigation-contents').click();
     await page.setViewportSize({ width: 900, height: 1000 });
     await expect(proposalContents).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

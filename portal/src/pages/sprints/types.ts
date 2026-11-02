@@ -13,6 +13,7 @@ export interface Sprint {
   goal: string | null;
   stewardPersonId: string | null;
   stewardName: string | null;
+  stewardAvatarUrl?: string | null;
   startsOn: string | null;
   endsOn: string | null;
   status: string;

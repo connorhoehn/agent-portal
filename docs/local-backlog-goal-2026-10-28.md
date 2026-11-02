@@ -223,6 +223,15 @@ summary are in `.scratch/resume-2026-10-28/`.
 
 ## Next session
 
+**Latest document and people follow-up (2026-11-01):** see
+[the UI handoff and technical-debt ledger](ui-document-reading-2026-11-01.md)
+for the embedded contents/document work, section controls, compact initiative
+Details and photo propagation. All 71 seeded identities now have portraits.
+It records the remaining code-diff/keyboard-focus audit issues, deployed avatar
+backfill and name-only team/design contracts. Keep those debts open;
+this follow-up does not renew the whole journey acceptance or deploy to AWS.
+
+
 **Local journey goal complete (2026-11-01):** all 160 target maps have complete,
 passing, sealed and fresh logs: Pipelines 55, Social 48, Assessment 57. The four Social activity
 maps are unblocked through disposable clone DM/inbox isolation. Assessment's

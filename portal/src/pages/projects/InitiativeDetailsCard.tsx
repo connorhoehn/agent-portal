@@ -3,7 +3,7 @@
 // needs an additional read, under the same caller gate as the Sprints lens.
 
 import {
-  Avatar, AvatarGroup, Card, IconButton, InfoIcon, Tooltip, Inline, Stack, StatusPill, T,
+  Avatar, IconButton, InfoIcon, KeyValue, Tooltip, Inline, Stack, StatusPill, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type { ProjectDetail } from '../project-detail/types';
@@ -29,32 +29,16 @@ export function InitiativeFacts({ input }: { input: InitiativeFactsInput }) {
   const sprintText = sprint?.name ?? (sprints.isLoading && !sprints.data ? 'Loading sprint…'
     : sprints.error ? 'Sprint unavailable' : 'No active sprint');
   const endsOn = sprint?.endsOn ? calendarDay(sprint.endsOn) : null;
-  const smeLabel = input.smes.length === 1 ? input.smes[0].name : `${input.smes.length} SMEs`;
-  return <Stack gap="sm" data-testid="initiative-facts">
-    <Card className="border-primary/20 bg-primary/5 px-3 py-2" data-testid="initiative-details-delivery">
-      <Stack gap="xs">
-        <Inline gap="sm" align="center" justify="between">
-          <T size="xs" weight="semibold" tone="secondary">Delivery</T>
-          {input.statusLabel && <StatusPill label={input.statusLabel} tone={project.status === 'archived' ? 'neutral' : 'info'} variant="text" />}
-        </Inline>
-        <T size="sm" weight="medium" className="truncate" title={sprintText}>{sprintText}</T>
-        {endsOn && <T size="xs" tone="secondary">Ends {endsOn}</T>}
-      </Stack>
-    </Card>
-    <Inline gap="md" align="center" className="min-w-0" data-testid="initiative-details-people">
-      {input.owner && <Inline gap="sm" align="center" wrap={false} className="min-w-0 flex-1">
-        <Avatar name={input.owner.name} src={input.owner.avatarUrl} size={24} />
-        <Stack gap="none" className="min-w-0"><T size="xs" tone="secondary">Owner</T><T size="sm" weight="medium" className="truncate" title={input.owner.name}>{input.owner.name}</T></Stack>
-      </Inline>}
-      {input.smes.length > 0 && <Tooltip content={input.smes.map((person) => person.name).join(', ')}>
-        <Inline as="span" gap="sm" align="center" wrap={false} className="min-w-0" aria-label={`SMEs: ${input.smes.map(person => person.name).join(', ')}`}>
-          <AvatarGroup items={input.smes.map(person => ({ name: person.name, src: person.avatarUrl }))} size={24} maxVisible={2} />
-          <T as="span" size="xs" tone="secondary" className="truncate">{smeLabel}</T>
-        </Inline>
-      </Tooltip>}
-      {!input.owner && input.smes.length === 0 && <T size="xs" tone="secondary">No owner or SME assigned</T>}
-    </Inline>
-  </Stack>;
+  const person = (value: InitiativePerson) => <Inline gap="sm" align="center" wrap={false}>
+    <Avatar name={value.name} src={value.avatarUrl} size={20} />
+    <T size="sm" wrap>{value.name}</T>
+  </Inline>;
+  return <KeyValue labelWidth="w-20" aria-label="Initiative facts" data-testid="initiative-facts" items={[
+    { label: 'Status', value: input.statusLabel ? <StatusPill label={input.statusLabel} tone={project.status === 'archived' ? 'neutral' : 'info'} variant="text" /> : 'Not set', muted: !input.statusLabel },
+    { label: 'Sprint', value: <Stack gap="none"><T size="sm" tone={sprint ? 'primary' : 'secondary'} wrap>{sprintText}</T>{endsOn && <T size="xs" tone="secondary">Ends {endsOn}</T>}</Stack> },
+    { label: 'Owner', value: input.owner ? person(input.owner) : 'Unassigned', muted: !input.owner },
+    { label: 'SMEs', value: input.smes.length ? <Stack gap="xs">{input.smes.map(value => <Inline key={value.name}>{person(value)}</Inline>)}</Stack> : 'None assigned', muted: input.smes.length === 0 },
+  ]} />;
 }
 
 /** The content title's info action reveals the existing Details pane directly. */

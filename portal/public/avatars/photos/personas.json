@@ -1,7 +1,7 @@
 {
   "version": 1,
   "brand": "Work",
-  "scope": "The 17 sign-in picker identities plus the Observability initiative demo contributors",
+  "scope": "All 71 seeded demo identities: 59 people and 12 unlinked app users",
   "style": "Photographic synthetic adult professionals, natural skin texture, soft window daylight, muted office backgrounds",
   "generator": "Built-in image_gen; original generation files retained in Codex generated_images",
   "personas": [
@@ -168,12 +168,12 @@
     {
       "subjectId": "u-tomas",
       "userId": "u-tomas",
-      "name": "Tom\u00e1s Ferreira",
+      "name": "Tomás Ferreira",
       "portraitUrl": "/avatars/photos/u-tomas.jpg",
       "focus": "Workflow collaboration",
       "biography": "Builds workflows and uses the Communication plane to coordinate their rollout with colleagues.",
       "speakingStyle": "Approachable and concrete; shares a run or definition so everyone is discussing the same work.",
-      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Tom\u00e1s Ferreira, fictional man around 31, workflow engineer. Warm olive skin, short wavy dark-brown hair, brown eyes, neat short mustache and beard, friendly relaxed smile, wearing a plain slate-blue crewneck. An approachable everyday technical colleague."
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Tomás Ferreira, fictional man around 31, workflow engineer. Warm olive skin, short wavy dark-brown hair, brown eyes, neat short mustache and beard, friendly relaxed smile, wearing a plain slate-blue crewneck. An approachable everyday technical colleague."
     },
     {
       "subjectId": "p-008",
@@ -194,6 +194,729 @@
       "biography": "Turns noisy alerting into useful signals and validates reliability changes against real failure cases.",
       "speakingStyle": "Clear and concrete; names the blocker, proposes a test, and reports what the result proves.",
       "prompt": "Use case: photorealistic-natural. Asset: square photographic directory headshot for an entirely fictional adult professional in an enterprise collaboration app. Real camera photograph, authentic skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background, face centered and straight-on with eyes toward the lens, entire hair and shoulders safely inside the square for a circular avatar crop. Friendly composed expression, normal business-casual clothes, natural proportions. One person only. No illustration, cartoon, vector art, 3D render, stylized features, plastic skin, fashion styling, logos, text or watermark. Character: Eli Garcia, entirely fictional man around 34, senior site reliability engineer. Medium warm brown skin, short dark-brown wavy hair, dark eyes, neatly trimmed short beard, relaxed slight smile, wearing a plain muted charcoal-blue crew-neck shirt. Credible friendly technical colleague."
+    },
+    {
+      "subjectId": "p-051",
+      "userId": null,
+      "name": "Simone Chang",
+      "portraitUrl": "/avatars/photos/p-051.jpg",
+      "focus": "Senior Security Engineer",
+      "biography": "Senior Security Engineer · Security",
+      "prompt": "Simone Chang, a fictional woman around 53, fair skin with light freckles, short natural curls in chestnut, wearing a muted burgundy knit top. This fictional colleague works as Senior Security Engineer in Security.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 1,
+        "column": 1
+      }
+    },
+    {
+      "subjectId": "p-049",
+      "userId": null,
+      "name": "Paolo Mancini",
+      "portraitUrl": "/avatars/photos/p-049.jpg",
+      "focus": "Engineering Manager",
+      "biography": "Engineering Manager · ML / AI",
+      "prompt": "Paolo Mancini, a fictional man around 39, medium tan skin, short wavy hair in dark brown, wearing a navy crew-neck sweater. This fictional colleague works as Engineering Manager in ML / AI.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 1,
+        "column": 2
+      }
+    },
+    {
+      "subjectId": "p-013",
+      "userId": "u-caleb",
+      "name": "Caleb Turner",
+      "portraitUrl": "/avatars/photos/p-013.jpg",
+      "focus": "Senior Engineer",
+      "biography": "Senior Engineer · Platform Engineering",
+      "prompt": "Caleb Turner, a fictional man around 34, light brown skin, neat medium-length curls in dark brown, wearing a simple rust-colored top. This fictional colleague works as Senior Engineer in Platform Engineering.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 1,
+        "column": 3
+      }
+    },
+    {
+      "subjectId": "p-043",
+      "userId": null,
+      "name": "Bria Petrov",
+      "portraitUrl": "/avatars/photos/p-043.jpg",
+      "focus": "Staff ML Engineer",
+      "biography": "Staff ML Engineer · ML / AI",
+      "prompt": "Bria Petrov, a fictional woman around 57, medium tan skin, shoulder-length braids in sandy brown, wearing a muted burgundy knit top. This fictional colleague works as Staff ML Engineer in ML / AI.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 1,
+        "column": 4
+      }
+    },
+    {
+      "subjectId": "p-priya",
+      "userId": "u-priya",
+      "name": "Priya Venkataraman",
+      "portraitUrl": "/avatars/photos/p-priya.jpg",
+      "focus": "Identity Governance Lead",
+      "biography": "Identity Governance Lead · Security",
+      "prompt": "Priya Venkataraman, a fictional woman around 35, fair skin with light freckles, shoulder-length braids in salt-and-pepper, wearing a navy crew-neck sweater. This fictional colleague works as Identity Governance Lead in Security.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 1,
+        "column": 5
+      }
+    },
+    {
+      "subjectId": "p-omar",
+      "userId": "u-omar",
+      "name": "Omar Haddad",
+      "portraitUrl": "/avatars/photos/p-omar.jpg",
+      "focus": "Engineering Manager",
+      "biography": "Engineering Manager · Security",
+      "prompt": "Omar Haddad, a fictional man around 42, warm medium-brown skin, closely cropped hair in sandy brown, wearing a plain forest-green blouse or collared shirt. This fictional colleague works as Engineering Manager in Security.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 1,
+        "column": 6
+      }
+    },
+    {
+      "subjectId": "u-hr",
+      "userId": "u-hr",
+      "name": "Helen Desai",
+      "portraitUrl": "/avatars/photos/u-hr.jpg",
+      "focus": "HR Administrator",
+      "biography": "HR Administrator · People Operations",
+      "prompt": "Helen Desai, a fictional woman around 49, deep brown skin, a straight chin-length bob in dark brown, wearing a muted burgundy knit top. This fictional colleague works as HR Administrator in People Operations.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 1,
+        "column": 7
+      }
+    },
+    {
+      "subjectId": "p-003",
+      "userId": null,
+      "name": "Owen Brooks",
+      "portraitUrl": "/avatars/photos/p-003.jpg",
+      "focus": "Senior Engineer",
+      "biography": "Senior Engineer · Platform Engineering",
+      "prompt": "Owen Brooks, a fictional man around 29, fair skin with light freckles, short loosely curled hair in dark brown, a neatly trimmed short beard, wearing a navy crew-neck sweater. This fictional colleague works as Senior Engineer in Platform Engineering.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 1,
+        "column": 8
+      }
+    },
+    {
+      "subjectId": "p-006",
+      "userId": null,
+      "name": "Maria Johnson",
+      "portraitUrl": "/avatars/photos/p-006.jpg",
+      "focus": "Principal Engineer",
+      "biography": "Principal Engineer · Platform Engineering",
+      "prompt": "Maria Johnson, a fictional woman around 36, warm medium-brown skin, a straight chin-length bob in black, understated thin-rim eyeglasses, wearing a plain forest-green blouse or collared shirt. This fictional colleague works as Principal Engineer in Platform Engineering.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 2,
+        "column": 1
+      }
+    },
+    {
+      "subjectId": "p-007",
+      "userId": null,
+      "name": "Marcus Müller",
+      "portraitUrl": "/avatars/photos/p-007.jpg",
+      "focus": "Engineer",
+      "biography": "Engineer · Platform Engineering",
+      "prompt": "Marcus Müller, a fictional man around 43, deep brown skin, short side-parted hair with some gray in chestnut, wearing a muted burgundy knit top. This fictional colleague works as Engineer in Platform Engineering.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 2,
+        "column": 2
+      }
+    },
+    {
+      "subjectId": "p-009",
+      "userId": null,
+      "name": "Arjun Shah",
+      "portraitUrl": "/avatars/photos/p-009.jpg",
+      "focus": "SRE",
+      "biography": "SRE · Platform Engineering",
+      "prompt": "Arjun Shah, a fictional man around 50, light olive skin, a shaved head in salt-and-pepper, a neatly trimmed short beard, wearing a charcoal cardigan over a cream shirt. This fictional colleague works as SRE in Platform Engineering.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 2,
+        "column": 3
+      }
+    },
+    {
+      "subjectId": "p-010",
+      "userId": null,
+      "name": "Kenji Chen",
+      "portraitUrl": "/avatars/photos/p-010.jpg",
+      "focus": "Staff Engineer",
+      "biography": "Staff Engineer · Platform Engineering",
+      "prompt": "Kenji Chen, a fictional man around 57, medium tan skin, short wavy hair in sandy brown, wearing a slate-blue oxford shirt. This fictional colleague works as Staff Engineer in Platform Engineering.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 2,
+        "column": 4
+      }
+    },
+    {
+      "subjectId": "p-014",
+      "userId": null,
+      "name": "Grace Singh",
+      "portraitUrl": "/avatars/photos/p-014.jpg",
+      "focus": "Senior Engineer",
+      "biography": "Senior Engineer · Platform Engineering",
+      "prompt": "Grace Singh, a fictional woman around 41, fair skin with light freckles, shoulder-length braids in black, understated thin-rim eyeglasses, wearing a warm gray linen shirt. This fictional colleague works as Senior Engineer in Platform Engineering.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 2,
+        "column": 5
+      }
+    },
+    {
+      "subjectId": "p-015",
+      "userId": null,
+      "name": "Raj Mehta",
+      "portraitUrl": "/avatars/photos/p-015.jpg",
+      "focus": "Data Engineer",
+      "biography": "Data Engineer · Data Platform",
+      "prompt": "Raj Mehta, a fictional man around 48, warm medium-brown skin, closely cropped hair in chestnut, wearing a dark teal knit sweater. This fictional colleague works as Data Engineer in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 2,
+        "column": 6
+      }
+    },
+    {
+      "subjectId": "p-016",
+      "userId": null,
+      "name": "Tara Wright",
+      "portraitUrl": "/avatars/photos/p-016.jpg",
+      "focus": "Data Analyst",
+      "biography": "Data Analyst · Data Platform",
+      "prompt": "Tara Wright, a fictional woman around 55, deep brown skin, a straight chin-length bob in salt-and-pepper, wearing a navy crew-neck sweater. This fictional colleague works as Data Analyst in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 2,
+        "column": 7
+      }
+    },
+    {
+      "subjectId": "p-017",
+      "userId": null,
+      "name": "Daniel Chang",
+      "portraitUrl": "/avatars/photos/p-017.jpg",
+      "focus": "Staff Data Engineer",
+      "biography": "Staff Data Engineer · Data Platform",
+      "prompt": "Daniel Chang, a fictional man around 32, light olive skin, a shaved head in sandy brown, a neatly trimmed short beard, wearing a plain forest-green blouse or collared shirt. This fictional colleague works as Staff Data Engineer in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 2,
+        "column": 8
+      }
+    },
+    {
+      "subjectId": "p-018",
+      "userId": null,
+      "name": "Yusuf Ahmed",
+      "portraitUrl": "/avatars/photos/p-018.jpg",
+      "focus": "Data Engineer",
+      "biography": "Data Engineer · Data Platform",
+      "prompt": "Yusuf Ahmed, a fictional man around 39, medium tan skin, short wavy hair in dark brown, wearing a muted burgundy knit top. This fictional colleague works as Data Engineer in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 3,
+        "column": 1
+      }
+    },
+    {
+      "subjectId": "p-019",
+      "userId": null,
+      "name": "Camille Dubois",
+      "portraitUrl": "/avatars/photos/p-019.jpg",
+      "focus": "Senior Data Engineer",
+      "biography": "Senior Data Engineer · Data Platform",
+      "prompt": "Camille Dubois, a fictional woman around 46, light brown skin, close-cropped natural hair in black, understated thin-rim eyeglasses, wearing a charcoal cardigan over a cream shirt. This fictional colleague works as Senior Data Engineer in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 3,
+        "column": 2
+      }
+    },
+    {
+      "subjectId": "p-020",
+      "userId": null,
+      "name": "Henry Hassan",
+      "portraitUrl": "/avatars/photos/p-020.jpg",
+      "focus": "Senior Engineer",
+      "biography": "Senior Engineer · Data Platform",
+      "prompt": "Henry Hassan, a fictional man around 53, fair skin with light freckles, short loosely curled hair in chestnut, a neatly trimmed short beard, wearing a slate-blue oxford shirt. This fictional colleague works as Senior Engineer in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 3,
+        "column": 3
+      }
+    },
+    {
+      "subjectId": "p-021",
+      "userId": null,
+      "name": "James Thompson",
+      "portraitUrl": "/avatars/photos/p-021.jpg",
+      "focus": "Data Engineer",
+      "biography": "Data Engineer · Data Platform",
+      "prompt": "James Thompson, a fictional man around 30, warm medium-brown skin, closely cropped hair in salt-and-pepper, wearing a simple rust-colored top. This fictional colleague works as Data Engineer in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 3,
+        "column": 4
+      }
+    },
+    {
+      "subjectId": "p-022",
+      "userId": null,
+      "name": "Sarah Thompson",
+      "portraitUrl": "/avatars/photos/p-022.jpg",
+      "focus": "Senior Engineer",
+      "biography": "Senior Engineer · Data Platform",
+      "prompt": "Sarah Thompson, a fictional woman around 37, deep brown skin, short natural curls in sandy brown, wearing a warm gray linen shirt. This fictional colleague works as Senior Engineer in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 3,
+        "column": 5
+      }
+    },
+    {
+      "subjectId": "p-023",
+      "userId": null,
+      "name": "Hiro Green",
+      "portraitUrl": "/avatars/photos/p-023.jpg",
+      "focus": "Data Analyst",
+      "biography": "Data Analyst · Data Platform",
+      "prompt": "Hiro Green, a fictional man around 44, light olive skin, a shaved head in dark brown, a neatly trimmed short beard, wearing a dark teal knit sweater. This fictional colleague works as Data Analyst in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 3,
+        "column": 6
+      }
+    },
+    {
+      "subjectId": "p-024",
+      "userId": null,
+      "name": "Andre Williams",
+      "portraitUrl": "/avatars/photos/p-024.jpg",
+      "focus": "Staff Engineer",
+      "biography": "Staff Engineer · Data Platform",
+      "prompt": "Andre Williams, a fictional man around 51, medium tan skin, short wavy hair in black, understated thin-rim eyeglasses, wearing a navy crew-neck sweater. This fictional colleague works as Staff Engineer in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 3,
+        "column": 7
+      }
+    },
+    {
+      "subjectId": "p-025",
+      "userId": null,
+      "name": "Anika Mehta",
+      "portraitUrl": "/avatars/photos/p-025.jpg",
+      "focus": "Principal Engineer",
+      "biography": "Principal Engineer · Data Platform",
+      "prompt": "Anika Mehta, a fictional woman around 58, light brown skin, a neat low ponytail in chestnut, wearing a plain forest-green blouse or collared shirt. This fictional colleague works as Principal Engineer in Data Platform.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 3,
+        "column": 8
+      }
+    },
+    {
+      "subjectId": "p-026",
+      "userId": null,
+      "name": "Mateo Green",
+      "portraitUrl": "/avatars/photos/p-026.jpg",
+      "focus": "Senior UX Researcher",
+      "biography": "Senior UX Researcher · Product",
+      "prompt": "Mateo Green, a fictional man around 35, fair skin with light freckles, short loosely curled hair in salt-and-pepper, a neatly trimmed short beard, wearing a muted burgundy knit top. This fictional colleague works as Senior UX Researcher in Product.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 4,
+        "column": 1
+      }
+    },
+    {
+      "subjectId": "p-027",
+      "userId": null,
+      "name": "Sasha Kim",
+      "portraitUrl": "/avatars/photos/p-027.jpg",
+      "focus": "UX Researcher",
+      "biography": "UX Researcher · Product",
+      "prompt": "Sasha Kim, a fictional woman around 42, warm medium-brown skin, a short side-parted pixie cut in sandy brown, wearing a charcoal cardigan over a cream shirt. This fictional colleague works as UX Researcher in Product.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 4,
+        "column": 2
+      }
+    },
+    {
+      "subjectId": "p-028",
+      "userId": null,
+      "name": "Felix Rivera",
+      "portraitUrl": "/avatars/photos/p-028.jpg",
+      "focus": "UX Researcher",
+      "biography": "UX Researcher · Product",
+      "prompt": "Felix Rivera, a fictional man around 49, deep brown skin, short side-parted hair with some gray in dark brown, wearing a slate-blue oxford shirt. This fictional colleague works as UX Researcher in Product.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 4,
+        "column": 3
+      }
+    },
+    {
+      "subjectId": "p-029",
+      "userId": null,
+      "name": "Ezra Park",
+      "portraitUrl": "/avatars/photos/p-029.jpg",
+      "focus": "Senior PM",
+      "biography": "Senior PM · Product",
+      "prompt": "Ezra Park, a fictional man around 56, light olive skin, a shaved head in black, understated thin-rim eyeglasses, a neatly trimmed short beard, wearing a simple rust-colored top. This fictional colleague works as Senior PM in Product.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 4,
+        "column": 4
+      }
+    },
+    {
+      "subjectId": "p-031",
+      "userId": null,
+      "name": "Fatima Ahmed",
+      "portraitUrl": "/avatars/photos/p-031.jpg",
+      "focus": "Senior PM",
+      "biography": "Senior PM · Product",
+      "prompt": "Fatima Ahmed, a fictional woman around 33, medium tan skin, a straight chin-length bob in chestnut, wearing a warm gray linen shirt. This fictional colleague works as Senior PM in Product.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 4,
+        "column": 5
+      }
+    },
+    {
+      "subjectId": "p-032",
+      "userId": null,
+      "name": "Ruth Foster",
+      "portraitUrl": "/avatars/photos/p-032.jpg",
+      "focus": "Technical Writer",
+      "biography": "Technical Writer · Product",
+      "prompt": "Ruth Foster, a fictional woman around 40, light brown skin, shoulder-length loose waves in salt-and-pepper, wearing a dark teal knit sweater. This fictional colleague works as Technical Writer in Product.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 4,
+        "column": 6
+      }
+    },
+    {
+      "subjectId": "p-033",
+      "userId": null,
+      "name": "Iris Patel",
+      "portraitUrl": "/avatars/photos/p-033.jpg",
+      "focus": "Senior PM",
+      "biography": "Senior PM · Product",
+      "prompt": "Iris Patel, a fictional woman around 47, fair skin with light freckles, a neat low ponytail in sandy brown, wearing a navy crew-neck sweater. This fictional colleague works as Senior PM in Product.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 4,
+        "column": 7
+      }
+    },
+    {
+      "subjectId": "p-034",
+      "userId": null,
+      "name": "Miles Wright",
+      "portraitUrl": "/avatars/photos/p-034.jpg",
+      "focus": "Accessibility Specialist",
+      "biography": "Accessibility Specialist · Design Systems",
+      "prompt": "Miles Wright, a fictional man around 54, warm medium-brown skin, closely cropped hair in dark brown, wearing a plain forest-green blouse or collared shirt. This fictional colleague works as Accessibility Specialist in Design Systems.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 4,
+        "column": 8
+      }
+    },
+    {
+      "subjectId": "p-035",
+      "userId": null,
+      "name": "Ben Okafor",
+      "portraitUrl": "/avatars/photos/p-035.jpg",
+      "focus": "Staff Designer",
+      "biography": "Staff Designer · Design Systems",
+      "prompt": "Ben Okafor, a fictional man around 31, deep brown skin, short side-parted hair with some gray in black, understated thin-rim eyeglasses, wearing a muted burgundy knit top. This fictional colleague works as Staff Designer in Design Systems.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 5,
+        "column": 1
+      }
+    },
+    {
+      "subjectId": "p-036",
+      "userId": null,
+      "name": "David Tanaka",
+      "portraitUrl": "/avatars/photos/p-036.jpg",
+      "focus": "Head of Design",
+      "biography": "Head of Design · Design Systems",
+      "prompt": "David Tanaka, a fictional man around 38, light olive skin, a shaved head in chestnut, a neatly trimmed short beard, wearing a charcoal cardigan over a cream shirt. This fictional colleague works as Head of Design in Design Systems.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 5,
+        "column": 2
+      }
+    },
+    {
+      "subjectId": "p-037",
+      "userId": null,
+      "name": "Oscar Foster",
+      "portraitUrl": "/avatars/photos/p-037.jpg",
+      "focus": "Senior Designer",
+      "biography": "Senior Designer · Design Systems",
+      "prompt": "Oscar Foster, a fictional man around 45, medium tan skin, short wavy hair in salt-and-pepper, wearing a slate-blue oxford shirt. This fictional colleague works as Senior Designer in Design Systems.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 5,
+        "column": 3
+      }
+    },
+    {
+      "subjectId": "p-038",
+      "userId": null,
+      "name": "Isabel Vasquez",
+      "portraitUrl": "/avatars/photos/p-038.jpg",
+      "focus": "Design Engineer",
+      "biography": "Design Engineer · Design Systems",
+      "prompt": "Isabel Vasquez, a fictional woman around 52, light brown skin, a straight chin-length bob in sandy brown, wearing a simple rust-colored top. This fictional colleague works as Design Engineer in Design Systems.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 5,
+        "column": 4
+      }
+    },
+    {
+      "subjectId": "p-039",
+      "userId": null,
+      "name": "Nils Andersson",
+      "portraitUrl": "/avatars/photos/p-039.jpg",
+      "focus": "Senior Designer",
+      "biography": "Senior Designer · Design Systems",
+      "prompt": "Nils Andersson, a fictional man around 29, fair skin with light freckles, short loosely curled hair in dark brown, a neatly trimmed short beard, wearing a warm gray linen shirt. This fictional colleague works as Senior Designer in Design Systems.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 5,
+        "column": 5
+      }
+    },
+    {
+      "subjectId": "p-040",
+      "userId": null,
+      "name": "Jordan O'Brien",
+      "portraitUrl": "/avatars/photos/p-040.jpg",
+      "focus": "Senior Designer",
+      "biography": "Senior Designer · Design Systems",
+      "prompt": "Jordan O'Brien, a fictional man around 36, warm medium-brown skin, closely cropped hair in black, understated thin-rim eyeglasses, wearing a dark teal knit sweater. This fictional colleague works as Senior Designer in Design Systems.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 5,
+        "column": 6
+      }
+    },
+    {
+      "subjectId": "p-041",
+      "userId": null,
+      "name": "Rosa Ahmed",
+      "portraitUrl": "/avatars/photos/p-041.jpg",
+      "focus": "ML Engineer",
+      "biography": "ML Engineer · ML / AI",
+      "prompt": "Rosa Ahmed, a fictional woman around 43, deep brown skin, close-cropped natural hair in chestnut, wearing a navy crew-neck sweater. This fictional colleague works as ML Engineer in ML / AI.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 5,
+        "column": 7
+      }
+    },
+    {
+      "subjectId": "p-042",
+      "userId": null,
+      "name": "Katya Petrov",
+      "portraitUrl": "/avatars/photos/p-042.jpg",
+      "focus": "Staff ML Engineer",
+      "biography": "Staff ML Engineer · ML / AI",
+      "prompt": "Katya Petrov, a fictional woman around 50, light olive skin, a short side-parted pixie cut in salt-and-pepper, wearing a plain forest-green blouse or collared shirt. This fictional colleague works as Staff ML Engineer in ML / AI.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 5,
+        "column": 8
+      }
+    },
+    {
+      "subjectId": "p-044",
+      "userId": null,
+      "name": "Zoe Thompson",
+      "portraitUrl": "/avatars/photos/p-044.jpg",
+      "focus": "Staff Engineer",
+      "biography": "Staff Engineer · ML / AI",
+      "prompt": "Zoe Thompson, a fictional woman around 34, light brown skin, short natural curls in dark brown, wearing a charcoal cardigan over a cream shirt. This fictional colleague works as Staff Engineer in ML / AI.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 6,
+        "column": 1
+      }
+    },
+    {
+      "subjectId": "p-045",
+      "userId": null,
+      "name": "Noah Vasquez",
+      "portraitUrl": "/avatars/photos/p-045.jpg",
+      "focus": "Senior Engineer",
+      "biography": "Senior Engineer · ML / AI",
+      "prompt": "Noah Vasquez, a fictional man around 41, fair skin with light freckles, short loosely curled hair in black, understated thin-rim eyeglasses, a neatly trimmed short beard, wearing a slate-blue oxford shirt. This fictional colleague works as Senior Engineer in ML / AI.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 6,
+        "column": 2
+      }
+    },
+    {
+      "subjectId": "p-046",
+      "userId": null,
+      "name": "Vikram Patel",
+      "portraitUrl": "/avatars/photos/p-046.jpg",
+      "focus": "Senior Engineer",
+      "biography": "Senior Engineer · ML / AI",
+      "prompt": "Vikram Patel, a fictional man around 48, warm medium-brown skin, closely cropped hair in chestnut, wearing a simple rust-colored top. This fictional colleague works as Senior Engineer in ML / AI.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 6,
+        "column": 3
+      }
+    },
+    {
+      "subjectId": "p-047",
+      "userId": null,
+      "name": "Nina Rivera",
+      "portraitUrl": "/avatars/photos/p-047.jpg",
+      "focus": "Staff ML Engineer",
+      "biography": "Staff ML Engineer · ML / AI",
+      "prompt": "Nina Rivera, a fictional woman around 55, deep brown skin, a neat low ponytail in salt-and-pepper, wearing a warm gray linen shirt. This fictional colleague works as Staff ML Engineer in ML / AI.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 6,
+        "column": 4
+      }
+    },
+    {
+      "subjectId": "p-048",
+      "userId": null,
+      "name": "Lucas Kim",
+      "portraitUrl": "/avatars/photos/p-048.jpg",
+      "focus": "Staff ML Engineer",
+      "biography": "Staff ML Engineer · ML / AI",
+      "prompt": "Lucas Kim, a fictional man around 32, light olive skin, a shaved head in sandy brown, a neatly trimmed short beard, wearing a dark teal knit sweater. This fictional colleague works as Staff ML Engineer in ML / AI.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 6,
+        "column": 5
+      }
+    },
+    {
+      "subjectId": "p-050",
+      "userId": null,
+      "name": "Ava Lee",
+      "portraitUrl": "/avatars/photos/p-050.jpg",
+      "focus": "Engineer",
+      "biography": "Engineer · ML / AI",
+      "prompt": "Ava Lee, a fictional woman around 46, light brown skin, shoulder-length braids in black, understated thin-rim eyeglasses, wearing a plain forest-green blouse or collared shirt. This fictional colleague works as Engineer in ML / AI.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 6,
+        "column": 6
+      }
+    },
+    {
+      "subjectId": "p-052",
+      "userId": null,
+      "name": "Diego Ortiz",
+      "portraitUrl": "/avatars/photos/p-052.jpg",
+      "focus": "Security Lead",
+      "biography": "Security Lead · Security",
+      "prompt": "Diego Ortiz, a fictional man around 30, warm medium-brown skin, closely cropped hair in salt-and-pepper, wearing a charcoal cardigan over a cream shirt. This fictional colleague works as Security Lead in Security.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 6,
+        "column": 7
+      }
+    },
+    {
+      "subjectId": "p-053",
+      "userId": null,
+      "name": "Ingrid Larsen",
+      "portraitUrl": "/avatars/photos/p-053.jpg",
+      "focus": "Engineer",
+      "biography": "Engineer · Security",
+      "prompt": "Ingrid Larsen, a fictional woman around 37, deep brown skin, shoulder-length loose waves in sandy brown, wearing a slate-blue oxford shirt. This fictional colleague works as Engineer in Security.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 6,
+        "column": 8
+      }
+    },
+    {
+      "subjectId": "p-054",
+      "userId": null,
+      "name": "Kevin Garcia",
+      "portraitUrl": "/avatars/photos/p-054.jpg",
+      "focus": "Senior Engineer",
+      "biography": "Senior Engineer · Security",
+      "prompt": "Kevin Garcia, a fictional man around 44, light olive skin, a shaved head in dark brown, a neatly trimmed short beard, wearing a simple rust-colored top. This fictional colleague works as Senior Engineer in Security.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 7,
+        "column": 1
+      }
+    },
+    {
+      "subjectId": "p-055",
+      "userId": null,
+      "name": "Joy Chen",
+      "portraitUrl": "/avatars/photos/p-055.jpg",
+      "focus": "Senior Security Engineer",
+      "biography": "Senior Security Engineer · Security",
+      "prompt": "Joy Chen, a fictional woman around 51, medium tan skin, close-cropped natural hair in black, understated thin-rim eyeglasses, wearing a warm gray linen shirt. This fictional colleague works as Senior Security Engineer in Security.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 7,
+        "column": 2
+      }
+    },
+    {
+      "subjectId": "p-056",
+      "userId": null,
+      "name": "Hugo Lee",
+      "portraitUrl": "/avatars/photos/p-056.jpg",
+      "focus": "Security Engineer",
+      "biography": "Security Engineer · Security",
+      "prompt": "Hugo Lee, a fictional man around 58, light brown skin, neat medium-length curls in chestnut, wearing a dark teal knit sweater. This fictional colleague works as Security Engineer in Security.",
+      "generation": {
+        "batch": "2026-11-01-grid",
+        "row": 7,
+        "column": 3
+      }
+    },
+    {
+      "subjectId": "p-rhea",
+      "userId": "u-rhea",
+      "name": "Rhea Castellanos",
+      "portraitUrl": "/avatars/photos/p-rhea.jpg",
+      "focus": "Security engineering",
+      "biography": "Security Engineer",
+      "prompt": "Use case: photorealistic-natural. Asset: square photographic directory profile portrait for a fictional adult professional in the Work enterprise collaboration demo. Character: Rhea Castellanos, fictional woman in her early thirties, warm olive skin, shoulder-length dark wavy hair tucked behind one ear, brown eyes, subtle friendly smile, charcoal crew-neck knit top. Real camera photograph, natural skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background. Face centered, eyes toward camera; full hair and shoulders comfortably inside square so a circle crop preserves the face. Crop mid-chest up, head occupies about half the image width. One person only. Professional everyday appearance. No lettering, logos, watermark, collage, illustration, 3D rendering, glamour retouching or plastic skin."
     }
   ]
 }

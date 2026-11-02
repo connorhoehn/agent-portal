@@ -12,7 +12,7 @@ for (const theme of ['light', 'dark']) test(`work layout and dedicated brief: ${
   const person = await openAsClone(browser, 'u-release', {
     role: 'org-leader', expectTenant: 'orgiq', landing: null, viewport: { width: 1680, height: 1050 },
     prepare: async context => {
-      await context.addInitScript(value => { localStorage.setItem('theme', value); localStorage.setItem('shell.conversation-pane.open', '0'); }, theme);
+      await context.addInitScript(value => { localStorage.setItem('orgiq:preferences:v1', JSON.stringify({ theme: value })); localStorage.setItem('shell.conversation-pane.open', '0'); }, theme);
       await context.route('**/api/**', route => {
         if (['GET', 'HEAD', 'OPTIONS'].includes(route.request().method())) return route.continue();
         writes.push(route.request().url()); return route.abort();
@@ -22,6 +22,7 @@ for (const theme of ['light', 'dark']) test(`work layout and dedicated brief: ${
   try {
     const page = person.page;
     await page.goto(workUrl);
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme === 'dark')).toBe(theme === 'dark');
     const rail = page.getByTestId('explorer-layout-rail');
     const list = page.getByTestId('initiative-work-rail');
     await expect(list).toHaveAttribute('data-layout', 'rail');

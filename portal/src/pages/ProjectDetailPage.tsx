@@ -713,7 +713,7 @@ function ProjectDetailPage() {
   const workListProps: WorkListViewProps = {
     searchPlaceholder: 'Find work…',
     groups: WORK_GROUPS.map((group) => group.id === 'in_progress' ? { ...group, defaultOpen: true } : group),
-    items: visibleRows.map((r) => ({ ...toWorkListItem(r, marketRuns[r.id], pendingIds.has(r.id), { metaStyle: 'text' }), kindLabel: r.type === 'bug' ? 'Bug' : 'Story' })),
+    items: visibleRows.map((r) => ({ ...toWorkListItem(r, marketRuns[r.id], pendingIds.has(r.id), { metaStyle: 'text', ownerAvatarUrl: r.assigneeId ? avatarOf(r.assigneeId) : undefined }), kindLabel: r.type === 'bug' ? 'Bug' : 'Story' })),
     count: allRows.length,
     currentId: current?.id ?? null,
     query: workSearch.searchText,
