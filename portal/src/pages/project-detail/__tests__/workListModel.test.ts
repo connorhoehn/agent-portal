@@ -45,16 +45,16 @@ test('sort by points puts the largest first; search narrows by title', () => {
   assert.deepEqual(workRows(tree, 'priority', 'high').map((r) => r.id), ['s-high']);
 });
 
-test('public keys survive sorting, appear as row tags and are searchable without changing internal links', () => {
+test('public keys survive sorting, appear as secondary references and are searchable without changing internal links', () => {
   const keyed = [node({ id: 'epic-a', type: 'epic', children: [node({ id: 'wi-a', key: 'ORG-AUTH-2', title: 'Instrument the API', labels: ['blocked'] })] })];
   const rows = workRows(keyed, 'priority', 'org-auth-2');
   assert.equal(rows.length, 1);
   const row = toWorkListItem(rows[0]!, undefined, false, { metaStyle: 'text' });
   assert.equal(row.id, 'wi-a');
-  assert.deepEqual(row.tag, { label: 'ORG-AUTH-2', tone: 'neutral' });
+  assert.equal(row.reference, 'ORG-AUTH-2');
+  assert.equal(row.tag, null);
   assert.equal(row.signal?.label, 'Blocked');
-  assert.deepEqual(toWorkListItem({ ...rows[0]!, status: 'done' }, undefined, false).tag,
-    { label: 'ORG-AUTH-2', tone: 'neutral' });
+  assert.equal(toWorkListItem({ ...rows[0]!, status: 'done' }, undefined, false).reference, 'ORG-AUTH-2');
 });
 
 test('a cancelled item sits under Done with a chip, never vanishing', () => {

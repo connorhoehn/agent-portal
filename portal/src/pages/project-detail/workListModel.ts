@@ -150,6 +150,7 @@ export function toWorkListItem(
     id: item.id,
     groupId: groupOf(item.status),
     title: item.title,
+    reference: item.key ?? undefined,
     done: item.status === 'done',
     donePending: pending,
     points: item.storyPoints,
@@ -160,10 +161,7 @@ export function toWorkListItem(
     // and points ("Layla Hassan · 5 points"); a bug or an epic says what it is
     // ("Bug · Eli Garcia · 2 points") — the same rule the chip layout followed.
     kindLabel: item.type === 'story' ? undefined : kindLabel(item),
-    tag: item.key ? {
-      label: item.key,
-      tone: 'neutral',
-    } : isBlocked(item) && item.status !== 'done' && item.status !== 'cancelled'
+    tag: !item.key && isBlocked(item) && item.status !== 'done' && item.status !== 'cancelled'
       ? { label: 'Blocked', tone: 'danger' } : null,
     blocked: isBlocked(item),
   };
