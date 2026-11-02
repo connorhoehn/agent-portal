@@ -869,7 +869,7 @@ function ProjectDetailPage() {
               navigate(`${path}?${params}`);
             }}
             onRetry={refreshWork}
-            recent={<RecentWorkActivity subject={{ kind: 'initiative', id: project.id }} onOpenActivity={() => setTab('activity')} />}
+            recent={<RecentWorkActivity people={contributors} subject={{ kind: 'initiative', id: project.id }} onOpenActivity={() => setTab('activity')} />}
           />
         )}
         {tab === 'activity' && (

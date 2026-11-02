@@ -120,6 +120,12 @@ afterEach(() => {
 });
 
 describe('GET /api/session/realtime-token', () => {
+  it('carries the generic demo portrait without borrowing a directory identity', async () => {
+    const res = await request(appAs({ ...MEMBER, sub: 'demo-user', name: 'Demo User' })).get('/api/session/realtime-token');
+    expect(res.status).toBe(200);
+    expect(await verify(res.body.token)).toMatchObject({ sub: 'demo-user', displayName: 'Demo User', avatarUrl: '/avatars/photos/demo-user.jpg' });
+  });
+
   it('200s with an HS256 token carrying the effective identity', async () => {
     const before = Math.floor(Date.now() / 1000);
     const res = await request(appAs(MEMBER)).get('/api/session/realtime-token');

@@ -204,7 +204,8 @@ sessionRouter.get('/realtime-token', requireSession('RealtimeToken'), asyncHandl
   // email / external_sub are a directory read; a miss (demo-user, picker-only
   // account, Aurora blip) just leaves those claims off rather than failing.
   const user = await getUser(session.sub).catch(() => null);
-  const avatarUrl = user ? (await userAvatars([user]).catch(() => new Map<string, string | null>())).get(user.id) ?? null : null;
+  const avatarUrl = (await userAvatars([user ?? { id: session.sub, personId: null }])
+    .catch(() => new Map<string, string | null>())).get(session.sub) ?? null;
   const { token, expiresAt } = await signRealtimeToken(
     realtimeClaims(session, { externalSub: user?.externalSub, email: user?.email, avatarUrl }), secret);
   const gatewayUrl = config.realtime?.gatewayUrl;

@@ -45,7 +45,8 @@ peopleRouter.get('/shared', requireSession('SharedPeople'), asyncHandler(async (
     .sort((a, b) => a.displayName.localeCompare(b.displayName) || a.id.localeCompare(b.id))
     .slice(0, 500);
   // Faces are best-effort (null → initials) and read only for who is answered.
-  const avatars = await userAvatars([...listed, ...directory.filter(user => user.id === current.sub)]);
+  const self = directory.find(user => user.id === current.sub) ?? { id: current.sub, personId: null };
+  const avatars = await userAvatars([...listed, self]);
   const people = listed.map(user => ({ userId: user.id, displayName: user.displayName, avatarUrl: avatars.get(user.id) ?? null }));
   res.set('Cache-Control', 'no-store');
   res.json({

@@ -111,6 +111,8 @@ export interface AttentionItem {
   /** Null when unassigned: the person column stays empty rather than
    *  claiming someone. */
   assigneeName: string | null;
+  /** Resolved by person id from the initiative contributors; never guessed by name. */
+  assigneeAvatarUrl: string | null;
   /** "2 pts"; null when unsized. */
   points: string | null;
   /** Opens the item on the Work tab. */
@@ -124,7 +126,7 @@ export function workItemHref(projectId: string, itemId: string): string {
   return `/iq/projects/${encodeURIComponent(projectId)}?${new URLSearchParams({ tab: 'work', item: itemId }).toString()}`;
 }
 
-function attentionOf(projectId: string, row: FlatWorkItem): AttentionItem {
+function attentionOf(projectId: string, row: FlatWorkItem, avatarUrl: string | null): AttentionItem {
   const reason = [row.blockedReason, row.summary, row.description].map((s) => s?.trim()).find(Boolean) ?? null;
   return {
     id: row.id,
@@ -132,6 +134,7 @@ function attentionOf(projectId: string, row: FlatWorkItem): AttentionItem {
     title: row.title,
     reason,
     assigneeName: row.assigneeName ?? null,
+    assigneeAvatarUrl: avatarUrl,
     points: row.storyPoints != null ? ptsLabel(row.storyPoints) : null,
     href: workItemHref(projectId, row.id),
   };
@@ -146,17 +149,20 @@ export interface UpNextRow {
   title: string;
   /** Null when unassigned — the column reads "Unassigned", never a guess. */
   assigneeName: string | null;
+  /** Resolved by person id from the initiative contributors; never guessed by name. */
+  assigneeAvatarUrl: string | null;
   /** "5 pts"; null when unsized. */
   points: string | null;
   href: string;
 }
 
-function upNextOf(projectId: string, row: FlatWorkItem): UpNextRow {
+function upNextOf(projectId: string, row: FlatWorkItem, avatarUrl: string | null): UpNextRow {
   return {
     id: row.id,
     key: row.key ?? null,
     title: row.title,
     assigneeName: row.assigneeName ?? null,
+    assigneeAvatarUrl: avatarUrl,
     points: row.storyPoints != null ? ptsLabel(row.storyPoints) : null,
     href: workItemHref(projectId, row.id),
   };
@@ -198,14 +204,16 @@ export function buildOverview(project: ProjectDetail, work: WorkRead): OverviewM
 
   const tree = work.tree;
   const rows = workRows(tree, 'priority', '');
+  const portraits = new Map(project.contributors.map(person => [person.personId, person.avatarUrl]));
+  const portraitOf = (row: FlatWorkItem) => row.assigneeId ? portraits.get(row.assigneeId) ?? null : null;
   const attention = rows
     .filter((r) => isBlocked(r) && (r.status === 'open' || r.status === 'in_progress'))
-    .map((r) => attentionOf(project.id, r));
+    .map((r) => attentionOf(project.id, r, portraitOf(r)));
   const flagged = new Set(attention.map((a) => a.id));
   const upNext = rows
     .filter((r) => r.status === 'open' && !flagged.has(r.id))
     .slice(0, UP_NEXT_LIMIT)
-    .map((r) => upNextOf(project.id, r));
+    .map((r) => upNextOf(project.id, r, portraitOf(r)));
   const n = rows.length;
   return {
     state: 'ready',

@@ -427,6 +427,12 @@
       "kind": "user",
       "name": "Tomás Ferreira",
       "url": "/avatars/photos/u-tomas.jpg"
+    },
+    {
+      "id": "demo-user",
+      "kind": "demo",
+      "name": "Demo User",
+      "url": "/avatars/photos/demo-user.jpg"
     }
   ]
 }

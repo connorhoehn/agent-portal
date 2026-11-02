@@ -2,7 +2,8 @@
 // `people`, schema/identity_schema.sql `app_users`) as the offline world fills it.
 //
 // The selectable demo cast uses commissioned photographic synthetic
-// portraits under /avatars/photos/. All 71 seeded identities are covered;
+// portraits under /avatars/photos/. Seeded identities and the generic demo
+// session are covered;
 // unknown people and the empty fixture still use initials.
 // generate-local.mjs preserves photo selection and checks the manifest/files.
 // Linked users show their PERSON's face (personId ?? userId).
@@ -44,7 +45,7 @@ export function localAvatarPath(subjectId: string): string | null {
 export const avatars = defineFixture<MockAvatar>({
   key: 'avatars',
   scenarios: {
-    default: () => [...seededPeople.map((p) => p.id), ...UNLINKED_USER_IDS]
+    default: () => [...seededPeople.map((p) => p.id), ...UNLINKED_USER_IDS, 'demo-user']
       .map((subjectId) => ({ subjectId, url: localAvatarPath(subjectId) })),
     empty: () => [],
   },

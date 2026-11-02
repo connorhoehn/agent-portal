@@ -50,6 +50,7 @@ test('needs attention: the blocked bug, with its short reason, Eli Garcia and "2
     title: 'Stop duplicate alerts during a dependency outage',
     reason: 'Waiting on the dependency map.',
     assigneeName: 'Eli Garcia',
+    assigneeAvatarUrl: null,
     points: '2 pts',
     href: '/iq/projects/p-observability?tab=work&item=wi-obs-e2-b4',
   });
@@ -102,4 +103,20 @@ test('people line: owner, then the SMEs by name', () => {
     { label: 'Owner', names: ['Nora DaSilva'] },
     { label: 'SMEs', names: ['Layla Hassan', 'Eli Garcia'] },
   ]);
+});
+
+
+test('both overview lists preserve contributor portraits by id, including missing portraits and namesakes', () => {
+  const project = { ...OBS_PROJECT, contributors: OBS_PROJECT.contributors.map(person => ({ ...person, avatarUrl: `/portraits/${person.personId}.jpg` })) };
+  const model = buildOverview(project, { tree: OBS_TREE });
+  if (model.state !== 'ready') throw new Error(model.state);
+  assert.equal(model.attention[0]?.assigneeAvatarUrl, '/portraits/p-011.jpg');
+  assert.deepEqual(model.upNext.map(row => row.assigneeAvatarUrl), ['/portraits/p-008.jpg', '/portraits/p-004.jpg', '/portraits/p-011.jpg']);
+  const tree = [node({ id: 'epic', type: 'epic', children: [
+    node({ id: 'unknown', assigneeId: 'another-eli', assigneeName: 'Eli Garcia' }),
+    node({ id: 'unassigned', assigneeId: null, assigneeName: null }),
+  ] })];
+  const missing = buildOverview(project, { tree });
+  if (missing.state !== 'ready') throw new Error(missing.state);
+  assert.ok(missing.upNext.every(row => row.assigneeAvatarUrl === null));
 });

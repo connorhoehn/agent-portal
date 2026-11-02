@@ -71,5 +71,6 @@ export const PORTRAIT_URLS: Readonly<Record<string, string>> = {
   "p-054": "/avatars/photos/p-054.jpg",
   "p-055": "/avatars/photos/p-055.jpg",
   "p-056": "/avatars/photos/p-056.jpg",
-  "p-rhea": "/avatars/photos/p-rhea.jpg"
+  "p-rhea": "/avatars/photos/p-rhea.jpg",
+  "demo-user": "/avatars/photos/demo-user.jpg"
 };

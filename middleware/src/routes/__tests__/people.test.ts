@@ -88,3 +88,22 @@ describe('GET /api/people/conversations', () => {
     expect(res.status).toBe(401); expect(res.body.conversations).toBeUndefined();
   });
 });
+
+
+it('keeps the generic demo session portrait separate from the directory cast', async () => {
+  const previous = process.env['AUTH_DEMO_MODE'];
+  const previousNodeEnv = process.env['NODE_ENV'];
+  process.env['AUTH_DEMO_MODE'] = 'true';
+  process.env['NODE_ENV'] = 'test';
+  try {
+    session = { ...ana, sub: 'demo-user', name: 'Demo User', tenant: 'orgiq', role: 'member', grants: { orgiq: ['member'] } };
+    const res = await request(app).get('/api/people/shared');
+    expect(res.status).toBe(200);
+    expect(res.body.me).toEqual({ userId: 'demo-user', displayName: 'Demo User', avatarUrl: '/avatars/photos/demo-user.jpg' });
+    expect(res.body.people.some((person: { userId: string }) => person.userId === 'demo-user')).toBe(false);
+  } finally {
+    if (previous === undefined) delete process.env['AUTH_DEMO_MODE'];
+    else process.env['AUTH_DEMO_MODE'] = previous;
+    process.env['NODE_ENV'] = previousNodeEnv;
+  }
+});

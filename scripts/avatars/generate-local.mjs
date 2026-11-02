@@ -211,7 +211,7 @@ function avatarSvg(person) {
 
 function main() {
   const check = process.argv.includes('--check');
-  const cast = [...readPeople(), ...readUnlinkedUsers()];
+  const cast = [...readPeople(), ...readUnlinkedUsers(), { id: 'demo-user', name: 'Demo User', kind: 'demo' }];
   const ids = new Set();
   for (const p of cast) {
     if (ids.has(p.id)) throw new Error(`duplicate avatar id ${p.id}`);
@@ -267,7 +267,7 @@ function main() {
   }
   for (const [name, body] of files) writeFileSync(join(OUT_DIR, name), body);
   const people = cast.filter(p => p.kind === 'person').length;
-  console.log(`wrote ${cast.length} avatars (${people} people, ${cast.length - people} unlinked users) + index.json → ${OUT_DIR}`);
+  console.log(`wrote ${cast.length} avatars (${people} people, ${cast.filter(p => p.kind === 'user').length} unlinked users, 1 demo session) + index.json → ${OUT_DIR}`);
 }
 
 main();

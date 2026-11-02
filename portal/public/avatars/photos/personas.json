@@ -917,6 +917,22 @@
       "focus": "Security engineering",
       "biography": "Security Engineer",
       "prompt": "Use case: photorealistic-natural. Asset: square photographic directory profile portrait for a fictional adult professional in the Work enterprise collaboration demo. Character: Rhea Castellanos, fictional woman in her early thirties, warm olive skin, shoulder-length dark wavy hair tucked behind one ear, brown eyes, subtle friendly smile, charcoal crew-neck knit top. Real camera photograph, natural skin texture and subtle asymmetry, soft window daylight, quiet softly blurred warm-gray office background. Face centered, eyes toward camera; full hair and shoulders comfortably inside square so a circle crop preserves the face. Crop mid-chest up, head occupies about half the image width. One person only. Professional everyday appearance. No lettering, logos, watermark, collage, illustration, 3D rendering, glamour retouching or plastic skin."
+    },
+    {
+      "subjectId": "demo-user",
+      "userId": "demo-user",
+      "name": "Demo User",
+      "portraitUrl": "/avatars/photos/demo-user.jpg",
+      "focus": "Demo workspace",
+      "biography": "Fictional generic demo-session identity; not a directory person.",
+      "prompt": "Use case: photorealistic-natural. Asset: one square profile photograph for the fictional generic Demo User account in the Work enterprise collaboration demo. A fictional adult professional, early thirties, short dark curly hair, warm medium skin, brown eyes, subtle friendly smile, plain charcoal crew-neck sweater. Natural camera photograph with real skin texture, soft window daylight, softly blurred warm-gray office background. Head and shoulders centered, eyes toward camera, full hair and shoulders inside the square with space for a circular avatar crop. One person only; no text, logos, watermark, illustration, glamour retouching or collage.",
+      "provenance": {
+        "generator": "Built-in image_gen",
+        "date": "2026-11-02",
+        "sourceFile": "exec-42806d4d-ab6e-4a9f-b452-37967fcef965.png",
+        "sourceSha256": "c4768dedb6b7831bbf22b87c7db75fa9729211f56263500540a6ea08fb151aa6",
+        "processing": "Converted to 256px JPEG; no other identity portrait reused."
+      }
     }
   ]
 }

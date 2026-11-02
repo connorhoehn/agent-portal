@@ -460,6 +460,8 @@ export interface RecentWorkEvent {
   what: string;
   /** Who did it, when the snapshot's node detail names a participant. */
   actor: string | null;
+  actorId: string | null;
+  actorAvatarUrl: string | null;
   at: string;
   href: string | null;
 }
@@ -483,6 +485,8 @@ export function recentWorkEvents(
         title: node.title,
         what: `${kind} · ${String(node.status).replace(/[-_]/g, ' ')}`,
         actor: details.get(node.id)?.participants?.[0]?.label ?? null,
+        actorId: details.get(node.id)?.participants?.[0]?.id ?? null,
+        actorAvatarUrl: details.get(node.id)?.participants?.[0]?.avatarUrl ?? null,
         at: node.updatedAt,
         href: workGraphNodeHref(node.id, graph.edges, graph.nodes),
       };

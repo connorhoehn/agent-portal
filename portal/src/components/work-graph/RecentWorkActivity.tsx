@@ -15,14 +15,17 @@ const COLUMNS: ActionRowColumn[] = [
   { id: 'when', width: 'sm', label: 'When' },
 ];
 
-export function RecentWorkActivity({ subject, limit = 5, onOpenActivity }: {
+export function RecentWorkActivity({ subject, limit = 5, people = [], onOpenActivity }: {
   subject: WorkGraphSubject;
   limit?: number;
+  /** Already-authorized portraits from the host, matched by participant id. */
+  people?: ReadonlyArray<{ personId: string; avatarUrl?: string | null }>;
   /** "Open Activity →": the host switches to its Activity tab. */
   onOpenActivity: () => void;
 }) {
   const navigate = useNavigate();
   const { result, liveHints } = useWorkGraphSource({ subject });
+  const portraits = new Map(people.map(person => [person.personId, person.avatarUrl]));
   const events = useMemo(() => recentWorkEvents(result.graph, limit), [result.graph, limit]);
   return (
     <PageSection
@@ -45,7 +48,7 @@ export function RecentWorkActivity({ subject, limit = 5, onOpenActivity }: {
           title: e.title,
           description: e.what,
           cells: {
-            who: e.actor ? <ActionRowPerson name={e.actor} size={24} /> : <T tone="secondary">—</T>,
+            who: e.actor ? <ActionRowPerson name={e.actor} avatarUrl={e.actorAvatarUrl ?? (e.actorId ? portraits.get(e.actorId) : null) ?? undefined} size={24} /> : <T tone="secondary">—</T>,
             when: relativeTime(e.at),
           },
         }))}

@@ -496,6 +496,13 @@
       "name": "Rhea Castellanos",
       "portraitUrl": "/avatars/photos/p-rhea.jpg",
       "biography": "Security Engineer"
+    },
+    {
+      "subjectId": "demo-user",
+      "userId": "demo-user",
+      "name": "Demo User",
+      "portraitUrl": "/avatars/photos/demo-user.jpg",
+      "biography": "Fictional generic demo-session identity; not a directory person."
     }
   ]
 }

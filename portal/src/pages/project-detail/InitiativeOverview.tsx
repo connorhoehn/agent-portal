@@ -47,9 +47,9 @@ const COLUMNS: ActionRowColumn[] = [
   { id: 'points', width: 'xs', label: 'Points' },
 ];
 
-function cells(assigneeName: string | null, points: string | null): Record<string, ReactNode> {
+function cells(assigneeName: string | null, avatarUrl: string | null, points: string | null): Record<string, ReactNode> {
   return {
-    person: assigneeName ? <ActionRowPerson name={assigneeName} size={24} /> : <T tone="secondary">Unassigned</T>,
+    person: assigneeName ? <ActionRowPerson name={assigneeName} avatarUrl={avatarUrl ?? undefined} size={24} /> : <T tone="secondary">Unassigned</T>,
     points: points ?? <T tone="secondary">Unsized</T>,
   };
 }
@@ -131,7 +131,7 @@ export function InitiativeOverview({
                   // blocked reason is a sentence (Cannot be written until the
                   // cu... at 1440px): whole on hover.
                   ...(a.reason ? { description: <T title={a.reason}>{a.reason}</T> } : {}),
-                  cells: cells(a.assigneeName, a.points),
+                  cells: cells(a.assigneeName, a.assigneeAvatarUrl, a.points),
                 }))}
                 onOpen={hrefOf(model.attention)}
                 data-testid="overview-attention"
@@ -174,7 +174,7 @@ export function InitiativeOverview({
               aria-label="Up next"
               className="work-overview-striped-rows"
               columns={COLUMNS}
-              items={model.upNext.map((r) => ({ id: r.id, title: r.title, leading: r.key ? <Chip tone="neutral" size="sm" mono>{r.key}</Chip> : undefined, cells: cells(r.assigneeName, r.points) }))}
+              items={model.upNext.map((r) => ({ id: r.id, title: r.title, leading: r.key ? <Chip tone="neutral" size="sm" mono>{r.key}</Chip> : undefined, cells: cells(r.assigneeName, r.assigneeAvatarUrl, r.points) }))}
               onOpen={hrefOf(model.upNext)}
               emptyLabel="Nothing is up next."
             />

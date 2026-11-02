@@ -5,7 +5,7 @@ import {
 } from '@connorhoehn/realtime-modules/client';
 import type { WorkGraphSnapshotV2 } from '@connorhoehn/realtime-modules/work-graph';
 import {
-  createWorkGraphTransport, isWorkGraphHint, workGraphHeading, workGraphNodeHref, workGraphPresentation, workGraphQueryString, workNodeKindStatus,
+  recentWorkEvents, createWorkGraphTransport, isWorkGraphHint, workGraphHeading, workGraphNodeHref, workGraphPresentation, workGraphQueryString, workNodeKindStatus,
   workGraphSubjectKey, workGraphSnapshotPath, workGraphViewState, workGraphQueryWindow, calendarDay,
 } from '../workGraph.ts';
 
@@ -390,4 +390,16 @@ test('heading: the subject, the day and the live state name what the graph shows
   const person = workGraphHeading({ subject: { kind: 'person', id: 'p-004' }, subjectKey: 'person:p-004', nodes: {}, people: [{ id: 'p-004', label: 'Nora DaSilva' }], day: '2026-10-07', timezone: 'UTC', live: 'stream', today: '2026-10-07' });
   assert.equal(person.title, 'Nora DaSilva’s day');
   assert.equal(workNodeKindStatus({ kind: 'run', status: 'error' }), 'Run · Failed');
+});
+
+
+test('recent activity preserves participant identity and an optional portrait', () => {
+  const graph = loaded();
+  const events = recentWorkEvents(graph, 5);
+  assert.equal(events.find(event => event.id === 'work:wi-1')?.actorId, 'p-004');
+  assert.equal(events.find(event => event.id === 'work:wi-1')?.actor, 'Nora DaSilva');
+  assert.equal(events.find(event => event.id === 'run:r-1')?.actorId, null);
+  const participant = graph.activity!.details!.find(detail => detail.nodeId === 'work:wi-1')!.participants![0]!;
+  participant.avatarUrl = '/portraits/nora.jpg';
+  assert.equal(recentWorkEvents(graph, 5).find(event => event.id === 'work:wi-1')?.actorAvatarUrl, '/portraits/nora.jpg');
 });

@@ -23,9 +23,10 @@ const PUBLIC = resolve(__dirname, '../../../../portal/public');
 afterEach(() => fixtureRegistry.resetAll('default'));
 
 describe('mock avatars', () => {
-  it('covers every seeded person and exactly the unlinked app users', async () => {
+  it('covers every seeded person, unlinked app user and the generic demo session', async () => {
     const ids = new Set(avatars.rows().map((row) => row.subjectId));
     for (const person of seededPeople) expect(ids.has(person.id)).toBe(true);
+    expect(ids.has('demo-user')).toBe(true);
     const unlinked = (await listUsers()).filter((user) => user.personId === null).map((user) => user.id).sort();
     expect([...UNLINKED_USER_IDS].sort()).toEqual(unlinked);
   });
@@ -56,10 +57,11 @@ describe('mock avatars', () => {
   });
 
   it("gives a linked user their person's face and an unlinked user their own", async () => {
-    const map = await userAvatars([{ id: 'u-theo', personId: 'p-001' }, { id: 'u-mira', personId: null }, { id: 'u-new', personId: null }]);
+    const map = await userAvatars([{ id: 'u-theo', personId: 'p-001' }, { id: 'u-mira', personId: null }, { id: 'u-new', personId: null }, { id: 'demo-user', personId: null }]);
     expect(map.get('u-theo')).toBe('/avatars/photos/p-001.jpg');
     expect(map.get('u-mira')).toBe('/avatars/photos/u-mira.jpg');
     expect(map.get('u-new')).toBeNull();
+    expect(map.get('demo-user')).toBe('/avatars/photos/demo-user.jpg');
   });
 });
 
