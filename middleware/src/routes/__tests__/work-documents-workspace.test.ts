@@ -57,12 +57,21 @@ it('creates a page in the initiative, lists it newest first, reads it back by id
   expect(edited.status).toBe(200); expect(edited.body.document.markdown).toBe('# Plan\n\nTenant by tenant.');
   expect((await request(app).get(`/api/graph/documents/${doc.id}`).set(as('reader'))).body.markdown).toBe('# Plan\n\nTenant by tenant.');
 });
-it('refuses a member, a foreign work item, a bad body and a whiteboard, and answers 404 for an unknown page', async () => {
+it('creates a whiteboard and round-trips its scene, refusing a scene that is not base64', async () => {
+  const created = await create({ title: 'Cutover board', kind: 'whiteboard' });
+  expect(created.status).toBe(201); expect(created.body.document).toMatchObject({ kind: 'whiteboard', scene: '', markdown: '' });
+  const id = created.body.document.id as string;
+  expect((await request(app).put(`/api/graph/documents/${id}`).set(as('author')).send({ scene: 'AQID' })).status).toBe(200);
+  expect((await request(app).get(`/api/graph/documents/${id}`).set(as('reader'))).body).toMatchObject({ kind: 'whiteboard', scene: 'AQID' });
+  expect((await request(app).put(`/api/graph/documents/${id}`).set(as('author')).send({ scene: 'not base64!' })).status).toBe(400);
+  expect((await request(app).put(`/api/graph/documents/${id}`).set(as('reader')).send({ scene: 'AQID' })).status).toBe(403);
+});
+it('refuses a member, a foreign work item, a bad body and an unknown kind, and answers 404 for an unknown page', async () => {
   expect((await create({ title: 'Nope' }, 'reader')).status).toBe(403);
   expect((await create({ title: 'Nope', workItemId: 'wi-elsewhere' })).status).toBe(404);
   expect((await create({ title: '' })).status).toBe(400);
   expect((await create({ title: 'x', url: 'https://example.com' })).status).toBe(400);
-  expect((await create({ title: 'Board', kind: 'whiteboard' })).status).toBe(400);
+  expect((await create({ title: 'Board', kind: 'deck' })).status).toBe(400);
   expect((await request(app).put('/api/graph/documents/wdoc-missing').set(as('author')).send({ title: 'x' })).status).toBe(404);
   expect((await request(app).put('/api/graph/documents/wdoc-missing').set(as('author')).send({})).status).toBe(400);
   expect(workspaceDocuments.rows()).toEqual([]);

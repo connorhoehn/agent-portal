@@ -39,15 +39,16 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
   const [newDeck, setNewDeck] = useState(false);
   // No title dialog: the page is created as "Untitled page" and opens at once,
   // where its title and body are written (as a meeting chat's /create does).
-  const newDocument = async () => {
+  const newDocument = async (kind: 'page' | 'whiteboard') => {
     if (creating) return;
     setCreating(true);
-    try { const doc = await createWorkspaceDocument(projectId, { title: 'Untitled page' }); navigate(doc.href); }
-    catch (cause) { toastError(null, 'Could not create the document', cause instanceof Error ? cause.message : 'Try again.'); }
+    try { const doc = await createWorkspaceDocument(projectId, { title: kind === 'whiteboard' ? 'Untitled whiteboard' : 'Untitled page', kind }); navigate(doc.href); }
+    catch (cause) { toastError(null, kind === 'whiteboard' ? 'Could not create the whiteboard' : 'Could not create the document', cause instanceof Error ? cause.message : 'Try again.'); }
     finally { setCreating(false); }
   };
   const newMenu: DropdownMenuSection[] = [{ items: [
-    { label: 'Document', description: 'A page written in this initiative; opens so you can write it', onSelect: () => void newDocument() },
+    { label: 'Document', description: 'A page written in this initiative; opens so you can write it', onSelect: () => void newDocument('page') },
+    { label: 'Whiteboard', description: 'A canvas drawn in this initiative; opens so you can sketch it', onSelect: () => void newDocument('whiteboard') },
     { label: 'Presentation', description: 'A status deck built from this initiative', onSelect: () => setNewDeck(true) },
   ] }];
   const [view, setView] = useState<FileView>('cards');
@@ -81,7 +82,7 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
     };
     // Pages written here (New › Document), newest edit first; they open on their own page.
     const pages = async (): Promise<FileRow[]> => readWorkspaceDocuments(await get(`/api/graph/projects/${encodeURIComponent(projectId)}/workspace-documents`), projectId)
-      .map(doc => ({ id: `document:${doc.id}`, title: doc.title ?? doc.id, kind: 'document', detail: `Page · edited ${relativeTime(doc.updatedAt)}`, href: doc.href }));
+      .map(doc => ({ id: `document:${doc.id}`, title: doc.title ?? doc.id, kind: 'document', detail: `${doc.kind === 'whiteboard' ? 'Whiteboard' : 'Page'} · edited ${relativeTime(doc.updatedAt)}`, href: doc.href }));
     const decks = async (): Promise<FileRow[]> => {
       const rows: InitiativeDeckSummary[] = await get(initiativeDeckPaths.list(projectId));
       if (!Array.isArray(rows) || rows.some(row => row.projectId !== projectId || typeof row.id !== 'string' || typeof row.title !== 'string')) throw new Error('Invalid project presentations');

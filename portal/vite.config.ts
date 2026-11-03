@@ -83,6 +83,10 @@ export default defineConfig(async () => ({
       'lib0/buffer', 'lib0/mutex', 'lib0/math', 'lib0/object', 'lib0/set',
       'lib0/diff', 'lib0/error', 'lib0/random', 'lib0/environment',
       'lib0/dom', 'lib0/eventloop', 'lib0/map', 'lib0/hash/sha256',
+      // The whiteboard page's lazy chunk imports Excalidraw (ui-components /diagram peer)
+      // and the realtime Excalidraw adapter; discovered mid-session, the adapter's
+      // re-optimisation served a module without its hooks.
+      '@excalidraw/excalidraw', '@connorhoehn/realtime-modules/adapters/excalidraw',
       '@tiptap/starter-kit', '@tiptap/extension-task-list', '@tiptap/extension-task-item',
       '@tiptap/extension-placeholder', '@tiptap/extension-collaboration',
     ],

@@ -3,7 +3,8 @@
 -- "Save as document" — as opposed to the ingested corpus records in
 -- `documents`, which only get LINKED to work items (work_item_documents).
 -- Additive: apply after orgiq_schema.sql and orgiq_work_items_schema.sql.
--- `kind` is 'page' today; 'whiteboard' is reserved for the canvas slice.
+-- `kind` is 'page' (markdown) or 'whiteboard' (an Excalidraw scene, stored as
+-- a base64 Yjs document update in `scene`; a page keeps `scene` empty).
 CREATE TABLE IF NOT EXISTS work_documents (
   id            TEXT PRIMARY KEY,
   project_id    TEXT NOT NULL REFERENCES projects(id),
@@ -11,6 +12,7 @@ CREATE TABLE IF NOT EXISTS work_documents (
   title         TEXT NOT NULL,
   kind          TEXT NOT NULL DEFAULT 'page' CHECK (kind IN ('page', 'whiteboard')),
   markdown      TEXT NOT NULL DEFAULT '',
+  scene         TEXT NOT NULL DEFAULT '',
   created_by    TEXT NOT NULL,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()

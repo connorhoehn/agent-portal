@@ -103,6 +103,15 @@ the follow-ups below remain explicitly open.
   discussion's initiative, DispatchAgentRun required), the thread opens an
   announced page on `/iq/documents/:id`; `initiative-doc-save.spec.ts` walks
   it as a clone (jest 44/44 on the tenant artifact suite).
+  2026-11-03, whiteboard: **New ▾ Whiteboard** creates a `kind: 'whiteboard'`
+  page that opens on the library's Excalidraw canvas (ui-components `/diagram`
+  `CollaborativeExcalidraw` in its hosted form over a page-owned Y.Doc; the
+  `@excalidraw/excalidraw` 0.18.1 peer is now installed and pre-bundled with the
+  realtime Excalidraw adapter in `vite.config.ts`). Strokes save explicitly as
+  one base64 Yjs update in `work_documents.scene` (PUT `scene`, 2 MB cap) and
+  reload; readers get view mode. One author at a time until the live Y.Doc.
+  The whiteboard walk draws a rectangle, saves and reloads it. A whiteboard
+  cannot be renamed on its page yet (a page can).
   Next slices: the live
   collaborative canvas (generalise `connectDocumentCanvas` from assessment to
   orgiq and mount EditorShell on `/iq/documents/:id`); the Excalidraw whiteboard

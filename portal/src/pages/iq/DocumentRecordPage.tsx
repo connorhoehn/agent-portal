@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import * as Y from 'yjs';
 import { useParams } from 'react-router';
 import { Button, Inline, InlineAlert, Input, KeyValue, LoadingState, MarkdownView, MetaLine, PageSection, Stack, T, Textarea } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
@@ -22,7 +23,7 @@ function Document({ id }: { id: string }) {
     catch (problem) { error = (problem as Error).message; }
   }
   if (error) return <PageSection title="Document record" data-testid="document-record-page"><UnavailableNotice error={error} what="this document record" onRetry={read.refresh} /></PageSection>;
-  if (page) return <WorkspacePage page={page} onSaved={read.refresh} />;
+  if (page) return page.kind === 'whiteboard' ? <WhiteboardPage page={page} onSaved={read.refresh} /> : <WorkspacePage page={page} onSaved={read.refresh} />;
   const sourceHref = documentSourceHref(doc?.sourceUri ?? null);
   return <PageSection title={doc?.title ?? 'Document record'} data-testid="document-record-page">
     {!doc ? <LoadingState /> : <Stack gap="md">
@@ -81,6 +82,55 @@ function WorkspacePage({ page, onSaved }: { page: WorkspaceDocument; onSaved: ()
         : page.markdown.trim()
           ? <MarkdownView markdown={page.markdown} data-testid="workspace-document-view" />
           : <T size="sm" tone="secondary" data-testid="workspace-document-empty">{mayEdit ? 'Nothing written yet. Write opens the page.' : 'Nothing written yet.'}</T>}
+    </Stack>
+  </PageSection>;
+}
+
+// A whiteboard written in an initiative (the Docs tab's New › Whiteboard,
+// 2026-11-03): the library's Excalidraw canvas (ui-components /diagram) over a
+// Y.Doc this page owns, seeded from the saved scene and saved back explicitly
+// as one Yjs update. One author at a time for now: the live, shared Y.Doc
+// arrives with the Work canvas service, the same step as the page editor's.
+// The hosted form of the library's collaborative canvas: this page owns the Y.Doc; no gateway, no awareness peers yet.
+const ExcalidrawCanvas = lazy(() => import('@connorhoehnslalom/ui-components/diagram').then(m => ({ default: m.CollaborativeExcalidraw })));
+const toBase64 = (bytes: Uint8Array): string => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); };
+const fromBase64 = (text: string): Uint8Array => Uint8Array.from(atob(text), c => c.charCodeAt(0));
+function WhiteboardPage({ page, onSaved }: { page: WorkspaceDocument; onSaved: () => void }) {
+  const { session } = useSession();
+  const { can, ready } = useCapabilities();
+  const mayEdit = ready && can('DispatchAgentRun');
+  const title = page.title ?? 'Untitled whiteboard';
+  useCrumbTrail(page.id, [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' },
+    { label: page.projectName ?? page.projectId, path: `/iq/projects/${encodeURIComponent(page.projectId)}` }, { label: title, id: page.id }]);
+  // The doc lives as long as the page; a later server read never replaces local strokes.
+  const ydoc = useMemo(() => { const doc = new Y.Doc(); if (page.scene) { try { Y.applyUpdate(doc, fromBase64(page.scene)); } catch { /* an unreadable scene starts blank */ } } return doc; }, [page.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => ydoc.destroy(), [ydoc]);
+  const savedScene = useRef(page.scene);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const user = useMemo(() => ({ userId: session?.sub, displayName: session?.name ?? 'You', color: 'var(--color-primary)' }), [session?.sub, session?.name]);
+  async function save() {
+    if (saving || !dirty) return;
+    setSaving(true); setProblem(null);
+    try {
+      const scene = toBase64(Y.encodeStateAsUpdate(ydoc));
+      await updateWorkspaceDocument(page.id, { scene });
+      savedScene.current = scene; setDirty(false); onSaved();
+    } catch (cause) { setProblem(cause instanceof Error ? cause.message : 'The whiteboard could not be saved.'); }
+    finally { setSaving(false); }
+  }
+  return <PageSection title={title} data-testid="workspace-whiteboard-page"
+    actions={mayEdit ? <Button size="sm" variant="primary" disabled={saving || !dirty} onClick={() => void save()} data-testid="workspace-whiteboard-save">{saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}</Button> : undefined}>
+    <Stack gap="md">
+      <MetaLine size="sm" tone="secondary" items={['Whiteboard', `edited ${relativeTime(page.updatedAt)}`, mayEdit ? 'One author at a time; Save keeps your strokes' : null]} data-testid="workspace-whiteboard-meta" />
+      {problem && <InlineAlert tone="error">{problem}</InlineAlert>}
+      <Suspense fallback={<LoadingState label="Loading the whiteboard…" />}>
+        <ExcalidrawCanvas ydoc={ydoc} awareness={null} user={user} editable={mayEdit} className="h-[70vh] min-h-[480px] rounded-lg border border-border"
+          // The binding's own first write to a blank board is not a change worth saving; a drawn element, or any
+          // change to a board that was saved before, is.
+          onSceneChange={(count) => { if ((count > 0 || savedScene.current !== '') && toBase64(Y.encodeStateAsUpdate(ydoc)) !== savedScene.current) setDirty(true); }} />
+      </Suspense>
     </Stack>
   </PageSection>;
 }

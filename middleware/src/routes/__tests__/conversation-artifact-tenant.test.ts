@@ -62,7 +62,7 @@ const subOf = (as: string) => as.split('/')[0]!;
 beforeEach(async () => {
   flowRunsFixture.reset();
   workspaceDocuments.reset('default');
-  const page = (id: string, projectId: string) => ({ id, projectId, workItemId: null, title: 'Runbook', kind: 'page' as const, markdown: '', createdBy: 'olu', createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T00:00:00.000Z' });
+  const page = (id: string, projectId: string) => ({ id, projectId, workItemId: null, title: 'Runbook', kind: 'page' as const, markdown: '', scene: '', createdBy: 'olu', createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T00:00:00.000Z' });
   workspaceDocuments.rows().push(page('wdoc-11111111-1111-1111-1111-111111111111', 'p-auth'), page('wdoc-22222222-2222-2222-2222-222222222222', 'p-other'));
   setSocialChatBackend(createMemorySocialChatBackend({ fixtures: false }));
   users = new Map([

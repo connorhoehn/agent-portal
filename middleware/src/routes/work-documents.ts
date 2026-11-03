@@ -7,7 +7,7 @@ import { getWorkItem } from '../providers/work-items.js';
 import { getProject } from '../providers/projects.js';
 import { notifyWorkGraphChanged } from '../lib/work-graph/live.js';
 import {
-  WORKSPACE_MARKDOWN_MAX, WORKSPACE_TITLE_MAX, createWorkspaceDocument, documentRecordHref, getDocumentRecord, getWorkspaceDocument, linkWorkDocument,
+  WORKSPACE_MARKDOWN_MAX, WORKSPACE_SCENE_MAX, WORKSPACE_TITLE_MAX, createWorkspaceDocument, documentRecordHref, getDocumentRecord, getWorkspaceDocument, linkWorkDocument,
   listWorkDocuments, listWorkspaceDocuments, searchDocumentRecords, unlinkWorkDocument, updateWorkspaceDocument, type WorkspaceDocumentKind,
 } from '../providers/work-documents.js';
 import type { Session } from '../lib/session.js';
@@ -33,20 +33,22 @@ function emptyBody(req: Request) {
 }
 /** Every workspace page answers in the document-record shape the portal's one reader checks, plus its body and provenance. */
 const workspaceRecord = (page: Awaited<ReturnType<typeof getWorkspaceDocument>> & object) => ({ ...page, source: 'workspace', sourceUri: null, ingestedAt: page.createdAt });
-/** A workspace page's writable fields: a title up to 200 characters, markdown up to 200k. Anything else is refused. */
-function workspaceFields(req: Request, { create }: { create: boolean }): { title?: string; markdown?: string; kind: WorkspaceDocumentKind; workItemId: string | null } {
+/** A workspace page's writable fields: a title up to 200 characters, markdown up to 200k, a whiteboard scene up to 2 MB. Anything else is refused. */
+function workspaceFields(req: Request, { create }: { create: boolean }): { title?: string; markdown?: string; scene?: string; kind: WorkspaceDocumentKind; workItemId: string | null } {
   const body = req.body;
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ValidationError('A document body is required');
-  const allowed = create ? ['title', 'markdown', 'kind', 'workItemId'] : ['title', 'markdown'];
+  const allowed = create ? ['title', 'markdown', 'kind', 'workItemId'] : ['title', 'markdown', 'scene'];
   if (Object.keys(body as Record<string, unknown>).some(key => !allowed.includes(key))) throw new ValidationError(`Only ${allowed.join(', ')} may be set`);
-  const { title, markdown, kind, workItemId } = body as Record<string, unknown>;
+  const { title, markdown, scene, kind, workItemId } = body as Record<string, unknown>;
   if (title !== undefined && (typeof title !== 'string' || !title.trim() || title.length > WORKSPACE_TITLE_MAX)) throw new ValidationError(`A title is 1–${WORKSPACE_TITLE_MAX} characters`);
   if (markdown !== undefined && (typeof markdown !== 'string' || markdown.length > WORKSPACE_MARKDOWN_MAX)) throw new ValidationError('Markdown is a string up to 200k characters');
+  if (scene !== undefined && (typeof scene !== 'string' || scene.length > WORKSPACE_SCENE_MAX || !/^[A-Za-z0-9+/=]*$/.test(scene))) throw new ValidationError('A scene is a base64 string up to 2 MB');
   if (create && title === undefined) throw new ValidationError('A title is required');
-  if (kind !== undefined && kind !== 'page') throw new ValidationError('Only page documents can be created here; whiteboards arrive with the canvas');
+  if (kind !== undefined && kind !== 'page' && kind !== 'whiteboard') throw new ValidationError('kind is page or whiteboard');
   if (workItemId !== undefined && workItemId !== null) id(workItemId);
-  if (!create && title === undefined && markdown === undefined) throw new ValidationError('Nothing to change');
-  return { ...(title !== undefined ? { title: title.trim() } : {}), ...(markdown !== undefined ? { markdown } : {}), kind: 'page', workItemId: typeof workItemId === 'string' ? workItemId : null };
+  if (!create && title === undefined && markdown === undefined && scene === undefined) throw new ValidationError('Nothing to change');
+  return { ...(title !== undefined ? { title: title.trim() } : {}), ...(markdown !== undefined ? { markdown } : {}), ...(scene !== undefined ? { scene } : {}),
+    kind: kind === 'whiteboard' ? 'whiteboard' : 'page', workItemId: typeof workItemId === 'string' ? workItemId : null };
 }
 workDocumentsRouter.get('/documents/:documentId', asyncHandler(async (req, res) => {
   const session = await authority(req.session), documentId = id(req.params.documentId);
@@ -69,7 +71,8 @@ workDocumentsRouter.put('/documents/:documentId', asyncHandler(async (req, res) 
   if (!page) throw new AppError(404, 'Workspace document not found');
   if (!await requireInitiativeScope(req, res, page.projectId, { action: 'edit documents' })) return;
   session = await authority(session, true);
-  const updated = await updateWorkspaceDocument(documentId, { ...(fields.title !== undefined ? { title: fields.title } : {}), ...(fields.markdown !== undefined ? { markdown: fields.markdown } : {}) });
+  const updated = await updateWorkspaceDocument(documentId, { ...(fields.title !== undefined ? { title: fields.title } : {}), ...(fields.markdown !== undefined ? { markdown: fields.markdown } : {}),
+    ...(fields.scene !== undefined ? { scene: fields.scene } : {}) });
   await authority(session, true);
   if (!updated) throw new AppError(404, 'Workspace document is no longer available');
   void notifyWorkGraphChanged(page.projectId, 'work-document');
