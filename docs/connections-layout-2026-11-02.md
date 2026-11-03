@@ -69,6 +69,16 @@ coverage and library integration debt remains open. All work stayed local;
 AWS checks and deployment are excluded.
 
 Shared-library follow-up: the accent SegmentedControl variant measured 4.13:1
-for its selected label in the dark theme. This page uses the neutral variant;
-the accent token needs its own library correction and consumer sweep. The
-failing evidence remains in `audit/`; no theme token was overridden here.
+for its selected label in the dark theme (and 4.04:1 in light: `text-primary`
+on `bg-primary-bg`). This page uses the neutral variant; the failing evidence
+remains in `audit/`; no theme token was overridden here.
+
+Resolved later the same day in ui-components `260e75d6` (2.500.1): the chosen
+accent segment now takes the fill's own foreground token, `text-primary-fg`,
+which measures 7.30:1 dark / 4.55:1 light; a library test pins the class pair
+and no `@theme` token changed. The app pin moved to 2.500.1 (built from a clean
+archive of that commit; it also ships the audit skill). On that pin the ten
+Connections specs pass again and the targeted audit passes 16 states with zero
+findings in both themes (`pin-2.500.1-audit/`). Consumer sweep: the app's other
+accent segmented controls (`useChatPins.tsx`, `FileCards.tsx`) are icon-only,
+so they were never below the 3:1 graphic floor; they inherit the fix.

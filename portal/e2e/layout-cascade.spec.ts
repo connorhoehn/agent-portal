@@ -467,24 +467,37 @@ test('rail collapse: a legacy hand-set section fold never folds a deep page; onl
   expect(m.crumb!.top - m.mainTop).toBeLessThanOrEqual(24);
 });
 
-test('rail collapse: a selection explored in the right pane is deep (Search › Ask about selection)', async ({ page }) => {
+test('rail collapse: a selection explored in the right pane is deep (Search › person inspector › Ask)', async ({ page }) => {
   await signIn(page, 'orgiq');
   await page.addInitScript(() => { try { localStorage.removeItem('shell.primary-rail.deep'); localStorage.removeItem('shell.primary-rail.shallow'); } catch { /* */ } });
   await page.goto('/iq/search?scope=p-llm-platform&q=k.kl&tab=connections&type=person&selection=person%3Ap-016', { waitUntil: 'domcontentloaded' });
   await settle(page);
-  // A selection alone is a highlight: both rails stay open.
-  const selected = await railFrame(page);
-  expect(selected.depth).toBeLessThanOrEqual(2);
-  expect(selected.primaryState).toBe('open');
-  await page.getByTestId('search-people-toolbar').getByRole('button', { name: /Ask about selection/ }).click();
-  await expect(page.getByTestId('page-conversation-pane')).toBeVisible({ timeout: 10_000 });
+  // A selected person opens in the shell's inspector (docs/connections-layout-2026-11-02.md):
+  // that is the selection level, so the primary rail folds while the section rail stays.
+  const pane = page.getByTestId('page-conversation-pane');
+  await expect(pane).toBeVisible({ timeout: 10_000 });
+  await expect.poll(async () => (await railFrame(page)).primaryState).toBe('collapsed');
+  const inspected = await railFrame(page);
+  expect(inspected.depth).toBeGreaterThanOrEqual(3);
+  expect(inspected.primaryWidth).toBeLessThanOrEqual(48);
+  expect(inspected.sectionState).toBe('open');
+  // Closing the inspector keeps the selection as a highlight: both rails open again.
+  await page.getByRole('button', { name: 'Close details panel', exact: true }).click();
+  await expect.poll(async () => (await railFrame(page)).primaryState).toBe('open');
+  const highlighted = await railFrame(page);
+  expect(highlighted.depth).toBeLessThanOrEqual(2);
+  // View person reopens it; Ask switches the same inspector to its conversation — still deep, one composer.
+  await page.getByRole('button', { name: 'View person', exact: true }).click();
+  await expect(pane).toBeVisible();
+  await page.getByTestId('search-pane-record').getByRole('button', { name: /^Ask about / }).click();
+  await expect(page.getByTestId('search-pane-transcript')).toBeVisible({ timeout: 10_000 });
   await expect.poll(async () => (await railFrame(page)).primaryState).toBe('collapsed');
   const deep = await railFrame(page);
   expect(deep.depth).toBeGreaterThanOrEqual(3);
   expect(deep.primaryWidth).toBeLessThanOrEqual(48);
   expect(deep.sectionState).toBe('open');
   // Closing the pane gives the depth back.
-  await page.getByTestId('page-conversation-pane').getByRole('button', { name: /Collapse/ }).click();
+  await pane.getByRole('button', { name: /Collapse|Close/ }).first().click();
   await expect.poll(async () => (await railFrame(page)).primaryState).toBe('open');
 });
 
