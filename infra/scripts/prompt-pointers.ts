@@ -69,10 +69,19 @@ function readPointers(prefix: string, region: string, agent: string): CurrentPoi
   return pointersFromParameters(prefix, agent, parsed.Parameters ?? []);
 }
 
+/** The first prompt id in per-page CLI text output, or null ("None" lines are empty pages). */
+export function firstPromptId(out: string): string | null {
+  return out.split(/\s+/).map((l) => l.trim()).find((l) => l && l !== 'None') ?? null;
+}
+
 function findPromptId(prefix: string, region: string, agent: string): string | null {
   const name = `${prefix}-${agent}-system-prompt`;
+  // The CLI auto-paginates list-prompts and applies --query to EACH page, so
+  // `| [0]` prints one line per page ("<id>\nNone" with two pages). Take the
+  // first real id; returning the raw text handed "<id>\nNone" to
+  // create-prompt-version (found on the 2026-11-03 rebuild's dry run).
   const out = aws(['bedrock-agent', 'list-prompts', '--region', region, '--query', `promptSummaries[?name=='${name}'].id | [0]`, '--output', 'text']);
-  return out && out !== 'None' ? out : null;
+  return firstPromptId(out);
 }
 
 function printPlan(plan: PointerPlan): void {
