@@ -16,9 +16,18 @@ Do not request credentials, run AWS checks or deploy as part of this work.
   2.500.2 (`e6536351`, another session) scopes the rule away from
   RichChatComposer (`:not([data-composer-size])`, and the attribute is always
   set); the portal reached it with the 2.500.3-work.2 prerelease pin (Vite
-  cache cleared, portal re-triggered). The storymaker studio already pins
-  2.500.2, so a stale `node_modules/.vite` there is the only way it still
-  shows. No portal CSS was added; the fix is the library's.
+  cache cleared, portal re-triggered); `composer-focus-surface.spec.ts` clicks
+  into a composer in all five tenants (no outline, inset kept, surface ring).
+  The storymaker studio pins 2.500.2 and was checked live: its built app on
+  its own test server (`scripts/test-server.mjs`, port 7443, fixture data),
+  the episode composer focused by Playwright, reads outline none, 8/12 px
+  inset, 40 px box, surface ring on, the scoped rule in its stylesheet
+  (`.scratch/composer-focus-2026-11-03/storymaker-focused.png`). Studio
+  caveat, handed to its owners: `vite dev` there fails to pre-bundle the
+  library (`Failed to resolve import "hls.js"` from BreakoutRoomsPanel, the
+  optional stream peer the studio does not install), so the dev server shows an
+  overlay instead of the app; the built app is unaffected. No portal CSS was
+  added; the fix is the library's.
 - [x] **WORK-UI-06 — Initiative tab panels and Details pane (2026-11-02, later).**
   A tab names its panel, so the Agents panel dropped its repeated "Agents"
   heading and opens on one row: Runs/Bots/Compute and the window switches,
