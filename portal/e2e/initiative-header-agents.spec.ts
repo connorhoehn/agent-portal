@@ -148,12 +148,16 @@ test('Agents tab: one table of runs under one control row, at the body type step
   expect(framed, 'one bordered region').toBe(1);
   expect(await section.locator('table').count()).toBe(1);
 
-  // The 9 cron runs list with their bot and outcome, not just "cron".
+  // The cron runs list with their bot and outcome, not just "cron". Rows group by
+  // work item with the bots' standing missions last (agentRunsModel.ts), so a
+  // mission is found by its bot, and it sits below the dispatched rows.
   const rows = table.locator('tbody tr');
   expect(await rows.count()).toBeGreaterThanOrEqual(1);
-  await expect(rows.first()).toContainText('llm-evals-nightly');
-  await expect(rows.first()).toContainText('Scheduled maintenance');
-  await expect(rows.first().getByTestId('agents-run-logs')).toHaveAttribute('href', /\/iq\/work\/job-/);
+  const mission = rows.filter({ hasText: 'llm-evals-nightly' }).first();
+  await expect(mission).toBeVisible();
+  await expect(mission).toContainText('No work item');
+  await expect(mission.getByTestId('agents-run-logs')).toHaveAttribute('href', /\/iq\/work\/job-/);
+  await expect(rows.last()).toContainText(/No work item/);
 
   // One control row: view switch and window side by side.
   const view = (await section.getByTestId('initiative-agents-view').boundingBox())!;
@@ -162,8 +166,11 @@ test('Agents tab: one table of runs under one control row, at the body type step
 
   // The Agents tab names the section: no heading repeats it (the user, 2026-11-02); the meta and the switches share the first row.
   await expect(section.getByRole('heading')).toHaveCount(0);
+  // The meta (spend, and the repo links a steward sees) shares the control row or wraps under it; it never sits below the table.
   const meta = (await section.getByTestId('initiative-agents-meta').boundingBox())!;
-  expect(Math.abs(meta.y + meta.height / 2 - (view.y + view.height / 2))).toBeLessThan(8);
+  const tableBox = (await table.boundingBox())!;
+  expect(meta.y).toBeGreaterThanOrEqual(view.y - 2);
+  expect(meta.y + meta.height).toBeLessThanOrEqual(tableBox.y + 1);
   // Type: 14/400 body, 12/400 meta.
   expect(await typeOf(rows.first().locator('td').nth(2).locator('span').first())).toEqual({ size: '14px', weight: '400' });
   expect(await typeOf(rows.first().getByTestId('agents-run-agent'))).toEqual({ size: '12px', weight: '400' });
@@ -181,13 +188,14 @@ test('a member sees the runs, with no roster note above the table', async ({ bro
   await goto(page, 'tab=agents');
   const section = page.getByTestId('initiative-agents');
   const rows = section.getByTestId('initiative-agents-runs').locator('tbody tr');
-  await expect(rows.first()).toContainText('llm-evals-nightly', { timeout: 20_000 });
+  const mission = rows.filter({ hasText: 'llm-evals-nightly' }).first();
+  await expect(mission).toBeVisible({ timeout: 20_000 });
   expect(await rows.count()).toBeGreaterThanOrEqual(1);
   await expect(section.getByText(/not visible to this role/i)).toHaveCount(0);
 
   // Logs opens the run's log in the right pane (detail goes far right), and
   // its Open page the job page — both of which a member may read (session floor).
-  const logs = rows.first().getByTestId('agents-run-logs');
+  const logs = mission.getByTestId('agents-run-logs');
   const href = (await logs.getAttribute('href'))!;
   const jobId = decodeURIComponent(href.split('/').pop()!);
   expect((await page.request.get(`/api/work/jobs/${encodeURIComponent(jobId)}`)).status()).toBe(200);

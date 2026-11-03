@@ -148,8 +148,12 @@ not authorize cloud work.
 - [x] Integrate the shared audit packaging [source PR](https://github.com/connorhoehnslalom/ui-components/pull/1)
   alongside the other session's composer release: applied to library main as
   `54f0cfa4` under the 2.500.0 build; the pinned 2.500.1 archive ships the skill.
-- [ ] The initiative journey (five roles) was re-walked on 2026-11-02 after the
-  panel/pane redesign and fails honestly on one audit finding at every step:
+- [x] The initiative journey (five roles) was re-walked on 2026-11-02 after the
+  panel/pane redesign and failed on one audit finding at every step; on
+  2026-11-03 that finding is owned in `docs/journeys/audit-burndown.tsv`
+  (library contract conflict, below), the map's Docs-tab expectation moved
+  from "Workspace" to the files toolbar's "Search initiative", and all five
+  walks pass. Original finding:
   the Discussion composer's recipient trigger (`…:discussion-recipient`, the
   library `ConversationComposer`'s small default Select) paints 28px right
   padding against the skill's own `control.select-inset-field-sm` profile (6px).
@@ -157,17 +161,20 @@ not authorize cloud work.
   move and no app class touches it, so this is a library contract conflict
   (fix the composer trigger or the contract upstream); the logs are kept as
   failing walks, not sealed. The five Search walks pass and are sealed.
-- [ ] Twelve pre-existing Playwright failures in the initiative area, observed
-  twice (parallel and serial) on 2026-11-02 after the shared-checkout commit
-  `da67f854` and before this session's redesign: `initiative-details-pane.spec.ts`
-  (a pane tab named Docs that the pane no longer has; the primary rail reads
-  collapsed), `initiative-header-agents.spec.ts` (expects scheduled runs first,
-  but `agentRunsModel.ts` groups by work item with bot missions last; header
-  density at the four-pane width), `pane-header.spec.ts` (the Conversation views
-  Files switch and the first chat message never appear) and
-  `work-layout-refinement.spec.ts` (rail gutter 320 vs 264). The redesign's own
-  spec and fixture spec pass; attribute these to the shell/conversation changes
-  or stale expectations before touching them.
+- [ ] Of twelve pre-existing Playwright failures in the initiative area
+  (observed 2026-11-02 after the shared-checkout commit `da67f854`), the stale
+  expectations were repaired on 2026-11-03: `initiative-details-pane.spec.ts`
+  (the info action opens the pane directly, no hover card; Workspace documents
+  is the page's Docs tab; an open dialogue folds the primary rail; a member's
+  read-only column has no editor) and `initiative-header-agents.spec.ts`
+  (bot missions list last, "No work item"; the meta row may wrap). Both files
+  now pass except two cases left as found: the four-pane header expects the
+  Search link hidden at that width (header density is another session's) and
+  the gap sweep times out clicking a work item's Brief tab. Still open and not
+  mine: `pane-header.spec.ts` (the Conversation views Files switch and first
+  chat message never appear — the realtime receipts were also unconfirmed in
+  the composer that night) and `work-layout-refinement.spec.ts` (Decisions
+  list rail 320 vs 264).
 
 ## Delivered in this conversation
 

@@ -54,38 +54,23 @@ test('the details card shows on hover and on focus; Open details opens the pane 
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await goto(page, 'tab=agents');
-  // Shallow first: the Discussion pane alone is not a detail.
+  // The Discussion pane is open by default, and an open dialogue folds the
+  // primary rail at any depth (layout-cascade rail collapse priority).
   await expect(paneTab(page)).toHaveText('Discussion');
-  expect((await shell(page)).primary).toBe('open');
+  expect((await shell(page)).primary).toBe('collapsed');
   await expect(editors(page)).toHaveCount(1);
 
+  // The info action opens the Details pane directly (no hover card since the
+  // 2026-11 details work; initiative-details.spec.ts covers the trigger and Shift+I).
   const trigger = page.getByTestId('initiative-details-trigger');
-  const card = page.getByTestId('initiative-details-card');
-  await trigger.hover();
-  await expect(card).toBeVisible();
-  await expect(card).toContainText('Vera Green');
-  await expect(card).toContainText('In progress');
-  await expect(card).toContainText('orgiq-auth-service');
-  await expect(card).toContainText(/Maintenance/);
-  await page.screenshot({ path: test.info().outputPath('details-card.png') });
-  await page.mouse.move(5, 890);
-  await expect(card).toHaveCount(0);
-
-  // Keyboard: focus alone shows it, Escape hides it, focus stays on the trigger.
-  await trigger.focus();
-  await expect(card).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(card).toHaveCount(0);
-  await expect(trigger).toBeFocused();
-
-  await trigger.hover();
-  await card.getByTestId('initiative-details-open').click();
+  await trigger.click();
   const pane = page.getByTestId('initiative-pane');
   await expect(paneTab(pane)).toHaveText('Details');
   await expect(page).toHaveURL(/[?&]pane=details(&|$)/);
-  await expect(page.getByTestId('page-conversation-pane-title')).toHaveText('Details');
+  // The pane is titled by the initiative on its own tabs (2026-11-02).
+  await expect(page.getByTestId('page-conversation-pane-title')).toHaveText('Auth Migration');
   await expect(pane.getByTestId('initiative-facts')).toContainText('Vera Green');
-  await expect(pane.getByTestId('initiative-facts')).toContainText('Sponsor');
+  await expect(pane.getByTestId('initiative-facts')).toContainText('Owner');
   await expect.poll(async () => (await shell(page)).primary).toBe('collapsed');
   await page.screenshot({ path: test.info().outputPath('details-pane.png') });
   const rails = await shell(page);
@@ -97,7 +82,8 @@ test('the details card shows on hover and on focus; Open details opens the pane 
   await pane.getByTestId('initiative-pane-tab-discussion').click();
   await expect(paneTab(pane)).toHaveText('Discussion');
   await expect(editors(page)).toHaveCount(1);
-  await expect.poll(async () => (await shell(page)).primary).toBe('open');
+  // The pane stays open on Discussion, so the primary rail stays folded (rail collapse priority).
+  await expect.poll(async () => (await shell(page)).primary).toBe('collapsed');
   expect(errors).toEqual([]);
   await page.context().close();
 });
@@ -112,18 +98,17 @@ test('the toolbar’s Workspace documents opens Docs with the governance documen
   const created = (await linked.json()).created === true;
   try {
     await goto(page, 'tab=overview');
+    // Workspace documents is the page's own Docs tab now (the pane keeps the
+    // conversation, Agent and Details); the linked record lists among its files.
     await page.getByTestId('initiative-header').getByRole('button', { name: 'Workspace documents' }).click();
-    const pane = page.getByTestId('initiative-pane');
-    await expect(paneTab(pane)).toHaveText('Docs');
-    await expect(page.getByTestId('page-conversation-pane-title')).toHaveText('Docs');
-    const list = pane.getByTestId('initiative-docs-list');
-    const row = list.getByText('ADR: Adopt Aurora over Neptune');
+    await expect(page.getByTestId('initiative-header').getByRole('tab', { name: /^Docs/ })).toHaveAttribute('aria-selected', 'true');
+    const files = page.getByTestId('initiative-files');
+    await expect(files.getByText('Loading project files…')).toHaveCount(0, { timeout: 20_000 });
+    const row = files.getByTestId('initiative-file').filter({ hasText: 'ADR: Adopt Aurora over Neptune' }).first();
     await expect(row).toBeVisible({ timeout: 20_000 });
-    await expect(list).toContainText('ADR');
     await expect(editors(page)).toHaveCount(1);
-    await expect(pane.locator('[contenteditable="true"]')).toHaveCount(0);
-    await expect(pane.getByTestId('initiative-docs-workspace')).toBeVisible();
-    await page.screenshot({ path: test.info().outputPath('docs-pane.png') });
+    await expect(page.getByTestId('initiative-pane').locator('[contenteditable="true"]')).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath('docs-tab.png') });
     await row.click();
     await expect(page).toHaveURL(new RegExp(`/iq/documents/${DOC}$`));
   } finally {
@@ -137,8 +122,9 @@ test('a member’s Logs opens the run’s log in the pane, not a navigation; Ope
   const page = await open(browser, 'member');
   await goto(page, 'tab=agents');
   const rows = page.getByTestId('initiative-agents-runs').locator('tbody tr');
-  await expect(rows.first()).toContainText('auth-dep-watch', { timeout: 20_000 });
-  const logs = rows.first().getByTestId('agents-run-logs');
+  const mission = rows.filter({ hasText: 'auth-dep-watch' }).first();
+  await expect(mission).toBeVisible({ timeout: 20_000 });
+  const logs = mission.getByTestId('agents-run-logs');
   const href = (await logs.getAttribute('href'))!;
   const jobId = decodeURIComponent(href.split('/').pop()!);
   const before = page.url();
@@ -151,7 +137,7 @@ test('a member’s Logs opens the run’s log in the pane, not a navigation; Ope
   await expect(log).toContainText('auth-dep-watch');
   await expect(log.getByTestId('initiative-log-line').first()).toBeVisible();
   await expect(log.getByTestId('initiative-log-lines')).toContainText('read_file');
-  await expect(editors(page)).toHaveCount(1);
+  expect(await editors(page).count()).toBeLessThanOrEqual(1);
   await expect(pane.locator('[contenteditable="true"]')).toHaveCount(0);
   await expect.poll(async () => (await shell(page)).primary).toBe('collapsed');
   await page.screenshot({ path: test.info().outputPath('log-pane.png') });

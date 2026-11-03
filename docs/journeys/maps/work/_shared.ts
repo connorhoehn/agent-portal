@@ -200,7 +200,7 @@ export function initiative(role: Role): Step[] {
     paneTab('Discussion', NO_PANE, {}),
     pageTab('Overview', '', { visible: [seen(AUTH.stuck)], noText: LEAKS }, { proves: ['tab-stability', 'story-facts'] }),
     pageTab('Work', 'work', { visible: [seen(AUTH.stuck)], numbers: [{ of: tabNamed('Work'), re: /(\d+)/, eqNumberOf: seen(/^\d+ work items$/), reOther: /(\d+)/ }] }),
-    pageTab('Docs', 'docs', { visible: [seen('Workspace')] }, { expectConsole: ARRIVED }),
+    pageTab('Docs', 'docs', { visible: [seen('Search initiative')] }, { expectConsole: ARRIVED }),
     pageTab('Decisions', 'decisions', { visible: [seen(AUTH.escalated)], numbers: [{ of: tabNamed('Decisions'), re: /(\d+)/, eqCount: tableRows }], noText: LEAKS }, { proves: ['tab-stability', 'story-facts'] }),
     pageTab('Agents', 'agents', { visible: [seen(/agent spend over \d+ runs/)] }),
     pageTab('Contributors', 'contributors', { visible: [seen(AUTH.owner), seen('Nora DaSilva')], numbers: [{ of: tabNamed('Contributors'), re: /(\d+)/, eqCount: tableRows }], noText: LEAKS }, { proves: ['tab-stability', 'story-facts'] }),
@@ -541,7 +541,7 @@ const DOC = { id: 'adr-d-vectordb', title: 'ADR: Vector DB vendor selection' };
 
 export function documents(role: Role): Step[] {
   return [
-    open(`/iq/projects/${AUTH.id}?tab=docs`, 'The initiative’s Docs tab lists what the initiative holds; for Auth Migration nothing is linked yet and the tab says so', { visible: [seen('No project files yet'), seen('Workspace')] }, { state: 'default', proves: 'empty-state', expectConsole: ARRIVED }),
+    open(`/iq/projects/${AUTH.id}?tab=docs`, 'The initiative’s Docs tab lists what the initiative holds; for Auth Migration nothing is linked yet and the tab says so', { visible: [seen('No project files yet'), seen('Search initiative')] }, { state: 'default', proves: 'empty-state', expectConsole: ARRIVED }),
     open(`/iq/documents/${DOC.id}`, 'Open the document record: the title, its source and when it was ingested, read-only', { url: `/iq/documents/${DOC.id}`, visible: [heading(DOC.title), seen('This is the ingested document record.'), seen('Ingested'), seen('Source location')], noText: [...LEAKS, /\b\d{4}-\d{2}-\d{2}T/] }, { facts: true, state: 'row-open' }),
     { do: 'wait', target: heading(DOC.title), name: 'The record offers no edit: source content and editing stay with the source', proves: 'role-gating', expect: { absent: [{ role: 'button', name: /^(edit|save|delete)/i }], visible: [seen(/editing remain governed by the source/)] } } as Step,
     openPalette(),
