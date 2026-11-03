@@ -168,12 +168,28 @@ TRANSIENT = (
 STABLE = 6  # consecutive successes, 10s apart, before the endpoint counts as ready
 
 def handler(event, context):
-    pid = event.get('PhysicalResourceId', 'data-api-ready')
+    pid = event.get('PhysicalResourceId', event['LogicalResourceId'])
     if event['RequestType'] == 'Delete':
         return {'PhysicalResourceId': pid}
     props = event['ResourceProperties']
     data = boto3.client('rds-data')
     last = None
+    sql = props.get('Sql')
+    if sql:
+        # One idempotent schema statement, retried through the same
+        # transients: the endpoint can answer one call and refuse the next.
+        for _ in range(54):
+            try:
+                data.execute_statement(resourceArn=props['ClusterArn'], secretArn=props['SecretArn'],
+                                       database=props['Database'], sql=sql)
+                return {'PhysicalResourceId': pid}
+            except Exception as e:
+                last = str(e)
+                if any(m in last for m in TRANSIENT):
+                    time.sleep(10)
+                    continue
+                raise
+        raise Exception('Aurora Data API refused the statement until the deadline: ' + str(last))
     stable = 0
     for _ in range(54):  # ~9 min at 10s cadence, inside the 10-min Lambda timeout
         try:
@@ -198,10 +214,9 @@ def handler(event, context):
 `),
     });
 
+    const dataApiProvider = new cr.Provider(this, 'DataApiReadyProvider', { onEventHandler: dataApiReadyFn });
     const dataApiReady = new cdk.CustomResource(this, 'DataApiReady', {
-      serviceToken: new cr.Provider(this, 'DataApiReadyProvider', {
-        onEventHandler: dataApiReadyFn,
-      }).serviceToken,
+      serviceToken: dataApiProvider.serviceToken,
       properties: {
         ClusterArn: props.auroraClusterArn,
         SecretArn: props.auroraCredentialsSecretArn,
@@ -209,29 +224,20 @@ def handler(event, context):
       },
     });
 
-    const rdsCall = (id: string, sql: string): cr.AwsCustomResource =>
-      new cr.AwsCustomResource(this, id, {
-        onCreate: {
-          service: 'RDSDataService',
-          action: 'executeStatement',
-          parameters: {
-            resourceArn: props.auroraClusterArn,
-            secretArn: props.auroraCredentialsSecretArn,
-            database: 'orgiq',
-            sql,
-          },
-          physicalResourceId: cr.PhysicalResourceId.of(id),
+    // Each schema statement runs through the same Lambda (its `Sql` branch),
+    // so it retries the endpoint transients instead of failing on the first
+    // refusal: a single-shot AwsCustomResource call failed DbInitExtension and
+    // later DbInitTextIndex on the 2026-11-03 rebuild, each time just after
+    // the endpoint had answered. Every statement is IF NOT EXISTS.
+    const rdsCall = (id: string, sql: string): cdk.CustomResource =>
+      new cdk.CustomResource(this, id, {
+        serviceToken: dataApiProvider.serviceToken,
+        properties: {
+          ClusterArn: props.auroraClusterArn,
+          SecretArn: props.auroraCredentialsSecretArn,
+          Database: 'orgiq',
+          Sql: sql,
         },
-        policy: cr.AwsCustomResourcePolicy.fromStatements([
-          new iam.PolicyStatement({
-            actions: ['rds-data:ExecuteStatement'],
-            resources: [props.auroraClusterArn],
-          }),
-          new iam.PolicyStatement({
-            actions: ['secretsmanager:GetSecretValue'],
-            resources: [props.auroraCredentialsSecretArn],
-          }),
-        ]),
       });
 
     const dbExtension = rdsCall('DbInitExtension', 'CREATE EXTENSION IF NOT EXISTS vector');
