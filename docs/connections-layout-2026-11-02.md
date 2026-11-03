@@ -63,10 +63,15 @@ and `accepted-audit/`. Earlier attempts are retained separately.
 The shared working tree includes independently owned Assessment/huddle edits;
 these checks describe the local tree, not a clean-checkout certification.
 
-The older journey seals remain historical after this redesign. No existing
-journey digest was overwritten without a fresh walk. The TODO's wider journey
-coverage and library integration debt remains open. All work stayed local;
-AWS checks and deployment are excluded.
+The older journey seals remained historical after this redesign; no existing
+journey digest was overwritten without a fresh walk. Closed since: the five
+Search journeys (every Work role) were re-walked on the 2.500.1 pin and sealed
+on freshly measured contracts, the layout-cascade rail-collapse case now
+describes this inspector contract (a selected person opens in the shell pane,
+so the primary rail folds; closing it returns the depth), and the library
+integration debt below is resolved. Nothing in this document remains open as
+of 2026-11-03; later Work-tenant items live in `work-social-ui-todo.md`. All
+work stayed local; AWS checks and deployment are excluded.
 
 Shared-library follow-up: the accent SegmentedControl variant measured 4.13:1
 for its selected label in the dark theme (and 4.04:1 in light: `text-primary`
