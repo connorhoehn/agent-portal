@@ -190,8 +190,8 @@ describe('OrgIQ-MiddlewareService — realtime amendments', () => {
     Annotations.fromStack(stack).hasWarning('*', Match.stringLikeRegexp('No realtimeGatewayUrl'));
   });
 
-  test('with deploySocial=true: REDIS_URL is read from the SSM parameter OrgIQ-Social writes, chat goes to its tables', () => {
-    const stack = middlewareServiceStack({ realtimeGateway: 'true', deploySocial: 'true' });
+  test('with deploySocial=true and OrgIQ-Social live: REDIS_URL is read from the SSM parameter it writes, chat goes to its tables', () => {
+    const stack = middlewareServiceStack({ realtimeGateway: 'true', deploySocial: 'true', socialLive: 'true' });
     const { env, secrets } = envOf(stack);
     assert.equal(env.REDIS_URL, undefined, 'REDIS_URL must not be a plaintext env copy');
     assert.match(JSON.stringify(secrets.REDIS_URL), /parameter\/orgiq\/social\/redis-url/);
@@ -481,7 +481,7 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
     };
     const off = envOfSocial({}).env;
     assert.equal(off.LOBBY_AUTHORITY_URL, undefined, 'no portal, no authority: call lobbies would refuse');
-    const { env, params } = envOfSocial({ deployPortal: 'true', portalPublicUrls: 'true' });
+    const { env, params } = envOfSocial({ deployPortal: 'true', portalPublicUrls: 'true', portalVideoUrlLive: 'true' });
     const lobby = JSON.stringify(env.LOBBY_AUTHORITY_URL);
     assert.match(lobby, /\/api\/realtime\/lobby-access/);
     const [ref] = [...lobby.matchAll(/"Ref":"([^"]+)"/g)].map((m) => m[1]);
@@ -712,7 +712,7 @@ describe('bin/app.ts — the social stacks are opt-in', () => {
 
   test('the full social app: every Fn::ImportValue resolves, and the middleware imports nothing social', () => {
     const app = synthApp({
-      deploySocial: 'true', deploySocialMedia: 'true', realtimeGateway: 'true', sfuAllowCidr: '203.0.113.4/32',
+      deploySocial: 'true', deploySocialMedia: 'true', realtimeGateway: 'true', sfuAllowCidr: '203.0.113.4/32', socialLive: 'true',
     });
     const exported = new Set<string>();
     for (const tpl of Object.values(app.templates)) for (const n of exportedNames(tpl)) exported.add(n);

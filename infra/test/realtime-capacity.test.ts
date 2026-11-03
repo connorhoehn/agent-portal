@@ -72,13 +72,14 @@ describe('#2 the realtime gateway runs as exactly one task', () => {
     viaUrl.hasResourceProperties('AWS::ApplicationAutoScaling::ScalableTarget', { MinCapacity: 1, MaxCapacity: 4 });
     assert.equal(env(container(viaUrl, 'middleware').c, 'REDIS_URL'), 'redis://10.0.0.9:6379');
 
-    const viaSocial = Template.fromStack(middlewareServiceStack({ deploySocial: 'true' }));
+    // socialLive: deploy.sh infers it once OrgIQ-Social has written its Redis parameter.
+    const viaSocial = Template.fromStack(middlewareServiceStack({ deploySocial: 'true', socialLive: 'true' }));
     viaSocial.resourceCountIs('AWS::ApplicationAutoScaling::ScalableTarget', 1);
     const secrets = (container(viaSocial, 'middleware').c.Secrets ?? []) as Array<{ Name: string }>;
     assert.ok(secrets.some((x) => x.Name === 'REDIS_URL'), 'REDIS_URL from the Social SSM parameter');
 
     // Opting out stays possible with a Redis present.
-    Template.fromStack(middlewareServiceStack({ deploySocial: 'true', middlewareAutoscale: 'false' }))
+    Template.fromStack(middlewareServiceStack({ deploySocial: 'true', socialLive: 'true', middlewareAutoscale: 'false' }))
       .resourceCountIs('AWS::ApplicationAutoScaling::ScalableTarget', 0);
   });
 

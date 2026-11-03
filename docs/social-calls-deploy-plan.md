@@ -568,7 +568,7 @@ are byte-identical.
 | `OrgIQ-Social` | outputs `SocialRedisUrl`, `SocialRedisUrlParameterName`, `SocialChatTablePrefix` | read by `schema/dump-stack-outputs.sh` |
 | `OrgIQ-Social` | (unchanged) platform-api on Fargate, 27 tables, host rules 30/40 | platform-api now gets `REDIS_ENDPOINT`/`REDIS_PORT`/`REDIS_URL` from ElastiCache |
 | `OrgIQ-MiddlewareService` | env `SOCIAL_CHAT_STORE=dynamo`, `SOCIAL_CHAT_TABLE_PREFIX=orgiq-social-[<tableSuffix>-]` | only with `realtimeGateway=true` **and** `deploySocial=true`; the names `middleware/src/lib/social-chat.ts` reads |
-| `OrgIQ-MiddlewareService` | container secret `REDIS_URL` ← SSM `/orgiq/social/redis-url` | same condition. `realtimeRedisUrl` overrides it as plain env. Without either, there is no REDIS_URL and synth warns: call state and the inbox stay in memory. |
+| `OrgIQ-MiddlewareService` | container secret `REDIS_URL` ← SSM `/orgiq/social/redis-url` | same condition, **and** `socialLive=true` (deploy.sh infers it once OrgIQ-Social is live and the parameter exists; before that nothing reads the parameter and the autoscale default stays off). `realtimeRedisUrl` overrides it as plain env. Without either, there is no REDIS_URL and synth warns: call state and the inbox stay in memory. |
 | `OrgIQ-MiddlewareService` | env `REALTIME_GATEWAY_URL` | `realtimeGatewayUrl` if given. Otherwise, with no certificate, `ws://<ALB DNS>` (the portal appends `/ws`), usable only from a `localhost` portal (§5). With a certificate it is left unset and synth warns, because the stack does not know the certificate's host. |
 | `OrgIQ-MiddlewareService` | env `REALTIME_PLATFORM_PUBLIC_URL`, `REALTIME_VIDEO_PUBLIC_URL` | explicit context wins. Otherwise they come from `https://<socialPlatformHost>` and `videoPublicUrl` / `https://<socialSfuHost>`. Unset (with a warning) when no host is known. |
 | `OrgIQ-MiddlewareService` | `REALTIME_JWT_SECRET` (`orgiq-realtime-jwt-secret`) | unchanged: already minted, and platform-api already reads it by name |
@@ -840,7 +840,15 @@ MW+=(--context realtimeGateway=true)
 ```
 
 From step 6 on, every middleware deploy carries `MW` and `SOCIAL`, as in
-§8. A participant's IP needs `sfuAllowCidr` for media and nothing else. The
+§8. The social flags are safe on the middleware before OrgIQ-Social or the
+portal's social distributions exist: each by-name read of another stack's
+parameter is gated on a producer-live flag deploy.sh infers from the account
+(`socialLive` ← `/orgiq/social/redis-url`, `portalPlatformApiUrlLive` ←
+`/orgiq/portal/platform-api-url`, `portalVideoUrlLive` ←
+`/orgiq/portal/video-url`; OrgIQ-Social gates its video URL the same way), so
+a fresh account no longer fails "Unable to fetch parameters … from parameter
+store". `node scripts/deploy/orchestrate.mjs apply --alb-allow-cidr <ip>/32
+[--sfu-allow-cidr …]` runs this whole runbook in order (DE-14). A participant's IP needs `sfuAllowCidr` for media and nothing else. The
 portal, the API and the SFU signalling now arrive through CloudFront, so
 `albAllowCidr` is only the operator's direct door.
 

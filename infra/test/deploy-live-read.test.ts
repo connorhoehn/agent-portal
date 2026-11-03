@@ -103,4 +103,64 @@ esac`;
     assert.match(r.stdout, /labCallbackSecret=<from Secrets Manager>/);
     assert.doesNotMatch(r.stdout.split('── Inferring')[1] ?? '', /--context labCallbackSecret=s3cret/);
   });
+
+  // A fresh account part-way through: each producer-live flag appears only once
+  // the parameter it guards exists (lib/middleware-service-stack.ts socialLive).
+  const inferAgainst = (cases: string) => {
+    const dir = mkdtempSync(join(tmpdir(), 'infer-fresh-'));
+    writeFileSync(join(dir, 'aws'), `#!/bin/bash
+args="$*"
+case "$args" in
+${cases}
+  *"describe-stacks"*"StackStatus"*) echo "Stack with id X does not exist" >&2; exit 254 ;;
+  *"ssm get-parameter"*) echo "ParameterNotFound" >&2; exit 254 ;;
+  *"get-secret-value"*) echo "ResourceNotFoundException" >&2; exit 254 ;;
+  *) echo None ;;
+esac
+`);
+    chmodSync(join(dir, 'aws'), 0o755);
+    const r = spawnSync('/bin/bash', ['-c', `set -euo pipefail\nREGION=us-east-1 PREFIX=orgiq STACK_PREFIX=OrgIQ- CDK_ARGS=()\n${block}\nprintf '%s\\n' "\${INFERRED[@]+"\${INFERRED[@]}"}"`], {
+      env: { ...process.env, PATH: `${dir}:${process.env['PATH']}` }, encoding: 'utf8',
+    });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.split('\n').filter((l) => l && l !== '--context');
+  };
+
+  test('nothing live: no producer-live flag, no socialPortalOrigin', () => {
+    const got = inferAgainst('');
+    for (const k of ['socialLive', 'portalPlatformApiUrlLive', 'portalVideoUrlLive', 'socialPortalOrigin', 'portalPublicUrls']) {
+      assert.ok(!got.some((c) => c.startsWith(`${k}=`)), `${k} inferred on an empty account: ${got.join(' ')}`);
+    }
+  });
+
+  test('portal live with its social URLs, Social not yet: the portal flags and socialPortalOrigin, never socialLive', () => {
+    const got = inferAgainst(`
+  *"describe-stacks --stack-name OrgIQ-Portal"*"PortalUrl"*) echo https://d1.cloudfront.net ;;
+  *"get-parameter --name /orgiq/portal/url"*) echo https://d1.cloudfront.net ;;
+  *"get-parameter --name /orgiq/portal/platform-api-url"*) echo https://d2.cloudfront.net ;;
+  *"get-parameter --name /orgiq/portal/video-url"*) echo https://d3.cloudfront.net ;;
+  *"get-parameter --name /orgiq/social/redis-url"*) echo redis://should-not-be-read:6379 ;;`);
+    for (const ctx of ['portalPublicUrls=true', 'portalPlatformApiUrlLive=true', 'portalVideoUrlLive=true', 'socialPortalOrigin=https://d1.cloudfront.net']) {
+      assert.ok(got.includes(ctx), `missing ${ctx}: ${got.join(' ')}`);
+    }
+    assert.ok(!got.some((c) => c.startsWith('socialLive=') || c.startsWith('deploySocial=')), 'Social is not live');
+  });
+
+  test('portal live without its social distributions: no portal URL flags', () => {
+    const got = inferAgainst(`
+  *"describe-stacks --stack-name OrgIQ-Portal"*"PortalUrl"*) echo https://d1.cloudfront.net ;;
+  *"get-parameter --name /orgiq/portal/url"*) echo https://d1.cloudfront.net ;;`);
+    assert.ok(got.includes('portalPublicUrls=true'));
+    assert.ok(!got.some((c) => /^portal(PlatformApi|Video)UrlLive=/.test(c)), got.join(' '));
+  });
+
+  test('OrgIQ-Social live: socialLive only once its Redis parameter exists', () => {
+    const social = `
+  *"describe-stacks --stack-name OrgIQ-Social"*"StackStatus"*) echo UPDATE_COMPLETE ;;`;
+    assert.ok(!inferAgainst(social).includes('socialLive=true'), 'no parameter, no socialLive');
+    const got = inferAgainst(`${social}
+  *"get-parameter --name /orgiq/social/redis-url"*) echo redis://cache:6379 ;;`);
+    assert.ok(got.includes('deploySocial=true') && got.includes('socialLive=true'), got.join(' '));
+    assert.ok(!got.some((c) => c.includes('redis://')), 'the Redis URL itself is never passed as context');
+  });
 });

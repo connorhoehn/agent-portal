@@ -835,6 +835,24 @@ export class MiddlewareServiceStack extends cdk.Stack {
     const ctxOn = (k: string) => { const v = this.node.tryGetContext(k); return v === true || v === 'true'; };
     const realtimeEnabled = ctxOn('realtimeGateway');
     const socialDeployed = ctxOn('deploySocial');
+    // ── Producer-live flags: read another stack's parameter only once it exists
+    // `deploySocial` / `deploySocialMedia` put the Social stacks in the app, and
+    // OrgIQ-SocialMedia / OrgIQ-Social import this stack's VPC and listener, so
+    // the middleware must carry the social flags BEFORE those stacks exist (or
+    // the exports they import are missing). But three of the values below are
+    // SSM parameters other stacks write, resolved by CloudFormation at deploy
+    // time: a deploy that names one before its producer ran fails with
+    // "Unable to fetch parameters [...] from parameter store" (the 2026-11
+    // rebuild of 647757222309 after aws-nuke). So each is read only when its
+    // producer is live, which deploy.sh infers from the account:
+    //   socialLive=true                OrgIQ-Social is live and has written
+    //                                  /<prefix>/social/redis-url
+    //   portalPlatformApiUrlLive=true  OrgIQ-Portal wrote /<prefix>/portal/platform-api-url
+    //   portalVideoUrlLive=true        OrgIQ-Portal wrote /<prefix>/portal/video-url
+    // On the live lab account all three are inferred, so its template is the
+    // one it always was; on a fresh account they stay off until the producer
+    // has deployed.
+    const socialLive = socialDeployed && ctxOn('socialLive');
 
     // ── More than one task needs a Redis (DE-47) ───────────────────────────
     // Devbox claims, reservations, the activity clock, cross-replica tails and
@@ -843,9 +861,11 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // own stale copy of the fleet (stopping a box another task is running a
     // task on) and each dispatcher pushes jobs onto boxes the others are
     // using. So autoscaling defaults on only when a Redis source exists
-    // (`realtimeRedisUrl`, or OrgIQ-Social's ElastiCache via `deploySocial`),
+    // (`realtimeRedisUrl`, or OrgIQ-Social's ElastiCache via `deploySocial`
+    // once OrgIQ-Social is live — `socialLive`, never earlier: the default must
+    // not read /<prefix>/social/redis-url before OrgIQ-Social has written it),
     // and asking for it without one is refused, like the gateway safeguard.
-    const fleetRedisSource = ctxStr('realtimeRedisUrl') ? 'override' : socialDeployed ? 'social' : null;
+    const fleetRedisSource = ctxStr('realtimeRedisUrl') ? 'override' : socialLive ? 'social' : null;
     const autoscaleRaw = this.node.tryGetContext('middlewareAutoscale');
     const autoscale = autoscaleRaw === undefined || autoscaleRaw === null || autoscaleRaw === ''
       ? !realtimeEnabled && fleetRedisSource !== null
@@ -856,14 +876,15 @@ export class MiddlewareServiceStack extends cdk.Stack {
     }
     if (autoscale && !fleetRedisSource) {
       throw new Error('middlewareAutoscale=true needs a Redis for shared fleet state and the reaper\'s leader lock (DE-47): '
-        + 'pass deploySocial=true (OrgIQ-Social\'s ElastiCache) or realtimeRedisUrl=redis://…, or middlewareAutoscale=false.');
+        + 'pass deploySocial=true with socialLive=true once OrgIQ-Social is live (its ElastiCache; deploy.sh infers socialLive) '
+        + 'or realtimeRedisUrl=redis://…, or middlewareAutoscale=false.');
     }
     const platformHost = ctxStr('socialPlatformHost');
     const sfuHost = ctxStr('socialSfuHost');
     const realtime = {
       enabled: realtimeEnabled,
       redisUrlOverride: ctxStr('realtimeRedisUrl'),
-      redisFromSocial: (realtimeEnabled || autoscale) && socialDeployed && !ctxStr('realtimeRedisUrl'),
+      redisFromSocial: (realtimeEnabled || autoscale) && socialLive && !ctxStr('realtimeRedisUrl'),
       socialChat: realtimeEnabled && socialDeployed,
       gatewayUrl: ctxStr('realtimeGatewayUrl'),
       // Browser-facing URLs: explicit context wins; otherwise derived from
@@ -1038,12 +1059,13 @@ export class MiddlewareServiceStack extends cdk.Stack {
       if (realtime.enabled && !realtime.gatewayUrl) {
         portalSecrets['REALTIME_GATEWAY_URL'] = portalSecret(portalParams.gatewayUrl, 'PortalGatewayUrlParameter');
       }
-      // Only the distributions OrgIQ-Portal actually made (it reads the same flags).
-      if (socialDeployed && !ctxStr('realtimePlatformPublicUrl')) {
+      // Only the distributions OrgIQ-Portal actually made (it reads the same
+      // flags), and only once it has written their parameters (see socialLive).
+      if (socialDeployed && ctxOn('portalPlatformApiUrlLive') && !ctxStr('realtimePlatformPublicUrl')) {
         delete environment['REALTIME_PLATFORM_PUBLIC_URL'];
         portalSecrets['REALTIME_PLATFORM_PUBLIC_URL'] = portalSecret(portalParams.platformApiUrl, 'PortalPlatformApiUrlParameter');
       }
-      if (ctxOn('deploySocialMedia') && !ctxStr('realtimeVideoPublicUrl')) {
+      if (ctxOn('deploySocialMedia') && ctxOn('portalVideoUrlLive') && !ctxStr('realtimeVideoPublicUrl')) {
         delete environment['REALTIME_VIDEO_PUBLIC_URL'];
         portalSecrets['REALTIME_VIDEO_PUBLIC_URL'] = portalSecret(portalParams.videoUrl, 'PortalVideoUrlParameter');
       }
@@ -1092,16 +1114,19 @@ export class MiddlewareServiceStack extends cdk.Stack {
         ssm.StringParameter.fromStringParameterName(this, 'BrowserProfileIdParameter', caps.browserProfileId));
     }
     if (realtime.redisFromSocial) {
-      // Written by OrgIQ-Social. It must exist before a task starts, which the
-      // deploy order guarantees (Social before `realtimeGateway=true`); a task
-      // started without it fails at start with ResourceInitializationError.
+      // Written by OrgIQ-Social; read only with socialLive (above), so the
+      // parameter exists before CloudFormation resolves it and before a task
+      // starts (a task started without it fails ResourceInitializationError).
       containerSecrets['REDIS_URL'] = ecs.Secret.fromSsmParameter(
         ssm.StringParameter.fromStringParameterName(this, 'SocialRedisUrlParameter', socialRedisUrlParameterName(prefix)),
       );
     }
     if (realtime.enabled) {
       const warn = (m: string) => cdk.Annotations.of(this).addWarning(m);
-      if (!realtime.redisUrlOverride && !realtime.redisFromSocial) {
+      if (socialDeployed && !socialLive && !realtime.redisUrlOverride) {
+        warn('realtimeGateway=true with deploySocial=true but without socialLive=true — OrgIQ-Social is not live yet, so '
+          + 'REDIS_URL is not wired: call state is in memory until a middleware deploy after OrgIQ-Social (deploy.sh infers socialLive).');
+      } else if (!realtime.redisUrlOverride && !realtime.redisFromSocial) {
         warn('realtimeGateway=true without deploySocial=true or realtimeRedisUrl — no REDIS_URL: call state and '
           + 'the notification inbox are in memory and lost on every task replacement.');
       }
