@@ -72,6 +72,18 @@ describe('the Data-API readiness gate', () => {
     assert.ok(granted.includes('rds-data:ExecuteStatement'));
     assert.ok(granted.includes('secretsmanager:GetSecretValue'));
   });
+
+  test('ready means several consecutive answers, not the first one (enablement flaps)', () => {
+    // 2026-11-03: one SELECT 1 succeeded, then DbInitExtension still got
+    // "HttpEndpoint is not enabled" on the first deploy and on the retry.
+    const code = Object.values<any>(template.findResources('AWS::Lambda::Function'))
+      .map((f) => String(f.Properties?.Code?.ZipFile ?? '')).find((z) => z.includes('SELECT 1'))!;
+    assert.ok(code, 'the readiness probe is inline');
+    const stable = Number(/STABLE = (\d+)/.exec(code)?.[1]);
+    assert.ok(stable >= 3, `needs at least 3 consecutive successes, has ${stable}`);
+    assert.match(code, /stable >= STABLE/);
+    assert.match(code, /stable = 0/, 'a transient resets the count');
+  });
 });
 
 describe('the KB service role is attached before Bedrock validates', () => {

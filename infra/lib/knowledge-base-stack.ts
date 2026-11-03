@@ -151,6 +151,11 @@ export class KnowledgeBaseStack extends cdk.Stack {
       // known cold-cluster transients — the endpoint still enabling, or the
       // serverless cluster resuming/scaling from zero — and re-raise anything
       // else (auth, missing DB) so real misconfiguration still fails loudly.
+      // Enablement is eventually consistent: on 2026-11-03 one SELECT 1
+      // succeeded and the very next call (DbInitExtension, another Lambda)
+      // still got "HttpEndpoint is not enabled", on both the first deploy and
+      // deploy.sh's retry. So the endpoint counts as ready only after
+      // STABLE consecutive successes; any transient resets the count.
       code: lambda.Code.fromInline(`
 import boto3, time
 
@@ -160,6 +165,7 @@ TRANSIENT = (
     'DatabaseResuming',
     'is resuming',
 )
+STABLE = 6  # consecutive successes, 10s apart, before the endpoint counts as ready
 
 def handler(event, context):
     pid = event.get('PhysicalResourceId', 'data-api-ready')
@@ -168,6 +174,7 @@ def handler(event, context):
     props = event['ResourceProperties']
     data = boto3.client('rds-data')
     last = None
+    stable = 0
     for _ in range(54):  # ~9 min at 10s cadence, inside the 10-min Lambda timeout
         try:
             data.execute_statement(
@@ -176,10 +183,14 @@ def handler(event, context):
                 database=props['Database'],
                 sql='SELECT 1',
             )
-            return {'PhysicalResourceId': pid}
+            stable += 1
+            if stable >= STABLE:
+                return {'PhysicalResourceId': pid}
+            time.sleep(10)
         except Exception as e:
             last = str(e)
             if any(m in last for m in TRANSIENT):
+                stable = 0
                 time.sleep(10)
                 continue
             raise
