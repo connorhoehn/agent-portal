@@ -13,7 +13,7 @@ The whole platform runs in AWS, nothing forwarded from a laptop:
 - ECS cluster `orgiq-middleware`: middleware, platform-api and the five
   document-workspace services (gateway, platform, catalog, mq, redis), 1/1 each.
 - 8 AgentCore runtimes READY; 4/4 ALB targets healthy.
-- Portal: https://d1hrudaahzp0ro.cloudfront.net (`/api`, `/ws` and
+- Portal: https://d25ntr6vvgp7ia.cloudfront.net (`/api`, `/ws` and
   `/document-realtime` route to the middleware ALB). Platform-api and SFU
   signalling have their own distributions (`PlatformApiPublicUrl`,
   `SfuPublicUrl` on `OrgIQ-Portal`).
@@ -28,9 +28,9 @@ Verification lives in two specs that run only against the deployed portal:
 F=~/.orgiq-aws-test/logins.txt   # "<email> <password>" per line, mode 600, not in the repo
 A=$(grep farah $F | tr ' ' ':'); B=$(grep mira $F | tr ' ' ':')
 cd portal
-CLOUD_PORTAL_URL=https://d1hrudaahzp0ro.cloudfront.net CLOUD_LOGIN_A="$B" CLOUD_LOGIN_B="$A" \
+CLOUD_PORTAL_URL=https://d25ntr6vvgp7ia.cloudfront.net CLOUD_LOGIN_A="$B" CLOUD_LOGIN_B="$A" \
   npx playwright test e2e/cloud-call-smoke.spec.ts --project=chromium      # real 2-user call, seat binding
-CLOUD_PORTAL_URL=https://d1hrudaahzp0ro.cloudfront.net CLOUD_LOGIN_DOC="$A" \
+CLOUD_PORTAL_URL=https://d25ntr6vvgp7ia.cloudfront.net CLOUD_LOGIN_DOC="$A" \
   npx playwright test e2e/cloud-documents-smoke.spec.ts --project=chromium # canvas loads, edit persists
 ```
 
@@ -40,6 +40,27 @@ the live gateway, provider code against the real Aurora, local-vs-Redis call
 state, and the production bundle; start there for any cloud-only failure. The Cognito users `farah.osei@assessment.example`
 and `mira.okafor@social.example` were given permanent passwords for this; the
 other seeded Cognito users are still `FORCE_CHANGE_PASSWORD`.
+
+## 2026-11-03: rebuilt after the lab account's aws-nuke
+
+On 2026-11-01 ~03:00 an account-wide aws-nuke (`AWSNuke-Session`, role
+`AWSNukeCrossAccountRole`) deleted Aurora, Cognito, every secret and Lambda,
+the VPC, ECS, the ALB, ElastiCache, the SFU host, the portal bucket and all
+three CloudFront distributions, leaving 22 hollow `UPDATE_COMPLETE` stacks
+(and the runtimes, DynamoDB tables and ECR repos). It may recur monthly; ask
+the lab admins about an exemption tag before relying on the stack.
+
+Rebuilt from scratch on 2026-11-03: `PURGE_RETAINED=true destroy.sh`, then
+`scripts/deploy/orchestrate.mjs apply`, then the data layer (migrations,
+`schema/apply_all_seed.py`, `schema.synth load` + KB ingestion 157/157,
+Cognito passwords for the two cloud-test users, `prompt-pointers.ts
+bootstrap --yes`, the page-thread migrator: 19 comments). New portal:
+**https://d25ntr6vvgp7ia.cloudfront.net**. Verified: 22 stacks, 7/7 ECS,
+8 runtimes READY, both cloud specs pass. What broke on the way, all fixed in
+code: the KB Data API readiness (`a7d3018f`, `079da805`), prompt-pointers'
+per-page CLI output (`0aac89aa`), and the fresh-account ordering cycles
+between the middleware, Social and Portal stacks (`03df3e4b`). Still manual
+(DE-24): the data-layer steps above.
 
 ## Open items
 

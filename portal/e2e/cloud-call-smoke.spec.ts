@@ -98,16 +98,14 @@ test('two signed-in users hear each other through the deployed SFU', async ({ br
     await expect(owner.getByTestId('social-room-join')).toBeEnabled({ timeout: 30000 });
     await join(owner);
     await expect(owner.getByTestId('call-dock-leave')).toBeVisible({ timeout: 30000 });
-    // Join walks into a call the page has discovered, and starts a second one
-    // otherwise: wait until the guest's page sees the owner's call.
-    // On the deployed stack the gateway registers the first caller's call
-    // ~9 s after Join (serial authoritative directory reads over the Data
-    // API); a guest who joins inside that window starts a second call in the
-    // lobby and neither seat is ever accepted. Wait it out, then join.
-    await expect(owner.getByText('1 connected to this hangout')).toBeVisible({ timeout: 30000 });
-    await guest.waitForTimeout(Number(process.env.CLOUD_SEAT_SETTLE_MS ?? 15000));
+    // Join walks into a call the page has discovered: wait until the owner's
+    // seat shows on the stage. (Two first joiners of a lobby share one call
+    // since realtime-modules 0.140.0, and a seat is accepted in ~2-3 s on the
+    // deployed stack, so the settle wait defaults to 0.)
+    await expect(owner.getByTestId('hangout-call-stage')).toContainText('1 participant', { timeout: 30000 });
+    await guest.waitForTimeout(Number(process.env.CLOUD_SEAT_SETTLE_MS ?? 0));
     await join(guest);
-    await expect(guest.getByTestId('hangout-call-stage')).toContainText('2 connected', { timeout: 45000 });
+    await expect(guest.getByTestId('hangout-call-stage')).toContainText('2 participants', { timeout: 45000 });
     await expect.poll(() => inboundAudio(guest), { timeout: 45000 }).toBeGreaterThan(0);
     await expect.poll(() => inboundAudio(owner), { timeout: 45000 }).toBeGreaterThan(0);
     // Each live media leg binds to its accepted gateway seat.
