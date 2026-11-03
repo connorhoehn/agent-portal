@@ -88,6 +88,22 @@ See [the continuation verification](work-social-ui-verification-2026-11-02.md)
 for exact local evidence and limits. The local UI checklist is complete;
 the follow-ups below remain explicitly open.
 
+- [~] **WORK-DOCS-01 — create a document in an initiative (2026-11-02, slice 1).**
+  Work had no document-creation path (the Discussion's /doc Save answered
+  409). Now: `work_documents` (schema/work_documents_schema.sql, additive,
+  unapplied) with a mock fixture; `GET/POST /api/graph/projects/:id/workspace-documents`,
+  `GET/PUT /api/graph/documents/:id` for a page (DispatchAgentRun + initiative
+  scope to write); the Docs tab's **New ▾** (Document → an Untitled page that
+  opens at once; Presentation → the status-deck dialog); the page renders
+  Markdown and a steward writes title/body on it (explicit Save). Jest 3/3,
+  Playwright `initiative-files-new-document.spec.ts` 3/3 in both themes inside
+  a scoped mock world; evidence `.scratch/work-documents-2026-11-02/`.
+  Next slices: wire the Discussion's /doc Save to this store; the live
+  collaborative canvas (generalise `connectDocumentCanvas` from assessment to
+  orgiq and mount EditorShell on `/iq/documents/:id`); the Excalidraw whiteboard
+  (install `@excalidraw/excalidraw`, the `/diagram` ExcalidrawCanvas, `kind:
+  'whiteboard'`); list these pages in the Discussion's Files view.
+
 ## Retained technical debt
 
 These are recorded follow-ups, outside the completed local UI changes. They do

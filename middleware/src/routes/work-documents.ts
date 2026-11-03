@@ -4,8 +4,12 @@ import { currentLiveSession } from '../lib/live-principal.js';
 import { isAllowed } from '../lib/authz.js';
 import { requireInitiativeScope } from '../lib/initiative-scope.js';
 import { getWorkItem } from '../providers/work-items.js';
+import { getProject } from '../providers/projects.js';
 import { notifyWorkGraphChanged } from '../lib/work-graph/live.js';
-import { documentRecordHref, getDocumentRecord, linkWorkDocument, listWorkDocuments, searchDocumentRecords, unlinkWorkDocument } from '../providers/work-documents.js';
+import {
+  WORKSPACE_MARKDOWN_MAX, WORKSPACE_TITLE_MAX, createWorkspaceDocument, documentRecordHref, getDocumentRecord, getWorkspaceDocument, linkWorkDocument,
+  listWorkDocuments, listWorkspaceDocuments, searchDocumentRecords, unlinkWorkDocument, updateWorkspaceDocument, type WorkspaceDocumentKind,
+} from '../providers/work-documents.js';
 import type { Session } from '../lib/session.js';
 
 export const workDocumentsRouter = Router();
@@ -27,12 +31,69 @@ function emptyBody(req: Request) {
   if (req.body !== undefined && (req.body === null || typeof req.body !== 'object' || Array.isArray(req.body)
     || Object.keys(req.body as Record<string, unknown>).length)) throw new ValidationError('The document identity belongs in the path; do not supply titles, URLs or actors');
 }
+/** Every workspace page answers in the document-record shape the portal's one reader checks, plus its body and provenance. */
+const workspaceRecord = (page: Awaited<ReturnType<typeof getWorkspaceDocument>> & object) => ({ ...page, source: 'workspace', sourceUri: null, ingestedAt: page.createdAt });
+/** A workspace page's writable fields: a title up to 200 characters, markdown up to 200k. Anything else is refused. */
+function workspaceFields(req: Request, { create }: { create: boolean }): { title?: string; markdown?: string; kind: WorkspaceDocumentKind; workItemId: string | null } {
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ValidationError('A document body is required');
+  const allowed = create ? ['title', 'markdown', 'kind', 'workItemId'] : ['title', 'markdown'];
+  if (Object.keys(body as Record<string, unknown>).some(key => !allowed.includes(key))) throw new ValidationError(`Only ${allowed.join(', ')} may be set`);
+  const { title, markdown, kind, workItemId } = body as Record<string, unknown>;
+  if (title !== undefined && (typeof title !== 'string' || !title.trim() || title.length > WORKSPACE_TITLE_MAX)) throw new ValidationError(`A title is 1–${WORKSPACE_TITLE_MAX} characters`);
+  if (markdown !== undefined && (typeof markdown !== 'string' || markdown.length > WORKSPACE_MARKDOWN_MAX)) throw new ValidationError('Markdown is a string up to 200k characters');
+  if (create && title === undefined) throw new ValidationError('A title is required');
+  if (kind !== undefined && kind !== 'page') throw new ValidationError('Only page documents can be created here; whiteboards arrive with the canvas');
+  if (workItemId !== undefined && workItemId !== null) id(workItemId);
+  if (!create && title === undefined && markdown === undefined) throw new ValidationError('Nothing to change');
+  return { ...(title !== undefined ? { title: title.trim() } : {}), ...(markdown !== undefined ? { markdown } : {}), kind: 'page', workItemId: typeof workItemId === 'string' ? workItemId : null };
+}
 workDocumentsRouter.get('/documents/:documentId', asyncHandler(async (req, res) => {
   const session = await authority(req.session), documentId = id(req.params.documentId);
-  const doc = await getDocumentRecord(documentId);
+  // A workspace page answers with its body and provenance; a corpus record with its ingest metadata.
+  const [doc, page] = await Promise.all([getDocumentRecord(documentId), getWorkspaceDocument(documentId)]);
   await authority(session);
+  if (page) { res.set('Cache-Control', 'no-store').json(workspaceRecord(page)); return; }
   if (!doc) throw new AppError(404, 'Document record not found');
   res.set('Cache-Control', 'no-store').json({ ...doc, href: documentRecordHref(doc.id) });
+}));
+workDocumentsRouter.put('/documents/:documentId', asyncHandler(async (req, res) => {
+  const fields = workspaceFields(req, { create: false });
+  let session = await authority(req.session, true);
+  const documentId = id(req.params.documentId);
+  const page = await getWorkspaceDocument(documentId);
+  if (!page) throw new AppError(404, 'Workspace document not found');
+  if (!await requireInitiativeScope(req, res, page.projectId, { action: 'edit documents' })) return;
+  session = await authority(session, true);
+  const updated = await updateWorkspaceDocument(documentId, { ...(fields.title !== undefined ? { title: fields.title } : {}), ...(fields.markdown !== undefined ? { markdown: fields.markdown } : {}) });
+  await authority(session, true);
+  if (!updated) throw new AppError(404, 'Workspace document is no longer available');
+  void notifyWorkGraphChanged(page.projectId, 'work-document');
+  res.set('Cache-Control', 'no-store').json({ document: workspaceRecord(updated) });
+}));
+workDocumentsRouter.get('/projects/:projectId/workspace-documents', asyncHandler(async (req, res) => {
+  const session = await authority(req.session), projectId = id(req.params.projectId);
+  if (!await getProject(projectId)) throw new AppError(404, 'Initiative not found');
+  const documents = (await listWorkspaceDocuments(projectId)).map(workspaceRecord);
+  await authority(session);
+  res.set('Cache-Control', 'no-store').json({ projectId, documents });
+}));
+workDocumentsRouter.post('/projects/:projectId/workspace-documents', asyncHandler(async (req, res) => {
+  const fields = workspaceFields(req, { create: true });
+  let session = await authority(req.session, true);
+  const projectId = id(req.params.projectId);
+  if (!await getProject(projectId)) throw new AppError(404, 'Initiative not found');
+  if (fields.workItemId) {
+    const work = await getWorkItem(fields.workItemId);
+    if (!work || work.projectId !== projectId) throw new AppError(404, 'Work item not found on this initiative');
+  }
+  // Writing a page into an initiative is its stewards' call, like linking a record (DE-44 row 23).
+  if (!await requireInitiativeScope(req, res, projectId, { action: 'create documents' })) return;
+  session = await authority(session, true);
+  const document = await createWorkspaceDocument({ projectId, workItemId: fields.workItemId, title: fields.title!, kind: fields.kind, markdown: fields.markdown ?? '' }, session.sub);
+  await authority(session, true);
+  void notifyWorkGraphChanged(projectId, 'work-document');
+  res.status(201).set('Cache-Control', 'no-store').json({ projectId, document: workspaceRecord(document) });
 }));
 workDocumentsRouter.get('/work-items/:id/documents', asyncHandler(async (req, res) => {
   const session = await authority(req.session), workItemId = id(req.params.id);

@@ -33,3 +33,39 @@ export async function changeWorkDocument(workItemId: string, documentId: string,
     || typeof (method === 'PUT' ? result.created : result.removed) !== 'boolean') throw new Error('Document association was not confirmed');
   return result;
 }
+
+// ─── Workspace documents (2026-11-02) ────────────────────────────────────────
+// Pages written inside an initiative: the Docs tab's "New › Document".
+export interface WorkspaceDocument extends DocumentRecord {
+  projectId: string; workItemId: string | null; kind: 'page' | 'whiteboard'; markdown: string; createdBy: string; createdAt: string; updatedAt: string; href: string;
+}
+export function readWorkspaceDocument(value: unknown): WorkspaceDocument {
+  const base = record(value);
+  const row = value as Record<string, unknown>;
+  if (typeof row.projectId !== 'string' || (row.workItemId !== null && typeof row.workItemId !== 'string') || typeof row.markdown !== 'string'
+    || (row.kind !== 'page' && row.kind !== 'whiteboard') || typeof row.createdBy !== 'string' || typeof row.createdAt !== 'string' || typeof row.updatedAt !== 'string'
+    || row.href !== documentRecordHref(base.id)) throw new Error('Invalid workspace document');
+  return { ...base, projectId: row.projectId, workItemId: row.workItemId as string | null, kind: row.kind, markdown: row.markdown,
+    createdBy: row.createdBy, createdAt: row.createdAt, updatedAt: row.updatedAt, href: row.href };
+}
+/** True when a `/api/graph/documents/:id` answer is a workspace page rather than a corpus record. */
+export const isWorkspaceDocument = (value: unknown): boolean => !!value && typeof value === 'object' && (value as Record<string, unknown>).source === 'workspace';
+export function readWorkspaceDocuments(value: unknown, projectId: string): WorkspaceDocument[] {
+  const body = value as { projectId?: unknown; documents?: unknown } | null;
+  if (!body || body.projectId !== projectId || !Array.isArray(body.documents)) throw new Error('Document response changed initiative');
+  return body.documents.map(readWorkspaceDocument);
+}
+export async function createWorkspaceDocument(projectId: string, input: { title: string; workItemId?: string | null }): Promise<WorkspaceDocument> {
+  if (!validId(projectId)) throw new Error('Invalid initiative identity');
+  const result = await sendJson<{ projectId: string; document: unknown }>(`/api/graph/projects/${encodeURIComponent(projectId)}/workspace-documents`, 'POST',
+    { title: input.title, ...(input.workItemId ? { workItemId: input.workItemId } : {}) });
+  if (result.projectId !== projectId) throw new Error('Document response changed initiative');
+  return readWorkspaceDocument(result.document);
+}
+export async function updateWorkspaceDocument(id: string, patch: { title?: string; markdown?: string }): Promise<WorkspaceDocument> {
+  if (!validId(id)) throw new Error('Invalid document identity');
+  const result = await sendJson<{ document: unknown }>(`/api/graph/documents/${encodeURIComponent(id)}`, 'PUT', patch);
+  const doc = readWorkspaceDocument(result.document);
+  if (doc.id !== id) throw new Error('Document response changed identity');
+  return doc;
+}
