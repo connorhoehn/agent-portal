@@ -933,8 +933,6 @@ function ProjectDetailPage() {
         workspaceHref={workspaceHref}
         onOpenWorkItem={openItemFromPane}
         onOpenDecisions={() => setTab('decisions')}
-        onOpenDocuments={() => setTab('docs')}
-        onOpenActivity={() => setTab('activity')}
         discussion={(
           <Stack gap="none" className="h-full min-h-0" data-testid="initiative-live-discussion">
             <Inline gap="sm" justify="between" align="center" className="border-b border-border px-4 py-2">

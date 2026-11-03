@@ -20,17 +20,18 @@ chat. Do not work on them here.
 credentials, run cloud checks or deploy for this task. Earlier read-only checks
 made no AWS changes; they are not a remaining blocker or a continuation task.
 
-The portal pin is **ui-components 2.499.7-audit.0**, realtime **0.141.0**.
-App implementation commit **`8ff773f4`** is pushed on main.
-Library UI fixes are on main through `a33f309f`; audit packaging is source
-`2c9136b2`, release `081fc21a` on `codex/audit-package-release-20261102`.
-[Draft PR #1](https://github.com/connorhoehnslalom/ui-components/pull/1) contains
-only the packaging source change. It was isolated because another session is
-publishing composer work from the shared library checkout. All 339 runtime files
-match verified UI 2.499.6; the archive additionally includes the audit skill.
-Integrate the source-only PR when advancing the shared package, preserving the
-other session's composer changes. The isolated checkout is
-`/Users/connorhoehn/Projects/ui-components-audit-release`.
+The portal pin is **ui-components 2.500.1**, realtime **0.141.0**.
+App implementation commit **`8ff773f4`** is pushed on main; the Connections
+redesign is `5f0e9e1f`. The library's main now carries the audit packaging
+source (`54f0cfa4`, the former draft PR #1, applied on top of the other
+session's `47aec225` 2.500.0 build) and the accent SegmentedControl contrast fix
+with the 2.500.1 bump (`260e75d6`). The 2.500.1 archive in `portal/vendor/` was
+built and packed from a clean archive of `260e75d6` (not from the shared
+checkout, where another session had 2.500.2 staged); it ships the audit skill,
+so `resolveUiAuditSkill` keeps finding the installed copy. Neither library
+commit is pushed; the other session's 2.500.2 release will carry both. The
+isolated checkout `/Users/connorhoehn/Projects/ui-components-audit-release` is
+historical.
 
 ## What to preserve
 

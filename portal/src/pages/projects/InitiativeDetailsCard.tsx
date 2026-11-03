@@ -3,7 +3,7 @@
 // needs an additional read, under the same caller gate as the Sprints lens.
 
 import {
-  Avatar, IconButton, InfoIcon, KeyValue, Tooltip, Inline, Stack, StatusPill, T,
+  Avatar, IconButton, InfoIcon, KeyValue, Tooltip, Inline, Stack, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type { ProjectDetail } from '../project-detail/types';
@@ -33,11 +33,12 @@ export function InitiativeFacts({ input }: { input: InitiativeFactsInput }) {
     <Avatar name={value.name} src={value.avatarUrl} size={20} />
     <T size="sm" wrap>{value.name}</T>
   </Inline>;
-  return <KeyValue labelWidth="w-20" aria-label="Initiative facts" data-testid="initiative-facts" items={[
-    { label: 'Status', value: input.statusLabel ? <StatusPill label={input.statusLabel} tone={project.status === 'archived' ? 'neutral' : 'info'} variant="text" /> : 'Not set', muted: !input.statusLabel },
-    { label: 'Sprint', value: <Stack gap="none"><T size="sm" tone={sprint ? 'primary' : 'secondary'} wrap>{sprintText}</T>{endsOn && <T size="xs" tone="secondary">Ends {endsOn}</T>}</Stack> },
+  // The status is the header's badge beside the title, so the pane does not
+  // repeat it; the people sit on one wrapping line each (the user, 2026-11-02).
+  return <KeyValue labelWidth="w-16" aria-label="Initiative facts" data-testid="initiative-facts" items={[
+    { label: 'Sprint', value: <Inline gap="sm" align="baseline" wrap><T size="sm" tone={sprint ? 'primary' : 'secondary'} wrap>{sprintText}</T>{endsOn && <T size="xs" tone="secondary">Ends {endsOn}</T>}</Inline> },
     { label: 'Owner', value: input.owner ? person(input.owner) : 'Unassigned', muted: !input.owner },
-    { label: 'SMEs', value: input.smes.length ? <Stack gap="xs">{input.smes.map(value => <Inline key={value.name}>{person(value)}</Inline>)}</Stack> : 'None assigned', muted: input.smes.length === 0 },
+    { label: 'SMEs', value: input.smes.length ? <Inline gap="md" align="center" wrap>{input.smes.map(value => <Inline key={value.name}>{person(value)}</Inline>)}</Inline> : 'None assigned', muted: input.smes.length === 0 },
   ]} />;
 }
 

@@ -21,7 +21,7 @@ import {
   type ActionRowColumn,
 } from '@connorhoehnslalom/ui-components';
 import {
-  Button, Chip, DataTable, Inline, InlineAlert, Link as ExternalLink, MetaLine, PageSection,
+  Button, Chip, DataTable, Inline, InlineAlert, Link as ExternalLink, MetaLine,
   SegmentedControl, Stack, StatusPill, T, type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -186,17 +186,14 @@ export function InitiativeRail({
       : null,
   ];
 
+  // The Agents tab names this section (the user, 2026-11-02: a tab should not
+  // repeat its title as a heading inside it), so the panel opens on one row:
+  // the view and window switches, with the spend/repo meta and the bots
+  // action at the far end, then the one table.
   return (
-    <PageSection size="sm"
-      title="Agents"
-      actions={view === 'bots' && canManageBots
-        ? <Button variant="link" onClick={() => navigate('/admin/bots')}>New bot</Button>
-        : undefined}
-      data-testid="initiative-agents"
-    >
-      <Stack gap="sm">
-        {meta.some(Boolean) && <MetaLine size="sm" tone="secondary" items={meta} data-testid="initiative-agents-meta" />}
-        <Inline gap="sm" wrap data-testid="initiative-agents-controls">
+    <Stack gap="sm" data-testid="initiative-agents">
+      <Inline gap="sm" justify="between" align="center" wrap data-testid="initiative-agents-controls">
+        <Inline gap="sm" align="center" wrap>
           <SegmentedControl aria-label="Runs, bots or compute" options={VIEW_OPTIONS}
             value={view} onChange={setView} data-testid="initiative-agents-view" />
           {view === 'runs' && (
@@ -204,6 +201,11 @@ export function InitiativeRail({
               value={String(days)} onChange={(v) => setDays(Number(v))} data-testid="initiative-agents-range" />
           )}
         </Inline>
+        <Inline gap="sm" align="center" wrap className="min-w-0">
+          {meta.some(Boolean) && <MetaLine size="sm" tone="secondary" items={meta} data-testid="initiative-agents-meta" />}
+          {view === 'bots' && canManageBots && <Button variant="link" onClick={() => navigate('/admin/bots')}>New bot</Button>}
+        </Inline>
+      </Inline>
 
         {view === 'runs' && (
           <>
@@ -257,7 +259,6 @@ export function InitiativeRail({
             <LabMemoryRailCard initiativeId={initiativeId} />
           </Stack>
         )}
-      </Stack>
-    </PageSection>
+    </Stack>
   );
 }

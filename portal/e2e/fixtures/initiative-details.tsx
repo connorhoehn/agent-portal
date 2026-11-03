@@ -31,7 +31,7 @@ function Surface() {
         <div className="w-75 border border-border" data-testid="small-pane-header"><PaneHeader tabs={[{ id: 'discussion', label: 'Discussion' }, { id: 'agent', label: 'Agent' }, { id: 'details', label: 'Details' }]} value={smallTab} onValueChange={setSmallTab} trailing={<IconButton aria-label="Small pane files" variant="outline" icon="d" size="sm" />} /></div>
         <Inline gap="sm" data-testid="native-theme-actions"><Button size="sm">Primary</Button><Button size="sm" variant="secondary">Secondary</Button><Button size="sm" variant="ghost">Ghost</Button><Button size="sm" variant="danger-solid">Destructive</Button><Button size="sm" variant="secondary" disabled>Disabled</Button><IconButton aria-label="Primary icon" size="sm" variant="primary" icon="i" /><IconButton aria-label="Pressed icon" size="sm" variant="outline" aria-pressed icon="i" /></Inline>
       </Stack>
-      <InitiativeSidePane control={control} subtitle={facts.project.name} facts={facts} overview={overview} discussion={<p className="px-4 py-3">Inert initiative discussion</p>} agent={<p>Inert agent</p>} decisions={[]} workItemIds={[]} workspaceHref="/iq/search?scope=p-observability" onOpenWorkItem={setOpened} onOpenDocuments={() => setOpened('docs')} onOpenActivity={() => setOpened('activity')} onOpenDecisions={() => setOpened('decisions')} />
+      <InitiativeSidePane control={control} subtitle={facts.project.name} facts={facts} overview={overview} discussion={<p className="px-4 py-3">Inert initiative discussion</p>} agent={<p>Inert agent</p>} decisions={[]} workItemIds={[]} workspaceHref="/iq/search?scope=p-observability" onOpenWorkItem={setOpened} onOpenDecisions={() => setOpened('decisions')} />
     </SidePaneSplit>
   </Stack>;
 }

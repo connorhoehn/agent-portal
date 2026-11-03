@@ -27,7 +27,7 @@ import {
   SidePane, usePaneState, useSidePane, useSidePaneHost, type PaneStateControl, type PaneTabSpec, type PersonDetail, type PersonEvidenceDocument,
 } from '@connorhoehnslalom/ui-components';
 import {
-  ActivityIcon, ArrowRightIcon, Button, Chip, DetailSection, DocumentIcon, EmptyState, IconButton, Inline, InlineAlert, KeyValue, LoadingState, MetaLine, PageSection, Stack, StatusPill, T, Tooltip,
+  Button, Chip, DetailSection, EmptyState, Inline, InlineAlert, KeyValue, LoadingState, MetaLine, Stack, StatusPill, T,
 } from '@connorhoehnslalom/ui-components/shared';
 import { ConversationViewsSlot } from '../../components/chat/useChatPins';
 import { ConversationPaneBody, useConversationPane } from '../../components/shell/ConversationPane';
@@ -59,6 +59,14 @@ export const INITIATIVE_PANE_TABS: readonly PaneTabSpec[] = [
 export type InitiativePaneTab = 'discussion' | 'agent' | 'details' | 'log' | 'decision' | 'person' | 'brief';
 const RECORD_KIND: Partial<Record<InitiativePaneTab, string>> = { brief: 'work-item', log: 'run', decision: 'decision', person: 'person' };
 const TAB_LABEL = Object.fromEntries(INITIATIVE_PANE_TABS.map((t) => [t.id, t.label])) as Record<InitiativePaneTab, string>;
+/**
+ * A record tab shows a record, so its title names the record's kind and the
+ * initiative drops to the second line. The three resting tabs are the
+ * initiative's own: the initiative is the title and the selected tab is the
+ * section — "Initiative details" over a Details tab said it twice (the user,
+ * 2026-11-02).
+ */
+const RECORD_TITLE: Partial<Record<InitiativePaneTab, string>> = { log: 'Run log', decision: 'Decision', person: 'Person' };
 
 export interface InitiativePaneControl {
   pane: PaneStateControl;
@@ -109,7 +117,7 @@ export interface InitiativeSidePaneProps {
   discussion: ReactNode;
   /** Persistent run output, with input owned by the content column. */
   agent: ReactNode;
-  /** The second line under the pane's title. */
+  /** The initiative's name: the pane's title on its own tabs, its second line under a record's. */
   subtitle: string;
   workItemLabel?: string;
   facts: InitiativeFactsInput;
@@ -121,8 +129,6 @@ export interface InitiativeSidePaneProps {
   workspaceHref: string;
   onOpenWorkItem: (id: string) => void;
   onOpenDecisions: () => void;
-  onOpenDocuments: () => void;
-  onOpenActivity: () => void;
 }
 
 export function InitiativeSidePane(props: InitiativeSidePaneProps) {
@@ -135,8 +141,8 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
   // shown while Discussion is the tab — never a second tab bar under this one.
   const [viewsSlot, setViewsSlot] = useState<HTMLElement | null>(null);
   return (
-    <SidePane title={tab === 'discussion' && inHuddle ? 'Huddle dialogue' : tab === 'details' ? 'Initiative details' : TAB_LABEL[tab]}
-      subtitle={tab === 'brief' ? props.workItemLabel ?? subtitle : tab === 'discussion' && inHuddle ? huddle?.title : subtitle}
+    <SidePane title={tab === 'discussion' && inHuddle ? 'Huddle dialogue' : tab === 'brief' ? TAB_LABEL.brief : RECORD_TITLE[tab] ?? subtitle}
+      subtitle={tab === 'brief' ? props.workItemLabel ?? subtitle : tab === 'discussion' && inHuddle ? huddle?.title : RECORD_TITLE[tab] ? subtitle : undefined}
       closeLabel={tab === 'brief' ? 'Close brief preview' : 'Close initiative pane'} explores={control.pane.away}
       paneId={tab === 'brief' ? 'work-item-brief' : 'initiative-dialogue'} widthPx={tab === 'brief' ? { min: 960, max: 1280 } : { min: 480, max: 960 }}
       presentation={tab === 'brief' ? 'document' : undefined}
@@ -171,7 +177,11 @@ export function InitiativeSidePane(props: InitiativeSidePaneProps) {
 
 // ─── Details ────────────────────────────────────────────────────────────────
 
-export function InitiativeDetailsSummary({ facts, overview, onOpenWorkItem, onOpenDocuments, onOpenActivity }: Pick<InitiativeSidePaneProps, 'facts' | 'overview' | 'onOpenWorkItem' | 'onOpenDocuments' | 'onOpenActivity'>) {
+// Compact (the user, 2026-11-02: "no waste or unnecessary stuff"): the
+// summary, the facts the header does not already show, and ONE work action
+// whose title is the link. Docs and Activity are the page's own tabs, so the
+// pane no longer repeats them as buttons.
+export function InitiativeDetailsSummary({ facts, overview, onOpenWorkItem }: Pick<InitiativeSidePaneProps, 'facts' | 'overview' | 'onOpenWorkItem'>) {
   const navigate = useNavigate();
   const ready = overview.state === 'ready' ? overview : null;
   const next = ready?.upNext[0] ?? null;
@@ -182,28 +192,25 @@ export function InitiativeDetailsSummary({ facts, overview, onOpenWorkItem, onOp
     if (item) onOpenWorkItem(item); else navigate(href);
   };
   return (
-    <Stack gap="lg">
-      {facts.project.summary && <T size="sm" tone="secondary" wrap as="p" data-testid="initiative-details-summary">{facts.project.summary}</T>}
+    <Stack gap="md">
+      {facts.project.summary && <T size="sm" tone="secondary" wrap as="p" className="line-clamp-3" title={facts.project.summary} data-testid="initiative-details-summary">{facts.project.summary}</T>}
       <InitiativeFacts input={facts} />
-      {action && <DetailSection as="h2" variant="heading" title={risks.length ? 'Needs attention' : 'Next work item'} className="border-t border-border pt-4" data-testid="initiative-details-action">
-        <Stack gap="sm">
-          <T size="sm" weight="medium" wrap>{action.title}</T>
-          <Inline gap="sm" align="center">
-            {action.key && <Chip size="md" tone="neutral" mono>{action.key}</Chip>}
-            <T size="xs" tone="secondary" wrap>{action.assigneeName ?? 'Unassigned'}{action.points ? ` · ${action.points}` : ''}</T>
-          </Inline>
-          {'reason' in action && action.reason && <T size="sm" tone="secondary" wrap>{action.reason}</T>}
-          <Inline><Button variant="secondary" size="sm" onClick={() => openItem(action.href)} aria-label={`Open work item ${action.key ?? action.title}`}>
-            {action.key ? `Open ${action.key}` : 'Open work item'}<ArrowRightIcon size={14} />
-          </Button></Inline>
+      {action && <DetailSection as="h2" variant="heading" title={risks.length ? 'Needs attention' : 'Next work item'} className="border-t border-border pt-3" data-testid="initiative-details-action">
+        <Stack gap="xs">
+          <Button variant="link" size="sm" onClick={() => openItem(action.href)} aria-label={`Open work item ${action.key ?? action.title}`}
+            className="h-auto justify-start whitespace-normal px-0 text-left">
+            <T size="sm" weight="medium" tone="inherit" wrap>{action.title}</T>
+          </Button>
+          <MetaLine size="sm" tone="secondary" items={[
+            action.key ? <Chip key="key" size="xs" tone="neutral" mono>{action.key}</Chip> : null,
+            action.assigneeName ?? 'Unassigned',
+            action.points || null,
+          ]} />
+          {'reason' in action && action.reason && <T size="xs" tone="secondary" wrap>{action.reason}</T>}
         </Stack>
       </DetailSection>}
       {!ready && <T size="sm" tone="secondary">{overview.state === 'loading' ? 'Loading work…' : 'Work could not be read.'}</T>}
       {ready && !action && <T size="sm" tone="secondary">No work is waiting for attention.</T>}
-      <Inline gap="sm" className="border-t border-border pt-3">
-        <Button variant="ghost" size="sm" onClick={onOpenDocuments} aria-label="Open initiative docs and files" data-testid="initiative-details-docs"><DocumentIcon size={14} />Docs and files</Button>
-        <Button variant="ghost" size="sm" onClick={onOpenActivity} aria-label="Open initiative activity" data-testid="initiative-details-activity"><ActivityIcon size={14} />Activity</Button>
-      </Inline>
     </Stack>
   );
 }

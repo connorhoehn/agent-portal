@@ -61,7 +61,8 @@ for (const theme of ['light', 'dark']) test(`work layout and dedicated brief: ${
     await expect(toggle).toBeFocused();
     await page.setViewportSize({ width: 1680, height: 1050 });
     await page.getByTestId('initiative-details-trigger').click();
-    await expect(page.getByText('Initiative details', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('initiative-pane-tab-details')).toHaveAttribute('aria-selected', 'true');
+    await expect(pane).not.toContainText('Initiative details');
     await pane.getByRole('button', { name: /Open work item ORG-OBS-11/ }).click();
     await expect(pane).toBeHidden();
     await expect(page.getByTestId('work-item-detail')).toBeFocused();

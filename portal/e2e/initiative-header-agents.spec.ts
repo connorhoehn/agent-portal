@@ -160,8 +160,11 @@ test('Agents tab: one table of runs under one control row, at the body type step
   const range = (await section.getByTestId('initiative-agents-range').boundingBox())!;
   expect(Math.abs(view.y - range.y)).toBeLessThan(2);
 
-  // Type: 14/600 heading, 14/400 body, 12/400 meta.
-  expect(await typeOf(section.getByRole('heading', { name: 'Agents' }))).toEqual({ size: '14px', weight: '600' });
+  // The Agents tab names the section: no heading repeats it (the user, 2026-11-02); the meta and the switches share the first row.
+  await expect(section.getByRole('heading')).toHaveCount(0);
+  const meta = (await section.getByTestId('initiative-agents-meta').boundingBox())!;
+  expect(Math.abs(meta.y + meta.height / 2 - (view.y + view.height / 2))).toBeLessThan(8);
+  // Type: 14/400 body, 12/400 meta.
   expect(await typeOf(rows.first().locator('td').nth(2).locator('span').first())).toEqual({ size: '14px', weight: '400' });
   expect(await typeOf(rows.first().getByTestId('agents-run-agent'))).toEqual({ size: '12px', weight: '400' });
   expect(await typeOf(section.getByTestId('initiative-agents-meta'))).toEqual({ size: '12px', weight: '400' });

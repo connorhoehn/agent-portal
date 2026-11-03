@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { OBS_PROJECT } from '../src/pages/project-detail/__tests__/obsFixture';
+const facts = { project: OBS_PROJECT };
 test.use({ baseURL: process.env.PANE_PREVIEW_ORIGIN ?? 'http://127.0.0.1:5183' });
 async function mount(page: Page, query = '') {
   const errors: string[] = [], mutations: string[] = [], reads: string[] = [];
@@ -30,8 +32,10 @@ test('info opens Details directly; Shift+I reveals it without disrupting editors
   await page.getByRole('button', { name: 'Discussion tab' }).focus(); await page.keyboard.press('Shift+I');
   await expect(page.getByTestId('initiative-pane-tab-details')).toHaveAttribute('aria-selected', 'true');
   await expect(draft).toHaveValue('Preserved draftI');
-  await page.getByTestId('initiative-details-docs').click(); await expect(page.getByTestId('fixture-opened')).toHaveText('docs');
-  await page.getByTestId('initiative-details-activity').click(); await expect(page.getByTestId('fixture-opened')).toHaveText('activity');
+  // Docs and Activity are the page's own tabs: the pane no longer repeats them as buttons, and it does not repeat the Details tab as its title.
+  await expect(page.getByTestId('initiative-details-docs')).toHaveCount(0); await expect(page.getByTestId('initiative-details-activity')).toHaveCount(0);
+  await expect(page.getByText('Initiative details', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(facts.project.name, { exact: true })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('details-curated-work.png') });
   expect(result.errors).toEqual([]); expect(result.mutations).toEqual([]); expect(result.reads.every(path => path === '/api/sprints')).toBe(true);
 });

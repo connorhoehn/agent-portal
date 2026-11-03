@@ -8,6 +8,17 @@ Do not request credentials, run AWS checks or deploy as part of this work.
 
 ## Active work
 
+- [x] **WORK-UI-06 — Initiative tab panels and Details pane (2026-11-02, later).**
+  A tab names its panel, so the Agents panel dropped its repeated "Agents"
+  heading and opens on one row: Runs/Bots/Compute and the window switches,
+  the spend/repo meta and the bots action at the far end, then the table. The
+  initiative pane's title is the initiative on its own tabs (Discussion, Agent,
+  Details) and the record kind on a record tab; "Initiative details" over a
+  Details tab is gone. Details is compact: summary (three-line clamp), Sprint /
+  Owner / SMEs on wrapping lines (Status is the header's badge), one work
+  action whose title is the link, and no Docs / Activity buttons (the page's
+  own tabs). `portal/e2e/initiative-agents-pane-compact.spec.ts` walks both
+  themes as a clone; evidence `.scratch/initiative-redesign-2026-11-02/`.
 - [x] **WORK-UI-05 — Connections controls and person inspector.** Replace the
   nested graph card with the shell's right pane; remove duplicate person copy
   and single-selection Ask actions. Relationship/team facets stay compact,
@@ -82,9 +93,11 @@ the follow-ups below remain explicitly open.
 These are recorded follow-ups, outside the completed local UI changes. They do
 not authorize cloud work.
 
-- [ ] Fix the shared accent SegmentedControl's dark-theme selected-label contrast
-  (4.13:1 in the Connections proposal). Connections uses the passing neutral
-  variant; [evidence](connections-layout-2026-11-02.md) retains the failed check.
+- [x] Fix the shared accent SegmentedControl's dark-theme selected-label contrast
+  (4.13:1 in the Connections proposal). ui-components `260e75d6` (2.500.1) paints
+  the chosen accent segment with `text-primary-fg` (7.30:1 dark, 4.55:1 light);
+  the app pins 2.500.1 and the Connections checks were re-run on it
+  ([evidence](connections-layout-2026-11-02.md)).
 - [ ] The durable Design provider is not wired. Historical rows need trusted
   canonical IDs; unlinked signers need a schema representation before migration.
 - [ ] Assessment contributor JSON lacks canonical IDs. Its separate in-progress
@@ -96,9 +109,29 @@ not authorize cloud work.
 - [ ] Refresh the 66 stale historical Work journey logs after their corresponding
   changes settle and map the missing `orgiq:admin` role. Targeted seals do not
   certify the entire 125-journey catalog.
-- [ ] Integrate the shared audit packaging [source PR](https://github.com/connorhoehnslalom/ui-components/pull/1)
-  alongside the other session's composer release. This app pins the independently
-  verified archive that already contains the skill.
+- [x] Integrate the shared audit packaging [source PR](https://github.com/connorhoehnslalom/ui-components/pull/1)
+  alongside the other session's composer release: applied to library main as
+  `54f0cfa4` under the 2.500.0 build; the pinned 2.500.1 archive ships the skill.
+- [ ] The initiative journey (five roles) was re-walked on 2026-11-02 after the
+  panel/pane redesign and fails honestly on one audit finding at every step:
+  the Discussion composer's recipient trigger (`…:discussion-recipient`, the
+  library `ConversationComposer`'s small default Select) paints 28px right
+  padding against the skill's own `control.select-inset-field-sm` profile (6px).
+  The library's dist is byte-equivalent across the 2.499.7-audit.0 → 2.500.1
+  move and no app class touches it, so this is a library contract conflict
+  (fix the composer trigger or the contract upstream); the logs are kept as
+  failing walks, not sealed. The five Search walks pass and are sealed.
+- [ ] Twelve pre-existing Playwright failures in the initiative area, observed
+  twice (parallel and serial) on 2026-11-02 after the shared-checkout commit
+  `da67f854` and before this session's redesign: `initiative-details-pane.spec.ts`
+  (a pane tab named Docs that the pane no longer has; the primary rail reads
+  collapsed), `initiative-header-agents.spec.ts` (expects scheduled runs first,
+  but `agentRunsModel.ts` groups by work item with bot missions last; header
+  density at the four-pane width), `pane-header.spec.ts` (the Conversation views
+  Files switch and the first chat message never appear) and
+  `work-layout-refinement.spec.ts` (rail gutter 320 vs 264). The redesign's own
+  spec and fixture spec pass; attribute these to the shell/conversation changes
+  or stale expectations before touching them.
 
 ## Delivered in this conversation
 
@@ -127,7 +160,7 @@ not authorize cloud work.
 - [Composer/gallery validation](composer-gallery-2026-11-02.md)
 - [Social collection validation](social-collection-controls-2026-11-02.md)
 
-The app currently pins ui-components 2.499.7-audit.0. Fix shared behavior in the library,
+The app currently pins ui-components 2.500.1. Fix shared behavior in the library,
 verify the packed distribution and rendered app, record exact remaining findings,
 and commit/push only this session's changes. Other work in the shared checkout
 remains independently owned.
