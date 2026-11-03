@@ -1,5 +1,5 @@
 import { test, expect, type Locator } from '@playwright/test';
-import { loginAs } from './realSession';
+import { loginAs, cloneIdentity, deleteClone } from './realSession';
 
 // Live exploration in the Search workspace's People graph (the old /iq/explore
 // behaviour): click a person -> their neighbourhood is drawn and the view keeps
@@ -17,7 +17,12 @@ async function insideCanvas(node: Locator, canvas: Locator) {
   expect(n!.x + n!.width).toBeLessThanOrEqual(c!.x + c!.width + 1); expect(n!.y + n!.height).toBeLessThanOrEqual(c!.y + c!.height + 1);
 }
 
-test.beforeEach(async ({ context, baseURL }) => { await loginAs(context, 'u-theo', baseURL); });
+let cloneId: string;
+test.beforeEach(async ({ context, baseURL }) => {
+  cloneId=await cloneIdentity(context.request,'u-theo','connections-exploration');
+  await loginAs(context,cloneId,baseURL);
+});
+test.afterEach(async ({ context })=>{if(cloneId)await deleteClone(context.request,cloneId);});
 
 test('clicking a person explores their neighbourhood and keeps them in view; clicking a neighbour widens it', async ({ page }) => {
   await page.goto('/iq/search?type=person&tab=connections');
@@ -29,7 +34,7 @@ test('clicking a person explores their neighbourhood and keeps them in view; cli
   const firstName = (await first.getAttribute('aria-label'))!.split(' · ')[0];
   await first.click();
   await expect(page).toHaveURL(/selection=person%3Ap-\d+/);
-  await expect(page).toHaveURL(/detail=p-\d+/);
+  await expect(page).toHaveURL(/paneRecord=person%3Ap-\d+/);
   await expect.poll(() => peopleCount(panel)).toBeLessThan(whole);
   const afterFirst = await peopleCount(panel);
   await page.waitForTimeout(800);
@@ -53,12 +58,14 @@ test('clicking a person explores their neighbourhood and keeps them in view; cli
 test('Explore keeps relationship lens, capped-aware count and detail without presenting generated daily status as presence', async ({ page }) => {
   await page.goto('/iq/search?type=person&tab=connections&detail=p-002&selection=person:p-002');
   const panel = page.getByTestId('search-people-graph');
-  await expect(page.getByTestId('search-person-card')).toBeVisible();
+  await expect(page.getByTestId('search-pane-record')).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Filter by presence' })).toHaveCount(0);
-  await panel.getByRole('radio', { name: 'Hierarchy' }).click();
+  await panel.getByRole('combobox',{name:'Relationship lens'}).click();
+  await page.getByRole('option',{name:'Hierarchy',exact:true}).click();
   await expect(page).toHaveURL(/entities=hierarchy/);
   await expect(panel.getByTestId('search-people-count')).toContainText(/hierarchy edges/);
-  await panel.getByRole('radio', { name: 'All' }).click();
+  await panel.getByRole('combobox',{name:'Relationship lens'}).click();
+  await page.getByRole('option',{name:'All',exact:true}).click();
   await expect(page).not.toHaveURL(/entities=/);
 });
 

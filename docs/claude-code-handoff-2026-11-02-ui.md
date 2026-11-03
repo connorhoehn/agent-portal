@@ -1,9 +1,14 @@
 # Work / Social UI handoff — 2026-11-02
 
 Start with [the current checklist](work-social-ui-todo.md), then
-[the verification report](work-social-ui-verification-2026-11-02.md). The user's
-latest request was the nested workspace search reached from an initiative work
-item. That implementation is committed in `b1805b6e`: a scoped visit opens Work,
+[the verification report](work-social-ui-verification-2026-11-02.md). The latest
+Connections redesign is documented in [this follow-up](connections-layout-2026-11-02.md):
+one shell inspector, compact relationship/team facets, hidden graph settings,
+and a Force/Radial radio group beside the canvas. Older selection/detail links
+still work; an explicit `pane=closed` preserves a dismissed inspector.
+
+The preceding nested workspace search implementation is committed in
+`b1805b6e`: a scoped visit opens Work,
 record-type navigation selects one collection, and All is one ranked list.
 Initiative scope survives every switch; expanding scope stops at people rather
 than pulling in unrelated work through a contributor.

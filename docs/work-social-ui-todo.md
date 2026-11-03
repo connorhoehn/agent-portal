@@ -8,6 +8,11 @@ Do not request credentials, run AWS checks or deploy as part of this work.
 
 ## Active work
 
+- [x] **WORK-UI-05 — Connections controls and person inspector.** Replace the
+  nested graph card with the shell's right pane; remove duplicate person copy
+  and single-selection Ask actions. Relationship/team facets stay compact,
+  Force/Radial stays beside the canvas, and advanced sliders live in settings.
+  [Design and verification](connections-layout-2026-11-02.md).
 - [x] **WORK-UI-04 — scoped workspace organization.** The Workspace entry on a
   project work item opens `/iq/search?scope=p-llm-platform`, which stacks People,
   Work and successive content sections. Check the entry point and replace the
@@ -77,6 +82,9 @@ the follow-ups below remain explicitly open.
 These are recorded follow-ups, outside the completed local UI changes. They do
 not authorize cloud work.
 
+- [ ] Fix the shared accent SegmentedControl's dark-theme selected-label contrast
+  (4.13:1 in the Connections proposal). Connections uses the passing neutral
+  variant; [evidence](connections-layout-2026-11-02.md) retains the failed check.
 - [ ] The durable Design provider is not wired. Historical rows need trusted
   canonical IDs; unlinked signers need a schema representation before migration.
 - [ ] Assessment contributor JSON lacks canonical IDs. Its separate in-progress

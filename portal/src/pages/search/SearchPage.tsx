@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { parseAskScope } from '../../lib/askScope';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
-  CanvasPaneLayout, CitedRecordList, ConnectionPathStrip, DepartmentChips, DepartmentInsightStrip, ExpandIcon, ExplorerLayout, GraphSearchBox,
+  CitedRecordList, ConnectionPathStrip, DepartmentInsightStrip, ExplorerLayout, GraphSearchBox,
   ORG_FIT_MIN_ZOOM, OrgGraph, RailNavList, RailSection, RecordGraph, RecordGraphCard, ScopeHeader, ViewportFillRegion,
   SidePane, useSidePaneHost, findConnectionPath, indexBusFactorFindings, paneRecordKey, parsePaneRecord, readPaneState, recordResultKey, visiblePaneTabs, writePaneState,
   type PaneState, type PaneTabSpec, type PathHop,
@@ -10,11 +10,10 @@ import {
   type OrgGraphHandle, type RailNavListItem, type RecordGraphEdge, type RecordGraphRecord,
 } from '@connorhoehnslalom/ui-components';
 import {
-  Banner, Button, ChatIcon, CloseIcon, DropdownMenu, EmptyState, FilterChip, GraphIcon, IconButton, Inline, Input, LoadingState,
-  SegmentedControl, Stack, T, Tooltip, useHeaderDensity, useRailFold,
+  Banner, Button, ChatIcon, CloseIcon, EmptyState, FilterChip, FilterPopover, GraphIcon, IconButton, Inline, Input, LoadingState,
+  SegmentedControl, Select, Slider, SlidersIcon, Stack, T, Tooltip, useHeaderDensity, useRailFold,
 } from '@connorhoehnslalom/ui-components/shared';
 import InvokePage, { type SearchConversationAPI } from '../InvokePage';
-import { RangeSliderFrame } from '../RangeSliderFrame';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { DirectoryPersonCard as PersonDetailCard } from '../../components/people/DirectoryPersonCard';
@@ -53,7 +52,7 @@ const SEARCH_PANE_TABS: readonly PaneTabSpec[] = [
   { id: 'chat', label: 'Conversation' },
   { id: 'record', label: 'Record', recordKinds: ['person'] },
 ];
-/** No `pane` param: the pane is closed (the conversation stays in the content column). */
+/** Explicit closed state; a lone selected person otherwise opens the inspector. */
 const PANE_CLOSED = 'closed';
 /** The pane params for a state, in the shape `update()` batches with the page's own params. */
 function paneParams(state: PaneState): Record<string, string | null> {
@@ -76,7 +75,7 @@ export default function SearchPage() {
     const q=nextQueryAfterSend({q:previous.get('q'),attached:parseRecordKeys(previous.get('context')).length,selected:parseRecordKeys(previous.get('selection')).length,text});
     if(q!==previous.get('q')){ if(q) next.set('q',q); else next.delete('q'); next.delete('offset'); }
     // With the conversation in the right pane the page keeps its tab (the graph stays).
-    if(!previous.get('pane')) next.set('tab',nextTabAfterSend(previous.get('tab')));return next;
+    if(!previous.get('pane')||previous.get('pane')===PANE_CLOSED) next.set('tab',nextTabAfterSend(previous.get('tab')));return next;
   }),[setParams]);
   return <InvokePage contextRefs={refs} askScope={about} onSubmitted={submitted} renderWorkspace={api=><SearchWorkspace api={api} />}
     renderAnswerEvidence={toolCalls=><AnswerEvidence toolCalls={toolCalls} />} />;
@@ -216,7 +215,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   function focusComposer(){composerRef.current?.querySelector<HTMLElement>('[contenteditable=true],textarea,input')?.focus();}
   // Ask about selection opens the conversation in the shell's right pane
   // (decision 9 amendment): the reply thread lives there (the one composer stays docked in the content column), and a
-  // lone person rides along as the pane's record tab instead of a docked card.
+  // selected person remains available as a record tab in that same pane.
   function askAbout(keys:string[]){
     const person=keys.length===1&&keys[0]!.startsWith('person:')?keys[0]!:null;
     update({context:keys.join(','),...paneParams({tab:'chat',record:parsePaneRecord(person)}),detail:null,...(tab==='answer'?{tab:'connections'}:{})});
@@ -224,12 +223,18 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
     requestAnimationFrame(()=>requestAnimationFrame(focusComposer));
   }
   const openInPane=(key:string)=>update({...paneParams({tab:'record',record:parsePaneRecord(key)}),detail:null,...(tab==='answer'?{tab:'connections'}:{})});
-  const closePane=()=>update(paneParams({tab:PANE_CLOSED,record:null}));
+  const closePane=()=>update({pane:PANE_CLOSED,paneRecord:null,detail:null});
   const askSelection=()=>askAbout(selected);
   // The conversation is in the right pane on Results and Connections; the
   // Answer tab IS the conversation, so there it stays in the content column.
   // The library pane contract (ui-components 2.438 usePaneState): `?pane=chat`, `?pane=record&paneRecord=person:<id>`.
-  const paneState=readPaneState(params,SEARCH_PANE_TABS,PANE_CLOSED);
+  const requestedPane=readPaneState(params,SEARCH_PANE_TABS,PANE_CLOSED);
+  // A person opens in the shell inspector, including old selection/detail URLs.
+  // Explicitly closing it keeps the graph selection and survives a reload.
+  const implicitPerson=tab==='connections'&&view==='org'&&!params.has('pane')
+    ? params.get('detail') ?? (focusIds.length===1?focusIds[0]:null) : null;
+  const paneState:PaneState=implicitPerson
+    ? {tab:'record',record:{kind:'person',id:implicitPerson}} : requestedPane;
   const paneHosted=paneState.tab!==PANE_CLOSED&&tab!=='answer';
   const paneRecordRef=paneState.record?paneRecordKey(paneState.record):null;
   const paneRecordId=paneState.record?.id ?? null;
@@ -318,11 +323,13 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
         onShowWholeOrgChange={all=>update({graphAll:all?'1':null},true)}
         // Clearing the last person keeps the org graph (People filter) instead of
         // flipping to the record view mid-gesture.
-        onSelectionChange={(keys,detail)=>update({selection:keys.length?keys.join(','):null,...(detail!==undefined?{detail}:{}),...(!keys.length&&type!=='person'?{type:'person'}:{})},true)}
+        onSelectionChange={(keys,detail)=>update({selection:keys.length?keys.join(','):null,
+          ...(detail!==undefined?{detail:null,...(detail?paneParams({tab:'record',record:{kind:'person',id:detail}}):{pane:PANE_CLOSED,paneRecord:null})}:{}),
+          ...(!keys.length&&type!=='person'?{type:'person'}:{})},true)}
         onAsk={askAbout}
         layout={params.get('layout')==='radial'?'radial':'force'} onLayoutChange={layout=>update({layout},true)}
-        lens={params.get('entities')} onLensChange={lens=>update({entities:lens},true)} detailId={params.get('detail')} onDetailChange={id=>update({detail:id},true)}
-        detailInPane={paneHosted} onOpenInPane={id=>openInPane(`person:${id}`)} onOpenPage={id=>navigate(personPageHref(id))} />
+        lens={params.get('entities')} onLensChange={lens=>update({entities:lens},true)}
+        detailId={paneTab==='record'?paneRecordId:null} detailInPane={paneHosted} onOpenInPane={id=>{openInPane(`person:${id}`);paneHost.reveal();}} />
     : <Stack gap="none" className="flex-1 min-h-0 px-6">
       {!!data?.partial?.length&&<Banner variant="warning" title={partialSourcesTitle(data.partial)} data-testid="search-partial-sources">{data.partial.join(' · ')}</Banner>}
       {error?<EmptyState title="Connections unavailable" description={error} actionLabel="Retry" onAction={refresh}/>:
@@ -366,7 +373,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   // The page's ONE composer, docked at the bottom of the content column whether or not the
   // conversation's thread is in the right pane (the user, 2026-10-07: the pane keeps the dialogue only).
   const composer=<Stack ref={composerRef} gap="none" className="shrink-0 min-w-0" data-testid="search-composer-dock">
-    <SearchComposer calls={!paneHosted} value={api.input} onChange={api.setInput} onSubmit={submit} disabled={busy||api.isStreaming}
+    <SearchComposer calls={tab!=='connections'&&!paneHosted} value={api.input} onChange={api.setInput} onSubmit={submit} disabled={busy||api.isStreaming}
       advisories={api.historyUnavailable ? [{ id: 'session-history', title: 'Session history unavailable', description: 'Memory is not configured. This conversation will not be saved after you leave.' }] : []}
       agents={api.agents.filter(agent=>!/(^|[-_])assessment[-_]/i.test(agent.id))}
       references={[...scopeReference,...references]}
@@ -385,15 +392,15 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   const paneRecordTitle=paneRecordRef?nameOf(paneRecordRef) ?? 'Record':null;
   const paneSubject=(attached.length?attached.map(ref=>nameOf(recordKey(ref))).filter(Boolean).join(', '):selectionLabel)||undefined;
   const hasTurns=api.messages.length>0||api.isStreaming;
-  const paneTabs=paneRecordId?visiblePaneTabs(SEARCH_PANE_TABS,paneState).map(t=>t.id==='record'?{...t,label:paneRecordTitle??'Record'}:t):undefined;
-  const searchPane=paneHosted&&<SidePane title="Work Assistant" {...(paneSubject?{subtitle:paneSubject}:{})}
+  const paneTabs=paneRecordId&&(paneTab==='chat'||hasTurns)?visiblePaneTabs(SEARCH_PANE_TABS,paneState).map(t=>t.id==='record'?{...t,label:paneRecordTitle??'Record'}:t):undefined;
+  const searchPane=paneHosted&&<SidePane title={paneTab==='record'?'Person details':'Work Assistant'} {...(paneTab==='chat'&&paneSubject?{subtitle:paneSubject}:{})} closeLabel="Close details panel"
     onClose={closePane} paneId="search" widthPx={{min:320,max:380}} explores={selected.length>0}
     {...(paneTabs?{tabs:paneTabs,value:paneTab,onValueChange:(id:string)=>update(paneParams({tab:id,record:paneState.record}))}:{})}
     data-testid="search-pane">
     {paneTab==='record'&&paneRecordId
-      ? <PanePersonRecord personId={paneRecordId} onClose={()=>update(paneParams({tab:'chat',record:null}))}
+      ? <PanePersonRecord personId={paneRecordId} onClose={closePane}
           onAsk={id=>askAbout([`person:${id}`])} onFocusPerson={id=>update({selection:[...new Set([...selected,`person:${id}`])].join(',')},true)}
-          onOpenPage={id=>navigate(personPageHref(id))} />
+          />
       : <Stack gap="none" className="flex-1 min-h-0 min-w-0 px-3" data-testid="search-pane-transcript">
           {hasTurns
             ? <AnswerGraphContext.Provider value={paneGraph}>{api.transcript}</AnswerGraphContext.Provider>
@@ -480,41 +487,30 @@ function orgGraphCardData(graph: OrgGraphData, focusIds: string[], showWholeOrg:
   };
 }
 
-/** A person's own page: the org graph focused on them, their card open
- *  (the search provider's person href, with the card). */
-function personPageHref(id: string): string {
-  return `/iq/search?${new URLSearchParams({ tab: 'connections', type: 'person', selection: `person:${id}`, detail: id })}`;
-}
-
-/** The pane's record tab for a person: the library card, and Open page. */
-function PanePersonRecord({ personId, onClose, onAsk, onFocusPerson, onOpenPage }: {
-  personId: string; onClose: () => void; onAsk: (id: string) => void; onFocusPerson: (id: string) => void; onOpenPage: (id: string) => void;
+/** Person content belongs to the shell inspector, never a nested canvas pane. */
+function PanePersonRecord({ personId, onClose, onAsk, onFocusPerson }: {
+  personId: string; onClose: () => void; onAsk: (id: string) => void; onFocusPerson: (id: string) => void;
 }) {
   const { session } = useSession();
-  const showInfluence = session?.role === 'hr-admin';
   const { data: detail, isLoading, error } = useFetch<PersonDetail>(`/api/graph/people/${encodeURIComponent(personId)}`);
   const { data: evidence } = useFetch<{ documents: PersonEvidenceDocument[] }>(`/api/graph/people/${encodeURIComponent(personId)}/evidence`);
-  return <Stack gap="none" className="flex-1 min-h-0 min-w-0" data-testid="search-pane-record">
-    <Inline justify="end" gap="xs" className="shrink-0 px-3 py-1">
-      <Button size="sm" variant="ghost" onClick={() => onOpenPage(personId)}>Open page</Button>
-    </Inline>
-    <PersonDetailCard className="static min-h-0 flex-1 w-full rounded-none border-0 shadow-none" person={detail} evidence={evidence?.documents ?? []}
-      loading={isLoading} error={error ?? null} showInfluence={showInfluence} onClose={onClose} onFocusPerson={onFocusPerson}
+  return <Stack gap="none" className="flex-1 min-h-0 min-w-0 overflow-auto p-4" data-testid="search-pane-record">
+    <PersonDetailCard embedded className="static min-h-0 w-full rounded-none border-0 shadow-none" person={detail} evidence={evidence?.documents ?? []}
+      loading={isLoading} error={error ?? null} showInfluence={session?.role === 'hr-admin'} onClose={onClose} onFocusPerson={onFocusPerson}
       onAsk={onAsk} askLabel={person => `Ask about ${person.name.split(' ')[0]}`} />
   </Stack>;
 }
 
-function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShowWholeOrgChange, onSelectionChange, onAsk, layout, onLayoutChange, lens, onLensChange, detailId: urlDetailId, onDetailChange, detailInPane = false, onOpenInPane, onOpenPage }: {
+function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShowWholeOrgChange, onSelectionChange, onAsk, layout, onLayoutChange, lens, onLensChange, detailId, detailInPane = false, onOpenInPane }: {
   graph: { data: OrgGraphData | null; error: string | null; refresh: () => void };
   selectedKeys: string[]; focusIds: string[]; showWholeOrg: boolean; onShowWholeOrgChange: (all: boolean) => void;
   onSelectionChange: (keys: string[], detail?: string | null) => void; onAsk: (keys: string[]) => void;
   layout: 'force' | 'radial'; onLayoutChange: (layout: 'force' | 'radial') => void;
   /** The old Explore `?entities=` lens: hierarchy keeps mentoring/reporting edges, skills keeps shared expertise, projects keeps collaboration. */
-  lens?: string | null; onLensChange: (lens: string | null) => void; detailId?: string | null; onDetailChange: (id: string | null) => void;
+  lens?: string | null; onLensChange: (lens: string | null) => void; detailId?: string | null;
   /** The right pane is open: the record lives there as a tab, never as a column beside the graph. */
   detailInPane?: boolean;
-  /** The docked card's expand menu: pop it into the right pane, or open the person's page. */
-  onOpenInPane: (id: string) => void; onOpenPage: (id: string) => void;
+  onOpenInPane: (id: string) => void;
 }) {
   const navigate = useNavigate();
   const { session } = useSession();
@@ -526,20 +522,6 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
   const [minStrength, setMinStrength] = useState(0.6);
   const [activeDepartment, setActiveDepartment] = useState<string | null>(null);
   const [rareSkillsOpen, setRareSkillsOpen] = useState(false);
-  // A lone focused person (the old /iq/explore?focus=<id>) opens on their card.
-  // The open person card lives in the URL (`?detail=`), as the old Explore's did, so a view survives a reload or a pasted link.
-  const [dismissed, setDismissed] = useState<string | null>(null);
-  const detailId = detailInPane ? null : urlDetailId ?? (focusIds.length === 1 && selectedKeys.length === 1 && dismissed !== focusIds[0] ? focusIds[0] : null);
-  const setDetailId = onDetailChange;
-  // Below ~1280px the library overlays the card on the canvas, so it starts folded and a pick does not cover the graph; the pane's own rail unfolds it.
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 1279px)').matches);
-  const [paneFolded, setPaneFolded] = useState(true);
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 1279px)');
-    const update = () => setNarrow(media.matches);
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
   const [pinnedPath, setPinnedPath] = useState<PathHop[] | null>(null);
   const lensTypes = LENS_EDGES[lens ?? ''];
   const selectedIds = useMemo(() => new Set(selectedKeys.filter(key => key.startsWith('person:')).map(key => key.slice(7))), [selectedKeys]);
@@ -555,8 +537,6 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
   const otherKeys = selectedKeys.filter(key => !key.startsWith('person:'));
   // One URL write for selection + open card: two separate setSearchParams calls clobber each other.
   const setPeople = (ids: Iterable<string>, detail?: string | null) => onSelectionChange([...otherKeys, ...[...ids].map(id => `person:${id}`)], detail);
-  const { data: detail, isLoading: detailLoading, error: detailError } = useFetch<PersonDetail>(detailId ? `/api/graph/people/${encodeURIComponent(detailId)}` : null);
-  const { data: evidence } = useFetch<{ documents: PersonEvidenceDocument[] }>(detailId ? `/api/graph/people/${encodeURIComponent(detailId)}/evidence` : null);
   const { data: findings, error: findingsError } = useFetch<{ findings: BusFactorFinding[] }>(
     showInfluence && (activeDepartment || rareSkillsOpen) ? '/api/work/findings?status=open&sweep=bus_factor&limit=200' : null,
   );
@@ -570,6 +550,8 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
   const people = useMemo(() => focused.people.slice(0, GRAPH_NODE_CAP), [focused]);
   // The graph's daily office/remote field is generated data, not live presence.
   const drawingPeople = useMemo(() => people.map(person => ({ ...person, presence: 'unknown' as const })), [people]);
+  // A focused neighborhood is already relevant; keep its neighbors readable.
+  const spotlightIds = useMemo(() => showWholeOrg ? selectedIds : new Set(people.map(person => person.id)), [showWholeOrg, selectedIds, people]);
   const edges = useMemo(() => {
     const kept = new Set(people.map(p => p.id));
     return strongestEdges(focused.relationships.filter(e => kept.has(e.source) && kept.has(e.target)), topK, lensTypes ? 0 : minStrength);
@@ -608,31 +590,44 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
   if (!data) return <LoadingState label="Loading org graph…" />;
 
   // The controls stay in flow and the pane scrolls, so a narrow window reaches the whole canvas instead of seeing a sliver of it above the dock.
-  // The graph has the width and height priority: the toolbar and legend rows
+  // The graph has the width and height priority: the compact control rows
   // are pinned above it (never scrolled under the tabs), the canvas takes the rest.
   return <Stack gap="none" className="flex-1 min-h-0 min-w-0 overflow-hidden px-6" data-testid="search-people-graph">
-    <Inline gap="sm" align="center" className="py-2 shrink-0" data-testid="search-people-toolbar">
-      <SegmentedControl aria-label="Organization graph layout" value={layout} onChange={value => onLayoutChange(value === 'radial' ? 'radial' : 'force')}
-        options={[{ value: 'force', label: 'Force' }, { value: 'radial', label: 'Radial' }]} />
+    <Inline gap="sm" align="center" wrap className="py-2 shrink-0 border-b border-border" data-testid="search-people-toolbar">
       <GraphSearchBox people={data.nodes} onPickPerson={focusPerson} onPickSkill={(_skill, ids) => { setPeople(ids, null); }} placeholder="Find a person or skill…" />
-      <RangeSliderFrame className="text-xs" label="Top-K" ariaLabel="Top K relationships per person" min={1} max={10} value={topK} onChange={setTopK} valueLabel={topK} />
-      <RangeSliderFrame className="text-xs" label="Min strength" ariaLabel="Minimum relationship strength" min={0} max={100} value={Math.round(minStrength * 100)} onChange={v => setMinStrength(v / 100)} valueLabel={minStrength.toFixed(2)} />
-      <Inline gap="xs" align="center" className="ml-auto">
-        {focusIds.length > 0 && <Button size="sm" variant="ghost" className="text-xs" aria-pressed={showWholeOrg} onClick={() => onShowWholeOrgChange(!showWholeOrg)}>{showWholeOrg ? 'Focus selection' : 'Show whole org'}</Button>}
-        {selectedIds.size > 0 && <T className="text-xs text-primary">{selectedIds.size} selected</T>}
-        <Tooltip content="Clear selection" placement="top"><IconButton size="md" variant="ghost" aria-label="Clear selection" disabled={!selectedIds.size} icon={<CloseIcon size={14} />} onClick={() => { setPeople([], null); setActiveDepartment(null); }} /></Tooltip>
-        <Tooltip content="Ask about selection" placement="top"><Button size="sm" className="text-xs" aria-label="Ask about selection" disabled={!selectedIds.size} onClick={() => onAsk([...selectedIds].map(id => `person:${id}`))}><ChatIcon size={14} />Ask</Button></Tooltip>
-      </Inline>
+      <Select size="sm" className="w-auto max-w-full" aria-label="Relationship lens" value={lensTypes?lens??'':''} onChange={event=>onLensChange(event.target.value||null)}
+        renderValue={option=>`Relationships: ${option?.label??'All'}`}
+        options={[{value:'',label:'All'},{value:'hierarchy',label:'Hierarchy'},{value:'skills',label:'Skills'},{value:'projects',label:'Projects'}]} />
+      <Select size="sm" className="w-auto max-w-full" aria-label="Department" value={activeDepartment??''} onChange={event=>{
+        const department=event.target.value||null;setActiveDepartment(department);
+        setPeople(department?data.nodes.filter(person=>person.department===department).map(person=>person.id):[],null);
+      }} renderValue={option=>`Team: ${option?.label??'All teams'}`}
+        options={[{value:'',label:'All teams'},...data.departments.map(department=>({value:department.name,label:department.name}))]} />
+      <FilterPopover label="Graph settings" panelLabel="Graph settings" trigger="icon" icon={<SlidersIcon size={16}/>} placement="bottom-end" data-testid="graph-settings">
+        <Stack gap="md">
+          <Stack gap="xs"><T size="sm" weight="medium">Connections per person</T>
+            <Slider aria-label="Connections per person" min={1} max={10} value={topK} onChange={setTopK}/></Stack>
+          <Stack gap="xs"><T size="sm" weight="medium">Minimum strength (%)</T>
+            <Slider aria-label="Minimum relationship strength" min={0} max={100} value={Math.round(minStrength*100)} onChange={value=>setMinStrength(value/100)} disabled={!!lensTypes}/>
+            {lensTypes&&<T size="xs" tone="secondary" wrap>Named relationship types include every recorded strength.</T>}</Stack>
+          {showInfluence&&<FilterChip active={rareSkillsOpen} size="sm" onClick={()=>setRareSkillsOpen(open=>!open)}>Rare skills · org-wide</FilterChip>}
+          <Button size="sm" variant="ghost" onClick={()=>{setTopK(4);setMinStrength(0.6);}}>Reset graph settings</Button>
+        </Stack>
+      </FilterPopover>
     </Inline>
-    <Inline gap="xs" align="center" className="pb-2 shrink-0">
-      <DepartmentChips departments={data.departments} people={data.nodes} activeDepartment={activeDepartment}
-        onToggle={(name, memberIds) => { setActiveDepartment(name); setPeople(name ? memberIds : [], null); }} />
-      {showInfluence && <FilterChip active={rareSkillsOpen} size="sm" onClick={() => setRareSkillsOpen(open => !open)}>⚠ Rare skills · org-wide</FilterChip>}
-      <SegmentedControl aria-label="Relationship lens" value={lensTypes ? lens ?? '' : ''} onChange={value => onLensChange(value || null)}
-        options={[{ value: '', label: 'All' }, { value: 'hierarchy', label: 'Hierarchy' }, { value: 'skills', label: 'Skills' }, { value: 'projects', label: 'Projects' }]} />
-      <T className="ml-auto text-xs text-text-tertiary" data-testid="search-people-count"
-        title={capped ? `${people.length} of ${total} people — capped for canvas performance, use search or a selection to narrow it instead` : undefined}>
-        {people.length < total ? `${people.length} / ${total}` : total} people{capped ? ' (capped)' : ''} · {edges.length}{lensTypes ? ` ${lens}` : ''} edges</T>
+    <Inline gap="sm" align="center" wrap className="py-2 shrink-0" data-testid="graph-view-controls">
+      <SegmentedControl aria-label="Organization graph layout" value={layout}
+        onChange={value=>onLayoutChange(value==='radial'?'radial':'force')}
+        options={[{value:'force',label:'Force'},{value:'radial',label:'Radial'}]}/>
+      <T size="xs" tone="tertiary" data-testid="search-people-count"
+        title={capped?`${people.length} of ${total} people — narrow the selection to see more detail`:undefined}>
+        {people.length<total?`${people.length} / ${total}`:total} people{capped?' (capped)':''} · {edges.length}{lensTypes?` ${lens}`:''} edges</T>
+      <Inline gap="xs" align="center" className="ml-auto" wrap>
+        {focusIds.length>0&&<Button size="sm" variant="ghost" aria-pressed={showWholeOrg} onClick={()=>onShowWholeOrgChange(!showWholeOrg)}>{showWholeOrg?'Focus selection':'Show whole org'}</Button>}
+        {selectedIds.size===1&&<Button size="sm" variant="ghost" onClick={()=>onOpenInPane([...selectedIds][0])}>View person</Button>}
+        {selectedIds.size>1&&<Button size="sm" variant="secondary" onClick={()=>onAsk([...selectedIds].map(id=>`person:${id}`))}>Ask about {selectedIds.size} people</Button>}
+        {selectedIds.size>0&&<IconButton size="sm" variant="ghost" aria-label="Clear selection" icon={<CloseIcon size={14}/>} onClick={()=>{setPeople([],null);setActiveDepartment(null);}}/>}
+      </Inline>
     </Inline>
     {showInfluence && (activeDepartment || rareSkillsOpen) && <DepartmentInsightStrip department={activeDepartment} people={data.nodes}
       busFactorFindings={findingsIndex} busFactorFindingsUnavailable={Boolean(findingsError)}
@@ -642,25 +637,8 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
     {lensTypes && !edges.length && !selectedIds.size && <EmptyState data-testid="search-lens-empty" title={`No ${lens} data`} description={`No ${lensTypes.join(' or ')} edges are in the graph yet. Run the ingestion pipeline to extract them, or switch back to all relationships.`}
       actionLabel="Show all relationships" onAction={() => onLensChange(null)} />}
     {focusMissing && <Banner variant="warning" title="Not in the org graph">{`${focusIds.join(', ')} ${focusIds.length === 1 ? 'is' : 'are'} not in the org graph. Show whole org to browse everyone.`}</Banner>}
-    {/* The card takes its own column beside the canvas rather than floating
-        over the drawn nodes; the canvas gets the rest of the pane height. */}
-    <CanvasPaneLayout data-testid="search-people-canvas" className="min-h-0 flex-1" paneLabel="person details" {...(narrow ? { collapsed: paneFolded, onCollapsedChange: setPaneFolded } : { expandKey: detailId })}
-      pane={detailId && selectedIds.has(detailId) ? <Stack gap="none" className="h-full min-h-0 w-full">
-        <Inline justify="end" className="shrink-0 border-b border-border px-3 py-1">
-          <DropdownMenu align="end" triggerTestId="search-person-expand" triggerLabel={`Expand ${detail?.name ?? 'person'}`} triggerTitle="Expand"
-            trigger={<ExpandIcon size={14} />}
-            sections={[{ items: [
-              { label: 'Open in pane', onSelect: () => onOpenInPane(detailId) },
-              { label: 'Open page', onSelect: () => onOpenPage(detailId) },
-            ] }]} />
-        </Inline>
-        <PersonDetailCard data-testid="search-person-card" className="static min-h-0 flex-1 w-full rounded-none border-0 shadow-none"
-        person={detail} evidence={evidence?.documents ?? []} loading={detailLoading} error={detailError ?? null}
-        showInfluence={showInfluence} onClose={() => { setDismissed(detailId); setDetailId(null); }}
-        onFocusPerson={id => { setPeople([...selectedIds, id], id); }}
-        onAsk={id => onAsk([`person:${id}`])} askLabel={person => `Ask about ${person.name.split(' ')[0]}`} />
-      </Stack> : null}>
-      <OrgGraph ref={graphHandle} data-testid="search-org-graph" aria-label="Organization graph" people={drawingPeople} relationships={edges} departments={data.departments}
+    <Stack gap="none" data-testid="search-people-canvas" className="min-h-0 min-w-0 flex-1">
+      <OrgGraph ref={graphHandle} legend={false} data-testid="search-org-graph" aria-label="Organization graph" people={drawingPeople} relationships={edges} departments={data.departments}
         // focusIds is what the automatic fit centres on when the drawing
         // overflows; without it the fit start-aligned the drawing beside the
         // legend and a selected person could sit past the right edge (D9,
@@ -673,12 +651,12 @@ function PeopleConnections({ graph, selectedKeys, focusIds, showWholeOrg, onShow
         // set (`focusOrgPeople` + the Top-K / min-strength sliders) and counts
         // it; the library's own one-hop trim on top dropped 3 of 11 people the
         // counter and the person card still named (D10).
-        multiSelectIds={selectedIds} spotlightIds={selectedIds} focusIds={fitFocusIds} pruneToFocus={false} minFitZoom={fitFocusIds.length ? ORG_FIT_MIN_ZOOM : ORG_OVERVIEW_FIT_ZOOM} fitInset={{ top: 24, right: 24, bottom: 40 }} layout={layout} showInfluence={showInfluence}
+        multiSelectIds={selectedIds} spotlightIds={spotlightIds} focusIds={fitFocusIds} pruneToFocus={false} minFitZoom={fitFocusIds.length ? ORG_FIT_MIN_ZOOM : ORG_OVERVIEW_FIT_ZOOM} fitInset={{ top: 24, right: 24, bottom: 40 }} layout={layout} showInfluence={showInfluence}
         onToggleMultiSelect={id => {
           if (selectedIds.has(id)) setPeople([...selectedIds].filter(item => item !== id), detailId === id ? null : undefined);
           else setPeople([...selectedIds, id], id);
         }} />
-    </CanvasPaneLayout>
-    {!selectedIds.size && <T size="xs" tone="tertiary" className="shrink-0 pb-1">Click people to select them, then Ask about selection to query with the graph in view.</T>}
+    </Stack>
+    {!selectedIds.size && <T size="xs" tone="tertiary" className="shrink-0 pb-1">Select a person to view their profile. Select two people to trace their connection.</T>}
   </Stack>;
 }
