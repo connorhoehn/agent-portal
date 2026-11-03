@@ -25,9 +25,11 @@ Do not request credentials, run AWS checks or deploy as part of this work.
   (`.scratch/composer-focus-2026-11-03/storymaker-focused.png`). Studio
   caveat, handed to its owners: `vite dev` there fails to pre-bundle the
   library (`Failed to resolve import "hls.js"` from BreakoutRoomsPanel, the
-  optional stream peer the studio does not install), so the dev server shows an
-  overlay instead of the app; the built app is unaffected. No portal CSS was
-  added; the fix is the library's.
+  optional stream peer the studio does not install), so the dev server showed an
+  overlay instead of the app; the built app was unaffected. The studio session
+  fixed it the same morning (`optimizeDeps.exclude: ['hls.js']` in
+  studio/vite.config.ts, verified on a spare port, uncommitted there). No
+  portal CSS was added; the fix is the library's.
 - [x] **WORK-UI-06 — Initiative tab panels and Details pane (2026-11-02, later).**
   A tab names its panel, so the Agents panel dropped its repeated "Agents"
   heading and opens on one row: Runs/Bots/Compute and the window switches,
