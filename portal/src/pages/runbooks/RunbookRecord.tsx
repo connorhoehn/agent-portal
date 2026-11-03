@@ -181,10 +181,10 @@ function HistoryTab({ runbook, names }: { runbook: RunbookRow; names: Names }) {
   if (!versions.data) return <LoadingState label="Loading versions…" />;
   return (
     <>
-      <DetailSection variant="heading" first title="Versions" hint={`${list.length}`}>
+      <DetailSection as="h2" variant="heading" first title="Versions" hint={`${list.length}`}>
         <DataTable data={list} columns={columns} keyField={(v) => String(v.version)} frameless emptyMessage="No versions." {...(list.length > 1 ? { onRowClick: compareWithPrevious } : { staticRows: 'There is only one version, so there is nothing earlier to compare it with.' })} data-testid="runbook-versions" />
       </DetailSection>
-      <DetailSection variant="heading" title="What changed" description="Compare any two versions of the canonical markdown.">
+      <DetailSection as="h2" variant="heading" title="What changed" description="Compare any two versions of the canonical markdown.">
         <Stack gap="sm">
           {list.length > 1 && (
             <Inline gap="sm" align="center">
@@ -226,15 +226,15 @@ function RunsTab({ runbook, version, names, applications, error, onOpen }: {
   ];
   return (
     <>
-      <DetailSection variant="heading" first title="The steps" hint={applications.some((a) => a.version === runbook.current_version) ? `as the last run of v${runbook.current_version} went` : `no run of v${runbook.current_version} yet`}>
+      <DetailSection as="h2" variant="heading" first title="Runs that were given it" hint={`${applications.length} · open one to read its brief`}>
+        <DataTable data={[...applications].sort((a, b) => b.at.localeCompare(a.at))} columns={columns} keyField={(a) => a.id} frameless emptyMessage="No run has reported on this runbook yet. Open a row to read the brief that run was given." onRowClick={(a) => onOpen(briefHref(a.run_ref))} data-testid="runbook-applications" />
+      </DetailSection>
+      <DetailSection as="h2" variant="heading" title="The steps" hint={applications.some((a) => a.version === runbook.current_version) ? `as the last run of v${runbook.current_version} went` : `no run of v${runbook.current_version} yet`}>
         <ProcedureSteps
           aria-label="Steps and their last outcome"
           steps={markers.map((m) => ({ id: String(m.n), title: m.step.do, ...(m.status ? { status: m.status } : {}), ...(m.note ? { note: m.note } : {}) }))}
           emptyLabel="This runbook has no steps."
         />
-      </DetailSection>
-      <DetailSection variant="heading" title="Runs that were given it" hint={`${applications.length} · open one to read its brief`}>
-        <DataTable data={[...applications].sort((a, b) => b.at.localeCompare(a.at))} columns={columns} keyField={(a) => a.id} frameless emptyMessage="No run has reported on this runbook yet. Open a row to read the brief that run was given." onRowClick={(a) => onOpen(briefHref(a.run_ref))} data-testid="runbook-applications" />
       </DetailSection>
     </>
   );

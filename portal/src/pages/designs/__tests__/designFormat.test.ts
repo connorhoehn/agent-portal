@@ -16,10 +16,10 @@ test('design portraits retain an external signer and do not borrow a namesake ph
   assert.equal(designParticipantPortrait('Alex', thread, contributors), undefined);
 });
 
-test('legacy design portraits resolve only one matching initiative contributor', () => {
+test('legacy names never resolve a contributor portrait', () => {
   const thread = { posts: [{ authorKind: 'human' as const, authorName: 'Alex' }], signoffs: [] };
   const contributors = [{ name: 'Alex', avatarUrl: '/one.jpg' }];
-  assert.equal(designParticipantPortrait('Alex', thread, contributors), '/one.jpg');
+  assert.equal(designParticipantPortrait('Alex', thread, contributors), undefined);
   assert.equal(designParticipantPortrait('Unknown', thread, contributors), undefined);
   contributors.push({ name: 'Alex', avatarUrl: '/two.jpg' });
   assert.equal(designParticipantPortrait('Alex', thread, contributors), undefined);
@@ -38,19 +38,19 @@ function review(over: Partial<DesignReview> = {}): DesignReview {
 test('reviewStateLine: open questions outrank everything but approval', () => {
   assert.match(reviewStateLine(review({ status: 'awaiting_input', openQuestions: 2 })), /2 questions waiting on a human/);
   assert.match(reviewStateLine(review({ status: 'proposed', signoffs: [
-    { personName: 'a', role: 'sme', decision: 'approve', at: '1' },
+    { personName: 'a', signerId: 'p-a', role: 'sme', decision: 'approve', at: '1' },
   ] })), /1\/2 sign-offs/);
   assert.match(reviewStateLine(review({ status: 'approved', kbSynced: true, signoffs: [
-    { personName: 'a', role: 'sme', decision: 'approve', at: '1' },
-    { personName: 'b', role: 'owner', decision: 'approve', at: '2' },
+    { personName: 'a', signerId: 'p-a', role: 'sme', decision: 'approve', at: '1' },
+    { personName: 'b', signerId: 'p-b', role: 'owner', decision: 'approve', at: '2' },
   ] })), /2 sign-offs · in the knowledge base/);
   assert.match(reviewStateLine(review()), /3 posts/);
 });
 
 test('latestSignoffs: one standing decision per person', () => {
   const out = latestSignoffs([
-    { personName: 'a', role: 'sme', decision: 'reject', at: '1' },
-    { personName: 'a', role: 'sme', decision: 'approve', at: '2' },
+    { personName: 'a', signerId: 'p-a', role: 'sme', decision: 'reject', at: '1' },
+    { personName: 'a', signerId: 'p-a', role: 'sme', decision: 'approve', at: '2' },
   ]);
   assert.equal(out.length, 1);
   assert.equal(out[0]!.decision, 'approve');
@@ -72,7 +72,7 @@ test('filterDesigns: "all" keeps everything, any other value narrows by exact st
 test('nextStep names the human action per status', () => {
   assert.match(nextStep(review({ status: 'awaiting_input', openQuestions: 1 })), /Answer the open question/);
   assert.match(nextStep(review({ status: 'proposed' })), /2 more sign-offs/);
-  assert.match(nextStep(review({ status: 'proposed', signoffs: [{ personName: 'a', role: 'sme', decision: 'approve', at: '1' }] })), /1 more sign-off/);
+  assert.match(nextStep(review({ status: 'proposed', signoffs: [{ personName: 'a', signerId: 'p-a', role: 'sme', decision: 'approve', at: '1' }] })), /1 more sign-off/);
   assert.match(nextStep(review({ status: 'approved' })), /binds the designs/);
   assert.match(nextStep(review({ status: 'ideating' })), /nothing needs you yet/);
 });
@@ -94,4 +94,16 @@ test('nextStep: awaiting_input defers to the capability that can answer, per vie
     nextStep(review({ status: 'proposed' }), 2, true),
     nextStep(review({ status: 'proposed' }), 2, false),
   );
+});
+
+
+test('portraits resolve by canonical identity across renames and separate namesakes', () => {
+  const thread = { posts: [
+    { authorKind: 'human' as const, authorName: 'Alex', authorId: 'p-one', avatarUrl: '/one.jpg' },
+    { authorKind: 'human' as const, authorName: 'Alex', authorId: 'p-two', avatarUrl: '/two.jpg' },
+  ], signoffs: [] };
+  assert.equal(designParticipantPortrait('Alex Renamed', thread, [], 'p-one'), '/one.jpg');
+  assert.equal(designParticipantPortrait('Alex', thread, [], 'p-two'), '/two.jpg');
+  assert.equal(designParticipantPortrait('Alex', thread, []), undefined);
+  assert.equal(designParticipantPortrait('Alex', {posts:[],signoffs:[]}, [{personId:'p-two',name:'Alex',avatarUrl:'/two.jpg'}], 'p-one'), undefined);
 });

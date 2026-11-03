@@ -3,24 +3,30 @@
 
 import type { DesignPost, DesignReview, DesignSignoff, DesignStatus, PostKind } from './types';
 
-/** Legacy participant labels have no IDs. Use recorded portraits only when
- * they agree; an explicit missing photo or conflicting snapshots stay unknown. */
+/** Resolve only the recorded identity. Legacy snapshots can display their own
+ * photo, but a name alone never borrows an identified contributor's portrait. */
 export function designParticipantPortrait(
   name: string,
   thread: {
-    posts: Pick<DesignPost, 'authorKind' | 'authorName' | 'avatarUrl'>[];
-    signoffs: Pick<DesignSignoff, 'personName' | 'avatarUrl'>[];
+    posts: Pick<DesignPost, 'authorKind' | 'authorName' | 'authorId' | 'avatarUrl'>[];
+    signoffs: Pick<DesignSignoff, 'personName' | 'signerId' | 'avatarUrl'>[];
   },
-  contributors: Array<{ name: string; avatarUrl?: string | null }>,
+  contributors: Array<{ personId?: string; name: string; avatarUrl?: string | null }>,
+  identity?: string,
 ): string | undefined {
-  const snapshots = [...thread.posts.filter(p => p.authorKind === 'human' && p.authorName === name),
-    ...thread.signoffs.filter(s => s.personName === name)].filter(p => p.avatarUrl !== undefined);
+  const snapshots = [...thread.posts.filter(p => p.authorKind === 'human' && (identity ? p.authorId === identity : !p.authorId && p.authorName === name)),
+    ...thread.signoffs.filter(s => identity ? s.signerId === identity : !s.signerId && s.personName === name)].filter(p => p.avatarUrl !== undefined);
   if (snapshots.length) {
     const urls = new Set(snapshots.map(p => p.avatarUrl ?? null));
     return urls.size === 1 ? snapshots[0]?.avatarUrl ?? undefined : undefined;
   }
-  const people = contributors.filter(person => person.name === name);
-  return people.length === 1 ? people[0]?.avatarUrl ?? undefined : undefined;
+  return identity ? contributors.find(person => person.personId === identity)?.avatarUrl ?? undefined : undefined;
+}
+
+export function designParticipants(posts: DesignPost[]): DesignPost[] {
+  const people = new Map<string, DesignPost>();
+  for (const post of posts) people.set(`${post.authorKind}:${post.authorId ?? `legacy:${post.authorName}`}`, post);
+  return [...people.values()];
 }
 
 export const STATUS_LABEL: Record<DesignStatus, string> = {
@@ -66,13 +72,13 @@ export const KIND_TONE: Record<PostKind, 'info' | 'warning' | 'success' | 'accen
 /** "2 of 3 approvals · 1 open question" — the list row's one-line state. */
 export function reviewStateLine(r: DesignReview, approvalsRequired = 2): string {
   if (r.status === 'approved') {
-    return `${r.signoffs.filter((s) => s.decision === 'approve').length} sign-offs${r.kbSynced ? ' · in the knowledge base' : ''}`;
+    return `${latestSignoffs(r.signoffs).filter((s) => s.signerId && s.decision === 'approve').length} sign-offs${r.kbSynced ? ' · in the knowledge base' : ''}`;
   }
   if (r.openQuestions > 0) {
     return `${r.openQuestions} question${r.openQuestions === 1 ? '' : 's'} waiting on a human`;
   }
   if (r.status === 'proposed') {
-    const have = r.signoffs.filter((s) => s.decision === 'approve').length;
+    const have = latestSignoffs(r.signoffs).filter((s) => s.signerId && s.decision === 'approve').length;
     return `${have}/${approvalsRequired} sign-offs`;
   }
   return `${r.postCount} post${r.postCount === 1 ? '' : 's'}`;
@@ -90,7 +96,7 @@ export function filterDesigns(reviews: DesignReview[], status: string): DesignRe
 /** Standing decision per person, latest wins — mirrors the server's tally. */
 export function latestSignoffs(signoffs: DesignSignoff[]): DesignSignoff[] {
   const latest = new Map<string, DesignSignoff>();
-  for (const s of signoffs) latest.set(s.personName, s);
+  for (const s of signoffs) latest.set(s.signerId ? `id:${s.signerId}` : `legacy:${s.personName}`, s);
   return [...latest.values()];
 }
 
@@ -113,7 +119,7 @@ export function nextStep(
         : `An owner or SME will answer the ${questionWord} below.`;
     }
     case 'proposed': {
-      const have = latestSignoffs(r.signoffs).filter((s) => s.decision === 'approve').length;
+      const have = latestSignoffs(r.signoffs).filter((s) => s.signerId && s.decision === 'approve').length;
       const need = Math.max(approvalsRequired - have, 0);
       return need > 0
         ? `Decision proposed — ${need} more sign-off${need === 1 ? '' : 's'} ratifies it and logs it to the knowledge base.`
@@ -132,4 +138,4 @@ export function nextStep(
 
 /** Where design reviews are read from, as the clause UnavailableNotice joins
  *  to "…, so this is unknown rather than empty." — not a bare noun. */
-export const DESIGNS_SOURCE = 'Design reviews are read from Aurora';
+export const DESIGNS_SOURCE = 'The design review service is unavailable';

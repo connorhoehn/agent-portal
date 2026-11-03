@@ -35,9 +35,9 @@ describe('decideApproval — the ADR gate', () => {
 describe('tallySignoffs', () => {
   it('latest sign-off per person wins, and one reject blocks', () => {
     const t = tallySignoffs([
-      { personName: 'a', role: 'sme', decision: 'reject', at: '1' },
-      { personName: 'a', role: 'sme', decision: 'approve', at: '2' },
-      { personName: 'b', role: 'owner', decision: 'approve', at: '3' },
+      { personName: 'a', signerId: 'p-a', role: 'sme', decision: 'reject', at: '1' },
+      { personName: 'a', signerId: 'p-a', role: 'sme', decision: 'approve', at: '2' },
+      { personName: 'b', signerId: 'p-b', role: 'owner', decision: 'approve', at: '3' },
     ]);
     expect(t.approvals).toBe(2);
     expect(t.rejections).toBe(0);
@@ -76,10 +76,28 @@ describe('the mock HITL loop end-to-end', () => {
   });
 
   it('two approvals ratify the ADR and log it to the KB', async () => {
-    const one = await signoffDesign('des-auth-rotation', 'approve', 'Vera Green', 'org-leader');
+    const one = await signoffDesign('des-auth-rotation', 'approve', 'Vera Green', 'org-leader', undefined, 'p-002');
     expect(one && 'thread' in one && one.thread?.status).not.toBe('approved');
-    const two = await signoffDesign('des-auth-rotation', 'approve', 'Nora DaSilva', 'sme');
+    const two = await signoffDesign('des-auth-rotation', 'approve', 'Nora DaSilva', 'sme', undefined, 'p-004');
     expect(two && 'thread' in two && two.thread?.status).toBe('approved');
     expect(two && 'thread' in two && two.thread?.kbSynced).toBe(true);
+  });
+});
+
+
+describe('canonical signoff identity', () => {
+  it('namesakes remain distinct and renaming one signer replaces their decision', () => {
+    const t = tallySignoffs([
+      { signerId: 'p-a', personName: 'Alex', role: 'sme', decision: 'reject', at: '1' },
+      { signerId: 'p-b', personName: 'Alex', role: 'sme', decision: 'approve', at: '2' },
+      { signerId: 'p-a', personName: 'Alex Renamed', role: 'sme', decision: 'approve', at: '3' },
+    ]);
+    expect(t).toEqual({ approvals: 2, rejections: 0, approved: true });
+  });
+  it('unverified name-only approvals cannot establish the quorum', () => {
+    expect(tallySignoffs([
+      { personName: 'Alex', role: 'sme', decision: 'approve', at: '1' },
+      { signerId: 'p-a', personName: 'Alex', role: 'sme', decision: 'approve', at: '2' },
+    ])).toEqual({ approvals: 1, rejections: 0, approved: false });
   });
 });

@@ -138,11 +138,11 @@ describe('POST /api/designs/:id/answer', () => {
     answerMock.mockResolvedValue(THREAD);
     const res = await request(buildApp())
       .post('/api/designs/dr-1/answer')
-      .send({ questionPostId: 'po-1', body: '  hourly  ', authorName: 'forged', avatarUrl: '/forged.jpg' });
+      .send({ questionPostId: 'po-1', body: '  hourly  ', authorName: 'forged', authorId: 'p-forged', signerId: 'p-forged', avatarUrl: '/forged.jpg' });
     expect(res.status).toBe(200);
     expect(getUser).toHaveBeenCalledWith('u-1');
     expect(userAvatars).toHaveBeenCalledWith([{ id: 'u-1', personId: 'p-1' }]);
-    expect(answerMock).toHaveBeenCalledWith('dr-1', 'po-1', 'hourly', 'Nora Vance', '/avatars/photos/p-1.jpg');
+    expect(answerMock).toHaveBeenCalledWith('dr-1', 'po-1', 'hourly', 'Nora Vance', '/avatars/photos/p-1.jpg', 'p-1');
   });
 
   it('409s (not 404) when the question is gone or already answered', async () => {
@@ -169,7 +169,7 @@ describe('POST /api/designs/:id/signoff', () => {
     const res = await request(buildApp())
       .post('/api/designs/dr-1/signoff').send({ decision: 'approve', role: 'admin', avatarUrl: '/forged.jpg' });
     expect(res.status).toBe(200);
-    expect(signoffMock).toHaveBeenCalledWith('dr-1', 'approve', 'Nora Vance', 'sme', '/avatars/photos/p-1.jpg');
+    expect(signoffMock).toHaveBeenCalledWith('dr-1', 'approve', 'Nora Vance', 'sme', '/avatars/photos/p-1.jpg', 'p-1');
     expect(res.body.status).toBe('approved');
   });
 
@@ -179,7 +179,7 @@ describe('POST /api/designs/:id/signoff', () => {
     signoffMock.mockResolvedValue({ thread: THREAD });
     await request(buildApp()).post('/api/designs/dr-1/signoff').send({ decision: 'reject', role: 'admin' });
     expect(userAvatars).toHaveBeenCalledWith([{ id: 'u-9', personId: null }]);
-    expect(signoffMock).toHaveBeenCalledWith('dr-1', 'reject', 'u-9', 'member', null);
+    expect(signoffMock).toHaveBeenCalledWith('dr-1', 'reject', 'u-9', 'member', null, 'user:u-9');
   });
 
   it('409s a blocked approval and forwards blockingId so the drawer can link it', async () => {

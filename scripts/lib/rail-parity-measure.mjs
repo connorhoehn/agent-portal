@@ -1,4 +1,4 @@
-import { listRailPlacementProblems } from './list-rail-profile.mjs';
+import { listRailPlacementProblems, listRailWidthProblems } from './list-rail-profile.mjs';
 // Headless measurement for docs/rail-parity-goal.md: the second rail on the
 // Assessment workspace (or another app's /documents with --other) must agree
 // with /iq/library's concise stacked rail on width, caption, row type, pitch
@@ -135,8 +135,8 @@ async function signIn(page, base, persona, tenant, role) {
 // Initiatives list draws (`nav[aria-label="Explorer"]`). Per page: the list
 // rail's left is the section rail's right (± 2), it starts at the content top
 // (± 2) and runs its full height (± 4), neither it nor any ancestor inside
-// <main> carries a radius (no floating box), its width equals the Initiatives
-// rail's (± 2), and the breadcrumb trail is the first row of the content
+// <main> carries a radius (no floating box), its width uses the ordinary,
+// combined-catalog or explicitly folded profile (± 2), and the breadcrumb trail is the first row of the content
 // column after it: 24px (± 2) right of the list rail, ≤ 24px under the top.
 const LIST_SUBJECTS = (process.env.RAIL_PARITY_LIST ?? '').split(',').map((v) => v.trim()).filter(Boolean);
 if (LIST_SUBJECTS.length) {
@@ -164,6 +164,7 @@ if (LIST_SUBJECTS.length) {
     const cb = crumbEl?.getBoundingClientRect();
     return {
       combined: !!list?.closest('[data-catalog-navigation="combined"]'),
+      collapsed: list?.getAttribute('data-collapsed') === 'true',
       contentLeft: Math.round(content.left), contentTop: Math.round(content.top), contentHeight: Math.round(content.bottom - content.top),
       section: section ? { left: Math.round(section.left), right: Math.round(section.right), width: Math.round(section.width) } : null,
       list: lr ? { left: Math.round(lr.left), right: Math.round(lr.right), top: Math.round(lr.top), width: Math.round(lr.width), height: Math.round(lr.height), radius } : null,
@@ -187,7 +188,7 @@ if (LIST_SUBJECTS.length) {
       if (Math.abs(m.list.top - m.contentTop) > 2) problems.push(`list rail top ${m.list.top} vs content top ${m.contentTop} — something sits above it (a trail, a title)`);
       if (Math.abs(m.list.height - m.contentHeight) > 4) problems.push(`list rail height ${m.list.height} vs content ${m.contentHeight} — not full height`);
       if (m.list.radius > 2) problems.push(`the list rail floats in a rounded box (radius ${m.list.radius}px)`);
-      if (ref?.list && Math.abs(m.list.width - ref.list.width) > 2) problems.push(`list rail width ${m.list.width} vs the Initiatives rail ${ref.list.width}`);
+      problems.push(...listRailWidthProblems({ combined: m.combined, collapsed: m.collapsed, width: m.list.width }, ref?.list?.width));
       if (!m.crumb) problems.push('no breadcrumb trail right of the list rail');
       else {
         if (Math.abs(m.crumb.left - m.list.right - 24) > 2) problems.push(`trail at x=${m.crumb.left}, ${m.crumb.left - m.list.right}px right of the list rail (want 24)`);

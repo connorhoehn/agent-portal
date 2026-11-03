@@ -33,7 +33,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
-import { DESIGNS_SOURCE, STATUS_LABEL, STATUS_TONE, designParticipantPortrait, latestSignoffs, nextStep } from './designFormat';
+import { DESIGNS_SOURCE, STATUS_LABEL, STATUS_TONE, designParticipantPortrait, designParticipants, latestSignoffs, nextStep } from './designFormat';
 import type { DesignThread } from './types';
 
 interface InitiativeLite {
@@ -102,10 +102,10 @@ export default function DesignThreadPage() {
   const isTerminal = thread.status === 'approved' || thread.status === 'rejected' || thread.status === 'superseded';
 
   // Everyone who actually spoke in the thread — humans and the agents.
-  const participants = [...new Map(thread.posts.map((p) => [p.authorName, p.authorKind])).entries()];
+  const participants = designParticipants(thread.posts);
   const owner = initiative?.ownerName ?? null;
   const ownerPhoto = initiative?.contributors.find(person => person.personId === initiative.ownerId)?.avatarUrl ?? undefined;
-  const photoFor = (name: string) => designParticipantPortrait(name, thread, initiative?.contributors ?? []);
+  const photoFor = (name: string, identity?: string) => designParticipantPortrait(name, thread, initiative?.contributors ?? [], identity);
   const smes = (initiative?.contributors ?? []).filter((c) => (c.role ?? '').toLowerCase() === 'sme');
 
   const rail = (
@@ -151,9 +151,9 @@ export default function DesignThreadPage() {
         {participants.length > 0 && (
           <>
             <SectionLabel as="div" className="mt-1">In this thread</SectionLabel>
-            {participants.map(([name, kind]) => (
-              <Inline key={name} align="center" gap="xs">
-                {kind === 'human' ? <Avatar name={name} src={photoFor(name)} size={24} /> : <T role="img" aria-label="agent">🤖</T>}
+            {participants.map(({ authorName: name, authorKind: kind, authorId, id }) => (
+              <Inline key={authorId ?? id} align="center" gap="xs">
+                {kind === 'human' ? <Avatar name={name} src={photoFor(name, authorId)} size={24} /> : <T role="img" aria-label="agent">🤖</T>}
                 <T className="truncate">{name}</T>
               </Inline>
             ))}
@@ -236,7 +236,7 @@ export default function DesignThreadPage() {
               id: p.id,
               authorKind: p.authorKind,
               authorName: p.authorName,
-              avatarUrl: p.authorKind === 'human' ? (p.avatarUrl === undefined ? photoFor(p.authorName) : p.avatarUrl ?? undefined) : undefined,
+              avatarUrl: p.authorKind === 'human' ? (p.avatarUrl === undefined ? photoFor(p.authorName, p.authorId) : p.avatarUrl ?? undefined) : undefined,
               kind: p.kind,
               body: p.body,
               resolved: p.resolvedBy != null,
@@ -249,7 +249,7 @@ export default function DesignThreadPage() {
 
           <SignoffPanel
             variant="inline"
-            signoffs={signoffs.map((s) => ({ name: s.personName, avatarUrl: s.avatarUrl === undefined ? photoFor(s.personName) : s.avatarUrl ?? undefined, role: s.role, decision: s.decision }))}
+            signoffs={signoffs.map((s) => ({ name: s.personName, avatarUrl: s.avatarUrl === undefined ? photoFor(s.personName, s.signerId) : s.avatarUrl ?? undefined, role: s.role, decision: s.decision }))}
             required={2}
             {...(canSteer && !isTerminal ? {
               actions: (

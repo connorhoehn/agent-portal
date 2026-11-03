@@ -6,7 +6,7 @@
 //   list-rail     a list rail is flush: its left is the previous rail's right,
 //                 it starts at the content top and runs its full height, no
 //                 ancestor inside <main> rounds it (no floating box), and it
-//                 is the Initiatives rail's 264px
+//                 follows the ordinary/combined/folded rail width profile
 //   crumbs-first  the breadcrumb trail is the content column's first row
 //   gutter        the trail sits at the standard 24px gutter from the
 //                 content column's left edge — one value on every route
@@ -21,6 +21,7 @@
 // route as the cascade half of the routes' rendered contract
 // (docs/journeys/contracts/cascade.json, docs/journeys.md).
 import { test, expect, type Page } from '@playwright/test';
+import { listRailWidthProblems } from '../../scripts/lib/list-rail-profile.mjs';
 import { BREADCRUMB_SELECTOR } from '../../scripts/lib/breadcrumb-selector.mjs';
 import {
   DEPTH_PAIRS, LIST_PAGES, OBSERVED_ROUTES, PARAM_ROUTES, SWEEP_USER, TENANTS, exemptions, resolveParam, routeKey, sourceDigest, staticInventory,
@@ -32,8 +33,6 @@ import { signInMeasured as signInAs } from './realSession';
 
 const BASE = process.env.LAYOUT_CASCADE_BASE ?? 'http://127.0.0.1:5183';
 const GUTTER = 24;
-// The Initiatives rail (ExplorerLayout railWidth="ms"): every list rail shares it.
-const LIST_RAIL_WIDTH = 264;
 const TOL = 2;
 // EditorShell's head carries a fixed 20px inset (docs/ui-components-queue.md),
 // so a loaded editor's h1 sits that far right of the trail until the library
@@ -52,7 +51,7 @@ interface Measure {
   // `data-collapsed="true"`, 36px): not navigation columns, but the content
   // column starts after them.
   strips: Array<{ left: number; right: number }>;
-  listRail: { left: number; right: number; top: number; height: number; width: number; radius: number } | null;
+  listRail: { combined: boolean; collapsed: boolean; left: number; right: number; top: number; height: number; width: number; radius: number } | null;
   crumb: { left: number; top: number; bottom: number; text: string } | null;
   title: { left: number; top: number; hidden: boolean; text: string } | null;
   footers: number;
@@ -84,7 +83,7 @@ async function measure(page: Page): Promise<Measure> {
       const b = listEl.getBoundingClientRect();
       let radius = 0;
       for (let el: Element | null = listEl; el && el !== main; el = el.parentElement) radius = Math.max(radius, parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0);
-      listRail = { left: Math.round(b.left), right: Math.round(b.right), top: Math.round(b.top), height: Math.round(b.height), width: Math.round(b.width), radius };
+      listRail = { combined: !!listEl.closest('[data-catalog-navigation="combined"]'), collapsed: listEl.getAttribute('data-collapsed') === 'true', left: Math.round(b.left), right: Math.round(b.right), top: Math.round(b.top), height: Math.round(b.height), width: Math.round(b.width), radius };
       for (const r of rails) if (Math.abs(r.left - listRail.left) <= 2) r.list = true;
     }
     const crumbEl = [...(main ?? document).querySelectorAll(breadcrumbSelector)].find(visible) ?? null;
@@ -138,7 +137,7 @@ function judge(route: string, m: Measure, skip: Set<Invariant>): Violation[] {
     if (Math.abs(l.top - m.mainTop) > 2) bad('list-rail', `list rail starts ${l.top - m.mainTop}px below the content top`);
     if (l.height < m.mainHeight - 4) bad('list-rail', `list rail ${l.height}px of ${m.mainHeight} — not full height`);
     if (l.radius > 2) bad('list-rail', `list rail floats in a rounded box (radius ${l.radius}px)`);
-    if (Math.abs(l.width - LIST_RAIL_WIDTH) > 2) bad('list-rail', `list rail ${l.width}px wide, the Initiatives rail is ${LIST_RAIL_WIDTH}`);
+    for (const problem of listRailWidthProblems(l)) bad('list-rail', problem);
   }
   // The content column's left edge: right of the last rail (or folded rail strip) beside the trail.
   const contentLeft = Math.max(m.mainLeft, ...[...m.rails, ...m.strips].filter((r) => !m.crumb || r.left < m.crumb.left).map((r) => r.right));

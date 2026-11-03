@@ -45,6 +45,8 @@ export default function WorkHomePage() {
   const requestedConsult = params.get('consult');
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
+  // Consult answers direct an agent; queue reviews retain the separate devbox gate.
+  const canAnswerConsults = ready && can('DispatchAgentRun');
 
   const { data: summary, error: summaryError, degraded: summaryDegraded, refresh: refreshSummary } = useFetch<Summary>('/api/work/summary', 8_000);
   const summaryFailure = summaryError ?? summaryDegraded;
@@ -117,7 +119,7 @@ export default function WorkHomePage() {
     },
   };
   const waiting = attentionCount(consultsForPrompts, jobs, proposals);
-  const prompts = attentionPrompts({ consults: consultsForPrompts, jobs, proposals, canDecide: canManage, money, label: (kind) => PROPOSAL_LABELS[kind] ?? kind }, deckHandlers);
+  const prompts = attentionPrompts({ consults: consultsForPrompts, jobs, proposals, canAnswerConsults, canReview: canManage, money, label: (kind) => PROPOSAL_LABELS[kind] ?? kind }, deckHandlers);
   const selectedPromptId = requestedConsult ? `consult:${requestedConsult}` : null;
   const selectedPrompt = prompts.find(prompt => prompt.id === selectedPromptId);
   const orderedPrompts = selectedPrompt ? [selectedPrompt, ...prompts.filter(prompt => prompt.id !== selectedPromptId)] : prompts;

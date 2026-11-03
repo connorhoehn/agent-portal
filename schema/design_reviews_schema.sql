@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS design_posts (
   review_id    TEXT NOT NULL REFERENCES design_reviews(id) ON DELETE CASCADE,
   author_kind  TEXT NOT NULL CHECK (author_kind IN ('agent','human')),
   author_name  TEXT NOT NULL,
+  -- Person ID, or user:<account ID> for an unlinked signed account.
+  author_id    TEXT,
+  avatar_url   TEXT,
   kind         TEXT NOT NULL
                CHECK (kind IN ('problem','analysis','option','question','answer','artifact','revision','decision')),
   body         TEXT NOT NULL,
@@ -59,3 +62,9 @@ CREATE TABLE IF NOT EXISTS design_signoffs (
   -- One standing sign-off per person; a new decision replaces the old.
   PRIMARY KEY (review_id, person_id)
 );
+
+-- Additive upgrade for existing tables; no name-based identity inference.
+ALTER TABLE design_posts ADD COLUMN IF NOT EXISTS author_id TEXT;
+ALTER TABLE design_posts ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+-- design_signoffs already uses people.id as its primary identity. Its future
+-- SQL provider must expose that value as signerId, never group by display name.

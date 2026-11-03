@@ -62,15 +62,17 @@ export function StackedCatalogLayout({
       navigate(href);
     },
   });
+  const distinctView = listTitle.toLowerCase().replace(/^all /, '') !== title.toLowerCase();
   const breadcrumbs = [
     ...(group.toLowerCase() === title.toLowerCase().replace(/s$/, '') ? [] : [{ label: group }]),
-    ...([crumb(title, sectionHref),
-      ...(selectedId ? [...(listTitle.toLowerCase().replace(/^all /, '') === title.toLowerCase() ? [] : [crumb(listTitle, listHref)]), { label: selectedTitle ?? 'Record' }] : [{ label: listTitle }])]),
+    selectedId || distinctView ? crumb(title, sectionHref) : { label: title },
+    ...(distinctView ? [selectedId ? crumb(listTitle, listHref) : { label: listTitle }] : []),
+    ...(selectedId ? [{ label: selectedTitle ?? 'Record' }] : []),
   ];
   if (navigation === 'combined') {
     const active = items.find(item => item.active) ?? items[0];
     const header = <Stack gap="none">
-      <ScopeHeader variant="crumbs" breadcrumbs={selectedId ? breadcrumbs : breadcrumbs.filter((item, index) => index === 0 || item.label !== breadcrumbs[index - 1]?.label)} />
+      <ScopeHeader variant="crumbs" breadcrumbs={breadcrumbs} />
       <PageHeader title={selectedId && recordHeading ? selectedTitle ?? title : title}
         description={selectedId ? undefined : overviewDescription} actions={selectedId ? undefined : overviewActions}
         className={`border-b border-border px-6 pb-3 ${UNDER_CRUMBS_BAND}`} data-testid="catalog-pane-header" />
@@ -86,7 +88,7 @@ export function StackedCatalogLayout({
                     onNavigate: event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return; event.preventDefault(); navigate(item.path); } }))} />}
               {railHeader}
             </Stack>,
-            body: selectedId ? railNotice ?? <GroupedList size="md" rowStyle="ruled" currentStyle="bar" groupHeading="title" groupCountAlign="inline"
+            body: selectedId ? railNotice ?? <GroupedList size="md" rowStyle="ruled" currentStyle="bar" groupHeading="label" groupCountAlign="end"
               groups={groupsOf(rows, listTitle)} rows={rows.map(row => ({ id: row.id, title: row.title, groupId: row.subline ?? listTitle, subline: row.description }))}
               currentId={selectedId} onOpenRow={row => onSelect(row.id)} /> : null,
           }} data-testid="catalog-explorer">

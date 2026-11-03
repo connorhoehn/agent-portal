@@ -24,18 +24,18 @@ export function HangoutCallView({ title, count, pane, onPaneChange, stage, conve
         <Button variant="secondary" size="sm" ref={peopleButton} aria-controls={sidebarId} aria-expanded={pane === 'people'} onClick={() => onPaneChange(pane === 'people' ? null : 'people')}>People ({count})</Button>
         <Button variant="secondary" size="sm" ref={conversationButton} aria-controls={sidebarId} aria-expanded={pane === 'conversation'} onClick={() => onPaneChange(pane === 'conversation' ? null : 'conversation')}>Conversation</Button>
       </Inline>} />
-    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden border-t border-border" data-testid="hangout-call-layout">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" data-testid="hangout-gallery">{stage}</div>
-      {pane && <div id={sidebarId} onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); closePane(); } }} className="absolute inset-y-0 right-0 z-20 w-[min(100%,22rem)] bg-surface shadow-lg @min-[780px]:relative @min-[780px]:z-auto @min-[780px]:w-80 @min-[780px]:shrink-0 @min-[780px]:shadow-none" data-testid="hangout-call-sidebar">
-        <ChatSidePanelFrame title="In this call" subtitle={title} size="sm" onClose={closePane} closeLabel="Close call sidebar">
+    <Inline gap="none" align="stretch" wrap={false} className="relative min-h-0 min-w-0 flex-1 overflow-hidden border-t border-border" data-testid="hangout-call-layout">
+      <Stack gap="none" className="min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="hangout-gallery">{stage}</Stack>
+      {pane && <Stack gap="none" id={sidebarId} onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); closePane(); } }} className="absolute inset-y-0 right-0 z-20 w-[min(100%,22rem)] bg-surface shadow-lg @min-[780px]:relative @min-[780px]:z-auto @min-[780px]:w-80 @min-[780px]:shrink-0 @min-[780px]:shadow-none" data-testid="hangout-call-sidebar">
+        <ChatSidePanelFrame title="In this call" subtitle={title} onClose={closePane} closeLabel="Close call sidebar">
           <Stack gap="none" className="h-full min-h-0">
             <Tabs idPrefix="hangout-call-pane" aria-label="Call sidebar" value={pane} onValueChange={value => onPaneChange(value as Exclude<HangoutCallPane, null>)}
               items={[{ id: 'conversation', label: 'Conversation' }, { id: 'people', label: `People (${count})` }]} variant="underline" size="sm" />
-            <div role="tabpanel" id="hangout-call-pane-panel-conversation" aria-labelledby="hangout-call-pane-tab-conversation" className={pane === 'conversation' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'} hidden={pane !== 'conversation'}>{conversation}</div>
-            {pane === 'people' && <div role="tabpanel" id="hangout-call-pane-panel-people" aria-labelledby="hangout-call-pane-tab-people" className="min-h-0 flex-1 overflow-y-auto">{people}</div>}
+            <Stack gap="none" role="tabpanel" id="hangout-call-pane-panel-conversation" aria-labelledby="hangout-call-pane-tab-conversation" className={pane === 'conversation' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'} hidden={pane !== 'conversation'}>{conversation}</Stack>
+            {pane === 'people' && <Stack gap="none" role="tabpanel" id="hangout-call-pane-panel-people" aria-labelledby="hangout-call-pane-tab-people" className="min-h-0 flex-1 overflow-y-auto">{people}</Stack>}
           </Stack>
         </ChatSidePanelFrame>
-      </div>}
-    </div>
+      </Stack>}
+    </Inline>
   </Stack>;
 }

@@ -13,7 +13,8 @@ export interface AttentionHandlers {
   decideProposal(p: Proposal, decision: 'approve' | 'reject'): Promise<void>;
 }
 
-const READ_ONLY = 'Answering and reviewing need the ManageDevbox capability; you can read these but not decide them.';
+const ANSWER_READ_ONLY = 'Your access allows you to read this question, but not answer it.';
+const REVIEW_READ_ONLY = 'Your access allows you to read this review, but not decide it.';
 
 /** How many items wait on a person. */
 export function attentionCount(consults: readonly LabConsult[], jobs: readonly Job[], proposals: readonly Proposal[]): number {
@@ -25,13 +26,14 @@ const done = async (run: () => Promise<void>): Promise<ComposerPromptResult> => 
 };
 
 export function attentionPrompts(
-  { consults, jobs, proposals, canDecide, money, label }: {
-    consults: readonly LabConsult[]; jobs: readonly Job[]; proposals: readonly Proposal[]; canDecide: boolean;
+  { consults, jobs, proposals, canAnswerConsults, canReview, money, label }: {
+    consults: readonly LabConsult[]; jobs: readonly Job[]; proposals: readonly Proposal[]; canAnswerConsults: boolean; canReview: boolean;
     money: (usd: number | undefined) => string; label: (kind: string) => string;
   },
   handlers: AttentionHandlers,
 ): ComposerPrompt[] {
-  const readOnly = canDecide ? {} : { readOnlyReason: READ_ONLY };
+  const answerAccess = canAnswerConsults ? {} : { readOnlyReason: ANSWER_READ_ONLY };
+  const reviewAccess = canReview ? {} : { readOnlyReason: REVIEW_READ_ONLY };
   const out: ComposerPrompt[] = [];
   for (const c of consults) out.push({
     id: `consult:${c.id}`, eyebrow: 'Agent question', title: c.repo ?? 'A running agent', question: c.question, kind: 'text',
@@ -41,7 +43,7 @@ export function attentionPrompts(
       ...(c.repo ? [{ label: 'Repo', value: c.repo, mono: true }] : []),
       ...(c.boxId ? [{ label: 'Box', value: c.boxId, mono: true }] : []),
     ],
-    ...readOnly,
+    ...answerAccess,
     onAnswer: (answer) => answer.kind === 'text' ? done(() => handlers.answerConsult(c.id, answer.text)) : { error: 'Type an answer.' },
   });
   for (const j of jobs.filter((x) => x.status === 'awaiting_review')) out.push({
@@ -52,7 +54,7 @@ export function attentionPrompts(
       ...(j.payload?.workItemTitle ? [{ label: 'Serves', value: [j.payload.workItemTitle, j.payload.initiativeName].filter(Boolean).join(' · ') }] : []),
       { label: 'Cost', value: money(j.result?.costUsd) },
     ],
-    ...readOnly,
+    ...reviewAccess,
     onAnswer: (answer) => answer.kind === 'choice' && (answer.optionId === 'accept' || answer.optionId === 'reject')
       ? done(() => handlers.reviewJob(j, answer.optionId as 'accept' | 'reject')) : { error: 'Pick Accept or Reject.' },
   });
@@ -65,7 +67,7 @@ export function attentionPrompts(
       { label: 'Source', value: p.source, mono: true },
       ...(p.confidence != null ? [{ label: 'Confidence', value: `${(p.confidence * 100).toFixed(0)}%` }] : []),
     ],
-    ...readOnly,
+    ...reviewAccess,
     onAnswer: (answer) => answer.kind === 'choice' && (answer.optionId === 'approve' || answer.optionId === 'reject')
       ? done(() => handlers.decideProposal(p, answer.optionId as 'approve' | 'reject')) : { error: 'Pick Approve or Reject.' },
   });

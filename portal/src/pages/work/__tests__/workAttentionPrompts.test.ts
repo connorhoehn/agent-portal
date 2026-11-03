@@ -13,7 +13,7 @@ const handlers = {
   reviewJob: async (j: Job, d: string) => { calls.push(`review ${j.id} ${d}`); },
   decideProposal: async (p: Proposal, d: string) => { if (d === 'reject') throw new Error('graph locked'); calls.push(`proposal ${p.id} ${d}`); },
 };
-const build = (canDecide: boolean) => attentionPrompts({ consults: [consult], jobs: [job('awaiting_review'), job('completed')], proposals: [proposal], canDecide, money: (n) => `$${n}`, label: (k) => k }, handlers);
+const build = (canReview: boolean, canAnswerConsults = canReview) => attentionPrompts({ consults: [consult], jobs: [job('awaiting_review'), job('completed')], proposals: [proposal], canAnswerConsults, canReview, money: (n) => `$${n}`, label: (k) => k }, handlers);
 
 test('one prompt per item that waits on a person, questions first', () => {
   const prompts = build(true);
@@ -34,4 +34,18 @@ test('answers call the page handlers; a failed write stays on the card', async (
 test('a reader without the capability sees the prompts read-only', () => {
   assert.ok(build(false).every((p) => typeof p.readOnlyReason === 'string' && p.readOnlyReason.length > 0));
   assert.ok(build(true).every((p) => p.readOnlyReason === undefined));
+});
+
+// These capabilities intentionally differ for program owners and org leaders.
+test('dispatch-only people can answer questions without receiving queue review controls', () => {
+  const [question, review, proposal] = build(false, true);
+  assert.equal(question!.readOnlyReason, undefined);
+  assert.ok(review!.readOnlyReason);
+  assert.ok(proposal!.readOnlyReason);
+});
+test('devbox-only capability cannot enable consult answers', () => {
+  const [question, review, proposal] = build(true, false);
+  assert.ok(question!.readOnlyReason);
+  assert.equal(review!.readOnlyReason, undefined);
+  assert.equal(proposal!.readOnlyReason, undefined);
 });

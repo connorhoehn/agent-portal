@@ -27,13 +27,15 @@ test('sources, omitted inputs, installed skills and assembly identity are docume
   assert.match(html, /v2; current version v3/);
   assert.match(html, /Restore a failed service/);
   assert.match(html, /Over the token budget/);
-  assert.ok(html.includes(brief.sha256));
+  assert.ok(html.includes(`<code>${brief.sha256}</code>`));
+  assert.match(html, /<code>job-1<\/code>/);
+  assert.match(html, /<code>wi-1<\/code>/);
   assert.ok(html.includes(brief.skill_library!.sha256));
   assert.equal(JSON.stringify(brief), original, 'saved instructions and checksums stay unchanged');
 });
 
 test('source labels and metadata cannot inject headings or HTML into the document', () => {
-  const changed = { ...brief, sections: [{ ...brief.sections[0]!, reason: '\n## Injected heading\n[Surprise](https://evil.example)' }] };
+  const changed = { ...brief, assembler_version: '`<script>no()</script>\n## Bad', sections: [{ ...brief.sections[0]!, reason: '\n## Injected heading\n[Surprise](https://evil.example)' }] };
   const html = documentMarkdownHtml(briefDocumentMarkdown(changed, { ...options, referenceLabel: () => '<script>bad()</script>' }));
   assert.doesNotMatch(html, /<script>|<h2>Injected|<a[^>]+>Surprise<\/a>/);
   assert.match(html, /Injected heading/);

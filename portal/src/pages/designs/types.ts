@@ -11,6 +11,8 @@ export interface DesignPost {
   id: string;
   authorKind: 'agent' | 'human';
   authorName: string;
+  /** Canonical person ID, or user:<account ID> for an unlinked signed author. */
+  authorId?: string;
   avatarUrl?: string | null;
   kind: PostKind;
   body: string;
@@ -21,6 +23,7 @@ export interface DesignPost {
 
 export interface DesignSignoff {
   personName: string;
+  signerId?: string;
   avatarUrl?: string | null;
   role: string;
   decision: 'approve' | 'reject';

@@ -23,10 +23,11 @@ import { createRequire } from 'node:module';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ROOT, mapFiles, loadMaps, composeLog, familyDir, coverageModel, coverageMarkdown, rel } from './maps.mjs';
+import { resolveUiAuditSkill } from '../lib/ui-audit-skill.cjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORTAL = path.join(ROOT, 'portal');
-const SKILL = path.resolve(process.env.UI_DOM_AUDIT_SKILL ?? path.join(ROOT, '.claude/skills/ui-dom-audit'));
+const SKILL = resolveUiAuditSkill({ root: ROOT });
 const BASE = process.env.JOURNEY_BASE_URL ?? process.env.UI_AUDIT_BASE_URL ?? 'http://127.0.0.1:5183';
 
 function args(argv) {

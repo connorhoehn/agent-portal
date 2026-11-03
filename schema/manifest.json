@@ -387,6 +387,13 @@
         ]
       },
       "why": "Moves human work_item_comments into the orgiq:work:<id> chat threads (middleware/src/lib/migrate-work-comments.ts). Runs against the deployed chat tables (`env`; the operator's shell overrides it) and the Aurora vars from middleware/.env.aws. Must be applied before the BFF that reads the thread is deployed."
+    },
+    {
+      "id": "2026-11-02-canonical-portraits",
+      "kind": "data",
+      "file": "migrations/2026-11-02-canonical-portraits.sql",
+      "dry_run_file": "migrations/2026-11-02-canonical-portraits.dry-run.sql",
+      "why": "Reviewed synthetic portrait cast, by canonical ID only. Publish and verify all hosted JPEG hashes first. Preserves custom photos and linked accounts. Assessment contributor JSON lacks canonical identity and is excluded."
     }
   ],
   "seed_run": [

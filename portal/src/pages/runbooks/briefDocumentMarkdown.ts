@@ -5,6 +5,10 @@ import type { Brief, BriefSection, BriefSkillDetail } from './types';
 const text = (value: string) => value.replace(/\\/g, '\\\\').replace(/[\[\]`*_<>#|]/g, '\\$&').replace(/\r?\n/g, ' ');
 const runbookLink = (id: string, label: string) => `[${text(label)}](/iq/runbooks/${encodeURIComponent(id)})`;
 const count = (n: number) => n.toLocaleString('en-US');
+const code = (value: string) => {
+  const delimiter = '`'.repeat(Math.max(0, ...(value.match(/`+/g) ?? []).map(run => run.length)) + 1);
+  return `${delimiter} ${value.replace(/\r?\n/g, ' ')} ${delimiter}`;
+};
 
 /** Supporting evidence belongs to the same document and outline as the instructions. */
 export function briefDocumentMarkdown(brief: Brief, options: {
@@ -38,15 +42,15 @@ export function briefDocumentMarkdown(brief: Brief, options: {
   }
   parts.push('## Assembly details', '_The document identity and inputs for this brief._');
   const fields = [
-    ['Brief', brief.id], ['Run', brief.run_ref], ['Assembler', brief.assembler_version],
+    ['Brief', code(brief.id)], ['Run', code(brief.run_ref)], ['Assembler', code(brief.assembler_version)],
     ['Tokens', `${count(brief.used_tokens)} of ${count(brief.budget_tokens)}`],
     [options.frozen ? 'Saved' : 'Assembled', new Date(brief.assembled_at).toUTCString()],
-    ...(brief.work_item_id ? [['Work item', `${options.workItemLabel} (${brief.work_item_id})`]] : []),
-    ...(brief.initiative_id ? [['Initiative', options.initiativeLabel]] : []),
-    ...(brief.repo ? [['Repository', brief.repo]] : []),
+    ...(brief.work_item_id ? [['Work item', `${text(options.workItemLabel)} (${code(brief.work_item_id)})`]] : []),
+    ...(brief.initiative_id ? [['Initiative', text(options.initiativeLabel)]] : []),
+    ...(brief.repo ? [['Repository', code(brief.repo)]] : []),
   ];
-  parts.push(fields.map(([label, value]) => `- **${label}:** ${text(value)}`).join('\n'));
-  parts.push(`**Document checksum (SHA-256)**\n\n${text(brief.sha256)}`);
-  if (brief.skill_library) parts.push(`**Skill library checksum (SHA-256)**\n\n${text(brief.skill_library.sha256)}`);
+  parts.push(fields.map(([label, value]) => `- **${label}:** ${value}`).join('\n'));
+  parts.push(`**Document checksum (SHA-256)**\n\n${code(brief.sha256)}`);
+  if (brief.skill_library) parts.push(`**Skill library checksum (SHA-256)**\n\n${code(brief.skill_library.sha256)}`);
   return parts.join('\n\n') + '\n';
 }

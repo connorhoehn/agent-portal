@@ -31,6 +31,8 @@ export interface DesignPost {
   /** 'agent' posts come from the fleet; 'human' from a signed-in person. */
   authorKind: 'agent' | 'human';
   authorName: string;
+  /** Canonical person ID, or user:<account ID> for an unlinked signed author. */
+  authorId?: string;
   /** Portrait captured from the signed author, never guessed from a name. */
   avatarUrl?: string | null;
   kind: PostKind;
@@ -44,6 +46,7 @@ export interface DesignPost {
 
 export interface DesignSignoff {
   personName: string;
+  signerId?: string;
   avatarUrl?: string | null;
   role: string;
   decision: 'approve' | 'reject';
@@ -114,10 +117,11 @@ export function tallySignoffs(signoffs: DesignSignoff[]): {
   approvals: number; rejections: number; approved: boolean;
 } {
   const latest = new Map<string, DesignSignoff>();
-  for (const s of signoffs) latest.set(s.personName, s);
+  for (const s of signoffs) latest.set(s.signerId ? `id:${s.signerId}` : `legacy:${s.personName}`, s);
   let approvals = 0, rejections = 0;
   for (const s of latest.values()) {
-    if (s.decision === 'approve') approvals++; else rejections++;
+    // A name-only historical approval cannot establish a distinct person.
+    if (s.decision === 'approve') { if (s.signerId) approvals++; } else rejections++;
   }
   return { approvals, rejections, approved: rejections === 0 && approvals >= APPROVALS_REQUIRED };
 }
@@ -192,7 +196,7 @@ export async function getDesignThread(id: string): Promise<DesignThread | null> 
  * the revision is synchronous; on Aurora it will be an enqueued agent job.
  */
 export async function answerQuestion(
-  id: string, questionPostId: string, body: string, byName: string, avatarUrl?: string | null,
+  id: string, questionPostId: string, body: string, byName: string, avatarUrl?: string | null, authorId?: string,
 ): Promise<DesignThread | null> {
   const doc = docs().find((d) => d.id === id);
   if (!doc) return null;
@@ -200,7 +204,7 @@ export async function answerQuestion(
   if (!q || q.resolvedBy != null) return null;
 
   const answer = newPost({
-    authorKind: 'human', authorName: byName, avatarUrl, kind: 'answer', body,
+    authorKind: 'human', authorName: byName, authorId, avatarUrl, kind: 'answer', body,
     createdAt: new Date().toISOString(),
   });
   q.resolvedBy = answer.id;
@@ -208,13 +212,13 @@ export async function answerQuestion(
 
   // The agent keeps going: it folds the answer into a revision.
   doc.posts.push(newPost({
-    authorKind: q.authorKind, authorName: q.authorName, kind: 'revision',
+    authorKind: q.authorKind, authorName: q.authorName, authorId: q.authorId, avatarUrl: q.avatarUrl, kind: 'revision',
     createdAt: new Date().toISOString(),
     body: `Revised with the answer above: ${body.length > 120 ? body.slice(0, 117) + '…' : body} — plan updated accordingly. Ready for a decision once the stewards agree.`,
   }));
   if (openQuestions(doc) === 0) {
     doc.posts.push(newPost({
-      authorKind: q.authorKind, authorName: q.authorName, kind: 'decision',
+      authorKind: q.authorKind, authorName: q.authorName, authorId: q.authorId, avatarUrl: q.avatarUrl, kind: 'decision',
       createdAt: new Date().toISOString(),
       body: 'Decision proposed on the basis of the resolved questions above. Sign-offs from two stewards approve it and log it to the knowledge base.',
     }));
@@ -236,7 +240,7 @@ export async function answerQuestion(
  * approved ADR and is logged to the knowledge base.
  */
 export async function signoffDesign(
-  id: string, decision: 'approve' | 'reject', byName: string, role: string, avatarUrl?: string | null,
+  id: string, decision: 'approve' | 'reject', byName: string, role: string, avatarUrl?: string | null, signerId?: string,
 ): Promise<{ thread: DesignThread; error?: never } | { thread?: never; error: string; blockingId?: string } | null> {
   const doc = docs().find((d) => d.id === id);
   if (!doc) return null;
@@ -250,8 +254,8 @@ export async function signoffDesign(
     if (!gate.ok) return { error: gate.reason, ...(gate.blockingId ? { blockingId: gate.blockingId } : {}) };
   }
 
-  doc.signoffs = doc.signoffs.filter((s) => s.personName !== byName);
-  doc.signoffs.push({ personName: byName, avatarUrl, role, decision, at: new Date().toISOString() });
+  doc.signoffs = doc.signoffs.filter((s) => signerId ? s.signerId !== signerId : s.signerId != null || s.personName !== byName);
+  doc.signoffs.push({ personName: byName, signerId, avatarUrl, role, decision, at: new Date().toISOString() });
 
   const tally = tallySignoffs(doc.signoffs);
   if (decision === 'reject') {

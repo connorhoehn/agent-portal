@@ -20,10 +20,10 @@ export const designsRouter: Router = Router();
 
 const steerGate = requireAction('DispatchAgentRun');
 
-async function actorPortrait(userId: string | undefined): Promise<string | null> {
-  if (!userId) return null;
+async function designActor(userId: string | undefined): Promise<{ id?: string; avatarUrl: string | null }> {
+  if (!userId) return { avatarUrl: null };
   const user = await getUser(userId);
-  return (await userAvatars([user ?? { id: userId, personId: null }])).get(userId) ?? null;
+  return { id: user?.personId ?? `user:${userId}`, avatarUrl: (await userAvatars([user ?? { id: userId, personId: null }])).get(userId) ?? null };
 }
 
 // GET /api/designs?initiative=&status=
@@ -63,10 +63,11 @@ designsRouter.post('/:id/answer', steerGate, asyncHandler(async (req, res) => {
   }
   if (!await designInScope(req, res, 'answer design questions')) return;
   const session = resolveSession(req);
+  const actor = await designActor(session?.sub);
   const thread = await answerQuestion(
     String(req.params['id'] ?? ''), questionPostId, String(body).trim(),
     session?.name ?? session?.sub ?? 'someone',
-    await actorPortrait(session?.sub),
+    actor.avatarUrl, actor.id,
   );
   if (!thread) {
     res.status(409).json({ error: 'question not found or already answered' });
@@ -86,10 +87,11 @@ designsRouter.post('/:id/signoff', steerGate, asyncHandler(async (req, res) => {
   }
   if (!await designInScope(req, res, 'sign off designs')) return;
   const session = resolveSession(req);
+  const actor = await designActor(session?.sub);
   const result = await signoffDesign(
     String(req.params['id'] ?? ''), decision,
     session?.name ?? session?.sub ?? 'someone', session?.role ?? 'member',
-    await actorPortrait(session?.sub),
+    actor.avatarUrl, actor.id,
   );
   if (!result) throw new NotFoundError('design review not found');
   if ('error' in result && result.error) {
