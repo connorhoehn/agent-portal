@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "9853f346d0a59cff30cf34d50e91a24f0b325ca6294074a34c8e5747fceec1e3",
-  "at": "2026-11-01T14:45:29.443Z"
+  "sourceDigest": "555e35b5595c64f797ac358f01fa32e518302c410e3a73613b7a7d0711af470e",
+  "at": "2026-11-03T01:09:55.128Z"
  },
  "routes": {
   "/access": {
@@ -391,10 +391,12 @@
   },
   "/assessment": {
    "value": {
-    "violations": [],
+    "violations": [
+     "crumbs-first"
+    ],
     "lands": "/assessment/teams"
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-11-03T00:24:50.060Z"
   },
   "/assessment/activity": {
    "value": {
@@ -434,6 +436,13 @@
     "lands": null
    },
    "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/assessment/decks": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-11-03T00:24:50.060Z"
   },
   "/assessment/decks/:deckId": {
    "value": {
@@ -486,10 +495,12 @@
   },
   "/assessment/submissions": {
    "value": {
-    "violations": [],
+    "violations": [
+     "crumbs-first"
+    ],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-11-03T00:24:50.060Z"
   },
   "/assessment/submissions/:submissionId": {
    "value": {
@@ -500,10 +511,12 @@
   },
   "/assessment/teams": {
    "value": {
-    "violations": [],
+    "violations": [
+     "crumbs-first"
+    ],
     "lands": null
    },
-   "changedAt": "2026-10-08T09:14:20.900Z"
+   "changedAt": "2026-11-03T00:24:50.060Z"
   },
   "/assessment/teams/:teamId": {
    "value": {
@@ -591,21 +604,21 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-15T14:45:05.560Z"
+   "changedAt": "2026-11-03T00:37:52.113Z"
   },
   "/iq/decisions?nav=section": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-15T14:45:05.560Z"
+   "changedAt": "2026-11-03T00:37:52.113Z"
   },
   "/iq/decisions/:id": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-15T16:24:14.560Z"
+   "changedAt": "2026-11-03T00:37:52.113Z"
   },
   "/iq/decks/:deckId": {
    "value": {
@@ -619,21 +632,21 @@
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-13T06:28:29.676Z"
+   "changedAt": "2026-11-03T00:37:52.113Z"
   },
   "/iq/designs?nav=section": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-13T06:28:29.676Z"
+   "changedAt": "2026-11-03T00:37:52.113Z"
   },
   "/iq/designs/:id": {
    "value": {
     "violations": [],
     "lands": null
    },
-   "changedAt": "2026-10-15T16:24:14.560Z"
+   "changedAt": "2026-11-03T00:37:52.113Z"
   },
   "/iq/diff": {
    "value": {
@@ -705,12 +718,26 @@
    },
    "changedAt": "2026-10-08T09:14:20.900Z"
   },
+  "/iq/projects?lens=sprints": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-11-03T00:24:50.060Z"
+  },
   "/iq/projects?nav=section": {
    "value": {
     "violations": [],
     "lands": null
    },
    "changedAt": "2026-10-08T09:14:20.900Z"
+  },
+  "/iq/projects?scope=all&view=table": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-11-03T00:24:50.060Z"
   },
   "/iq/projects/:id": {
    "value": {
@@ -851,6 +878,13 @@
     "lands": null
    },
    "changedAt": "2026-10-13T06:28:29.676Z"
+  },
+  "/iq/work/findings?view=failed": {
+   "value": {
+    "violations": [],
+    "lands": null
+   },
+   "changedAt": "2026-11-03T00:24:50.060Z"
   },
   "/iq/work/queue": {
    "value": {

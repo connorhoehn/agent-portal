@@ -7,9 +7,9 @@ count — a hand-walked log is not a map. See docs/journeys.md "Journey maps".
 This is static map coverage, not a count of executed or passing walks.
 
 - **355 maps** (families: access, assessment, demo, pipelines, runbooks, social, user-search, work)
-- **routes:** 90 of 143 inventoried routes visited by a map (63%); 11 visited route(s) are not in the inventory
+- **routes:** 91 of 147 inventoried routes visited by a map (62%); 11 visited route(s) are not in the inventory
 - **roles:** 20 of 22 tenant roles mapped (including cross-tenant roles in each tenant)
-- **cells:** 504 route × role cells, 1325 route × role × state cells, 38 distinct states
+- **cells:** 509 route × role cells, 1375 route × role × state cells, 41 distinct states
 
 ## Covered
 
@@ -74,6 +74,7 @@ This is static map coverage, not a count of executed or passing walks.
 | `/iq/projects` | refused | refused | refused |  | refused | refused | refused | default, dialog-open, empty, error, filtered, filtered-empty, loading, long-text, many, row-open | default, dialog-open, empty, error, filtered, filtered-empty, loading, long-text, many, refused, row-open | default, dialog-open, empty, error, filtered, filtered-empty, loading, long-text, many, refused, row-open | default, dialog-open, empty, error, filtered, filtered-empty, loading, long-text, many, refused, row-open | default, dialog-open, empty, error, filtered, filtered-empty, loading, long-text, many, refused, row-open |  | refused | refused | refused |  | refused | refused | refused |
 | `/iq/projects/:id` |  |  |  |  |  |  |  | default, dialog-open, empty, filtered, filtered-empty, long-text, many, not-found, row-open | default, dialog-open, empty, filtered, filtered-empty, long-text, many, not-found, row-open | default, dialog-open, empty, filtered, filtered-empty, in-room, long-text, many, not-found, pane-open, row-open | default, dialog-open, empty, filtered, filtered-empty, long-text, many, not-found, row-open | default, dialog-open, empty, filtered, filtered-empty, in-room, long-text, many, not-found, pane-open, row-open |  |  |  |  |  |  |  |  |
 | `/iq/projects/:id?item=` |  |  |  |  |  |  |  | default, dialog-open, not-found, row-open | default, dialog-open, not-found, row-open | default, dialog-open, not-found, refused, row-open | default, dialog-open, not-found, row-open | default, dialog-open, not-found, refused, row-open |  |  |  |  |  |  |  |  |
+| `/iq/projects?lens=sprints` |  |  |  |  |  |  |  | default, empty, filtered, filtered-empty, row-open | default, empty, filtered, filtered-empty, row-open | default, dialog-open, empty, filtered, filtered-empty, refused, row-open | default, dialog-open, empty, filtered, filtered-empty, refused, row-open | default, dialog-open, empty, filtered, filtered-empty, row-open |  |  |  |  |  |  |  |  |
 | `/iq/prompts` |  |  |  |  |  |  |  | default, filtered-empty, row-open |  | default, filtered-empty, row-open |  |  |  |  |  |  |  |  |  |  |
 | `/iq/runbooks` |  |  |  |  |  |  |  | default, filtered-empty, row-open | default, filtered-empty, row-open | default, filtered-empty, row-open | default, filtered-empty, row-open | default, filtered-empty, row-open |  |  |  |  |  |  |  |  |
 | `/iq/runbooks/:id` |  |  |  |  |  |  |  | not-found | default, not-found | default, not-found | not-found | not-found |  |  |  |  |  |  |  |  |
@@ -85,7 +86,7 @@ This is static map coverage, not a count of executed or passing walks.
 | `/iq/runs/:id` |  |  |  |  |  |  |  | not-found, row-open |  | not-found, row-open | not-found, row-open | not-found, row-open |  |  |  |  |  |  |  |  |
 | `/iq/scores` |  |  |  |  | refused | refused | refused | default, empty, error, filtered, row-open |  | default, empty, error, filtered, row-open |  |  |  |  |  |  |  |  |  |  |
 | `/iq/scores/cohorts` |  |  |  |  |  |  |  | empty |  | empty |  |  |  |  |  |  |  |  |  |  |
-| `/iq/search` |  |  |  |  | refused | refused | refused | default, filtered, filtered-empty, row-open | default, filtered, filtered-empty, row-open | default, filtered, filtered-empty, row-open | default, filtered, filtered-empty, row-open | default, filtered, filtered-empty, row-open |  | refused | refused | refused |  | refused | refused | refused |
+| `/iq/search` |  |  |  |  | refused | refused | refused | default, dialog-open, filtered, filtered-empty, row-open, scoped-all, scoped-people, scoped-work | default, dialog-open, filtered, filtered-empty, row-open, scoped-all, scoped-people, scoped-work | default, dialog-open, filtered, filtered-empty, row-open, scoped-all, scoped-people, scoped-work | default, dialog-open, filtered, filtered-empty, row-open, scoped-all, scoped-people, scoped-work | default, dialog-open, filtered, filtered-empty, row-open, scoped-all, scoped-people, scoped-work |  | refused | refused | refused |  | refused | refused | refused |
 | `/iq/work` |  |  |  |  |  |  |  | default, empty, error, row-open | default, empty, error, row-open | default, empty, error, row-open | default, empty, error, row-open | default, empty, error, row-open |  |  |  |  |  |  |  |  |
 | `/iq/work/:jobId` |  |  |  |  |  |  |  | default, dialog-open, not-found | default, not-found | default, not-found | default, not-found | default, dialog-open, not-found |  |  |  |  |  |  |  |  |
 | `/iq/work/changes` |  |  |  |  |  |  |  | filtered, filtered-empty | filtered, filtered-empty | filtered, filtered-empty | filtered, filtered-empty | filtered, filtered-empty |  |  |  |  |  |  |  |  |
@@ -147,7 +148,7 @@ Expected per route kind: list → default, filtered-empty, row-open; record → 
 - `/iq/scores/cohorts` (page): default
 - `/iq/work` (list): filtered-empty
 - `/iq/work/changes` (page): default
-- `/iq/work/findings` (list): default, row-open
+- `/iq/work/findings` (page): default
 - `/iq/work/queue` (list): default, row-open
 - `/pipelines/*` (page): default
 - `/pipelines/approvals/:approvalId` (page): default
@@ -158,8 +159,8 @@ Expected per route kind: list → default, filtered-empty, row-open; record → 
 ### Routes no map visits
 
 - **access** (4): `/access/requests?status=open`, `/access/reviews?status=open`, `/access/settings`, `/access`
-- **assessment** (6): `/assessment/activity`, `/assessment/communication`, `/assessment/decks/:deckId`, `/assessment/submissions/:submissionId`, `/assessment/workspace?view=library`, `/assessment`
-- **orgiq** (33): `/admin/capabilities`, `/admin/identity/test`, `/admin/ingest/schedules`, `/admin/ingest/sources`, `/admin/ingest/storage`, `/admin/observability/agents`, `/admin/observability/approvals`, `/admin/observability/authz`, `/admin/observability/calibration`, `/admin/observability/capability-events`, `/admin/observability/cost`, `/admin/observability/drift`, `/admin/observability/guardrail-rules`, `/admin/observability/harness`, `/admin/observability/invocations/search`, `/admin/observability/memory`, `/admin/observability/model-compare`, `/admin/observability/oncall`, `/admin/observability/quality`, `/admin/observability/sessions`, `/admin/observability/traffic`, `/iq/activity`, `/iq/canary`, `/iq/decisions?nav=section`, `/iq/decks/:deckId`, `/iq/designs?nav=section`, `/iq/diff`, `/iq/history`, `/iq/library?nav=section`, `/iq/projects?nav=section`, `/iq/prompt-ops`, `/iq/scores/compare`, `/iq`
+- **assessment** (7): `/assessment/activity`, `/assessment/communication`, `/assessment/decks/:deckId`, `/assessment/decks`, `/assessment/submissions/:submissionId`, `/assessment/workspace?view=library`, `/assessment`
+- **orgiq** (35): `/admin/capabilities`, `/admin/identity/test`, `/admin/ingest/schedules`, `/admin/ingest/sources`, `/admin/ingest/storage`, `/admin/observability/agents`, `/admin/observability/approvals`, `/admin/observability/authz`, `/admin/observability/calibration`, `/admin/observability/capability-events`, `/admin/observability/cost`, `/admin/observability/drift`, `/admin/observability/guardrail-rules`, `/admin/observability/harness`, `/admin/observability/invocations/search`, `/admin/observability/memory`, `/admin/observability/model-compare`, `/admin/observability/oncall`, `/admin/observability/quality`, `/admin/observability/sessions`, `/admin/observability/traffic`, `/iq/activity`, `/iq/canary`, `/iq/decisions?nav=section`, `/iq/decks/:deckId`, `/iq/designs?nav=section`, `/iq/diff`, `/iq/history`, `/iq/library?nav=section`, `/iq/projects?nav=section`, `/iq/projects?scope=all&view=table`, `/iq/prompt-ops`, `/iq/scores/compare`, `/iq/work/findings?view=failed`, `/iq`
 - **pipelines** (5): `/pipelines/activity`, `/pipelines/communication`, `/pipelines/decks/:deckId`, `/pipelines/settings`, `/pipelines`
 - **social** (5): `/social/decks/:deckId`, `/social/profile`, `/social/settings`, `/social/work-graph`, `/social`
 

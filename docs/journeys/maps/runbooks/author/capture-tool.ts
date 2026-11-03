@@ -12,10 +12,10 @@ export default {
   fields: { surface: 'a run’s proposal that carries files', pages: SURFACE_PAGES + ', portal/src/pages/runbooks/RunbookFiles.tsx' },
   steps: [
     page('/iq/runbooks/proposals', 'Proposals lists the run’s change to the presence client among the open edits',
-      ['Proposals', "Call the gateway's presence API with the captured client"]),
+      ['Proposals', "Gateway presence API"]),
     { do: 'navigate', url: '/iq/runbooks/proposals/prop-presence-busy', audit: true, proves: 'shows', expectConsole: DIFF_KEY_WARNING,
       name: 'The proposal shows the files it carries as a diff: the client, the fixture and the expected output',
-      expect: { visible: [{ testId: 'proposal-review' }, { testId: 'proposal-files-diff' }], text: ['Files this proposal carries', /scripts\/presence-client\.mjs/, /do-not-disturb/], noText: [/\bundefined\b/] } },
+      expect: { visible: [{ testId: 'proposal-review' }, { testId: 'proposal-files-diff' }], text: ['File changes', /scripts\/presence-client\.mjs/, /do-not-disturb/], noText: [/\bundefined\b/] } },
     { do: 'api', url: '/api/runbooks/proposals/prop-presence-busy', proves: 'shows',
       name: 'The proposal’s file diff is served as text: three files modified, the script among them', expect: { status: 200 } },
     { do: 'api', method: 'POST', url: '/api/runbooks/proposals/prop-presence-busy/accept', body: {},

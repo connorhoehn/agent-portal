@@ -11,7 +11,7 @@ export default {
   fields: { surface: 'accept a proposal', pages: SURFACE_PAGES },
   steps: [
     page('/iq/runbooks/proposals/prop-tenant-cutover-callback', 'The owner sees the diff, the lint result and Apply change and Reject on the run’s proposal',
-      ['Cut one tenant over from SAML to Cognito', /against v1/], { expectConsole: DIFF_KEY_WARNING, expect: { visible: [{ testId: 'proposal-diff' }, { testId: 'proposal-card' }], noText: [/You can read this proposal, not decide it/] } }),
+      ['SAML to Cognito migration', /against v1/], { expectConsole: DIFF_KEY_WARNING, expect: { visible: [{ testId: 'proposal-diff' }, { testId: 'proposal-card' }], noText: [/You can read this proposal, not decide it/] } }),
     { do: 'click', target: { role: 'button', name: 'Apply change', within: { testId: 'proposal-card' } }, audit: true, writes: true, proves: 'gating', expectConsole: DIFF_KEY_WARNING,
       name: 'Accepting closes the proposal and leaves the runbook at its next version',
       expect: { visible: [{ testId: 'proposal-decided' }] } },

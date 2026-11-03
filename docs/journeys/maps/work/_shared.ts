@@ -514,7 +514,7 @@ export function searchSurface(role: Role): Step[] {
   const sTab = (name: string, url: RegExp, expect: Expect) =>
     tabClick(tabNamed(name, searchTabs), `Click ${name} on Search: it opens and the header and tab strip stay where they were`, { url, ...selected(tabNamed(name, searchTabs)), ...expect }, searchStill());
   return [
-    open('/iq/search', 'Open Search: every kind of record, counted by type, people first', { url: '/iq/search', visible: [heading('Search'), seen(/People/), seen(/Initiatives/), tabNamed('Results', searchTabs)], noText: LEAKS }, { facts: true }),
+    open('/iq/search', 'Open Search: one ranked result list with content-type navigation', { url: '/iq/search', visible: [heading('Search'), seen(/People/), seen(/Initiatives/), tabNamed('Results', searchTabs)], noText: LEAKS }, { facts: true }),
     sTab('Answer', /[?&]tab=answer\b/, { visible: [seen('Ask Supervisor')] }),
     sTab('Connections', /[?&]tab=connections\b/, { visible: [seen(/\d+ records · \d+ connections/)] }),
     sTab('Results', /^\/iq\/search(?:\?(?!.*tab=(?!results)).*)?$/, { visible: [seen(/People/)] }),
@@ -522,11 +522,15 @@ export function searchSurface(role: Role): Step[] {
     open('/iq/search?q=auth', 'Search auth: people, the initiative and its decisions are all found', { url: '/iq/search?q=auth', visible: [seen('Vera Green'), seen('Auth Migration')] }, { facts: true, state: 'filtered' }),
     click({ css: 'a[href*="type=decision"]' }, 'Narrow to decisions: the escalated cutover decision is among them', { url: /[?&]type=decision/, visible: [seen(DECISION.title)] }, { proves: 'tab-stability', stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
     click({ role: 'link', name: new RegExp(DECISION.title), within: { css: 'main' } }, 'Open the decision from the results: its record names who decides', { url: /^\/iq\/decisions\/d-/ }, { state: 'row-open' }),
-    open('/iq/search?q=zzzzqq', 'Search zzzzqq: the page says no records match and offers another phrase', { url: '/iq/search?q=zzzzqq', visible: [seen('No matching records'), seen('Try another phrase or clear a filter.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
+    open('/iq/search?q=zzzzqq', 'Search zzzzqq: the page says no records match and offers another phrase', { url: '/iq/search?q=zzzzqq', visible: [seen('No matching records'), seen('Try another phrase or choose another record type.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
     open('/iq/search?tab=connections&type=person', 'The people graph: fifty-nine people and their relationships, by name', { url: '/iq/search?tab=connections&type=person', visible: [heading('People & connections'), seen(/\d+ people · \d+ edges/)], noText: LEAKS }, { facts: true }),
     open('/iq/projects', 'Back on Initiatives to use the palette from another page', { url: '/iq/projects', visible: [heading(/initiatives$/i)] }),
+    open('/iq/search?scope=p-llm-platform', 'Initiative search opens only Work and retains its context', { visible: [seen('LLM Application Platform'), { css: '[data-testid="search-results"] [data-group="work"]' }], count: [{ target: { css: '[data-testid="search-results"] [data-group]' }, eq: 1 }] }, { state: 'scoped-work' }),
+    click({ role: 'link', name: /^People/, within: { testId: 'search-type-rail' } }, 'Switch to People without stacking another collection or leaving the initiative', { url: /scope=p-llm-platform/, visible: [{ css: '[data-testid="search-results"] [data-group="person"] [data-record-key^="person:"]' }], absent: [{ css: '[data-testid="search-results"] [data-record-key^="work:"]' }] }, { state: 'scoped-people' }),
+    // Wait for the newly requested payload, not the group label which changes before the fetch completes.
+    click({ role: 'link', name: /^All results/, within: { testId: 'search-type-rail' } }, 'All results is one ranked collection within the initiative', { url: /scope=p-llm-platform/, visible: [{ css: '[data-testid="search-results"] [data-group="all"] [data-record-key^="work:"]' }, { css: '[data-testid="search-results"] [data-group="all"] [data-record-key^="person:"]' }], count: [{ target: { css: '[data-testid="search-results"] [data-group]' }, eq: 1 }] }, { state: 'scoped-all' }),
     openPalette(),
-    fill({ placeholder: /Jump to a page/ }, 'decisions', 'Type "decisions" into the palette: the Decisions page is offered', { visible: [{ role: 'option', name: /^Decisions/ }] }),
+    fill({ placeholder: /Jump to a page/ }, 'decisions', 'Type "decisions" into the palette: the Decisions page is offered', { visible: [{ role: 'option', name: /^Decisions/ }, { css: '[role="option"][data-testid^="command-palette-record-"]' }], absent: [{ testId: 'command-palette-records-loading' }] }),
     click({ role: 'option', name: /^Decisions/ }, 'Pick Decisions: the palette jumps to the page and closes', { url: /^\/iq\/decisions/, hidden: [PALETTE], visible: [heading('Decisions')] }),
     tabWalk(8),
   ];

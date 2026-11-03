@@ -15,7 +15,7 @@ export default {
       expect: { visible: [{ testId: 'work-item-brief-preview' }], text: ['Tenant-by-tenant cutover runbook with rollback'] } },
     { do: 'click', target: { text: 'Brief preview' }, audit: true, proves: 'shows',
       name: 'The preview carries the work and one line pointing at the org’s installed skills, and says it is a preview, not a run’s brief',
-      expect: { text: [/A preview, not a run/, /established skills are installed in/], noText: [new RegExp(RUNBOOK.cutover.title)], visible: [{ testId: 'brief-document' }, { testId: 'brief-sections' }] } },
+      expect: { text: [/Preview · A run saves its own copy/, /established skills are installed in/], noText: [new RegExp(RUNBOOK.cutover.title)], visible: [{ testId: 'brief-document' }, { testId: 'brief-markdown-contents' }] } },
     { do: 'api', url: '/api/work-items/wi-auth-e2-s2/brief-preview', proves: 'gating',
       name: 'The same preview over the API needs only the brief permission an SME holds', expect: { status: 200 } },
   ],

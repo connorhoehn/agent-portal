@@ -3,6 +3,9 @@
 Current checklist for this session, updated 2026-11-02. The dated reports below
 retain historical evidence; this file carries the open work forward.
 
+**Scope: local development only. The user explicitly said not to use AWS.**
+Do not request credentials, run AWS checks or deploy as part of this work.
+
 ## Active work
 
 - [x] **WORK-UI-04 — scoped workspace organization.** The Workspace entry on a
@@ -33,23 +36,61 @@ retain historical evidence; this file carries the open work forward.
   waits before revealing the contents, preventing a measured section-list jump.
   [Validation and ownership](runbook-review-followup-2026-11-02.md).
 
-## Remaining follow-ups
+## Follow-up verification
 
-- [ ] Review the joined Chat transcript's 36px message and 8px action insets;
-  define its intended shared row profile before changing spacing or audit rules.
-  Reproduce the two unstable live-state measurements with isolated input.
-- [ ] Extract reusable source/installed-package audit logic to ui-components;
-  keep route, tenant and ratchet policies in this app's adapter.
-- [ ] Reconcile inbox ManageDevbox and consult DispatchAgentRun authorization
-  vocabulary with role coverage; do not change permissions as a styling fix.
-- [ ] Persist canonical IDs for legacy design authors/sign-offs before broadening
-  portrait resolution. Missing photos must not borrow a namesake's portrait.
-- [ ] Deploy canonical-ID avatar backfills and verify hosted assets on the deploy
-  machine. Local fixture coverage is complete; deployment is not claimed.
-- [ ] Profile the large entry bundle and refresh affected journey seals after
-  final UI revisions. Preserve the existing warning and acceptance thresholds.
-- [ ] Validate the gallery with a live multi-client media call; shared-screen
-  presentation remains a distinct follow-up to the bounded participant gallery.
+- [x] Joined Chat transcript row profile and unstable live-state checks.
+  Shared 36px message / 8px action anatomy is explicit and mutation-tested;
+  final deep audit passes 33 cases in both themes at 900/1440px.
+- [x] Reusable source/installed-package audit extracted to ui-components.
+  Same-tree output parity, source fixtures and installed archive checks pass;
+  app route, tenant and ratchet policies remain local.
+- [x] Inbox consult and review action vocabulary follows existing capabilities.
+  DispatchAgentRun answers consults; ManageDevbox reviews queue actions. Role
+  tests pass; backend permissions are unchanged.
+- [x] Canonical design identities in the active provider and fixtures. Signed
+  authors/signers retain IDs; grouping and portraits never infer identity from
+  a name. Additive SQL columns are prepared.
+- [x] **PEOPLE-03 — local portraits:** all 80 locally served asset hashes pass.
+  A prepared ID-only migration for 59 people and 12 unlinked accounts passes
+  disposable PostgreSQL preservation/idempotence tests and remains unapplied.
+  AWS work is excluded by the user's instruction. Assessment contributor JSON
+  has no canonical IDs and remains documented identity debt.
+- [x] Profile the large entry bundle without changing warning thresholds.
+  Initial script: 4,485,082 bytes; gzip 1,345,718 bytes. Terminal, graph, document
+  editor and camera-effects imports are candidate split points.
+- [x] Refresh affected journey seals after final UI revisions. All 26 affected
+  walks pass and are sealed: Search, Decisions and Sprints across five roles,
+  plus eleven runbook journeys. Rail/cascade/type measurements share the same
+  current source digest. Separate Assessment breadcrumb failures stay visible.
+- [x] Live two-client gallery acceptance passes with real local media transport,
+  synthetic camera/microphone devices and isolated cloned users. Covers audio/
+  video delivery, camera transitions, right sidebar and bounded gallery sizes.
+  Shared-screen presentation remains a distinct follow-up.
+
+
+See [the continuation verification](work-social-ui-verification-2026-11-02.md)
+for exact local evidence and limits. The local UI checklist is complete;
+the follow-ups below remain explicitly open.
+
+## Retained technical debt
+
+These are recorded follow-ups, outside the completed local UI changes. They do
+not authorize cloud work.
+
+- [ ] The durable Design provider is not wired. Historical rows need trusted
+  canonical IDs; unlinked signers need a schema representation before migration.
+- [ ] Assessment contributor JSON lacks canonical IDs. Its separate in-progress
+  UI work also has three missing-breadcrumb findings; preserve that ownership.
+- [ ] Split the measured large entry bundle at appropriate terminal, graph,
+  document-editor and camera-effects boundaries; keep warning thresholds intact.
+- [ ] Extend gallery acceptance to shared screens, WAN reconnects and real
+  hardware permissions.
+- [ ] Refresh the 66 stale historical Work journey logs after their corresponding
+  changes settle and map the missing `orgiq:admin` role. Targeted seals do not
+  certify the entire 125-journey catalog.
+- [ ] Integrate the shared audit packaging [source PR](https://github.com/connorhoehnslalom/ui-components/pull/1)
+  alongside the other session's composer release. This app pins the independently
+  verified archive that already contains the skill.
 
 ## Delivered in this conversation
 
@@ -67,6 +108,7 @@ retain historical evidence; this file carries the open work forward.
 
 ## Evidence and ownership
 
+- [Continuation verification](work-social-ui-verification-2026-11-02.md)
 - [Work UI findings](work-ui-followup-2026-11-02.md)
 - [Document reading and retained debt](ui-document-reading-2026-11-01.md)
 - [Runbook review audit closure](runbook-review-followup-2026-11-02.md)
@@ -77,7 +119,10 @@ retain historical evidence; this file carries the open work forward.
 - [Composer/gallery validation](composer-gallery-2026-11-02.md)
 - [Social collection validation](social-collection-controls-2026-11-02.md)
 
-The app currently pins ui-components 2.499.4. Fix shared behavior in the library,
+The app currently pins ui-components 2.499.7-audit.0. Fix shared behavior in the library,
 verify the packed distribution and rendered app, record exact remaining findings,
 and commit/push only this session's changes. Other work in the shared checkout
 remains independently owned.
+
+[Claude Code handoff](claude-code-handoff-2026-11-02-ui.md) carries the current
+architecture, local verification limits and retained debt.

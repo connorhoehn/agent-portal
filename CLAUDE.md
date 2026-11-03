@@ -5,16 +5,23 @@ on Amazon Bedrock AgentCore that ingests org docs, builds a knowledge graph,
 scores expertise and serves conversational search across four tenants
 (`orgiq`, `assessment`, `social`, `pipelines`). `CONSTITUTION.md` is the spec.
 
-**UI continuation (2026-10-28):** read
+**Work / Social UI continuation (2026-11-02):** read
+`docs/claude-code-handoff-2026-11-02-ui.md` and
+`docs/work-social-ui-todo.md` first for the current UI work, verification and
+local-only scope. The user explicitly said not to use AWS for this work; do not
+request credentials, run AWS checks or deploy. The checkout also has independently owned Assessment/huddle
+edits; inspect ownership before staging.
+
+**Dispatch UI constraint (2026-10-28):** read
 `docs/claude-code-handoff-2026-10-28-ui.md` for the user-approved dispatch
 response component. Changes must stay within individual components; revision
 5's page redesign was rejected. Request confirmation stays inline in the response
 box, with no modal. This UI handoff supplements the general state below.
 
-**Current state:** read `docs/claude-code-handoff-2026-10-26.md` first, and
+**Deployment background:** read `docs/claude-code-handoff-2026-10-26.md`, and
 `docs/aws-deploy-open-items-2026-10-27.md` for the live AWS deploy's open
 items (the call join window is resolved; its fixed table lists what bit). The 10-26 handoff
-holds the current commits, pins, verified test scope and the open
+holds that deployment's commits, pins, verified test scope and the open
 continuation items. The dated checkpoint prose that used to live here is in
 `docs/history/claude-md-checkpoints-2026-10.md`; treat it as history, not as
 the state of the tree. When this file and the code disagree, the code wins and
@@ -22,10 +29,10 @@ the claim here is a bug.
 
 Durable facts the handoff does not repeat:
 
-- Pins: the portal consumes `@connorhoehnslalom/ui-components` **2.490.0**;
-  portal and middleware consume `@connorhoehn/realtime-modules` (its real
-  package name, no alias) **0.140.0** from
-  tracked tarballs in `portal/vendor/` (`file:` deps, both lockfiles); middleware
+- Pins: the portal consumes `@connorhoehnslalom/ui-components` **2.499.7-audit.0** and
+  `@connorhoehn/realtime-modules` (its real package name, no alias) **0.141.0**
+  from tracked tarballs in `portal/vendor/`. Read middleware's own manifest and
+  lockfile for its independently managed realtime pin; middleware
   pins `@connorhoehn/service-runtime` 0.4.1 and `distributed-core` 0.48.0
   (`077d7594`) by full sha; infra consumes
   `@connorhoehn/realtime-examples-cdk` 0.1.0 from `infra/vendor/`. Move a pin by replacing the tarball or sha,

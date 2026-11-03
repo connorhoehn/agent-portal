@@ -55,7 +55,7 @@ the trail — and pane padding of 20px against the 24px everywhere else.
    gutter box.** A page with records — a knowledge tier, a review queue,
    promotion candidates, compaction runs, a catalog record — draws
    the library `ListRailLayout` (ui-components 2.438, one `ListRail` value)
-   exactly as the Initiatives list draws it (`InitiativesExplorer.tsx`: 264px,
+   as the Initiatives list draws it (`InitiativesExplorer.tsx`: default 264px,
    caption title with a count chip, search + filter popover in the rail
    header, `GroupedList` rows with `currentStyle="bar"`, a footer line), its
    rail flush against the section rail from the content top to the footer,
@@ -71,6 +71,11 @@ the trail — and pane padding of 20px against the 24px everywhere else.
    floating inside the content pane… consistent with… initiatives… stack
    right next to the other two left sidebars… Having this floating thing
    creates wasted padding and space.")
+   Combined catalogs (`data-catalog-navigation="combined"`) merge view choices
+   and records into one `railWidth="ml"` 320px rail. An explicitly collapsed
+   WorkspaceRail (`data-collapsed="true"`) occupies 36px. These November 2
+   profiles preserve the requested readable record titles and right information
+   pane; they do not relax edge, gutter, full-height or width-drift checks.
 6. **Always some content.** A section's own landing shows real content — an
    overview with the section's lists and counts, or its first destination —
    never a bare "Explore …" / "Browse …" placeholder.

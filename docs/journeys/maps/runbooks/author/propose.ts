@@ -12,7 +12,8 @@ export default {
   fields: { surface: 'suggest an edit', pages: SURFACE_PAGES },
   steps: [
     page(`/iq/runbooks/${RUNBOOK.sso.id}`, 'The runbook reads as steps with its owner, its version and where it came from',
-      [RUNBOOK.sso.title, 'Where it came from', 'Suggest an edit']),
+      ['SSO setup for a new origin', 'Suggest an edit'],
+      { expect: { visible: [{ testId: 'runbook-reader' }, { testId: 'runbook-reader-contents' }] } }),
     { do: 'click', target: { role: 'tab', name: 'Suggest an edit' }, audit: true, proves: 'gating',
       name: 'Suggest an edit opens the form with the runbook’s own markdown in it',
       expect: { visible: [{ testId: 'suggest-form' }, { testId: 'suggest-markdown' }, { testId: 'suggest-rationale' }] } },

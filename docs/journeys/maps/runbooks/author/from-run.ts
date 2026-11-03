@@ -10,8 +10,8 @@ export default {
   fields: { surface: 'a run’s proposal', pages: SURFACE_PAGES },
   steps: [
     page('/iq/runbooks/proposals', 'Proposals lists the open edits, the cutover one among them',
-      ['Proposals', 'Cut one tenant over from SAML to Cognito']),
-    { do: 'click', target: { role: 'button', name: /Cut one tenant over from SAML to Cognito/ }, audit: true, proves: 'shows', expectConsole: DIFF_KEY_WARNING,
+      ['Proposals', 'SAML to Cognito migration']),
+    { do: 'click', target: { role: 'button', name: /SAML to Cognito migration/ }, audit: true, proves: 'shows', expectConsole: DIFF_KEY_WARNING,
       name: 'The cutover proposal opens beside the list, naming the run and why',
       expect: { url: /^\/iq\/runbooks\/proposals\/prop-tenant-cutover-callback/, visible: [{ testId: 'proposal-review' }, { testId: 'proposal-diff' }], text: [/hosted-UI redirect/], noText: [/\bundefined\b/] } },
     { do: 'navigate', url: '/iq/runbooks/proposals/prop-tenant-cutover-callback', audit: true, proves: 'gating', expectConsole: DIFF_KEY_WARNING,

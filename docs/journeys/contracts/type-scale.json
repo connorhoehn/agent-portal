@@ -1,7 +1,7 @@
 {
  "measured": {
-  "sourceDigest": "9853f346d0a59cff30cf34d50e91a24f0b325ca6294074a34c8e5747fceec1e3",
-  "at": "2026-11-01T14:51:49.173Z"
+  "sourceDigest": "555e35b5595c64f797ac358f01fa32e518302c410e3a73613b7a7d0711af470e",
+  "at": "2026-11-03T01:16:29.501Z"
  },
  "routes": {
   "/access": {
@@ -414,17 +414,17 @@
   },
   "/assessment/communication/channels/:slug": {
    "value": {
-    "title": null,
+    "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-15T00:25:03.826Z"
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/assessment/communication/dms/:lobby": {
    "value": {
-    "title": null,
+    "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-14T23:48:56.930Z"
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/assessment/configuration": {
    "value": {
@@ -432,6 +432,13 @@
     "offenders": []
    },
    "changedAt": "2026-10-15T03:26:09.972Z"
+  },
+  "/assessment/decks": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/assessment/decks/:deckId": {
    "value": {
@@ -575,17 +582,17 @@
   },
   "/iq/communication/channels/:slug": {
    "value": {
-    "title": null,
+    "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-16T17:35:29.357Z"
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/iq/communication/dms/:lobby": {
    "value": {
-    "title": null,
+    "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-16T17:35:29.357Z"
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/iq/decisions": {
    "value": {
@@ -606,7 +613,7 @@
     "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-15T00:25:03.826Z"
+   "changedAt": "2026-11-03T01:16:29.501Z"
   },
   "/iq/decks/:deckId": {
    "value": {
@@ -706,12 +713,26 @@
    },
    "changedAt": "2026-10-15T00:25:03.826Z"
   },
+  "/iq/projects?lens=sprints": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-11-03T01:16:29.501Z"
+  },
   "/iq/projects?nav=section": {
    "value": {
     "title": "20/600",
     "offenders": []
    },
    "changedAt": "2026-10-15T00:25:03.826Z"
+  },
+  "/iq/projects?scope=all&view=table": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/iq/projects/:id": {
    "value": {
@@ -750,10 +771,10 @@
   },
   "/iq/runbooks/:id": {
    "value": {
-    "title": "20/600",
+    "title": "20/700",
     "offenders": []
    },
-   "changedAt": "2026-10-15T03:45:36.614Z"
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/iq/runbooks/briefs": {
    "value": {
@@ -764,10 +785,10 @@
   },
   "/iq/runbooks/briefs/:ref": {
    "value": {
-    "title": "20/600",
+    "title": "20/700",
     "offenders": []
    },
-   "changedAt": "2026-10-15T03:45:36.614Z"
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/iq/runbooks/proposals": {
    "value": {
@@ -778,10 +799,10 @@
   },
   "/iq/runbooks/proposals/:pid": {
    "value": {
-    "title": "20/600",
+    "title": "20/700",
     "offenders": []
    },
-   "changedAt": "2026-10-24T15:51:36.630Z"
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/iq/runs": {
    "value": {
@@ -852,6 +873,13 @@
     "offenders": []
    },
    "changedAt": "2026-10-14T23:48:56.930Z"
+  },
+  "/iq/work/findings?view=failed": {
+   "value": {
+    "title": "20/600",
+    "offenders": []
+   },
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/iq/work/queue": {
    "value": {
@@ -925,17 +953,17 @@
   },
   "/pipelines/communication/channels/:slug": {
    "value": {
-    "title": null,
+    "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-15T03:26:09.972Z"
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/pipelines/communication/dms/:lobby": {
    "value": {
-    "title": null,
+    "title": "20/600",
     "offenders": []
    },
-   "changedAt": "2026-10-14T23:48:56.930Z"
+   "changedAt": "2026-11-03T00:31:46.778Z"
   },
   "/pipelines/configuration": {
    "value": {
