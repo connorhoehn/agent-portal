@@ -33,6 +33,29 @@ commit is pushed; the other session's 2.500.2 release will carry both. The
 isolated checkout `/Users/connorhoehn/Projects/ui-components-audit-release` is
 historical.
 
+## 2026-11-02/03 continuation (this session)
+
+Commits on main after `5f0e9e1f`, all local: `8b8b0cff` (pin 2.500.1 with the
+accent contrast fix and the packaged audit skill), `11a9d70a` (initiative
+panels drop repeated tab titles; compact Details pane), `8a74f21f`, `03fc4a0c`,
+`32b81aa3`, `9dc7943e`, `f334d17c` (Work documents: New ▾ Document /
+Whiteboard / Presentation on the Docs tab, the Discussion's /doc Save into the
+same store, page-owned breadcrumb trails, Excalidraw whiteboard, manifest
+entry and PostgreSQL acceptance). `docs/work-social-ui-todo.md` WORK-UI-06 and
+WORK-DOCS-01 carry the detail. The portal now also installs
+`@excalidraw/excalidraw` 0.18.1 (the library's optional `/diagram` peer),
+pre-bundled with the realtime Excalidraw adapter in `vite.config.ts`.
+
+Open from this continuation: the live collaborative canvas for Work pages
+and boards (generalise `providers/document-canvas.ts` from assessment to
+orgiq and mount EditorShell / a shared Y.Doc; the social compose profile's
+document service is up locally), listing Work pages in the Discussion's
+Files view, author names on pages (ids today), and the twelve pre-existing
+initiative-area spec failures plus the composer recipient-select contract
+conflict recorded in the todo. Two session-only /loop jobs may still be
+scheduled in the originating terminal (a 30-minute audit/redesign tick and an
+hourly document-creation tick); they die with that session.
+
 ## What to preserve
 
 - Use shared ui-components layout, typography and controls. The portable
