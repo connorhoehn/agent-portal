@@ -66,7 +66,11 @@ session's scratch directory from a clean archive of library commit `e078dfb8`
 dist and had bumped `package.json` to 2.500.3 (`c67cb135` is its
 DialogueSegment commit); when a `chore(release): build ui-components 2.500.3`
 commit exists on main, pack it and replace the prerelease tarball, then
-re-measure the journey contracts. Journey logs: the pin bump stales every
+re-measure the journey contracts. The release should also carry the
+storymaker session's uncommitted, self-tested change in the library's
+`skills/ui-dom-audit` (measure.mjs `urlKey` includes the URL hash so hash
+routers count as routed records; a `hash-route` self-test fixture); it is
+source only and must not be reverted. Journey logs: the pin bump stales every
 Work seal; the five initiative walks were re-walked and sealed on re-measured
 contracts, the other 61 remain as they were before this turn (listed by
 `scripts/validate-work-journeys.sh --quick`).
