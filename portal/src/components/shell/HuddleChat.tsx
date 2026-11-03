@@ -432,11 +432,12 @@ export function HuddleReactionBar() {
 }
 
 /**
- * The footer bar's chat toggle: opens the huddle chat in the right pane, or
- * focuses its composer when open. Null without an eligible call.
+ * The meeting Chat button toggles its actual pane. The footer's Message
+ * action opts into focus behavior so it can always return to the composer.
  */
-export function useHuddleChatToggle(): { open: boolean; toggle(): void } | null {
+export function useHuddleChatToggle({ behavior = 'toggle' }: { behavior?: 'toggle' | 'focus' } = {}): { open: boolean; toggle(): void } | null {
   const chat = useHuddleChat();
+  const pane = useSidePaneHost();
   const input = useThreadInput(chat?.channel ?? null);
   const focus = useComposerFocus();
   if (!chat?.callId) return null;
@@ -445,7 +446,13 @@ export function useHuddleChatToggle(): { open: boolean; toggle(): void } | null 
   // composer (HuddleChatBody routes the focus request). Otherwise, closed: a page
   // composer that answers (the overview's) takes the focus; whenever the pane is
   // open, the pane's composer does.
-  return { open: chat.open, toggle: () => {
+  const visible = chat.open && (chat.view === 'floating' || !chat.paneOwned || (chat.ownedPane?.visible ?? (pane.shown && !pane.folded)));
+  return { open: visible, toggle: () => {
+    if (behavior === 'toggle' && visible) {
+      chat.closeMessage();
+      if (chat.view === 'pane' && chat.paneOwned) (chat.ownedPane?.hide ?? pane.collapse)();
+      return;
+    }
     chat.openMessage();
     focus.request({ mode: 'chat', target: { kind: 'huddle' } });
     if (input.owner === 'composer') input.focus();
@@ -524,7 +531,7 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
       input={input.owner === 'composer' ? 'below' : undefined}
       includeFiles={input.owner !== 'composer'}
       // An empty room chat with announcements draws the panel, so they show.
-      emptyState={meetingChat && meetingChat.withAnnouncements([]).length ? undefined : <Stack gap="sm" className="px-4 pt-5"><T size="sm" weight="semibold">Start the conversation</T><T size="sm" tone="secondary" wrap>Messages stay with this huddle as you move between work and documents.</T></Stack>}
+      emptyState={meetingChat && meetingChat.withAnnouncements([]).length ? undefined : <Stack gap="sm" className="px-4 pt-2"><T size="sm" weight="semibold">Start the conversation</T><T size="sm" tone="secondary" wrap>Messages stay with this huddle as you move between work and documents.</T></Stack>}
       // Writers react, pin and attach; a reader sees the thread, its pins and files.
       // A room's chat is gateway-only: pins and files (REST on the call's channel) stay with the main huddle.
       reactions={!chat.unavailableReason} {...(inRoom ? {} : { pins: { canPin: !chat.unavailableReason } })} attachments={!chat.unavailableReason && !inRoom}

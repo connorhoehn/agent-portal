@@ -7,7 +7,7 @@ import { ChatIcon, Inline, Stack, useRailFold } from '@connorhoehnslalom/ui-comp
 // keeps what belongs beside the page rather than instead of it: the outline,
 // the page's conversation (the composer dock posts into it) and its activity.
 export type PanelId = 'outline' | 'chat' | 'activity';
-const DocumentContext = createContext<{ open: (id: PanelId) => void; active: PanelId; host: HTMLElement | null } | null>(null);
+const DocumentContext = createContext<{ open: (id: PanelId) => void; collapse(): void; active: PanelId; host: HTMLElement | null } | null>(null);
 export const useDocumentContext = () => useContext(DocumentContext);
 
 /** The examples' dock pattern keeps document state in its owner while the library owns the column. */
@@ -68,7 +68,8 @@ export function ExplorerFrame({ rail, children, aside, paneHeader }: ExplorerFra
   const [active, setActive] = useState<PanelId>('outline');
   const [host, setHost] = useState<HTMLElement | null>(null);
   const open = useCallback((id: PanelId) => { setActive(id); setState('open'); }, []);
-  const context = useMemo(() => ({ open, active, host: state === 'collapsed' ? null : host }), [open, active, host, state]);
+  const collapse = useCallback(() => setState('collapsed'), []);
+  const context = useMemo(() => ({ open, collapse, active, host: state === 'collapsed' ? null : host }), [open, collapse, active, host, state]);
   const dock = <Stack ref={setHost} gap="sm" className="min-h-0 flex-1 p-4" />;
   return (
     <DocumentContext.Provider value={aside ? context : null}>

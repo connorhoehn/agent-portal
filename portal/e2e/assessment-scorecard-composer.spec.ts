@@ -168,9 +168,8 @@ async function expectTilesInBlock(page: Page) {
   await expect(media.getByTestId('shell-call-media')).toHaveAttribute('data-placement', 'composer');
   await expect(page.getByTestId('shell-footer').getByTestId('shell-call-media')).toHaveCount(0);
   await expect(media.getByTestId('page-call-dock')).toBeVisible();
-  // The call bar with its own Leave, over the tiles: the full bar (layout="shelf"), or — with the
-  // team Discussion open as the right pane, the detail column under 640px — its narrow form ("stack").
-  await expect(media.getByTestId('shell-call-media')).toHaveAttribute('data-layout', /^(shelf|stack)$/);
+  // Compact columns keep the preview beside the call details and controls.
+  await expect(media.getByTestId('shell-call-media')).toHaveAttribute('data-layout', 'compact');
   await expect(media.getByTestId('call-dock-leave')).toBeVisible();
 }
 

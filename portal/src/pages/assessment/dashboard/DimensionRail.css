@@ -44,6 +44,7 @@
 }
 .assessment-dimension-list .dimension-rail-metadata { gap: 4px 8px; margin-top: 3px; }
 .assessment-dimension-list .dimension-rail-confidence { white-space: nowrap; }
+.assessment-dimension-list .dimension-rail-confidence > span:first-child { width: auto; }
 .assessment-dimension-list [data-focus-key^="g:"] {
   font-size: 12px;
   font-weight: 600;

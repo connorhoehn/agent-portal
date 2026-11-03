@@ -19,7 +19,7 @@ export function LevelBadge({
 }) {
   const tone: ChipTone = levelTone(level, isNa);
   return (
-    <Chip tone={tone} size={size} solid={tone !== 'neutral'} mono>
+    <Chip tone={tone} size={size} mono>
       {levelBadgeLabel(level, isNa)}
     </Chip>
   );

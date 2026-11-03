@@ -1,13 +1,7 @@
-// Joining a huddle shows its media as participant tiles directly above the
-// conversation composer that holds the call (the accepted 2026-10-07 mockup,
-// docs/design/initiative-huddle-shell-plan.md): above the initiative's composer
-// (docked in the content column since 2.438.3; its call block is the compact one) the
-// narrow call bar over a two-column grid (ui-components 2.433.0
-// ConversationCallDock layout="stack"); above the scorecard's dimension
-// composer the full bar over a row of tiles (layout="shelf"). Both are the
-// shell's one media sink; the footer keeps the compact bar and its Leave. Two real sessions
-// on the shared Tilt app with Chrome's fake devices over the local SFU (:3902)
-// — no route fixtures. Opt in with REAL_MEDIA_ACCEPTANCE=1.
+// One media sink follows the visible composer. Its compact preview and call
+// controls share columns; all participants remain attached to the call.
+// Uses real sessions and synthetic devices over the local SFU.
+// Opt in with REAL_MEDIA_ACCEPTANCE=1.
 import { test as base, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { loginAs } from './realSession';
 
@@ -53,19 +47,19 @@ const grid = (page: Page) => discussion(page).getByTestId('composer-call-dock').
 const playingRemoteTiles = (page: Page) => grid(page).locator('[data-is-local="false"][data-track-kind="camera"] video').evaluateAll(videos =>
   videos.filter(v => { const video = v as HTMLVideoElement; return !!video.srcObject && video.readyState >= 2 && video.videoWidth > 0; }).length);
 
-async function expectGrid(page: Page, count: number, columns: number) {
+async function expectPreview(page: Page, count: number) {
   const dock = discussion(page).getByTestId('composer-call-dock');
   await expect(dock).toHaveAttribute('data-holds-media', 'true', { timeout: 30_000 });
   await expect(page.getByTestId('shell-call-media')).toHaveCount(1);
-  await expect(dock.getByTestId('shell-call-media')).toHaveAttribute('data-layout', 'stack');
+  await expect(dock.getByTestId('shell-call-media')).toHaveAttribute('data-layout', 'compact');
   // The composer holds the media, so the right pane offers no second video panel.
   await expect(page.getByTestId('huddle-media-panel')).toHaveCount(0);
-  await expect(grid(page)).toHaveAttribute('data-variant', 'grid');
+  await expect(grid(page)).toHaveAttribute('data-variant', 'dock');
   await expect(grid(page)).toHaveAttribute('data-tile-count', String(count), { timeout: 45_000 });
-  await expect(grid(page)).toHaveAttribute('data-columns', String(columns));
+  expect((await grid(page).boundingBox())!.height).toBeLessThanOrEqual(74);
 }
 
-test('two people in a huddle each see a two-pane grid above the initiative composer; Leave stays in the footer', async ({ browser }) => {
+test('two people in a huddle retain media in the compact composer preview', async ({ browser }) => {
   test.setTimeout(180_000);
   const people = [await signedIn(browser, 'u-vera'), await signedIn(browser, 'u-nora')];
   const [vera, nora] = people.map(p => p.page) as [Page, Page];
@@ -86,7 +80,7 @@ test('two people in a huddle each see a two-pane grid above the initiative compo
     await expect(nora.getByTestId('shell-call-dock')).toBeVisible({ timeout: 30_000 });
 
     for (const [page, other] of [[vera, 'Nora'], [nora, 'Vera']] as const) {
-      await expectGrid(page, 2, 2);
+      await expectPreview(page, 2);
       const tiles = grid(page).locator('[data-peer-id]');
       await expect(tiles).toHaveCount(2);
       // The viewer first ("You"), then the other person by name, each with a mute state.
@@ -143,8 +137,8 @@ const blockGrid = (page: Page) => blockDock(page).getByTestId('call-dock-tile-ro
 async function expectBlockGrid(page: Page, count: number) {
   await expect(blockDock(page)).toHaveAttribute('data-holds-media', 'true', { timeout: 30_000 });
   await expect(page.getByTestId('shell-call-media')).toHaveCount(1);
-  // The full bar, or its narrow form once the composer is squeezed (the huddle chat split opens beside it).
-  await expect(blockDock(page).getByTestId('shell-call-media')).toHaveAttribute('data-layout', /^(shelf|stack)$/);
+  // The preview stays compact when the adjacent discussion pane opens.
+  await expect(blockDock(page).getByTestId('shell-call-media')).toHaveAttribute('data-layout', 'compact');
   // The composer holds the media, so the right pane offers no second panel.
   await expect(page.getByTestId('huddle-media-panel')).toHaveCount(0);
   await expect(blockGrid(page)).toHaveAttribute('data-tile-count', String(count), { timeout: 45_000 });
@@ -256,8 +250,8 @@ test('the pre-join device check precedes start and accept, applies its choices a
     await expect(nora.getByTestId('shell-call-dock')).toBeVisible({ timeout: 20_000 });
     await expect(nora.getByTestId('prejoin-dialog')).toHaveCount(0);
 
-    await expectGrid(vera, 2, 2);
-    await expectGrid(nora, 2, 2);
+    await expectPreview(vera, 2);
+    await expectPreview(nora, 2);
     // Vera's camera stayed off: Nora decodes no remote video, and only one media sink exists on each side.
     await expect.poll(() => playingRemoteTiles(nora), { timeout: 20_000 }).toBe(0);
     for (const page of [vera, nora]) await expect(page.getByTestId('shell-call-media')).toHaveCount(1);

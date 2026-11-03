@@ -193,13 +193,8 @@ export function TeamScorecard({ teamId, tab, onTabChange, revealDiscussion = fal
     />
   );
 
-  return (
-    // A flush page (data-shell-flush): the header prints the shell's trail as its
-    // first row, at the 24px gutter, and the dimension rail below sits flush
-    // against the shell rail — so the trail, the title row, the facts and the
-    // tabs are one block (the initiative page's frame).
-    <Stack gap="none" className="h-full min-h-0 min-w-0 bg-surface" data-shell-flush ref={headerDensity.contentRef}>
-      <Stack gap="none" className="shrink-0 px-6">
+  const header = (
+      <Stack gap="none" className="shrink-0 min-w-0 px-6">
       <PageHeader
         {...headerDensity.headerProps}
         breadcrumbs={breadcrumbs}
@@ -258,12 +253,19 @@ export function TeamScorecard({ teamId, tab, onTabChange, revealDiscussion = fal
         onTabChange={(id) => onTabChange(id as ScorecardTab)}
       />
       </Stack>
+  );
+
+  return (
+    // Certification owns its header inside the detail column, so expanding
+    // the overview never pushes the dimensions rail below the top toolbar.
+    <Stack gap="none" className="h-full min-h-0 min-w-0 bg-surface" data-shell-flush ref={headerDensity.contentRef}>
+      {tab !== 'scorecard' && header}
 
       {/* Every pane stays mounted once visited — toggled with `hidden`, not
           unmounted — so selection/form state in each survives switching tabs. */}
       <Stack hidden={tab !== 'scorecard'} gap="none" className="flex-1 min-h-0">
         <DimensionMasterDetail dimensions={dimensions} selectedId={selectedDimId} onSelect={setSelectedDimId} teamId={team.id} teamName={team.name}
-          onChanged={refresh} active={tab === 'scorecard'} conversation={conversation} />
+          onChanged={refresh} active={tab === 'scorecard'} conversation={conversation} header={tab === 'scorecard' ? header : undefined} />
       </Stack>
 
       {visited.has('plan') && (

@@ -1,18 +1,23 @@
-import { useEffect, useRef, type ReactNode } from 'react';
-import { useSidePane } from '@connorhoehnslalom/ui-components';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useSidePane, useSidePaneHost } from '@connorhoehnslalom/ui-components';
 import { Button, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { useComposerFocus, useComposerFocusReveal } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { HuddleChatBody, useHuddleChat } from './HuddleChat';
 
 /** One page pane owns both transcripts; opening either never ends the call or edits a draft. */
-export function useConversationPane({ enabled = true, onReveal }: { enabled?: boolean; onReveal?: () => void } = {}) {
+export function useConversationPane({ enabled = true, onReveal, onHide, visible }: { enabled?: boolean; onReveal?: () => void; onHide?: () => void; visible?: boolean } = {}) {
   const huddle = useHuddleChat();
   const sidePane = useSidePane();
+  const host = useSidePaneHost();
   const focus = useComposerFocus();
   const reveal = useRef(() => {});
   reveal.current = () => { sidePane.reveal(); onReveal?.(); };
+  const hideRef = useRef(() => {});
+  hideRef.current = onHide ?? host.collapse;
+  const hide = useCallback(() => hideRef.current(), []);
+  const shown = visible ?? (host.shown && !host.folded);
   const register = huddle?.registerPaneOwner;
-  useEffect(() => enabled ? register?.() : undefined, [enabled, register]);
+  useEffect(() => enabled ? register?.({ visible: shown, hide }) : undefined, [enabled, register, shown, hide]);
   const inHuddle = !!huddle?.callId && huddle.view === 'pane';
   // Respond once when the call transcript opens, not whenever the page renders:
   // the user can subsequently explore Details without being pulled back.

@@ -215,22 +215,21 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       { label: 'Presentations', path: '/assessment/workspace?view=presentations' },
       ...(b ? [{ label: 'Presentation', id: b }] : []),
     ];
-    // Mirrors the shell rail for this tenant (Layout.tsx NAV_ITEMS): the first
-    // crumb is the GROUP the page sits under, the second the page — the same
-    // shape as `Plan › Initiatives › Observability` in the org tenant, so a
-    // person reads where they are the same way in both products.
+    // Assess is the tenant's root context, already named by the shell.
+    // Keep its trails to the collection and record; a page can add a third level.
     const page = a ?? 'teams';
     const group = ASSESSMENT_GROUPS[page] ?? 'Assessment';
+    const trail: Crumb[] = group === 'Assess' ? [] : [{ label: group }];
     const pageLabel = ASSESSMENT_LABELS[page] ?? page;
     if (page === 'teams' && b) {
-      return [{ label: group }, { label: pageLabel, path: '/assessment/teams' }, { label: b, id: b }];
+      return [...trail, { label: pageLabel, path: '/assessment/teams' }, { label: b, id: b }];
     }
     // A submission record: the page registers its team as the crumb's title.
     // A record opened beside its list rail: the page registers its title as the crumb's label.
     if ((page === 'submissions' || page === 'feedback' || page === 'runs') && b) {
-      return [{ label: group }, { label: pageLabel, path: `/assessment/${page}` }, { label: shortId(b), id: b }];
+      return [...trail, { label: pageLabel, path: `/assessment/${page}` }, { label: shortId(b), id: b }];
     }
-    return [{ label: group }, { label: pageLabel }];
+    return [...trail, { label: pageLabel }];
   }
 
   // The social and pipelines tenants mirror their shell rails the same way:

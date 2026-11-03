@@ -48,7 +48,7 @@ async function join(page: Page) {
   await page.getByTestId('social-room-join').click();
   // "Start a huddle" for the first caller, "Join the huddle" into a live call.
   const prejoin = page.getByRole('dialog').filter({ hasText: /^(Start a|Join the) huddle/ });
-  await prejoin.getByRole('button', { name: 'Join', exact: true }).click({ timeout: 15000 }).catch(() => {});
+  await prejoin.getByTestId('prejoin-join').click({ timeout: 15000 }).catch(() => {});
 }
 
 async function inboundAudio(page: Page): Promise<number> {

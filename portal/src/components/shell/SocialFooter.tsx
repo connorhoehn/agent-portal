@@ -62,7 +62,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
   const host = useCallHost();
   const { session } = useSession();
   const frames = useGatewayFrames();
-  const chat = useHuddleChatToggle();
+  const chat = useHuddleChatToggle({ behavior: 'focus' });
   const pageOwnsCall = useHuddleChat()?.paneOwned ?? false;
   // On a call that carries a meeting (lib/meetingRooms.ts): Raise, React,
   // People and Rooms as the bar's meeting items; React then replaces the

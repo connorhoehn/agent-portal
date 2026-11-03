@@ -57,32 +57,20 @@ const composerDock = (scope: Page | Locator) => scope.getByTestId('composer-call
 const tiles = (scope: Page | Locator) => composerDock(scope).getByTestId('call-dock-tile-row');
 
 /** The bar and tiles are in `composer`, directly above its input, and the footer shows the compact status. */
-/**
- * `shelf`: the full bar (mic ▾, camera ▾, Share, People, settings, Leave) over large tiles in a row.
- * `stack` (a side pane): mic ▾, camera ▾, ⋯ and Leave on the bar, the tiles two to a row.
- */
-async function expectComposerBar(page: Page, composer: Locator, phase: string, tileCount: number, expected: 'shelf' | 'stack' | 'auto' = 'shelf', ringing?: number) {
+/** Compact preview, metadata and working controls share columns on every composer. */
+async function expectComposerBar(page: Page, composer: Locator, phase: string, tileCount: number, ringing?: number) {
   const dock = composerDock(composer);
   await expect(dock).toHaveAttribute('data-holds-media', 'true', { timeout: 30_000 });
   await expect(page.getByTestId('shell-call-media')).toHaveCount(1);
   await expect(dock.getByTestId('shell-call-media')).toHaveAttribute('data-placement', 'composer');
-  // `auto`: a composer squeezed below 640px (the huddle chat split open beside it) takes the narrow form.
-  await expect(dock.getByTestId('shell-call-media')).toHaveAttribute('data-layout', expected === 'auto' ? /^(shelf|stack)$/ : expected);
-  const layout = expected === 'auto'
-    ? (await dock.getByTestId('shell-call-media').getAttribute('data-layout')) as 'shelf' | 'stack'
-    : expected;
+  await expect(dock.getByTestId('shell-call-media')).toHaveAttribute('data-layout', 'compact');
   await expect(dock.locator('[data-phase]').first()).toHaveAttribute('data-phase', phase, { timeout: 45_000 });
-  const controls = layout === 'shelf'
-    ? ['call-dock-title', 'call-dock-mic', 'call-dock-camera', 'call-dock-share', 'call-dock-people', 'call-dock-settings', 'call-dock-leave']
-    : ['call-dock-title', 'call-dock-mic', 'call-dock-camera', 'call-dock-more', 'call-dock-leave'];
+  const controls = ['call-dock-title', 'call-dock-mic', 'call-dock-camera', 'call-dock-more', 'call-dock-leave'];
   for (const control of controls) await expect(dock.getByTestId(control)).toBeVisible();
   await expect(tiles(composer)).toHaveAttribute('data-tile-count', String(tileCount), { timeout: 45_000 });
-  if (layout === 'stack') {
-    await expect(tiles(composer)).toHaveAttribute('data-variant', 'grid');
-    expect(Number(await tiles(composer).getAttribute('data-columns'))).toBeLessThanOrEqual(2);
-  } else {
-    await expect(dock.locator('[data-tile-size]').first()).toHaveAttribute('data-tile-size', 'lg');
-  }
+  await expect(tiles(composer)).toHaveAttribute('data-variant', 'dock');
+  await expect(dock.locator('[data-tile-size]').first()).toHaveAttribute('data-tile-size', 'sm');
+  expect((await tiles(composer).boundingBox())!.height).toBeLessThanOrEqual(74);
   await expect(tiles(composer).locator('[data-peer-id]').first()).toHaveAttribute('data-is-local', 'true');
   // Invitees still being rung are placeholder tiles after the people in the call (ui-components 2.436.0).
   if (ringing !== undefined) await expect(tiles(composer).locator('[data-ringing="true"]')).toHaveCount(ringing, { timeout: 45_000 });
@@ -129,14 +117,14 @@ test('Social DM: ringing, in-call and Leave above the "Message Farah Osei" compo
     await start.click();
     // Ringing: the caller's bar says who is rung, with their own tile.
     // Sana's own tile plus Farah's ringing placeholder.
-    await expectComposerBar(sana, composer(sana), 'calling', 2, 'shelf', 1);
+    await expectComposerBar(sana, composer(sana), 'calling', 2, 1);
     await expect(tiles(composer(sana)).locator('[data-ringing="true"]')).toHaveAttribute('data-peer-id', 'u-farah');
     await expect(composerDock(composer(sana))).toContainText(/Calling Farah Osei/);
     await expect(sana.getByTestId('shell-call-dock')).toContainText(/Calling/);
     await sana.screenshot({ path: test.info().outputPath('dm-ringing.png') });
 
     await farah.getByRole('button', { name: 'Accept', exact: true }).click({ timeout: 30_000 });
-    for (const page of [sana, farah]) await expectComposerBar(page, composer(page), 'active', 2, 'shelf', 0);
+    for (const page of [sana, farah]) await expectComposerBar(page, composer(page), 'active', 2, 0);
     await sana.screenshot({ path: test.info().outputPath('dm-in-call.png') });
 
     await leaveFromComposer(sana, composer(sana), [farah]);
@@ -157,10 +145,10 @@ test('Initiative: the composer in the content column carries the compact bar and
     // The caller's own tile plus the callee's ringing placeholder (more if the initiative rings others).
     await expect(tiles(pane(caller)).locator(`[data-peer-id="${process.env.INITIATIVE_CALLEE ?? 'u-nora'}"]`)).toHaveAttribute('data-ringing', 'true', { timeout: 30_000 });
     const invited = await tiles(pane(caller)).locator('[data-ringing="true"]').count();
-    await expectComposerBar(caller, pane(caller), 'calling', 1 + invited, 'stack', invited);
+    await expectComposerBar(caller, pane(caller), 'calling', 1 + invited, invited);
     await expect(composerDock(pane(caller))).toHaveAttribute('data-compact', 'true');
     await callee.getByRole('button', { name: 'Accept', exact: true }).click({ timeout: 30_000 });
-    for (const page of [caller, callee]) await expectComposerBar(page, pane(page), 'active', 2, 'stack');
+    for (const page of [caller, callee]) await expectComposerBar(page, pane(page), 'active', 2);
     await caller.screenshot({ path: test.info().outputPath('initiative-in-call.png') });
     await leaveFromComposer(caller, pane(caller), [callee]);
     for (const person of people) expect(person.errors).toEqual([]);
@@ -176,14 +164,14 @@ test('Assessment team scorecard: the dimension composer carries the bar and tile
     const composer = (page: Page) => page.getByTestId('dimension-composer-block');
     await expect(huddleButton(asha)).toBeEnabled({ timeout: 30_000 });
     await huddleButton(asha).click();
-    await expectComposerBar(asha, composer(asha), 'active', 1, 'auto');
+    await expectComposerBar(asha, composer(asha), 'active', 1);
     await expect(huddleButton(jonas)).toBeEnabled({ timeout: 30_000 });
     await huddleButton(jonas).click();
-    for (const page of [asha, jonas]) await expectComposerBar(page, composer(page), 'active', 2, 'auto');
+    for (const page of [asha, jonas]) await expectComposerBar(page, composer(page), 'active', 2);
     await asha.screenshot({ path: test.info().outputPath('scorecard-in-call.png') });
     await composerDock(composer(jonas)).getByTestId('call-dock-leave').click();
     await expect(composerDock(composer(jonas))).toHaveCount(0, { timeout: 20_000 });
-    await expectComposerBar(asha, composer(asha), 'active', 1, 'auto');
+    await expectComposerBar(asha, composer(asha), 'active', 1);
     for (const person of people) expect(person.errors).toEqual([]);
   } finally { await close(people); }
 });

@@ -1,6 +1,6 @@
 // The centrepiece: the 17-dimension rail paired with a tabbed detail pane for
 // whichever dimension is selected, on the library `ExplorerLayout` — the rail
-// flush at the frame's left edge (300px, `md`, with wrapped rubric names),
+// flush at the frame's left edge (368px by default, resizable),
 // its rows the library `GroupedList` grouped by where each dimension stands
 // (claims to verify, verified, not yet assessed, not applicable), which owns
 // the rows' focus, ArrowUp/Down/Home/End movement and Enter/Space activation.
@@ -14,7 +14,7 @@
 // else here is composed from Stack/Inline/Card/DetailSection/Chip, per
 // docs/assessment-goal.md "De-hand-roll every page".
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router';
 import { ExplorerLayout } from '@connorhoehnslalom/ui-components';
 import {
@@ -31,6 +31,7 @@ import {
   Stack,
   Tabs,
   useRailFold,
+  useToast,
   type TabItem,
 } from '@connorhoehnslalom/ui-components/shared';
 import { isOpenFollowUp } from '../assessmentFormat';
@@ -169,11 +170,9 @@ function ProgressTab({ dimension, teamId, onChanged, command }: { dimension: Dim
     <Stack gap="lg">
       <DetailSection title="Criteria to level up" first>
         {!dimension.is_na && dimension.next_level_criteria.length > 0 ? (
-          <Stack gap="xs" className="mt-2">
+          <Stack as="ul" gap="xs" className="mt-2 list-disc pl-4 marker:text-accent">
             {dimension.next_level_criteria.map((c, i) => (
-              <Inline key={i} gap="xs" wrap={false} className="text-sm text-text-secondary">
-                <strong className="text-accent">&bull;</strong>{c}
-              </Inline>
+              <T as="li" key={i} size="sm" tone="secondary" wrap className="list-item">{c}</T>
             ))}
           </Stack>
         ) : (
@@ -402,6 +401,8 @@ interface DimensionMasterDetailProps {
   active: boolean;
   /** The team's Discussion (the page's one runtime, shared with the right pane's thread). */
   conversation: ConversationRuntime | null;
+  /** The team overview belongs above the detail, alongside the full-height rail. */
+  header?: ReactNode;
 }
 
 /**
@@ -432,6 +433,7 @@ function DimensionFooter({ teamId, teamName, dimension, onChanged, cardsShownEls
   const host = useCallHost();
   const huddleComposer = usePageHuddleComposer('agent');
   const [note, setNote] = useState<string | null>(null);
+  const { toast } = useToast();
   const reference = useMemo(() => dimensionPageReference({ id: teamId, name: teamName }, dimension), [teamId, teamName, dimension]);
   const huddleLive = !!host?.lobby && host.lobby.lobbyName === channel && !['idle', 'ended', 'failed'].includes(host.call.phase);
   // The call bar and tiles above the input, from the caller's ring to the ended notice.
@@ -462,7 +464,12 @@ function DimensionFooter({ teamId, teamName, dimension, onChanged, cardsShownEls
       identity={session ? { userId: session.sub, displayName: session.name ?? session.sub } : null}
       recipients={[
         { id: 'discussion', label: 'Team discussion', channel, placeholder: 'Add to this team’s Discussion…',
-          send: out => { conversation?.chat.sendMessage(out.text, out.metadata); setNote('Sent to the team’s Discussion.'); return !!conversation; } },
+          send: out => {
+            if (!conversation) return false;
+            conversation.chat.sendMessage(out.text, out.metadata);
+            toast('Sent to the team’s Discussion.', { type: 'success' });
+            return true;
+          } },
         // Call chat is the same destination and draft on every page, even after navigation.
         ...(huddleComposer.recipient ? [huddleComposer.recipient] : []),
       ]}
@@ -500,7 +507,7 @@ function DimensionFooter({ teamId, teamName, dimension, onChanged, cardsShownEls
   );
 }
 
-export function DimensionMasterDetail({ dimensions, selectedId, onSelect, teamId, teamName, onChanged, active, conversation }: DimensionMasterDetailProps) {
+export function DimensionMasterDetail({ dimensions, selectedId, onSelect, teamId, teamName, onChanged, active, conversation, header }: DimensionMasterDetailProps) {
   const [onlyClaims, setOnlyClaims] = useState(false);
   const filtered = filterRailDimensions(dimensions, onlyClaims);
   const fallbackId = filtered.length > 0 ? filtered[0].id : null;
@@ -517,7 +524,8 @@ export function DimensionMasterDetail({ dimensions, selectedId, onSelect, teamId
   return (
     <ExplorerLayout
       className="assessment-dimension-layout min-h-0 flex-1"
-      railWidth="ms"
+      railWidth="lg"
+      railResize={{ minPx: 300, maxPx: 560, storageKey: 'assessment.dimension-rail.width' }}
       railTitle="Dimensions"
       railHeading="compact"
       railCount={filtered.length}
@@ -532,6 +540,7 @@ export function DimensionMasterDetail({ dimensions, selectedId, onSelect, teamId
         <DimensionRailList dimensions={filtered} allDimensions={dimensions} selectedId={effectiveId} onSelect={onSelect} />
       )}
       panePadding="none"
+      paneHeader={header}
       paneFooter={effective ? (
         <DimensionFooter key={effective.id} teamId={teamId} teamName={teamName} dimension={effective} onChanged={onChanged}
           cardsShownElsewhere={tab === 'progress'} command={command} active={active} conversation={conversation}

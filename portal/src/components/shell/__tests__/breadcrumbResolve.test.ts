@@ -38,6 +38,14 @@ test('Assessment Workspace and legacy presentation links use the files location 
   assert.equal(deck[2]?.id, 'deck-existing');
 });
 
+test('Assessment root groups do not repeat the tenant context in page trails', () => {
+  assert.deepEqual(resolveBreadcrumbs('/assessment/teams/TEAM-005'), [
+    { label: 'Dashboard', path: '/assessment/teams' }, { label: 'TEAM-005', id: 'TEAM-005' },
+  ]);
+  assert.deepEqual(resolveBreadcrumbs('/assessment/teams'), [{ label: 'Dashboard' }]);
+  assert.deepEqual(resolveBreadcrumbs('/assessment/submissions/sub-1').map(crumb => crumb.label), ['Submissions', 'sub-1']);
+});
+
 test('a Work presentation trail names its files location and resolved entity without Plan', () => {
   assert.deepEqual(resolveBreadcrumbs('/iq/decks/deck-existing'), [
     { label: 'Initiatives', path: '/iq/projects' },

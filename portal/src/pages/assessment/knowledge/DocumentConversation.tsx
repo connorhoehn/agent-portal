@@ -28,6 +28,8 @@ import { ConversationComposer } from '../../../lib/conversationComposer';
 import { useCallBlock, useCallHost } from '../../../lib/conversationCall';
 import { lobbyPrefix } from '../../../lib/conversationCallModel';
 import { documentCallLobby } from './documentCommentsModel';
+import { ConversationPaneBody, useConversationPane } from '../../../components/shell/ConversationPane';
+import { usePageHuddleComposer } from '../../../components/shell/HuddleComposerDock';
 
 const OFFLINE_REASON = offlineReason('this document’s conversation');
 
@@ -90,6 +92,7 @@ export const READER_AGENT_REASON = 'Your current role can read this document; as
 
 function ComposerDock({ docId, title, conversation, agentEdit, stripInDock, agentEditable }: { docId: string; title: string; conversation: DocumentConversation; agentEdit: DocumentAgentEdit; stripInDock: boolean; agentEditable: boolean }) {
   const context = useDocumentContext();
+  const huddleComposer = usePageHuddleComposer(agentEditable ? 'agent' : 'chat');
   const [chip, setChip] = useState(true);
   // This document's huddle (useDocumentCall's lobby): the call bar and tiles above the input,
   // naming the document as its chip (the mockup's "Auth architecture review · Auth architecture").
@@ -102,11 +105,15 @@ function ComposerDock({ docId, title, conversation, agentEdit, stripInDock, agen
     {stripInDock && agentEdit.strip}
   </Stack> : null;
   return <ConversationComposer
+    key={huddleComposer.editorKey}
     channel={conversation.channel}
     chat={conversation.chat}
     context={{ kind: 'document', id: docId, title }}
     // The role decides Agent (a reader's is off with the reason); the doc family lets every reader post.
-    capabilities={{ maySend: conversation.maySend, mayAttach: true, agent: { allowed: agentEditable, reason: READER_AGENT_REASON } }}
+    capabilities={{ maySend: conversation.maySend, mayAttach: true, agent: {
+      allowed: agentEditable && !huddleComposer.unavailableHuddle,
+      reason: huddleComposer.unavailableHuddle ? 'Choose a current destination before changing this draft’s mode.' : READER_AGENT_REASON,
+    } }}
     offModes={{ terminal: 'Terminal sends lines to a running agent loop, and none is attached to a document.' }}
     offline={conversation.connected ? null : OFFLINE_REASON}
     identity={{ userId: conversation.userId, displayName: conversation.displayName }}
@@ -120,11 +127,13 @@ function ComposerDock({ docId, title, conversation, agentEdit, stripInDock, agen
         const sent = conversation.send(out.text, out.metadata);
         if (sent) context?.open('chat');
         return sent;
-      } }) }]}
+      } }) }, ...(huddleComposer.recipient ? [huddleComposer.recipient] : [])]}
+    {...huddleComposer.composerProps}
     // One input per conversation: while this dock is mounted it owns the conversation's input,
     // so the Chat panel beside the page shows the thread only and its Write/Reply land here.
     claim={{ label: 'the document composer', replies: true }}
     answersFocus
+    onReveal={() => context?.open('chat')}
     callBlock={block}
     modePlaceholders={{
       agent: 'Ask the drafter to edit this page — select text to rewrite it…',
@@ -149,14 +158,21 @@ function ComposerDock({ docId, title, conversation, agentEdit, stripInDock, agen
  * panel is then the thread only, and Write/Reply put the caret in the dock.
  */
 export function DocumentChatPanel({ title, conversation }: { title: string; conversation: DocumentConversation }) {
+  const context = useDocumentContext();
+  // Claim the existing context column even while it is folded. The shell's
+  // fallback must not open a second transcript beside this document pane.
+  const pane = useConversationPane({ enabled: !!context, onReveal: () => context?.open('chat'),
+    onHide: context?.collapse, visible: !!context?.host && context.active === 'chat' });
   return <DocumentContextPanel id="chat">
     <Stack gap="sm" className="min-h-0 flex-1" data-testid="document-chat-panel">
-      {!conversation.connected && <InlineAlert tone="warning">{OFFLINE_REASON}</InlineAlert>}
-      <ConversationThread conversation={conversation} title={title} pins={{ canPin: true }} attachments reactions
-        placeholder="Write a message…"
-        composer={{ draftKey: `${conversation.channel}:panel`,
-          recipients: [{ id: 'discussion', label: title, channel: conversation.channel, attachments: true, send: out => conversation.send(out.text, out.metadata) }] }}
-        data-testid="document-chat" />
+      <ConversationPaneBody pane={pane} pageLabel="Document discussion">
+        {!conversation.connected && <InlineAlert tone="warning">{OFFLINE_REASON}</InlineAlert>}
+        <ConversationThread conversation={conversation} title={title} pins={{ canPin: true }} attachments reactions
+          placeholder="Write a message…"
+          composer={{ draftKey: `${conversation.channel}:panel`,
+            recipients: [{ id: 'discussion', label: title, channel: conversation.channel, attachments: true, send: out => conversation.send(out.text, out.metadata) }] }}
+          data-testid="document-chat" />
+      </ConversationPaneBody>
     </Stack>
   </DocumentContextPanel>;
 }

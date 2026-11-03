@@ -7,7 +7,7 @@ import { CallChatRuntime } from '../call-chat.js';
 import { MemoryCallChatStateStore } from '../call-chat-state.js';
 import type { Session } from '../session.js';
 
-it.each(['social:workgraph:workspace', 'assessment:doc:page:100002', 'pipelines:run:run-42', 'assessment:team:team-lower'])('shared call lifecycle leaves %s outside the huddle reconciler', async lobbyName => {
+it.each(['social:workgraph:workspace', 'assessment:doc:', 'pipelines:run:run-42', 'assessment:team:team-lower'])('shared call lifecycle leaves %s outside the huddle reconciler', async lobbyName => {
   const calls = new InMemoryCallStateStore(), state = new MemoryCallChatStateStore();
   const getState = jest.spyOn(state, 'get'), join = jest.spyOn(state, 'join');
   const authority = jest.fn().mockRejectedValue(new Error('OrgIQ authority must not run for another call tenant'));

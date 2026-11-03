@@ -13,13 +13,14 @@ export interface CallAuthority { displayName: string; grants: Grants }
 /** The tenants whose sockets page pins (OrgIQ only) and huddle chat resolve. */
 export type CallTenant = typeof TENANTS_WITH_HUDDLE_CHAT[number];
 const ORGIQ_ONLY: readonly CallTenant[] = ['orgiq'];
-/** Huddle chat follows the accepted call in Work, Assessment teams and Social (manifest `huddleChat`). */
+/** Huddle chat follows accepted Work, Assessment and Social calls (manifest `huddleChat`). */
 export const HUDDLE_CHAT_TENANTS: readonly CallTenant[] = TENANTS_WITH_HUDDLE_CHAT;
-/** The tenant a huddle-bearing lobby belongs to, or null (documents, pipelines, malformed). */
+/** The tenant a huddle-bearing lobby belongs to, or null (pipelines, malformed). */
 export function huddleLobbyTenant(lobbyName: string): CallTenant | null {
   if (lobbyName.startsWith('orgiq:')) return 'orgiq';
   if (SOCIAL_CONVERSATION_ID.test(lobbyName)) return 'social';
-  return tenantChannelFamily(lobbyName)?.id === 'assessment:team' ? 'assessment' : null;
+  const family = tenantChannelFamily(lobbyName)?.id;
+  return family === 'assessment:team' || family === 'assessment:doc' ? 'assessment' : null;
 }
 export async function currentCallAuthority(session: Session, tenants: readonly CallTenant[] = ORGIQ_ONLY): Promise<CallAuthority> {
   if (!tenants.includes(session.tenant as CallTenant)) {

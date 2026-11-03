@@ -20,6 +20,31 @@ test('TEAM-005 dimension rail is readable and retains grouped keyboard navigatio
   if (await rail.getAttribute('data-collapsed') === 'true') await page.getByRole('button', { name: 'Show dimensions', exact: true }).click();
   const list = page.getByTestId('dimension-rail');
   await expect(list).toBeVisible();
+  const topAlignment = () => rail.evaluate(element => {
+    const toolbar = document.querySelector('.shell-header')!;
+    return Math.abs(element.getBoundingClientRect().top - toolbar.getBoundingClientRect().bottom);
+  });
+  await expect.poll(topAlignment).toBeLessThanOrEqual(1);
+  const trail = page.getByTestId('page-header').getByRole('navigation');
+  await expect(trail).toContainText('Dashboard');
+  await expect(trail).not.toContainText('Assess');
+  for (const name of ['Collapse header', 'Expand header']) {
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect.poll(topAlignment).toBeLessThanOrEqual(1);
+  }
+  const defaultWidth = (await rail.boundingBox())!.width;
+  expect(defaultWidth).toBeGreaterThanOrEqual(367);
+  await page.getByRole('button', { name: 'Widen dimensions', exact: true }).click();
+  await expect.poll(async () => (await rail.boundingBox())!.width).toBeGreaterThan(defaultWidth + 20);
+  await page.getByRole('button', { name: 'Reset dimensions width', exact: true }).click();
+  const divider = page.getByRole('separator', { name: 'Resize dimensions', exact: true });
+  await divider.focus(); await divider.press('Shift+ArrowRight');
+  await expect.poll(async () => (await rail.boundingBox())!.width).toBeGreaterThan(defaultWidth + 10);
+  const resizedWidth = (await rail.boundingBox())!.width;
+  await page.reload();
+  await expect(list).toBeVisible();
+  await expect.poll(async () => Math.abs((await rail.boundingBox())!.width - resizedWidth)).toBeLessThanOrEqual(1);
+  await page.getByRole('button', { name: 'Reset dimensions width', exact: true }).click();
   const measure = () => rail.evaluate(element => ({ width: element.getBoundingClientRect().width,
     heading: [...element.querySelectorAll('h2 span')].map(node => ({ text: node.textContent, width: node.getBoundingClientRect().width, scrollWidth: node.scrollWidth })),
     titles: [...element.querySelectorAll('[data-focus-key^="r:"] .truncate[title]')].map(node => ({ text: node.textContent,
@@ -36,6 +61,12 @@ test('TEAM-005 dimension rail is readable and retains grouped keyboard navigatio
   const first = page.getByTestId('dimension-rail-row-open-1'), second = page.getByTestId('dimension-rail-row-open-2');
   await first.focus(); await first.press('ArrowDown'); await expect(second).toBeFocused(); await second.press('Enter');
   await expect(page.getByTestId('dimension-rail-row-2')).toHaveAttribute('aria-current', 'true');
+  await page.getByRole('tab', { name: 'Improvement Plan', exact: true }).click();
+  await expect(rail).not.toBeVisible();
+  await expect(page.getByTestId('page-header')).toHaveCount(1);
+  await page.getByRole('tab', { name: 'Certification', exact: true }).click();
+  await expect(page.getByTestId('dimension-rail-row-2')).toHaveAttribute('aria-current', 'true');
+  await expect.poll(topAlignment).toBeLessThanOrEqual(1);
   await expect(page.getByRole('heading', { name: 'Continuous Delivery (CD)', exact: true })).toBeVisible();
   await second.press('ArrowLeft');
   const verifiedGroup = page.getByTestId('dimension-rail-group-toggle-verified');

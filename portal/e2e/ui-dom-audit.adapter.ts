@@ -319,7 +319,7 @@ export default {
         await expect(huddle(p)).toBeEnabled({ timeout: 30_000 });
         await huddle(p).click();
         // Wait for either outcome; isVisible itself never waits for a delayed pre-join dialog.
-        const join = p.getByRole('dialog', { name: /Start a huddle|Join/ }).getByRole('button', { name: 'Join', exact: true });
+        const join = p.getByRole('dialog', { name: /Start a huddle|Join/ }).getByTestId('prejoin-join');
         const stage = p.getByTestId('huddle-meeting-stage');
         await expect(join.or(stage)).toBeVisible({ timeout: 30_000 });
         if (await join.isVisible()) await join.click();

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { SidePane, usePaneState, useSidePane, type PaneTabSpec } from '@connorhoehnslalom/ui-components';
+import { SidePane, usePaneState, useSidePane, useSidePaneHost, type PaneTabSpec } from '@connorhoehnslalom/ui-components';
 import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useComposerFocusReveal } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { HuddleChatBody, useHuddleChat } from '../shell/HuddleChat';
@@ -21,6 +21,7 @@ export interface DeckAssistantPaneProps {
 export function DeckAssistantPane({ question, questionRequest, deckTitle, assistantTitle = 'Presentation assistant', composerTestId = 'deck-composer-dock' }: DeckAssistantPaneProps) {
   const [params, setParams] = useSearchParams();
   const sidePane = useSidePane();
+  const paneHost = useSidePaneHost();
   const huddle = useHuddleChat();
   const callId = huddle?.callId ?? null;
   const huddleView = huddle?.view ?? 'closed';
@@ -60,7 +61,8 @@ export function DeckAssistantPane({ question, questionRequest, deckTitle, assist
 
   // This page owns the huddle's thread even while its pane is collapsed or
   // Agent is selected; the shell must not add a second huddle drawer.
-  useEffect(() => registerPaneOwner?.(), [registerPaneOwner]);
+  const huddleVisible = pane.tab === 'huddle' && paneHost.shown && !paneHost.folded;
+  useEffect(() => registerPaneOwner?.({ visible: huddleVisible, hide: paneHost.collapse }), [registerPaneOwner, huddleVisible, paneHost.collapse]);
   useComposerFocusReveal(request => {
     if (callId && request.target?.kind === 'huddle') openPane.current('huddle');
   });

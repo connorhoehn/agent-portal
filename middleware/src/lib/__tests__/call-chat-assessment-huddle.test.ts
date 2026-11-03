@@ -27,7 +27,6 @@ import type { Session } from '../session.js';
 type Frame = Record<string, unknown>;
 type Client = { ws: WebSocket; frames: Frame[] };
 const SECRET = 'assessment-huddle-chat-contract';
-const TEAM = 'assessment:team:TEAM-005';
 const callId = 'team-huddle-1';
 const channel = callChatChannel(callId);
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -45,6 +44,7 @@ async function refusal(client: Client, act: () => void): Promise<Frame> {
 }
 const chatFrames = (client: Client, action: string) => client.frames.filter(frame => frame.type === 'chat' && frame.action === action && frame.channel === channel);
 
+describe.each(['assessment:team:TEAM-005', 'assessment:doc:page:100002', 'assessment:doc:h:a1b2c3'])('assessment huddle %s', TEAM => {
 let server: http.Server, port: number, handle: ReturnType<typeof attachRealtimeGateway>, app: express.Express;
 let users: Map<string, UserInfo>, sessions: Map<string, Session>, clients: Client[], previousSecret: string | undefined;
 
@@ -158,4 +158,7 @@ it('admits exactly the people seated by joining the lobby; a non-joined teammate
   await until(() => ana.frames.some(frame => frame.type === 'call-chat' && frame.action === 'members' && (frame.participants as unknown[])?.length === 1));
   expect((await request(app).get(`/api/calls/${callId}/chat`).set('x-user', 'bea')).status).toBe(403);
   expect(errorCode(await refusal(bea, () => out(bea, { service: 'chat', action: 'send', channel, message: 'After leaving', metadata: { clientDeliveryId: 'bea-2' } })))).toBe('HUDDLE_CHAT_DENIED');
+  jest.mocked(isAllowed).mockResolvedValue(false);
+  expect((await request(app).get(`/api/calls/${callId}/chat`).set('x-user', 'ana')).status).toBe(403);
 }, 30000);
+});

@@ -767,32 +767,6 @@ tbody tr:focus-within .row-reveal,
   padding-left: 0;
 }
 
-/* Keep the dock's call controls visible above the compact participant strip. */
-[data-testid="shell-call-media"][data-placement="composer"] [data-testid="call-dock-tile-row"] {
-  display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  gap: 8px;
-  align-items: center;
-}
-[data-testid="shell-call-media"][data-placement="composer"] [data-dock-item="true"] {
-  /* The tile's size is the library's inline width/height (CallDock tileSize
-     lg, 240 × 135, chosen inside CallMediaOutlet with no prop —
-     docs/ui-components-queue.md). max-* is not set inline, so it bounds the
-     tile at normal specificity. */
-  flex: 0 0 170px;
-  width: 170px;
-  height: 96px;
-  max-width: 170px;
-  max-height: 96px;
-  aspect-ratio: 16 / 9;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #293341, #151c28);
-}
-[data-testid="shell-call-media"][data-placement="composer"] [data-testid="call-dock-connecting"] > div {
-  width: 170px;
-  height: 96px;
-}
 /* The media strip and editor form one chat card. Footer controls stay in the
    social row, so navigating cannot introduce a second standalone call panel. */
 .conversation-call-composer [data-testid$="-dock-slot"] {
@@ -806,21 +780,10 @@ tbody tr:focus-within .row-reveal,
   padding: 0;
   gap: 0;
 }
-/* The enclosing card supplies the horizontal inset. A visible call header
-   still needs room below the meeting toolbar and above the participant tiles. */
-.conversation-call-composer [data-testid$="-dock-slot"] section[data-phase][data-call-dock] {
-  padding-top: 8px;
-  gap: 8px;
-}
 .conversation-call-composer [data-testid$="-dock-slot"] + *,
 .conversation-call-composer [data-testid$="-dock-slot"] + * .uic-composer {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
-}
-[data-testid="shell-call-media"][data-placement="composer"] [data-dock-item="true"]:has([data-call-stream="screen"]) {
-  flex-basis: 240px;
-  width: 240px;
-  max-width: 240px;
 }
 [data-call-stream="screen"] video { object-fit: contain; }
 [data-dock-item="true"]:has([data-call-stream="screen"]) > .absolute.inset-x-0 > svg:last-child { display: none; }
