@@ -107,6 +107,17 @@ function WhiteboardPage({ page, onSaved }: { page: WorkspaceDocument; onSaved: (
   useEffect(() => () => ydoc.destroy(), [ydoc]);
   const savedScene = useRef(page.scene);
   const [dirty, setDirty] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(title);
+  useEffect(() => { if (!renaming) setName(title); }, [title, renaming]);
+  async function rename() {
+    const next = name.trim();
+    if (!next || next === title) { setRenaming(false); return; }
+    setSaving(true); setProblem(null);
+    try { await updateWorkspaceDocument(page.id, { title: next }); setRenaming(false); onSaved(); }
+    catch (cause) { setProblem(cause instanceof Error ? cause.message : 'The whiteboard could not be renamed.'); }
+    finally { setSaving(false); }
+  }
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const user = useMemo(() => ({ userId: session?.sub, displayName: session?.name ?? 'You', color: 'var(--color-primary)' }), [session?.sub, session?.name]);
@@ -121,9 +132,18 @@ function WhiteboardPage({ page, onSaved }: { page: WorkspaceDocument; onSaved: (
     finally { setSaving(false); }
   }
   return <PageSection title={title} data-testid="workspace-whiteboard-page"
-    actions={mayEdit ? <Button size="sm" variant="primary" disabled={saving || !dirty} onClick={() => void save()} data-testid="workspace-whiteboard-save">{saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}</Button> : undefined}>
+    actions={mayEdit ? <Inline gap="sm">
+        {!renaming && <Button size="sm" variant="secondary" disabled={saving} onClick={() => setRenaming(true)} data-testid="workspace-whiteboard-rename">Rename</Button>}
+        <Button size="sm" variant="primary" disabled={saving || !dirty} onClick={() => void save()} data-testid="workspace-whiteboard-save">{saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}</Button>
+      </Inline> : undefined}>
     <Stack gap="md">
       <MetaLine size="sm" tone="secondary" items={['Whiteboard', `edited ${relativeTime(page.updatedAt)}`, mayEdit ? 'One author at a time; Save keeps your strokes' : null]} data-testid="workspace-whiteboard-meta" />
+      {renaming && <Inline gap="sm" align="center" wrap={false}>
+        <Input aria-label="Whiteboard title" value={name} onChange={event => setName(event.target.value)} className="max-w-md" data-testid="workspace-whiteboard-title"
+          onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void rename(); } if (event.key === 'Escape') setRenaming(false); }} />
+        <Button size="sm" variant="primary" disabled={saving || !name.trim()} onClick={() => void rename()} data-testid="workspace-whiteboard-rename-save">Save name</Button>
+        <Button size="sm" variant="ghost" disabled={saving} onClick={() => setRenaming(false)}>Cancel</Button>
+      </Inline>}
       {problem && <InlineAlert tone="error">{problem}</InlineAlert>}
       <Suspense fallback={<LoadingState label="Loading the whiteboard…" />}>
         <ExcalidrawCanvas ydoc={ydoc} awareness={null} user={user} editable={mayEdit} className="h-[70vh] min-h-[480px] rounded-lg border border-border"

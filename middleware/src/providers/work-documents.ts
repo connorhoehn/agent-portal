@@ -167,10 +167,11 @@ export async function updateWorkspaceDocument(id: string, patch: { title?: strin
     row.updatedAt = clock.nowIso();
     return withHref(row);
   }
-  const rows = await workspaceSql(`UPDATE work_documents SET title = COALESCE(:title, title), markdown = COALESCE(:markdown, markdown),
-    scene = COALESCE(:scene, scene), updated_at = NOW() WHERE id = :id RETURNING ${WORKSPACE_COLUMNS}`,
-  [str('id', id), ...(patch.title !== undefined ? [str('title', patch.title)] : [{ name: 'title', value: { isNull: true } }]),
-    ...(patch.markdown !== undefined ? [str('markdown', patch.markdown)] : [{ name: 'markdown', value: { isNull: true } }]),
-    ...(patch.scene !== undefined ? [str('scene', patch.scene)] : [{ name: 'scene', value: { isNull: true } }])] as ReturnType<typeof str>[]);
+  const sets: string[] = [], params = [str('id', id)];
+  if (patch.title !== undefined) { sets.push('title = :title'); params.push(str('title', patch.title)); }
+  if (patch.markdown !== undefined) { sets.push('markdown = :markdown'); params.push(str('markdown', patch.markdown)); }
+  if (patch.scene !== undefined) { sets.push('scene = :scene'); params.push(str('scene', patch.scene)); }
+  if (!sets.length) return getWorkspaceDocument(id);
+  const rows = await workspaceSql(`UPDATE work_documents SET ${sets.join(', ')}, updated_at = NOW() WHERE id = :id RETURNING ${WORKSPACE_COLUMNS}`, params);
   return rows[0] ? withHref(workspaceRow(rows[0])) : null;
 }

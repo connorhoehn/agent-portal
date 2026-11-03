@@ -92,9 +92,13 @@ test('New › Whiteboard opens an Excalidraw canvas in the initiative, and Save 
     await expect(board.locator('.excalidraw')).toBeVisible({ timeout: 30_000 });
     await expect(board.getByTestId('workspace-whiteboard-save')).toBeDisabled();
     expect(await board.locator('.excalidraw canvas').count()).toBeGreaterThan(0);
+    await board.getByTestId('workspace-whiteboard-rename').click();
+    await board.getByTestId('workspace-whiteboard-title').fill('Cutover sequence board');
+    await board.getByTestId('workspace-whiteboard-rename-save').click();
+    await expect(board.getByRole('heading', { name: 'Cutover sequence board' })).toBeVisible({ timeout: 15_000 });
     await page.goto('/iq/projects/p-auth-migration?scope=all&tab=docs');
     await expect(files.getByText('Loading project files…')).toHaveCount(0, { timeout: 20_000 });
-    await expect(files.getByTestId('initiative-file').filter({ hasText: 'Untitled whiteboard' })).toContainText(/Whiteboard · edited/);
+    await expect(files.getByTestId('initiative-file').filter({ hasText: 'Cutover sequence board' })).toContainText(/Whiteboard · edited/);
     expect(person.errors).toEqual([]);
   } finally { await person.close(); }
 });

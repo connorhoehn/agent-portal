@@ -108,6 +108,12 @@
       "why": "Explicit work context links require both work_items and documents."
     },
     {
+      "id": "work_documents_schema",
+      "file": "work_documents_schema.sql",
+      "kind": "repeatable",
+      "why": "Pages and whiteboards written inside an initiative (the Docs tab's New menu, the Discussion's /doc Save) require projects and work_items."
+    },
+    {
       "id": "work_item_comment_migration_schema",
       "file": "work_item_comment_migration_schema.sql",
       "kind": "repeatable",
@@ -399,6 +405,7 @@
   "seed_run": [
     "orgiq_work_items_schema",
     "work_item_documents_schema",
+    "work_documents_schema",
     "work_item_comment_migration_schema",
     "assessment_team_members_schema",
     "assessment_deck_schema",

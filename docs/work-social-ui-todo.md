@@ -110,8 +110,14 @@ the follow-ups below remain explicitly open.
   realtime Excalidraw adapter in `vite.config.ts`). Strokes save explicitly as
   one base64 Yjs update in `work_documents.scene` (PUT `scene`, 2 MB cap) and
   reload; readers get view mode. One author at a time until the live Y.Doc.
-  The whiteboard walk draws a rectangle, saves and reloads it. A whiteboard
-  cannot be renamed on its page yet (a page can).
+  The whiteboard walk draws a rectangle, saves, reloads and renames it.
+  Cloud readiness: `work_documents_schema.sql` is a repeatable manifest entry
+  (after `work_item_documents_schema`, also in `seed_run`), the update SQL
+  binds strings only, and `work-documents-workspace-postgres.test.ts` runs the
+  migration and provider SQL in the labelled disposable PostgreSQL
+  (`REAL_WORK_DOCUMENTS_POSTGRES=1`, container
+  `orgiq-work-documents-postgres-acceptance`): 8/8 with the link suite. Aurora
+  application remains a deploy step (no AWS in this work).
   Next slices: the live
   collaborative canvas (generalise `connectDocumentCanvas` from assessment to
   orgiq and mount EditorShell on `/iq/documents/:id`); the Excalidraw whiteboard
