@@ -23,7 +23,9 @@
 // the thread (no input, no hand-off).
 
 import { useChat, useChatReadReceipts, useGatewayOptional, useReactions } from '@connorhoehn/realtime-modules/client';
+import { useNavigate } from 'react-router';
 import { WrappedChatPanel, type WrappedChatPanelProps } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { documentRecordHref } from '../../lib/workDocuments';
 import { Button, EmptyState, Inline, InlineAlert, LoadingState, LockIcon, Stack, T } from '@connorhoehnslalom/ui-components/shared';
 import { ThreadInputHandoff, useThreadInput, type ConversationComposerProps } from '@connorhoehnslalom/ui-components/social/rich-composer';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -173,6 +175,7 @@ export interface ConversationThreadProps {
 
 export function ConversationThread({ conversation, title, readOnlyReason = null, pins, attachments = false, includeFiles = true, reactions = false, editable = true, renderMessageReferences, typingUsers, fill = true, input = 'own', composer, placeholder, notices = false, emptyState, dock, transformMessages, postRhythm, 'data-testid': testId }: ConversationThreadProps) {
   const { channel, chat: originalChat, receipts, quote, connected, readState, maySend, userId, displayName, summarize } = conversation;
+  const navigate = useNavigate();
   const messages = useMessagePortraits(originalChat.messages);
   const chat = { ...originalChat, messages };
   const srcFor = useAttachmentSource();
@@ -227,7 +230,9 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
         {/* No panel draws here yet, so the dock stands over the input itself. */}
         {!readError && <Stack gap="none" className="shrink-0">{dock}{field}</Stack>}
       </Stack> : (
-    <WrappedChatPanel key={channel} chat={pinned.chat} attachmentSrc={a => srcFor(a)} {...(reactions && canWrite ? { reactions: conversation.reactions } : {})}
+    <WrappedChatPanel key={channel} chat={pinned.chat} attachmentSrc={a => srcFor(a)}
+      // A Work page a /doc Save announced in this thread opens on its page (docs/work-social-ui-todo.md WORK-DOCS-01).
+      {...(channel.startsWith('orgiq:') ? { onOpenDocument: (id: string) => navigate(documentRecordHref(id)) } : {})} {...(reactions && canWrite ? { reactions: conversation.reactions } : {})}
       {...(pinned.messagePins ? { pins: pinned.messagePins } : {})} currentUserId={userId} displayName={displayName}
       editable={editable && canWrite && connected} {...(forward.onForwardMessage && canWrite ? { onForwardMessage: forward.onForwardMessage } : {})}
       {...(fill ? { fill: true } : {})} showHeader={false} contentAlign={input === 'below' || elsewhere ? 'start' : 'end'} {...(summarize.localMessages.length ? { localMessages: summarize.localMessages } : {})}

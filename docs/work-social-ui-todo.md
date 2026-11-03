@@ -98,7 +98,12 @@ the follow-ups below remain explicitly open.
   Markdown and a steward writes title/body on it (explicit Save). Jest 3/3,
   Playwright `initiative-files-new-document.spec.ts` 3/3 in both themes inside
   a scoped mock world; evidence `.scratch/work-documents-2026-11-02/`.
-  Next slices: wire the Discussion's /doc Save to this store; the live
+  2026-11-03: the Discussion's `/doc` "Save as document" saves into this
+  store (orgiq is a `document` save target; the page must belong to the
+  discussion's initiative, DispatchAgentRun required), the thread opens an
+  announced page on `/iq/documents/:id`; `initiative-doc-save.spec.ts` walks
+  it as a clone (jest 44/44 on the tenant artifact suite).
+  Next slices: the live
   collaborative canvas (generalise `connectDocumentCanvas` from assessment to
   orgiq and mount EditorShell on `/iq/documents/:id`); the Excalidraw whiteboard
   (install `@excalidraw/excalidraw`, the `/diagram` ExcalidrawCanvas, `kind:

@@ -13,6 +13,7 @@ import { conversationArtifactRouter, pendingArtifacts } from '../conversation-ar
 import { errorHandler } from '../../lib/async-handler.js';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { isAllowed } from '../../lib/authz.js';
+import { workspaceDocuments } from '../../providers/work-documents.js';
 import { agentcore } from '../../providers/index.js';
 import { config } from '../../config.js';
 import { createMemorySocialChatBackend, setSocialChatBackend, socialChat } from '../../lib/social-chat.js';
@@ -49,14 +50,20 @@ const msg = (channel: string, id: string, userId: string, text: string, timestam
   ({ id, channel, clientId: `c-${userId}`, userId, message: text, timestamp, metadata: { displayName: 'Forged label' }, ...over });
 
 const CASES = [
-  { tenant: 'orgiq', letter: 'o', channel: 'orgiq:initiative:p-auth', reader: 'olu/orgiq/sme', readOnly: 'mia/orgiq/member', crossTenant: 'ana/assessment/assessor', target: null },
-  { tenant: 'assessment', letter: 'a', channel: 'assessment:doc:d-1', reader: 'ana/assessment/assessor', readOnly: null, crossTenant: 'olu/orgiq/sme', target: 'document' },
-  { tenant: 'pipelines', letter: 'p', channel: 'pipelines:run:r-7', reader: 'pat/pipelines/author', readOnly: null, crossTenant: 'ana/assessment/assessor', target: null },
+  // orgiq saves into the Work page store (providers/work-documents.ts, 2026-11-03): a page of ITS initiative, by a DispatchAgentRun holder.
+  { tenant: 'orgiq', letter: 'o', channel: 'orgiq:initiative:p-auth', reader: 'olu/orgiq/sme', readOnly: 'mia/orgiq/member', crossTenant: 'ana/assessment/assessor', target: 'document',
+    saved: 'wdoc-11111111-1111-1111-1111-111111111111', missing: 'wdoc-99999999-9999-9999-9999-999999999999', readOnlyDoc: 'wdoc-22222222-2222-2222-2222-222222222222', noGrant: 'mia/orgiq/member' },
+  { tenant: 'assessment', letter: 'a', channel: 'assessment:doc:d-1', reader: 'ana/assessment/assessor', readOnly: null, crossTenant: 'olu/orgiq/sme', target: 'document',
+    saved: 'draft:11111111-1111-1111-1111-111111111111', missing: 'draft:99999999-9999-9999-9999-999999999999', readOnlyDoc: 'draft:22222222-2222-2222-2222-222222222222', noGrant: 'rae/assessment/assessment-reader' },
+  { tenant: 'pipelines', letter: 'p', channel: 'pipelines:run:r-7', reader: 'pat/pipelines/author', readOnly: null, crossTenant: 'ana/assessment/assessor', target: null, saved: '', missing: '', readOnlyDoc: '', noGrant: '' },
 ] as const;
 const subOf = (as: string) => as.split('/')[0]!;
 
 beforeEach(async () => {
   flowRunsFixture.reset();
+  workspaceDocuments.reset('default');
+  const page = (id: string, projectId: string) => ({ id, projectId, workItemId: null, title: 'Runbook', kind: 'page' as const, markdown: '', createdBy: 'olu', createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T00:00:00.000Z' });
+  workspaceDocuments.rows().push(page('wdoc-11111111-1111-1111-1111-111111111111', 'p-auth'), page('wdoc-22222222-2222-2222-2222-222222222222', 'p-other'));
   setSocialChatBackend(createMemorySocialChatBackend({ fixtures: false }));
   users = new Map([
     ['olu', user('olu', { orgiq: ['sme'], assessment: ['assessor'], pipelines: ['author'] })],
@@ -155,26 +162,27 @@ describe.each(CASES.flatMap(c => (['diagram', 'doc'] as const).map(cmd => ({ ...
       }
       expect((await save(c.reader, started.body.runId)).status).toBe(400);
       expect((await save(c.reader, started.body.runId, { documentId: '../../etc passwd' })).status).toBe(400);
-      const saved = await save(c.reader, started.body.runId, { documentId: 'draft:11111111-1111-1111-1111-111111111111' });
+      const saved = await save(c.reader, started.body.runId, { documentId: c.saved });
       expect(saved.status).toBe(200);
-      expect(saved.body.metadata).toMatchObject({ documents: [{ id: 'draft:11111111-1111-1111-1111-111111111111', label: 'Runbook' }], artifactOf: { command: 'doc' } });
+      expect(saved.body.metadata).toMatchObject({ documents: [{ id: c.saved, label: 'Runbook' }], artifactOf: { command: 'doc' } });
       expect(saved.body.text).not.toContain('runbook first'); // the body is never posted, only its reference
-      expect((await save(c.reader, started.body.runId, { documentId: 'draft:11111111-1111-1111-1111-111111111111' })).status).toBe(409);
+      expect((await save(c.reader, started.body.runId, { documentId: c.saved })).status).toBe(409);
     });
 
     it('Save resolves the document against the actor\'s current authority: missing 404, read-only 403, no grant 403, cross-tenant refused', async () => {
       if (!c.target) return;
       const started = await run('doc', c.reader, c.channel, 'Runbook'); await settle();
-      const missing = await save(c.reader, started.body.runId, { documentId: 'draft:99999999-9999-9999-9999-999999999999' });
+      const missing = await save(c.reader, started.body.runId, { documentId: c.missing });
       expect(missing.status).toBe(404);
-      const readOnly = await save(c.reader, started.body.runId, { documentId: 'draft:22222222-2222-2222-2222-222222222222' });
+      // assessment: a read-only knowledge page; orgiq: another initiative's page.
+      const readOnly = await save(c.reader, started.body.runId, { documentId: c.readOnlyDoc });
       expect(readOnly.status).toBe(403);
-      // A reader of the same conversation without ManageKnowledge cannot save into a document.
-      const rd = await run('doc', 'rae/assessment/assessment-reader', c.channel, 'Runbook'); await settle();
-      expect((await save('rae/assessment/assessment-reader', rd.body.runId, { documentId: 'draft:11111111-1111-1111-1111-111111111111' })).status).toBe(403);
+      // A reader of the same conversation without the page store's write authority cannot save into a document.
+      const rd = await run('doc', c.noGrant, c.channel, 'Runbook'); await settle();
+      expect((await save(c.noGrant, rd.body.runId, { documentId: c.saved })).status).toBe(403);
       // Another tenant's session cannot reach the run at all, and a refusal claims nothing.
-      expect((await save(c.crossTenant, started.body.runId, { documentId: 'draft:11111111-1111-1111-1111-111111111111' })).status).toBe(404);
-      expect((await save(c.reader, started.body.runId, { documentId: 'draft:11111111-1111-1111-1111-111111111111' })).status).toBe(200);
+      expect((await save(c.crossTenant, started.body.runId, { documentId: c.saved })).status).toBe(404);
+      expect((await save(c.reader, started.body.runId, { documentId: c.saved })).status).toBe(200);
     });
   }
 });

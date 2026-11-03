@@ -55,10 +55,10 @@ export function readWorkspaceDocuments(value: unknown, projectId: string): Works
   if (!body || body.projectId !== projectId || !Array.isArray(body.documents)) throw new Error('Document response changed initiative');
   return body.documents.map(readWorkspaceDocument);
 }
-export async function createWorkspaceDocument(projectId: string, input: { title: string; workItemId?: string | null }): Promise<WorkspaceDocument> {
+export async function createWorkspaceDocument(projectId: string, input: { title: string; workItemId?: string | null; markdown?: string }): Promise<WorkspaceDocument> {
   if (!validId(projectId)) throw new Error('Invalid initiative identity');
   const result = await sendJson<{ projectId: string; document: unknown }>(`/api/graph/projects/${encodeURIComponent(projectId)}/workspace-documents`, 'POST',
-    { title: input.title, ...(input.workItemId ? { workItemId: input.workItemId } : {}) });
+    { title: input.title, ...(input.workItemId ? { workItemId: input.workItemId } : {}), ...(input.markdown !== undefined ? { markdown: input.markdown } : {}) });
   if (result.projectId !== projectId) throw new Error('Document response changed initiative');
   return readWorkspaceDocument(result.document);
 }

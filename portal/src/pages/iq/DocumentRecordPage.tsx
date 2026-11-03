@@ -59,7 +59,8 @@ function WorkspacePage({ page, onSaved }: { page: WorkspaceDocument; onSaved: ()
     } catch (cause) { setProblem(cause instanceof Error ? cause.message : 'The page could not be saved.'); }
     finally { setSaving(false); }
   }
-  const meta = <MetaLine size="sm" tone="secondary" items={['Page', `edited ${relativeTime(page.updatedAt)}`, `by ${page.createdBy}`]} data-testid="workspace-document-meta" />;
+  // No author line yet: createdBy is a user id, and an id is not a name (a directory lookup is the next slice).
+  const meta = <MetaLine size="sm" tone="secondary" items={['Page', `edited ${relativeTime(page.updatedAt)}`]} data-testid="workspace-document-meta" />;
   return <PageSection title={title} data-testid="workspace-document-page"
     actions={mayEdit ? (writing
       ? <Inline gap="sm"><Button size="sm" variant="ghost" disabled={saving} onClick={() => { setDraft(page.markdown); setWriting(false); }}>Cancel</Button>

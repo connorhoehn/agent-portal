@@ -21,7 +21,7 @@ import {
   agentRunStatusOf, canPost, canSave, isTerminal, sourcesMarkdown,
   type ArtifactApi, type ArtifactResult, type ArtifactRunStatus, type PostedArtifact, type SaveTarget,
 } from './conversationArtifact';
-import { createAssessmentDraft } from './conversationArtifactSave';
+import { createPageForSave } from './conversationArtifactSave';
 
 export interface ConversationArtifactCardProps {
   runId: string;
@@ -58,7 +58,7 @@ export default function ConversationArtifactCard({ runId, instruction, requested
   const save = () => act(async () => {
     const target = status!.saveTarget ?? null;
     // The page is made by the tenant's own route first; the server then claims Save once and builds the reference.
-    const documentId = target === 'document' ? await createAssessmentDraft(result!) : undefined;
+    const documentId = target === 'document' ? await createPageForSave(status!.channel, result!) : undefined;
     await send(await api.requestSave(runId, documentId), result!, target);
   }, 'The page could not be saved.');
 

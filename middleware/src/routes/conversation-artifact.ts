@@ -11,8 +11,10 @@
 //                          reference message. The page itself is made by the tenant's EXISTING
 //                          document route (assessment: POST /api/assessment/knowledge/doc/create,
 //                          gated ManageKnowledge there; Social: the conversation's attachment
-//                          upload). orgiq and pipelines have no document-creation path, so Save
-//                          answers 409 there rather than minting a store.
+//                          upload; orgiq since 2026-11-03: POST /api/graph/projects/:id/workspace-documents,
+//                          the Docs tab's own page store, gated DispatchAgentRun + the initiative
+//                          scope there). pipelines has no document-creation path, so Save answers
+//                          409 there rather than minting a store.
 //
 // Authority is the /summarize authority, unchanged and fresh on every request:
 // Social = chatAccess (ViewSocial to read, PostMessage to post, live membership);
@@ -34,6 +36,7 @@ import { chatAccess, readChatLines } from './chat-pins.js';
 import { isAllowed } from '../lib/authz.js';
 import { currentLiveSession } from '../lib/live-principal.js';
 import { getKnowledgeDoc } from '../providers/assessment.js';
+import { getWorkspaceDocument } from '../providers/work-documents.js';
 import { assertChat, conversationLines, conversationTenant, sessionOf } from './conversation-summarize.js';
 
 export const pendingArtifacts = pendingFlowRuns;
@@ -51,7 +54,7 @@ const tenantFlow = (tenant: Exclude<ArtifactTenant, 'social'>, command: Artifact
 
 /** Where a saved page can land, by tenant. Anything else has no existing document-creation path. */
 export const SAVE_TARGET: Readonly<Record<ArtifactTenant, 'document' | 'attachment' | null>> = {
-  assessment: 'document', social: 'attachment', orgiq: null, pipelines: null,
+  assessment: 'document', social: 'attachment', orgiq: 'document', pipelines: null,
 };
 
 interface Authority {
@@ -161,8 +164,18 @@ const postHandler = (authority: Authority): RequestHandler => asyncHandler(async
  * the actor's current session must hold ManageKnowledge in the run's tenant (the gate the create route
  * uses), and the document must exist and be editable. Missing is a 404, not an accepted string.
  */
-async function assertDocumentTarget(req: Request, tenant: string, documentId: string): Promise<void> {
+async function assertDocumentTarget(req: Request, tenant: string, documentId: string, scope: string): Promise<void> {
   const session = await currentLiveSession(sessionOf(req));
+  if (tenant === 'orgiq') {
+    // A Work page (providers/work-documents.ts): the saver must hold the page store's own write
+    // authority, and an initiative discussion saves only into its own initiative.
+    if (session.tenant !== 'orgiq' || !await isAllowed(session, 'DispatchAgentRun')) throw new AppError(403, 'Forbidden');
+    const page = await getWorkspaceDocument(documentId);
+    if (!page) throw new NotFoundError('document not found');
+    const initiative = /^orgiq:initiative:([^\s/?#]{1,128})$/.exec(scope)?.[1];
+    if (initiative && page.projectId !== initiative) throw new AppError(403, 'That page belongs to another initiative');
+    return;
+  }
   if (session.tenant !== tenant || !await isAllowed(session, 'ManageKnowledge')) throw new AppError(403, 'Forbidden');
   const doc = await getKnowledgeDoc(documentId);
   if (!doc) throw new NotFoundError('document not found');
@@ -179,7 +192,7 @@ const saveHandler = (authority: Authority): RequestHandler => asyncHandler(async
   // A page is made by the tenant's own route; the id it minted is only the reference carried in the message.
   if (target === 'document' && (typeof raw !== 'string' || !/^[a-zA-Z0-9:_.\-/]{1,256}$/.test(raw))) throw new ValidationError('documentId is required');
   if (target === 'attachment' && raw !== undefined) throw new ValidationError('A conversation page is saved as an attachment; documentId is not accepted');
-  if (target === 'document') await assertDocumentTarget(req, run.tenant, raw as string);
+  if (target === 'document') await assertDocumentTarget(req, run.tenant, raw as string, run.scope);
   const message = pageReferenceMessage(run, target === 'document' ? raw as string : null);
   if (!message) throw new AppError(409, 'There is nothing to save');
   if (!await flow.markSaved(run, target === 'document' ? raw as string : 'attachment')) throw new AppError(409, 'This page was already saved');
