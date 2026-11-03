@@ -55,6 +55,7 @@ test('/doc Save in the initiative Discussion writes a Work page the reader can o
     const doc = page.getByTestId('workspace-document-page');
     await expect(doc).toContainText(`Cutover notes ${stamp}`);
     await expect(doc.getByTestId('workspace-document-view')).toBeVisible();
+    await expect(page.locator('main nav').filter({ hasText: 'Initiatives' }).first()).toContainText(/Initiatives.*Auth Migration.*Cutover notes/s);
     await page.screenshot({ path: `${OUT}/doc-saved-page.png`, clip: { x: 0, y: 0, width: 1440, height: 640 } });
     await page.goto('/iq/projects/p-auth-migration?scope=all&tab=docs');
     const files = page.getByTestId('initiative-files');

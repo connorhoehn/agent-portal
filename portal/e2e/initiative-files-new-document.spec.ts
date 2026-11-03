@@ -31,6 +31,7 @@ for (const theme of ['light', 'dark'] as const) test(`New › Document writes a 
     await expect(doc.getByTestId('workspace-document-view')).toContainText('Cutover order', { timeout: 15_000 });
     await expect(doc.getByRole('heading', { name: 'Cutover order' })).toBeVisible();
     await expect(doc.getByRole('heading', { name: 'Tenant cutover notes' })).toBeVisible();
+    await expect(page.locator('main nav').filter({ hasText: 'Initiatives' }).first()).toContainText(/Initiatives.*Auth Migration.*Tenant cutover notes/s);
     await page.screenshot({ path: `${OUT}/document-page-${theme}.png`, clip: { x: 0, y: 0, width: 1440, height: 640 } });
     // Back under Docs: the page lists first, as a document, with its edit time.
     await page.goBack();

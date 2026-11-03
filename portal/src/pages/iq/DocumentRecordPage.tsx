@@ -3,6 +3,7 @@ import { useParams } from 'react-router';
 import { Button, Inline, InlineAlert, Input, KeyValue, LoadingState, MarkdownView, MetaLine, PageSection, Stack, T, Textarea } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
+import { useCrumbTrail } from '../../lib/crumbLabels';
 import { useFetch } from '../../hooks/useFetch';
 import { absoluteTime, relativeTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -43,6 +44,9 @@ function WorkspacePage({ page, onSaved }: { page: WorkspaceDocument; onSaved: ()
   const { can, ready } = useCapabilities();
   const mayEdit = ready && can('DispatchAgentRun');
   const title = page.title ?? 'Untitled page';
+  // The page's place: under its initiative, not under Search (the resolver only sees the URL).
+  useCrumbTrail(page.id, [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' },
+    { label: page.projectName ?? page.projectId, path: `/iq/projects/${encodeURIComponent(page.projectId)}` }, { label: title, id: page.id }]);
   const [writing, setWriting] = useState(false);
   const [draft, setDraft] = useState(page.markdown);
   const [name, setName] = useState(title);

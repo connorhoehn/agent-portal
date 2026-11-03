@@ -53,7 +53,11 @@ workDocumentsRouter.get('/documents/:documentId', asyncHandler(async (req, res) 
   // A workspace page answers with its body and provenance; a corpus record with its ingest metadata.
   const [doc, page] = await Promise.all([getDocumentRecord(documentId), getWorkspaceDocument(documentId)]);
   await authority(session);
-  if (page) { res.set('Cache-Control', 'no-store').json(workspaceRecord(page)); return; }
+  if (page) {
+    // The page's place, for the portal's trail: its initiative by name.
+    const project = await getProject(page.projectId);
+    res.set('Cache-Control', 'no-store').json({ ...workspaceRecord(page), projectName: project?.name ?? null }); return;
+  }
   if (!doc) throw new AppError(404, 'Document record not found');
   res.set('Cache-Control', 'no-store').json({ ...doc, href: documentRecordHref(doc.id) });
 }));

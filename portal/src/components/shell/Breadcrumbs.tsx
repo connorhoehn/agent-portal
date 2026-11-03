@@ -13,7 +13,7 @@ import { ScopeHeader } from '@connorhoehnslalom/ui-components';
 import { Breadcrumbs as UIBreadcrumbs, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
 
 import { resolveBreadcrumbs } from './breadcrumbResolve';
-import { useCrumbLabels } from '../../lib/crumbLabels';
+import { useCrumbLabels, useCrumbTrails } from '../../lib/crumbLabels';
 export type { Crumb } from './breadcrumbResolve';
 
 
@@ -27,13 +27,18 @@ export function useShellBreadcrumbItems() {
   // the resolver put on the crumb; until it does (or if it never does) the
   // shortened id stands.
   const titles = useCrumbLabels();
-  const crumbs = useMemo(
-    () => resolveBreadcrumbs(pathname).map((c) => {
+  // A page that knows its record's PLACE (a Work page under an initiative)
+  // registers the whole trail under the record's id; otherwise only titles.
+  const trails = useCrumbTrails();
+  const crumbs = useMemo(() => {
+    const resolved = resolveBreadcrumbs(pathname);
+    const owned = resolved.map((c) => (c.id ? trails.get(c.id) : undefined)).find(Boolean);
+    if (owned) return owned.map((c) => ({ ...c }));
+    return resolved.map((c) => {
       const title = c.id ? titles.get(c.id) : undefined;
       return title ? { ...c, label: title } : c;
-    }),
-    [pathname, titles],
-  );
+    });
+  }, [pathname, titles, trails]);
 
   // Group crumbs (Build/Org/Operate/System) are context, not destinations, so
   // they carry no href and the library renders them as plain text. The last

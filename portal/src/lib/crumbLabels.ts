@@ -60,4 +60,46 @@ export function useCrumbLabel(id: string | undefined, label: string | null | und
 export function resetCrumbLabels(): void {
   labels.clear();
   emit();
+  trails.clear();
+  trailSnapshot = new Map();
+}
+
+// ─── A page-owned trail ──────────────────────────────────────────────────────
+// A pathname can name a record whose PLACE the URL does not carry: a Work
+// page under /iq/documents/:id belongs to an initiative, while the resolver
+// can only say "Search › <id>". The page that fetched it registers the whole
+// trail under the record's id; the shell uses that trail while the page is
+// mounted and falls back to the resolver's otherwise (2026-11-03).
+export interface TrailCrumb { label: string; path?: string; id?: string }
+const trails = new Map<string, readonly TrailCrumb[]>();
+let trailSnapshot: ReadonlyMap<string, readonly TrailCrumb[]> = new Map();
+function emitTrails(): void {
+  trailSnapshot = new Map(trails);
+  listeners.forEach((l) => l());
+}
+export function setCrumbTrail(id: string, trail: readonly TrailCrumb[] | null | undefined): void {
+  if (!id) return;
+  if (!trail || trail.length === 0) {
+    if (!trails.delete(id)) return;
+  } else {
+    trails.set(id, trail);
+  }
+  emitTrails();
+}
+function getTrailSnapshot(): ReadonlyMap<string, readonly TrailCrumb[]> { return trailSnapshot; }
+/** The shell's read side: the trail registered for a crumb's id, if any. */
+export function useCrumbTrails(): ReadonlyMap<string, readonly TrailCrumb[]> {
+  return useSyncExternalStore(subscribe, getTrailSnapshot, getTrailSnapshot);
+}
+/** A page's write side: the trail lives exactly as long as the page does. */
+export function useCrumbTrail(id: string | undefined, trail: readonly TrailCrumb[] | null | undefined): void {
+  const key = JSON.stringify(trail ?? null);
+  useEffect(() => {
+    if (!id) return;
+    setCrumbTrail(id, trail);
+    return () => setCrumbTrail(id, null);
+  }, [id, key]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+export function crumbTrail(id: string | undefined): readonly TrailCrumb[] | undefined {
+  return id ? trailSnapshot.get(id) : undefined;
 }
