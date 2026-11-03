@@ -117,6 +117,14 @@ describe('planDeploy', () => {
     assert.match(linesOf(plan, 'social-stacks')[0], /deploy\.sh OrgIQ-SocialMedia OrgIQ-Social --context deploySocialMedia=true --context deploySocial=true --context sfuAllowCidr=9\.9\.9\.9\/32/);
     assert.equal(contextOf(planDeploy(social, fresh(social), null, { ...base, albAllowCidr: '9.9.9.9/32', sfuAllowCidr: '8.8.8.8/32,7.7.7.7/32' })
       .phases.find((p) => p.id === 'social-stacks').commands).sfuAllowCidr, '8.8.8.8/32,7.7.7.7/32');
+    // --turn-allow-cidr turns the relay on; without it neither key is passed (deploy.sh's inference decides).
+    const turnOn = contextOf(planDeploy(social, fresh(social), null, { ...base, turnAllowCidr: '0.0.0.0/0' })
+      .phases.find((p) => p.id === 'social-stacks').commands);
+    assert.equal(turnOn.deployTurn, 'true');
+    assert.equal(turnOn.turnAllowCidr, '0.0.0.0/0');
+    const turnOff = contextOf(planDeploy(social, fresh(social), null, base).phases.find((p) => p.id === 'social-stacks').commands);
+    assert.equal(turnOff.deployTurn, undefined);
+    assert.equal(turnOff.turnAllowCidr, undefined);
     assert.match(linesOf(plan, 'social-portal')[0], /deploy\.sh OrgIQ-Portal --context deployPortal=true --context deploySocialMedia=true --context deploySocial=true$/);
     assert.match(linesOf(plan, 'realtime-gateway')[0], /deploy\.sh OrgIQ-MiddlewareService --context realtimeGateway=true --context deploySocialMedia=true --context deploySocial=true$/);
     // Without Social the middleware and portal passes carry no social flag at all (today's core fleet).

@@ -2,7 +2,7 @@
 // DE-14: one resumable deploy command.
 //
 //   node scripts/deploy/orchestrate.mjs plan   [--env lab] [--only a,b] [--from <phase>] [--dry-run]
-//   node scripts/deploy/orchestrate.mjs apply  [--env lab] [--only a,b] [--from <phase>] [--working-tree] [--alb-allow-cidr <cidr>] [--sfu-allow-cidr <cidr>] [--break-lock]
+//   node scripts/deploy/orchestrate.mjs apply  [--env lab] [--only a,b] [--from <phase>] [--working-tree] [--alb-allow-cidr <cidr>] [--sfu-allow-cidr <cidr>] [--turn-allow-cidr <cidr>] [--break-lock]
 //   node scripts/deploy/orchestrate.mjs resume [--env lab]        # = apply; the live account decides what is left
 //   node scripts/deploy/orchestrate.mjs status [--env lab]
 //
@@ -48,7 +48,7 @@ export function loadEnvironment(name = 'lab', dir = resolve(REPO_ROOT, 'infra/en
 // ── options ─────────────────────────────────────────────────────────────────
 export function parseArgs(argv) {
   const opts = { command: argv[0] ?? 'plan', env: process.env.ENV || 'lab', only: null, from: null, dryRun: false, workingTree: false,
-    albAllowCidr: null, sfuAllowCidr: null, breakLock: false, help: false };
+    albAllowCidr: null, sfuAllowCidr: null, turnAllowCidr: null, breakLock: false, help: false };
   for (let i = 1; i < argv.length; i += 1) {
     const arg = argv[i];
     const value = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${arg} needs a value`); return v; };
@@ -60,6 +60,9 @@ export function parseArgs(argv) {
     else if (arg === '--alb-allow-cidr') opts.albAllowCidr = value();
     // The SFU's media allowlist (OrgIQ-SocialMedia); defaults to --alb-allow-cidr's value.
     else if (arg === '--sfu-allow-cidr') opts.sfuAllowCidr = value();
+    // Turns the TURN relay on (deployTurn) with this allowlist; without it,
+    // deploy.sh's inference keeps whatever TURN state is live.
+    else if (arg === '--turn-allow-cidr') opts.turnAllowCidr = value();
     else if (arg === '--break-lock') opts.breakLock = true;
     else if (arg === '--help' || arg === '-h') opts.help = true;
     else throw new Error(`Unknown argument ${arg}`);
@@ -77,7 +80,7 @@ export function parseArgs(argv) {
  * @param env        the environment (loadEnvironment)
  * @param probes     what the live account says (collectProbes, or a fixture)
  * @param previous   the last recorded state, or null
- * @param options    { only, from, commit, inputKeyFor(phase), exists(path), albAllowCidr, sfuAllowCidr, dirty(paths) }
+ * @param options    { only, from, commit, inputKeyFor(phase), exists(path), albAllowCidr, sfuAllowCidr, turnAllowCidr, dirty(paths) }
  * @returns { phases: [{ id, action, reason, inputKey, commands }] } in Runbook A order
  */
 export function planDeploy(env, probes, previous, options = {}) {

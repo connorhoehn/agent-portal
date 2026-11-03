@@ -164,7 +164,7 @@ export const PHASES = [
   },
   {
     id: 'social-stacks', needs: ['social-images', 'middleware-portal'], enabled: (env) => env.features.social, inputPaths: ['infra'],
-    describe: 'OrgIQ-SocialMedia + OrgIQ-Social with the image digests and the SFU allowlist (--sfu-allow-cidr, else --alb-allow-cidr) as explicit --context (an explicit value beats the inferred one); deploy.sh infers socialPortalOrigin from the live portal',
+    describe: 'OrgIQ-SocialMedia + OrgIQ-Social with the image digests and the SFU allowlist (--sfu-allow-cidr, else --alb-allow-cidr) and, with --turn-allow-cidr, the TURN relay (deployTurn) as explicit --context (an explicit value beats the inferred one); deploy.sh infers socialPortalOrigin from the live portal',
     live: (probes, env) => stackHealthy(probes, env, 'SocialMedia') && stackHealthy(probes, env, 'Social'),
     // Not -e: the closure redeploys OrgIQ-MiddlewareService with the social
     // flags, which guarantees the exports these two import even when an
@@ -174,6 +174,7 @@ export const PHASES = [
       return [deploySh(env, [stackId(env, 'SocialMedia'), stackId(env, 'Social')], {
         ...socialContext(env),
         sfuAllowCidr: ctx.options.sfuAllowCidr ?? ctx.options.albAllowCidr,
+        ...(ctx.options.turnAllowCidr && { deployTurn: 'true', turnAllowCidr: ctx.options.turnAllowCidr }),
         sfuImageDigest: digests.sfuImageDigest, platformApiImageDigest: digests.platformApiImageDigest,
         ...(digests.platformApiImageDigest && { deploySocialService: 'true' }),
       })];

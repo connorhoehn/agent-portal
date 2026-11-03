@@ -30,8 +30,9 @@ the claim here is a bug.
 Durable facts the handoff does not repeat:
 
 - Pins: the portal consumes `@connorhoehnslalom/ui-components` **2.499.7-audit.0** and
-  `@connorhoehn/realtime-modules` (its real package name, no alias) **0.141.0**
-  from tracked tarballs in `portal/vendor/`. Read middleware's own manifest and
+  `@connorhoehn/realtime-modules` (its real package name, no alias) **0.142.0**
+  from tracked tarballs in `portal/vendor/` (0.142.0's release commit `fe92dd6`
+  is local to `~/Projects/realtime-modules` until pushed as `connorhoehn`). Read middleware's own manifest and
   lockfile for its independently managed realtime pin; middleware
   pins `@connorhoehn/service-runtime` 0.4.1 and `distributed-core` 0.48.0
   (`077d7594`) by full sha; infra consumes

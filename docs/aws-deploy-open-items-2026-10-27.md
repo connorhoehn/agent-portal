@@ -190,7 +190,33 @@ SFU admits media only from `9.179.13.10/32`, so any other participant needs
 their IP added. `deploy.sh`'s sticky inference re-supplies the *old* values.
 Decide whether the deploy should add the caller's current IP automatically
 (`curl https://checkip.amazonaws.com`) and how participants are admitted
-(TURN, `deployTurn=true`, is built but off).
+(TURN, `deployTurn=true`, below).
+
+**TURN, 2026-11-03.** Deployed (`deployTurn=true`, relay EIP `3.230.192.153`,
+`orchestrate.mjs --turn-allow-cidr`). What was proven, and what was not:
+
+- `GET /api/ice-servers` hands TURN credentials only to a caller with a valid
+  stage token (live-video-streaming `b039d20`, SFU image
+  `sha256:775a5533…`); the user is in the username, the answer is `no-store`.
+  Live: anonymous and a forged token get `{"iceServers":[]}`; the portal
+  (realtime-modules 0.142.0, `fetchIceConfig`) sends the token and receives the
+  three TURN URLs.
+- From the SFU host, a real TURN Allocate with an LVS-minted credential got a
+  relay address; a wrong credential got 401.
+- **The custodian revokes open TURN ingress.** `turnAllowCidr=0.0.0.0/0`: all
+  three rules (UDP/TCP 3478, TCP 443) revoked by
+  `custodian-restrict-security-group-admin-ingress` 2–4 s after CloudFormation
+  added them (CloudTrail). `/32` rules survive. Public TURN needs an exemption
+  for `orgiq-social-turn` or another account; the stack runs with the operator
+  `/32` meanwhile.
+- **Not proven: a browser call through the relay.** `CLOUD_FORCE_RELAY=1` on
+  `cloud-call-smoke` (relay-only peer connections, asserts every selected
+  candidate is `relay`) fails from the Netskope-managed laptop: no packet from
+  it reaches the relay on UDP/TCP 3478 (tcpdump on the host, a temporary /16
+  rule too), and TCP 443 is taken by Netskope's web proxy, while UDP to the
+  SFU's media ports works. Run it from an unmanaged network. `turns:` on 443
+  (`turnTlsDomain` + `turnTlsCertSecretName`) needs a DNS name and certificate;
+  whether a TLS-inspecting proxy passes it is unmeasured.
 
 ### 6. Test data left on the deployed stack
 

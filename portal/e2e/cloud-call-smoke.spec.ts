@@ -4,6 +4,8 @@
 //   CLOUD_PORTAL_URL=https://<id>.cloudfront.net
 //   CLOUD_LOGIN_A=<email>:<password>   (social community-admin)
 //   CLOUD_LOGIN_B=<email>:<password>   (social participant)
+// CLOUD_FORCE_RELAY=1 makes every peer connection relay-only, so the call
+// passes only through the deployed TURN relay (OrgIQ-SocialMedia deployTurn).
 import { test, expect, type Page } from '@playwright/test';
 import { cloudSignIn, cloudUseTenant } from './cloudSession';
 
@@ -16,16 +18,28 @@ const bindings: number[] = [];
 
 function instrumentCallPage(label: string) {
   return async (page: Page) => {
-    await page.addInitScript(() => {
+    await page.addInitScript((forceRelay) => {
       const peers: RTCPeerConnection[] = [];
       (window as any).__pcs = peers;
-      window.RTCPeerConnection = new Proxy(window.RTCPeerConnection, { construct(T, a) { const pc = Reflect.construct(T, a); peers.push(pc); return pc; } });
-    });
+      window.RTCPeerConnection = new Proxy(window.RTCPeerConnection, { construct(T, a) {
+        if (forceRelay) a = [{ ...(a[0] ?? {}), iceTransportPolicy: 'relay' }, ...a.slice(1)];
+        const pc = Reflect.construct(T, a); peers.push(pc); return pc;
+      } });
+    }, Boolean(process.env.CLOUD_FORCE_RELAY));
     if (process.env.CLOUD_TIMELINE) {
       const t0 = Date.now();
       page.on('request', (q) => { if (/\/api\/(video|calls|realtime)/.test(q.url())) console.log(`[${label}] +${Date.now() - t0}ms → ${q.method()} ${new URL(q.url()).pathname}`); });
       page.on('response', (r) => { if (/\/api\/(video|calls|realtime)/.test(r.url())) console.log(`[${label}] +${Date.now() - t0}ms ← ${r.status()} ${new URL(r.url()).pathname}`); });
       page.on('websocket', (ws) => ws.on('framesent', (f) => { const m = String(f.payload); if (m.includes('"service":"call"')) console.log(`[${label}] +${Date.now() - t0}ms ws→ ${m.slice(0, 120)}`); }));
+    }
+    if (process.env.CLOUD_FORCE_RELAY) {
+      // What each ICE fetch was given (never the credential itself).
+      page.on('response', async (r) => {
+        if (!r.url().endsWith('/api/ice-servers')) return;
+        const body = await r.json().catch(() => null);
+        const auth = Boolean((await r.request().allHeaders())['authorization']);
+        console.log(`[${label}] ice-servers ${r.status()} auth=${auth} urls=${JSON.stringify((body?.iceServers ?? []).map((e: any) => e.urls))}`);
+      });
     }
     page.on('response', async (r) => {
       if (!r.url().includes('/call-binding')) return;
@@ -59,6 +73,23 @@ async function inboundAudio(page: Page): Promise<number> {
       (await pc.getStats()).forEach((r: any) => { if (r.type === 'inbound-rtp' && (r.kind ?? r.mediaType) === 'audio') samples += r.totalSamplesReceived ?? 0; });
     }
     return samples;
+  });
+}
+
+/** The local candidate types of every live connection's selected pair. */
+async function selectedCandidateTypes(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const types: string[] = [];
+    for (const pc of (window as any).__pcs ?? []) {
+      if (pc.connectionState !== 'connected') continue;
+      const stats = await pc.getStats();
+      stats.forEach((r: any) => {
+        if (r.type !== 'candidate-pair' || !r.nominated || r.state !== 'succeeded') return;
+        const local = stats.get(r.localCandidateId);
+        if (local) types.push(local.candidateType);
+      });
+    }
+    return types;
   });
 }
 
@@ -108,6 +139,13 @@ test('two signed-in users hear each other through the deployed SFU', async ({ br
     await expect(guest.getByTestId('hangout-call-stage')).toContainText('2 participants', { timeout: 45000 });
     await expect.poll(() => inboundAudio(guest), { timeout: 45000 }).toBeGreaterThan(0);
     await expect.poll(() => inboundAudio(owner), { timeout: 45000 }).toBeGreaterThan(0);
+    if (process.env.CLOUD_FORCE_RELAY) {
+      for (const p of [owner, guest]) {
+        const types = await selectedCandidateTypes(p);
+        expect(types.length, 'a connected peer connection').toBeGreaterThan(0);
+        expect(new Set(types), `selected local candidates ${types}`).toEqual(new Set(['relay']));
+      }
+    }
     // Each live media leg binds to its accepted gateway seat.
     await expect.poll(() => bindings.filter((s) => s === 200).length, { timeout: 30000 }).toBeGreaterThanOrEqual(2);
     await owner.screenshot({ path: `${out}/owner-in-call.png`, fullPage: true });
