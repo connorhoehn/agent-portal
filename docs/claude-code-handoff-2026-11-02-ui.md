@@ -20,7 +20,7 @@ chat. Do not work on them here.
 credentials, run cloud checks or deploy for this task. Earlier read-only checks
 made no AWS changes; they are not a remaining blocker or a continuation task.
 
-The portal pin is **ui-components 2.500.1**, realtime **0.141.0**.
+The portal pin is **ui-components 2.500.3-work.2** (a prerelease built from library commit `e078dfb8`; see the 2026-11-03 section), realtime **0.141.0**.
 App implementation commit **`8ff773f4`** is pushed on main; the Connections
 redesign is `5f0e9e1f`. The library's main now carries the audit packaging
 source (`54f0cfa4`, the former draft PR #1, applied on top of the other
@@ -52,9 +52,24 @@ orgiq and mount EditorShell / a shared Y.Doc; the social compose profile's
 document service is up locally), listing Work pages in the Discussion's
 Files view, author names on pages (ids today), and the twelve pre-existing
 initiative-area spec failures plus the composer recipient-select contract
-conflict recorded in the todo. Two session-only /loop jobs may still be
-scheduled in the originating terminal (a 30-minute audit/redesign tick and an
-hourly document-creation tick); they die with that session.
+conflict recorded in the todo. Both session-only /loop jobs were cancelled on 2026-11-03; nothing is
+scheduled.
+
+2026-11-03, later: the whiteboard/page chrome review (hover-to-rename h1,
+background checkpoint saves, full-screen stage, meta line under the content;
+todo WORK-DOCS-01) and the composer inner-focus-ring regression (todo
+WORK-UI-07) moved the pin to the prerelease `2.500.3-work.2`, built in this
+session's scratch directory from a clean archive of library commit `e078dfb8`
+(main, unpushed, source only: `c799db44` adds `useFullscreen`,
+`FullscreenToggle`, `MinimizeIcon` and `EditableHeading` `as`/`revealOnHover`;
+`e078dfb8` its type fix). A Codex session owns the shared library checkout's
+dist and had bumped `package.json` to 2.500.3 (`c67cb135` is its
+DialogueSegment commit); when a `chore(release): build ui-components 2.500.3`
+commit exists on main, pack it and replace the prerelease tarball, then
+re-measure the journey contracts. Journey logs: the pin bump stales every
+Work seal; the five initiative walks were re-walked and sealed on re-measured
+contracts, the other 61 remain as they were before this turn (listed by
+`scripts/validate-work-journeys.sh --quick`).
 
 ## What to preserve
 

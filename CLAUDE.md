@@ -29,7 +29,7 @@ the claim here is a bug.
 
 Durable facts the handoff does not repeat:
 
-- Pins: the portal consumes `@connorhoehnslalom/ui-components` **2.500.1** and
+- Pins: the portal consumes `@connorhoehnslalom/ui-components` **2.500.3-work.2** and
   `@connorhoehn/realtime-modules` (its real package name, no alias) **0.141.0**
   from tracked tarballs in `portal/vendor/`. Read middleware's own manifest and
   lockfile for its independently managed realtime pin; middleware

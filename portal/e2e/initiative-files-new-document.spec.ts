@@ -1,6 +1,7 @@
-// The Docs tab's New › Document (2026-11-02): a steward titles a page, it opens
-// on its own page where they write and save it, and it lists under Docs. Runs
-// as a clone inside a scoped mock world, so the shared demo state keeps no page.
+// The Docs tab's New › Document (2026-11-02): a steward opens a page on its own
+// route, renames it from the heading, writes it, and the page checkpoints
+// itself in the background (no Save button); it lists under Docs. Runs as a
+// clone inside a scoped mock world, so the shared demo state keeps no page.
 import { expect, test } from '@playwright/test';
 import { openAsClone } from './realSession';
 
@@ -24,13 +25,21 @@ for (const theme of ['light', 'dark'] as const) test(`New › Document writes a 
     const doc = page.getByTestId('workspace-document-page');
     await expect(doc).toContainText('Untitled page');
     await expect(doc.getByTestId('workspace-document-empty')).toBeVisible();
-    await doc.getByTestId('workspace-document-write').click();
+    // The title renames in place: the pencil shows on hover, Enter commits.
+    await doc.getByTestId('workspace-document-title').hover();
+    await doc.getByTestId('workspace-document-title-edit').click();
     await doc.getByTestId('workspace-document-title').fill('Tenant cutover notes');
+    await doc.getByTestId('workspace-document-title').press('Enter');
+    await expect(doc.getByRole('heading', { level: 1, name: 'Tenant cutover notes' })).toBeVisible({ timeout: 15_000 });
+    await doc.getByTestId('workspace-document-write').click();
     await doc.getByTestId('workspace-document-body').fill('# Cutover order\n\n1. Legacy SSO tenants first.\n2. Then the rest, one per day.');
-    await doc.getByTestId('workspace-document-save').click();
-    await expect(doc.getByTestId('workspace-document-view')).toContainText('Cutover order', { timeout: 15_000 });
+    // No Save: the checkpoint lands on its own once typing pauses.
+    await expect(doc.getByTestId('document-save-status')).toHaveAttribute('data-save-state', 'saved', { timeout: 15_000 });
+    await doc.getByTestId('workspace-document-done').click();
+    await expect(doc.getByTestId('workspace-document-view')).toContainText('Cutover order');
     await expect(doc.getByRole('heading', { name: 'Cutover order' })).toBeVisible();
-    await expect(doc.getByRole('heading', { name: 'Tenant cutover notes' })).toBeVisible();
+    const saved = await page.request.get(new URL(page.url()).pathname.replace('/iq/documents/', '/api/graph/documents/'));
+    expect((await saved.json()).markdown).toContain('Legacy SSO tenants first');
     await expect(page.locator('main nav').filter({ hasText: 'Initiatives' }).first()).toContainText(/Initiatives.*Auth Migration.*Tenant cutover notes/s);
     await page.screenshot({ path: `${OUT}/document-page-${theme}.png`, clip: { x: 0, y: 0, width: 1440, height: 640 } });
     // Back under Docs: the page lists first, as a document, with its edit time.
@@ -57,7 +66,7 @@ test('a member sees no New menu and the server refuses a write', async ({ browse
   } finally { await person.close(); }
 });
 
-test('New › Whiteboard opens an Excalidraw canvas in the initiative, and Save keeps a stroke across a reload', async ({ browser }) => {
+test('New › Whiteboard opens an Excalidraw canvas in the initiative; strokes checkpoint on their own, the stage goes full screen, the title renames in place', async ({ browser }) => {
   test.setTimeout(150_000);
   const person = await openAsClone(browser, 'u-release', { tenant: 'orgiq', landing: null, preJoin: 'remembered', label: 'new-whiteboard', scope: 'default' });
   const { page } = person;
@@ -73,7 +82,12 @@ test('New › Whiteboard opens an Excalidraw canvas in the initiative, and Save 
     await expect(board).toContainText('Untitled whiteboard');
     const canvas = board.locator('.excalidraw');
     await expect(canvas).toBeVisible({ timeout: 30_000 });
-    await expect(board.getByTestId('workspace-whiteboard-save')).toBeDisabled();
+    // A blank board has nothing to checkpoint: no save line yet.
+    await expect(board.getByTestId('document-save-status')).toHaveCount(0);
+    // The meta line reads under the canvas, not between the title and the board.
+    const stageBox = (await board.getByTestId('workspace-whiteboard-stage').boundingBox())!;
+    const metaBox = (await board.getByTestId('workspace-whiteboard-meta').boundingBox())!;
+    expect(metaBox.y).toBeGreaterThan(stageBox.y + stageBox.height - 1);
     // Draw one rectangle: the rectangle tool, then a drag on the canvas.
     const box = (await canvas.boundingBox())!;
     await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
@@ -82,20 +96,30 @@ test('New › Whiteboard opens an Excalidraw canvas in the initiative, and Save 
     await page.mouse.down();
     await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 8 });
     await page.mouse.up();
-    await expect(board.getByTestId('workspace-whiteboard-save')).toBeEnabled({ timeout: 10_000 });
+    // The stroke checkpoints itself once the pen pauses.
+    await expect(board.getByTestId('document-save-status')).toHaveAttribute('data-save-state', 'saved', { timeout: 15_000 });
     await page.screenshot({ path: `${OUT}/whiteboard-drawn.png`, clip: { x: 0, y: 0, width: 1440, height: 800 } });
-    await board.getByTestId('workspace-whiteboard-save').click();
-    await expect(board.getByTestId('workspace-whiteboard-save')).toHaveText('Saved', { timeout: 15_000 });
     const read = await page.request.get(new URL(page.url()).pathname.replace('/iq/documents/', '/api/graph/documents/'));
     expect((await read.json()).scene.length).toBeGreaterThan(20);
     await page.reload();
     await expect(board.locator('.excalidraw')).toBeVisible({ timeout: 30_000 });
-    await expect(board.getByTestId('workspace-whiteboard-save')).toBeDisabled();
+    await expect(board.getByTestId('document-save-status')).toHaveCount(0);
     expect(await board.locator('.excalidraw canvas').count()).toBeGreaterThan(0);
-    await board.getByTestId('workspace-whiteboard-rename').click();
+    // Full screen: the stage becomes the document's full-screen element; Escape leaves it.
+    const stage = board.getByTestId('workspace-whiteboard-stage');
+    await board.getByTestId('workspace-whiteboard-fullscreen').click();
+    await expect(stage).toHaveAttribute('data-fullscreen', 'true', { timeout: 10_000 });
+    expect(await page.evaluate(() => document.fullscreenElement?.getAttribute('data-testid'))).toBe('workspace-whiteboard-stage');
+    await expect(board.getByTestId('workspace-whiteboard-fullscreen')).toHaveAttribute('aria-label', 'Exit full screen');
+    await page.screenshot({ path: `${OUT}/whiteboard-fullscreen.png` });
+    await page.evaluate(() => document.exitFullscreen());
+    await expect(stage).toHaveAttribute('data-fullscreen', 'false', { timeout: 10_000 });
+    // The title renames in place from the heading's pencil.
+    await board.getByTestId('workspace-whiteboard-title').hover();
+    await board.getByTestId('workspace-whiteboard-title-edit').click();
     await board.getByTestId('workspace-whiteboard-title').fill('Cutover sequence board');
-    await board.getByTestId('workspace-whiteboard-rename-save').click();
-    await expect(board.getByRole('heading', { name: 'Cutover sequence board' })).toBeVisible({ timeout: 15_000 });
+    await board.getByTestId('workspace-whiteboard-title').press('Enter');
+    await expect(board.getByRole('heading', { level: 1, name: 'Cutover sequence board' })).toBeVisible({ timeout: 15_000 });
     await page.goto('/iq/projects/p-auth-migration?scope=all&tab=docs');
     await expect(files.getByText('Loading project files…')).toHaveCount(0, { timeout: 20_000 });
     await expect(files.getByTestId('initiative-file').filter({ hasText: 'Cutover sequence board' })).toContainText(/Whiteboard · edited/);

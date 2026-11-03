@@ -8,6 +8,17 @@ Do not request credentials, run AWS checks or deploy as part of this work.
 
 ## Active work
 
+- [x] **WORK-UI-07 — composer inner focus ring (2026-11-03).** Library
+  2.500.1 (`e6d7d5a3`) painted a 2 px primary outline inside the message
+  editor on focus (`.chat-composer .chat-composer-input:focus-visible`), a
+  second box under the composer's own rounded focus surface with the text
+  crowded inside it, in every tenant and in the storymaker studio. Library
+  2.500.2 (`e6536351`, another session) scopes the rule away from
+  RichChatComposer (`:not([data-composer-size])`, and the attribute is always
+  set); the portal reached it with the 2.500.3-work.2 prerelease pin (Vite
+  cache cleared, portal re-triggered). The storymaker studio already pins
+  2.500.2, so a stale `node_modules/.vite` there is the only way it still
+  shows. No portal CSS was added; the fix is the library's.
 - [x] **WORK-UI-06 — Initiative tab panels and Details pane (2026-11-02, later).**
   A tab names its panel, so the Agents panel dropped its repeated "Agents"
   heading and opens on one row: Runs/Bots/Compute and the window switches,
@@ -118,11 +129,28 @@ the follow-ups below remain explicitly open.
   (`REAL_WORK_DOCUMENTS_POSTGRES=1`, container
   `orgiq-work-documents-postgres-acceptance`): 8/8 with the link suite. Aurora
   application remains a deploy step (no AWS in this work).
+  2026-11-03, page chrome (user review of the whiteboard page): the title
+  renames in place from the heading (library `EditableHeading` as the page's
+  h1 with `revealOnHover`: the pencil shows on hover or keyboard focus; Enter
+  commits), saves are background checkpoints 1.5 s after the last edit with a
+  flush on Done / page hide / leaving (no Save button; the library's
+  `DocumentSaveStatus` line reads Saving… / Saved / Changes not saved + Retry),
+  the whiteboard stage goes full screen through the library's new
+  `FullscreenToggle` over `useFullscreen` (Escape or the same button leaves),
+  and the meta line sits under the canvas / body instead of between the title
+  and the content. Library source commits `c799db44` + `e078dfb8` (ui-components
+  main, 2.500.3 changelog section, 11 tests); the portal pins the prerelease
+  `2.500.3-work.2` built from a clean archive of `e078dfb8` until the 2.500.3
+  release commit exists. `initiative-files-new-document.spec.ts` now walks the
+  rename, the checkpoint, full screen and the meta placement (5/5 with the
+  member refusal; `initiative-doc-save.spec.ts` 1/1).
   Next slices: the live
   collaborative canvas (generalise `connectDocumentCanvas` from assessment to
-  orgiq and mount EditorShell on `/iq/documents/:id`); the Excalidraw whiteboard
-  (install `@excalidraw/excalidraw`, the `/diagram` ExcalidrawCanvas, `kind:
-  'whiteboard'`); list these pages in the Discussion's Files view.
+  orgiq and mount EditorShell on `/iq/documents/:id`); list these pages in the
+  Discussion's Files view; author names on pages (ids today). Creation and
+  editing stay behind DispatchAgentRun like the Discussion's comment route, so
+  a plain member (the cookie-less demo identity) sees no New ▾ and no pencil;
+  opening the store to members is a user decision, not taken.
 
 ## Retained technical debt
 
