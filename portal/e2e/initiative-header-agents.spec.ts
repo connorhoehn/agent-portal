@@ -117,6 +117,26 @@ test('four-pane header: one-line title with inline status, one compact action ro
   await page.context().close();
 });
 
+test('narrow header: under the 760px cut, Search and Repository move into the ⋯ menu', async ({ browser }) => {
+  test.setTimeout(90_000);
+  // 1180 keeps the primary rail, the section rail and the Initiatives rail open, so the header is ~716px.
+  const page = await open(browser, 'u-release', 'org-leader', 1180);
+  await page.goto(`/iq/projects/${PID}?scope=all&tab=overview`);
+  const header = page.getByTestId('initiative-header');
+  await expect(header.locator('h1')).toBeVisible({ timeout: 20_000 });
+  expect((await header.boundingBox())!.width, 'header under the wide-actions cut').toBeLessThan(760);
+  const actions = header.getByTestId('initiative-header-actions');
+  await expect(actions.getByRole('button', { name: /Start call/ })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Search in this initiative' })).toHaveCount(0);
+  await expect(header.getByRole('button', { name: 'Repository' })).toHaveCount(0);
+  await header.getByTestId('initiative-header-menu-trigger').click();
+  const menu = page.getByTestId('initiative-header-menu');
+  await expect(menu.getByRole('menuitem', { name: 'Search in this initiative' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Repository' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.context().close();
+});
+
 test('wide header: search icon · Start call · code icon · ⋯ on the title row, no Status deck', async ({ browser }) => {
   test.setTimeout(90_000);
   const page = await open(browser, 'u-release', 'org-leader', 1920);
