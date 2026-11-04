@@ -69,8 +69,11 @@ commit exists on main, pack it and replace the prerelease tarball, then
 re-measure the journey contracts. The release should also carry the
 storymaker session's uncommitted, self-tested change in the library's
 `skills/ui-dom-audit` (measure.mjs `urlKey` includes the URL hash so hash
-routers count as routed records; a `hash-route` self-test fixture); it is
-source only and must not be reverted. Journey logs: the pin bump stales every
+routers count as routed records; a `hash-route` self-test fixture) and its
+uncommitted `TaskStrip` change (a live strip is `bg-primary-bg`, the
+`running` dot gets an `animate-ping` ring with `motion-reduce:hidden`, test
+ids `task-strip-dot`/`task-strip-pulse`; `TaskStrip.test.tsx` 9/9). Both are
+source only, self-tested by that session, and must not be reverted. Journey logs: the pin bump stales every
 Work seal; the five initiative walks were re-walked and sealed on re-measured
 contracts, the other 61 remain as they were before this turn (listed by
 `scripts/validate-work-journeys.sh --quick`).
