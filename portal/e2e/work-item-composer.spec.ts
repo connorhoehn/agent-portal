@@ -42,7 +42,11 @@ for (const itemId of ['wi-obs-e3-s1', 'wi-obs-e2-b4']) test(`Work item ${itemId}
     const pane = page.getByTestId('initiative-pane-brief');
     await expect(pane.getByTestId('brief-document')).toBeVisible();
     await expect(page.getByTestId('work-item-detail').getByTestId('brief-document')).toHaveCount(0);
-    expect(await pane.evaluate(el => getComputedStyle(el).overflowY)).toBe('auto');
+    // The brief's reading surface owns the scroll (b82ab2a9), not the pane body around it.
+    const reader = pane.getByTestId('brief-markdown-workspace');
+    await expect(reader).toHaveAttribute('data-reading-presentation', 'pane');
+    expect(await pane.evaluate(el => getComputedStyle(el).overflowY)).not.toBe('auto');
+    expect(await reader.evaluate(el => ['auto', 'scroll'].includes(getComputedStyle(el).overflowY))).toBe(true);
     await expect(page.getByTestId('initiative-pane').getByRole('tablist')).toHaveCount(0);
     const toggle = page.getByTestId('work-item-brief-preview').getByRole('button');
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');

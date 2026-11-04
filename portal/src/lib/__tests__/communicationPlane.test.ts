@@ -82,7 +82,8 @@ test('nav model: rail, palette and trail say Communication; Social keeps Meet â€
   for (const [p, tenant, group] of expected) {
     assert.match(layout, new RegExp(`path: '${p}',\\s*label: 'Communication',\\s*tenant: '${tenant}',\\s*group: '${group}'`), `rail row ${p}`);
     assert.match(palette, new RegExp(`label: 'Communication',[^\\n]*path: '${p}', tenant: '${tenant}', group: '${group}'`), `palette row ${p}`);
-    assert.deepEqual(resolveBreadcrumbs(p).map((c) => c.label), [group, 'Communication']);
+    // Assess is the assessment tenant's root context, named by the shell, so its trail starts at the page (da67f854).
+    assert.deepEqual(resolveBreadcrumbs(p).map((c) => c.label), group === 'Assess' ? ['Communication'] : [group, 'Communication']);
   }
   for (const gone of ['/iq/calls', '/assessment/calls', '/pipelines/calls']) {
     assert.ok(!layout.includes(`'${gone}'`), `rail no longer lists ${gone}`);
