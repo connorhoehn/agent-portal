@@ -374,3 +374,21 @@ with 2.477.0. What is still open:
 ### 2026-11-02 — composer folding and hangout gallery
 
 Delivered in ui-components 2.497.0: ContextComposer explicit collapse with retained drafts/files and focus recovery, enabled by ConversationComposer; bounded CallDock stage gallery; persistent media node on camera-off transitions. Stories and portable audit mutations cover both. Social now hosts People/Conversation in the call's right sidebar. See [validation and remaining screen-share presentation follow-up](composer-gallery-2026-11-02.md).
+
+### 2026-11-04 — the portal entry bundle is mostly library code
+
+Measured on a production build of main (ui-components 2.500.3-work.2,
+realtime-modules 0.142.0): the entry is 4,511,206 bytes (1,354,985 gzip), of
+which ui-components is ~1.67 MB and realtime-modules ~0.57 MB by sourcemap
+attribution. Two library-side splits would move the largest optional pieces
+out of every page load; neither can be made from the app without forking.
+
+| owner | change | why | entry bytes |
+|---|---|---|---|
+| ui-components | Keep `@xterm/xterm` and `@xterm/addon-fit` out of the `ComputeContext` chunk; load the terminal with `import()` where it mounts. | The app's `ComputeHost` (App.tsx) only needs `ComputeProvider`, and the static import makes every tenant ship the terminal. | ~330 KB |
+| realtime-modules | Emit a real `import('@mediapipe/tasks-vision')` in `client/media-effects/faceLandmarker`. | The source intends a lazy load, but the CommonJS build compiles it to `Promise.resolve().then(() => require(...))`, which Rollup hoists to a static import via `client/video` → SocialFooter. | ~140 KB |
+
+Checked and not worth it: marking ui-components' JS side-effect free saves
+only ~113 KB (the graph, breakout and editor chunks are reachable from
+shell code that renders), and lazy-loading the shell's `SocialConversation`
+saves ~54 KB because the composer already carries the same editor stack.

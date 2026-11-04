@@ -179,6 +179,10 @@ not authorize cloud work.
   UI work also has three missing-breadcrumb findings; preserve that ownership.
 - [ ] Split the measured large entry bundle at appropriate terminal, graph,
   document-editor and camera-effects boundaries; keep warning thresholds intact.
+  2026-11-04: measured, and the worthwhile splits are upstream — the terminal
+  (~330 KB, ui-components `ComputeContext`) and mediapipe (~140 KB,
+  realtime-modules' CommonJS lazy import). App-side cuts measured at 54–113 KB
+  and were not taken; see the 2026-11-04 entry in `ui-components-queue.md`.
 - [ ] Extend gallery acceptance to shared screens, WAN reconnects and real
   hardware permissions.
 - [ ] Refresh the 66 stale historical Work journey logs after their corresponding
