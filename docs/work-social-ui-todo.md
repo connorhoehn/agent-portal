@@ -207,9 +207,11 @@ not authorize cloud work.
   is the page's Docs tab; an open dialogue folds the primary rail; a member's
   read-only column has no editor) and `initiative-header-agents.spec.ts`
   (bot missions list last, "No work item"; the meta row may wrap). Both files
-  now pass except two cases left as found: the four-pane header expects the
-  Search link hidden at that width (header density is another session's) and
-  the gap sweep times out clicking a work item's Brief tab. Still open and not
+  now pass in full (2026-11-04): the four-pane header case follows the
+  header's own 760px cut (the open Discussion pane folds the primary rail, so
+  at 1440 the header is ~880px and Search/Repository stay on the row), and the
+  gap sweep walks the item's current tabs (Brief, Docs, Activity; its
+  discussion is the side pane). Still open and not
   mine: `pane-header.spec.ts` (the Conversation views Files switch and first
   chat message never appear — the realtime receipts were also unconfirmed in
   the composer that night) and `work-layout-refinement.spec.ts` (Decisions

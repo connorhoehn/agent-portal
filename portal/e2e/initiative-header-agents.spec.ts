@@ -70,6 +70,10 @@ test('four-pane header: one-line title with inline status, one compact action ro
   const page = await open(browser, 'u-release', 'org-leader');
   await goto(page, 'tab=agents');
   const header = page.getByTestId('initiative-header');
+  // The open Discussion pane folds the primary rail, so at 1440 the header can
+  // clear ProjectDetailPage's 760px WIDE_ACTIONS_PX cut; Search and Repository
+  // follow the header's own width, not the viewport.
+  const wide = (await header.boundingBox())!.width >= 760;
   // The library PageHeader (2.437): its title row wraps the actions under the
   // title when the column is narrow — asserted by geometry below, not by a
   // test-only attribute.
@@ -101,13 +105,13 @@ test('four-pane header: one-line title with inline status, one compact action ro
   await expect(actions.getByRole('button', { name: /Start call/ })).toBeVisible();
   await expect(header.getByText('Search in this initiative', { exact: true })).toHaveCount(0);
   await expect(header.getByText('Status deck')).toHaveCount(0);
-  await expect(header.getByRole('button', { name: 'Search in this initiative' })).toHaveCount(0);
-  await expect(header.getByRole('button', { name: 'Repository' })).toHaveCount(0);
+  await expect(header.getByRole('button', { name: 'Search in this initiative' })).toHaveCount(wide ? 1 : 0);
+  await expect(header.getByRole('button', { name: 'Repository' })).toHaveCount(wide ? 1 : 0);
 
   await header.getByTestId('initiative-header-menu-trigger').click();
   const menu = page.getByTestId('initiative-header-menu');
-  await expect(menu.getByRole('menuitem', { name: 'Search in this initiative' })).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: 'Repository' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Search in this initiative' })).toHaveCount(wide ? 0 : 1);
+  await expect(menu.getByRole('menuitem', { name: 'Repository' })).toHaveCount(wide ? 0 : 1);
   await expect(menu.getByRole('menuitem', { name: 'Status deck' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.context().close();
@@ -223,7 +227,8 @@ test('every tab panel starts one gap under its tab strip', async ({ browser }) =
   await goto(page, `tab=work&item=${ITEM}`);
   const detail = page.getByTestId('work-item-detail');
   await expect(detail).toBeVisible({ timeout: 20_000 });
-  for (const label of ['Brief', 'Discussion', 'Activity']) {
+  // The item's discussion lives in the side pane; its tabs are Brief, Docs, Activity.
+  for (const label of ['Brief', 'Docs', 'Activity']) {
     await detail.getByRole('tab', { name: new RegExp(`^${label}`) }).click();
     await page.waitForTimeout(800);
     const g = await gapUnderTabs(page, 'work-item-detail', 'work-item-detail');
