@@ -7,7 +7,7 @@ import { loginAs } from './realSession';
 // hanging out of the pane over the content column):
 //
 // - one tab row (Discussion · Details · Docs …), the only tablist in the pane;
-// - the conversation's views (Chat / Pinned / Files / Calls) are an icon
+// - the conversation's views (Chat / Pinned / Calls; files are the Docs tab) are an icon
 //   switcher at the right end of that row, not a second row;
 // - a menu opened inside the pane stays inside the pane (ui-components 2.435
 //   popover boundary), at 1440 and 1280;
@@ -78,7 +78,9 @@ for (const width of [1440, 1280]) {
     const row = page.getByTestId('initiative-pane-header-row');
     const views = row.getByRole('radiogroup', { name: 'Conversation views' });
     await expect(views).toBeVisible();
-    for (const name of ['Chat', /^Pinned/, /^Files/, /^Calls/]) await expect(views.getByRole('radio', { name })).toBeVisible();
+    // Initiative files are the page's Docs tab, so this thread passes includeFiles={false}: no Files view.
+    for (const name of ['Chat', /^Pinned/, /^Calls/]) await expect(views.getByRole('radio', { name })).toBeVisible();
+    await expect(views.getByRole('radio', { name: /^Files/ })).toHaveCount(0);
     await expect(pane(page).getByText('More', { exact: true })).toHaveCount(0);
     const rowBox = await box(row), viewsBox = await box(views);
     expect(Math.abs((viewsBox.y + viewsBox.height / 2) - (rowBox.y + rowBox.height / 2)), 'views on the tab row').toBeLessThanOrEqual(2);
@@ -124,7 +126,7 @@ for (const width of [1440, 1280]) {
 }
 
 for (const [user, role] of [['u-operator', undefined], ['u-release', 'org-leader']] as const) {
-  test(`work item as ${role ?? 'admin'}: one composer, in the content column; pins load; the Discussion tab lists the pane's thread`, async ({ browser }) => {
+  test(`work item as ${role ?? 'admin'}: one composer, in the content column; pins load; the item's Activity lists its comments`, async ({ browser }) => {
     test.setTimeout(120_000);
     const page = await open(browser, user, 1440, role);
     const channel = `orgiq:work:${ITEM}`;
@@ -143,17 +145,16 @@ for (const [user, role] of [['u-operator', undefined], ['u-release', 'org-leader
     await expect(pane(page).getByRole('radiogroup', { name: 'Conversation views' })).toBeVisible();
     await expect(page.getByText(/Pinned messages are unavailable/)).toHaveCount(0);
 
-    // The same thread in both places: the seeded comments are its history.
-    const paneMessages = pane(page).getByTestId('chat-message');
-    await expect(paneMessages.first()).toBeVisible({ timeout: 15_000 });
-    await expect(pane(page)).toContainText('Bounding the queue trades spans for survival');
-    const tabList = page.getByTestId('initiative-workspace').getByTestId('comment-list');
-    await expect(tabList).toContainText('Bounding the queue trades spans for survival');
-    await expect(tabList).toContainText('Nora DaSilva');
-    const paneCount = await paneMessages.count();
-    await expect(page.getByTestId('initiative-workspace').getByTestId('work-item-tab-comments').or(page.getByRole('tab', { name: /^Discussion/ })).first())
-      .toContainText(String(paneCount));
-    await expect(pane(page)).not.toContainText('No messages yet');
+    // The pane is the initiative's own discussion (scopeDiscussionChannel), not the
+    // item's thread; the item's seeded comments are its Activity history (?view=comments → history).
+    await expect(pane(page).getByTestId('initiative-conversation-empty').or(pane(page).getByTestId('chat-message').first())).toBeVisible({ timeout: 15_000 });
+    await expect(pane(page)).not.toContainText('Bounding the queue trades spans for survival');
+    const detail = page.getByTestId('work-item-detail');
+    await expect(detail.getByRole('tab', { name: 'Activity' })).toHaveAttribute('aria-selected', 'true');
+    const activity = detail.getByRole('list', { name: 'Activity' });
+    await expect(activity).toContainText('Repro: burst 40k spans/s');
+    await expect(activity).toContainText('Layla Hassan');
+    await expect(activity).toContainText('Nora DaSilva');
     await page.screenshot({ path: test.info().outputPath(`work-item-${role ?? 'admin'}.png`) });
   });
 }

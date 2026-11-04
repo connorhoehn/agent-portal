@@ -200,7 +200,7 @@ not authorize cloud work.
   move and no app class touches it, so this is a library contract conflict
   (fix the composer trigger or the contract upstream); the logs are kept as
   failing walks, not sealed. The five Search walks pass and are sealed.
-- [ ] Of twelve pre-existing Playwright failures in the initiative area
+- [x] Of twelve pre-existing Playwright failures in the initiative area
   (observed 2026-11-02 after the shared-checkout commit `da67f854`), the stale
   expectations were repaired on 2026-11-03: `initiative-details-pane.spec.ts`
   (the info action opens the pane directly, no hover card; Workspace documents
@@ -211,11 +211,13 @@ not authorize cloud work.
   header's own 760px cut (the open Discussion pane folds the primary rail, so
   at 1440 the header is ~880px and Search/Repository stay on the row), and the
   gap sweep walks the item's current tabs (Brief, Docs, Activity; its
-  discussion is the side pane). Still open and not
-  mine: `pane-header.spec.ts` (the Conversation views Files switch and first
-  chat message never appear — the realtime receipts were also unconfirmed in
-  the composer that night) and `work-layout-refinement.spec.ts` (Decisions
-  list rail 320 vs 264).
+  discussion is the side pane). Closed 2026-11-04,
+  all as stale expectations: `pane-header.spec.ts` asked for a Files view the
+  initiative thread turns off (`includeFiles={false}`; files are the Docs tab)
+  and for the item's seeded comments in the pane, which is the initiative's own
+  discussion (they are the item's Activity history); `work-layout-refinement.spec.ts`
+  compared Decisions' rail to Initiatives', but a combined catalog's rail is
+  320px by rule 5 of `layout-cascade.md`. Both files pass.
 
 ## Delivered in this conversation
 

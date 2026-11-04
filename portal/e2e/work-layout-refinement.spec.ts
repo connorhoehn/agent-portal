@@ -81,7 +81,7 @@ for (const theme of ['light', 'dark']) test(`work layout and dedicated brief: ${
   } finally { await person.close(); }
 });
 
-test('Design and Decisions share the initiative rail and content gutters', async ({ browser }) => {
+test('Design and Decisions: list-rail profiles and one content gutter', async ({ browser }) => {
   test.setTimeout(90_000);
   const person = await openAsClone(browser, 'u-release', { role: 'org-leader', expectTenant: 'orgiq', landing: null, viewport: { width: 1440, height: 1000 } });
   try {
@@ -98,7 +98,12 @@ test('Design and Decisions share the initiative rail and content gutters', async
       await noOverflow(page);
       await page.screenshot({ path: test.info().outputPath(path.includes('decisions') ? 'decisions.png' : 'initiatives.png') });
     }
-    expect(dimensions[1].rail).toBeCloseTo(dimensions[0].rail, 0);
+    // Initiatives is the default 264px list rail; Decisions is a combined catalog,
+    // whose one rail is railWidth="ml" 320px (docs/layout-cascade.md rule 5, 2026-11-02).
+    expect(dimensions[0].rail).toBeCloseTo(264, 0);
+    await page.goto('/iq/decisions?nav=section');
+    await expect(page.locator('[data-catalog-navigation="combined"]')).toBeVisible();
+    expect(dimensions[1].rail).toBeCloseTo(320, 0);
     expect(dimensions[1].gutter).toBeCloseTo(dimensions[0].gutter, 0);
     for (const width of [1440, 900]) {
       await page.setViewportSize({ width, height: 1000 });
