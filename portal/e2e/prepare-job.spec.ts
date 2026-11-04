@@ -173,3 +173,46 @@ test('the card fits 900px and 390px without horizontal scroll', async ({ page })
   }
   expect(result.errors).toEqual([]);
 });
+
+test('an accepted dispatch stays in the box as a run card; a stopped run retries in place', async ({ page }) => {
+  const run = (id: string) => ({ status: 202, json: { run: { id, status: 'running', costUsd: null } } });
+  const result = await fixture(page, '?runStatus=failed&runReason=Run%20cap%20reached', [run('run-1'), run('run-2')]);
+  await page.getByTestId('prepare-job-deck-option-dispatch').click();
+  await expect(card(page)).toContainText('Stopped while the agent was working');
+  await expect(card(page)).toContainText('Run cap reached');
+  await expect(deck(page)).toContainText('Dispatched');
+  await expect(deck(page)).toContainText('Agent working');
+  await expect(deck(page)).toContainText('Result ready');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await card(page).screenshot({ path: test.info().outputPath('prepare-job-run-stopped.png') });
+  await page.getByTestId('prepare-job-deck-option-retry').click();
+  await expect(page.getByTestId('dispatched-run')).toContainText('run-2');
+  await expect(card(page)).toContainText('Stopped while the agent was working');
+  const posts = result.requests.filter(r => r.method === 'POST' && r.path === '/api/bots/dispatch-work');
+  expect(posts).toHaveLength(2);
+  expect(posts[1]!.body).toMatchObject({ workItemId: 'fixture-item' });
+  await page.getByTestId('prepare-job-deck-option-back').click();
+  await expect(card(page)).toContainText('Dispatch with these settings?');
+  expect(result.unexpected).toEqual([]);
+  expect(result.errors).toEqual([]);
+});
+
+test('a running dispatch shows the agent working, and Dismiss closes the card', async ({ page }) => {
+  const result = await fixture(page, '', [{ status: 202, json: { run: { id: 'run-1', status: 'running', costUsd: null } } }]);
+  await page.getByTestId('prepare-job-deck-option-dispatch').click();
+  await expect(card(page)).toContainText('The agent is working on this item');
+  await expect(page.getByTestId('prepare-job-deck-option-dismiss')).toBeVisible();
+  await page.getByTestId('prepare-job-deck-option-dismiss').click();
+  await expect(card(page)).toHaveCount(0);
+  expect(result.unexpected).toEqual([]);
+  expect(result.errors).toEqual([]);
+});
+
+test('a finished run completes the path with its result', async ({ page }) => {
+  const result = await fixture(page, '?runStatus=done', [{ status: 202, json: { run: { id: 'run-1', status: 'running', costUsd: 0.84 } } }]);
+  await page.getByTestId('prepare-job-deck-option-dispatch').click();
+  await expect(card(page)).toContainText('Result ready');
+  await expect(card(page)).toContainText('$0.84');
+  await expect(page.getByTestId('prepare-job-deck-option-retry')).toHaveCount(0);
+  expect(result.errors).toEqual([]);
+});

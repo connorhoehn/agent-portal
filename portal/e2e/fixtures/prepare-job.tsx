@@ -28,7 +28,11 @@ function Fixture() {
     ...(dispatched ? { status: 'in_progress' as const } : {}), epicId: 'fixture-epic', epicTitle: 'SLOs and error budgets' };
   const prompts = usePrepareJobDeck({
     item, codebases, linkedRepo: params.get('linked') ?? 'fixture/alerts', orgProjectId: 'p-observability',
-    canDispatch, role: canDispatch ? 'sme' : 'member', run: undefined, request,
+    canDispatch, role: canDispatch ? 'sme' : 'member', request,
+    // ?runStatus= stands in for the page's poll: the dispatched run as it later reads.
+    run: dispatched && params.get('runStatus')
+      ? { ...dispatched, status: params.get('runStatus') as BotRun['status'], outcome: { reason: params.get('runReason') ?? undefined } }
+      : undefined,
     onDispatched: (_, run) => setDispatched(run), onEstimateSaved: (_, value) => setSaved(value),
   });
   return <Stack gap="md" className="mx-auto max-w-4xl p-4">

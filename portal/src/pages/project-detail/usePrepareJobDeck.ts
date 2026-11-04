@@ -6,6 +6,9 @@
 // funding prompt instead: the envelope request (POST
 // /api/access-requests/envelope, status from GET …/mine) or Save for later
 // (PUT /api/bots/work-items/:id/job-draft, loaded back when the deck opens).
+// An accepted dispatch stays in the same box as a run card (runPrompt): its
+// path follows the polled run, and a stopped run offers Retry through the
+// same dispatch and budget gates.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComposerPrompt, ComposerPromptResult } from '@connorhoehnslalom/ui-components/social/rich-composer';
@@ -31,6 +34,7 @@ import {
   modelLabel,
   prepareJobPrompts,
   readDispatchResponse,
+  runPrompt,
   type Confirms,
   type DispatchPayload,
   type EnvelopeRequestOutcome,
@@ -107,6 +111,9 @@ export function usePrepareJobDeck(input: PrepareJobDeckInput): ComposerPrompt[] 
   const running = run?.status === 'running';
   const [shownFor, setShownFor] = useState<string | null>(null);
   const [doneFor, setDoneFor] = useState<string | null>(null);
+  // The run this box dispatched, followed in place until dismissed. The page's
+  // polled run replaces it once the poll reports the same run.
+  const [tracked, setTracked] = useState<{ itemId: string; run: BotRun } | null>(null);
 
   // A different item starts a new job.
   useEffect(() => {
@@ -121,6 +128,7 @@ export function usePrepareJobDeck(input: PrepareJobDeckInput): ComposerPrompt[] 
     lastRequest.current = request;
     setShownFor(itemId);
     setDoneFor(null);
+    setTracked(null);
     setStep({ kind: 'confirm' });
     setRev((r) => r + 1);
   }, [request, itemId]);
@@ -149,7 +157,8 @@ export function usePrepareJobDeck(input: PrepareJobDeckInput): ComposerPrompt[] 
   const mayAsk = !!item && canDispatch && !!orgProjectId && (envelope?.value === NO_GRANT_LABEL || step.kind === 'funding');
   const { data: mine, refresh: refreshMine } = useFetch<{ items?: AccessRequest[] }>(mayAsk ? mineUrl(`envelope:${orgProjectId}`) : null);
 
-  const to = useCallback((next: PrepareStep) => { setStep(next); setRev((r) => r + 1); }, []);
+  // Any step is back in setup: a run card on screen gives way to it.
+  const to = useCallback((next: PrepareStep) => { setTracked(null); setStep(next); setRev((r) => r + 1); }, []);
   const edit = useCallback((patch: Partial<PreparedJob>) => {
     if (!itemId) return;
     setEdits((prev) => ({ itemId, job: { ...(prev?.itemId === itemId ? prev.job : {}), ...patch } }));
@@ -183,7 +192,8 @@ export function usePrepareJobDeck(input: PrepareJobDeckInput): ComposerPrompt[] 
     if (outcome.kind === 'codebase') { to({ kind: 'codebase', options: outcome.options }); return { receipt: 'Needs a codebase' }; }
     if (outcome.kind === 'gate') { to({ kind: 'gate', stop: outcome.stop }); return { receipt: `Needs your confirmation · ${outcome.stop.title}` }; }
     confirms.current = {};
-    setDoneFor(item.id);
+    setDoneFor(null);
+    setTracked({ itemId: item.id, run: outcome.run as BotRun });
     onDispatched(item.id, outcome.run as BotRun);
     return { receipt: `Dispatched · "${item.title}" is in progress on ${modelLabel(job.model)}` };
   }, [item, job, to, onDispatched, orgProjectId]);
@@ -245,6 +255,17 @@ export function usePrepareJobDeck(input: PrepareJobDeckInput): ComposerPrompt[] 
   }, [item, job]);
 
   if (!item || !job) return [];
+  if (tracked?.itemId === item.id && doneFor !== item.id) {
+    const latest = run && run.id === tracked.run.id ? run : tracked.run;
+    // Retry and Back are asks for this item's setup, like Prepare job: a gate
+    // or the settings card that follows shows even though the item now reads
+    // in progress (the server, not the card, decides whether it may run again).
+    return [runPrompt({ item, run: latest, model: job.model }, {
+      retry: () => { setShownFor(item.id); return dispatch(job.agentProjectId ?? undefined); },
+      back: () => { setShownFor(item.id); to({ kind: 'confirm' }); },
+      dismiss: () => { setTracked(null); setDoneFor(item.id); },
+    })];
+  }
   const open = shownFor === item.id || (canDispatch && !blocked && !running);
   if (!open || doneFor === item.id) return [];
   return prepareJobPrompts({

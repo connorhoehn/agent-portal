@@ -595,3 +595,86 @@ function fundingPrompt(view: PrepareJobView, funding: FundingView, actions: Prep
     },
   };
 }
+
+// ─── After dispatch: the run, in the same box ────────────────────────────────
+
+/** The dispatched run's path. "Result ready" completes it; a stopped run halts at "Agent working". */
+export const RUN_STEPS: readonly string[] = ['Dispatched', 'Agent working', 'Result ready'];
+
+/** What the run card reads from the item's latest marketplace run (BotRun). */
+export interface TrackedRun {
+  id: string;
+  status: 'running' | 'done' | 'failed' | 'skipped';
+  costUsd: number | null;
+  outcome?: { reason?: string; summary?: string; prUrl?: string } | null;
+}
+
+export interface RunPromptActions {
+  /** Dispatch the same job again; every budget gate asks again if it applies. */
+  retry: () => Promise<ComposerPromptResult>;
+  /** Back to the job's settings (change model, cap or instruction first). */
+  back: () => void;
+  /** Close the card; the run carries on (or stays finished) without it. */
+  dismiss: () => void;
+}
+
+/**
+ * The run card that replaces the job once a dispatch is accepted: one path,
+ * Dispatched → Agent working → Result ready, advanced by the polled run. A
+ * failed or skipped run stops at Agent working and offers Retry inside the
+ * same card (no modal, no navigation). Its id carries the status, so each
+ * change is a new question rather than a stale one.
+ */
+export function runPrompt(input: { item: Pick<JobItem, 'id' | 'title'>; run: TrackedRun; model: string }, actions: RunPromptActions): ComposerPrompt {
+  const { item, run, model } = input;
+  const id = `prepare-job:${item.id}:run-${run.status}:${run.id}`;
+  const cost = run.costUsd != null ? [{ label: 'Cost', value: usd(run.costUsd) }] : [];
+  const dismiss = { id: 'dismiss', label: 'Dismiss' };
+  const close = () => { actions.dismiss(); return { receipt: `${item.title}: run card closed` }; };
+
+  if (run.status === 'running') {
+    return {
+      id, eyebrow: 'Job', title: item.title,
+      fields: [{ label: 'Model', value: modelLabel(model) }, { label: 'Status', value: 'Agent working', tone: 'info' }],
+      path: { steps: RUN_STEPS, current: 1 },
+      question: 'The agent is working on this item. This card follows the run; you can keep typing.',
+      kind: 'choice', options: [dismiss],
+      onAnswer: close,
+    };
+  }
+
+  if (run.status === 'done') {
+    const summary = run.outcome?.summary ? [{ label: 'Summary', value: run.outcome.summary }] : [];
+    const pr = run.outcome?.prUrl ? [{ label: 'Change', value: run.outcome.prUrl.replace(/^https:\/\/github\.com\//, ''), mono: true }] : [];
+    return {
+      id, eyebrow: 'Job', title: 'Result ready',
+      fields: [{ label: 'Status', value: 'Finished', tone: 'success' }, ...summary, ...pr, ...cost],
+      path: { steps: RUN_STEPS, current: RUN_STEPS.length },
+      question: `The agent finished "${item.title}". Review the change before merging it.`,
+      kind: 'choice', options: [dismiss], defaultOptionId: 'dismiss',
+      onAnswer: close,
+    };
+  }
+
+  const skipped = run.status === 'skipped';
+  const reason = run.outcome?.reason ? [{ label: 'Reason', value: run.outcome.reason, tone: 'danger' as const }] : [];
+  return {
+    id, eyebrow: 'Job · stopped',
+    title: skipped ? 'The run did not start' : 'Stopped while the agent was working',
+    fields: [...reason, ...cost, { label: 'Model', value: modelLabel(model) }],
+    path: { steps: RUN_STEPS, current: 1 },
+    question: 'Retry with the same settings? A budget gate asks again if one applies.',
+    kind: 'choice',
+    options: [
+      { id: 'retry', label: 'Retry', emphasis: 'primary' },
+      { id: 'back', label: 'Back to the job', hint: 'Change the model, cap or instruction first' },
+      dismiss,
+    ],
+    defaultOptionId: 'retry',
+    onAnswer: (answer) => {
+      if (answer.optionId === 'retry') return actions.retry();
+      if (answer.optionId === 'back') { actions.back(); return { receipt: 'Back to the job' }; }
+      return close();
+    },
+  };
+}

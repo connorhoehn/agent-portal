@@ -57,6 +57,19 @@ does not grant funding or queue a job. When integrating, show submission success
 only after the real operation succeeds; preserve the existing permission and
 funding gates.
 
+**Addendum 2026-11-04 (user-approved):** after a dispatch is accepted, the
+same response box keeps the job as a run card instead of closing. Its path is
+Dispatched → Agent working → Result ready, advanced by the page's existing
+10 s marketplace-runs poll. A failed or skipped run stops at Agent working with
+its reason and offers Retry (the same `dispatch-work` POST, so every budget
+gate asks again), Back to the job, or Dismiss; a finished run completes the
+path with its summary, change and cost. Still no modal, backdrop or navigation,
+and nothing claims success before the run reports it. Code: `runPrompt` in
+`portal/src/pages/project-detail/prepareJobModel.ts`, wired in
+`usePrepareJobDeck.ts`; checks in `prepareJobModel.test.ts` and
+`portal/e2e/prepare-job.spec.ts`. The pattern came from the storymaker
+studio's proposal-request card.
+
 ## Source and existing integration owners
 
 Under `portal/prototypes/initiatives-review/`:

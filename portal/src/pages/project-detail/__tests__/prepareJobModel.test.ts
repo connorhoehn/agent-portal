@@ -28,6 +28,9 @@ import {
   prepareJobPrompts,
   readDispatchResponse,
   readEnvelopeResponse,
+  RUN_STEPS,
+  runPrompt,
+  type TrackedRun,
   requestedUsdFor,
   type ForecastRead,
   type PrepareJobActions,
@@ -327,4 +330,45 @@ test('job drafts: the PUT body and the edits a saved draft restores', () => {
     { model: DEVBOX_MODELS[1]!.id, capUsd: 3, instruction: 'Do the thing', agentProjectId: 'cb-obs' });
   assert.deepEqual(jobFromDraft({ model: 'retired', budgetPerRunUsd: null, instruction: null, agentProjectId: null }), { capUsd: null });
   assert.deepEqual(jobFromDraft(null), {});
+});
+
+test('after dispatch: the run card follows the run and a stopped run retries in place', async () => {
+  const item = { id: 'wi-1', title: 'Reduce duplicate alerts' };
+  const model = DEFAULT_DEVBOX_MODEL;
+  const calls: string[] = [];
+  const actions = {
+    retry: async () => { calls.push('retry'); return { receipt: 'retried' }; },
+    back: () => { calls.push('back'); },
+    dismiss: () => { calls.push('dismiss'); },
+  };
+  const at = (run: TrackedRun) => runPrompt({ item, run, model }, actions);
+  const base: TrackedRun = { id: 'run-1', status: 'running', costUsd: null, outcome: null };
+
+  const running = at(base);
+  assert.deepEqual(running.path, { steps: RUN_STEPS, current: 1 });
+  assert.equal(running.title, item.title);
+  assert.deepEqual(running.options!.map((o) => o.id), ['dismiss']);
+  assert.deepEqual(await running.onAnswer({ kind: 'choice', optionId: 'dismiss' }), { receipt: 'Reduce duplicate alerts: run card closed' });
+
+  const done = at({ ...base, status: 'done', costUsd: 0.84, outcome: { summary: 'Merged pager rules', prUrl: 'https://github.com/acme/alerts/pull/7' } });
+  assert.equal(done.title, 'Result ready');
+  assert.equal(done.path!.current, RUN_STEPS.length, 'every step complete');
+  assert.deepEqual(done.fields!.map((f) => [f.label, f.value]), [['Status', 'Finished'], ['Summary', 'Merged pager rules'], ['Change', 'acme/alerts/pull/7'], ['Cost', '$0.84']]);
+
+  const failed = at({ ...base, status: 'failed', outcome: { reason: 'Run cap reached' } });
+  assert.equal(failed.title, 'Stopped while the agent was working');
+  assert.equal(failed.path!.current, 1, 'halts at Agent working');
+  assert.deepEqual(failed.options!.map((o) => o.id), ['retry', 'back', 'dismiss']);
+  assert.equal(failed.defaultOptionId, 'retry');
+  assert.equal(failed.fields![0]!.value, 'Run cap reached');
+  assert.deepEqual(await failed.onAnswer({ kind: 'choice', optionId: 'retry' }), { receipt: 'retried' });
+  await failed.onAnswer({ kind: 'choice', optionId: 'back' });
+  await failed.onAnswer({ kind: 'choice', optionId: 'dismiss' });
+  assert.deepEqual(calls, ['dismiss', 'retry', 'back', 'dismiss']);
+
+  assert.equal(at({ ...base, status: 'skipped' }).title, 'The run did not start');
+  // Each status is a new question, so the deck never answers a stale one.
+  assert.equal(new Set([running.id, done.id, failed.id]).size, 3);
+  // Nothing on the card claims success before the run says so.
+  for (const p of [running, failed]) assert.doesNotMatch(`${p.title} ${p.question}`, /finished|ready|merged/i);
 });
