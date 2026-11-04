@@ -255,6 +255,9 @@ are the extra depth it must carry (`numbers`, `dialog`, `composer`,
 | `hr-admin/ingest` | surface | `/admin/ingest/crawl`, `/admin/ingest/history`, `/admin/ingest/sources` | default, row-open | — | — | Ingest: crawl targets, history and sources; open a crawl |
 | `hr-admin/codebases` | surface | `/admin/projects` | default, row-open | — | — | Codebases: the agent projects and what each delivers |
 | `hr-admin/refusals` | refusals | `/iq/projects` | refused | — | — | The rail and palette as this role sees them, ⌘I quick switch, every gated /iq and /admin route it cannot reach (a deep link that lands on /iq/projects) and the APIs that answer 403 |
+| `admin/refusals` | refusals | `/iq/projects` | default | — | — | The cross-tenant admin (Platform Operator) in Work: the full rail and palette, ⌘I quick switch, a gated route that opens, and the most gated reads answering 200 (admin.cedar has no forbid here) |
+| `admin/search` | surface | `/iq/search` | default, filtered, filtered-empty, row-open | Results, Answer, Connections | palette | Search and the palette: find a person, an initiative and a decision; the connections graph; a query that finds nothing; ControlOrMeta+K jumps to a page |
+| `admin/frames` | frames | `/iq/projects`, `/iq/projects/p-auth-migration`, `/iq/decisions`, `/iq/work`, `/iq/search`, `/settings` | default | — | — | The core pages at 1440 and 900 wide, light and dark: nothing clipped, no horizontal scroll, the audit clean in both themes |
 | `hr-admin/frames` | frames | `/iq/projects`, `/iq/projects/p-auth-migration`, `/iq/decisions`, `/iq/work`, `/iq/search`, `/settings` | default | — | — | The core pages at 1440 and 900 wide, light and dark: nothing clipped, no horizontal scroll, the audit clean in both themes |
 
 ## Status

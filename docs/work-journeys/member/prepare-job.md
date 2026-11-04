@@ -4,18 +4,18 @@ user: u-theo (Theo Chang)
 url: /iq/projects/p-auth-migration?item=wi-auth-e1-s1; /iq/projects/p-auth-migration?item=wi-auth-e1-s1&view=docs; /iq/projects/p-auth-migration?item=wi-nope
 map: docs/journeys/maps/work/member/prepare-job.ts
 pages: portal/src/pages/project-detail/usePrepareJobDeck.ts, portal/src/pages/project-detail/prepareJobModel.ts, portal/src/pages/ProjectDetailPage.tsx
-audited: 2026-10-18 10:07–10:10 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-f8f1fa83), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.480.4
-session: /api/session/me sub u-theo-clone-f8f1fa83, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
+audited: 2026-11-04 18:04–18:05 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-theo-clone-700834ba), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.500.3-work.2
+session: /api/session/me sub u-theo-clone-700834ba, tenant orgiq, role member, grants {"orgiq":["member"],"social":["participant"]}
 screenshot: prepare-job.jpg
-verdict: pass
+verdict: fail — 8 of 14 steps failed; step 5 (View job setup shows what the job would run with, and no options to pick): not focused: [data-composer-prompt-deck="expanded"]
 console errors: 0
-layout: pass — ui-dom-audit 0 failing findings at 13 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/projects/p-auth-migration?item=wi-auth-e1-s1: no horizontal scroll (1440/1440), 1 h1 "BFF authorization-code + PKCE flow behind the middleware" 20/600 at 104/115, first-row-top: 151px, composer at y 638–851 of 900
-keyboard: pass — Key 1 picks nothing: this role has no option to pick, and nothing is sent; Key 2 picks nothing either: the card is unchanged; Enter on the focused Hide button folds the card to its one-line summary; Escape folds the card and the work item stays open; Tab from the top of the page: the controls take focus in turn (Tab visited 36 distinct visible controls of 41 focusable, focus lost 1×)
+layout: fail — 8 ui-dom-audit finding(s) at 8 of 13 measured step(s) (composer.presence ×8); at /iq/projects/p-auth-migration?item=wi-auth-e1-s1: no horizontal scroll (1440/1440), 1 h1 "BFF authorization-code + PKCE flow behind the middleware" 20/600 at 104/115, first-row-top: 92px, composer at y 642–855 of 900
+keyboard: fail — step 7 (Key 1 picks nothing: this role has no option to pick, and nothing is sent): 1 ui-dom-audit finding(s): composer.presence ×1; step 8 (Key 2 picks nothing either: the card is unchanged): 1 ui-dom-audit finding(s): composer.presence ×1; step 9 (Enter on the focused Hide button folds the card to its one-line summary): not visible: main :visible:text-matches("question waiting", ""); step 12 (Escape folds the card and the work item stays open): visible (expected hidden): [data-composer-prompt-deck="expanded"] ×1
 empty-state: pass — A work item that is not in the list says so and sends the reader to the rail
-role-gating: pass — Open the item's header menu: it offers View job setup; View job setup shows what the job would run with, and no options to pick; The card says who authorizes a job and that this role can only see the setup; Open the item's header menu: it offers View job setup; Open the card again from the menu
+role-gating: fail — step 5 (View job setup shows what the job would run with, and no options to pick): not focused: [data-composer-prompt-deck="expanded"]; step 6 (The card says who authorizes a job and that this role can only see the setup): 1 ui-dom-audit finding(s): composer.presence ×1; step 10 (Open the item's header menu: it offers View job setup): not visible: menuitem "View job setup"; step 11 (Open the card again from the menu): click failed: locator.click: Timeout 8000ms exceeded.
 story-facts: pass — Open BFF authorization-code + PKCE flow behind the middleware: the work item whose job would run
 tab-stability: pass — Click the Docs tab of the work item: it opens and the item header, tab strip and side pane stay where they were (4 box(es) held still); Click the Brief tab of the work item: it opens and the item header, tab strip and side pane stay where they were (4 box(es) held still)
-dom-audit: 0 failing finding(s) at 13 measured step(s); 28 more owed by docs/journeys/audit-burndown.tsv (a11y.heading-order ×13, a11y.landmarks ×12, keyboard.typography ×3) — ui-dom-audit measureDOM, contract Work shared UI compact layout d2d16ad077a348fe
+dom-audit: 8 failing finding(s) at 13 measured step(s); 32 more owed by docs/journeys/audit-burndown.tsv (control.font-size ×26, control.select-inset-field-sm ×5, a11y.heading-order ×1) — ui-dom-audit measureDOM, contract Work shared UI compact layout e34ed4bae531eb49
 notes: Theo Chang: The prepare-job card: what a job would run with, the composer keys 1-5 and Enter, Escape; who may dispatch and the sentence that says who can when this role cannot. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/work/member/prepare-job).
 
 ## Steps
@@ -26,13 +26,13 @@ notes: Theo Chang: The prepare-job card: what a job would run with, the composer
 | 2 | Click the Docs tab of the work item: it opens and the item header, tab strip and side pane stay where they were (4 box(es) held still) | row-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1&view=docs |
 | 3 | Click the Brief tab of the work item: it opens and the item header, tab strip and side pane stay where they were (4 box(es) held still) |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
 | 4 | Open the item's header menu: it offers View job setup |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
-| 5 | View job setup shows what the job would run with, and no options to pick | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
-| 6 | The card says who authorizes a job and that this role can only see the setup |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
-| 7 | Key 1 picks nothing: this role has no option to pick, and nothing is sent |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
-| 8 | Key 2 picks nothing either: the card is unchanged |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
-| 9 | Enter on the focused Hide button folds the card to its one-line summary |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
-| 10 | Open the item's header menu: it offers View job setup |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
-| 11 | Open the card again from the menu | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
-| 12 | Escape folds the card and the work item stays open |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
-| 13 | Tab from the top of the page: the controls take focus in turn (Tab visited 36 distinct visible controls of 41 focusable, focus lost 1×) |  | pass | — | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
+| 5 | View job setup shows what the job would run with, and no options to pick | dialog-open | fail: not focused: [data-composer-prompt-deck="expanded"] | 1 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
+| 6 | The card says who authorizes a job and that this role can only see the setup |  | fail: 1 ui-dom-audit finding(s): composer.presence ×1 | 1 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
+| 7 | Key 1 picks nothing: this role has no option to pick, and nothing is sent |  | fail: 1 ui-dom-audit finding(s): composer.presence ×1 | 1 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
+| 8 | Key 2 picks nothing either: the card is unchanged |  | fail: 1 ui-dom-audit finding(s): composer.presence ×1 | 1 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
+| 9 | Enter on the focused Hide button folds the card to its one-line summary |  | fail: not visible: main :visible:text-matches("question waiting", "") | 1 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
+| 10 | Open the item's header menu: it offers View job setup |  | fail: not visible: menuitem "View job setup" | 1 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
+| 11 | Open the card again from the menu | dialog-open | fail: click failed: locator.click: Timeout 8000ms exceeded. | 1 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
+| 12 | Escape folds the card and the work item stays open |  | fail: visible (expected hidden): [data-composer-prompt-deck="expanded"] ×1 | 1 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
+| 13 | Tab from the top of the page: the controls take focus in turn (Tab visited 37 distinct visible controls of 37 focusable) |  | pass | — | /iq/projects/p-auth-migration?item=wi-auth-e1-s1 |
 | 14 | A work item that is not in the list says so and sends the reader to the rail | not-found | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-nope |

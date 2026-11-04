@@ -1,21 +1,21 @@
 surface: automate
 role: hr-admin
 user: u-rachel (Rachel Kowalski)
-url: /iq/work; /iq/work/job-inf-maint-1; /iq/work/queue; /iq/work/queue?status=failed; /iq/work/findings; /iq/work/findings?q=zzzzqq; /iq/work/changes
+url: /iq/work; /iq/work/job-inf-maint-1; /iq/work/queue; /iq/work/queue?status=failed; /iq/work/findings; /iq/work/findings?view=failed; /iq/work/findings?q=zzzzqq; /iq/work/changes
 map: docs/journeys/maps/work/hr-admin/automate.ts
 pages: portal/src/pages/work, portal/src/pages/work/QueuePage.tsx
-audited: 2026-10-17 10:04–10:05 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-15789c92), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
-session: /api/session/me sub u-rachel-clone-15789c92, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
+audited: 2026-11-04 18:39–18:40 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-rachel-clone-5c95d545), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.500.3-work.2
+session: /api/session/me sub u-rachel-clone-5c95d545, tenant orgiq, role hr-admin, grants {"orgiq":["hr-admin","org-leader"],"social":["participant"],"access":["approver"]}
 screenshot: automate.jpg
 verdict: pass
 console errors: 0 unexpected; 4 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)
-layout: pass — ui-dom-audit 0 failing findings at 17 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/work: no horizontal scroll (1440/1440), 1 h1 "Inbox" 20/600 at 444/88, table body rows 44px ×4, first-row-top: 409px, composer at y 493–851 of 900
-keyboard: pass — Enter on the first recent run opens its record; Tab from the top of the page: the controls take focus in turn (Tab visited 39 distinct visible controls of 55 focusable, focus lost 1×)
+layout: pass — ui-dom-audit 0 failing findings at 19 measured step(s); at /iq/work: no horizontal scroll (1440/1440), 1 h1 "Inbox" 20/600 at 444/88, table body rows 44px ×4, first-row-top: 52px, composer at y 797–855 of 900
+keyboard: pass — Enter on the first recent run opens its record; Tab from the top of the page: the controls take focus in turn (Tab visited 38 distinct visible controls of 56 focusable)
 empty-state: pass — Search zzzzqq among the failed jobs: the table says nothing is dead-lettered; Search zzzzqq: the findings list says nothing is open; Search zzzzqq: no graph update matches; In a world with no runs the Inbox says there are no completed runs yet (mock scope {"scenario":"empty","fixture":"agent-jobs"}); In the same world Runs says no jobs yet and how they begin (mock scope {"scenario":"empty","fixture":"agent-jobs"}); When the queue cannot be read, the Inbox says its numbers are unknown, not zero (mock scope {"scenario":"error","fixture":"agent-jobs"})
-role-gating: pass — This role holds ManageDevbox: the questions can be answered, no read-only sentence; Open Findings: the dead-letter queue and the open findings by sweep (2 box(es) held still)
-story-facts: pass — Open the Inbox: the questions waiting, the queue and the recent runs; Open Runs: every job by state, with the dispatched runs running outside the queue named by work item (2 box(es) held still); Open Findings: the dead-letter queue and the open findings by sweep (2 box(es) held still); Open Graph updates: what agents proposed to the org graph and who decided it (2 box(es) held still)
-tab-stability: pass — Open Runs: every job by state, with the dispatched runs running outside the queue named by work item (2 box(es) held still); Open Findings: the dead-letter queue and the open findings by sweep (2 box(es) held still); Open Graph updates: what agents proposed to the org graph and who decided it (2 box(es) held still)
-dom-audit: 0 failing finding(s) at 17 measured step(s); 87 more owed by docs/journeys/audit-burndown.tsv (a11y.contrast ×70, a11y.landmarks ×17) — ui-dom-audit measureDOM, contract Work shared UI compact layout d2d16ad077a348fe
+role-gating: pass — This role holds ManageDevbox: the questions can be answered, no read-only sentence; Open Findings: the open findings by sweep, with the failed runs one tab away (2 box(es) held still); Click Failed runs: the failed and cancelled runs, each with Requeue for this role (1 box(es) held still)
+story-facts: pass — Open the Inbox: the questions waiting, the queue and the recent runs; Open Runs: every job by state, with the dispatched runs running outside the queue named by work item (2 box(es) held still); Open Findings: the open findings by sweep, with the failed runs one tab away (2 box(es) held still); Open Graph updates: what agents proposed to the org graph and who decided it (2 box(es) held still)
+tab-stability: pass — Open Runs: every job by state, with the dispatched runs running outside the queue named by work item (2 box(es) held still); Open Findings: the open findings by sweep, with the failed runs one tab away (2 box(es) held still); Click Findings: the open findings are back (1 box(es) held still); Open Graph updates: what agents proposed to the org graph and who decided it (2 box(es) held still)
+dom-audit: 0 failing finding(s) at 19 measured step(s) — ui-dom-audit measureDOM, contract Work shared UI compact layout e34ed4bae531eb49
 notes: Rachel Kowalski: Automate: the inbox, runs, findings and graph changes; filter each, open a run, the empty and error worlds; review and requeue gated by ManageDevbox. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/work/hr-admin/automate).
 
 ## Steps
@@ -30,13 +30,15 @@ notes: Rachel Kowalski: Automate: the inbox, runs, findings and graph changes; f
 | 6 | Filter to the failed (dead-letter) jobs: the badge agrees with the rows | filtered | pass | 0 finding(s) | /iq/work/queue?status=failed |
 | 7 | Search zzzzqq among the failed jobs: the table says nothing is dead-lettered | filtered-empty | pass | 0 finding(s) | /iq/work/queue?status=failed |
 | 8 | Clear the search: the rows come back |  | pass | 0 finding(s) | /iq/work/queue?status=failed |
-| 9 | Open Findings: the dead-letter queue and the open findings by sweep (2 box(es) held still) |  | pass | 0 finding(s) | /iq/work/findings |
-| 10 | Search zzzzqq: the findings list says nothing is open | filtered-empty | pass | 0 finding(s) | /iq/work/findings?q=zzzzqq |
-| 11 | Clear the search: the rows come back |  | pass | 0 finding(s) | /iq/work/findings |
-| 12 | Open Graph updates: what agents proposed to the org graph and who decided it (2 box(es) held still) |  | pass | 0 finding(s) | /iq/work/changes |
-| 13 | Filter to the applied changes: three of them, each decided by a named person | filtered | pass | 0 finding(s) | /iq/work/changes |
-| 14 | Search zzzzqq: no graph update matches | filtered-empty | pass | 0 finding(s) | /iq/work/changes |
-| 15 | Tab from the top of the page: the controls take focus in turn (Tab visited 39 distinct visible controls of 55 focusable, focus lost 1×) |  | pass | — | /iq/work/changes |
-| 16 | In a world with no runs the Inbox says there are no completed runs yet (mock scope {"scenario":"empty","fixture":"agent-jobs"}) | empty | pass | 0 finding(s) | /iq/work |
-| 17 | In the same world Runs says no jobs yet and how they begin (mock scope {"scenario":"empty","fixture":"agent-jobs"}) | empty | pass | 0 finding(s) | /iq/work/queue |
-| 18 | When the queue cannot be read, the Inbox says its numbers are unknown, not zero (mock scope {"scenario":"error","fixture":"agent-jobs"}) | error | pass | 0 finding(s) | /iq/work |
+| 9 | Open Findings: the open findings by sweep, with the failed runs one tab away (2 box(es) held still) |  | pass | 0 finding(s) | /iq/work/findings |
+| 10 | Click Failed runs: the failed and cancelled runs, each with Requeue for this role (1 box(es) held still) |  | pass | 0 finding(s) | /iq/work/findings?view=failed |
+| 11 | Click Findings: the open findings are back (1 box(es) held still) |  | pass | 0 finding(s) | /iq/work/findings |
+| 12 | Search zzzzqq: the findings list says nothing is open | filtered-empty | pass | 0 finding(s) | /iq/work/findings?q=zzzzqq |
+| 13 | Clear the search: the rows come back |  | pass | 0 finding(s) | /iq/work/findings |
+| 14 | Open Graph updates: what agents proposed to the org graph and who decided it (2 box(es) held still) |  | pass | 0 finding(s) | /iq/work/changes |
+| 15 | Filter to the applied changes: three of them, each decided by a named person | filtered | pass | 0 finding(s) | /iq/work/changes |
+| 16 | Search zzzzqq: no graph update matches | filtered-empty | pass | 0 finding(s) | /iq/work/changes |
+| 17 | Tab from the top of the page: the controls take focus in turn (Tab visited 38 distinct visible controls of 56 focusable) |  | pass | — | /iq/work/changes |
+| 18 | In a world with no runs the Inbox says there are no completed runs yet (mock scope {"scenario":"empty","fixture":"agent-jobs"}) | empty | pass | 0 finding(s) | /iq/work |
+| 19 | In the same world Runs says no jobs yet and how they begin (mock scope {"scenario":"empty","fixture":"agent-jobs"}) | empty | pass | 0 finding(s) | /iq/work/queue |
+| 20 | When the queue cannot be read, the Inbox says its numbers are unknown, not zero (mock scope {"scenario":"error","fixture":"agent-jobs"}) | error | pass | 0 finding(s) | /iq/work |

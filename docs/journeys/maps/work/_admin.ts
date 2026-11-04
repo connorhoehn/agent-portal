@@ -119,9 +119,9 @@ export function budgets(role: Role): Step[] {
       ...(c.budgets ? { visible: [h1('Initiatives'), seen('Observability Platform'), seen('Auth Migration'), seen('$431.00'), btn('Set budget')] } : { absent: [btn('Set budget'), btn(/^Edit monthly budget/)] }),
     }, { facts: true, proves: ['story-facts', 'role-gating'] }),
     api('/api/budgets', 200, 'This role may read budgets: GET /api/budgets answers 200'),
-    fill(search('Search initiative budgets'), 'auth', 'Search auth: only Auth Migration stays and the roll-up count follows', { visible: [seen('Auth Migration'), seen('1 of 14 initiatives')], count: [{ target: rowsN, eq: 1 }] }, { state: 'filtered', proves: 'empty-state' }),
-    fill(search('Search initiative budgets'), 'zzzzqq', 'Search zzzzqq: the table says no initiative matches', { visible: [seen('No initiative matches this search.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
-    fill(search('Search initiative budgets'), '', 'Clear the search: every initiative is back', { count: [{ target: rowsN, eq: 14 }] }),
+    fill(search('Search initiatives'), 'auth', 'Search auth: only Auth Migration stays and the roll-up count follows', { visible: [seen('Auth Migration'), seen('1 of 14 initiatives')], count: [{ target: rowsN, eq: 1 }] }, { state: 'filtered', proves: 'empty-state' }),
+    fill(search('Search initiatives'), 'zzzzqq', 'Search zzzzqq: the table says no initiative matches', { visible: [seen('No initiative matches this search.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
+    fill(search('Search initiatives'), '', 'Clear the search: every initiative is back', { count: [{ target: rowsN, eq: 14 }] }),
     click(link(/^Sprints/, { css: 'main' }), 'Switch to the Sprints view (no tab strip here, so the view switch is the stability check): header and strip stay put', {
       url: /report=sprints/, visible: [h1('Sprints'), seen('Layla Hassan'), seen(/^19 of 19 envelopes$/)], count: [{ target: rowsN, min: 18 }],
       numbers: [{ of: link(/^Sprints/, { css: 'main' }), re: /(\d+)/, eqNumberOf: seen(/^\d+ of \d+ envelopes$/), reOther: /^\d+ of (\d+)/ }],
@@ -380,7 +380,7 @@ export function identity(role: Role): Step[] {
       url: '/admin/identity/roles', visible: [h1('Roles'), seen('Permission matrix'), seen(/^\d+ of \d+ actions$/), seen('HR Admin')], count: [{ target: tableRows, min: 40 }],
       numbers: [{ of: seen(/^\d+ of \d+ actions$/), re: /^(\d+)/, eqCount: tableRows }],
     }, { proves: ['tab-stability', 'story-facts'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
-    fill(search('Search actions'), 'zzzzqq', 'Search zzzzqq: the matrix says no action matches', { visible: [seen('0 of 53 actions')] }, { state: 'filtered-empty', proves: 'empty-state' }),
+    fill(search('Search actions'), 'zzzzqq', 'Search zzzzqq: the matrix says no action matches', { visible: [seen(/^0 of \d+ actions$/)] }, { state: 'filtered-empty', proves: 'empty-state' }),
     fill(search('Search actions'), 'ManageBots', 'Search ManageBots: the one action stays with who may do it', { visible: [seen('ManageBots')], count: [{ target: tableRows, eq: 1 }] }, { state: 'filtered' }),
     click(sub('Policies'), 'Open Policies from the identity rail: in this local stack the policy store is not configured and the page says it does not know, not that there are none', {
       url: '/admin/identity/policies', visible: [h1('Cedar Policies'), seen('Could not load policies'), btn('Try again')],

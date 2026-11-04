@@ -69,7 +69,7 @@ export default function DecisionsPage() {
   const columns: DataTableColumn<DecisionSummary>[] = [
     {
       key: 'topic', header: 'Decision', sortable: true,
-      render: (d) => <RecordLink to={href(d.id, search)} className="block max-w-[220px] truncate" title={d.topic}>{d.topic}</RecordLink>,
+      render: (d) => <RecordLink to={href(d.id, search)} className="block max-w-[200px] truncate" title={d.topic}>{d.topic}</RecordLink>,
     },
     {
       key: 'projectId', header: 'Initiative', sortable: true,

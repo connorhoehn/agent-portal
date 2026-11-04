@@ -19,7 +19,8 @@ export const GOAL = 'docs/work-journeys-goal.md';
 export const MATRIX = 'docs/work-journeys/MATRIX.txt';
 export const FLOORS = 'scripts/work-journeys-floors.tsv';
 export const LOGS = 'docs/work-journeys';
-export const ROLES = ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin'];
+// admin: the cross-tenant operator (admin.cedar) as it lands in Work, walked since 2026-11-04.
+export const ROLES = ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin'];
 /** Every check the catalog's `checks` column may name, and what the map must then contain. */
 export const CHECKS = ['numbers', 'dialog', 'composer', 'palette', 'write', 'tabs', 'reload'];
 export const WIDTHS = [1440, 900];
@@ -187,7 +188,8 @@ async function refusals() {
   const gated = await gatedRoutes();
   const { maps } = await workMaps();
   for (const role of ROLES) {
-    const owed = gated.filter((r) => !r.roles.includes(role));
+    // RequireRole (portal/src/lib/auth.tsx) passes the cross-tenant admin through every role gate.
+    const owed = role === 'admin' ? [] : gated.filter((r) => !r.roles.includes(role));
     const refused = maps.filter(({ map }) => map.persona.role === role).flatMap(({ map }) => map.steps.filter((s) => s.do === 'navigate' && s.expect?.urlNot).map((s) => s.url));
     const uncovered = owed.filter((r) => !refused.some((u) => patternRe(r.path).test(u)));
     if (!owed.length) out('ok', `${role}: reaches every gated route (nothing to refuse)`);

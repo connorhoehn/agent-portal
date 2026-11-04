@@ -279,19 +279,20 @@ function prepareJobDispatcher(role: Role): Step[] {
     { do: 'wait', target: DECK, name: 'The card is the dispatcher\'s: it names the options and the sprint envelope this person spends from', proves: 'role-gating', expect: { visible: [deckOption(/Dispatch/), deckOption(/Change model/), deckOption(/Change cap/), deckOption(/Edit instruction/)], absent: [{ text: 'Needs dispatch rights' }] } } as Step,
     press('2', 'Key 2 picks Change model: the card asks which model runs the job', { visible: [DECK, seen(/Which model runs/)] }, { proves: 'keyboard' }),
     press('Enter', 'Enter keeps the current model and returns to the job', { visible: [DECK, deckOption(/Change model/)] }, { proves: 'keyboard' }),
-    press('3', 'Key 3 picks Change cap: the card asks for a dollar amount', { visible: [DECK, seen(/Cap this run at how many dollars/)] }, { proves: 'keyboard' }),
+    press('3', 'Key 3 picks Change cap: the card offers No cap, the forecast high or a custom amount', { visible: [DECK, seen(/Choose a cap for this run/), deckOption('No cap'), deckOption('Custom amount')] }, { proves: 'keyboard' }),
     press('Enter', 'Enter keeps no cap and returns to the job', { visible: [DECK, deckOption(/Change cap/)] }, { proves: 'keyboard' }),
     press('4', 'Key 4 picks Edit instruction: the card shows the derived instruction', { visible: [DECK, seen(/Type the instruction in the composer/)] }, { proves: 'keyboard' }),
     press('Enter', 'Enter keeps the instruction and returns to the job', { visible: [DECK, deckOption(/Edit instruction/)] }, { proves: 'keyboard' }),
     press('Escape', 'Escape folds the card and the work item stays open', { hidden: [DECK], url }, { proves: 'keyboard' }),
     ...openDeck('Open the card again from the menu'),
-    press('3', 'Key 3 picks Change cap again', { visible: [DECK, seen(/Cap this run at how many dollars/)] }, { proves: 'keyboard' }),
-    fill({ css: 'main [contenteditable="true"]', nth: 0 }, '0.01', 'Type a one-cent cap, far under the forecast', { visible: [DECK] }, { proves: 'keyboard' }),
+    press('3', 'Key 3 picks Change cap again', { visible: [DECK, seen(/Choose a cap for this run/)] }, { proves: 'keyboard' }),
+    click(deckOption('Custom amount'), 'Custom amount: the card asks for a dollar figure', { visible: [DECK, seen(/Type the dollar amount below/)] }),
+    fill({ testId: 'initiative-composer-prompts-answer' }, '0.01', 'Type a one-cent cap, far under the forecast, into the card\'s answer field', { visible: [DECK] }, { proves: 'keyboard' }),
     press('Enter', 'Enter sets the cap: the card shows it beside the forecast', { visible: [DECK, { text: '$0.01', within: DECK }] }, { proves: 'keyboard' }),
     click(deckOption(/^(1 )?Dispatch$/), 'Dispatch: the cap is under the forecast, so the card stops and asks (Over the run cap you set)', { visible: [DECK, { text: 'Over the run cap you set', within: DECK }, deckOption('Dispatch anyway'), deckOption('Back to the job')] }, { state: 'dialog-open', expectConsole: /409/ }),
     click(deckOption('Back to the job'), 'Back to the job keeps nothing: the card is the job again and the item is still up next', { visible: [DECK, { text: 'Dispatch with these settings?', within: DECK }, { text: /Over the run cap you set: not dispatched/ }] }),
     click(deckOption(/^(1 )?Dispatch$/), 'Dispatch asks again', { visible: [{ text: 'Over the run cap you set', within: DECK }] }, { expectConsole: /409/ }),
-    click(deckOption('Dispatch anyway'), 'Dispatch anyway confirms the brake: the job is sent and the card says so', { hidden: [DECK], visible: [{ text: /Dispatched/ }] }, { writes: true }),
+    click(deckOption('Dispatch anyway'), 'Dispatch anyway confirms the brake: the job is sent and the card follows the run (Agent working)', { visible: [DECK, { text: 'The agent is working on this item. This card follows the run; you can keep typing.', within: DECK }, deckOption('Dismiss')] }, { writes: true }),
     reload('Reload: the item is In progress, read back from the server', { visible: [heading(granted.title), { role: 'combobox', name: 'Status' }], attr: [{ target: { role: 'combobox', name: 'Status' }, name: 'data-value', value: 'in_progress' }] }),
     ...openDeck('Open the card again: the work is under way'),
     { do: 'wait', target: DECK, name: 'The job is running: the card says so and Dispatch is off until it is up next again', proves: 'role-gating', expect: { visible: [{ text: 'A job is already running for this item. Dispatch another with these settings?', within: DECK }], disabled: [deckOption(/^(1 )?Dispatch$/)] } } as Step,
@@ -433,15 +434,17 @@ export function automate(role: Role): Step[] {
   return [
     open('/iq/work', 'Open the Inbox: the questions waiting, the queue and the recent runs', { url: '/iq/work', visible: [heading('Inbox'), seen('Needs your attention'), seen('Recent runs')], count: [{ target: tableRows, min: 1 }], noText: [] }, { facts: true }),
     c.devbox
-      ? { do: 'wait', target: seen('Needs your attention'), name: 'This role holds ManageDevbox: the questions can be answered, no read-only sentence', proves: 'role-gating', expect: { noText: [/need the ManageDevbox capability/] } } as Step
-      : { do: 'wait', target: seen('Needs your attention'), name: 'Answering and reviewing need ManageDevbox: the inbox says so and offers no answer', proves: 'role-gating', expect: { visible: [seen(/need the ManageDevbox capability; you can read these but not decide them/)] } } as Step,
+      ? { do: 'wait', target: seen('Needs your attention'), name: 'This role holds ManageDevbox: the questions can be answered, no read-only sentence', proves: 'role-gating', expect: { noText: [/Your access allows you to read this (question|review)/] } } as Step
+      : { do: 'wait', target: seen('Needs your attention'), name: 'Answering and reviewing need ManageDevbox: an empty inbox says nothing waits, and a waiting question or review says this role may read it but not decide it', proves: 'role-gating', expect: { visible: [seen(/Nothing right now — questions and reviews appear in the composer\.|Your access allows you to read this (question|review), but not (answer|decide) it\./)] } } as Step,
     press('Enter', 'Enter on the first recent run opens its record', { url: /^\/iq\/work\/job-/ }, { target: firstRow, state: 'row-open', proves: 'keyboard' }),
     back('Browser Back returns to the Inbox', { url: '/iq/work', visible: [heading('Inbox')] }),
     click({ css: '[data-shell-nav] a[href="/iq/work/queue"]' }, 'Open Runs: every job by state, with the dispatched runs running outside the queue named by work item', { url: '/iq/work/queue', visible: [heading('Runs'), seen('Running now outside the queue'), seen('Span-metrics connector feeding RED dashboards')], count: [{ target: tableRows, min: 10 }] }, { proves: ['tab-stability', 'story-facts'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
     click({ role: 'button', name: /^Failed/ }, 'Filter to the failed (dead-letter) jobs: the badge agrees with the rows', { url: /[?&]status=failed/, numbers: [{ of: { role: 'button', name: /^Failed/ }, re: /(\d+)/, eqCount: openLinks }], visible: [seen('inference-canary-nightly')] }, { state: 'filtered' }),
     fill(search('Search runs'), 'zzzzqq', 'Search zzzzqq among the failed jobs: the table says nothing is dead-lettered', { visible: [seen('No loaded run matches this search.')] }, { state: 'filtered-empty', proves: 'empty-state' }),
     clear('Search runs'),
-    click({ css: '[data-shell-nav] a[href="/iq/work/findings"]' }, 'Open Findings: the dead-letter queue and the open findings by sweep', { url: '/iq/work/findings', visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions')], ...(c.devbox ? { visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions'), { role: 'button', name: /requeue/i, nth: 0 }, { role: 'button', name: 'Run sweeps now', nth: 0 }] } : c.dispatch ? { visible: [heading('Findings'), seen('Dead-letter queue'), seen('Orphan decisions'), { role: 'button', name: 'Run sweeps now', nth: 0 }], absent: [{ role: 'button', name: /requeue/i }] } : { absent: [{ role: 'button', name: /requeue/i }] }) }, { proves: ['tab-stability', 'story-facts', 'role-gating'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
+    click({ css: '[data-shell-nav] a[href="/iq/work/findings"]' }, 'Open Findings: the open findings by sweep, with the failed runs one tab away', { url: '/iq/work/findings', visible: [heading('Findings'), { role: 'tab', name: /^Failed runs/ }, seen('Orphan decisions'), ...(c.dispatch || c.devbox ? [{ role: 'button', name: 'Run sweeps now', nth: 0 } as Target] : [])] }, { proves: ['tab-stability', 'story-facts', 'role-gating'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
+    tabClick({ role: 'tab', name: /^Failed runs/ }, c.devbox ? 'Click Failed runs: the failed and cancelled runs, each with Requeue for this role' : 'Click Failed runs: the failed and cancelled runs, read-only for this role (Requeue needs ManageDevbox)', { url: /[?&]view=failed\b/, visible: [seen('Failed or cancelled runs. Requeue creates a new attempt.'), seen('inference-canary-nightly')], ...(c.devbox ? { visible: [seen('Failed or cancelled runs. Requeue creates a new attempt.'), { role: 'button', name: /requeue/i, nth: 0 }] } : { absent: [{ role: 'button', name: /requeue/i }] }) }, [STILL.header], { proves: 'role-gating' }),
+    tabClick({ role: 'tab', name: /^Findings/ }, 'Click Findings: the open findings are back', { url: /^(?!.*[?&]view=failed)/, visible: [seen('Orphan decisions')] }, [STILL.header]),
     fill(search('Search findings'), 'zzzzqq', 'Search zzzzqq: the findings list says nothing is open', { url: /[?&]q=zzzzqq/, visible: [seen(c.dispatch ? /Nothing open\. Sweeps run every 6 hours, or run one now\./ : /Nothing open\. Sweeps run automatically every 6 hours\./)] }, { state: 'filtered-empty', proves: 'empty-state' }),
     clear('Search findings'),
     click({ css: '[data-shell-nav] a[href="/iq/work/changes"]' }, 'Open Graph updates: what agents proposed to the org graph and who decided it', { url: '/iq/work/changes', visible: [heading('Graph updates'), seen('Linked a document to an entity'), seen('Rachel Kowalski')], ...(c.devbox ? {} : { absent: [{ role: 'button', name: /^(Approve|Reject)( |$)/ }] }), noText: LEAKS }, { proves: ['tab-stability', 'story-facts'], stable: [STILL.header, { css: '[data-shell-nav] aside' }] }),
@@ -541,7 +544,9 @@ const DOC = { id: 'adr-d-vectordb', title: 'ADR: Vector DB vendor selection' };
 
 export function documents(role: Role): Step[] {
   return [
-    open(`/iq/projects/${AUTH.id}?tab=docs`, 'The initiative’s Docs tab lists what the initiative holds; for Auth Migration nothing is linked yet and the tab says so', { visible: [seen('No project files yet'), seen('Search initiative')] }, { state: 'default', proves: 'empty-state', expectConsole: ARRIVED }),
+    // The shared demo state collects pages people (and initiative-doc-save.spec.ts) save here, and the page store
+    // is not forked by a mock scope, so this reads the tab as it is: a count that names what it holds, or the empty sentence.
+    open(`/iq/projects/${AUTH.id}?tab=docs`, 'The initiative’s Docs tab lists what the initiative holds, with a count, or says nothing is linked yet', { visible: [seen(/^\d+ files? in this initiative$|No project files yet/), seen('Search initiative')] }, { state: 'default', expectConsole: ARRIVED }),
     open(`/iq/documents/${DOC.id}`, 'Open the document record: the title, its source and when it was ingested, read-only', { url: `/iq/documents/${DOC.id}`, visible: [heading(DOC.title), seen('This is the ingested document record.'), seen('Ingested'), seen('Source location')], noText: [...LEAKS, /\b\d{4}-\d{2}-\d{2}T/] }, { facts: true, state: 'row-open' }),
     { do: 'wait', target: heading(DOC.title), name: 'The record offers no edit: source content and editing stay with the source', proves: 'role-gating', expect: { absent: [{ role: 'button', name: /^(edit|save|delete)/i }], visible: [seen(/editing remain governed by the source/)] } } as Step,
     openPalette(),
@@ -592,7 +597,7 @@ export function library(role: Role): Step[] {
 }
 
 // ── runbooks ────────────────────────────────────────────────────────────────
-const RUNBOOK = { id: 'rb-tenant-cutover', title: 'Cut one tenant over from SAML to Cognito' };
+const RUNBOOK = { id: 'rb-tenant-cutover', title: 'SAML to Cognito migration' };
 const DIFF_KEY_WARNING = /unique "key" prop/;
 const rbTabs: Target = { role: 'tablist', name: / sections$/ };
 const rbStill = (): Target[] => [STILL.header, rbTabs];
@@ -609,10 +614,10 @@ export function runbooks(role: Role): Step[] {
     rbTab('History', 'history', { visible: [seen('Versions'), seen('Vera Green')] }),
     rbTab('Runs', 'runs', { visible: [seen('The steps')] }),
     rbTab('Suggest an edit', 'suggest', { visible: [seen('Runbook markdown'), seen(/Why this change/)] }),
-    rbTab('Read', null, { visible: [seen('Use this when')] }),
+    rbTab('Read', null, { visible: [{ role: 'heading', name: 'Use when' }, { role: 'heading', name: 'Steps' }] }),
     press('ArrowRight', 'ArrowRight moves focus along the tab strip to History', { focused: tabNamed('History', rbTabs) }, { target: tabNamed('Read', rbTabs), proves: 'keyboard' }),
-    click(rail('Proposals'), 'Open Proposals from the section rail: five open, edits and new runbooks that runs and colleagues suggested', { url: '/iq/runbooks/proposals', visible: [heading('Proposals'), seen('Cut one tenant over from SAML to Cognito'), seen(/5 of 5 proposals/)] }, { proves: 'tab-stability', stable: [STILL.header] }),
-    open('/iq/runbooks/proposals/prop-tenant-cutover-callback', c.reviewRunbook ? 'Open a proposal: its diff, and Accept and Reject for this reviewer' : 'Open a proposal: its diff is readable, and the page says deciding it belongs to the owner or an SME', { visible: [seen('What it changes')], ...(c.reviewRunbook ? {} : { visible: [seen('What it changes'), seen('You can read this proposal, not decide it')], absent: [{ role: 'button', name: /^(accept|reject|merge)/i }] }) }, { state: 'row-open', proves: 'role-gating', expectConsole: DIFF_KEY_WARNING }),
+    click(rail('Proposals'), 'Open Proposals from the section rail: five open, edits and new runbooks that runs and colleagues suggested', { url: '/iq/runbooks/proposals', visible: [heading('Proposals'), seen(RUNBOOK.title), seen(/5 of 5 proposals/)] }, { proves: 'tab-stability', stable: [STILL.header] }),
+    open('/iq/runbooks/proposals/prop-tenant-cutover-callback', c.reviewRunbook ? 'Open a proposal: its diff, and Accept and Reject for this reviewer' : 'Open a proposal: its diff is readable, and the page says deciding it belongs to the owner or an SME', { visible: [seen('Change summary')], ...(c.reviewRunbook ? {} : { visible: [seen('Change summary'), seen('You can read this proposal, not decide it')], absent: [{ role: 'button', name: /^(accept|reject|merge)/i }] }) }, { state: 'row-open', proves: 'role-gating', expectConsole: DIFF_KEY_WARNING }),
     click(rail('Briefs'), 'Open Briefs: what each run was told when it started', { url: '/iq/runbooks/briefs', visible: [heading('Briefs'), seen('Choose a brief')] }, { proves: 'tab-stability', stable: [STILL.header] }),
     tabWalk(8),
     open('/iq/runbooks/rb-missing', 'A runbook that does not exist says it could not load it, and that the cause is unknown rather than empty', { visible: [seen('Could not load this runbook'), seen('That runbook does not exist.')] }, { state: 'not-found', proves: 'empty-state', expectConsole: /404/ }),

@@ -4,18 +4,18 @@ user: u-vera (Vera Green, owner of Auth Migration)
 url: /iq/projects/p-auth-migration?item=wi-auth-e2-b3; /iq/projects/p-auth-migration?item=wi-auth-e2-b3&view=docs; /iq/projects/p-zero-trust?item=wi-zt-e1-s2; /iq/projects/p-auth-migration?item=wi-nope
 map: docs/journeys/maps/work/org-leader/prepare-job.ts
 pages: portal/src/pages/project-detail/usePrepareJobDeck.ts, portal/src/pages/project-detail/prepareJobModel.ts, portal/src/pages/ProjectDetailPage.tsx
-audited: 2026-10-17 09:46–09:54 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-a492026d), scenario: scope default, middleware dev:mock :3001, Vite :5183, ui-components 2.480.2
-session: /api/session/me sub u-vera-clone-a492026d, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
+audited: 2026-11-04 18:05–18:06 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-vera-clone-1987b8af), scenario: scope default, middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.500.3-work.2
+session: /api/session/me sub u-vera-clone-1987b8af, tenant orgiq, role org-leader, grants {"orgiq":["org-leader","member"],"social":["participant"],"access":["approver"]}
 screenshot: prepare-job.jpg
-verdict: pass
-console errors: 0 unexpected; 3 expected by the map (Failed to load resource: the server responded with a status of 409 (Conflict) | Failed to load resource: the server responded with a status of 429 (Too Many Req)
-layout: pass — ui-dom-audit 0 failing findings at 33 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/projects/p-auth-migration?item=wi-auth-e2-b3: no horizontal scroll (1440/1440), 1 h1 "Logout leaves the legacy shim cookie alive" 20/600 at 104/115, first-row-top: 115px, composer at y 447–851 of 900
-keyboard: pass — Key 2 picks Change model: the card asks which model runs the job; Enter keeps the current model and returns to the job; Key 3 picks Change cap: the card asks for a dollar amount; Enter keeps no cap and returns to the job; Key 4 picks Edit instruction: the card shows the derived instruction; Enter keeps the instruction and returns to the job; Escape folds the card and the work item stays open; Key 3 picks Change cap again; Type a one-cent cap, far under the forecast; Enter sets the cap: the card shows it beside the forecast; Escape folds the card; Tab from the top of the page: the controls take focus in turn (Tab visited 39 distinct visible controls of 61 focusable, focus lost 1×)
+verdict: fail — 1 of 35 steps failed; step 33 (Key 1 dispatches nothing: the fleet's concurrency ceiling (3) was reached by the run just sent, so the card says so and the item stays Open): not visible: text "concurrency ceiling \(3\) reached" within [data-composer-prompt-deck="expanded"]
+console errors: 0 unexpected; 2 expected by the map (Failed to load resource: the server responded with a status of 409 (Conflict) [4)
+layout: pass — ui-dom-audit 0 failing findings at 34 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/projects/p-auth-migration?item=wi-auth-e2-b3: no horizontal scroll (1440/1440), 1 h1 "Logout leaves the legacy shim cookie alive" 20/600 at 104/115, first-row-top: 92px, composer at y 615–855 of 900
+keyboard: pass — Key 2 picks Change model: the card asks which model runs the job; Enter keeps the current model and returns to the job; Key 3 picks Change cap: the card offers No cap, the forecast high or a custom amount; Enter keeps no cap and returns to the job; Key 4 picks Edit instruction: the card shows the derived instruction; Enter keeps the instruction and returns to the job; Escape folds the card and the work item stays open; Key 3 picks Change cap again; Type a one-cent cap, far under the forecast, into the card's answer field; Enter sets the cap: the card shows it beside the forecast; Escape folds the card; Tab from the top of the page: the controls take focus in turn (Tab visited 40 distinct visible controls of 42 focusable)
 empty-state: pass — A work item that is not in the list says so and sends the reader to the rail
-role-gating: pass — Open the item's header menu: it offers Prepare job; Prepare job shows the job with its numbered options: Dispatch, Change model, Change cap, Edit instruction; The card is the dispatcher's: it names the options and the sprint envelope this person spends from; Open the item's header menu: it offers Prepare job; Open the card again from the menu; Open the item's header menu: it offers Prepare job; Open the card again: the work is under way; The job is running: the card says so and Dispatch is off until it is up next again; Open the item's header menu: it offers Prepare job; Prepare job opens the card on an initiative with no grant for this role; The card says Not braked by an envelope: no sprint grant is needed here, and none is named; Key 1 dispatches nothing: the fleet's concurrency ceiling (3) was reached by the run just sent, so the card says so and the item stays Open
+role-gating: fail — step 33 (Key 1 dispatches nothing: the fleet's concurrency ceiling (3) was reached by the run just sent, so the card says so and the item stays Open): not visible: text "concurrency ceiling \(3\) reached" within [data-composer-prompt-deck="expanded"]
 story-facts: pass — Open Logout leaves the legacy shim cookie alive: a sized item that is up next, where this sme holds a sprint grant; Open a work item on an initiative where no sprint grant is held: a release manager needs none
 tab-stability: pass — Click the Docs tab of the work item: it opens and the item header, tab strip and side pane stay where they were (4 box(es) held still); Click the Brief tab of the work item: it opens and the item header, tab strip and side pane stay where they were (4 box(es) held still)
-dom-audit: 0 failing finding(s) at 33 measured step(s); 324 more owed by docs/journeys/audit-burndown.tsv (control.font-size ×27, keyboard.typography ×112, a11y.contrast ×120, a11y.heading-order ×33, a11y.landmarks ×32) — ui-dom-audit measureDOM, contract Work shared UI compact layout d2d16ad077a348fe
+dom-audit: 0 failing finding(s) at 34 measured step(s); 66 more owed by docs/journeys/audit-burndown.tsv (control.font-size ×59, a11y.heading-order ×1, control.select-inset-field-sm ×6) — ui-dom-audit measureDOM, contract Work shared UI compact layout e34ed4bae531eb49
 notes: Vera Green, owner of Auth Migration: The prepare-job card: what a job would run with, the composer keys 1-5 and Enter, Escape; who may dispatch and the sentence that says who can when this role cannot. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/work/org-leader/prepare-job).
 
 ## Steps
@@ -30,7 +30,7 @@ notes: Vera Green, owner of Auth Migration: The prepare-job card: what a job wou
 | 6 | The card is the dispatcher's: it names the options and the sprint envelope this person spends from |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 7 | Key 2 picks Change model: the card asks which model runs the job |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 8 | Enter keeps the current model and returns to the job |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 9 | Key 3 picks Change cap: the card asks for a dollar amount |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 9 | Key 3 picks Change cap: the card offers No cap, the forecast high or a custom amount |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 10 | Enter keeps no cap and returns to the job |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 11 | Key 4 picks Edit instruction: the card shows the derived instruction |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 12 | Enter keeps the instruction and returns to the job |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
@@ -38,21 +38,22 @@ notes: Vera Green, owner of Auth Migration: The prepare-job card: what a job wou
 | 14 | Open the item's header menu: it offers Prepare job |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 15 | Open the card again from the menu | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 16 | Key 3 picks Change cap again |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 17 | Type a one-cent cap, far under the forecast |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 18 | Enter sets the cap: the card shows it beside the forecast |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 19 | Dispatch: the cap is under the forecast, so the card stops and asks (Over the run cap you set) | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 20 | Back to the job keeps nothing: the card is the job again and the item is still up next |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 21 | Dispatch asks again |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 22 | Dispatch anyway confirms the brake: the job is sent and the card says so |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 23 | Reload: the item is In progress, read back from the server |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 24 | Open the item's header menu: it offers Prepare job |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 25 | Open the card again: the work is under way | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 26 | The job is running: the card says so and Dispatch is off until it is up next again |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 27 | Escape folds the card |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 28 | Open a work item on an initiative where no sprint grant is held: a release manager needs none | default | pass | 0 finding(s) | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
-| 29 | Open the item's header menu: it offers Prepare job |  | pass | 0 finding(s) | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
-| 30 | Prepare job opens the card on an initiative with no grant for this role | dialog-open | pass | 0 finding(s) | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
-| 31 | The card says Not braked by an envelope: no sprint grant is needed here, and none is named |  | pass | 0 finding(s) | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
-| 32 | Key 1 dispatches nothing: the fleet's concurrency ceiling (3) was reached by the run just sent, so the card says so and the item stays Open | refused | pass | 0 finding(s) | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
-| 33 | Tab from the top of the page: the controls take focus in turn (Tab visited 39 distinct visible controls of 61 focusable, focus lost 1×) |  | pass | — | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
-| 34 | A work item that is not in the list says so and sends the reader to the rail | not-found | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-nope |
+| 17 | Custom amount: the card asks for a dollar figure |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 18 | Type a one-cent cap, far under the forecast, into the card's answer field |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 19 | Enter sets the cap: the card shows it beside the forecast |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 20 | Dispatch: the cap is under the forecast, so the card stops and asks (Over the run cap you set) | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 21 | Back to the job keeps nothing: the card is the job again and the item is still up next |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 22 | Dispatch asks again |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 23 | Dispatch anyway confirms the brake: the job is sent and the card follows the run (Agent working) |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 24 | Reload: the item is In progress, read back from the server |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 25 | Open the item's header menu: it offers Prepare job |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 26 | Open the card again: the work is under way | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 27 | The job is running: the card says so and Dispatch is off until it is up next again |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 28 | Escape folds the card |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 29 | Open a work item on an initiative where no sprint grant is held: a release manager needs none | default | pass | 0 finding(s) | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
+| 30 | Open the item's header menu: it offers Prepare job |  | pass | 0 finding(s) | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
+| 31 | Prepare job opens the card on an initiative with no grant for this role | dialog-open | pass | 0 finding(s) | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
+| 32 | The card says Not braked by an envelope: no sprint grant is needed here, and none is named |  | pass | 0 finding(s) | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
+| 33 | Key 1 dispatches nothing: the fleet's concurrency ceiling (3) was reached by the run just sent, so the card says so and the item stays Open | refused | fail: not visible: text "concurrency ceiling \(3\) reached" within [data-composer-prompt-deck="expanded"] | 0 finding(s) | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
+| 34 | Tab from the top of the page: the controls take focus in turn (Tab visited 40 distinct visible controls of 42 focusable) |  | pass | — | /iq/projects/p-zero-trust?item=wi-zt-e1-s2 |
+| 35 | A work item that is not in the list says so and sends the reader to the rail | not-found | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-nope |

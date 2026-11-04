@@ -109,8 +109,9 @@ export function AssetDrawer({ id, onOpenAsset, onBack }: { id: string; onOpenAss
         >
           <Card padding="none">
             {rows.map((r) => (
-              <Inline key={r.label} gap="xs" wrap={false} className="items-center gap-2.5 border-b border-border px-3 py-2 last:border-b-0">
-                <T className={r.met ? 'text-success' : 'text-danger'} aria-hidden>
+              <Inline key={r.label} gap="xs" wrap={false} className="items-center gap-2 border-b border-border px-3 py-2 last:border-b-0">
+                {/* A 12px glyph box: px-3 + 12 + gap-2 puts every label on the 32px inset. */}
+                <T className={`w-3 shrink-0 text-center ${r.met ? 'text-success' : 'text-danger'}`} aria-hidden>
                   {r.met ? '✓' : '✕'}
                 </T>
                 <T size="xs" className="text-text-primary">{r.label}</T>

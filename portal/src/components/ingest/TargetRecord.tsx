@@ -107,10 +107,22 @@ export function TargetRecord({
         } : {})}
       />
 
+      {/* Runs first (table-first density): the target's facts and a manager's settings form follow them. */}
+      <DetailSection title="Recent runs" hint={`${runs.length}`}>
+        <DataTable
+          frameless
+          data={runs}
+          columns={RUN_COLUMNS}
+          keyField={(s) => s.id}
+          onRowClick={(s) => void navigate(crawlRunHref(s.id))}
+          emptyMessage={canManage ? 'No run of this target yet — start one with Run now.' : 'No run of this target yet.'}
+          data-testid="ingest-target-runs"
+        />
+      </DetailSection>
+
       <KeyValue
         layout="row"
         items={[
-          { label: 'ID', value: target.id, mono: true },
           { label: 'Start URL', value: target.startUrl, mono: true },
           { label: 'Mode', value: target.mode },
           { label: 'Max pages', value: String(target.maxPages) },
@@ -135,18 +147,6 @@ export function TargetRecord({
           />
         </DetailSection>
       )}
-
-      <DetailSection title="Recent runs" hint={`${runs.length}`}>
-        <DataTable
-          frameless
-          data={runs}
-          columns={RUN_COLUMNS}
-          keyField={(s) => s.id}
-          onRowClick={(s) => void navigate(crawlRunHref(s.id))}
-          emptyMessage={canManage ? 'No run of this target yet — start one with Run now.' : 'No run of this target yet.'}
-          data-testid="ingest-target-runs"
-        />
-      </DetailSection>
 
       <ConfirmDialog
         open={confirmDelete}

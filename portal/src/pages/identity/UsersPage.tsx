@@ -463,7 +463,7 @@ function TenantGrantsCard({ tenant, roles, checked, onToggle }: {
   onToggle: (role: string) => void;
 }) {
   return (
-    <Card padding="sm" className="min-w-[180px]">
+    <Card padding="sm" className="min-w-[180px] px-3">
       <Stack gap="xs">
         <SectionLabel>{tenant.displayName}</SectionLabel>
         {roles.map(r => (

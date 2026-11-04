@@ -318,7 +318,7 @@ export default function BudgetsPage() {
                   groupId: r.groupId,
                   title: r.title,
                   subline: r.subline,
-                  ...(r.blindSpot ? { pill: <Chip tone="warning" size="xs">blind spot</Chip> } : {}),
+                  ...(r.blindSpot ? { pill: <Chip tone="warning" size="md">blind spot</Chip> } : {}),
                 }))}
                 currentId={initiativeId ?? OVERVIEW_ROW_ID}
                 onOpenRow={(row) => openInitiative(row.id)}
