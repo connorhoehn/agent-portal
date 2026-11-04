@@ -209,12 +209,16 @@ Decide whether the deploy should add the caller's current IP automatically
   added them (CloudTrail). `/32` rules survive. Public TURN needs an exemption
   for `orgiq-social-turn` or another account; the stack runs with the operator
   `/32` meanwhile.
-- **Not proven: a browser call through the relay.** `CLOUD_FORCE_RELAY=1` on
-  `cloud-call-smoke` (relay-only peer connections, asserts every selected
-  candidate is `relay`) fails from the Netskope-managed laptop: no packet from
+- **Proven 2026-11-04: a browser call through the relay.** `CLOUD_FORCE_RELAY=1`
+  on `cloud-call-smoke` (relay-only peer connections, every selected candidate
+  `relay`) passed from a throwaway EC2 runner (`mcr.microsoft.com/playwright:v1.60.0-noble`,
+  no ingress, its /32 added to the TURN group for the run; all removed after).
+  The control run without the flag passed too although the runner was not on
+  `sfuAllowCidr`: the browsers fell back to the relay on their own.
+- From the Netskope-managed laptop the forced-relay run fails: no packet from
   it reaches the relay on UDP/TCP 3478 (tcpdump on the host, a temporary /16
   rule too), and TCP 443 is taken by Netskope's web proxy, while UDP to the
-  SFU's media ports works. Run it from an unmanaged network. `turns:` on 443
+  SFU's media ports works. Run it from an unmanaged network (or a runner as above). `turns:` on 443
   (`turnTlsDomain` + `turnTlsCertSecretName`) needs a DNS name and certificate;
   whether a TLS-inspecting proxy passes it is unmeasured.
 
