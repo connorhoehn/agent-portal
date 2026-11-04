@@ -10,6 +10,17 @@
 // + runtimes → middleware image → middleware + portal stacks → portal publish →
 // auth URLs → the runtimes again for the callback guards → the opt-in Social,
 // documents and devbox phases → verify.
+//
+// Social on a FRESH account (nothing live) runs with no hand-ordered step:
+// every middleware and portal pass carries the social flags from the start
+// (so the exports OrgIQ-SocialMedia / OrgIQ-Social import exist, and the
+// portal makes the platform-api and SFU distributions and their parameters),
+// while the middleware reads another stack's parameter only once deploy.sh
+// sees its producer live (socialLive, portalPlatformApiUrlLive,
+// portalVideoUrlLive — lib/middleware-service-stack.ts). Then the images →
+// SocialMedia + Social (SFU allowlist, platform-api scaled to 1, the portal as
+// CORS origin) → a portal pass for the social distributions → the middleware
+// as the realtime gateway, reading the now-live Redis and URLs.
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -39,6 +50,14 @@ export function deploySh(env, stacks = [], context = {}) {
 }
 const node = (script, args = []) => ({ program: 'node', args: [resolve(REPO_ROOT, script), ...args], cwd: REPO_ROOT, env: {} });
 const sh = (script, args = [], env = {}) => ({ program: 'bash', args: [resolve(REPO_ROOT, script), ...args], cwd: REPO_ROOT, env });
+
+/**
+ * The social flags every middleware/portal pass carries when the environment
+ * runs Social. Before OrgIQ-Social exists deploy.sh cannot infer them, and a
+ * middleware synthesized without them has none of the exports the Social
+ * stacks import (cycle A of the 2026-11 rebuild).
+ */
+export const socialContext = (env) => (env.features.social ? { deploySocialMedia: 'true', deploySocial: 'true' } : {});
 
 /** A command line for printing (quoted the way a shell wants it). */
 export function commandLine(cmd) {
@@ -88,12 +107,12 @@ export const PHASES = [
   },
   {
     id: 'middleware-portal', needs: ['middleware-image'], inputPaths: ['infra'],
-    describe: 'OrgIQ-MiddlewareService + OrgIQ-Portal with deployMiddlewareService/deployPortal (albAllowCidr from --alb-allow-cidr), then a forced ECS rollout only when the image digest changed',
+    describe: 'OrgIQ-MiddlewareService + OrgIQ-Portal with deployMiddlewareService/deployPortal (albAllowCidr from --alb-allow-cidr; the social flags when features.social), then a forced ECS rollout only when the image digest changed',
     live: (probes, env) => stackHealthy(probes, env, 'MiddlewareService') && stackHealthy(probes, env, 'Portal')
       && Number(probes.ecs?.desired) >= 1 && probes.ecs?.running === probes.ecs?.desired,
     commands: (env, ctx) => {
       const cmds = [deploySh(env, [stackId(env, 'MiddlewareService'), stackId(env, 'Portal')], {
-        deployMiddlewareService: 'true', deployPortal: 'true', albAllowCidr: ctx.options.albAllowCidr,
+        deployMiddlewareService: 'true', deployPortal: 'true', albAllowCidr: ctx.options.albAllowCidr, ...socialContext(env),
       })];
       const digest = ctx.outputs['middleware-image']?.digest;
       const previousDigest = ctx.previousOutputs['middleware-image']?.digest;
@@ -113,9 +132,9 @@ export const PHASES = [
   },
   {
     id: 'auth-urls', needs: ['portal-publish'], inputPaths: ['infra'],
-    describe: 'OrgIQ-Authentication + OrgIQ-MiddlewareService again: deploy.sh infers portalPublicUrl and portalPublicUrls once the portal is live',
+    describe: 'OrgIQ-Authentication + OrgIQ-MiddlewareService again: deploy.sh infers portalPublicUrl and portalPublicUrls once the portal is live (the social flags when features.social)',
     live: (probes, env) => ssmPresent(probes, `/${env.prefix}/portal/url`) && stackHealthy(probes, env, 'Authentication'),
-    commands: (env) => [deploySh(env, [stackId(env, 'Authentication'), stackId(env, 'MiddlewareService')])],
+    commands: (env) => [deploySh(env, [stackId(env, 'Authentication'), stackId(env, 'MiddlewareService')], socialContext(env))],
   },
   {
     id: 'runtime-callbacks', needs: ['auth-urls', 'runtimes'], inputPaths: ['infra/lib/agentcore-runtime-stack.ts'],
@@ -145,16 +164,34 @@ export const PHASES = [
   },
   {
     id: 'social-stacks', needs: ['social-images', 'middleware-portal'], enabled: (env) => env.features.social, inputPaths: ['infra'],
-    describe: 'OrgIQ-SocialMedia + OrgIQ-Social with the image digests as explicit --context (an explicit value beats the inferred one)',
+    describe: 'OrgIQ-SocialMedia + OrgIQ-Social with the image digests and the SFU allowlist (--sfu-allow-cidr, else --alb-allow-cidr) and, with --turn-allow-cidr, the TURN relay (deployTurn) as explicit --context (an explicit value beats the inferred one); deploy.sh infers socialPortalOrigin from the live portal',
     live: (probes, env) => stackHealthy(probes, env, 'SocialMedia') && stackHealthy(probes, env, 'Social'),
+    // Not -e: the closure redeploys OrgIQ-MiddlewareService with the social
+    // flags, which guarantees the exports these two import even when an
+    // earlier pass ran without them. It reads no Social parameter yet.
     commands: (env, ctx) => {
       const digests = ctx.outputs['social-images'] ?? {};
       return [deploySh(env, [stackId(env, 'SocialMedia'), stackId(env, 'Social')], {
-        deploySocialMedia: 'true', deploySocial: 'true',
+        ...socialContext(env),
+        sfuAllowCidr: ctx.options.sfuAllowCidr ?? ctx.options.albAllowCidr,
+        ...(ctx.options.turnAllowCidr && { deployTurn: 'true', turnAllowCidr: ctx.options.turnAllowCidr }),
         sfuImageDigest: digests.sfuImageDigest, platformApiImageDigest: digests.platformApiImageDigest,
         ...(digests.platformApiImageDigest && { deploySocialService: 'true' }),
       })];
     },
+  },
+  {
+    id: 'social-portal', needs: ['social-stacks'], enabled: (env) => env.features.social, inputPaths: ['infra'],
+    describe: 'OrgIQ-Portal with deployPortal and the social flags: the platform-api and SFU distributions and their /<prefix>/portal/{platform-api,video}-url parameters',
+    live: (probes, env) => stackHealthy(probes, env, 'Portal')
+      && ssmPresent(probes, `/${env.prefix}/portal/platform-api-url`) && ssmPresent(probes, `/${env.prefix}/portal/video-url`),
+    commands: (env) => [deploySh(env, [stackId(env, 'Portal')], { deployPortal: 'true', ...socialContext(env) })],
+  },
+  {
+    id: 'realtime-gateway', needs: ['social-portal'], enabled: (env) => env.features.social, inputPaths: ['infra'],
+    describe: 'OrgIQ-MiddlewareService with realtimeGateway=true: deploy.sh now infers socialLive and the portal URL flags, so REDIS_URL and the browser URLs come from the live parameters',
+    live: (probes, env) => stackHealthy(probes, env, 'MiddlewareService') && probes.realtimeGateway === true,
+    commands: (env) => [deploySh(env, [stackId(env, 'MiddlewareService')], { realtimeGateway: 'true', ...socialContext(env) })],
   },
   {
     id: 'documents-build', needs: ['fleet'], enabled: (env) => env.features.documents,

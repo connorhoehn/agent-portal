@@ -305,7 +305,9 @@ describe('OrgIQ-Social with deployPortal=true', () => {
 
 describe('the public URLs flow back without a hand-copied CloudFront domain', () => {
   test('portalPublicUrls=true: the middleware reads them from SSM as container secrets, never also as env', () => {
-    const mw = synthApp({ ...FULL, portalPublicUrls: 'true' }).template('OrgIQ-MiddlewareService');
+    // The flags deploy.sh infers once OrgIQ-Portal has written the social URLs.
+    const mw = synthApp({ ...FULL, portalPublicUrls: 'true', portalPlatformApiUrlLive: 'true', portalVideoUrlLive: 'true' })
+      .template('OrgIQ-MiddlewareService');
     const c = container(mw);
     const names = portalParameterNames('orgiq');
     for (const k of ['PUBLIC_BASE_URL', 'PORTAL_ORIGIN', 'COGNITO_CALLBACK_URL', 'COGNITO_LOGOUT_URL',
@@ -318,7 +320,7 @@ describe('the public URLs flow back without a hand-copied CloudFront domain', ()
 
   test('explicit context still wins over the parameter', () => {
     const c = container(synthApp({
-      ...FULL, portalPublicUrls: 'true', realtimePlatformPublicUrl: 'https://platform.example.com',
+      ...FULL, portalPublicUrls: 'true', portalPlatformApiUrlLive: 'true', realtimePlatformPublicUrl: 'https://platform.example.com',
     }).template('OrgIQ-MiddlewareService'));
     assert.equal(envOf(c, 'REALTIME_PLATFORM_PUBLIC_URL'), 'https://platform.example.com');
     assert.equal(secretOf(c, 'REALTIME_PLATFORM_PUBLIC_URL'), undefined);

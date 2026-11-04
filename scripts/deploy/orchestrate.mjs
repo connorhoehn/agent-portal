@@ -2,7 +2,7 @@
 // DE-14: one resumable deploy command.
 //
 //   node scripts/deploy/orchestrate.mjs plan   [--env lab] [--only a,b] [--from <phase>] [--dry-run]
-//   node scripts/deploy/orchestrate.mjs apply  [--env lab] [--only a,b] [--from <phase>] [--working-tree] [--alb-allow-cidr <cidr>] [--break-lock]
+//   node scripts/deploy/orchestrate.mjs apply  [--env lab] [--only a,b] [--from <phase>] [--working-tree] [--alb-allow-cidr <cidr>] [--sfu-allow-cidr <cidr>] [--turn-allow-cidr <cidr>] [--break-lock]
 //   node scripts/deploy/orchestrate.mjs resume [--env lab]        # = apply; the live account decides what is left
 //   node scripts/deploy/orchestrate.mjs status [--env lab]
 //
@@ -48,7 +48,7 @@ export function loadEnvironment(name = 'lab', dir = resolve(REPO_ROOT, 'infra/en
 // ── options ─────────────────────────────────────────────────────────────────
 export function parseArgs(argv) {
   const opts = { command: argv[0] ?? 'plan', env: process.env.ENV || 'lab', only: null, from: null, dryRun: false, workingTree: false,
-    albAllowCidr: null, breakLock: false, help: false };
+    albAllowCidr: null, sfuAllowCidr: null, turnAllowCidr: null, breakLock: false, help: false };
   for (let i = 1; i < argv.length; i += 1) {
     const arg = argv[i];
     const value = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${arg} needs a value`); return v; };
@@ -58,6 +58,11 @@ export function parseArgs(argv) {
     else if (arg === '--dry-run') opts.dryRun = true;
     else if (arg === '--working-tree') opts.workingTree = true;
     else if (arg === '--alb-allow-cidr') opts.albAllowCidr = value();
+    // The SFU's media allowlist (OrgIQ-SocialMedia); defaults to --alb-allow-cidr's value.
+    else if (arg === '--sfu-allow-cidr') opts.sfuAllowCidr = value();
+    // Turns the TURN relay on (deployTurn) with this allowlist; without it,
+    // deploy.sh's inference keeps whatever TURN state is live.
+    else if (arg === '--turn-allow-cidr') opts.turnAllowCidr = value();
     else if (arg === '--break-lock') opts.breakLock = true;
     else if (arg === '--help' || arg === '-h') opts.help = true;
     else throw new Error(`Unknown argument ${arg}`);
@@ -75,7 +80,7 @@ export function parseArgs(argv) {
  * @param env        the environment (loadEnvironment)
  * @param probes     what the live account says (collectProbes, or a fixture)
  * @param previous   the last recorded state, or null
- * @param options    { only, from, commit, inputKeyFor(phase), exists(path), albAllowCidr, dirty(paths) }
+ * @param options    { only, from, commit, inputKeyFor(phase), exists(path), albAllowCidr, sfuAllowCidr, turnAllowCidr, dirty(paths) }
  * @returns { phases: [{ id, action, reason, inputKey, commands }] } in Runbook A order
  */
 export function planDeploy(env, probes, previous, options = {}) {
@@ -127,7 +132,7 @@ export function planDeploy(env, probes, previous, options = {}) {
 }
 
 function featureOf(id) {
-  if (id.startsWith('social')) return 'social';
+  if (id.startsWith('social') || id === 'realtime-gateway') return 'social';
   if (id.startsWith('documents')) return 'documents';
   return id;
 }
@@ -144,7 +149,7 @@ export function contextOf(commands) {
 }
 
 // ── read-only probes ────────────────────────────────────────────────────────
-const READ_ONLY = /^(sts get-caller-identity|cloudformation describe-stacks|ecr describe-images|ecs describe-services|ssm get-parameter|secretsmanager describe-secret|s3api head-object|bedrock-agentcore-control list-agent-runtimes|configure export-credentials)\b/;
+const READ_ONLY = /^(sts get-caller-identity|cloudformation describe-stacks|ecr describe-images|ecs describe-services|ecs describe-task-definition|ssm get-parameter|secretsmanager describe-secret|s3api head-object|bedrock-agentcore-control list-agent-runtimes|configure export-credentials)\b/;
 
 export function makeAws(log = () => {}) {
   return (args, { readOnly = true, allowFail = true } = {}) => {
@@ -183,7 +188,15 @@ export function collectProbes(env, aws) {
   const ecs = q(['ecs', 'describe-services', '--cluster', `${env.prefix}-middleware`, '--services', `${env.prefix}-middleware`, '--region', env.region,
     '--query', 'services[0].[desiredCount,runningCount]', '--output', 'text']);
   if (ecs) { const [d, r] = ecs.split(/\s+/); probes.ecs = { desired: Number(d), running: Number(r) }; }
-  for (const name of [`/${env.prefix}/portal/url`, `/${env.prefix}/documents/workspace-config`, lastRunParameter(env.prefix), lockParameter(env.prefix)]) {
+  // The middleware as its own realtime gateway: REALTIME_GATEWAY on the running task definition (what deploy.sh reads).
+  const taskDef = q(['ecs', 'describe-services', '--cluster', `${env.prefix}-middleware`, '--services', `${env.prefix}-middleware`, '--region', env.region,
+    '--query', 'services[0].taskDefinition', '--output', 'text']);
+  probes.realtimeGateway = taskDef?.startsWith('arn:')
+    ? q(['ecs', 'describe-task-definition', '--task-definition', taskDef, '--region', env.region,
+      '--query', "taskDefinition.containerDefinitions[0].environment[?name=='REALTIME_GATEWAY'].value | [0]", '--output', 'text']) === 'on'
+    : false;
+  for (const name of [`/${env.prefix}/portal/url`, `/${env.prefix}/portal/platform-api-url`, `/${env.prefix}/portal/video-url`, `/${env.prefix}/social/redis-url`,
+    `/${env.prefix}/documents/workspace-config`, lastRunParameter(env.prefix), lockParameter(env.prefix)]) {
     probes.ssm[name] = q(['ssm', 'get-parameter', '--name', name, '--region', env.region, '--query', 'Parameter.Value', '--output', 'text']);
   }
   for (const s of ['approvals-request', 'harness-trace', 'assessment-run-complete']) {

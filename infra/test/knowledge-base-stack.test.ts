@@ -29,13 +29,14 @@ function byLogicalIdPrefix(type: string, prefix: string): [string, any] {
 
 describe('the Data-API readiness gate', () => {
   test('a DataApiReady custom resource exists', () => {
-    // Endpoint enablement is asynchronous and monotonic, so one probe that
-    // proves `SELECT 1` answers makes every later DbInit* call safe.
+    // Endpoint enablement is asynchronous and NOT monotonic (2026-11-03: it
+    // answered, then refused the next call), so the probe needs consecutive
+    // answers and every DbInit* statement retries the same transients.
     byLogicalIdPrefix('AWS::CloudFormation::CustomResource', 'DataApiReady');
   });
 
   test('the FIRST schema statement waits for it', () => {
-    const [, extension] = byLogicalIdPrefix('Custom::AWS', 'DbInitExtension');
+    const [, extension] = byLogicalIdPrefix('AWS::CloudFormation::CustomResource', 'DbInitExtension');
     assert.ok(
       dependsOn(extension).some((d) => d.startsWith('DataApiReady')),
       'DbInitExtension must depend on DataApiReady, or the cold-cluster race returns',
@@ -48,7 +49,7 @@ describe('the Data-API readiness gate', () => {
     // creation runs against a table that does not exist yet.
     const chain = ['DbInitExtension', 'DbInitTable', 'DbInitIndex', 'DbInitTextIndex'];
     for (let i = 1; i < chain.length; i++) {
-      const [, resource] = byLogicalIdPrefix('Custom::AWS', chain[i]!);
+      const [, resource] = byLogicalIdPrefix('AWS::CloudFormation::CustomResource', chain[i]!);
       assert.ok(
         dependsOn(resource).some((d) => d.startsWith(chain[i - 1]!)),
         `${chain[i]} must depend on ${chain[i - 1]}`,
@@ -71,6 +72,26 @@ describe('the Data-API readiness gate', () => {
       .flatMap((s) => (Array.isArray(s.Action) ? s.Action : [s.Action]));
     assert.ok(granted.includes('rds-data:ExecuteStatement'));
     assert.ok(granted.includes('secretsmanager:GetSecretValue'));
+  });
+
+  test('ready means several consecutive answers, not the first one (enablement flaps)', () => {
+    // 2026-11-03: one SELECT 1 succeeded, then DbInitExtension still got
+    // "HttpEndpoint is not enabled" on the first deploy and on the retry.
+    const code = Object.values<any>(template.findResources('AWS::Lambda::Function'))
+      .map((f) => String(f.Properties?.Code?.ZipFile ?? '')).find((z) => z.includes('SELECT 1'))!;
+    assert.ok(code, 'the readiness probe is inline');
+    const stable = Number(/STABLE = (\d+)/.exec(code)?.[1]);
+    assert.ok(stable >= 3, `needs at least 3 consecutive successes, has ${stable}`);
+    assert.match(code, /stable >= STABLE/);
+    assert.match(code, /stable = 0/, 'a transient resets the count');
+  });
+
+  test('every schema statement runs through the retrying Lambda, none through a single-shot AwsCustomResource', () => {
+    assert.equal(Object.keys(template.findResources('Custom::AWS')).filter((id) => id.startsWith('DbInit')).length, 0);
+    for (const id of ['DbInitExtension', 'DbInitTable', 'DbInitIndex', 'DbInitTextIndex']) {
+      const [, r] = byLogicalIdPrefix('AWS::CloudFormation::CustomResource', id);
+      assert.match(String(r.Properties.Sql), /IF NOT EXISTS/, `${id} must be idempotent to be retried`);
+    }
   });
 });
 

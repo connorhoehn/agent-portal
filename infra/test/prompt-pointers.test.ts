@@ -181,3 +181,16 @@ describe('the CLI against a fake aws', () => {
     assert.ok(!r.calls.some((c) => /get-parameters/.test(c)));
   });
 });
+
+// The CLI applies --query per page of an auto-paginated list-prompts, so the
+// text output is one line per page; the 2026-11-03 rebuild's dry run printed
+// "publish DRAFT of <id>\nNone".
+import { firstPromptId } from '../scripts/prompt-pointers';
+describe('firstPromptId reads per-page CLI output', () => {
+  test('the first real id wins; None lines are empty pages', () => {
+    assert.equal(firstPromptId('JNDBMKTFEU\nNone'), 'JNDBMKTFEU');
+    assert.equal(firstPromptId('None\nHVJECMVUUS'), 'HVJECMVUUS');
+    assert.equal(firstPromptId('None\nNone'), null);
+    assert.equal(firstPromptId(''), null);
+  });
+});

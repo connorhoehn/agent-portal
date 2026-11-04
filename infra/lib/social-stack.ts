@@ -494,7 +494,10 @@ export class SocialStack extends cdk.Stack {
     const portalParams = portalParameterNames(prefix);
     const portalUrl = (key: 'url' | 'videoUrl') => (flag('portalPublicUrls')
       ? ssm.StringParameter.valueForStringParameter(this, portalParams[key]) : undefined);
-    const portalVideoUrl = props.sfu ? portalUrl('videoUrl') : undefined;
+    // The video URL only once OrgIQ-Portal has written it (its SFU distribution
+    // exists only when it deployed with deploySocialMedia): deploy.sh infers
+    // portalVideoUrlLive from the parameter, as the middleware does.
+    const portalVideoUrl = props.sfu && flag('portalVideoUrlLive') ? portalUrl('videoUrl') : undefined;
     const videoPublicUrl = ctx('videoPublicUrl') ?? (sfuHost ? `https://${sfuHost}` : portalVideoUrl);
     const gatewayWsUrl = ctx('socialGatewayWsUrl');
     const platformInternal = socialPlatformInternalUrl(prefix);

@@ -471,6 +471,19 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
     live_read PORTAL_URL_PARAM ssm get-parameter --name "/${PREFIX}/portal/url" --region "$REGION" \
       --query 'Parameter.Value' --output text
     [[ -n "$PORTAL_URL_PARAM" ]] && infer portalPublicUrls true
+    # The social distributions' URLs, each only once OrgIQ-Portal wrote it: the
+    # middleware and OrgIQ-Social resolve them by name at deploy time, and a
+    # read before the parameter exists fails the whole stack ("Unable to fetch
+    # parameters ... from parameter store", the fresh-account cycle).
+    live_read PORTAL_PLATFORM_PARAM ssm get-parameter --name "/${PREFIX}/portal/platform-api-url" --region "$REGION" \
+      --query 'Parameter.Value' --output text
+    [[ -n "$PORTAL_PLATFORM_PARAM" ]] && infer portalPlatformApiUrlLive true
+    live_read PORTAL_VIDEO_PARAM ssm get-parameter --name "/${PREFIX}/portal/video-url" --region "$REGION" \
+      --query 'Parameter.Value' --output text
+    [[ -n "$PORTAL_VIDEO_PARAM" ]] && infer portalVideoUrlLive true
+    # The SFU's CORS origin is the portal, known as soon as the portal is: a
+    # first OrgIQ-SocialMedia create (nothing social live yet) needs it too.
+    infer socialPortalOrigin "$PORTAL_URL"
   fi
 
   # The middleware as its own realtime gateway, read off the running task.
@@ -500,7 +513,6 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
     [[ "$SFU_AMI" == ami-* ]] && infer sfuAmiId "$SFU_AMI"
     stack_output SFU_CIDRS ${STACK_PREFIX}SocialMedia SfuAllowedCidrs
     [[ "$SFU_CIDRS" =~ ^[0-9] ]] && infer sfuAllowCidr "$SFU_CIDRS"
-    [[ -n "$PORTAL_URL" ]] && infer socialPortalOrigin "$PORTAL_URL"
   fi
   # TURN (opt-in on OrgIQ-SocialMedia): its relay and allowlist must be
   # re-supplied or the next deploy deletes the relay (DE-23).
@@ -538,6 +550,11 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
 
   if stack_live ${STACK_PREFIX}Social; then
     infer deploySocial true
+    # OrgIQ-Social's Redis parameter: the middleware reads it (REDIS_URL, and
+    # the autoscale default) only with socialLive, so never before it exists.
+    live_read SOCIAL_REDIS_PARAM ssm get-parameter --name "/${PREFIX}/social/redis-url" --region "$REGION" \
+      --query 'Parameter.Value' --output text
+    [[ -n "$SOCIAL_REDIS_PARAM" ]] && infer socialLive true
     stack_output PLATFORM_DIGEST ${STACK_PREFIX}Social PlatformApiImageDigest
     stack_output PLATFORM_SVC ${STACK_PREFIX}Social PlatformApiServiceName
     PLATFORM_DESIRED=0

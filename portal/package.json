@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
-    "@connorhoehn/realtime-modules": "file:vendor/connorhoehn-realtime-modules-0.141.0.tgz",
+    "@connorhoehn/realtime-modules": "file:vendor/connorhoehn-realtime-modules-0.142.0.tgz",
     "@connorhoehnslalom/ui-components": "file:vendor/connorhoehnslalom-ui-components-2.500.3-work.2.tgz",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",

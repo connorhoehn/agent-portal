@@ -24,9 +24,9 @@ from `middleware/` with `npx tsx`. No script prints a secret value.
 F=~/.orgiq-aws-test/logins.txt     # "<email> <password>" lines, mode 600, never in the repo
 A=$(grep farah $F | tr ' ' ':'); B=$(grep mira $F | tr ' ' ':')
 cd portal
-CLOUD_PORTAL_URL=https://d1hrudaahzp0ro.cloudfront.net CLOUD_LOGIN_A="$B" CLOUD_LOGIN_B="$A" \
+CLOUD_PORTAL_URL=https://d25ntr6vvgp7ia.cloudfront.net CLOUD_LOGIN_A="$B" CLOUD_LOGIN_B="$A" \
   npx playwright test e2e/cloud-call-smoke.spec.ts --project=chromium
-CLOUD_PORTAL_URL=https://d1hrudaahzp0ro.cloudfront.net CLOUD_LOGIN_DOC="$A" \
+CLOUD_PORTAL_URL=https://d25ntr6vvgp7ia.cloudfront.net CLOUD_LOGIN_DOC="$A" \
   npx playwright test e2e/cloud-documents-smoke.spec.ts --project=chromium
 ```
 
@@ -43,7 +43,7 @@ CLOUD_PORTAL_URL=https://d1hrudaahzp0ro.cloudfront.net CLOUD_LOGIN_DOC="$A" \
 
 ```bash
 npx tsx .claude/skills/deployed-stack-debug/scripts/gateway-probe.mts \
-  --portal https://d1hrudaahzp0ro.cloudfront.net --user u-farah --tenant social \
+  --portal https://d25ntr6vvgp7ia.cloudfront.net --user u-farah --tenant social \
   --send '{"service":"call","action":"watch","lobbyName":"social:room:cloud-call-smoke"}' --seconds 8
 ```
 

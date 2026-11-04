@@ -41,6 +41,12 @@ function allLive(env = lab) {
   for (const r of ['lvs-sfu', 'platform-api', 'social-gateway']) p.ecr[`${env.prefix}-${r}`] = env.features.social ? ['sha-1'] : [];
   p.ecs = { desired: 1, running: 1 };
   p.ssm['/orgiq/portal/url'] = 'https://d1.cloudfront.net';
+  if (env.features.social) {
+    p.ssm['/orgiq/portal/platform-api-url'] = 'https://d2.cloudfront.net';
+    p.ssm['/orgiq/portal/video-url'] = 'https://d3.cloudfront.net';
+    p.ssm['/orgiq/social/redis-url'] = 'redis://cache:6379';
+    p.realtimeGateway = true;
+  }
   p.portalUrl = 'https://d1.cloudfront.net';
   p.portalIndexPresent = true;
   for (const s of ['approvals-request', 'harness-trace', 'assessment-run-complete']) p.secrets[`orgiq-${s}-secret`] = true;
@@ -64,7 +70,7 @@ describe('planDeploy', () => {
   test('a fresh account plans every enabled phase in Runbook A order, including auth-urls and runtime-callbacks', () => {
     const plan = planDeploy(lab, fresh(), null, base);
     assert.deepEqual(runIds(plan), ['preflight', 'fleet', 'runtimes', 'middleware-image', 'middleware-portal', 'portal-publish', 'auth-urls', 'runtime-callbacks', 'verify']);
-    for (const id of ['social-images', 'social-stacks', 'documents-build', 'documents-push', 'documents-deploy', 'devbox']) {
+    for (const id of ['social-images', 'social-stacks', 'social-portal', 'realtime-gateway', 'documents-build', 'documents-push', 'documents-deploy', 'devbox']) {
       assert.equal(plan.phases.find((p) => p.id === id).action, 'disabled', `${id} is opt-in per environment`);
     }
     // The order is the dependency order too.
@@ -89,6 +95,46 @@ describe('planDeploy', () => {
     assert.ok(ids.indexOf('social-stacks') < ids.indexOf('verify'));
   });
 
+  test('(d) a fresh Social account: no hand-ordered step — social exports first, Social, the portal distributions, then the gateway', () => {
+    const plan = planDeploy(social, fresh(social), null, { ...base, albAllowCidr: '9.9.9.9/32' });
+    assert.deepEqual(runIds(plan), ['preflight', 'fleet', 'runtimes', 'middleware-image', 'middleware-portal', 'portal-publish', 'auth-urls',
+      'runtime-callbacks', 'social-images', 'social-stacks', 'social-portal', 'realtime-gateway', 'verify']);
+    const ctxOf = (id) => contextOf(plan.phases.find((p) => p.id === id).commands);
+    // The middleware carries the social flags from its first deploy, so the exports the Social stacks import exist,
+    // and the portal makes the platform-api / SFU distributions (and their parameters) before Social reads them.
+    for (const id of ['middleware-portal', 'auth-urls', 'social-stacks', 'social-portal', 'realtime-gateway']) {
+      assert.equal(ctxOf(id).deploySocial, 'true', `${id} deploySocial`);
+      assert.equal(ctxOf(id).deploySocialMedia, 'true', `${id} deploySocialMedia`);
+    }
+    assert.match(linesOf(plan, 'middleware-portal')[0], /OrgIQ-MiddlewareService OrgIQ-Portal .*deployPortal=true .*albAllowCidr=9\.9\.9\.9\/32/);
+    // The gateway is never turned on before Social exists; the producer-live flags are deploy.sh's to infer, never passed.
+    for (const p of plan.phases) {
+      const c = contextOf(p.commands);
+      if (p.id !== 'realtime-gateway') assert.equal(c.realtimeGateway, undefined, `${p.id} turns the gateway on early`);
+      for (const k of ['socialLive', 'portalPlatformApiUrlLive', 'portalVideoUrlLive', 'middlewareAutoscale']) assert.equal(c[k], undefined, `${p.id} passes ${k}`);
+    }
+    // Social: the SFU allowlist defaults to --alb-allow-cidr; the digests reach it once social-images has run (runner test below).
+    assert.match(linesOf(plan, 'social-stacks')[0], /deploy\.sh OrgIQ-SocialMedia OrgIQ-Social --context deploySocialMedia=true --context deploySocial=true --context sfuAllowCidr=9\.9\.9\.9\/32/);
+    assert.equal(contextOf(planDeploy(social, fresh(social), null, { ...base, albAllowCidr: '9.9.9.9/32', sfuAllowCidr: '8.8.8.8/32,7.7.7.7/32' })
+      .phases.find((p) => p.id === 'social-stacks').commands).sfuAllowCidr, '8.8.8.8/32,7.7.7.7/32');
+    // --turn-allow-cidr turns the relay on; without it neither key is passed (deploy.sh's inference decides).
+    const turnOn = contextOf(planDeploy(social, fresh(social), null, { ...base, turnAllowCidr: '0.0.0.0/0' })
+      .phases.find((p) => p.id === 'social-stacks').commands);
+    assert.equal(turnOn.deployTurn, 'true');
+    assert.equal(turnOn.turnAllowCidr, '0.0.0.0/0');
+    const turnOff = contextOf(planDeploy(social, fresh(social), null, base).phases.find((p) => p.id === 'social-stacks').commands);
+    assert.equal(turnOff.deployTurn, undefined);
+    assert.equal(turnOff.turnAllowCidr, undefined);
+    assert.match(linesOf(plan, 'social-portal')[0], /deploy\.sh OrgIQ-Portal --context deployPortal=true --context deploySocialMedia=true --context deploySocial=true$/);
+    assert.match(linesOf(plan, 'realtime-gateway')[0], /deploy\.sh OrgIQ-MiddlewareService --context realtimeGateway=true --context deploySocialMedia=true --context deploySocial=true$/);
+    // Without Social the middleware and portal passes carry no social flag at all (today's core fleet).
+    const core = planDeploy(lab, fresh(), null, base);
+    for (const id of ['middleware-portal', 'auth-urls']) assert.equal(contextOf(core.phases.find((p) => p.id === id).commands).deploySocial, undefined);
+    for (const id of ['social-portal', 'realtime-gateway']) assert.equal(core.phases.find((p) => p.id === id).action, 'disabled');
+    assert.match(core.phases.find((p) => p.id === 'realtime-gateway').reason, /features\.social is off/);
+  });
+
+
   test('all live with unchanged input keys plans only preflight and verify', () => {
     const probes = allLive();
     const plan = planDeploy(lab, probes, recorded(lab, probes), base);
@@ -102,7 +148,7 @@ describe('planDeploy', () => {
     treeVersions['scripts/docker/document-workspace-sources.json'] = 'v2';
     try {
       const plan = planDeploy(social, probes, previous, base);
-      assert.deepEqual(runIds(plan), ['preflight', 'social-images', 'social-stacks', 'verify']);
+      assert.deepEqual(runIds(plan), ['preflight', 'social-images', 'social-stacks', 'social-portal', 'realtime-gateway', 'verify']);
       assert.match(plan.phases.find((p) => p.id === 'social-stacks').reason, /social-images runs before it/);
       // At plan time the recorded digests are the explicit context; the runner swaps in the fresh ones (see below).
       assert.match(linesOf(plan, 'social-stacks')[0], /--context sfuImageDigest=sha256:a{64} --context platformApiImageDigest=sha256:b{64} --context deploySocialService=true/);
@@ -325,6 +371,23 @@ describe('the runner', () => {
     assert.deepEqual(readState(h.runner.file, 'lab').state.phases['social-images'].outputs, { sfuImageDigest: 'sha256:' + 'f'.repeat(64), platformApiImageDigest: 'sha256:' + 'e'.repeat(64) });
   });
 
+  test('(d) a fresh Social account applies in order and the social stacks get the fresh digests, platform-api at 1 and the SFU allowlist', () => {
+    const probes = fresh(social);
+    const h = harness({ env: social, probes, reports: { '.scratch/social-images/report.json': { images: [
+      { key: 'sfu', context: 'sfuImageDigest=sha256:' + 'f'.repeat(64) }, { key: 'platformApi', context: 'platformApiImageDigest=sha256:' + 'e'.repeat(64) }] } } });
+    h.runner.apply({ ...base, albAllowCidr: '9.9.9.9/32', sfuAllowCidr: '8.8.8.8/32' }); // verify fails on the still-empty fixture; the order is what counts
+    const deploys = h.executed.filter((l) => /deploy\.sh/.test(l));
+    const at = (re) => deploys.findIndex((l) => re.test(l));
+    const order = [/deploy\.sh$/, /OrgIQ-MiddlewareService OrgIQ-Portal /, /OrgIQ-Authentication OrgIQ-MiddlewareService/, /OrgIQ-SocialImages/,
+      /OrgIQ-SocialMedia OrgIQ-Social /, /deploy\.sh OrgIQ-Portal /, /OrgIQ-MiddlewareService --context realtimeGateway=true/].map(at);
+    assert.ok(order.every((i) => i >= 0), `${order}\n${deploys.join('\n')}`);
+    assert.deepEqual([...order].sort((a, b) => a - b), order, deploys.join('\n'));
+    const socialLine = deploys[order[4]];
+    assert.match(socialLine, /sfuAllowCidr=8\.8\.8\.8\/32/);
+    assert.match(socialLine, /sfuImageDigest=sha256:f{64}/);
+    assert.match(socialLine, /platformApiImageDigest=sha256:e{64} --context deploySocialService=true/);
+  });
+
   test('a middleware digest that changed forces one ECS rollout; an unchanged one does not', () => {
     const probes = allLive();
     const previous = recorded(lab, probes, { 'middleware-image': { digest: 'sha256:' + '1'.repeat(64) } });
@@ -433,7 +496,7 @@ test('collectProbes asks only read-only verbs', () => {
   const calls = [];
   const aws = (args) => { calls.push(args.join(' ')); return null; };
   collectProbes(lab, aws);
-  for (const c of calls) assert.match(c, /^(sts get-caller-identity|cloudformation describe-stacks|ecr describe-images|ecs describe-services|ssm get-parameter|secretsmanager describe-secret|bedrock-agentcore-control list-agent-runtimes|configure export-credentials)/, c);
+  for (const c of calls) assert.match(c, /^(sts get-caller-identity|cloudformation describe-stacks|ecr describe-images|ecs describe-services|ecs describe-task-definition|ssm get-parameter|secretsmanager describe-secret|bedrock-agentcore-control list-agent-runtimes|configure export-credentials)/, c);
 });
 
 // keep the temp dirs from leaking across runs
@@ -442,7 +505,7 @@ process.on('exit', () => { try { mkdirSync(join(tmpdir(), 'orch-keep')); } catch
 test('lab.json plans the Social and document phases: the lab account runs both', () => {
   assert.deepEqual(labFile.features, { social: true, documents: true, devbox: false });
   const plan = planDeploy(labFile, fresh(labFile), null, base);
-  for (const id of ['social-images', 'social-stacks', 'documents-build', 'documents-push', 'documents-deploy']) {
+  for (const id of ['social-images', 'social-stacks', 'social-portal', 'realtime-gateway', 'documents-build', 'documents-push', 'documents-deploy']) {
     assert.notEqual(plan.phases.find((p) => p.id === id)?.action, 'disabled', id);
   }
   assert.equal(plan.phases.find((p) => p.id === 'devbox')?.action, 'disabled');
