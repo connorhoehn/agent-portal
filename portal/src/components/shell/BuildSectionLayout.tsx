@@ -1,12 +1,10 @@
-import { DockedColumn, ListRailLayout, ScopeHeader, ViewportFillRegion, type ListRail } from '@connorhoehnslalom/ui-components';
-import { Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { ScopeHeader, type ListRail } from '@connorhoehnslalom/ui-components';
+import { SectionLayout, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type BreadcrumbItem, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 import type { ComponentProps, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useShellBreadcrumbItems } from './Breadcrumbs';
 import { SectionTrailContext } from './sectionTrail';
 import { isBuildNavActive } from './buildNavigation';
-import { UNDER_CRUMBS_BAND } from './headerRhythm';
-import { SectionHeader } from './SectionContent';
 
 type SubNavProps = ComponentProps<typeof SubNavLayout>;
 
@@ -53,46 +51,37 @@ export function BuildSectionLayout({
   secondaryStorageKey?: string;
   secondaryRailWidth?: number;
   contentLabel?: string;
-  /** Given, the content column becomes the library `ListRailLayout`: the page's
-   *  list as a flush rail beside the section rail, then the trail and the title
-   *  (`SectionHeader`) as the content column's first rows. */
+  /** Given, the page's list is a flush rail beside the section rail, then the
+   *  trail and the title as the content column's first rows. */
   list?: SectionListRail;
 }) {
   const { pathname, search } = useLocation();
-  const breadcrumbs = useShellBreadcrumbItems();
-  return <ViewportFillRegion bottomGap={0} data-testid="build-section">
-    <Stack gap="none" className="h-full min-h-0 bg-surface" data-shell-flush>
-      <SubNavLayout title={title} items={items} storageKey={storageKey}
-        {...(titleAction ? { titleAction } : {})}
-        {...(railWidth ? { railWidth } : {})}
-        {...(secondaryItems?.length ? { secondaryTitle, secondaryItems, secondaryStorageKey, secondaryRailWidth } : {})}
-        railLabel={`${title} navigation`} contentAs="section" contentLabel={contentLabel ?? `${title} workspace`}
-        renderNavItem={renderNavItem ?? ((item, body) => {
-          const active = isBuildNavActive(item.path, pathname, search);
-          return <Link to={item.path} aria-current={active ? 'page' : undefined}
-            className={active ? activeNavItemClassName : inactiveNavItemClassName}>{body}</Link>;
-        })}>
-        {list ? (
-          <ListRailLayout
-            header={<SectionHeader breadcrumbs={suppliedBreadcrumbs ?? breadcrumbs} title={list.title} {...(list.description ? { description: list.description } : {})} />}
-            list={list.rail}
-            {...(list.footer != null ? { footer: list.footer } : {})}
-            data-testid="build-section-list"
-          >
-            <Stack gap="md" className="w-full min-w-0 px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)]" data-testid="build-section-content">
-              <SectionTrailContext.Provider value={true}>{children}</SectionTrailContext.Provider>
-            </Stack>
-          </ListRailLayout>
-        ) : <Stack gap="none" className="h-full min-h-0 min-w-0">
-          <ScopeHeader variant="crumbs" breadcrumbs={suppliedBreadcrumbs ?? breadcrumbs} />
-          {/* The content column: a scrolling body over the column's dock, where a
-              section's command composer docks (ColumnDock) at the bottom, spanning
-              the column, with nothing below it (docs/layout-cascade.md). */}
-          <DockedColumn body={contentPadding === 'none' ? 'fill' : 'scroll'}
-            bodyClassName={contentPadding === 'none' ? 'flex flex-col' : `flex flex-col px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)] ${UNDER_CRUMBS_BAND}`}
-            bodyProps={{ 'data-testid': 'build-section-content' }}><SectionTrailContext.Provider value={true}>{children}</SectionTrailContext.Provider></DockedColumn>
-        </Stack>}
-      </SubNavLayout>
-    </Stack>
-  </ViewportFillRegion>;
+  const shellBreadcrumbs = useShellBreadcrumbItems();
+  const breadcrumbs = (suppliedBreadcrumbs ?? shellBreadcrumbs) as BreadcrumbItem[];
+  const fill = !list && contentPadding === 'none';
+  // The library SectionLayout is the frame (section rail, optional list rail,
+  // trail row, docked body); this binding supplies the shell's trail, the
+  // default router-aware rail links and the "trail already drawn" context.
+  return <SectionLayout
+    title={title} items={items} storageKey={storageKey}
+    {...(titleAction ? { titleAction } : {})}
+    {...(railWidth ? { railWidth } : {})}
+    {...(secondaryItems?.length ? { secondary: { items: secondaryItems, ...(secondaryTitle ? { title: secondaryTitle } : {}), ...(secondaryStorageKey ? { storageKey: secondaryStorageKey } : {}), ...(secondaryRailWidth ? { railWidth: secondaryRailWidth } : {}) } } : {})}
+    contentLabel={contentLabel ?? `${title} workspace`}
+    renderNavItem={renderNavItem ?? ((item, body) => {
+      const active = isBuildNavActive(item.path, pathname, search);
+      return <Link to={item.path} aria-current={active ? 'page' : undefined}
+        className={active ? activeNavItemClassName : inactiveNavItemClassName}>{body}</Link>;
+    })}
+    {...(list ? {
+      list: list.rail,
+      header: { breadcrumbs, title: list.title, ...(list.description ? { description: list.description } : {}) },
+      ...(list.footer != null ? { footer: list.footer } : {}),
+    } : { header: { breadcrumbs } })}
+    // A canvas page owns its gutters and scrolls its own panes; no band under the trail.
+    {...(fill ? { body: 'fill' as const, gutter: 'none' as const, bodyClassName: 'pt-0' } : {})}
+    data-testid="build-section"
+  >
+    <SectionTrailContext.Provider value={true}>{children}</SectionTrailContext.Provider>
+  </SectionLayout>;
 }

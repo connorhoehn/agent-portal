@@ -672,8 +672,8 @@ tbody tr:focus-within .row-reveal,
   }
 }
 
-/* Build pages retain a full-height module menu beside lists and records. */
-[data-shell-nav] [data-testid="build-section"] section[data-subnav-content] {
+/* Section layouts (BuildSectionLayout, StackedCatalogLayout) keep a full-height module menu beside lists and records. */
+[data-shell-nav] [data-page-template="section-layout"] section[data-subnav-content] {
   padding: 0;
   overflow: hidden;
   min-height: 0;

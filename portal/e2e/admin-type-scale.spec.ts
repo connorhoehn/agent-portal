@@ -28,9 +28,9 @@ type Scale = {
   unnamedRowButtons: number;
 };
 
-/** Measures the content column (`build-section-content`), not the shell. */
+/** Measures the content column's body (the section layout's `[data-page-body]`), not the shell. */
 async function measure(page: Page): Promise<Scale> {
-  const root = page.getByTestId('build-section-content');
+  const root = page.locator('[data-testid="build-section"] [data-page-body]').first();
   await expect(root).toBeVisible();
   await page.waitForLoadState('networkidle').catch(() => undefined);
   return root.evaluate((el) => {
