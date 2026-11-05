@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { Breadcrumbs, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useShellBreadcrumbItems } from './Breadcrumbs';
 import { useSectionTrailDrawn } from './sectionTrail';
@@ -15,15 +14,13 @@ export function FlushTrail({ compact = false }: { compact?: boolean } = {}) {
   </Stack>;
 }
 
-/** A non-collection page (a form, a configuration surface) on the collection
- * pages' frame: the shell's padding ring dropped (`data-shell-flush`), the
- * trail as the first row, the content at the page gutter — so its title sits
- * where every list page's title sits. */
-export function FlushPage({ children, 'data-testid': testId }: { children: ReactNode; 'data-testid'?: string }) {
-  return <Stack gap="none" className="h-full min-h-0 min-w-0" data-shell-flush data-testid={testId}>
-    <FlushTrail />
-    <Stack gap="md" className="min-h-0 min-w-0 flex-1 overflow-auto px-[var(--ui-page-gutter)] pb-[var(--ui-page-gutter)]">
-      {children}
-    </Stack>
-  </Stack>;
+/** The trail a page passes to the library `PageFrame` (`breadcrumbs`): the
+ * shell's items, or none when a section layout already drew the trail as the
+ * column's first row (docs/layout-cascade.md rules 1–2). A non-collection page
+ * (a form, a configuration surface) is a `PageFrame`: flush, the trail and the
+ * one h1 at the page gutter, where every list page's title sits. */
+export function useFlushTrailItems() {
+  const breadcrumbs = useShellBreadcrumbItems();
+  const trailDrawn = useSectionTrailDrawn();
+  return trailDrawn ? undefined : breadcrumbs;
 }

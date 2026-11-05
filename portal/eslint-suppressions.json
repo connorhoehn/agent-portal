@@ -87,7 +87,7 @@
   },
   "src/components/shell/FlushPage.tsx": {
     "ui-components/no-arbitrary-token-values": {
-      "count": 4
+      "count": 2
     }
   },
   "src/pages/NotFoundPage.tsx": {

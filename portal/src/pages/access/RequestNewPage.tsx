@@ -21,7 +21,7 @@ import {
   KeyValue,
   Link,
   LoadingState,
-  PageHeader,
+  PageFrame,
   PersonPicker,
   RadioGroup,
   Stack,
@@ -31,7 +31,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { FlushPage } from '../../components/shell/FlushPage';
+import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -135,6 +135,7 @@ export default function RequestNewPage() {
   }
 
   const page = ACCESS_SURFACES['new-request'];
+  const trail = useFlushTrailItems();
   const back = { label: 'Requests', to: '/access/requests', onClick: (e: { preventDefault: () => void }) => { e.preventDefault(); navigate('/access/requests'); } };
 
   const sections: FormWizardSection[] = [
@@ -253,11 +254,10 @@ export default function RequestNewPage() {
   }
 
   return (
-    // The list pages' frame (FlushPage): the title at the page gutter, one h1; each
-    // section a 14/600 heading with a 12/400 description (FormWizard).
-    <FlushPage data-testid="access-request-new">
-      <PageHeader density="compact" title={page.title} description={page.description} back={back} />
+    // The library page frame: the trail and the title at the page gutter, one h1;
+    // each section a 14/600 heading with a 12/400 description (FormWizard).
+    <PageFrame title={page.title} description={page.description} back={back} breadcrumbs={trail} data-testid="access-request-new">
       {body}
-    </FlushPage>
+    </PageFrame>
   );
 }

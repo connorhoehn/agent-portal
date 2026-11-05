@@ -392,3 +392,17 @@ Checked and not worth it: marking ui-components' JS side-effect free saves
 only ~113 KB (the graph, breakout and editor chunks are reachable from
 shell code that renders), and lazy-loading the shell's `SocialConversation`
 saves ~54 KB because the composer already carries the same editor stack.
+
+### 2026-11-04 — page templates (2.501.0 adoption)
+
+The portal adopted 2.501.0's templates where they were a clean swap:
+`observability/InvocationDetailPage.tsx` is a `DetailPage` (seven tabs instead
+of eight stacked cards) and the three Access form pages that used the local
+`FlushPage` are `PageFrame`s (`FlushPage.tsx` now only supplies the shell trail
+as `useFlushTrailItems()`). What the templates could not absorb:
+
+| primitive | why | where used |
+|---|---|---|
+| `DetailPage` title has no heading level (`as`) | `DetailPage` draws its `DetailHeader` title as a fixed `h2`. A routed record page whose host layout draws no `h1` (every page inside `BuildSectionLayout`) ends with zero `h1`; `a11y.heading-order` (deep) reports it on all four theme × width cases. Wants `titleAs` (default `h2`), the way `PageHeader` and `DetailSection` already take `as`. | `portal/src/pages/observability/InvocationDetailPage.tsx` |
+| `PageFrame` has no section rail, list rail or docked column | `BuildSectionLayout` (section rail + optional `ListRailLayout` list rail, `ViewportFillRegion`, `DockedColumn` so a section's command composer docks at the column bottom) and `StackedCatalogLayout` (section rail or combined `RailNavList`, record `GroupedList` rail with fold, catalog overview) are layouts around many pages, not page frames. `MasterDetailPage` covers list + record but not a section rail beside it, rail folding, or the `ColumnDock` the collection command host registers with. Wants a section-layout template (section rail + optional list rail + docked body) or `PageFrame body="docked"`. | `portal/src/components/shell/BuildSectionLayout.tsx`, `StackedCatalogLayout.tsx` (left local) |
+| `PageFrame` header cannot be `SectionContent`'s trail row | `SectionContent` draws the trail as its own `ScopeHeader` row with right-hand `controls`/`link`, folds the title into the trail (`collapsed`, the conversation view), switches to a conversation inset, docks a composer via `DockedColumn`, and emits the `section-crumbs` / `data-section-content` / `data-section-title` markers the DOM audit's column rules key on. `PageFrame`'s trail is a row inside `PageHeader` with none of those. Wants trail-row controls, a collapsed-into-trail header, a docked body, and template markers the audit can use as a reading edge. | `portal/src/components/shell/SectionContent.tsx` (left local; used by Social chat and Communication) |

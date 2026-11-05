@@ -16,7 +16,7 @@ import {
   Inline,
   KeyValue,
   LoadingState,
-  PageHeader,
+  PageFrame,
   PageSection,
   Select,
   Stack,
@@ -25,7 +25,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
-import { FlushPage } from '../../components/shell/FlushPage';
+import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -54,6 +54,7 @@ export default function ConfigurationPage() {
   const [edits, setEdits] = useState<Edits>({});
   const [busy, setBusy] = useState(false);
   const page = ACCESS_SURFACES.configuration;
+  const trail = useFlushTrailItems();
   const items = data?.items ?? [];
   const patch = configurationPatch(items, edits);
   const value = <K extends 'defaultDuration' | 'sensitive'>(i: ConfigItem, k: K): ConfigItem[K] => (edits[i.id]?.[k] ?? i[k]) as ConfigItem[K];
@@ -90,11 +91,10 @@ export default function ConfigurationPage() {
   ];
 
   return (
-    <FlushPage data-testid="access-configuration">
-      <PageHeader density="compact" title={page.title} description={page.description}
+    <PageFrame title={page.title} description={page.description} breadcrumbs={trail} data-testid="access-configuration"
         {...(mayEdit ? {
           actions: <Button size="sm" variant="primary" disabled={busy || patch.items.length === 0} onClick={() => void save()} data-testid="access-configuration-save"><CheckIcon />Save</Button>,
-        } : { badge: <Chip tone="neutral" size="xs">Read-only</Chip> })} />
+        } : { badge: <Chip tone="neutral" size="xs">Read-only</Chip> })}>
       {error ? (
         <UnavailableNotice error={error} what="the access configuration" source="Durations, stewards and catalog defaults are read from GET /api/access/configuration" onRetry={refresh} />
       ) : !data ? (
@@ -132,6 +132,6 @@ export default function ConfigurationPage() {
           )}
         </Stack>
       )}
-    </FlushPage>
+    </PageFrame>
   );
 }
