@@ -39,7 +39,9 @@ export interface Expect {
   enabled?: Target[];
   /** The focused element matches this target. */
   focused?: Target;
+  /** Visible matches, polled until they settle (rows a write round-trips for). */
   count?: Array<{ target: Target; eq?: number; min?: number; max?: number }>;
+  /** An attribute, polled until it settles; `value` on an input/select/textarea is the live value it holds, not the default attribute. */
   attr?: Array<{ target: Target; name: string; value: Text | null }>;
   /** api steps: the response status (one or any of a list). */
   status?: number | number[];

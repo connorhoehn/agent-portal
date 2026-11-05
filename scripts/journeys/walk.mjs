@@ -108,13 +108,22 @@ export async function checkExpect(page, e = {}, ctx = {}) {
   for (const t of asList(e.enabled)) if (!(await poll(() => locate(page, t).first().isEnabled({ timeout: 1000 })))) f.push(`not enabled: ${describe(t)}`);
   if (e.focused && !(await poll(() => locate(page, e.focused).first().evaluate((el) => el === document.activeElement || el.contains(document.activeElement))))) f.push(`not focused: ${describe(e.focused)}`);
   for (const c of asList(e.count)) {
-    const n = await visibleCount(locate(page, c.target));
-    if ((c.eq != null && n !== c.eq) || (c.min != null && n < c.min) || (c.max != null && n > c.max)) f.push(`count of visible ${describe(c.target)} is ${n} (expected ${c.eq != null ? `= ${c.eq}` : ''}${c.min != null ? `≥ ${c.min}` : ''}${c.max != null ? ` ≤ ${c.max}` : ''})`);
+    // Rows drawn after a round trip (a gateway write, a refetch) settle a moment after the step; poll like `hidden`.
+    const within = (n) => !((c.eq != null && n !== c.eq) || (c.min != null && n < c.min) || (c.max != null && n > c.max));
+    let n = await visibleCount(locate(page, c.target));
+    if (!within(n)) await poll(async () => within(n = await visibleCount(locate(page, c.target))));
+    if (!within(n)) f.push(`count of visible ${describe(c.target)} is ${n} (expected ${c.eq != null ? `= ${c.eq}` : ''}${c.min != null ? `≥ ${c.min}` : ''}${c.max != null ? ` ≤ ${c.max}` : ''})`);
   }
   for (const a of asList(e.attr)) {
-    const got = await locate(page, a.target).first().getAttribute(a.name, { timeout: T.expect }).catch(() => undefined);
-    const ok = a.value === null ? got === null : a.value instanceof RegExp ? a.value.test(got ?? '') : got === a.value;
-    if (!ok) f.push(`${describe(a.target)} [${a.name}] is ${JSON.stringify(got)} (expected ${a.value})`);
+    // `value` on a form control is what it holds now: React leaves a focused number input's
+    // `value` attribute at its default until blur. Other attributes are read as written. A state
+    // the step's write round-trips for (aria-pressed after Raise) settles a moment later; poll it.
+    const read = () => locate(page, a.target).first().evaluate((el, name) =>
+      name === 'value' && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) ? String(el.value) : el.getAttribute(name), a.name, { timeout: T.expect }).catch(() => undefined);
+    const ok = (got) => a.value === null ? got === null : a.value instanceof RegExp ? a.value.test(got ?? '') : got === a.value;
+    let got = await read();
+    if (!ok(got)) await poll(async () => ok(got = await read()));
+    if (!ok(got)) f.push(`${describe(a.target)} [${a.name}] is ${JSON.stringify(got)} (expected ${a.value})`);
   }
   for (const n of asList(e.numbers)) {
     // A number on screen agrees with another: the count of visible rows, another element's number, or a constant.

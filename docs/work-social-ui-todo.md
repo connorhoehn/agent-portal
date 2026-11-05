@@ -191,9 +191,26 @@ not authorize cloud work.
   Done 2026-11-04 (`9b39ed4a`, `5843e7d6`): all 128 maps re-walked on freshly
   measured contracts, admin walked (refusals, frames, search), 125 pass and are
   sealed. Still failing: `member/prepare-job` (a read-only ComposerPromptDeck
-  card takes no focus; queued in `ui-components-queue.md`) and `call-rooms` for
-  sme and org-leader (the huddle people panel prints clone ids and the audit
-  reads the meeting toolbar as a read-only composer; last passed 2026-10-17).
+  card takes no focus; queued in `ui-components-queue.md`). `call-rooms` for
+  sme and org-leader pass again on 2026-11-05: every one of their nine failures
+  (ids instead of names, no Chat or React on the stage, Theo's composer read
+  as read-only, no "All rooms" target, no announcement) came from one line.
+  `hasJoinedCall` (`portal/src/components/shell/callShellModel.ts`) stopped
+  counting the `connecting` phase on 2026-10-24 (`451ef40e`), and on the
+  signalling-only media fixture the call never leaves `connecting`, so the
+  huddle chat never bound to the call and the roster that names the clones was
+  never read. The phase is back in the rule (the seat admits the chat, not the
+  media); the walker polls `count`/`attr` checks and reads a form control's
+  live `value`; the room-chat step reads the pane the dialogue already opened,
+  since the stage's Chat item has been a toggle since the collapsible composer.
+  The re-measurement that sealed them (2026-11-05 19:44) found the Communication
+  landing (`/iq`, `/assessment`, `/pipelines` `/communication`) opening Sana
+  Iqbal's DM for a fresh clone while the social simulator's users are online,
+  with a `title` violation on the DM page; the earlier measurements saw the
+  simulator offline and the landing itself. The five Work `social` logs were
+  re-walked and re-sealed under it; the fifteen hand-written
+  `docs/communication-journeys` logs read stale until their owner decides the
+  landing (the open Communication landing-depth decision) and re-walks them.
 - [x] Integrate the shared audit packaging [source PR](https://github.com/connorhoehnslalom/ui-components/pull/1)
   alongside the other session's composer release: applied to library main as
   `54f0cfa4` under the 2.500.0 build; the pinned 2.500.1 archive ships the skill.
