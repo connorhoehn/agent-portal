@@ -42,7 +42,7 @@ the claim here is a bug.
 
 Durable facts the handoff does not repeat:
 
-- Pins: the portal consumes `@connorhoehnslalom/ui-components` **2.504.0** and
+- Pins: the portal consumes `@connorhoehnslalom/ui-components` **2.505.0** and
   `@connorhoehn/realtime-modules` (its real package name, no alias) **0.142.0**
   from tracked tarballs in `portal/vendor/` (0.142.0's release commit `fe92dd6`
   is local to `~/Projects/realtime-modules` until pushed as `connorhoehn`). Read middleware's own manifest and
