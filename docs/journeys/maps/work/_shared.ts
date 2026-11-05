@@ -298,9 +298,19 @@ function prepareJobDispatcher(role: Role): Step[] {
     { do: 'wait', target: DECK, name: 'The job is running: the card says so and Dispatch is off until it is up next again', proves: 'role-gating', expect: { visible: [{ text: 'A job is already running for this item. Dispatch another with these settings?', within: DECK }], disabled: [deckOption(/^(1 )?Dispatch$/)] } } as Step,
     press('Escape', 'Escape folds the card', { hidden: [DECK] }, { proves: 'keyboard' }),
     open(`/iq/projects/${DISPATCH.ungranted.initiative}?item=${DISPATCH.ungranted.item}`, 'Open a work item on an initiative where this sme holds no grant', { visible: [heading(DISPATCH.ungranted.title)], noText: LEAKS }, { facts: true }),
-    ...openDeck('Prepare job opens the card; its envelope field says there is no grant here'),
-    { do: 'wait', target: DECK, name: 'The card says No sprint grant here', proves: 'role-gating', expect: { visible: [{ text: 'No sprint grant here', within: DECK }] } } as Step,
-    press('1', 'Key 1 dispatches: the server refuses, with its sentence, and nothing runs', { visible: [seen(/no active sprint grant/i)] }, { state: 'refused', proves: 'role-gating', expectConsole: /403|Forbidden/ }),
+    // An sme with no grant here gets the funding card (Request budget / Save for later), never a Dispatch the server
+    // refuses; the other dispatchers (patched in _ol.ts / _po.ts) get the job card.
+    ...(role === 'sme' ? [
+      click(menu, `Open the item's header menu: it offers Prepare job`, { visible: [{ role: 'menuitem', name: 'Prepare job' }] }, { proves: 'role-gating' }),
+      click({ role: 'menuitem', name: 'Prepare job' }, 'Prepare job opens the funding card: this job needs a sprint envelope, so the choices are Request budget or Save for later', { visible: [DECK, { text: 'This job needs a sprint envelope', within: DECK }, deckOption(/Request budget/), deckOption(/Save for later/)], focused: DECK, count: [{ target: DECK_OPTION, eq: 2 }] }, { state: 'dialog-open', proves: 'role-gating' }),
+      { do: 'wait', target: DECK, name: 'The card says No sprint grant here, and that the saved setup on this initiative is not this person\'s to read', proves: 'role-gating', expect: { visible: [{ text: 'No sprint grant here', within: DECK }, { text: /you can only read job drafts on initiatives you own or contribute to/, within: DECK }] } } as Step,
+      { do: 'wait', target: DECK, name: 'Nothing on the card dispatches: the job cannot run here until a budget holder grants an envelope', state: 'refused', proves: 'role-gating', expect: { visible: [{ text: /You hold no sprint grant on this initiative, so this job cannot run yet\./, within: DECK }], absent: [deckOption(/^(1 )?Dispatch$/)] } } as Step,
+      press('Escape', 'Escape folds the card', { hidden: [DECK] }, { proves: 'keyboard' }),
+    ] as Step[] : [
+      ...openDeck('Prepare job opens the card; its envelope field says there is no grant here'),
+      { do: 'wait', target: DECK, name: 'The card says No sprint grant here', proves: 'role-gating', expect: { visible: [{ text: 'No sprint grant here', within: DECK }] } } as Step,
+      press('1', 'Key 1 dispatches: the server refuses, with its sentence, and nothing runs', { visible: [seen(/no active sprint grant/i)] }, { state: 'refused', proves: 'role-gating', expectConsole: /403|Forbidden/ }),
+    ] as Step[]),
     tabWalk(10),
     open(`/iq/projects/${granted.initiative}?item=wi-nope`, 'A work item that is not in the list says so and sends the reader to the rail', { visible: [seen('Work item unavailable'), seen('This item is not in the current work list.')] }, { state: 'not-found', proves: 'empty-state' }),
   ];
@@ -827,10 +837,16 @@ const SURFACE_STEPS: Record<string, (role: Role) => Step[]> = {
 const writesJourney = (role: Role, journey: string): boolean => writesJob(role) && (journey === 'work-write' || journey === 'prepare-job');
 
 /** The map a role walks for one surface: `docs/journeys/maps/work/<role>/<journey>.ts` is one line of this. */
+/** The saved-setup read a dispatcher makes on a work item: refused (403 NOT_ON_INITIATIVE) outside the initiatives they
+ *  own or contribute to, and shown on the job card as "Saved setup" (usePrepareJobDeck). Deliberate, so expected. */
+const DRAFT_REFUSED = /\[403 GET \/api\/bots\/work-items\/[^/\]]+\/job-draft\]/;
+const DRAFT_JOURNEYS = new Set(['prepare-job', 'work-write', 'work-items']);
+
 export function surfaceMap(role: Role, journey: string, opts: Partial<JourneyMap> = {}): JourneyMap {
   const steps = SURFACE_STEPS[journey];
   if (!steps) throw new Error(`no surface steps for ${journey}`);
   return {
+    ...(DRAFT_JOURNEYS.has(journey) ? { expectConsole: DRAFT_REFUSED } : {}),
     family: 'work', log: `${role}/${journey}`, kind: 'surface', persona: PERSONA[role], scenario: 'shared', identity: 'clone',
     ...(writesJourney(role, journey) ? { scenario: { scope: 'default' }, writes: true } : {}),
     viewport: { width: 1440, height: 900 },

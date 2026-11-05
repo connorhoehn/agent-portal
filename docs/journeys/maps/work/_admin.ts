@@ -139,7 +139,7 @@ export function budgets(role: Role): Step[] {
       click(btn(`Remove allocation for ${INF}`), 'Remove allocation asks first and names the initiative', { visible: [dialog('Remove allocation?'), { text: /keeps accruing spend/, within: dialog('Remove allocation?') }] }, { state: 'dialog-open', proves: 'role-gating' }),
       press('Escape', 'Escape keeps the allocation: the dialog closes and $42.00 is still there', { hidden: [dialog('Remove allocation?')], visible: [editBtn('$42.00')] }, { proves: 'keyboard' }),
       click(btn(`Remove allocation for ${INF}`), 'Open Remove allocation again to confirm it', { visible: [dialog('Remove allocation?')] }, { state: 'dialog-open' }),
-      click({ role: 'button', name: 'Remove', exact: true, within: dialog('Remove allocation?') }, `Remove: ${INF} is an unallocated blind spot again and the total is $431.00`, { hidden: [dialog('Remove allocation?')], visible: [btn('Set budget'), seen('$431.00')], absent: [editBtn('$42.00')] }, { writes: true }),
+      click({ role: 'button', name: 'Remove', exact: true, within: dialog('Remove allocation?') }, `Remove: ${INF} is an unallocated blind spot again, the total is $431.00, and focus lands on its Set budget`, { hidden: [dialog('Remove allocation?')], visible: [btn('Set budget'), seen('$431.00')], absent: [editBtn('$42.00')], focused: btn('Set budget') }, { writes: true, proves: ['keyboard', 'role-gating'] }),
       reload('Reload: the removal survived, the initiative is unallocated again', { visible: [btn('Set budget'), seen('$431.00')], absent: [editBtn('$42.00')] }),
     ] : []),
     tabWalk(10),

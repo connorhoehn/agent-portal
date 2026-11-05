@@ -4,18 +4,18 @@ user: u-nora (Nora DaSilva, SME on Auth Migration)
 url: /iq/projects; /iq/projects?scope=all; /iq/projects?scope=all&status=in_progress; /iq/projects?scope=all&status=in_progress&q=auth; /iq/projects?scope=all&status=in_progress&q=zzzzqq; /iq/projects/p-observability?scope=all&status=in_progress; /iq/projects?scope=mine
 map: docs/journeys/maps/work/sme/initiatives.ts
 pages: portal/src/pages/ProjectsPage.tsx, portal/src/pages/initiatives
-audited: 2026-11-04 18:18–18:18 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-2dfd1e94), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.500.3-work.2
-session: /api/session/me sub u-nora-clone-2dfd1e94, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
+audited: 2026-11-04 20:46–20:46 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-nora-clone-200b6cf8), scenario: the shared mock, read-only (every non-GET the page sent was blocked), middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.500.3-work.2
+session: /api/session/me sub u-nora-clone-200b6cf8, tenant orgiq, role sme, grants {"orgiq":["sme"],"social":["participant"]}
 screenshot: initiatives.jpg
-verdict: fail — 1 of 21 steps failed; step 11 (Enter on the first row opens its record): 1 ui-dom-audit finding(s): coverage.stability ×1
+verdict: pass
 console errors: 0 unexpected; 2 expected by the map (Failed to load resource: the server responded with a status of 500 (Internal Ser)
-layout: fail — 1 ui-dom-audit finding(s) at 1 of 20 measured step(s) (coverage.stability ×1); at /iq/projects: no horizontal scroll (1440/1440), 1 h1 "My initiatives" 20/600 at 488/92, table body rows 44px ×2, first-row-top: 170px, composer at y 797–855 of 900
-keyboard: fail — step 11 (Enter on the first row opens its record): 1 ui-dom-audit finding(s): coverage.stability ×1
+layout: pass — ui-dom-audit 0 failing findings at 20 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/projects: no horizontal scroll (1440/1440), 1 h1 "My initiatives" 20/600 at 488/92, table body rows 44px ×2, first-row-top: 170px, composer at y 797–855 of 900
+keyboard: pass — Escape closes the dialog and focus returns to the button that opened it; Escape closes the popover; Enter on the first row opens its record; ControlOrMeta+K opens the command palette over the page; Escape closes it and focus returns to where it was; Tab from the top of the page: the controls take focus in turn (Tab visited 40 distinct visible controls of 63 focusable)
 empty-state: pass — Search "auth": the list narrows to what matches; Search zzzzqq: the list says what it holds instead of a blank table; In a world with no initiatives, the list says nothing creates one by hand and where they come from (mock scope {"scenario":"empty","fixture":"initiatives"}); In the same world My initiatives says no initiative lists this person and offers All initiatives (mock scope {"scenario":"empty","fixture":"initiatives"}); When the initiatives read fails, the list says it could not load them rather than showing an empty one (mock scope {"scenario":"error","fixture":"initiatives"}); With very long names the list keeps every row on one line and the page scrolls no wider (mock scope long-text); With many initiatives the list grows downward and its count agrees with its rows (mock scope many); While the list loads it says so (Loading initiatives…), not an empty table (mock scope {"scenario":"loading","delayMs":2500})
 role-gating: pass — Open All initiatives from the rail: the whole program, spend figures locked for this role (3 box(es) held still); Request budget access opens its dialog (nothing is sent)
 story-facts: pass — Open Initiatives as sme: the list this role lands on, with its own initiative; Open All initiatives from the rail: the whole program, spend figures locked for this role (3 box(es) held still)
 tab-stability: pass — Open All initiatives from the rail: the whole program, spend figures locked for this role (3 box(es) held still)
-dom-audit: 1 failing finding(s) at 20 measured step(s); 1 more owed by docs/journeys/audit-burndown.tsv (control.select-inset-field-sm ×1) — ui-dom-audit measureDOM, contract Work shared UI compact layout e34ed4bae531eb49
+dom-audit: 0 failing finding(s) at 20 measured step(s); 1 more owed by docs/journeys/audit-burndown.tsv (control.select-inset-field-sm ×1) — ui-dom-audit measureDOM, contract Work shared UI compact layout e34ed4bae531eb49
 notes: Nora DaSilva, SME on Auth Migration: Find an initiative: all and mine, search and status, a search that matches nothing, open one; the list under empty, error, long-text, many and loading worlds. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/work/sme/initiatives).
 
 ## Steps
@@ -32,7 +32,7 @@ notes: Nora DaSilva, SME on Auth Migration: Find an initiative: all and mine, se
 | 8 | Search "auth": the list narrows to what matches | filtered | pass | 0 finding(s) | /iq/projects?scope=all&status=in_progress&q=auth |
 | 9 | Search zzzzqq: the list says what it holds instead of a blank table | filtered-empty | pass | 0 finding(s) | /iq/projects?scope=all&status=in_progress&q=zzzzqq |
 | 10 | Clear the search: the rows come back |  | pass | 0 finding(s) | /iq/projects?scope=all&status=in_progress |
-| 11 | Enter on the first row opens its record | row-open | fail: 1 ui-dom-audit finding(s): coverage.stability ×1 | 1 finding(s) | /iq/projects/p-observability?scope=all&status=in_progress |
+| 11 | Enter on the first row opens its record | row-open | pass | 0 finding(s) | /iq/projects/p-observability?scope=all&status=in_progress |
 | 12 | Browser Back returns to the list |  | pass | 0 finding(s) | /iq/projects?scope=all&status=in_progress |
 | 13 | ControlOrMeta+K opens the command palette over the page | dialog-open | pass | 0 finding(s) | /iq/projects?scope=all&status=in_progress |
 | 14 | Escape closes it and focus returns to where it was |  | pass | 0 finding(s) | /iq/projects?scope=all&status=in_progress |

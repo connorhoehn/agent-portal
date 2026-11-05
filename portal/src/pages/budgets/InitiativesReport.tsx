@@ -234,6 +234,21 @@ export function InitiativesReport({
 }: InitiativesReportProps) {
   const [confirmDelete, setConfirmDelete] = useState<BudgetRow | null>(null);
   const [showFirstBudget, setShowFirstBudget] = useState(false);
+  // A removed allocation takes its trash button (the dialog's focus target) with it. Once the refreshed
+  // row is back, focus moves to the control that replaced it — the row's "Set budget" in the Allocated
+  // column — and the sideways-scrolled table returns to its start, so the row is readable from its name.
+  const focusAfterRemove = useRef<string | null>(null);
+  useEffect(() => {
+    const id = focusAfterRemove.current;
+    if (!id) return;
+    const trigger = document.querySelector<HTMLButtonElement>(`[data-allocation-trigger="${CSS.escape(id)}"]`);
+    if (!trigger) return;
+    focusAfterRemove.current = null;
+    for (let el = trigger.parentElement; el; el = el.parentElement) {
+      if (el.scrollWidth > el.clientWidth && /(auto|scroll)/.test(getComputedStyle(el).overflowX)) { el.scrollLeft = 0; break; }
+    }
+    trigger.focus({ preventScroll: true });
+  }, [budgets]);
 
   async function deleteAllocation(row: BudgetRow) {
     const res = await writeJson(`/api/budgets/${encodeURIComponent(row.orgProjectId)}`, 'DELETE');
@@ -241,6 +256,7 @@ export function InitiativesReport({
       toastError(null, 'Failed to remove allocation', res.error ?? undefined);
     } else {
       toastSuccess(null, 'Allocation removed', row.orgProjectName ?? row.orgProjectId);
+      focusAfterRemove.current = row.orgProjectId;
     }
     setConfirmDelete(null);
     refresh();

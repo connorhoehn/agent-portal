@@ -91,6 +91,14 @@ test('the header card: item, codebase, model, cap, forecast, envelope', () => {
   assert.deepEqual(reader.map((f) => f.value), ['ORG-OBS-11', 'Not shown to your role', 'Haiku', 'No cap', 'Needs dispatch rights']);
 });
 
+test('a refused draft read is a field on the card, not swallowed', () => {
+  const job = { model: DEFAULT_DEVBOX_MODEL, agentProjectId: 'cb-obs', capUsd: null, instruction: 'x' };
+  const refusal = 'you can only read job drafts on initiatives you own or contribute to';
+  const fields = jobFields({ item, job, codebases, forecast: live, envelope: null, canDispatch: true, draftRefusal: refusal });
+  assert.deepEqual(fields.at(-1), { label: 'Saved setup', value: refusal, tone: 'warning' });
+  assert.equal(jobFields({ item, job, codebases, forecast: live, envelope: null, canDispatch: true }).some((f) => f.label === 'Saved setup'), false);
+});
+
 test('envelope label: unread, unresolved, no grant (sme), fits, over', () => {
   const row = { grantId: 'g', orgProjectId: 'p-observability', orgProjectName: null, sprintId: null, sprintName: null, sprintStatus: null,
     startsOn: null, endsOn: null, allocatedUsd: 30, spentUsd: 29.5, remainingUsd: 0.5, attributionAvailable: true };

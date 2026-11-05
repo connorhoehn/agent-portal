@@ -159,8 +159,10 @@ export function jobFields(input: {
   forecast: ForecastRead;
   envelope: { value: string; tone?: ComposerPromptField['tone'] } | null;
   canDispatch: boolean;
+  /** The server's 403 for reading this initiative's saved setup, shown rather than swallowed. */
+  draftRefusal?: string | null;
 }): ComposerPromptField[] {
-  const { item, job, codebases, forecast, envelope, canDispatch } = input;
+  const { item, job, codebases, forecast, envelope, canDispatch, draftRefusal } = input;
   const codebase = codebases.find((c) => c.id === job.agentProjectId);
   const fc = forecastLabel(item, forecast, canDispatch);
   const capOver = job.capUsd != null && forecast.estimate != null && forecast.estimate.costUsdP75 > job.capUsd;
@@ -172,6 +174,7 @@ export function jobFields(input: {
     { label: 'Forecast', value: fc.value, ...(fc.tone ? { tone: fc.tone } : {}) },
   ];
   if (envelope) fields.push({ label: 'Envelope', value: envelope.value, ...(envelope.tone ? { tone: envelope.tone } : {}) });
+  if (draftRefusal) fields.push({ label: 'Saved setup', value: draftRefusal, tone: 'warning' });
   return fields;
 }
 

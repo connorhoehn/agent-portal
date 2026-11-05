@@ -150,6 +150,8 @@ export interface Persona {
 export type ScopeRequest = string | { scenario?: string; fixture?: string; fixtures?: Record<string, string> };
 
 export interface JourneyMap {
+  /** A console error every step of this map expects (one deliberate refusal the page shows), narrower than any step's own. */
+  expectConsole?: RegExp;
   /** The family: docs/<family>-journeys holds its logs and PROTOCOL.md. */
   family: string;
   /** The log this map writes, relative to the family directory, without .md (requester/catalog). */

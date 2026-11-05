@@ -290,7 +290,7 @@ export async function walkMap(browser, map, ctx) {
       // Chromium resource errors omit URLs. Attach this step's failed responses
       // before matching narrow, documented expected errors in the map.
       if (s.http.length) s.console = s.console.map((m) => /Failed to load resource/.test(m) ? `${m} [${[...new Set(s.http)].join(', ')}]` : m);
-      s.expectedConsole = s.console.filter((m) => (step.expectConsole && step.expectConsole.test(m)) || blockedNoise(m));
+      s.expectedConsole = s.console.filter((m) => (step.expectConsole && step.expectConsole.test(m)) || (map.expectConsole && map.expectConsole.test(m)) || blockedNoise(m));
       s.unexpectedConsole = s.console.filter((m) => !s.expectedConsole.includes(m));
       if (!s.http.length) delete s.http;
       s.status = s.failures.length || s.unexpectedConsole.length ? 'fail' : 'pass';

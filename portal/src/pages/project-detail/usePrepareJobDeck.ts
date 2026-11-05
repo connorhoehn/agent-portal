@@ -102,6 +102,8 @@ export function usePrepareJobDeck(input: PrepareJobDeckInput): ComposerPrompt[] 
     // The job is derived per item; a codebase list that arrives late fills the codebase only.
     [itemId, codebases.map((c) => c.id).join(','), linkedRepo]); // eslint-disable-line react-hooks/exhaustive-deps
   const [edits, setEdits] = useState<{ itemId: string; job: Partial<PreparedJob> } | null>(null);
+  // The server refuses a draft read outside the reader's initiatives (403 NOT_ON_INITIATIVE); the card says so.
+  const [draftRefusal, setDraftRefusal] = useState<{ itemId: string; message: string } | null>(null);
   const job: PreparedJob | null = derived ? { ...derived, ...(edits?.itemId === itemId ? edits.job : {}) } : null;
   const [step, setStep] = useState<PrepareStep>({ kind: 'confirm' });
   const [rev, setRev] = useState(0);
@@ -140,7 +142,15 @@ export function usePrepareJobDeck(input: PrepareJobDeckInput): ComposerPrompt[] 
     if (!itemId || !canDispatch) return;
     let cancelled = false;
     fetch(`/api/bots/work-items/${encodeURIComponent(itemId)}/job-draft`, { credentials: 'include' })
-      .then(async (res) => (res.ok ? await res.json().catch(() => ({})) as { draft?: Parameters<typeof jobFromDraft>[0] } : {}))
+      .then(async (res) => {
+        if (res.status === 403) {
+          const refusal = await res.json().catch(() => ({})) as { error?: string };
+          if (!cancelled) setDraftRefusal({ itemId, message: refusal.error ?? 'You cannot read the saved setup for this initiative.' });
+          return {};
+        }
+        if (!cancelled) setDraftRefusal(null);
+        return res.ok ? await res.json().catch(() => ({})) as { draft?: Parameters<typeof jobFromDraft>[0] } : {};
+      })
       .then((body) => {
         if (cancelled || !body.draft) return;
         setEdits({ itemId, job: jobFromDraft(body.draft) });
@@ -270,7 +280,7 @@ export function usePrepareJobDeck(input: PrepareJobDeckInput): ComposerPrompt[] 
   if (!open || doneFor === item.id) return [];
   return prepareJobPrompts({
     item, job, step, rev, canDispatch, blocked, forecast, running,
-    fields: jobFields({ item, job, codebases, forecast, envelope, canDispatch }),
+    fields: jobFields({ item, job, codebases, forecast, envelope, canDispatch, draftRefusal: draftRefusal?.itemId === item.id ? draftRefusal.message : null }),
     funding: orgProjectId ? { noGrant: envelope?.value === NO_GRANT_LABEL, holder: budgetHolder ?? null, requests: mine?.items ?? null } : null,
   }, {
     dispatch,

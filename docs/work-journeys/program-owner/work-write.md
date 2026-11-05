@@ -4,25 +4,25 @@ user: u-mia (Mia Singh, program owner)
 url: /iq/projects/p-auth-migration?item=wi-auth-e2-b3; /iq/projects/p-auth-migration?tab=work; /iq/projects/p-auth-migration?tab=work&item=wi-mock-1; /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history
 map: docs/journeys/maps/work/program-owner/work-write.ts
 pages: portal/src/pages/ProjectDetailPage.tsx, portal/src/pages/project-detail/NewItemForm.tsx, portal/src/pages/project-detail/BriefDialogs.tsx, portal/src/pages/project-detail/WorkItemDetail.tsx
-audited: 2026-11-04 18:02–18:02 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-c7f689d9), scenario: scope default, middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.500.3-work.2
-session: /api/session/me sub u-mia-clone-c7f689d9, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
+audited: 2026-11-04 20:14–20:14 local, Chromium 148.0.7778.96 1440x900 (scripts/journeys/run-maps.mjs: Playwright headless, a fresh context signed in through portal/e2e/realSession.ts as clone u-mia-clone-af1550cf), scenario: scope default, middleware dev:mock :3001, Vite http://127.0.0.1:5183, ui-components 2.500.3-work.2
+session: /api/session/me sub u-mia-clone-af1550cf, tenant orgiq, role program-owner, grants {"orgiq":["program-owner","member"],"social":["participant"]}
 screenshot: work-write.jpg
-verdict: fail — 7 of 32 steps failed; step 1 (Open Logout leaves the legacy shim cookie alive: this role may edit, so the brief offers Add context and the header menu offers new work): console error: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-auth-e2-b3/job-draft]
-console errors: 7 — Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-auth-e2-b3/job-draft] | Failed to load resource: the server responded with a status of 4
+verdict: pass
+console errors: 0 unexpected; 7 expected by the map (Failed to load resource: the server responded with a status of 403 (Forbidden) [)
 layout: pass — ui-dom-audit 0 failing findings at 31 measured step(s) (burn-down findings are listed under dom-audit:); at /iq/projects/p-auth-migration?item=wi-auth-e2-b3: no horizontal scroll (1440/1440), 1 h1 "Logout leaves the legacy shim cookie alive" 20/600 at 104/115, first-row-top: 92px, composer at y 615–855 of 900
-keyboard: pass — New story opens its dialog, named for the epic; Escape closes the dialog and nothing is created; New story opens its dialog, named for the epic; Enter creates the story: the dialog closes and the header menu stays shut; Enter posts the note to the story: Activity opens with it; Escape closes it; Tab from the top of the page: the controls take focus in turn (Tab visited 35 distinct visible controls of 55 focusable)
+keyboard: pass — New story opens its dialog, named for the epic; Escape closes the dialog and nothing is created; New story opens its dialog, named for the epic; Enter creates the story: the dialog closes and the header menu stays shut; Enter posts the note to the story: Activity opens with it; Escape closes it; Tab from the top of the page: the controls take focus in turn (Tab visited 35 distinct visible controls of 48 focusable)
 empty-state: pass — With no title typed the dialog will not create anything: Create is disabled
-role-gating: fail — step 1 (Open Logout leaves the legacy shim cookie alive: this role may edit, so the brief offers Add context and the header menu offers new work): console error: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-auth-e2-b3/job-draft]
-story-facts: fail — step 1 (Open Logout leaves the legacy shim cookie alive: this role may edit, so the brief offers Add context and the header menu offers new work): console error: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-auth-e2-b3/job-draft]
+role-gating: pass — Open Logout leaves the legacy shim cookie alive: this role may edit, so the brief offers Add context and the header menu offers new work; Open the header menu: it offers a new story in this item's epic; Open the header menu: it offers a new story in this item's epic
+story-facts: pass — Open Logout leaves the legacy shim cookie alive: this role may edit, so the brief offers Add context and the header menu offers new work; Open the Work tab: the new story is listed in its epic, read back from the server
 tab-stability: pass — Click Activity: the change is in the story's history (4 box(es) held still); Click Brief: the story's brief and the composer are back (4 box(es) held still); Click Activity: the planning note is there, by its author (4 box(es) held still)
-dom-audit: 0 failing finding(s) at 31 measured step(s); 91 more owed by docs/journeys/audit-burndown.tsv (control.font-size ×62, control.select-inset-field-sm ×21, a11y.heading-order ×8) — ui-dom-audit measureDOM, contract Work shared UI compact layout e34ed4bae531eb49
+dom-audit: 0 failing finding(s) at 31 measured step(s); 29 more owed by docs/journeys/audit-burndown.tsv (control.select-inset-field-sm ×21, a11y.heading-order ×8) — ui-dom-audit measureDOM, contract Work shared UI compact layout e34ed4bae531eb49
 notes: Mia Singh, program owner: Change work: create a story, move its status, assign an owner, add a planning note, each read back after a reload, inside a scoped world. Generated by the runner from the map; every field above was observed in this run (steps below; per-step screenshots in .scratch/journeys/work/program-owner/work-write).
 
 ## Steps
 
 | # | step | state | result | audit | evidence |
 |---|---|---|---|---|---|
-| 1 | Open Logout leaves the legacy shim cookie alive: this role may edit, so the brief offers Add context and the header menu offers new work | default | fail: console error: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-auth-e2-b3/job-draft] | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 1 | Open Logout leaves the legacy shim cookie alive: this role may edit, so the brief offers Add context and the header menu offers new work | default | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 2 | Open the header menu: it offers a new story in this item's epic |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 3 | New story opens its dialog, named for the epic | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 4 | Escape closes the dialog and nothing is created |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
@@ -31,26 +31,26 @@ notes: Mia Singh, program owner: Change work: create a story, move its status, a
 | 7 | With no title typed the dialog will not create anything: Create is disabled |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 8 | Type the story title |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 9 | Enter creates the story: the dialog closes and the header menu stays shut |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
-| 10 | Reload the page: this item is where it was |  | fail: console error: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-auth-e2-b3/job-draft] | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
+| 10 | Reload the page: this item is where it was |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?item=wi-auth-e2-b3 |
 | 11 | Open the Work tab: the new story is listed in its epic, read back from the server | default | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work |
-| 12 | Open the new story: its header names it | row-open | fail: console error: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-mock-1/job-draft] | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
+| 12 | Open the new story: its header names it | row-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
 | 13 | Open the status list of the new story | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
 | 14 | Choose In progress: the story moves |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
-| 15 | Reload: the story is still In progress |  | fail: console error: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-mock-1/job-draft] | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
+| 15 | Reload: the story is still In progress |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
 | 16 | Open the priority list of the story | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
 | 17 | Choose Critical priority |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
-| 18 | Reload: the priority is still Critical |  | fail: console error: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-mock-1/job-draft] | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
+| 18 | Reload: the priority is still Critical |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
 | 19 | Open the owner picker of the story: it searches the initiative's people | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
 | 20 | Search Nora: the picker narrows to her |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
 | 21 | Pick Nora DaSilva: she owns the story |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
 | 22 | Click Activity: the change is in the story's history (4 box(es) held still) |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
-| 23 | Reload: Nora DaSilva still owns it |  | fail: console error: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-mock-1/job-draft] | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
+| 23 | Reload: Nora DaSilva still owns it |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
 | 24 | Click Brief: the story's brief and the composer are back (4 box(es) held still) |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
 | 25 | Type a planning note into the composer with /comment |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1 |
 | 26 | Enter posts the note to the story: Activity opens with it |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
-| 27 | Reload and read the note back: the story's Activity still holds it |  | fail: console error: Failed to load resource: the server responded with a status of 403 (Forbidden) [403 GET /api/bots/work-items/wi-mock-1/job-draft] | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
+| 27 | Reload and read the note back: the story's Activity still holds it |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
 | 28 | Click Activity: the planning note is there, by its author (4 box(es) held still) |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
 | 29 | Open the header menu again for a new epic |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
 | 30 | New epic opens its dialog | dialog-open | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
 | 31 | Escape closes it |  | pass | 0 finding(s) | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
-| 32 | Tab from the top of the page: the controls take focus in turn (Tab visited 35 distinct visible controls of 55 focusable) |  | pass | — | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |
+| 32 | Tab from the top of the page: the controls take focus in turn (Tab visited 35 distinct visible controls of 48 focusable) |  | pass | — | /iq/projects/p-auth-migration?tab=work&item=wi-mock-1&view=history |

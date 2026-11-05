@@ -392,3 +392,14 @@ Checked and not worth it: marking ui-components' JS side-effect free saves
 only ~113 KB (the graph, breakout and editor chunks are reachable from
 shell code that renders), and lazy-loading the shell's `SocialConversation`
 saves ~54 KB because the composer already carries the same editor stack.
+
+### 2026-11-04 — a read-only ComposerPromptDeck card takes no focus
+
+A member's View job setup (`/iq/projects/p-auth-migration?item=wi-auth-e1-s1`)
+opens a card with no options and no answer field. The deck neither focuses
+itself (no `tabIndex` on `[data-composer-prompt-deck]`) nor counts as the
+composer's active prompt, so focus falls back to the header menu trigger and the
+audit's `composer.presence` reads 0 inputs. Wanted in ui-components: an
+expanded read-only card is focusable (`tabIndex={-1}`, focused on open like an
+option would be) and satisfies `composer.presence` as the active prompt. The
+member/prepare-job journey stays failing on it until then.
