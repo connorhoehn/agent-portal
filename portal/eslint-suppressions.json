@@ -1,0 +1,352 @@
+{
+  "src/components/ambient/AmbientVisitor.tsx": {
+    "ui-components/no-inline-style": {
+      "count": 1
+    }
+  },
+  "src/components/canary/edges/WeightedEdge.tsx": {
+    "ui-components/no-inline-style": {
+      "count": 2
+    }
+  },
+  "src/components/canary/nodes/ScorePanelNode.tsx": {
+    "ui-components/no-inline-style": {
+      "count": 1
+    }
+  },
+  "src/components/canary/setup/ExperimentConfigStep.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 2
+    }
+  },
+  "src/components/canary/setup/PromptEditorStep.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/components/canary/setup/VersionPickerStep.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 2
+    },
+    "ui-components/no-inline-style": {
+      "count": 2
+    },
+    "ui-components/no-raw-controls": {
+      "count": 1
+    }
+  },
+  "src/components/collections/CollectionCommandPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/components/collections/CollectionRecordFrame.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 2
+    }
+  },
+  "src/components/decks/DeckRunProgress.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/components/decks/ShareToSocialAction.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 3
+    }
+  },
+  "src/components/ingest/Thumbnail.tsx": {
+    "ui-components/no-inline-style": {
+      "count": 2
+    }
+  },
+  "src/components/kb/LandingZoneBrowser.tsx": {
+    "ui-components/no-raw-controls": {
+      "count": 1
+    }
+  },
+  "src/components/runs/RunsLedger.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 2
+    }
+  },
+  "src/components/scores/CompareDeltaTable.tsx": {
+    "ui-components/no-inline-style": {
+      "count": 2
+    }
+  },
+  "src/components/scores/Leaderboard.tsx": {
+    "ui-components/no-inline-style": {
+      "count": 1
+    }
+  },
+  "src/components/scores/PersonDetailCard.tsx": {
+    "ui-components/no-inline-style": {
+      "count": 1
+    }
+  },
+  "src/components/shell/FlushPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 4
+    }
+  },
+  "src/pages/NotFoundPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/ProjectsPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/ScoresPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/SelectContextPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 17
+    }
+  },
+  "src/pages/access/ApprovalsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/access/AuditPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/access/CatalogPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/access/PoliciesPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/access/RequestsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/access/ReviewRecordPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/access/ReviewsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/admin/AgentProjectsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/admin/ChangesPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/assessment/ConfigurationPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/assessment/FeedbackPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    },
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/assessment/ReportsPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/assessment/SubmissionsPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    },
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/assessment/dashboard/AssessorDesk.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    },
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/assessment/decks/CreateDeckDialog.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/assessment/submissions/DropStep.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/assessment/submissions/FetchLinksStep.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/assessment/submissions/PreviewStep.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/assessment/submissions/RunPromptStep.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/bots/BotsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/capabilities/CapabilitiesHomePage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 2
+    }
+  },
+  "src/pages/capabilities/prompts/InferenceSettings.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/capabilities/prompts/TemplateHighlighted.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/capabilities/prompts/TestPanel.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/capabilities/prompts/VarCombobox.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 2
+    }
+  },
+  "src/pages/identity/PoliciesPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 3
+    }
+  },
+  "src/pages/identity/PolicyTestPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/identity/SchemaPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 1
+    }
+  },
+  "src/pages/identity/UsersPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 5
+    }
+  },
+  "src/pages/observability/AgentMetricsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 4
+    }
+  },
+  "src/pages/observability/CapabilityEventsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 4
+    }
+  },
+  "src/pages/observability/CostPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/observability/DriftPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 2
+    }
+  },
+  "src/pages/observability/InvocationDetailPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 25
+    }
+  },
+  "src/pages/observability/InvocationsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 22
+    }
+  },
+  "src/pages/observability/SessionsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 9
+    }
+  },
+  "src/pages/observability/SummaryPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 10
+    }
+  },
+  "src/pages/observability/harness/HarnessHomePage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 25
+    }
+  },
+  "src/pages/pipelines/ApprovalsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/pipelines/ArtifactsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/pipelines/DefinitionsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/pipelines/QueuesPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/pipelines/RunbooksPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/pipelines/SourcesPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  },
+  "src/pages/search/SearchPage.tsx": {
+    "ui-components/button-explicit-variant": {
+      "count": 2
+    }
+  },
+  "src/pages/social/ContactsPage.tsx": {
+    "ui-components/no-arbitrary-token-values": {
+      "count": 1
+    }
+  }
+}
