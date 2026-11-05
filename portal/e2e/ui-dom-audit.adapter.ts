@@ -53,26 +53,21 @@ const selectors = {
   // content column. Never use the ledger/command host as its own boundary.
   // Since ui-components 2.448.0 a section's command composer docks at the bottom of the content
   // column (DockedColumn + ColumnDock), so an embedded section is no longer a boundary.
-  composerBoundary: '[data-docked-column], [data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-section-content], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
+  composerBoundary: '[data-docked-column], [data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
   // composer.last: the column a composer must be the last content of (the same hosts), and the dock
   // that holds it (content inside the dock — a call strip — is the dock's, not "below the composer").
-  composerColumns: '[data-docked-column], [data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-section-content], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
+  composerColumns: '[data-docked-column], [data-testid$="-pane-column"], [data-testid="social-chat-pane"], [data-testid="shell-split-primary"], [data-subnav-content], [data-testid="page-conversation-pane"]',
   composerDocks: '[data-column-dock], [data-floating-composer-dock], [data-testid$="-pane-footer"]:has([data-composer-surface])',
   rightPane: '[data-testid="page-conversation-pane"]',
   // The content column (the trail's parent: SectionContent, or a ListRailLayout header's column) and its
   // reading edge (the trail band, padded by the page gutter): content.gutter, header-alignment, single-title.
-  // Since ui-components 2.501.0 a page may instead be a library template root (PageFrame, DetailPage,
-  // CollectionPage…, `data-page-template`) that carries its trail inside its own header. Those roots are
-  // content columns too — unless they sit inside a section column above, which is already measured —
-  // or the template-era rules keyed on this alias (section.separator, page.vertical-budget,
-  // element.unmarked) would never see the pages built from templates.
-  contentColumns: ':has(> [data-testid="section-crumbs"]):not([data-testid$="-pane-header"]), [data-testid$="-pane-column"]:has(> [data-testid$="-pane-header"] > [data-testid="section-crumbs"]), [data-page-template]:not([data-section-content] *, [data-section-body] *, [data-testid="build-section-content"] *, [data-testid$="-pane-column"] *)',
-  // A template root's reading edge is its own header row (PageHeader / DetailPage's header band), at the
-  // page gutter, which is where its trail sits when it has one.
-  trail: '[data-testid="section-crumbs"], [data-page-template] > [data-testid="page-header"], [data-page-template] [data-detail-page-header]',
+  // Library template columns (PageFrame, SectionLayout, DetailPage…: data-page-column / data-page-trail /
+  // data-page-title) are bound by the contract's own librarySelectors since ui-components 2.504.0; only the
+  // portal's hand-built SectionHeader columns are listed here.
+  contentColumns: ':has(> [data-testid="section-crumbs"]):not([data-testid$="-pane-header"]), [data-testid$="-pane-column"]:has(> [data-testid$="-pane-header"] > [data-testid="section-crumbs"])', trail: '[data-testid="section-crumbs"]',
   // layout.contained-controls: every visible control inside the viewport, its column and its clipping ancestors.
   containedControls: ':is(button, a[href], [role="tab"], select, textarea, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]))',
-  containmentRegions: '[data-section-content], [data-subnav-content], [data-shell-nav] aside, .shell-header, [data-testid="shell-footer"]',
+  containmentRegions: '[data-subnav-content], [data-shell-nav] aside, .shell-header, [data-testid="shell-footer"]',
   // people.sparse-row: tile lists (ActivePeopleGrid and other role="list" grids) in the app.
   tileLists: '[data-shell-nav] [role="list"]',
   conversationState: '[data-composer-surface], [data-testid="social-channel-not-joined"], [data-testid="social-shared-work"], [data-testid="social-conversation-state"]',
