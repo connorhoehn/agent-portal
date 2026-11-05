@@ -12,7 +12,7 @@ local-only scope. The user explicitly said not to use AWS for this work; do not
 request credentials, run AWS checks or deploy. The checkout also has independently owned Assessment/huddle
 edits; inspect ownership before staging.
 
-**Building portal UI (ui-components 2.501+):** before writing any portal
+**Building portal UI (ui-components 2.504+):** before writing any portal
 page, read `portal/node_modules/@connorhoehnslalom/ui-components/docs/COMPONENT_INDEX.md`
 and follow the `ui-page-build` skill (`.../ui-components/skills/ui-page-build/SKILL.md`
 in the same package). Start every page from a template (`PageFrame`,
@@ -42,7 +42,7 @@ the claim here is a bug.
 
 Durable facts the handoff does not repeat:
 
-- Pins: the portal consumes `@connorhoehnslalom/ui-components` **2.501.0** and
+- Pins: the portal consumes `@connorhoehnslalom/ui-components` **2.504.0** and
   `@connorhoehn/realtime-modules` (its real package name, no alias) **0.142.0**
   from tracked tarballs in `portal/vendor/` (0.142.0's release commit `fe92dd6`
   is local to `~/Projects/realtime-modules` until pushed as `connorhoehn`). Read middleware's own manifest and

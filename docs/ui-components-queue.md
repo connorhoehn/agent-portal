@@ -393,9 +393,9 @@ only ~113 KB (the graph, breakout and editor chunks are reachable from
 shell code that renders), and lazy-loading the shell's `SocialConversation`
 saves ~54 KB because the composer already carries the same editor stack.
 
-### 2026-11-04 — page templates (2.501.0 adoption)
+### 2026-11-04 — page templates (2.504.0 adoption)
 
-The portal adopted 2.501.0's templates where they were a clean swap:
+The portal adopted the 2.504.0 templates where they were a clean swap:
 `observability/InvocationDetailPage.tsx` is a `DetailPage` (seven tabs instead
 of eight stacked cards) and the three Access form pages that used the local
 `FlushPage` are `PageFrame`s (`FlushPage.tsx` now only supplies the shell trail
