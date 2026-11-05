@@ -12,6 +12,19 @@ local-only scope. The user explicitly said not to use AWS for this work; do not
 request credentials, run AWS checks or deploy. The checkout also has independently owned Assessment/huddle
 edits; inspect ownership before staging.
 
+**Building portal UI (ui-components 2.501+):** before writing any portal
+page, read `portal/node_modules/@connorhoehnslalom/ui-components/docs/COMPONENT_INDEX.md`
+and follow the `ui-page-build` skill (`.../ui-components/skills/ui-page-build/SKILL.md`
+in the same package). Start every page from a template (`PageFrame`,
+`CollectionPage`, `MasterDetailPage`, `DetailPage`, `DashboardPage`,
+`SettingsPage`); one record's facets are `DetailPage` tabs, never stacked
+cards. Done for any `portal/src` change means `scripts/validate-ui.sh --route
+<tenant>:<path>` passes for every route it renders: `lint:ui` (the library's
+ESLint plugin against the per-file baseline `portal/eslint-suppressions.json`,
+which only shrinks), `validate-component-discipline.sh`, and `audit:ui` on
+those routes. Fix findings at their owner; never add audit exceptions or grow
+the baseline.
+
 **Dispatch UI constraint (2026-10-28):** read
 `docs/claude-code-handoff-2026-10-28-ui.md` for the user-approved dispatch
 response component. Changes must stay within individual components; revision
@@ -255,7 +268,7 @@ were public until 2026-09-29 because nothing in this tree creates them.
 Features follow goal-doc + validator: `docs/<feature>-goal.md` is the
 definition of done and `scripts/validate-<feature>.sh` is the only judge (most
 take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
-(25 validators).
+(26 validators).
 
 | Doc | What it is | Judge |
 |-----|------------|-------|
@@ -271,6 +284,7 @@ take `--quick`). `ls docs/*-goal.md scripts/validate-*.sh` is authoritative
 | `research-honesty-checks-2026-09-16.md` | "Numbers that lie" scanners | `validate-honest-numbers.sh` |
 | `nav-server-tier-decisions.md` | Rail / palette / `App.tsx` gate parity | `validate-nav-parity.sh` |
 | `ui-components-queue.md` | Missing composites; the component-discipline exemption ledger | `validate-component-discipline.sh` |
+| ui-components' `docs/COMPONENT_INDEX.md`, `skills/ui-page-build` (in the installed package) | Portal page UI: page templates, the ESLint plugin baseline, discipline, the DOM audit of changed routes | `validate-ui.sh` |
 | `social-tenant-design.md`, `social-tenant-goal.md`, `pipelines-tenant-goal.md` | Third and fourth tenants, the activity bell | `validate-social-tenant.sh`, `validate-pipelines-tenant.sh` |
 | `communication-plane-goal.md` | Social seen from the other tenants | `validate-communication-plane.sh` |
 | `access-tenant-design.md`, `access-tenant-goal.md`, `access-tenant-api.md` | The fifth tenant: access requests, approvals, provisioning (A0 registered 2026-10-13; A1/A2/E in progress) | `validate-access-tenant.sh` |
