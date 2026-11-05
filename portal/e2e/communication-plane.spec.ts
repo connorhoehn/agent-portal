@@ -105,7 +105,7 @@ test('an org-leader finds Communication in rail, trail and palette — the full 
   const frame = await page.evaluate(() => {
     const r = document.querySelector('[data-testid="social-chat-rail"]')!.getBoundingClientRect();
     const band = document.querySelector('[data-testid="page-trail"]')!;
-    const c = (band.querySelector('nav[aria-label*="readcrumb"]') ?? band).getBoundingClientRect();
+    const c = (band.querySelector('[data-ui-breadcrumbs], nav[aria-label*="readcrumb"]') ?? band).getBoundingClientRect();
     const m = document.querySelector('[data-shell-nav] main')!.getBoundingClientRect();
     return { railTop: Math.round(r.top), railRight: Math.round(r.right), mainTop: Math.round(m.top), crumbLeft: Math.round(c.left), crumbTop: Math.round(c.top) };
   });
