@@ -61,7 +61,15 @@ const selectors = {
   rightPane: '[data-testid="page-conversation-pane"]',
   // The content column (the trail's parent: SectionContent, or a ListRailLayout header's column) and its
   // reading edge (the trail band, padded by the page gutter): content.gutter, header-alignment, single-title.
-  contentColumns: ':has(> [data-testid="section-crumbs"]):not([data-testid$="-pane-header"]), [data-testid$="-pane-column"]:has(> [data-testid$="-pane-header"] > [data-testid="section-crumbs"])', trail: '[data-testid="section-crumbs"]',
+  // Since ui-components 2.501.0 a page may instead be a library template root (PageFrame, DetailPage,
+  // CollectionPage…, `data-page-template`) that carries its trail inside its own header. Those roots are
+  // content columns too — unless they sit inside a section column above, which is already measured —
+  // or the template-era rules keyed on this alias (section.separator, page.vertical-budget,
+  // element.unmarked) would never see the pages built from templates.
+  contentColumns: ':has(> [data-testid="section-crumbs"]):not([data-testid$="-pane-header"]), [data-testid$="-pane-column"]:has(> [data-testid$="-pane-header"] > [data-testid="section-crumbs"]), [data-page-template]:not([data-section-content] *, [data-section-body] *, [data-testid="build-section-content"] *, [data-testid$="-pane-column"] *)',
+  // A template root's reading edge is its own header row (PageHeader / DetailPage's header band), at the
+  // page gutter, which is where its trail sits when it has one.
+  trail: '[data-testid="section-crumbs"], [data-page-template] > [data-testid="page-header"], [data-page-template] [data-detail-page-header]',
   // layout.contained-controls: every visible control inside the viewport, its column and its clipping ancestors.
   containedControls: ':is(button, a[href], [role="tab"], select, textarea, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]))',
   containmentRegions: '[data-section-content], [data-subnav-content], [data-shell-nav] aside, .shell-header, [data-testid="shell-footer"]',
