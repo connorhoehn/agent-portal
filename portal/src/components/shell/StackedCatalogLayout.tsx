@@ -1,9 +1,8 @@
 import { DockedColumn, ListRailLayout, ScopeHeader, ViewportFillRegion, useSidePaneHost } from '@connorhoehnslalom/ui-components';
-import { GroupedList, PageHeader, PageSection, RailNavList, Select, Stack, SubNavLayout, useRailFold, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { GroupedList, PageHeader, PageSection, RailNavList, SectionLayout, Select, Stack, useRailFold, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { UNDER_CRUMBS_BAND } from './headerRhythm';
-import { SectionHeader } from './SectionContent';
 import { useDialogueRailFold } from './useDialogueRailFold';
 
 function groupsOf(rows: Array<{ subline?: string }>, fallback: string) {
@@ -98,51 +97,43 @@ export function StackedCatalogLayout({
       </Stack>
     </ViewportFillRegion>;
   }
-  const content = catalogOverview && !selectedId ? <Stack gap="none" className="h-full min-h-0">
-    <ScopeHeader variant="crumbs" breadcrumbs={[{ label: group }, { label: title }]} />
-    {/* The overview's command host docks at the column's bottom (ColumnDock). */}
-    <DockedColumn bodyClassName={`flex flex-col px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)] ${UNDER_CRUMBS_BAND}`} bodyProps={{ 'data-testid': 'catalog-overview' }}>
-      <PageSection title={title}
+  // Stacked: the library SectionLayout — the section rail, then either the
+  // catalog overview (trail row over a PageSection) or the record list as a
+  // flush list rail with the trail and title heading the content column. Rows
+  // group by their category line (a design's status, an asset's kind).
+  const overview = catalogOverview && !selectedId;
+  return (
+    <SectionLayout
+      title={title} items={items} storageKey={`catalog-${title}`}
+      renderNavItem={(item, body) => {
+        const active = items.find((entry) => entry.path === item.path)?.active;
+        return <Link to={item.path} aria-current={active ? 'page' : undefined} className={active ? activeNavItemClassName : inactiveNavItemClassName}>{body}</Link>;
+      }}
+      {...(overview ? { header: { breadcrumbs: [{ label: group }, { label: title }] } } : {
+        header: { breadcrumbs, title },
+        list: {
+          title: listTitle,
+          count: rows.length,
+          label: `${title.toLowerCase()} records`,
+          header: railHeader,
+          body: railNotice ?? <GroupedList
+            size="md" currentStyle="bar" groupHeading="label" groupCountAlign="end"
+            groups={groupsOf(rows, listTitle)}
+            rows={rows.map((row) => ({ id: row.id, title: row.title, groupId: row.subline ?? listTitle }))}
+            currentId={selectedId}
+            onOpenRow={(row) => onSelect(row.id)}
+          />,
+        },
+        ...(footer != null ? { footer } : {}),
+      })}
+      bodyClassName={overview ? undefined : 'overflow-x-auto'}
+      data-testid="stacked-catalog"
+    >
+      {overview ? <PageSection title={title} data-testid="catalog-overview"
         {...(overviewDescription ? { description: overviewDescription } : {})}
         {...(overviewActions ? { actions: overviewActions } : {})}>
         {children}
-      </PageSection>
-    </DockedColumn>
-  </Stack> : <ListRailLayout
-    header={<SectionHeader breadcrumbs={breadcrumbs} title={title} />}
-    // The record list is a flush list rail beside the section rail, the
-    // Initiatives rail's structure (docs/layout-cascade.md); the content
-    // column after it opens with the trail and the title. Rows group by their
-    // category line (a design's status, an asset's kind).
-    list={{
-      title: listTitle,
-      count: rows.length,
-      label: `${title.toLowerCase()} records`,
-      header: railHeader,
-      body: railNotice ?? <GroupedList
-        size="md" currentStyle="bar" groupHeading="label" groupCountAlign="end"
-        groups={groupsOf(rows, listTitle)}
-        rows={rows.map((row) => ({ id: row.id, title: row.title, groupId: row.subline ?? listTitle }))}
-        currentId={selectedId}
-        onOpenRow={(row) => onSelect(row.id)}
-      />,
-    }}
-    {...(footer != null ? { footer } : {})}
-    data-testid="catalog-explorer"
-  >
-    <Stack gap="md" className="min-w-0 w-full overflow-x-auto px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)]">{children}</Stack>
-  </ListRailLayout>;
-  return (
-    <ViewportFillRegion bottomGap={0} data-testid="stacked-catalog">
-      <Stack gap="none" className="h-full min-h-0 bg-surface" data-shell-flush>
-        <SubNavLayout title={title} items={items} railLabel={`${title} navigation`} storageKey={`catalog-${title}`} contentAs="section" contentLabel={`${title} workspace`}
-          renderNavItem={(item, body) => {
-            const active = items.find((entry) => entry.path === item.path)?.active;
-            return <Link to={item.path} aria-current={active ? 'page' : undefined} className={active ? activeNavItemClassName : inactiveNavItemClassName}>{body}</Link>;
-          }}>
-          {content}
-        </SubNavLayout>
-      </Stack>
-    </ViewportFillRegion>
+      </PageSection> : children}
+    </SectionLayout>
   );
 }

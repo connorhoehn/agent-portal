@@ -45,11 +45,11 @@ test('Agent library uses a table overview and keeps both menus for asset details
   await expect(page.getByTestId('catalog-overview')).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Agent library navigation' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Used by', exact: true })).toBeInViewport();
-  await expect(page.getByTestId('catalog-explorer')).toHaveCount(0);
+  await expect(page.getByTestId('stacked-catalog-list')).toHaveCount(0);
   await page.getByRole('textbox', { name: 'Search assets', exact: true }).fill('Stakeholder update email');
   await page.getByTestId('agent-library-table').getByText('Stakeholder update email', { exact: true }).click();
   await expect(page).toHaveURL(/\/iq\/library\/lib-stakeholder-email/);
-  await expect(page.getByTestId('catalog-explorer')).toBeVisible();
+  await expect(page.getByTestId('stacked-catalog-list')).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Agent library navigation' })).toBeVisible();
   await expect(page.getByText('Contract', { exact: true })).toBeVisible();
 });
