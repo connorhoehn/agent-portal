@@ -3,25 +3,31 @@
 // Endpoint: GET /api/observability/invocations/:invocationId
 // Returns: { invocation, toolCalls, parent, children: [{ ..., grandchildren }] }
 //
-// Sections (cards): header → trace tree → tool waterfall → prompt → response
-// → judge → raw metadata (collapsed). Replay button posts to /replay; backend
-// returns 501 currently, surfaced via a small toast.
+// A DetailPage: the header carries the agent, the run's chips and its
+// actions; each facet is a tab (trace chain, tool calls, memory, guardrails
+// when one fired, prompt & response, judge, raw metadata) instead of eight
+// stacked cards. The open tab is `?tab=` so a facet can be linked. Replay
+// posts to /replay; backend returns 501 currently, surfaced via a small toast.
 
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import {
   Button,
   Card,
   Chip,
   CodeBlock,
+  DetailPage,
+  DetailSection,
+  ErrorState,
   Inline,
   InlineAlert,
   InlinePlaceholder,
-  PageSection,
-  SectionLabel,
+  LoadingState,
+  MetaLine,
   Stack,
   useToast, T,
+  type DetailPageTab,
 } from '@connorhoehnslalom/ui-components/shared';
 import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
@@ -90,6 +96,8 @@ const fmtDur = (ms: number | null | undefined): string => {
   return `${(ms / 60_000).toFixed(1)}m`;
 };
 
+const SEARCH_PATH = '/admin/observability/invocations/search';
+
 const judgeTone = (v: number | null | undefined) => {
   if (v == null) return 'neutral' as const;
   if (v >= 0.75) return 'success' as const;
@@ -113,6 +121,15 @@ function childToNode(c: ChildSummary): TraceNode {
 function InvocationDetailPage() {
   const params = useParams<{ invocationId: string }>();
   const invocationId = params.invocationId ?? '';
+  const navigate = useNavigate();
+  const [search, setSearch] = useSearchParams();
+  const tab = search.get('tab') ?? undefined;
+  const onTabChange = (id: string) => setSearch((prev) => {
+    const next = new URLSearchParams(prev);
+    next.set('tab', id);
+    return next;
+  }, { replace: true });
+  const backToSearch = <Button variant="link" size="sm" onClick={() => navigate(SEARCH_PATH)}>← Back to search</Button>;
 
   const [detail, setDetail] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -189,16 +206,14 @@ function InvocationDetailPage() {
 
   if (!invocationId) {
     return (
-      <ErrorBlock title="Missing invocation id" detail="No id in the URL." />
+      <ErrorBlock title="Missing invocation id" detail="No id in the URL." actions={backToSearch} />
     );
   }
   if (loading && !detail) {
     return (
-      <PageSection title="Invocation">
-        <Card padding="md">
-          <T size="xs" className="text-[var(--color-text-tertiary)]">Loading invocation…</T>
-        </Card>
-      </PageSection>
+      <DetailPage title="Invocation" gutter="none" actions={backToSearch}>
+        <LoadingState label="Loading invocation…" />
+      </DetailPage>
     );
   }
   if (error || !detail) {
@@ -210,6 +225,7 @@ function InvocationDetailPage() {
           'The backend may not have the detail endpoint yet, or this invocation has not been indexed.'
         }
         invocationId={invocationId}
+        actions={backToSearch}
       />
     );
   }
@@ -271,149 +287,140 @@ function InvocationDetailPage() {
   // and "✗ schema" badge, not in place of them.
   const failureMessage = toolCalls.find((t) => t.errored && t.errorMessage)?.errorMessage ?? null;
 
-  return (
-    <PageSection title={agentName}>
+  const judgeLabel = inv.judgeScore != null && Number.isFinite(inv.judgeScore)
+    ? Number(inv.judgeScore).toFixed(2)
+    : '—';
+  const showGuardrails = !!inv.guardrailAction && inv.guardrailAction !== 'NONE';
 
-      <Card padding="md">
-        <Inline align="start" justify="between" wrap gap="sm">
-          <Stack gap="sm" className="min-w-0 flex-1">
-            {ts && (
-              <T size="xs" className="text-[var(--color-text-secondary)]">
-                {new Date(ts).toLocaleString()}
-              </T>
+  const tabs: DetailPageTab[] = [
+    {
+      id: 'trace',
+      label: 'Trace chain',
+      content: hasTrace ? (
+        <TraceTree
+          parent={parentNode}
+          current={currentNode}
+          children={childrenNodes}
+          currentInvocationId={invocationId}
+        />
+      ) : (
+        <InlinePlaceholder align="center" size="sm">
+          This invocation has no recorded parent or child invocations yet.
+        </InlinePlaceholder>
+      ),
+    },
+    {
+      id: 'tools',
+      label: 'Tool calls',
+      badge: toolCalls.length,
+      content: <ToolWaterfall toolCalls={toolCalls} />,
+    },
+    { id: 'memory', label: 'Memory', content: <MemoryOperations invocationId={invocationId} /> },
+    ...(showGuardrails
+      ? [{ id: 'guardrails', label: 'Guardrails', content: <GuardrailTrace invocationId={invocationId} /> }]
+      : []),
+    {
+      id: 'io',
+      label: 'Prompt & response',
+      content: (
+        <Stack gap="none">
+          <DetailSection title="Prompt" first>
+            {prompt ? (
+              <CodeBlock code={prompt} language="text" theme="light" className="max-h-[360px] overflow-y-auto" />
+            ) : (
+              <InlinePlaceholder align="center" size="sm">
+                No prompt text captured for this invocation.
+              </InlinePlaceholder>
             )}
-            <T size="xs" as="div" className="break-all font-mono text-[var(--color-text-tertiary)]">
-              {invocationId}
-            </T>
-            <Inline gap="sm" wrap align="center">
-              <SectionLabel>judge</SectionLabel>
-              <Chip tone={judgeTone(inv.judgeScore)} size="xs">
-                {inv.judgeScore != null && Number.isFinite(inv.judgeScore)
-                  ? Number(inv.judgeScore).toFixed(2)
-                  : '—'}
-              </Chip>
-              <SchemaChip valid={inv.schemaValid ?? null} />
-              {inv.guardrailAction && (
-                <Chip tone="warning" size="xs">
-                  {String(inv.guardrailAction)}
-                </Chip>
-              )}
-              {modeFromTemplate && <ModeChip mode={modeFromTemplate} />}
-              <CostChip cost={totalCost} />
-              <PromptVersionChip promptVersion={inv.promptVersion ?? null} />
-              {inv.modelId && (
-                <T size="xs" title="model id" className="font-mono text-[var(--color-text-tertiary)]">
-                  {String(inv.modelId)}
-                </T>
-              )}
-              <T size="xs" className="text-[var(--color-text-tertiary)]">
-                · duration {fmtDur(inv.durationMs)}
-              </T>
-            </Inline>
-          </Stack>
-          <Stack gap="xs" align="end">
-            <Link
-              to="/admin/observability/invocations/search"
-              className="text-xs px-2 py-[2px] text-[var(--color-primary)] no-underline"
-            >
-              ← Back to search
-            </Link>
-            <Inline gap="xs">
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={onReplay}
-                disabled={replayLoading}
-                title="Replay this invocation (backend may return 501 — replay coming soon)"
-              >
-                {replayLoading ? 'Replaying…' : 'Replay'}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => setSaveOpen(true)}>
-                + Save as test case
-              </Button>
-            </Inline>
-          </Stack>
-        </Inline>
-      </Card>
-
-      <Card padding="md">
-        <SectionLabel as="div" className="mb-3">Trace chain</SectionLabel>
-        {hasTrace ? (
-          <TraceTree
-            parent={parentNode}
-            current={currentNode}
-            children={childrenNodes}
-            currentInvocationId={invocationId}
-          />
-        ) : (
-          <InlinePlaceholder align="center" size="sm">
-            This invocation has no recorded parent or child invocations yet.
-          </InlinePlaceholder>
-        )}
-      </Card>
-
-      <Card padding="md">
-        <SectionLabel as="div" className="mb-3">
-          Tool calls{' '}
-          <T weight="normal" size="xs" className="text-[var(--color-text-tertiary)]">
-            {toolCalls.length} call{toolCalls.length === 1 ? '' : 's'}
-          </T>
-        </SectionLabel>
-        <ToolWaterfall toolCalls={toolCalls} />
-      </Card>
-
-      <MemoryOperationsCard invocationId={invocationId} />
-
-      {inv.guardrailAction && inv.guardrailAction !== 'NONE' && (
-        <GuardrailTraceCard invocationId={invocationId} />
-      )}
-
-      <Card padding="md">
-        <SectionLabel as="div" className="mb-3">Prompt</SectionLabel>
-        {prompt ? (
-          <CodeBlock code={prompt} language="text" theme="light" className="max-h-[360px] overflow-y-auto" />
-        ) : (
-          <InlinePlaceholder align="center" size="sm">
-            No prompt text captured for this invocation.
-          </InlinePlaceholder>
-        )}
-      </Card>
-
-      <Card padding="md">
-        <SectionLabel as="div" className="mb-3">Response</SectionLabel>
-        {failureMessage && (
-          <InlineAlert tone="error" className="mb-3">
-            {failureMessage}
-          </InlineAlert>
-        )}
-        {response ? (
-          <CodeBlock code={response} language="text" theme="light" className="max-h-[360px] overflow-y-auto" />
-        ) : (
-          <InlinePlaceholder align="center" size="sm">
-            No response text captured for this invocation.
-          </InlinePlaceholder>
-        )}
-      </Card>
-
-      <Card padding="md">
-        <SectionLabel as="div" className="mb-3">Judge</SectionLabel>
+          </DetailSection>
+          <DetailSection title="Response">
+            {failureMessage && (
+              <InlineAlert tone="error" className="mb-3">
+                {failureMessage}
+              </InlineAlert>
+            )}
+            {response ? (
+              <CodeBlock code={response} language="text" theme="light" className="max-h-[360px] overflow-y-auto" />
+            ) : (
+              <InlinePlaceholder align="center" size="sm">
+                No response text captured for this invocation.
+              </InlinePlaceholder>
+            )}
+          </DetailSection>
+        </Stack>
+      ),
+    },
+    {
+      id: 'judge',
+      label: 'Judge',
+      content: (
         <Inline align="start" gap="sm">
-          <Chip tone={judgeTone(inv.judgeScore)} size="sm">
-            {inv.judgeScore != null && Number.isFinite(inv.judgeScore)
-              ? Number(inv.judgeScore).toFixed(2)
-              : '—'}
-          </Chip>
+          <Chip tone={judgeTone(inv.judgeScore)} size="sm">{judgeLabel}</Chip>
           {inv.judgeRationale ? (
-            <T size="xs" as="div" className="leading-[1.5] text-[var(--color-text-secondary)]">
+            <T size="xs" as="div" tone="secondary" className="leading-normal">
               {inv.judgeRationale}
             </T>
           ) : (
-            <T size="xs" className="text-[var(--color-text-tertiary)]">(no rationale recorded)</T>
+            <T size="xs" tone="tertiary">(no rationale recorded)</T>
           )}
         </Inline>
-      </Card>
+      ),
+    },
+    { id: 'raw', label: 'Raw metadata', content: <RawMetadata invocation={inv} /> },
+  ];
 
-      <RawMetadataCard invocation={inv} />
+  return (
+    <>
+      <DetailPage
+        title={agentName}
+        gutter="none"
+        data-testid="invocation-detail"
+        badge={
+          <Inline gap="xs" wrap align="center">
+            <Chip tone={judgeTone(inv.judgeScore)} size="xs" title="judge score">judge {judgeLabel}</Chip>
+            <SchemaChip valid={inv.schemaValid ?? null} />
+            {inv.guardrailAction && (
+              <Chip tone="warning" size="xs">
+                {String(inv.guardrailAction)}
+              </Chip>
+            )}
+            {modeFromTemplate && <ModeChip mode={modeFromTemplate} />}
+            <CostChip cost={totalCost} />
+            <PromptVersionChip promptVersion={inv.promptVersion ?? null} />
+          </Inline>
+        }
+        meta={
+          <MetaLine
+            size="xs"
+            items={[
+              ...(ts ? [new Date(ts).toLocaleString()] : []),
+              <T key="id" size="xs" tone="tertiary" className="break-all font-mono">{invocationId}</T>,
+              ...(inv.modelId ? [<T key="model" size="xs" tone="tertiary" title="model id" className="font-mono">{String(inv.modelId)}</T>] : []),
+              `duration ${fmtDur(inv.durationMs)}`,
+            ]}
+          />
+        }
+        actions={
+          <>
+            {backToSearch}
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={onReplay}
+              disabled={replayLoading}
+              title="Replay this invocation (backend may return 501 — replay coming soon)"
+            >
+              {replayLoading ? 'Replaying…' : 'Replay'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setSaveOpen(true)}>
+              + Save as test case
+            </Button>
+          </>
+        }
+        tabs={tabs}
+        {...(tab ? { activeTab: tab } : {})}
+        onTabChange={onTabChange}
+      />
 
       <SaveAsTestCaseModal
         invocation={{
@@ -429,7 +436,7 @@ function InvocationDetailPage() {
           toast(`Test case ${testId} saved. View in harness: /admin/observability/harness`, { type: 'success' })
         }
       />
-    </PageSection>
+    </>
   );
 }
 
@@ -450,7 +457,7 @@ interface MemoryEventRow {
   ts: string;
 }
 
-function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
+function MemoryOperations({ invocationId }: { invocationId: string }) {
   const [events, setEvents] = useState<MemoryEventRow[] | null>(null);
   // Both ways of being blind, kept apart from the honest zero. This card used
   // to `.catch(() => setEvents([]))`, so a dead endpoint and an agent that
@@ -484,13 +491,10 @@ function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
 
   const count = events?.length ?? 0;
   return (
-    <Card padding="md">
-      <SectionLabel as="div" className="mb-3">
-        Memory operations{' '}
-        <T weight="normal" size="xs" className="text-[var(--color-text-tertiary)]">
-          {events == null ? 'loading…' : `${count} op${count === 1 ? '' : 's'}`}
-        </T>
-      </SectionLabel>
+    <Stack gap="sm">
+      <T size="xs" tone="tertiary">
+        {events == null ? 'loading…' : `${count} memory op${count === 1 ? '' : 's'}`}
+      </T>
       {failure ? (
         <UnavailableNotice
           error={failure}
@@ -507,7 +511,7 @@ function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
       ) : (
         <Stack gap="sm">
           {events.map((e) => (
-            <Card key={e.memoryEventId} padding="sm" className="bg-[var(--color-bg)]">
+            <Card key={e.memoryEventId} padding="sm">
               <Stack gap="xs">
                 <Inline gap="sm" wrap align="center">
                   <Chip
@@ -522,22 +526,22 @@ function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
                   >
                     {e.kind}
                   </Chip>
-                  <T size="xs" className="text-[var(--color-text-tertiary)]">
+                  <T size="xs" tone="tertiary">
                     {e.resultCount == null ? '—' : `${e.resultCount} result${e.resultCount === 1 ? '' : 's'}`}
                   </T>
-                  <T size="xs" className="text-[var(--color-text-tertiary)]">·</T>
-                  <T size="xs" className="text-[var(--color-text-tertiary)]">
+                  <T size="xs" tone="tertiary">·</T>
+                  <T size="xs" tone="tertiary">
                     {e.durationMs == null ? '—' : `${e.durationMs}ms`}
                   </T>
                   {e.sessionId && (
                     <>
-                      <T size="xs" className="text-[var(--color-text-tertiary)]">·</T>
-                      <T size="xs" className="text-[var(--color-text-tertiary)]">session {e.sessionId}</T>
+                      <T size="xs" tone="tertiary">·</T>
+                      <T size="xs" tone="tertiary">session {e.sessionId}</T>
                     </>
                   )}
                 </Inline>
                 {e.queryText && (
-                  <T size="xs" as="div" className="italic text-[var(--color-text-secondary)]">
+                  <T size="xs" as="div" tone="secondary" className="italic">
                     {e.queryText}
                   </T>
                 )}
@@ -557,7 +561,7 @@ function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
           ))}
         </Stack>
       )}
-    </Card>
+    </Stack>
   );
 }
 
@@ -574,7 +578,7 @@ interface GuardrailInterventionRow {
   ts: string;
 }
 
-function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
+function GuardrailTrace({ invocationId }: { invocationId: string }) {
   const [rows, setRows] = useState<GuardrailInterventionRow[] | null>(null);
   // This card is only rendered for an invocation that WAS intervened on, so
   // "no rule-level breakdown was captured" is already an odd answer — reading
@@ -607,13 +611,10 @@ function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
   }, [invocationId, reloadKey]);
 
   return (
-    <Card padding="md">
-      <SectionLabel as="div" className="mb-3">
-        Guardrail trace{' '}
-        <T weight="normal" size="xs" className="text-[var(--color-text-tertiary)]">
-          {rows == null ? 'loading…' : `${rows.length} rule${rows.length === 1 ? '' : 's'} fired`}
-        </T>
-      </SectionLabel>
+    <Stack gap="sm">
+      <T size="xs" tone="tertiary">
+        {rows == null ? 'loading…' : `${rows.length} guardrail rule${rows.length === 1 ? '' : 's'} fired`}
+      </T>
       {failure ? (
         <UnavailableNotice
           error={failure}
@@ -630,7 +631,7 @@ function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
       ) : (
         <Stack gap="sm">
           {rows.map((r) => (
-            <Card key={r.interventionId} padding="sm" className="bg-[var(--color-bg)]">
+            <Card key={r.interventionId} padding="sm">
               <Stack gap="xs">
                 <Inline gap="sm" wrap align="center">
                   <GuardrailRuleBadge
@@ -639,10 +640,10 @@ function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
                     severity={r.severity}
                   />
                   {r.ruleCategory && (
-                    <T size="xs" className="text-[var(--color-text-tertiary)]">{r.ruleCategory}</T>
+                    <T size="xs" tone="tertiary">{r.ruleCategory}</T>
                   )}
                   {r.severity && (
-                    <T size="xs" className="text-[var(--color-text-tertiary)]">severity {r.severity}</T>
+                    <T size="xs" tone="tertiary">severity {r.severity}</T>
                   )}
                 </Inline>
                 {r.matchedText && (
@@ -658,7 +659,7 @@ function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
           ))}
         </Stack>
       )}
-    </Card>
+    </Stack>
   );
 }
 
@@ -681,8 +682,7 @@ function SchemaChip({ valid }: { valid: boolean | null }) {
   );
 }
 
-function RawMetadataCard({ invocation }: { invocation: InvocationRow }) {
-  const [open, setOpen] = useState(false);
+function RawMetadata({ invocation }: { invocation: InvocationRow }) {
   const json = useMemo(() => {
     try {
       return JSON.stringify(invocation, null, 2);
@@ -691,19 +691,10 @@ function RawMetadataCard({ invocation }: { invocation: InvocationRow }) {
     }
   }, [invocation]);
   return (
-    <Card padding="md">
-      <Inline align="center" gap="sm" className="mb-3">
-        <Button variant="ghost" size="sm" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-          {open ? '▾' : '▸'} Raw metadata
-        </Button>
-        <T weight="normal" size="xs" className="text-[var(--color-text-tertiary)]">
-          full invocation_traces row · JSON
-        </T>
-      </Inline>
-      {open && (
-        <CodeBlock code={json} language="json" theme="light" className="max-h-[360px] overflow-y-auto" />
-      )}
-    </Card>
+    <Stack gap="sm">
+      <T size="xs" tone="tertiary">full invocation_traces row · JSON</T>
+      <CodeBlock code={json} language="json" theme="light" />
+    </Stack>
   );
 }
 
@@ -711,32 +702,29 @@ function ErrorBlock({
   title,
   detail,
   invocationId,
+  actions,
 }: {
   title: string;
   detail: string;
   invocationId?: string;
+  actions: ReactNode;
 }) {
   return (
-    <PageSection
-      title={title}
-      actions={
-        <Link
-          to="/admin/observability/invocations/search"
-          className="text-xs px-2 py-[2px] text-[var(--color-primary)] no-underline"
-        >
-          ← Back to search
-        </Link>
-      }
-    >
-      <Card padding="md">
-        {invocationId && (
-          <T size="xs" as="div" className="break-all font-mono text-[var(--color-text-tertiary)]">
-            id: {invocationId}
-          </T>
-        )}
-        <T size="xs" as="div" className="mt-1 text-[var(--color-text-secondary)]">{detail}</T>
-      </Card>
-    </PageSection>
+    <DetailPage title={title} gutter="none" actions={actions}>
+      <ErrorState
+        title={title}
+        description={
+          <Stack gap="xs">
+            {invocationId && (
+              <T size="xs" as="div" tone="tertiary" className="break-all font-mono">
+                id: {invocationId}
+              </T>
+            )}
+            <T size="xs" as="div" tone="secondary">{detail}</T>
+          </Stack>
+        }
+      />
+    </DetailPage>
   );
 }
 

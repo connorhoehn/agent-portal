@@ -284,11 +284,6 @@
       "count": 2
     }
   },
-  "src/pages/observability/InvocationDetailPage.tsx": {
-    "ui-components/no-arbitrary-token-values": {
-      "count": 25
-    }
-  },
   "src/pages/observability/InvocationsPage.tsx": {
     "ui-components/no-arbitrary-token-values": {
       "count": 22

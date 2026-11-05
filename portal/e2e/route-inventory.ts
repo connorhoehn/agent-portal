@@ -120,6 +120,8 @@ export const PARAM_ROUTES: readonly ParamRoute[] = [
   { tenant: 'orgiq', pattern: '/iq/work/:jobId', template: '/iq/work/:id', resolve: { url: '/api/work/jobs?limit=1', pick: first('jobs') }, fallback: 'job-missing' },
   { tenant: 'orgiq', pattern: '/iq/library/:assetId', template: '/iq/library/:id', resolve: { url: '/api/library?limit=1', pick: first('assets') }, fallback: 'asset-missing' },
   { tenant: 'orgiq', pattern: '/iq/decks/:deckId', template: '/iq/decks/:id', id: 'deck-missing' },
+  // One invocation's triage page (the DetailPage template since ui-components 2.501): the newest searchable invocation.
+  { tenant: 'orgiq', pattern: '/admin/observability/invocations/:invocationId', template: '/admin/observability/invocations/:id', resolve: { url: '/api/observability/invocations/search?limit=1', pick: first('invocations', 'invocationId') }, fallback: 'invocation-missing' },
   // Runbooks (docs/distillation-runbooks-design.md §4): a runbook, a proposal and a brief each open as a page beside their list rail.
   { tenant: 'orgiq', pattern: '/iq/runbooks/:id', template: '/iq/runbooks/:id', id: 'rb-tenant-cutover' },
   { tenant: 'orgiq', pattern: '/iq/runbooks/proposals/:pid', template: '/iq/runbooks/proposals/:id', resolve: { url: '/api/runbooks/proposals', pick: first('proposals') }, fallback: 'proposal-missing' },
