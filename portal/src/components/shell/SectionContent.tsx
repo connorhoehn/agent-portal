@@ -9,8 +9,8 @@
 // Initiatives list draws (264px, caption title + count chip, search header,
 // grouped rows, footer) — and `SectionHeader` as its `header`, so the content
 // column (trail first, then the title, then the record) starts after it.
-import { DockedColumn, ScopeHeader } from '@connorhoehnslalom/ui-components';
-import { PageHeader, Stack, type Density } from '@connorhoehnslalom/ui-components/shared';
+import { ScopeHeader } from '@connorhoehnslalom/ui-components';
+import { PageFrame, PageHeader, Stack, type BreadcrumbItem, type Density } from '@connorhoehnslalom/ui-components/shared';
 import type { ComponentProps, ReactNode } from 'react';
 import { UNDER_CRUMBS_BAND, UNDER_CRUMBS_BAND_WITH_CONTROLS } from './headerRhythm';
 
@@ -69,8 +69,14 @@ export function SectionHeader({ breadcrumbs, controls, link, title, description,
   );
 }
 
+/** The content column of a sectioned page: the library `PageFrame` in its
+ *  trail form — the trail row (with `controls`/`link` on its right), the title
+ *  band under it (folded into the trail when `collapsed`), and a docked body a
+ *  section's command composer (`ColumnDock`) docks under. A conversation
+ *  (`inset="conversation"`) owns its own gutters. */
 export function SectionContent({
-  body = 'scroll', children, 'data-testid': testId, ...header
+  body = 'scroll', children, 'data-testid': testId,
+  breadcrumbs, controls, link, title, description, badge, actions, density, collapsed = false, onToggleCollapsed, inset = 'page',
 }: SectionHeaderProps & {
   /** `scroll`: the body scrolls (an overview, a form). `fill`: the body is a
    *  fixed-height frame whose panes scroll on their own (a canvas + inspector). */
@@ -79,18 +85,25 @@ export function SectionContent({
   'data-testid'?: string;
 }) {
   return (
-    <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-section-content data-testid={testId}>
-      <SectionHeader {...header} />
-      {/* The body scrolls over the column's dock: a section's command composer
-          (ColumnDock) docks at the column's bottom, spanning it. */}
-      <DockedColumn
-        body={body === 'scroll' ? 'scroll' : 'fill'}
-        bodyClassName={`flex flex-col gap-3 ${header.inset === 'conversation' ? '' : 'px-[var(--ui-page-gutter,1.5rem)] pb-[var(--ui-page-gutter,1.5rem)]'}`}
-        bodyProps={{ 'data-section-body': '' }}
-      >
-        {children}
-      </DockedColumn>
-    </Stack>
+    <PageFrame
+      title={title}
+      {...(breadcrumbs ? { breadcrumbs: breadcrumbs as BreadcrumbItem[] } : {})}
+      {...(description ? { description } : {})}
+      {...(badge ? { badge } : {})}
+      {...(actions ? { actions } : {})}
+      {...(density ? { density } : {})}
+      {...(controls ? { trailControls: controls } : {})}
+      {...(link ? { trailLink: link } : {})}
+      collapsed={collapsed}
+      {...(onToggleCollapsed ? { onToggleCollapsed } : {})}
+      body="docked"
+      dockedBody={body}
+      bodyGutter={inset === 'conversation' ? 'none' : 'page'}
+      className="flex-1"
+      {...(testId ? { 'data-testid': testId } : {})}
+    >
+      {children}
+    </PageFrame>
   );
 }
 

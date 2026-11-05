@@ -88,7 +88,7 @@ test('an org-leader finds Communication in rail, trail and palette — the full 
   const nav = page.locator('[data-shell-nav]');
   await expect(nav.getByRole('link', { name: /^Communication/ })).toBeVisible();
   await expect(nav.getByRole('link', { name: /^Calls$/ })).toHaveCount(0);
-  const crumbs = page.getByTestId('section-crumbs');
+  const crumbs = page.getByTestId('page-trail');
   // The trail is the section's (Engage › Communication, b02f3d85); the tenant is in the header switcher, not the trail.
   await expect(crumbs).toContainText('Engage'); await expect(crumbs).toContainText('Communication');
   // …/calls is a shelf destination: Active now and no section (one section per route).
@@ -104,7 +104,7 @@ test('an org-leader finds Communication in rail, trail and palette — the full 
   // The cascade: rail flush at the content top, trail first at the 24px gutter right of it.
   const frame = await page.evaluate(() => {
     const r = document.querySelector('[data-testid="social-chat-rail"]')!.getBoundingClientRect();
-    const band = document.querySelector('[data-testid="section-crumbs"]')!;
+    const band = document.querySelector('[data-testid="page-trail"]')!;
     const c = (band.querySelector('nav[aria-label*="readcrumb"]') ?? band).getBoundingClientRect();
     const m = document.querySelector('[data-shell-nav] main')!.getBoundingClientRect();
     return { railTop: Math.round(r.top), railRight: Math.round(r.right), mainTop: Math.round(m.top), crumbLeft: Math.round(c.left), crumbTop: Math.round(c.top) };
@@ -185,7 +185,7 @@ test('an orgiq user without a Social grant gets the denied state and makes zero 
   const denied = page.getByTestId('communication-no-social');
   await expect(denied).toBeVisible({ timeout: 15_000 });
   await expect(denied).toContainText('Ask an admin for Social access');
-  await expect(page.getByTestId('section-crumbs')).toContainText('Communication');
+  await expect(page.getByTestId('page-trail')).toContainText('Communication');
   await denied.getByRole('button', { name: 'Open Calls' }).click();
   await expect(page).toHaveURL(/\/iq\/communication\/calls$/);
   await expect(page.getByTestId('tenant-calls-empty').or(page.getByTestId('tenant-call-log'))).toBeVisible({ timeout: 15_000 });
@@ -203,7 +203,7 @@ test('the assessment plane as u-asha, the pipelines plane as u-tomas (granted) a
   await expect(asha.page).toHaveURL(/\/assessment\/communication\/calls$/, { timeout: 15_000 });
   await expect(asha.page.getByTestId('communication-page')).toHaveAttribute('data-access', 'social');
   await expect(asha.page.locator('[data-shell-nav]').getByRole('link', { name: /^Communication/ })).toBeVisible();
-  const crumbs = asha.page.getByTestId('section-crumbs');
+  const crumbs = asha.page.getByTestId('page-trail');
   await expect(crumbs).toContainText('Assess'); await expect(crumbs).toContainText('Communication');
   await oneSectionRail(asha.page, null);
   // The plane's home: the full rail with the assessment groups section, which lists the teams the assessor is on
@@ -229,7 +229,7 @@ test('the assessment plane as u-asha, the pipelines plane as u-tomas (granted) a
   expect(me.grants.social ?? [], 'the seeded u-tomas (pipelines author) holds a Social grant').toEqual(['participant']);
   await tomas.page.goto('/pipelines/communication');
   await expect(tomas.page.getByTestId('communication-page')).toHaveAttribute('data-access', 'social', { timeout: 15_000 });
-  const pCrumbs = tomas.page.getByTestId('section-crumbs');
+  const pCrumbs = tomas.page.getByTestId('page-trail');
   await expect(pCrumbs).toContainText('Runs'); await expect(pCrumbs).toContainText('Communication');
   await expect(tomas.page.locator('[data-shell-nav]').getByRole('link', { name: /^Communication/ })).toBeVisible();
   await expect(tomas.page.getByTestId('plane-groups-section').getByRole('button', { name: /^My pipelines/ })).toBeVisible({ timeout: 15_000 });
