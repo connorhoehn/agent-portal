@@ -185,9 +185,15 @@ not authorize cloud work.
   and were not taken; see the 2026-11-04 entry in `ui-components-queue.md`.
 - [ ] Extend gallery acceptance to shared screens, WAN reconnects and real
   hardware permissions.
-- [ ] Refresh the 66 stale historical Work journey logs after their corresponding
+- [x] Refresh the 66 stale historical Work journey logs after their corresponding
   changes settle and map the missing `orgiq:admin` role. Targeted seals do not
   certify the entire 125-journey catalog.
+  Done 2026-11-04 (`9b39ed4a`, `5843e7d6`): all 128 maps re-walked on freshly
+  measured contracts, admin walked (refusals, frames, search), 125 pass and are
+  sealed. Still failing: `member/prepare-job` (a read-only ComposerPromptDeck
+  card takes no focus; queued in `ui-components-queue.md`) and `call-rooms` for
+  sme and org-leader (the huddle people panel prints clone ids and the audit
+  reads the meeting toolbar as a read-only composer; last passed 2026-10-17).
 - [x] Integrate the shared audit packaging [source PR](https://github.com/connorhoehnslalom/ui-components/pull/1)
   alongside the other session's composer release: applied to library main as
   `54f0cfa4` under the 2.500.0 build; the pinned 2.500.1 archive ships the skill.
