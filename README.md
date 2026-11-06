@@ -4,6 +4,8 @@ OrgIQ, the Organizational Intelligence Platform, is a multi-agent system on Amaz
 
 The product is split into tenants that share one backend: work (`orgiq`), `assessment`, `social`, `pipelines` and `access`. Each has its own section of the portal and its own API prefix.
 
+How this repository and its siblings came to be, and how they depend on each other, is told in [docs/project-story.md](docs/project-story.md).
+
 ## What's in the repo
 
 - `agents/` holds the Strands agents (Python 3.12) that run on AgentCore Runtime, plus shared helpers in `agents/_shared`, the base image in `agents/base`, and the golden-set tests in `agents/tests`.

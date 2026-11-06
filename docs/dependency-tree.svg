@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" font-family="Helvetica, Arial, sans-serif">
+<rect width="1600" height="1000" fill="#FFFFFF"/>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9AA0A6"/></marker></defs>
+<path d="M430,756 C430,796 800,776 800,816" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,756 C800,796 800,776 800,816" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M1170,756 C1170,796 800,776 800,816" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,622 C800,662 430,642 430,682" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,622 C800,719 800,719 800,816" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,488 C800,585 430,585 430,682" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,488 C800,528 800,508 800,548" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,488 C800,652 800,652 800,816" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,354 C800,518 430,518 430,682" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,354 C800,394 800,374 800,414" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,354 C800,585 800,585 800,816" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M430,220 C430,260 800,240 800,280" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,220 C800,317 800,317 800,414" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M800,220 C800,518 800,518 800,816" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M1170,220 C1170,260 800,240 800,280" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M1170,220 C1170,451 430,451 430,682" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M1170,220 C1170,317 800,317 800,414" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M1170,220 C1170,451 800,451 800,682" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M1170,220 C1170,518 800,518 800,816" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M615,86 C615,126 430,106 430,146" fill="none" stroke="#1C1C1E" stroke-opacity="0.55" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M615,86 C615,183 800,183 800,280" fill="none" stroke="#1C1C1E" stroke-opacity="0.55" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M615,86 C615,384 430,384 430,682" fill="none" stroke="#1C1C1E" stroke-opacity="0.55" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M615,86 C615,317 800,317 800,548" fill="none" stroke="#1C1C1E" stroke-opacity="0.55" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M615,86 C615,451 800,451 800,816" fill="none" stroke="#1C1C1E" stroke-opacity="0.55" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M765,49 L835,49" fill="none" stroke="#1C1C1E" stroke-opacity="0.55" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M615,86 C615,126 1170,106 1170,146" fill="none" stroke="#1C1C1E" stroke-opacity="0.55" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M615,86 C615,126 800,106 800,146" fill="none" stroke="#1C1C1E" stroke-opacity="0.55" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M615,86 C615,384 1170,384 1170,682" fill="none" stroke="#1C1C1E" stroke-opacity="0.55" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M985,86 C985,183 800,183 800,280" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M985,86 C985,384 430,384 430,682" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M985,86 C985,250 800,250 800,414" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M985,86 C985,451 800,451 800,816" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M985,86 C985,126 430,106 430,146" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M985,86 C985,126 800,106 800,146" fill="none" stroke="#B9BEC4" stroke-opacity="0.9" stroke-width="2.2" marker-end="url(#arrow)"/>
+<g><rect x="650" y="816" width="300" height="74" rx="14" fill="#2A9D8F"/>
+<text x="800" y="847" text-anchor="middle" font-size="22" font-weight="700" fill="#FFFFFF">distributed-core</text>
+<text x="800" y="872" text-anchor="middle" font-size="15" fill="#FFFFFF" fill-opacity="0.9">membership, Raft, WAL, transports</text></g>
+<g><rect x="280" y="682" width="300" height="74" rx="14" fill="#F2A900"/>
+<text x="430" y="713" text-anchor="middle" font-size="22" font-weight="700" fill="#1C1C1E">service-runtime</text>
+<text x="430" y="738" text-anchor="middle" font-size="15" fill="#1C1C1E" fill-opacity="0.9">signed service auth</text></g>
+<g><rect x="650" y="682" width="300" height="74" rx="14" fill="#F2A900"/>
+<text x="800" y="713" text-anchor="middle" font-size="22" font-weight="700" fill="#1C1C1E">pipeline-runtime</text>
+<text x="800" y="738" text-anchor="middle" font-size="15" fill="#1C1C1E" fill-opacity="0.9">durable pipeline runs</text></g>
+<g><rect x="1020" y="682" width="300" height="74" rx="14" fill="#2A9D8F"/>
+<text x="1170" y="713" text-anchor="middle" font-size="22" font-weight="700" fill="#FFFFFF">managed-nosql-store</text>
+<text x="1170" y="738" text-anchor="middle" font-size="15" fill="#FFFFFF" fill-opacity="0.9">DynamoDB-compatible local store</text></g>
+<g><rect x="650" y="548" width="300" height="74" rx="14" fill="#2A9D8F"/>
+<text x="800" y="579" text-anchor="middle" font-size="22" font-weight="700" fill="#FFFFFF">message-queue</text>
+<text x="800" y="604" text-anchor="middle" font-size="15" fill="#FFFFFF" fill-opacity="0.9">durable queue, consumer groups</text></g>
+<g><rect x="650" y="414" width="300" height="74" rx="14" fill="#2A9D8F"/>
+<text x="800" y="445" text-anchor="middle" font-size="22" font-weight="700" fill="#FFFFFF">event-catalog</text>
+<text x="800" y="470" text-anchor="middle" font-size="15" fill="#FFFFFF" fill-opacity="0.9">versioned event contracts</text></g>
+<g><rect x="650" y="280" width="300" height="74" rx="14" fill="#E76F51"/>
+<text x="800" y="311" text-anchor="middle" font-size="22" font-weight="700" fill="#FFFFFF">realtime-modules</text>
+<text x="800" y="336" text-anchor="middle" font-size="15" fill="#FFFFFF" fill-opacity="0.9">presence, chat, calls, docs</text></g>
+<g><rect x="280" y="146" width="300" height="74" rx="14" fill="#4A7FB5"/>
+<text x="430" y="177" text-anchor="middle" font-size="22" font-weight="700" fill="#FFFFFF">ui-components</text>
+<text x="430" y="202" text-anchor="middle" font-size="15" fill="#FFFFFF" fill-opacity="0.9">React component library</text></g>
+<g><rect x="650" y="146" width="300" height="74" rx="14" fill="#8E5CC7"/>
+<text x="800" y="177" text-anchor="middle" font-size="22" font-weight="700" fill="#FFFFFF">live-video-streaming</text>
+<text x="800" y="202" text-anchor="middle" font-size="15" fill="#FFFFFF" fill-opacity="0.9">mediasoup SFU cluster</text></g>
+<g><rect x="1020" y="146" width="300" height="74" rx="14" fill="#F2A900"/>
+<text x="1170" y="177" text-anchor="middle" font-size="22" font-weight="700" fill="#1C1C1E">platform-api</text>
+<text x="1170" y="202" text-anchor="middle" font-size="15" fill="#1C1C1E" fill-opacity="0.9">calls, workspaces, pipelines</text></g>
+<g><rect x="465" y="12" width="300" height="74" rx="14" fill="#1C1C1E"/>
+<text x="615" y="43" text-anchor="middle" font-size="22" font-weight="700" fill="#FFFFFF">aws-agentcore</text>
+<text x="615" y="68" text-anchor="middle" font-size="15" fill="#FFFFFF" fill-opacity="0.9">OrgIQ on Bedrock AgentCore</text></g>
+<g><rect x="835" y="12" width="300" height="74" rx="14" fill="#E76F51"/>
+<text x="985" y="43" text-anchor="middle" font-size="22" font-weight="700" fill="#FFFFFF">realtime-examples</text>
+<text x="985" y="68" text-anchor="middle" font-size="15" fill="#FFFFFF" fill-opacity="0.9">the original gateway, now a reference app</text></g>
+<rect x="50" y="930" width="18" height="18" rx="5" fill="#2A9D8F"/><text x="76" y="944" font-size="15" fill="#3C3C43">Scale: SQS and DynamoDB papers</text>
+<rect x="322" y="930" width="18" height="18" rx="5" fill="#E76F51"/><text x="348" y="944" font-size="15" fill="#3C3C43">Collaboration: presence, cursors, CRDTs</text>
+<rect x="658.8" y="930" width="18" height="18" rx="5" fill="#8E5CC7"/><text x="684.8" y="944" font-size="15" fill="#3C3C43">Video: IVS, then mediasoup</text>
+<rect x="902" y="930" width="18" height="18" rx="5" fill="#F2A900"/><text x="928" y="944" font-size="15" fill="#3C3C43">Agents and pipelines</text>
+<rect x="1102" y="930" width="18" height="18" rx="5" fill="#4A7FB5"/><text x="1128" y="944" font-size="15" fill="#3C3C43">UI library</text>
+<rect x="1230" y="930" width="18" height="18" rx="5" fill="#1C1C1E"/><text x="1256" y="944" font-size="15" fill="#3C3C43">The platform</text>
+<text x="50" y="976" font-size="14" fill="#6B6F76">An arrow means "depends on". Read bottom to top: distributed-core is the only leaf, the two apps at the top consume almost everything.</text>
+</svg>
