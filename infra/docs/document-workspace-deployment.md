@@ -53,10 +53,6 @@ access-point-scoped IAM. This is deliberately not a pretend S3 upload adapter.
 Redis currently uses private plain TCP; authenticated/TLS Redis needs upstream
 client configuration support before enabling that cache topology.
 
-Synthesis is validated locally, not applied. Image build/restart, two-user cold
-restart, signed upload authorization and BFF revocation acceptance remain separate
-runtime gates; generated infrastructure does not by itself prove those flows.
-
 `documentWorkspace.sourceOwnerSub` optionally names an existing assessment steward
 for newly imported source mappings. It is passed only to the BFF as
 `DOCUMENT_SOURCE_OWNER_SUB`. Omitting it leaves ownership unestablished; a viewer

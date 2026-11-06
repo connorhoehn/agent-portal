@@ -1,2 +1,0 @@
-Actual compiled dispatch artifact preserves 1000 results, a 50-request bound, and sequential membership pagination
-Controlled client only; native store performance remains unverified

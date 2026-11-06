@@ -12,9 +12,8 @@ npm run prototype:build                   # → prototypes/<name>/build/index.ht
 ```
 
 The built `index.html` opens from a `file://` path and can be sent to
-someone — everything is inlined. Builds are gitignored; the source is what we
-keep. `?view=split|full|details|lab` picks the starting arrangement, the way
-the Codex exports did with `data-preview-view`.
+someone — everything is inlined. Builds are gitignored; only the source is
+tracked. `?view=split|full|details|lab` picks the starting arrangement.
 
 ## Why it lives inside `portal/`
 
@@ -38,12 +37,12 @@ in `vite.prototype.config.ts` is the whole fix when one needs them.
 
 | Directory | What it is |
 |---|---|
-| `active-now/` | **The real Social shell** — the Codex "Active Now" preview (`~/Documents/Codex/2026-09-19/…/work/component-preview`), copied in and rewired from a sibling checkout's `src/` to the installed package. Rail, conversation, split panel with the activity graph, right inspector. This is the one to extend: it is the app's layout. |
+| `active-now/` | The Social shell: rail, conversation, split panel with the activity graph, and a right inspector, wired to the installed component package. This is the one to extend: it mirrors the app's layout. |
 | `computer-lab-chat/` | An earlier standalone sketch of the same idea with the chat column hand-composed. Superseded by the variant below; kept because its inspector states are spelled out plainly. |
 
 ### The Computer Lab variant (`active-now/`)
 
-Three additions to the Codex preview, each in the place the real app would
+Three additions to the base shell, each in the place the real app would
 put it:
 
 1. **`/run` in the composer.** The library's own command bar (`commands` on
@@ -59,18 +58,10 @@ put it:
    puts an AgentCore devbox `ShellTerminal` in the inspector (the library's
    simulator behind `mock-shell:`), in place of a sentence about observation
    capabilities.
-3. **Provenance first in the inspector.** The presentation node's
-   "Generation tools · Slides · Charts · Files" chips are gone. In their place:
-   *Produced by — Not backed by a registered skill. `skill:deck.pptx` is not
-   registered.* with what a registered skill would show and a way to the skill
-   library. Same block on the generation run.
-
-That third one is the point of the variant. A detail pane that shows more
-than the platform can attribute — a slide preview from a generator that does
-not exist — teaches a viewer to distrust the whole screen, and it is the pane
-a demo lingers on. Every inspector should lead with what produced this and
-how; when nothing registered can, it should say so. Worse-looking panel,
-better panel: it is a thing somebody can go and fix.
+3. **Provenance first in the inspector.** The inspector leads with what
+   produced the selected node ("Produced by ..."), or says plainly that no
+   registered skill backs it, instead of showing generator chips the
+   platform cannot attribute.
 
 ## What is real in a prototype
 

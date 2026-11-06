@@ -1,2 +1,0 @@
-AWS identity check cannot reach its endpoint under current network access
-Last reachable identity check returned InvalidClientTokenId. Raw proxy diagnostics are not copied into repository artifacts.

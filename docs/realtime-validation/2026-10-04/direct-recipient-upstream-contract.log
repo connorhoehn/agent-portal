@@ -1,4 +1,0 @@
-
-> @connorhoehn/realtime-modules@0.101.0 check:contract
-> tsc -p tsconfig.contract.json
-

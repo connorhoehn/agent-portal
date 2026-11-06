@@ -1,3 +1,0 @@
-image=orgiq-middleware:cluster-0109-validation sha256:bb15549ea9f32f1103c66879faa7599a89b8b3937f98a8980cf4e91b8cb73539 mode=plain
-Started owned compiled BFF a container 4750c5b0bff0d225d9920eb4da32b7101449290e6923347d14a84fdcbe456632 port 3065 image sha256:bb15549ea9f32f1103c66879faa7599a89b8b3937f98a8980cf4e91b8cb73539 budget 1 CPU / 1024 MiB
-Started owned compiled BFF b container f5c49ad50be9cd5948d4805cbf535017997ec17d98ae255e5af74861e7b592b6 port 3066 image sha256:bb15549ea9f32f1103c66879faa7599a89b8b3937f98a8980cf4e91b8cb73539 budget 1 CPU / 1024 MiB

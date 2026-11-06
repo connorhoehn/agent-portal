@@ -1,4 +1,0 @@
-interface:
-  display_name: "CDP Browser Audit"
-  short_description: "Drive isolated local app demos through CDP"
-  default_prompt: "Use $cdp-browser to inspect and exercise a local app in a dedicated browser context, then verify the visual results."

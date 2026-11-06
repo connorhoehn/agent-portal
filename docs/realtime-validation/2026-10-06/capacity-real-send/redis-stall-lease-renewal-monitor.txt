@@ -1,4 +1,0 @@
-OK
-1791302352.590936 [0 172.17.0.1:35494] "EVAL" "if redis.call('GET',KEYS[1]) ~= ARGV[1] then return 0 end\nredis.call('PEXPIRE',KEYS[1],ARGV[2]);\nfor i=2,#KEYS,2 do if redis.call('GET',KEYS[i]) == ARGV[i/2+2] then\nredis.call('PEXPIRE',KEYS[i],ARGV[2]); redis.call('PEXPIRE',KEYS[i+1],ARGV[2]*2); end end\nreturn 1" "1" "realtime:orgiq-bff-cluster-acceptance:node:bff-b" "ab9afe0d-383a-485a-9ed5-d316008e0aab" "30000"
-1791302352.590962 [0 lua] "GET" "realtime:orgiq-bff-cluster-acceptance:node:bff-b"
-1791302352.590972 [0 lua] "PEXPIRE" "realtime:orgiq-bff-cluster-acceptance:node:bff-b" "30000"

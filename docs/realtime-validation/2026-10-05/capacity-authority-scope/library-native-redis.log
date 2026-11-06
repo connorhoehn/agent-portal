@@ -1,5 +1,0 @@
-Test Suites: 1 passed, 1 total
-Tests:       31 passed, 31 total
-Snapshots:   0 total
-Time:        9.373 s, estimated 10 s
-Ran all test suites matching test/server/redis-router.integration.test.ts.

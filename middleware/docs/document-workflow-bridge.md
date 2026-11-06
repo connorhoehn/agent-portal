@@ -52,19 +52,3 @@ pending CRDT writes before saving a named version. The BFF hydrates the canonica
 channel before either operation, never reconstructs Markdown, never accepts actor
 identity, and never exposes its manage grant. Gateway authority rechecks lifecycle
 locks and live session revocation when the operation runs.
-
-## Running service verification (2026-09-20)
-
-Validated against the isolated `assessment-document-workspace` Compose project,
-using a newly seeded document and fixture identities, without touching the user's
-reference stack. Platform image source was `9c0c96f428d982ce88e4011ec37a3ca573b0b29e`;
-gateway source was `907991255b1426f3051d943dda853dc42313609b`.
-
-The document received an acknowledged CRDT write, a named binary version through
-the BFF transport, and an acknowledged restore of that version. Its explicit owner
-requested a review from a second verified identity; the reviewer approved it. The
-already connected editor was then denied further edits and restore, an upload URL
-issued before approval rejected its HTTP PUT with 403, and a REST section mutation
-returned 409. Snapshot reads continued. Finalization succeeded and reopening the
-finalized document returned 409. Live session epoch checks were exercised on every
-hop. Unit tests additionally cover unavailable policy and revoked sessions.

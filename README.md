@@ -1,111 +1,100 @@
-# OrgIQ — Organizational Intelligence Platform
+# aws-agentcore
 
-Multi-agent system built on Amazon Bedrock AgentCore that ingests organizational documents, builds a knowledge graph, scores expertise, and serves conversational search. Designed as an accelerator for enterprise teams looking to surface "who knows what" across their organization.
+OrgIQ, the Organizational Intelligence Platform, is a multi-agent system on Amazon Bedrock AgentCore. It ingests organisational documents, builds a knowledge graph in Aurora, scores expertise, and answers "who knows what" through conversational search.
 
-## Quick Start
+The product is split into tenants that share one backend: work (`orgiq`), `assessment`, `social`, `pipelines` and `access`. Each has its own section of the portal and its own API prefix.
+
+## What's in the repo
+
+- `agents/` holds the Strands agents (Python 3.12) that run on AgentCore Runtime, plus shared helpers in `agents/_shared`, the base image in `agents/base`, and the golden-set tests in `agents/tests`.
+- `infra/` is the CDK (TypeScript) code for every AWS stack, with deploy and teardown wrappers in `infra/scripts`.
+- `middleware/` is the Express backend-for-frontend. It proxies AG-UI streaming over SSE, talks to Aurora through the RDS Data API, and hosts the realtime gateway on `/ws`.
+- `portal/` is the React + Vite UI, built on the ui-components library.
+- `schema/` has the Aurora SQL and the synthetic corpus pipeline in `schema/synth`.
+- `notebooks/` has Jupyter notebooks that walk through each AgentCore capability (AWS and GCP flavours).
+- `scripts/` has build, image, deploy-support, load-test and check scripts. `tenants/` holds the tenant manifest, `k8s/` has Kubernetes custom-resource examples, and `tools/` has the local-compute worker.
+- `Tiltfile` and `docker-compose.yml` define the local development stack.
+
+## Getting started
+
+You need Node 20 or newer, Python 3.12, and Docker. Deploying also needs the AWS CLI and credentials for the target account. The CDK CLI is installed by `npm install` in `infra/`. The optional `tilt` CLI runs the whole local stack in one command.
+
+### Run it locally
+
+No AWS access is needed. The mock backend serves fixture data.
 
 ```bash
-node scripts/docker/prepare-libraries.mjs
-docker-compose up --build
+tilt up                                # middleware on :3001, portal on :5183
 ```
 
-This starts three services:
+Or start the two processes yourself:
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| Jupyter | http://localhost:8888 | SDK exploration notebooks |
-| Middleware | http://localhost:3001 | Express API + AG-UI SSE proxy |
-| Portal | http://localhost:5183 | React frontend |
+```bash
+cd middleware && npm install && npm run dev:mock
+cd portal && npm install && npm run dev
+```
 
-Local ports bind to `127.0.0.1`. Jupyter uses its generated login token; find the login URL with `docker compose logs jupyter` (or `jupyter-gcp`).
+Notebooks run in Docker: `docker-compose up jupyter` serves them at http://localhost:8888.
 
-Requires AWS credentials — run `aws-azure-login --mode gui` first. The `default` profile targets the innovation lab account `647757222309` (us-east-1).
+### Test
 
-## Demo Portal
+```bash
+cd middleware && npm test && npm run typecheck
+cd portal && npm test && npm run typecheck
+cd infra && npm test
+```
 
-The portal (http://localhost:5183) serves two tenants — OrgIQ (the IQ
-workspace, analyst-facing, plus Admin for operators) and Assessment (its own
-shell-rail hierarchy at `/assessment/*`). Headline pages:
+The agent tests need `botocore`. Install `schema/synth/requirements.txt` into a virtualenv, then:
 
-| Area | Path | Description |
-|------|------|-------------|
-| Agent Flow | `/iq/agents` | Multi-agent orchestration visualizer |
-| Org Graph | `/iq/explore` (Explore) | Interactive Aurora graph explorer |
-| Ask | `/iq/invoke` | Conversational expertise search + direct agent invocation (AG-UI streaming) |
-| Scores | `/iq/scores`, `/iq/scores/cohorts`, `/iq/scores/compare` | Expertise leaderboards + cohort/compare views |
-| Projects | `/iq/projects`, `/iq/projects/:id` | Project portfolio + drill-down (includes a per-project Decisions tab) |
-| Knowledge Base | `/admin/knowledge` | KB sources, sync status, retrieval test |
-| Code Interpreter | `/admin/capabilities/code-interpreter` | Sandboxed Python demo |
-| Capabilities | `/admin/capabilities/*` | AgentCore primitives: Browser, Code Interpreter, Guardrails, Memory |
-| Identity | `/admin/identity/*` | Cedar policies, role assignment, schema, policy testing |
-| Ingest | `/admin/ingest/*` | Sources, schedules, crawl targets, run history, storage |
-| Assessment | `/assessment/*` | Second tenant: Assess / Analyze / Informatics / System |
-| Observability | `/admin/observability/*` | Invocations, traces, sessions, cost, drift, calibration, on-call, traffic, quality, model compare, approval queue, harness |
-| Admin | `/admin/*` | Tenant + role configuration |
-| Settings | `/settings` | Local dev settings |
+```bash
+cd agents/_shared && python -m unittest test_prompt_source test_callbacks
+cd agents/tests && python golden_runner.py     # structural check, offline
+```
 
-Older bare paths (`/agents`, `/graph`, `/search`, `/scores`, `/projects`,
-`/decisions`, `/knowledge-base`, `/code-interpreter`, `/capabilities/*`,
-`/identity/*`, `/ingest/*`, `/observability/*`) still work as redirects to the
-routes above — see `portal/src/App.tsx`. `/decisions` and `/decisions/:id`
-redirect to `/iq/projects`; there is no standalone decisions page, only the
-Decisions tab on a project's detail page.
+Run the full middleware suite on its own. Two concurrent runs can hang.
 
-## Notebooks
+### Deploy
 
-Progressive walkthrough of every AgentCore capability:
+Everything is deployed with CDK through the wrapper script, not with `agentcore deploy`.
 
-| # | Notebook | Topic |
-|---|----------|-------|
-| 00 | `00-index` | Index and overview |
-| 01 | `01-setup-credentials` | AWS credentials and SDK setup |
-| 02 | `02-aurora-graph` | Aurora PostgreSQL org-graph (relational + pgvector) |
-| 03 | `03-embeddings` | Titan Embeddings V2 (1024d) |
-| 04 | `04-knowledge-base` | Bedrock Knowledge Base + OpenSearch |
-| 05 | `05-guardrails` | Bedrock Guardrails |
-| 06 | `06-strands-agent` | Strands Agents framework |
-| 07 | `07-agentcore-memory` | AgentCore Memory service |
-| 08 | `08-agentcore-gateway` | MCP Gateway + tool routing |
-| 09 | `09-agentcore-policy` | Policy Engine (Cedar) |
-| 10 | `10-agentcore-identity` | Identity and credentials |
-| 11 | `11-code-execution` | AgentCore Code Interpreter (sandboxed Python) |
-| 12 | `12-ag-ui-streaming` | AG-UI protocol streaming |
-| 13 | `13-a2a-protocol` | Agent-to-Agent communication |
-| 14 | `14-scoring` | Expertise scoring algorithms |
-| 15 | `15-deploy-runtime` | Deploy agents to AgentCore Runtime |
-| 16 | `16-evaluations` | Agent evaluation framework |
-| 17 | `17-telemetry` | OpenInference spans → ADOT → CloudWatch → Aurora |
-| 18 | `18-fairness` | Statistical fairness (DI ratio, SPD), LLM-as-judge bias check, Bedrock Model Evaluation (BOLD) |
-| 19 | `19-cleanup` | Resource teardown |
-| 20 | `20-coding-agent` | Devbox: Claude Code hosted in an AgentCore Runtime microVM — session storage, command API, interactive shell |
+```bash
+cd infra
+./scripts/deploy.sh [Stack] [--context key=value]
+DEPLOY_PLAN_ONLY=true ./scripts/deploy.sh [Stack]    # prints the plan, changes nothing
+./scripts/destroy.sh                                  # teardown
+```
 
-## AWS Services Used
+Agent runtimes need their container images to exist first, so they deploy in phases:
 
-- **Amazon Bedrock AgentCore** — Runtime (microVM), MCP Gateway, Memory, Policy Engine, Identity, Code Interpreter, Browser
-- **Amazon Bedrock** — Foundation models (Nova Pro), Guardrails, Knowledge Bases, Managed Prompts
-- **Amazon Aurora Serverless v2** — PostgreSQL 16 + `pgvector` for the org-graph (relational tables + 1024d embeddings)
-- **Amazon OpenSearch Serverless** — Vector search backing Bedrock Knowledge Bases
-- **Amazon Verified Permissions** — Cedar policy evaluation for tenant + role authorization
-- **Amazon S3** — Document storage and artifact persistence
-- **Amazon DynamoDB** — Scores, sessions, and leaderboard tables
-- **AWS CDK** — Infrastructure as code (14 TypeScript stacks)
-- **AWS Lambda** — Span projector (OpenInference → Aurora)
-- **Amazon CloudWatch + ADOT** — Dashboards, OpenInference traces, budget alarms
-- **Amazon Titan Embeddings V2** — 1024-dimension vector embeddings
-- **AWS IAM** — Fine-grained roles for agents and services
+1. `./scripts/deploy.sh OrgIQ-AgentCoreRuntime` creates the image repositories.
+2. `agents/base/build.sh` builds and pushes the base image.
+3. `agents/build-all.sh` builds and pushes every agent image.
+4. `./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true` creates the runtimes.
 
-### Locked local Docker libraries
+The middleware image is built with `node scripts/docker/middleware-image-build.mjs` (add `--dry-run` to preview) and goes live with `--context deployMiddlewareService=true`. The portal is built, then published to S3 and CloudFront with `node scripts/portal-publish.mjs` after deploying with `--context deployPortal=true`.
 
-Before `docker compose build`, run `node scripts/docker/prepare-libraries.mjs`.
-The script reads the exact Git commits in the package locks from the sibling
-`ui-components`, `realtime-modules`, and `distributed-core` repositories. It
-packages their committed files without running lifecycle scripts; sibling
-working-tree changes and rebuilt outputs cannot enter the image. If a commit
-is missing locally, fetch that repository's remote before preparing artifacts.
-`./scripts/build.sh` performs preparation automatically.
+The stacks create Aurora and the Bedrock knowledge base. Apply the Aurora schema with `schema/apply-schema.sh` (see `schema/README.md`), and generate demo content with `python -m schema.synth all` (see `schema/synth/README.md`).
 
-Docker installs the existing public-package lock graph with `npm ci`; only
-internal Git locators are translated to those verified local tarballs. The
-prepared artifacts live in ignored `.docker-libraries/` and include integrity
-hashes checked during the build. Environment files are excluded from build
-contexts. No SSH key, registry token or cloud credentials are copied into images.
+## Architecture notes
+
+- Each agent's system instructions are kept in Bedrock's managed template store and read at run time with a short cache. The system text hard-coded in each agent's `main.py` is only a fallback.
+- The organisation graph is plain relational tables in Aurora PostgreSQL. Agents and the backend reach it through the RDS Data API with parameterised SQL, and the agents' read tools only accept `SELECT` and `WITH`.
+- AG-UI streaming runs over SSE with `POST`, not `EventSource`, so the request can carry a body and headers.
+- Embeddings use Titan Embeddings V2 at 1024 dimensions everywhere. Knowledge base searches pin the search type explicitly rather than relying on the default.
+- Users, tenants and grants live in Aurora (`schema/identity_schema.sql`). Authorisation uses Cedar policies per tenant, in `middleware/seeds/roles/<tenant>/`.
+- `npm run dev:mock` runs the backend against fixtures that follow a contract: they return rows and selectors rather than precomputed counts, take timestamps from a shared clock, and register every write so `POST /api/__mock/reset` undoes it. `POST /api/__mock/scenario` produces empty and error states without touching shared data.
+- The portal's realtime socket connects to the gateway on `/ws`, authenticated with a short-lived token from `GET /api/session/realtime-token`.
+
+## Related repositories
+
+All of these sit next to this checkout under the same parent directory.
+
+- `connorhoehnslalom/ui-components`: the React component library behind the portal, consumed as a packed tarball in `portal/vendor`.
+- `connorhoehn/realtime-modules`: presence, chat, calls and collaborative documents served over the realtime gateway, with matching client hooks.
+- `connorhoehn/service-runtime`: signed service-to-service authentication for internal calls.
+- `connorhoehn/distributed-core`: clustering and coordination primitives under the realtime gateway.
+- `connorhoehnslalom/message-queue`: the message queue service, built into the `mq` container image.
+- `connorhoehn/realtime-examples`: reference realtime applications. Its `cdk/` package of reusable CDK constructs is vendored in `infra/vendor`.
+- `connorhoehn/platform-api`: the HTTP API behind call sessions, document workspaces and lobby admission.
+- `connorhoehn/live-video-streaming`: the media server (SFU) that carries call audio and video.
+- `connorhoehn/managed-nosql-store`: a DynamoDB-compatible store used for local durable storage.

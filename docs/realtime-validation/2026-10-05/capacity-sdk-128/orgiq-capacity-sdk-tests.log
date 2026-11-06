@@ -1,9 +1,0 @@
-PASS src/lib/__tests__/realtime-gateway-social-dynamo.test.ts
-PASS src/lib/__tests__/social-membership-fence.test.ts
-
-Test Suites: 2 passed, 2 total
-Tests:       1 skipped, 11 passed, 12 total
-Snapshots:   0 total
-Time:        6.621 s, estimated 7 s
-Ran all test suites within paths "src/lib/__tests__/realtime-gateway-social-dynamo.test.ts", "src/lib/__tests__/social-membership-fence.test.ts".
-Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

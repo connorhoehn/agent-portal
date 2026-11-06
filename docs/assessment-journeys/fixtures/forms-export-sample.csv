@@ -1,4 +1,0 @@
-Id,Completion time,Email,Name,What is your team name?,What went well with CI this quarter?,What obstacles remain for CI?,Evidence / Additional Context for Dimension 1,Upload Evidence for Dimension 1,How would you rate your team's SDLC maturity?.Continuous Integration (CI),I confirm that the information provided is accurate to the best of my knowledge
-7,9/4/2026 14:12,sam.okafor@example.com,Sam Okafor,Notifications Service,Every PR runs unit + contract tests in under 8 minutes.,Nightly integration suite still flaky on the messaging mocks.,Pipeline dashboard: https://github.com/example/notifications/actions,,Established,I confirm this is accurate.
-8,9/4/2026 15:40,dana.q@example.com,Dana Quiroga,Fraud Detection ML,Moved model training jobs into CI with cached datasets.,,,,Developing,
-9,9/4/2026 16:05,pat.n@example.com,Pat Nguyen,Ledger Reconciliation,"""Green builds, mostly""","Shared runners, queueing.",,,Initial,I confirm this is accurate.

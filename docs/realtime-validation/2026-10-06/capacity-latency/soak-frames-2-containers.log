@@ -1,3 +1,0 @@
-image=orgiq-middleware:cluster-real-send-validation sha256:c749a4aaef7948ec4fbadfaf1421c9d47e5e512e74b2a268d0dc69d8d5ef33c9 mode=frames
-Started owned compiled BFF a container 5dae9218c8dd336d46788e24ecc6514c09689e70927f2b335c63eaa69128e0ca port 3065 image sha256:c749a4aaef7948ec4fbadfaf1421c9d47e5e512e74b2a268d0dc69d8d5ef33c9 budget 1 CPU / 1024 MiB
-Started owned compiled BFF b container 0701cd39bbea65190383160fa87f9f5b38a6921b608fc38be108ea59edc5c5a5 port 3066 image sha256:c749a4aaef7948ec4fbadfaf1421c9d47e5e512e74b2a268d0dc69d8d5ef33c9 budget 1 CPU / 1024 MiB

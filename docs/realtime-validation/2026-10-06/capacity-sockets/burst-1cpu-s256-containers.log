@@ -1,3 +1,0 @@
-sockets=256 cpus=1 mem=1024 image=orgiq-middleware:cluster-sockets-validation sha256:830115567800094a03b865eb657136d37a5115b16a48575eae04918c5aaf6d7a mode=metrics
-Started owned compiled BFF a container 4c67af70908493cc4bd85d1b751e92c0c8f9384524ca96c0075044fa9ad5a3f8 port 3065 image sha256:830115567800094a03b865eb657136d37a5115b16a48575eae04918c5aaf6d7a budget 1 CPU / 1024 MiB dynamoMaxSockets 256
-Started owned compiled BFF b container 9593dcc6d3b9c4a8913b58dac5491e85c53bcfcb739da158c939674c85cad7c7 port 3066 image sha256:830115567800094a03b865eb657136d37a5115b16a48575eae04918c5aaf6d7a budget 1 CPU / 1024 MiB dynamoMaxSockets 256

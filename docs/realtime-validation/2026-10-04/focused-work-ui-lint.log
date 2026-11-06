@@ -1,4 +1,0 @@
-
-> @connorhoehnslalom/ui-components@2.409.0 lint
-> node scripts/tsc.mjs --noEmit && node scripts/tsc.mjs --noEmit -p demo/tsconfig.json
-

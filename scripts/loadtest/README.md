@@ -1,10 +1,8 @@
 # Realtime signalling load test
 
 `realtime-calls.mjs` drives the middleware's realtime gateway (`/ws`) with
-about 1,000 sockets and 100 simultaneous calls. It is plan **A** in
-`docs/realtime-capacity-100-calls-2026-10-01.md` ("Signalling at 100 calls,
-locally, no AWS"). It measures signalling only (see "What this does not
-prove").
+about 1,000 sockets and 100 simultaneous calls, locally and without AWS. It
+measures signalling only (see "What this does not prove").
 
 The script is plain Node ESM. It loads `ws` and `jose` from
 `middleware/node_modules`, so run `npm install` in `middleware/` once and
@@ -126,7 +124,7 @@ finds it on its own for a loopback URL; pass `--server-pid` otherwise.
 ## 2. Run
 
 ```bash
-# Everything the plan lists, both call shapes (about 21 minutes at --hold-seconds 60)
+# Every scenario, both call shapes (about 21 minutes at --hold-seconds 60)
 node scripts/loadtest/realtime-calls.mjs --scenario all --group-size 2,4 --hold-seconds 60 --json /tmp/rt.json
 
 # One scenario
@@ -225,7 +223,7 @@ and 2 when the script itself errors.
 6. After the hold, every member hangs up with `user-status left` and an
    `ended` targeted at itself, exactly as `hangUp()` does.
 
-| Scenario | Plan # | What changes |
+| Scenario | # | What changes |
 |---|---|---|
 | `steady` | 1 | 100 calls started evenly over 60 s |
 | `ring-storm` | 2 | 100 invites within 1 s |
@@ -254,7 +252,7 @@ reported separately; errors outside that window fail the run. Token renewal
 waits for new members' registration receipts before the next wave. A long
 soak cannot pass merely by retaining sockets authenticated with expired tokens.
 
-## Thresholds (from the plan)
+## Thresholds
 
 | Check | Pass | Meaning |
 |---|---|---|
@@ -291,7 +289,7 @@ pin's actual behavior rather than assuming restart works.
 
 - **Media.** No WHIP/WHEP, no SFU, no platform-api session. Calls here are
   signalling records only. SFU capacity, ICE reachability and the "one call →
-  two SFU sessions" defect need plan B on AWS.
+  two SFU sessions" defect need a run against a deployed stack.
 - **Pinned pages.** Load users are synthetic Social actors. Call-page sharing
   requires an OrgIQ session, matching registered live socket and current
   directory authority. Run its HTTP/browser contracts and real-Redis Lua/CAS
@@ -349,7 +347,7 @@ daemon; the Docker driver itself uses its mounted `/var/run/docker.sock`.
 
 The separate `compose.chat.yaml` profile starts disk-backed DynamoDB Local on
 18061, AOF Redis on 16479, and the installed public chat-schema initializer.
-It uses its own named volumes and does not rebuild the accepted signalling
+It uses its own named volumes and does not rebuild the signalling
 gateway or touch owner ports. The already built `orgiq-soak-gateway:local`
 image supplies the initializer's Node runtime.
 
@@ -386,11 +384,11 @@ src/lib/__tests__/call-chat-durable.integration.test.ts --runInBand \
 
 Before restarting, that check validates the exact container names, Compose
 project/service labels, loopback port bindings, owned data volumes and inspected
-IDs. It deletes only its own test rows/keys afterward. The accepted local run
-kept all 12 pre-restart message IDs/timestamps and the private call incarnation,
-returned the original receipt on retry, and stored one new message afterward:
-exactly 13 durable rows. This establishes bounded storage-container continuity,
-not a high-concurrency durable-chat soak or media recovery.
+IDs. It deletes only its own test rows/keys afterward. It asserts that all
+pre-restart message IDs/timestamps and the private call incarnation survive,
+that a retry returns the original receipt, and that a new message adds exactly
+one durable row. This establishes bounded storage-container continuity, not a
+high-concurrency durable-chat soak or media recovery.
 
 ## Pointing it at a deployed gateway
 

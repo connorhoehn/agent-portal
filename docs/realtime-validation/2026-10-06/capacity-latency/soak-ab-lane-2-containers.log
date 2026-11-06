@@ -1,3 +1,0 @@
-image=orgiq-middleware:cluster-latency-lane-validation sha256:ab0525591b9f32f68e9d1da1d6ba1dd60c472f7af4ff14c27687ce2ade725cca mode=plain
-Started owned compiled BFF a container da604a6246b2bdcc91d5feb99e0c8c4863f1525ccd5ac62f9ae3dbc91d4bb2cf port 3065 image sha256:ab0525591b9f32f68e9d1da1d6ba1dd60c472f7af4ff14c27687ce2ade725cca budget 1 CPU / 1024 MiB
-Started owned compiled BFF b container 19f553f9b2fab9c7c2358b45db0aa6c61d6d3b81c54ae6185dfe1063a13a9514 port 3066 image sha256:ab0525591b9f32f68e9d1da1d6ba1dd60c472f7af4ff14c27687ce2ade725cca budget 1 CPU / 1024 MiB
