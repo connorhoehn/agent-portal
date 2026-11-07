@@ -41,7 +41,8 @@
 
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { SERVICE_AUTH_HEADER, verifyEnvelope } from '@connorhoehn/service-runtime';
+import { SERVICE_AUTH_HEADER } from '@connorhoehn/service-runtime';
+import { verifyInternalRequest, INTERNAL_DEVBOX_AUDIENCE } from '../lib/internal-service-auth.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { userStewardsInitiative, userReachesBox } from '../lib/initiative-scope.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
@@ -84,14 +85,17 @@ function configuredSecret(): string {
 }
 
 /**
- * Verify the signed envelope over `payload`. Returns the verified serviceId
- * on success (so a route can cross-check it against the body's own declared
+ * Verify the signed request. Returns the verified serviceId on success (so a
+ * route can cross-check it against the body's own declared
  * `principal.service`), or writes an error response and returns null.
  *
- * Copied from `internal-work-graph-compute.ts::signed()` — same secret pair,
- * same 30s ttl / 5s clock-skew tolerance, same header. This is the ONE check
- * standing between this router and the public internet; every route below
- * calls it before touching anything else.
+ * Request-bound since service-runtime 0.7.0 (lib/internal-service-auth.ts):
+ * the MAC covers method, path with query, body and the router's audience.
+ * `payload` is what the old body-only envelope covered on the route, accepted
+ * for one release while SERVICE_AUTH_LEGACY_BODY_ONLY allows it. Same secret
+ * pair, 30s ttl / 5s skew and header as `internal-work-graph-compute.ts`.
+ * This is the ONE check standing between this router and the public
+ * internet; every route below calls it before touching anything else.
  */
 function verifyServiceAuth(req: Request, res: Response, payload: object): string | null {
   const secret = configuredSecret();
@@ -104,12 +108,11 @@ function verifyServiceAuth(req: Request, res: Response, payload: object): string
     res.status(401).json({ error: 'SERVICE_AUTH_INVALID' });
     return null;
   }
-  const result = verifyEnvelope(header, {
+  const result = verifyInternalRequest(req, {
     secret,
     allowedServices: [allowedServiceId()],
-    payload,
-    ttlSec: 30,
-    toleranceSec: 5,
+    audience: INTERNAL_DEVBOX_AUDIENCE,
+    legacyPayload: payload,
   });
   if (!result.ok) {
     res.status(401).json({ error: 'SERVICE_AUTH_INVALID' });

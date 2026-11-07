@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { createHash } from 'node:crypto';
-import { SERVICE_AUTH_HEADER, verifyEnvelope } from '@connorhoehn/service-runtime';
+import { SERVICE_AUTH_HEADER } from '@connorhoehn/service-runtime';
+import { verifyInternalRequest, WORK_GRAPH_COMPUTE_AUDIENCE } from '../lib/internal-service-auth.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { computeCapabilityConfigured, computeCapabilitySessions } from '../work-graph/compute-capability-runtime.js';
@@ -35,12 +36,13 @@ function signed(req: Request, res: Response, payload: object): boolean {
     res.status(401).json({ error: 'SERVICE_AUTH_INVALID' });
     return false;
   }
-  const result = verifyEnvelope(header, {
+  // Request-bound (method, path and query, body, audience): a header signed
+  // for one route here is refused on its siblings (lib/internal-service-auth.ts).
+  const result = verifyInternalRequest(req, {
     secret,
     allowedServices: [process.env['WORK_GRAPH_PLATFORM_SERVICE_ID']?.trim() || 'platform-api'],
-    payload,
-    ttlSec: 30,
-    toleranceSec: 5,
+    audience: WORK_GRAPH_COMPUTE_AUDIENCE,
+    legacyPayload: payload,
   });
   if (!result.ok) {
     res.status(401).json({ error: 'SERVICE_AUTH_INVALID' });
@@ -260,15 +262,14 @@ internalWorkGraphComputeRouter.post('/fixtures/register-box', asyncHandler(async
   const header = req.header(SERVICE_AUTH_HEADER);
   if (!secret || !header) { res.status(401).json({ error: 'SERVICE_AUTH_INVALID' }); return; }
   if (!fixtureBoxBody(req.body)) { res.status(400).json({ error: 'INVALID_REQUEST' }); return; }
-  const result = verifyEnvelope(header, {
+  const result = verifyInternalRequest(req, {
     secret,
     // Deliberately its own allowlist, not the platform's: this route is
     // aws-agentcore seeding its own state for itself, not platform-api
     // calling in, so it never claims the 'platform-api' service identity.
     allowedServices: [process.env['WORK_GRAPH_FIXTURE_SERVICE_ID']?.trim() || 'aws-agentcore'],
-    payload: req.body,
-    ttlSec: 30,
-    toleranceSec: 5,
+    audience: WORK_GRAPH_COMPUTE_AUDIENCE,
+    legacyPayload: req.body,
   });
   if (!result.ok) { res.status(401).json({ error: 'SERVICE_AUTH_INVALID' }); return; }
   const box = registerBox({

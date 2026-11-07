@@ -12,7 +12,9 @@ import http from 'node:http';
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import request, { attachToSharedServer } from '../../test-support/http.js';
-import { SERVICE_AUTH_HEADER, signEnvelope } from '@connorhoehn/service-runtime';
+import { SERVICE_AUTH_HEADER, signEnvelope, signServiceRequest } from '@connorhoehn/service-runtime';
+import { captureRawBody } from '../../lib/service-auth.js';
+import { INTERNAL_DEVBOX_AUDIENCE, resetLegacyBodyOnlyWarnings } from '../../lib/internal-service-auth.js';
 import { internalDevboxRouter } from '../internal-devbox.js';
 import { userStewardsInitiative } from '../../lib/initiative-scope.js';
 import { _resetFleet, getBox, getBoxBySession, listBoxes } from '../../lib/devbox-fleet.js';
@@ -52,7 +54,8 @@ const originalEnv = { ...process.env };
 
 function app(): express.Express {
   const value = express();
-  value.use(express.json());
+  // As index.ts mounts it: the raw bytes are kept for the request-bound MAC.
+  value.use(express.json({ verify: captureRawBody }));
   value.use('/internal/devbox', internalDevboxRouter);
   return value;
 }
@@ -144,6 +147,49 @@ describe('internal devbox router — envelope', () => {
     // to be a different principal — the extra body-level check must catch it.
     const res = await request(app()).post('/internal/devbox/sessions').set(signed(body)).send(body);
     expect(res.status).toBe(400);
+  });
+});
+
+/** The request-bound envelope (service-runtime 0.7.0) for exactly this method, target and body. */
+function signedRequest(method: string, target: string, body?: object, serviceId = 'platform-api'): Record<string, string> {
+  return { [SERVICE_AUTH_HEADER]: signServiceRequest(
+    { method, target, body: body === undefined ? '' : JSON.stringify(body) },
+    { secret: SECRET, serviceId, audience: INTERNAL_DEVBOX_AUDIENCE },
+  ) };
+}
+
+describe('internal devbox router — request-bound envelope', () => {
+  afterEach(() => { delete process.env['SERVICE_AUTH_LEGACY_BODY_ONLY']; resetLegacyBodyOnlyWarnings(); });
+
+  it('accepts a request signed for its own method, target and body', async () => {
+    expect((await request(app()).get('/internal/devbox/status').set(signedRequest('GET', '/internal/devbox/status'))).status).toBe(200);
+    const body = { principal: principal(), label: 'x' };
+    const res = await request(app()).post('/internal/devbox/sessions')
+      .set(signedRequest('POST', '/internal/devbox/sessions', body)).set('Content-Type', 'application/json').send(JSON.stringify(body));
+    expect(res.status).toBe(201);
+  });
+
+  it('refuses a captured header replayed against a sibling route, a different query, or another audience', async () => {
+    const header = signedRequest('GET', '/internal/devbox/status');
+    expect((await request(app()).get('/internal/devbox/boxes/box-1/tail').set(header)).status).toBe(401);
+    expect((await request(app()).get('/internal/devbox/status?x=1').set(header)).status).toBe(401);
+    const otherAudience = { [SERVICE_AUTH_HEADER]: signServiceRequest({ method: 'GET', target: '/internal/devbox/status', body: '' },
+      { secret: SECRET, serviceId: 'platform-api', audience: 'orgiq-middleware/work-graph-compute' }) };
+    expect((await request(app()).get('/internal/devbox/status').set(otherAudience)).status).toBe(401);
+  });
+
+  it('still takes the body-only envelope for one release, logging the deprecation once; SERVICE_AUTH_LEGACY_BODY_ONLY=refuse ends it', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      expect((await request(app()).get('/internal/devbox/status').set(signed({}))).status).toBe(200);
+      expect((await request(app()).get('/internal/devbox/status').set(signed({}))).status).toBe(200);
+      expect(warn.mock.calls.filter((c) => String(c[0]).includes('DEPRECATED'))).toHaveLength(1);
+      process.env['SERVICE_AUTH_LEGACY_BODY_ONLY'] = 'refuse';
+      expect((await request(app()).get('/internal/devbox/status').set(signed({}))).status).toBe(401);
+      expect((await request(app()).get('/internal/devbox/status').set(signedRequest('GET', '/internal/devbox/status'))).status).toBe(200);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

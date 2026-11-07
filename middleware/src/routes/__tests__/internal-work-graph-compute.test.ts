@@ -19,7 +19,9 @@ jest.mock('../../work-graph/compute-capability-runtime.js', () => ({
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import { SERVICE_AUTH_HEADER, signEnvelope } from '@connorhoehn/service-runtime';
+import { SERVICE_AUTH_HEADER, signEnvelope, signServiceRequest } from '@connorhoehn/service-runtime';
+import { captureRawBody } from '../../lib/service-auth.js';
+import { WORK_GRAPH_COMPUTE_AUDIENCE, resetLegacyBodyOnlyWarnings } from '../../lib/internal-service-auth.js';
 import { internalWorkGraphComputeRouter } from '../internal-work-graph-compute.js';
 import { computeCapabilitySessions } from '../../work-graph/compute-capability-runtime.js';
 import { getBox, _resetFleet } from '../../lib/devbox-fleet.js';
@@ -29,7 +31,8 @@ const originalEnv = { ...process.env };
 
 function app() {
   const value = express();
-  value.use(express.json());
+  // As index.ts mounts it: the raw bytes are kept for the request-bound MAC.
+  value.use(express.json({ verify: captureRawBody }));
   value.use('/internal/work-graph/compute-capabilities', internalWorkGraphComputeRouter);
   return value;
 }
@@ -193,5 +196,34 @@ describe('fixture box registration (dev/test seam)', () => {
       expect(res.status).toBe(404);
       expect(getBox('seed-box-1')).toBeNull();
     } finally { process.env['NODE_ENV'] = 'test'; }
+  });
+});
+
+describe('request-bound envelope (service-runtime 0.7.0)', () => {
+  const BASE = '/internal/work-graph/compute-capabilities';
+  const body = { requestId: 'request-9', sessionId: 'capability-session-1' };
+  const signedFor = (path: string, b: object) => ({ [SERVICE_AUTH_HEADER]: signServiceRequest(
+    { method: 'POST', target: `${BASE}${path}`, body: JSON.stringify(b) },
+    { secret: SECRET, serviceId: 'platform-api', audience: WORK_GRAPH_COMPUTE_AUDIENCE },
+  ) });
+  const post = (path: string, headers: Record<string, string>, b: object) =>
+    request(app()).post(`${BASE}${path}`).set(headers).set('Content-Type', 'application/json').send(JSON.stringify(b));
+  afterEach(() => { delete process.env['SERVICE_AUTH_LEGACY_BODY_ONLY']; resetLegacyBodyOnlyWarnings(); });
+
+  it('a captured envelope replayed against the sibling route with the same body shape is refused', async () => {
+    const captured = signedFor('/revalidate', body);
+    expect((await post('/revalidate', captured, body)).status).toBe(200);
+    // /close takes the identical { requestId, sessionId } body: the old
+    // body-only MAC let this replay through for 30 seconds.
+    const replay = await post('/close', captured, body);
+    expect(replay.status).toBe(401);
+    expect(replay.body).toEqual({ error: 'SERVICE_AUTH_INVALID' });
+    expect(computeCapabilitySessions.close).not.toHaveBeenCalled();
+  });
+
+  it('with SERVICE_AUTH_LEGACY_BODY_ONLY=refuse a body-only envelope is refused on every route', async () => {
+    process.env['SERVICE_AUTH_LEGACY_BODY_ONLY'] = 'refuse';
+    expect((await post('/revalidate', signed(body), body)).status).toBe(401);
+    expect((await post('/close', signed(body), body)).status).toBe(401);
   });
 });
