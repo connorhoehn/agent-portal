@@ -8,10 +8,12 @@
 //      no query-string or cookie fallback;
 //   3. the JWT verifies against REALTIME_JWT_SECRET (HS256, iss/aud/exp,
 //      tokenKind 'orgiq-hs256').
-// The resulting context — `{ userId: sub, displayName, org, tenants, role }` —
+// The resulting context — `{ userId: sub, displayName, org, tenants, role, exp }` —
 // is what the router routes rings by (`getClientsByUserId`) and what the
-// current-principal preflight sees. Token expiry itself is verified at
-// upgrade; the portal re-fetches on drops.
+// current-principal preflight sees. Token expiry is verified at upgrade, and
+// since realtime-modules 0.146 the library also closes a live socket at the
+// context's `exp` (seconds) plus its grace, with close code 4001; the portal
+// reconnects and fetches a fresh token on every drop.
 
 import type { IncomingMessage } from 'node:http';
 import { bearerSubprotocolAuth } from '@connorhoehn/realtime-modules/server';
@@ -64,6 +66,7 @@ export async function authenticateGatewayUpgrade(req: IncomingMessage): Promise<
  * (routes/realtime-lobby-access.ts) so platform-api's question is asked of
  * exactly the identity the gateway would admit. */
 export function gatewayAuthFromClaims(claims: RealtimeTokenClaims): RealtimeGatewayAuth {
+  const exp = tokenExp(claims);
   return {
     userId: claims.sub,
     displayName: typeof claims.displayName === 'string' && claims.displayName ? claims.displayName : claims.sub,
@@ -72,9 +75,17 @@ export function gatewayAuthFromClaims(claims: RealtimeTokenClaims): RealtimeGate
     role: typeof claims.role === 'string' ? claims.role : '',
     epoch: claims.epoch ?? 0,
     sessionIat: Number((claims as unknown as { iat?: number }).iat) || 0,
+    // The JWT claim as-is, in seconds: the library closes the socket when it passes.
+    ...(exp ? { exp } : {}),
     ...(claims.act ? { act: { sub: claims.act.sub, epoch: claims.act.epoch ?? 0 } } : {}),
     // Presence and chat stamp `avatarUrl` off this context (the library's
     // default resolveSender), so a peer's face comes from the signed token.
     ...(claimableAvatarUrl(claims.avatarUrl) ? { avatarUrl: claimableAvatarUrl(claims.avatarUrl) } : {}),
   };
+}
+
+/** The verified token's `exp` claim (seconds since the epoch), or undefined. */
+function tokenExp(claims: RealtimeTokenClaims): number | undefined {
+  const exp = (claims as unknown as { exp?: unknown }).exp;
+  return typeof exp === 'number' && Number.isSafeInteger(exp) && exp > 0 ? exp : undefined;
 }

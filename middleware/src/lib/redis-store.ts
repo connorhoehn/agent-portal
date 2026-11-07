@@ -1,17 +1,42 @@
 // Application store shapes over the library's bounded transport. Connections,
 // TLS, deadlines, reconnects and pub/sub remain owned by realtime-modules.
 import { createBoundedRedis, type BoundedRedis, type BoundedRedisOptions } from '@connorhoehn/realtime-modules/server';
+import type { NotificationRedisClient } from '@connorhoehn/realtime-modules/notification';
 
 type CommandRedis = Pick<BoundedRedis, 'command' | 'quit'>;
+type RedisReply = Awaited<ReturnType<BoundedRedis['command']>>;
+type RedisArg = Parameters<BoundedRedis['command']>[number];
 
-function strings(reply: Awaited<ReturnType<BoundedRedis['command']>>): string[] {
+/** Named explicitly so declaration emit never reaches into realtime-modules' own distributed-core copy. */
+export interface GatewayRedisStore {
+  command(...args: RedisArg[]): Promise<RedisReply>;
+  quit(): Promise<void>;
+  ping(): Promise<RedisReply>;
+  get(key: string): Promise<RedisReply>;
+  hset(key: string, field: string, value: string): Promise<RedisReply>;
+  hsetnx(key: string, field: string, value: string): Promise<RedisReply>;
+  hgetall(key: string): Promise<Record<string, string>>;
+  hdel(key: string, ...fields: string[]): Promise<RedisReply>;
+  sadd(key: string, ...members: string[]): Promise<RedisReply>;
+  srem(key: string, ...members: string[]): Promise<RedisReply>;
+  smembers(key: string): Promise<string[]>;
+  del(...keys: string[]): Promise<RedisReply>;
+  expire(key: string, seconds: number): Promise<RedisReply>;
+  setNX(key: string, value: string): Promise<RedisReply>;
+  zadd(key: string, score: number, member: string): Promise<RedisReply>;
+  zrange(key: string, start: number, stop: number): Promise<string[]>;
+  zcard(key: string): Promise<number>;
+  zremrangebyrank(key: string, start: number, stop: number): Promise<RedisReply>;
+}
+
+function strings(reply: RedisReply): string[] {
   if (!Array.isArray(reply) || !reply.every((value): value is string => typeof value === 'string')) {
     throw new Error('Invalid Redis string-list reply');
   }
   return reply;
 }
 
-export function createRedisStore(redis: CommandRedis) {
+export function createRedisStore(redis: CommandRedis): GatewayRedisStore {
   const command: BoundedRedis['command'] = (...args) => redis.command(...args);
   return {
     command,
@@ -45,14 +70,12 @@ export function createRedisStore(redis: CommandRedis) {
   };
 }
 
-export type GatewayRedisStore = ReturnType<typeof createRedisStore>;
-
 export async function openRedisStore(url: string, options?: BoundedRedisOptions): Promise<GatewayRedisStore> {
   return createRedisStore(await createBoundedRedis(url, options));
 }
 
 /** The notification store's node-redis-shaped view over the shared store. */
-export function notificationRedisClient(redis: Pick<GatewayRedisStore, 'zadd' | 'zrange' | 'zcard' | 'zremrangebyrank' | 'hset' | 'hgetall' | 'expire' | 'del'>) {
+export function notificationRedisClient(redis: Pick<GatewayRedisStore, 'zadd' | 'zrange' | 'zcard' | 'zremrangebyrank' | 'hset' | 'hgetall' | 'expire' | 'del'>): NotificationRedisClient {
   return {
     zAdd: (key: string, member: { score: number; value: string }) => redis.zadd(key, member.score, member.value),
     zRange: (key: string, start: number, stop: number) => redis.zrange(key, start, stop),
