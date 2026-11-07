@@ -34,5 +34,11 @@ COPY tsconfig.json ./
 
 RUN npm run build
 
+# Run unprivileged. The service writes nothing under /app (only os.tmpdir() in
+# mock code), so ownership is for tools that expect to own their cwd; the
+# entrypoint is plain `node dist/index.js` on port 3001 (> 1024).
+RUN chown -R node:node /app
+USER node
+
 EXPOSE 3001
 CMD ["node", "dist/index.js"]
