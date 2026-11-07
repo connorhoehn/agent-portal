@@ -32,7 +32,7 @@ export type Action =
   | 'RunDevboxTask'
   | 'DecideAgentChange'
   | 'DeliverAgentChange'
-  | 'EditSdlcPolicy'
+  | 'ManageSdlcPolicies'
   | 'ManageBots'
   | 'DispatchAgentRun'
   | 'ManageIngest'

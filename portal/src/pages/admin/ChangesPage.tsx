@@ -86,13 +86,13 @@ export default function ChangesPage() {
   // there is no readable queue: the fetch 403s and this page knows nothing
   // about what is waiting, so a denied list is reported as a denial below
   // rather than rendered as an empty queue. The WRITES carry their own actions
-  // since DE-42: the policy editor's POST/DELETE /policies ask EditSdlcPolicy
+  // since DE-42: the policy editor's POST/DELETE /policies ask ManageSdlcPolicies
   // (sdlc.ts `editGate`), which an SME does not hold even though they can read
   // the policies. So the Policies tab opens for every reader and the editor
   // itself goes read-only, with the reason, when the write is not theirs.
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
-  const canEditPolicy = ready && can('EditSdlcPolicy');
+  const canEditPolicy = ready && can('ManageSdlcPolicies');
   const { data, error, isLoading, refresh } = useFetch<{ changes: Change[] }>('/api/sdlc/changes', 15_000);
   // A denial and an outage are different facts and get different words. The
   // one thing neither may be reported as is "no changes yet".

@@ -17,7 +17,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
 /** Why the editor is read-only for this viewer — the server's gate, named (sdlc.ts `editGate`). */
-const READ_ONLY_REASON = 'You can read these policies but not change them: editing needs the EditSdlcPolicy capability, which platform operators hold.';
+const READ_ONLY_REASON = 'You can read these policies but not change them: editing needs the ManageSdlcPolicies capability, which org leaders and admins hold.';
 
 type PolicyKind = 'require_review' | 'protected_paths' | 'max_files' | 'model_allowlist';
 type PolicyAction = 'require_approval' | 'block';
@@ -128,7 +128,7 @@ function configFor(form: FormState): Record<string, unknown> {
 }
 
 /**
- * `canEdit`: whether the viewer holds EditSdlcPolicy (DE-42) — the action
+ * `canEdit`: whether the viewer holds ManageSdlcPolicies (DE-42) — the action
  * POST /api/sdlc/policies and DELETE /api/sdlc/policies/:id ask
  * (middleware/src/routes/sdlc.ts `editGate`). Reading the list is the coarser
  * ManageDevbox, which an SME holds without the edit right, so the editor is
