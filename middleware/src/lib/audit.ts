@@ -137,6 +137,56 @@ export function eventFromSession(session: Session, action: string, decision: 'AL
   };
 }
 
+// ── Break-glass alert: admin outside its session tenant ─────────────────────
+//
+// `admin` is the one cross-tenant role and its Cedar policy is unconditional
+// (seeds/roles/admin.cedar, docs/next-steps.md §8 work item 22). Crossing into
+// another tenant's routes is allowed, never silent: requireTenant calls this,
+// which records an `AdminCrossTenant` ALLOW event (ring buffer, SSE, Aurora)
+// and writes an `audit-alert` JSON line a log metric filter can alarm on.
+// Repeats for the same (actor, from, to) inside ALERT_WINDOW_MS are folded into
+// one, so an admin working in another tenant does not flood the trail.
+
+const ALERT_WINDOW_MS = 60_000;
+const lastAlert = new Map<string, number>();
+
+export interface AdminCrossTenantAlert {
+  type: 'audit-alert';
+  alert: 'admin-cross-tenant';
+  sub: string;
+  actor?: string;
+  sessionTenant: string;
+  targetTenant: string;
+  path?: string;
+  ts: string;
+}
+
+/** Returns the alert it emitted, or null when an identical one went out within the window. */
+export function alertAdminCrossTenant(session: Session, targetTenant: string, path?: string, now = Date.now()): AdminCrossTenantAlert | null {
+  const who = session.act?.sub ?? session.sub;
+  const key = `${who}|${session.tenant}|${targetTenant}`;
+  const last = lastAlert.get(key);
+  if (last !== undefined && now - last < ALERT_WINDOW_MS) return null;
+  lastAlert.set(key, now);
+  if (lastAlert.size > 10_000) lastAlert.clear();
+  const ts = new Date(now).toISOString();
+  const alert: AdminCrossTenantAlert = {
+    type: 'audit-alert', alert: 'admin-cross-tenant', sub: session.sub,
+    ...(session.act ? { actor: session.act.sub } : {}),
+    sessionTenant: session.tenant, targetTenant, ...(path ? { path } : {}), ts,
+  };
+  process.stdout.write(JSON.stringify(alert) + '\n');
+  logAuthz(eventFromSession(session, 'AdminCrossTenant', 'ALLOW', {
+    path, ts, reason: `break-glass: admin in tenant=${session.tenant} entered tenant=${targetTenant}`,
+  }));
+  return alert;
+}
+
+/** Test seam: forget the fold window. */
+export function _resetAdminAlerts(): void {
+  lastAlert.clear();
+}
+
 export interface AuthzQuery {
   decision?: 'ALLOW' | 'DENY';
   role?: string;

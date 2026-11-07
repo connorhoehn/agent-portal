@@ -14,7 +14,7 @@ import {
   type EntityItem,
 } from '@aws-sdk/client-verifiedpermissions';
 import { config } from '../config.js';
-import { eventFromSession, logAuthz } from './audit.js';
+import { alertAdminCrossTenant, eventFromSession, logAuthz } from './audit.js';
 import {
   demoSession, demoFallbackAllowed, ssoAvailable, ADMIN_ROLE, DEFAULT_ROLE,
   type Tenant, type Role, type Session,
@@ -406,13 +406,20 @@ export function requireAction(action: string) {
  * `tenant`. This is the data-boundary guard: routes serving one tenant's
  * tables reject sessions parked in another tenant. The tenant comes from the
  * signed cookie only — never from a header or query param. The cross-tenant
- * `admin` role passes any tenant guard.
+ * `admin` role passes any tenant guard, and each crossing raises an audit
+ * alert (lib/audit.ts alertAdminCrossTenant).
  */
 export function requireTenant(tenant: Tenant) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const session = resolveSession(req);
     if (!session) { denyUnauthenticated(req, res, 'TenantScope'); return; }
-    if (session.tenant === tenant || session.role === ADMIN_ROLE) {
+    if (session.tenant === tenant) {
+      next();
+      return;
+    }
+    if (session.role === ADMIN_ROLE) {
+      // Break-glass (seeds/roles/admin.cedar): allowed, never silent.
+      alertAdminCrossTenant(session, tenant, req.path);
       next();
       return;
     }
