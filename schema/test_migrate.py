@@ -349,7 +349,7 @@ class ManifestTests(unittest.TestCase):
         self.assertLess(files.index('agent_bots_schema.sql'), files.index('agent_budgets_schema.sql'))
         self.assertNotIn('environments_schema.sql', files, 'its tail needs seed rows')
         seed = sm.seed_run_files()
-        self.assertEqual(seed[-1], 'schema/graph_readonly_role.sql')
+        self.assertEqual(seed[-2:], ['schema/graph_readonly_role.sql', 'schema/row_level_security.sql'])
         self.assertLess(seed.index('schema/seed_program.sql'), seed.index('schema/environments_schema.sql'))
 
     def test_the_page_thread_migration_gates_the_middleware(self):

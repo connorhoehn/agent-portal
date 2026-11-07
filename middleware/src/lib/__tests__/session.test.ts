@@ -17,6 +17,7 @@ import {
   type Grants,
   type Session,
 } from '../session.js';
+import { currentDbTenant } from '../../providers/db-tenant.js';
 
 describe('mintSession', () => {
   const user = { id: 'u-test', displayName: 'Test User' };
@@ -236,6 +237,22 @@ describe('session_epoch', () => {
       await sessionMiddleware()(req, res, () => {});
       expect(req.session?.sub).toBe('u-e');
     });
+  });
+});
+
+describe('the request tenant scope (row-level security, work item 22)', () => {
+  it('runs the rest of the request with the session tenant first, then its other granted tenants', async () => {
+    const cookie = await signSession({
+      sub: 'u-s', role: 'member', tenant: 'orgiq',
+      grants: { orgiq: ['member'], social: ['participant'] }, iat: Math.floor(Date.now() / 1000),
+    });
+    const req = { cookies: { 'orgiq.session': cookie } } as unknown as import('express').Request;
+    const res = { cookie: jest.fn(), clearCookie: jest.fn() } as unknown as import('express').Response;
+    let seen = '';
+    await sessionMiddleware()(req, res, () => { seen = currentDbTenant(); });
+    expect(seen).toBe('orgiq,social');
+    // Outside the request the scope is gone: system work runs as every tenant.
+    expect(currentDbTenant()).toBe('*');
   });
 });
 

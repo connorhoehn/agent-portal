@@ -350,13 +350,19 @@
       "id": "service_roles",
       "file": "service_roles.sql",
       "kind": "seed",
-      "why": "Second to last in the seed run: grants each service its own login (middleware, graph writer, knowledge base) on tables that must already exist, so the master secret is left to migrations (infra/SECURITY-NOTES.md). Re-apply after every migration (apply_all_seed.py --roles-only); apply_all_seed.py sets the passwords from Secrets Manager. Kind seed because no deploy runs it today."
+      "why": "Third to last in the seed run: grants each service its own login (middleware, graph writer, knowledge base) on tables that must already exist, so the master secret is left to migrations (infra/SECURITY-NOTES.md). Re-apply after every migration (apply_all_seed.py --roles-only); apply_all_seed.py sets the passwords from Secrets Manager. Kind seed because no deploy runs it today."
     },
     {
       "id": "graph_readonly_role",
       "file": "graph_readonly_role.sql",
       "kind": "seed",
-      "why": "LAST in the seed run: grants SELECT on an explicit allow-list, so every table must exist. The database half of the agents' read-only boundary (docs/readonly-graph-role.md); apply_all_seed.py sets its password from Secrets Manager afterwards. Kind seed because no deploy runs it today."
+      "why": "Second to last in the seed run: grants SELECT on an explicit allow-list, so every table must exist. The database half of the agents' read-only boundary (docs/readonly-graph-role.md); apply_all_seed.py sets its password from Secrets Manager afterwards. Kind seed because no deploy runs it today."
+    },
+    {
+      "id": "row_level_security",
+      "file": "row_level_security.sql",
+      "kind": "seed",
+      "why": "LAST in the seed run (work item 22): row-level security on every tenant table, keyed on the per-transaction app.tenant the middleware's Data API wrapper sets, binding orgiq_app_middleware. It names the roles service_roles and graph_readonly_role create and the tables every schema file creates. Re-apply with the role files after every migration (apply_all_seed.py --roles-only); its assertions fail the apply when a new tenant table is not covered. Kind seed because no deploy runs it today."
     },
     {
       "id": "2026-09-05-drop-newsroom",
@@ -426,6 +432,7 @@
     "environments_schema",
     "seed_kb_registry",
     "service_roles",
-    "graph_readonly_role"
+    "graph_readonly_role",
+    "row_level_security"
   ]
 }

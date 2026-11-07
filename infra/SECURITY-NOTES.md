@@ -54,6 +54,16 @@ cdk-nag 2.38.2 (devDependency) runs AwsSolutions over every stack; `npx cdk synt
 
 Still open: the Devbox role grants `bedrock:InvokeModel` on a foundation-model ARN with a wildcard region; it is suppressed under IAM5 but deserves a look against the AWS-native-models rule.
 
+## Row-level security (work item 22)
+
+`schema/row_level_security.sql` turns on RLS for every tenant table and binds `orgiq_app_middleware` to a per-transaction `app.tenant`. The file's header lists the tables, the predicate for each, and the tables left out on purpose.
+
+- **The setting.** The middleware sends `SELECT set_config('app.tenant', :app_tenant, true)` in the same Data API transaction as the statement (`middleware/src/providers/data-api.ts`). The value is the session's active tenant followed by the user's other granted tenants. It is `*` for `admin`, for the access tenant, and for system work outside a request. Unset reads nothing.
+- **The flag.** `RLS_ENFORCE` defaults on when `AURORA_SECRET_ARN` is the middleware login and off under `dbMasterSecret`. The master owns the tables, so RLS never applies to it. Only statements on a protected table pay the transaction.
+- **Cost.** An autocommit statement on a protected table becomes four Data API calls instead of one (begin, set, statement, commit). An explicit transaction gains one call. On a local PostgreSQL 16, pgbench measured 0.058 ms for the statement alone and 0.182 ms for the four-statement form. The Data API's own per-call latency is not measured yet; it needs a live cluster.
+- **Rollout.** `python3 schema/apply_all_seed.py --roles-only` now applies it after the two role files. Run that before the middleware moves to its own login. Re-run it after every migration: its assertions fail the apply when a new table carries a tenant column without a policy.
+- **Proof.** `schema/test_row_level_security_postgres.py` (opt-in, disposable container) shows that a wrong or unset setting returns zero rows and that a cross-tenant write is refused.
+
 ## Migration order for an existing environment
 
 1. **Agent images first.** `agents/_shared/callbacks.py` and the devbox must read the `*_SECRET_ID` variables (see "Change needed in agents/" below). Until those images are deployed, run deploys with `PLAINTEXT_CALLBACK_SECRETS=1 ./scripts/deploy.sh …`. Without it, the callbacks go unsigned and the middleware refuses them.

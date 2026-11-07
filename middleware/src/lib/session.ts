@@ -20,6 +20,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { config } from '../config.js';
 import { viewerScheme } from './trusted-proxy.js';
+import { dbTenantScopeFor, runWithDbTenant } from '../providers/db-tenant.js';
 
 // Tenants, their ordered roles and the Role union come from tenants/manifest.json
 // through the generated copy (DE-29; `node scripts/gen-tenants.mjs`).
@@ -544,7 +545,7 @@ export function sessionMiddleware() {
               if (verified.act) reminted.iat = verified.iat;
               setSessionCookie(res, await signSession(reminted));
               req.session = reminted;
-              next();
+              withDbTenant(reminted, next);
               return;
             }
             // The identity still exists but has lost its last grant. This is
@@ -559,7 +560,7 @@ export function sessionMiddleware() {
           }
         }
         req.session = verified;
-        next();
+        withDbTenant(verified, next);
         return;
       }
       // Bad signatures and expired/malformed credentials are just as
@@ -570,7 +571,21 @@ export function sessionMiddleware() {
       next();
       return;
     }
-    if (demoFallbackAllowed()) req.session = demoSession();
+    if (demoFallbackAllowed()) {
+      req.session = demoSession();
+      withDbTenant(req.session, next);
+      return;
+    }
     next();
   };
+}
+
+/**
+ * Run the rest of the request with the session's tenant scope, which the Data
+ * API wrapper sends as `app.tenant` for row-level security
+ * (providers/db-tenant.ts, schema/row_level_security.sql). A request without a
+ * session carries no scope.
+ */
+function withDbTenant(session: Session, next: NextFunction): void {
+  runWithDbTenant(dbTenantScopeFor(session), () => next());
 }

@@ -28,7 +28,8 @@ RETRYABLE = ('HttpEndpointNotEnabledException', 'ThrottlingException', 'Statemen
 # the reason each file sits where it does on its entry. In short: the schema
 # files the seeds write into come first so a seed-only run against an older
 # database works, environments_schema follows seed_program (its tail seeds the
-# p-* cast), and graph_readonly_role is LAST (it grants on an allow-list).
+# p-* cast), graph_readonly_role grants on an allow-list, and row_level_security
+# is LAST (it names both files' roles and every tenant table).
 FILES = seed_run_files()
 
 # The demo sign-in cast (u-operator holds `admin` in every tenant). Never part
@@ -53,7 +54,7 @@ SERVICE_ROLES = (
     ('orgiq_graph_writer', 'orgiq-aurora-graph-writer-credentials', 'AURORA_GRAPH_WRITER_SECRET_ARN'),
     ('orgiq_kb_service', 'orgiq-aurora-kb-credentials', 'AURORA_KB_SECRET_ARN'),
 )
-ROLE_FILES = ['schema/service_roles.sql', 'schema/graph_readonly_role.sql']
+ROLE_FILES = ['schema/service_roles.sql', 'schema/graph_readonly_role.sql', 'schema/row_level_security.sql']
 
 # Characters the generated password must not contain. The CDK secret generator
 # excludes these (see infra/lib/aurora-stack.ts); we re-check rather than trust,

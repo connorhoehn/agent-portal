@@ -1,21 +1,16 @@
 // Identity provider — tenants, login-able users, and per-tenant role grants
-// from Aurora via the RDS Data API (schema/identity_schema.sql). Self-contained:
-// no imports from aurora.ts/types.ts.
+// from Aurora via the RDS Data API (schema/identity_schema.sql). No imports from
+// aurora.ts/types.ts; statements go through the shared transport (data-api.ts),
+// so user_tenant_roles is read under row-level security like every tenant table.
 //
 // When Aurora is unreachable or the identity tables don't exist yet, falls back
 // to an in-memory mirror of the seed data so local dev works with no database.
 
-import {
-  RDSDataClient,
-  ExecuteStatementCommand,
-  BeginTransactionCommand,
-  CommitTransactionCommand,
-  RollbackTransactionCommand,
-  type SqlParameter,
-  type Field,
-} from '@aws-sdk/client-rds-data';
+import { type SqlParameter, type Field } from '@aws-sdk/client-rds-data';
 
 import { config } from '../config.js';
+import { beginTransaction, commitTransaction, executeStatement, rollbackTransaction } from './data-api.js';
+import { runAsSystem } from './db-tenant.js';
 import type { Grants } from '../lib/session.js';
 import { TENANTS, TENANT_MANIFEST } from '../lib/tenants.generated.js';
 import { identityGrantWritesFixture } from '../mock/identity-grants.js';
@@ -212,12 +207,6 @@ export { liveClones as listIdentityClones };
 
 // ── RDS Data API helpers (local to this module) ──────────────────────────────
 
-let _client: RDSDataClient | null = null;
-function getClient(): RDSDataClient {
-  if (!_client) _client = new RDSDataClient({ region: config.region });
-  return _client;
-}
-
 function readField(cell: Field | undefined): unknown {
   if (!cell) return null;
   if (cell.isNull) return null;
@@ -233,29 +222,19 @@ function auroraConfigured(): boolean {
 }
 
 async function exec(sql: string, params: SqlParameter[] = [], transactionId?: string): Promise<unknown[][]> {
-  const out = await getClient().send(new ExecuteStatementCommand({
-    resourceArn: config.aurora.clusterArn,
-    secretArn: config.aurora.secretArn,
-    database: config.aurora.database,
-    sql,
-    parameters: params,
-    ...(transactionId ? { transactionId } : {}),
-  }));
+  const out = await executeStatement(sql, params, transactionId);
   return (out.records ?? []).map(row => row.map(readField));
 }
 
 /** Run `fn` in one Data API transaction: committed if it returns, rolled back if it throws. */
 async function inTransaction<T>(fn: (transactionId: string) => Promise<T>): Promise<T> {
-  const target = { resourceArn: config.aurora.clusterArn, secretArn: config.aurora.secretArn };
-  const begun = await getClient().send(new BeginTransactionCommand({ ...target, database: config.aurora.database }));
-  const transactionId = begun.transactionId;
-  if (!transactionId) throw new Error('Data API returned no transaction id');
+  const transactionId = await beginTransaction();
   try {
     const result = await fn(transactionId);
-    await getClient().send(new CommitTransactionCommand({ ...target, transactionId }));
+    await commitTransaction(transactionId);
     return result;
   } catch (error) {
-    await getClient().send(new RollbackTransactionCommand({ ...target, transactionId })).catch(() => undefined);
+    await rollbackTransaction(transactionId);
     throw error;
   }
 }
@@ -349,14 +328,18 @@ const MAX_QUEUED_AUTHORITY_SUBJECTS = 2048;
 type AuthorityWaiter = { resolve: (user: UserInfo | null) => void; reject: (error: unknown) => void };
 const authorityQueue = new Map<string, AuthorityWaiter[]>();
 let authorityScheduled = false;
+// A user's whole grant set is the source of authority, not tenant data: it is
+// read as the system (providers/db-tenant.ts runAsSystem), whichever request
+// asks. These reads are also batched across requests (queuedAuthoritativeUser),
+// so one caller's tenant scope must never decide another user's grants.
 async function readCurrentUsers(userIds: string[]): Promise<Map<string, UserInfo>> {
   const params = userIds.map((id, index) => str(`id${index}`, id));
-  const rows = await exec(
+  const rows = await runAsSystem(() => exec(
     `SELECT u.id, u.display_name, u.email, u.person_id, u.session_epoch, u.external_sub,
             r.tenant_id, r.role
      FROM app_users u LEFT JOIN user_tenant_roles r ON r.user_id = u.id
      WHERE u.id IN (${params.map(param => `:${param.name}`).join(', ')})
-     ORDER BY u.id, r.granted_at, r.tenant_id, r.role`, params);
+     ORDER BY u.id, r.granted_at, r.tenant_id, r.role`, params));
   const users = new Map<string, UserInfo>();
   for (const [id, name, email, personId, epoch, externalSub, tenant, role] of rows) {
     if (typeof id !== 'string' || !userIds.includes(id)) throw new Error('Unexpected directory subject');
@@ -397,9 +380,9 @@ function queuedAuthoritativeUser(userId: string): Promise<UserInfo | null> {
 // first time a user signs in (then linking the sub so later logins are direct).
 
 async function hydrate(id: string, displayName: string, email: string | null, personId: string | null, epoch = 0): Promise<UserInfo> {
-  const grantRows = await exec(
+  const grantRows = await runAsSystem(() => exec(
     `SELECT user_id, tenant_id, role FROM user_tenant_roles WHERE user_id = :id ORDER BY granted_at, tenant_id, role`,
-    [str('id', id)]);
+    [str('id', id)]));
   return { id, displayName, email, personId, grants: groupGrants(grantRows).get(id) ?? {}, epoch };
 }
 

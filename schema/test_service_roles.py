@@ -57,14 +57,15 @@ class ServiceRolesSqlTests(unittest.TestCase):
 class ServiceRolesApplierTests(unittest.TestCase):
     def test_role_files_run_just_before_the_end_of_the_seed(self):
         files = seed_run_files()
-        self.assertEqual(files[-2:], ['schema/service_roles.sql', 'schema/graph_readonly_role.sql'])
+        self.assertEqual(files[-3:], ['schema/service_roles.sql', 'schema/graph_readonly_role.sql',
+                                      'schema/row_level_security.sql'])
 
     def test_every_role_has_a_secret(self):
         self.assertEqual(tuple(sorted(r for r, _, _ in seed.SERVICE_ROLES)), ROLES)
         for role, secret, _ in seed.SERVICE_ROLES:
             self.assertTrue(secret.startswith('orgiq-aurora-') and secret.endswith('-credentials'), secret)
 
-    def test_roles_only_applies_both_role_files_then_sets_and_verifies_every_password(self):
+    def test_roles_only_applies_every_role_file_then_sets_and_verifies_every_password(self):
         rds = Mock()
         with patch.object(seed, 'get_cluster_info', return_value=('cluster', 'admin', 'db')), \
                 patch.object(seed.boto3, 'client', return_value=rds), \
