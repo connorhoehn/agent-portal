@@ -4,7 +4,7 @@ OrgIQ, the Organizational Intelligence Platform, is a multi-agent system on Amaz
 
 The product is split into tenants that share one backend: work (`orgiq`), `assessment`, `social`, `pipelines` and `access`. Each has its own section of the portal and its own API prefix.
 
-How this repository and its siblings came to be, and how they depend on each other, is told in [docs/project-story.md](docs/project-story.md).
+How this repository and its siblings came to be, and how they depend on each other, is told in [docs/project-story.md](docs/project-story.md). What is loose and what comes next is in [docs/next-steps.md](docs/next-steps.md).
 
 ## What's in the repo
 

