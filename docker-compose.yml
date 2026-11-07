@@ -253,6 +253,9 @@ services:
       # default for the other platform-api surfaces this profile serves;
       # SOCIAL_PLATFORM_SKIP_AUTH=false runs without it.
       - SKIP_AUTH=${SOCIAL_PLATFORM_SKIP_AUTH:-true}
+      # platform-api refuses SKIP_AUTH without this explicit dev flag (and never in production).
+      - INSECURE_DEV_MODE=${SOCIAL_PLATFORM_SKIP_AUTH:-true}
+      - NODE_ENV=development
       # The secret the middleware's token bridge signs with — its dev
       # fallback by default. A forged/expired OrgIQ token is refused (401)
       # even while SKIP_AUTH is on.
