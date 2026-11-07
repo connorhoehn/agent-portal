@@ -5,16 +5,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { LintContext } from './lint.js';
 
-/** The repository root: the nearest directory, from the cwd upward, holding middleware/ and CLAUDE.md. */
+/** The repository root: the nearest directory, from the cwd upward, holding middleware/ and a README.md (the hand-over sweep removed CLAUDE.md). */
 export function repoRoot(start: string = process.cwd()): string {
   let dir = resolve(start);
   for (let k = 0; k < 8; k += 1) {
-    if (existsSync(join(dir, 'middleware', 'package.json')) && existsSync(join(dir, 'CLAUDE.md'))) return dir;
+    if (existsSync(join(dir, 'middleware', 'package.json')) && existsSync(join(dir, 'README.md'))) return dir;
     const up = dirname(dir);
     if (up === dir) break;
     dir = up;
   }
-  throw new Error(`no repository root (middleware/ + CLAUDE.md) above ${start}`);
+  throw new Error(`no repository root (middleware/ + README.md) above ${start}`);
 }
 
 export function repoLintContext(root: string = repoRoot()): LintContext {

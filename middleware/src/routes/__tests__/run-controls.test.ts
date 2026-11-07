@@ -9,6 +9,9 @@ jest.mock('../../lib/authz.js', () => ({
   readForRolesElseAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   requireAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   requireSession: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  // budget-scope.ts: no session means no program-owner scoping, so the PUT goes through.
+  resolveSession: () => undefined,
+  isAllowed: async () => true,
 }));
 jest.mock('../../lib/devbox-arn.js', () => ({ resolveDevboxArn: jest.fn(async () => null), devboxDataClient: jest.fn() }));
 jest.mock('../../lib/sdlc-pipeline.js', () => ({ dispatchGovernedRun: jest.fn() }));

@@ -197,25 +197,40 @@ describe('pairing', () => {
     expect(await claimPairingCode(pairing.code, { label: 'orphan' })).toBeNull();
   });
 
-  it('re-pairing a machine keeps its id, its created_at and its OWNER, and clears the revoke', async () => {
-    // The Map this replaced overwrote the whole row, so a re-pair moved a
-    // machine to whoever held the newest code. Aurora's ON CONFLICT (id) DO
-    // UPDATE touches label, platform, token_hash and revoked_at — nothing else.
-    freeze('2026-09-07T12:00:00.000Z');
-    expect(await revokeNode(DEMO_NODE_ID, 'demo-user')).toBe(true);
-
+  it('re-pairing re-uses the id only for the owner\'s own live machine, and keeps its created_at and owner', async () => {
+    // Aurora's ON CONFLICT (id) DO UPDATE ... WHERE owner_id = EXCLUDED.owner_id
+    // AND revoked_at IS NULL touches label, platform and token_hash, nothing else.
     freeze('2026-09-07T13:00:00.000Z');
-    const claimed = await claimPairingCode('MKPAD234', {
+    const createdAt = computeNodes.rows(/* live */).find((n) => n.id === DEMO_NODE_ID)!.createdAt;
+    const pairing = await createPairingCode('demo-user');
+    const claimed = await claimPairingCode(pairing.code, {
       nodeId: DEMO_NODE_ID, label: 'demo-macbook-reimaged', platform: 'darwin/arm64',
     });
     const node = await getNode(DEMO_NODE_ID);
-    expect(node!.ownerId).toBe('demo-user');            // NOT u-operator, who held the code
-    expect(node!.createdAt).toBe(computeNodes.rows(/* live */).find((n) => n.id === DEMO_NODE_ID)!.createdAt);
+    expect(claimed!.nodeId).toBe(DEMO_NODE_ID);
+    expect(node!.ownerId).toBe('demo-user');
+    expect(node!.createdAt).toBe(createdAt);
     expect(node!.label).toBe('demo-macbook-reimaged');
     expect(node!.revokedAt).toBeNull();
     // The old token is dead; the new one works.
     expect(await getNodeByToken(MOCK_NODE_TOKEN)).toBeNull();
     expect((await getNodeByToken(claimed!.nodeToken))?.id).toBe(DEMO_NODE_ID);
+  });
+
+  it('a code held by another owner, or a revoked machine, never re-pairs the suggested id: it gets a fresh one', async () => {
+    freeze('2026-09-07T12:00:00.000Z');
+    // MKPAD234 belongs to u-operator; DEMO_NODE_ID belongs to demo-user.
+    const other = await claimPairingCode('MKPAD234', { nodeId: DEMO_NODE_ID, label: 'hijack', platform: 'darwin/arm64' });
+    expect(other!.nodeId).not.toBe(DEMO_NODE_ID);
+    expect((await getNode(DEMO_NODE_ID))!.label).toBe('demo-macbook');
+    expect((await getNode(DEMO_NODE_ID))!.ownerId).toBe('demo-user');
+    expect((await getNode(other!.nodeId))!.ownerId).toBe('u-operator');
+
+    expect(await revokeNode(DEMO_NODE_ID, 'demo-user')).toBe(true);
+    const again = await createPairingCode('demo-user');
+    const fresh = await claimPairingCode(again.code, { nodeId: DEMO_NODE_ID, label: 'revived', platform: 'darwin/arm64' });
+    expect(fresh!.nodeId).not.toBe(DEMO_NODE_ID);
+    expect((await getNode(DEMO_NODE_ID))!.revokedAt).not.toBeNull();
   });
 });
 

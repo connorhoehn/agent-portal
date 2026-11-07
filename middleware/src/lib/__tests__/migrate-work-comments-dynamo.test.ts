@@ -30,8 +30,10 @@ if (endpoint && !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(endpoint).
 const suite = endpoint ? describe : describe.skip;
 const prefix = `orgiq-chat-pagethread-${randomBytes(4).toString('hex')}-`;
 const TABLES = ['chat-messages', 'chat-members'];
-const manifest = JSON.parse(readFileSync(require.resolve('@connorhoehn/realtime-examples-cdk/dynamodb-schemas.json', { paths: [resolvePath(process.cwd(), '..', 'infra')] }), 'utf8')) as
-  { tables: { tableName: string; hashKey: { name: string; type: 'S' }; rangeKey?: { name: string; type: 'S' } }[] };
+type Manifest = { tables: { tableName: string; hashKey: { name: string; type: 'S' }; rangeKey?: { name: string; type: 'S' } }[] };
+// Resolved on first use, so a tree without infra/node_modules can still collect (and skip) this suite.
+let cached: Manifest | undefined;
+const manifest = (): Manifest => (cached ??= JSON.parse(readFileSync(require.resolve('@connorhoehn/realtime-examples-cdk/dynamodb-schemas.json', { paths: [resolvePath(process.cwd(), '..', 'infra')] }), 'utf8')) as Manifest);
 
 const client = () => new DynamoDBClient({ endpoint, region: 'us-east-1', maxAttempts: 2,
   credentials: { accessKeyId: 'local', secretAccessKey: 'local' }, requestHandler: new FetchHttpHandler({ requestTimeout: 5000 }) });
@@ -57,7 +59,7 @@ suite('work-comment migration into DynamoDB Local', () => {
 
   beforeAll(async () => {
     for (const name of TABLES) {
-      const t = manifest.tables.find((x) => x.tableName === name)!;
+      const t = manifest().tables.find((x) => x.tableName === name)!;
       const keys = [t.hashKey, ...(t.rangeKey ? [t.rangeKey] : [])];
       await c.send(new CreateTableCommand({ TableName: `${prefix}${name}`, BillingMode: 'PAY_PER_REQUEST',
         AttributeDefinitions: keys.map((k) => ({ AttributeName: k.name, AttributeType: k.type })),
