@@ -52,6 +52,8 @@ const SCOPED = [
   // §9 item 8d: a comment needs ViewWorkItems plus membership of the item's
   // initiative (requireInitiativeScope), not the DispatchAgentRun write gate.
   'work-items POST /projects/:id/discussion/comments', 'work-items POST /work-items/:id/comments',
+  // A workspace document is edited and created by members of its initiative (requireInitiativeScope).
+  'work-documents PUT /documents/:documentId', 'work-documents POST /projects/:projectId/workspace-documents',
 ];
 
 /** Not scoped yet, each with why. Fixing one moves it to SCOPED. */

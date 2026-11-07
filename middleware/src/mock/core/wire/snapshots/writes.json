@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-10-30T00:55:57.879Z",
-  "serverHandlerSha": "a9e451ab3dad2592419d173eedbff16d3349c0c3603307999df03eecb7fdb0c5",
+  "capturedAt": "2026-11-07T23:00:36.528Z",
+  "serverHandlerSha": "509bc88f647f18d9b7bad0e306e9e88318fa5927e5e0733acc58b839abe2138a",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -325,6 +325,7 @@
         "contacts[]": "string",
         "contributors": "array",
         "contributors[]": "object",
+        "contributors[].avatarUrl": "string",
         "contributors[].initials": "string",
         "contributors[].name": "string",
         "created_at": "string",
@@ -2401,8 +2402,10 @@
         "posts[].artifact.name": "string",
         "posts[].artifact.type": "string",
         "posts[].artifact.url": "null",
+        "posts[].authorId": "string",
         "posts[].authorKind": "string",
         "posts[].authorName": "string",
+        "posts[].avatarUrl": "string",
         "posts[].body": "string",
         "posts[].createdAt": "string",
         "posts[].id": "string",
@@ -2462,8 +2465,10 @@
         "posts[].artifact.name": "string",
         "posts[].artifact.type": "string",
         "posts[].artifact.url": "null",
+        "posts[].authorId": "string",
         "posts[].authorKind": "string",
         "posts[].authorName": "string",
+        "posts[].avatarUrl": "string",
         "posts[].body": "string",
         "posts[].createdAt": "string",
         "posts[].id": "string",
@@ -2472,9 +2477,11 @@
         "signoffs": "array",
         "signoffs[]": "object",
         "signoffs[].at": "string",
+        "signoffs[].avatarUrl": "string",
         "signoffs[].decision": "string",
         "signoffs[].personName": "string",
         "signoffs[].role": "string",
+        "signoffs[].signerId": "string",
         "status": "string",
         "summary": "string",
         "title": "string",
@@ -2582,6 +2589,12 @@
       ]
     },
     "POST /api/graph/projects/:id/discussion/comments": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/graph/projects/:projectId/workspace-documents": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
@@ -4307,6 +4320,7 @@
         "sprint.pointsTotal": "number",
         "sprint.startsOn": "string",
         "sprint.status": "string",
+        "sprint.stewardAvatarUrl": "null",
         "sprint.stewardName": "null",
         "sprint.stewardPersonId": "null"
       },
@@ -4749,6 +4763,12 @@
         "reason"
       ]
     },
+    "PUT /api/graph/documents/:documentId": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -4783,7 +4803,7 @@
       "skipped": "no body: `schema` is a Cedar JSON schema; GET /api/identity/schema needs a live policy store, so none is readable offline."
     },
     "PUT /api/identity/users/:id/grants": {
-      "skipped": "HTTP 503: Aurora not configured — cannot set grants (orgiq/admin)",
+      "skipped": "HTTP 403: you cannot change your own grants; ask another user admin (orgiq/admin)",
       "sent": [
         "grants"
       ]
