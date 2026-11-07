@@ -101,6 +101,7 @@ async function until(pred: () => boolean, ms = 2_000): Promise<void> {
     await new Promise((r) => setTimeout(r, 10));
   }
 }
+const dmRefused = (o: Open, channel: string) => o.frames.filter((f) => f.type === 'error' && f['channel'] === channel && (f.code === 'AUTHZ_CHANNEL_DENIED' || (f['error'] as { code?: string } | undefined)?.code === 'CHAT_DM_FORBIDDEN'));
 const denied = (o: Open) => o.frames.filter((f) => f.type === 'error' && f.code === 'AUTHZ_CHANNEL_DENIED');
 const chatMessages = (o: Open, channel: string) => o.frames
   .filter((f) => f.type === 'chat' && f.action === 'message' && (f['message'] as { channel?: string } | undefined)?.channel === channel)
@@ -263,7 +264,8 @@ describe('DMs over the socket', () => {
       send(lena, { service: 'chat', action: 'send', channel: DM, message: 'dm round trip' });
       await until(() => chatMessages(sana, DM).some((m) => m.message === 'dm round trip'));
       send(mira, { service: 'chat', action: 'join', channel: DM });
-      await until(() => denied(mira).length >= 1);
+      // The library's DM gate (CHAT_DM_FORBIDDEN) answers before the router's authority does.
+      await until(() => dmRefused(mira, DM).length >= 1);
       expect(chatMessages(mira, DM)).toEqual([]);
       const rows = await socialChat().conversations.listForUser('u-sana');
       expect(rows.find((r) => r.channel === DM)?.lastMessagePreview).toBe('dm round trip');

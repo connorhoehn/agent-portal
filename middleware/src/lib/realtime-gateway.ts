@@ -349,13 +349,9 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
         // persona for shared records, but keeps its own identity in a DM
         // whose members explicitly name the clone; its socket epoch is its own.
         resolveSender: recordOwnerSender,
-        // DM membership stays with the router's channel authority
-        // (lib/tenant-channels.ts, lib/live-principal.ts), which already refuses
-        // anyone not named in a `<tenant>:dm:` name. realtime-modules 0.146 also
-        // gates DMs inside chat, but it resolves the sender without the frame on
-        // join and history, so `recordOwnerSender` answers with a clone's
-        // persona and a clone is refused its own disposable DM.
-        enforceDmMembership: false,
+        // realtime-modules 0.146.1 resolves the sender with the frame on join
+        // and history, so the library's DM gate sees a clone's own identity.
+        enforceDmMembership: true,
         // Page discussions keep a cursor per current reader, with no member
         // list, and the service makes their "new messages" items
         // (realtime-modules 0.115 / 0.118; lib/page-thread-unread.ts).

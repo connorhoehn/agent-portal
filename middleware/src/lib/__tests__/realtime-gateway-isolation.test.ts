@@ -91,6 +91,7 @@ async function until(pred: () => boolean, ms = 2_000): Promise<void> {
     await new Promise((r) => setTimeout(r, 10));
   }
 }
+const dmRefused = (o: Open, channel: string) => o.frames.filter((f) => f.type === 'error' && f['channel'] === channel && (f.code === 'AUTHZ_CHANNEL_DENIED' || (f['error'] as { code?: string } | undefined)?.code === 'CHAT_DM_FORBIDDEN'));
 const denied = (o: Open) => o.frames.filter((f) => f.type === 'error' && f.code === 'AUTHZ_CHANNEL_DENIED');
 const chatFrames = (o: Open) => o.frames.filter((f) => f.type === 'chat');
 const messageTexts = (o: Open) => chatFrames(o).map((f) => JSON.stringify(f)).join('\n');
@@ -255,7 +256,8 @@ describe('the tenant-neutral shell entry (<tenant>:lobby presence, <tenant>:dm c
       send(vera, { service: 'chat', action: 'send', channel: dm, message: 'hello nora' });
       await until(() => JSON.stringify(nora.frames).includes('hello nora'));
       send(theo, { service: 'chat', action: 'join', channel: dm });
-      await until(() => denied(theo).some((f) => f['channel'] === dm));
+      // The library's DM gate (CHAT_DM_FORBIDDEN) answers before the router's authority does.
+      await until(() => dmRefused(theo, dm).length >= 1);
     } finally { nora.ws.close(); vera.ws.close(); }
   });
 });
