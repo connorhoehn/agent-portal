@@ -8,7 +8,7 @@
 #
 # Rebuild this base image only when common deps in the install block change.
 
-FROM --platform=linux/arm64 python:3.12-slim AS deps
+FROM --platform=linux/arm64 python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54 AS deps
 
 # uv is much faster than pip for resolution + install.
 RUN pip install --no-cache-dir uv
@@ -18,28 +18,28 @@ RUN pip install --no-cache-dir uv
 # extras set — supervisor needs a2a, all others need ag-ui.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system --no-cache \
-      "strands-agents>=1.55" \
-      "strands-agents-builder>=0.1" \
-      "bedrock-agentcore[a2a,ag-ui]>=1.9" \
-      "ag-ui-protocol>=0.1.18" \
-      "ag-ui-strands>=0.1.8" \
+      "strands-agents==1.64.0" \
+      "strands-agents-builder==0.1.10" \
+      "bedrock-agentcore[a2a,ag-ui]==1.25.4" \
+      "ag-ui-protocol==1.0.0" \
+      "ag-ui-strands==1.0.2" \
       # ADOT distro (not vanilla opentelemetry-distro): AgentCore Runtime
       # injects OTEL_PYTHON_CONFIGURATOR=aws_configurator, which only exists
       # in aws-opentelemetry-distro. With the vanilla distro no configurator
       # loads at all and no spans are ever exported (aws/spans stays empty).
-      "aws-opentelemetry-distro>=0.12.1" \
-      "opentelemetry-instrumentation" \
-      "opentelemetry-exporter-otlp" \
+      "aws-opentelemetry-distro==0.22.0" \
+      "opentelemetry-instrumentation==0.66b1" \
+      "opentelemetry-exporter-otlp==1.45.1" \
       # OpenInference instrumentation — translates Strands/Bedrock spans to OI format
-      "openinference-instrumentation-bedrock>=0.1.37" \
-      "openinference-instrumentation-strands-agents>=0.1.2" \
-      "openinference-semantic-conventions>=0.1.29" \
-      "openinference-instrumentation>=0.1.50" \
-      "websocket-client>=1.8"
+      "openinference-instrumentation-bedrock==0.1.63" \
+      "openinference-instrumentation-strands-agents==0.1.15" \
+      "openinference-semantic-conventions==0.1.43" \
+      "openinference-instrumentation==0.1.75" \
+      "websocket-client==1.9.2"
 
 # ── Runtime image ─────────────────────────────────────────────────────────────
 
-FROM --platform=linux/arm64 python:3.12-slim
+FROM --platform=linux/arm64 python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
 
 # Non-root user required by AgentCore Runtime contract.
 RUN useradd -m -u 1000 bedrock_agentcore

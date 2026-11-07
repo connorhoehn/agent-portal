@@ -1,5 +1,6 @@
 ARG GATEWAY_IMAGE=orgiq-soak-gateway:local
-FROM docker:29-cli AS docker-cli
+# Refresh digest: docker buildx imagetools inspect docker:29-cli
+FROM docker:29-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d AS docker-cli
 FROM ${GATEWAY_IMAGE}
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY . /workspace/scripts/loadtest

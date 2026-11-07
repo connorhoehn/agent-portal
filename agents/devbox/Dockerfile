@@ -11,10 +11,15 @@
 # role's credentials + CLAUDE_CODE_USE_BEDROCK=1 — no Anthropic API key exists
 # anywhere in this image or its environment.
 
-FROM --platform=linux/arm64 python:3.12-slim
+# Node comes from the official image stage (digest-pinned) instead of a
+# curl | bash NodeSource script. Refresh: docker buildx imagetools inspect node:20-trixie-slim
+FROM --platform=linux/arm64 node:20-trixie-slim@sha256:abfbe12cc943141a0c9e8c0a57d710df1dadd95d35e8662cc02958b284d1f35b AS node
+
+# Refresh: docker buildx imagetools inspect python:3.12-slim
+FROM --platform=linux/arm64 python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
 
 # System deps: git (workspace VCS), ripgrep (Claude Code's search backend),
-# curl/ca-certificates (NodeSource install + general use), procps (ps for
+# curl/ca-certificates (general use), procps (ps for
 # subprocess management inside the microVM).
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -22,24 +27,27 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         git curl ca-certificates ripgrep procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Node 20 (NodeSource) + Claude Code CLI. Global npm installs land in
-# /usr/lib/node_modules with world-readable bin links — usable by UID 1000.
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/* \
-    && npm install -g @anthropic-ai/claude-code \
+# Node 20 (copied from the pinned node stage) + Claude Code CLI, pinned to the
+# version in use on the build machine. Global npm installs land in
+# /usr/local/lib/node_modules with bin links in /usr/local/bin, world-readable
+# and usable by UID 1000.
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && npm install -g @anthropic-ai/claude-code@2.1.319 \
     && npm cache clean --force
 
 # Python deps for the runtime-contract wrapper. No Strands/AG-UI — the "agent"
 # here is Claude Code itself; bedrock-agentcore only provides the HTTP contract.
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir \
-      "bedrock-agentcore>=1.9" \
+      "bedrock-agentcore==1.25.4" \
       # ADOT distro — AgentCore injects OTEL_PYTHON_CONFIGURATOR=aws_configurator,
       # which only aws-opentelemetry-distro provides (vanilla distro exports nothing).
-      "aws-opentelemetry-distro>=0.12.1" \
-      "opentelemetry-instrumentation" \
-      "opentelemetry-exporter-otlp"
+      "aws-opentelemetry-distro==0.22.0" \
+      "opentelemetry-instrumentation==0.66b1" \
+      "opentelemetry-exporter-otlp==1.45.1"
 
 # Non-root user required by AgentCore Runtime contract. UID 1000 also matches
 # what BYO filesystem access points would expect if ever attached.

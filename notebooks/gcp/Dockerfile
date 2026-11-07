@@ -2,7 +2,8 @@
 
 # ── Stage 1: system packages + gcloud CLI ─────────────────────────────────────
 # Cached layer — only rebuilds when base image or apt packages change.
-FROM python:3.12-slim AS base
+# Refresh digest: docker buildx imagetools inspect python:3.12-slim
+FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54 AS base
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \

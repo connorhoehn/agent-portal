@@ -4,7 +4,11 @@
 # This layer is cached indefinitely. Only rebuilds when the base image changes
 # or you add/remove apt packages. BuildKit cache mount keeps the apt cache on
 # the host so even a rebuild doesn't re-download packages from the internet.
-FROM python:3.12-slim AS base
+# Node comes from the official image stage (digest-pinned), not a curl | bash script.
+# Refresh digests: docker buildx imagetools inspect node:22-trixie-slim python:3.12-slim
+FROM node:22-trixie-slim@sha256:be1e2a3dc2c4fd68cdfadad2a696a280e0d2749098bee509230174d72fb768c6 AS node
+
+FROM python:3.12-slim@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54 AS base
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -26,9 +30,10 @@ RUN ARCH=$(dpkg --print-architecture) && \
 # (notebook 20): `agentcore exec --it` is a bidirectional PTY stream that
 # botocore can't speak, so it runs from JupyterLab's Terminal tab instead of a
 # notebook cell — which requires the CLI inside this image.
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/* \
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
     && npm install -g @aws/agentcore \
     && npm cache clean --force
 
