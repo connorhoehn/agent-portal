@@ -23,6 +23,7 @@ echo "Building + pushing $URI (linux/arm64)..."
 docker buildx build \
   --platform linux/arm64 \
   --provenance=false \
+  --build-context shared=../_shared \
   --push \
   -t "$URI" \
   .

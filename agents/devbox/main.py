@@ -37,6 +37,13 @@ from typing import AsyncIterator
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
+try:  # image: copied next to main.py; checkout: agents/_shared
+    from secret_resolver import SecretResolutionError, resolve_secret
+except ImportError:  # pragma: no cover - local run from the repo
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "_shared"))
+    from secret_resolver import SecretResolutionError, resolve_secret
+
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
@@ -191,6 +198,17 @@ def _subprocess_env(workspace: str, lab: object = None) -> dict:
     for var in _LAB_ENV.values():
         env.pop(var, None)
     env.update(_lab_env(lab))
+    # The lab callback secret comes from Secrets Manager by name
+    # (LAB_CALLBACK_SECRET_ID); `lab` reads it as LAB_CALLBACK_SECRET.
+    try:
+        lab_secret = resolve_secret("LAB_CALLBACK_SECRET")
+    except SecretResolutionError as exc:
+        log.error("devbox: %s; `lab` calls will go unsigned", exc)
+        lab_secret = ""
+    if lab_secret:
+        env["LAB_CALLBACK_SECRET"] = lab_secret
+    else:
+        env.pop("LAB_CALLBACK_SECRET", None)
     return env
 
 

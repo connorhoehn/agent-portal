@@ -402,10 +402,8 @@ class TheCdkWiring(unittest.TestCase):
 
     def test_the_secret_grant_is_a_swap_not_an_addition(self):
         """A read agent that can still fetch the admin secret has no boundary."""
-        self.assertIn(
-            "resources: [useReadOnlySecret ? readOnlySecretArn! : props.auroraCredentialsSecretArn]",
-            self.RUNTIME,
-        )
+        self.assertIn("resources: [dbSecretArn]", self.RUNTIME)
+        self.assertIn("login === 'reader' ? readOnlySecretArn", self.RUNTIME)
 
     def test_readonly_cannot_be_disabled_in_a_deployed_runtime(self):
         self.assertIn("readOnlyGraphRole cannot be disabled", self.RUNTIME)

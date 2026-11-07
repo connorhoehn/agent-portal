@@ -55,6 +55,8 @@ RUN useradd -m -u 1000 bedrock_agentcore
 
 WORKDIR /app
 COPY --chown=bedrock_agentcore:bedrock_agentcore main.py /app/
+# Shared secret-by-name helper; build.sh passes --build-context shared=../_shared
+COPY --from=shared --chown=bedrock_agentcore:bedrock_agentcore secret_resolver.py /app/
 
 # The lab loop: `lab` (signal | remember | recall | consult) is how a session
 # reaches the platform surfaces that outlive it, and the managed SessionStart

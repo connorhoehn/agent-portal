@@ -32,6 +32,11 @@ Env contract
 ``APPROVALS_REQUEST_SECRET``        unlock the approval-request callback
 ``HARNESS_TRACE_SECRET``            unlock the trace callback
 ``ASSESSMENT_RUN_COMPLETE_SECRET``  unlock the assessment run-complete callback
+``<VAR>_ID``                        Secrets Manager secret NAME for each of the above;
+                                    resolved once per process (``secret_resolver.py``),
+                                    ``PLAINTEXT_CALLBACK_SECRETS=1`` falls back to the
+                                    plain variable. A failed lookup logs an error and
+                                    sends nothing (fails closed)
 ``MIDDLEWARE_URL``                  base URL (default the compose service name)
 
 ``SERVICE_AUTH_LEGACY_HEADERS``     transition flag (lane C4): unset/``accept`` sends
@@ -82,6 +87,11 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Iterable
 from urllib.parse import urlsplit
+
+try:  # package import (agents._shared) or flat import (image: /app/_shared on sys.path)
+    from .secret_resolver import SecretResolutionError, resolve_secret
+except ImportError:
+    from secret_resolver import SecretResolutionError, resolve_secret
 
 log = logging.getLogger(__name__)
 
@@ -137,6 +147,7 @@ ALL_CALLBACKS = (APPROVALS_REQUEST, HARNESS_TRACE, ASSESSMENT_RUN_COMPLETE)
 #: Callback names already logged at startup — the announcement is per process,
 #: not per call, so a chatty agent doesn't fill CloudWatch with it.
 _ANNOUNCED: set = set()
+_ERRORED: set = set()
 
 
 def secret_for(cb: Callback) -> str:
@@ -146,7 +157,14 @@ def secret_for(cb: Callback) -> str:
     tell whether *this* runtime version knows the secret — the single most
     useful fact when a callback starts 401ing.
     """
-    value = (os.environ.get(cb.env_var) or "").strip()
+    try:
+        value = resolve_secret(cb.env_var)
+    except SecretResolutionError as exc:
+        # Fail closed: unsigned, so the middleware refuses it. Never crash the agent.
+        value = ""
+        if cb.name not in _ERRORED:
+            _ERRORED.add(cb.name)
+            log.error("callbacks: %s", exc)
     if cb.name not in _ANNOUNCED:
         _ANNOUNCED.add(cb.name)
         log.info(
@@ -379,6 +397,7 @@ def auth_failure_note(cb: Callback, status: Any) -> str:
 def reset_announcements() -> None:
     """Test hook — forget which callbacks have already logged their state."""
     _ANNOUNCED.clear()
+    _ERRORED.clear()
 
 
 # ── Assessment run-complete client ────────────────────────────────────────────
