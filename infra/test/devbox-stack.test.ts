@@ -183,20 +183,25 @@ describe('lab loop wiring', () => {
     assert.equal('LAB_CALLBACK_SECRET' in env, false);
   });
 
-  test('both are set through when supplied, so the loop can authenticate', () => {
-    const env = envOf(Template.fromStack(devboxStack(
-      { deployDevbox: 'true' },
-      { labApiBase: 'https://orgiq.example.com', labCallbackSecret: 'lab-secret-value' },
-    )));
+  test('with an origin, the runtime gets the lab secret by NAME and may read only it', () => {
+    const t = Template.fromStack(devboxStack({ deployDevbox: 'true' }, { labApiBase: 'https://orgiq.example.com' }));
+    const env = envOf(t);
     assert.equal(env['LAB_API_BASE'], 'https://orgiq.example.com');
+    assert.equal(env['LAB_CALLBACK_SECRET_ID'], 'orgiq-lab-callback-secret');
+    assert.equal('LAB_CALLBACK_SECRET' in env, false, 'the value never enters the template');
+    const st = statementsForRole(t, 'orgiq-devbox-execution-role').find((x: any) => x.Sid === 'LabCallbackSecret');
+    assert.match(JSON.stringify(st!.Resource), /secret:orgiq-lab-callback-secret-\?{6}/);
+  });
+
+  test('a plaintext labCallbackSecret is refused unless plaintextCallbackSecrets=true (one release)', () => {
+    const props = { labApiBase: 'https://orgiq.example.com', labCallbackSecret: 'lab-secret-value' };
+    assert.throws(() => devboxStack({ deployDevbox: 'true' }, props), /passes a secret VALUE/);
+    const env = envOf(Template.fromStack(devboxStack({ deployDevbox: 'true', plaintextCallbackSecrets: 'true' }, props)));
     assert.equal(env['LAB_CALLBACK_SECRET'], 'lab-secret-value');
   });
 
-  test('an origin without a secret is still wired — the guard is open until the middleware mints one', () => {
-    const env = envOf(Template.fromStack(devboxStack(
-      { deployDevbox: 'true' }, { labApiBase: 'https://orgiq.example.com' },
-    )));
-    assert.equal(env['LAB_API_BASE'], 'https://orgiq.example.com');
-    assert.equal('LAB_CALLBACK_SECRET' in env, false);
+  test('without an origin there is no secret id and no grant', () => {
+    assert.equal('LAB_CALLBACK_SECRET_ID' in envOf(phaseTwo), false);
+    assert.ok(!statementsForRole(phaseTwo, 'orgiq-devbox-execution-role').some((x: any) => x.Sid === 'LabCallbackSecret'));
   });
 });

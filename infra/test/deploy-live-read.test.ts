@@ -91,17 +91,27 @@ esac`;
     const dir = mkdtempSync(join(tmpdir(), 'infer-'));
     writeFileSync(join(dir, 'aws'), `#!/bin/bash\n${fakeAws}\n`);
     chmodSync(join(dir, 'aws'), 0o755);
-    const r = spawnSync('/bin/bash', ['-c', `set -euo pipefail\nREGION=us-east-1 PREFIX=orgiq STACK_PREFIX=OrgIQ- CDK_ARGS=()\n${block}\nprintf '%s\\n' "\${INFERRED[@]}"`], {
-      env: { ...process.env, PATH: `${dir}:${process.env['PATH']}` }, encoding: 'utf8',
+    const run = (extraEnv: Record<string, string> = {}) => spawnSync('/bin/bash', ['-c', `set -euo pipefail\nREGION=us-east-1 PREFIX=orgiq STACK_PREFIX=OrgIQ- CDK_ARGS=()\n${block}\nprintf '%s\\n' "\${INFERRED[@]}"`], {
+      env: { ...process.env, PATH: `${dir}:${process.env['PATH']}`, ...extraEnv }, encoding: 'utf8',
     });
+    const r = run();
     assert.equal(r.status, 0, r.stderr);
     for (const ctx of ['deployRuntimes=true', 'liveRuntimeIds=SupervisorRuntime,SearchRuntime', 'deployDevbox=true', 'devboxOrgAccess=true',
-      'labApiBase=https://d1.cloudfront.net', 'labCallbackSecret=s3cret', 'deployTurn=true', 'turnAllowCidr=9.179.13.10/32']) {
+      'labApiBase=https://d1.cloudfront.net', 'deployTurn=true', 'turnAllowCidr=9.179.13.10/32']) {
       assert.ok(r.stdout.includes(ctx), `missing --context ${ctx}\n${r.stdout}`);
     }
+    // Work item 19: the runtime reads the lab secret by name; its value is no
+    // longer copied into context unless PLAINTEXT_CALLBACK_SECRETS=1.
+    assert.doesNotMatch(r.stdout, /labCallbackSecret=/);
+    assert.doesNotMatch(r.stdout, /plaintextCallbackSecrets/);
+
+    const legacy = run({ PLAINTEXT_CALLBACK_SECRETS: '1' });
+    assert.equal(legacy.status, 0, legacy.stderr);
+    assert.ok(legacy.stdout.includes('labCallbackSecret=s3cret'));
+    assert.ok(legacy.stdout.includes('plaintextCallbackSecrets=true'));
     // The shown list (printed to the operator) masks the secret.
-    assert.match(r.stdout, /labCallbackSecret=<from Secrets Manager>/);
-    assert.doesNotMatch(r.stdout.split('── Inferring')[1] ?? '', /--context labCallbackSecret=s3cret/);
+    assert.match(legacy.stdout, /labCallbackSecret=<from Secrets Manager>/);
+    assert.doesNotMatch(legacy.stdout.split('── Inferring')[1] ?? '', /--context labCallbackSecret=s3cret/);
   });
 
   // A fresh account part-way through: each producer-live flag appears only once

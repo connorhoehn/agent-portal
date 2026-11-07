@@ -4,6 +4,7 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
+import { namedSecret, readNamedSecrets, refusePlaintext } from './callback-secrets';
 import { resolveContainerUri } from './agentcore-runtime-stack';
 
 /**
@@ -79,6 +80,11 @@ export interface DevboxStackProps extends cdk.StackProps {
    */
   readonly labApiBase?: string;
   /**
+   * @deprecated Refused unless `-c plaintextCallbackSecrets=true` (one
+   * release). With `labApiBase` set the runtime gets LAB_CALLBACK_SECRET_ID
+   * (the secret's name) and GetSecretValue on it instead, and reads the value
+   * at session start (lib/callback-secrets.ts).
+   *
    * Value of `orgiq-lab-callback-secret`, minted by OrgIQ-MiddlewareService.
    * The `lab` script sends it as `x-lab-auth` when set and omits the header
    * when unset, so this is safe to leave off — but once the middleware stack
@@ -230,6 +236,12 @@ export class DevboxStack extends cdk.Stack {
       },
     });
 
+    // The lab loop's callback secret, by name (work item 19): only when the
+    // loop is wired at all.
+    refusePlaintext(this, { labCallbackSecret: props.labCallbackSecret });
+    const labSecret = props.labApiBase ? namedSecret(this, prefix, 'lab-callback') : undefined;
+    if (labSecret) executionRole.addToPolicy(readNamedSecrets('LabCallbackSecret', [labSecret.arn]));
+
     // Opt-in, read-only OrgIQ data-plane access — for devbox sessions that
     // exercise real OrgIQ agent code against live data.
     //   cdk deploy OrgIQ-Devbox --context deployDevbox=true --context devboxOrgAccess=true
@@ -320,6 +332,7 @@ export class DevboxStack extends cdk.Stack {
         // reads, to anyone inspecting it, like a configured-but-broken loop
         // rather than one that was never turned on.
         ...(props.labApiBase ? { LAB_API_BASE: props.labApiBase } : {}),
+        ...(labSecret ? { LAB_CALLBACK_SECRET_ID: labSecret.name } : {}),
         ...(props.labCallbackSecret ? { LAB_CALLBACK_SECRET: props.labCallbackSecret } : {}),
       },
     });

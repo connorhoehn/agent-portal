@@ -304,7 +304,7 @@ describe('the read-only graph role is mandatory and an EXCLUSIVE credential swap
   test('supervisor and the assessment agents get no Aurora access at all', () => {
     for (const agent of ['supervisor', 'assessment-scorer', 'assessment-drafter']) {
       const granted = new Set(statementsForRole(phaseTwo, `orgiq-${agent}-execution-role`).flatMap(actionsOf));
-      assert.ok(!granted.has('secretsmanager:GetSecretValue'), `${agent} holds a database secret`);
+      assert.ok(!secretsOf(phaseTwo, agent).includes('aurora'), `${agent} holds a database secret`);
       assert.ok(!granted.has('rds-data:ExecuteStatement'), `${agent} holds the Data API`);
       assert.equal(envOf(phaseTwo, agent).AURORA_SECRET_ARN, undefined);
     }
@@ -409,17 +409,35 @@ describe('machine-callback secrets', () => {
     );
   });
 
-  test('when the operator supplies them they land on every runtime', () => {
-    const t = Template.fromStack(
-      runtimeStack(
-        { deployRuntimes: 'true' },
-        {
-          approvalsRequestSecret: 'approvals-xyz',
-          harnessTraceSecret: 'harness-xyz',
-          assessmentRunCompleteSecret: 'runcomplete-xyz',
-        },
-      ).runtime,
-    );
+  test('each runtime gets the NAMES of the callback secrets it signs with, and may read only those', () => {
+    const want: Record<string, string[]> = {
+      supervisor: ['APPROVALS_REQUEST_SECRET', 'HARNESS_TRACE_SECRET'],
+      ingestion: ['APPROVALS_REQUEST_SECRET', 'HARNESS_TRACE_SECRET'],
+      'assessment-scorer': ['HARNESS_TRACE_SECRET', 'ASSESSMENT_RUN_COMPLETE_SECRET'],
+      'assessment-drafter': ['HARNESS_TRACE_SECRET', 'ASSESSMENT_RUN_COMPLETE_SECRET'],
+    };
+    const slug: Record<string, string> = {
+      APPROVALS_REQUEST_SECRET: 'approvals-request', HARNESS_TRACE_SECRET: 'harness-trace',
+      ASSESSMENT_RUN_COMPLETE_SECRET: 'assessment-run-complete',
+    };
+    for (const agent of ALL_AGENTS) {
+      const env = envOf(phaseTwo, agent);
+      const vars = want[agent] ?? ['HARNESS_TRACE_SECRET'];
+      const ids = Object.keys(env).filter((k) => /_SECRET_ID$/.test(k)).sort();
+      assert.deepEqual(ids, vars.map((v) => `${v}_ID`).sort(), agent);
+      const st = statementsForRole(phaseTwo, `orgiq-${agent}-execution-role`).find((x: any) => x.Sid === 'CallbackSecrets');
+      const res = flatten(st!.Resource);
+      for (const v of vars) {
+        assert.equal(env[`${v}_ID`], `orgiq-${slug[v]}-secret`);
+        assert.match(res, new RegExp(`secret:orgiq-${slug[v]}-secret-\\?\\?\\?\\?\\?\\?`));
+      }
+    }
+  });
+
+  test('a secret VALUE in context is refused; plaintextCallbackSecrets=true (one release) still passes it through', () => {
+    const values = { approvalsRequestSecret: 'approvals-xyz', harnessTraceSecret: 'harness-xyz', assessmentRunCompleteSecret: 'runcomplete-xyz' };
+    assert.throws(() => runtimeStack({ deployRuntimes: 'true' }, values), /passes a secret VALUE/);
+    const t = Template.fromStack(runtimeStack({ deployRuntimes: 'true', plaintextCallbackSecrets: 'true' }, values).runtime);
     for (const agent of ALL_AGENTS) {
       const env = envOf(t, agent);
       assert.equal(env.APPROVALS_REQUEST_SECRET, 'approvals-xyz');

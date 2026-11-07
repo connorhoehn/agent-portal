@@ -539,7 +539,12 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
       stack_output DEVBOX_LAB ${STACK_PREFIX}Devbox DevboxLabApiBase
       if [[ "$DEVBOX_LAB" == http* ]]; then
         infer labApiBase "$DEVBOX_LAB"
-        if ! ctx_given labCallbackSecret; then
+        # The lab secret now reaches the runtime by name (LAB_CALLBACK_SECRET_ID,
+        # lib/callback-secrets.ts). Its VALUE is only copied into context for
+        # images that cannot fetch it yet: PLAINTEXT_CALLBACK_SECRETS=1, one
+        # release (infra/SECURITY-NOTES.md).
+        # (plaintextCallbackSecrets itself is inferred with the runtime secrets below.)
+        if [[ "${PLAINTEXT_CALLBACK_SECRETS:-}" == 1 ]] && ! ctx_given labCallbackSecret; then
           live_read LAB_SECRET secretsmanager get-secret-value --secret-id "${PREFIX}-lab-callback-secret" --region "$REGION" \
             --query SecretString --output text
           [[ -n "$LAB_SECRET" ]] && infer labCallbackSecret "$LAB_SECRET" secret
@@ -583,10 +588,13 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
   fi
 
   # The runtimes' machine-callback secrets (lib/agentcore-runtime-stack.ts):
-  # minted by OrgIQ-MiddlewareService, passed as plain env because a runtime's
-  # EnvironmentVariables cannot hold a Secrets Manager reference.
+  # minted by OrgIQ-MiddlewareService. The runtimes read them by name now
+  # (`*_SECRET_ID`); the values are copied into context only for images that
+  # cannot fetch them yet: PLAINTEXT_CALLBACK_SECRETS=1, one release.
+  [[ "${PLAINTEXT_CALLBACK_SECRETS:-}" == 1 ]] && infer plaintextCallbackSecrets true
   for pair in approvalsRequestSecret:approvals-request harnessTraceSecret:harness-trace \
               assessmentRunCompleteSecret:assessment-run-complete; do
+    [[ "${PLAINTEXT_CALLBACK_SECRETS:-}" == 1 ]] || continue
     key=${pair%%:*}
     ctx_given "$key" && continue
     live_read val secretsmanager get-secret-value --secret-id "${PREFIX}-${pair#*:}-secret" --region "$REGION" \

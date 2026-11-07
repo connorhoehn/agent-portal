@@ -7,6 +7,7 @@ import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
 import { dbMasterSecret } from './context-flags';
+import { namedSecret, readNamedSecrets, refusePlaintext } from './callback-secrets';
 import { DEFAULT_MODEL_REGISTRY_FILE, loadModelRegistry, primaryModelFor } from './model-registry';
 
 /**
@@ -80,11 +81,9 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly browserProfileId?: string;
 
   // ── Machine-callback auth (matches middleware-service-stack.ts) ──────────
-  // Plain string values, NOT Secrets Manager ARNs — see the long comment
-  // where these are consumed below for why. Only supervisor + the two
-  // assessment agents call these callbacks today, but every runtime gets the
-  // same three env vars (cheap, and future agents may grow a callback too);
-  // an unset value is simply omitted rather than sent as "undefined".
+  // @deprecated Plain secret VALUES. Refused unless
+  // `-c plaintextCallbackSecrets=true` (one release); the runtimes get the
+  // secret names in `<VAR>_ID` and read the values themselves.
   readonly approvalsRequestSecret?: string;
   readonly harnessTraceSecret?: string;
   readonly assessmentRunCompleteSecret?: string;
@@ -132,6 +131,18 @@ const ALL_AGENT_NAMES = AGENT_NAMES;
  * graph-builder upserts the graph, scoring updates score columns) and keeps
  * the admin credential.
  */
+/**
+ * Which middleware callbacks each agent signs, and so which callback secrets
+ * its runtime may read (agents/_shared/callbacks.py). Every agent posts traces
+ * (instrumentation.py); approvals come from the supervisor and ingestion
+ * (approval_tool); the run-complete report belongs to the assessment agents.
+ */
+const CALLBACKS = [
+  { env: 'APPROVALS_REQUEST_SECRET', slug: 'approvals-request', agents: ['supervisor', 'ingestion'] },
+  { env: 'HARNESS_TRACE_SECRET', slug: 'harness-trace', agents: null },
+  { env: 'ASSESSMENT_RUN_COMPLETE_SECRET', slug: 'assessment-run-complete', agents: ['assessment-scorer', 'assessment-drafter'] },
+] as const;
+
 const READ_AGENTS = new Set<(typeof ALL_AGENT_NAMES)[number]>(['search', 'advisor']);
 
 /**
@@ -268,6 +279,11 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     const readOnlySecretArn = props.auroraReadOnlySecretArn
       ?? cdk.Fn.importValue(`${prefix}-aurora-readonly-secret-arn`);
     const masterFallback = dbMasterSecret(this);
+    refusePlaintext(this, {
+      approvalsRequestSecret: props.approvalsRequestSecret,
+      harnessTraceSecret: props.harnessTraceSecret,
+      assessmentRunCompleteSecret: props.assessmentRunCompleteSecret,
+    });
     const graphWriterSecretArn = masterFallback ? undefined : (props.auroraGraphWriterSecretArn
       ?? cdk.Fn.importValue(`${prefix}-aurora-graph-writer-secret-arn`));
 
@@ -449,6 +465,11 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           resources: [dbSecretArn],
         }));
       }
+      // The callback secrets this agent signs with, by name (CALLBACKS).
+      const callbacks = CALLBACKS.filter(c => c.agents === null || (c.agents as readonly string[]).includes(agentName))
+        .map(c => ({ env: c.env, ...namedSecret(this, prefix, c.slug) }));
+      executionRole.addToPolicy(readNamedSecrets('CallbackSecrets', callbacks.map(c => c.arn)));
+
       // Wildcard over all KBs in this account — covers the default orgiq KB and
       // any new KBs provisioned via the portal registry wizard (Wave 1+).
       // Scoped to account/region; no cross-account access is possible.
@@ -596,39 +617,11 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           ...(agentName === 'supervisor' && props.guardrailIdMember && { GUARDRAIL_ID_MEMBER: props.guardrailIdMember }),
           ...(agentName === 'supervisor' && props.guardrailIdOrgLeader && { GUARDRAIL_ID_ORG_LEADER: props.guardrailIdOrgLeader }),
           ...(agentName === 'supervisor' && props.guardrailIdHrAdmin && { GUARDRAIL_ID_HR_ADMIN: props.guardrailIdHrAdmin }),
-          // Machine-callback auth, mirroring middleware-service-stack.ts's
-          // APPROVALS_REQUEST_SECRET / HARNESS_TRACE_SECRET /
-          // ASSESSMENT_RUN_COMPLETE_SECRET container secrets. These arrive
-          // here as PLAIN STRINGS via CDK context (--context
-          // approvalsRequestSecret=..., see app.ts), not as Secrets Manager
-          // ARNs, for two reasons:
-          //   1. Ordering: this stack is instantiated (and normally deployed
-          //      — see CLAUDE.md's "genuine second phase" gotcha) before
-          //      OrgIQ-MiddlewareService in app.ts, and neither stack
-          //      declares a dependency on the other. An Fn.importValue here
-          //      would reference a CloudFormation export that doesn't exist
-          //      yet on this stack's first deploy, breaking `deployRuntimes`
-          //      well before the ordering problem this comment describes was
-          //      even relevant.
-          //   2. Even with the ARN in hand, AWS::BedrockAgentCore::Runtime's
-          //      EnvironmentVariables is a bare string map — unlike ECS
-          //      TaskDefinition, this resource type has no `Secret` /
-          //      fromSecretsManager equivalent that pulls the value at
-          //      container start. The only way to get a Secrets Manager
-          //      value in here at all is a raw CloudFormation dynamic
-          //      reference resolved by the CFN service before the
-          //      CreateAgentRuntime/UpdateAgentRuntime call — which would
-          //      still land as plaintext in the runtime's environment
-          //      (visible to anyone with bedrock-agentcore:GetAgentRuntime),
-          //      defeating the point of Secrets Manager, on a resource type
-          //      new enough that dynamic-reference support isn't confirmed.
-          //      Rather than invent that mechanism, this stays a plain
-          //      context value the operator copies in by hand.
-          //
-          // Runbook: after `OrgIQ-MiddlewareService` mints the three
-          // secrets, `aws secretsmanager get-secret-value` each one and
-          // redeploy this stack with all three --context values set. See
-          // docs/agentcore-preview-surface.md for the full sequencing.
+          // Machine-callback auth. `<VAR>_ID` names the secret the runtime
+          // reads at start (lib/callback-secrets.ts); the value never enters
+          // the template. The plain `<VAR>` values below are the one-release
+          // fallback (`-c plaintextCallbackSecrets=true`), refused otherwise.
+          ...Object.fromEntries(callbacks.map(c => [`${c.env}_ID`, c.name])),
           ...(props.approvalsRequestSecret && { APPROVALS_REQUEST_SECRET: props.approvalsRequestSecret }),
           ...(props.harnessTraceSecret && { HARNESS_TRACE_SECRET: props.harnessTraceSecret }),
           ...(props.assessmentRunCompleteSecret && { ASSESSMENT_RUN_COMPLETE_SECRET: props.assessmentRunCompleteSecret }),

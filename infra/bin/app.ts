@@ -276,17 +276,11 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, stackId(environment, 'Ag
   browserArn: cdk.Fn.importValue(`${prefix}-browser-arn`),
   browserProfileId: cdk.Fn.importValue(`${prefix}-browser-profile-id`),
   // Machine-callback auth for the sessionless routes the fleet POSTs to
-  // (approvals/request, harness/trace, assessment run-complete). These are
-  // plain CLI context values, not Fn.importValue — OrgIQ-MiddlewareService
-  // mints the actual secrets and is declared *after* this stack in this
-  // file with no dependency edge between them, so there is no CloudFormation
-  // export to import from here yet. Operator runbook (also in
-  // docs/agentcore-preview-surface.md): deploy OrgIQ-MiddlewareService
-  // first, `aws secretsmanager get-secret-value` each of the three
-  // `orgiq-*-secret` secrets it creates, then redeploy this stack with:
-  //   --context approvalsRequestSecret=<value>
-  //   --context harnessTraceSecret=<value>
-  //   --context assessmentRunCompleteSecret=<value>
+  // (approvals/request, harness/trace, assessment run-complete). Each runtime
+  // gets the NAMES of the secrets OrgIQ-MiddlewareService mints
+  // (`*_SECRET_ID`) and reads the values itself (lib/callback-secrets.ts).
+  // The three context values below are the old plaintext path: refused unless
+  // `--context plaintextCallbackSecrets=true` (one release, SECURITY-NOTES.md).
   approvalsRequestSecret: app.node.tryGetContext('approvalsRequestSecret') as string | undefined,
   harnessTraceSecret: app.node.tryGetContext('harnessTraceSecret') as string | undefined,
   assessmentRunCompleteSecret: app.node.tryGetContext('assessmentRunCompleteSecret') as string | undefined,
@@ -403,20 +397,16 @@ new DevboxStack(app, stackId(environment, 'Devbox'), {
     auroraReadOnlySecretArn: cdk.Fn.importValue(`${prefix}-aurora-readonly-secret-arn`),
     knowledgeBaseId: cdk.Fn.importValue(`${prefix}-knowledge-base-id`),
   }),
-  // The lab loop, off unless an operator turns it on. Same hand-copied shape as
-  // the three agent-callback secrets above, and for the same reason: an
-  // AgentCore runtime's EnvironmentVariables is a bare string map, so neither
-  // value can be a Secrets-Manager reference resolved at deploy time.
-  //
-  //   aws secretsmanager get-secret-value --secret-id orgiq-lab-callback-secret \
-  //     --query SecretString --output text
+  // The lab loop, off unless an operator turns it on:
   //   cdk deploy OrgIQ-Devbox --context deployDevbox=true \
-  //     --context labApiBase=https://<middleware-origin> \
-  //     --context labCallbackSecret=<value>
+  //     --context labApiBase=https://<middleware-origin>
+  // The runtime then gets LAB_CALLBACK_SECRET_ID (the name of
+  // `<prefix>-lab-callback-secret`) and reads the value itself.
+  // `labCallbackSecret=<value>` is the old plaintext path, refused unless
+  // `--context plaintextCallbackSecrets=true` (one release).
   //
   // Without labApiBase the in-container `lab` CLI soft-exits at every session
-  // start and the loop does nothing — the state every deployed devbox has been
-  // in so far.
+  // start and the loop does nothing.
   labApiBase: app.node.tryGetContext('labApiBase') as string | undefined,
   labCallbackSecret: app.node.tryGetContext('labCallbackSecret') as string | undefined,
   description: 'OrgIQ Devbox: Claude Code hosted on AgentCore Runtime with persistent session workspace',
