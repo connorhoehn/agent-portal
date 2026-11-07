@@ -993,6 +993,14 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // The Claude price table the ledger estimates from (DE-32).
       MODEL_PRICES_PARAM: `/${prefix}/pricing/model_prices`,
 
+      // Money fails closed (docs/next-steps.md §8 work item 16). Spend charged
+      // to no initiative is refused rather than judged by nothing, and an
+      // unreadable budget or hold store refuses (503) instead of proceeding
+      // unbraked. Both used to fall back to code defaults (allow, and the
+      // NODE_ENV check), so a task with NODE_ENV dropped would spend unbraked.
+      SPEND_HOLDS_UNATTRIBUTED: 'refuse',
+      BUDGET_FAIL_CLOSED: 'true',
+
       // Devbox lifetime (DE-48) and the git entrypoint switch (DE-45); see above.
       ...devboxLifetime,
       DEVBOX_GIT_ENTRYPOINT: devboxGitEntrypoint ? 'on' : 'off',

@@ -33,6 +33,10 @@ import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { config } from '../config.js';
 import { agentcore } from '../providers/index.js';
 import { flowRunStore, kickFlowRun, registerFlowExecutor, type FlowExecutionContext, type FlowRunRow, type FlowRunStep } from './flow-runs/index.js';
+import { SpendRefusedError } from './async-handler.js';
+import {
+  holdAgentInvoke, bindAgentInvokeHold, releaseAgentInvokeHold, recordAgentInvoke, usageFromEvent,
+} from './agent-invoke-spend.js';
 
 export const SUMMARIZE_AGENT_ID = 'orgiq-assessment-drafter';
 export const SUMMARIZE_MODE = 'summarize-conversation';
@@ -182,22 +186,48 @@ const withStatus = (steps: readonly FlowRunStep[], id: string, status: FlowRunSt
   steps.map(s => (s.id === id ? { ...s, status } : s));
 
 async function draft(spec: SummarizeFlowSpec, run: FlowRunRow, lines: readonly TranscriptLine[], instruction: string): Promise<{ envelope: unknown; unavailable?: string }> {
-  if (config.mock.agentcore) return { envelope: digestEnvelope(lines) };
-  try {
-    const out = await agentcore.invokeAgent(SUMMARIZE_AGENT_ID, {
-      message: `Execute ${spec.tenant} command ${SUMMARIZE_MODE}`,
-      structuredInput: { tenant: spec.tenant, command: SUMMARIZE_MODE, mode: SUMMARIZE_MODE, run_id: run.id,
-        document: { text: transcriptText(lines) }, ...(instruction ? { instruction } : {}),
-        ...(spec.agentAuth ? { auth: { tenant: spec.tenant, sub: run.requestedBy } } : {}) },
-      timeoutMs: 120_000,
-    });
-    if (out.raw && typeof out.raw === 'object' && 'error' in out.raw) {
-      return { envelope: null, unavailable: String((out.raw as { detail?: unknown; error: unknown }).detail ?? (out.raw as { error: unknown }).error) };
-    }
-    return { envelope: JSON.parse(out.text) };
-  } catch (error) {
-    return { envelope: null, unavailable: error instanceof Error ? error.message : 'the drafter failed' };
+  if (config.mock.agentcore) {
+    // No runtime is called, so nothing is spent: the start's hold goes back.
+    await releaseAgentInvokeHold(holdIdOf(run));
+    return { envelope: digestEnvelope(lines) };
   }
+  // The ledger row for this run's drafter call (work item 16), keyed by the
+  // run id the start's hold was bound to, so writing it settles that hold. A
+  // retried attempt writes the same key: the ledger keeps the first.
+  let raw: unknown = null;
+  try {
+    return await invoke();
+  } finally {
+    await recordAgentInvoke({
+      sourceId: run.id, actorId: run.requestedBy, initiativeId: null,
+      feature: `summarize:${spec.tenant}`, usage: usageFromEvent(raw),
+    });
+  }
+
+  async function invoke(): Promise<{ envelope: unknown; unavailable?: string }> {
+    try {
+      const out = await agentcore.invokeAgent(SUMMARIZE_AGENT_ID, {
+        message: `Execute ${spec.tenant} command ${SUMMARIZE_MODE}`,
+        structuredInput: { tenant: spec.tenant, command: SUMMARIZE_MODE, mode: SUMMARIZE_MODE, run_id: run.id,
+          document: { text: transcriptText(lines) }, ...(instruction ? { instruction } : {}),
+          ...(spec.agentAuth ? { auth: { tenant: spec.tenant, sub: run.requestedBy } } : {}) },
+        timeoutMs: 120_000,
+      });
+      raw = out.raw;
+      if (out.raw && typeof out.raw === 'object' && 'error' in out.raw) {
+        return { envelope: null, unavailable: String((out.raw as { detail?: unknown; error: unknown }).detail ?? (out.raw as { error: unknown }).error) };
+      }
+      return { envelope: JSON.parse(out.text) };
+    } catch (error) {
+      return { envelope: null, unavailable: error instanceof Error ? error.message : 'the drafter failed' };
+    }
+  }
+}
+
+/** The spend hold the run's start took, kept in its meta so any node that resumes it can release it. */
+function holdIdOf(run: FlowRunRow): string | null {
+  const id = run.meta['spendHoldId'];
+  return typeof id === 'string' && id ? id : null;
 }
 
 /** One tenant's `/summarize` flow on the shared durable store. Registers its executor. */
@@ -236,11 +266,35 @@ export function defineSummarizeFlow(spec: SummarizeFlowSpec): SummarizeFlow {
     activeRunCount: userId => flowRunStore.countActive(spec.tenant, spec.kind, userId),
     async startRun(input) {
       await flowRunStore.prune(spec.kind, RUN_TTL_MS);
-      const run = await flowRunStore.create({
-        tenant: spec.tenant, kind: spec.kind, requestedBy: input.userId, scope: input.channel, idPrefix: spec.idPrefix,
-        maxAttempts: 2, progress: INITIAL_STEPS,
-        input: { lines: input.lines, instruction: input.instruction },
-      });
+      // Money first (work item 16): a run with lines calls the drafter, so it
+      // is judged and held against the requester's budget before anything is
+      // stored. A refusal is the spend refusal every other path answers. A
+      // conversation names no initiative, so the hold is the user's alone.
+      let holdId: string | null = null;
+      if (input.lines.length > 0) {
+        const held = await holdAgentInvoke({ actorId: input.userId, initiativeId: null });
+        if (held.kind !== 'held') {
+          const { spendRefusalResponse } = await import('./spend-refusal.js');
+          const out = spendRefusalResponse(held);
+          throw new SpendRefusedError(out.status, out.body, out.headers);
+        }
+        holdId = held.holdId;
+      }
+      let run: FlowRunRow;
+      try {
+        run = await flowRunStore.create({
+          tenant: spec.tenant, kind: spec.kind, requestedBy: input.userId, scope: input.channel, idPrefix: spec.idPrefix,
+          maxAttempts: 2, progress: INITIAL_STEPS,
+          input: { lines: input.lines, instruction: input.instruction },
+        });
+        if (holdId) {
+          await bindAgentInvokeHold(holdId, run.id);
+          await flowRunStore.setMetaOnce(run.id, input.userId, 'spendHoldId', holdId);
+        }
+      } catch (err) {
+        await releaseAgentInvokeHold(holdId);
+        throw err;
+      }
       if (input.sinceMs !== null) await flowRunStore.setMetaOnce(run.id, input.userId, 'since', new Date(input.sinceMs).toISOString());
       // Kept in meta (the private input is dropped at the terminal write): a room-recording run re-asks participation with it.
       if (input.recordingId) await flowRunStore.setMetaOnce(run.id, input.userId, 'recordingId', input.recordingId);

@@ -23,6 +23,18 @@ export class NotFoundError extends AppError {
   constructor(message = 'Not found') { super(404, message); }
 }
 
+/**
+ * A money refusal thrown from below a route (lib/spend-refusal.ts renders the
+ * status, body and headers): the error handler answers it with that exact
+ * shape, so a path that reserves spend deep in a library (`/summarize`'s
+ * startRun) refuses the same way a route that renders it inline does.
+ */
+export class SpendRefusedError extends AppError {
+  constructor(status: number, readonly body: Record<string, unknown>, readonly headers: Record<string, string> = {}) {
+    super(status, typeof body['error'] === 'string' ? body['error'] : 'spend refused');
+  }
+}
+
 export function asyncHandler(
   fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>,
 ): RequestHandler {
@@ -38,6 +50,10 @@ export function errorHandler(
   next: NextFunction,
 ): void {
   if (res.headersSent) { next(err); return; }
+  if (err instanceof SpendRefusedError) {
+    res.set(err.headers).status(err.status).json(err.body);
+    return;
+  }
   if (err instanceof AppError) {
     res.status(err.status).json({ error: err.message, ...(err instanceof SessionInvalidError ? { code: err.code } : {}) });
     return;

@@ -29,6 +29,9 @@ import { MemoryCallChatStateStore } from '../../lib/call-chat-state.js';
 import { observeCallPageLifecycle, type RecoverableCallStateStore } from '../../lib/call-pages.js';
 import type { Session } from '../../lib/session.js';
 import { admitChannel } from '../../lib/gateway/authority.js';
+import { spendEntries } from '../../mock/spend-ledger.js';
+import { spendHolds } from '../../mock/spend-holds.js';
+import { mockHolds } from '../../providers/spend-holds.js';
 
 const POLICY: Record<string, string[]> = {
   member: [], sme: ['DispatchAgentRun'], assessor: ['ViewAssessment'], 'assessment-reader': [],
@@ -219,6 +222,29 @@ describe('the drafter', () => {
     expect(result).toMatchObject({ fallback: true, unavailable: expect.stringContaining('assessment') });
     expect(invoke).toHaveBeenCalledWith('orgiq-assessment-drafter', expect.objectContaining({
       structuredInput: expect.objectContaining({ mode: 'summarize-conversation', tenant: 'orgiq', auth: { tenant: 'orgiq', sub: 'olu' } }) }));
+  });
+
+  it('each drafter call writes one ledger row for the requester, settling the hold its start took', async () => {
+    spendEntries.reset(); spendHolds.reset();
+    invoke.mockResolvedValue({ text: '', raw: { usage: { inputTokens: 2_000, outputTokens: 300 } } });
+    const started = await run('ana/assessment/assessor', 'assessment:doc:d-1'); await settle();
+    const rows = spendEntries.rows().filter((r) => r.source === 'agent_invoke');
+    expect(rows).toEqual([expect.objectContaining({ sourceId: started.body.runId, actorId: 'ana', trigger: 'summarize:assessment', costBasis: 'estimated' })]);
+    expect(rows[0]!.costUsd).toBeCloseTo(2 * 0.0008 + 0.3 * 0.0032, 6);
+  });
+
+  it('a refused spend answers the spend refusal and stores no run', async () => {
+    process.env['SPEND_HOLDS_UNATTRIBUTED'] = 'refuse';
+    try {
+      const res = await run('ana/assessment/assessor', 'assessment:doc:d-1');
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ gate: 'spend-hold' });
+      expect(flowRunsFixture.rows()).toHaveLength(0);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(mockHolds().filter((h) => h.status === 'held')).toHaveLength(0);
+    } finally {
+      delete process.env['SPEND_HOLDS_UNATTRIBUTED'];
+    }
   });
 
   it('assessment uses the grounded drafter answer when every quote is verbatim', async () => {

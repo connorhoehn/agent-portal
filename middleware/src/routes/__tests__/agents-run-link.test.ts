@@ -10,6 +10,11 @@
 //      `running`, records STEP_* and TOOL_CALL_* as they relay, and closes it.
 //   3. A stream that errors closes the run `failed`.
 
+// Money on the invoke has its own suite (agents-invoke-spend.test.ts); here every invoke is held.
+jest.mock('../../lib/agent-invoke-spend.js', () => ({
+  holdAgentInvoke: jest.fn(async () => ({ kind: 'held', holdId: null, initiativeId: null, grantId: null, amountUsd: 0 })),
+  recordAgentInvoke: jest.fn(async () => {}), releaseAgentInvokeHold: jest.fn(async () => {}), usageFromEvent: () => null,
+}));
 jest.mock('../../lib/authz.js', () => ({
   requireAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   requireTenant: () => (_req: unknown, _res: unknown, next: () => void) => next(),

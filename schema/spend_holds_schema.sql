@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS spend_holds (
   -- for a cron firing. A per-user lock and budget (goal row "user budgets")
   -- will read this column; the lock order is initiative, grant, then user.
   actor_id       TEXT,
-  source         TEXT NOT NULL CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run')),
+  source         TEXT NOT NULL CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'agent_invoke')),
   -- The key spend_entries uses for the same attempt; set once the row exists.
   source_id      TEXT,
   amount_usd     NUMERIC(10,4) NOT NULL CHECK (amount_usd >= 0),
@@ -34,6 +34,12 @@ CREATE TABLE IF NOT EXISTS spend_holds (
   closed_at      TIMESTAMPTZ,
   UNIQUE (source, source_id)
 );
+
+-- The source list as a named constraint, so adding a path is a re-apply of
+-- this file (agent_invoke: a chat invoke or a /summarize run, work item 16).
+ALTER TABLE spend_holds DROP CONSTRAINT IF EXISTS spend_holds_source_check;
+ALTER TABLE spend_holds ADD CONSTRAINT spend_holds_source_check
+  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'agent_invoke'));
 
 CREATE INDEX IF NOT EXISTS spend_holds_open_idx ON spend_holds (initiative_id) WHERE status = 'held';
 CREATE INDEX IF NOT EXISTS spend_holds_grant_open_idx ON spend_holds (grant_id) WHERE status = 'held';

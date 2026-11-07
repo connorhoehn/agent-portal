@@ -18,6 +18,11 @@
 
 const mockSend = jest.fn();
 
+// Money on the invoke has its own suite (agents-invoke-spend.test.ts); here every invoke is held.
+jest.mock('../../lib/agent-invoke-spend.js', () => ({
+  holdAgentInvoke: jest.fn(async () => ({ kind: 'held', holdId: null, initiativeId: null, grantId: null, amountUsd: 0 })),
+  recordAgentInvoke: jest.fn(async () => {}), releaseAgentInvokeHold: jest.fn(async () => {}), usageFromEvent: () => null,
+}));
 jest.mock('../../config.js', () => ({
   config: {
     region: 'us-east-1',

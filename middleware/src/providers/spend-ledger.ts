@@ -22,7 +22,8 @@ import { emitSpendMetric } from '../lib/fleet-metrics.js';
 import { estimateUsageCost } from '../lib/model-prices.js';
 import { randomUUID } from 'node:crypto';
 
-export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call';
+// 'agent_invoke' (work item 16): a chat invoke or a /summarize run, keyed by its run id (lib/agent-invoke-spend.ts).
+export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke';
 export type { CostBasis };
 
 export interface SpendEntry {

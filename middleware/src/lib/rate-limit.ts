@@ -1,5 +1,5 @@
-// Minimal in-memory sliding-window rate limiter for session mutation
-// endpoints. Per-IP, per-bucket; process-local by design — with horizontal
+// Minimal in-memory fixed-window rate limiter for session mutation
+// endpoints. Per-IP (or per caller-chosen key), per-bucket; process-local by design — with horizontal
 // scaling each replica enforces its own window, which is still a meaningful
 // brake on credentialless brute-forcing of /login and /masquerade. Swap for
 // an ALB/WAF rule or Redis when the middleware scales out.
@@ -30,10 +30,13 @@ function clientKey(req: Request): string {
 /**
  * Returns middleware allowing `max` requests per `windowMs` per client IP for
  * the given bucket. Over-limit requests get 429 with a Retry-After header.
+ *
+ * `keyOf` keys the window on something else (a session subject, for a
+ * per-user brake); when it answers null the client IP is used.
  */
-export function rateLimit(bucket: string, max: number, windowMs: number) {
+export function rateLimit(bucket: string, max: number, windowMs: number, keyOf?: (req: Request) => string | null | undefined) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const key = `${bucket}|${clientKey(req)}`;
+    const key = `${bucket}|${keyOf?.(req) || clientKey(req)}`;
     const now = Date.now();
     let w = windows.get(key);
     if (!w || w.resetAt <= now) {

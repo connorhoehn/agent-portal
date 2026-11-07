@@ -3,6 +3,11 @@ const mockStream = {
   toolCallStart: jest.fn(), toolCallArgs: jest.fn(), toolCallEnd: jest.fn(), toolCallResult: jest.fn(),
   textMessageStart: jest.fn(), textMessageContent: jest.fn(), textMessageEnd: jest.fn(), runFinished: jest.fn(),
 };
+// Money on the invoke has its own suite (agents-invoke-spend.test.ts); here every invoke is held.
+jest.mock('../../lib/agent-invoke-spend.js', () => ({
+  holdAgentInvoke: jest.fn(async () => ({ kind: 'held', holdId: null, initiativeId: null, grantId: null, amountUsd: 0 })),
+  recordAgentInvoke: jest.fn(async () => {}), releaseAgentInvokeHold: jest.fn(async () => {}), usageFromEvent: () => null,
+}));
 jest.mock('@connorhoehn/realtime-modules/agent-streaming', () => ({
   agentStreamMiddleware: (handler: (req: unknown, stream: unknown, signal: AbortSignal) => Promise<void>) =>
     (req: unknown, res: { json: (value: unknown) => void }, next: (error?: unknown) => void) => {
