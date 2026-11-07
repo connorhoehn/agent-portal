@@ -1,5 +1,5 @@
 {
-  "$comment": "DE-29: one registration record per tenant (docs/deployment-enhancements/DE-29-tenant-manifest.md). Edit this file, then run `node scripts/gen-tenants.mjs` and `node scripts/check-tenant-manifest.mjs`. Order is significant: it is the TENANTS order every consumer sees. Capabilities are facts about each product, not shared chrome.",
+  "$comment": "One registration record per tenant: its id, display name, roles, API prefix, portal root, home route, feature flag and capability facts (capabilities describe each product, they are not shared chrome). Order is significant: it is the TENANTS order every consumer sees. After editing, run `node scripts/gen-tenants.mjs` to regenerate the consumers, then `node scripts/check-tenant-manifest.mjs` to verify them.",
   "crossTenantRoles": ["admin"],
   "tenants": [
     {
