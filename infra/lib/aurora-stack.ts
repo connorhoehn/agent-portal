@@ -10,8 +10,8 @@ import { contextFlag, protectData as protectDataFlag } from './context-flags';
 
 export interface AuroraStackProps extends cdk.StackProps {
   readonly prefix?: string;
-  /** ARN of the base agent role to grant RDS Data API access */
-  readonly agentRoleArn: string;
+  /** @deprecated Ignored: the agent base role no longer gets the Data API or the master secret. */
+  readonly agentRoleArn?: string;
 }
 
 /**
@@ -32,6 +32,13 @@ export class AuroraStack extends cdk.Stack {
    * use for model-authored SQL. See `readOnlySecret` below.
    */
   public readonly readOnlySecretArn: string;
+  /**
+   * Per-service logins (schema/service_roles.sql, work item 19). The master
+   * secret above is for schema loaders and migrations only.
+   */
+  public readonly middlewareSecretArn: string;
+  public readonly graphWriterSecretArn: string;
+  public readonly kbSecretArn: string;
   public readonly clusterEndpoint: string;
   public readonly dbName = 'orgiq';
   public readonly graphName = 'orgiq_graph';
@@ -193,6 +200,48 @@ export class AuroraStack extends cdk.Stack {
     this.readOnlySecretArn = readOnlySecret.secretArn;
 
     // ---------------------------------------------------------------
+    // One login per service (schema/service_roles.sql). Same shape and the
+    // same reasons as the reader secret above: generated here, joined to the
+    // database role by `schema/apply_all_seed.py --roles-only`, and a quote or
+    // backslash in the password is refused rather than escaped. Until that
+    // runs a role cannot authenticate, which is why consumers can be pointed
+    // back at the master secret for one release with `-c dbMasterSecret=true`
+    // (infra/SECURITY-NOTES.md, migration order).
+    // ---------------------------------------------------------------
+    const serviceSecret = (id: string, service: string, username: string, purpose: string) => {
+      const secret = new secretsmanager.Secret(this, id, {
+        secretName: `${prefix}-aurora-${service}-credentials`,
+        description: `${prefix} Aurora — ${username} login for ${purpose}`,
+        generateSecretString: {
+          secretStringTemplate: JSON.stringify({
+            username,
+            engine: 'postgres',
+            host: cluster.clusterEndpoint.hostname,
+            port: 5432,
+            dbname: this.dbName,
+            dbClusterIdentifier: cluster.clusterIdentifier,
+          }),
+          generateStringKey: 'password',
+          passwordLength: 40,
+          excludeCharacters: '\'"\\`$;/@ ',
+        },
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      });
+      new cdk.CfnOutput(this, `${id}Arn`, {
+        value: secret.secretArn,
+        exportName: `${prefix}-aurora-${service}-secret-arn`,
+        description: `Aurora login for ${purpose} (schema/service_roles.sql)`,
+      });
+      return secret.secretArn;
+    };
+    this.middlewareSecretArn = serviceSecret('MiddlewareDbSecret', 'middleware', 'orgiq_app_middleware',
+      'the middleware (application DML)');
+    this.graphWriterSecretArn = serviceSecret('GraphWriterSecret', 'graph-writer', 'orgiq_graph_writer',
+      'graph-builder and scoring (org-graph upserts)');
+    this.kbSecretArn = serviceSecret('KnowledgeBaseDbSecret', 'kb', 'orgiq_kb_service',
+      'the Bedrock knowledge base vector store (bedrock_kb)');
+
+    // ---------------------------------------------------------------
     // Fast-delete: a polling Lambda that calls DeleteDBCluster and WAITS until
     // the cluster is fully gone before returning, so CFN's subnet group /
     // param group cleanup never races a still-deleting cluster.
@@ -328,26 +377,9 @@ def handler(event, context):
     const cfnWriter = cluster.node.findChild('writer').node.findChild('Resource') as rds.CfnDBInstance;
     cfnWriter.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
 
-    // ---------------------------------------------------------------
-    // Grant agent base role RDS Data API access
-    // ---------------------------------------------------------------
-
-    const agentRole = iam.Role.fromRoleArn(this, 'AgentBaseRole', props.agentRoleArn);
-
-    agentRole.addToPrincipalPolicy(new iam.PolicyStatement({
-      sid: 'RdsDataApi',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'rds-data:ExecuteStatement',
-        'rds-data:BatchExecuteStatement',
-        'rds-data:BeginTransaction',
-        'rds-data:CommitTransaction',
-        'rds-data:RollbackTransaction',
-      ],
-      resources: [cluster.clusterArn],
-    }));
-
-    cluster.secret!.grantRead(agentRole);
+    // The foundation's agent base role used to get the Data API and the
+    // MASTER secret here. Nothing assumes that role (the runtimes run as their
+    // own execution roles), so the grant was a master credential with no user.
 
     // ---------------------------------------------------------------
     // Outputs

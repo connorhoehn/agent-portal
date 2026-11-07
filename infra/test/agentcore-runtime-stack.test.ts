@@ -278,18 +278,45 @@ describe('the read-only graph role is mandatory and an EXCLUSIVE credential swap
     }
   });
 
-  test('on: the writers keep the admin credential', () => {
-    const t = Template.fromStack(
-      runtimeStack({ deployRuntimes: 'true', readOnlyGraphRole: 'true' }).runtime,
-    );
-    for (const agent of ['ingestion', 'graph-builder', 'scoring']) {
-      const resources = JSON.stringify(
-        statementsForRole(t, `orgiq-${agent}-execution-role`)
-          .filter((s) => actionsOf(s).includes('secretsmanager:GetSecretValue'))
-          .map((s) => s.Resource),
-      );
-      assert.ok(resources.includes('orgiq-aurora-abc123'), `${agent} writes and needs the admin login`);
-      assert.equal(t && envOf(t, agent).AURORA_READONLY_SECRET_ARN, undefined);
+  const secretsOf = (t: Template, agent: string) => JSON.stringify(
+    statementsForRole(t, `orgiq-${agent}-execution-role`)
+      .filter((s) => actionsOf(s).includes('secretsmanager:GetSecretValue'))
+      .map((s) => s.Resource),
+  );
+
+  test('graph-builder and scoring write as orgiq_graph_writer, never the master (work item 19)', () => {
+    for (const agent of ['graph-builder', 'scoring']) {
+      const resources = secretsOf(phaseTwo, agent);
+      assert.ok(resources.includes('orgiq-aurora-graph-writer'), `${agent} must read the graph-writer secret`);
+      assert.ok(!resources.includes('secret:orgiq-aurora-abc123'), `${agent} must not hold the master secret`);
+      assert.match(envOf(phaseTwo, agent).AURORA_SECRET_ARN ?? '', /graph-writer/);
+      assert.equal(envOf(phaseTwo, agent).AURORA_READONLY_SECRET_ARN, undefined);
+    }
+  });
+
+  test('ingestion only reads knowledge_bases, so it reads as orgiq_graph_reader', () => {
+    const resources = secretsOf(phaseTwo, 'ingestion');
+    assert.ok(resources.includes('orgiq-aurora-readonly'));
+    assert.ok(!resources.includes('secret:orgiq-aurora-abc123'));
+    assert.match(envOf(phaseTwo, 'ingestion').AURORA_READONLY_SECRET_ARN ?? '', /readonly/);
+  });
+
+  test('supervisor and the assessment agents get no Aurora access at all', () => {
+    for (const agent of ['supervisor', 'assessment-scorer', 'assessment-drafter']) {
+      const granted = new Set(statementsForRole(phaseTwo, `orgiq-${agent}-execution-role`).flatMap(actionsOf));
+      assert.ok(!granted.has('secretsmanager:GetSecretValue'), `${agent} holds a database secret`);
+      assert.ok(!granted.has('rds-data:ExecuteStatement'), `${agent} holds the Data API`);
+      assert.equal(envOf(phaseTwo, agent).AURORA_SECRET_ARN, undefined);
+    }
+  });
+
+  test('-c dbMasterSecret=true (one release) hands every non-reader the master again', () => {
+    const t = Template.fromStack(runtimeStack({ deployRuntimes: 'true', dbMasterSecret: 'true' }).runtime);
+    for (const agent of ['graph-builder', 'scoring', 'supervisor']) {
+      assert.ok(secretsOf(t, agent).includes('secret:orgiq-aurora-abc123'), agent);
+    }
+    for (const agent of ['search', 'advisor', 'ingestion']) {
+      assert.ok(!secretsOf(t, agent).includes('secret:orgiq-aurora-abc123'), `${agent} stays on the reader`);
     }
   });
 });

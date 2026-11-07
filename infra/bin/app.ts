@@ -25,6 +25,7 @@ import { SocialImagesStack } from '../lib/social-images-stack';
 import { SocialMediaStack } from '../lib/social-media-stack';
 import { SocialStack } from '../lib/social-stack';
 import { PortalStack } from '../lib/portal-stack';
+import { contextFlag, dbMasterSecret as dbMasterSecretFlag } from '../lib/context-flags';
 
 const app = new cdk.App();
 
@@ -77,7 +78,6 @@ new ssm.StringParameter(foundation, 'EnvironmentRecord', {
 const aurora = new AuroraStack(app, stackId(environment, 'Aurora'), {
   env,
   prefix,
-  agentRoleArn: foundation.agentBaseRole.roleArn,
   description: 'OrgIQ Aurora: Serverless v2 PostgreSQL with pgvector + relational org-graph schema',
 });
 aurora.addDependency(foundation);
@@ -85,12 +85,25 @@ aurora.addDependency(foundation);
 // -------------------------------------------------------------------
 // Stack 3: Knowledge Base (Bedrock KB backed by Aurora pgvector)
 // -------------------------------------------------------------------
+// Work item 19: each service authenticates to Aurora as its own role
+// (schema/service_roles.sql); the master secret is for migrations.
+// `-c dbMasterSecret=true` hands it back to every service for one release;
+// `-c kbMasterSecret=true` holds back only the knowledge base, whose switch
+// replaces it (infra/SECURITY-NOTES.md).
+const dbMasterSecret = dbMasterSecretFlag(app);
+const kbMasterSecret = dbMasterSecret || contextFlag(app, 'kbMasterSecret', false);
+const middlewareDbSecretArn = dbMasterSecret
+  ? cdk.Fn.importValue(`${prefix}-aurora-secret-arn`)
+  : cdk.Fn.importValue(`${prefix}-aurora-middleware-secret-arn`);
+
 const knowledgeBase = new KnowledgeBaseStack(app, stackId(environment, 'KnowledgeBase'), {
   env,
   prefix,
   documentsBucket: foundation.documentsBucket,
   auroraClusterArn: aurora.clusterArn,
   auroraCredentialsSecretArn: aurora.credentialsSecretArn,
+  ...(!kbMasterSecret && { knowledgeBaseSecretArn: aurora.kbSecretArn }),
+  ...(!dbMasterSecret && { registrySecretArn: aurora.middlewareSecretArn }),
   description: 'OrgIQ Knowledge Base: Bedrock KB with Aurora pgvector storage + S3 data source',
 });
 knowledgeBase.addDependency(aurora);
@@ -161,6 +174,9 @@ const agents = new AgentsStack(app, stackId(environment, 'Agents'), {
 knowledgeBase.exportValue(knowledgeBase.knowledgeBaseArn);
 for (const v of [foundation.artifactsBucket.bucketArn, foundation.scoresTable.tableArn,
   foundation.sessionsTable.tableArn]) foundation.exportValue(v);
+// Likewise OrgIQ-Aurora, which used to grant the agent base role the master
+// secret (removed, work item 19).
+foundation.exportValue(foundation.agentBaseRole.roleArn);
 agents.addDependency(foundation);
 agents.addDependency(aurora);
 agents.addDependency(knowledgeBase);
@@ -471,7 +487,8 @@ const middlewareService = new MiddlewareServiceStack(app, stackId(environment, '
 
   // Aurora (from AuroraStack exports)
   auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),
-  auroraCredentialsSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
+  // The orgiq_app_middleware login, not the master (dbMasterSecret above).
+  auroraCredentialsSecretArn: middlewareDbSecretArn,
 
   // AgentCore identifiers (from AgentCoreMemoryStack + KnowledgeBaseStack)
   browserId: agentCoreCapabilities.browserId,

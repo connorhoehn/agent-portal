@@ -12,7 +12,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { Match, Template } from 'aws-cdk-lib/assertions';
-import { knowledgeBaseStack } from './helpers/stacks';
+import { KB_SECRET_ARN, MIDDLEWARE_DB_SECRET_ARN, SECRET_ARN, knowledgeBaseStack } from './helpers/stacks';
 
 const template = Template.fromStack(knowledgeBaseStack());
 
@@ -57,12 +57,17 @@ describe('the Data-API readiness gate', () => {
     }
   });
 
-  test('the knowledge base is created only after the schema exists', () => {
+  test('the knowledge base is created only after the schema and its login exist', () => {
+    // Bedrock validates the vector table, as the KB's own login, at create time.
     const [, kb] = byLogicalIdPrefix('AWS::Bedrock::KnowledgeBase', 'KnowledgeBase');
-    assert.ok(
-      dependsOn(kb).some((d) => d.startsWith('DbInitTextIndex')),
-      'Bedrock validates the vector table at create time — the GIN index must exist first',
-    );
+    assert.ok(dependsOn(kb).some((d) => d.startsWith('DbInitKbLogin')), 'the KB must wait for its login');
+    const [, login] = byLogicalIdPrefix('AWS::CloudFormation::CustomResource', 'DbInitKbLogin');
+    assert.ok(dependsOn(login).some((d) => d.startsWith('DbInitTextIndex')),
+      'the GIN index (and so the table) must exist before the login is granted on it');
+    // Under the dbMasterSecret fallback there is no login step.
+    const master = Template.fromStack(knowledgeBaseStack({}, { scoped: false }));
+    const [, kbm] = Object.entries<any>(master.findResources('AWS::Bedrock::KnowledgeBase'))[0]!;
+    assert.ok(dependsOn(kbm).some((d) => d.startsWith('DbInitTextIndex')));
   });
 
   test('the readiness probe can reach the Data API and the secret', () => {
@@ -114,6 +119,33 @@ describe('the KB service role is attached before Bedrock validates', () => {
         `${id}: a detached AWS::IAM::Policy on the KB role reintroduces the 403 race`,
       );
     }
+  });
+});
+
+describe('the knowledge base authenticates as orgiq_kb_service, not the master (work item 19)', () => {
+  const kb = () => Object.values<any>(template.findResources('AWS::Bedrock::KnowledgeBase'))[0];
+
+  test('the storage configuration names the KB login', () => {
+    assert.equal(kb().Properties.StorageConfiguration.RdsConfiguration.CredentialsSecretArn, KB_SECRET_ARN);
+  });
+
+  test('the KB role reads its own login and the registry\'s, never the master', () => {
+    const role = Object.values<any>(template.findResources('AWS::IAM::Role'))
+      .find((r) => r.Properties?.RoleName === 'orgiq-kb-service-role');
+    const st = role.Properties.Policies[0].PolicyDocument.Statement.find((x: any) => x.Sid === 'AuroraCredentialsSecret');
+    assert.deepEqual([].concat(st.Resource).sort(), [KB_SECRET_ARN, MIDDLEWARE_DB_SECRET_ARN].sort());
+  });
+
+  test('the init step that creates the login only runs master DDL; its Python compiles', () => {
+    const [, login] = byLogicalIdPrefix('AWS::CloudFormation::CustomResource', 'DbInitKbLogin');
+    assert.equal(login.Properties.SecretArn, SECRET_ARN);
+    assert.equal(login.Properties.LoginSecretArn, KB_SECRET_ARN);
+    assert.equal(login.Properties.LoginRole, 'orgiq_kb_service');
+    const fn = Object.values<any>(template.findResources('AWS::Lambda::Function'))
+      .find((f) => String(f.Properties?.Code?.ZipFile ?? '').includes('_kb_login'));
+    const r = require('node:child_process').spawnSync('python3', ['-c', 'import sys; compile(sys.stdin.read(), "index.py", "exec")'],
+      { input: fn.Properties.Code.ZipFile, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
   });
 });
 

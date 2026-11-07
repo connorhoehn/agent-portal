@@ -12,8 +12,23 @@ export interface KnowledgeBaseStackProps extends cdk.StackProps {
   readonly documentsBucket: s3.IBucket;
   /** Aurora Serverless v2 cluster ARN (used as vector store) */
   readonly auroraClusterArn: string;
-  /** Secrets Manager secret ARN for Aurora credentials */
+  /**
+   * The Aurora MASTER secret. Used only by the init steps that create the
+   * vector extension, table and indexes (DDL), never by the knowledge base.
+   */
   readonly auroraCredentialsSecretArn: string;
+  /**
+   * The `orgiq_kb_service` login (schema/service_roles.sql) the knowledge base
+   * reads and writes bedrock_kb as. Unset, the knowledge base uses the master
+   * secret (the state before work item 19).
+   */
+  readonly knowledgeBaseSecretArn?: string;
+  /**
+   * The secret the middleware's knowledge-base registry hands to the KBs it
+   * creates at run time (its own login, which owns their vector tables). The
+   * shared KB service role must be able to read it.
+   */
+  readonly registrySecretArn?: string;
 }
 
 /**
@@ -40,6 +55,11 @@ export class KnowledgeBaseStack extends cdk.Stack {
     super(scope, id, props);
 
     const prefix = props.prefix ?? 'orgiq';
+    // What the knowledge base itself authenticates as. NOTE: changing this on
+    // a deployed stack REPLACES the knowledge base (StorageConfiguration is a
+    // replacement property), and its id is exported; see SECURITY-NOTES.md.
+    const kbSecretArn = props.knowledgeBaseSecretArn ?? props.auroraCredentialsSecretArn;
+    const kbReadableSecrets = [...new Set([kbSecretArn, ...(props.registrySecretArn ? [props.registrySecretArn] : [])])];
 
     // -------------------------------------------------------------------
     // IAM Role for Bedrock Knowledge Base service
@@ -76,7 +96,7 @@ export class KnowledgeBaseStack extends cdk.Stack {
               sid: 'AuroraCredentialsSecret',
               effect: iam.Effect.ALLOW,
               actions: ['secretsmanager:GetSecretValue'],
-              resources: [props.auroraCredentialsSecretArn],
+              resources: kbReadableSecrets,
             }),
             new iam.PolicyStatement({
               sid: 'BedrockEmbeddingAccess',
@@ -137,7 +157,9 @@ export class KnowledgeBaseStack extends cdk.Stack {
             }),
             new iam.PolicyStatement({
               actions: ['secretsmanager:GetSecretValue'],
-              resources: [props.auroraCredentialsSecretArn],
+              // The master (runs the DDL) and, when scoped, the KB login whose
+              // password the DbInitKbLogin step sets.
+              resources: [...new Set([props.auroraCredentialsSecretArn, kbSecretArn])],
             }),
           ],
         }),
@@ -169,6 +191,45 @@ TRANSIENT = (
 )
 STABLE = 6  # consecutive successes, 10s apart, before the endpoint counts as ready
 
+def _run(data, props, sql, label):
+    last = None
+    for _ in range(54):
+        try:
+            data.execute_statement(resourceArn=props['ClusterArn'], secretArn=props['SecretArn'],
+                                   database=props['Database'], sql=sql)
+            return
+        except Exception as e:
+            last = str(e)
+            if any(m in last for m in TRANSIENT):
+                time.sleep(10)
+                continue
+            # Never echo the statement: the login step carries a password.
+            raise Exception(f'{label} failed: {last[:300]}')
+    raise Exception(f'{label}: Aurora Data API refused the statement until the deadline: {last}')
+
+
+def _kb_login(data, props):
+    # The knowledge base's own login (schema/service_roles.sql, work item 19),
+    # created here so a fresh deploy can point the KB at it before anyone runs
+    # apply_all_seed.py. Same rules as the applier: password from the secret,
+    # refused (not escaped) if it holds a quote or backslash.
+    import json, re
+    role = props['LoginRole']
+    if not re.fullmatch(r'[a-z_]+', role):
+        raise Exception('bad role name')
+    secret = boto3.client('secretsmanager').get_secret_value(SecretId=props['LoginSecretArn'])['SecretString']
+    pw = json.loads(secret).get('password') or ''
+    if not pw or set(pw) & set("'\\"\\\\" + chr(96) + "$;\\n\\r"):
+        raise Exception('the KB login secret has no usable password')
+    _run(data, props, f"DO $R$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{role}') THEN "
+         f"CREATE ROLE {role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT; "
+         f"END IF; END $R$", 'create role')
+    _run(data, props, f"ALTER ROLE {role} WITH LOGIN PASSWORD '{pw}'", 'set password')
+    _run(data, props, f"GRANT CONNECT ON DATABASE {props['Database']} TO {role}", 'grant connect')
+    _run(data, props, f"GRANT USAGE ON SCHEMA public TO {role}", 'grant usage')
+    _run(data, props, f"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.bedrock_kb TO {role}", 'grant table')
+
+
 def handler(event, context):
     pid = event.get('PhysicalResourceId', event['LogicalResourceId'])
     if event['RequestType'] == 'Delete':
@@ -176,6 +237,9 @@ def handler(event, context):
     props = event['ResourceProperties']
     data = boto3.client('rds-data')
     last = None
+    if props.get('LoginRole'):
+        _kb_login(data, props)
+        return {'PhysicalResourceId': pid}
     sql = props.get('Sql')
     if sql:
         # One idempotent schema statement, retried through the same
@@ -266,6 +330,22 @@ def handler(event, context):
     );
     dbTextIndex.node.addDependency(dbIndex);
 
+    // The knowledge base's own login, before the knowledge base validates it.
+    let kbReady: cdk.CustomResource = dbTextIndex;
+    if (props.knowledgeBaseSecretArn) {
+      kbReady = new cdk.CustomResource(this, 'DbInitKbLogin', {
+        serviceToken: dataApiProvider.serviceToken,
+        properties: {
+          ClusterArn: props.auroraClusterArn,
+          SecretArn: props.auroraCredentialsSecretArn,
+          Database: 'orgiq',
+          LoginRole: 'orgiq_kb_service',
+          LoginSecretArn: props.knowledgeBaseSecretArn,
+        },
+      });
+      kbReady.node.addDependency(dbTextIndex);
+    }
+
     // -------------------------------------------------------------------
     // Bedrock Knowledge Base — RDS (Aurora pgvector) storage
     // -------------------------------------------------------------------
@@ -289,7 +369,7 @@ def handler(event, context):
         type: 'RDS',
         rdsConfiguration: {
           resourceArn: props.auroraClusterArn,
-          credentialsSecretArn: props.auroraCredentialsSecretArn,
+          credentialsSecretArn: kbSecretArn,
           databaseName: 'orgiq',
           tableName: 'bedrock_kb',
           fieldMapping: {
@@ -302,7 +382,7 @@ def handler(event, context):
       },
     });
 
-    knowledgeBase.node.addDependency(dbTextIndex);
+    knowledgeBase.node.addDependency(kbReady);
 
     this.knowledgeBaseId = knowledgeBase.attrKnowledgeBaseId;
     this.knowledgeBaseArn = knowledgeBase.attrKnowledgeBaseArn;

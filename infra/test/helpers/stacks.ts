@@ -33,6 +33,8 @@ export const PREFIX = 'orgiq';
 
 const CLUSTER_ARN = 'arn:aws:rds:us-east-1:111111111111:cluster:orgiq-aurora';
 export const SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:111111111111:secret:orgiq-aurora-abc123';
+export const GRAPH_WRITER_SECRET_ARN =
+  'arn:aws:secretsmanager:us-east-1:111111111111:secret:orgiq-aurora-graph-writer-credentials-gws123';
 export const READONLY_SECRET_ARN =
   'arn:aws:secretsmanager:us-east-1:111111111111:secret:orgiq-aurora-readonly-def456';
 const KB_ARN = 'arn:aws:bedrock:us-east-1:111111111111:knowledge-base/KBTEST0001';
@@ -83,7 +85,12 @@ export function auroraStack(context: Record<string, unknown> = {}): AuroraStack 
   });
 }
 
-export function knowledgeBaseStack(context: Record<string, unknown> = {}): KnowledgeBaseStack {
+export const KB_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:111111111111:secret:orgiq-aurora-kb-credentials-kbs123';
+export const MIDDLEWARE_DB_SECRET_ARN =
+  'arn:aws:secretsmanager:us-east-1:111111111111:secret:orgiq-aurora-middleware-credentials-mws123';
+
+/** Scoped by default, as the app builds it; `{ scoped: false }` is the dbMasterSecret fallback. */
+export function knowledgeBaseStack(context: Record<string, unknown> = {}, opts: { scoped?: boolean } = {}): KnowledgeBaseStack {
   const app = newApp(context);
   const host = new cdk.Stack(app, 'Host');
   return new KnowledgeBaseStack(app, 'OrgIQ-KnowledgeBase', {
@@ -91,6 +98,7 @@ export function knowledgeBaseStack(context: Record<string, unknown> = {}): Knowl
     documentsBucket: s3.Bucket.fromBucketArn(host, 'Docs', DOCS_BUCKET_ARN),
     auroraClusterArn: CLUSTER_ARN,
     auroraCredentialsSecretArn: SECRET_ARN,
+    ...(opts.scoped !== false && { knowledgeBaseSecretArn: KB_SECRET_ARN, registrySecretArn: MIDDLEWARE_DB_SECRET_ARN }),
   });
 }
 
@@ -183,6 +191,7 @@ export function runtimeStack(
     auroraClusterArn: CLUSTER_ARN,
     auroraCredentialsSecretArn: SECRET_ARN,
     auroraReadOnlySecretArn: overrides.auroraReadOnlySecretArn ?? READONLY_SECRET_ARN,
+    auroraGraphWriterSecretArn: GRAPH_WRITER_SECRET_ARN,
     knowledgeBaseId: 'KBTEST0001',
     codeInterpreterId: 'orgiq_ci-1234',
     codeInterpreterArn: overrides.codeInterpreterArn

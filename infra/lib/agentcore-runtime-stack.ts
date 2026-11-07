@@ -6,6 +6,7 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
+import { dbMasterSecret } from './context-flags';
 import { DEFAULT_MODEL_REGISTRY_FILE, loadModelRegistry, primaryModelFor } from './model-registry';
 
 /**
@@ -58,6 +59,12 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
    * Reader provisioning is a deployment prerequisite, never an admin fallback.
    */
   readonly auroraReadOnlySecretArn?: string;
+  /**
+   * ARN of the `orgiq_graph_writer` credential (schema/service_roles.sql) for
+   * graph-builder and scoring. When omitted, resolves
+   * `<prefix>-aurora-graph-writer-secret-arn`.
+   */
+  readonly auroraGraphWriterSecretArn?: string;
   readonly knowledgeBaseId: string;
   /**
    * Fleet-wide model override. Unset (the default), each runtime's cold
@@ -126,6 +133,31 @@ const ALL_AGENT_NAMES = AGENT_NAMES;
  * the admin credential.
  */
 const READ_AGENTS = new Set<(typeof ALL_AGENT_NAMES)[number]>(['search', 'advisor']);
+
+/**
+ * Which Aurora login each agent runs as (work item 19).
+ *
+ *   reader  — search and advisor (model-authored SQL, above) and ingestion,
+ *             whose only query is the `knowledge_bases` lookup in
+ *             `_shared/kb_resolver.py`.
+ *   writer  — graph-builder and scoring: `orgiq_graph_writer`, SELECT/INSERT/
+ *             UPDATE on the org-graph tables and nothing else.
+ *   none    — supervisor and the two assessment agents never call the Data
+ *             API, so they get no secret and no rds-data grant at all.
+ *
+ * Nothing gets the master secret, unless `-c dbMasterSecret=true` (one
+ * release) puts every non-reader back on it.
+ */
+const DB_LOGIN: Record<(typeof ALL_AGENT_NAMES)[number], 'reader' | 'writer' | 'none'> = {
+  supervisor: 'none',
+  search: 'reader',
+  scoring: 'writer',
+  advisor: 'reader',
+  ingestion: 'reader',
+  'graph-builder': 'writer',
+  'assessment-scorer': 'none',
+  'assessment-drafter': 'none',
+};
 
 // Explicit session lifecycle per agent. The service defaults are 900s idle /
 // 28800s max — set explicitly so the numbers live in source rather than being
@@ -235,6 +267,9 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     }
     const readOnlySecretArn = props.auroraReadOnlySecretArn
       ?? cdk.Fn.importValue(`${prefix}-aurora-readonly-secret-arn`);
+    const masterFallback = dbMasterSecret(this);
+    const graphWriterSecretArn = masterFallback ? undefined : (props.auroraGraphWriterSecretArn
+      ?? cdk.Fn.importValue(`${prefix}-aurora-graph-writer-secret-arn`));
 
     // Shared base image for every internally-managed agent. Built once via agents/base/build.sh
     // and pre-loaded with strands-agents + bedrock-agentcore + ag-ui deps, so
@@ -386,37 +421,34 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         }));
       }
 
-      // Data-plane permissions every agent's tools need. Granted to the
-      // execution role (the one the runtime container actually assumes) — the
-      // separate AgentsStack roles are for non-AgentCore-Runtime deployments
-      // and aren't in the call path here.
-      executionRole.addToPolicy(new iam.PolicyStatement({
-        sid: 'AuroraRdsData',
-        actions: [
-          'rds-data:ExecuteStatement',
-          'rds-data:BatchExecuteStatement',
-          'rds-data:BeginTransaction',
-          'rds-data:CommitTransaction',
-          'rds-data:RollbackTransaction',
-        ],
-        resources: [props.auroraClusterArn],
-      }));
-      // Which Aurora credential this runtime may read.
-      //
-      // For the two read agents with the read-only role turned on, this is an
-      // EXCLUSIVE swap, not an addition: they get `orgiq_graph_reader` and
-      // lose GetSecretValue on the admin secret entirely. That is the point —
-      // a boundary the agent could step around by fetching the other secret is
-      // a suggestion. `search` and `advisor` touch Aurora in exactly two
-      // places (`query_graph` and the `knowledge_bases` lookup in
-      // `_shared/kb_resolver.py`), both pure SELECTs, so neither has any
-      // remaining use for a writable login.
-      const useReadOnlySecret = readOnlySecretArn !== undefined && READ_AGENTS.has(agentName);
-      executionRole.addToPolicy(new iam.PolicyStatement({
-        sid: 'AuroraSecret',
-        actions: ['secretsmanager:GetSecretValue'],
-        resources: [useReadOnlySecret ? readOnlySecretArn! : props.auroraCredentialsSecretArn],
-      }));
+      // Which Aurora login this runtime may read (DB_LOGIN above). Exclusive,
+      // not additive: an agent never holds GetSecretValue on a login it is not
+      // meant to use, because a boundary it could step around by fetching the
+      // other secret is a suggestion.
+      const login = masterFallback && DB_LOGIN[agentName] !== 'reader' ? 'master' : DB_LOGIN[agentName];
+      const useReadOnlySecret = login === 'reader';
+      const dbSecretArn = login === 'reader' ? readOnlySecretArn
+        : login === 'writer' ? graphWriterSecretArn!
+          : login === 'master' ? props.auroraCredentialsSecretArn
+            : undefined;
+      if (dbSecretArn) {
+        executionRole.addToPolicy(new iam.PolicyStatement({
+          sid: 'AuroraRdsData',
+          actions: [
+            'rds-data:ExecuteStatement',
+            'rds-data:BatchExecuteStatement',
+            'rds-data:BeginTransaction',
+            'rds-data:CommitTransaction',
+            'rds-data:RollbackTransaction',
+          ],
+          resources: [props.auroraClusterArn],
+        }));
+        executionRole.addToPolicy(new iam.PolicyStatement({
+          sid: 'AuroraSecret',
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [dbSecretArn],
+        }));
+      }
       // Wildcard over all KBs in this account — covers the default orgiq KB and
       // any new KBs provisioned via the portal registry wizard (Wave 1+).
       // Scoped to account/region; no cross-account access is possible.
@@ -547,8 +579,9 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           MODEL_ID: props.modelId ?? primaryModelFor(modelRegistry, agentName, modelId),
           MODEL_REGISTRY_PARAM: modelRegistryParamName,
           ...(modelRegistryVersion && { MODEL_REGISTRY_VERSION: String(modelRegistryVersion) }),
-          AURORA_CLUSTER_ARN: props.auroraClusterArn,
-          AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
+          // AURORA_SECRET_ARN is the login this agent writes with (graph
+          // writer), or its reader; never the master unless dbMasterSecret.
+          ...(dbSecretArn && { AURORA_CLUSTER_ARN: props.auroraClusterArn, AURORA_SECRET_ARN: dbSecretArn }),
           APP_ENV: 'production',
           // Read agents cannot fall back to the administrator credential.
           ...(useReadOnlySecret && { AURORA_READONLY_SECRET_ARN: readOnlySecretArn! }),

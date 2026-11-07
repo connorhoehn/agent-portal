@@ -44,6 +44,17 @@ DEMO_IDENTITIES = 'schema/seed_demo_identities.sql'
 READONLY_ROLE = 'orgiq_graph_reader'
 READONLY_SECRET_NAME = 'orgiq-aurora-readonly-credentials'
 
+# The per-service logins created by service_roles.sql (work item 19), each
+# with the secret OrgIQ-Aurora mints for it and the env var that overrides the
+# secret id. The master secret (get_cluster_info) stays the one that applies
+# schema; these are what the services run as.
+SERVICE_ROLES = (
+    ('orgiq_app_middleware', 'orgiq-aurora-middleware-credentials', 'AURORA_MIDDLEWARE_SECRET_ARN'),
+    ('orgiq_graph_writer', 'orgiq-aurora-graph-writer-credentials', 'AURORA_GRAPH_WRITER_SECRET_ARN'),
+    ('orgiq_kb_service', 'orgiq-aurora-kb-credentials', 'AURORA_KB_SECRET_ARN'),
+)
+ROLE_FILES = ['schema/service_roles.sql', 'schema/graph_readonly_role.sql']
+
 # Characters the generated password must not contain. The CDK secret generator
 # excludes these (see infra/lib/aurora-stack.ts); we re-check rather than trust,
 # because the only safe way to inline a password into ALTER ROLE is to know it
@@ -57,9 +68,13 @@ def _load_readonly_password(region: str) -> str | None:
     Missing, unreadable or malformed credentials return None. The caller counts
     this as failure: production read agents no longer fall back to admin.
     """
+    return _load_password(region, os.environ.get('AURORA_READONLY_SECRET_ARN') or READONLY_SECRET_NAME)
+
+
+def _load_password(region: str, name: str) -> str | None:
+    """Fetch one role's password from the named secret, or None."""
     import boto3
     sm = boto3.client('secretsmanager', region_name=region)
-    name = os.environ.get('AURORA_READONLY_SECRET_ARN') or READONLY_SECRET_NAME
     try:
         raw = sm.get_secret_value(SecretId=name)['SecretString']
     except Exception as e:  # noqa: BLE001
@@ -115,6 +130,77 @@ def set_readonly_password(rds, arn: str, sec: str, db: str, region: str) -> int:
     return 1
 
 
+def set_service_role_passwords(rds, arn: str, sec: str, db: str, region: str) -> int:
+    """Give each service role (service_roles.sql) the password from its secret.
+
+    Returns the failure count. A missing secret is a failure: that service is
+    deployed to authenticate as its role, and would otherwise get no database.
+    """
+    failures = 0
+    for role, default_name, env in SERVICE_ROLES:
+        name = os.environ.get(env) or default_name
+        print(f'{name}: setting {role} password')
+        password = _load_password(region, name)
+        if password is None:
+            failures += 1
+            continue
+        failures += _alter_role_password(rds, arn, sec, db, role, password)
+    return failures
+
+
+def _alter_role_password(rds, arn: str, sec: str, db: str, role: str, password: str) -> int:
+    sql = f"ALTER ROLE {role} WITH LOGIN PASSWORD '{password}'"
+    for attempt in range(6):
+        try:
+            rds.execute_statement(resourceArn=arn, secretArn=sec, database=db, sql=sql)
+            print(f'  ✓ {role} can now authenticate')
+            return 0
+        except Exception as e:  # noqa: BLE001
+            msg = str(e)
+            if any(r in msg for r in RETRYABLE) and attempt < 5:
+                time.sleep(2 * (attempt + 1))
+                continue
+            # Never echo the statement: it carries the password.
+            print(f'  FAIL [ALTER ROLE {role} PASSWORD] -> {msg[:160]}')
+            return 1
+    return 1
+
+
+# What each service role must and must not be able to do, asked of the engine.
+# (role, privilege check SQL expression, expected)
+SERVICE_ROLE_PROBES = (
+    ('orgiq_graph_writer', "has_table_privilege('orgiq_graph_writer', 'people', 'UPDATE')", True),
+    ('orgiq_graph_writer', "has_table_privilege('orgiq_graph_writer', 'people', 'DELETE')", False),
+    ('orgiq_graph_writer', "has_table_privilege('orgiq_graph_writer', 'app_users', 'SELECT')", False),
+    ('orgiq_graph_writer', "has_schema_privilege('orgiq_graph_writer', 'public', 'CREATE')", False),
+    ('orgiq_kb_service', "has_table_privilege('orgiq_kb_service', 'bedrock_kb', 'INSERT')", True),
+    ('orgiq_kb_service', "has_table_privilege('orgiq_kb_service', 'people', 'SELECT')", False),
+    ('orgiq_app_middleware', "has_table_privilege('orgiq_app_middleware', 'app_users', 'UPDATE')", True),
+    ('orgiq_app_middleware', "has_table_privilege('orgiq_app_middleware', 'app_users', 'TRUNCATE')", False),
+    ('orgiq_app_middleware', "(SELECT rolcreaterole OR rolsuper FROM pg_roles WHERE rolname = 'orgiq_app_middleware')", False),
+)
+
+
+def verify_service_roles(rds, arn: str, sec: str, db: str) -> int:
+    """Ask PostgreSQL what each service role can do; count the wrong answers."""
+    sql = 'SELECT ' + ', '.join(expr for _, expr, _ in SERVICE_ROLE_PROBES)
+    try:
+        resp = rds.execute_statement(resourceArn=arn, secretArn=sec, database=db, sql=sql)
+    except Exception as e:  # noqa: BLE001
+        print(f'  ✗ service-role verification failed: {str(e)[:160]}')
+        return 1
+    row = resp.get('records', [[]])[0]
+    values = [list(cell.values())[0] if cell and not cell.get('isNull') else None for cell in row]
+    failures = 0
+    for (role, expr, expected), got in zip(SERVICE_ROLE_PROBES, values):
+        ok = bool(got) == expected
+        failures += 0 if ok else 1
+        print(f"    {'✓' if ok else '✗'} {expr} = {got} (want {expected})")
+    if not failures:
+        print('  ✓ service-role boundaries confirmed by the engine')
+    return failures
+
+
 def verify_readonly_role(rds, arn: str, sec: str, db: str) -> int:
     """Print what the role can actually do, straight from the engine.
 
@@ -166,12 +252,20 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--readonly-role-only', action='store_true',
                         help='Apply reader grants/password only; do not replay demo seed data')
+    parser.add_argument('--roles-only', action='store_true',
+                        help='Apply every role file (service roles + reader), set their passwords and verify; '
+                             'no seed data. Run after every migration.')
     parser.add_argument('--demo-identities', action='store_true',
                         help=f'Also apply {DEMO_IDENTITIES} (the demo sign-in cast, including an '
                              'all-tenant admin). Local and demo databases only.')
     options = parser.parse_args(argv)
-    files = ['schema/graph_readonly_role.sql'] if options.readonly_role_only else FILES
-    if options.demo_identities and not options.readonly_role_only:
+    if options.readonly_role_only:
+        files = ['schema/graph_readonly_role.sql']
+    elif options.roles_only:
+        files = ROLE_FILES
+    else:
+        files = FILES
+    if options.demo_identities and not (options.readonly_role_only or options.roles_only):
         files = [DEMO_IDENTITIES, *files]
     arn, sec, db = get_cluster_info()
     rds = boto3.client('rds-data', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
@@ -205,6 +299,11 @@ def main(argv=None) -> int:
     region = os.environ.get('AWS_REGION', 'us-east-1')
     total_fail += set_readonly_password(rds, arn, sec, db, region)
     total_fail += verify_readonly_role(rds, arn, sec, db)
+    # The service roles exist whenever service_roles.sql ran (every run but
+    # --readonly-role-only).
+    if not options.readonly_role_only:
+        total_fail += set_service_role_passwords(rds, arn, sec, db, region)
+        total_fail += verify_service_roles(rds, arn, sec, db)
 
     return 1 if total_fail else 0
 
