@@ -234,7 +234,7 @@ describe('GET /api/auth/callback', () => {
 
   it('links the federated sub on FIRST login, then resolves directly', async () => {
     m(exchangeCode).mockResolvedValue({ id_token: 'idt' });
-    m(verifyIdToken).mockResolvedValue({ sub: 'cognito-1', email: 'nora@example.com' });
+    m(verifyIdToken).mockResolvedValue({ sub: 'cognito-1', email: 'nora@example.com', emailVerified: true });
     m(getUserByExternalSub).mockResolvedValue(null);
     m(getUserByEmail).mockResolvedValue(USER);
     const res = await request(buildApp())
@@ -242,6 +242,19 @@ describe('GET /api/auth/callback', () => {
       .set('Cookie', await stateCookie());
     expect(res.status).toBe(302);
     expect(linkExternalSub).toHaveBeenCalledWith('u-nora', 'cognito-1');
+  });
+
+  it('never links by an UNVERIFIED email: the identity is refused as unprovisioned', async () => {
+    m(exchangeCode).mockResolvedValue({ id_token: 'idt' });
+    m(verifyIdToken).mockResolvedValue({ sub: 'cognito-evil', email: 'nora@example.com', emailVerified: false });
+    m(getUserByExternalSub).mockResolvedValue(null);
+    m(getUserByEmail).mockResolvedValue(USER);
+    const res = await request(buildApp())
+      .get('/api/auth/callback?code=c&state=st-1')
+      .set('Cookie', await stateCookie());
+    expect(res.status).toBe(403);
+    expect(getUserByEmail).not.toHaveBeenCalled();
+    expect(linkExternalSub).not.toHaveBeenCalled();
   });
 
   it('403s an authenticated identity with no OrgIQ account, and AUDITS the deny', async () => {

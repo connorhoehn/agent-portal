@@ -49,3 +49,15 @@ export function canGrantAll(actor: GrantActor, pairs: Iterable<readonly [string,
   }
   return { ok: true };
 }
+
+/**
+ * May `actor` change something on `target` beyond grants (its person link)?
+ * An admin may; anyone else only for a user who holds a grant in the actor's
+ * own tenant, so a tenant-scoped ManageUsers holder cannot reach into another
+ * tenant's directory (docs/next-steps.md section 7, PUT /users/:id/person).
+ */
+export function canManageUserIn(actor: GrantActor, targetGrants: Readonly<Record<string, readonly string[] | undefined>>): GrantVerdict {
+  if (actor.role === ADMIN_ROLE) return { ok: true };
+  if ((targetGrants[actor.tenant] ?? []).length > 0) return { ok: true };
+  return { ok: false, reason: `this user holds no grant in '${actor.tenant}', the tenant your session is scoped to` };
+}

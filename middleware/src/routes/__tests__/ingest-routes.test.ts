@@ -37,7 +37,7 @@ jest.mock('../../providers/knowledge-base.js', () => ({
   countS3Documents: jest.fn(), uploadDocument: jest.fn(), getIngestStats: jest.fn(),
   triggerKbSyncForCrawl: jest.fn(), getStorageBreakdown: jest.fn(),
 }));
-jest.mock('../../providers/kb-registry.js', () => ({ getKbBySlug: jest.fn() }));
+jest.mock('../../providers/kb-registry.js', () => ({ getKbBySlug: jest.fn(), listKbs: jest.fn(async () => [{ slug: 'adr', s3Prefix: 'adr/' }]) }));
 jest.mock('../../lib/ingest-scheduler.js', () => ({
   listSchedules: jest.fn(), addSchedule: jest.fn(), removeSchedule: jest.fn(),
   toggleSchedule: jest.fn(), validateCronExpr: jest.fn(),
@@ -360,12 +360,21 @@ describe('POST /api/ingest/upload', () => {
     expect(prefix).toBe('uploads');
   });
 
-  it('honours an explicit X-Prefix', async () => {
+  it('honours an X-Prefix that is a registered knowledge base prefix', async () => {
     m(uploadDocument).mockResolvedValue({ key: 'adr/a.md' });
     await request(buildApp()).post('/api/ingest/upload')
-      .set('X-Filename', 'a.md').set('X-Prefix', ' adr ')
+      .set('X-Filename', 'a.md').set('X-Prefix', ' adr/ ')
       .set('Content-Type', 'text/markdown').send('x');
     expect(m(uploadDocument).mock.calls[0]![3]).toBe('adr');
+  });
+
+  it.each(['crawled/other', '../adr', 'adr/../secrets', '/adr', '/uploads'])('refuses X-Prefix %s before writing anything', async (prefix) => {
+    const res = await request(buildApp()).post('/api/ingest/upload')
+      .set('X-Filename', 'a.md').set('X-Prefix', prefix)
+      .set('Content-Type', 'text/markdown').send('x');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/X-Prefix/);
+    expect(uploadDocument).not.toHaveBeenCalled();
   });
 });
 

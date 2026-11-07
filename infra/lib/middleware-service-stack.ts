@@ -1001,6 +1001,12 @@ export class MiddlewareServiceStack extends cdk.Stack {
       SPEND_HOLDS_UNATTRIBUTED: 'refuse',
       BUDGET_FAIL_CLOSED: 'true',
 
+      // The agent and devbox callbacks sign service-runtime's request envelope
+      // (agents/_shared/callbacks.py, agents/devbox/lab); the static
+      // x-*-auth headers are bearer tokens that replay forever, so the
+      // middleware stops accepting them (lib/service-auth.ts, lane C4).
+      SERVICE_AUTH_LEGACY_HEADERS: 'refuse',
+
       // Devbox lifetime (DE-48) and the git entrypoint switch (DE-45); see above.
       ...devboxLifetime,
       DEVBOX_GIT_ENTRYPOINT: devboxGitEntrypoint ? 'on' : 'off',

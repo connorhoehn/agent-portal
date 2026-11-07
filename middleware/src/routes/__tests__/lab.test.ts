@@ -14,6 +14,13 @@ jest.mock('../../lib/authz.js', () => ({
       if (!req.session) { res.status(401).json({ error: 'Unauthenticated' }); return; }
       next();
     },
+  // Same shape as lib/authz.ts requireTenant: another tenant is 403, admin passes.
+  requireTenant: (tenant: string) =>
+    (req: { session?: { role?: string; tenant?: string } }, res: { status: (n: number) => { json: (b: unknown) => void } }, next: () => void) => {
+      if (!req.session) { res.status(401).json({ error: 'Unauthenticated' }); return; }
+      if (req.session.tenant !== tenant && req.session.role !== 'admin') { res.status(403).json({ error: 'Forbidden', requiredTenant: tenant }); return; }
+      next();
+    },
   requireAction: (_action: string) =>
     (req: { session?: { role?: string } }, res: { status: (n: number) => { json: (b: unknown) => void } }, next: () => void) => {
       // sme holds DispatchAgentRun; anonymous holds nothing.
@@ -63,6 +70,19 @@ function appWith(session: { sub: string; role: string; tenant: string } | null) 
 
 const agent = () => appWith(null); // sessionless caller — the microVM
 const sme = () => appWith({ sub: 'u-nora', role: 'sme', tenant: 'orgiq' });
+const assessor = () => appWith({ sub: 'u-ana', role: 'assessor', tenant: 'assessment' });
+
+describe('the lab is an orgiq surface', () => {
+  it('a session from another tenant reads no experiences, consult list or consult, and answers none', async () => {
+    const opened = await request(agent()).post('/api/lab/consults').send({ question: 'Which tenant may read me?', repo: 'payments' });
+    const id = opened.body.consult.id as string;
+    expect((await request(assessor()).get('/api/lab/experiences')).status).toBe(403);
+    expect((await request(assessor()).get('/api/lab/consults')).status).toBe(403);
+    expect((await request(assessor()).get(`/api/lab/consults/${id}`)).status).toBe(403);
+    expect((await request(assessor()).post(`/api/lab/consults/${id}/answer`).send({ answer: 'x' })).status).toBe(403);
+    expect((await request(sme()).get(`/api/lab/consults/${id}`)).status).toBe(200);
+  });
+});
 
 describe('lab signals', () => {
   it('a sessionless agent files a signal and it lands in the findings list', async () => {

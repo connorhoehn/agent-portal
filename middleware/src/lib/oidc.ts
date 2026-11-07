@@ -97,6 +97,8 @@ export async function exchangeCode(code: string, codeVerifier: string): Promise<
 export interface IdClaims {
   sub: string;
   email?: string;
+  /** True only when the token's `email_verified` claim is the boolean true. */
+  emailVerified: boolean;
   name?: string;
 }
 
@@ -120,6 +122,10 @@ export async function verifyIdToken(idToken: string): Promise<IdClaims> {
   return {
     sub: String(p.sub),
     email: pick('email'),
+    // The email links an SSO identity to an existing account (routes/auth.ts),
+    // so an address the IdP has not verified must never do that. Strictly the
+    // boolean: a string "true" from a misconfigured IdP is not proof.
+    emailVerified: p['email_verified'] === true,
     name: pick('name') ?? pick('cognito:username') ?? pick('email'),
   };
 }

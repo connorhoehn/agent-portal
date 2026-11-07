@@ -31,7 +31,7 @@ import { listTenants, listUsers, getUser, createTenant, createUser, setGrants } 
 // same way by providers/sprints.ts) and keeps the write local to this file.
 import { exec } from '../providers/aurora.js';
 import { isCapabilityGrant, type Grants } from '../lib/session.js';
-import { canEditGrantsOf, canGrantAll } from '../lib/grant-rule.js';
+import { canEditGrantsOf, canGrantAll, canManageUserIn } from '../lib/grant-rule.js';
 import { grantDiff } from '../lib/identity-grants-sql.js';
 
 export const identityRouter = Router();
@@ -267,6 +267,14 @@ identityRouter.put('/users/:id/person', requireAction('ManageUsers'), asyncHandl
   const user = await getUser(userId);
   if (!user) {
     res.status(404).json({ error: `user '${userId}' not found` });
+    return;
+  }
+  // ManageUsers is held per tenant: relinking reaches only users of the
+  // caller's own tenant, unless the caller is an admin.
+  const scoped = canManageUserIn(req.session!, user.grants);
+  if (!scoped.ok) {
+    logAuthz({ decision: 'DENY', action: 'ManageUsers.LinkPerson', sub: req.session!.sub, role: req.session!.role, path: req.path, reason: scoped.reason });
+    res.status(403).json({ error: scoped.reason });
     return;
   }
 

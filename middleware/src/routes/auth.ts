@@ -117,8 +117,11 @@ authRouter.get('/callback', loginLimit, asyncHandler(async (req, res) => {
 
   // Resolve the federated identity to an OrgIQ user: by external_sub first,
   // then by email on first login (and link the sub so it's direct next time).
+  // The email fallback needs `email_verified === true`: an unverified address
+  // (self sign-up, or an IdP that lets users set their email) would otherwise
+  // take over whichever account holds it.
   let user = await getUserByExternalSub(claims.sub);
-  if (!user && claims.email) {
+  if (!user && claims.email && claims.emailVerified) {
     user = await getUserByEmail(claims.email);
     if (user) await linkExternalSub(user.id, claims.sub);
   }

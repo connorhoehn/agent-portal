@@ -19,7 +19,7 @@ import {
   triggerKbSyncForCrawl,
   getStorageBreakdown,
 } from '../providers/knowledge-base.js';
-import { getKbBySlug } from '../providers/kb-registry.js';
+import { getKbBySlug, listKbs } from '../providers/kb-registry.js';
 import {
   listSchedules,
   addSchedule,
@@ -327,7 +327,26 @@ ingestRouter.get('/stats', asyncHandler(async (_req, res) => {
 // Accepts a single file as raw bytes. Portal should set:
 //   Content-Type: <mime type>
 //   X-Filename: original filename (required)
-//   X-Prefix: s3 subfolder (optional, defaults to "uploads")
+//   X-Prefix: s3 subfolder (optional, defaults to "uploads"); only "uploads"
+//             or a registered knowledge base's s3 prefix
+
+/**
+ * The S3 prefix an upload may land under. The header used to be taken as
+ * given, so a caller could write anywhere in the documents bucket the
+ * knowledge base indexes (docs/next-steps.md section 7). Now: `uploads`, or a
+ * registered knowledge base's prefix (of the caller's tenant, any tenant for
+ * an admin), and never a path with `..` or a leading `/`. Null = refused.
+ */
+export async function uploadPrefix(raw: unknown, session: { role?: string; tenant?: string } | undefined): Promise<string | null> {
+  const given = typeof raw === 'string' ? raw.trim() : '';
+  if (!given) return 'uploads';
+  if (given.startsWith('/') || given.includes('\\') || given.includes('..')) return null;
+  const prefix = given.replace(/\/+$/, '');
+  if (prefix === 'uploads') return prefix;
+  const tenant = session?.role === 'admin' ? undefined : session?.tenant;
+  const kbs = await listKbs(tenant);
+  return kbs.some((kb) => kb.s3Prefix.trim().replace(/\/+$/, '') === prefix && prefix !== '') ? prefix : null;
+}
 
 ingestRouter.post(
   '/upload',
@@ -339,7 +358,11 @@ ingestRouter.post(
       return;
     }
     const contentType = (req.headers['content-type'] as string) || 'application/octet-stream';
-    const prefix = (req.headers['x-prefix'] as string | undefined)?.trim() || 'uploads';
+    const prefix = await uploadPrefix(req.headers['x-prefix'], req.session);
+    if (!prefix) {
+      res.status(400).json({ error: 'X-Prefix must be "uploads" or a registered knowledge base prefix' });
+      return;
+    }
     const body = req.body as Buffer;
     if (!body?.length) {
       res.status(400).json({ error: 'Empty body' });

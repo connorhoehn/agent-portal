@@ -206,6 +206,14 @@ describe('the Claude price table (DE-32)', () => {
     assert.match(resources, /parameter\/orgiq\/pricing\/\*/, 'the grant must be scoped to /orgiq/pricing/*');
   });
 
+  test('money and service auth fail closed in the task definition (work item 16)', () => {
+    const container = containerDefinition(closedTemplate);
+    const env = Object.fromEntries(((container.Environment ?? []) as any[]).map((e) => [e.Name, e.Value]));
+    assert.equal(env.SPEND_HOLDS_UNATTRIBUTED, 'refuse');
+    assert.equal(env.BUDGET_FAIL_CLOSED, 'true');
+    assert.equal(env.SERVICE_AUTH_LEGACY_HEADERS, 'refuse');
+  });
+
   test('the container is told which parameter holds the table', () => {
     const container = containerDefinition(closedTemplate);
     const env = Object.fromEntries(((container.Environment ?? []) as any[]).map((e) => [e.Name, e.Value]));

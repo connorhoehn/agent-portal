@@ -14,11 +14,20 @@ jest.mock('../../config.js', () => ({
     },
   },
 }));
+let mockClaims: Record<string, unknown> = {};
 jest.mock('aws-jwt-verify', () => ({
-  CognitoJwtVerifier: { create: () => ({ verify: async () => ({}) }) },
+  CognitoJwtVerifier: { create: () => ({ verify: async () => mockClaims }) },
 }));
 
-import { cognitoEnabled, authorizeUrl, hostedLogoutUrl, pkceChallenge, randomToken } from '../oidc.js';
+import { cognitoEnabled, authorizeUrl, hostedLogoutUrl, pkceChallenge, randomToken, verifyIdToken } from '../oidc.js';
+
+describe('verifyIdToken email_verified', () => {
+  it.each([[true, true], ['true', false], [false, false], [undefined, false]])(
+    'email_verified %p reads as emailVerified %p', async (claim, expected) => {
+      mockClaims = { sub: 's-1', email: 'a@example.com', ...(claim === undefined ? {} : { email_verified: claim }) };
+      expect((await verifyIdToken('t')).emailVerified).toBe(expected);
+    });
+});
 
 describe('oidc helpers', () => {
   it('cognitoEnabled is true when the config is complete', () => {

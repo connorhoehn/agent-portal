@@ -18,7 +18,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { createHash } from 'node:crypto';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
-import { requireAction, requireSession } from '../lib/authz.js';
+import { requireAction, requireSession, requireTenant } from '../lib/authz.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { fileLabSignal } from '../providers/org-sweeps.js';
 import {
@@ -41,9 +41,12 @@ const callbackLimit = rateLimit('lab-callback', 120, 60_000);
 // constant-time when it is set.
 const requireLabAuth = requireServiceAuth(LAB_CALLBACK_SERVICE_AUTH);
 
+/** The lab is a Work (orgiq) surface: a session from another tenant reads none of it. */
+const orgiqOnly = requireTenant('orgiq');
+
 /** Session OR service header — for reads both the portal and the fleet make. */
 function sessionOrLabAuth(req: Request, res: Response, next: NextFunction): void {
-  if (req.session) { next(); return; }
+  if (req.session) { orgiqOnly(req, res, next); return; }
   requireLabAuth(req, res, next);
 }
 
@@ -160,7 +163,7 @@ labRouter.post('/consults', callbackLimit, requireLabAuth, asyncHandler(async (r
 }));
 
 // Human list FIRST so '/consults' doesn't fall into the ':id' matcher.
-labRouter.get('/consults', requireSession('LabConsults'), asyncHandler(async (req, res) => {
+labRouter.get('/consults', requireSession('LabConsults'), orgiqOnly, asyncHandler(async (req, res) => {
   const consults = await listConsults({
     ...(str(req.query['status']) !== undefined ? { status: str(req.query['status'])! } : {}),
   });
@@ -188,7 +191,7 @@ labRouter.get('/consults/:id', callbackLimit, sessionOrLabAuth, asyncHandler(asy
 }));
 
 // Answering directs a running agent — the same authority that dispatches one.
-labRouter.post('/consults/:id/answer', requireAction('DispatchAgentRun'), asyncHandler(async (req, res) => {
+labRouter.post('/consults/:id/answer', orgiqOnly, requireAction('DispatchAgentRun'), asyncHandler(async (req, res) => {
   const answer = str((req.body ?? {})['answer']);
   if (!answer) throw new ValidationError('`answer` is required');
   const who = req.session?.sub ?? 'unknown';

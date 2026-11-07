@@ -183,6 +183,22 @@ describe('PUT /api/identity/users/:id/person', () => {
     expect(getUserMock).not.toHaveBeenCalled();
   });
 
+  it('403s relinking a user who holds no grant in the caller\'s tenant; an admin may', async () => {
+    const assessor = { ...USER, id: 'u-ana', grants: { assessment: ['assessor'] } };
+    getUserMock.mockResolvedValueOnce(assessor);
+    const res = await request(buildApp(hrAdmin))
+      .put('/api/identity/users/u-ana/person').send({ personId: 'p-001' });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/orgiq/);
+    expect(execMock).not.toHaveBeenCalled();
+
+    getUserMock.mockResolvedValueOnce(assessor).mockResolvedValueOnce({ ...assessor, personId: 'p-001' });
+    execMock.mockResolvedValueOnce([{ id: 'p-001' }]).mockResolvedValueOnce([]);
+    const asAdmin = await request(buildApp({ sub: 'u-operator', role: 'admin', tenant: 'orgiq' }))
+      .put('/api/identity/users/u-ana/person').send({ personId: 'p-001' });
+    expect(asAdmin.status).toBe(200);
+  });
+
   it('is gated on ManageUsers', async () => {
     manageAllow.value = false;
     const res = await request(buildApp({ sub: 'u-nora', role: 'sme', tenant: 'orgiq' }))
