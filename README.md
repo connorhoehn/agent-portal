@@ -19,32 +19,50 @@ How this repository and its siblings came to be, and how they depend on each oth
 
 ## Getting started
 
-You need Node 20 or newer, Python 3.12, and Docker. Deploying also needs the AWS CLI and credentials for the target account. The CDK CLI is installed by `npm install` in `infra/`. The optional `tilt` CLI runs the whole local stack in one command.
+To run the app locally you need Node 20 or newer (checked on Node 25), `git`, and SSH access to GitHub: the middleware pins `service-runtime` as a `github:` dependency. Nothing else is needed: no Docker, no Python, no AWS account. The portal installs its sibling libraries from tarballs in `portal/vendor`, so it needs no network beyond npm. Python 3.12 is only for the agents, Docker only for the notebooks and the optional `social` compose profile, and the AWS CLI and credentials only for deploying. The CDK CLI is installed by `npm install` in `infra/`. The optional `tilt` CLI runs the local stack in one command.
 
 ### Run it locally
 
-No AWS access is needed. The mock backend serves fixture data.
+The mock backend serves fixture data. `dev:mock` sets every mock flag itself, so there is no `.env` to write.
 
 ```bash
-tilt up                                # middleware on :3001, portal on :5183
+cd middleware && npm install    # about 2.5 minutes, most of it the github: dependency
+cd ../portal && npm install     # about 35 seconds
 ```
 
-Or start the two processes yourself:
+Then start the two processes in separate terminals:
 
 ```bash
-cd middleware && npm install && npm run dev:mock
-cd portal && npm install && npm run dev
+cd middleware && npm run dev:mock    # http://localhost:3001, ready in about 10 seconds
+cd portal && npm run dev             # http://localhost:5183
 ```
+
+Check it: `curl localhost:3001/api/health` returns `"service":"orgiq-middleware"`, and the portal answers at http://localhost:5183.
+
+`tilt up` starts the same two processes, but it does not install dependencies, so run both installs first. Its `platform-api-forward` and `social-docs-forward` resources need Colima and fail without it; ignore them, they only matter for real video calls and the document canvas.
+
+To use other ports, set `PORT` for the middleware and point the portal's proxy at it; the portal's own port is fixed at 5183 (override with `npm run dev -- --port N --strictPort`):
+
+```bash
+cd middleware && PORT=3013 npm run dev:mock
+cd portal && API_PROXY_TARGET=http://127.0.0.1:3013 npm run dev -- --port 5190 --strictPort
+```
+
+Open `/workspaces` and pick a person to sign in as (the walk-through in [docs/demo-script.md](docs/demo-script.md) names them). Without a sign-in the mock serves a demo user who holds every orgiq and assessment role. For `curl`, `POST /api/session/login` with `{"userId":"u-vera"}` and keep the cookie jar. `POST /api/__mock/reset` puts the fixtures back.
 
 Notebooks run in Docker: `docker-compose up jupyter` serves them at http://localhost:8888.
 
 ### Test
 
+Run `npm install` in `middleware/`, `portal/` and `infra/` first (the infra install takes about 45 seconds, and some middleware tests read from it).
+
 ```bash
-cd middleware && npm test && npm run typecheck
-cd portal && npm test && npm run typecheck
-cd infra && npm test
+cd middleware && npm test && npm run typecheck   # tests about 15 minutes, typecheck 15 seconds
+cd portal && npm test && npm run typecheck       # tests 5 seconds, typecheck 7 seconds
+cd infra && npm test                             # about 2 minutes
 ```
+
+The middleware suite is large and slow; run it once, alone. On a fresh clone it reported 9 failing suites out of 610 (run before `infra/` was installed): four runbook suites look for a `CLAUDE.md` that was removed, `migrate-work-comments-dynamo` could not resolve a package from `infra/`, and four others (`run-controls`, `local-compute-fixtures`, `runbooks-demo`, `runbooks-tools-demo`) fail for reasons not yet diagnosed. The portal tests, infra tests and both typechecks pass.
 
 The agent tests need `botocore`. Install `schema/synth/requirements.txt` into a virtualenv, then:
 
