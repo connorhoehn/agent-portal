@@ -168,7 +168,7 @@ async function walk(page: Page, withPrimary: boolean): Promise<Walk> {
       const row = title.closest('div.justify-between') ?? title.parentElement?.parentElement ?? null;
       if (row) for (const c of row.children) if (!c.contains(title)) actionRoots.push({ el: c, kind: 'title-row' });
     }
-    for (const band of main.querySelectorAll('[data-testid="section-crumbs"]')) {
+    for (const band of main.querySelectorAll('[data-testid="section-crumbs"], [data-page-trail]')) {
       for (const c of band.querySelectorAll(':scope > *, :scope > * > *')) {
         if (c.matches('nav') || c.querySelector(breadcrumbSelector) || c.closest(breadcrumbSelector)) continue;
         if (!actionRoots.some((r) => r.el.contains(c))) actionRoots.push({ el: c, kind: 'trail-band' });

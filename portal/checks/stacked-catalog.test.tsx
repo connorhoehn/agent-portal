@@ -27,14 +27,14 @@ for (const basePath of ['/iq/designs', '/iq/library']) {
   test(`${basePath}: the section closes descendant rails and content`, () => {
     const html = render(`${basePath}?nav=section`, basePath);
     assert.match(html, /Catalog navigation/);
-    assert.doesNotMatch(html, /data-testid="catalog-explorer"/);
+    assert.doesNotMatch(html, /data-testid="stacked-catalog-list"/);
     assert.doesNotMatch(html, /data-testid="record-content"/);
     assert.doesNotMatch(html, /<a[^>]*aria-current="page"/);
   });
 
   test(`${basePath}: a view opens its list beside the content`, () => {
     const html = render(`${basePath}?status=all`, basePath);
-    assert.match(html, /data-testid="catalog-explorer"/);
+    assert.match(html, /data-testid="stacked-catalog-list"/);
     assert.match(html, /First record/);
     assert.match(html, /data-testid="record-content"/);
     assert.match(html, /href="[^\"]+\?nav=section"/);

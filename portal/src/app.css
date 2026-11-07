@@ -609,7 +609,8 @@ tbody tr:focus-within .row-reveal,
 }
 [data-initiative-stack] [data-testid="explorer-layout-rail-header"],
 [data-testid="initiative-work-explorer-rail-header"],
-[data-testid="catalog-explorer-rail-header"],
+[data-testid="stacked-catalog-list-rail-header"],
+[data-catalog-navigation="combined"] [data-testid="explorer-layout-rail-header"],
 [data-testid="runbooks-library-rail-header"],
 [data-testid="runbooks-proposals-rail-header"],
 [data-testid="runbooks-briefs-rail-header"] {
@@ -619,7 +620,8 @@ tbody tr:focus-within .row-reveal,
 }
 [data-initiative-stack] [data-testid="explorer-layout-rail-title"],
 [data-testid="initiative-work-explorer-rail-title"],
-[data-testid="catalog-explorer-rail-title"],
+[data-testid="stacked-catalog-list-rail-title"],
+[data-catalog-navigation="combined"] [data-testid="explorer-layout-rail-title"],
 [data-testid="runbooks-library-rail-title"],
 [data-testid="runbooks-proposals-rail-title"],
 [data-testid="runbooks-briefs-rail-title"] {
@@ -672,8 +674,8 @@ tbody tr:focus-within .row-reveal,
   }
 }
 
-/* Build pages retain a full-height module menu beside lists and records. */
-[data-shell-nav] [data-testid="build-section"] section[data-subnav-content] {
+/* Section layouts (BuildSectionLayout, StackedCatalogLayout) keep a full-height module menu beside lists and records. */
+[data-shell-nav] [data-page-template="section-layout"] section[data-subnav-content] {
   padding: 0;
   overflow: hidden;
   min-height: 0;

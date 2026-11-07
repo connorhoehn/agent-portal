@@ -53,7 +53,7 @@ export async function layoutFacts(page) {
     const r = (n) => Math.round(n);
     const h1s = [...document.querySelectorAll('h1')].filter(vis);
     const h1 = h1s[0];
-    const trail = document.querySelector('[data-testid="section-crumbs"]');
+    const trail = document.querySelector('[data-testid="section-crumbs"], [data-page-trail]');
     const rows = [...document.querySelectorAll('[data-shell-nav] table tbody tr')].filter(vis).filter((tr) => !tr.querySelector('[colspan]'));
     const composer = [...document.querySelectorAll('[data-composer-surface]')].filter(vis).pop();
     // The first data row (a table body row, a grid row, a list or listbox item) — the density rule's first-row-top.

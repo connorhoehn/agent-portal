@@ -153,15 +153,15 @@ test('Communication: an open conversation gets the compact title row; collapsing
   const channel = page.getByTestId('social-chat-rail-list-channels').getByTestId('conversation-row').first();
   await expect(channel).toBeVisible({ timeout: 20_000 });
   await channel.click();
-  const title = content.locator('[data-section-title] [data-density]');
+  const title = content.locator('[data-page-title] [data-density]');
   await expect(title).toHaveAttribute('data-density', 'compact', { timeout: 30_000 });
   expect(await type(title.locator('h1'))).toEqual({ size: '14px', weight: '600' });
   await shot(page, 'communication-compact');
   await title.getByRole('button', { name: 'Collapse header' }).click();
-  await expect(content.locator('[data-section-title]')).toHaveCount(0);
-  await expect(page.getByTestId('section-crumbs')).toContainText('Communication');
-  await page.getByTestId('section-crumbs').getByRole('button', { name: 'Expand header' }).click();
-  await expect(content.locator('[data-section-title]')).toHaveCount(1);
+  await expect(content.locator('[data-page-title]')).toHaveCount(0);
+  await expect(page.getByTestId('page-trail')).toContainText('Communication');
+  await page.getByTestId('page-trail').getByRole('button', { name: 'Expand header' }).click();
+  await expect(content.locator('[data-page-title]')).toHaveCount(1);
   await page.context().close();
 });
 

@@ -21,7 +21,7 @@ import {
   Inline,
   InlineAlert,
   LoadingState,
-  PageHeader,
+  PageFrame,
   PageSection,
   PersonPicker,
   RadioGroup,
@@ -32,7 +32,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useState } from 'react';
-import { FlushPage } from '../../components/shell/FlushPage';
+import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -65,6 +65,7 @@ function DelegationSettings() {
   const { can, ready } = useCapabilities();
   const mayDelegate = ready && can('DecideAccess');
   const page = ACCESS_SURFACES.settings;
+  const trail = useFlushTrailItems();
   const list = useFetch<ItemsResponse<AccessDelegation>>(`${ACCESS_API}/delegations`);
   const delegates = useFetch<ItemsResponse<AccessPerson>>(mayDelegate ? `${ACCESS_API}/delegates` : null);
   const [draft, setDraft] = useState<DelegationDraft>(EMPTY_DELEGATION);
@@ -110,8 +111,7 @@ function DelegationSettings() {
   ) : null);
 
   return (
-    <FlushPage data-testid="access-settings">
-      <PageHeader density="compact" title={page.title} description={page.description} />
+    <PageFrame title={page.title} description={page.description} breadcrumbs={trail} data-testid="access-settings">
       <Stack gap="lg">
         <PageSection size="sm" title="Delegate my decisions"
           description="While you are away, another approver decides the steps that wait on you, on your behalf. They never decide a request they made or benefit from, and an access-admin step only if they are an access admin.">
@@ -145,6 +145,6 @@ function DelegationSettings() {
           )}
         </PageSection>
       </Stack>
-    </FlushPage>
+    </PageFrame>
   );
 }

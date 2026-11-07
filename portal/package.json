@@ -8,6 +8,7 @@
     "preview": "vite preview",
     "test": "node --test 'src/**/__tests__/*.test.ts' 'src/**/__tests__/*.test.tsx'",
     "typecheck": "tsc --noEmit",
+    "lint:ui": "eslint src",
     "prototype": "vite --config vite.prototype.config.ts",
     "prototype:build": "vite build --config vite.prototype.config.ts && node prototypes/inline.mjs \"prototypes/${PROTOTYPE:-active-now}/build\"",
     "audit:ui": "node ../scripts/audit-ui-dom.cjs"
@@ -15,7 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@connorhoehn/realtime-modules": "file:vendor/connorhoehn-realtime-modules-0.142.0.tgz",
-    "@connorhoehnslalom/ui-components": "file:vendor/connorhoehnslalom-ui-components-2.500.3-work.2.tgz",
+    "@connorhoehnslalom/ui-components": "file:vendor/connorhoehnslalom-ui-components-2.505.0.tgz",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -56,8 +57,10 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.1.0",
+    "eslint": "^10.13.0",
     "tailwindcss": "^4.2.0",
     "typescript": "5.9",
+    "typescript-eslint": "^8.72.0",
     "vite": "^7.3.6"
   }
 }

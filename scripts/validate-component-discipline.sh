@@ -110,18 +110,34 @@ done
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Queued composites keep their per-file cap wherever they live.
+#
+# A "Composed locally in `…`" row takes its file out of every area budget
+# above (dc_area_files), so this section is the only place that file is
+# counted at all. It used to cap raw styled elements alone, which left a
+# queued file free to add any number of raw <button>s and style= props (the
+# two counters the area budgets also hold) — "queue it" became "hand-roll it"
+# for exactly the elements the library already ships. Every counter the area
+# budgets use now adds into ONE per-file total against the cap, and a raw
+# <button> has no exemption at all (Button/IconButton exist; no queue row can
+# be about them). A row whose file is gone fails too: a stale exemption would
+# silently cover whatever file is next created at that path.
 # ─────────────────────────────────────────────────────────────────────────────
 section "queued composites stay small"
-q_over=""; q_n=0
+q_over=""; q_btn=""; q_gone=""; q_n=0; q_max=0
 for f in $QUEUED_FILES; do
-  [ -f "$f" ] || continue
+  if [ ! -f "$f" ]; then q_gone="$q_gone ${f#portal/src/}"; continue; fi
   q_n=$((q_n + 1))
-  c=$(count_raw "$f")
-  [ "$c" -le "$QUEUED_MAX_PER_FILE" ] || q_over="$q_over ${f#portal/src/}($c)"
+  c_raw=$(count_raw "$f"); c_btn=$(count_re '<button' "$f"); c_sty=$(count_re 'style=\{' "$f")
+  c=$((c_raw + c_btn + c_sty))
+  [ "$c" -gt "$q_max" ] && q_max=$c
+  [ "$c" -le "$QUEUED_MAX_PER_FILE" ] || q_over="$q_over ${f#portal/src/}(raw $c_raw + button $c_btn + style $c_sty = $c)"
+  [ "$c_btn" -eq 0 ] || q_btn="$q_btn ${f#portal/src/}($c_btn)"
 done
+[ -z "$q_gone" ] || fail "queue rows exempt files that no longer exist (delete the row or fix the path):$q_gone"
+[ -z "$q_btn" ] || fail "raw <button> in a queued composite — a queue row never exempts a button (use Button/IconButton):$q_btn"
 [ -z "$q_over" ] \
-  && ok "$q_n queued composites, each ≤ $QUEUED_MAX_PER_FILE raw elements" \
-  || fail "queued composite over the per-file cap of $QUEUED_MAX_PER_FILE:$q_over"
+  && ok "$q_n queued composites, each ≤ $QUEUED_MAX_PER_FILE hand-rolled (raw + <button> + style=; largest $q_max)" \
+  || fail "queued composite over the per-file cap of $QUEUED_MAX_PER_FILE hand-rolled elements:$q_over"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # The library entry that once broke the production build. ui-components'
