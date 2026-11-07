@@ -48,7 +48,8 @@ export function agentInvokeHoldTtlMs(graceMs: number): number {
 }
 
 export interface AgentInvokeHoldInput {
-  actorId: string;
+  /** The caller. Null only for a call with no session, which is refused unless SPEND_HOLDS_UNATTRIBUTED=allow. */
+  actorId: string | null;
   initiativeId: string | null;
   /** The run id, when it is known before the call (the chat invoke). */
   sourceId?: string | null;

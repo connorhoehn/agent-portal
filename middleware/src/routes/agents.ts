@@ -285,7 +285,7 @@ async function invokeInitiative(session: Session, scope: AnswerScope | null): Pr
   return await stewardsInitiative(session, initiativeId) ? initiativeId : null;
 }
 
-interface InvokeHold { holdId: string | null; initiativeId: string | null; actorId: string; sourceId: string }
+interface InvokeHold { holdId: string | null; initiativeId: string | null; actorId: string | null; sourceId: string }
 const preAnswers = new WeakMap<ExpressRequest, StreamedAnswer>();
 const invokeHolds = new WeakMap<ExpressRequest, InvokeHold>();
 
@@ -337,13 +337,16 @@ agentsRouter.post('/:agentId/invoke', invokeLimit, requireAction('Search'), requ
   // so a refusal is the plain JSON every other spend path answers
   // (lib/spend-refusal.ts), never a mid-stream error. The run id minted here
   // is the ledger key the row written after the call settles the hold with.
-  if (principal) {
+  // Charged to the scoped initiative when the caller is on it, else to the
+  // caller (SPEND_HOLDS_UNATTRIBUTED=actor); a call with neither is refused.
+  {
     const { holdAgentInvoke } = await import('../lib/agent-invoke-spend.js');
-    const initiativeId = await invokeInitiative(principal, scope);
+    const initiativeId = principal ? await invokeInitiative(principal, scope) : null;
+    const actorId = principal?.sub ?? null;
     const sourceId = deriveRunId(req);
     const body = (req.body ?? {}) as Record<string, unknown>;
     const held = await holdAgentInvoke({
-      actorId: principal.sub, initiativeId, sourceId,
+      actorId, initiativeId, sourceId,
       confirmed: {
         allocation: body['confirmOverAllocation'] === true,
         envelope: body['confirmOverEnvelope'] === true,
@@ -357,7 +360,7 @@ agentsRouter.post('/:agentId/invoke', invokeLimit, requireAction('Search'), requ
       res.status(out.status).json(out.body);
       return;
     }
-    invokeHolds.set(req, { holdId: held.holdId, initiativeId: held.initiativeId, actorId: principal.sub, sourceId });
+    invokeHolds.set(req, { holdId: held.holdId, initiativeId: held.initiativeId, actorId, sourceId });
   }
   next();
 }), agentStreamMiddleware(async (req: ExpressRequest, stream: AgentStream, signal: AbortSignal) => {

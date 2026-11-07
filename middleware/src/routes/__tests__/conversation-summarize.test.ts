@@ -4,7 +4,7 @@
 // channelGuard), the directory read fresh on every decision, the chat store's
 // membership rows/history floor/deletions, and the durable flow-run fixture.
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true, agentcore: true } } }));
-jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
+jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn(), displayNameForSubject: (sub: string) => sub }));
 jest.mock('../../providers/index.js', () => ({ agentcore: { invokeAgent: jest.fn() } }));
 jest.mock('../../lib/authz.js', () => ({ resolveSession: (req: { session?: unknown }) => req.session, isAllowed: jest.fn() }));
 
@@ -32,6 +32,8 @@ import { admitChannel } from '../../lib/gateway/authority.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
 import { spendHolds } from '../../mock/spend-holds.js';
 import { mockHolds } from '../../providers/spend-holds.js';
+import { userBudgets } from '../../mock/user-budgets.js';
+import { userSpendThisPeriod } from '../../providers/user-budgets.js';
 
 const POLICY: Record<string, string[]> = {
   member: [], sme: ['DispatchAgentRun'], assessor: ['ViewAssessment'], 'assessment-reader': [],
@@ -231,6 +233,22 @@ describe('the drafter', () => {
     const rows = spendEntries.rows().filter((r) => r.source === 'agent_invoke');
     expect(rows).toEqual([expect.objectContaining({ sourceId: started.body.runId, actorId: 'ana', trigger: 'summarize:assessment', costBasis: 'estimated' })]);
     expect(rows[0]!.costUsd).toBeCloseTo(2 * 0.0008 + 0.3 * 0.0032, 6);
+  });
+
+  it('by default (SPEND_HOLDS_UNATTRIBUTED=actor) a run is charged to the requester and refused once their budget is spent', async () => {
+    spendEntries.reset(); spendHolds.reset(); userBudgets.reset();
+    expect(process.env['SPEND_HOLDS_UNATTRIBUTED']).toBeUndefined();
+    const spent = (await userSpendThisPeriod('ana')).spentUsd;
+    userBudgets.rows().push({ userId: 'ana', allocatedUsd: spent, hardCapUsd: spent, note: null, setBy: 'u-release' });
+    try {
+      const res = await run('ana/assessment/assessor', 'assessment:doc:d-1');
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ gate: 'user-cap', userBudget: { userId: 'ana' } });
+      expect(flowRunsFixture.rows()).toHaveLength(0);
+      expect(invoke).not.toHaveBeenCalled();
+    } finally {
+      userBudgets.reset();
+    }
   });
 
   it('a refused spend answers the spend refusal and stores no run', async () => {

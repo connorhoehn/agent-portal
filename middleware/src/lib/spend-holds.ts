@@ -16,8 +16,12 @@
 // ── Decisions this encodes (recorded in the goal doc) ────────────────────────
 // - Unattributed spend (no initiative) is judged only by its spender's user
 //   budget (DE-54) and held against it; with no user budget it takes no hold
-//   and is judged by nothing, as before. `SPEND_HOLDS_UNATTRIBUTED=refuse`
-//   refuses it instead.
+//   and is judged by nothing, as before. `SPEND_HOLDS_UNATTRIBUTED` picks what
+//   happens when nobody at all is known (docs/next-steps.md §9 item 1):
+//   `actor` (the default) charges the actor and refuses only spend with
+//   neither an initiative nor an actor (a service call); `allow` lets that
+//   through unjudged too (local mock profiles); `refuse` refuses every spend
+//   with no initiative, the actor's included (a hardened deploy).
 // - An unreadable hold store (table not yet applied) proceeds unheld and logs,
 //   as before DE-34; `SPEND_HOLDS_FAIL_CLOSED=1` (or BUDGET_FAIL_CLOSED, on by
 //   default in production) refuses with 503.
@@ -64,7 +68,8 @@ import { selectDispatchForecast, type ForecastSamples } from './marketplace-esti
 export interface ReserveSpendInput {
   /** The initiative charged. Null = unattributed: no initiative brake; held
    *  only against the actor's user budget when they have one (DE-54), else
-   *  no hold at all (unless refused by config). */
+   *  no hold at all. With no actor either it is refused unless
+   *  SPEND_HOLDS_UNATTRIBUTED=allow; `refuse` refuses it even with an actor. */
   initiativeId: string | null;
   /** Who is spending: the session subject or principal.requestedBy. Null for a cron firing. */
   actorId: string | null;
@@ -191,8 +196,12 @@ function parseScopeKey(key: string): RunScope {
 /** Five minutes of grace past a path's run ceiling before a hold expires. */
 export const HOLD_GRACE_MS = 5 * 60_000;
 
-function unattributedRule(): 'allow' | 'refuse' {
-  return (process.env['SPEND_HOLDS_UNATTRIBUTED'] ?? '').trim().toLowerCase() === 'refuse' ? 'refuse' : 'allow';
+export type UnattributedRule = 'actor' | 'allow' | 'refuse';
+
+/** SPEND_HOLDS_UNATTRIBUTED: `actor` (default, and for any unknown value), `allow` or `refuse`. */
+export function unattributedRule(): UnattributedRule {
+  const v = (process.env['SPEND_HOLDS_UNATTRIBUTED'] ?? '').trim().toLowerCase();
+  return v === 'refuse' || v === 'allow' ? v : 'actor';
 }
 
 let warnedMissing = false;
@@ -304,8 +313,12 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
   }
 
   if (!pid) {
-    if (unattributedRule() === 'refuse') {
+    const rule = unattributedRule();
+    if (rule === 'refuse') {
       return { kind: 'refused', reason: 'this spend is charged to no initiative, and unattributed spend is refused here' };
+    }
+    if (rule === 'actor' && !actor) {
+      return { kind: 'refused', reason: 'this spend is charged to no initiative and to no user, and spend nobody answers for is refused here' };
     }
     // Unattributed spend answers only to its spender's user budget.
     if (!judgeUser) return { kind: 'held', holdId: null, initiativeId: null, grantId: null, amountUsd };

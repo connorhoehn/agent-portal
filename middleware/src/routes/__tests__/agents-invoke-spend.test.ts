@@ -127,6 +127,48 @@ describe('the chat invoke reserves and records spend', () => {
   });
 });
 
+describe('SPEND_HOLDS_UNATTRIBUTED=actor (the default): initiative, else the actor, else refused', () => {
+  it('a scoped invoke is charged to the initiative the caller is on', async () => {
+    expect(process.env['SPEND_HOLDS_UNATTRIBUTED']).toBeUndefined();
+    const res = await invoke({ scope: { kind: 'initiative', id: 'p-auth' } });
+    expect(res.status).toBe(200);
+    expect(mockHolds()).toEqual([expect.objectContaining({ source: 'agent_invoke', initiativeId: 'p-auth', actorId: USER })]);
+    expect(invokeRows()).toEqual([expect.objectContaining({ initiativeId: 'p-auth', actorId: USER })]);
+  });
+
+  it('an unscoped invoke writes its ledger row to the actor, and is refused once that user budget is spent', async () => {
+    userBudgets.rows().push({ userId: USER, allocatedUsd: 1_000, hardCapUsd: null, note: null, setBy: 'u-release' });
+    const ok = await invoke();
+    expect(ok.status).toBe(200);
+    expect(invokeRows()).toEqual([expect.objectContaining({ actorId: USER, initiativeId: null })]);
+    expect(mockHolds()).toEqual([expect.objectContaining({ actorId: USER, initiativeId: null })]);
+
+    userBudgets.reset();
+    const spent = (await userSpendThisPeriod(USER)).spentUsd;
+    userBudgets.rows().push({ userId: USER, allocatedUsd: spent, hardCapUsd: spent, note: null, setBy: 'u-release' });
+    const refused = await invoke();
+    expect(refused.status).toBe(403);
+    expect(refused.body).toMatchObject({ gate: 'user-cap', userBudget: { userId: USER } });
+    expect(agentcore.invokeAgentStreaming).toHaveBeenCalledTimes(1);
+  });
+
+  it('an invoke with neither an initiative nor an actor is refused; allow lets it through', async () => {
+    principal = null as unknown as typeof principal;
+    const res = await invoke();
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ gate: 'spend-hold' });
+    expect(agentcore.invokeAgentStreaming).not.toHaveBeenCalled();
+
+    process.env['SPEND_HOLDS_UNATTRIBUTED'] = 'allow';
+    try {
+      expect((await invoke()).status).toBe(200);
+      expect(invokeRows()).toEqual([expect.objectContaining({ actorId: null, initiativeId: null })]);
+    } finally {
+      delete process.env['SPEND_HOLDS_UNATTRIBUTED'];
+    }
+  });
+});
+
 describe('the per-user rate limit', () => {
   it('the 31st invoke in a minute is 429; another user is unaffected', async () => {
     for (let i = 0; i < 30; i++) expect((await invoke()).status).toBe(200);
