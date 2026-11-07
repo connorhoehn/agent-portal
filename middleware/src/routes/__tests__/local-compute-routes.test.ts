@@ -84,7 +84,7 @@ jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 import express from 'express';
 import http from 'node:http';
 import request, { attachToSharedServer } from '../../test-support/http.js';
-import { localComputeRouter } from '../local-compute.js';
+import { localComputeRouter, normaliseRepo } from '../local-compute.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { clearAuthzCache } from '../../lib/authz.js';
 import { resetRateLimits } from '../../lib/rate-limit.js';
@@ -2017,6 +2017,20 @@ describe('handing a machine work', () => {
       expect((await getJob(bare.body.id))!.payload).toMatchObject({ repo: 'https://github.com/acme/api' });
       const https = await hand(app, node.nodeId, { repo: 'https://github.com/acme/api.git' });
       expect((await getJob(https.body.id))!.payload).toMatchObject({ repo: 'https://github.com/acme/api.git' });
+    });
+
+    it('trusts a github.com URL only by its prefix, never because the string mentions github.com', async () => {
+      // `evil.com/github.com` was returned verbatim because the check was
+      // `raw.includes('github.com')`. Read as owner/name it can only ever be
+      // a github.com repository.
+      expect(normaliseRepo('evil.com/github.com')).toBe('https://github.com/evil.com/github.com');
+      for (const raw of ['https://evil.com/github.com/x', 'http://github.com/acme/api', 'ssh://git@github.com/acme/api',
+        'https://github.com.evil.com/acme/api', 'git@evil.com:github.com/acme', 'https://github.com/acme/api/extra']) {
+        expect([raw, normaliseRepo(raw)]).toEqual([raw, null]);
+      }
+      expect(normaliseRepo('https://github.com/acme/api')).toBe('https://github.com/acme/api');
+      expect(normaliseRepo('git@github.com:acme/api.git')).toBe('git@github.com:acme/api.git');
+      expect(normaliseRepo('acme/api.git')).toBe('https://github.com/acme/api.git');
     });
 
     it('does not park a run with no repo in review — there is no capture to look at', async () => {

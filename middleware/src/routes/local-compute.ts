@@ -1241,11 +1241,12 @@ async function ownedNode(req: Request, res: Response): Promise<ComputeNode | nul
  * section 7, middleware).
  */
 export function normaliseRepo(raw: string): string | null {
-  const m = /^(?:https:\/\/github\.com\/|git@github\.com:)?([^/:\s]+\/[^/:\s]+?)(\.git)?$/.exec(raw);
-  if (!m) return null;
-  const full = m[1]!;
+  // The prefix decides the form; nothing else in the string does (a check for
+  // "contains github.com" passed `evil.com/github.com` through verbatim).
+  const prefix = ['https://github.com/', 'git@github.com:'].find((p) => raw.startsWith(p)) ?? '';
+  const full = raw.slice(prefix.length).replace(/\.git$/, '');
   if (!REPO_FULL_NAME_RE.test(full) || full.split('/').some((seg) => /^\.+$/.test(seg) || seg.startsWith('-'))) return null;
-  return raw.includes('github.com') ? raw : `https://github.com/${full}`;
+  return prefix ? raw : `https://github.com/${raw}`;
 }
 
 localComputeRouter.post(

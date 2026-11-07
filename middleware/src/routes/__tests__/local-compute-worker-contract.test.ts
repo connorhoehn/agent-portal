@@ -94,3 +94,21 @@ describe('local-compute-worker.mjs — no shell, no blanket permissions', () => 
     expect(source).toMatch(/function ensureRepo\(repoUrl\) \{[\s\S]*?REPO_URL_RE\.test\(repoUrl\)/);
   });
 });
+
+// Review follow-up: Write/Edit plus `Bash(git commit:*)` let a run write
+// .git/hooks/pre-commit and then commit, which runs the hook: a shell by
+// another name. Writes under .git/ are denied outright.
+describe('local-compute-worker.mjs — nothing writes under .git/', () => {
+  it('denies writes under .git/ and passes the deny list to claude', () => {
+    // Edit(path) deny rules cover every file-editing tool (Write and
+    // NotebookEdit too); Claude Code ignores Write(path) deny rules.
+    expect(source).toContain("const DISALLOWED_TOOLS = ['Edit(./.git/**)', 'Edit(**/.git/**)'];");
+    expect(source).toContain("'--disallowedTools', DISALLOWED_TOOLS.join(',')");
+  });
+
+  it('says in its header that a local:task run cannot run tests until LOCAL_ALLOWED_TOOLS widens the list', () => {
+    const header = source.slice(0, source.indexOf('import '));
+    expect(header).toMatch(/cannot run (the repo's )?tests/);
+    expect(header).toContain('LOCAL_ALLOWED_TOOLS');
+  });
+});

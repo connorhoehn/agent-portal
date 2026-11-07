@@ -17,6 +17,16 @@
 //     of feature tickets is not what that is for. ANTHROPIC_MODEL may name a
 //     Sonnet or Haiku id; anything else refuses to start.
 //
+//   PERMISSIONS. A run gets an explicit tool allowlist (ALLOWED_TOOLS below:
+//     read, search, edit and git status/diff/log/show/add/commit in the
+//     checkout), a deny list for anything under .git/, and --permission-mode
+//     dontAsk, so whatever is not allowed is refused, never prompted for. It is
+//     never started with --dangerously-skip-permissions. One consequence to
+//     know: a `local:task` run cannot run the repo's tests (no `npm test`, no
+//     general shell) until the operator widens the list on this machine with
+//     LOCAL_ALLOWED_TOOLS, e.g. adding `Bash(npm test:*)`. Do that only for
+//     repos you trust: an edit to package.json plus `npm test` is a shell.
+//
 //   loopback — a local inference server (llama-server, Ollama, vLLM, anything
 //     speaking the Anthropic Messages API) at ANTHROPIC_BASE_URL. Claude Code
 //     is pointed at it through --settings with a placeholder key, and told a
@@ -132,6 +142,14 @@ const DEFAULT_ALLOWED_TOOLS = [
 const ALLOWED_TOOLS = process.env.LOCAL_ALLOWED_TOOLS
   ? process.env.LOCAL_ALLOWED_TOOLS.split(',').map((t) => t.trim()).filter(Boolean)
   : DEFAULT_ALLOWED_TOOLS;
+// Never widened by LOCAL_ALLOWED_TOOLS, and deny wins over allow. A run that
+// could write .git/ could plant .git/hooks/pre-commit (or point core.hooksPath
+// somewhere) and then `git commit`, which runs the hook: a shell by another
+// name. Both the checkout's own .git and any nested one are covered. Only
+// Edit(path) rules are matched by Claude Code's file checks, and they cover
+// every file-editing tool (Write and NotebookEdit included); the CLI warns
+// about and ignores Write(path) / NotebookEdit(path) deny rules.
+const DISALLOWED_TOOLS = ['Edit(./.git/**)', 'Edit(**/.git/**)'];
 
 // Bumped by hand when this file's behaviour changes in a way worth seeing on
 // the fleet view (a job kind added, a claim-loop fix). Reported in
@@ -802,6 +820,7 @@ function runTask(config, jobId, cwd, prompt, systemNote = null) {
     '--verbose',
     ...(ANTHROPIC_MODEL ? ['--model', ANTHROPIC_MODEL] : []),
     '--allowedTools', ALLOWED_TOOLS.join(','),
+    '--disallowedTools', DISALLOWED_TOOLS.join(','),
     '--permission-mode', 'dontAsk',
     ...(settingsOverride ? ['--settings', settingsOverride] : []),
     // R8: only when the skills install and the frozen brief disagree (the brief's bytes stay as frozen).
