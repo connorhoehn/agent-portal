@@ -183,6 +183,9 @@ services:
       - WSG_PRESENCE_REGISTRY_ENABLED=true
       - WSG_PRESENCE_REGISTRY_AUTHORITATIVE=true
       - SKIP_AUTH=true
+      # The gateway refuses SKIP_AUTH without the explicit dev flags (realtime-examples 0.2.x).
+      - INSECURE_DEV_MODE=true
+      - INSECURE_DEV_MODE_ALLOW_NETWORK_BIND=true
       - COGNITO_REGION=${SOCIAL_COGNITO_REGION:-us-east-1}
       - COGNITO_USER_POOL_ID=${SOCIAL_COGNITO_USER_POOL_ID:-us-east-1_localdev000}
       - REDIS_ENDPOINT=social-redis
