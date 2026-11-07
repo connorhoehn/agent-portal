@@ -45,6 +45,8 @@ export interface SynthesisedApp {
   readonly stackNames: string[];
   /** Stack name -> `aws://account/region` as written in the cloud assembly manifest. */
   readonly environments: Record<string, string>;
+  /** Stack name -> error annotations (`aws:cdk:error`), e.g. cdk-nag findings. */
+  readonly errors: Record<string, string[]>;
   /** true when the app produced a template for this stack name. */
   has(stackName: string): boolean;
 }
@@ -104,9 +106,15 @@ export function synthApp(context: Record<string, string> = {}): SynthesisedApp {
     templates[name] = JSON.parse(fs.readFileSync(path.join(outdir, file), 'utf8'));
   }
   const environments: Record<string, string> = {};
+  const errors: Record<string, string[]> = {};
   const manifest = JSON.parse(fs.readFileSync(path.join(outdir, 'manifest.json'), 'utf8'));
   for (const [name, artifact] of Object.entries<any>(manifest.artifacts ?? {})) {
     if (artifact.type === 'aws:cloudformation:stack') environments[name] = artifact.environment;
+    for (const [where, entries] of Object.entries<any>(artifact.metadata ?? {})) {
+      for (const e of entries as any[]) {
+        if (e.type === 'aws:cdk:error') (errors[name] ??= []).push(`${where}: ${typeof e.data === 'string' ? e.data : JSON.stringify(e.data)}`);
+      }
+    }
   }
   fs.rmSync(outdir, { recursive: true, force: true });
 
@@ -114,6 +122,7 @@ export function synthApp(context: Record<string, string> = {}): SynthesisedApp {
     templates,
     stackNames: Object.keys(templates).sort(),
     environments,
+    errors,
     has: (stackName: string) => stackName in templates,
     template(stackName: string) {
       const t = templates[stackName];

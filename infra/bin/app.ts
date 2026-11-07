@@ -26,6 +26,7 @@ import { SocialMediaStack } from '../lib/social-media-stack';
 import { SocialStack } from '../lib/social-stack';
 import { PortalStack } from '../lib/portal-stack';
 import { contextFlag, dbMasterSecret as dbMasterSecretFlag } from '../lib/context-flags';
+import { applyNag } from '../lib/nag';
 
 const app = new cdk.App();
 
@@ -622,5 +623,10 @@ if (ctxFlag('deployPortal')) {
   });
   portal.addDependency(middlewareService);
 }
+
+// cdk-nag AwsSolutions over every stack, with the reviewed suppressions in
+// infra/nag-suppressions.ts (`--context nag=false` to skip, `nag=true` to
+// require it). See lib/nag.ts.
+applyNag(app, app.node.children.filter((c): c is cdk.Stack => c instanceof cdk.Stack));
 
 app.synth();
