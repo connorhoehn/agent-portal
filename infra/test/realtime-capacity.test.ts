@@ -41,7 +41,7 @@ describe('#2 the realtime gateway runs as exactly one task', () => {
   const on = Template.fromStack(middlewareServiceStack({ realtimeGateway: 'true' }));
   const off = Template.fromStack(middlewareServiceStack());
 
-  test('no autoscaling, stop-before-start, a whole core and 2 GB, a short drain', () => {
+  test('no autoscaling, stop-before-start, 2 vCPU and 4 GB (the measured 1,000-socket size), a short drain', () => {
     on.resourceCountIs('AWS::ApplicationAutoScaling::ScalableTarget', 0);
     on.hasResourceProperties('AWS::ECS::Service', {
       DeploymentConfiguration: Match.objectLike({ MinimumHealthyPercent: 0, MaximumPercent: 100 }),
@@ -49,8 +49,8 @@ describe('#2 the realtime gateway runs as exactly one task', () => {
       AvailabilityZoneRebalancing: 'DISABLED',
     });
     const { td } = container(on, 'middleware');
-    assert.equal(td.Properties.Cpu, '1024');
-    assert.equal(td.Properties.Memory, '2048');
+    assert.equal(td.Properties.Cpu, '2048');
+    assert.equal(td.Properties.Memory, '4096');
     on.hasResourceProperties('AWS::ElasticLoadBalancingV2::TargetGroup', {
       TargetGroupAttributes: Match.arrayWith([{ Key: 'deregistration_delay.timeout_seconds', Value: '15' }]),
     });
@@ -92,8 +92,10 @@ describe('#2 the realtime gateway runs as exactly one task', () => {
   });
 
   test('middlewareCpu / middlewareMemoryMiB size it; asking to autoscale the gateway is refused', () => {
-    const big = Template.fromStack(middlewareServiceStack({ realtimeGateway: 'true', middlewareCpu: '2048', middlewareMemoryMiB: '4096' }));
-    assert.equal(container(big, 'middleware').td.Properties.Cpu, '2048');
+    const big = Template.fromStack(middlewareServiceStack({ realtimeGateway: 'true', middlewareCpu: '4096', middlewareMemoryMiB: '8192' }));
+    assert.equal(container(big, 'middleware').td.Properties.Cpu, '4096');
+    const small = Template.fromStack(middlewareServiceStack({ realtimeGateway: 'true', middlewareCpu: '1024', middlewareMemoryMiB: '2048' }));
+    assert.equal(container(small, 'middleware').td.Properties.Cpu, '1024');
     assert.throws(() => middlewareServiceStack({ realtimeGateway: 'true', middlewareAutoscale: 'true' }), /one-task realtime gateway safeguard/);
     assert.throws(() => middlewareServiceStack({ middlewareCpu: 'lots' }), /middlewareCpu/);
   });

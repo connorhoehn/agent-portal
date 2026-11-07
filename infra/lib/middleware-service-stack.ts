@@ -1203,9 +1203,11 @@ export class MiddlewareServiceStack extends cdk.Stack {
     //   - a short deregistration delay, because with stop-before-start the old
     //     task drains for the WHOLE delay (300 s default) before the new one
     //     starts — that delay is the signalling blackout per deploy;
-    //   - 1 vCPU / 2 GB by default: Node needs one whole core, and Fargate's
-    //     512 is half of one, shared with REST, agent SSE and the pollers.
-    //     ~1,000 sockets is tens of MB; the core is what runs out first.
+    //   - 2 vCPU / 4 GB by default: the only size measured to hold 1,000
+    //     sockets and 100 calls with no errors (chat p95 ~0.7 s, health p99
+    //     19–45 ms; docs/spend-map.md). At 1 vCPU the BFF sat at 100 % of one
+    //     core and chat p95 was 1.2–1.8 s; 4 vCPU measured no better.
+    // Without the gateway the size is unchanged: 0.5 vCPU / 1 GB.
     // `middlewareCpu` / `middlewareMemoryMiB` override the size either way.
     const realtimePinned = realtime.enabled;
     const ctxNum = (k: string, fallback: number): number => {
@@ -1215,8 +1217,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
       if (!Number.isInteger(n) || n <= 0) throw new Error(`${k} must be a positive integer, got ${String(raw)}`);
       return n;
     };
-    const taskCpu = ctxNum('middlewareCpu', realtimePinned ? 1024 : 512);
-    const taskMemory = ctxNum('middlewareMemoryMiB', realtimePinned ? 2048 : 1024);
+    const taskCpu = ctxNum('middlewareCpu', realtimePinned ? 2048 : 512);
+    // Fargate's floor for 2 vCPU is 4 GB.
+    const taskMemory = ctxNum('middlewareMemoryMiB', realtimePinned ? 4096 : 1024);
     // `autoscale` was decided above, with the Redis rule (DE-47).
 
     // ── Fargate service via L2 pattern ─────────────────────────────────────
