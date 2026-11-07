@@ -197,10 +197,23 @@ export async function getPairingCodeStatus(code: string, ownerId: string): Promi
   };
 }
 
+/** A server-minted node id, for a claim that names none or one it may not have. */
+export function freshNodeId(): string {
+  return `node-${randomBytes(6).toString('hex')}`;
+}
+
 /**
  * Claim a pairing code: single-use, atomically — the UPDATE stamps
  * claimed_at only where it is still NULL and unexpired, so two racing claims
  * cannot both mint a node from one code.
+ *
+ * The machine may suggest its node id (so a re-pair keeps its history), but
+ * the suggestion only re-pairs a node that is live AND belongs to the code's
+ * owner. Anything else — another person's node, or a revoked one — gets a
+ * fresh id and the existing row is left exactly as it was. The claim used to
+ * rotate whichever node it named and clear `revoked_at`, so pairing your own
+ * laptop under someone else's id took their machine over (docs/next-steps.md
+ * section 8, package 6).
  */
 export async function claimPairingCode(
   code: string,
@@ -208,12 +221,12 @@ export async function claimPairingCode(
 ): Promise<ClaimedNode | null> {
   const token = TOKEN_PREFIX + randomBytes(24).toString('hex');
   const tokenHash = hashToken(token);
-  const nodeId = node.nodeId?.trim() || `node-${randomBytes(6).toString('hex')}`;
+  const nodeId = node.nodeId?.trim() || freshNodeId();
 
   if (config.mock.aurora) {
     const claimed = mockClaimPairingCode(code.toUpperCase(), {
       nodeId, label: node.label, platform: node.platform ?? null, tokenHash,
-    });
+    }, freshNodeId);
     return claimed ? { nodeId: claimed.id, nodeToken: token } : null;
   }
 
@@ -227,18 +240,27 @@ export async function claimPairingCode(
   const ownerId = claimed[0] ? toStr(claimed[0]['owner_id']) : null;
   if (!ownerId) return null;
 
-  await exec(
-    `INSERT INTO compute_nodes (id, owner_id, label, platform, token_hash)
-     VALUES (:id, :owner, :label, :platform, :hash)
-     ON CONFLICT (id) DO UPDATE
-       SET label = EXCLUDED.label, platform = EXCLUDED.platform,
-           token_hash = EXCLUDED.token_hash, revoked_at = NULL`,
-    [
-      s('id', nodeId), s('owner', ownerId), s('label', node.label),
-      s('platform', node.platform ?? ''), s('hash', tokenHash),
-    ],
-  );
-  return { nodeId, nodeToken: token };
+  // The suggested id first; on a conflict the UPDATE applies only to the
+  // owner's own live node, otherwise no row comes back and a fresh id is
+  // inserted instead (a second collision on 48 random bits is retried once
+  // more rather than assumed impossible).
+  for (const id of [nodeId, freshNodeId(), freshNodeId()]) {
+    const rows = await exec(
+      `INSERT INTO compute_nodes (id, owner_id, label, platform, token_hash)
+       VALUES (:id, :owner, :label, :platform, :hash)
+       ON CONFLICT (id) DO UPDATE
+         SET label = EXCLUDED.label, platform = EXCLUDED.platform,
+             token_hash = EXCLUDED.token_hash
+         WHERE compute_nodes.owner_id = EXCLUDED.owner_id AND compute_nodes.revoked_at IS NULL
+       RETURNING id`,
+      [
+        s('id', id), s('owner', ownerId), s('label', node.label),
+        s('platform', node.platform ?? ''), s('hash', tokenHash),
+      ],
+    );
+    if (rows[0]) return { nodeId: toStr(rows[0]['id']), nodeToken: token };
+  }
+  throw new Error('could not mint a node id for this pairing');
 }
 
 // ─── Token auth + reads ──────────────────────────────────────────────────────

@@ -105,10 +105,11 @@ describe('the agent job queue (agent-jobs)', () => {
     freeze('2026-09-16T09:00:00.000Z');
     const beforeIds = (await listJobs({ limit: 200 })).map((j) => j.id).sort();
 
-    const job = await enqueueJob({ kind: 'devbox:task', title: 'jest-hook smoke test' });
+    const job = await enqueueJob({ kind: 'devbox:task', title: 'jest-hook smoke test', payload: { nodeId: 'node-operator-thinkpad' } });
     const claim = await claimNextJobForWorker({
       boxId: 'local-node-operator-thinkpad',
       sessionId: 'sess-jest-hook',
+      nodeId: 'node-operator-thinkpad',
       // `devbox:task` is not a local kind, but claimNextJobForWorker only
       // filters by the kinds THIS call asks for — proving the token map
       // itself resets, not the routing rules, is the point here.

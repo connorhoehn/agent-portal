@@ -99,6 +99,7 @@ jest.mock('../../providers/doc-linker.js', () => ({
   analyzeDocumentLinks: jest.fn(), analyzeDocumentFindings: jest.fn(),
 }));
 jest.mock('../../providers/lab.js', () => ({ listConsults: jest.fn() }));
+jest.mock('../../providers/local-compute.js', () => ({ getNode: jest.fn() }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
 import request from '../../test-support/http.js';
@@ -119,6 +120,7 @@ import { listProposals, decideProposal, proposeGraphChange, proposalStats } from
 import { dispatcherEvents, dispatchOnce, busyBoxes } from '../../lib/job-dispatcher.js';
 import { analyzeDocumentLinks, analyzeDocumentFindings } from '../../providers/doc-linker.js';
 import { listConsults } from '../../providers/lab.js';
+import { getNode } from '../../providers/local-compute.js';
 
 const m = <T,>(fn: T): jest.Mock => fn as unknown as jest.Mock;
 
@@ -266,6 +268,57 @@ describe('GET /api/work/ask-suggestions', () => {
 });
 
 // ── Jobs ───────────────────────────────────────────────────────────────────
+
+// docs/next-steps.md section 8, package 6: a `local:*` job runs on a person's
+// own laptop, so it must name a machine the caller owns. An untargeted one was
+// claimable by every paired worker, so any ManageDevbox holder could run a
+// prompt on someone else's machine.
+describe('POST /api/work/jobs — local kinds bind to an owned node', () => {
+  const NODE = { id: 'node-nora', ownerId: 'u-nora', revokedAt: null };
+
+  it('400s a local:* job with no nodeId, and queues nothing', async () => {
+    const res = await request(buildApp()).post('/api/work/jobs')
+      .send({ title: 't', prompt: 'p', kind: 'local:task' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/nodeId/);
+    expect(enqueueJob).not.toHaveBeenCalled();
+  });
+
+  it('403s a local:* job naming someone else\'s node, or one that does not exist', async () => {
+    m(getNode).mockResolvedValueOnce({ ...NODE, id: 'node-raj', ownerId: 'u-raj' });
+    const theirs = await request(buildApp()).post('/api/work/jobs')
+      .send({ title: 't', prompt: 'p', kind: 'local:task', nodeId: 'node-raj' });
+    expect(theirs.status).toBe(403);
+    m(getNode).mockResolvedValueOnce(null);
+    const ghost = await request(buildApp()).post('/api/work/jobs')
+      .send({ title: 't', prompt: 'p', kind: 'local:task', nodeId: 'node-ghost' });
+    expect(ghost.status).toBe(403);
+    m(getNode).mockResolvedValueOnce({ ...NODE, revokedAt: '2026-11-01T00:00:00.000Z' });
+    const revoked = await request(buildApp()).post('/api/work/jobs')
+      .send({ title: 't', prompt: 'p', kind: 'local:task', nodeId: 'node-nora' });
+    expect(revoked.status).toBe(403);
+    expect(enqueueJob).not.toHaveBeenCalled();
+  });
+
+  it('queues a local:* job targeted at the caller\'s own node', async () => {
+    m(getNode).mockResolvedValueOnce(NODE);
+    m(enqueueJob).mockResolvedValue({ id: 'job-1', status: 'queued', payload: {} });
+    const res = await request(buildApp()).post('/api/work/jobs')
+      .send({ title: 't', prompt: 'p', kind: 'local:task', nodeId: 'node-nora' });
+    expect(res.status).toBe(201);
+    expect((m(enqueueJob).mock.calls[0]![0] as { payload: Record<string, unknown> }).payload)
+      .toMatchObject({ nodeId: 'node-nora' });
+  });
+
+  it('ignores nodeId on a devbox:task (the cloud fleet is not targeted)', async () => {
+    m(enqueueJob).mockResolvedValue({ id: 'job-1', status: 'queued', payload: {} });
+    const res = await request(buildApp()).post('/api/work/jobs')
+      .send({ title: 't', prompt: 'p', nodeId: 'node-raj' });
+    expect(res.status).toBe(201);
+    expect(getNode).not.toHaveBeenCalled();
+    expect((m(enqueueJob).mock.calls[0]![0] as { payload: Record<string, unknown> }).payload).not.toHaveProperty('nodeId');
+  });
+});
 
 describe('POST /api/work/jobs — attribution', () => {
   const JOB = { id: 'job-1', status: 'queued', payload: {} };

@@ -129,6 +129,7 @@ import {
   emitLocalSessionEnd,
 } from '../work-graph/compute-emitter.js';
 import { invalidateComputeCapabilitySource } from '../work-graph/compute-capability-runtime.js';
+import { REPO_FULL_NAME_RE } from '../lib/repo-token-provider.js';
 
 export const localComputeRouter = Router();
 
@@ -1230,6 +1231,23 @@ async function ownedNode(req: Request, res: Response): Promise<ComputeNode | nul
   return node;
 }
 
+/**
+ * The one shape of `repo` a machine is handed: a GitHub repository, as
+ * `owner/name`, `https://github.com/owner/name[.git]` or
+ * `git@github.com:owner/name[.git]`, with owner/name held to the same
+ * pattern the GitHub token provider uses (lib/repo-token-provider.ts). A bare
+ * `owner/name` is stored as its https URL. Anything else is null: the worker
+ * clones this string, and it once reached a shell (docs/next-steps.md
+ * section 7, middleware).
+ */
+export function normaliseRepo(raw: string): string | null {
+  const m = /^(?:https:\/\/github\.com\/|git@github\.com:)?([^/:\s]+\/[^/:\s]+?)(\.git)?$/.exec(raw);
+  if (!m) return null;
+  const full = m[1]!;
+  if (!REPO_FULL_NAME_RE.test(full) || full.split('/').some((seg) => /^\.+$/.test(seg) || seg.startsWith('-'))) return null;
+  return raw.includes('github.com') ? raw : `https://github.com/${full}`;
+}
+
 localComputeRouter.post(
   '/nodes/:nodeId/work',
   browserTenant,
@@ -1246,7 +1264,14 @@ localComputeRouter.post(
     };
     let title = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : '';
     let prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
-    let repo = typeof body.repo === 'string' && body.repo.trim() ? body.repo.trim().slice(0, 400) : null;
+    let repo: string | null = null;
+    if (typeof body.repo === 'string' && body.repo.trim()) {
+      repo = normaliseRepo(body.repo.trim().slice(0, 400));
+      if (!repo) {
+        res.status(400).json({ error: 'repo must be a GitHub repository: owner/name, https://github.com/owner/name or git@github.com:owner/name' });
+        return;
+      }
+    }
     // What the row remembers about where it came from — the pick list on the
     // Local compute page hands a machine an initiative's work item or a bot's
     // mission, never a typed prompt. Both keep the governed checks their

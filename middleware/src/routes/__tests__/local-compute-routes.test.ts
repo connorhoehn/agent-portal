@@ -359,6 +359,40 @@ describe('POST /api/local-compute/pair/claim', () => {
     expect(other.status).toBe(404);
   });
 
+  // docs/next-steps.md section 8, package 6: the claim used to accept a
+  // caller-chosen node id and rotate THAT node's token, so pairing your own
+  // laptop under someone else's node id took their machine over.
+  it('a claim naming another owner\'s node id gets a fresh id and leaves the original token valid', async () => {
+    const mia = await pair({ sub: 'u-mia' }, { label: 'mia-mbp', nodeId: 'node-mia-1' });
+    expect(mia.nodeId).toBe('node-mia-1');
+    const raj = await pair({ sub: 'u-raj' }, { label: 'raj-mbp', nodeId: 'node-mia-1' });
+    expect(raj.nodeId).not.toBe('node-mia-1');
+    // Mia's machine still answers to her token and is still hers.
+    const reg = await request(anon()).post(`${BASE}/register`).set(bearer(mia.nodeToken)).send({ jobKinds: ['local:task'] });
+    expect(reg.status).toBe(200);
+    const miaNodes = (await request(as('member', 'u-mia')).get(`${BASE}/nodes`)).body.nodes.map((n: { id: string; label: string }) => [n.id, n.label]);
+    expect(miaNodes).toContainEqual(['node-mia-1', 'mia-mbp']);
+    const rajNodes = (await request(as('member', 'u-raj')).get(`${BASE}/nodes`)).body.nodes.map((n: { id: string }) => n.id);
+    expect(rajNodes).toEqual([raj.nodeId]);
+  });
+
+  it('the same owner re-pairing a live node keeps its id and rotates its token', async () => {
+    const first = await pair({ sub: 'u-mia' }, { label: 'mia-mbp', nodeId: 'node-mia-2' });
+    const again = await pair({ sub: 'u-mia' }, { label: 'mia-mbp-renamed', nodeId: 'node-mia-2' });
+    expect(again.nodeId).toBe('node-mia-2');
+    expect((await request(anon()).post(`${BASE}/register`).set(bearer(first.nodeToken)).send({})).status).toBe(401);
+    expect((await request(anon()).post(`${BASE}/register`).set(bearer(again.nodeToken)).send({})).status).toBe(200);
+  });
+
+  it('never revives a revoked node: re-pairing its id mints a fresh one', async () => {
+    const first = await pair({ sub: 'u-mia' }, { label: 'mia-mbp', nodeId: 'node-mia-3' });
+    expect((await request(as('member', 'u-mia')).delete(`${BASE}/nodes/${first.nodeId}`)).status).toBe(200);
+    const again = await pair({ sub: 'u-mia' }, { label: 'mia-mbp', nodeId: 'node-mia-3' });
+    expect(again.nodeId).not.toBe('node-mia-3');
+    const ids = (await request(as('member', 'u-mia')).get(`${BASE}/nodes`)).body.nodes.map((n: { id: string }) => n.id);
+    expect(ids).not.toContain('node-mia-3');
+  });
+
   it('slices the caller-supplied label, nodeId and platform to their column widths', async () => {
     const started = await request(as('member')).post('/api/local-compute/pair/start').send({});
     const claimed = await request(anon()).post('/api/local-compute/pair/claim').send({
@@ -1343,8 +1377,9 @@ async function readyWorker(
   return node;
 }
 
-async function queueLocal(title: string, payload: Record<string, unknown> = {}) {
-  const job = await enqueueJob({ kind: 'local:task', title, payload, createdBy: 'u-mia' });
+/** Queue a local job targeted at `node` (null: untargeted, which no machine may claim). */
+async function queueLocal(node: Paired | null, title: string, payload: Record<string, unknown> = {}) {
+  const job = await enqueueJob({ kind: 'local:task', title, payload: { ...(node ? { nodeId: node.nodeId } : {}), ...payload }, createdBy: 'u-mia' });
   expect(job).not.toBeNull();
   return job!;
 }
@@ -1459,7 +1494,7 @@ describe('POST /api/local-compute/claim', () => {
     const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
     await request(as('member', 'u-mia')).patch(`${BASE}/nodes/${node.nodeId}`).send({ acceptJobs: true });
     await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({ jobKinds: ['local:task'] });
-    const queued = await queueLocal('cutover runbook', { prompt: 'Write the tenant cutover runbook.' });
+    const queued = await queueLocal(node, 'cutover runbook', { prompt: 'Write the tenant cutover runbook.' });
 
     const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(res.status).toBe(200);
@@ -1478,7 +1513,7 @@ describe('POST /api/local-compute/claim', () => {
     const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
     await request(as('member', 'u-mia')).patch(`${BASE}/nodes/${node.nodeId}`).send({ acceptJobs: true });
     await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({ jobKinds: ['local:task'] });
-    await queueLocal('unreviewed', { prompt: 'Do the thing.', requiresReview: false });
+    await queueLocal(node, 'unreviewed', { prompt: 'Do the thing.', requiresReview: false });
 
     const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(res.status).toBe(200);
@@ -1492,7 +1527,7 @@ describe('POST /api/local-compute/claim', () => {
     const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
     await request(as('member', 'u-mia')).patch(`${BASE}/nodes/${node.nodeId}`).send({ acceptJobs: true });
     await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({ jobKinds: ['local:task'] });
-    await queueLocal('no prompt', { repo: 'https://github.com/x/y' });
+    await queueLocal(node, 'no prompt', { repo: 'https://github.com/x/y' });
 
     const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(res.status).toBe(200);
@@ -1510,7 +1545,7 @@ describe('POST /api/local-compute/claim', () => {
   it('409s a machine whose owner has not switched it on, naming the gate', async () => {
     const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
     await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({ jobKinds: ['local:task'] });
-    await queueLocal('nightly distill');
+    await queueLocal(node, 'nightly distill');
 
     const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(res.status).toBe(409);
@@ -1523,7 +1558,7 @@ describe('POST /api/local-compute/claim', () => {
   it('409s a machine that advertised no runnable kind — an empty advertisement is not "everything"', async () => {
     const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
     await request(as('member', 'u-mia')).patch(`${BASE}/nodes/${node.nodeId}`).send({ acceptJobs: true });
-    await queueLocal('nightly distill');
+    await queueLocal(node, 'nightly distill');
 
     const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(res.status).toBe(409);
@@ -1539,7 +1574,7 @@ describe('POST /api/local-compute/claim', () => {
 
   it('never offers a kind the node did not advertise, even when it is the only work queued', async () => {
     const node = await readyWorker({ kinds: ['local:distill'] });
-    await queueLocal('a repo task');       // local:task — advertised by nobody here
+    await queueLocal(node, 'a repo task');       // local:task — advertised by nobody here
     expect((await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({})).status).toBe(204);
   });
 
@@ -1554,7 +1589,7 @@ describe('POST /api/local-compute/claim', () => {
 
   it('hands out the job, a fencing token and ONE session id, and marks the row claimed', async () => {
     const node = await readyWorker();
-    const queued = await queueLocal('nightly distill', { repo: 'aws-agentcore', prompt: 'distil' });
+    const queued = await queueLocal(node, 'nightly distill', { repo: 'aws-agentcore', prompt: 'distil' });
 
     const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(res.status).toBe(200);
@@ -1583,7 +1618,7 @@ describe('POST /api/local-compute/claim', () => {
 
   it('does not hand the fencing token back on a later read — only the holder has it', async () => {
     const node = await readyWorker();
-    const queued = await queueLocal('nightly distill');
+    const queued = await queueLocal(node, 'nightly distill');
     const claim = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(claim.body.claimToken).toBeTruthy();
     // The claim response is the one and only delivery. A worker that loses it
@@ -1593,9 +1628,9 @@ describe('POST /api/local-compute/claim', () => {
 
   it('429s at the node\'s own slot limit, and the limit is counted from the ROWS', async () => {
     const node = await readyWorker({ maxConcurrency: 2 });
-    await queueLocal('one');
-    await queueLocal('two');
-    await queueLocal('three');
+    await queueLocal(node, 'one');
+    await queueLocal(node, 'two');
+    await queueLocal(node, 'three');
 
     const first = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     const second = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
@@ -1622,8 +1657,9 @@ describe('POST /api/local-compute/claim', () => {
   it('gives two machines different jobs — the claim is atomic, not read-then-write', async () => {
     const mia = await readyWorker({ sub: 'u-mia', label: 'mia-mbp' });
     const raj = await readyWorker({ sub: 'u-raj', label: 'raj-mbp' });
-    await queueLocal('one');
-    await queueLocal('two');
+    // Each job names its machine; an untargeted one is claimable by nobody.
+    await queueLocal(mia, 'one');
+    await queueLocal(raj, 'two');
 
     const a = await request(anon()).post(`${BASE}/claim`).set(bearer(mia.nodeToken)).send({});
     const b = await request(anon()).post(`${BASE}/claim`).set(bearer(raj.nodeToken)).send({});
@@ -1636,7 +1672,7 @@ describe('POST /api/local-compute/claim', () => {
 describe('the fenced job writes', () => {
   async function claimed(opts: { sub?: string; label?: string } = {}) {
     const node = await readyWorker(opts);
-    await queueLocal('nightly distill');
+    await queueLocal(node, 'nightly distill');
     const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(res.status).toBe(200);
     return { node, jobId: res.body.job.id as string, claimToken: res.body.claimToken as string };
@@ -1827,7 +1863,7 @@ describe('the fenced job writes', () => {
 
   it('ends the presence session the claim minted, so a finished job leaves no ghost', async () => {
     const node = await readyWorker();
-    await queueLocal('nightly distill');
+    await queueLocal(node, 'nightly distill');
     const claim = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     const sessionId = claim.body.sessionId as string;
 
@@ -1966,6 +2002,23 @@ describe('handing a machine work', () => {
       expect(row!.createdBy).toBe('u-mia');
     });
 
+    it('400s a repo that is not a GitHub owner/name, and normalises a bare owner/name', async () => {
+      // The worker clones `repo`; it used to reach a shell, so a repo field
+      // was a command line (docs/next-steps.md section 7, middleware).
+      const node = await readyWorker();
+      const app = as('member', 'u-mia');
+      for (const repo of ['https://github.com/x/y;touch /tmp/pwned', '$(id)', '--upload-pack=touch /tmp/x',
+        'ext::sh -c touch% /tmp/pwned', 'https://evil.example/x/y', 'https://github.com/../etc', 'acme']) {
+        const res = await hand(app, node.nodeId, { repo });
+        expect([repo, res.status]).toEqual([repo, 400]);
+      }
+      const bare = await hand(app, node.nodeId, { repo: 'acme/api' });
+      expect(bare.status).toBe(201);
+      expect((await getJob(bare.body.id))!.payload).toMatchObject({ repo: 'https://github.com/acme/api' });
+      const https = await hand(app, node.nodeId, { repo: 'https://github.com/acme/api.git' });
+      expect((await getJob(https.body.id))!.payload).toMatchObject({ repo: 'https://github.com/acme/api.git' });
+    });
+
     it('does not park a run with no repo in review — there is no capture to look at', async () => {
       const node = await readyWorker();
       const res = await hand(as('member', 'u-mia'), node.nodeId, { prompt: 'what is 10+10' });
@@ -2039,15 +2092,15 @@ describe('handing a machine work', () => {
       expect(claimed.body.job.id).toBe(handed.body.id);
     });
 
-    it('leaves an untargeted local job claimable by any eligible machine', async () => {
-      // The pre-existing contract, and the reason targeting is a payload field
-      // rather than a schema change: a script or a bot that enqueues local work
-      // without naming a machine still gets whichever one is free.
+    it('refuses an untargeted local job to every machine (docs/next-steps.md section 8, package 6)', async () => {
+      // It used to be claimable by any eligible machine, which put whoever
+      // queued it in charge of a prompt on somebody else's laptop. A local job
+      // runs only on the machine it names.
       const other = await readyWorker({ sub: 'u-raj', label: 'raj-mbp' });
-      const job = await queueLocal('anyone can take this');
+      const job = await queueLocal(null, 'anyone can take this');
       const claimed = await request(anon()).post(`${BASE}/claim`).set(bearer(other.nodeToken)).send({});
-      expect(claimed.status).toBe(200);
-      expect(claimed.body.job.id).toBe(job.id);
+      expect(claimed.status).toBe(204);
+      expect((await getJob(job.id))!.status).toBe('queued');
     });
   });
 
@@ -2121,7 +2174,7 @@ describe('handing a machine work', () => {
 describe('the run logs', () => {
   async function claimed(opts: { sub?: string; label?: string } = {}) {
     const node = await readyWorker(opts);
-    await queueLocal('nightly distill');
+    await queueLocal(node, 'nightly distill');
     const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(res.status).toBe(200);
     return { node, jobId: res.body.job.id as string, claimToken: res.body.claimToken as string };
@@ -2445,7 +2498,7 @@ describe('the node operational log', () => {
 describe('skills for a local run (R8)', () => {
   it('a worker that installs project skills, on a job with a repo, gets a brief that says so', async () => {
     const node = await readyWorker();
-    await queueLocal('with repo', { prompt: 'Fix it.', repo: 'https://github.com/x/y' });
+    await queueLocal(node, 'with repo', { prompt: 'Fix it.', repo: 'https://github.com/x/y' });
     const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({ projectSkills: true });
     expect(res.status).toBe(200);
     expect(res.body.skillLibrary).toMatchObject({ dir: './.claude/skills' });
@@ -2454,13 +2507,13 @@ describe('skills for a local run (R8)', () => {
 
   it('an older worker, or a job with no repo, is told the skills are not on this machine', async () => {
     const node = await readyWorker();
-    await queueLocal('old worker', { prompt: 'Fix it.', repo: 'https://github.com/x/y' });
+    await queueLocal(node, 'old worker', { prompt: 'Fix it.', repo: 'https://github.com/x/y' });
     const old = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
     expect(old.status).toBe(200);
     expect(old.body.skillLibrary?.dir ?? null).toBeNull();
     expect(old.body.job.payload.prompt).not.toContain('installed in `');
 
-    await queueLocal('no repo', { prompt: 'What is 10+10?' });
+    await queueLocal(node, 'no repo', { prompt: 'What is 10+10?' });
     const bare = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({ projectSkills: true });
     expect(bare.status).toBe(200);
     expect(bare.body.skillLibrary?.dir ?? null).toBeNull();
@@ -2468,7 +2521,7 @@ describe('skills for a local run (R8)', () => {
 
   it('serves the library to the claim holder only, and 304s the sha it already has', async () => {
     const node = await readyWorker();
-    await queueLocal('skills', { prompt: 'Fix it.', repo: 'https://github.com/x/y' });
+    await queueLocal(node, 'skills', { prompt: 'Fix it.', repo: 'https://github.com/x/y' });
     const c = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({ projectSkills: true });
     const path = `${BASE}/jobs/${c.body.job.id}/skills`;
 

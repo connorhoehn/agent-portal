@@ -69,3 +69,28 @@ describe('local-compute-worker.mjs — presence is independent of acceptJobs', (
     expect(body).toMatch(/await new Promise/);
   });
 });
+
+// docs/next-steps.md section 8, package 6. The worker cloned with
+// `execSync(\`git clone ${repoUrl} ${name}\`)`, so a job's `repo` was a shell
+// command line, and ran `claude -p --dangerously-skip-permissions`, so a
+// prompt could do anything the operator's account can. Neither may come back.
+describe('local-compute-worker.mjs — no shell, no blanket permissions', () => {
+  it('clones through execFileSync with an argument array and an option terminator', () => {
+    expect(source).not.toMatch(/execSync\(\s*`git clone/);
+    expect(source).toContain("execFileSync('git', ['clone', '--', repoUrl, name]");
+  });
+
+  it('runs no git command through a shell at all', () => {
+    expect(source).not.toMatch(/\bexecSync\(/);
+  });
+
+  it('never passes --dangerously-skip-permissions; it passes an explicit allowlist and denies the rest', () => {
+    expect(source).not.toContain("'--dangerously-skip-permissions'");
+    expect(source).toContain("'--allowedTools', ALLOWED_TOOLS.join(',')");
+    expect(source).toContain("'--permission-mode', 'dontAsk'");
+  });
+
+  it('refuses a repo that is not a GitHub URL before it reaches git', () => {
+    expect(source).toMatch(/function ensureRepo\(repoUrl\) \{[\s\S]*?REPO_URL_RE\.test\(repoUrl\)/);
+  });
+});

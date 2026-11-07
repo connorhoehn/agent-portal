@@ -128,8 +128,8 @@ live('agent job attempts on PostgreSQL', () => {
   });
 
   it('uses the same fencing contract for pull workers and keeps tokens out of reads', async () => {
-    await enqueueJob({ kind: 'devbox:task', title: 'pull', payload: {} });
-    const claim = (await claimNextJobForWorker({ boxId: 'local:a', sessionId: 'a', kinds: ['devbox:task'] }))!;
+    await enqueueJob({ kind: 'devbox:task', title: 'pull', payload: { nodeId: 'a' } });
+    const claim = (await claimNextJobForWorker({ boxId: 'local:a', sessionId: 'a', kinds: ['devbox:task'], nodeId: 'a' }))!;
     expect(claim.claimToken).toEqual(expect.any(String));
     expect(claim.job).not.toHaveProperty('claimToken');
     expect(await getJob(claim.job.id)).not.toHaveProperty('claimToken');
@@ -156,11 +156,11 @@ live('agent job attempts on PostgreSQL', () => {
   });
 
   it('fails closed for every claim path before the fencing migration', async () => {
-    await enqueueJob({ kind: 'devbox:task', title: 'unmigrated', payload: {} });
+    await enqueueJob({ kind: 'devbox:task', title: 'unmigrated', payload: { nodeId: 'a' } });
     await sql('ALTER TABLE agent_jobs DROP COLUMN claim_token;');
     try {
       for (const claim of [() => claimNextJob('a', 'a'), () => claimJob('unused', 'a', 'a'),
-        () => claimNextJobForWorker({ boxId: 'local:a', sessionId: 'a', kinds: ['devbox:task'] })]) {
+        () => claimNextJobForWorker({ boxId: 'local:a', sessionId: 'a', kinds: ['devbox:task'], nodeId: 'a' })]) {
         await expect(claim()).rejects.toThrow('local_compute_worker_schema.sql');
       }
       const [row] = await run('SELECT status, attempts FROM agent_jobs');
@@ -170,11 +170,11 @@ live('agent job attempts on PostgreSQL', () => {
 
 
   it('refuses exhausted queued rows on every claim path', async () => {
-    const job = (await enqueueJob({ kind: 'devbox:task', title: 'budget', payload: {}, maxAttempts: 1 }))!;
+    const job = (await enqueueJob({ kind: 'devbox:task', title: 'budget', payload: { nodeId: 'a' }, maxAttempts: 1 }))!;
     await sql('UPDATE agent_jobs SET attempts = max_attempts;');
     expect(await claimNextJob('a', 'a')).toBeNull();
     expect(await claimJob(job.id, 'a', 'a')).toBeNull();
-    expect(await claimNextJobForWorker({ boxId: 'local:a', sessionId: 'a', kinds: ['devbox:task'] })).toBeNull();
+    expect(await claimNextJobForWorker({ boxId: 'local:a', sessionId: 'a', kinds: ['devbox:task'], nodeId: 'a' })).toBeNull();
   });
 
 });

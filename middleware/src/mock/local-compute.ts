@@ -714,23 +714,29 @@ export function mockPairingCodeStatus(code: string, ownerId: string): PairingCod
 export function mockClaimPairingCode(
   code: string,
   node: { nodeId: string; label: string; platform: string | null; tokenHash: string },
+  freshId: () => string,
 ): ComputeNode | null {
   const nowMs = clock.now().getTime();
   const pending = pairingCodes.rows().find((c) => c.code === code);
   if (!pending || pending.claimedAt !== null || Date.parse(pending.expiresAt) <= nowMs) return null;
   pending.claimedAt = clock.nowIso();
-  pending.claimedNodeId = node.nodeId;
 
-  const existing = byId(node.nodeId);
-  if (existing) {
+  // The same rule as the cluster's ON CONFLICT ... WHERE: only the owner's own
+  // live node is re-paired; another owner's node or a revoked one is left
+  // alone and this claim gets a fresh id.
+  let id = node.nodeId;
+  const existing = byId(id);
+  if (existing && existing.ownerId === pending.ownerId && existing.revokedAt === null) {
+    pending.claimedNodeId = id;
     existing.label = node.label;
     existing.platform = node.platform;
     existing.tokenHash = node.tokenHash;
-    existing.revokedAt = null;
     return toNode(existing);
   }
+  while (byId(id)) id = freshId();
+  pending.claimedNodeId = id;
   const created: ComputeNodeRow = {
-    id: node.nodeId,
+    id,
     ownerId: pending.ownerId,
     label: node.label,
     platform: node.platform,

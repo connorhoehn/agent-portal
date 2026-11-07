@@ -54,6 +54,10 @@
 //                          claude-sonnet-4-5-20250929).
 //   POLL_INTERVAL_S        how often to poll /claim when idle (default: 10)
 //   REPOS_DIR              where to clone/update repos (default: ~/repos-worker)
+//   LOCAL_ALLOWED_TOOLS    comma-separated Claude Code tool rules a run may use, replacing
+//                          the default allowlist below (ALLOWED_TOOLS). Anything not
+//                          listed is denied: the run is started with --permission-mode
+//                          dontAsk, never --dangerously-skip-permissions.
 //   LOCAL_SKILLS           "off" to stop installing the org's skill library (R8) into each
 //                          run's checkout as project skills (default: on; see
 //                          local-compute-skills.mjs — never touches ~/.claude/skills)
@@ -66,7 +70,7 @@
 // and the operator decides whether to restart it.
 
 import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, createWriteStream } from 'node:fs';
-import { execSync, spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { syncProjectSkills, describeSync, skillsNote, BODY_MAX } from './local-compute-skills.mjs';
 import { join, basename, dirname } from 'node:path';
 import { homedir, hostname, platform, arch, loadavg, cpus, totalmem, freemem, uptime } from 'node:os';
@@ -111,6 +115,23 @@ const JOB_KINDS = (process.env.JOB_KINDS ?? 'local:task')
 const MAX_CONCURRENCY = Math.max(1, parseInt(process.env.MAX_CONCURRENCY ?? '2', 10) || 2);
 // R8: install the org's skill library into each run's checkout as project skills.
 const LOCAL_SKILLS = (process.env.LOCAL_SKILLS ?? 'on').toLowerCase() !== 'off';
+
+// What a run may do, as Claude Code permission rules. It used to run with
+// --dangerously-skip-permissions, so a prompt (a work item's text, which other
+// people write) could do anything this machine's account can. The default is
+// a code change in the checkout: read and search it, edit it, follow the
+// org's skills, and look at or commit its git state. No general shell, no
+// network, no package scripts (an edit to package.json plus `npm test` is a
+// shell). An operator who wants the run to execute tests widens it on their
+// own machine with LOCAL_ALLOWED_TOOLS, e.g. adding `Bash(npm test:*)`.
+const DEFAULT_ALLOWED_TOOLS = [
+  'Read', 'Glob', 'Grep', 'Edit', 'Write', 'NotebookEdit', 'TodoWrite', 'Skill',
+  'Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git log:*)', 'Bash(git show:*)',
+  'Bash(git add:*)', 'Bash(git commit:*)', 'Bash(ls:*)',
+];
+const ALLOWED_TOOLS = process.env.LOCAL_ALLOWED_TOOLS
+  ? process.env.LOCAL_ALLOWED_TOOLS.split(',').map((t) => t.trim()).filter(Boolean)
+  : DEFAULT_ALLOWED_TOOLS;
 
 // Bumped by hand when this file's behaviour changes in a way worth seeing on
 // the fleet view (a job kind added, a claim-loop fix). Reported in
@@ -667,25 +688,37 @@ async function shipLog(config, jobId, chunk) {
 
 // ─── Repo sync ───────────────────────────────────────────────────────────────
 
+// The shapes the middleware hands out (routes/local-compute.ts `normaliseRepo`):
+// a GitHub https or ssh URL whose owner/name is plain. Checked here as well, so
+// a row written before that check (or by another enqueuer) never reaches git.
+const REPO_URL_RE = /^(?:https:\/\/github\.com\/|git@github\.com:)[\w.-]+\/[\w.-]+$/;
+
 function ensureRepo(repoUrl) {
   if (!repoUrl) return process.cwd();
+  if (typeof repoUrl !== 'string' || !REPO_URL_RE.test(repoUrl)) {
+    throw new Error(`repo ${JSON.stringify(repoUrl)} is not a GitHub repository URL`);
+  }
   const name = basename(repoUrl, '.git');
+  if (!name || /^\.+$/.test(name) || name.startsWith('-')) throw new Error(`repo name ${JSON.stringify(name)} is not usable`);
   const repoPath = join(REPOS_DIR, name);
 
   if (!existsSync(REPOS_DIR)) mkdirSync(REPOS_DIR, { recursive: true });
 
+  // Every git call takes an argument array and no shell: the job's `repo`
+  // once reached `execSync` as part of a command line.
   if (existsSync(repoPath)) {
     log.step(`updating ${name}`, 1);
     // Discard any local changes — the workspace is ephemeral and the worker is
     // the only writer, so anything uncommitted is leftover junk from a prior run.
-    execSync('git reset --hard HEAD && git clean -fd', { cwd: repoPath, stdio: 'ignore' });
-    execSync('git pull --ff-only', { cwd: repoPath, stdio: 'ignore' });
+    execFileSync('git', ['reset', '--hard', 'HEAD'], { cwd: repoPath, stdio: 'ignore' });
+    execFileSync('git', ['clean', '-fd'], { cwd: repoPath, stdio: 'ignore' });
+    execFileSync('git', ['pull', '--ff-only'], { cwd: repoPath, stdio: 'ignore' });
   } else {
     log.step(`cloning ${name}`, 1);
     // The machine uses its OWN git credentials, not a borrowed token. Shipping
     // the middleware's GitHub token to a laptop would make a stolen node token
     // a way to clone every private repo the service account can reach.
-    execSync(`git clone ${repoUrl} ${name}`, { cwd: REPOS_DIR, stdio: 'ignore' });
+    execFileSync('git', ['clone', '--', repoUrl, name], { cwd: REPOS_DIR, stdio: 'ignore' });
   }
   return repoPath;
 }
@@ -737,10 +770,12 @@ function runTask(config, jobId, cwd, prompt, systemNote = null) {
 
   // The command built here is what the devbox agent does, minus the microVM
   // glue: `claude -p` with --model (must be recognized by Claude Code even
-  // though llama.cpp ignores it), --dangerously-skip-permissions (the machine IS
-  // the sandbox), and --settings (env block outranks process.env, so this is the
-  // only way to reliably point at loopback). The prompt is passed as a single
-  // string argument, not via stdin.
+  // though llama.cpp ignores it), an explicit tool allowlist with
+  // --permission-mode dontAsk (anything not on ALLOWED_TOOLS is denied rather
+  // than prompted for; this machine is a person's laptop, not a sandbox), and
+  // --settings (env block outranks process.env, so this is the only way to
+  // reliably point at loopback). The prompt is passed as a single string
+  // argument, not via stdin.
   //
   // `--output-format stream-json` rather than `json`, and it is what makes the
   // log worth having: `json` buffers the ENTIRE run and emits one object at
@@ -766,7 +801,8 @@ function runTask(config, jobId, cwd, prompt, systemNote = null) {
     '--output-format', 'stream-json',
     '--verbose',
     ...(ANTHROPIC_MODEL ? ['--model', ANTHROPIC_MODEL] : []),
-    '--dangerously-skip-permissions',
+    '--allowedTools', ALLOWED_TOOLS.join(','),
+    '--permission-mode', 'dontAsk',
     ...(settingsOverride ? ['--settings', settingsOverride] : []),
     // R8: only when the skills install and the frozen brief disagree (the brief's bytes stay as frozen).
     ...(systemNote ? ['--append-system-prompt', systemNote] : []),

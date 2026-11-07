@@ -695,8 +695,10 @@ export function _resetPullSideProbe(): void { _resetColumnProbes(); }
  * could ask for — a second machine (or another person's) would win the race
  * about as often. That is not only surprising, it puts the prompt text of a run
  * you scoped to your own hardware on somebody else's disk. A job with no
- * `nodeId` stays claimable by any eligible machine, which is the behaviour every
- * existing caller already relies on; the portal always targets.
+ * `nodeId` is claimed by NO machine (docs/next-steps.md section 8, package 6):
+ * it used to go to any eligible one, which let whoever queued it run a prompt
+ * on somebody else's laptop. Both enqueue routes now refuse an untargeted local
+ * job, so such a row can only be legacy; it waits until someone cancels it.
  */
 export async function claimNextJobForWorker(opts: {
   boxId: string;
@@ -707,14 +709,12 @@ export async function claimNextJobForWorker(opts: {
 }): Promise<PullClaim | null> {
   if (opts.kinds.length === 0) return null;
   await requireClaimSchema();
+  // A machine with no id can be named by no job.
+  if (!opts.nodeId) return null;
   const claimToken = mintClaimToken();
 
-  /** A job is claimable by this machine if it names no machine, or names this one. */
-  const targetOk = (payload: Record<string, unknown>): boolean => {
-    const want = payload['nodeId'];
-    if (typeof want !== 'string' || !want) return true;
-    return want === opts.nodeId;
-  };
+  /** A job is claimable by this machine only if it names this machine. */
+  const targetOk = (payload: Record<string, unknown>): boolean => payload['nodeId'] === opts.nodeId;
 
   if (config.mock.aurora) {
     const next = mockJobs
@@ -745,13 +745,13 @@ export async function claimNextJobForWorker(opts: {
       WHERE id = (
             SELECT id FROM agent_jobs
              WHERE status = 'queued' AND attempts < max_attempts AND kind IN (${kindList})
-               AND (payload->>'nodeId' IS NULL OR payload->>'nodeId' = :node)
+               AND payload->>'nodeId' = :node
              ORDER BY priority, created_at
              FOR UPDATE SKIP LOCKED
              LIMIT 1)
       RETURNING ${COLUMNS}`,
     [strParam('box', opts.boxId), strParam('session', opts.sessionId),
-      strParam('token', claimToken), strParam('node', opts.nodeId ?? ''), ...kindParams],
+      strParam('token', claimToken), strParam('node', opts.nodeId), ...kindParams],
   );
   if (!rows[0]) return null;
   const job = rowToJob(rows[0]);

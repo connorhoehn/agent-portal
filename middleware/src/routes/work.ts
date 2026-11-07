@@ -34,6 +34,7 @@ import { dispatcherEvents, dispatchOnce, busyBoxes } from '../lib/job-dispatcher
 import { analyzeDocumentLinks, analyzeDocumentFindings } from '../providers/doc-linker.js';
 import { listConsults } from '../providers/lab.js';
 import { LOCAL_JOB_KINDS } from '../lib/local-work.js';
+import { getNode } from '../providers/local-compute.js';
 
 export const workRouter = Router();
 
@@ -234,7 +235,7 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
   const body = (req.body ?? {}) as {
     title?: string; prompt?: string; kind?: string; priority?: number;
     requiresReview?: boolean; findingId?: string;
-    workItemId?: string; suggestionId?: string;
+    workItemId?: string; suggestionId?: string; nodeId?: string;
   };
   const title = (body.title ?? '').trim();
   const prompt = (body.prompt ?? '').trim();
@@ -250,6 +251,22 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
   const kind = (body.kind ?? 'devbox:task').trim();
   if (!QUEUEABLE_KINDS.includes(kind)) {
     throw new ValidationError(`kind must be one of ${QUEUEABLE_KINDS.join(', ')}`);
+  }
+  // A `local:*` job runs on a person's own machine, so it must name one the
+  // caller owns. An untargeted row is claimed by no machine
+  // (providers/agent-jobs.ts `claimNextJobForWorker`); before that, any paired
+  // worker took it, which let any ManageDevbox holder run a prompt on someone
+  // else's laptop (docs/next-steps.md section 7, "Fix first" item 5).
+  let nodeId: string | null = null;
+  if ((LOCAL_JOB_KINDS as readonly string[]).includes(kind)) {
+    nodeId = typeof body.nodeId === 'string' ? body.nodeId.trim() : '';
+    if (!nodeId) throw new ValidationError(`a ${kind} job needs a nodeId: the machine of yours that runs it`);
+    const node = await getNode(nodeId);
+    const sub = resolveSession(req)?.sub;
+    if (!node || node.revokedAt || !sub || node.ownerId !== sub) {
+      res.status(403).json({ error: 'nodeId is not a machine you own' });
+      return;
+    }
   }
 
   // A queued job spends on the initiative of the work it serves, and a
@@ -274,6 +291,7 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
       prompt,
       requiresReview: body.requiresReview !== false,
       ...served,
+      ...(nodeId ? { nodeId } : {}),
     },
     ...(body.priority !== undefined ? { priority: body.priority } : {}),
     createdBy: (req as { session?: { sub?: string } }).session?.sub ?? 'portal',
