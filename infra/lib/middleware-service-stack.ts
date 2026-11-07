@@ -547,12 +547,24 @@ export class MiddlewareServiceStack extends cdk.Stack {
     }));
 
     // Bedrock AgentCore — invoke runtimes + A2A
+    // Invoke and describe only this fleet's runtimes (`<prefix>_<agent>` and
+    // the devbox); a runtime's description carries its environment. Listing
+    // and workload tokens have no narrower resource.
     taskRole.addToPolicy(new iam.PolicyStatement({
       sid: 'AgentCoreInvoke',
       actions: [
         'bedrock-agentcore:InvokeAgentRuntime',
-        'bedrock-agentcore:ListAgentRuntimes',
         'bedrock-agentcore:GetAgentRuntime',
+      ],
+      resources: [
+        `arn:aws:bedrock-agentcore:${this.region}:${this.account}:runtime/${prefix}_*`,
+        `arn:aws:bedrock-agentcore:${this.region}:${this.account}:runtime/${prefix}_*/runtime-endpoint/*`,
+      ],
+    }));
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'AgentCoreList',
+      actions: [
+        'bedrock-agentcore:ListAgentRuntimes',
         'bedrock-agentcore:GetWorkloadAccessToken',
         'bedrock-agentcore:GetWorkloadAccessTokenForJwt',
       ],

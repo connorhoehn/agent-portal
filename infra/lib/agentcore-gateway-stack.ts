@@ -154,11 +154,23 @@ export class AgentCoreGatewayStack extends cdk.Stack {
               actions: ['lambda:InvokeFunction'],
               resources: [...lambdas.values()].map(fn => fn.functionArn),
             }),
+            // What a gateway needs from its policy engine (AgentCore
+            // "Gateway and Policy IAM permissions"): evaluate a call, list the
+            // tools a caller may use, read the engine. It used to hold
+            // bedrock-agentcore:* on *. The gateway's own ARN is not known
+            // before the gateway (which needs this role) exists, so gateways
+            // are matched by this account and region.
             new iam.PolicyStatement({
-              sid: 'PolicyEngineAccess',
+              sid: 'PolicyEngineEvaluate',
               effect: iam.Effect.ALLOW,
-              actions: ['bedrock-agentcore:*'],
-              resources: ['*'],
+              actions: ['bedrock-agentcore:AuthorizeAction', 'bedrock-agentcore:PartiallyAuthorizeActions'],
+              resources: [props.policyEngineArn, `arn:aws:bedrock-agentcore:${this.region}:${this.account}:gateway/*`],
+            }),
+            new iam.PolicyStatement({
+              sid: 'PolicyEngineRead',
+              effect: iam.Effect.ALLOW,
+              actions: ['bedrock-agentcore:GetPolicyEngine'],
+              resources: [props.policyEngineArn],
             }),
             new iam.PolicyStatement({
               sid: 'Logs',

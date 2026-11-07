@@ -367,13 +367,17 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
 
       // Supervisor needs A2A: list runtimes for discovery + invoke sub-agents
       if (agentName === 'supervisor') {
+        // List has no resource-level permission; Get is limited to this
+        // fleet's runtimes (a runtime's description includes its env).
+        executionRole.addToPolicy(new iam.PolicyStatement({
+          sid: 'A2ARuntimeList',
+          actions: ['bedrock-agentcore:ListAgentRuntimes'],
+          resources: ['*'],
+        }));
         executionRole.addToPolicy(new iam.PolicyStatement({
           sid: 'A2ARuntimeDiscovery',
-          actions: [
-            'bedrock-agentcore:ListAgentRuntimes',
-            'bedrock-agentcore:GetAgentRuntime',
-          ],
-          resources: ['*'],
+          actions: ['bedrock-agentcore:GetAgentRuntime'],
+          resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:runtime/${prefix}_*`],
         }));
         executionRole.addToPolicy(new iam.PolicyStatement({
           sid: 'A2AInvokeSubAgents',
@@ -468,11 +472,17 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
       if (props.browserArn) {
         executionRole.addToPolicy(new iam.PolicyStatement({
           sid: 'BrowserInvoke',
-          // The automation stream WebSocket endpoint is gated by a separate
-          // IAM action — grant `bedrock-agentcore:*` on the browser ARN so we
-          // pick up whichever specific action AWS uses for stream access
-          // (likely AccessBrowserSession / ConnectBrowserAutomationStream).
-          actions: ['bedrock-agentcore:*'],
+          // The session lifecycle plus the two stream connections (the
+          // automation WebSocket is its own action). Was bedrock-agentcore:*.
+          actions: [
+            'bedrock-agentcore:StartBrowserSession',
+            'bedrock-agentcore:StopBrowserSession',
+            'bedrock-agentcore:GetBrowserSession',
+            'bedrock-agentcore:ListBrowserSessions',
+            'bedrock-agentcore:UpdateBrowserStream',
+            'bedrock-agentcore:ConnectBrowserAutomationStream',
+            'bedrock-agentcore:ConnectBrowserLiveViewStream',
+          ],
           resources: [props.browserArn, `${props.browserArn}/*`],
         }));
       }
