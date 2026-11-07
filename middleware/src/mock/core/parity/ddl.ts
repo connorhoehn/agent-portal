@@ -306,11 +306,15 @@ export function tableShape(fileName: string, table: string): TableShape | null {
  *
  * Empty when the file seeds no rows at all for the table: `assessment_*` has
  * no seed, so "the default the seed relies on" is not a thing there.
+ *
+ * `seedFile` names the file holding the INSERTs when it is not the DDL's own:
+ * the demo sign-in cast lives in seed_demo_identities.sql, apart from the
+ * identity_schema.sql DDL every deploy loads.
  */
-export function defaultedColumns(fileName: string, table: string): ColumnDef[] {
+export function defaultedColumns(fileName: string, table: string, seedFile: string = fileName): ColumnDef[] {
   const shape = tableShape(fileName, table);
   if (!shape) return [];
-  const inserts = seedRows(fileName, table);
+  const inserts = seedRows(seedFile, table);
   if (inserts.length === 0) return [];
   const named = new Set(inserts.flatMap((r) => Object.keys(r.values)));
   return shape.columns.filter((c) => !named.has(c.name) && c.defaultValue !== undefined);

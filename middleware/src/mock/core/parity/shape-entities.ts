@@ -99,6 +99,7 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     describes: 'The sign-in cast against app_users — including the two columns the seed INSERT never names.',
     sqlFile: 'identity_schema.sql',
     table: 'app_users',
+    seedFile: 'seed_demo_identities.sql',
     mockRows: async () => (await import('../../../providers/identity.js')).listUsers(),
     mockId: (u: { id: string }) => u.id,
     // `session_epoch` is the whole reason this row exists: it is the column the
@@ -123,6 +124,7 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     describes: 'The grants the session cookie carries, flattened out of each user into the join table\'s own shape.',
     sqlFile: 'identity_schema.sql',
     table: 'user_tenant_roles',
+    seedFile: 'seed_demo_identities.sql',
     mockRows: async () => {
       const { listUsers } = await import('../../../providers/identity.js');
       const out: Row[] = [];

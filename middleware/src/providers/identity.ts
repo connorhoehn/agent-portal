@@ -52,7 +52,7 @@ export interface UserInfo {
   externalSub?: string | null;
 }
 
-// ── Fallback seed mirror (matches schema/identity_schema.sql) ────────────────
+// ── Fallback seed mirror (matches schema/seed_demo_identities.sql) ────────────────
 
 // The tenants rows (schema/identity_schema.sql) mirror tenants/manifest.json;
 // so does this fallback (DE-29).

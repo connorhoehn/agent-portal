@@ -26,7 +26,7 @@ const docker = (process.env['ORGIQ_DOCKER'] ?? 'docker').split(' ').filter(Boole
 const SCHEMA = 'access_acceptance';
 const read = (name: string) => readFileSync(`${process.cwd()}/../schema/${name}`, 'utf8');
 const access = read('access_schema.sql');
-const parents = ['orgiq_schema.sql', 'identity_schema.sql'].map(read).join('\n');
+const parents = ['orgiq_schema.sql', 'identity_schema.sql', 'seed_demo_identities.sql'].map(read).join('\n');
 const NULL = '__PG_NULL__';
 const literal = (value: string) => `'${value.replace(/'/g, "''")}'`;
 

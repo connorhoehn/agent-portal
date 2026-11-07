@@ -136,6 +136,36 @@ describe('PUT /api/identity/users/:id/grants — one grant rule', () => {
     expect(setGrantsMock).toHaveBeenCalledWith('u-asha', { assessment: ['lead-assessor'] }, {});
   });
 
+  it('reads the target\'s current grants authoritatively, so a stale read cannot hide a fresh admin grant', async () => {
+    getUserMock.mockResolvedValue(ASHA);
+    await request(buildApp(programLead))
+      .put('/api/identity/users/u-asha/grants')
+      .send({ grants: { assessment: ['lead-assessor'] } });
+    expect(getUserMock.mock.calls[0]).toEqual(['u-asha', { authoritative: true }]);
+  });
+
+  it('403s the real identity behind a masquerade editing its own grants through the masqueraded session', async () => {
+    // An admin masquerading as Farah holds a program-lead session whose `act`
+    // is the admin; that session must not reach the admin's own row.
+    const masquerade = { ...programLead, act: { sub: 'u-operator', role: 'admin', tenant: 'assessment', grants: {} } };
+    getUserMock.mockResolvedValue({ ...ASHA, id: 'u-operator', grants: { assessment: ['admin'] } });
+    const res = await request(buildApp(masquerade))
+      .put('/api/identity/users/u-operator/grants')
+      .send({ grants: { assessment: ['admin', 'lead-assessor'] } });
+    expect(res.status).toBe(403);
+    expect(setGrantsMock).not.toHaveBeenCalled();
+  });
+
+  it('403s a non-admin PUT whose base names admin (the diff would remove it)', async () => {
+    getUserMock.mockResolvedValue(ASHA);
+    const res = await request(buildApp(programLead))
+      .put('/api/identity/users/u-asha/grants')
+      .send({ grants: { assessment: ['assessor'] }, base: { assessment: ['assessor', 'admin'] } });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/admin/);
+    expect(setGrantsMock).not.toHaveBeenCalled();
+  });
+
   it('403s a program-lead removing admin from someone who holds it', async () => {
     getUserMock.mockResolvedValue({ ...ASHA, grants: { assessment: ['assessor', 'admin'] } });
     const res = await request(buildApp(programLead))

@@ -31,7 +31,7 @@ const SCHEMA = 'spend_holds_acceptance';
 const read = (name: string) => readFileSync(`${process.cwd()}/../schema/${name}`, 'utf8');
 // load_schema.py's order up to the holds.
 const schema = [
-  'orgiq_schema.sql', 'search_workspace_schema.sql', 'identity_schema.sql', 'social_schema.sql', 'observability_schema.sql',
+  'orgiq_schema.sql', 'search_workspace_schema.sql', 'identity_schema.sql', 'seed_demo_identities.sql', 'social_schema.sql', 'observability_schema.sql',
   'observability_authz_schema.sql', 'observability_sprint1_schema.sql', 'observability_sprint2_schema.sql',
   'observability_sprint3_promote_schema.sql', 'observability_sprint4_calibration_schema.sql',
   'observability_sprint4_memory_schema.sql', 'observability_sprint5_canary_schema.sql',

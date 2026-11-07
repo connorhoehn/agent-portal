@@ -66,7 +66,7 @@ describe('the DDL reader reads the real CREATE TABLE', () => {
   });
 
   it('knows which columns the seed leaves to their DEFAULT, and which tables have no seed', () => {
-    expect(defaultedColumns('identity_schema.sql', 'app_users').map((c) => c.name))
+    expect(defaultedColumns('identity_schema.sql', 'app_users', 'seed_demo_identities.sql').map((c) => c.name))
       .toContain('session_epoch');
     // The assessment tenant has no INSERT at all, so "the default the seed
     // relies on" is not a thing there — and claiming otherwise would make the

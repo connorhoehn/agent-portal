@@ -1111,7 +1111,8 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
     ],
   },
 
-  // ── identity & tenancy (schema/identity_schema.sql) ────────────────────────
+  // ── identity & tenancy (schema/identity_schema.sql; the cast and its grants
+  // are seeded by schema/seed_demo_identities.sql) ──────────────────────────
   {
     name: 'tenants',
     describes: 'The five tenants the BFF serves — orgiq plus four tenants beside it (assessment, social, pipelines, access); the user picker and requireTenant() both read this.',
@@ -1127,7 +1128,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
   {
     name: 'app_users',
     describes: 'The sign-in cast; personId is what links a session to the org graph.',
-    sqlFile: 'identity_schema.sql',
+    sqlFile: 'seed_demo_identities.sql',
     seedId: 'id',
     coverage: 'complete',
     mockRows: async () => (await import('../../../providers/identity.js')).listUsers(),
@@ -1141,7 +1142,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
   {
     name: 'user_tenant_roles',
     describes: 'Grants the signed session cookie carries — no grant in a tenant, no access.',
-    sqlFile: 'identity_schema.sql',
+    sqlFile: 'seed_demo_identities.sql',
     seedId: '',
     seedKey: (row) => `${row.values['user_id']}@${row.values['tenant_id']}:${row.values['role']}`,
     coverage: 'complete',

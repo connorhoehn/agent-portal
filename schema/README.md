@@ -50,3 +50,25 @@ Expected tables: `collaborations`, `decision_participants`, `decisions`,
   uses `IF NOT EXISTS` everywhere, so additive changes are safe to reapply.
   Destructive changes (drop column, change type) need manual migration outside
   this file.
+
+## Demo identities
+
+`seed_demo_identities.sql` holds the demo sign-in cast: 24 accounts in
+`app_users` and their grants in `user_tenant_roles`, including `u-operator`,
+which holds `admin` in all five tenants. It used to live at the end of
+`identity_schema.sql`, which every deploy loads, so every environment got a
+known all-tenant admin account.
+
+It is deliberately **not** in `manifest.json`. `load_schema.py`, a deploy and a
+plain `python3 schema/apply_all_seed.py` never apply it. To load it into a
+local or demo database, ask for it:
+
+```bash
+python3 schema/apply_all_seed.py --demo-identities
+```
+
+That applies it first, before the rest of the seed run, so the seeds that look
+users up find them. Never use the flag against a shared or production cluster.
+Offline (`MOCK_AURORA`) the middleware does not read this file: the same cast
+is mirrored in `FALLBACK_USERS` in `middleware/src/providers/identity.ts`, and
+the parity tests in `middleware/src/mock/core/parity` compare the two.

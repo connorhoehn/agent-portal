@@ -8,6 +8,8 @@ die mid-file. This driver retries those (and throttles) with backoff.
 
 Run from repo root:  python3 schema/apply_all_seed.py
 """
+from __future__ import annotations
+
 import argparse
 import os
 from pathlib import Path
@@ -28,6 +30,12 @@ RETRYABLE = ('HttpEndpointNotEnabledException', 'ThrottlingException', 'Statemen
 # database works, environments_schema follows seed_program (its tail seeds the
 # p-* cast), and graph_readonly_role is LAST (it grants on an allow-list).
 FILES = seed_run_files()
+
+# The demo sign-in cast (u-operator holds `admin` in every tenant). Never part
+# of the manifest or the default run; only `--demo-identities` applies it, and
+# first, so the seeds that look users up (assessment_team_members_schema's
+# EXISTS guard, access_schema's person re-link) find them.
+DEMO_IDENTITIES = 'schema/seed_demo_identities.sql'
 
 # The role created by graph_readonly_role.sql, and the Secrets Manager secret
 # OrgIQ-Aurora mints for it. The SQL file deliberately creates the role with no
@@ -158,8 +166,13 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--readonly-role-only', action='store_true',
                         help='Apply reader grants/password only; do not replay demo seed data')
+    parser.add_argument('--demo-identities', action='store_true',
+                        help=f'Also apply {DEMO_IDENTITIES} (the demo sign-in cast, including an '
+                             'all-tenant admin). Local and demo databases only.')
     options = parser.parse_args(argv)
     files = ['schema/graph_readonly_role.sql'] if options.readonly_role_only else FILES
+    if options.demo_identities and not options.readonly_role_only:
+        files = [DEMO_IDENTITIES, *files]
     arn, sec, db = get_cluster_info()
     rds = boto3.client('rds-data', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
     total_fail = 0

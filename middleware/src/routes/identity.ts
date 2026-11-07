@@ -210,7 +210,13 @@ identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandl
     res.status(403).json({ error: self.reason });
     return;
   }
-  const current = await getUser(userId);
+  // Authoritative: the merge and the grant-rule diff below are computed from
+  // this read, and a cached or fallback read that missed a fresh `admin` grant
+  // would let a scoped write drop it without the rule ever seeing it.
+  // (An unconfigured cluster answers 503 here rather than the 500 the
+  // authoritative read would throw.)
+  if (auroraMissing(res, 'set grants')) return;
+  const current = await getUser(userId, { authoritative: true });
   if (!current) {
     res.status(404).json({ error: `user '${userId}' not found` });
     return;
@@ -231,7 +237,6 @@ identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandl
     res.status(403).json({ error: verdict.reason });
     return;
   }
-  if (auroraMissing(res, 'set grants')) return;
   await setGrants(userId, merged, from ? { base: from } : {});
   res.json(await getUser(userId));
 }));

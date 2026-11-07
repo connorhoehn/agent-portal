@@ -51,6 +51,8 @@ export interface ShapeEntity<M> {
   describes: string;
   /** File under `schema/`, e.g. `assessment_schema.sql`. */
   sqlFile: string;
+  /** File under `schema/` holding the seed INSERTs, when not `sqlFile` itself. */
+  seedFile?: string;
   /** The table whose DDL is canonical. */
   table: string;
   /** The registered fixture key this row covers, for the record. */
@@ -222,7 +224,7 @@ export async function auditShape<M>(entity: ShapeEntity<M>): Promise<ShapeAudit>
   const usedKeys = new Set<string>();
   // Columns the seed's INSERTs never name, so the DDL default is the value the
   // seeded row really holds. Empty for a table with no seed at all.
-  const defaulted = new Map(defaultedColumns(entity.sqlFile, entity.table).map((c) => [c.name, c]));
+  const defaulted = new Map(defaultedColumns(entity.sqlFile, entity.table, entity.seedFile ?? entity.sqlFile).map((c) => [c.name, c]));
 
   for (const col of shape.columns) {
     const read = reader(col.name);

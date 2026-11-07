@@ -327,6 +327,22 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(apply_all_seed.FILES, sm.seed_run_files())
         self.assertTrue(hasattr(load_schema, 'manifest_schema_files'))
 
+    def test_the_demo_cast_is_never_loaded_by_default(self):
+        # identity_schema.sql is a repeatable entry every deploy loads; the demo
+        # accounts (u-operator is admin in every tenant) live apart from it and
+        # only `apply_all_seed.py --demo-identities` applies them.
+        import apply_all_seed
+        identity = (sm.SCHEMA_DIR / 'identity_schema.sql').read_text()
+        self.assertNotRegex(identity, r'INSERT INTO (app_users|user_tenant_roles)\b')
+        self.assertNotIn("('u-", identity)
+        demo = (sm.SCHEMA_DIR / 'seed_demo_identities.sql').read_text()
+        self.assertIn("('u-operator', 'orgiq',    'admin')", demo)
+        files = [e.get('file') for e in self.data['entries']]
+        self.assertNotIn('seed_demo_identities.sql', files)
+        self.assertNotIn('schema/seed_demo_identities.sql', sm.seed_run_files())
+        self.assertNotIn('schema/seed_demo_identities.sql', apply_all_seed.FILES)
+        self.assertEqual(apply_all_seed.DEMO_IDENTITIES, 'schema/seed_demo_identities.sql')
+
     def test_order_constraints_survive(self):
         files = sm.schema_files()
         self.assertEqual(files.index('spend_ledger_schema.sql'), files.index('program_schema.sql') + 1)
