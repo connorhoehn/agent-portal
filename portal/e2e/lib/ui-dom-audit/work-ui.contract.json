@@ -1,0 +1,1737 @@
+{
+  "version": 1,
+  "name": "Work shared UI compact layout",
+  "tolerance": 1,
+  "rules": [
+    {
+      "id": "composer.dialogue-tools",
+      "kind": "count",
+      "selector": "[data-composer-dialogue] :is([role=toolbar], .ProseMirror, [data-composer-mode])",
+      "expected": 0,
+      "owner": "ConversationComposer prompt dialogue"
+    },
+    {
+      "id": "composer.choice-input",
+      "kind": "count",
+      "selector": "[data-composer-dialogue=choice] :is(input, textarea, [contenteditable=true]), [data-composer-dialogue=confirm] :is(input, textarea, [contenteditable=true])",
+      "expected": 0,
+      "owner": "ComposerPromptDeck choice and confirm answers"
+    },
+    {
+      "id": "meeting.badge-contained",
+      "kind": "within",
+      "selector": "[data-ui-meeting-toolbar] button [data-ui-badge=\"count\"]",
+      "anchor": "button",
+      "ancestor": true,
+      "owner": "MeetingToolbar"
+    },
+    {
+      "id": "call.header-inset",
+      "kind": "align",
+      "selector": "[data-call-dock-header]",
+      "anchor": "[data-call-dock]",
+      "ancestor": true,
+      "edges": [
+        "top"
+      ],
+      "offset": {
+        "min": 8
+      },
+      "owner": "CallDock composition"
+    },
+    {
+      "id": "shell.header.count",
+      "kind": "count",
+      "selector": "$header",
+      "expected": 1,
+      "owner": "shell"
+    },
+    {
+      "id": "shell.footer.count",
+      "kind": "count",
+      "selector": "$footer",
+      "expected": 1,
+      "owner": "shell"
+    },
+    {
+      "id": "shell.header.height",
+      "kind": "box",
+      "selector": "$header",
+      "properties": {
+        "height": {
+          "min": 40,
+          "max": 56
+        }
+      },
+      "owner": "shell"
+    },
+    {
+      "id": "shell.footer.height",
+      "kind": "box",
+      "selector": "$footerRow",
+      "properties": {
+        "height": {
+          "min": 40,
+          "max": 48
+        }
+      },
+      "owner": "SocialFooter"
+    },
+    {
+      "id": "shell.viewport",
+      "kind": "viewport",
+      "owner": "shell / scroll containment"
+    },
+    {
+      "id": "shell.columns",
+      "kind": "columns",
+      "selector": "$shellColumns",
+      "children": ":scope > aside, :scope > main",
+      "min": 2,
+      "max": 3,
+      "maxGap": 1,
+      "required": true,
+      "owner": "SubNavLayout"
+    },
+    {
+      "id": "workspace.columns",
+      "kind": "columns",
+      "selector": "$workspaceColumns",
+      "children": ":scope > *",
+      "min": 2,
+      "max": 3,
+      "maxGap": 1,
+      "owner": "workspace rail + content layout"
+    },
+    {
+      "id": "subnav.columns",
+      "kind": "columns",
+      "selector": "$nestedColumns",
+      "children": ":scope > aside, :scope > [data-subnav-content]",
+      "min": 2,
+      "max": 3,
+      "maxGap": 1,
+      "owner": "SubNavLayout nested rail + content"
+    },
+    {
+      "id": "pane.columns",
+      "kind": "columns",
+      "selector": "$splitColumns",
+      "children": ":scope > [data-testid$='-primary'], :scope > [data-testid$='-secondary']",
+      "min": 1,
+      "max": 2,
+      "maxGap": 8,
+      "owner": "SplitPane / SidePane"
+    },
+    {
+      "id": "control.font-family",
+      "kind": "text",
+      "selector": "$controls",
+      "properties": {
+        "fontFamily": {
+          "from": "body",
+          "property": "fontFamily"
+        }
+      },
+      "owner": "Button / IconButton / forms",
+      "exclude": [
+        {
+          "selector": "$keyboardHints",
+          "reason": "Keyboard hints use the explicit monospace typography rule"
+        },
+        {
+          "selector": "$decorativeText",
+          "reason": "Aria-hidden glyphs are icons rather than readable labels"
+        },
+        {
+          "selector": "$codeLabels",
+          "reason": "Code identifiers have their own monospace profile"
+        },
+        {
+          "selector": "[data-ui-code-surface=\"terminal\"] textarea.xterm-helper-textarea",
+          "reason": "xterm's hidden input helper inside a marked terminal code surface is not a visible form control"
+        },
+        {
+          "selector": "[data-reading-contents] button",
+          "reason": "Embedded document contents use the paper font, checked by document.contents-font."
+        }
+      ],
+      "tolerance": 0.1
+    },
+    {
+      "id": "control.font-size",
+      "kind": "text",
+      "selector": "$controls",
+      "properties": {
+        "fontSize": [
+          12,
+          14
+        ]
+      },
+      "tolerance": 0.1,
+      "exclude": [
+        {
+          "selector": "$railHeaders",
+          "reason": "Navigation group captions use their shared rail typography contract"
+        },
+        {
+          "selector": "$tenantControl",
+          "reason": "Tenant identity uses the explicit shell brand typography rule"
+        },
+        {
+          "selector": "$tickerControl",
+          "reason": "The compact footer ticker uses the explicit ticker typography rule"
+        },
+        {
+          "selector": "$avatarControl",
+          "reason": "Avatar initials and overflow counts use the separate avatar readability rule"
+        },
+        {
+          "selector": "$keyboardHints",
+          "reason": "Keyboard hints use the explicit compact hint typography rule"
+        },
+        {
+          "selector": "$captions",
+          "reason": "Secondary role captions use the explicit caption typography rule"
+        },
+        {
+          "selector": "$decorativeText",
+          "reason": "Aria-hidden glyphs are icons rather than readable labels"
+        },
+        {
+          "selector": "$codeLabels",
+          "reason": "Code identifiers have their own monospace profile"
+        },
+        {
+          "selector": "$railCaptionLabels",
+          "reason": "RailSectionHeader / railType has an explicit 11px profile"
+        },
+        {
+          "selector": "$conversationLabels",
+          "reason": "ConversationList has an explicit 13px profile"
+        },
+        {
+          "selector": "$conversationMetadata",
+          "reason": "ConversationList has an explicit 11px profile"
+        },
+        {
+          "selector": "$rowMenuGlyphs",
+          "reason": "ConversationList has an explicit 13px profile"
+        },
+        {
+          "selector": "$railItemLabels",
+          "reason": "GroupedList rail titles use the explicit railType item typography profile; sibling actions remain ordinary controls"
+        },
+        {
+          "selector": "$graphDetailLabels",
+          "reason": "WorkActivityNode detail text uses a leaf-only typography profile; neighboring controls remain ordinary"
+        },
+        {
+          "selector": "$graphMetadataLabels",
+          "reason": "WorkActivityNode metadata uses a leaf-only typography profile; neighboring controls remain ordinary"
+        },
+        {
+          "selector": "$activePersonCaptions",
+          "reason": "ActivePeopleGrid name / More caption uses a leaf-only typography profile; neighboring controls remain ordinary"
+        },
+        {
+          "selector": "[data-ui-code-surface=\"terminal\"] textarea.xterm-helper-textarea",
+          "reason": "xterm's hidden input helper inside a marked terminal code surface is not a visible form control"
+        }
+      ],
+      "owner": "Button / IconButton / forms"
+    },
+    {
+      "id": "control.border-style",
+      "kind": "style",
+      "selector": "$controls",
+      "properties": {
+        "borderTopStyle": [
+          "solid",
+          "none"
+        ]
+      },
+      "owner": "Button / IconButton / forms (FileUploadDrop: data-ui-dropzone)",
+      "exclude": [
+        {
+          "selector": "[role=\"button\"][data-ui-dropzone]:not(:has(button, input, select, textarea, [role=\"button\"]))",
+          "reason": "A marked drop target's dashed edge is its affordance; the exemption lapses if it hosts a nested control"
+        }
+      ]
+    },
+    {
+      "id": "toolbar.control-height",
+      "kind": "box",
+      "selector": "$toolbarControls",
+      "properties": {
+        "height": {
+          "token": "--ui-control-sm"
+        }
+      },
+      "owner": "controlMetrics / CollectionToolbar"
+    },
+    {
+      "id": "collection.gutter",
+      "kind": "style",
+      "selector": "$collections",
+      "properties": {
+        "paddingLeft": 0,
+        "paddingRight": 0
+      },
+      "owner": "CollectionPage; shell supplies outer gutter"
+    },
+    {
+      "id": "section.gutter",
+      "kind": "style",
+      "selector": "$sectionTitles",
+      "properties": {
+        "paddingLeft": {
+          "token": "--ui-page-gutter"
+        },
+        "paddingRight": {
+          "token": "--ui-page-gutter"
+        }
+      },
+      "owner": "SectionHeader"
+    },
+    {
+      "id": "content.gutter",
+      "kind": "gutter",
+      "selector": "$contentColumns",
+      "anchor": "$trail",
+      "edges": [
+        "left",
+        "right"
+      ],
+      "owner": "SectionContent body inset / the page composing the content column"
+    },
+    {
+      "id": "content.header-alignment",
+      "kind": "row-start",
+      "selector": "$contentColumns",
+      "anchor": "$trail",
+      "offset": 0,
+      "tolerance": 2,
+      "owner": "SectionHeader title band / the conversation header that takes the title slot"
+    },
+    {
+      "id": "content.single-title",
+      "kind": "title-count",
+      "selector": "$contentColumns",
+      "titleSize": 20,
+      "expected": 1,
+      "owner": "one header per page: SectionHeader title, or the conversation/record header with the title folded into the trail",
+      "exclude": [
+        {
+          "selector": "[role=\"document\"]",
+          "reason": "Headings inside a semantic document describe its contents, separately from the host page title."
+        }
+      ]
+    },
+    {
+      "id": "layout.contained-controls",
+      "kind": "contained",
+      "selector": "$containedControls",
+      "region": "$containmentRegions",
+      "owner": "the control's composite (header actions, tab rows, row actions) and its column",
+      "scrollers": [
+        {
+          "selector": "[role=\"tablist\"], :has(> [role=\"tablist\"])",
+          "reason": "A tab row that outgrows its column scrolls inside itself (Tabs / ChannelHeader); the row is judged in place of its tabs"
+        },
+        {
+          "selector": ":has(> table)",
+          "reason": "A table's own scroller (DataTable) scrolls wide rows; the scroller is judged in place of its cells' controls"
+        }
+      ]
+    },
+    {
+      "id": "people.sparse-row",
+      "kind": "sparse-row",
+      "selector": "$tileLists",
+      "maxGapRatio": 3,
+      "minItems": 3,
+      "owner": "ActivePeopleGrid columns (rail: 4; page: fit) / tile grids"
+    },
+    {
+      "id": "toolbar.inset",
+      "kind": "style",
+      "selector": "[data-toolbar-variant=\"collection\"]:not([data-collection-layout=\"cards\"])",
+      "properties": {
+        "paddingLeft": {
+          "token": "--ui-table-inset"
+        },
+        "paddingRight": {
+          "token": "--ui-table-inset"
+        }
+      },
+      "owner": "CollectionToolbar"
+    },
+    {
+      "id": "table.geometry",
+      "kind": "table",
+      "selector": "$tables",
+      "rowHeight": {
+        "token": "--ui-table-row"
+      },
+      "cellInset": {
+        "token": "--ui-table-inset"
+      },
+      "headerFontSize": 12,
+      "headerFontWeight": 600,
+      "owner": "DataTable / Table",
+      "bodyFontSize": 14,
+      "bodyFontFamily": {
+        "property": "fontFamily",
+        "from": "body"
+      },
+      "exclude": [
+        {
+          "selector": "[data-ui-table-rows=\"content\"]",
+          "reason": "Document tables wrap prose and use the content-row profile; cells and headings remain checked."
+        },
+        {
+          "selector": "[data-ui-table-rows=\"work\"]",
+          "reason": "Work rows share the overview title/subline and owner/fact columns; their explicit work profile checks typography, height and cell edges."
+        },
+        {
+          "selector": "[data-ui-table-rows=\"code-diff\"]",
+          "reason": "DiffViewer preserves complete code lines in a horizontal scroller, with two compact line-number gutters. The code-diff profile checks its 12px monospace type, 18px lines and 6/8px cell insets; annotations and ordinary controls retain their own checks."
+        }
+      ]
+    },
+    {
+      "id": "composer.surface",
+      "kind": "composer",
+      "selector": "$composers",
+      "input": "[contenteditable='true'], textarea",
+      "boundary": "$composerBoundary",
+      "inset": {
+        "token": "--ui-content-gutter",
+        "scope": "element"
+      },
+      "owner": "ComposerSurface / conversation host"
+    },
+    {
+      "id": "control.native-select",
+      "kind": "count",
+      "selector": "$nativeSelects",
+      "expected": 0,
+      "owner": "forms/Select \u2014 a raw or hidden <select> (or <input list>/<datalist>) opens the platform's unstyled menu; the only accepted one is Select native={{ reason }} (data-ui-native-select + data-ui-native-reason)",
+      "includeHidden": true
+    },
+    {
+      "id": "control.unmarked-listbox",
+      "kind": "count",
+      "selector": "$unmarkedListboxes",
+      "expected": 0,
+      "includeHidden": true,
+      "owner": "forms/Select, Combobox, menus \u2014 a role=\"listbox\" without data-ui-listbox is a hand-rolled dropdown"
+    },
+    {
+      "id": "listbox.option-type",
+      "kind": "text",
+      "selector": "$listboxOptions",
+      "properties": {
+        "fontSize": [
+          12,
+          14
+        ]
+      },
+      "tolerance": 0.1,
+      "exclude": [
+        {
+          "selector": "$keyboardHints",
+          "reason": "Key hints inside an option are judged once, by keyboard.typography"
+        }
+      ],
+      "owner": "forms/Select / Combobox option rows (12/14 scale)"
+    },
+    {
+      "id": "listbox.in-viewport",
+      "kind": "in-viewport",
+      "selector": "$openListboxes",
+      "owner": "forms/Select / Combobox popup placement (flip and clamp)"
+    },
+    {
+      "id": "composer.nesting",
+      "kind": "count",
+      "selector": "$nestedComposers",
+      "expected": 0,
+      "owner": "ComposerSurface"
+    },
+    {
+      "id": "page.activity-unique",
+      "kind": "count",
+      "selector": "[data-page-activity] ~ [data-page-activity]",
+      "expected": 0,
+      "owner": "Page activity region \u2014 repeated configuration must not leave duplicate sibling sections"
+    },
+    {
+      "id": "dock.clearance",
+      "kind": "dock-clearance",
+      "selector": "[data-floating-composer-dock][data-placement=\"pinned\"]",
+      "ignore": "[role=\"dialog\"], [role=\"menu\"], [role=\"listbox\"], [role=\"tooltip\"], [data-ui-listbox], [data-uic-popover]",
+      "owner": "the content column's scroller and the pinned composer dock (FloatingComposerDock / ComposerSurface)"
+    },
+    {
+      "id": "rail.accordion-font",
+      "kind": "style",
+      "selector": "$railHeaders",
+      "properties": {
+        "fontFamily": {
+          "from": "body",
+          "property": "fontFamily"
+        },
+        "fontWeight": 600,
+        "fontSize": 12
+      },
+      "owner": "SubNavLayout / rail typography"
+    },
+    {
+      "id": "app.font-family",
+      "kind": "style",
+      "selector": "body",
+      "properties": {
+        "fontFamily": "system-ui, -apple-system, sans-serif"
+      },
+      "owner": "shared app typography"
+    },
+    {
+      "id": "identity.font-size",
+      "kind": "text",
+      "selector": "$tenantControl",
+      "properties": {
+        "fontSize": 16
+      },
+      "owner": "TenantSwitcher",
+      "tolerance": 0.1
+    },
+    {
+      "id": "ticker.font-size",
+      "kind": "text",
+      "selector": "$tickerControl",
+      "properties": {
+        "fontSize": 11,
+        "fontWeight": 400
+      },
+      "owner": "ActivityTicker",
+      "tolerance": 0.1
+    },
+    {
+      "id": "avatar.readability",
+      "kind": "text",
+      "selector": "$avatarControl",
+      "properties": {
+        "fontSize": {
+          "min": 9,
+          "max": 16
+        }
+      },
+      "owner": "PresenceAvatars",
+      "tolerance": 0.1
+    },
+    {
+      "id": "keyboard.typography",
+      "kind": "text",
+      "selector": "$keyboardHints",
+      "properties": {
+        "fontFamily": {
+          "contains": "monospace"
+        },
+        "fontSize": 11
+      },
+      "owner": "keyboard hint",
+      "tolerance": 0.1
+    },
+    {
+      "id": "caption.typography",
+      "kind": "text",
+      "selector": "$captions",
+      "properties": {
+        "fontSize": 12
+      },
+      "owner": "secondary caption",
+      "tolerance": 0.1
+    },
+    {
+      "id": "rail.accordion-height",
+      "kind": "box",
+      "selector": "$railHeaders",
+      "properties": {
+        "height": 36
+      },
+      "owner": "SubNavLayout / rail row geometry"
+    },
+    {
+      "id": "rail.disclosure-label",
+      "kind": "text",
+      "selector": "$railCaptionLabels",
+      "properties": {
+        "fontSize": 12
+      },
+      "tolerance": 0.1,
+      "owner": "RailSectionHeader / railType"
+    },
+    {
+      "id": "conversation.label",
+      "kind": "text",
+      "selector": "$conversationLabels",
+      "properties": {
+        "fontSize": 14
+      },
+      "tolerance": 0.1,
+      "owner": "ConversationList"
+    },
+    {
+      "id": "conversation.metadata",
+      "kind": "text",
+      "selector": "$conversationMetadata",
+      "properties": {
+        "fontSize": 12
+      },
+      "tolerance": 0.1,
+      "owner": "ConversationList"
+    },
+    {
+      "id": "conversation.menu-glyph",
+      "kind": "text",
+      "selector": "$rowMenuGlyphs",
+      "properties": {
+        "fontSize": 13
+      },
+      "tolerance": 0.1,
+      "owner": "ConversationList"
+    },
+    {
+      "id": "code.typography",
+      "kind": "text",
+      "selector": "$codeLabels",
+      "properties": {
+        "fontFamily": {
+          "contains": "monospace"
+        },
+        "fontSize": [
+          10,
+          11,
+          12,
+          14
+        ]
+      },
+      "tolerance": 0.1,
+      "owner": "code identifier / inline code"
+    },
+    {
+      "id": "rail.item-label",
+      "kind": "text",
+      "selector": "$railItemLabels",
+      "properties": {
+        "fontSize": 14,
+        "fontWeight": "500",
+        "lineHeight": 20
+      },
+      "tolerance": 0.1,
+      "owner": "GroupedList / railType"
+    },
+    {
+      "id": "composer.presence",
+      "kind": "composer-presence",
+      "selector": "$composers",
+      "owner": "page composition / contextual composer policy",
+      "input": "[contenteditable=\"true\"], textarea, [role=\"textbox\"]"
+    },
+    {
+      "id": "graph.detail",
+      "kind": "text",
+      "selector": "$graphDetailLabels",
+      "properties": {
+        "fontSize": 12
+      },
+      "tolerance": 0.1,
+      "owner": "WorkActivityNode detail text"
+    },
+    {
+      "id": "graph.metadata",
+      "kind": "text",
+      "selector": "$graphMetadataLabels",
+      "properties": {
+        "fontSize": 12
+      },
+      "tolerance": 0.1,
+      "owner": "WorkActivityNode metadata"
+    },
+    {
+      "id": "people.active-caption",
+      "kind": "text",
+      "selector": "$activePersonCaptions",
+      "properties": {
+        "fontSize": 12,
+        "fontWeight": "500"
+      },
+      "tolerance": 0.1,
+      "owner": "ActivePeopleGrid name / More caption"
+    },
+    {
+      "id": "record.popout",
+      "kind": "record-popout",
+      "owner": "collection record routing: ListRailLayout list rail + content column, or a SidePane tab",
+      "selector": "[role=\"dialog\"], [role=\"alertdialog\"], dialog[open], [data-ui-dialog]",
+      "allow": [
+        "[role=\"alertdialog\"]",
+        "[data-ui-dialog=\"confirm\"]",
+        "[data-ui-dialog=\"command-help\"]"
+      ]
+    },
+    {
+      "id": "collection.row-activatable",
+      "kind": "row-activatable",
+      "owner": "DataTable onRowClick (or a row link) / staticRows reason",
+      "selector": "$collectionTables"
+    },
+    {
+      "id": "collection.selection-shift",
+      "kind": "selection-shift",
+      "owner": "CollectionToolbar selection (in place of the resting controls)"
+    },
+    {
+      "id": "popover.fit",
+      "kind": "popover-fit",
+      "selector": "$popovers",
+      "trigger": "[aria-expanded=\"true\"][aria-haspopup]",
+      "header": "h2, h3, [role=\"tablist\"]",
+      "margin": 0,
+      "owner": "InlinePopover placement (flip/clamp, re-anchor on growth) + the panel's own height cap (NotificationBell)"
+    },
+    {
+      "id": "panel.inset",
+      "kind": "panel-inset",
+      "selector": "$panels",
+      "header": "h1, h2, h3, [role=\"heading\"]",
+      "tolerance": 2,
+      "owner": "the anchored panel's sections (NotificationCenter feed/empty state, popover bodies): every block at the header's inset"
+    },
+    {
+      "id": "panel.empty-height",
+      "kind": "panel-empty",
+      "selector": "$panels",
+      "empty": "$emptyStates",
+      "maxGap": 96,
+      "owner": "the anchored panel's height cap (a max-height, never a fixed height) \u2014 NotificationBell / NotificationCenter, InlinePopover content"
+    },
+    {
+      "id": "composer.last",
+      "kind": "composer-last",
+      "selector": "$composers",
+      "column": "$composerColumns",
+      "dock": "$composerDocks",
+      "ignore": "[role=\"dialog\"], [role=\"menu\"], [role=\"listbox\"], [role=\"tooltip\"], [data-ui-listbox], [data-uic-popover]",
+      "owner": "DockedColumn + ColumnDock (the page's one composer docked at the content column's bottom, spanning it); the page composing the column"
+    },
+    {
+      "id": "section.empty-row",
+      "kind": "section-empty",
+      "selector": "$sections",
+      "empty": "$emptyStates",
+      "maxLines": 1,
+      "owner": "PageSection empty (one row: the title and one quiet line) \u2014 never a heading over a 'nothing here' block"
+    },
+    {
+      "id": "board.lane-surface",
+      "kind": "surface-distinct",
+      "selector": "$boardLanes",
+      "owner": "BoardColumn lane surface"
+    },
+    {
+      "id": "board.lane-columns",
+      "kind": "columns",
+      "selector": "$boards",
+      "children": "[data-ui-board-lane]",
+      "min": 1,
+      "max": 12,
+      "maxGap": 16,
+      "owner": "CatalogGrid variant=\"lanes\" + BoardColumn h-full"
+    },
+    {
+      "id": "text.cramped",
+      "kind": "text-cramped",
+      "selector": "body",
+      "maxLines": 4,
+      "minChars": 20,
+      "owner": "the composite laying the text out (a callout/alert stacking title, body and action; a card column) \u2014 container queries, not page CSS"
+    },
+    {
+      "id": "text.overlap",
+      "kind": "text-overlap",
+      "selector": "body",
+      "tolerance": 2,
+      "maxPerPage": 10,
+      "owner": "the composite whose labels overflow their slot (flow/stat strips, chips, headers): wrap, ellipsis + title, or scroll inside the frame"
+    },
+    {
+      "id": "text.clipped",
+      "kind": "text-clipped",
+      "selector": "body",
+      "tolerance": 1,
+      "owner": "the composite clipping the label: an ellipsis (title for the full text) or room for it",
+      "scrollers": [
+        {
+          "selector": ".react-flow",
+          "reason": "A node canvas viewport (xyflow, TypedNodeCanvas / WorkActivityGraph) pans: a node cut at its edge is reached by panning, like a row scrolled out of a list"
+        }
+      ]
+    },
+    {
+      "id": "placeholder.squeezed",
+      "kind": "placeholder-squeezed",
+      "selector": "input[placeholder]:not([type=\"checkbox\"]):not([type=\"radio\"]):not([type=\"range\"]):not([type=\"file\"]):not([type=\"hidden\"]):not([type=\"color\"]), textarea[placeholder], [contenteditable=\"true\"]:has([data-placeholder]), [contenteditable=\"true\"][aria-placeholder]",
+      "minEm": 10,
+      "owner": "the row hosting the input (a composer's idle row, a toolbar): the input keeps its minimum width before chips; chips fold into a menu when narrow",
+      "maxHidden": 0.5
+    },
+    {
+      "id": "consistency.fingerprint",
+      "kind": "fingerprint",
+      "deep": true,
+      "owner": "the component family named in the finding (its library composite, or the page that restyles it)",
+      "columns": "$contentColumns",
+      "trail": "$trail",
+      "outliers": {
+        "minRoutes": 4,
+        "minMajority": 3,
+        "maxShare": 0.2,
+        "maxDistinct": 3
+      },
+      "families": [
+        {
+          "name": "page-title",
+          "selector": "$pageTitles|[data-shell-nav] h1",
+          "properties": [
+            "fontSize",
+            "fontWeight",
+            "lineHeight",
+            "letterSpacing"
+          ]
+        },
+        {
+          "name": "section-heading",
+          "selector": "$sectionHeadings|[data-shell-nav] h2",
+          "properties": [
+            "fontSize",
+            "fontWeight",
+            "lineHeight",
+            "textTransform",
+            "letterSpacing"
+          ]
+        },
+        {
+          "name": "table-header",
+          "selector": "[data-shell-nav] thead th",
+          "properties": [
+            "height",
+            "paddingLeft",
+            "fontSize",
+            "fontWeight",
+            "textTransform",
+            "letterSpacing"
+          ]
+        },
+        {
+          "name": "table-row",
+          "selector": "[data-shell-nav] tbody > tr",
+          "exclude": "tr:has([colspan])",
+          "properties": [
+            "height"
+          ]
+        },
+        {
+          "name": "table-cell",
+          "selector": "[data-shell-nav] tbody td",
+          "exclude": "tr:has([colspan])",
+          "properties": [
+            "paddingLeft",
+            "paddingTop",
+            "fontSize"
+          ]
+        },
+        {
+          "name": "button",
+          "selector": "[data-shell-nav] button:not([role=\"tab\"])",
+          "where": "control",
+          "keyBy": [
+            "fontSize",
+            "iconOnly"
+          ],
+          "properties": [
+            "height",
+            "borderRadius"
+          ]
+        },
+        {
+          "name": "input",
+          "selector": "[data-shell-nav] input:not([type=\"checkbox\"]):not([type=\"radio\"]):not([type=\"range\"]):not([type=\"hidden\"]):not([type=\"file\"]), [data-shell-nav] [data-ui-control]",
+          "exclude": "[data-composer-surface]",
+          "properties": [
+            "height",
+            "fontSize",
+            "borderRadius"
+          ]
+        },
+        {
+          "name": "tab",
+          "selector": "[role=\"tab\"]",
+          "keyBy": [
+            "fontSize"
+          ],
+          "properties": [
+            "height",
+            "fontWeight",
+            "paddingLeft",
+            "borderRadius"
+          ]
+        },
+        {
+          "name": "rail-item",
+          "selector": "[data-ui-text=\"rail-item\"]",
+          "of": "button, a, [role=\"treeitem\"], [role=\"option\"], li",
+          "properties": [
+            "height",
+            "paddingLeft"
+          ]
+        },
+        {
+          "name": "empty-state",
+          "selector": "[data-ui-empty]",
+          "properties": [
+            "fontSize",
+            "textAlign",
+            "paddingTop",
+            "paddingLeft"
+          ]
+        },
+        {
+          "name": "badge",
+          "selector": "[data-shell-nav] span",
+          "where": "pill",
+          "max": 400,
+          "properties": [
+            "height",
+            "fontSize",
+            "fontWeight",
+            "paddingLeft"
+          ]
+        },
+        {
+          "name": "icon",
+          "selector": "[data-shell-nav] button svg",
+          "host": "button",
+          "keyBy": [
+            "host.height"
+          ],
+          "properties": [
+            "width",
+            "height"
+          ]
+        },
+        {
+          "name": "card",
+          "selector": "[data-shell-nav] div, [data-shell-nav] section, [data-shell-nav] article, [data-shell-nav] li",
+          "where": "card",
+          "max": 300,
+          "properties": [
+            "borderRadius",
+            "paddingLeft",
+            "paddingTop"
+          ]
+        },
+        {
+          "name": "panel",
+          "selector": "$panels",
+          "properties": [
+            "borderRadius"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "density.blank-band",
+      "kind": "blank-band",
+      "deep": true,
+      "selector": "$contentColumns",
+      "maxGap": 96,
+      "owner": "the page composing the content column (or the composite holding a fixed height)",
+      "anchoredDocks": "$composerDocks"
+    },
+    {
+      "id": "density.table-first",
+      "kind": "table-first",
+      "deep": true,
+      "selector": "$collectionTables",
+      "columns": "$contentColumns",
+      "trail": "$trail",
+      "maxTopRatio": 0.6,
+      "maxPreamble": 240,
+      "owner": "the list page (CollectionPage composition): one compact selector/filter row, then the table"
+    },
+    {
+      "id": "density.narrow-block",
+      "kind": "narrow-block",
+      "deep": true,
+      "selector": "table, [data-ui-section], [data-collection-page]",
+      "columns": "$contentColumns",
+      "trail": "$trail",
+      "minRatio": 0.6,
+      "owner": "the block holding a max-width (its composite or the page)"
+    },
+    {
+      "id": "align.grid",
+      "kind": "alignment-grid",
+      "deep": true,
+      "columns": "$contentColumns",
+      "trail": "$trail",
+      "insets": [
+        0,
+        {
+          "token": "--ui-table-inset"
+        },
+        {
+          "token": "--ui-content-gutter"
+        }
+      ],
+      "maxStray": 12,
+      "tolerance": 1.5,
+      "owner": "the block whose padding/margin is off the inset grid",
+      "exclude": [
+        {
+          "selector": "[data-reading-presentation]",
+          "reason": "CanvasDocumentView uses a document page grid and compact document status bar, independently of the host application gutter. Text, controls, contrast, overflow and table checks still apply."
+        },
+        {
+          "selector": "[data-ui-table-rows=\"code-diff\"]",
+          "reason": "DiffViewer preserves complete code lines in a horizontal scroller, with two compact line-number gutters. The code-diff profile checks its 12px monospace type, 18px lines and 6/8px cell insets; annotations and ordinary controls retain their own checks."
+        },
+        {
+          "selector": "[data-ui-change-location]",
+          "reason": "ChangeLocation is a hunk coordinate strip: text follows the @@ marker. Its explicit profile checks the 8px strip inset; control, contrast and overflow checks remain active."
+        },
+        {
+          "selector": "[data-ui-change-diff-side]",
+          "reason": "ChangeDiff has a +/- gutter before prose. Its explicit profile checks 8px insets and 8px marker gap; contrast, wrapping and overflow remain checked."
+        },
+        {
+          "selector": "[data-ui-composer-modes]",
+          "reason": "RichChatComposer mode controls follow the composer border (12px docked, 8px compact), not the page reading gutter. composer.surface still checks the outer placement; composer.mode-inset checks this inner grid, and all control/focus/contrast checks remain active."
+        },
+        {
+          "selector": "[data-ui-procedure]",
+          "reason": "ProcedureSteps has a numbered/bulleted marker column (24px md or 20px sm) plus a 12px gap before its prose and code. The procedure profile checks this anatomy; text, contrast, overflow and controls are still checked."
+        },
+        {
+          "selector": "[data-ui-source-row] > span:nth-child(2)",
+          "reason": "The SourceCard row title/meta column follows a 32px file mark and 12px gap. Its source-row profile checks the marker, gap and outer insets; the row control and neighboring content remain checked."
+        },
+        {
+          "selector": "[data-ui-control=\"select\"] > span",
+          "reason": "Select labels follow the trigger inset, not the page gutter. Explicit select profiles check both inset sizes and variants; trigger typography, focus, containment and the popup remain checked."
+        },
+        {
+          "selector": "[data-testid=\"message-row-content\"], [data-testid=\"message-row-header\"], [data-testid=\"message-row-footer\"]",
+          "reason": "MessageRow has a 20px avatar slot and 8px gap, inside ChatPanel\u2019s 8px hover inset (36px text / 8px actions from the transcript edge). The chat.message profiles enforce this anatomy; continued rows retain the slot, own bubbles reverse it. Only row content uses this grid; ordinary neighbors and control/contrast/overflow checks remain active."
+        },
+        {
+          "selector": "[data-ui-composer-tools]",
+          "reason": "RichChatComposer toolbar follows the composer boundary with 8px docked / 6px compact side padding. Explicit composer.tools-inset rules check this inner grid; outer dock, controls, contrast and focus remain measured."
+        },
+        {
+          "selector": "[data-ui-inline-code]",
+          "reason": "MarkdownView inline code uses a 4px background inset within the paragraph. markdown.inline-code-inset checks its padding and zero margins; only the code token uses this profile, while paragraph neighbors, type and contrast remain checked."
+        }
+      ]
+    },
+    {
+      "id": "align.baseline",
+      "kind": "baseline",
+      "deep": true,
+      "selector": "[data-shell-nav] *",
+      "tolerance": 1.5,
+      "owner": "the row composite (header, meta row, label/value list)"
+    },
+    {
+      "id": "align.icon-center",
+      "kind": "icon-center",
+      "deep": true,
+      "selector": "[data-shell-nav] button, [data-shell-nav] [role=\"button\"], [data-shell-nav] [role=\"menuitem\"], [data-shell-nav] [role=\"tab\"], [data-shell-nav] a[href]",
+      "tolerance": 2,
+      "owner": "the control/row composite drawing the icon"
+    },
+    {
+      "id": "layout.scroll-owner",
+      "kind": "scroll-owner",
+      "deep": true,
+      "selector": "[data-shell-nav] table, [data-shell-nav] pre, [data-shell-nav] [role=\"grid\"], [data-shell-nav] img, [data-shell-nav] canvas",
+      "region": "$containmentRegions",
+      "owner": "the composite holding wide content (DataTable scroller, code block)"
+    },
+    {
+      "id": "layout.content-share",
+      "kind": "content-share",
+      "deep": true,
+      "selector": "$contentColumns",
+      "narrowBelow": 768,
+      "narrowRatio": 0.75,
+      "minWidth": 480,
+      "owner": "the shell/rail layout (rails fold at narrow widths)"
+    },
+    {
+      "id": "content.honesty",
+      "kind": "content-honesty",
+      "deep": true,
+      "selector": "body",
+      "owner": "the page/fixture formatting the value",
+      "exclude": [
+        {
+          "selector": "$trail",
+          "reason": "The trail repeats the section name by design (layout cascade rule 2)"
+        }
+      ],
+      "patterns": [
+        {
+          "name": "undefined/null/NaN shown",
+          "pattern": "(?:^|[^\\w-])(undefined|null|NaN|Infinity|Invalid Date)(?![\\w-])"
+        },
+        {
+          "name": "object leaked",
+          "pattern": "\\[object \\w+\\]"
+        },
+        {
+          "name": "unformatted money",
+          "pattern": "\\$\\s?(NaN|undefined|-?\\d{5,}(?:\\.\\d+)?)\\b"
+        },
+        {
+          "name": "placeholder copy",
+          "pattern": "\\b(TODO|FIXME|XXX|TBD)\\b|lorem ipsum|coming soon|not (yet )?implemented|placeholder text|under construction",
+          "flags": "i"
+        },
+        {
+          "name": "raw ISO timestamp",
+          "pattern": "\\b\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}",
+          "expect": "a formatted date/time"
+        },
+        {
+          "name": "raw UUID",
+          "pattern": "\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b",
+          "flags": "i",
+          "expect": "the record's name"
+        },
+        {
+          "name": "ungrouped number",
+          "pattern": "(?<![\\w.,:/#$-])\\d{5,}(?:\\.\\d+)?(?![\\w:/.-])",
+          "expect": "digit grouping (12,345) or a compact form (12.3k)"
+        },
+        {
+          "name": "internal id shown as text",
+          "pattern": "^(?:p|u|spr|run|job|req|bot|asset|deck|doc|ch|dm|sub|tm|team|wi|evt|ar|grant)-[a-z0-9][a-z0-9-]*$",
+          "whole": true,
+          "expect": "the record's name, or the id in code style"
+        }
+      ]
+    },
+    {
+      "id": "a11y.names",
+      "kind": "a11y-names",
+      "deep": true,
+      "selector": "button, a[href], [role=\"button\"], [role=\"tab\"], [role=\"menuitem\"], [role=\"checkbox\"], [role=\"switch\"], [role=\"combobox\"], input:not([type=\"hidden\"]), select, textarea, img",
+      "owner": "the control composite (icon buttons need aria-label)"
+    },
+    {
+      "id": "a11y.contrast",
+      "kind": "contrast",
+      "deep": true,
+      "selector": "body",
+      "min": 4.5,
+      "minLarge": 3,
+      "owner": "the text token / tone in the theme measured",
+      "exclude": [
+        {
+          "selector": "[data-composer-surface] [contenteditable] [data-placeholder], .ProseMirror .is-empty",
+          "reason": "Editor placeholders are hint text drawn by the editor, measured by placeholder.squeezed"
+        },
+        {
+          "selector": "[data-ui-text=\"avatar\"]",
+          "reason": "Avatar initials sit on user-distinguishing palette colours (identity data, not a tone token); avatar.readability judges their size"
+        }
+      ]
+    },
+    {
+      "id": "a11y.heading-order",
+      "kind": "heading-order",
+      "deep": true,
+      "selector": "body",
+      "owner": "the page outline (PageHeader h1, PageSection h2)"
+    },
+    {
+      "id": "a11y.landmarks",
+      "kind": "landmarks",
+      "deep": true,
+      "owner": "AppShell regions and rails (name each nav/aside)"
+    },
+    {
+      "id": "composer.readonly-coherent",
+      "kind": "composer-readonly",
+      "deep": true,
+      "selector": "$composers",
+      "dock": "$composerDocks|[data-column-dock], [data-floating-composer-dock]",
+      "allow": "a[href]",
+      "owner": "ConversationComposer / ComposerSurface (read-only mode)"
+    },
+    {
+      "id": "layer.behaviour",
+      "kind": "layer",
+      "deep": true,
+      "chrome": [
+        "$header",
+        "$footer"
+      ],
+      "owner": "the layer composite (InlinePopover, Menu, Dialog, Drawer, Tooltip)"
+    },
+    {
+      "id": "focus.visible",
+      "kind": "focus-walk",
+      "deep": true,
+      "owner": "the focusable composite (focus-visible ring)"
+    },
+    {
+      "id": "tabs.stable",
+      "kind": "tab-stability",
+      "deep": true,
+      "tolerance": 1,
+      "owner": "Tabs / the pane hosting the tablist (fixed tab row height, panel below, pane not content-sized)"
+    },
+    {
+      "id": "state.data",
+      "kind": "data-state",
+      "deep": true,
+      "region": "$contentColumns|main",
+      "owner": "the page handling the response (empty/error/loading states)"
+    },
+    {
+      "id": "theme.parity",
+      "kind": "geometry-snapshot",
+      "deep": true,
+      "selector": "[data-shell-nav] :is(h1, h2, h3, button, input, table, [role=\"tab\"], [role=\"tablist\"], [data-ui-section], [data-ui-empty], [data-composer-surface])",
+      "tolerance": 1,
+      "owner": "the theme tokens (a size/border that changes with the theme)"
+    },
+    {
+      "id": "text.flex-fragmented",
+      "kind": "text-fragmented",
+      "deep": true,
+      "selector": "[data-shell-nav] :is(p, div, span, li, td, label)",
+      "owner": "the component composing a sentence from text and inline marks (wrap the sentence in one element)"
+    },
+    {
+      "id": "text.leading-separator",
+      "kind": "leading-separator",
+      "deep": true,
+      "selector": "[data-shell-nav]",
+      "owner": "the inline list composite (separators belong to the item before them, or the list wraps by item)"
+    },
+    {
+      "id": "table.selection-column",
+      "kind": "selection-column",
+      "deep": true,
+      "selector": "$tables",
+      "owner": "DataTable selection / the page placing its checkbox column"
+    },
+    {
+      "id": "table.column-hog",
+      "kind": "column-hog",
+      "deep": true,
+      "selector": "$tables",
+      "maxShare": 0.5,
+      "owner": "DataTable column sizing (a growing text column truncates) / the page defining the columns",
+      "exclude": [
+        {
+          "selector": "[data-ui-table-rows=\"code-diff\"]",
+          "reason": "DiffViewer preserves complete code lines in a horizontal scroller, with two compact line-number gutters. The code-diff profile checks its 12px monospace type, 18px lines and 6/8px cell insets; annotations and ordinary controls retain their own checks."
+        }
+      ]
+    },
+    {
+      "id": "list.marker-alignment",
+      "kind": "marker-first-line",
+      "deep": true,
+      "selector": "[data-shell-nav] :is(li, [role=\"listitem\"], div, p)",
+      "tolerance": 2,
+      "owner": "the list composite drawing the marker (align-items: first baseline / start, not center)"
+    },
+    {
+      "id": "collection.cards-inset",
+      "kind": "style",
+      "selector": "[data-collection-layout=\"cards\"]",
+      "properties": {
+        "paddingLeft": 0,
+        "paddingRight": 0
+      },
+      "owner": "CollectionToolbar card layout aligns to page content"
+    },
+    {
+      "id": "page.body-inset",
+      "kind": "style",
+      "selector": "[data-page-body=\"inset\"]",
+      "properties": {
+        "paddingLeft": {
+          "token": "--ui-page-gutter"
+        },
+        "paddingRight": {
+          "token": "--ui-page-gutter"
+        }
+      },
+      "owner": "Standalone content body; covers shelf and empty states without a breadcrumb"
+    },
+    {
+      "id": "form.text-control-height",
+      "kind": "box",
+      "selector": "[data-ui-dialog=\"form\"] input:is([type=\"text\"],:not([type])):not([data-ui-control=\"combobox\"] input), [data-ui-dialog=\"form\"] [data-ui-control=\"combobox\"] > div:first-child",
+      "properties": {
+        "height": {
+          "min": 28,
+          "max": 32
+        }
+      },
+      "owner": "Input / PersonPicker in compact application forms"
+    },
+    {
+      "id": "rail.indicator-width",
+      "kind": "box",
+      "selector": "[data-ui-rail-leading=\"indicator\"]",
+      "properties": {
+        "width": 8
+      },
+      "owner": "GroupedList / decorative indicator column"
+    },
+    {
+      "id": "table.document-geometry",
+      "kind": "table",
+      "selector": "table[data-ui-table-rows=\"content\"]",
+      "rowHeight": {
+        "min": 44
+      },
+      "cellInset": {
+        "token": "--ui-table-inset"
+      },
+      "headerFontSize": 12,
+      "headerFontWeight": 600,
+      "owner": "DataTable content rows",
+      "bodyFontSize": 14,
+      "bodyFontFamily": {
+        "property": "fontFamily",
+        "from": "body"
+      }
+    },
+    {
+      "id": "workspace.resizable-columns",
+      "kind": "columns",
+      "selector": "[data-testid$=\"-rail-split\"]",
+      "children": ":scope > [data-testid$=\"-primary\"], :scope > [data-testid$=\"-secondary\"]",
+      "min": 2,
+      "max": 2,
+      "maxGap": 1,
+      "owner": "ExplorerLayout adjustable rail / SplitPane logical columns"
+    },
+    {
+      "id": "document.contents-font",
+      "kind": "text",
+      "selector": "[data-reading-contents] button",
+      "properties": {
+        "fontFamily": {
+          "from": ".doc-page",
+          "property": "fontFamily"
+        }
+      },
+      "owner": "CanvasDocumentView embedded document contents"
+    },
+    {
+      "id": "navigation.breadcrumb",
+      "kind": "breadcrumb",
+      "selector": "[data-ui-breadcrumbs], nav[aria-label=\"Breadcrumb\"], nav[aria-label=\"Breadcrumbs\"]",
+      "owner": "Shared Breadcrumbs and route hierarchy: one distinct level per crumb, one truncated line"
+    },
+    {
+      "id": "work.row-geometry",
+      "kind": "box",
+      "selector": "[data-work-row]",
+      "properties": {
+        "height": 44
+      },
+      "owner": "WorkTableView"
+    },
+    {
+      "id": "work.title",
+      "kind": "style",
+      "selector": "[data-work-title]",
+      "properties": {
+        "fontSize": 14,
+        "fontWeight": 500,
+        "lineHeight": 20
+      },
+      "owner": "WorkTableView"
+    },
+    {
+      "id": "work.secondary",
+      "kind": "style",
+      "selector": "[data-work-description]",
+      "properties": {
+        "fontSize": 12,
+        "lineHeight": 16
+      },
+      "owner": "WorkTableView"
+    },
+    {
+      "id": "work.title-inset",
+      "kind": "style",
+      "selector": "[data-work-row] > td:first-child",
+      "properties": {
+        "paddingLeft": 10,
+        "paddingRight": 10
+      },
+      "owner": "WorkTableView"
+    },
+    {
+      "id": "work.owner-column",
+      "kind": "box",
+      "selector": "[data-work-row] > td:nth-child(2)",
+      "properties": {
+        "width": 184
+      },
+      "owner": "WorkTableView"
+    },
+    {
+      "id": "work.portrait",
+      "kind": "box",
+      "selector": "[data-work-row] [data-ui-text=\"avatar\"]",
+      "properties": {
+        "width": 24,
+        "height": 24
+      },
+      "owner": "ActionRowPerson in WorkTableView"
+    },
+    {
+      "id": "work.header",
+      "kind": "style",
+      "selector": "table[data-ui-table-rows=\"work\"] thead th",
+      "properties": {
+        "fontSize": 12,
+        "fontWeight": 600
+      },
+      "owner": "WorkTableView"
+    },
+    {
+      "id": "call.gallery.tile-width",
+      "kind": "box",
+      "selector": "[data-call-dock][data-layout=\"stage\"] [data-dock-item]",
+      "properties": {
+        "width": {
+          "max": 416
+        }
+      },
+      "owner": "CallDock stage / CallTileRow gallery"
+    },
+    {
+      "id": "composer.folded.height",
+      "kind": "box",
+      "selector": "[data-composer-surface=\"collapsed\"]",
+      "properties": {
+        "height": {
+          "max": 48
+        }
+      },
+      "owner": "ContextComposer explicit collapse"
+    },
+    {
+      "id": "control.segmented-content-width.neutral",
+      "kind": "align",
+      "selector": "[data-segmented-width=\"content\"][data-segmented-tone=\"neutral\"] > :last-child",
+      "anchor": "[data-segmented-width=\"content\"]",
+      "ancestor": true,
+      "edges": [
+        "right"
+      ],
+      "offset": -3,
+      "owner": "SegmentedControl intrinsic width"
+    },
+    {
+      "id": "control.segmented-content-width.accent",
+      "kind": "align",
+      "selector": "[data-segmented-width=\"content\"][data-segmented-tone=\"accent\"] > :last-child",
+      "anchor": "[data-segmented-width=\"content\"]",
+      "ancestor": true,
+      "edges": [
+        "right"
+      ],
+      "offset": -4,
+      "owner": "SegmentedControl intrinsic width"
+    },
+    {
+      "id": "collection.refresh-with-query",
+      "kind": "within",
+      "selector": "[data-toolbar-variant=\"collection\"] button[aria-label=\"Refresh\"]",
+      "anchor": "[data-toolbar-controls]",
+      "ancestor": true,
+      "owner": "CollectionToolbar query controls"
+    },
+    {
+      "id": "diff.line-type",
+      "kind": "style",
+      "selector": "[data-ui-table-rows=\"code-diff\"] [data-diff-cell]",
+      "properties": {
+        "fontSize": 12,
+        "lineHeight": 18,
+        "fontFamily": {
+          "contains": "monospace"
+        }
+      },
+      "owner": "DiffViewer"
+    },
+    {
+      "id": "diff.line-height",
+      "kind": "box",
+      "selector": "[data-ui-table-rows=\"code-diff\"] [data-diff-line]",
+      "properties": {
+        "height": 18
+      },
+      "owner": "DiffViewer"
+    },
+    {
+      "id": "diff.gutter-inset",
+      "kind": "style",
+      "selector": "[data-ui-table-rows=\"code-diff\"] [data-diff-cell=\"gutter\"]",
+      "properties": {
+        "paddingLeft": 6,
+        "paddingRight": 6
+      },
+      "owner": "DiffViewer"
+    },
+    {
+      "id": "diff.code-inset",
+      "kind": "style",
+      "selector": "[data-ui-table-rows=\"code-diff\"] [data-diff-cell=\"code\"]",
+      "properties": {
+        "paddingLeft": 8,
+        "paddingRight": 8,
+        "whiteSpace": "pre"
+      },
+      "owner": "DiffViewer"
+    },
+    {
+      "id": "diff.scroll",
+      "kind": "style",
+      "selector": "[data-ui-diff-scroll]",
+      "properties": {
+        "overflowX": "auto"
+      },
+      "owner": "DiffViewer"
+    },
+    {
+      "id": "change.location-inset",
+      "kind": "style",
+      "selector": "[data-ui-change-location]",
+      "properties": {
+        "paddingLeft": 8,
+        "paddingRight": 8
+      },
+      "owner": "ChangeLocation"
+    },
+    {
+      "id": "change.diff-inset",
+      "kind": "style",
+      "selector": "[data-ui-change-diff-side]",
+      "properties": {
+        "paddingLeft": 8,
+        "paddingRight": 8,
+        "columnGap": 8
+      },
+      "owner": "ChangeDiff"
+    },
+    {
+      "id": "composer.mode-inset-docked",
+      "kind": "style",
+      "selector": "[data-ui-composer-modes=\"docked\"]",
+      "properties": {
+        "paddingLeft": 12,
+        "paddingRight": 12
+      },
+      "owner": "RichChatComposer mode row"
+    },
+    {
+      "id": "composer.mode-inset-compact",
+      "kind": "style",
+      "selector": "[data-ui-composer-modes=\"compact\"]",
+      "properties": {
+        "paddingLeft": 8,
+        "paddingRight": 8
+      },
+      "owner": "RichChatComposer mode row"
+    },
+    {
+      "id": "procedure.marker-gap",
+      "kind": "style",
+      "selector": "[data-ui-procedure] > li",
+      "properties": {
+        "columnGap": 12
+      },
+      "owner": "ProcedureSteps"
+    },
+    {
+      "id": "procedure.marker-md",
+      "kind": "box",
+      "selector": "[data-ui-procedure=\"md\"] > li > :first-child",
+      "properties": {
+        "width": 24,
+        "height": 24
+      },
+      "owner": "ProcedureSteps"
+    },
+    {
+      "id": "procedure.marker-sm",
+      "kind": "box",
+      "selector": "[data-ui-procedure=\"sm\"] > li > :first-child",
+      "properties": {
+        "width": 20,
+        "height": 20
+      },
+      "owner": "ProcedureSteps"
+    },
+    {
+      "id": "source.row-inset",
+      "kind": "style",
+      "selector": "[data-ui-source-row]",
+      "properties": {
+        "paddingLeft": 0,
+        "paddingRight": 0,
+        "columnGap": 12
+      },
+      "owner": "SourceCard row"
+    },
+    {
+      "id": "source.row-mark",
+      "kind": "box",
+      "selector": "[data-ui-source-row] > :first-child",
+      "properties": {
+        "width": 32,
+        "height": 32
+      },
+      "owner": "SourceCard row"
+    },
+    {
+      "id": "control.select-inset-field-sm",
+      "kind": "style",
+      "selector": "[data-ui-control=\"select\"][data-ui-size=\"sm\"]:is([data-variant=\"default\"],[data-variant=\"ghost\"])",
+      "properties": {
+        "paddingLeft": 8,
+        "paddingRight": 6
+      },
+      "owner": "Select trigger"
+    },
+    {
+      "id": "control.select-inset-pill-sm",
+      "kind": "style",
+      "selector": "[data-ui-control=\"select\"][data-ui-size=\"sm\"][data-variant=\"pill\"]",
+      "properties": {
+        "paddingLeft": 8,
+        "paddingRight": 4
+      },
+      "owner": "Select trigger"
+    },
+    {
+      "id": "control.select-inset-field-md",
+      "kind": "style",
+      "selector": "[data-ui-control=\"select\"][data-ui-size=\"md\"]:is([data-variant=\"default\"],[data-variant=\"ghost\"])",
+      "properties": {
+        "paddingLeft": 10,
+        "paddingRight": 8
+      },
+      "owner": "Select trigger"
+    },
+    {
+      "id": "control.select-inset-pill-md",
+      "kind": "style",
+      "selector": "[data-ui-control=\"select\"][data-ui-size=\"md\"][data-variant=\"pill\"]",
+      "properties": {
+        "paddingLeft": 10,
+        "paddingRight": 6
+      },
+      "owner": "Select trigger"
+    },
+    {
+      "id": "chat.message-inset",
+      "kind": "style",
+      "selector": "[data-testid=\"chat-message\"]",
+      "properties": {
+        "paddingLeft": 8,
+        "paddingRight": 8
+      },
+      "owner": "ChatPanel message hover surface"
+    },
+    {
+      "id": "chat.message-gap",
+      "kind": "style",
+      "selector": "[data-testid=\"message-row\"]",
+      "properties": {
+        "columnGap": 8,
+        "paddingLeft": 0,
+        "paddingRight": 0
+      },
+      "owner": "MessageRow avatar/content grid"
+    },
+    {
+      "id": "chat.message-avatar-slot",
+      "kind": "box",
+      "selector": "[data-testid=\"message-row\"] > :first-child",
+      "properties": {
+        "width": 20
+      },
+      "owner": "MessageRow stable avatar slot"
+    },
+    {
+      "id": "composer.tools-inset-docked",
+      "kind": "style",
+      "selector": "[data-ui-composer-tools=\"docked\"]",
+      "properties": {
+        "paddingLeft": 8,
+        "paddingRight": 8
+      },
+      "owner": "RichChatComposer toolbar"
+    },
+    {
+      "id": "composer.tools-inset-compact",
+      "kind": "style",
+      "selector": "[data-ui-composer-tools=\"compact\"]",
+      "properties": {
+        "paddingLeft": 6,
+        "paddingRight": 6
+      },
+      "owner": "RichChatComposer toolbar"
+    },
+    {
+      "id": "markdown.inline-code-inset",
+      "kind": "style",
+      "selector": "[data-ui-inline-code]",
+      "properties": {
+        "paddingLeft": "4px",
+        "paddingRight": "4px",
+        "marginLeft": "0px",
+        "marginRight": "0px"
+      },
+      "owner": "MarkdownView inline code token"
+    },
+    {
+      "id": "notice.marker-gap",
+      "kind": "style",
+      "selector": "[data-ui-access-notice]",
+      "properties": {
+        "columnGap": "8px"
+      },
+      "owner": "AccessNotice marker-to-prose gap"
+    }
+  ]
+}

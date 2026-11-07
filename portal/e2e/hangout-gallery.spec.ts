@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { measureDOM } from '../../.claude/skills/ui-dom-audit/scripts/measure.mjs';
-const fullContract = JSON.parse(readFileSync(new URL('../../.claude/skills/ui-dom-audit/references/work-ui.contract.json', import.meta.url), 'utf8'));
+import { measureDOM } from './lib/ui-dom-audit/measure.mjs';
+const fullContract = JSON.parse(readFileSync(new URL('./lib/ui-dom-audit/work-ui.contract.json', import.meta.url), 'utf8'));
 const contract = { ...fullContract, rules: fullContract.rules.filter((rule: { id: string }) => ['call.gallery.tile-width', 'composer.folded.height'].includes(rule.id)) };
 
 for (const theme of ['light', 'dark']) for (const width of [1440, 900, 540]) {

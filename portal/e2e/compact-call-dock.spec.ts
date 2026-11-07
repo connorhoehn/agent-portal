@@ -1,5 +1,5 @@
 import { test, expect } from './cdpTest';
-import { measureDOM } from '../../.claude/skills/ui-dom-audit/scripts/measure.mjs';
+import { measureDOM } from './lib/ui-dom-audit/measure.mjs';
 
 test('compact call columns fit narrow and wide hosts with one or several participants', async ({ page }) => {
   const errors: string[] = [];

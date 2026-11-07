@@ -1,5 +1,5 @@
 import { test, expect } from './cdpTest';
-import { measureDOM } from '../../.claude/skills/ui-dom-audit/scripts/measure.mjs';
+import { measureDOM } from './lib/ui-dom-audit/measure.mjs';
 
 test('shared chat stays compact in empty, short and historical conversations', async ({ page }) => {
   const errors: string[] = [];

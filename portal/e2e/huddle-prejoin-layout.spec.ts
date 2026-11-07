@@ -1,7 +1,7 @@
 import { test, expect } from './cdpTest';
 import { openAsClone } from './realSession';
 import { PRE_JOIN_KEY } from './preJoin';
-import { measureDOM } from '../../.claude/skills/ui-dom-audit/scripts/measure.mjs';
+import { measureDOM } from './lib/ui-dom-audit/measure.mjs';
 
 test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] } });
 

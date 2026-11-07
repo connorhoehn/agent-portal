@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs';
 import adapter from './ui-dom-audit.adapter';
 // The shared engine runs in the browser; this fixture binds the actual portal selector.
 // @ts-expect-error The portable audit intentionally ships plain JavaScript.
-import { measureDOM } from '../../.claude/skills/ui-dom-audit/scripts/measure.mjs';
+import { measureDOM } from './lib/ui-dom-audit/measure.mjs';
 
 test('adjustable and ordinary workspace frames retain column checks', async ({ page }) => {
-  const contract = JSON.parse(readFileSync(new URL('../../.claude/skills/ui-dom-audit/references/work-ui.contract.json', import.meta.url), 'utf8'));
+  const contract = JSON.parse(readFileSync(new URL('./lib/ui-dom-audit/work-ui.contract.json', import.meta.url), 'utf8'));
   const rules = contract.rules.filter((rule: { id: string }) => ['workspace.columns', 'workspace.resizable-columns'].includes(rule.id));
   const payload = { contract: { ...contract, rules }, selectors: adapter.selectors };
   const measure = () => page.evaluate(measureDOM, payload) as Promise<{ issues: { rule: string }[] }>;
