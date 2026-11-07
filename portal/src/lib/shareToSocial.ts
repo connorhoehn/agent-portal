@@ -4,9 +4,16 @@
 // components/decks/ShareToSocialAction.tsx.
 import type { ChatAttachmentDescriptor } from '@connorhoehnslalom/ui-components/social/rich-composer';
 
-/** `metadata` for a send that carries files (empty when there are none) — the composer's own shape. */
-const attachmentMetadata = (attachments: readonly ChatAttachmentDescriptor[]): { attachments?: ChatAttachmentDescriptor[] } =>
-  attachments.length ? { attachments: [...attachments] } : {};
+/** An attachment as a chat send carries it: the upload id and its display fields, never a URL. */
+export type OutgoingAttachment = Omit<ChatAttachmentDescriptor, 'url'>;
+
+/**
+ * `metadata` for a send that carries files (empty when there are none). Since
+ * realtime-modules 0.146 the gateway writes each attachment's download URL from
+ * its id and refuses any other URL, so the one the upload reported is dropped.
+ */
+export const attachmentMetadata = (attachments: readonly ChatAttachmentDescriptor[]): { attachments?: OutgoingAttachment[] } =>
+  attachments.length ? { attachments: attachments.map(({ url: _issued, ...rest }) => rest) } : {};
 
 export interface ShareDestination {
   /** Gateway channel: `social:ch:<slug>` or `social:dm:<ids>`. */

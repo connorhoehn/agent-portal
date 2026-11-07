@@ -20,7 +20,9 @@ describe('message shaping', () => {
     assert.equal(pptxName('Review'), 'Review.pptx'); assert.equal(pptxName('a.PPTX'), 'a.PPTX');
   });
   it('carries attachments and a display-only sourceDeck', () => {
-    assert.deepEqual(shareMetadata(att, 'd', 'r', 'Me'), { displayName: 'Me', attachments: [att], sourceDeck: { id: 'd', revisionId: 'r' } });
+    // The gateway writes the download URL from the id (realtime-modules 0.146), so the send carries none.
+    const { url: _issued, ...sent } = att;
+    assert.deepEqual(shareMetadata(att, 'd', 'r', 'Me'), { displayName: 'Me', attachments: [sent], sourceDeck: { id: 'd', revisionId: 'r' } });
   });
   it('confirms only an echoed message citing the attachment', () => {
     assert.equal(messageConfirmsShare([{}, { metadata: { attachments: [{ id: 'other' }] } }], 't1'), false);
