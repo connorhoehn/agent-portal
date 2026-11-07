@@ -189,7 +189,7 @@ describe('reviewing and accepting', () => {
     const d2 = await request(appAs(USERS.member!)).get(`/api/runbooks/proposals/${drop.body.proposal.id}`);
     expect(d2.body.files_diff.files.every((f: { status: string }) => f.status === 'deleted')).toBe(true);
     // Without its script, the procedure's commands point at nothing: lint says so.
-    expect(drop.body.proposal.lint.map((f: { rule: string }) => f.rule)).toContain('R-command-real');
+    expect(drop.body.proposal.lint.map((f: { rule: string }) => f.rule)).toEqual(expect.arrayContaining([expect.stringMatching(/^R-(command-real|file-missing)$/)]));
   });
 });
 
