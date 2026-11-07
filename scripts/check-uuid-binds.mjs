@@ -3,7 +3,7 @@
 // `uuid = text` and a text VALUES entry for a uuid column (every assessment
 // draft creation answered 503 until `:document` was cast). The mocked-Aurora
 // tests and the native harness never reach this, so this is the static check
-// (docs/deployment-enhancements/DE-28-bug-class-lint.md, check 2).
+// (check 2 of scripts/validate-deploy-bug-classes.sh).
 //
 // Rule: schema/*.sql CREATE TABLE blocks give table -> {uuid columns}. For each
 // SQL template literal in middleware/src/**/*.ts (not __tests__, not mock/),

@@ -84,7 +84,7 @@ else
   fi
   [ "$nt" -lt "$bt" ] && note "budget is stale: lower $BUDGET_T to $nt"
   if [ "$nt" -gt 0 ]; then
-    note "open product decisions (see docs/nav-server-tier-decisions.md):"
+    note "open product decisions:"
     node -e '
       const fs=require("fs");
       for (const l of fs.readFileSync(process.argv[1],"utf8").trim().split("\n").filter(Boolean)) {

@@ -105,4 +105,3 @@ fi
 echo
 echo "Next step — apply CRDs to your cluster:"
 echo "  kubectl apply -f k8s/crds/"
-echo "(See docs/deploy-via-operator.md for the full flow.)"

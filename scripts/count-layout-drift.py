@@ -35,8 +35,8 @@ Classes (each a ratchet in validate-component-discipline.sh):
                library's: T size="xs|sm|base", or the composite's own size prop.
   cellbutton   a text `<Button` inside a table cell — a TableTd body, a
                DataTable column `render`, or `rowActions`. A cell holds one
-               thing; its only control is an IconButton (docs/layout-cascade.md
-               "Tables"). Secondary facts go to a meta column, a Chip with a
+               thing; its only control is an IconButton.
+               Secondary facts go to a meta column, a Chip with a
                title, or the row's detail pane.
   lonesearch   a searchable DataTable alongside a page-local Toolbar or
                CollectionToolbar: two competing control rows. Standalone

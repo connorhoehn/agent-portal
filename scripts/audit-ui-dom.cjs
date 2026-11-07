@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 const skill = resolveUiAuditSkill({ root });
 const cli = path.join(skill, 'scripts/audit.mjs');
 if (!fs.existsSync(cli)) {
-  console.error('Link ui-components/skills/ui-dom-audit as .claude/skills/ui-dom-audit (or set UI_DOM_AUDIT_SKILL to that directory).');
+  console.error('Install @connorhoehnslalom/ui-components in portal (it ships skills/ui-dom-audit), or set UI_DOM_AUDIT_SKILL to a skill directory.');
   process.exit(2);
 }
 // The interaction probes (row activation, detail actions, selection) make the larger

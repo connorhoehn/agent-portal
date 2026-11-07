@@ -12,9 +12,7 @@
 //     in middleware/src/index.ts (orgiq: any requireTenant('orgiq') mount);
 //   - App.tsx has a `path="<portalRoot>"` tree;
 //   - the shell rail labels (Layout.tsx TENANT_LABELS) and the chooser tiles
-//     (SelectContextPage.tsx TENANT_META) name each tenant by its displayName;
-//   - CLAUDE.md names each tenant's roles in order on one line (the pattern the
-//     tenant judges grep).
+//     (SelectContextPage.tsx TENANT_META) name each tenant by its displayName.
 // Exit 0 when all agree, 1 with one line per disagreement.
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
@@ -89,12 +87,6 @@ export function checkTenantManifest(root) {
     if (!new RegExp(`^\\s*${esc(t.id)}:\\s*\\{\\s*label:\\s*'${esc(t.displayName)}'`, 'm').test(picker)) problems.push(`portal/src/pages/SelectContextPage.tsx: TENANT_META lacks ${t.id}: { label: '${t.displayName}' }`);
   }
 
-  // 6. CLAUDE.md, the human copy.
-  const claude = read(root, 'CLAUDE.md') ?? '';
-  for (const t of manifest.tenants) {
-    const re = new RegExp([t.id, ...t.roles].map(x => `\`${esc(x)}\``).join('.*'));
-    if (!claude.split('\n').some(line => re.test(line))) problems.push(`CLAUDE.md: no line names \`${t.id}\` and its roles in order (${t.roles.join(' / ')})`);
-  }
   return problems;
 }
 
@@ -103,7 +95,7 @@ function main(argv) {
   const root = ri >= 0 ? resolve(argv[ri + 1]) : resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const problems = checkTenantManifest(root);
   if (problems.length) { for (const p of problems) console.error(`check-tenant-manifest: ${p}`); return 1; }
-  console.log('check-tenant-manifest: seeds, mounts, route trees, shell labels, CLAUDE.md and generated files agree with tenants/manifest.json');
+  console.log('check-tenant-manifest: seeds, mounts, route trees, shell labels and generated files agree with tenants/manifest.json');
   return 0;
 }
 

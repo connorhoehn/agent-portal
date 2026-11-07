@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Every orgiq writer that changes a searchable record updates the search index
-// after its commit (docs/user-search-goal.md, decision 1; middleware/src/lib/search-index/writes.ts).
+// after its commit (middleware/src/lib/search-index/writes.ts).
 //
 // The check: in each module that owns an indexed record type, every exported
 // function whose name says it writes (create/update/add/remove/set/…) or whose

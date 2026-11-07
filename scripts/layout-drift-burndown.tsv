@@ -1,6 +1,6 @@
 # Layout-drift burn-down (scripts/count-layout-drift.py; judged by validate-component-discipline.sh; audit 2026-10-07 J1).
 # Columns: class · portal file · offenders allowed in it · owner surface · due date.
-# Classes (docs/layout-cascade.md "Tables"): bar bigtext cardstat stackedcell glyphbutton pxtype cellbutton lonesearch tablesize.
+# Classes: bar bigtext cardstat stackedcell glyphbutton pxtype cellbutton lonesearch tablesize.
 # A file over its row, a file with no row, or a row still counting after its due date fails the judge. Lower a row as you burn it.
 # Minted 2026-10-08 at the per-file counts behind the 2026-10-07 budgets (pxtype 358, tablesize 20, cellbutton 21, stackedcell 10, cardstat 7, bigtext 4, lonesearch 2, glyphbutton 1, bar 0).
 # 2026-10-14 (refinement plan Lane B): every row burned to zero; the file stays so a new offender needs a row (and an owner and a due date) rather than slipping in.

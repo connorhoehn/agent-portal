@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Definition of done for docs/research-honesty-checks-2026-09-16.md — the
-# judge for the four recurring "numbers that lie" bug classes found by
+# The judge for the four recurring "numbers that lie" bug classes found by
 # hand over ~40 fixes in one session. Exit 0 only when every check passes.
 #
 #   --quick   skip tsc (the two static scanners + the class 4 grep still run —

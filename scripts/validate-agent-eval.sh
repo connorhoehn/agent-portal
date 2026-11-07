@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Definition of done for docs/agent-eval-goal.md. Exit 0 only when every
+# Definition of done for agent evals. Exit 0 only when every
 # tool-bearing agent has a golden set and the structural harness (free,
 # offline, no AWS) is clean for all of them. Deliberately does NOT run
 # `golden_runner.py --mode live` — that mode spends real Bedrock $ and needs
-# live credentials; see the goal doc for why it stays an operator workflow.
+# live credentials; it stays an operator workflow.
 set -u
 cd "$(dirname "$0")/.."
 FAILS=()
@@ -12,7 +12,7 @@ fail() { printf '  ✗ %s\n' "$1"; FAILS+=("$1"); }
 section() { printf '\n== %s ==\n' "$1"; }
 
 PY=.venv-synth/bin/python
-[ -x "$PY" ] || { echo "missing $PY — see CLAUDE.md 'Local dev' for the synth venv setup"; exit 1; }
+[ -x "$PY" ] || { echo "missing $PY — create the synth venv at .venv-synth first"; exit 1; }
 
 section "golden set coverage"
 for d in agents/*/; do
@@ -40,9 +40,6 @@ else
   fail "golden_runner.py --mode structural failing — see /tmp/agent-eval-structural.log"
   tail -40 /tmp/agent-eval-structural.log | sed 's/^/      /'
 fi
-
-section "docs"
-[ -f docs/agent-eval-goal.md ] && ok "docs/agent-eval-goal.md exists" || fail "docs/agent-eval-goal.md missing"
 
 echo
 if [ "${#FAILS[@]}" = 0 ]; then echo "ALL CHECKS PASS — every agent has a golden set, structural grading is clean."; exit 0; fi

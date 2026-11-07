@@ -3,7 +3,7 @@
 # library, or hand-rolled out of divs?
 #
 # The assessment tenant already answered this for itself: its gate in
-# validate-assessment-tenant.sh walked `portal/src/pages/assessment` from 274
+# the assessment tenant gate (since removed) walked `portal/src/pages/assessment` from 274
 # raw styled elements to 0. That gate covers exactly one directory, and the
 # measurement that motivated it — "60 in the reference orgiq pages" — was never
 # itself enforced. So the rest of the portal has never been gated, and the debt
@@ -36,9 +36,9 @@ ok()   { printf '  ✓ %s\n' "$1"; }
 section() { printf '\n== %s ==\n' "$1"; }
 
 SRC=portal/src
-QUEUE=docs/ui-components-queue.md
+QUEUE=docs/ui-components-queue.md  # optional list of composites queued for the library; absent means none
 
-# The same element set validate-assessment-tenant.sh counts.
+# The same element set the assessment gate counted.
 # One raw-element counter for every discipline check (audit 2026-10-07 T7):
 # scripts/lib/discipline.sh, which the tenant validators source too.
 source scripts/lib/discipline.sh
@@ -162,7 +162,7 @@ section "layout drift — library primitives composed off the type scale (burn-d
 # glyph for an icon (the 2026-10-07 /admin/budgets report). One counter,
 # scripts/count-layout-drift.py (brace-aware tag walking — an arrow function in
 # an onClick cannot truncate a tag), nine classes. The last three are the
-# table rules (docs/layout-cascade.md "Tables", 2026-10-07): `cellbutton` (a
+# table rules (2026-10-07): `cellbutton` (a
 # text Button in a table cell or row actions), `lonesearch` (DataTable's own
 # search field on a row of its own) and `tablesize` (a DataTable/Table off the
 # 44px step — an explicit size other than sm; the shell's compact density

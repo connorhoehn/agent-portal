@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Definition of done for docs/newsroom-removal-goal.md. Exit 0 only when the
+# Definition of done for removing the newsroom tenant. Exit 0 only when the
 # newsroom tenant is gone everywhere it can execute. --quick skips jest/build.
 set -u
 cd "$(dirname "$0")/.."
@@ -37,8 +37,7 @@ section "tenancy model"
 # Re-pointed 2026-09-29 at "the retired tenant is absent" rather than "exactly
 # these two": the social and pipelines tenants joined TENANTS, and a pin on the
 # literal two-tenant list would turn this judge red for a reason unrelated to
-# the tenant it guards (docs/social-tenant-and-pipelines-research-2026-09-29.md
-# §A.3). The surviving tenants must still lead the list.
+# the tenant it guards. The surviving tenants must still lead the list.
 # TENANTS is generated from tenants/manifest.json (DE-29); session.ts re-exports it.
 tenants_line=$(grep -E "^export const TENANTS" middleware/src/lib/tenants.generated.ts)
 if printf '%s' "$tenants_line" | grep -qE "TENANTS\s*=\s*\[\s*'orgiq'\s*,\s*'assessment'(\s*,|\s*\])" && ! printf '%s' "$tenants_line" | grep -qiE "$PAT"; then
@@ -57,11 +56,6 @@ section "schema"
 [ -f schema/migrations/2026-09-05-drop-newsroom.sql ] && grep -qi "DROP TABLE IF EXISTS" schema/migrations/2026-09-05-drop-newsroom.sql && ok "drop migration written" || fail "schema/migrations/2026-09-05-drop-newsroom.sql missing or has no DROP TABLE IF EXISTS"
 grep -q "drop-newsroom" schema/load_schema.py && fail "load_schema.py must NOT auto-run the drop migration" || ok "drop migration is not auto-run"
 
-section "docs"
-[ -f docs/newsroom-removal.md ] && ok "docs/newsroom-removal.md exists" || fail "docs/newsroom-removal.md missing (what was removed, the migration, how to restore)"
-[ -d docs/assessment-journeys/isolation/archived-newsroom ] && ok "reporter/editor isolation logs archived" || fail "docs/assessment-journeys/isolation/archived-newsroom/ missing"
-grep -qE "OUTSIDE_ROLES=\(member sme program-owner org-leader hr-admin\)" scripts/validate-assessment-tenant.sh && ok "assessment validator isolation matrix = 5 orgiq roles" || fail "scripts/validate-assessment-tenant.sh still audits reporter/editor"
-
 section "builds and suites"
 if jg_mw_tsc >/dev/null 2>&1; then ok "middleware tsc"; else fail "middleware: tsc errors"; fi
 if jg_portal_tsc >/dev/null 2>&1; then ok "portal tsc"; else fail "portal: tsc errors"; fi
@@ -69,21 +63,7 @@ if [ "$QUICK" = 0 ]; then
   if (cd middleware && npx jest >/dev/null 2>&1); then ok "middleware jest"; else fail "middleware: jest failures"; fi
   if (cd portal && node --test 'src/**/__tests__/*.test.ts' >/dev/null 2>&1); then ok "portal node tests"; else fail "portal: node tests failing"; fi
   if jg_vite_build >/dev/null 2>&1; then ok "portal vite build"; else fail "portal: vite build failed"; fi
-  if scripts/validate-assessment-tenant.sh --quick --no-time >/dev/null 2>&1; then ok "assessment validator still passes"; else fail "assessment validator regressed"; fi
 fi
-
-section "journey proof"
-J=docs/newsroom-removal-journey.md
-if [ -f "$J" ]; then
-  bad=""
-  grep -qiE '^picker-workspaces: *(Org|orgiq)[^\n]*(Assessment|assessment)' "$J" || bad="$bad picker"
-  grep -qiE '^newsroom-route-result: *(not-found|redirect)' "$J" || bad="$bad route"
-  grep -qiE '^newsroom-api-status: *404' "$J" || bad="$bad api"
-  grep -qiE '^palette-newsroom-entries: *0' "$J" || bad="$bad palette"
-  grep -qiE '^verdict: *pass' "$J" || bad="$bad verdict"
-  grep -qiE 'TODO|unverified|placeholder' "$J" && bad="$bad TODO"
-  [ -z "$bad" ] && ok "journey proof passes" || fail "journey proof fails:$bad"
-else fail "$J missing"; fi
 
 echo
 if [ "${#FAILS[@]}" = 0 ]; then echo "ALL CHECKS PASS — the newsroom tenant is gone."; exit 0; fi

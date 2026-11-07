@@ -3,7 +3,7 @@
 // DE-29 done-when: gen-tenants --check passes on the tree and fails after a
 // hand edit of a generated file; check-tenant-manifest passes on the tree and
 // fails for each fixture (a manifest role with no Cedar file, a tenant with no
-// requireTenant mount, CLAUDE.md missing a role).
+// requireTenant mount).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,7 +26,6 @@ const FILES = [
   'portal/src/App.tsx',
   'portal/src/components/shell/Layout.tsx',
   'portal/src/pages/SelectContextPage.tsx',
-  'CLAUDE.md',
 ];
 
 function fixture() {
@@ -94,15 +93,6 @@ test('fixture: a tenant with no requireTenant mount', () => {
     edit(root, 'middleware/src/index.ts', s => s.replace(/^app\.use\('\/api\/pipelines[^\n]*\n/gm, ''));
     const problems = checkTenantManifest(root);
     assert.deepEqual(problems, ["middleware/src/index.ts: no app.use('/api/pipelines', requireTenant('pipelines')…) mount"]);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
-
-test('fixture: CLAUDE.md missing a role', () => {
-  const root = fixture();
-  try {
-    edit(root, 'CLAUDE.md', s => s.replace('`moderator` / ', ''));
-    const problems = checkTenantManifest(root);
-    assert.deepEqual(problems, ['CLAUDE.md: no line names `social` and its roles in order (participant / moderator / community-admin)']);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

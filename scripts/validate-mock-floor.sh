@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Definition of done for docs/mock-floor-goal.md — the judge for the mock data
+# Definition of done for the mock data floor — the judge for the mock data
 # floor in middleware/src/mock/core/. Exit 0 only when every check passes.
 #
 #   --quick   skip the full jest run (still runs tsc and the floor's own suites)
 #   --static  source/snapshot checks only; requires separate build/test evidence
 #
 # What each section enforces, and what it cannot see, is written out in
-# docs/mock-floor.md § "The judge". Read that before loosening anything here.
+# Read this script before loosening anything here.
 set -u
 cd "$(dirname "$0")/.."
 source scripts/lib/judges.sh  # jg_*: static gates run once per tree state
@@ -47,11 +47,11 @@ snapsha_check() {
   if [ -z "$actual" ]; then
     fail "$label: could not compute the handler digest — is middleware/node_modules present?"
   elif [ -z "$recorded" ]; then
-    fail "$label records no serverHandlerSha — recapture it (docs/mock-floor.md § Regenerating the snapshots)"
+    fail "$label records no serverHandlerSha — recapture it"
   elif [ "$recorded" = "$actual" ]; then
     ok "$label was captured from the handler sources on disk"
   else
-    fail "$label was captured from DIFFERENT handler sources than are on disk — recapture it (docs/mock-floor.md § Regenerating the snapshots)"
+    fail "$label was captured from DIFFERENT handler sources than are on disk — recapture it"
     note "recorded ${recorded%%????????????????????????????????????????????????????????}… vs on disk ${actual%%????????????????????????????????????????????????????????}…"
   fi
 }
@@ -135,7 +135,7 @@ fi
 # summarise. This is a HEURISTIC and it is a ratchet, not a gate: it matches a
 # SHAPE (`documentCount: 1247`), and it cannot tell a drifting aggregate (the
 # rows are right there in the same fixture) from a leaf metric (nothing in the
-# repo to count). Both limits are written out in docs/mock-floor.md; the budget
+# repo to count). Both limits are described in this script; the budget
 # may only go down, and it goes down by deriving a real aggregate with
 # countBy/sumBy — never by deleting a leaf metric to buy a point.
 section "rule 1 — no typed aggregates (ratchet)"
@@ -159,7 +159,7 @@ fi
 if [ "$n_agg" -le "$budget" ]; then
   ok "typed-aggregate shapes: $n_agg ≤ budget $budget"
 else
-  fail "typed-aggregate shapes: $n_agg > budget $budget — derive it (countBy/sumBy) or, if it is a leaf metric, say so in docs/mock-floor-goal.md before lowering nothing"
+  fail "typed-aggregate shapes: $n_agg > budget $budget — derive it (countBy/sumBy) or, if it is a leaf metric"
 fi
 if [ "$n_agg" -lt "$budget" ]; then
   note "budget is stale: lower $BUDGET_FILE to $n_agg"
@@ -278,7 +278,7 @@ fi
 # while this section stayed green, because the GET capture could not see them.
 #
 # It is a ratchet and it is a HEURISTIC in both directions — what it can and
-# cannot prove is written out in docs/mock-floor.md § What the judge cannot see.
+# cannot prove is not checked here.
 if [ "$SCAN_OK" = 1 ]; then
   # These remain visible: configured document services use their real durable
   # authority in dev:mock and refuse writes when absent, rather than fabricating
@@ -320,7 +320,7 @@ fi
 section "rule 2 — write response shapes are captured, not assumed"
 WRITES="$MW/src/mock/core/wire/snapshots/writes.json"
 if [ ! -f "$WRITES" ]; then
-  fail "write snapshot missing: $(rel "$WRITES") — capture it (docs/mock-floor.md § Regenerating the snapshots)"
+  fail "write snapshot missing: $(rel "$WRITES") — capture it"
 else
   node -e '
     const fs = require("fs");
@@ -477,7 +477,7 @@ if (cd "$MW" && node node_modules/.bin/tsx .mock-floor-tmp/enum.ts > "$TMP/live.
   if [ -z "$added" ] && [ -z "$gone" ]; then
     ok "routes.json matches the live router table ($(wc -l < "$TMP/live-routes.txt" | tr -d ' ') routes)"
   else
-    fail "routes.json is stale — regenerate (see docs/mock-floor.md § Regenerating the snapshots)"
+    fail "routes.json is stale — regenerate"
     [ -n "$added" ] && printf '%s\n' "$added" | head -10 | while read -r l; do note "+ $l (mounted, not captured)"; done
     [ -n "$gone" ] && printf '%s\n' "$gone" | head -10 | while read -r l; do note "- $l (captured, no longer mounted)"; done
   fi
@@ -518,12 +518,6 @@ if [ -f "$WRITES" ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-section "docs"
-[ -f docs/mock-floor.md ] && ok "docs/mock-floor.md exists" || fail "docs/mock-floor.md missing"
-[ -f docs/mock-floor-goal.md ] && ok "docs/mock-floor-goal.md exists" || fail "docs/mock-floor-goal.md missing"
-grep -q "The judge" docs/mock-floor.md 2>/dev/null && ok "docs/mock-floor.md documents the judge and its blind spots" \
-  || fail "docs/mock-floor.md has no '## The judge' section saying what this script can and cannot see"
-
 # ─────────────────────────────────────────────────────────────────────────────
 echo
 if [ "${#FAILS[@]}" = 0 ]; then

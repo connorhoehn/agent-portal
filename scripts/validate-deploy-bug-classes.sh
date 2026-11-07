@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# DE-28: lint for the three bug classes the first live deploy hit
-# (docs/deployment-enhancements/DE-28-bug-class-lint.md). None needs AWS.
+# Lint for the three bug classes the first live deploy hit. None needs AWS.
 #   1. partial secret ARNs      infra/test/secret-arns.test.ts
 #   2. uuid binds as text       scripts/check-uuid-binds.mjs (+ jest cases), native harness typing
 #   3. second CommonJS editor   portal/scripts/check-bundle-singletons.mjs after a sourcemap build

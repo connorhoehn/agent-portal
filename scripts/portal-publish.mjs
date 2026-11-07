@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Build the portal and publish it to OrgIQ-Portal (S3 + CloudFront) — the
-// no-domain HTTPS path, docs/social-calls-deploy-plan.md §10.
+// no-domain HTTPS path.
 //
 //   node scripts/portal-publish.mjs --dry-run              # print the plan; no AWS, no build
 //   node scripts/portal-publish.mjs                        # build, sync, invalidate, check

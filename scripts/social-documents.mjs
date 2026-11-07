@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Assessment documents on the local `social` compose profile
-// (docs/assessment-documents-parity-plan.md, Phase 0).
+// (assessment document pages against a local realtime gateway).
 //
 // The `dev:mock` middleware only opens the real canvas when it can mint a
 // document grant and reach a gateway + platform-api that trust it. This
@@ -67,12 +67,12 @@ const middlewareEnv = {
   REALTIME_PLATFORM_PUBLIC_URL: process.env.REALTIME_PLATFORM_PUBLIC_URL || `http://localhost:${platformPort}`,
   REALTIME_VIDEO_PUBLIC_URL: process.env.REALTIME_VIDEO_PUBLIC_URL || process.env.SOCIAL_VIDEO_PUBLIC_URL || 'http://localhost:3901',
   // The one-time import of Aurora document comments into platform-api's
-  // table (docs/assessment-documents-parity-goal.md): the profile's local
+  // table: the profile's local
   // DynamoDB publishes :8000; without these the Comments tab only counts the
   // comments that have not moved.
   DOCUMENT_COMMENT_IMPORT_TABLE: process.env.DOCUMENT_COMMENT_IMPORT_TABLE || 'document-comments',
   DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT: process.env.DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT || 'http://127.0.0.1:8000',
-  // Social channels and DMs (docs/social-tenant-design.md §4.4): the gateway's
+  // Social channels and DMs: the gateway's
   // chat({ chatStore }) takes realtime-modules' DynamoChatStore over the
   // profile's chat-* tables instead of the in-memory store. DynamoDB Local is
   // in-memory, so the middleware seeds the mock channels into it once when
@@ -101,5 +101,5 @@ if (action === 'up') {
 } else {
   console.log('Usage: node scripts/social-documents.mjs up [--build]|middleware|env|status|down');
   console.log(`Gateway :${gatewayPort}, platform-api :${platformPort}, middleware callback :${bffPort}.`);
-  console.log('Keys: .scratch/social-documents/settings.json (gitignored). Guide: docs/social-calls-local-stack.md.');
+  console.log('Keys: .scratch/social-documents/settings.json (gitignored).');
 }

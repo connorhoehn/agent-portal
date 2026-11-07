@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Route ↔ test parity, for every router — not just assessment.ts.
 #
-# `scripts/validate-assessment-tenant.sh` has carried this exact check for one
+# the assessment tenant judge (since removed) carried this exact check for one
 # router for months and repeatedly caught real gaps: a route nothing calls is
 # a route nobody has seen work. This runs the same idea against the whole HTTP
 # surface, via `middleware/src/mock/core/coverage/scan.ts` — which reuses
@@ -11,8 +11,7 @@
 #
 # What "has a test" means, and what this cannot see (a route having *a* test
 # says nothing about whether the test is any good; this cannot read the
-# assertion), is written out in docs/route-test-coverage.md. Read that before
-# loosening anything here.
+# assertion), is not decided here. Read the script before loosening anything.
 #
 # This is a RATCHET, on the same contract as scripts/orgiq-raw-budget.txt and
 # scripts/mock-aggregate-budget.txt: scripts/route-coverage-budget.txt holds
