@@ -2019,6 +2019,27 @@ describe('handing a machine work', () => {
       expect((await getJob(https.body.id))!.payload).toMatchObject({ repo: 'https://github.com/acme/api.git' });
     });
 
+    it('LOCAL_ALLOWED_REPO_HOSTS adds hosts to the github.com-only check; a host not listed stays a 400', async () => {
+      const node = await readyWorker();
+      const app = as('member', 'u-mia');
+      expect((await hand(app, node.nodeId, { repo: 'https://gitlab.com/acme/api.git' })).status).toBe(400);
+      process.env['LOCAL_ALLOWED_REPO_HOSTS'] = ' GitLab.com , github.example.com, https://bad.example/x, ';
+      try {
+        const lab = await hand(app, node.nodeId, { repo: 'https://gitlab.com/acme/api.git' });
+        expect(lab.status).toBe(201);
+        expect((await getJob(lab.body.id))!.payload).toMatchObject({ repo: 'https://gitlab.com/acme/api.git' });
+        const ghe = await hand(app, node.nodeId, { repo: 'git@github.example.com:acme/api' });
+        expect(ghe.status).toBe(201);
+        // A malformed entry is ignored, not half-used, and owner/name still means github.com.
+        for (const repo of ['https://bad.example/x/acme/api', 'https://evil.example/acme/api', 'https://gitlab.com/../etc']) {
+          expect([repo, (await hand(app, node.nodeId, { repo })).status]).toEqual([repo, 400]);
+        }
+        expect(normaliseRepo('acme/api')).toBe('https://github.com/acme/api');
+      } finally {
+        delete process.env['LOCAL_ALLOWED_REPO_HOSTS'];
+      }
+    });
+
     it('trusts a github.com URL only by its prefix, never because the string mentions github.com', async () => {
       // `evil.com/github.com` was returned verbatim because the check was
       // `raw.includes('github.com')`. Read as owner/name it can only ever be

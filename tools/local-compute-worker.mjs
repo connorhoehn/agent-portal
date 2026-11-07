@@ -18,14 +18,16 @@
 //     Sonnet or Haiku id; anything else refuses to start.
 //
 //   PERMISSIONS. A run gets an explicit tool allowlist (ALLOWED_TOOLS below:
-//     read, search, edit and git status/diff/log/show/add/commit in the
-//     checkout), a deny list for anything under .git/, and --permission-mode
+//     read, search, edit, git status/diff/log/show/add/commit, and the repo's
+//     test commands: `npm test`, `npm run test:*`, `npx jest`, `npx vitest`,
+//     `pytest`), a deny list for anything under .git/, and --permission-mode
 //     dontAsk, so whatever is not allowed is refused, never prompted for. It is
-//     never started with --dangerously-skip-permissions. One consequence to
-//     know: a `local:task` run cannot run the repo's tests (no `npm test`, no
-//     general shell) until the operator widens the list on this machine with
-//     LOCAL_ALLOWED_TOOLS, e.g. adding `Bash(npm test:*)`. Do that only for
-//     repos you trust: an edit to package.json plus `npm test` is a shell.
+//     never started with --dangerously-skip-permissions. The test commands are
+//     kept only for a run whose working directory is the repo this worker
+//     cloned for it; a job that names no repo runs without them, so `npm test`
+//     is refused there (an edit to package.json plus `npm test` is a shell,
+//     and outside the clone it would be a shell in whatever directory the
+//     worker was started from). No general shell either way.
 //
 //   loopback — a local inference server (llama-server, Ollama, vLLM, anything
 //     speaking the Anthropic Messages API) at ANTHROPIC_BASE_URL. Claude Code
@@ -64,6 +66,11 @@
 //                          claude-sonnet-4-5-20250929).
 //   POLL_INTERVAL_S        how often to poll /claim when idle (default: 10)
 //   REPOS_DIR              where to clone/update repos (default: ~/repos-worker)
+//   LOCAL_ALLOWED_REPO_HOSTS
+//                          comma-separated extra git hosts a job's repo may live on
+//                          (GitHub Enterprise, GitLab), e.g. `github.example.com,gitlab.com`.
+//                          github.com is always allowed. Set the same value on the
+//                          middleware, which refuses to enqueue any other host.
 //   LOCAL_ALLOWED_TOOLS    comma-separated Claude Code tool rules a run may use, replacing
 //                          the default allowlist below (ALLOWED_TOOLS). Anything not
 //                          listed is denied: the run is started with --permission-mode
@@ -82,6 +89,7 @@
 import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, createWriteStream } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { syncProjectSkills, describeSync, skillsNote, BODY_MAX } from './local-compute-skills.mjs';
+import { allowedToolsFrom, toolsForRun, allowedRepoHosts, normaliseRepoUrl, TEST_TOOLS } from './local-compute-policy.mjs';
 import { join, basename, dirname } from 'node:path';
 import { homedir, hostname, platform, arch, loadavg, cpus, totalmem, freemem, uptime } from 'node:os';
 
@@ -128,20 +136,16 @@ const LOCAL_SKILLS = (process.env.LOCAL_SKILLS ?? 'on').toLowerCase() !== 'off';
 
 // What a run may do, as Claude Code permission rules. It used to run with
 // --dangerously-skip-permissions, so a prompt (a work item's text, which other
-// people write) could do anything this machine's account can. The default is
-// a code change in the checkout: read and search it, edit it, follow the
-// org's skills, and look at or commit its git state. No general shell, no
-// network, no package scripts (an edit to package.json plus `npm test` is a
-// shell). An operator who wants the run to execute tests widens it on their
-// own machine with LOCAL_ALLOWED_TOOLS, e.g. adding `Bash(npm test:*)`.
-const DEFAULT_ALLOWED_TOOLS = [
-  'Read', 'Glob', 'Grep', 'Edit', 'Write', 'NotebookEdit', 'TodoWrite', 'Skill',
-  'Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git log:*)', 'Bash(git show:*)',
-  'Bash(git add:*)', 'Bash(git commit:*)', 'Bash(ls:*)',
-];
-const ALLOWED_TOOLS = process.env.LOCAL_ALLOWED_TOOLS
-  ? process.env.LOCAL_ALLOWED_TOOLS.split(',').map((t) => t.trim()).filter(Boolean)
-  : DEFAULT_ALLOWED_TOOLS;
+// people write) could do anything this machine's account can. The default
+// (DEFAULT_ALLOWED_TOOLS in local-compute-policy.mjs) is a code change in the
+// checkout: read and search it, edit it, follow the org's skills, look at or
+// commit its git state, and run its tests. The test commands are dropped for
+// any run that is not inside the repo this worker cloned for it (toolsForRun,
+// applied in runTask), whatever list they came from. LOCAL_ALLOWED_TOOLS
+// replaces the default list on this machine.
+const ALLOWED_TOOLS = allowedToolsFrom(process.env.LOCAL_ALLOWED_TOOLS);
+// Hosts a job's repo may be cloned from: github.com plus LOCAL_ALLOWED_REPO_HOSTS.
+const REPO_HOSTS = allowedRepoHosts(process.env.LOCAL_ALLOWED_REPO_HOSTS);
 // Never widened by LOCAL_ALLOWED_TOOLS, and deny wins over allow. A run that
 // could write .git/ could plant .git/hooks/pre-commit (or point core.hooksPath
 // somewhere) and then `git commit`, which runs the hook: a shell by another
@@ -707,14 +711,18 @@ async function shipLog(config, jobId, chunk) {
 // ─── Repo sync ───────────────────────────────────────────────────────────────
 
 // The shapes the middleware hands out (routes/local-compute.ts `normaliseRepo`):
-// a GitHub https or ssh URL whose owner/name is plain. Checked here as well, so
-// a row written before that check (or by another enqueuer) never reaches git.
-const REPO_URL_RE = /^(?:https:\/\/github\.com\/|git@github\.com:)[\w.-]+\/[\w.-]+$/;
-
-function ensureRepo(repoUrl) {
-  if (!repoUrl) return process.cwd();
-  if (typeof repoUrl !== 'string' || !REPO_URL_RE.test(repoUrl)) {
-    throw new Error(`repo ${JSON.stringify(repoUrl)} is not a GitHub repository URL`);
+// an https or ssh URL on github.com or a LOCAL_ALLOWED_REPO_HOSTS host whose
+// owner/name is plain. Checked here as well, so a row written before that
+// check (or by another enqueuer) never reaches git.
+//
+// Returns the run's working directory and the clone it is in. A job with no
+// repo runs in the worker's own directory with clonePath null, which is what
+// keeps the test commands off that run (toolsForRun).
+function ensureRepo(rawRepo) {
+  if (!rawRepo) return { cwd: process.cwd(), clonePath: null };
+  const repoUrl = normaliseRepoUrl(rawRepo, REPO_HOSTS.hosts);
+  if (!repoUrl) {
+    throw new Error(`repo ${JSON.stringify(rawRepo)} is not a repository URL on an allowed host (${REPO_HOSTS.hosts.join(', ')}; LOCAL_ALLOWED_REPO_HOSTS adds more)`);
   }
   const name = basename(repoUrl, '.git');
   if (!name || /^\.+$/.test(name) || name.startsWith('-')) throw new Error(`repo name ${JSON.stringify(name)} is not usable`);
@@ -738,7 +746,7 @@ function ensureRepo(repoUrl) {
     // a way to clone every private repo the service account can reach.
     execFileSync('git', ['clone', '--', repoUrl, name], { cwd: REPOS_DIR, stdio: 'ignore' });
   }
-  return repoPath;
+  return { cwd: repoPath, clonePath: repoPath };
 }
 
 // ─── Run ─────────────────────────────────────────────────────────────────────
@@ -771,8 +779,12 @@ async function equipRun(config, jobId, cwd) {
   return skillsNote(r, briefDir);
 }
 
-function runTask(config, jobId, cwd, prompt, systemNote = null) {
+function runTask(config, jobId, cwd, prompt, systemNote = null, clonePath = null) {
   const started = Date.now();
+  // The repo's test commands only inside the clone this worker made for the
+  // run; anywhere else `npm test` and friends are refused like any other shell.
+  const tools = toolsForRun(ALLOWED_TOOLS, { cwd, clonePath });
+  if (tools.length < ALLOWED_TOOLS.length) log.info(`no cloned repo: test commands off for this run (${TEST_TOOLS.filter((t) => ALLOWED_TOOLS.includes(t)).length} removed)`, 1);
   // Loopback only. In anthropic mode NO settings block is passed: `claude -p`
   // resolves auth and model exactly as it would for the operator at a terminal,
   // and an injected placeholder key would override that login and 401.
@@ -819,7 +831,7 @@ function runTask(config, jobId, cwd, prompt, systemNote = null) {
     '--output-format', 'stream-json',
     '--verbose',
     ...(ANTHROPIC_MODEL ? ['--model', ANTHROPIC_MODEL] : []),
-    '--allowedTools', ALLOWED_TOOLS.join(','),
+    '--allowedTools', tools.join(','),
     '--disallowedTools', DISALLOWED_TOOLS.join(','),
     '--permission-mode', 'dontAsk',
     ...(settingsOverride ? ['--settings', settingsOverride] : []),
@@ -1012,13 +1024,13 @@ async function runJob(config, claim) {
       return;
     }
 
-    const cwd = ensureRepo(repoUrl);
+    const { cwd, clonePath } = ensureRepo(repoUrl);
     // Skills go only into a checkout this worker owns (REPOS_DIR/<repo>), never the directory it
     // was started from, which may be the operator's home.
     const note = repoUrl
       ? await equipRun(config, job.id, cwd)
       : skillsNote(null, held.get(job.id)?.skillLibrary?.dir ?? null);
-    const outcome = await runTask(config, job.id, cwd, prompt, note);
+    const outcome = await runTask(config, job.id, cwd, prompt, note, clonePath);
 
     log[outcome.exitCode === 0 ? 'ok' : 'warn'](`finished in ${(outcome.durationMs / 1000).toFixed(1)}s · exit ${outcome.exitCode}`, 1);
     // `payload.requiresReview` is the same field the push-side dispatcher honours
@@ -1104,6 +1116,8 @@ if (reg.jobKinds.length === 0) {
   process.exit(1);
 }
 
+if (REPO_HOSTS.ignored.length) log.warn(`LOCAL_ALLOWED_REPO_HOSTS: ignored ${REPO_HOSTS.ignored.map((h) => JSON.stringify(h)).join(', ')} (bare host names only)`);
+log.info(`repo hosts: ${REPO_HOSTS.hosts.join(', ')}`);
 log.info(`polling for work every ${POLL_INTERVAL_S}s · announcing presence every ${Math.max(5, Math.min(heartbeatIntervalS, 25))}s`);
 log.info('Ctrl-C to stop. Anything claimed is handed back to the fleet if this worker dies mid-run.');
 // (presence is already running — started above, before the pause wait)

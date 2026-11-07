@@ -21,7 +21,9 @@
 // reachable machine IS connected — it just is not taking jobs.
 
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { allowedRepoHosts, normaliseRepo } from '../../lib/local-compute-repo.js';
 
 const WORKER = join(__dirname, '..', '..', '..', '..', 'tools', 'local-compute-worker.mjs');
 const source = readFileSync(WORKER, 'utf8');
@@ -86,12 +88,12 @@ describe('local-compute-worker.mjs — no shell, no blanket permissions', () => 
 
   it('never passes --dangerously-skip-permissions; it passes an explicit allowlist and denies the rest', () => {
     expect(source).not.toContain("'--dangerously-skip-permissions'");
-    expect(source).toContain("'--allowedTools', ALLOWED_TOOLS.join(',')");
+    expect(source).toContain("'--allowedTools', tools.join(',')");
     expect(source).toContain("'--permission-mode', 'dontAsk'");
   });
 
-  it('refuses a repo that is not a GitHub URL before it reaches git', () => {
-    expect(source).toMatch(/function ensureRepo\(repoUrl\) \{[\s\S]*?REPO_URL_RE\.test\(repoUrl\)/);
+  it('refuses a repo on a host it does not allow before it reaches git', () => {
+    expect(source).toMatch(/function ensureRepo\(rawRepo\) \{[\s\S]*?normaliseRepoUrl\(rawRepo, REPO_HOSTS\.hosts\);\s*if \(!repoUrl\) \{\s*throw/);
   });
 });
 
@@ -106,9 +108,86 @@ describe('local-compute-worker.mjs — nothing writes under .git/', () => {
     expect(source).toContain("'--disallowedTools', DISALLOWED_TOOLS.join(',')");
   });
 
-  it('says in its header that a local:task run cannot run tests until LOCAL_ALLOWED_TOOLS widens the list', () => {
+  it('says in its header that the test commands run only inside the cloned repo', () => {
     const header = source.slice(0, source.indexOf('import '));
-    expect(header).toMatch(/cannot run (the repo's )?tests/);
+    expect(header).toMatch(/test commands are\s+\/\/\s+kept only for a run whose working directory is the repo this worker\s+\/\/\s+cloned/);
     expect(header).toContain('LOCAL_ALLOWED_TOOLS');
+    expect(header).toContain('LOCAL_ALLOWED_REPO_HOSTS');
+  });
+});
+
+// docs/next-steps.md section 9 item 3: the default allowlist runs the repo's
+// tests, but only with the cloned repo as the working directory. The policy
+// lives in tools/local-compute-policy.mjs, evaluated here in a fresh node
+// (the CJS jest build cannot import an .mjs).
+const POLICY = join(__dirname, '..', '..', '..', '..', 'tools', 'local-compute-policy.mjs');
+function policy<T>(expr: string, env: Record<string, string> = {}): T {
+  const driver = `const p = await import(${JSON.stringify(POLICY)}); process.stdout.write(JSON.stringify(${expr}));`;
+  const out = spawnSync(process.execPath, ['--input-type=module', '-e', driver], { encoding: 'utf8', env: { ...process.env, ...env } });
+  if (out.status !== 0) throw new Error(out.stderr);
+  return JSON.parse(out.stdout) as T;
+}
+const TESTS = ['Bash(npm test:*)', 'Bash(npm run test:*)', 'Bash(npx jest:*)', 'Bash(npx vitest:*)', 'Bash(pytest:*)'];
+
+describe('local-compute-worker.mjs — the repo\'s tests, inside the clone only', () => {
+  it('the default allowlist carries the five test commands and still no general shell', () => {
+    const defaults = policy<string[]>('p.allowedToolsFrom(undefined)');
+    expect(defaults).toEqual(expect.arrayContaining(TESTS));
+    expect(defaults.filter((t) => /^Bash\((?!git |ls:|npm test:|npm run test:|npx jest:|npx vitest:|pytest:)/.test(t))).toEqual([]);
+    expect(defaults).not.toContain('Bash');
+  });
+
+  it('a run inside the clone keeps them; a run with no clone, or outside it, has them removed', () => {
+    const inClone = policy<string[]>(`p.toolsForRun(p.allowedToolsFrom(), { cwd: '/w/repos/api/', clonePath: '/w/repos/api' })`);
+    expect(inClone).toEqual(expect.arrayContaining(TESTS));
+    const noClone = policy<string[]>(`p.toolsForRun(p.allowedToolsFrom(), { cwd: '/home/op', clonePath: null })`);
+    for (const t of TESTS) expect(noClone).not.toContain(t);
+    expect(noClone).toEqual(expect.arrayContaining(['Read', 'Edit', 'Bash(git commit:*)']));
+    const elsewhere = policy<string[]>(`p.toolsForRun(p.allowedToolsFrom(), { cwd: '/w/repos', clonePath: '/w/repos/api' })`);
+    for (const t of TESTS) expect(elsewhere).not.toContain(t);
+    // An operator's own list loses them too when there is no clone.
+    const operator = policy<string[]>(`p.toolsForRun(p.allowedToolsFrom('Read, Bash(npm test:*) ,Bash(make:*)'), { cwd: '/home/op', clonePath: null })`);
+    expect(operator).toEqual(['Read', 'Bash(make:*)']);
+  });
+
+  it('runTask passes the per-run list, and a job with no repo has no clone', () => {
+    expect(source).toContain('const tools = toolsForRun(ALLOWED_TOOLS, { cwd, clonePath });');
+    expect(source).toContain("'--allowedTools', tools.join(',')");
+    expect(source).not.toContain("'--allowedTools', ALLOWED_TOOLS.join(',')");
+    expect(source).toContain('if (!rawRepo) return { cwd: process.cwd(), clonePath: null };');
+    expect(source).toContain('return { cwd: repoPath, clonePath: repoPath };');
+    expect(source).toContain('await runTask(config, job.id, cwd, prompt, note, clonePath)');
+  });
+
+  it('writes under .git/ stay denied whatever the allowlist', () => {
+    expect(source).toContain("'--disallowedTools', DISALLOWED_TOOLS.join(',')");
+  });
+});
+
+describe('LOCAL_ALLOWED_REPO_HOSTS — the worker and the middleware give one answer', () => {
+  const INPUTS = [
+    'acme/api', 'https://github.com/acme/api', 'git@github.com:acme/api.git',
+    'https://gitlab.com/acme/api.git', 'git@gitlab.com:acme/api', 'https://github.example.com/acme/api',
+    'https://evil.example/acme/api', 'https://gitlab.com.evil.example/acme/api', 'https://gitlab.com/acme/api/extra',
+    'https://gitlab.com/../etc', 'https://gitlab.com/-x/api', 'http://gitlab.com/acme/api', 'https://bad.example/x/acme/api',
+  ];
+  it.each([
+    ['unset', ''],
+    ['GitLab and a GitHub Enterprise host, plus junk that is ignored', ' GitLab.com,github.example.com, https://bad.example/x ,a b,'],
+  ])('%s', (_label, raw) => {
+    const env = { LOCAL_ALLOWED_REPO_HOSTS: raw };
+    const worker = policy<{ hosts: string[]; out: (string | null)[] }>(
+      `(() => { const h = p.allowedRepoHosts(process.env.LOCAL_ALLOWED_REPO_HOSTS); return { hosts: h.hosts, out: ${JSON.stringify(INPUTS)}.map((r) => p.normaliseRepoUrl(r, h.hosts)) }; })()`, env);
+    const hosts = allowedRepoHosts(raw);
+    expect(worker.hosts).toEqual(hosts);
+    expect(worker.out).toEqual(INPUTS.map((r) => normaliseRepo(r, hosts)));
+    expect(hosts[0]).toBe('github.com');
+    if (raw) {
+      expect(hosts).toEqual(['github.com', 'gitlab.com', 'github.example.com']);
+      expect(normaliseRepo('https://gitlab.com/acme/api.git', hosts)).toBe('https://gitlab.com/acme/api.git');
+    } else {
+      expect(normaliseRepo('https://gitlab.com/acme/api.git', hosts)).toBeNull();
+    }
+    expect(normaliseRepo('https://evil.example/acme/api', hosts)).toBeNull();
   });
 });

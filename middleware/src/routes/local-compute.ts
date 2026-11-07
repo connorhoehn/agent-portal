@@ -129,7 +129,7 @@ import {
   emitLocalSessionEnd,
 } from '../work-graph/compute-emitter.js';
 import { invalidateComputeCapabilitySource } from '../work-graph/compute-capability-runtime.js';
-import { REPO_FULL_NAME_RE } from '../lib/repo-token-provider.js';
+import { allowedRepoHosts, normaliseRepo } from '../lib/local-compute-repo.js';
 
 export const localComputeRouter = Router();
 
@@ -1231,23 +1231,8 @@ async function ownedNode(req: Request, res: Response): Promise<ComputeNode | nul
   return node;
 }
 
-/**
- * The one shape of `repo` a machine is handed: a GitHub repository, as
- * `owner/name`, `https://github.com/owner/name[.git]` or
- * `git@github.com:owner/name[.git]`, with owner/name held to the same
- * pattern the GitHub token provider uses (lib/repo-token-provider.ts). A bare
- * `owner/name` is stored as its https URL. Anything else is null: the worker
- * clones this string, and it once reached a shell (docs/next-steps.md
- * section 7, middleware).
- */
-export function normaliseRepo(raw: string): string | null {
-  // The prefix decides the form; nothing else in the string does (a check for
-  // "contains github.com" passed `evil.com/github.com` through verbatim).
-  const prefix = ['https://github.com/', 'git@github.com:'].find((p) => raw.startsWith(p)) ?? '';
-  const full = raw.slice(prefix.length).replace(/\.git$/, '');
-  if (!REPO_FULL_NAME_RE.test(full) || full.split('/').some((seg) => /^\.+$/.test(seg) || seg.startsWith('-'))) return null;
-  return prefix ? raw : `https://github.com/${raw}`;
-}
+// The repo check (github.com plus LOCAL_ALLOWED_REPO_HOSTS) lives in lib/local-compute-repo.ts.
+export { normaliseRepo };
 
 localComputeRouter.post(
   '/nodes/:nodeId/work',
@@ -1269,7 +1254,8 @@ localComputeRouter.post(
     if (typeof body.repo === 'string' && body.repo.trim()) {
       repo = normaliseRepo(body.repo.trim().slice(0, 400));
       if (!repo) {
-        res.status(400).json({ error: 'repo must be a GitHub repository: owner/name, https://github.com/owner/name or git@github.com:owner/name' });
+        const hosts = allowedRepoHosts();
+        res.status(400).json({ error: `repo must be owner/name (GitHub), https://<host>/owner/name or git@<host>:owner/name, on ${hosts.join(', ')}` });
         return;
       }
     }
