@@ -345,3 +345,48 @@ Each item: the decision, why, the change it implies, how to verify.
 10. **realtime-examples production overlays: patch with placeholders that fail loudly.** Leaving them silently broken wastes the next person's afternoon. Each of `values-eks-discovery`, `values-eks-shape2`, the cell overlays and `values-multinode` gets `COGNITO_CLIENT_ID: "REPLACE_ME"`, `ALLOWED_ORIGINS: "https://REPLACE_ME"` and `TRUSTED_PROXY_HOPS: "1"`, and the gateway's startup check refuses any value containing `REPLACE_ME` with a message naming the file. Verify: a chart render of each overlay succeeds and the gateway's config test rejects the placeholder.
 
 Two things these decisions do not change: nothing here re-enables an auth bypass outside an explicit dev flag, and nothing weakens the tenant boundary. Where a decision widens a default (test commands on local compute, TURN relay into the VPC, group DMs), the widening is bounded to the thing the research workflow needs.
+
+## 10. What the autonomous run did (7 November 2026)
+
+This section is the summary of the run that worked the section 8 list after section 9's decisions. Everything below is pushed to each repository's `main` unless stated. Nothing was deployed; no AWS or GitHub API access was used, only SSH pushes.
+
+### Packages
+
+| Package | State |
+|---|---|
+| 1 platform-api agent steps | Done. User definitions get no tools; tool steps run only on devbox; the CLI child gets an allowlisted environment. 0.1.1 to 0.1.4. |
+| 2, 3, 4 live-video-streaming | Done, plus a round 2 the review demanded. Legacy signalling and open transport routes removed; sessions service-token only; recordings behind a credential or a 24-hour playback token; webhooks behind the ops token with target validation pinned at delivery; TURN credentials, DTLS key and the proxy CA out of the repo; every channel route authenticated; call channels PRIVATE. 2.0.1. |
+| 5, 6, 16 aws-agentcore middleware | Done. One grant rule (admin only from admin, no self-edits, create is not an upsert); local-compute jobs bound to owned machines with a settings allowlist instead of skipped permissions; chat and summaries take a spend hold and write a ledger row, rate limited; lab, person-relink, ingest prefix and SSO email gates; internal routes verify request-bound signatures. |
+| 7, 8 realtime-modules | Done. Attachment token leak closed; documents, calls, rooms and DMs fail closed; sockets close at token expiry; caller identity from the auth context; DM gate resolves the sender with the frame. 0.146.3 (chain: 0.146.0 to 0.146.3). |
+| 9 platform-api lobby and tokens | Done. Lobby authority on by default, partition check for every tenant lobby, Cognito `aud` and `token_use`, CORS allowlist, timing-safe admin token, media catalog per org with a startup backfill. |
+| 10 message-queue and event-catalog | Done. Auth on by default with the four internal callers as the Helm default; every route gated; catalog reads gated with a token prompt and proxy for the admin UI; replay re-validates. 0.6.5 and 0.10.3. |
+| 11 editor XSS | Done. ui-components 2.507.2, realtime-modules plain-text editor, tiptap and prosemirror floors. |
+| 12 distributed-core | Done, three rounds. Trusted-key verification, every message type gated at the transport, Raft signed, certificates bound to node and expiry, loopback binds by default, public bind without keys fails closed, webhook SSRF guard with address pinning. The review also surfaced a real Raft election-safety bug (a node could vote twice in a term under load, leaving two leaders) fixed in 0.51.2. 0.51.0 and 0.51.1 shipped a stale `dist/`, so 0.51.2 is the first version consumers actually run. |
+| 13 service-runtime | Done. Request-bound gate, body cap, generic 401, replay cache, per-service secrets, 32-byte minimum. 0.7.1. |
+| 14 pipeline-runtime | Done. Approvals authorised before persistence; resume replays only verified decisions. 1.5.2. |
+| 15 agents and devbox | Partly. Secrets by name, guardrail and knowledge-base scoping are in infra; box reuse across users and the clone-target confinement are designed in `docs/microvm-runner-design.md` but the fleet path still reuses boxes. |
+| 17 realtime-examples gateway | Done, plus the section 9 items: per-tenant activity, SKIP_AUTH behind explicit dev flags, JWT audience, org gate on, frame limits, Origin allowlist, session restore bound to the subject, group DMs with a member resolver, ambient invites only for the global hangout, router channel check, socket close at expiry, production overlays with `REPLACE_ME` placeholders that refuse to start. 0.2.5. |
+| 18 managed-nosql-store | Done. Loopback default, admin token required in cluster mode and on replication, mutual TLS between nodes, sync on commit. 0.13.0. |
+| 19 infra least privilege | Done. Per-service Aurora logins, named AgentCore actions, confused-deputy conditions, deletion protection by default, Cognito hardened, secrets by name, portal refuses without a certificate, cdk-nag gate green with path-scoped suppressions, middleware at 2 vCPU when the gateway rides on it. Migration order in `infra/SECURITY-NOTES.md`. |
+| 20 headers and CSP | Done. Middleware, platform-api and the gateway send the header set; CloudFront carries a response-headers policy with the CSP; the realtime-examples frontend has a build-time CSP meta; CodeBlock no longer uses inline styles. |
+| 21 dependency hygiene | Done except CI pins. Audits clean of fixable highs in platform-api and message-queue; agent images pinned by digest; Python pinned; every consumer on distributed-core 0.51.2 (the last bump chain is the one still in flight when this was written). |
+| 22 row-level security and Cedar | Done. RLS on 22 tenant tables behind the per-service login (`RLS_ENFORCE`), policy engine deny-by-default with three read tools, admin break-glass with an audit alert. |
+
+### Also done
+
+- `docs/spend-map.md`, `docs/microvm-runner-design.md`, `docs/repo-consolidation.md`, `docs/fail-open-audit.md` (91 rows and the one-flag convention), `docs/demo-script.md`; README rewritten from a fresh-clone walk; the middleware suites that the hand-over sweep broke are green again.
+- Every worktree on the twelve repositories was merged or deleted (the aws-agentcore `ui-components-2501` branch was merged into main; the chassis worktrees and their `codex/*` branches were already merged and were removed locally and on origin).
+
+### Decisions I took (section 9 has the reasoning)
+
+Spend is charged to the actor's budget when no initiative is known; group DMs and the global hangout's ambient ring stay available; the gateway's production overlays fail loudly on placeholders while local overlays carry the dev flags; call channels are private; message-queue's Helm chart renders with the known callers; the catalog admin UI gets a token prompt; distributed-core refuses unsigned gossip only on public binds.
+
+### Still open, in order
+
+1. **Deploy.** Nothing here has run in AWS. The migration order is in `infra/SECURITY-NOTES.md`; the first deploy needs `-c kbMasterSecret=true`, `apply_all_seed.py --roles-only`, a certificate or `-c allowHttpOrigin=true`, and the Helm placeholders filled in.
+2. **Fail-open leftovers.** The 17 `test.failing` cases in `middleware/src/lib/__tests__/fail-closed-startup.test.ts` are the middleware defaults that still open on a bare `NODE_ENV` check. The convention to adopt is the `INSECURE_DEV_MODE` helper described in `docs/fail-open-audit.md`.
+3. **Agent runtime usage.** Chat spend rows carry an unknown cost until `agents/_shared/agui_stream.py` emits token usage.
+4. **Devbox box reuse.** Package 15's microVM runner is designed, not built.
+5. **CI.** No workflows were added (GitHub access was out of scope); actions in the four repos with workflows are pinned by tag.
+6. **Known flakes.** managed-nosql-store's Raft tests under machine load; distributed-core's Raft integration suite under load; the dashboard UI tests in live-video-streaming (44, pre-existing).
+7. **ui-components local checkout.** Your own checkout is 50 commits behind origin with 139 uncommitted files; it was deliberately not touched.
