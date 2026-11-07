@@ -9,6 +9,11 @@ permit (
     OrgIQ::Action::"ViewLeaderboard",
     OrgIQ::Action::"ViewObservability",
     OrgIQ::Action::"LabelFeedback",
+    // Read the work board and write discussion on it (docs/next-steps.md §9
+    // item 8d). A comment is discussion, not a state change: the route asks
+    // this plus membership of the item's initiative (owner, contributor, or
+    // an org-wide role); sprint, owner and status writes keep their own gates.
+    OrgIQ::Action::"ViewWorkItems",
     OrgIQ::Action::"ManageCanary",
     // Dispatch agent runs against initiatives (bots, marketplace authorize).
     // Leaders direct agent work across the org the same way they approve the
@@ -38,7 +43,18 @@ permit (
     // Decide runbook proposals. Role-wide here; routes/runbooks.ts scopes it to the
     // runbook's owner or an SME on its initiative (lib/runbook-review.ts), with
     // org-leader and admin overriding.
-    OrgIQ::Action::"ReviewRunbook"
+    OrgIQ::Action::"ReviewRunbook",
+    // Change the SDLC policies that govern agent-written code (POST/DELETE
+    // /api/sdlc/policies, PUT /api/sdlc/policy-sets/:scope) and approve a
+    // second-person loosening. Held by org-leader and admin only, never by a
+    // devbox operator, so nobody who runs the boxes moves the rules their own
+    // runs are judged by (docs/next-steps.md §9 item 8b). Replaces
+    // EditSdlcPolicy, which hr-admin held.
+    OrgIQ::Action::"ManageSdlcPolicies",
+    // Edit the Bedrock guardrail (PII filters, denied topics). The guardrail
+    // editor is open to org-leader, hr-admin and admin (§9 item 8c); everyone
+    // with ViewObservability keeps the read-only detail view.
+    OrgIQ::Action::"EditGuardrail"
   ],
   resource
 )

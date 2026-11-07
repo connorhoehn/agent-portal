@@ -13,6 +13,11 @@ permit (
     OrgIQ::Action::"ViewOrgChart",
     OrgIQ::Action::"ViewObservability",
     OrgIQ::Action::"LabelFeedback",
+    // Read the work board and write discussion on it (docs/next-steps.md §9
+    // item 8d). A comment is discussion, not a state change: the route asks
+    // this plus membership of the item's initiative (owner, contributor, or
+    // an org-wide role); sprint, owner and status writes keep their own gates.
+    OrgIQ::Action::"ViewWorkItems",
     // Pair their OWN machine as a presence node. This is personal, not fleet
     // authority: the routes bind every node to the pairing session's sub, and
     // a member only ever sees or manages their own machines. Dispatching work

@@ -6,6 +6,10 @@
 const mockGateActions: { read: string[]; manage: string[] } = { read: [], manage: [] };
 
 jest.mock('../../lib/authz.js', () => ({
+  // lib/budget-scope.ts (program-owner scope, budgets-program-owner-scope.test.ts):
+  // no session here, so it never narrows these writes.
+  resolveSession: (req: { session?: unknown }) => req.session ?? null,
+  isAllowed: async () => true,
   readForRolesElseAction: (_roles: string[], action: string) => {
     mockGateActions.read.push(action);
     return (_req: unknown, _res: unknown, next: () => void) => next();

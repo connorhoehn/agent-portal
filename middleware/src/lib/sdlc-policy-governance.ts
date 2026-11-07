@@ -4,11 +4,10 @@
 // writing it, kept out of the route so the legacy POST/DELETE /policies and
 // the versioned PUT /policy-sets/:scope cannot drift apart.
 //
-// Who may edit SDLC policies is an OPEN user decision. What is built is the
-// conservative default (docs/local-backlog-goal-2026-10-28.md, "Decisions
-// taken by default"):
-//   1. Cedar `EditSdlcPolicy` — hr-admin and admin; the sme lost it with the
-//      ManageDevbox split (asked at the route, before this file).
+// Who may edit SDLC policies was decided in docs/next-steps.md §9 item 8b:
+//   1. Cedar `ManageSdlcPolicies` — org-leader and admin; never a devbox
+//      operator (sme, hr-admin), so nobody who runs the boxes moves the rules
+//      their own runs are judged by (asked at the route, before this file).
 //   2. The `org` set needs an org-wide role (org-leader, hr-admin, admin). An
 //      initiative set needs the caller on that initiative, and a non-org-wide
 //      caller may not make it looser than the org set.
@@ -17,7 +16,7 @@
 //      loosening of them. Admin may pass `override: true`, which is audited.
 //   4. Two people to loosen (SDLC_POLICY_TWO_PERSON, on unless set to "off"):
 //      a loosening edit is stored as a pending proposal and applies only when
-//      a second EditSdlcPolicy holder or an org-leader approves it; the
+//      a second ManageSdlcPolicies holder or an org-leader approves it; the
 //      proposer never can. Tightening applies at once.
 
 import {
@@ -145,7 +144,7 @@ export async function submitPolicySet(input: {
  * The second person on a loosening proposal. Approving applies it as the
  * next version (or supersedes it when the set moved on since it was made);
  * the proposer may never decide their own proposal, approve or reject.
- * `mayDecide` is the route's answer to "EditSdlcPolicy holder or org-leader".
+ * `mayDecide` is the route's answer to "ManageSdlcPolicies holder or org-leader".
  */
 export async function decidePolicyProposal(input: {
   session: Session; id: string; decision: 'approve' | 'reject'; note: string | null; override?: boolean;
@@ -159,8 +158,8 @@ export async function decidePolicyProposal(input: {
     return { kind: 'refused', status: 409, gate: 'self-approval', error: 'you proposed this edit, so someone else must decide it' };
   }
   const override = input.override === true && input.session.role === 'admin';
-  // org-leader may approve an org loosening (DE-43 §4) though it holds no
-  // EditSdlcPolicy; the scope rules still apply to it as to anyone.
+  // org-leader may approve an org loosening (DE-43 §4); the scope rules still
+  // apply to it as to anyone.
   const refused = await editRefusal(input.session, proposal.scope, override);
   const overrode = refused === OVERRODE_SELF_GATE;
   if (refused && refused !== OVERRODE_SELF_GATE) return refused;

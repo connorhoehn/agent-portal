@@ -16,7 +16,7 @@ const ROUTES = resolve(__dirname, '..');
 const FILES = ['bots', 'work', 'agent-projects', 'sdlc', 'internal-devbox', 'work-items', 'work-documents',
   'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints', 'prompt-pointers', 'user-budgets',
   'ops-switches'];
-const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|sprintMoveAllowed|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(/;
+const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|sprintMoveAllowed|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(|requireBudgetScope\(/;
 
 const SCOPED = [
   'agent-projects DELETE /:id', 'agent-projects POST /', 'agent-projects POST /:id/clone-command',
@@ -44,6 +44,14 @@ const SCOPED = [
   // DE-50: an initiative pause is its stewards' (ManageBudgets + requireInitiativeScope);
   // the fleet scope needs an org-wide role instead.
   'ops-switches PUT /switches/:scope',
+  // docs/next-steps.md §9 item 8a: a program-owner allocates only on
+  // initiatives they own (lib/budget-scope.ts requireBudgetScope); org-leader,
+  // hr-admin and admin stay program-wide.
+  'budgets PUT /:orgProjectId', 'budgets DELETE /:orgProjectId', 'budgets PUT /:orgProjectId/limits',
+  'grants POST /', 'grants PATCH /:id', 'grants DELETE /:id',
+  // §9 item 8d: a comment needs ViewWorkItems plus membership of the item's
+  // initiative (requireInitiativeScope), not the DispatchAgentRun write gate.
+  'work-items POST /projects/:id/discussion/comments', 'work-items POST /work-items/:id/comments',
 ];
 
 /** Not scoped yet, each with why. Fixing one moves it to SCOPED. */
@@ -51,13 +59,6 @@ const OPEN: Record<string, string> = {
   'prompt-pointers POST /:agent/candidate': 'DE-4: prompts are org-wide, keyed by agent, with no initiative; ManageCanary (org-leader / hr-admin) is the gate',
   'prompt-pointers POST /:agent/promote': 'DE-4: same as candidate: org-wide, ManageCanary',
   'prompt-pointers POST /:agent/rollback': 'DE-4: same as candidate: org-wide, ManageCanary',
-  'budgets PUT /:orgProjectId': 'DE-44 row 20: whether program-owner is program-wide is a user decision',
-  'budgets DELETE /:orgProjectId': 'DE-44 row 20: same decision',
-  // DE-37: run limits sit beside the allocation, behind the same manageGate.
-  'budgets PUT /:orgProjectId/limits': 'DE-37: gated like budgets PUT (ManageBudgets); whether program-owner is program-wide is the DE-44 row 20 decision',
-  'grants POST /': 'DE-44 row 21: same program-owner decision',
-  'grants PATCH /:id': 'DE-44 row 21',
-  'grants DELETE /:id': 'DE-44 row 21',
   // DE-54: a user budget spans every initiative the user spends on, so there is
   // no initiative to scope to; ManageBudgets plus the self-set refusal (a user
   // never sets or removes their own row) are the gate.
@@ -65,12 +66,12 @@ const OPEN: Record<string, string> = {
   'user-budgets DELETE /:userId': 'DE-54: same as PUT /:userId',
   // DE-55: which bots are funded first is the release manager's money call,
   // gated like budgets PUT (same program-owner decision, DE-44 row 20).
-  'bots PUT /:id/essential': 'DE-55: ManageBudgets marks a bot essential; whether program-owner is program-wide is the DE-44 row 20 decision',
+  'bots PUT /:id/essential': 'DE-55: ManageBudgets marks a bot essential; not in §9 item 8a (budgets and grants only), so program-owner is still program-wide here',
   'initiative-decks POST /projects/:projectId': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
   'initiative-decks POST /:id/revisions': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
   'initiative-decks POST /:id/revise': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
   'initiative-decks POST /:id/preview': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
-  'sdlc POST /policies': 'the org set only (no initiative); EditSdlcPolicy + org-wide role + self-gate + two-person rule in lib/sdlc-policy-governance.ts (DE-43/DE-46)',
+  'sdlc POST /policies': 'the org set only (no initiative); ManageSdlcPolicies + org-wide role + self-gate + two-person rule in lib/sdlc-policy-governance.ts (DE-43/DE-46)',
   'sdlc DELETE /policies/:id': 'same as POST /policies: the org set only',
   'devbox POST /sessions': 'mints a fresh session id for the caller; nothing to scope until a box is registered',
   'work POST /dispatch': 'operator kick of the dispatcher; no initiative in the request',
@@ -78,8 +79,6 @@ const OPEN: Record<string, string> = {
   'work POST /findings/analyze-batch': 'same as /findings/:id/analyze',
   'work POST /proposals': 'ManageDevbox-gated; not yet assessed for initiative scope (not in the DE-44 table)',
   'work POST /proposals/:id/decide': 'ManageDevbox-gated; not yet assessed for initiative scope (not in the DE-44 table)',
-  'work-items POST /projects/:id/discussion/comments': 'commenting is open to every reader today; restricting it to stewards is a user decision (DE-44 row 23)',
-  'work-items POST /work-items/:id/comments': 'commenting is open to every reader today; restricting it to stewards is a user decision (DE-44 row 23)',
 };
 
 function writeRoutes(): Map<string, string> {

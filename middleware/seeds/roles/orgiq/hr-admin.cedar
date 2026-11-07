@@ -21,6 +21,11 @@ permit (
     OrgIQ::Action::"ViewIdentityAdmin",
     OrgIQ::Action::"ViewObservability",
     OrgIQ::Action::"LabelFeedback",
+    // Read the work board and write discussion on it (docs/next-steps.md §9
+    // item 8d). A comment is discussion, not a state change: the route asks
+    // this plus membership of the item's initiative (owner, contributor, or
+    // an org-wide role); sprint, owner and status writes keep their own gates.
+    OrgIQ::Action::"ViewWorkItems",
     OrgIQ::Action::"ManageIngest",
     OrgIQ::Action::"ManageCanary",
     OrgIQ::Action::"ManageKB",
@@ -72,17 +77,17 @@ when { principal.role == "hr-admin" };
 // every one of them through ManageDevbox and keeps them: whether People Ops
 // should lose shell and task is an open decision (DE-42), and the split must
 // not narrow a role on its own. Org-wide, so no initiative condition; the
-// route layer treats hr-admin as on every initiative. EditSdlcPolicy is the
-// governance-editing half; DE-43's two-person rule and self-gate refusal
-// apply on top of it at the route.
+// route layer treats hr-admin as on every initiative. Editing the SDLC
+// policies is NOT here: it is ManageSdlcPolicies (org-leader and admin),
+// because hr-admin operates the boxes those policies govern
+// (docs/next-steps.md §9 item 8b).
 permit (
   principal,
   action in [
     OrgIQ::Action::"OpenDevboxShell",
     OrgIQ::Action::"RunDevboxTask",
     OrgIQ::Action::"DecideAgentChange",
-    OrgIQ::Action::"DeliverAgentChange",
-    OrgIQ::Action::"EditSdlcPolicy"
+    OrgIQ::Action::"DeliverAgentChange"
   ],
   resource
 )

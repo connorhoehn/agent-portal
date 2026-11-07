@@ -69,6 +69,25 @@ export async function stewardsInitiative(
 }
 
 /**
+ * Whether this caller's person is the OWNER of `initiativeId` (not merely a
+ * contributor, and with no org-wide bypass). The program-owner budget scope
+ * (docs/next-steps.md §9 item 8a) asks this: a program owner allocates only
+ * within initiatives they own. Unresolvable caller or failed lookup = false.
+ */
+export async function ownsInitiative(session: Session | null, initiativeId: string): Promise<boolean> {
+  if (!session?.sub || !initiativeId) return false;
+  try {
+    const { getUser, getProject } = await providers();
+    const personId = (await getUser(session.sub))?.personId ?? null;
+    if (!personId) return false;
+    return (await getProject(initiativeId))?.ownerId === personId;
+  } catch (err) {
+    console.warn(`[initiative-scope] could not resolve the owner of ${initiativeId}:`, (err as Error).message);
+    return false;
+  }
+}
+
+/**
  * The same rule for a user id with no session in hand: a service-signed call
  * names who it acts for (`principal.requestedBy`), not a cookie. The user is
  * read authoritatively so a revoked grant cannot charge an initiative, and an

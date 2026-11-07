@@ -13,6 +13,11 @@ permit (
     OrgIQ::Action::"ViewOrgChart",
     OrgIQ::Action::"ViewObservability",
     OrgIQ::Action::"LabelFeedback",
+    // Read the work board and write discussion on it (docs/next-steps.md §9
+    // item 8d). A comment is discussion, not a state change: the route asks
+    // this plus membership of the item's initiative (owner, contributor, or
+    // an org-wide role); sprint, owner and status writes keep their own gates.
+    OrgIQ::Action::"ViewWorkItems",
     // Direct agent work across the program — same authority an SME exercises
     // per-initiative; the route-layer grant scoping still applies to spend.
     OrgIQ::Action::"DispatchAgentRun",
@@ -24,6 +29,7 @@ permit (
     OrgIQ::Action::"ManageBots",
     // Set the monthly allocation per initiative — the program owner runs the
     // delivery program, so they are exactly who should be setting its ceiling.
+    // Only on initiatives they own: see the forbid at the end of this file.
     OrgIQ::Action::"ManageBudgets",
     // Read the session brief a run was given (GET /api/runs/:ref/brief, the work-item
     // brief preview). Every role that can see work can see what a box was told.
@@ -48,3 +54,18 @@ forbid (
   resource
 )
 when { principal.role == "program-owner" };
+
+// A program owner allocates only within the initiatives they own
+// (docs/next-steps.md §9 item 8a): an initiative allocation, its run limits
+// and its sprint envelopes (routes/budgets.ts, routes/grants.ts) send
+// `ownsInitiative`, true when the caller's person is the initiative's owner.
+// The route refuses first (403 NOT_INITIATIVE_OWNER), because the local seed
+// matrix ignores `when` clauses; this is the production copy. A bare
+// capability probe sends no attribute, so the budget controls still show and
+// reads stay open.
+forbid (
+  principal,
+  action == OrgIQ::Action::"ManageBudgets",
+  resource
+)
+when { principal.role == "program-owner" && resource has ownsInitiative && !resource.ownsInitiative };

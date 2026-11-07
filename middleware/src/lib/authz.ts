@@ -49,7 +49,7 @@ export const CAPABILITY_ACTIONS = [
   'RunDevboxTask',       // devbox.ts /:sid/task, agent-projects /:id/runs, sdlc /address + /rereview, devbox agent invoke
   'DecideAgentChange',   // sdlc.ts — POST /changes/:id/decide (author refused, DE-43)
   'DeliverAgentChange',  // sdlc.ts — POST /changes/:id/deliver
-  'EditSdlcPolicy',      // sdlc.ts — policy sets, policy writes, loosening proposals (DE-43/DE-46)
+  'ManageSdlcPolicies',  // sdlc.ts — policy writes, policy sets, loosening approvals (org-leader + admin, §9 item 8b)
   'ManageBots',          // bots.ts — create/edit standing missions (sme, program-owner, leaders)
   'DispatchAgentRun',    // projects.ts, bots.ts
   'ManageIngest',        // index.ts — ingest + connections
@@ -58,7 +58,8 @@ export const CAPABILITY_ACTIONS = [
   'LabelFeedback',       // quality.ts
   'ApproveTransaction',  // approvals.ts
   'Masquerade',          // session.ts
-  'ManageBudgets',       // budgets.ts — initiative allocations (program management)
+  'ManageBudgets',       // budgets.ts — initiative allocations (program management; program-owner only on initiatives they own)
+  'ViewWorkItems',       // work-items.ts — comment on a work item of an initiative you are on (§9 item 8d)
   'ManageSprints',       // sprints.ts — create sprints, move work between them (org-leader + sme)
   'EnterEnvironment',    // environments.ts — reach a deployed environment from a devbox
   'ManageEnvironments',  // environments.ts — describe/edit/remove an environment

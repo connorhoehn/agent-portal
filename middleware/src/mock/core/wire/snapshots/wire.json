@@ -4126,12 +4126,6 @@
         "schema.OrgIQ.actions.EditSchema.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.EditSchema.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.EditSchema.appliesTo.resourceTypes[]": "string",
-        "schema.OrgIQ.actions.EditSdlcPolicy": "object",
-        "schema.OrgIQ.actions.EditSdlcPolicy.appliesTo": "object",
-        "schema.OrgIQ.actions.EditSdlcPolicy.appliesTo.principalTypes": "array",
-        "schema.OrgIQ.actions.EditSdlcPolicy.appliesTo.principalTypes[]": "string",
-        "schema.OrgIQ.actions.EditSdlcPolicy.appliesTo.resourceTypes": "array",
-        "schema.OrgIQ.actions.EditSdlcPolicy.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.EnterEnvironment": "object",
         "schema.OrgIQ.actions.EnterEnvironment.appliesTo": "object",
         "schema.OrgIQ.actions.EnterEnvironment.appliesTo.principalTypes": "array",
@@ -4228,6 +4222,12 @@
         "schema.OrgIQ.actions.ManageRecordings.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.ManageRecordings.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.ManageRecordings.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ManageSdlcPolicies": "object",
+        "schema.OrgIQ.actions.ManageSdlcPolicies.appliesTo": "object",
+        "schema.OrgIQ.actions.ManageSdlcPolicies.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ManageSdlcPolicies.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ManageSdlcPolicies.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ManageSdlcPolicies.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.ManageSocialConfig": "object",
         "schema.OrgIQ.actions.ManageSocialConfig.appliesTo": "object",
         "schema.OrgIQ.actions.ManageSocialConfig.appliesTo.principalTypes": "array",
@@ -4396,6 +4396,12 @@
         "schema.OrgIQ.actions.ViewSocial.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.ViewSocial.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.ViewSocial.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.ViewWorkItems": "object",
+        "schema.OrgIQ.actions.ViewWorkItems.appliesTo": "object",
+        "schema.OrgIQ.actions.ViewWorkItems.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.ViewWorkItems.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.ViewWorkItems.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.ViewWorkItems.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.entityTypes": "object"
       },
       "values": {}
@@ -8895,7 +8901,6 @@
           "EditGuardrail",
           "EditPolicy",
           "EditSchema",
-          "EditSdlcPolicy",
           "EnterEnvironment",
           "LabelFeedback",
           "ManageAccessCatalog",
@@ -8912,6 +8917,7 @@
           "ManageKnowledge",
           "ManagePipelineConfig",
           "ManageRecordings",
+          "ManageSdlcPolicies",
           "ManageSocialConfig",
           "ManageSprints",
           "ManageSubmissions",
@@ -8938,7 +8944,8 @@
           "ViewOrgChart",
           "ViewPipelines",
           "ViewSessionBrief",
-          "ViewSocial"
+          "ViewSocial",
+          "ViewWorkItems"
         ],
         "role": [
           "admin"
@@ -10548,7 +10555,6 @@
         "EditGuardrail",
         "EditPolicy",
         "EditSchema",
-        "EditSdlcPolicy",
         "EnterEnvironment",
         "LabelFeedback",
         "ManageAccessCatalog",
@@ -10565,6 +10571,7 @@
         "ManageKnowledge",
         "ManagePipelineConfig",
         "ManageRecordings",
+        "ManageSdlcPolicies",
         "ManageSocialConfig",
         "ManageSprints",
         "ManageSubmissions",
@@ -10591,7 +10598,8 @@
         "ViewOrgChart",
         "ViewPipelines",
         "ViewSessionBrief",
-        "ViewSocial"
+        "ViewSocial",
+        "ViewWorkItems"
       ]
     },
     "category": {

@@ -1,6 +1,8 @@
 // GET /api/session/capabilities for the DE-42 actions, in open mode (no
 // policy store) over the REAL Cedar seeds: each new action is a key, true for
-// the roles the split kept them on, false for the rest.
+// the roles the split kept them on, false for the rest. Policy editing is
+// ManageSdlcPolicies since docs/next-steps.md §9 item 8b (org-leader and
+// admin; it replaced EditSdlcPolicy, which hr-admin held).
 
 jest.mock('../../config.js', () => ({
   config: {
@@ -27,7 +29,8 @@ import request from '../../test-support/http.js';
 import { sessionRouter } from '../session.js';
 import { CAPABILITY_ACTIONS } from '../../lib/authz.js';
 
-const NEW = ['OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange', 'EditSdlcPolicy'] as const;
+const BOX = ['OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange'] as const;
+const NEW = [...BOX, 'ManageSdlcPolicies'] as const;
 
 function appAs(role: string) {
   const app = express();
@@ -47,21 +50,32 @@ describe('DE-42 actions in GET /api/session/capabilities', () => {
     for (const a of NEW) expect(CAPABILITY_ACTIONS).toContain(a);
   });
 
-  it('sme: shell, task, decide and deliver true; EditSdlcPolicy false', async () => {
+  it('sme: shell, task, decide and deliver true; ManageSdlcPolicies false', async () => {
     const a = await caps('sme');
     expect(NEW.map((k) => [k, a[k]])).toEqual([
       ['OpenDevboxShell', true], ['RunDevboxTask', true], ['DecideAgentChange', true],
-      ['DeliverAgentChange', true], ['EditSdlcPolicy', false],
+      ['DeliverAgentChange', true], ['ManageSdlcPolicies', false],
     ]);
   });
 
-  it('hr-admin: all five true (it held all of them through ManageDevbox)', async () => {
+  it('hr-admin: the four box actions true (held through ManageDevbox); ManageSdlcPolicies false (§9 item 8b)', async () => {
     const a = await caps('hr-admin');
-    for (const k of NEW) expect([k, a[k]]).toEqual([k, true]);
+    for (const k of BOX) expect([k, a[k]]).toEqual([k, true]);
+    expect(a['ManageSdlcPolicies']).toBe(false);
   });
 
-  it.each(['member', 'program-owner', 'org-leader'])('%s: every new action is a key and false', async (role) => {
+  it('org-leader: ManageSdlcPolicies true, the box actions false', async () => {
+    const a = await caps('org-leader');
+    for (const k of BOX) expect([k, a[k]]).toEqual([k, false]);
+    expect(a['ManageSdlcPolicies']).toBe(true);
+  });
+
+  it.each(['member', 'program-owner'])('%s: every new action is a key and false', async (role) => {
     const a = await caps(role);
     for (const k of NEW) expect([k, a[k]]).toEqual([k, false]);
+  });
+
+  it('EditSdlcPolicy is gone from the capability list', () => {
+    expect(CAPABILITY_ACTIONS).not.toContain('EditSdlcPolicy');
   });
 });

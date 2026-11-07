@@ -10,6 +10,8 @@
 // Gated in two tiers, mirroring /api/budgets:
 //   reads  — operational visibility: org-leader + hr-admin, else ManageBudgets.
 //   writes — allocating agent spend is program management: ManageBudgets.
+//            A program-owner only on initiatives they own (lib/budget-scope.ts,
+//            docs/next-steps.md §9 item 8a).
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
@@ -20,6 +22,7 @@ import {
   updateGrant, revokeGrant, listGrantsForSprint, getGrant,
 } from '../providers/grants.js';
 import { grantEnvelope } from '../lib/grant-envelope.js';
+import { requireBudgetScope } from '../lib/budget-scope.js';
 
 export const grantsRouter: Router = Router();
 
@@ -78,6 +81,7 @@ grantsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
   const hardCapUsd = validCap(body['hardCapUsd'], amountUsd);
 
   if (!await initiativeExists(initiativeId)) throw new NotFoundError('No such initiative');
+  if (!await requireBudgetScope(req, res, initiativeId)) return;
   if (!await personExists(granteePersonId)) throw new NotFoundError('No such grantee');
 
   const sprint = await getSprint(sprintId);
@@ -119,10 +123,12 @@ grantsRouter.patch('/:id', manageGate, asyncHandler(async (req, res) => {
   if (patch.amountUsd === undefined && patch.note === undefined && patch.hardCapUsd === undefined) {
     throw new ValidationError('provide amountUsd and/or note (or hardCapUsd) to update');
   }
+  // The envelope's initiative decides whether a program-owner may touch it.
+  const current = await getGrant(id);
+  if (current && !await requireBudgetScope(req, res, current.orgProjectId)) return;
   // DE-36: the cap never sits below the envelope, whichever of the two moved.
   if (patch.amountUsd !== undefined || patch.hardCapUsd != null) {
     // An unknown id falls through to updateGrant, which answers the 404.
-    const current = await getGrant(id);
     const amountAfter = patch.amountUsd ?? current?.allocatedUsd ?? 0;
     const capAfter = patch.hardCapUsd === undefined ? current?.hardCapUsd ?? null : patch.hardCapUsd;
     if (current && capAfter != null && capAfter < amountAfter) {
@@ -141,6 +147,8 @@ grantsRouter.patch('/:id', manageGate, asyncHandler(async (req, res) => {
 //   DELETE /api/grants/:id  → { ok: true }
 grantsRouter.delete('/:id', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '').trim();
+  const current = await getGrant(id);
+  if (current && !await requireBudgetScope(req, res, current.orgProjectId)) return;
   const ok = await revokeGrant(id);
   if (!ok) throw new NotFoundError('No such grant');
   // Content-free live hint for the activity graph (lib/work-graph/live.ts); lazy so this router's tests do not load the bots provider.

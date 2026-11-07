@@ -28,7 +28,7 @@ export type AgentAction =
   | 'RunDevboxTask'
   | 'DecideAgentChange'
   | 'DeliverAgentChange'
-  | 'EditSdlcPolicy';
+  | 'ManageSdlcPolicies';
 
 export interface AgentActionAttrs {
   onInitiative?: boolean;

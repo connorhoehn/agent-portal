@@ -399,7 +399,7 @@ app.use('/api/agent-projects', requireTenant('orgiq'), requireSession('ViewAgent
 // the floor (tenant scope + a real session); each route carries its own action
 // (DE-42): reads ManageDevbox as before, decide DecideAgentChange, deliver
 // DeliverAgentChange, re-review/address RunDevboxTask, policy writes
-// EditSdlcPolicy.
+// ManageSdlcPolicies (org-leader + admin, docs/next-steps.md §9 item 8b).
 app.use('/api/sdlc', requireTenant('orgiq'), requireSession('ViewSdlc'), sdlcRouter);
 // Environments — where each initiative's code runs. Mount is the floor only
 // (tenant scope + a real session): reading the estate is open to every orgiq

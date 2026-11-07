@@ -367,7 +367,7 @@ describe('DE-42 initiative conditions and the DE-43 author forbid', () => {
 
   test('the sme general grant (the first permit) does not name any of the new actions', () => {
     const general = permits(role('orgiq/sme'))[0]!;
-    for (const a of [...ACTIONS, 'EditSdlcPolicy']) expect(general).not.toContain(`"${a}"`);
+    for (const a of [...ACTIONS, 'ManageSdlcPolicies']) expect(general).not.toContain(`"${a}"`);
   });
 
   test.each(['orgiq/sme', 'orgiq/hr-admin'])('%s forbids DecideAgentChange when the caller is the author, except admin', (key) => {
@@ -384,5 +384,43 @@ describe('DE-42 initiative conditions and the DE-43 author forbid', () => {
     expect(permits(role('orgiq/hr-admin'))[0]).toMatch(/"ManageDevbox"/);
     const smeStatements = role('orgiq/sme').statements;
     expect(smeStatements.slice(-3).map((s) => s.split(/\s/)[0])).toEqual(['permit', 'permit', 'forbid']);
+  });
+});
+
+// ===========================================================================
+// 7. docs/next-steps.md §9 item 8. The program-owner budget scope is a forbid
+//    keyed on `ownsInitiative`, which the budget and grant routes send
+//    (lib/budget-scope.ts); a bare capability probe sends none, so the forbid
+//    must not fire on a missing attribute. ManageSdlcPolicies and
+//    EditGuardrail are unconditioned grants on org-leader's general permit,
+//    under its orgiq tenant guard.
+// ===========================================================================
+describe('§9 item 8: the program-owner budget forbid and the new org-leader grants', () => {
+  const schema = JSON.parse(readFileSync(join(seedsDir(), 'schema.json'), 'utf8'));
+
+  test('schema.json declares ownsInitiative as an optional Boolean, and ManageSdlcPolicies / ViewWorkItems as actions', () => {
+    expect(schema.OrgIQ.entityTypes.Application.shape.attributes.ownsInitiative).toEqual({ type: 'Boolean', required: false });
+    expect(Object.keys(schema.OrgIQ.actions)).toEqual(expect.arrayContaining(['ManageSdlcPolicies', 'ViewWorkItems']));
+    expect(Object.keys(schema.OrgIQ.actions)).not.toContain('EditSdlcPolicy');
+  });
+
+  test('program-owner forbids ManageBudgets only when ownsInitiative is present and false', () => {
+    const f = forbids(role('orgiq/program-owner')).filter((s) => /ManageBudgets/.test(s));
+    expect(f).toHaveLength(1);
+    expect(f[0]).toMatch(/action\s*==\s*OrgIQ::Action::"ManageBudgets"/);
+    expect(whenBody(f[0]!)).toBe('principal.role == "program-owner" && resource has ownsInitiative && !resource.ownsInitiative');
+  });
+
+  test('the forbid was appended: program-owner still opens with its general grant, then the ApproveTransaction forbid', () => {
+    const kinds = role('orgiq/program-owner').statements.map((s) => s.split(/\s/)[0]);
+    expect(kinds).toEqual(['permit', 'forbid', 'forbid']);
+    expect(role('orgiq/program-owner').statements[1]).toMatch(/ApproveTransaction/);
+  });
+
+  test('org-leader grants ManageSdlcPolicies and EditGuardrail on its general permit, tenant-guarded, unconditioned otherwise', () => {
+    const general = permits(role('orgiq/org-leader'))[0]!;
+    for (const a of ['ManageSdlcPolicies', 'EditGuardrail']) expect(general).toContain(`OrgIQ::Action::"${a}"`);
+    expect(whenBody(general)).toBe('principal.role == "org-leader" && principal has tenant && principal.tenant == "orgiq"');
+    expect(forbids(role('orgiq/org-leader')).some((s) => /ManageSdlcPolicies|EditGuardrail/.test(s))).toBe(false);
   });
 });

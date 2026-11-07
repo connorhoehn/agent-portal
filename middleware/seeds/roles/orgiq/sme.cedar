@@ -11,6 +11,11 @@ permit (
     OrgIQ::Action::"ViewOrgChart",
     OrgIQ::Action::"ViewObservability",
     OrgIQ::Action::"LabelFeedback",
+    // Read the work board and write discussion on it (docs/next-steps.md §9
+    // item 8d). A comment is discussion, not a state change: the route asks
+    // this plus membership of the item's initiative (owner, contributor, or
+    // an org-wide role); sprint, owner and status writes keep their own gates.
+    OrgIQ::Action::"ViewWorkItems",
     // The point of the role: assign computers to do the work.
     OrgIQ::Action::"DispatchAgentRun",
     // Stand up the mundane-work automations themselves — a bot built from a
@@ -101,7 +106,7 @@ when {
 };
 
 // Approve and ship agent-written code on the initiatives they are on. Policy
-// editing (EditSdlcPolicy) is deliberately absent: the gates constrain the
+// editing (ManageSdlcPolicies) is deliberately absent: the gates constrain the
 // SME, so the SME does not get to move them (DE-43).
 permit (
   principal,

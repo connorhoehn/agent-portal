@@ -3,14 +3,15 @@
 // mattered here specifically because the router's authorization is two-layer
 // and easy to silently break in one direction without the other noticing:
 //
-//   1. A blanket `capabilitiesRouter.use(...)` (capabilities.ts:35) requires
-//      ManageDevbox on every non-GET/HEAD verb — code interpreter, browser
+//   1. A blanket `capabilitiesRouter.use(...)` requires ManageDevbox on every
+//      non-GET/HEAD verb outside /guardrail — code interpreter, browser
 //      sessions and crawls spend real AWS money, so any mutation needs it.
-//   2. On top of that, the guardrail-editing routes ALSO require
-//      EditGuardrail (capabilities.ts:56-76) — disabling a PII filter or
-//      deleting a denied-content topic is a content-safety control, not
-//      merely a spend control, and ManageDevbox alone must not be enough to
-//      touch it.
+//   2. The guardrail-editing routes require EditGuardrail instead, at the
+//      floor and again on each route — disabling a PII filter or deleting a
+//      denied-content topic is a content-safety control, so ManageDevbox
+//      alone must not be enough to touch it; and since docs/next-steps.md §9
+//      item 8c the editor is open to org-leader, who holds EditGuardrail but
+//      no ManageDevbox, so ManageDevbox must not be required for it either.
 //
 // A regression that dropped either gate (e.g. a refactor that hoisted the
 // guardrail routes above the blanket `.use`, or a copy-paste that reused
@@ -28,11 +29,12 @@
 // mutation-only and mutation+content-safety.
 
 const mockGateActions: string[] = [];
+const mockRequestGates: string[] = [];
 
 jest.mock('../../lib/authz.js', () => ({
   requireAction: (action: string) => {
     mockGateActions.push(action);
-    return (_req: unknown, _res: unknown, next: () => void) => next();
+    return (_req: unknown, _res: unknown, next: () => void) => { mockRequestGates.push(action); next(); };
   },
 }));
 
@@ -94,6 +96,7 @@ function buildApp() {
 beforeEach(() => {
   togglePii.mockReset(); updateTopic.mockReset(); addTopic.mockReset();
   removeTopic.mockReset(); terminateCodeSession.mockReset();
+  mockRequestGates.length = 0;
 });
 
 describe('capabilitiesRouter — gate construction (module load, not per-request)', () => {
@@ -104,9 +107,10 @@ describe('capabilitiesRouter — gate construction (module load, not per-request
   // one) shows up in HOW MANY TIMES and WHICH action was asked for while the
   // module loaded, not in a per-request log — hence one assertion on the
   // full construction sequence rather than one per test.
-  it('asks for ManageDevbox once (the blanket) and EditGuardrail exactly 4 times (the 4 guardrail-editing routes)', () => {
+  it('builds ManageDevbox once (the blanket), EditGuardrail once for the guardrail floor and once per guardrail-editing route', () => {
     expect(mockGateActions).toEqual([
-      'ManageDevbox', // capabilitiesRouter.use(...) — every non-GET/HEAD verb
+      'ManageDevbox', // capabilitiesRouter.use(...) — every non-GET/HEAD verb outside /guardrail
+      'EditGuardrail', // capabilitiesRouter.use(...) — every non-GET/HEAD verb under /guardrail
       'EditGuardrail', // PATCH /guardrail/pii
       'EditGuardrail', // PATCH /guardrail/topics/:name
       'EditGuardrail', // POST /guardrail/topics
@@ -115,6 +119,20 @@ describe('capabilitiesRouter — gate construction (module load, not per-request
     // In particular: DELETE /code-sessions/:sessionId below is a real
     // mutation but never asks for EditGuardrail — if it ever silently
     // gained that requirement (or lost ManageDevbox), this count would move.
+  });
+});
+
+describe('capabilitiesRouter — which gates a request passes', () => {
+  it('a guardrail edit asks EditGuardrail and never ManageDevbox (org-leader holds only the first)', async () => {
+    togglePii.mockResolvedValue({ type: 'EMAIL', enabled: false });
+    await request(buildApp()).patch('/api/capabilities/guardrail/pii').send({ type: 'EMAIL', enabled: false });
+    expect(mockRequestGates).toEqual(['EditGuardrail', 'EditGuardrail']);
+  });
+
+  it('a code-session delete asks ManageDevbox only', async () => {
+    terminateCodeSession.mockResolvedValue(true);
+    await request(buildApp()).delete('/api/capabilities/code-sessions/cs-1');
+    expect(mockRequestGates).toEqual(['ManageDevbox']);
   });
 });
 

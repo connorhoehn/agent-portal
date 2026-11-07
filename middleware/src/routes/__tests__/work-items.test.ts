@@ -128,8 +128,8 @@ beforeEach(() => {
 });
 
 describe('gating', () => {
-  it('puts both writes behind DispatchAgentRun', () => {
-    expect(mockGateActions).toEqual(['DispatchAgentRun']);
+  it('puts board writes behind DispatchAgentRun and comments behind ViewWorkItems (§9 item 8d)', () => {
+    expect(mockGateActions).toEqual(['DispatchAgentRun', 'ViewWorkItems']);
   });
 });
 

@@ -93,8 +93,11 @@ const PROJECT = {
 };
 
 const SME = { sub: 'u-eli', role: 'sme', tenant: 'orgiq' };
+// Policy editors since docs/next-steps.md §9 item 8b: ManageSdlcPolicies,
+// org-leader and admin. hr-admin operates the boxes and no longer edits.
+const LEADER = { sub: 'u-lead', role: 'org-leader', tenant: 'orgiq' };
+const LEADER2 = { sub: 'u-lead2', role: 'org-leader', tenant: 'orgiq' };
 const HR = { sub: 'u-hr', role: 'hr-admin', tenant: 'orgiq' };
-const HR2 = { sub: 'u-hr2', role: 'hr-admin', tenant: 'orgiq' };
 const ADMIN = { sub: 'u-admin', role: 'admin', tenant: 'orgiq' };
 const MEMBER = { sub: 'u-mel', role: 'member', tenant: 'orgiq' };
 
@@ -176,7 +179,7 @@ describe('GET /policies', () => {
 
 describe('POST /policies (legacy, writes a new org version)', () => {
   it('requires a name and refuses an unknown kind, NAMING the valid ones', async () => {
-    const app = buildApp(HR);
+    const app = buildApp(LEADER);
     const noName = await request(app).post('/api/sdlc/policies').send({ kind: 'max_files' });
     expect(noName.status).toBe(400);
     expect(noName.body.error).toMatch(/name is required/);
@@ -190,7 +193,7 @@ describe('POST /policies (legacy, writes a new org version)', () => {
   it('defaults action to require_approval — only the literal "block" blocks', async () => {
     // A typo must not silently turn a gate that asks for a human into a hard
     // stop, or into one that no longer asks.
-    const app = buildApp(HR);
+    const app = buildApp(LEADER);
     // Bound to a local, not inline: this is request INPUT, and the wire sweep
     // reads an inline `action:` string on a policy-shaped literal as a fixture
     // claiming a value the server sends.
@@ -205,38 +208,56 @@ describe('POST /policies (legacy, writes a new org version)', () => {
   });
 
   it('creates with 201 as a new org version attributed to the session, trimming the name', async () => {
-    const res = await request(buildApp(HR)).post('/api/sdlc/policies').send({ name: '  Cap files  ', kind: 'max_files', config: { max: 9 } });
+    const res = await request(buildApp(LEADER)).post('/api/sdlc/policies').send({ name: '  Cap files  ', kind: 'max_files', config: { max: 9 } });
     expect(res.status).toBe(201);
     expect(Object.keys(res.body)).toEqual(['policy']);
     expect(res.body.policy).toMatchObject({ name: 'Cap files', enabled: true, kind: 'max_files', action: 'require_approval' });
-    expect(await latestPolicySet('org')).toMatchObject({ version: 2, changedBy: 'u-hr', basedOn: 1 });
+    expect(await latestPolicySet('org')).toMatchObject({ version: 2, changedBy: 'u-lead', basedOn: 1 });
   });
 
-  it('sme gets 403 on POST and DELETE (EditSdlcPolicy, DE-42/43)', async () => {
+  it('hr-admin, a devbox operator, gets 403 on every policy write and on deciding a proposal (§9 item 8b)', async () => {
+    const app = buildApp(HR);
+    const policies = (await latestPolicySet('org'))!.policies;
+    const post = await request(app).post('/api/sdlc/policies').send({ name: 'a', kind: 'max_files', config: { max: 5 } });
+    const put = await request(app).put('/api/sdlc/policy-sets/org').send({ policies, baseVersion: 1, reason: 'x' });
+    const del = await request(app).delete(`/api/sdlc/policies/${policies[1]!.id}`);
+    for (const res of [post, put, del]) {
+      expect(res.status).toBe(403);
+      expect(res.body.action).toBe('ManageSdlcPolicies');
+    }
+    const large = policies.find((p) => p.kind === 'max_files')!;
+    const proposal = await request(buildApp(LEADER)).post('/api/sdlc/policies').send({ ...large, config: { max: 400 } });
+    expect(proposal.status).toBe(202);
+    const decide = await request(app).post(`/api/sdlc/policy-proposals/${proposal.body.proposal.id}/decide`).send({ decision: 'approve' });
+    expect(decide.status).toBe(403);
+    expect((await latestPolicySet('org'))!.version).toBe(1);
+  });
+
+  it('sme gets 403 on POST and DELETE (ManageSdlcPolicies, DE-42/43)', async () => {
     const app = buildApp(SME);
     const post = await request(app).post('/api/sdlc/policies').send({ name: 'a', kind: 'max_files' });
     expect(post.status).toBe(403);
-    expect(post.body.action).toBe('EditSdlcPolicy');
+    expect(post.body.action).toBe('ManageSdlcPolicies');
     const policyId = (await latestPolicySet('org'))!.policies[1]!.id;
     expect((await request(app).delete(`/api/sdlc/policies/${policyId}`)).status).toBe(403);
     expect((await latestPolicySet('org'))!.version).toBe(1);
   });
 
-  it('a loosening edit by hr-admin is 202 pending, evaluation unchanged until a second holder approves; the proposer gets 409', async () => {
+  it('a loosening edit by an org-leader is 202 pending, evaluation unchanged until a second holder approves; the proposer gets 409', async () => {
     const large = (await latestPolicySet('org'))!.policies.find((p) => p.kind === 'max_files')!;
-    const res = await request(buildApp(HR)).post('/api/sdlc/policies').send({ ...large, config: { max: 400 } });
+    const res = await request(buildApp(LEADER)).post('/api/sdlc/policies').send({ ...large, config: { max: 400 } });
     expect(res.status).toBe(202);
-    expect(res.body).toMatchObject({ pending: true, proposal: { status: 'pending', proposedBy: 'u-hr', scope: 'org', baseVersion: 1 } });
+    expect(res.body).toMatchObject({ pending: true, proposal: { status: 'pending', proposedBy: 'u-lead', scope: 'org', baseVersion: 1 } });
     expect((await latestPolicySet('org'))!.version).toBe(1);
 
     const id = res.body.proposal.id as string;
-    const own = await request(buildApp(HR)).post(`/api/sdlc/policy-proposals/${id}/decide`).send({ decision: 'approve' });
+    const own = await request(buildApp(LEADER)).post(`/api/sdlc/policy-proposals/${id}/decide`).send({ decision: 'approve' });
     expect(own.status).toBe(409);
     expect(own.body.gate).toBe('self-approval');
-    // An SME holds no EditSdlcPolicy and is not an org-leader.
+    // An SME holds no ManageSdlcPolicies and is not an org-leader.
     expect((await request(buildApp(SME)).post(`/api/sdlc/policy-proposals/${id}/decide`).send({ decision: 'approve' })).status).toBe(403);
 
-    const second = await request(buildApp(HR2)).post(`/api/sdlc/policy-proposals/${id}/decide`).send({ decision: 'approve' });
+    const second = await request(buildApp(LEADER2)).post(`/api/sdlc/policy-proposals/${id}/decide`).send({ decision: 'approve' });
     expect(second.status).toBe(200);
     expect(second.body).toMatchObject({ ok: true, status: 'approved', set: { version: 2 } });
     expect((await latestPolicySet('org'))!.policies.find((p) => p.id === large.id)!.config).toEqual({ max: 400 });
@@ -244,7 +265,7 @@ describe('POST /policies (legacy, writes a new org version)', () => {
 
   it('an org-leader may approve a loosening proposal (DE-43 §4)', async () => {
     const large = (await latestPolicySet('org'))!.policies.find((p) => p.kind === 'max_files')!;
-    const res = await request(buildApp(HR)).post('/api/sdlc/policies').send({ ...large, enabled: false });
+    const res = await request(buildApp(LEADER)).post('/api/sdlc/policies').send({ ...large, enabled: false });
     expect(res.status).toBe(202);
     const out = await request(buildApp({ sub: 'u-vera', role: 'org-leader', tenant: 'orgiq' }))
       .post(`/api/sdlc/policy-proposals/${res.body.proposal.id}/decide`).send({ decision: 'approve' });
@@ -253,12 +274,12 @@ describe('POST /policies (legacy, writes a new org version)', () => {
 
   it('a caller the rules have gated gets 409 self-gated', async () => {
     m(hasChangesRequestedBy).mockResolvedValue(true);
-    const res = await request(buildApp(HR)).post('/api/sdlc/policies').send({ name: 'a', kind: 'max_files', config: { max: 5 } });
+    const res = await request(buildApp(LEADER)).post('/api/sdlc/policies').send({ name: 'a', kind: 'max_files', config: { max: 5 } });
     expect(res.status).toBe(409);
     expect(res.body.gate).toBe('self-gated');
   });
 
-  it('member gets 403 on every policy write, naming EditSdlcPolicy (DE-42)', async () => {
+  it('member gets 403 on every policy write, naming ManageSdlcPolicies (DE-42)', async () => {
     const app = buildApp(MEMBER);
     const policies = (await latestPolicySet('org'))!.policies;
     const post = await request(app).post('/api/sdlc/policies').send({ name: 'a', kind: 'max_files' });
@@ -266,14 +287,14 @@ describe('POST /policies (legacy, writes a new org version)', () => {
     const del = await request(app).delete(`/api/sdlc/policies/${policies[1]!.id}`);
     for (const res of [post, put, del]) {
       expect(res.status).toBe(403);
-      expect(res.body.action).toBe('EditSdlcPolicy');
+      expect(res.body.action).toBe('ManageSdlcPolicies');
     }
     expect((await latestPolicySet('org'))!.version).toBe(1);
   });
 
-  it('admin with override: true applies a loosening edit alone and leaves one EditSdlcPolicy.Override audit line', async () => {
+  it('admin with override: true applies a loosening edit alone and leaves one ManageSdlcPolicies.Override audit line', async () => {
     const large = (await latestPolicySet('org'))!.policies.find((p) => p.kind === 'max_files')!;
-    const overrides = () => recentAuthzEvents({ limit: 1000 }).filter((e) => e.action === 'EditSdlcPolicy.Override').length;
+    const overrides = () => recentAuthzEvents({ limit: 1000 }).filter((e) => e.action === 'ManageSdlcPolicies.Override').length;
     const before = overrides();
     // Without the flag an admin is a proposer like anyone else: pending, no audit line.
     const pending = await request(buildApp(ADMIN)).post('/api/sdlc/policies').send({ ...large, config: { max: 400 } });
@@ -293,19 +314,19 @@ describe('POST /policies (legacy, writes a new org version)', () => {
 
 describe('DELETE /policies/:id', () => {
   it('404s an unknown policy; removing an enabled one is loosening, so it waits', async () => {
-    const missing = await request(buildApp(HR)).delete('/api/sdlc/policies/p-x');
+    const missing = await request(buildApp(LEADER)).delete('/api/sdlc/policies/p-x');
     expect(missing.status).toBe(404);
     expect(missing.body.error).toMatch(/No such policy/);
 
     const cost = (await latestPolicySet('org'))!.policies.find((p) => p.kind === 'max_cost')!;
-    const res = await request(buildApp(HR)).delete(`/api/sdlc/policies/${cost.id}`);
+    const res = await request(buildApp(LEADER)).delete(`/api/sdlc/policies/${cost.id}`);
     expect(res.status).toBe(202);
     expect(res.body.proposal.loosening).toEqual([`removes "${cost.name}"`]);
   });
 
   it('refuses to remove the independent-review policy (DE-43 §5)', async () => {
     const review = (await latestPolicySet('org'))!.policies.find((p) => p.kind === 'require_review')!;
-    const res = await request(buildApp(HR)).delete(`/api/sdlc/policies/${review.id}`);
+    const res = await request(buildApp(LEADER)).delete(`/api/sdlc/policies/${review.id}`);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/independent-review policy cannot be removed/);
   });
@@ -314,10 +335,10 @@ describe('DELETE /policies/:id', () => {
 describe('policy sets (DE-46 routes)', () => {
   it('PUT applies a tightening edit as the next version; a stale baseVersion is 409', async () => {
     const policies = (await latestPolicySet('org'))!.policies.map((p) => (p.kind === 'max_files' ? { ...p, config: { max: 10 } } : p));
-    const ok = await request(buildApp(HR)).put('/api/sdlc/policy-sets/org').send({ policies, baseVersion: 1, reason: 'tighter' });
+    const ok = await request(buildApp(LEADER)).put('/api/sdlc/policy-sets/org').send({ policies, baseVersion: 1, reason: 'tighter' });
     expect(ok.status).toBe(201);
-    expect(ok.body.set).toMatchObject({ scope: 'org', version: 2, changedBy: 'u-hr', reason: 'tighter' });
-    const stale = await request(buildApp(HR)).put('/api/sdlc/policy-sets/org').send({ policies, baseVersion: 1, reason: 'again' });
+    expect(ok.body.set).toMatchObject({ scope: 'org', version: 2, changedBy: 'u-lead', reason: 'tighter' });
+    const stale = await request(buildApp(LEADER)).put('/api/sdlc/policy-sets/org').send({ policies, baseVersion: 1, reason: 'again' });
     expect(stale.status).toBe(409);
     expect(stale.body).toMatchObject({ gate: 'stale-base', currentVersion: 2 });
     const history = await request(buildApp(SME)).get('/api/sdlc/policy-sets/org/versions');
@@ -326,7 +347,7 @@ describe('policy sets (DE-46 routes)', () => {
 
   it('requires a reason', async () => {
     const policies = (await latestPolicySet('org'))!.policies;
-    expect((await request(buildApp(HR)).put('/api/sdlc/policy-sets/org').send({ policies, baseVersion: 1 })).status).toBe(400);
+    expect((await request(buildApp(LEADER)).put('/api/sdlc/policy-sets/org').send({ policies, baseVersion: 1 })).status).toBe(400);
   });
 
   it('an sme not on initiative A gets 403 on PUT /policy-sets/A', async () => {

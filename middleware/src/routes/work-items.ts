@@ -105,8 +105,14 @@ async function sprintMoveAllowed(
 // state. GETs stay tenant-open: the board is operational visibility.
 const writeGate = requireAction('DispatchAgentRun');
 
+// A comment is discussion, not a state change (docs/next-steps.md §9 item 8d):
+// it needs ViewWorkItems plus membership of the item's initiative (owner,
+// contributor, or an org-wide role; requireInitiativeScope), not the
+// DispatchAgentRun write gate. Sprint, owner and status moves keep theirs.
+const commentGate = requireAction('ViewWorkItems');
+
 // An explicit /comment adds a work note to the persistent initiative dialogue.
-workItemsRouter.post('/projects/:id/discussion/comments', writeGate, asyncHandler(async (req, res) => {
+workItemsRouter.post('/projects/:id/discussion/comments', commentGate, asyncHandler(async (req, res) => {
   const body = req.body as Record<string, unknown>;
   if (!body || unknownKeys(body, ['body', 'workItemId', 'clientDeliveryId']).length) {
     res.status(400).json({ error: 'A comment contains body, workItemId and clientDeliveryId only' }); return;
@@ -119,6 +125,7 @@ workItemsRouter.post('/projects/:id/discussion/comments', writeGate, asyncHandle
   const session = resolveSession(req);
   const user = session ? await getUser(session.sub) : null;
   if (!session || !user) { res.status(401).json({ error: 'Sign in to comment' }); return; }
+  if (!await requireInitiativeScope(req, res, req.params['id'] as string, { action: 'comment' })) return;
   const message = await postInitiativeWorkComment({
     projectId: req.params['id'] as string, workItemId: body['workItemId'],
     userId: user.id, displayName: user.displayName, personId: user.personId,
@@ -728,7 +735,7 @@ workItemsRouter.get(
 
 workItemsRouter.post(
   '/work-items/:id/comments',
-  writeGate,
+  commentGate,
   asyncHandler(async (req, res) => {
     const id = req.params['id'] as string;
     if (!id) { res.status(400).json({ error: 'Missing work item id' }); return; }
@@ -742,9 +749,11 @@ workItemsRouter.post(
     const bodyError = checkCommentBody(body['body']);
     if (bodyError) { res.status(400).json({ error: bodyError }); return; }
 
-    if (!(await getWorkItem(id))) { res.status(404).json({ error: 'Work item not found' }); return; }
+    const item = await getWorkItem(id);
+    if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
+    if (!await requireInitiativeScope(req, res, item.projectId, { action: 'comment' })) return;
 
-    // writeGate already required a session (requireAction 401s otherwise),
+    // commentGate already required a session (requireAction 401s otherwise),
     // so this is never null here — but resolveSession's return type is
     // nullable and there is no reason to assert past it blind.
     const session = resolveSession(req);

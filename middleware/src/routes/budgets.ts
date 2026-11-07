@@ -10,10 +10,13 @@
 //   reads  — operational visibility (the ledger + org summary): org-leader +
 //            hr-admin, like the other read-wide surfaces.
 //   writes — allocating agent spend is program management: ManageBudgets.
+//            A program-owner only on initiatives they own (lib/budget-scope.ts,
+//            docs/next-steps.md §9 item 8a).
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { readForRolesElseAction, requireAction } from '../lib/authz.js';
+import { requireBudgetScope } from '../lib/budget-scope.js';
 import type { RunLimitPatch } from '../providers/run-limits.js';
 // Loaded on first use (DE-37): the route's tests mock providers/budgets, not this.
 const runLimits = () => import('../providers/run-limits.js');
@@ -114,6 +117,7 @@ budgetsRouter.put('/:orgProjectId/limits', manageGate, asyncHandler(async (req, 
   if (uph !== undefined) patch.maxUsdPerHour = uph;
   if (Object.keys(patch).length === 0) throw new ValidationError('send at least one of maxConcurrent, maxRunsPerDay, maxUsdPerHour');
   if (!await initiativeExists(orgProjectId)) throw new NotFoundError('No such initiative');
+  if (!await requireBudgetScope(req, res, orgProjectId)) return;
   await (await runLimits()).upsertRunLimit('initiative', orgProjectId, patch, req.session?.sub ?? null);
   res.json({ limits: await limitsBody(orgProjectId) });
 }));
@@ -168,6 +172,7 @@ budgetsRouter.put('/:orgProjectId', manageGate, asyncHandler(async (req, res) =>
   if (carryCap !== undefined) extras.carryOverCapUsd = carryCap;
 
   if (!await initiativeExists(orgProjectId)) throw new NotFoundError('No such initiative');
+  if (!await requireBudgetScope(req, res, orgProjectId)) return;
 
   const needsBefore = hardCapUsd === undefined || policyFields;
   const before = needsBefore ? await getBudget(orgProjectId) : null;
@@ -204,6 +209,7 @@ budgetsRouter.put('/:orgProjectId', manageGate, asyncHandler(async (req, res) =>
 
 budgetsRouter.delete('/:orgProjectId', manageGate, asyncHandler(async (req, res) => {
   const orgProjectId = String(req.params['orgProjectId'] ?? '').trim();
+  if (!await requireBudgetScope(req, res, orgProjectId)) return;
   const ok = await deleteAllocation(orgProjectId);
   if (!ok) throw new NotFoundError('No allocation for that initiative');
   res.json({ ok: true });

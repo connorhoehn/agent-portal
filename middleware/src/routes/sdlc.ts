@@ -52,7 +52,7 @@ function sessionOr401(req: Request, res: Response): Session | null {
 function auditPolicyOverride(req: Request, session: Session, out: PolicyWriteOutcome | { kind: 'rejected' }, what: string): void {
   if (out.kind !== 'applied' || !out.overrode) return;
   logAuthz({
-    decision: 'ALLOW', action: 'EditSdlcPolicy.Override', sub: session.sub, role: session.role,
+    decision: 'ALLOW', action: 'ManageSdlcPolicies.Override', sub: session.sub, role: session.role,
     tenant: session.tenant, path: req.path,
     reason: `admin override on ${what} (${out.version.scope} version ${out.version.version})`,
   });
@@ -80,14 +80,17 @@ function answerPolicyWrite(res: Response, out: PolicyWriteOutcome | { kind: 'rej
 }
 
 /**
- * EditSdlcPolicy (DE-42). Whether the caller is on the scope's initiative, or
- * org-wide for `org`, is the governance lib's question (submitPolicySet), so
- * Cedar is asked with the probe's attributes here.
+ * ManageSdlcPolicies (docs/next-steps.md §9 item 8b): org-leader and admin,
+ * never a devbox operator, so nobody who runs the boxes edits the rules their
+ * own runs are judged by. Guards every policy write: POST and DELETE
+ * /policies and PUT /policy-sets/:scope (the same write, versioned). Whether
+ * the caller is on the scope's initiative, or org-wide for `org`, is the
+ * governance lib's question (submitPolicySet).
  */
 async function editGate(req: Request, res: Response): Promise<Session | null> {
   const session = sessionOr401(req, res);
   if (!session) return null;
-  return await authorizeAgentAction(req, res, 'EditSdlcPolicy', { onInitiative: true }) ? session : null;
+  return await authorizeAgentAction(req, res, 'ManageSdlcPolicies', { onInitiative: true }) ? session : null;
 }
 
 // ─── Policies (legacy single-policy surface) ──────────────────────────────────
@@ -202,9 +205,9 @@ sdlcRouter.post('/policy-proposals/:id/decide', asyncHandler(async (req, res) =>
   if (body.decision !== 'approve' && body.decision !== 'reject') throw new ValidationError('decision must be approve or reject');
   const session = sessionOr401(req, res);
   if (!session) return;
-  // A second EditSdlcPolicy holder, or an org-leader (DE-43 §4).
-  if (session.role !== 'org-leader' && !await isAllowed(session, 'EditSdlcPolicy', { onInitiative: true })) {
-    res.status(403).json({ error: 'Forbidden', action: 'EditSdlcPolicy', role: session.role, tenant: session.tenant });
+  // A second ManageSdlcPolicies holder, or an org-leader (DE-43 §4).
+  if (session.role !== 'org-leader' && !await isAllowed(session, 'ManageSdlcPolicies', { onInitiative: true })) {
+    res.status(403).json({ error: 'Forbidden', action: 'ManageSdlcPolicies', role: session.role, tenant: session.tenant });
     return;
   }
   // stewardsInitiative is asked inside decidePolicyProposal for the proposal's scope.

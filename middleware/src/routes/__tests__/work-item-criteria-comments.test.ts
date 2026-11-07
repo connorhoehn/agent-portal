@@ -7,6 +7,8 @@
 // comment POST goes through (never trusting an authorId in the body).
 
 const manageAllow = { value: true };
+// ViewWorkItems: the comment gate since docs/next-steps.md §9 item 8d.
+const viewAllow = { value: true };
 
 // Stubbed so the real provider module can be loaded for its pure helper
 // (decideStatusTransition, required actual below) without dragging in
@@ -25,7 +27,7 @@ jest.mock('../../lib/authz.js', () => ({
   resolveSession: (req: { session?: unknown }) => req.session ?? null,
   requireAction: (action: string) =>
     (_req: unknown, res: { status: (n: number) => { json: (b: unknown) => void } }, next: () => void) => {
-      if (action === 'DispatchAgentRun' && !manageAllow.value) {
+      if ((action === 'DispatchAgentRun' && !manageAllow.value) || (action === 'ViewWorkItems' && !viewAllow.value)) {
         res.status(403).json({ error: 'Forbidden', action });
         return;
       }
@@ -130,6 +132,7 @@ const member = { sub: 'u-x', role: 'member', tenant: 'orgiq' };
 
 beforeEach(() => {
   manageAllow.value = true;
+  viewAllow.value = true;
   [getWorkItemMock, listCriteriaMock, createCriterionMock, updateCriterionMock, deleteCriterionMock,
     listCommentsMock, createCommentMock, getUserMock,
   ].forEach((m) => m.mockReset());
@@ -421,12 +424,23 @@ describe('POST /api/graph/work-items/:id/comments', () => {
     expect(createCommentMock).not.toHaveBeenCalled();
   });
 
-  it('refuses a member session — writeGate — before any person lookup', async () => {
+  it('a member on the initiative comments without DispatchAgentRun (§9 item 8d)', async () => {
     manageAllow.value = false;
     const res = await request(buildApp(member))
       .post('/api/graph/work-items/wi-obs-e1-s4/comments')
       .send({ body: 'ok' });
+    expect(res.status).toBe(201);
+    expect(createCommentMock).toHaveBeenCalled();
+  });
+
+  it('refuses a session without ViewWorkItems before any person lookup', async () => {
+    viewAllow.value = false;
+    const res = await request(buildApp(member))
+      .post('/api/graph/work-items/wi-obs-e1-s4/comments')
+      .send({ body: 'ok' });
     expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ action: 'ViewWorkItems' });
+    expect(getUserMock).not.toHaveBeenCalled();
     expect(createCommentMock).not.toHaveBeenCalled();
   });
 });
@@ -444,12 +458,13 @@ describe('criteria edits are the item\'s initiative\'s stewards\' call (DE-44 ro
     expect(deleteCriterionMock).not.toHaveBeenCalled();
   });
 
-  it('commenting stays open to every reader (recorded as a user decision)', async () => {
+  it('commenting needs membership of the item\'s initiative, not stewardship of its state (§9 item 8d)', async () => {
     scopeDeny.add('p-observability');
     getUserMock.mockResolvedValue({ id: 'u-nobody', displayName: 'Nobody', personId: 'p-999', grants: {}, epoch: 0, email: null });
     createCommentMock.mockResolvedValue({ id: 'cm-1', body: 'hi' });
     const res = await request(buildApp({ sub: 'u-nobody', role: 'sme', tenant: 'orgiq' }))
       .post('/api/graph/work-items/wi-obs-e1-s4/comments').send({ body: 'hi' });
-    expect(res.status).not.toBe(403);
+    expect(res.status).toBe(403);
+    expect(createCommentMock).not.toHaveBeenCalled();
   });
 });

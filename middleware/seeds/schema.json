@@ -51,6 +51,10 @@
             "isAuthor": {
               "type": "Boolean",
               "required": false
+            },
+            "ownsInitiative": {
+              "type": "Boolean",
+              "required": false
             }
           }
         }
@@ -637,7 +641,17 @@
           ]
         }
       },
-      "EditSdlcPolicy": {
+      "ManageSdlcPolicies": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ViewWorkItems": {
         "appliesTo": {
           "principalTypes": [
             "User"

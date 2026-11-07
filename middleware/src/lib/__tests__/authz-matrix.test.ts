@@ -139,12 +139,14 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     granted: ['Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ConnectLocalCompute',
       // Reading what a run was told is open to everyone who can see work; deciding
       // a runbook proposal is not (ReviewRunbook, below).
-      'ViewSessionBrief'],
+      'ViewSessionBrief',
+      // Comment on work items of initiatives they are on (§9 item 8d).
+      'ViewWorkItems'],
   },
   'orgiq/sme': {
     tenant: 'orgiq',
     granted: [
-      'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback',
+      'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ViewWorkItems',
       // ManageDevbox is role-wide on purpose: it opens the Computers surface,
       // and lib/devbox-visibility.ts then scopes the fleet to this SME's own
       // computers plus the ones shared on initiatives they are attached to.
@@ -158,7 +160,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'ViewSessionBrief', 'ReviewRunbook',
       // DE-42: the agent-code authorities split out of ManageDevbox, each
       // conditioned on onInitiative (shell and task also on ownsBox).
-      // EditSdlcPolicy is deliberately absent (DE-43).
+      // ManageSdlcPolicies is deliberately absent (DE-43).
       'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange',
     ],
   },
@@ -169,7 +171,8 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // across the whole board, and allocates the per-initiative budget they
       // are accountable for — same allocation authority as hr-admin and
       // org-leader. Transaction approval and the admin surface stay closed.
-      'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback',
+      // ManageBudgets only on initiatives they own (a forbid, §9 item 8a).
+      'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ViewWorkItems',
       'DispatchAgentRun', 'ManageSprints', 'ManageBots', 'ManageBudgets',
       'ViewSessionBrief', 'ReviewRunbook',
     ],
@@ -177,10 +180,12 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
   'orgiq/org-leader': {
     tenant: 'orgiq',
     granted: [
-      'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewObservability', 'LabelFeedback',
+      'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewObservability', 'LabelFeedback', 'ViewWorkItems',
       'ManageCanary', 'DispatchAgentRun', 'ManageBudgets', 'ManageSprints', 'ManageBots',
       'ApproveTransaction', 'EnterEnvironment', 'ManageEnvironments', 'ConnectLocalCompute',
       'ViewSessionBrief', 'ReviewRunbook',
+      // §9 items 8b and 8c: the SDLC policy editor and the guardrail editor.
+      'ManageSdlcPolicies', 'EditGuardrail',
     ],
   },
   'orgiq/hr-admin': {
@@ -188,12 +193,14 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     granted: [
       'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewSalary', 'ViewPerformance',
       'EditGuardrail', 'EditPolicy', 'EditSchema', 'ViewIdentityAdmin', 'ViewObservability',
-      'LabelFeedback', 'ManageIngest', 'ManageCanary', 'ManageKB', 'ManageDevbox',
+      'LabelFeedback', 'ViewWorkItems', 'ManageIngest', 'ManageCanary', 'ManageKB', 'ManageDevbox',
       'ManageBots', 'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
       'ConnectLocalCompute', 'ViewSessionBrief',
       // DE-42: hr-admin held all of these through ManageDevbox and keeps them
-      // (losing shell/task is an open decision); EditSdlcPolicy is its own.
-      'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange', 'EditSdlcPolicy',
+      // (losing shell/task is an open decision). It no longer edits SDLC
+      // policies: that is ManageSdlcPolicies, which a devbox operator never
+      // holds (§9 item 8b).
+      'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange',
     ],
   },
   'assessment/assessor': {
@@ -630,14 +637,17 @@ describe('schema completeness (AVP rejects undeclared actions)', () => {
 // ---------------------------------------------------------------------------
 // DE-42: ManageDevbox split into shell / task / decide / deliver / policy edit.
 // The split keeps every role's effective permissions: exactly the roles that
-// held ManageDevbox (sme, hr-admin, admin) hold the new actions, except that
-// the sme does not get EditSdlcPolicy (DE-43: the gated do not move the gates).
+// held ManageDevbox (sme, hr-admin, admin) hold the new actions. Policy
+// editing is ManageSdlcPolicies (§9 item 8b): org-leader and admin only, never
+// a role that holds ManageDevbox (the gated do not move the gates, DE-43).
 // ---------------------------------------------------------------------------
 describe('DE-42 box and agent-change actions', () => {
-  const NEW = ['OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange', 'EditSdlcPolicy'];
+  const BOX = ['OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange'];
+  const NEW = [...BOX, 'ManageSdlcPolicies'];
   const EXPECTED: Record<string, string[]> = {
-    'orgiq/sme': ['OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange'],
-    'orgiq/hr-admin': NEW,
+    'orgiq/sme': BOX,
+    'orgiq/hr-admin': BOX,
+    'orgiq/org-leader': ['ManageSdlcPolicies'],
   };
 
   test.each(NEW)('%s is granted to exactly the expected roles, and to none in the other four tenants', (action) => {
@@ -658,13 +668,44 @@ describe('DE-42 box and agent-change actions', () => {
     }
   });
 
-  test('sme does not hold EditSdlcPolicy (DE-43)', () => {
-    expect(role('orgiq/sme').granted).not.toContain('EditSdlcPolicy');
+  test('no role that holds ManageDevbox holds ManageSdlcPolicies, and EditSdlcPolicy is gone (§9 item 8b)', () => {
+    for (const [key, r] of roles) {
+      if (key === '*/admin') continue;
+      if (r.granted.includes('ManageDevbox')) expect([key, r.granted.includes('ManageSdlcPolicies')]).toEqual([key, false]);
+      expect(referencedActions(r.cedar)).not.toContain('EditSdlcPolicy');
+    }
   });
 
-  test('program-owner, org-leader and member hold none of them (decide/deliver for the first two is an open decision)', () => {
-    for (const key of ['orgiq/program-owner', 'orgiq/org-leader', 'orgiq/member']) {
+  test('program-owner and member hold none of them; org-leader holds only the policy editor', () => {
+    for (const key of ['orgiq/program-owner', 'orgiq/member']) {
       for (const a of NEW) expect(role(key).granted).not.toContain(a);
     }
+    for (const a of BOX) expect(role('orgiq/org-leader').granted).not.toContain(a);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// docs/next-steps.md §9 item 8 (a, c, d): the guardrail editor, work-item
+// comments and the program-owner budget scope. These roles exist only in the
+// orgiq tenant (admin is cross-tenant and holds everything), so each change
+// has one test here; the `when` conditions are pinned in cedar-policy-edges.
+// ---------------------------------------------------------------------------
+describe('§9 item 8: guardrail editor, comments, program-owner budgets', () => {
+  const ORGIQ = ['orgiq/member', 'orgiq/sme', 'orgiq/program-owner', 'orgiq/org-leader', 'orgiq/hr-admin'];
+
+  test('EditGuardrail: org-leader and hr-admin (plus admin), nobody else in any tenant', () => {
+    const holders = [...roles.entries()].filter(([k, r]) => k !== '*/admin' && r.granted.includes('EditGuardrail')).map(([k]) => k).sort();
+    expect(holders).toEqual(['orgiq/hr-admin', 'orgiq/org-leader']);
+  });
+
+  test('ViewWorkItems: every orgiq role, and no role in another tenant', () => {
+    const holders = [...roles.entries()].filter(([k, r]) => k !== '*/admin' && r.granted.includes('ViewWorkItems')).map(([k]) => k).sort();
+    expect(holders).toEqual([...ORGIQ].sort());
+  });
+
+  test('program-owner keeps ManageBudgets but forbids it on initiatives it does not own', () => {
+    expect(role('orgiq/program-owner').granted).toContain('ManageBudgets');
+    expect(role('orgiq/program-owner').forbidden).toContain('ManageBudgets');
+    for (const key of ['orgiq/org-leader', 'orgiq/hr-admin']) expect(role(key).forbidden).not.toContain('ManageBudgets');
   });
 });

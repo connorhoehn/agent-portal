@@ -33,12 +33,17 @@ const VISION_MODEL = 'amazon.nova-lite-v1:0';
 export const capabilitiesRouter = Router();
 
 // Code-interpreter executions, browser microVM sessions and crawls spend real
-// AWS resources, so every mutation on this surface requires ManageDevbox
-// (guardrail edits additionally carry EditGuardrail below; hr-admin holds
-// both). Reads stay open so the capabilities dashboard renders for any role.
+// AWS resources, so every mutation on this surface requires ManageDevbox.
+// Guardrail edits are the exception: they spend nothing and carry their own
+// action, EditGuardrail, which org-leader, hr-admin and admin hold
+// (docs/next-steps.md §9 item 8c); an org-leader holds no ManageDevbox, so the
+// floor would hide the editor from the role it is meant for. Reads stay open
+// so the capabilities dashboard renders for any role.
 const manageCaps = requireAction('ManageDevbox');
+const editGuardrail = requireAction('EditGuardrail');
 capabilitiesRouter.use((req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD') { next(); return; }
+  if (req.path === '/guardrail' || req.path.startsWith('/guardrail/')) { editGuardrail(req, res, next); return; }
   manageCaps(req, res, next);
 });
 
