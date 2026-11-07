@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import type { Construct } from 'constructs';
+import { authDev as authDevFlag, protectData as protectDataFlag } from './context-flags';
 
 export interface AuthenticationStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -37,17 +38,31 @@ export class AuthenticationStack extends cdk.Stack {
 
     const prefix = props?.prefix ?? 'orgiq';
 
-    // localhost dev callbacks are always registered so the flow is testable
-    // against the real pool from a laptop; production HTTPS callbacks come in
-    // via context (they must be HTTPS — Cognito rejects non-localhost http).
-    const devCallbacks = [
+    // `-c authDev=true` marks a development pool: it registers the localhost
+    // callbacks (so the flow is testable from a laptop) and turns on the
+    // admin-password flow. Neither belongs on a pool real users sign in to: a
+    // localhost callback lets any process on a victim's machine receive their
+    // authorization code, and the admin flow takes a password server-side.
+    // Production HTTPS callbacks come in via context.
+    const authDev = authDevFlag(this);
+    const protectData = protectDataFlag(this);
+    const devCallbacks = authDev ? [
       'http://localhost:3001/api/auth/callback',
       'http://localhost:3199/api/auth/callback',
       'http://localhost:5183/api/auth/callback',
-    ];
-    const devLogouts = ['http://localhost:5183/', 'http://localhost:3001/'];
+    ] : [];
+    const devLogouts = authDev ? ['http://localhost:5183/', 'http://localhost:3001/'] : [];
     const callbackUrls = [...new Set([...devCallbacks, ...(props?.callbackUrls ?? [])])];
     const logoutUrls = [...new Set([...devLogouts, ...(props?.logoutUrls ?? [])])];
+    // Cognito refuses an authorization-code client with no callback URL. With
+    // neither a real callback nor authDev the client has OAuth off: the pool
+    // exists, SSO is inert, and the picker login stays the only path — the
+    // same state as a middleware with COGNITO_CALLBACK_URL unset.
+    const oauthOn = callbackUrls.length > 0;
+    if (!oauthOn) {
+      cdk.Annotations.of(this).addWarningV2('orgiq:auth-no-callback',
+        'No callback URL (authCallbackUrls / portalPublicUrl) and authDev is off: the app client has OAuth disabled');
+    }
 
     const pool = new cognito.UserPool(this, 'UserPool', {
       userPoolName: `${prefix}-users`,
@@ -62,11 +77,17 @@ export class AuthenticationStack extends cdk.Stack {
         requireLowercase: true,
         requireUppercase: true,
         requireDigits: true,
-        requireSymbols: false,
+        requireSymbols: true,
       },
+      // Optional MFA with an authenticator app (TOTP). SMS stays off: it needs
+      // an SNS role and a spend limit, and is the weaker factor.
+      mfa: cognito.Mfa.OPTIONAL,
+      mfaSecondFactor: { otp: true, sms: false },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
-      // Demo pool: destroy with the stack. Flip to RETAIN before real users exist.
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      deletionProtection: protectData,
+      // RETAIN by default (protectData): the pool holds every user's password
+      // and MFA enrolment, which no redeploy can recreate.
+      removalPolicy: protectData ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
     this.userPoolId = pool.userPoolId;
 
@@ -79,20 +100,21 @@ export class AuthenticationStack extends cdk.Stack {
     const client = pool.addClient('PortalClient', {
       userPoolClientName: `${prefix}-portal`,
       generateSecret: true, // confidential client — BFF holds the secret
-      // userSrp for the Hosted UI; adminUserPassword lets the middleware (and
-      // demo scripts / tests) obtain tokens server-side via AdminInitiateAuth
-      // without driving a browser — handy for a headless demo login path.
-      authFlows: { userSrp: true, adminUserPassword: true },
-      oAuth: {
-        flows: { authorizationCodeGrant: true },
-        scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
-        callbackUrls,
-        logoutUrls,
-      },
+      // userSrp for the Hosted UI. adminUserPassword (AdminInitiateAuth, a
+      // headless demo login for scripts and tests) only on an authDev pool.
+      authFlows: { userSrp: true, adminUserPassword: authDev },
+      ...(oauthOn ? {
+        oAuth: {
+          flows: { authorizationCodeGrant: true },
+          scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
+          callbackUrls,
+          logoutUrls,
+        },
+      } : { disableOAuth: true }),
       preventUserExistenceErrors: true,
       accessTokenValidity: cdk.Duration.hours(1),
       idTokenValidity: cdk.Duration.hours(1),
-      refreshTokenValidity: cdk.Duration.days(30),
+      refreshTokenValidity: cdk.Duration.days(7),
     });
     this.userPoolClientId = client.userPoolClientId;
 
@@ -173,9 +195,12 @@ export class AuthenticationStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ClientSecretArn', {
       value: clientSecret.secretArn, exportName: `${prefix}-cognito-client-secret-arn`,
     });
-    // Convenience for local testing: the exact login URL to open.
-    new cdk.CfnOutput(this, 'LoginUrl', {
-      value: `${this.hostedUiDomain}/login?client_id=${client.userPoolClientId}&response_type=code&scope=openid+email+profile&redirect_uri=http://localhost:3001/api/auth/callback`,
-    });
+    // Convenience for testing: the exact login URL to open, for the first
+    // registered callback (localhost on an authDev pool).
+    if (oauthOn) {
+      new cdk.CfnOutput(this, 'LoginUrl', {
+        value: `${this.hostedUiDomain}/login?client_id=${client.userPoolClientId}&response_type=code&scope=openid+email+profile&redirect_uri=${callbackUrls[0]}`,
+      });
+    }
   }
 }

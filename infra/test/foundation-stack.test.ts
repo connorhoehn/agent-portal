@@ -23,9 +23,30 @@ function bucketByName(suffix: string): [string, any] {
   return hit as [string, any];
 }
 
-describe('OrgIQ-Foundation buckets can actually be deleted', () => {
+const throwaway = Template.fromStack(foundationStack({ protectData: 'false' }));
+
+describe('protectData (the default) keeps the documents bucket', () => {
+  test('the documents bucket is RETAIN; the artifacts bucket is still DESTROY', () => {
+    const [, docs] = bucketByName('documents');
+    assert.equal(docs.DeletionPolicy, 'Retain');
+    assert.equal(docs.UpdateReplacePolicy, 'Retain');
+    const [, artifacts] = bucketByName('artifacts');
+    assert.equal(artifacts.DeletionPolicy, 'Delete');
+  });
+
+  test('the documents emptier stays in the template but is told to retain', () => {
+    // Removing the custom resource would run its Delete handler and empty
+    // the bucket on the very deploy meant to protect it.
+    const emptiers = Object.values<any>(template.findResources('Custom::EmptyBucketOnDestroy'));
+    const retained = emptiers.filter((e) => e.Properties.Retain === 'true');
+    assert.equal(retained.length, 1);
+    assert.match(JSON.stringify(retained[0].Properties.BucketName), /DocumentsBucket/);
+  });
+});
+
+describe('OrgIQ-Foundation buckets can actually be deleted (protectData=false)', () => {
   test('both buckets are DESTROY, not RETAIN — RETAIN orphaned 203 live versions on the last teardown', () => {
-    const buckets = template.findResources('AWS::S3::Bucket');
+    const buckets = throwaway.findResources('AWS::S3::Bucket');
     assert.equal(Object.keys(buckets).length, 2, 'expected exactly the documents + artifacts buckets');
     for (const [id, bucket] of Object.entries(buckets)) {
       assert.equal(

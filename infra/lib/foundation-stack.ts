@@ -5,6 +5,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
+import { protectData as protectDataFlag } from './context-flags';
 
 export interface FoundationStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -36,6 +37,9 @@ export class FoundationStack extends cdk.Stack {
     super(scope, id, props);
 
     const prefix = props?.prefix ?? 'orgiq';
+    // The documents bucket holds every ingested source document; with
+    // protectData (the default) it is RETAINed and never emptied on destroy.
+    const protectData = protectDataFlag(this);
 
     // -------------------------------------------------------------------
     // S3 Buckets
@@ -57,12 +61,13 @@ export class FoundationStack extends cdk.Stack {
           ],
         },
       ],
-      // Was RETAIN: on teardown that orphaned the bucket (203 live versions had
-      // to be emptied and deleted by hand). Foundation is meant to tear down
-      // cleanly, so both buckets are DESTROY and emptied by emptyBucketOnDestroy
-      // below. This bucket is versioned, so the emptier removes every version
-      // AND delete marker (a plain object delete only adds a marker).
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      // RETAIN by default (protectData): this is the only copy of the source
+      // documents. A throwaway stack (`-c protectData=false`) is DESTROY and
+      // emptied by emptyBucketOnDestroy below — on the last such teardown a
+      // RETAINed bucket orphaned 203 live versions that had to be emptied by
+      // hand. Versioned, so the emptier removes every version AND delete
+      // marker (a plain object delete only adds a marker).
+      removalPolicy: protectData ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
 
     this.artifactsBucket = new s3.Bucket(this, 'ArtifactsBucket', {
@@ -96,8 +101,12 @@ export class FoundationStack extends cdk.Stack {
     // Custodian-resistant teardown: empty both buckets on stack delete using an
     // emptier Lambda whose S3 permissions live on its own IAM role (identity-
     // based), not on a per-bucket resource policy the custodian layer strips.
-    this.emptyBucketOnDestroy(this.documentsBucket);
-    this.emptyBucketOnDestroy(this.artifactsBucket);
+    // The documents emptier stays in the template even when protected: a
+    // custom resource REMOVED from a template runs its Delete handler, which
+    // would empty the bucket on the deploy meant to protect it. Instead its
+    // `Retain` property turns that Delete into a no-op.
+    this.emptyBucketOnDestroy(this.documentsBucket, protectData);
+    this.emptyBucketOnDestroy(this.artifactsBucket, false);
 
     // -------------------------------------------------------------------
     // DynamoDB Tables
@@ -244,7 +253,7 @@ export class FoundationStack extends cdk.Stack {
    * runs first (CloudFormation deletes in reverse dependency order) and the
    * bucket delete then finds it empty.
    */
-  private emptyBucketOnDestroy(bucket: s3.Bucket): void {
+  private emptyBucketOnDestroy(bucket: s3.Bucket, retain: boolean): void {
     if (!this.emptierFn) {
       this.emptierFn = new lambda.Function(this, 'BucketEmptierFn', {
         description: 'Empties OrgIQ-Foundation S3 buckets on stack destroy (versions + delete markers).',
@@ -259,6 +268,7 @@ export class FoundationStack extends cdk.Stack {
           'const s3 = new S3Client({});',
           'exports.handler = async (event) => {',
           "  if (event.RequestType !== 'Delete') return {};",
+          "  if (event.ResourceProperties.Retain === 'true') return {};",
           '  const Bucket = event.ResourceProperties.BucketName;',
           '  try {',
           '    let KeyMarker, VersionIdMarker;',
@@ -302,7 +312,9 @@ export class FoundationStack extends cdk.Stack {
     const cleaner = new cdk.CustomResource(this, `${bucket.node.id}Emptier`, {
       serviceToken: this.emptierProvider!.serviceToken,
       resourceType: 'Custom::EmptyBucketOnDestroy',
-      properties: { BucketName: bucket.bucketName },
+      // Only the documents bucket ever carries Retain=true; the artifacts
+      // bucket keeps its original properties so its resource does not change.
+      properties: { BucketName: bucket.bucketName, ...(retain ? { Retain: 'true' } : {}) },
     });
     // Force the emptier's Delete to run before the bucket's Delete.
     cleaner.node.addDependency(bucket);

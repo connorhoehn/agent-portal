@@ -6,6 +6,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
+import { contextFlag, protectData as protectDataFlag } from './context-flags';
 
 export interface AuroraStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -39,6 +40,12 @@ export class AuroraStack extends cdk.Stack {
     super(scope, id, props);
 
     const prefix = props.prefix ?? 'orgiq';
+    // Deletion protection, RETAIN and a week of backups unless this is a
+    // throwaway stack (`-c protectData=false`). See infra/SECURITY-NOTES.md.
+    const protectData = protectDataFlag(this);
+    // Only consulted when protectData=false: the deleter takes a final
+    // snapshot unless told otherwise.
+    const skipFinalSnapshot = contextFlag(this, 'auroraSkipFinalSnapshot', false);
 
     // ---------------------------------------------------------------
     // VPC — isolated subnets only (Data API is the access path)
@@ -115,9 +122,12 @@ export class AuroraStack extends cdk.Stack {
       securityGroups: [dbSg],
       enableDataApi: true,
       storageEncrypted: true,
-      deletionProtection: false,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      backup: { retention: cdk.Duration.days(1) },
+      deletionProtection: protectData,
+      // RETAIN also retains the subnet group (the L2 passes it down). The VPC
+      // and security group are not retained, so destroying a protected stack
+      // ends DELETE_FAILED on them: redeploy with protectData=false first.
+      removalPolicy: protectData ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+      backup: { retention: cdk.Duration.days(protectData ? 7 : 1) },
     });
 
     this.clusterArn = cluster.clusterArn;
@@ -183,12 +193,24 @@ export class AuroraStack extends cdk.Stack {
     this.readOnlySecretArn = readOnlySecret.secretArn;
 
     // ---------------------------------------------------------------
-    // Fast-delete: a polling Lambda that calls DeleteDBCluster with
-    // SkipFinalSnapshot=true and WAITS until the cluster is fully gone
-    // before returning. This ensures CFN's subnet group / param group
-    // cleanup never races against a still-deleting cluster.
+    // Fast-delete: a polling Lambda that calls DeleteDBCluster and WAITS until
+    // the cluster is fully gone before returning, so CFN's subnet group /
+    // param group cleanup never races a still-deleting cluster.
+    //
+    // With protectData (the default) the custom resource stays in the
+    // template but its Delete is a no-op: the cluster is RETAINed and has
+    // deletion protection on. The resource is kept rather than removed because
+    // REMOVING a custom resource from a template runs its Delete handler —
+    // dropping it would have deleted the cluster on the very deploy meant to
+    // protect it.
+    //
+    // Unprotected, it takes a final snapshot unless
+    // `-c auroraSkipFinalSnapshot=true`. Its permissions name this cluster
+    // and this stack's final-snapshot ids only (it used to be able to delete
+    // any cluster in the account).
     // ---------------------------------------------------------------
 
+    const finalSnapshotPrefix = `${prefix}-aurora-final`;
     const deleterRole = new iam.Role(this, 'AuroraDeleterRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       managedPolicies: [
@@ -196,10 +218,21 @@ export class AuroraStack extends cdk.Stack {
       ],
       inlinePolicies: {
         RdsDelete: new iam.PolicyDocument({
-          statements: [new iam.PolicyStatement({
-            actions: ['rds:DeleteDBCluster', 'rds:DescribeDBClusters'],
-            resources: ['*'],
-          })],
+          statements: [
+            new iam.PolicyStatement({
+              actions: ['rds:DeleteDBCluster', 'rds:DescribeDBClusters'],
+              resources: [cluster.clusterArn],
+            }),
+            new iam.PolicyStatement({
+              // DeleteDBCluster with FinalDBSnapshotIdentifier creates the
+              // snapshot under the caller's identity.
+              actions: ['rds:CreateDBClusterSnapshot', 'rds:AddTagsToResource'],
+              resources: [
+                cluster.clusterArn,
+                `arn:aws:rds:${this.region}:${this.account}:cluster-snapshot:${finalSnapshotPrefix}-*`,
+              ],
+            }),
+          ],
         }),
       },
     });
@@ -235,14 +268,22 @@ def _pid(event):
 def handler(event, context):
     if event['RequestType'] != 'Delete':
         return {'PhysicalResourceId': _pid(event)}
-    cluster_id = event['ResourceProperties']['ClusterId']
+    props = event['ResourceProperties']
+    # protectData: the cluster is RETAINed with deletion protection on, so a
+    # stack delete (or this resource leaving the template) must not touch it.
+    if props.get('Protected', 'true') != 'false':
+        print('protectData is on: leaving the cluster in place')
+        return {'PhysicalResourceId': _pid(event)}
+    cluster_id = props['ClusterId']
+    skip = props.get('SkipFinalSnapshot') == 'true'
+    args = {'DBClusterIdentifier': cluster_id, 'SkipFinalSnapshot': skip,
+            'DeleteAutomatedBackups': skip}
+    if not skip:
+        args['FinalDBSnapshotIdentifier'] = (
+            f"{props['FinalSnapshotPrefix']}-{time.strftime('%Y%m%d%H%M%S', time.gmtime())}")
     rds = boto3.client('rds')
     try:
-        rds.delete_db_cluster(
-            DBClusterIdentifier=cluster_id,
-            SkipFinalSnapshot=True,
-            DeleteAutomatedBackups=True,
-        )
+        rds.delete_db_cluster(**args)
     except rds.exceptions.DBClusterNotFoundFault:
         return {'PhysicalResourceId': _pid(event)}
     except Exception as e:
@@ -270,7 +311,13 @@ def handler(event, context):
       serviceToken: new cr.Provider(this, 'AuroraDeleterProvider', {
         onEventHandler: deleterFn,
       }).serviceToken,
-      properties: { ClusterId: cluster.clusterIdentifier },
+      properties: {
+        ClusterId: cluster.clusterIdentifier,
+        // Strings, because custom resource properties arrive as strings.
+        Protected: protectData ? 'true' : 'false',
+        SkipFinalSnapshot: skipFinalSnapshot ? 'true' : 'false',
+        FinalSnapshotPrefix: finalSnapshotPrefix,
+      },
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
     auroraDeleter.node.addDependency(cluster);

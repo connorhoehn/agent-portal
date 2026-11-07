@@ -329,7 +329,7 @@ describe('the public URLs flow back without a hand-copied CloudFront domain', ()
   test('portalPublicUrl registers the Cognito callback + sign-out and points the runtimes at the middleware', () => {
     const app = synthApp({ portalPublicUrl: PORTAL_URL, deployRuntimes: 'true' });
     app.template('OrgIQ-Authentication').hasResourceProperties('AWS::Cognito::UserPoolClient', {
-      CallbackURLs: Match.arrayWith(['http://localhost:3001/api/auth/callback', `${PORTAL_URL}/api/auth/callback`]),
+      CallbackURLs: [`${PORTAL_URL}/api/auth/callback`],
       LogoutURLs: Match.arrayWith([`${PORTAL_URL}/`]),
     });
     const runtimes = Object.values<any>(app.template('OrgIQ-AgentCoreRuntime').findResources('AWS::BedrockAgentCore::Runtime'));

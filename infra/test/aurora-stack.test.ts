@@ -59,9 +59,46 @@ describe('cost floor', () => {
   });
 });
 
-describe('teardown', () => {
+const throwaway = Template.fromStack(auroraStack({ protectData: 'false' }));
+
+function deleterProps(t: Template): Record<string, unknown> {
+  const [, r] = Object.entries<any>(t.findResources('AWS::CloudFormation::CustomResource'))
+    .find(([id]) => id.includes('AuroraFastDeleter'))!;
+  return r.Properties;
+}
+
+describe('protectData (the default)', () => {
+  test('deletion protection is on, the cluster keeps a week of backups', () => {
+    template.hasResourceProperties('AWS::RDS::DBCluster', { DeletionProtection: true, BackupRetentionPeriod: 7 });
+  });
+
+  test('the subnet group is RETAINed with the cluster', () => {
+    for (const [id, sg] of Object.entries(template.findResources('AWS::RDS::DBSubnetGroup'))) {
+      assert.equal(sg.DeletionPolicy, 'Retain', id);
+    }
+  });
+
+  test('the deleter stays in the template but is told the cluster is protected', () => {
+    // Removing the custom resource would run its Delete handler — which
+    // deleted the cluster before this flag existed.
+    assert.equal(deleterProps(template).Protected, 'true');
+  });
+});
+
+describe('teardown (protectData=false)', () => {
   test('deletion protection is OFF — on, `cdk destroy` cannot delete the cluster at all', () => {
-    template.hasResourceProperties('AWS::RDS::DBCluster', { DeletionProtection: false });
+    throwaway.hasResourceProperties('AWS::RDS::DBCluster', { DeletionProtection: false, BackupRetentionPeriod: 1 });
+  });
+
+  test('the deleter takes a final snapshot unless auroraSkipFinalSnapshot=true', () => {
+    assert.equal(deleterProps(throwaway).Protected, 'false');
+    assert.equal(deleterProps(throwaway).SkipFinalSnapshot, 'false');
+    const skip = Template.fromStack(auroraStack({ protectData: 'false', auroraSkipFinalSnapshot: 'true' }));
+    assert.equal(deleterProps(skip).SkipFinalSnapshot, 'true');
+  });
+
+  test('a misspelt flag fails the synth rather than taking the default', () => {
+    assert.throws(() => auroraStack({ protectData: 'no' }), /protectData must be true or false/);
   });
 
   test('the cluster and its writer are RETAINed so CFN does not double-delete them', () => {
@@ -88,15 +125,18 @@ describe('teardown', () => {
     );
   });
 
-  test('the deleter can actually delete: rds:DeleteDBCluster + DescribeDBClusters', () => {
-    const granted = new Set(
-      Object.values<any>(template.findResources('AWS::IAM::Role'))
-        .flatMap((r) => (r.Properties?.Policies ?? []) as any[])
-        .flatMap((p) => (p.PolicyDocument?.Statement ?? []) as any[])
-        .flatMap((s) => (Array.isArray(s.Action) ? s.Action : [s.Action])),
-    );
-    assert.ok(granted.has('rds:DeleteDBCluster'));
-    assert.ok(granted.has('rds:DescribeDBClusters'));
+  test('the deleter can delete THIS cluster only: rds:DeleteDBCluster + DescribeDBClusters on its ARN', () => {
+    const statements = Object.values<any>(template.findResources('AWS::IAM::Role'))
+      .flatMap((r) => (r.Properties?.Policies ?? []) as any[])
+      .flatMap((p) => (p.PolicyDocument?.Statement ?? []) as any[]);
+    const del = statements.find((s) => [].concat(s.Action).includes('rds:DeleteDBCluster' as never));
+    assert.ok(del, 'no rds:DeleteDBCluster grant');
+    assert.ok([].concat(del.Action).includes('rds:DescribeDBClusters' as never));
+    // It used to be '*': any cluster in the account.
+    assert.notEqual(del.Resource, '*');
+    assert.match(JSON.stringify(del.Resource), /AuroraCluster/);
+    const snap = statements.find((s) => [].concat(s.Action).includes('rds:CreateDBClusterSnapshot' as never));
+    assert.match(JSON.stringify(snap.Resource), /cluster-snapshot:orgiq-aurora-final-\*/);
   });
 });
 
