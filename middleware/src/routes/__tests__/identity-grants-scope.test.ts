@@ -83,7 +83,9 @@ const FARAH = {
   personId: null, grants: { assessment: ['program-lead', 'lead-assessor'] },
 };
 
-const programLead = { sub: 'u-farah', role: 'program-lead', tenant: 'assessment' };
+// Another program-lead editing Farah: nobody edits their own grants
+// (lib/grant-rule.ts; identity-grant-rule.test.ts pins that refusal).
+const programLead = { sub: 'u-jonas', role: 'program-lead', tenant: 'assessment' };
 const admin = { sub: 'u-operator', role: 'admin', tenant: 'assessment' };
 
 function buildApp(session: Record<string, unknown> | null) {

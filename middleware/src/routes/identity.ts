@@ -31,6 +31,8 @@ import { listTenants, listUsers, getUser, createTenant, createUser, setGrants } 
 // same way by providers/sprints.ts) and keeps the write local to this file.
 import { exec } from '../providers/aurora.js';
 import { isCapabilityGrant, type Grants } from '../lib/session.js';
+import { canEditGrantsOf, canGrantAll } from '../lib/grant-rule.js';
+import { grantDiff } from '../lib/identity-grants-sql.js';
 
 export const identityRouter = Router();
 
@@ -144,9 +146,27 @@ identityRouter.post('/users', requireAction('ManageUsers'), asyncHandler(async (
       res.status(403).json({ error: `cannot set grants for tenant '${offending}' — your session is scoped to '${req.session!.tenant}'` });
       return;
     }
+    // The one grant rule (lib/grant-rule.ts): `admin` only from an admin session.
+    const verdict = canGrantAll(req.session!, grantDiff({}, grants).add);
+    if (!verdict.ok) {
+      res.status(403).json({ error: verdict.reason });
+      return;
+    }
   }
   if (auroraMissing(res, 'provision users')) return;
-  await createUser({ id, displayName, ...(email && { email }), ...(personId && { personId }) });
+  // Create, never upsert: an existing id keeps its name, email and grants.
+  // Rewriting the email of an existing account would let the SSO email-link
+  // fallback (routes/auth.ts) hand that account to whoever owns the new address.
+  const exists = `user '${id}' already exists; edit its grants instead`;
+  if (await getUser(id, { authoritative: true })) {
+    res.status(409).json({ error: exists });
+    return;
+  }
+  const created = await createUser({ id, displayName, ...(email && { email }), ...(personId && { personId }) });
+  if (!created) {
+    res.status(409).json({ error: exists });
+    return;
+  }
   if (grants) await setGrants(id, grants);
   res.status(201).json(await getUser(id));
 }));
@@ -185,6 +205,11 @@ identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandl
     res.status(403).json({ error: `cannot set grants for tenant '${offending}' — your session is scoped to '${session.tenant}'` });
     return;
   }
+  const self = canEditGrantsOf(session, userId);
+  if (!self.ok) {
+    res.status(403).json({ error: self.reason });
+    return;
+  }
   const current = await getUser(userId);
   if (!current) {
     res.status(404).json({ error: `user '${userId}' not found` });
@@ -198,6 +223,14 @@ identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandl
   const scoped = session.role !== 'admin';
   const merged: Grants = scoped ? { ...current.grants, ...grants } : grants;
   const from = base && scoped ? { ...current.grants, ...base } : base;
+  // The one grant rule over what this write changes, added and removed
+  // alike: a scoped manager may neither grant `admin` nor take it away.
+  const diff = grantDiff(from ?? current.grants, merged);
+  const verdict = canGrantAll(session, [...diff.add, ...diff.remove]);
+  if (!verdict.ok) {
+    res.status(403).json({ error: verdict.reason });
+    return;
+  }
   if (auroraMissing(res, 'set grants')) return;
   await setGrants(userId, merged, from ? { base: from } : {});
   res.json(await getUser(userId));

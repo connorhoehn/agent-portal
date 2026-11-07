@@ -66,6 +66,7 @@
 
 import { AppError } from './async-handler.js';
 import { bumpSessionEpoch, getUser, grantRole, listUsers, revokeRole } from '../providers/identity.js';
+import { canGrant } from './grant-rule.js';
 import { addContribution, removeContribution } from '../providers/projects.js';
 import { accessNow, casRequest, findRequest, listCatalog, listPolicies, listSteps, type AccessCatalogRow, type AccessRequestRow } from '../providers/access.js';
 import { listGrants } from '../providers/budgets.js';
@@ -229,6 +230,13 @@ export async function provisionAccess(request: Pick<AccessRequestRow, 'id'>): Pr
     }
     if (item.kind === 'sprint-envelope' && (current.requestedUsd == null || !(current.requestedUsd > 0))) {
       throw new ProvisionError(`${current.id} asks for no amount; a sprint envelope needs one`);
+    }
+    // The one grant rule (lib/grant-rule.ts). Provisioning writes for an
+    // approval, never as an admin session, so `admin` is refused whatever the
+    // catalog says; the write is scoped to the item's own tenant.
+    if ((item.kind === 'tenant-role' || item.kind === 'capability') && item.role) {
+      const verdict = canGrant({ role: 'access-provisioning', tenant: item.tenant }, item.tenant, item.role);
+      if (!verdict.ok) throw new ProvisionError(`${item.title} cannot be provisioned: ${verdict.reason}`);
     }
     const now = accessNow();
     // SoD against the beneficiary's grants NOW (A7), not the submit-time snapshot.

@@ -148,6 +148,17 @@ describe('provisionAccess: an initiative membership', () => {
     await expect(provisionAccess({ id: 'req-0100' })).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/no linked person/) });
     expect(row('req-0100')).toMatchObject({ status: 'approved', provisionedAt: null, expiresAt: null });
   });
+
+  // One grant rule (docs/next-steps.md section 8, package 5): `admin` is only
+  // ever granted by an admin session. Provisioning acts for the approval, not
+  // for an admin, so a catalog row naming `admin` is refused before the claim.
+  it('a catalog row naming admin is refused before the row is claimed, and grants nothing', async () => {
+    accessCatalogFixture.rows().find((c) => c.id === 'role:orgiq:sme')!.role = 'admin';
+    approve('req-0001');
+    await expect(provisionAccess({ id: 'req-0001' })).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/admin/) });
+    expect(row('req-0001')).toMatchObject({ status: 'approved', provisionedAt: null, expiresAt: null });
+    expect((await getUser('u-rhea', { authoritative: true }))!.grants).toEqual({ access: ['requester'] });
+  });
 });
 
 describe('revokeAccess: the inverse', () => {

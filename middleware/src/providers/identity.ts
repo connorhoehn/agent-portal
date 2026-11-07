@@ -511,20 +511,28 @@ export async function createTenant(id: string, displayName: string): Promise<Ten
   return { id, displayName, status: 'ACTIVE' };
 }
 
+/**
+ * Insert a new user. Never an upsert: an existing id is left exactly as it
+ * is (name, email, person) and the call returns false, so the caller can
+ * answer 409. Rewriting an existing account's email would hand it to whoever
+ * owns the new address through the SSO email-link fallback.
+ */
 export async function createUser(
   input: { id: string; displayName: string; email?: string; personId?: string },
-): Promise<void> {
+): Promise<boolean> {
   if (!auroraConfigured()) throw new Error('Aurora not configured — cannot provision users');
   const params = [str('id', input.id), str('name', input.displayName)];
-  await exec(
+  const rows = await exec(
     `INSERT INTO app_users (id, display_name, email, person_id)
      VALUES (:id, :name, ${input.email ? ':email' : 'NULL'}, ${input.personId ? ':person' : 'NULL'})
-     ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name, email = EXCLUDED.email`,
+     ON CONFLICT (id) DO NOTHING
+     RETURNING id`,
     [
       ...params,
       ...(input.email ? [str('email', input.email)] : []),
       ...(input.personId ? [str('person', input.personId)] : []),
     ]);
+  return rows.length > 0;
 }
 
 // ── Grant writes ─────────────────────────────────────────────────────────────
