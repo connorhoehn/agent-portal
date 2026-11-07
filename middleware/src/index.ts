@@ -148,6 +148,7 @@ import { assessmentDocumentSourceRouter } from './routes/assessment-document-sou
 import { assessmentDocumentProposalsRouter } from './routes/assessment-document-proposals.js';
 
 import { trustedProxyHops } from './lib/trusted-proxy.js';
+import { securityHeaders } from './lib/security-headers.js';
 import { startModelPriceRefresh } from './lib/model-prices.js';
 
 const app = express();
@@ -155,6 +156,8 @@ const app = express();
 // ECS declares its enforced ALB hop; direct/local servers ignore forwarding
 // headers by default so callers cannot choose their own rate-limit bucket.
 app.set('trust proxy', trustedProxyHops());
+app.disable('x-powered-by');
+app.use(securityHeaders);
 
 app.use(browserOrigin);
 app.use(express.json({ verify: captureRawBody }));
