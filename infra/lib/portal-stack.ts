@@ -7,6 +7,7 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
+import { contextFlag } from './context-flags';
 
 // ── The contract between OrgIQ-Portal and the stacks behind it ──────────────
 //
@@ -163,6 +164,21 @@ export class PortalStack extends cdk.Stack {
     // ALB's own DNS name, so the origin must be a host the certificate covers.
     const certArn = ctx('certificateArn');
     const originHost = ctx('portalAlbOriginHost');
+    // Without a certificate the CloudFront → ALB leg is plain HTTP across the
+    // internet: session cookies, the OAuth callback (code and state) and the
+    // origin-verify secret all cross it in clear (docs/next-steps.md §7).
+    // Refused (work item 19). `-c allowHttpOrigin=true` is for throwaway
+    // stacks only and is named so that nobody passes it by accident.
+    if (!certArn && !contextFlag(this, 'allowHttpOrigin', false)) {
+      throw new Error('deployPortal requires --context certificateArn=<ACM certificate on the ALB> and '
+        + 'portalAlbOriginHost=<a host it covers>: without them CloudFront reaches the ALB over plain HTTP, '
+        + 'carrying cookies, the OAuth callback and the origin-verify secret. For a throwaway stack only: '
+        + '--context allowHttpOrigin=true (infra/SECURITY-NOTES.md).');
+    }
+    if (!certArn) {
+      cdk.Annotations.of(this).addWarningV2('orgiq:portal-http-origin',
+        'allowHttpOrigin=true: CloudFront reaches the ALB over plain HTTP. Throwaway stacks only.');
+    }
     if (certArn && !originHost) {
       throw new Error('deployPortal with certificateArn requires --context portalAlbOriginHost=<a host the '
         + 'certificate covers, resolving to the ALB> — CloudFront cannot reach an HTTPS-only ALB by its DNS name');

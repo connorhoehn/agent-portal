@@ -22,7 +22,7 @@ const ALL_VIEWER_AND_CLOUDFRONT = '33f36d7e-f396-46d9-90e0-52428a34d9dc';
 const PORTAL_URL = 'https://d111abcdef8.cloudfront.net';
 
 const FULL = {
-  deployPortal: 'true', deploySocial: 'true', deploySocialMedia: 'true', realtimeGateway: 'true',
+  deployPortal: 'true', allowHttpOrigin: 'true', deploySocial: 'true', deploySocialMedia: 'true', realtimeGateway: 'true',
   deployMiddlewareService: 'true', sfuAllowCidr: '203.0.113.4/32',
   albAllowCidr: '203.0.113.4/32,198.51.100.1/32,198.51.100.2/32,198.51.100.3/32,198.51.100.4/32,198.51.100.5/32',
 };
@@ -182,7 +182,7 @@ describe('OrgIQ-Portal', () => {
   });
 
   test('without the social flags it builds only the portal distribution', () => {
-    const solo = synthApp({ deployPortal: 'true' }).template('OrgIQ-Portal');
+    const solo = synthApp({ deployPortal: 'true', allowHttpOrigin: 'true' }).template('OrgIQ-Portal');
     solo.resourceCountIs('AWS::CloudFront::Distribution', 1);
     solo.resourceCountIs('AWS::SSM::Parameter', 4);
   });
@@ -190,6 +190,14 @@ describe('OrgIQ-Portal', () => {
   test('imports only the ALB DNS export the middleware has always had', () => {
     assert.deepEqual([...importedExportNames(app.templates['OrgIQ-Portal'])], ['orgiq-middleware-alb-dns']);
     assert.deepEqual([...exportedNames(app.templates['OrgIQ-Portal'])], []);
+  });
+
+  test('without a certificate deployPortal is refused (plain HTTP to the ALB); allowHttpOrigin=true is the throwaway escape', () => {
+    assert.throws(() => synthApp({ deployPortal: 'true' }), /deployPortal requires --context certificateArn/);
+    assert.throws(() => synthApp({ deployPortal: 'true', allowHttpOrigin: 'yes' }), /allowHttpOrigin must be true or false/);
+    const origin = Object.values<any>(app.template('OrgIQ-Portal').findResources('AWS::CloudFront::Distribution'))[0]
+      .Properties.DistributionConfig.Origins.find((o: any) => o.CustomOriginConfig);
+    assert.equal(origin.CustomOriginConfig.OriginProtocolPolicy, 'http-only', 'only because the test opted in');
   });
 
   test('with a certificate it needs portalAlbOriginHost, and then speaks TLS to that host', () => {
@@ -241,7 +249,7 @@ describe('OrgIQ-MiddlewareService with deployPortal=true', () => {
     // The id is looked up at deploy time (it differs per region)…
     mw.resourceCountIs('Custom::AWS', 1);
     // …unless named.
-    const named = middlewareServiceStack({ deployPortal: 'true', cloudFrontPrefixListId: 'pl-3b927c52' });
+    const named = middlewareServiceStack({ deployPortal: 'true', allowHttpOrigin: 'true', cloudFrontPrefixListId: 'pl-3b927c52' });
     const nt = Template.fromStack(named);
     nt.resourceCountIs('Custom::AWS', 0);
     assert.deepEqual(prefixListIngress(nt).map((r) => r.SourcePrefixListId), ['pl-3b927c52']);

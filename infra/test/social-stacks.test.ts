@@ -481,7 +481,7 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
     };
     const off = envOfSocial({}).env;
     assert.equal(off.LOBBY_AUTHORITY_URL, undefined, 'no portal, no authority: call lobbies would refuse');
-    const { env, params } = envOfSocial({ deployPortal: 'true', portalPublicUrls: 'true', portalVideoUrlLive: 'true' });
+    const { env, params } = envOfSocial({ deployPortal: 'true', allowHttpOrigin: 'true', portalPublicUrls: 'true', portalVideoUrlLive: 'true' });
     const lobby = JSON.stringify(env.LOBBY_AUTHORITY_URL);
     assert.match(lobby, /\/api\/realtime\/lobby-access/);
     const [ref] = [...lobby.matchAll(/"Ref":"([^"]+)"/g)].map((m) => m[1]);
@@ -489,7 +489,7 @@ describe('OrgIQ-Social — platform-api, Redis, tables', () => {
     assert.equal(env.LOBBY_AUTHORITY_REQUIRED, 'true');
     assert.equal(params[env.VIDEO_PUBLIC_URL.Ref].Default, '/orgiq/portal/video-url');
     // Explicit context still wins.
-    assert.equal(envOfSocial({ deployPortal: 'true', portalPublicUrls: 'true', lobbyAuthorityUrl: 'https://x.example/api/realtime/lobby-access' })
+    assert.equal(envOfSocial({ deployPortal: 'true', allowHttpOrigin: 'true', portalPublicUrls: 'true', lobbyAuthorityUrl: 'https://x.example/api/realtime/lobby-access' })
       .env.LOBBY_AUTHORITY_URL, 'https://x.example/api/realtime/lobby-access');
   });
 

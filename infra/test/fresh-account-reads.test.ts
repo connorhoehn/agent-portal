@@ -25,7 +25,7 @@ const VIDEO = '/orgiq/portal/video-url';
 // What deploy.sh passes and infers between "the middleware + portal exist" and
 // "OrgIQ-Social exists": the orchestrator's social flags, the portal inferred.
 const FRESH = {
-  deploySocial: 'true', deploySocialMedia: 'true', deployPortal: 'true', portalPublicUrls: 'true',
+  deploySocial: 'true', deploySocialMedia: 'true', deployPortal: 'true', allowHttpOrigin: 'true', portalPublicUrls: 'true',
   deployMiddlewareService: 'true', sfuAllowCidr: '203.0.113.4/32',
 };
 // What deploy.sh infers once each producer has written its parameter.

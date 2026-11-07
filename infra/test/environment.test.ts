@@ -67,7 +67,7 @@ describe('loadEnvironment', () => {
 });
 
 const ALL = {
-  deployPortal: 'true', deployDevbox: 'true', deployMiddlewareService: 'true', deploySocial: 'true',
+  deployPortal: 'true', allowHttpOrigin: 'true', deployDevbox: 'true', deployMiddlewareService: 'true', deploySocial: 'true',
   deploySocialMedia: 'true', deploySocialImages: 'true', deployCanary: 'true', deployRuntimes: 'true', enableEval: 'true',
 };
 

@@ -598,7 +598,10 @@ if (deploySocial) {
 //
 //   deployPortal=true        OrgIQ-Portal, plus the ALB side on the middleware
 //                            and social stacks (prefix list, origin secret,
-//                            header rules) — pass it to every one of them
+//                            header rules) — pass it to every one of them.
+//                            Needs certificateArn + portalAlbOriginHost: the
+//                            CloudFront → ALB leg is refused over plain HTTP
+//                            unless allowHttpOrigin=true (throwaway stacks)
 //   portalPublicUrls=true    a LATER middleware deploy: read the public URLs
 //                            back from OrgIQ-Portal's SSM parameters
 //   portalPublicUrl=https://…  Cognito callback/sign-out + the runtimes'

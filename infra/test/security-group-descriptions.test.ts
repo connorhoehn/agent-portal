@@ -15,7 +15,7 @@ const ALLOWED = /^[a-zA-Z0-9. _\-:/()#,@[\]+=&;{}!$*]*$/;
 const SCENARIOS: Record<string, Record<string, string>> = {
   default: {},
   full: {
-    deployPortal: 'true', deploySocial: 'true', deploySocialMedia: 'true', realtimeGateway: 'true',
+    deployPortal: 'true', allowHttpOrigin: 'true', deploySocial: 'true', deploySocialMedia: 'true', realtimeGateway: 'true',
     deployMiddlewareService: 'true', deploySocialService: 'true',
     platformApiImageDigest: `sha256:${'0'.repeat(64)}`, sfuImageDigest: `sha256:${'0'.repeat(64)}`,
     albAllowCidr: '203.0.113.4/32', sfuAllowCidr: '203.0.113.4/32',
