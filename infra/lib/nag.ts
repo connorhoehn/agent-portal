@@ -32,10 +32,28 @@ export function applyNag(app: cdk.App, stacks: cdk.Stack[]): 'applied' | 'skippe
   }
   cdk.Aspects.of(app).add(new nag.AwsSolutionsChecks({ verbose: true }));
   for (const stack of stacks) {
+    // NAG_NO_SUPPRESS=1 prints every raw finding (audit aid; never set it in CI).
+    if (process.env.NAG_NO_SUPPRESS) continue;
     const entries = NAG_SUPPRESSIONS.filter(e => !e.stacks || e.stacks.some(suffix => stack.stackName.endsWith(`-${suffix}`)));
-    if (entries.length) {
-      nag.NagSuppressions.addStackSuppressions(stack, entries.map(e => ({ id: e.id, reason: e.reason })), true);
+    const stackWide = entries.filter(e => !e.paths);
+    if (stackWide.length) {
+      nag.NagSuppressions.addStackSuppressions(stack, stackWide.map(e => ({ id: e.id, reason: e.reason })), true);
+    }
+    // Path-scoped entries: each glob is relative to the stack (`*` = one path segment) and the
+    // suppression is applied to the matching constructs only, with their children.
+    const all = stack.node.findAll();
+    for (const e of entries.filter(x => x.paths)) {
+      for (const glob of e.paths!) {
+        const re = new RegExp(`^${stack.node.path}/${glob.split('*').map(escapeRe).join('[^/]*')}$`);
+        for (const c of all.filter(n => re.test(n.node.path))) {
+          nag.NagSuppressions.addResourceSuppressions(c, [{ id: e.id, reason: e.reason }], true);
+        }
+      }
     }
   }
   return 'applied';
+}
+
+function escapeRe(x: string): string {
+  return x.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 }

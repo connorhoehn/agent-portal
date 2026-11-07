@@ -149,6 +149,7 @@ export class PortalStack extends cdk.Stack {
     // is nothing to keep.
     this.bucket = new s3.Bucket(this, 'PortalBucket', {
       bucketName: `${prefix}-portal-${this.account}-${this.region}`,
+      enforceSSL: true,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,

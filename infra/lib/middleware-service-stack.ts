@@ -1011,10 +1011,10 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // unreadable budget or hold store refuses (503) instead of proceeding
       // unbraked. Both used to fall back to code defaults (allow, and the
       // NODE_ENV check), so a task with NODE_ENV dropped would spend unbraked.
-      // 'refuse' is the end state (docs/spend-map.md) but today every chat question without an
-      // initiative scope and every /summarize is unattributed, so 'refuse' would 403 them. Flip
-      // once those paths attribute spend; until then unattributed spend answers to the user budget.
-      SPEND_HOLDS_UNATTRIBUTED: 'allow',
+      // 'actor': a hold goes to the initiative when known, else to the actor's user budget, and is
+      // refused only when neither exists. 'refuse' is the end state (docs/spend-map.md) once every
+      // chat question and /summarize carries an initiative scope.
+      SPEND_HOLDS_UNATTRIBUTED: 'actor',
       BUDGET_FAIL_CLOSED: 'true',
 
       // The agent and devbox callbacks sign service-runtime's request envelope
@@ -1541,6 +1541,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
       const topic = new sns.Topic(this, 'RealtimeAlarmTopic', {
         topicName: realtimeAlarmTopicName(prefix),
         displayName: 'OrgIQ realtime load alarms',
+        enforceSSL: true,
       });
       const email = ctxStr('alertEmail');
       if (email) topic.addSubscription(new subs.EmailSubscription(email));

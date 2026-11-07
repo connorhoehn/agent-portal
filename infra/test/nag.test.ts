@@ -29,8 +29,8 @@ test('every suppression names an AwsSolutions rule and gives a reason', () => {
   for (const s of NAG_SUPPRESSIONS) {
     assert.match(s.id, /^AwsSolutions-[A-Z]+\d+$/);
     assert.ok(s.reason.length > 20, `${s.id}: a suppression needs a real reason`);
-    assert.ok(!ids.has(`${s.id}:${s.stacks ?? '*'}`), `${s.id} listed twice`);
-    ids.add(`${s.id}:${s.stacks ?? '*'}`);
+    assert.ok(!ids.has(`${s.id}:${s.stacks ?? '*'}:${s.paths ?? '*'}`), `${s.id} listed twice`);
+    ids.add(`${s.id}:${s.stacks ?? '*'}:${s.paths ?? '*'}`);
   }
   // What this work item fixed must stay fixed, not suppressed.
   for (const fixed of ['AwsSolutions-RDS10', 'AwsSolutions-COG1', 'AwsSolutions-CFR5']) {

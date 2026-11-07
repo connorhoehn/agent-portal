@@ -28,7 +28,31 @@ Middleware sizing: with the realtime gateway on (`realtimeGateway=true`), the mi
 - **Confused-deputy conditions.** Every service trust policy has `aws:SourceAccount` and `aws:SourceArn` (`lib/service-trust.ts`, `test/service-trust.test.ts`). Three kinds of role are exempt because their services do not send those keys: Lambda execution roles, EC2 instance roles and ECS task execution roles. The eight unused `<prefix>-<agent>-role` roles in OrgIQ-Agents are gone.
 - **Callback secrets by name.** Runtimes get `<VAR>_ID` (for example `APPROVALS_REQUEST_SECRET_ID=orgiq-approvals-request-secret`) and permission to read only that secret. The value never enters the template.
 - **Cognito.** MFA is optional, authenticator app (TOTP) only. Passwords need a symbol. Refresh tokens last 7 days. There is no admin-password flow and no localhost callback unless `authDev=true`.
-- **cdk-nag.** `bin/app.ts` applies AwsSolutions with the suppressions in `nag-suppressions.ts`, and `test/nag.test.ts` fails on any unsuppressed finding.
+- **cdk-nag.** `bin/app.ts` applies AwsSolutions with the suppressions in `nag-suppressions.ts`, and `test/nag.test.ts` fails on any unsuppressed finding. See the cdk-nag section below.
+
+## cdk-nag
+
+cdk-nag 2.38.2 (devDependency) runs AwsSolutions over every stack; `npx cdk synth --quiet -c nag=true` exits 0 for the default app and for the full-app context `test/nag.test.ts` uses. `NAG_NO_SUPPRESS=1` prints every raw finding.
+
+**Fixed in the stacks:** `enforceSSL` on the documents, artifacts and portal buckets (S10) and on both SNS topics (SNS3). Earlier fixes stay unsuppressed: RDS10, COG1, CFR5.
+
+**Suppressed** (`nag-suppressions.ts`; IAM4 and IAM5 are scoped to named constructs, so a new wildcard still fails the synth):
+
+| Rule | Where | Reason |
+|---|---|---|
+| IAM4 | Lambda roles (custom resources, tool Lambdas, SpanProjector, ParseMetrics, LogRetention, AgentBaseRole); MiddlewareExecutionRole; SfuInstanceRole | AWS-maintained minimum policies (Lambda basic execution, ECS task execution, SSM managed instance). |
+| IAM5 | AgentCoreRuntime execution roles, GatewayRole and tool roles, evaluation/memory/sandbox/devbox roles, Aurora deleter, Foundation/KB/Portal bucket roles, AwsCustomResource policies, MiddlewareTask/ExecutionRole, canary and projector roles, Social roles, SfuInstanceRole | Actions with no resource-level permission, or prefix/account-scoped names (`runtime/<prefix>_*`, `table/<prefix>-social-*`, `bucket/*` objects, `index/*`). Named actions are pinned by `test/least-privilege.test.ts`. |
+| L1 | all inline Lambdas | python3.12 / nodejs20.x pinned on purpose; runtime upgrades are their own change. |
+| SMG4 | every generated secret | No rotation Lambda yet; logins are tied to DB roles by `apply_all_seed.py`. |
+| S1, CFR3, ELB2 | Foundation, Portal, MiddlewareService | No log bucket exists and the account custodian strips the bucket-policy grant log delivery needs. |
+| RDS6 | Aurora | Data API with Secrets Manager logins only. |
+| AEC3, AEC4, AEC5, AEC6 | Social (SocialRedis) | Single private node, no AUTH or TLS: research stack, cost. |
+| COG2, COG8 | Authentication | MFA optional by decision; Plus plan is paid. |
+| VPC7, CFR2, EC28, EC29, SF2 | Aurora and MiddlewareService VPCs, Portal, SocialMedia, PromptCanary | Flow logs, WAF, detailed monitoring, termination protection, X-Ray: research stack, cost. |
+| EC23 | MiddlewareService ALB security group | `addRedirect` opens 0.0.0.0/0:80 for the redirect only; custodian revokes it. Open item: `open: false`. |
+| ECS2, CFR1, CFR4, DDB3 | MiddlewareService, Social, Portal, Foundation | Non-secret env vars only; no geo restriction; default CloudFront certificate; PITR only on durable tables. |
+
+Still open: the Devbox role grants `bedrock:InvokeModel` on a foundation-model ARN with a wildcard region; it is suppressed under IAM5 but deserves a look against the AWS-native-models rule.
 
 ## Migration order for an existing environment
 
@@ -61,7 +85,6 @@ Middleware sizing: with the realtime gateway on (`realtimeGateway=true`), the mi
 
 ## Open items
 
-- **cdk-nag is not installed.** `npm install -D cdk-nag@^2` turns `test/nag.test.ts` on. The suppression list has not been checked against a real run yet; expect to add or delete entries and to narrow IAM5 to `appliesTo`.
 - **SpanProjector and PromptCanary still use the master secret.** They write observability tables and could run as `orgiq_app_middleware` or a new observability role.
 - **The middleware holds CREATE on schema `public`.** It needs it only because the KB registry creates per-KB vector tables at run time. Move those tables to their own schema and grant `orgiq_kb_service` on them instead.
 - **`ALTER ROLE … PASSWORD` sends the password in clear.** `pg_stat_statements` is preloaded, so the statement may be recorded (§7, unverified). Sending a pre-computed SCRAM verifier would avoid it, if the Data API accepts SCRAM logins.

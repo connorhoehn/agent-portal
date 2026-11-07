@@ -36,6 +36,7 @@ export class ObservabilityStack extends cdk.Stack {
     const alertTopic = new sns.Topic(this, 'AlertTopic', {
       topicName: `${prefix}-alerts`,
       displayName: 'OrgIQ Infrastructure Alerts',
+      enforceSSL: true,
     });
 
     if (alertEmail) {

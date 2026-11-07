@@ -48,6 +48,7 @@ export class FoundationStack extends cdk.Stack {
 
     this.documentsBucket = new s3.Bucket(this, 'DocumentsBucket', {
       bucketName: `${prefix}-documents-${this.account}-${this.region}`,
+      enforceSSL: true,
       versioned: true,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -73,6 +74,7 @@ export class FoundationStack extends cdk.Stack {
 
     this.artifactsBucket = new s3.Bucket(this, 'ArtifactsBucket', {
       bucketName: `${prefix}-artifacts-${this.account}-${this.region}`,
+      enforceSSL: true,
       versioned: false,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
