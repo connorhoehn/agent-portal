@@ -19,6 +19,7 @@ import { attachFleetAlarms, fleetAlarmsEnabled } from './fleet-alarms';
 import { capabilityParameterNames } from './agentcore-capabilities-stack';
 import { DEVBOX_TASK_TIMEOUT_S } from './devbox-stack';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 import {
   realtimeJwtSecretArnParameterName, socialPlatformInternalUrl, socialRedisUrlParameterName, socialTablePrefix,
 } from './social-stack';
@@ -272,7 +273,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // ── Task Role (runtime permissions) ────────────────────────────────────
     const taskRole = new iam.Role(this, 'MiddlewareTaskRole', {
       roleName: `${prefix}-middleware-task-role`,
-      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
+      assumedBy: trustedService(this, 'ecs-tasks.amazonaws.com'),
       description: `Runtime role for ${prefix}-middleware Fargate task`,
     });
 

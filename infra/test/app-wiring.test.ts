@@ -172,15 +172,14 @@ describe('every agent runtime points at a prompt OrgIQ-Agents actually creates',
     }
   });
 
-  test('every agent with an IAM role in OrgIQ-Agents also gets a runtime', () => {
-    // AgentCoreRuntimeStack skips any agent missing from props.agentRoles, so
-    // the two AGENT_NAMES lists drifting apart silently drops an agent from
-    // the deployed fleet.
+  test('every agent with a managed prompt in OrgIQ-Agents also gets a runtime', () => {
+    // The two agent lists drifting apart silently drops an agent from the
+    // deployed fleet (or leaves a prompt nothing reads).
     const on = synthApp({ deployRuntimes: 'true' });
     const roleAgents = Object.values<any>(
-      on.template('OrgIQ-Agents').findResources('AWS::IAM::Role'),
+      on.template('OrgIQ-Agents').findResources('AWS::Bedrock::Prompt'),
     )
-      .map((r) => /^orgiq-(.+)-role$/.exec(r.Properties?.RoleName ?? '')?.[1])
+      .map((r) => /^orgiq-(.+)-system-prompt$/.exec(r.Properties?.Name ?? '')?.[1])
       .filter((n): n is string => Boolean(n))
       .sort();
     const runtimeAgents = Object.values<any>(
@@ -189,5 +188,24 @@ describe('every agent runtime points at a prompt OrgIQ-Agents actually creates',
       .map((r) => String(r.Properties.AgentRuntimeName).replace(/^orgiq_/, '').replace(/_/g, '-'))
       .sort();
     assert.deepEqual(runtimeAgents, roleAgents);
+  });
+});
+
+describe('the export ledger (test/fixtures/export-ledger.json)', () => {
+  // A deployed consumer pins every export it imports; dropping one makes the
+  // producer's next deploy fail ("Export ... cannot be deleted as it is in use").
+  test('every export a deployed stack may import is still produced', () => {
+    const ledger = JSON.parse(require('node:fs').readFileSync(`${__dirname}/fixtures/export-ledger.json`, 'utf8'));
+    const produced = new Map<string, Set<string>>();
+    for (const ctx of [{}, { deployRuntimes: 'true' }] as Record<string, string>[]) {
+      for (const [name, t] of Object.entries(synthApp(ctx).templates)) {
+        produced.set(name, new Set([...(produced.get(name) ?? []), ...exportedNames(t)]));
+      }
+    }
+    const missing: string[] = [];
+    for (const [stack, names] of Object.entries<string[]>(ledger.exports)) {
+      for (const n of names) if (!produced.get(stack)?.has(n)) missing.push(`${stack}: ${n}`);
+    }
+    assert.deepEqual(missing, [], 'an export disappeared; keep it (Stack.exportValue) or move it to `removed` with a reason');
   });
 });

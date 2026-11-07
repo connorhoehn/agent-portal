@@ -1,0 +1,148 @@
+{
+ "$comment": "Every CloudFormation export the app produced before work item 19 (default context plus deployRuntimes=true). CloudFormation refuses to delete an export another deployed stack imports, and producers deploy before consumers, so an export may only leave this list deliberately: move it to `removed` with the reason and the deploy step in infra/SECURITY-NOTES.md.",
+ "exports": {
+  "OrgIQ-AgentCoreCapabilities": [
+   "OrgIQ-AgentCoreCapabilities:ExportsOutputFnGetAttBrowserBrowserArn3972E19F",
+   "OrgIQ-AgentCoreCapabilities:ExportsOutputFnGetAttBrowserBrowserId01497DDA",
+   "orgiq-browser-arn",
+   "orgiq-browser-id",
+   "orgiq-browser-profile-id",
+   "orgiq-code-interpreter-arn",
+   "orgiq-code-interpreter-id",
+   "orgiq-workload-identity-arn"
+  ],
+  "OrgIQ-AgentCoreGateway": [
+   "orgiq-gateway-compute-pagerank-lambda-arn",
+   "orgiq-gateway-graph-traversal-lambda-arn",
+   "orgiq-gateway-kb-query-lambda-arn",
+   "orgiq-mcp-gateway-id",
+   "orgiq-mcp-gateway-url"
+  ],
+  "OrgIQ-AgentCoreMemory": [
+   "orgiq-memory-arn",
+   "orgiq-memory-id"
+  ],
+  "OrgIQ-AgentCorePolicy": [
+   "OrgIQ-AgentCorePolicy:ExportsOutputFnGetAttPolicyEnginePolicyEngineArnBE8B4C58",
+   "OrgIQ-AgentCorePolicy:ExportsOutputFnGetAttPolicyEnginePolicyEngineIdAEE8861D",
+   "orgiq-policy-engine-arn",
+   "orgiq-policy-engine-id"
+  ],
+  "OrgIQ-AgentCoreRuntime": [
+   "orgiq-advisor-runtime-id",
+   "orgiq-agent-base-ecr-uri",
+   "orgiq-assessment-drafter-runtime-id",
+   "orgiq-assessment-scorer-runtime-id",
+   "orgiq-graph-builder-runtime-id",
+   "orgiq-ingestion-runtime-id",
+   "orgiq-runtime-model-id",
+   "orgiq-scoring-runtime-id",
+   "orgiq-search-runtime-id",
+   "orgiq-supervisor-runtime-id"
+  ],
+  "OrgIQ-AgentCoreTelemetry": [
+   "orgiq-eval-execution-role-arn",
+   "orgiq-quality-evaluator-id",
+   "orgiq-tool-selection-evaluator-id"
+  ],
+  "OrgIQ-Aurora": [
+   "OrgIQ-Aurora:ExportsOutputRefAuroraCluster23D869C0CA1C7DB5",
+   "OrgIQ-Aurora:ExportsOutputRefAuroraClusterSecretAttachmentDB8032DAFDEEBE73",
+   "OrgIQ-Aurora:ExportsOutputRefGraphReaderSecret2CCC06BD9F4272CC",
+   "orgiq-aurora-cluster-arn",
+   "orgiq-aurora-db-name",
+   "orgiq-aurora-endpoint",
+   "orgiq-aurora-readonly-secret-arn",
+   "orgiq-aurora-secret-arn"
+  ],
+  "OrgIQ-Authentication": [
+   "OrgIQ-Authentication:ExportsOutputRefClientSecret6773D8CE7B36455B",
+   "OrgIQ-Authentication:ExportsOutputRefUserPool6BA7E5F296FD7236",
+   "OrgIQ-Authentication:ExportsOutputRefUserPoolHostedUiDomainE021B0B644BA1D58",
+   "OrgIQ-Authentication:ExportsOutputRefUserPoolPortalClientF86287D164A01066",
+   "orgiq-cognito-client-id",
+   "orgiq-cognito-client-secret-arn",
+   "orgiq-cognito-domain",
+   "orgiq-cognito-user-pool-id"
+  ],
+  "OrgIQ-Authorization": [
+   "orgiq-policy-store-arn",
+   "orgiq-policy-store-id",
+   "orgiq-session-signing-secret-arn"
+  ],
+  "OrgIQ-Devbox": [
+   "orgiq-devbox-ecr-uri"
+  ],
+  "OrgIQ-Foundation": [
+   "OrgIQ-Foundation:ExportsOutputFnGetAttAgentBaseRoleF624B37DArn3EFE136C",
+   "OrgIQ-Foundation:ExportsOutputFnGetAttArtifactsBucket2AAC5544ArnD57FAE19",
+   "OrgIQ-Foundation:ExportsOutputFnGetAttDocumentsBucket9EC9DEB9ArnEA5095A7",
+   "OrgIQ-Foundation:ExportsOutputFnGetAttScoresTable6CB35494Arn1D09F1EA",
+   "OrgIQ-Foundation:ExportsOutputFnGetAttSessionsTable7C302024Arn24FF8012",
+   "orgiq-agent-base-role-arn",
+   "orgiq-artifacts-bucket-arn",
+   "orgiq-artifacts-bucket-name",
+   "orgiq-documents-bucket-arn",
+   "orgiq-documents-bucket-name",
+   "orgiq-scores-table-arn",
+   "orgiq-scores-table-name",
+   "orgiq-sessions-table-name"
+  ],
+  "OrgIQ-Guardrails": [
+   "orgiq-bedrock-invocation-log-group",
+   "orgiq-guardrail-arn",
+   "orgiq-guardrail-arn-hr-admin",
+   "orgiq-guardrail-arn-member",
+   "orgiq-guardrail-arn-org-leader",
+   "orgiq-guardrail-id",
+   "orgiq-guardrail-id-hr-admin",
+   "orgiq-guardrail-id-member",
+   "orgiq-guardrail-id-org-leader",
+   "orgiq-guardrail-version"
+  ],
+  "OrgIQ-KnowledgeBase": [
+   "OrgIQ-KnowledgeBase:ExportsOutputFnGetAttKnowledgeBaseKnowledgeBaseArn47097C46",
+   "OrgIQ-KnowledgeBase:ExportsOutputFnGetAttKnowledgeBaseKnowledgeBaseIdFC83E473",
+   "orgiq-knowledge-base-arn",
+   "orgiq-knowledge-base-id"
+  ],
+  "OrgIQ-MiddlewareService": [
+   "orgiq-approvals-request-secret-arn",
+   "orgiq-assessment-run-complete-secret-arn",
+   "orgiq-harness-runner-secret-arn",
+   "orgiq-harness-trace-secret-arn",
+   "orgiq-lab-callback-secret-arn",
+   "orgiq-middleware-alb-dns",
+   "orgiq-middleware-cluster-name",
+   "orgiq-middleware-ecr-uri",
+   "orgiq-middleware-service-name",
+   "orgiq-middleware-url"
+  ],
+  "OrgIQ-SpanProjector": [
+   "orgiq-span-projector-fn-arn"
+  ]
+ },
+ "removed": {
+  "OrgIQ-Agents": {
+   "reason": "The per-agent IAM roles were removed (nothing assumed them). If a Gateway deployed before the tool manifest still imports these, deploy OrgIQ-AgentCoreGateway before OrgIQ-Agents (SECURITY-NOTES.md, migration order).",
+   "exports": [
+    "OrgIQ-Agents:ExportsOutputFnGetAttAdvisorRole8811E905Arn02CA5E15",
+    "OrgIQ-Agents:ExportsOutputFnGetAttAssessmentDrafterRole80256773Arn60CFA4FF",
+    "OrgIQ-Agents:ExportsOutputFnGetAttAssessmentScorerRole506DFC16Arn13B16F7E",
+    "OrgIQ-Agents:ExportsOutputFnGetAttGraphBuilderRole0853655EArnDD6FABFF",
+    "OrgIQ-Agents:ExportsOutputFnGetAttIngestionRoleFC2D3E97Arn8A845CBB",
+    "OrgIQ-Agents:ExportsOutputFnGetAttScoringRole09B6BA8AArn8AD8FFAB",
+    "OrgIQ-Agents:ExportsOutputFnGetAttSearchRoleF90A309EArnE1711F11",
+    "OrgIQ-Agents:ExportsOutputFnGetAttSupervisorRole70619DB1ArnADF4A0AD",
+    "orgiq-advisor-role-arn",
+    "orgiq-assessment-drafter-role-arn",
+    "orgiq-assessment-scorer-role-arn",
+    "orgiq-graph-builder-role-arn",
+    "orgiq-ingestion-role-arn",
+    "orgiq-scoring-role-arn",
+    "orgiq-search-role-arn",
+    "orgiq-supervisor-role-arn"
+   ]
+  }
+ }
+}

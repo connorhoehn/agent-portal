@@ -1,217 +1,27 @@
 import * as cdk from 'aws-cdk-lib';
-import * as iam from 'aws-cdk-lib/aws-iam';
 import type { Construct } from 'constructs';
 
 export interface AgentsStackProps extends cdk.StackProps {
   readonly prefix?: string;
-  /** Aurora Serverless v2 cluster ARN (graph + vector store) */
-  readonly auroraClusterArn: string;
-  /** Secrets Manager secret ARN for Aurora credentials */
-  readonly auroraCredentialsSecretArn: string;
-  /** Knowledge Base ARN for search agent */
-  readonly knowledgeBaseArn: string;
-  /** Documents bucket ARN for ingestion agent */
-  readonly documentsBucketArn: string;
-  /** Artifacts bucket ARN for all agents */
-  readonly artifactsBucketArn: string;
-  /** Scores table ARN for scoring agent */
-  readonly scoresTableArn: string;
-  /** Sessions table ARN for all agents */
-  readonly sessionsTableArn: string;
 }
 
-const AGENT_NAMES = [
-  'supervisor',
-  'search',
-  'scoring',
-  'advisor',
-  'ingestion',
-  'graph-builder',
-  // Assessment tenant — read-only text agents, no Aurora/KB/S3 access, so they
-  // get only the common per-agent policies applied by the loop below (no
-  // agent-specific block after it, unlike search/scoring/advisor/ingestion/
-  // graph-builder). See agents/assessment-scorer, agents/assessment-drafter.
-  'assessment-scorer',
-  'assessment-drafter',
-] as const;
-
 /**
- * OrgIQ-Agents: IAM roles for the AgentCore Runtime agents + Managed Prompts.
- * Each agent gets a specific role with least-privilege access.
- * Graph access uses Aurora relational tables via RDS Data API (see schema/orgiq_schema.sql).
+ * OrgIQ-Agents: the Bedrock Managed Prompts the runtimes read at start
+ * (SYSTEM_PROMPT_NAME, agents/_shared/prompt_source.py).
+ *
+ * It also used to hold one IAM role per agent, trusted by bedrock and
+ * ecs-tasks with no source conditions and holding the Aurora master secret.
+ * Nothing assumed them — a deployed runtime runs as
+ * `<prefix>-<agent>-execution-role` from OrgIQ-AgentCoreRuntime — so they were
+ * removed (docs/next-steps.md §8 work item 19). If an OrgIQ-AgentCoreGateway
+ * deployed before the manifest still imports their ARN exports, deploy that
+ * stack first (infra/SECURITY-NOTES.md, migration order).
  */
 export class AgentsStack extends cdk.Stack {
-  public readonly agentRoles: Record<string, iam.Role>;
-
   constructor(scope: Construct, id: string, props: AgentsStackProps) {
     super(scope, id, props);
 
     const prefix = props.prefix ?? 'orgiq';
-    this.agentRoles = {};
-
-    // -------------------------------------------------------------------
-    // Shared Aurora Data API policy statement (re-used per agent)
-    // -------------------------------------------------------------------
-
-    const auroraReadStatement = new iam.PolicyStatement({
-      sid: 'AuroraDataApiRead',
-      effect: iam.Effect.ALLOW,
-      actions: ['rds-data:ExecuteStatement'],
-      resources: [props.auroraClusterArn],
-    });
-
-    const auroraWriteStatement = new iam.PolicyStatement({
-      sid: 'AuroraDataApiWrite',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'rds-data:ExecuteStatement',
-        'rds-data:BatchExecuteStatement',
-        'rds-data:BeginTransaction',
-        'rds-data:CommitTransaction',
-        'rds-data:RollbackTransaction',
-      ],
-      resources: [props.auroraClusterArn],
-    });
-
-    const auroraSecretStatement = new iam.PolicyStatement({
-      sid: 'AuroraCredentials',
-      effect: iam.Effect.ALLOW,
-      actions: ['secretsmanager:GetSecretValue'],
-      resources: [props.auroraCredentialsSecretArn],
-    });
-
-    // -------------------------------------------------------------------
-    // Per-Agent IAM Roles
-    // -------------------------------------------------------------------
-
-    for (const agentName of AGENT_NAMES) {
-      const role = new iam.Role(this, `${this.capitalize(agentName)}Role`, {
-        roleName: `${prefix}-${agentName}-role`,
-        assumedBy: new iam.CompositePrincipal(
-          new iam.ServicePrincipal('bedrock.amazonaws.com'),
-          new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
-        ),
-        description: `Execution role for OrgIQ ${agentName} agent`,
-        managedPolicies: [
-          iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
-        ],
-      });
-
-      // Common: Bedrock invoke (Amazon Nova models) + guardrail
-      role.addToPolicy(new iam.PolicyStatement({
-        sid: 'BedrockInvoke',
-        effect: iam.Effect.ALLOW,
-        actions: [
-          'bedrock:InvokeModel',
-          'bedrock:InvokeModelWithResponseStream',
-          'bedrock:ApplyGuardrail',
-        ],
-        resources: ['*'],
-      }));
-
-      // Common: read managed prompts. Agents resolve their system prompt from
-      // Bedrock Prompt Management at run time (agents/_shared/prompt_source.py)
-      // so a Prompt Studio edit changes the deployed agent without a rebuild.
-      // Read-only by design — an agent must never mutate the library. Without
-      // these actions every agent silently falls back to its baked literal,
-      // which is safe but makes the studio a no-op.
-      role.addToPolicy(new iam.PolicyStatement({
-        sid: 'BedrockPromptRead',
-        effect: iam.Effect.ALLOW,
-        actions: ['bedrock:GetPrompt', 'bedrock:ListPrompts'],
-        resources: ['*'],
-      }));
-
-      // Common: sessions table
-      role.addToPolicy(new iam.PolicyStatement({
-        sid: 'SessionsAccess',
-        effect: iam.Effect.ALLOW,
-        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
-        resources: [props.sessionsTableArn, `${props.sessionsTableArn}/index/*`],
-      }));
-
-      // PassRole for AgentCore Runtime execution roles (named ${prefix}-<agentName>-execution-role)
-      role.addToPolicy(new iam.PolicyStatement({
-        sid: 'PassToAgentCore',
-        effect: iam.Effect.ALLOW,
-        actions: ['iam:PassRole'],
-        resources: [`arn:aws:iam::${this.account}:role/${prefix}-*-execution-role`],
-        conditions: {
-          StringEquals: { 'iam:PassedToService': 'bedrock-agentcore.amazonaws.com' },
-        },
-      }));
-
-      this.agentRoles[agentName] = role;
-    }
-
-    // -------------------------------------------------------------------
-    // Agent-specific permissions
-    // -------------------------------------------------------------------
-
-    // Supervisor: A2A agent invocation
-    this.agentRoles['supervisor'].addToPolicy(new iam.PolicyStatement({
-      sid: 'A2AInvoke',
-      effect: iam.Effect.ALLOW,
-      actions: ['bedrock:InvokeAgent', 'bedrock:InvokeFlow'],
-      resources: ['*'],
-    }));
-
-    // Search: KB retrieve + Aurora read (SQL graph queries via RDS Data API)
-    this.agentRoles['search'].addToPolicy(new iam.PolicyStatement({
-      sid: 'KnowledgeBaseRetrieve',
-      effect: iam.Effect.ALLOW,
-      actions: ['bedrock:Retrieve', 'bedrock:RetrieveAndGenerate'],
-      resources: [props.knowledgeBaseArn],
-    }));
-    this.agentRoles['search'].addToPolicy(auroraReadStatement);
-    this.agentRoles['search'].addToPolicy(auroraSecretStatement);
-
-    // Scoring: DynamoDB scores + Aurora read+write (in-degree CTE + score update-back)
-    this.agentRoles['scoring'].addToPolicy(new iam.PolicyStatement({
-      sid: 'ScoresTableAccess',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem',
-        'dynamodb:Query', 'dynamodb:BatchWriteItem',
-      ],
-      resources: [props.scoresTableArn, `${props.scoresTableArn}/index/*`],
-    }));
-    this.agentRoles['scoring'].addToPolicy(auroraReadStatement);
-    this.agentRoles['scoring'].addToPolicy(auroraSecretStatement);
-
-    // Advisor: Aurora read + KB retrieve
-    this.agentRoles['advisor'].addToPolicy(auroraReadStatement);
-    this.agentRoles['advisor'].addToPolicy(auroraSecretStatement);
-    this.agentRoles['advisor'].addToPolicy(new iam.PolicyStatement({
-      sid: 'KnowledgeBaseRetrieve',
-      effect: iam.Effect.ALLOW,
-      actions: ['bedrock:Retrieve'],
-      resources: [props.knowledgeBaseArn],
-    }));
-
-    // Ingestion: S3 read + artifacts write (triggers graph-builder via A2A)
-    this.agentRoles['ingestion'].addToPolicy(new iam.PolicyStatement({
-      sid: 'DocumentsBucketRead',
-      effect: iam.Effect.ALLOW,
-      actions: ['s3:GetObject', 's3:ListBucket', 's3:GetBucketLocation'],
-      resources: [props.documentsBucketArn, `${props.documentsBucketArn}/*`],
-    }));
-    this.agentRoles['ingestion'].addToPolicy(new iam.PolicyStatement({
-      sid: 'ArtifactsBucketWrite',
-      effect: iam.Effect.ALLOW,
-      actions: ['s3:PutObject', 's3:GetObject'],
-      resources: [`${props.artifactsBucketArn}/*`],
-    }));
-
-    // Graph-builder: Aurora full write + S3 artifacts read
-    this.agentRoles['graph-builder'].addToPolicy(auroraWriteStatement);
-    this.agentRoles['graph-builder'].addToPolicy(auroraSecretStatement);
-    this.agentRoles['graph-builder'].addToPolicy(new iam.PolicyStatement({
-      sid: 'ArtifactsRead',
-      effect: iam.Effect.ALLOW,
-      actions: ['s3:GetObject', 's3:ListBucket'],
-      resources: [props.artifactsBucketArn, `${props.artifactsBucketArn}/*`],
-    }));
 
     // -------------------------------------------------------------------
     // Bedrock Managed Prompts
@@ -334,22 +144,6 @@ use only what it validates.`,
         ],
         defaultVariant: 'default',
       });
-    }
-
-    // -------------------------------------------------------------------
-    // Outputs
-    // -------------------------------------------------------------------
-
-    for (const [agentName, role] of Object.entries(this.agentRoles)) {
-      new cdk.CfnOutput(this, `${this.capitalize(agentName)}RoleArn`, {
-        value: role.roleArn,
-        exportName: `${prefix}-${agentName}-role-arn`,
-      });
-      // AgentCoreGateway used to take these roles as objects, which made CDK
-      // mint ExportsOutputFnGetAtt<Role>Arn exports it imports. Agents deploys
-      // first, and CloudFormation refuses to delete an export still imported,
-      // so keep the auto-named exports until no deployed Gateway imports them.
-      this.exportValue(role.roleArn);
     }
   }
 

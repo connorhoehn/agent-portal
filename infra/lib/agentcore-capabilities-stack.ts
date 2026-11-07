@@ -3,6 +3,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 
 /**
  * SSM parameters holding the capability ids the deployed middleware needs
@@ -61,7 +62,7 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
 
     const sandboxRole = new iam.Role(this, 'SandboxExecutionRole', {
       roleName: `${prefix}-sandbox-execution-role`,
-      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+      assumedBy: trustedService(this, 'bedrock-agentcore.amazonaws.com'),
       description: 'Execution role for OrgIQ AgentCore Code Interpreter and Browser',
       inlinePolicies: {
         SandboxAccess: new iam.PolicyDocument({

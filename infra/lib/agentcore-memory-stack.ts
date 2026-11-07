@@ -5,6 +5,7 @@ import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { loadMemoryConfig, memoryIdParameterName, parseMemoryConfig } from './memory-config';
 import type { MemoryStrategy, TenantMemoryConfig } from './memory-config';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 
 export interface AgentCoreMemoryStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -29,7 +30,7 @@ export class AgentCoreMemoryStack extends cdk.Stack {
 
     const memoryRole = new iam.Role(this, 'MemoryExecutionRole', {
       roleName: `${prefix}-memory-execution-role`,
-      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+      assumedBy: trustedService(this, 'bedrock-agentcore.amazonaws.com'),
       description: 'Execution role for OrgIQ AgentCore Memory store',
       inlinePolicies: {
         MemoryAccess: new iam.PolicyDocument({

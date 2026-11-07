@@ -152,15 +152,15 @@ const authentication = new AuthenticationStack(app, stackId(environment, 'Authen
 const agents = new AgentsStack(app, stackId(environment, 'Agents'), {
   env,
   prefix,
-  auroraClusterArn: aurora.clusterArn,
-  auroraCredentialsSecretArn: aurora.credentialsSecretArn,
-  knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
-  documentsBucketArn: foundation.documentsBucket.bucketArn,
-  artifactsBucketArn: foundation.artifactsBucket.bucketArn,
-  scoresTableArn: foundation.scoresTable.tableArn,
-  sessionsTableArn: foundation.sessionsTable.tableArn,
-  description: 'OrgIQ Agents: IAM roles for 8 AgentCore agents + Managed Prompts',
+  description: 'OrgIQ Agents: Managed Prompts for the 8 AgentCore agents',
 });
+// OrgIQ-Agents used to import these for its (now removed) per-agent roles.
+// CloudFormation refuses to delete an export another stack still imports, and
+// the producers deploy before Agents, so keep the auto-named exports for one
+// release; drop these lines once a deploy has run with them.
+knowledgeBase.exportValue(knowledgeBase.knowledgeBaseArn);
+for (const v of [foundation.artifactsBucket.bucketArn, foundation.scoresTable.tableArn,
+  foundation.sessionsTable.tableArn]) foundation.exportValue(v);
 agents.addDependency(foundation);
 agents.addDependency(aurora);
 agents.addDependency(knowledgeBase);
@@ -239,7 +239,6 @@ const agentCoreCapabilities = new AgentCoreCapabilitiesStack(app, stackId(enviro
 const agentCoreRuntime = new AgentCoreRuntimeStack(app, stackId(environment, 'AgentCoreRuntime'), {
   env,
   prefix,
-  agentRoles: agents.agentRoles,
   ...(orgiqMemory && { memoryIdParameter: memoryIdParameterName(prefix, 'orgiq') }),
   // Sub-agents no longer get a guardrail — enforcement lives only on the
   // supervisor edge, which selects from the three role-keyed IDs below.

@@ -5,6 +5,7 @@ import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 import { DEFAULT_MODEL_REGISTRY_FILE, loadModelRegistry, primaryModelFor } from './model-registry';
 
 /**
@@ -39,7 +40,8 @@ export function resolveContainerUri(repoUri: string, repoName: string, region: s
 
 export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly prefix?: string;
-  readonly agentRoles: Record<string, iam.Role>;
+  /** @deprecated Ignored. OrgIQ-Agents no longer creates per-agent roles; every runtime is built. */
+  readonly agentRoles?: Record<string, iam.Role>;
   /** Literal id, or leave unset and pass `memoryIdParameter` (SSM name published by the memory stack). */
   readonly memoryId?: string;
   readonly memoryIdParameter?: string;
@@ -251,9 +253,6 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     });
 
     for (const agentName of ALL_AGENT_NAMES) {
-      const agentRole = props.agentRoles[agentName];
-      if (!agentRole) continue;
-
       const pascal = this.pascal(agentName);
       const runtimeName = `${prefix}-${agentName}`;
       // agentRuntimeName and endpoint name must match [a-zA-Z][a-zA-Z0-9_]{0,47} — no hyphens
@@ -270,7 +269,7 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
       // Runtime execution role — trusted by bedrock-agentcore service
       const executionRole = new iam.Role(this, `${pascal}ExecutionRole`, {
         roleName: `${runtimeName}-execution-role`,
-        assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+        assumedBy: trustedService(this, 'bedrock-agentcore.amazonaws.com'),
         description: `Execution role for ${runtimeName} AgentCore Runtime`,
         inlinePolicies: {
           RuntimeAccess: new iam.PolicyDocument({
@@ -608,45 +607,6 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         value: runtime.attrAgentRuntimeId,
         exportName: `${prefix}-${agentName}-runtime-id`,
       });
-    }
-
-    // Grant capability access to the appropriate agent roles now that both
-    // AgentsStack (roles) and AgentCoreCapabilitiesStack (ARNs) are resolved.
-    // These grants live here to avoid a cross-stack dependency cycle.
-    if (props.codeInterpreterArn) {
-      for (const agentName of ['graph-builder', 'scoring'] as const) {
-        props.agentRoles[agentName]?.addToPolicy(new iam.PolicyStatement({
-          sid: 'CodeInterpreterInvoke',
-          actions: [
-            'bedrock-agentcore:InvokeCodeInterpreter',
-            'bedrock-agentcore:StartCodeInterpreterSession',
-            'bedrock-agentcore:StopCodeInterpreterSession',
-            'bedrock-agentcore:ExecuteCodeInterpreterCode',
-            'bedrock-agentcore:ListCodeInterpreterSessions',
-          ],
-          resources: [props.codeInterpreterArn],
-        }));
-      }
-    }
-
-    if (props.browserArn) {
-      for (const agentName of ['supervisor', 'search', 'advisor'] as const) {
-        props.agentRoles[agentName]?.addToPolicy(new iam.PolicyStatement({
-          sid: 'BrowserInvoke',
-          actions: [
-            'bedrock-agentcore:InvokeBrowser',
-            'bedrock-agentcore:StartBrowserSession',
-            'bedrock-agentcore:StopBrowserSession',
-            'bedrock-agentcore:TakeBrowserScreenshot',
-            'bedrock-agentcore:ClickBrowserElement',
-            'bedrock-agentcore:SendKeystrokesToBrowser',
-            'bedrock-agentcore:ScrollBrowserElement',
-            'bedrock-agentcore:NavigateBrowserToPage',
-            'bedrock-agentcore:GetBrowserPageSource',
-          ],
-          resources: [props.browserArn],
-        }));
-      }
     }
 
     new cdk.CfnOutput(this, 'ModelId', {

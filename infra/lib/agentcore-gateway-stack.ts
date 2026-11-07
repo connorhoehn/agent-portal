@@ -9,6 +9,7 @@ import { AGENT_NAMES } from './agentcore-runtime-stack';
 import { loadGatewayToolManifest, parseGatewayToolManifest } from './gateway-tools-manifest';
 import type { GatewayToolManifest, GatewayToolSpec } from './gateway-tools-manifest';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 
 export interface AgentCoreGatewayStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -141,13 +142,8 @@ export class AgentCoreGatewayStack extends cdk.Stack {
 
     const gatewayRole = new iam.Role(this, 'GatewayRole', {
       roleName: `${prefix}-mcp-gateway-role`,
-      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com', {
-        conditions: {
-          StringLike: {
-            'aws:SourceArn': `arn:aws:bedrock-agentcore:${this.region}:${this.account}:gateway/*`,
-          },
-        },
-      }),
+      assumedBy: trustedService(this, 'bedrock-agentcore.amazonaws.com',
+        `arn:aws:bedrock-agentcore:${this.region}:${this.account}:gateway/*`),
       description: 'Execution role for OrgIQ MCP Gateway',
       inlinePolicies: {
         GatewayAccess: new iam.PolicyDocument({

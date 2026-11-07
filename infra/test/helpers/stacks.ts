@@ -99,16 +99,7 @@ export function guardrailsStack(context: Record<string, unknown> = {}): Guardrai
 }
 
 export function agentsStack(context: Record<string, unknown> = {}): AgentsStack {
-  return new AgentsStack(newApp(context), 'OrgIQ-Agents', {
-    prefix: PREFIX,
-    auroraClusterArn: CLUSTER_ARN,
-    auroraCredentialsSecretArn: SECRET_ARN,
-    knowledgeBaseArn: KB_ARN,
-    documentsBucketArn: DOCS_BUCKET_ARN,
-    artifactsBucketArn: ARTIFACTS_BUCKET_ARN,
-    scoresTableArn: SCORES_TABLE_ARN,
-    sessionsTableArn: SESSIONS_TABLE_ARN,
-  });
+  return new AgentsStack(newApp(context), 'OrgIQ-Agents', { prefix: PREFIX });
 }
 
 export function observabilityStack(context: Record<string, unknown> = {}): ObservabilityStack {
@@ -162,7 +153,6 @@ export function spanProjectorStack(context: Record<string, unknown> = {}): SpanP
 export interface RuntimeStackBuild {
   readonly agents: AgentsStack;
   readonly runtime: AgentCoreRuntimeStack;
-  readonly agentRoles: Record<string, iam.Role>;
 }
 
 /**
@@ -183,19 +173,9 @@ export function runtimeStack(
   }> = {},
 ): RuntimeStackBuild {
   const app = newApp(context);
-  const agents = new AgentsStack(app, 'OrgIQ-Agents', {
-    prefix: PREFIX,
-    auroraClusterArn: CLUSTER_ARN,
-    auroraCredentialsSecretArn: SECRET_ARN,
-    knowledgeBaseArn: KB_ARN,
-    documentsBucketArn: DOCS_BUCKET_ARN,
-    artifactsBucketArn: ARTIFACTS_BUCKET_ARN,
-    scoresTableArn: SCORES_TABLE_ARN,
-    sessionsTableArn: SESSIONS_TABLE_ARN,
-  });
+  const agents = new AgentsStack(app, 'OrgIQ-Agents', { prefix: PREFIX });
   const runtime = withoutEcrLookup(() => new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime', {
     prefix: PREFIX,
-    agentRoles: agents.agentRoles,
     memoryId: 'orgiq_memory-ABCDEF',
     guardrailIdMember: 'gr-member',
     guardrailIdOrgLeader: 'gr-orgleader',
@@ -215,7 +195,7 @@ export function runtimeStack(
     harnessTraceSecret: overrides.harnessTraceSecret,
     assessmentRunCompleteSecret: overrides.assessmentRunCompleteSecret,
   }));
-  return { agents, runtime, agentRoles: agents.agentRoles };
+  return { agents, runtime };
 }
 
 export function middlewareServiceStack(

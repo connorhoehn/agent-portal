@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -255,7 +256,7 @@ export class PromptCanaryStack extends cdk.Stack {
 
     const sfnRole = new iam.Role(this, 'ControllerRole', {
       roleName: `${prefix}-canary-controller-role`,
-      assumedBy: new iam.ServicePrincipal('states.amazonaws.com'),
+      assumedBy: trustedService(this, 'states.amazonaws.com'),
       description: 'Execution role for the OrgIQ Prompt Canary Express state machine.',
     });
 
@@ -522,7 +523,7 @@ export class PromptCanaryStack extends cdk.Stack {
 
     const schedulerRole = new iam.Role(this, 'SchedulerRole', {
       roleName: `${prefix}-canary-scheduler-role`,
-      assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
+      assumedBy: trustedService(this, 'scheduler.amazonaws.com'),
       description: 'Role assumed by EventBridge Scheduler to start canary controller executions.',
     });
 
@@ -638,7 +639,7 @@ export class PromptCanaryStack extends cdk.Stack {
 
     const role = new iam.Role(this, 'PromotionControllerRole', {
       roleName: `${prefix}-prompt-promotion-role`,
-      assumedBy: new iam.ServicePrincipal('states.amazonaws.com'),
+      assumedBy: trustedService(this, 'states.amazonaws.com'),
       description: 'Execution role for the DE-4 per-agent prompt promotion controller.',
     });
     role.addToPolicy(new iam.PolicyStatement({
@@ -860,7 +861,7 @@ export class PromptCanaryStack extends cdk.Stack {
 
     const schedulerRole = new iam.Role(this, 'PromotionSchedulerRole', {
       roleName: `${prefix}-prompt-promotion-scheduler-role`,
-      assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
+      assumedBy: trustedService(this, 'scheduler.amazonaws.com'),
     });
     schedulerRole.addToPolicy(new iam.PolicyStatement({
       sid: 'StartPromotionController', actions: ['states:StartExecution'], resources: [machine.stateMachineArn],

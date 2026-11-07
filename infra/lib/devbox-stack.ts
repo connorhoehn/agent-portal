@@ -3,6 +3,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 import { resolveContainerUri } from './agentcore-runtime-stack';
 
 /**
@@ -171,7 +172,7 @@ export class DevboxStack extends cdk.Stack {
     // ── Execution role — minimal by design ──────────────────────────────────
     const executionRole = new iam.Role(this, 'DevboxExecutionRole', {
       roleName: `${repoName}-execution-role`,
-      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+      assumedBy: trustedService(this, 'bedrock-agentcore.amazonaws.com'),
       description: `Execution role for ${repoName} AgentCore Runtime (Claude Code devbox)`,
       inlinePolicies: {
         DevboxRuntimeAccess: new iam.PolicyDocument({

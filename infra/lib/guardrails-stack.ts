@@ -3,6 +3,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 
 export interface GuardrailsStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -113,7 +114,7 @@ export class GuardrailsStack extends cdk.Stack {
 
     const loggingRole = new iam.Role(this, 'BedrockInvocationLoggingRole', {
       roleName: `${prefix}-bedrock-invocation-logging-role`,
-      assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+      assumedBy: trustedService(this, 'bedrock.amazonaws.com'),
       description: 'Role Bedrock uses to write model invocation logs',
     });
     invocationLogGroup.grantWrite(loggingRole);

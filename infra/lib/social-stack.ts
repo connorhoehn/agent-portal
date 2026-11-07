@@ -13,6 +13,7 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as discovery from 'aws-cdk-lib/aws-servicediscovery';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 import { socialRepoName } from './social-images-stack';
 import { SFU_PORTS, sfuParameterNames, sfuSecretNames } from './social-media-stack';
 import {
@@ -429,7 +430,7 @@ export class SocialStack extends cdk.Stack {
 
     const taskRole = new iam.Role(this, 'PlatformApiTaskRole', {
       roleName: `${prefix}-social-platform-api-task-role`,
-      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
+      assumedBy: trustedService(this, 'ecs-tasks.amazonaws.com'),
       description: `Runtime role for the ${prefix} social platform-api task`,
     });
     // Scoped to this deployment's namespace (tables AND their indexes), one

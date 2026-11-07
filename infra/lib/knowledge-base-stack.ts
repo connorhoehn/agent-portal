@@ -4,6 +4,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 
 export interface KnowledgeBaseStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -50,7 +51,8 @@ export class KnowledgeBaseStack extends cdk.Stack {
     // causing Bedrock's validation call to fail with a 403 before the policy is attached.
     const kbRole = new iam.Role(this, 'KBServiceRole', {
       roleName: `${prefix}-kb-service-role`,
-      assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+      // Only knowledge bases in this account (the CFN one and the registry's).
+      assumedBy: trustedService(this, 'bedrock.amazonaws.com', `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`),
       description: 'Service role for Bedrock Knowledge Base (Aurora pgvector + S3 data source)',
       inlinePolicies: {
         KBAccess: new iam.PolicyDocument({

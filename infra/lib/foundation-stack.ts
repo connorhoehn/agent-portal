@@ -5,6 +5,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 import { protectData as protectDataFlag } from './context-flags';
 
 export interface FoundationStackProps extends cdk.StackProps {
@@ -159,7 +160,7 @@ export class FoundationStack extends cdk.Stack {
     this.agentBaseRole = new iam.Role(this, 'AgentBaseRole', {
       roleName: `${prefix}-agent-base-role`,
       assumedBy: new iam.CompositePrincipal(
-        new iam.ServicePrincipal('bedrock.amazonaws.com'),
+        trustedService(this, 'bedrock.amazonaws.com'),
         new iam.ServicePrincipal('lambda.amazonaws.com'),
       ),
       description: 'Base role for OrgIQ AgentCore Runtime agents',

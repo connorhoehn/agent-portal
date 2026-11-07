@@ -5,6 +5,7 @@ import * as xray from 'aws-cdk-lib/aws-xray';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
+import { trustedService } from './service-trust';
 import { loadModelRegistry, primaryModelFor } from './model-registry';
 
 const AGENT_NAMES = ['supervisor', 'search', 'scoring', 'advisor', 'ingestion', 'graph-builder'] as const;
@@ -49,7 +50,7 @@ export class AgentCoreTelemetryStack extends cdk.Stack {
 
     const evalRole = new iam.Role(this, 'EvaluationExecutionRole', {
       roleName: `${prefix}-eval-execution-role`,
-      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+      assumedBy: trustedService(this, 'bedrock-agentcore.amazonaws.com'),
       description: 'Execution role for OrgIQ online evaluation configs',
       inlinePolicies: {
         EvalAccess: new iam.PolicyDocument({
