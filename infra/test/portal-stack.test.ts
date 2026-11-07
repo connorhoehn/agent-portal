@@ -99,6 +99,22 @@ describe('OrgIQ-Portal', () => {
   const t = app.template('OrgIQ-Portal');
   const dists = () => Object.values<any>(t.findResources('AWS::CloudFront::Distribution'))
     .map((d) => d.Properties.DistributionConfig);
+
+  test('the portal behaviour carries the security headers and a CSP with the connect hosts', () => {
+    const pol = Object.values<any>(t.findResources('AWS::CloudFront::ResponseHeadersPolicy'))[0].Properties.ResponseHeadersPolicyConfig;
+    const sec = pol.SecurityHeadersConfig;
+    assert.equal(sec.ContentTypeOptions.Override, true);
+    assert.equal(sec.FrameOptions.FrameOption, 'DENY');
+    assert.equal(sec.ReferrerPolicy.ReferrerPolicy, 'strict-origin-when-cross-origin');
+    assert.ok(sec.StrictTransportSecurity.AccessControlMaxAgeSec >= 31536000);
+    const csp = JSON.stringify(sec.ContentSecurityPolicy.ContentSecurityPolicy);
+    for (const part of ["default-src 'self'", "script-src 'self' 'wasm-unsafe-eval'", "worker-src 'self' blob:", "frame-ancestors 'none'", 'cognito-idp.']) {
+      assert.ok(csp.includes(part), `CSP lacks ${part}`);
+    }
+    assert.ok(!csp.includes('unsafe-eval\''.replace("'", '')) || csp.includes('wasm-unsafe-eval'));
+    const main = dists().find((d) => (d.Properties?.DistributionConfig ?? d).DefaultRootObject === 'index.html');
+    assert.ok((main.Properties?.DistributionConfig ?? main).DefaultCacheBehavior.ResponseHeadersPolicyId);
+  });
   const portal = () => dists().find((d) => d.DefaultRootObject === 'index.html');
 
   test('is in the app with deployPortal=true, after the middleware', () => {

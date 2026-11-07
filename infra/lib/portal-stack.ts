@@ -234,23 +234,6 @@ export class PortalStack extends cdk.Stack {
       ].join('\n')),
     });
 
-    const middleware = albOrigin();
-    this.distribution = new cloudfront.Distribution(this, 'PortalDistribution', {
-      comment: `${prefix} portal + middleware (${props.stackPrefix ?? 'OrgIQ'}-Portal)`,
-      defaultRootObject: 'index.html',
-      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
-      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
-      defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessControl(this.bucket),
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
-        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
-        functionAssociations: [{ function: spaRewrite, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
-      },
-      additionalBehaviors: Object.fromEntries([...MIDDLEWARE_PATHS, ...DOCUMENT_PATHS].map((p) => [p, passThrough(middleware)])),
-    });
-    this.portalUrl = `https://${this.distribution.distributionDomainName}`;
-
     // ── platform-api and the SFU, each on its own distribution ────────────
     const routed = (logicalId: string, route: string, comment: string) => new cloudfront.Distribution(this, logicalId, {
       comment: `${prefix} ${comment} (${props.stackPrefix ?? 'OrgIQ'}-Portal)`,
@@ -264,6 +247,53 @@ export class PortalStack extends cdk.Stack {
     if (props.sfu) {
       this.sfuDistribution = routed('SfuDistribution', ORIGIN_ROUTES.sfu, 'SFU signalling (media stays on the EIP)');
     }
+
+    // ── Response headers for the portal (S3) behaviour ─────────────────────
+    // The middleware paths are same-origin through this distribution, so
+    // 'self' covers /api and /ws; platform-api and the SFU are cross-origin
+    // distributions of this stack. Further origins (the realtime-token
+    // response's hosts) come from --context cspConnectOrigins=<space list>.
+    const region = this.region;
+    const connectSrc = [
+      "'self'",
+      ...[this.platformApiDistribution, this.sfuDistribution].flatMap((d) => d
+        ? [`https://${d.distributionDomainName}`, `wss://${d.distributionDomainName}`] : []),
+      `https://cognito-idp.${region}.amazonaws.com`,
+      ...(ctx('cspConnectOrigins') ?? '').split(/[\s,]+/).filter(Boolean),
+    ].join(' ');
+    const csp = [
+      "default-src 'self'", "script-src 'self' 'wasm-unsafe-eval'", "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' blob: data:", "media-src 'self' blob:", "worker-src 'self' blob:",
+      `connect-src ${connectSrc}`, "frame-ancestors 'none'", "base-uri 'self'", "object-src 'none'",
+    ].join('; ');
+    const portalHeaders = new cloudfront.ResponseHeadersPolicy(this, 'PortalHeaders', {
+      comment: `${prefix} portal security headers`,
+      securityHeadersBehavior: {
+        strictTransportSecurity: { accessControlMaxAge: cdk.Duration.days(365), includeSubdomains: true, override: true },
+        contentTypeOptions: { override: true },
+        referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
+        frameOptions: { frameOption: cloudfront.HeadersFrameOption.DENY, override: true },
+        contentSecurityPolicy: { contentSecurityPolicy: csp, override: true },
+      },
+    });
+
+    const middleware = albOrigin();
+    this.distribution = new cloudfront.Distribution(this, 'PortalDistribution', {
+      comment: `${prefix} portal + middleware (${props.stackPrefix ?? 'OrgIQ'}-Portal)`,
+      defaultRootObject: 'index.html',
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(this.bucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        responseHeadersPolicy: portalHeaders,
+        functionAssociations: [{ function: spaRewrite, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+      },
+      additionalBehaviors: Object.fromEntries([...MIDDLEWARE_PATHS, ...DOCUMENT_PATHS].map((p) => [p, passThrough(middleware)])),
+    });
+    this.portalUrl = `https://${this.distribution.distributionDomainName}`;
 
     // ── What the middleware reads (by name) ────────────────────────────────
     const names = portalParameterNames(prefix);
