@@ -26,6 +26,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { clock } from '../../mock/core/index.js';
 import type { VoiceEventKind, VoiceSessionEventRow } from '../../providers/voice-sessions.js';
+import { insecureDevMode } from '../insecure-dev-mode.js';
 
 export { VOICE_EVENT_KINDS, type VoiceEventKind } from '../../providers/voice-sessions.js';
 
@@ -33,6 +34,9 @@ export { VOICE_EVENT_KINDS, type VoiceEventKind } from '../../providers/voice-se
 export const CLIENT_EVENT_KINDS: readonly VoiceEventKind[] = [
   'started', 'delegation', 'tool-call', 'tool-result', 'refused', 'confirm-shown', 'confirmed', 'cancelled', 'usage', 'error', 'client',
 ];
+
+/** The most events one batched POST /:id/events carries (the dock flushes at most every 500 ms). */
+export const MAX_EVENT_BATCH = 20;
 
 /** The largest serialized `data` a row keeps. */
 export const MAX_EVENT_DATA_BYTES = 2048;
@@ -118,7 +122,10 @@ let warnedProduction = false;
  * NODE_ENV=production (refused, said once). Read per call.
  */
 export function voiceLogDir(): string | null {
-  const raw = (process.env['VOICE_LOG_DIR'] ?? '').trim();
+  // Under INSECURE_DEV_MODE the file log is on by default (`.voice-log` next to
+  // the process): the owner reads these files directly rather than running
+  // commands, so a laptop must write them without any extra variable.
+  const raw = (process.env['VOICE_LOG_DIR'] ?? '').trim() || (insecureDevMode() ? '.voice-log' : '');
   if (!raw) return null;
   if (process.env['NODE_ENV'] === 'production') {
     if (!warnedProduction) {

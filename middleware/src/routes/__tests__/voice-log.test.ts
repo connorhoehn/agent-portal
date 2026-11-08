@@ -27,7 +27,7 @@ import { FakeSideband, SilentSideband } from '../../test-support/fake-sideband.j
 import { hashToolArgs } from '../../lib/voice/catalogue.js';
 import { sweepVoiceSessions, defaultVoiceReaperDeps } from '../../lib/voice/reaper.js';
 import {
-  sanitizeEventData, sweepVoiceEventRetention, voiceLogFile, MAX_EVENT_DATA_BYTES, VOICE_EVENT_KINDS,
+  sanitizeEventData, sweepVoiceEventRetention, voiceLogFile, MAX_EVENT_BATCH, MAX_EVENT_DATA_BYTES, VOICE_EVENT_KINDS,
 } from '../../lib/voice/session-log.js';
 import { resetRateLimits } from '../../lib/rate-limit.js';
 import { userBudgets } from '../../mock/user-budgets.js';
@@ -134,6 +134,24 @@ describe('the event log, written by the mint, the dock and the close', () => {
     expect((await post(id, { kind: 'refused', tool: 'drop_tables' })).status).toBe(201);
     const events = (await get(`/sessions/${id}`)).body.events;
     expect(events.at(-1)).toEqual(expect.objectContaining({ kind: 'refused', data: { tool: 'unknown', knownTool: false } }));
+  });
+
+  it('takes a batch of events in one request, in order, and refuses the whole batch for one bad event', async () => {
+    const id = await mint();
+    const batch = await post(id, { events: [
+      { kind: 'client', data: { phase: 'listening' } },
+      { kind: 'tool-call', tool: 'search', args: { query: 'vera' } },
+      { kind: 'confirm-shown', tool: 'search', data: { requestId: 3 } },
+    ] });
+    expect(batch.status).toBe(201);
+    expect(batch.body).toEqual({ seqs: [2, 3, 4] });
+    expect((await post(id, { events: [{ kind: 'client' }, { kind: 'minted' }] })).body).toEqual({ error: expect.stringMatching(/^events\[1\]: kind must be/) });
+    expect((await post(id, { events: [] })).status).toBe(400);
+    expect((await post(id, { events: Array.from({ length: MAX_EVENT_BATCH + 1 }, () => ({ kind: 'client' })) })).status).toBe(400);
+    expect((await post(id, { events: ['x'] })).status).toBe(400);
+    const events = (await get(`/sessions/${id}`)).body.events;
+    expect(events.map((e: { kind: string }) => e.kind)).toEqual(['minted', 'client', 'tool-call', 'confirm-shown']);
+    expect(events[2].data).toEqual({ tool: 'search', argsSha256: hashToolArgs({ query: 'vera' }) });
   });
 
   it('logs a mint that fails after its row exists as an error and a close', async () => {

@@ -36,6 +36,11 @@
 //     delegation, tool-call, tool-result, refused, confirm-shown, confirmed,
 //     cancelled, usage, error, client; sanitized, never words or arguments.
 //     201 { seq }; 429 once the log holds 500 rows.
+//   POST /api/voice/sessions/:id/events  { events: [ <the event form above>, … ] }
+//     (the batched form: the dock sends at most one request per 500 ms) 1 to
+//     MAX_EVENT_BATCH events, each parsed as the event form; any bad one is a
+//     400 naming its index and nothing is written. 201 { seqs } in order;
+//     429 { seqs } with the rows written before the log filled.
 //
 // The event log (lib/voice/session-log.ts): the mint (`minted`, or `error` +
 // `closed` when it fails after the row exists), the dock's events above, the
@@ -84,7 +89,7 @@ import {
   attachSideband, createLiveSession, detachSideband, hangupLiveSession, mockLiveScript, voiceProviderConfigured, waitForSidebandUsage,
   MOCK_SDP_ANSWER, VoiceProviderError, type ProviderUsage,
 } from '../lib/voice/openai.js';
-import { parseClientEvent, recordVoiceEvent } from '../lib/voice/session-log.js';
+import { MAX_EVENT_BATCH, parseClientEvent, recordVoiceEvent, type VoiceEventKind } from '../lib/voice/session-log.js';
 import {
   closeVoiceSession, getVoiceSession, insertVoiceSession, insertVoiceToolCall, learnReapedSessionCost, recordProviderUsage, setProviderSessionId,
   userOpenVoiceSessions, userVoiceSecondsSince,
@@ -331,6 +336,28 @@ voiceRouter.post('/sessions/:id/events', rateLimit('voice-events', 120, 60_000, 
   const row = await ownSession(req, { sameTenant: true });
   if (!row) { notFound(res); return; }
   const body = (req.body ?? {}) as Record<string, unknown>;
+  // The batched event form: every event checked first, then written in order.
+  if (body['events'] !== undefined) {
+    const list = body['events'];
+    if (!Array.isArray(list) || list.length < 1 || list.length > MAX_EVENT_BATCH) {
+      res.status(400).json({ error: `events must be an array of 1 to ${MAX_EVENT_BATCH} events` }); return;
+    }
+    const parsed: Array<{ kind: VoiceEventKind; data: Record<string, unknown> }> = [];
+    for (const [i, raw] of list.entries()) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { res.status(400).json({ error: `events[${i}] must be an object` }); return; }
+      const one = parseClientEvent(raw as Record<string, unknown>, { knownTool: (n) => voiceTool(n) != null, hashArgs: hashToolArgs });
+      if ('error' in one) { res.status(400).json({ error: `events[${i}]: ${one.error}` }); return; }
+      parsed.push(one);
+    }
+    const seqs: number[] = [];
+    for (const one of parsed) {
+      const event = await recordVoiceEvent(row, one.kind, one.data);
+      if (!event) { res.status(429).json({ error: 'this voice session has logged its maximum number of events', seqs }); return; }
+      seqs.push(event.seq);
+    }
+    res.status(201).json({ seqs });
+    return;
+  }
   // The event form: one row of the session's log, nothing else.
   if (body['kind'] !== undefined) {
     const parsed = parseClientEvent(body, { knownTool: (n) => voiceTool(n) != null, hashArgs: hashToolArgs });
