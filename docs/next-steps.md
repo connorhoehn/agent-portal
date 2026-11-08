@@ -432,7 +432,7 @@ The rule everywhere: `INSECURE_DEV_MODE=true` is the opt-in, `NODE_ENV=productio
 7. **ui-components local checkout.** Your own checkout is 50 commits behind origin with 139 uncommitted files; it was deliberately not touched.
 8. **Deploy manifests that now refuse to start.** `k8s/crds/middleware-workload.yaml` sets neither the signing secret nor the policy store (it used to start and deny everything; now it exits 2 naming them). live-video-streaming's `k8s/base/prometheus.yaml` scrapes `/api/metrics` without a token and will get 401 until a bearer token from a secret is configured. realtime-examples callers must move to `signServiceRequest` before service-runtime 0.8.0 drops body-only envelopes.
 9. **Agents' legacy static header.** `agents/_shared/callbacks.py` still sends `x-lab-auth` beside the signed envelope unless `SERVICE_AUTH_LEGACY_HEADERS=refuse`; harmless (the envelope decides on its own, and the middleware now refuses the bare header by default), but the default can flip to refuse once the deployed images are rebuilt.
-10. **Voice navigator.** Specified in `docs/voice-navigator-spec.md` and section 11 below; nothing built. V1 (verify the live API's function calls with the prototype) comes first.
+10. **Voice navigator: built** (8 November 2026; section 11 "Built"). Left: a shell-output primitive and tooltip `detail` in ui-components, the `DEVBOX_COMMAND_ALLOWLIST` opt-in for `test`/`lint`/`build`, the owner's daily-minutes question, and the first real session in a deployed environment.
 
 ## 11. Voice navigator (8 November 2026)
 
