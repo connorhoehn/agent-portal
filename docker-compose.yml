@@ -59,6 +59,9 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_PROFILE=${AWS_PROFILE:-default}
       - NODE_ENV=development
+      # The one dev switch (middleware/.env.example): the portal's localhost
+      # origin, seed-policy authz without a policy store, the dev keys.
+      - INSECURE_DEV_MODE=true
       - PORT=3001
     restart: unless-stopped
     networks:

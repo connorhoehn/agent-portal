@@ -40,5 +40,10 @@ RUN npm run build
 RUN chown -R node:node /app
 USER node
 
+# The image is production unless an orchestrator says otherwise; every
+# security default also fails closed without INSECURE_DEV_MODE, which no
+# deployed task sets (docs/fail-open-audit.md §2).
+ENV NODE_ENV=production
+
 EXPOSE 3001
 CMD ["node", "dist/index.js"]

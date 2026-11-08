@@ -54,6 +54,9 @@ const composeEnv = { ...process.env,
   SOCIAL_VIDEO_API_URL: process.env.SOCIAL_VIDEO_API_URL || 'http://host.docker.internal:3901',
 };
 const middlewareEnv = {
+  // dev:mock sets it too; spelled out so `env` prints a complete set: the
+  // plaintext ws:// gateway below is accepted only under the dev flag.
+  INSECURE_DEV_MODE: 'true',
   DOCUMENT_GRANT_ISSUER: saved.issuer, DOCUMENT_GRANT_KEY_ID: saved.keyId,
   DOCUMENT_GRANT_PRIVATE_KEY: saved.privateKey, DOCUMENT_POLICY_SECRET: saved.policySecret,
   DOCUMENT_GATEWAY_PUBLIC_URL: `ws://127.0.0.1:${gatewayPort}`,

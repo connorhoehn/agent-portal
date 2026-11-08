@@ -221,6 +221,26 @@ describe('the Claude price table (DE-32)', () => {
   });
 });
 
+describe('the task never runs in insecure development mode (docs/fail-open-audit.md §2)', () => {
+  // INSECURE_DEV_MODE=true is the one switch that opens the middleware's
+  // security defaults (dev signing keys, seed-policy authz, open callbacks,
+  // localhost origins). It belongs to laptops and compose files, never a task.
+  const variants: Array<[string, Template]> = [
+    ['default', closedTemplate],
+    ['portal + http origin', Template.fromStack(middlewareServiceStack({ deployPortal: 'true', allowHttpOrigin: 'true', cloudFrontPrefixListId: 'pl-3b927c52' }))],
+  ];
+  for (const [name, template] of variants) {
+    test(`${name}: INSECURE_DEV_MODE appears nowhere in the template, and NODE_ENV is production`, () => {
+      assert.ok(!JSON.stringify(template.toJSON()).includes('INSECURE_DEV_MODE'), 'INSECURE_DEV_MODE must never reach a deployed task');
+      const container = containerDefinition(template);
+      const names = [...(container.Environment ?? []), ...(container.Secrets ?? [])].map((e: any) => e.Name);
+      assert.ok(!names.includes('INSECURE_DEV_MODE'));
+      const env = Object.fromEntries(((container.Environment ?? []) as any[]).map((e) => [e.Name, e.Value]));
+      assert.equal(env.NODE_ENV, 'production');
+    });
+  }
+});
+
 describe('routing and health', () => {
   test('tasks are not publicly addressable; only the ALB is', () => {
     closedTemplate.hasResourceProperties('AWS::ECS::Service', {

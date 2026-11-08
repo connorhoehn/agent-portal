@@ -30,6 +30,7 @@ services:
     environment:
       PORT: "3001"
       NODE_ENV: development
+      INSECURE_DEV_MODE: "true"
       DEV_OFFLINE: "true"
       AUTH_DEMO_MODE: "true"
       MOCK_AURORA: "true"
