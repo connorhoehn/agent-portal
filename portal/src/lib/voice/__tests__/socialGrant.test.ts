@@ -75,7 +75,7 @@ test('send_chat_message without PostMessage: refused before any read, with the a
   assert.equal(hint.href, `/access/requests/new?item=${encodeURIComponent(ITEM)}`);
   assert.equal(new URLSearchParams(hint.href.split('?')[1]).get('item'), ITEM);
   assert.match(hint.note, /ends this voice session/);
-  assert.deepEqual(result.output['offer'], { tool: 'navigate', page: 'workspaces' });
+  assert.deepEqual(result.output['offer'], { tool: 'open', page: 'workspaces' });
   assert.equal(log.length, 0);
   assert.equal(s.sends.length, 0);
 });

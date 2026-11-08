@@ -66,7 +66,7 @@ export const OUTPUT_LINES_KEPT = 400;
 export const COMMAND_TIMEOUT_MS = 150_000;
 /** How long a delivered message suppresses an identical retry. */
 export const DELIVERY_MEMORY_MS = 10 * 60_000;
-/** The lab's path: open_computer_lab opens it and start_computer's boxes appear in it. */
+/** The lab's path: open { page: 'computer-lab' } opens it and start_computer's boxes appear in it. */
 export const LAB_PATH = '/admin/devbox';
 
 // ── the phrase table (§6: the model picks the phrase, the dock owns the text) ──

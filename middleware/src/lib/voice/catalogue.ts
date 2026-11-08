@@ -91,40 +91,124 @@ export const VOICE_TENANTS = ['orgiq', 'social', 'assessment', 'pipelines', 'acc
 const PEOPLE_TENANTS = ['orgiq', 'social'] as const;
 
 /**
- * Page ids `navigate` may name, per tenant, with the route the dock opens.
- * '*' pages are offered in every voice tenant. See the module header. An id
- * may repeat across tenants ("teams", "runs"): a session is offered only its
- * own tenant's row, and the dock resolves the id inside its tenant.
+ * Page ids `open` may name (catalogue v2, V2-4): every palette page
+ * (portal/src/components/shell/portalCommands.ts PAGES, each with a pageId
+ * since V2-2), with its path, its tenant ('admin' platform pages are orgiq's,
+ * 'universal' ones are '*') and the palette's own roles, so a session is
+ * offered exactly the pages isPageVisible shows its role. An id may repeat
+ * across tenants ("teams", "runs"): a session is offered only its own
+ * tenant's row. The portal's drift test pins this table to PAGES.
  */
-export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: readonly string[] }> = [
-  { id: 'search', path: '/iq/search', tenants: ['orgiq'] },
-  // The lab that lists and starts the user's computers (DevboxPage, `ComputerLab`), where
-  // start_computer's boxes appear. /iq/local-compute is the paired-laptop page, not the lab.
-  { id: 'computer-lab', path: '/admin/devbox', tenants: ['orgiq'] },
-  { id: 'initiatives', path: '/iq/projects', tenants: ['orgiq'] },
-  { id: 'bots', path: '/admin/bots', tenants: ['orgiq'] },
+export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: readonly string[]; roles?: readonly string[] }> = [
+  { id: 'automate', path: '/iq/work', tenants: ['orgiq'] },
+  { id: 'graph-updates', path: '/iq/work/changes', tenants: ['orgiq'] },
+  { id: 'work-queue', path: '/iq/work/queue', tenants: ['orgiq'] },
   { id: 'findings', path: '/iq/work/findings', tenants: ['orgiq'] },
-  { id: 'teams', path: '/social/teams', tenants: ['social'] },
-  { id: 'channels', path: '/social/channels', tenants: ['social'] },
-  // A person's profile in Social; params.id opens /social/contacts/<userId>.
-  { id: 'contacts', path: '/social/contacts', tenants: ['social'] },
+  { id: 'initiatives', path: '/iq/projects', tenants: ['orgiq'] },
+  { id: 'decisions', path: '/iq/decisions', tenants: ['orgiq'] },
+  { id: 'agent-library', path: '/iq/library', tenants: ['orgiq'] },
+  { id: 'designs', path: '/iq/designs', tenants: ['orgiq'] },
+  { id: 'workspace-runs', path: '/iq/runs', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
+  { id: 'work-graph', path: '/iq/activity', tenants: ['orgiq'] },
+  { id: 'local-compute-configuration', path: '/iq/local-compute/configuration', tenants: ['orgiq'] },
+  { id: 'budgets', path: '/admin/budgets', tenants: ['orgiq'], roles: ['program-owner', 'org-leader', 'hr-admin'] },
+  { id: 'bots', path: '/admin/bots', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
+  { id: 'codebases', path: '/admin/projects', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'changes', path: '/admin/changes', tenants: ['orgiq'], roles: ['program-owner', 'hr-admin'] },
+  { id: 'computer-lab', path: '/admin/devbox', tenants: ['orgiq'], roles: ['sme', 'hr-admin', 'org-leader', 'program-owner'] },
+  { id: 'local-compute', path: '/iq/local-compute', tenants: ['orgiq'] },
+  { id: 'runbooks', path: '/iq/runbooks', tenants: ['orgiq'] },
+  { id: 'runbook-proposals', path: '/iq/runbooks/proposals', tenants: ['orgiq'] },
+  { id: 'session-briefs', path: '/iq/runbooks/briefs', tenants: ['orgiq'] },
+  { id: 'search', path: '/iq/search', tenants: ['orgiq'] },
+  { id: 'communication', path: '/iq/communication', tenants: ['orgiq'] },
+  { id: 'scores', path: '/iq/scores', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'score-cohorts', path: '/iq/scores/cohorts', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'score-compare', path: '/iq/scores/compare', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-ops-deployed', path: '/iq/prompt-ops', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-studio', path: '/iq/prompts', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-versions', path: '/iq/history', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-diff', path: '/iq/diff', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-rollout', path: '/iq/canary', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-evals', path: '/iq/evaluations', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'observability', path: '/admin/observability/summary', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'observability-on-call', path: '/admin/observability/oncall', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'observability-runs', path: '/admin/observability/invocations', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'agent-architecture', path: '/iq/agents', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'knowledge', path: '/admin/knowledge', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'ingest-sources', path: '/admin/ingest/crawl', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'ingest-runs', path: '/admin/ingest/history', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'ingest-storage', path: '/admin/ingest/storage', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'ingest-kb-sync', path: '/admin/ingest/sources', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'ingest-schedule', path: '/admin/ingest/schedules', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'capabilities', path: '/admin/capabilities', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'traffic', path: '/admin/observability/traffic', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'invocations-search', path: '/admin/observability/invocations/search', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'capability-events', path: '/admin/observability/capability-events', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'tool-calls', path: '/admin/observability/tools', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'agent-metrics', path: '/admin/observability/agents', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'sessions', path: '/admin/observability/sessions', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'authz-log', path: '/admin/observability/authz', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'memory', path: '/admin/observability/memory', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'guardrail-rules', path: '/admin/observability/guardrail-rules', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'drift', path: '/admin/observability/drift', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'quality', path: '/admin/observability/quality', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'cost', path: '/admin/observability/cost', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'approval-queue', path: '/admin/observability/approvals', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'harness', path: '/admin/observability/harness', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'calibration', path: '/admin/observability/calibration', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'model-compare', path: '/admin/observability/model-compare', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'identity', path: '/admin/identity', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'identity-users', path: '/admin/identity/users', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'identity-policy-sandbox', path: '/admin/identity/test', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'settings', path: '/settings', tenants: ['*'] },
   { id: 'teams', path: '/assessment/teams', tenants: ['assessment'] },
+  { id: 'communication', path: '/assessment/communication', tenants: ['assessment'] },
   { id: 'submissions', path: '/assessment/submissions', tenants: ['assessment'] },
   { id: 'reports', path: '/assessment/reports', tenants: ['assessment'] },
   { id: 'feedback', path: '/assessment/feedback', tenants: ['assessment'] },
+  { id: 'work-graph', path: '/assessment/activity', tenants: ['assessment'] },
+  { id: 'enterprise', path: '/assessment/enterprise', tenants: ['assessment'] },
+  { id: 'workspace-library', path: '/assessment/workspace?view=library', tenants: ['assessment'] },
+  { id: 'prompts', path: '/assessment/prompts', tenants: ['assessment'] },
+  { id: 'rules', path: '/assessment/rules', tenants: ['assessment'] },
   { id: 'runs', path: '/assessment/runs', tenants: ['assessment'] },
+  { id: 'assessment-configuration', path: '/assessment/configuration', tenants: ['assessment'], roles: ['assessor', 'lead-assessor', 'program-lead'] },
+  { id: 'channels', path: '/social/channels', tenants: ['social'] },
+  { id: 'direct-messages', path: '/social/dms', tenants: ['social'] },
+  { id: 'calls', path: '/social/calls', tenants: ['social'] },
+  { id: 'hangouts', path: '/social/rooms', tenants: ['social'] },
+  { id: 'contacts', path: '/social/contacts', tenants: ['social'] },
+  { id: 'teams', path: '/social/teams', tenants: ['social'] },
+  { id: 'profile', path: '/social/profile', tenants: ['social'] },
+  { id: 'recordings', path: '/social/recordings', tenants: ['social'] },
+  { id: 'work-graph', path: '/social/work-graph', tenants: ['social'] },
+  { id: 'social-configuration', path: '/social/configuration', tenants: ['social'] },
+  { id: 'social-settings', path: '/social/settings', tenants: ['social'] },
   { id: 'definitions', path: '/pipelines/definitions', tenants: ['pipelines'] },
   { id: 'runbooks', path: '/pipelines/runbooks', tenants: ['pipelines'] },
   { id: 'queues', path: '/pipelines/queues', tenants: ['pipelines'] },
   { id: 'runs', path: '/pipelines/runs', tenants: ['pipelines'] },
+  { id: 'work-graph', path: '/pipelines/activity', tenants: ['pipelines'] },
+  { id: 'communication', path: '/pipelines/communication', tenants: ['pipelines'] },
   { id: 'approvals', path: '/pipelines/approvals', tenants: ['pipelines'] },
   { id: 'artifacts', path: '/pipelines/artifacts', tenants: ['pipelines'] },
+  { id: 'agents', path: '/pipelines/agents', tenants: ['pipelines'] },
+  { id: 'bots', path: '/pipelines/bots', tenants: ['pipelines'] },
+  { id: 'commands', path: '/pipelines/commands', tenants: ['pipelines'] },
+  { id: 'pipelines-configuration', path: '/pipelines/configuration', tenants: ['pipelines'], roles: ['pipeline-admin'] },
+  { id: 'pipeline-settings', path: '/pipelines/settings', tenants: ['pipelines'] },
   { id: 'catalog', path: '/access/catalog', tenants: ['access'] },
   { id: 'requests', path: '/access/requests', tenants: ['access'] },
   { id: 'open-requests', path: '/access/requests?status=open', tenants: ['access'] },
   { id: 'new-request', path: '/access/requests/new', tenants: ['access'] },
-  { id: 'approvals', path: '/access/approvals', tenants: ['access'] },
-  // Entering another workspace ends the voice session (§2, §6): offered as the hint, never the switch.
+  { id: 'approvals', path: '/access/approvals', tenants: ['access'], roles: ['approver', 'access-admin'] },
+  { id: 'policies', path: '/access/policies', tenants: ['access'] },
+  { id: 'reviews', path: '/access/reviews', tenants: ['access'] },
+  { id: 'open-reviews', path: '/access/reviews?status=open', tenants: ['access'] },
+  { id: 'audit', path: '/access/audit', tenants: ['access'] },
+  { id: 'access-configuration', path: '/access/configuration', tenants: ['access'], roles: ['access-admin'] },
+  { id: 'access-settings', path: '/access/settings', tenants: ['access'] },
   { id: 'workspaces', path: '/workspaces', tenants: ['*'] },
 ];
 
@@ -290,6 +374,25 @@ export function summaryKinds(tenant: string | null): string[] {
 }
 
 /**
+ * The kinds `open` resolves by name, per tenant (catalogue v2, V2-4): the
+ * list kinds whose rows open on a page (portal lib/voice/kinds.ts, each
+ * kind's href built from the id, never taken from the model).
+ */
+export const OPEN_KINDS: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'consult', 'bot', 'run', 'computer', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
+  assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
+  pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  access: ['request', 'approval', 'catalog-item', 'review', 'delegation', 'policy', 'audit-event'],
+};
+
+/** `open`'s kind enum for one tenant, or every tenant's kinds (null). */
+export function openKinds(tenant: string | null): string[] {
+  if (tenant != null) return [...(OPEN_KINDS[tenant] ?? [])];
+  return [...new Set(Object.values(OPEN_KINDS).flat())];
+}
+
+/**
  * What `budget` may read, per tenant (catalogue v2, V2-7). The caller's own
  * spend everywhere; the rest is orgiq's money, behind the budgets read tier
  * (the routes withhold or refuse below it, and the dock turns that into the
@@ -340,30 +443,36 @@ export function queueWorkKinds(tenant: string | null): string[] {
   return [...new Set(Object.values(QUEUE_WORK_KINDS).flat())];
 }
 
-function navigatePageIds(tenant: string | null): string[] {
-  return [...new Set(NAVIGATE_PAGES.filter((p) => tenant == null || p.tenants.includes('*') || p.tenants.includes(tenant)).map((p) => p.id))];
+/** The page ids a session in `tenant` may open, narrowed to what the palette shows `role` (isPageVisible) when given; every id (null). */
+export function navigatePageIds(tenant: string | null, role?: string): string[] {
+  return [...new Set(NAVIGATE_PAGES.filter((p) => (tenant == null || p.tenants.includes('*') || p.tenants.includes(tenant))
+    && (!role || role === 'admin' || p.tenants.includes('*') || !p.roles || p.roles.includes(role))).map((p) => p.id))];
 }
 
 export const VOICE_TOOLS: readonly VoiceTool[] = [
   {
-    name: 'navigate',
-    description: 'Open a page of the portal in the current workspace.',
+    name: 'open',
+    description: 'Open, in the current workspace, a page, a row of the last result (by its ref or position: "the second one" is "2"), or a record by kind and name ("open the payments initiative" is kind initiative, name payments). Several matches come back as a numbered choice the user picks by saying its number or clicking it. Never a path.',
     parameters: obj({
-      page: str('The page to open.', { enum: navigatePageIds(null) }),
+      page: str('A page of this workspace to open.', { enum: navigatePageIds(null) }),
+      ref: str('A row to open: its ref exactly as a result gave it (e.g. "initiative:p-12"), or its position in the last result ("2" for the second row). Never a name or a path.', { minLength: 1, maxLength: 200 }),
+      kind: str('With name: the kind of record the user named.', { enum: openKinds(null) }),
+      name: str('With kind: the record\'s name as the user said it; several matches come back as a numbered choice.', { minLength: 1, maxLength: 120 }),
       params: obj({
         q: str('Search text for the page, when it takes one.'),
         type: str('A result type filter, when the page takes one.'),
         id: str('A record id, when the page opens one.'),
       }),
-    }, ['page']),
+    }),
     kind: 'navigate', backing: 'route', confirm: false, action: null,
-    gate: "the palette entry's roles and tenant (portalCommands.ts)", spend: 'none', idempotent: true,
-    says: 'Opening search.', tenants: VOICE_TENANTS, mapsTo: "useNavigate() to the palette entry's path",
+    gate: "a page: the palette entry's roles and tenant (portalCommands.ts isPageVisible); a row: only one this session's own read returned, or a typed ref through the kind's own gate; a name: the kind's list read (portal lib/voice/kinds.ts); every href stays in the portal and in the session's tenant, and the page's route gates again", spend: 'none', idempotent: true,
+    says: 'Opening search.', tenants: VOICE_TENANTS,
+    mapsTo: "useNavigate() to the palette entry's path, the kept row's href, or the kind's href built from a typed ref; a name through the kind's list read (list's routes)",
   },
   {
     name: 'search',
     // toolsForTenant names the tenant's own types in the description it renders.
-    description: 'Search this workspace\'s backend index by free text: people by skill, topic or name, records, and questions such as "who decided X" or "which teams are below target". Narrow it with a type; "latest" means sort recent; pass answer true when the user asks a question that wants one fact. Each row carries a ref that open_result opens.',
+    description: 'Search this workspace\'s backend index by free text: people by skill, topic or name, records, and questions such as "who decided X" or "which teams are below target". Narrow it with a type; "latest" means sort recent; pass answer true when the user asks a question that wants one fact. Each row carries a ref that open opens.',
     parameters: obj({
       query: str('What to search for, in the user\'s words.', { minLength: 1, maxLength: 200 }),
       type: str('Which kind of record.', { enum: searchRecordTypes(null) }),
@@ -378,20 +487,9 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     mapsTo: 'GET /api/search?q=&type=&scope=&sort=&limit= in orgiq, whose question intents rank the answering records first (navigate /iq/search?q=&type=&tab=results); GET /api/<tenant>/search?q=&type=&limit= and GET /api/<tenant>/search/answer?q= elsewhere',
   },
   {
-    name: 'open_result',
-    description: 'Open one row of the last search or activity result on its own page (a person\'s profile, an initiative, a run). Pass the row\'s ref exactly as the result gave it (e.g. "person:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.',
-    parameters: obj({
-      ref: str('The row\'s ref from the result, or its position in the last result ("1" to "10").', { minLength: 1, maxLength: 200 }),
-    }, ['ref']),
-    kind: 'navigate', backing: 'route', confirm: false, action: null,
-    gate: "only a row this session's own search returned (the dock keeps them); the page's route gates again", spend: 'none', idempotent: true,
-    says: 'Opening the first result.', tenants: VOICE_TENANTS,
-    mapsTo: "useNavigate() to the kept row's href (the index's own link: /social/contacts/<id>, /iq/search?tab=connections&selection=person:<id>, …)",
-  },
-  {
     name: 'list',
     // toolsForTenant names the tenant's own kinds in the description it renders.
-    description: 'List one kind of record in this workspace through the same read its page uses, optionally filtered by words, status, scope or a time. Each row carries a ref that open_result opens and get reads.',
+    description: 'List one kind of record in this workspace through the same read its page uses, optionally filtered by words, status, scope or a time. Each row carries a ref that open opens and get reads.',
     parameters: obj({
       kind: str('Which kind of record.', { enum: listKinds(null) }),
       filter: obj({
@@ -418,13 +516,6 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     gate: "per kind, the page's own gate (portal lib/voice/kinds.ts); the route gates the record again", spend: 'none', idempotent: true,
     says: 'Reading that initiative.', tenants: VOICE_TENANTS,
     mapsTo: 'GET /api/graph/projects/:id, GET /api/graph/projects/:id/work, GET /api/graph/projects/:id/decisions, GET /api/graph/projects/:id/activity, GET /api/graph/projects/:projectId/workspace-documents, GET /api/graph/work-items/:id/comments, GET /api/graph/work-items/:id/criteria, GET /api/graph/work-items/:id/documents, GET /api/graph/documents/:documentId, GET /api/graph/decisions/:id, GET /api/designs/:id, GET /api/work/jobs/:id, GET /api/lab/consults/:id, GET /api/bots/:id, GET /api/bots/:id/runs, GET /api/runs/:id, GET /api/runs/:id/steps, GET /api/environments/:id, GET /api/environments/:id/runs, GET /api/runbooks/:id, GET /api/runbooks/:id/versions, GET /api/runbooks/:id/applications, GET /api/runbooks/proposals/:pid, GET /api/sdlc/changes/:id, GET /api/sdlc/changes/:id/evaluations, GET /api/initiative-decks/:id, GET /api/agent-projects/:id/runs, GET /api/graph/people/:personId, GET /api/graph/people/:personId/work, GET /api/graph/people/:personId/evidence, GET /api/library/:id, GET /api/runs/:ref/brief, GET /api/social/plane/teams/:teamId, GET /api/social/plane/rooms/:slug, GET /api/social/plane/rooms/:slug/activity, GET /api/social/plane/recordings/:recordingId/transcript, GET /api/social/channels/:slug, GET /api/social/teams/:teamId, GET /api/social/rooms/:slug, GET /api/social/rooms/:slug/activity, GET /api/social/recordings/:recordingId/transcript, GET /api/assessment/teams/:id, GET /api/assessment/teams/:id/evidence, GET /api/assessment/teams/:id/exceptions, GET /api/assessment/teams/:id/recommendations, GET /api/assessment/teams/:id/stories, GET /api/assessment/runs/:runId, GET /api/assessment/feedback/:taskId, GET /api/assessment/decks/:id, GET /api/pipelines/runs/:id, GET /api/pipelines/runs/:id/steps, GET /api/pipelines/definitions/:id, GET /api/pipelines/decks/:id, GET /api/access/requests/:id, GET /api/access/reviews/:id',
-  },
-  {
-    name: 'open_computer_lab',
-    description: 'Open the Computer Lab, optionally on one initiative.',
-    parameters: obj({ initiativeId: str('The initiative to focus, when the user named one.') }),
-    kind: 'navigate', backing: 'route', confirm: false, action: null, gate: 'the route: ManageDevbox or the fleet read tier (org-leader, program-owner)', spend: 'none', idempotent: true,
-    says: 'Opening the Computer Lab.', tenants: ['orgiq'], mapsTo: 'navigate /admin/devbox[?box=<a computer of the initiative>]',
   },
   {
     name: 'start_computer',
@@ -488,7 +579,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   },
   {
     name: 'activity',
-    description: 'Read what is happening around the user from the social app\'s activity and the presence roster: who is online, who is in a call or huddle now, the user\'s missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time. Each row carries a ref that open_result opens.',
+    description: 'Read what is happening around the user from the social app\'s activity and the presence roster: who is online, who is in a call or huddle now, the user\'s missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time. Each row carries a ref that open opens.',
     parameters: obj({
       scope: str('What to read: "online" (who is online now), "live-calls" (who is in a call or huddle now), "missed-calls" (the user\'s missed calls), "messages", "pins", "work" (what a person worked on, in the Work workspace) or "recent" (messages, pins, missed calls and, in Work, work items, since a time; yesterday by default).', { enum: activityScopes(null) }),
       since: str(`Since when, for messages, pins, missed-calls, work and recent: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
@@ -554,7 +645,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   },
   {
     name: 'access_request_status',
-    description: 'Look up access requests and report status, current step and decider: the user\'s own ("mine", the default), the ones waiting on their decision ("approvals", approvers only) or their reports\' ("reports"). Approvals and reports are read in the Access workspace only. Each row carries a ref that open_result opens.',
+    description: 'Look up access requests and report status, current step and decider: the user\'s own ("mine", the default), the ones waiting on their decision ("approvals", approvers only) or their reports\' ("reports"). Approvals and reports are read in the Access workspace only. Each row carries a ref that open opens.',
     parameters: obj({
       query: str('The item asked for or the person, as the user named it; leave out to list them all.', { minLength: 1, maxLength: 120 }),
       scope: str('"mine" (the default): the user\'s own requests; "approvals": the requests waiting on the user\'s decision; "reports": the requests of people the user manages.', { enum: ['mine', 'approvals', 'reports'] }),
@@ -583,9 +674,10 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   'social/moderator': { name: 'activity', arguments: { scope: 'live-calls', since: null, who: null }, said: 'Who is on a call right now?' },
   'access/approver': { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'Show me my approvals.' },
   'access/access-admin': { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'What is waiting on me?' },
-  // V2-5: the reads by kind. An SME lists their initiatives, a lead assessor the teams, a pipeline author the failed
-  // runs, a community admin the channels, a requester their own access requests.
-  'orgiq/sme': { name: 'list', arguments: { kind: 'initiative', filter: { q: null, status: null, scope: 'mine', since: null }, limit: null }, said: 'List my initiatives.' },
+  // V2-5: the reads by kind. A lead assessor lists the teams, a pipeline author the failed runs, a community admin
+  // the channels, a requester their own access requests.
+  // V2-4: an SME opens an initiative by a name two share; the dock shows the numbered choice card.
+  'orgiq/sme': { name: 'open', arguments: { page: null, ref: null, kind: 'initiative', name: 'migration', params: null }, said: 'Open the migration initiative.' },
   'assessment/lead-assessor': { name: 'list', arguments: { kind: 'team', filter: null, limit: null }, said: 'Which teams are there?' },
   'pipelines/author': { name: 'list', arguments: { kind: 'run', filter: { q: null, status: 'failed', scope: null, since: null }, limit: null }, said: 'List the failed runs.' },
   'social/community-admin': { name: 'list', arguments: { kind: 'channel', filter: null, limit: null }, said: 'Which channels are there?' },
@@ -632,9 +724,13 @@ function withEnum(t: VoiceTool, prop: string, values: string[], description = t.
  * tool is left out when none does (G9): the model is never offered a phrase
  * the server would refuse.
  */
-export function toolsForTenant(tenant: string, opts: { commandAllowlist?: readonly string[] } = {}): VoiceTool[] {
+export function toolsForTenant(tenant: string, opts: { commandAllowlist?: readonly string[]; role?: string } = {}): VoiceTool[] {
   return VOICE_TOOLS.filter((t) => t.tenants.includes(tenant)).flatMap((t) => {
-    if (t.name === 'navigate') return [withEnum(t, 'page', navigatePageIds(tenant))];
+    if (t.name === 'open') {
+      const kinds = openKinds(tenant);
+      const narrowed = withEnum(t, 'page', navigatePageIds(tenant, opts.role));
+      return [kinds.length ? withEnum(narrowed, 'kind', kinds) : narrowed];
+    }
     if (t.name === 'search') {
       const types = searchRecordTypes(tenant);
       return types.length ? [withEnum(t, 'type', types, `${t.description} The kinds here: ${types.join(', ')}.`)] : [];
@@ -716,6 +812,9 @@ export function voiceInstructions(tenant: string, tools: readonly VoiceTool[]): 
     'Reads and navigation need no permission. Starting a computer, running a command, sending a message to other people, starting a call and queuing background work are delegated too: the portal then shows the user a Confirm / Cancel card and nothing happens until they confirm by voice or by clicking, so tell them what is waiting for their confirmation.',
     ...(tools.some((t) => t.name === 'queue_work')
       ? ['Queued work runs in the background: once it is queued say so and that you will tell them when it is done. When the portal later tells you it ended, say the outcome in one short sentence.']
+      : []),
+    ...(tools.some((t) => t.name === 'open')
+      ? ['When a result says several records match, read them out as a short numbered list and ask which; the portal shows the same numbers on a card, and the user may pick by saying the number or clicking.']
       : []),
     'If a request needs something the backend cannot do, say you cannot do it and offer the nearest page.',
     'Keep spoken answers short. The backend can:',

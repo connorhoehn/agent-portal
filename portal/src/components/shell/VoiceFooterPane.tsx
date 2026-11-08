@@ -24,7 +24,9 @@
 // by lib/voice/work.ts's VoiceJobTracker: one library job toast (useToast's
 // toastJob, 2.510.3) per server job id, gone VOICE_TOAST_SECONDS after it ends,
 // the entry mirrored into the notification center (lib/localNotifications.ts)
-// and the outcome spoken while the session is live.
+// and the outcome spoken while the session is live. An ambiguous `open` (two
+// Alphas) shows the library's VoiceChoiceCard (2.510.4) through the dock's
+// `pendingChoice`; the user picks by click or by saying the number.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -32,7 +34,7 @@ import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/clien
 import { CaptionsIcon } from '@connorhoehn/ui-components';
 import { openOutputTab, openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { IconButton, Inline, InlinePopover, Tooltip, useToastOptional } from '@connorhoehn/ui-components/shared';
-import { VoiceDock, VoiceTurnStrip, type VoicePending, type VoiceTurn } from '@connorhoehn/ui-components/voice';
+import { VoiceDock, VoiceTurnStrip, type VoicePending, type VoicePendingChoice, type VoiceTurn } from '@connorhoehn/ui-components/voice';
 import { useSession } from '../../lib/auth';
 import { useCapabilities, type Action } from '../../lib/capabilities';
 import { features } from '../../lib/features';
@@ -133,7 +135,7 @@ function VoiceFooterPane() {
   const planeCaps = useFetch<{ actions: Record<string, boolean>; requestItemId?: string }>(onPlane ? '/api/social/plane/capabilities' : null, 60_000, { share: true });
   // Delivery ids per (channel, text), for this person only.
   const deliveries = useMemo(() => new Map<string, DeliveryRecord>(), [session?.sub]);
-  // The rows this tenant's searches returned, for open_result; a new tenant or another person starts empty
+  // The rows this tenant's reads returned, for open and get by position; a new tenant or another person starts empty
   // (G14: a row one persona's read returned is never opened for another in the same tab).
   const results = useMemo(() => new ResultMemory(), [tenant, session?.sub]);
 
@@ -326,6 +328,15 @@ function VoiceFooterPane() {
     onConfirm: () => controller.confirm('click'),
     onCancel: () => controller.cancel('click'),
   } : null;
+  // open's ambiguous name (catalogue v2): the library's choice card, picked by click or by the number the user said
+  // (the controller hears it and sets `ordinal`; the card chooses that row once and calls back here).
+  const pendingChoice: VoicePendingChoice | null = snap.choice ? {
+    title: snap.choice.title,
+    candidates: snap.choice.candidates.map((c) => ({ ...c })),
+    ...(snap.choice.ordinal ? { ordinal: snap.choice.ordinal } : {}),
+    onChoose: (index) => controller.choose(index),
+    onCancel: () => controller.cancelChoice(),
+  } : null;
   const turns = snap.turns as VoiceTurn[];
   return <Inline ref={anchor} gap="xs" align="center" wrap={false} className="min-w-0 max-w-[30rem] shrink border-l border-border pl-2" data-testid="shell-footer-voice">
     <VoiceDock
@@ -336,6 +347,7 @@ function VoiceFooterPane() {
       elapsedSeconds={snap.elapsedSeconds}
       budget={snap.budget}
       pending={pending}
+      pendingChoice={pendingChoice}
       lastLine={snap.lastLine}
       onStart={() => { void controller.start(); }}
       onStop={() => { void controller.stop('closed'); }}

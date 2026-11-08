@@ -3,22 +3,82 @@
 exports[`POST /api/voice/sessions — the mint the session object names exactly the catalogue's functions and no web_search 1`] = `
 [
   {
-    "description": "Open a page of the portal in the current workspace.",
-    "name": "navigate",
+    "description": "Open, in the current workspace, a page, a row of the last result (by its ref or position: "the second one" is "2"), or a record by kind and name ("open the payments initiative" is kind initiative, name payments). Several matches come back as a numbered choice the user picks by saying its number or clicking it. Never a path.",
+    "name": "open",
     "parameters": {
       "additionalProperties": false,
       "properties": {
-        "page": {
-          "description": "The page to open.",
+        "kind": {
+          "description": "With name: the kind of record the user named.",
           "enum": [
-            "search",
-            "computer-lab",
-            "initiatives",
-            "bots",
-            "findings",
-            "workspaces",
+            "initiative",
+            "work-item",
+            "decision",
+            "design",
+            "job",
+            "finding",
+            "proposal",
+            "consult",
+            "bot",
+            "run",
+            "computer",
+            "runbook",
+            "runbook-proposal",
+            "change",
+            "sprint",
+            "deck",
+            "codebase",
+            "person",
+            "saved-search",
+            "library",
+            "brief",
+            "channel",
+            "team",
+            "dm",
+            "room",
+            "recording",
+            "call",
+            null,
           ],
-          "type": "string",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "name": {
+          "description": "With kind: the record's name as the user said it; several matches come back as a numbered choice.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "page": {
+          "description": "A page of this workspace to open.",
+          "enum": [
+            "automate",
+            "graph-updates",
+            "work-queue",
+            "findings",
+            "initiatives",
+            "decisions",
+            "agent-library",
+            "designs",
+            "work-graph",
+            "local-compute-configuration",
+            "local-compute",
+            "runbooks",
+            "runbook-proposals",
+            "session-briefs",
+            "search",
+            "communication",
+            "settings",
+            "workspaces",
+            null,
+          ],
+          "type": [
+            "string",
+            "null",
+          ],
         },
         "params": {
           "additionalProperties": false,
@@ -55,9 +115,19 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "null",
           ],
         },
+        "ref": {
+          "description": "A row to open: its ref exactly as a result gave it (e.g. "initiative:p-12"), or its position in the last result ("2" for the second row). Never a name or a path.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
       },
       "required": [
         "page",
+        "ref",
+        "kind",
+        "name",
         "params",
       ],
       "type": "object",
@@ -66,7 +136,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Search this workspace's backend index by free text: people by skill, topic or name, records, and questions such as "who decided X" or "which teams are below target". Narrow it with a type; "latest" means sort recent; pass answer true when the user asks a question that wants one fact. Each row carries a ref that open_result opens. The kinds here: person, team, initiative, work, decision, knowledge, asset, recording.",
+    "description": "Search this workspace's backend index by free text: people by skill, topic or name, records, and questions such as "who decided X" or "which teams are below target". Narrow it with a type; "latest" means sort recent; pass answer true when the user asks a question that wants one fact. Each row carries a ref that open opens. The kinds here: person, team, initiative, work, decision, knowledge, asset, recording.",
     "name": "search",
     "parameters": {
       "additionalProperties": false,
@@ -141,26 +211,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Open one row of the last search or activity result on its own page (a person's profile, an initiative, a run). Pass the row's ref exactly as the result gave it (e.g. "person:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.",
-    "name": "open_result",
-    "parameters": {
-      "additionalProperties": false,
-      "properties": {
-        "ref": {
-          "description": "The row's ref from the result, or its position in the last result ("1" to "10").",
-          "type": "string",
-        },
-      },
-      "required": [
-        "ref",
-      ],
-      "type": "object",
-    },
-    "strict": true,
-    "type": "function",
-  },
-  {
-    "description": "List one kind of record in this workspace through the same read its page uses, optionally filtered by words, status, scope or a time. Each row carries a ref that open_result opens and get reads. The kinds here: initiative, work-item, decision, design, job, finding, proposal, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, brief, channel, team, dm, room, recording, call.",
+    "description": "List one kind of record in this workspace through the same read its page uses, optionally filtered by words, status, scope or a time. Each row carries a ref that open opens and get reads. The kinds here: initiative, work-item, decision, design, job, finding, proposal, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, brief, channel, team, dm, room, recording, call.",
     "name": "list",
     "parameters": {
       "additionalProperties": false,
@@ -304,28 +355,6 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
       "required": [
         "ref",
         "part",
-      ],
-      "type": "object",
-    },
-    "strict": true,
-    "type": "function",
-  },
-  {
-    "description": "Open the Computer Lab, optionally on one initiative.",
-    "name": "open_computer_lab",
-    "parameters": {
-      "additionalProperties": false,
-      "properties": {
-        "initiativeId": {
-          "description": "The initiative to focus, when the user named one.",
-          "type": [
-            "string",
-            "null",
-          ],
-        },
-      },
-      "required": [
-        "initiativeId",
       ],
       "type": "object",
     },
@@ -512,7 +541,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Read what is happening around the user from the social app's activity and the presence roster: who is online, who is in a call or huddle now, the user's missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time. Each row carries a ref that open_result opens.",
+    "description": "Read what is happening around the user from the social app's activity and the presence roster: who is online, who is in a call or huddle now, the user's missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time. Each row carries a ref that open opens.",
     "name": "activity",
     "parameters": {
       "additionalProperties": false,
@@ -706,7 +735,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Look up access requests and report status, current step and decider: the user's own ("mine", the default), the ones waiting on their decision ("approvals", approvers only) or their reports' ("reports"). Approvals and reports are read in the Access workspace only. Each row carries a ref that open_result opens.",
+    "description": "Look up access requests and report status, current step and decider: the user's own ("mine", the default), the ones waiting on their decision ("approvals", approvers only) or their reports' ("reports"). Approvals and reports are read in the Access workspace only. Each row carries a ref that open opens.",
     "name": "access_request_status",
     "parameters": {
       "additionalProperties": false,

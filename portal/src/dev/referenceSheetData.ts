@@ -83,8 +83,8 @@ export const TURNS: VoiceTurn[] = [
     id: 't2', role: 'assistant', at: '09:41',
     text: 'You have three active initiatives. Starting a computer in each needs your OK.',
     toolCalls: [
-      { name: 'list_active_initiatives', status: 'done', summary: '3 initiatives (scope=mine)' },
-      { name: 'open_computer_lab', status: 'done', summary: '/iq/local-compute' },
+      { name: 'list', status: 'done', summary: '3 initiatives; first: Alpha' },
+      { name: 'open', status: 'done', summary: 'Opened Computer Lab' },
     ],
   },
   { id: 't3', role: 'you', at: '09:42', text: 'Yes. And tell the platform team I am out this afternoon.' },
@@ -104,8 +104,8 @@ export const TURNS_FAILED: VoiceTurn[] = [
     id: 'f2', role: 'assistant', at: '10:05',
     text: 'Two open findings from stale_docs. The bus_factor sweep did not answer.',
     toolCalls: [
-      { name: 'bot_sweep_status', status: 'done', summary: '2 warnings since yesterday' },
-      { name: 'bot_sweep_status', status: 'failed', summary: 'bus_factor: 503 from /api/bots/runs' },
+      { name: 'summary', status: 'done', summary: '2 open findings' },
+      { name: 'summary', status: 'failed', summary: 'Could not read the sweeps, findings or bot runs.' },
     ],
   },
 ];

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_FIELD_CHARS, MAX_ROWS, DATA_NOTE, ResultMemory, localHref, parseSince, parseToolArgs, runVoiceTool, shapeOutput, voicePage } from '../tools.ts';
+import { MAX_FIELD_CHARS, MAX_ROWS, DATA_NOTE, ResultMemory, localHref, parseSince, parseToolArgs, runVoiceTool, shapeOutput, spokenOrdinal, voicePage } from '../tools.ts';
 import { VOICE_TENANTS, VOICE_TOOLS, navigatePageIds, voiceToolSpec } from '../catalogue.ts';
 import { PALETTE, fakeFetch, route, toolContext } from './voiceHarness.ts';
 
@@ -9,8 +9,13 @@ const P3_REFUSALS: Array<{ tool: string; args: Record<string, unknown>; ctx: Par
   { tool: 'search', args: { query: 'kubernetes', type: 'person' }, ctx: { deny: ['Search'] } },
   { tool: 'search', args: { query: 'auth migration', type: 'decision', answer: true }, ctx: { deny: ['Search'] } },
   { tool: 'search', args: { query: 'who approved it', answer: true }, ctx: { tenant: 'access', deny: ['ViewAccess'] } },
-  { tool: 'navigate', args: { page: 'bots' }, ctx: { role: 'member' } },
-  { tool: 'open_computer_lab', args: {}, ctx: { tenant: 'social' } },
+  { tool: 'open', args: { page: 'bots' }, ctx: { role: 'member' } },
+  { tool: 'open', args: { page: 'computer-lab' }, ctx: { tenant: 'social' } },
+  { tool: 'open', args: { ref: 'bot:b1' }, ctx: { role: 'member', deny: ['ManageBots'] } },
+  { tool: 'open', args: { kind: 'initiative' }, ctx: {} },
+  { tool: 'open', args: { page: 'search', ref: '1' }, ctx: {} },
+  { tool: 'open', args: { kind: 'request', name: 'SME' }, ctx: { tenant: 'orgiq' } },
+  { tool: 'open', args: { ref: 'work-item:w1' }, ctx: {} },
   { tool: 'list', args: { kind: 'initiative' }, ctx: { tenant: 'social' } },
   { tool: 'list', args: { kind: 'bot' }, ctx: { role: 'member', deny: ['ManageBots'] } },
   { tool: 'list', args: { kind: 'channel' }, ctx: { tenant: 'orgiq', social: null } },
@@ -59,15 +64,15 @@ test('arguments: strict nulls are dropped, then lengths, ranges, enums and unkno
     '{"query":"x","tenant":"access"}', '{}', 'not json', JSON.stringify({ query: 'x'.repeat(201) })]) {
     assert.equal(parseToolArgs(people, bad).ok, false, bad);
   }
-  const nav = voiceToolSpec('navigate')!;
+  const nav = voiceToolSpec('open')!;
   assert.equal(parseToolArgs(nav, '{"page":"search","params":{"q":"k8s","type":null,"id":null}}').ok, true);
   assert.equal(parseToolArgs(nav, '{"route":"/iq/local-compute"}').ok, false, 'the V1 probe\'s own shape is not the catalogue\'s');
 });
 
-test('navigate refuses an unknown page id and a page outside the tenant or the role, table-driven over PAGES', async () => {
-  const unknown = await runVoiceTool('navigate', { page: 'admin-identity' }, toolContext());
+test('open { page } refuses an unknown page id and a page outside the tenant or the role, table-driven over PAGES', async () => {
+  const unknown = await runVoiceTool('open', { page: 'admin-identity' }, toolContext());
   assert.equal(unknown.outcome, 'refused', 'not in the enum');
-  const crossTenant = await runVoiceTool('navigate', { page: 'teams' }, toolContext({ tenant: 'orgiq' }));
+  const crossTenant = await runVoiceTool('open', { page: 'teams' }, toolContext({ tenant: 'orgiq' }));
   assert.equal(crossTenant.outcome, 'refused', 'a social page from orgiq');
 
   // Every role of every tenant, over every page id: the id resolves to its own tenant's palette row, gated by isPageVisible.
@@ -80,7 +85,7 @@ test('navigate refuses an unknown page id and a page outside the tenant or the r
     for (const tenant of VOICE_TENANTS) {
       for (const role of roles) {
         const c = toolContext({ tenant, role });
-        const r = await runVoiceTool('navigate', { page: id }, c);
+        const r = await runVoiceTool('open', { page: id }, c);
         const target = PALETTE.pages.find((p) => p.pageId === id && inTenant(p, tenant));
         const expected = navigatePageIds(tenant).includes(id) && !!target && PALETTE.visible(target, tenant, role);
         assert.equal(r.outcome === 'done', expected, `${id} as ${role} in ${tenant}`);
@@ -90,13 +95,13 @@ test('navigate refuses an unknown page id and a page outside the tenant or the r
   }
   // A repeated id opens the session's own tenant's page, with a record id where the route takes one.
   const runs = toolContext({ tenant: 'pipelines', role: 'author' });
-  await runVoiceTool('navigate', { page: 'runs', params: { id: 'run-7' } }, runs);
+  await runVoiceTool('open', { page: 'runs', params: { id: 'run-7' } }, runs);
   assert.deepEqual(runs.navigations, ['/pipelines/runs/run-7']);
   const teams = toolContext({ tenant: 'assessment', role: 'assessor' });
-  await runVoiceTool('navigate', { page: 'teams' }, teams);
+  await runVoiceTool('open', { page: 'teams' }, teams);
   assert.deepEqual(teams.navigations, ['/assessment/teams']);
   const ws = toolContext({ tenant: 'social', role: 'social-member' });
-  const out = await runVoiceTool('navigate', { page: 'workspaces' }, ws);
+  const out = await runVoiceTool('open', { page: 'workspaces' }, ws);
   assert.equal(out.outcome, 'done');
   assert.match(String(out.output['warning']), /ends this voice session/);
   assert.equal(voicePage(PALETTE, 'workspaces')!.path, '/workspaces');
@@ -203,7 +208,7 @@ test('search outside orgiq reads that tenant\'s own search, with its own types a
   assert.equal(org.log[0]!.url, '/api/search?q=platform&type=team&limit=5');
 });
 
-test('open_result opens a row the session\'s own search returned, by ref or position, and nothing else', async () => {
+test('open { ref } opens a row the session\'s own search returned, by ref or position, and never a name, a path or another origin', async () => {
   const people = [
     { type: 'person', id: 'p-ada', title: 'Ada Okafor', subtitle: 'Platform', href: '/iq/search?tab=connections&selection=person%3Ap-ada' },
     { type: 'person', id: 'p-bo', title: 'Bo Lin', subtitle: 'SRE', href: '/iq/search?tab=connections&selection=person%3Ap-bo' },
@@ -212,34 +217,37 @@ test('open_result opens a row the session\'s own search returned, by ref or posi
   const results = new ResultMemory();
   const c = toolContext({ fetch, results });
   // Before any search there is nothing to open.
-  assert.equal((await runVoiceTool('open_result', { ref: '1' }, c)).outcome, 'refused');
+  assert.equal((await runVoiceTool('open', { ref: '1' }, c)).outcome, 'refused');
   const found = await runVoiceTool('search', { query: 'kubernetes', type: 'person' }, c);
   assert.deepEqual((found.output['rows'] as Array<{ ref: string }>).map((r) => r.ref), ['person:p-ada', 'person:p-bo']);
   c.navigations.length = 0;
 
-  const first = await runVoiceTool('open_result', { ref: '1' }, c);
+  const first = await runVoiceTool('open', { ref: '1' }, c);
   assert.equal(first.outcome, 'done');
   assert.deepEqual(c.navigations, [people[0]!.href], 'the first row\'s own href: the person in the connections inspector');
-  const byRef = await runVoiceTool('open_result', { ref: 'person:p-bo' }, c);
+  const byRef = await runVoiceTool('open', { ref: 'person:p-bo' }, c);
   assert.equal(byRef.summary, 'Opened Bo Lin');
   assert.deepEqual(c.navigations, [people[0]!.href, people[1]!.href]);
 
-  // A name, a path, a ref no search returned and a position past the rows are all refused, and open nothing.
-  for (const ref of ['Ada Okafor', '/admin/identity', 'person:p-zed', '3', 'https://evil.example/x']) {
-    const r = await runVoiceTool('open_result', { ref }, c);
+  // A name, a path, a position past the rows and another origin are all refused, and open nothing.
+  for (const ref of ['Ada Okafor', '/admin/identity', '3', 'https://evil.example/x', '//evil.example/x', 'javascript:alert(1)']) {
+    const r = await runVoiceTool('open', { ref }, c);
     assert.equal(r.outcome, 'refused', ref);
   }
   assert.equal(c.navigations.length, 2);
-  assert.equal(log.length, 1, 'open_result never reads');
+  // A typed ref no search returned opens through the kind's own href, built from the id (the page's route gates it).
+  assert.equal((await runVoiceTool('open', { ref: 'person:p-zed' }, c)).outcome, 'done');
+  assert.equal(c.navigations.at(-1), '/iq/search?tab=connections&selection=person%3Ap-zed');
+  assert.equal(log.length, 1, 'open by ref never reads');
   // A context without the dock's memory (no session) cannot open anything.
-  assert.equal((await runVoiceTool('open_result', { ref: '1' }, toolContext())).outcome, 'refused');
+  assert.equal((await runVoiceTool('open', { ref: '1' }, toolContext())).outcome, 'refused');
 });
 
-test('open_result refuses a kept row whose href leaves the portal; social profiles open on the contacts page', async () => {
+test('open refuses a kept row whose href leaves the portal; social profiles open on the contacts page', async () => {
   const results = new ResultMemory();
   results.keep([{ ref: 'contact:u-ada', title: 'Ada', href: '//evil.example/x' }]);
   const c = toolContext({ tenant: 'social', role: 'participant', results });
-  assert.equal((await runVoiceTool('open_result', { ref: 'contact:u-ada' }, c)).outcome, 'refused');
+  assert.equal((await runVoiceTool('open', { ref: 'contact:u-ada' }, c)).outcome, 'refused');
   assert.deepEqual(c.navigations, []);
   for (const bad of ['//x', 'https://x', 'javascript:alert(1)', '\\x', 'x']) assert.equal(localHref(bad), false, bad);
   assert.equal(localHref('/social/contacts/u-ada'), true);
@@ -247,11 +255,11 @@ test('open_result refuses a kept row whose href leaves the portal; social profil
   const { fetch } = fakeFetch([route('GET', '/api/social/search?', 200, { results: [{ type: 'contact', id: 'u-ada', title: 'Ada Okafor', kind: 'Contact', href: '/social/contacts/u-ada', score: 2 }], total: 1 })]);
   const s = toolContext({ fetch, tenant: 'social', role: 'participant', allow: ['ViewSocial'], results: new ResultMemory() });
   await runVoiceTool('search', { query: 'ada', type: 'contact' }, s);
-  assert.equal((await runVoiceTool('open_result', { ref: 'contact:u-ada' }, s)).outcome, 'done');
+  assert.equal((await runVoiceTool('open', { ref: 'contact:u-ada' }, s)).outcome, 'done');
   assert.deepEqual(s.navigations, ['/social/contacts/u-ada']);
   // And navigate names the same profile by page id.
   const n = toolContext({ tenant: 'social', role: 'participant' });
-  await runVoiceTool('navigate', { page: 'contacts', params: { id: 'u-ada' } }, n);
+  await runVoiceTool('open', { page: 'contacts', params: { id: 'u-ada' } }, n);
   assert.deepEqual(n.navigations, ['/social/contacts/u-ada']);
 });
 
@@ -332,20 +340,74 @@ test('get reads a kept row by ordinal or a typed ref: its summary with withheld 
   assert.equal((await runVoiceTool('get', { ref: 'request:r1' }, c)).outcome, 'refused');
 });
 
-test('open_computer_lab opens the Computer Lab (/admin/devbox), on the initiative\'s busiest computer when it has one', async () => {
+test('open { page: computer-lab } opens the lab; open { kind: computer, name } opens the initiative\'s running computer on it', async () => {
   const c = toolContext();
-  const r = await runVoiceTool('open_computer_lab', { initiativeId: 'p1' }, c);
+  const r = await runVoiceTool('open', { page: 'computer-lab' }, c);
   assert.equal(r.outcome, 'done');
   assert.deepEqual(c.navigations, ['/admin/devbox'], 'the lab that lists and starts computers, not /iq/local-compute');
-  const boxes = [
-    { id: 'c-idle', label: 'alpha-1', sessionId: 's'.repeat(40), status: 'idle', projectId: 'p1' },
-    { id: 'c-run', label: 'alpha-2', sessionId: 't'.repeat(40), status: 'running', projectId: 'p1' },
-  ];
-  const withBoxes = toolContext({ compute: { canManage: true, computers: () => boxes, create: async () => boxes[0]!, openShell: () => ({ ok: true, id: 'x' }), runCommand: async () => {} } });
-  await runVoiceTool('open_computer_lab', { initiativeId: 'p1' }, withBoxes);
-  assert.deepEqual(withBoxes.navigations, ['/admin/devbox?box=c-run']);
-  const member = await runVoiceTool('open_computer_lab', {}, toolContext({ role: 'member' }));
+  const { fetch } = fakeFetch([route('GET', '/api/devbox/boxes', 200, { boxes: [
+    { id: 'c-idle', label: 'alpha-1', project: 'Alpha', status: 'idle' }, { id: 'c-run', label: 'alpha-2', project: 'Alpha', status: 'running' },
+    { id: 'c-beta', label: 'beta-1', project: 'Beta', status: 'running' },
+  ] })]);
+  const focus = toolContext({ fetch, role: 'sme' });
+  await runVoiceTool('open', { kind: 'computer', name: 'alpha' }, focus);
+  assert.deepEqual(focus.navigations, ['/admin/devbox?box=c-run']);
+  const member = await runVoiceTool('open', { page: 'computer-lab' }, toolContext({ role: 'member' }));
   assert.equal(member.outcome, 'refused', 'the lab route\'s roles');
+});
+
+test('open { kind, name }: one match opens in one step, two are a numbered choice kept for "the second one", none points at the nearest page', async () => {
+  const { fetch, log } = fakeFetch([route('GET', '/api/graph/projects', 200, [
+    { id: 'p-alpha', name: 'Alpha', ownerName: 'Ana' }, { id: 'p-alpha-2', name: 'Alpha rollout', ownerName: 'Bo' }, { id: 'p-beta', name: 'Beta' },
+  ])]);
+  const results = new ResultMemory();
+  const c = toolContext({ fetch, results });
+  const one = await runVoiceTool('open', { kind: 'initiative', name: 'beta' }, c);
+  assert.equal(one.outcome, 'done');
+  assert.equal(log[0]!.url, '/api/graph/projects?limit=50&scope=all', 'a name is looked for across everything the user reads');
+  assert.deepEqual(c.navigations, ['/iq/projects/p-beta']);
+  // "Alpha" names one exactly: exact title wins over the looser match.
+  await runVoiceTool('open', { kind: 'initiative', name: 'Alpha' }, c);
+  assert.equal(c.navigations.at(-1), '/iq/projects/p-alpha');
+  const two = await runVoiceTool('open', { kind: 'initiative', name: 'alph' }, c);
+  assert.equal(two.output['kind'], 'ambiguous');
+  assert.deepEqual(two.output['candidates'], [
+    { ref: 'initiative:p-alpha', title: 'Alpha', subtitle: 'Owner: Ana', kind: 'initiative', href: '/iq/projects/p-alpha' },
+    { ref: 'initiative:p-alpha-2', title: 'Alpha rollout', subtitle: 'Owner: Bo', kind: 'initiative', href: '/iq/projects/p-alpha-2' },
+  ]);
+  assert.equal(c.navigations.length, 2, 'an ambiguous name opens nothing');
+  await runVoiceTool('open', { ref: '2' }, c);
+  assert.equal(c.navigations.at(-1), '/iq/projects/p-alpha-2', '"the second one"');
+  const none = await runVoiceTool('open', { kind: 'initiative', name: 'Gamma' }, c);
+  assert.equal(none.outcome, 'refused');
+  assert.deepEqual(none.output['nearest'], { page: 'initiatives', label: 'Initiatives' });
+});
+
+test('open refuses a kept row in another workspace with the workspace switch offer, and a kind the role cannot read before any request', async () => {
+  const results = new ResultMemory();
+  results.keep([{ ref: 'request:r1', title: 'SME in Work', href: '/access/requests/r1' }, { ref: 'run:r9', title: 'Nightly', href: '/pipelines/runs/r9' }]);
+  const c = toolContext({ results });
+  for (const ref of ['1', 'request:r1', 'run:r9']) {
+    const r = await runVoiceTool('open', { ref }, c);
+    assert.equal(r.outcome, 'refused', ref);
+    assert.deepEqual(r.output['offer'], { tool: 'open', page: 'workspaces' });
+  }
+  assert.deepEqual(c.navigations, []);
+  // The same row in its own workspace opens.
+  const a = toolContext({ tenant: 'access', role: 'requester', results });
+  assert.equal((await runVoiceTool('open', { ref: 'request:r1' }, a)).outcome, 'done');
+  assert.deepEqual(a.navigations, ['/access/requests/r1']);
+  let calls = 0;
+  const m = toolContext({ role: 'member', deny: ['ManageBots'], fetch: async () => { calls++; throw new Error('network'); } });
+  assert.equal((await runVoiceTool('open', { kind: 'bot', name: 'nightly' }, m)).outcome, 'refused');
+  assert.equal(calls, 0);
+});
+
+test('spokenOrdinal reads "the second one", "number three", "4" and nothing from a sentence that merely holds a number', () => {
+  for (const [t, n] of [['the second one', 2], ['First.', 1], ['number three', 3], ['4', 4], ['the 5th one', 5], ['ten', 10], ['open the tenth', 10], ['option two please', 2]] as const) {
+    assert.equal(spokenOrdinal(t), n, t);
+  }
+  for (const t of ['two of them are wrong', 'I have 3 questions', '', 'eleven', '12', 'none of them']) assert.equal(spokenOrdinal(t), null, t);
 });
 
 const NOW = new Date('2026-11-08T12:00:00Z');
@@ -467,7 +529,7 @@ test('budget: a member hears their own spend and the access request offer, and e
   assert.deepEqual(me.output['rows'], [{ title: 'Alpha', spentUsd: 3.5 }]);
   const more = me.output['more'] as { hint: { href: string; item: string }; offer: unknown };
   assert.equal(more.hint.href, '/access/requests/new?item=capability%3Aorgiq%3Abudgets-read');
-  assert.deepEqual(more.offer, { tool: 'navigate', page: 'workspaces' });
+  assert.deepEqual(more.offer, { tool: 'open', page: 'workspaces' });
   for (const args of [{ scope: 'initiative', initiative: 'Alpha migration' }, { scope: 'org' }, { scope: 'allocations' }, { scope: 'users' }, { scope: 'switches' }, { scope: 'cost' }]) {
     const r = await runVoiceTool('budget', args, c);
     assert.equal(r.outcome, 'refused', JSON.stringify(args));
@@ -559,14 +621,14 @@ test('access_request_status: an approver reads what waits on them, a manager the
   assert.equal(log.at(-1)!.url, '/api/access/requests?scope=reports');
   assert.equal(reports.summary, 'Moderator in Social: pending');
   // The kept rows open the request's own record page.
-  assert.equal((await runVoiceTool('open_result', { ref: 'request:r-bo' }, c)).outcome, 'done');
+  assert.equal((await runVoiceTool('open', { ref: 'request:r-bo' }, c)).outcome, 'done');
   assert.deepEqual(c.navigations, ['/access/requests/r-bo']);
   const nav = toolContext({ tenant: 'access', role: 'requester' });
-  await runVoiceTool('navigate', { page: 'requests', params: { id: 'r-bo' } }, nav);
+  await runVoiceTool('open', { page: 'requests', params: { id: 'r-bo' } }, nav);
   assert.deepEqual(nav.navigations, ['/access/requests/r-bo']);
   // The approvals page is the approver's palette row; a requester is not offered it.
   const asRequester = toolContext({ tenant: 'access', role: 'requester' });
-  assert.equal((await runVoiceTool('navigate', { page: 'approvals' }, asRequester)).outcome, 'refused');
+  assert.equal((await runVoiceTool('open', { page: 'approvals' }, asRequester)).outcome, 'refused');
 });
 
 test('access_request_status outside Access refuses approvals and reports with the Access hint, before any request', async () => {
@@ -605,7 +667,7 @@ test('property: no tool result carries a string over 120 characters or a list ov
   ]);
   const calls: Array<[string, Record<string, unknown>]> = [
     ['search', { query: 'k', type: 'person', limit: 10 }], ['search', { query: 'k', limit: 10 }], ['list', { kind: 'initiative', filter: { scope: 'all' }, limit: 10 }],
-    ['summary', { kind: 'sweeps', since: 'yesterday' }], ['access_request_status', { query: 'alpha' }], ['navigate', { page: 'search', params: { q: huge.slice(0, 900) } }],
+    ['summary', { kind: 'sweeps', since: 'yesterday' }], ['access_request_status', { query: 'alpha' }], ['open', { page: 'search', params: { q: huge.slice(0, 900) } }],
   ];
   const walk = (v: unknown, path: string): void => {
     if (typeof v === 'string') assert.ok(v.length <= MAX_FIELD_CHARS, `${path} is ${v.length} characters`);

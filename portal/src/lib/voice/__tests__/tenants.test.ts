@@ -16,7 +16,7 @@ interface MwCatalogue { MOCK_CALLS: Record<string, Call>; VOICE_TENANTS: readonl
 interface MwOpenai { mockLiveScript: (id: string, c: Call) => { onStart: unknown[]; onResponseCreate: unknown[]; onClose: unknown[] } }
 
 /** One tenant's scripted session run to the end; `extraStart` adds frames (a second call) to the script. */
-export async function scriptedRun(tenant: string, opts: { role: string; allow: Action[]; routes: Route[]; extraStart?: unknown[]; ctx?: Parameters<typeof toolContext>[0]; call?: Call }) {
+export async function scriptedRun(tenant: string, opts: { role: string; allow: Action[]; routes: Route[]; extraStart?: unknown[]; ctx?: Parameters<typeof toolContext>[0]; call?: Call; beforeStop?: (c: VoiceController, ctx: ReturnType<typeof toolContext>) => Promise<void> | void }) {
   const { MOCK_CALLS } = await middlewareVoice<MwCatalogue>('catalogue.ts');
   const { mockLiveScript } = await middlewareVoice<MwOpenai>('openai.ts');
   const call = opts.call ?? MOCK_CALLS[tenant];
@@ -38,6 +38,7 @@ export async function scriptedRun(tenant: string, opts: { role: string; allow: A
   const controller = new VoiceController({ fetch, media: null, toolContext: () => ctx, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
   await controller.start();
   await clock.advance(opts.extraStart ? 8000 : 4000);
+  await opts.beforeStop?.(controller, ctx);
   const stopping = controller.stop();
   await clock.advance(300);
   await stopping;
@@ -116,20 +117,20 @@ test('the orgiq scripted session finds the Kubernetes experts, then opens the fi
   const run = await scriptedRun('orgiq', {
     role: 'member', allow: ['Search', 'VoiceNavigate'],
     routes: [route('GET', '/api/search?', 200, { results: people, total: 2 })],
-    extraStart: secondCall('open_result', { ref: '1' }),
+    extraStart: secondCall('open', { ref: '1' }),
   });
-  assert.deepEqual(run.calls, [['search', 'done'], ['open_result', 'done']]);
+  assert.deepEqual(run.calls, [['search', 'done'], ['open', 'done']]);
   assert.equal(run.ctx.navigations.at(-1), people[0]!.href, 'the person, on the connections tab the index links to');
   assert.equal(run.summaries[1], 'Opened Priya Natarajan');
 });
 
-test('a scripted open_result for a ref no search returned is refused and opens nothing', async () => {
+test('a scripted open of a name where a ref is expected is refused and opens nothing', async () => {
   const run = await scriptedRun('orgiq', {
     role: 'member', allow: ['Search', 'VoiceNavigate'],
     routes: [route('GET', '/api/search?', 200, { results: [{ type: 'person', id: 'p1', title: 'Priya', href: '/iq/search?tab=connections&selection=person%3Ap1' }], total: 1 })],
-    extraStart: secondCall('open_result', { ref: 'person:not-a-row' }),
+    extraStart: secondCall('open', { ref: 'Priya Natarajan' }),
   });
-  assert.deepEqual(run.calls, [['search', 'done'], ['open_result', 'refused']]);
+  assert.deepEqual(run.calls, [['search', 'done'], ['open', 'refused']]);
   assert.equal(run.ctx.navigations.length, 1, 'only the search page');
 });
 
@@ -239,4 +240,39 @@ test('the V2-7 scripted session: an HR admin asks what the org spent and hears t
   assert.deepEqual(run.calls, [['budget', 'done']]);
   assert.equal(run.summaries[0], 'The org spent $29.81 this month; on pace for $112.49; most: Auth Migration at $9.72');
   assert.deepEqual(run.log.filter((l) => l.method === 'GET').map((l) => l.url), ['/api/spend/report?groupBy=initiative']);
+});
+
+test('V2-4: open with a name two initiatives share shows the choice card; "the second one" sets its ordinal, and choosing opens that row\'s own page', async () => {
+  const projects = [{ id: 'p-alpha', name: 'Alpha migration' }, { id: 'p-alpha-2', name: 'Alpha rollout' }];
+  const said = { atMs: 5000, event: { type: 'session.input_transcript.delta', delta: 'The second one.', start_ms: 7000, end_ms: 7600 } };
+  let seen: unknown = null;
+  const run = await scriptedRun('orgiq', {
+    role: 'member', allow: ['Search', 'VoiceNavigate'],
+    call: { name: 'open', arguments: { page: null, ref: null, kind: 'initiative', name: 'alpha', params: null }, said: 'Open Alpha.' },
+    routes: [route('GET', '/api/graph/projects', 200, projects)],
+    extraStart: [said],
+    beforeStop: (c, ctx) => {
+      const choice = c.getSnapshot().choice!;
+      assert.equal(c.getSnapshot().phase, 'confirming', 'the card waits on the user (the library opens it in that phase)');
+      seen = { titles: choice.candidates.map((x) => x.title), ordinal: choice.ordinal, hrefs: choice.candidates.map((x) => x.href) };
+      assert.deepEqual(ctx.navigations, [], 'nothing opens while the user chooses');
+      c.choose(choice.ordinal! - 1);
+      assert.equal(c.getSnapshot().choice, null);
+      assert.notEqual(c.getSnapshot().phase, 'confirming');
+    },
+  });
+  assert.deepEqual(seen, { titles: ['Alpha migration', 'Alpha rollout'], ordinal: 2, hrefs: ['/iq/projects/p-alpha', '/iq/projects/p-alpha-2'] });
+  assert.deepEqual(run.calls, [['open', 'refused']], 'ambiguous is a refusal the model turns into a question');
+  assert.deepEqual(run.ctx.navigations, ['/iq/projects/p-alpha-2']);
+});
+
+test('V2-4: open by a unique name opens in one step, with no card', async () => {
+  const run = await scriptedRun('orgiq', {
+    role: 'member', allow: ['Search', 'VoiceNavigate'],
+    call: { name: 'open', arguments: { page: null, ref: null, kind: 'initiative', name: 'Alpha', params: null }, said: 'Open Alpha.' },
+    routes: [route('GET', '/api/graph/projects', 200, [{ id: 'p-alpha', name: 'Alpha' }, { id: 'p-alpha-2', name: 'Alpha rollout' }])],
+    beforeStop: (c) => { assert.equal(c.getSnapshot().choice, null); },
+  });
+  assert.deepEqual(run.calls, [['open', 'done']]);
+  assert.deepEqual(run.ctx.navigations, ['/iq/projects/p-alpha']);
 });

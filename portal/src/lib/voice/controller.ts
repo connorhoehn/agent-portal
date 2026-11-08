@@ -39,7 +39,7 @@
 import { VoiceClient, type ClientEvent, type MediaFactory, type StopReason, type VoiceFrame, type VoiceMint } from './client.ts';
 import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
 import {
-  cancelledResult, hashToolArgs, planPreparedCall, prepareToolCall, refused, runPreparedCall, toolAvailable,
+  cancelledResult, hashToolArgs, localHref, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
   type ConfirmPlan, type PreparedCall, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
@@ -67,6 +67,19 @@ export interface VoicePendingView {
   detail?: string;
 }
 
+/**
+ * Several records matched a name (open's `ambiguous`, catalogue v2 V2-4): the
+ * library's VoiceChoiceCard shows them; the user picks by click or by saying
+ * the number, which the dock passes to the card as `ordinal`.
+ */
+export interface VoiceChoiceView {
+  id: string;
+  title: string;
+  candidates: ReadonlyArray<{ title: string; subtitle?: string; kind?: string; href?: string }>;
+  /** 1-based, set when the user said a number; the card chooses that row. */
+  ordinal?: number;
+}
+
 export interface VoiceSnapshot {
   phase: VoicePhase;
   level: number;
@@ -74,6 +87,8 @@ export interface VoiceSnapshot {
   elapsedSeconds: number;
   budget: { usedUsd: number; holdUsd: number } | null;
   pending: VoicePendingView | null;
+  /** The numbered choice an ambiguous name left, or null. */
+  choice: VoiceChoiceView | null;
   lastLine: { role: 'you' | 'assistant'; text: string } | null;
   turns: readonly VoiceTurnView[];
   muted: boolean;
@@ -150,6 +165,8 @@ export class VoiceController {
   private mint: VoiceMint | null = null;
   private delegations = new Map<string, DelegationRecord>();
   private pending: Pending | null = null;
+  private choice: (VoiceChoiceView & { heard: string }) | null = null;
+  private choiceSeq = 0;
   private budgetCard: VoicePendingView | null = null;
   private turns: VoiceTurnView[] = [];
   private turnSeq = 0;
@@ -221,6 +238,7 @@ export class VoiceController {
     if (!client || !sessionOpen(this.machine)) return;
     // A card still up is answered as cancelled so the row records it.
     if (this.pending) this.resolvePending(false, 'click');
+    this.clearChoice();
     this.dispatch({ type: 'stop' });
     await client.stop(reason);
   }
@@ -263,6 +281,34 @@ export class VoiceController {
   /** How long a job toast stays once its job ends: the last mint's VOICE_TOAST_SECONDS, else the default. */
   toastSeconds(): number {
     return this.lastToastSeconds;
+  }
+
+  /**
+   * The user picked row `index` of the choice card (by click, or the card acting on the spoken ordinal): open its
+   * href, which the open runner built and checked, after the same in-portal, in-tenant check; the voice learns it silently.
+   */
+  choose(index: number): void {
+    const c = this.choice;
+    const picked = c?.candidates[index];
+    this.clearChoice();
+    if (!c || !picked?.href) return;
+    const ctx = this.opts.toolContext();
+    if (!openableHref(picked.href, ctx)) return;
+    ctx.navigate(picked.href);
+    this.addLine('assistant', `Opened ${picked.title}`);
+    this.noteContext(`The user chose "${picked.title}" from the numbered choice; it is now open. Do not open it again.`);
+  }
+
+  cancelChoice(): void {
+    this.clearChoice();
+  }
+
+  /** The choice is a card the user answers, so the phase reads `confirming` while it is up (the library opens it then). */
+  private clearChoice(): void {
+    const c = this.choice;
+    if (!c) return;
+    this.choice = null;
+    this.dispatch({ type: 'confirm-resolved', callId: c.id });
   }
 
   /** Silent page context for the voice (§1: session.thinking.append, delegation_id null). */
@@ -333,6 +379,7 @@ export class VoiceController {
         this.appendTurn('you', f.text, at);
         this.dispatch({ type: 'input', at });
         if (this.pending) this.hearForPending(f.text);
+        else if (this.choice) this.hearForChoice(f.text);
         return;
       case 'output':
         this.appendTurn('assistant', f.text, at);
@@ -440,6 +487,7 @@ export class VoiceController {
   private async answer(client: VoiceClient, delegationId: string, callId: string, name: string, res: ToolResult, startedAt: number, args: unknown, confirmedBy?: 'voice' | 'click'): Promise<void> {
     if (client !== this.client || this.machine.base !== 'live') return;
     client.sendToolOutput(callId, JSON.stringify(res.output));
+    this.noteChoice(res);
     const rec = this.delegation(delegationId);
     rec.calls.set(callId, { name, status: 'answered' });
     rec.unanswered += 1;
@@ -451,6 +499,25 @@ export class VoiceController {
       ...(confirmedBy ? { confirmedBy } : {}),
     }));
     this.maybeContinue(client, delegationId);
+  }
+
+  /** An ambiguous result whose candidates each open on a page becomes the choice card; any other answered call clears it. */
+  private noteChoice(res: ToolResult): void {
+    const cands = res.output['kind'] === 'ambiguous' && Array.isArray(res.output['candidates']) ? res.output['candidates'] as Array<Record<string, unknown>> : null;
+    const rows = cands?.filter((c) => typeof c['title'] === 'string' && typeof c['href'] === 'string' && localHref(c['href'] as string)) ?? [];
+    if (cands && rows.length && rows.length === cands.length) {
+      this.clearChoice();
+      this.choice = {
+        id: `choice-${++this.choiceSeq}`, heard: '',
+        title: 'Which one?',
+        candidates: rows.map((c) => ({
+          title: c['title'] as string, href: c['href'] as string,
+          ...(typeof c['subtitle'] === 'string' ? { subtitle: c['subtitle'] } : {}), ...(typeof c['kind'] === 'string' ? { kind: c['kind'] } : {}),
+        })),
+      };
+      this.dispatch({ type: 'confirm-shown', callId: this.choice.id });
+    } else this.clearChoice();
+    this.publish();
   }
 
   private onCompleted(client: VoiceClient, delegationId: string): void {
@@ -495,6 +562,17 @@ export class VoiceController {
   private clearDelegations(): void {
     for (const rec of this.delegations.values()) if (rec.grace != null) this.clearTimer(rec.grace);
     this.delegations.clear();
+  }
+
+  /** "The second one": the card is told the ordinal and chooses it (once per value); a number past the rows is ignored. */
+  private hearForChoice(text: string): void {
+    const c = this.choice;
+    if (!c) return;
+    c.heard += text;
+    const n = spokenOrdinal(c.heard);
+    if (n == null || n > c.candidates.length || c.ordinal === n) return;
+    this.choice = { ...c, ordinal: n };
+    this.publish();
   }
 
   private hearForPending(text: string): void {
@@ -595,6 +673,7 @@ export class VoiceController {
   private reset(): void {
     this.clearDelegations();
     this.pending = null;
+    this.choice = null;
     this.budgetCard = null;
     this.mint = null;
     this.warned = false;
@@ -631,6 +710,7 @@ export class VoiceController {
       elapsedSeconds: Math.floor(this.elapsed()),
       budget: this.budget(),
       pending: this.pending?.view ?? this.budgetCard ?? null,
+      choice: this.choice ? { id: this.choice.id, title: this.choice.title, candidates: this.choice.candidates, ...(this.choice.ordinal ? { ordinal: this.choice.ordinal } : {}) } : null,
       lastLine: last ? { role: last.role, text: last.text.trim() } : null,
       turns: this.turns,
       muted: this.muted,
@@ -645,6 +725,7 @@ export class VoiceController {
     if (prev.phase === next.phase && prev.level === next.level && prev.outputLevel === next.outputLevel
       && prev.elapsedSeconds === next.elapsedSeconds && prev.budget?.usedUsd === next.budget?.usedUsd
       && prev.budget?.holdUsd === next.budget?.holdUsd && prev.pending === next.pending && prev.turns === next.turns
+      && prev.choice?.id === next.choice?.id && prev.choice?.ordinal === next.choice?.ordinal
       && prev.lastLine?.text === next.lastLine?.text && prev.muted === next.muted && prev.reason === next.reason
       && prev.closedSeconds === next.closedSeconds) return;
     this.snapshot = next;

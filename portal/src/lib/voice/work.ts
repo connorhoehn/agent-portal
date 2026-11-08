@@ -38,7 +38,7 @@
 import type { Notification } from '@connorhoehn/realtime-modules/client';
 import { QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, type QueueWorkKind } from './catalogue.ts';
 import {
-  ambiguous, done, failed, readFailure, readJson, refused,
+  ambiguous, done, failed, localHref, readFailure, readJson, refused,
   type JobTracking, type QueuedJob, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 
@@ -179,7 +179,9 @@ const runQueueWork: VoiceToolRunner = async (_args, ctx, planned) => {
     const posted = await post(ctx, '/api/work/sweeps/run', { ...(plan.sweep ? { sweep: plan.sweep } : {}), background: true });
     if (!posted.ok) return postRefusal(plan, posted, '/iq/work/findings');
     const id = posted.body['jobId'];
-    if (typeof id === 'string' && id) job = { jobId: id, kind: 'sweep', title: plan.title, href: typeof posted.body['href'] === 'string' ? posted.body['href'] as string : '/iq/work/findings' };
+    // The route's own link, only when it stays inside the portal (localHref, as open checks a kept row's).
+    const href = typeof posted.body['href'] === 'string' && localHref(posted.body['href'] as string) ? posted.body['href'] as string : '/iq/work/findings';
+    if (typeof id === 'string' && id) job = { jobId: id, kind: 'sweep', title: plan.title, href };
   } else if (plan.kind === 'bot-run') {
     const page = `/admin/bots/${encodeURIComponent(plan.botId!)}`;
     const posted = await post(ctx, `/api/bots/${encodeURIComponent(plan.botId!)}/run`, {});

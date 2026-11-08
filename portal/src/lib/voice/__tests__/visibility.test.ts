@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from '../actions.ts';
 import { accessRequestHref, BUDGET_READ_ITEM_ID, planPreparedCall, prepareToolCall, ResultMemory, runPreparedCall, type CallAccess, type ComputeAccess, type PresenceAccess, type SocialAccess, type ToolResult, type VoiceComputer } from '../tools.ts';
-import { middlewareVoice, toolContext, type LoggedRequest } from './voiceHarness.ts';
+import { middlewareVoice, PALETTE, toolContext, type LoggedRequest } from './voiceHarness.ts';
 import type { Action } from '../../capabilities';
 
 interface World {
@@ -91,12 +91,11 @@ const calls: CallAccess = { unavailable: null, active: () => null, callConversat
 
 /** Arguments that drive each tool to a refusal, an ambiguity or a failure. */
 const VARIANTS: Record<string, unknown[]> = {
-  navigate: [{ page: 'bots' }, { page: 'nowhere' }, { page: 'search', params: { q: 'x' } }],
+  open: [{ page: 'bots' }, { page: 'nowhere' }, { page: 'search', params: { q: 'x' } }, { ref: 'person:p-not-kept' }, { ref: '1' }, { ref: 'initiative:p-sana-alpha' },
+    { kind: 'initiative', name: 'Initiative' }, { kind: 'initiative', name: 'Nothing Like It' }, { kind: 'bot', name: 'sana' }, { kind: 'channel', name: 'x' }, { page: 'search', ref: '1' }],
   search: [{ query: 'kubernetes', type: 'person' }, { query: 'alpha', type: 'initiative' }, { query: 'x', type: 'not-a-type' }, { query: 'who decided it', answer: true }],
-  open_result: [{ ref: 'person:p-not-kept' }, { ref: '1' }],
   list: [{ kind: 'initiative', filter: { q: 'nothing like it' } }, { kind: 'bot' }, { kind: 'channel' }, { kind: 'not-a-kind' }, { kind: 'finding', filter: { since: 'soon' } }],
   get: [{ ref: '1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' }],
-  open_computer_lab: [{ initiativeId: 'p-unknown' }],
   start_computer: [{ initiativeIds: ['Unknown Initiative'] }],
   open_shell: [{ computerId: 'unknown-box' }],
   run_command: [{ computerId: 'unknown-box', phrase: 'status' }, { computerId: 'unknown-box', phrase: 'commits-since', since: 'soon' }],
@@ -154,6 +153,8 @@ async function runAs(world: World, mode: Mode, name: string, args: unknown): Pro
   if (world.socialRequestItemId) for (const s of [world.socialRequestItemId, accessRequestHref(world.socialRequestItemId), 'Request Social access']) universe.add(s);
   // And the budgets tier's own request link (budget's offer): fixed words and the catalog item, never a row.
   for (const s of [BUDGET_READ_ITEM_ID, accessRequestHref(BUDGET_READ_ITEM_ID), 'Request budget visibility']) universe.add(s);
+  // The palette's own pages (open's nearest page) are the UI the persona already sees, not rows.
+  for (const p of PALETTE.pages) { universe.add(p.label); if (p.pageId) universe.add(p.pageId); }
   return { results, universe };
 }
 
@@ -178,7 +179,9 @@ test('property: a refused, ambiguous or failed payload names only rows that pers
               // A typed ref (`kind:id`, catalogue v2) names a row by the id the persona's own read returned.
               const typed = /^[a-z][a-z-]*:(.+)$/.exec(id)?.[1];
               const known = (x: string) => universe.has(x) || [...universe].some((u) => capped(u) === x);
-              assert.ok(known(id) || (typed != null && known(typed)), `${where}: "${id}" is not in this persona's own reads`);
+              // A portal link the dock built from such an id (kinds.ts href) names the same row: one of its segments is the id.
+              const linked = id.startsWith('/') && decodeURIComponent(id).split(/[/?=&]/).some((seg) => seg.length > 2 && known(seg.replace(/^[a-z][a-z-]*:/, '')));
+              assert.ok(known(id) || (typed != null && known(typed)) || linked, `${where}: "${id}" is not in this persona's own reads`);
             }
             const text = JSON.stringify(r.output) + r.summary;
             for (const f of foreign) assert.ok(!text.includes(f), `${where}: names the other persona's "${f}"`);

@@ -60,7 +60,7 @@ describe('strict schemas', () => {
     expect(s['properties'].limit.type).toEqual(['integer', 'null']);
     expect(s['properties'].sort.enum).toEqual(['relevance', 'recent', null]);
     expect(s['properties'].query.type).toBe('string');
-    const nav = liveFunctionTool(tools.find((t) => t.name === 'navigate')!)['parameters'] as Record<string, any>;
+    const nav = liveFunctionTool(tools.find((t) => t.name === 'open')!)['parameters'] as Record<string, any>;
     expect(nav['properties'].params.type).toEqual(['object', 'null']);
     expect(nav['properties'].params.required).toEqual(['q', 'type', 'id']);
     expect(nav['properties'].params.additionalProperties).toBe(false);

@@ -190,7 +190,7 @@ describe('POST /api/voice/sessions — the mint', () => {
       const res = await mint();
       expect(res.status).toBe(201);
       // Reads and navigation; pipelines adds queue_work's dry-run (G19, gated per kind on RunPipeline by the dock).
-      const offered = ['access_request_status', 'budget', 'get', 'list', 'navigate', 'open_result', ...(tenant === 'pipelines' ? ['queue_work'] : []), 'search', 'summary'];
+      const offered = ['access_request_status', 'budget', 'get', 'list', 'open', ...(tenant === 'pipelines' ? ['queue_work'] : []), 'search', 'summary'];
       expect(res.body.tools.sort()).toEqual(offered);
       const sent = JSON.parse(calls[0]!.init.body!).session;
       expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(offered);
@@ -200,7 +200,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
     const res = await mint();
     expect(res.status).toBe(201);
-    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'budget', 'get', 'list', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
+    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'budget', 'get', 'list', 'open', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
   });
 
   it('an access approver\'s scripted session reads their approvals; a requester\'s their own requests', async () => {
@@ -400,7 +400,7 @@ describe('POST /api/voice/sessions/:id/events — tool-call rows', () => {
   it('refuses another user\'s session as not found, and writes nothing', async () => {
     const id = await minted();
     principal = { sub: 'u-mallory', role: 'member', tenant: 'orgiq', grants: {} };
-    const res = await request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: 'navigate', outcome: 'done' });
+    const res = await request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: 'open', outcome: 'done' });
     expect(res.status).toBe(404);
     expect(voiceToolCalls.rows()).toHaveLength(0);
   });
@@ -408,15 +408,15 @@ describe('POST /api/voice/sessions/:id/events — tool-call rows', () => {
   it('refuses the same user from another tenant', async () => {
     const id = await minted();
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
-    expect((await request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: 'navigate', outcome: 'done' })).status).toBe(404);
+    expect((await request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: 'open', outcome: 'done' })).status).toBe(404);
   });
 
   it('refuses a tool outside the catalogue, a bad outcome and a malformed hash', async () => {
     const id = await minted();
     const post = (b: Record<string, unknown>) => request(app).post(`/api/voice/sessions/${id}/events`).send(b);
     expect((await post({ tool: 'shell_exec', outcome: 'done' })).status).toBe(400);
-    expect((await post({ tool: 'navigate', outcome: 'maybe' })).status).toBe(400);
-    expect((await post({ tool: 'navigate', outcome: 'done', argsSha256: 'not-hex' })).status).toBe(400);
+    expect((await post({ tool: 'open', outcome: 'maybe' })).status).toBe(400);
+    expect((await post({ tool: 'open', outcome: 'done', argsSha256: 'not-hex' })).status).toBe(400);
     expect(voiceToolCalls.rows()).toHaveLength(0);
   });
 });

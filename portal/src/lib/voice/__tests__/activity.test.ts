@@ -55,7 +55,7 @@ test('live-calls, missed-calls, messages and pins each answer from the social in
     '/api/social/search?type=message&limit=50',
     '/api/social/search?q=pins&type=pin&limit=50',
   ]);
-  // The rows are kept for open_result: "open the first one" opens the pin's conversation.
+  // The rows are kept for open: "open the first one" opens the pin's conversation.
   assert.equal(ctx.results!.find('1')!.href, '/social/channels/platform');
 });
 

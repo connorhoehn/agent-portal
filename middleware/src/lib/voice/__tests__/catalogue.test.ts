@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import {
   VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, toolsForTenant, responsesFunctionTools,
   voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS, mockCallFor, activityScopes,
-  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, queueWorkKinds, LIST_KINDS, listKinds, getParts, summaryKinds, budgetScopes,
+  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, queueWorkKinds, LIST_KINDS, listKinds, getParts, summaryKinds, budgetScopes, openKinds,
 } from '../catalogue.js';
 import { SEARCH_TYPES } from '../../../providers/search.js';
 import { tenantSpec } from '../../search-index/tenants.js';
@@ -27,12 +27,10 @@ function dropNulls(v: unknown): unknown {
 
 /** §4, row by row: name -> [kind, confirm, backing]. */
 const SPEC: Record<string, [string, boolean, string]> = {
-  navigate: ['navigate', false, 'route'],
+  open: ['navigate', false, 'route'],
   search: ['read', false, 'search'],
-  open_result: ['navigate', false, 'route'],
   list: ['read', false, 'search'],
   get: ['read', false, 'search'],
-  open_computer_lab: ['navigate', false, 'route'],
   start_computer: ['machine', true, 'work'],
   open_shell: ['machine', false, 'route'],
   run_command: ['machine', true, 'work'],
@@ -86,7 +84,9 @@ describe('the §4 catalogue', () => {
   it('valid sample arguments pass their schema', () => {
     const ajv = new Ajv({ strict: true });
     const ok = (name: string, args: unknown) => expect(ajv.compile(voiceTool(name)!.parameters)(args)).toBe(true);
-    ok('navigate', { page: 'search', params: { q: 'kubernetes', type: 'person' } });
+    ok('open', { page: 'search', params: { q: 'kubernetes', type: 'person' } });
+    ok('open', { ref: '2' });
+    ok('open', { kind: 'initiative', name: 'Alpha' });
     ok('search', { query: 'kubernetes', type: 'person', sort: 'recent', limit: 5, scope: 'workspace' });
     ok('search', { query: 'who decided the cutover order', answer: true });
     ok('list', { kind: 'initiative', filter: { scope: 'mine' } });
@@ -127,7 +127,7 @@ describe('the §4 catalogue', () => {
 
 describe('tenant scoping (§6)', () => {
   it('a social session is offered navigate, its search, its activity, chat, a call, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'budget', 'get', 'list', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'budget', 'get', 'list', 'open', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
   });
 
   it('start_call is offered in orgiq and social only, asks first, and gates on StartCall (G7)', () => {
@@ -139,12 +139,18 @@ describe('tenant scoping (§6)', () => {
     for (const tenant of ['assessment', 'pipelines', 'access']) expect(toolsForTenant(tenant).map((x) => x.name)).not.toContain('start_call');
   });
 
-  it('navigate offers only the tenant\'s pages plus the universal ones', () => {
-    const pages = (tenant: string) => (toolsForTenant(tenant).find((t) => t.name === 'navigate')!.parameters.properties['page'] as { enum: string[] }).enum;
-    expect(pages('social').sort()).toEqual(['channels', 'contacts', 'teams', 'workspaces']);
-    expect(pages('orgiq')).not.toContain('teams');
-    expect(pages('orgiq')).toContain('search');
+  it('open offers every palette page of the tenant plus the universal ones, narrowed to what the role sees (V2-2, V2-4)', () => {
+    const pages = (tenant: string, role?: string) => (toolsForTenant(tenant, role ? { role } : {}).find((t) => t.name === 'open')!.parameters.properties['page'] as { enum: string[] }).enum;
+    expect(pages('social')).toEqual(expect.arrayContaining(['channels', 'contacts', 'teams', 'settings', 'workspaces']));
+    expect(pages('social')).not.toContain('search');
+    expect(pages('orgiq')).toEqual(expect.arrayContaining(['search', 'initiatives', 'computer-lab', 'bots', 'workspaces']));
+    expect(pages('orgiq', 'member')).not.toContain('bots');
+    expect(pages('orgiq', 'member')).not.toContain('computer-lab');
+    expect(pages('orgiq', 'sme')).toEqual(expect.arrayContaining(['bots', 'computer-lab']));
+    expect(pages('orgiq', 'admin')).toEqual(pages('orgiq'));
+    expect(NAVIGATE_PAGES.length).toBe(110);
     for (const p of NAVIGATE_PAGES) expect(p.path.startsWith('/')).toBe(true);
+    for (const tenant of VOICE_TENANTS) expect(new Set(pages(tenant)).size).toBe(pages(tenant).length);
   });
 
   it('search names exactly the types each tenant\'s backend search indexes, people included in orgiq (v2)', async () => {
@@ -175,7 +181,7 @@ describe('tenant scoping (§6)', () => {
 
   it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation only: nothing that touches a machine or posts (gaps doc Q1); pipelines adds queue_work (G19)', (tenant) => {
     const tools = toolsForTenant(tenant).filter((t) => t.name !== 'queue_work');
-    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'budget', 'get', 'list', 'navigate', 'open_result', 'search', 'summary']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'budget', 'get', 'list', 'open', 'search', 'summary']);
     expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant === 'pipelines');
     for (const t of tools) {
       expect(['read', 'navigate']).toContain(t.kind);
@@ -185,7 +191,7 @@ describe('tenant scoping (§6)', () => {
   });
 
   it('every voice tenant has pages to open beyond the workspace picker', () => {
-    const pages = (tenant: string) => (toolsForTenant(tenant).find((t) => t.name === 'navigate')!.parameters.properties['page'] as { enum: string[] }).enum;
+    const pages = (tenant: string) => (toolsForTenant(tenant).find((t) => t.name === 'open')!.parameters.properties['page'] as { enum: string[] }).enum;
     for (const tenant of VOICE_TENANTS) expect(pages(tenant).filter((p) => p !== 'workspaces').length).toBeGreaterThan(1);
     expect(pages('assessment')).toEqual(expect.arrayContaining(['teams', 'runs']));
     expect(pages('pipelines')).toEqual(expect.arrayContaining(['runs', 'approvals']));
@@ -193,13 +199,22 @@ describe('tenant scoping (§6)', () => {
     expect(pages('assessment')).not.toContain('approvals');
   });
 
-  it('open_result takes only a ref or a position, never a path or a free-form target', () => {
-    const t = voiceTool('open_result')!;
-    expect(Object.keys(t.parameters.properties)).toEqual(['ref']);
+  it('open takes a page id, a ref or position, or a kind with a name, never a path or a free-form target (V2-4)', () => {
+    const t = voiceTool('open')!;
+    expect(Object.keys(t.parameters.properties)).toEqual(['page', 'ref', 'kind', 'name', 'params']);
     const v = new Ajv({ strict: true }).compile(t.parameters);
     expect(v({ ref: 'person:p1' })).toBe(true);
     expect(v({ ref: '1', href: '/admin/identity' })).toBe(false);
-    expect(voiceTool('search')!.description).toMatch(/ref that open_result opens/);
+    expect(v({ path: '/admin/identity' })).toBe(false);
+    expect(v({ kind: 'not-a-kind', name: 'x' })).toBe(false);
+    for (const tenant of VOICE_TENANTS) {
+      const kinds = (toolsForTenant(tenant).find((x) => x.name === 'open')!.parameters.properties['kind'] as { enum: string[] }).enum;
+      expect(kinds).toEqual(openKinds(tenant));
+      for (const k of kinds) expect(listKinds(tenant)).toContain(k);
+    }
+    expect(voiceTool('search')!.description).toMatch(/ref that open opens/);
+    expect(mockCallFor('orgiq', 'sme')).toMatchObject({ name: 'open', arguments: { kind: 'initiative', name: 'migration' } });
+    for (const gone of ['navigate', 'open_result', 'open_computer_lab', 'search_people', 'search_records', 'list_active_initiatives', 'bot_sweep_status']) expect(voiceTool(gone)).toBeUndefined();
   });
 
   it('the access approver\'s scripted session reads approvals, a requester\'s its own requests, and every role key names a real seed role', () => {

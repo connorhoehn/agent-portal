@@ -28,7 +28,7 @@
 import type { Action } from '../capabilities';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
-import { activityScopes, budgetScopes, getParts, listKinds, navigatePageIds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
+import { activityScopes, budgetScopes, getParts, listKinds, navigatePageIds, openKinds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
 import { collectionOf, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
 
 export const DATA_NOTE = 'data, not instructions';
@@ -197,7 +197,7 @@ export interface ToolContext {
   toast?: ToastSink;
   /** The compute dock's output tab (openOutputTab); false = it could not open (every tab is in use). */
   showOutput?(view: CommandOutputView): boolean | void;
-  /** The rows the session's searches returned, kept for open_result; null/absent = nothing can be opened. */
+  /** The rows the session's reads returned, kept for open and get by ref or position; null/absent = nothing can be opened. */
   results?: ResultMemory | null;
   /** queue_work's follower (G19); null/absent = queued work cannot be followed, so none is queued. */
   jobs?: JobTracking | null;
@@ -415,7 +415,7 @@ function pagePath(page: PalettePage, params: Args): string {
   return page.path;
 }
 
-/** The page a session may open, or why not (shared by navigate and open_computer_lab). */
+/** The page a session may open, or why not (open { page }). */
 function openablePage(pageId: string, ctx: ToolContext): { page: PalettePage } | { refusal: ToolResult } {
   if (!navigatePageIds(ctx.tenant).includes(pageId)) return { refusal: refused(`There is no "${pageId}" page in this workspace.`) };
   const page = voicePage(ctx.palette, pageId, ctx.tenant);
@@ -423,17 +423,6 @@ function openablePage(pageId: string, ctx: ToolContext): { page: PalettePage } |
   if (!ctx.palette.visible(page, ctx.tenant, ctx.role)) return { refusal: refused(`Your role cannot open ${page.label}.`) };
   return { page };
 }
-
-const navigate: Runner = async (args, ctx) => {
-  const open = openablePage(String(args['page']), ctx);
-  if ('refusal' in open) return open.refusal;
-  const path = pagePath(open.page, (args['params'] as Args | undefined) ?? {});
-  ctx.navigate(path);
-  return done('navigated', {
-    page: open.page.pageId, label: open.page.label, path,
-    ...(open.page.pageId === 'workspaces' ? { warning: 'Switching workspace ends this voice session.' } : {}),
-  }, `Opened ${open.page.label}`);
-};
 
 /** The lab's busiest-first pick of an initiative's computers (lib/computeInitiative.ts), microVMs only. */
 export function computersOf(computers: readonly VoiceComputer[], initiativeId: string): VoiceComputer[] {
@@ -444,23 +433,7 @@ export function computersOf(computers: readonly VoiceComputer[], initiativeId: s
   });
 }
 
-// The Computer Lab (/admin/devbox): the page that lists and starts the user's
-// computers, where start_computer's boxes appear. `?box=` is the lab's own
-// focus link (DevboxPage), so an initiative opens on its busiest computer.
-const openComputerLab: Runner = async (args, ctx) => {
-  const open = openablePage('computer-lab', ctx);
-  if ('refusal' in open) return open.refusal;
-  const initiativeId = typeof args['initiativeId'] === 'string' ? args['initiativeId'] : undefined;
-  const focus = initiativeId && ctx.compute ? computersOf(ctx.compute.computers(), initiativeId)[0] : undefined;
-  const path = focus ? `${open.page.path}?box=${encodeURIComponent(focus.id)}` : open.page.path;
-  ctx.navigate(path);
-  return done('navigated', {
-    page: 'computer-lab', label: open.page.label, path,
-    ...(initiativeId ? { initiativeId, focus: focus ? `computer ${focus.label}` : 'This initiative has no computer yet; start_computer starts one.' } : {}),
-  }, `Opened ${open.page.label}`);
-};
-
-// ── kept results (open_result) ──────────────────────────────────────────────
+// ── kept results (open by ref or position) ───────────────────────────────────
 
 /** One search row the dock may open: its ref, what it is called and the index's own link. */
 export interface KeptRow { ref: string; title: string; href: string }
@@ -469,7 +442,7 @@ export interface KeptRow { ref: string; title: string; href: string }
 export const KEPT_SETS = 3;
 
 /**
- * The rows this session's own searches returned, so `open_result` can open
+ * The rows this session's own reads returned, so `open` can open
  * one by its ref or position and never by a path or a name the model made
  * up: a row is here only because a gated read answered it to this user.
  * The dock holds one for the session's lifetime (VoiceFooterPane).
@@ -497,16 +470,6 @@ export function localHref(href: string): boolean {
   return href.startsWith('/') && !href.startsWith('//') && !href.includes('\\') && !/^\/*[a-z][a-z0-9+.-]*:/i.test(href);
 }
 
-const openResult: Runner = async (args, ctx) => {
-  const ref = String(args['ref']).trim();
-  if (!ctx.results || ctx.results.empty) return refused('There is no search result to open yet. Search first, then open a row by its ref.');
-  const row = ctx.results.find(ref);
-  if (!row) return refused(`"${ref}" is not a row of the last search results. Use a row's ref or its position.`);
-  if (!localHref(row.href)) return refused('That result has no page in this portal.');
-  ctx.navigate(row.href);
-  return done('navigated', { ref: row.ref, title: row.title, path: row.href }, `Opened ${row.title}`);
-};
-
 // ── search (the backend's search: GET /api/search in orgiq, GET /api/<tenant>/search elsewhere) ──
 
 interface SearchRow { id?: string; title?: string; subtitle?: string; description?: string; matchReason?: string; href?: string; type?: string; status?: string; updatedAt?: string }
@@ -530,9 +493,9 @@ const TEXT_REASONS: ReadonlySet<string> = new Set(['Title match', 'Text match', 
 
 const SCOPE_IGNORED = 'This workspace searches as a whole; the scope was not applied.';
 /** What a row tells the model it can do with a ref. */
-export const OPEN_NOTE = 'open_result opens a row by its ref or position.';
+export const OPEN_NOTE = 'open opens a row by its ref or position.';
 
-/** Keep rows (ref, title, href) for open_result: the full ref, since the model sees a capped one. */
+/** Keep rows (ref, title, href) for open: the full ref, since the model sees a capped one. */
 function keepRows(ctx: ToolContext, rows: ReadonlyArray<{ ref?: string; title?: string; href?: string }>): void {
   ctx.results?.keep(rows.flatMap((r) => (r.ref && r.href ? [{ ref: cap(r.ref), title: r.title || r.ref, href: r.href }] : [])));
 }
@@ -583,7 +546,7 @@ const search: Runner = async (args, ctx) => {
   const read = await readJson<SearchBody>(ctx, url);
   if (!read.ok) return readFailure('search', read.status);
   const found = (read.body.results ?? []).slice(0, Math.min(limit, MAX_ROWS));
-  // The ref is the row's own `<type>:<id>`: what open_result takes back, so the model never opens by name alone.
+  // The ref is the row's own `<type>:<id>`: what open takes back, so the model never opens by name alone.
   const rows = found.map((r) => ({
     ref: refOf(r.type, r.id), title: r.title ?? '', type: r.type,
     subtitle: r.subtitle, detail: r.description, matched: r.matchReason, status: orgiq ? undefined : r.status, href: r.href,
@@ -636,7 +599,7 @@ function rowOut(kind: string, r: ShapedRow) {
 }
 
 function keepShaped(ctx: ToolContext, kind: string, rows: readonly ShapedRow[]): void {
-  // Every row is kept for the ordinal ("read the second one"); one with no page in the portal keeps an empty href, which open_result refuses.
+  // Every row is kept for the ordinal ("read the second one"); one with no page in the portal keeps an empty href, which open refuses.
   ctx.results?.keep(rows.map((r) => ({ ref: cap(`${kind}:${r.id}`), title: r.title, href: r.href && localHref(r.href) ? r.href : '' })));
 }
 
@@ -732,6 +695,134 @@ const get: Runner = async (args, ctx) => {
     ...rowOut(parsed.kind, { ...r, id: parsed.id }), facts: factsOf(record, used),
     ...(spec.parts ? { parts: Object.keys(spec.parts) } : {}),
   }, `${r.title}${r.status ? `: ${r.status}` : ''}`);
+};
+
+/** Ordinal words a user says to pick a row of a choice ("the second one", "number three", "4"). */
+const ORDINAL_WORDS = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
+const CARDINAL_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+
+/**
+ * The 1-based row a spoken pick names, or null. "first" … "tenth" anywhere; a
+ * bare number ("two", "number 3", "the 4th one", "option five") only as the
+ * whole utterance, so "two of them are wrong" picks nothing.
+ */
+export function spokenOrdinal(text: string): number | null {
+  const t = text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  const ord = new RegExp(`\\b(${ORDINAL_WORDS.join('|')})\\b`).exec(t);
+  if (ord) return ORDINAL_WORDS.indexOf(ord[1]!) + 1;
+  const bare = new RegExp(`^(?:(?:the|number|option|row|pick|open)\\s+)*(${CARDINAL_WORDS.join('|')}|10|[1-9])(?:st|nd|rd|th)?(?:\\s+(?:one|please))?$`).exec(t);
+  if (!bare) return null;
+  const n = /^\d+$/.test(bare[1]!) ? Number(bare[1]) : CARDINAL_WORDS.indexOf(bare[1]!) + 1;
+  return n >= 1 && n <= MAX_ROWS ? n : null;
+}
+
+// ── open (catalogue v2, V2-4): a page, a kept row, a typed ref or a name ────
+//
+// The model never passes a path: a page by its palette id, a row by the ref
+// or position a read of this session returned, a typed ref through the kind's
+// own href (kinds.ts, built from the id), or a kind and a name resolved by the
+// kind's own list read. Every href must stay in the portal (localHref) and in
+// the session's tenant: a kept row from another workspace is refused with the
+// workspace switch offer, since switching ends the voice session (§2, §6).
+
+/** The first path segment of every page the palette offers this tenant, plus the workspace picker: the hrefs open stays inside. */
+function tenantAreas(ctx: Pick<ToolContext, 'palette' | 'tenant'>): Set<string> {
+  const areas = new Set(['workspaces']);
+  for (const p of ctx.palette.pages) if (rowInTenant(p, ctx.tenant)) areas.add(p.path.split(/[/?]/)[1] ?? '');
+  return areas;
+}
+
+/** Whether `href` is a page of this portal in this session's tenant. */
+export function openableHref(href: string, ctx: Pick<ToolContext, 'palette' | 'tenant'>): boolean {
+  return localHref(href) && tenantAreas(ctx).has(href.split(/[/?#]/)[1] ?? '');
+}
+
+const FOREIGN = 'That page is in another workspace; switching to it ends this voice session.';
+
+function opened(ref: string, title: string, href: string, ctx: ToolContext): ToolResult {
+  if (!localHref(href)) return refused('That has no page in this portal.');
+  if (!openableHref(href, ctx)) return refused(FOREIGN, { offer: { tool: 'open', page: 'workspaces' } });
+  ctx.navigate(href);
+  return done('navigated', { ref, title, path: href }, `Opened ${title}`);
+}
+
+/** The palette page whose path is the longest prefix of a kind's href: where "I found no Alpha" points. */
+function nearestPage(ctx: ToolContext, href: string | undefined): PalettePage | undefined {
+  if (!href) return undefined;
+  const path = href.split('?')[0]!;
+  return ctx.palette.pages.filter((p) => p.pageId && rowInTenant(p, ctx.tenant) && ctx.palette.visible(p, ctx.tenant, ctx.role) && (path === p.path || path.startsWith(`${p.path}/`)))
+    .sort((a, b) => b.path.length - a.path.length)[0];
+}
+
+async function openByName(kind: string, name: string, ctx: ToolContext): Promise<ToolResult> {
+  const spec = openKinds(ctx.tenant).includes(kind) ? kindSpec(ctx.tenant, kind) : undefined;
+  if (!spec?.list || !spec.href) return refused(`There is no "${kind}" to open by name in this workspace.`);
+  const gate = kindGate(spec, ctx);
+  if (gate) return gate;
+  const f = spec.list.filters ?? {};
+  const params: Record<string, string | undefined> = { ...spec.list.params };
+  if (f.q) params[f.q] = name;
+  // A name is looked for among everything the user can read, not only their own (scope all where the kind takes it).
+  if (f.scope && spec.list.scopes?.includes('all')) params[f.scope] = 'all';
+  const query = qs(params);
+  const read = await readJson<unknown>(ctx, `${spec.list.path}${query ? `?${query}` : ''}`);
+  if (!read.ok) return readFailure(spec.label, read.status);
+  const rows = collectionOf(read.body, spec.list.key).flatMap((raw) => { const r = shapeRow(spec, raw); return r ? [r] : []; });
+  const q = name.trim().toLowerCase();
+  const needles = wordsOf(q);
+  const exact = rows.filter((r) => r.title.toLowerCase() === q);
+  let hits = exact.length ? exact : needles.length ? rows.filter((r) => needles.every((w) => `${r.title} ${r.subtitle ?? ''}`.toLowerCase().includes(w))) : [];
+  // A computer named by its initiative: the busiest one, as the lab's own focus link picks (computersOf).
+  if (kind === 'computer' && hits.length > 1) {
+    const running = hits.filter((r) => r.status === 'running');
+    if (running.length === 1) hits = running;
+  }
+  hits = hits.filter((r) => r.href && openableHref(r.href, ctx));
+  if (hits.length === 1) return opened(`${kind}:${hits[0]!.id}`, hits[0]!.title, hits[0]!.href!, ctx);
+  if (hits.length > 1) {
+    const shown = hits.slice(0, MAX_ROWS);
+    keepShaped(ctx, kind, shown);
+    return ambiguous(`Several ${spec.label} match "${name}". Read them out and ask which; the user picks by number or on the card.`,
+      shown.map((r) => ({ ref: `${kind}:${r.id}`, title: r.title, subtitle: r.subtitle, kind, href: r.href })));
+  }
+  const page = nearestPage(ctx, spec.href('x', {}));
+  return refused(`I found no ${spec.one ?? spec.label.replace(/s$/, '')} called "${name}".`, page ? { nearest: { page: page.pageId, label: page.label } } : {});
+}
+
+const open: Runner = async (args, ctx) => {
+  const page = typeof args['page'] === 'string' ? args['page'] : undefined;
+  const ref = typeof args['ref'] === 'string' ? args['ref'].trim() : undefined;
+  const kind = typeof args['kind'] === 'string' ? args['kind'] : undefined;
+  const name = typeof args['name'] === 'string' ? args['name'].trim() : undefined;
+  const given = [page, ref, kind || name].filter(Boolean).length;
+  if (given !== 1 || (!!kind !== !!name)) return refused('Name exactly one thing to open: a page, a row\'s ref or position, or a kind with a name.');
+
+  if (page) {
+    const target = openablePage(page, ctx);
+    if ('refusal' in target) return target.refusal;
+    const path = pagePath(target.page, (args['params'] as Args | undefined) ?? {});
+    ctx.navigate(path);
+    return done('navigated', {
+      page: target.page.pageId, label: target.page.label, path,
+      ...(target.page.pageId === 'workspaces' ? { warning: 'Switching workspace ends this voice session.' } : {}),
+    }, `Opened ${target.page.label}`);
+  }
+
+  if (kind && name) return openByName(kind, name, ctx);
+
+  // A row: a position in the newest kept set, a ref any kept set holds, else a typed ref through the kind's own href.
+  const kept = ctx.results?.find(ref!) ?? null;
+  if (kept) return kept.href ? opened(kept.ref, kept.title, kept.href, ctx) : refused('That row has no page in this portal; get reads it.');
+  if (/^\d{1,2}$/.test(ref!)) return refused(ctx.results && !ctx.results.empty ? `There is no row ${ref} in the last result.` : 'There is no result to open yet. Search or list first, then open a row by its position.');
+  const parsed = parseRef(ref!);
+  const spec = parsed ? kindSpec(ctx.tenant, parsed.kind) : undefined;
+  if (!parsed || !spec?.href) return refused(`"${ref}" is not a row of the last results or a ref this workspace opens. Use a row's ref or its position.`);
+  const gate = kindGate(spec, ctx, spec.getAction ?? spec.action);
+  if (gate) return gate;
+  const href = spec.href(parsed.id, {});
+  if (!href) return refused(`A ${parsed.kind} opens from a list: list them, then open one by its position.`);
+  return opened(ref!, ref!, href, ctx);
 };
 
 // ── sweeps and bots ─────────────────────────────────────────────────────────
@@ -997,7 +1088,7 @@ export function budgetTierRefusal(item?: unknown): ToolResult {
   const id = typeof item === 'string' && CATALOG_ITEM_RE.test(item) ? item : BUDGET_READ_ITEM_ID;
   return refused(BUDGET_TIER_REASON, {
     hint: { label: 'Request budget visibility', href: accessRequestHref(id), item: id, note: 'The request is filed in the Access workspace; switching to it ends this voice session.' },
-    offer: { tool: 'navigate', page: 'workspaces' },
+    offer: { tool: 'open', page: 'workspaces' },
   });
 }
 
@@ -1169,7 +1260,7 @@ function requestRow(r: AccessRequest, scope: AccessScope) {
 
 function requestsDone(query: string, items: AccessRequest[], ctx: ToolContext, scope: AccessScope = 'mine', hint?: string): ToolResult {
   const rows = items.slice(0, MAX_ROWS).map((r) => requestRow(r, scope));
-  // Each request opens on its own record page (open_result, or navigate requests with params.id).
+  // Each request opens on its own record page (open by ref or position, or open the requests page with params.id).
   ctx.results?.keep(items.slice(0, MAX_ROWS).map((r) => ({ ref: cap(`request:${r.id}`), title: r.item.title, href: `/access/requests/${encodeURIComponent(r.id)}` })));
   const what = query ? `"${query}"` : 'that';
   const none = scope === 'approvals' ? `Nothing ${query ? `matching ${what} ` : ''}is waiting on your decision`
@@ -1358,12 +1449,10 @@ const activity: Runner = async (args, ctx) => {
 
 /** The read and navigation runners. actions.ts adds the machine and people tools as VOICE_RUNNERS. */
 export const TOOL_RUNNERS: Readonly<Record<string, Runner>> = {
-  navigate,
-  open_result: openResult,
+  open,
   search,
   list,
   get,
-  open_computer_lab: openComputerLab,
   summary,
   budget,
   access_request_status: accessRequestStatus,
@@ -1393,7 +1482,7 @@ export const accessRequestHref = (itemId: string): string => `/access/requests/n
 /**
  * The refusal for a Social action the session holds no grant for, outside Social (G10): actionable when the
  * plane named the catalog item that grants it. The request page is the Access workspace's, so the dock offers
- * the workspace switch (navigate `workspaces`) and says that it ends the voice session.
+ * the workspace switch (open `workspaces`) and says that it ends the voice session.
  */
 export function socialGrantRefusal(ctx: Pick<ToolContext, 'tenant' | 'socialRequestItemId'>, fallback: string): ToolResult {
   const item = ctx.tenant !== 'social' ? ctx.socialRequestItemId : null;
@@ -1403,7 +1492,7 @@ export function socialGrantRefusal(ctx: Pick<ToolContext, 'tenant' | 'socialRequ
       label: 'Request Social access', href: accessRequestHref(item), item,
       note: 'The request is filed in the Access workspace; switching to it ends this voice session.',
     },
-    offer: { tool: 'navigate', page: 'workspaces' },
+    offer: { tool: 'open', page: 'workspaces' },
   });
 }
 

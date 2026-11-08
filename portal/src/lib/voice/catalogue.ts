@@ -49,32 +49,117 @@ export const VOICE_TENANTS = ['orgiq', 'social', 'assessment', 'pipelines', 'acc
 /** Where the machine and people tools reach (the middleware's PEOPLE_TENANTS); the other tenants get reads and navigation only. */
 const PEOPLE_TENANTS = ['orgiq', 'social'] as const;
 
-/** Page ids `navigate` may name (the middleware's NAVIGATE_PAGES, ids and tenants); an id may repeat across tenants. */
-export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly string[] }> = [
-  { id: 'search', tenants: ['orgiq'] },
-  { id: 'computer-lab', tenants: ['orgiq'] },
-  { id: 'initiatives', tenants: ['orgiq'] },
-  { id: 'bots', tenants: ['orgiq'] },
+/** Page ids `open` may name (the middleware's NAVIGATE_PAGES: ids, tenants and the palette's roles); an id may repeat across tenants. */
+export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly string[]; roles?: readonly string[] }> = [
+  { id: 'automate', tenants: ['orgiq'] },
+  { id: 'graph-updates', tenants: ['orgiq'] },
+  { id: 'work-queue', tenants: ['orgiq'] },
   { id: 'findings', tenants: ['orgiq'] },
-  { id: 'teams', tenants: ['social'] },
-  { id: 'channels', tenants: ['social'] },
-  { id: 'contacts', tenants: ['social'] },
+  { id: 'initiatives', tenants: ['orgiq'] },
+  { id: 'decisions', tenants: ['orgiq'] },
+  { id: 'agent-library', tenants: ['orgiq'] },
+  { id: 'designs', tenants: ['orgiq'] },
+  { id: 'workspace-runs', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
+  { id: 'work-graph', tenants: ['orgiq'] },
+  { id: 'local-compute-configuration', tenants: ['orgiq'] },
+  { id: 'budgets', tenants: ['orgiq'], roles: ['program-owner', 'org-leader', 'hr-admin'] },
+  { id: 'bots', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
+  { id: 'codebases', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'changes', tenants: ['orgiq'], roles: ['program-owner', 'hr-admin'] },
+  { id: 'computer-lab', tenants: ['orgiq'], roles: ['sme', 'hr-admin', 'org-leader', 'program-owner'] },
+  { id: 'local-compute', tenants: ['orgiq'] },
+  { id: 'runbooks', tenants: ['orgiq'] },
+  { id: 'runbook-proposals', tenants: ['orgiq'] },
+  { id: 'session-briefs', tenants: ['orgiq'] },
+  { id: 'search', tenants: ['orgiq'] },
+  { id: 'communication', tenants: ['orgiq'] },
+  { id: 'scores', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'score-cohorts', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'score-compare', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-ops-deployed', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-studio', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-versions', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-diff', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-rollout', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'prompt-evals', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'observability', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'observability-on-call', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'observability-runs', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'agent-architecture', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'knowledge', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'ingest-sources', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'ingest-runs', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'ingest-storage', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'ingest-kb-sync', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'ingest-schedule', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'capabilities', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'traffic', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'invocations-search', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'capability-events', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'tool-calls', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'agent-metrics', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'sessions', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'authz-log', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'memory', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'guardrail-rules', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'drift', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'quality', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'cost', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'approval-queue', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'harness', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'calibration', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'model-compare', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
+  { id: 'identity', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'identity-users', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'identity-policy-sandbox', tenants: ['orgiq'], roles: ['hr-admin'] },
+  { id: 'settings', tenants: ['*'] },
   { id: 'teams', tenants: ['assessment'] },
+  { id: 'communication', tenants: ['assessment'] },
   { id: 'submissions', tenants: ['assessment'] },
   { id: 'reports', tenants: ['assessment'] },
   { id: 'feedback', tenants: ['assessment'] },
+  { id: 'work-graph', tenants: ['assessment'] },
+  { id: 'enterprise', tenants: ['assessment'] },
+  { id: 'workspace-library', tenants: ['assessment'] },
+  { id: 'prompts', tenants: ['assessment'] },
+  { id: 'rules', tenants: ['assessment'] },
   { id: 'runs', tenants: ['assessment'] },
+  { id: 'assessment-configuration', tenants: ['assessment'], roles: ['assessor', 'lead-assessor', 'program-lead'] },
+  { id: 'channels', tenants: ['social'] },
+  { id: 'direct-messages', tenants: ['social'] },
+  { id: 'calls', tenants: ['social'] },
+  { id: 'hangouts', tenants: ['social'] },
+  { id: 'contacts', tenants: ['social'] },
+  { id: 'teams', tenants: ['social'] },
+  { id: 'profile', tenants: ['social'] },
+  { id: 'recordings', tenants: ['social'] },
+  { id: 'work-graph', tenants: ['social'] },
+  { id: 'social-configuration', tenants: ['social'] },
+  { id: 'social-settings', tenants: ['social'] },
   { id: 'definitions', tenants: ['pipelines'] },
   { id: 'runbooks', tenants: ['pipelines'] },
   { id: 'queues', tenants: ['pipelines'] },
   { id: 'runs', tenants: ['pipelines'] },
+  { id: 'work-graph', tenants: ['pipelines'] },
+  { id: 'communication', tenants: ['pipelines'] },
   { id: 'approvals', tenants: ['pipelines'] },
   { id: 'artifacts', tenants: ['pipelines'] },
+  { id: 'agents', tenants: ['pipelines'] },
+  { id: 'bots', tenants: ['pipelines'] },
+  { id: 'commands', tenants: ['pipelines'] },
+  { id: 'pipelines-configuration', tenants: ['pipelines'], roles: ['pipeline-admin'] },
+  { id: 'pipeline-settings', tenants: ['pipelines'] },
   { id: 'catalog', tenants: ['access'] },
   { id: 'requests', tenants: ['access'] },
   { id: 'open-requests', tenants: ['access'] },
   { id: 'new-request', tenants: ['access'] },
-  { id: 'approvals', tenants: ['access'] },
+  { id: 'approvals', tenants: ['access'], roles: ['approver', 'access-admin'] },
+  { id: 'policies', tenants: ['access'] },
+  { id: 'reviews', tenants: ['access'] },
+  { id: 'open-reviews', tenants: ['access'] },
+  { id: 'audit', tenants: ['access'] },
+  { id: 'access-configuration', tenants: ['access'], roles: ['access-admin'] },
+  { id: 'access-settings', tenants: ['access'] },
   { id: 'workspaces', tenants: ['*'] },
 ];
 
@@ -163,6 +248,25 @@ export function summaryKinds(tenant: string | null): string[] {
 }
 
 /**
+ * The kinds `open` resolves by name, per tenant (catalogue v2, V2-4): the
+ * list kinds whose rows open on a page (portal lib/voice/kinds.ts, each
+ * kind's href built from the id, never taken from the model).
+ */
+export const OPEN_KINDS: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'consult', 'bot', 'run', 'computer', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
+  assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
+  pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  access: ['request', 'approval', 'catalog-item', 'review', 'delegation', 'policy', 'audit-event'],
+};
+
+/** `open`'s kind enum for one tenant, or every tenant's kinds (null). */
+export function openKinds(tenant: string | null): string[] {
+  if (tenant != null) return [...(OPEN_KINDS[tenant] ?? [])];
+  return [...new Set(Object.values(OPEN_KINDS).flat())];
+}
+
+/**
  * What `budget` may read, per tenant (catalogue v2, V2-7). The caller's own
  * spend everywhere; the rest is orgiq's money, behind the budgets read tier
  * (the routes withhold or refuse below it, and the dock turns that into the
@@ -229,15 +333,18 @@ const searchScope = str('Where to search: "workspace" (the default) or one initi
 
 export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
   {
-    name: 'navigate',
+    name: 'open',
     parameters: obj({
-      page: str('The page to open.', { enum: [...new Set(NAVIGATE_PAGE_IDS.map((p) => p.id))] }),
+      page: str('A page of this workspace to open.', { enum: navigatePageIds(null) }),
+      ref: str('A row to open: its ref exactly as a result gave it (e.g. "initiative:p-12"), or its position in the last result ("2" for the second row). Never a name or a path.', { minLength: 1, maxLength: 200 }),
+      kind: str('With name: the kind of record the user named.', { enum: openKinds(null) }),
+      name: str('With kind: the record\'s name as the user said it; several matches come back as a numbered choice.', { minLength: 1, maxLength: 120 }),
       params: obj({
         q: str('Search text for the page, when it takes one.'),
         type: str('A result type filter, when the page takes one.'),
         id: str('A record id, when the page opens one.'),
       }),
-    }, ['page']),
+    }),
     kind: 'navigate', backing: 'route', confirm: false, action: null, says: 'Opening search.', tenants: VOICE_TENANTS,
   },
   {
@@ -251,13 +358,6 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       answer: { type: 'boolean', description: 'True when the user asked a question that wants one fact (who, how many, which): the backend answers it from the index, with the records it read.' },
     }, ['query']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Searching for the Kubernetes experts.', tenants: VOICE_TENANTS,
-  },
-  {
-    name: 'open_result',
-    parameters: obj({
-      ref: str('The row\'s ref from the result, or its position in the last result ("1" to "10").', { minLength: 1, maxLength: 200 }),
-    }, ['ref']),
-    kind: 'navigate', backing: 'route', confirm: false, action: null, says: 'Opening the first result.', tenants: VOICE_TENANTS,
   },
   {
     name: 'list',
@@ -280,11 +380,6 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       part: str('One part of the record instead of its summary, where the kind has it (its work, steps, members, versions…).', { enum: getParts(null) }),
     }, ['ref']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Reading that initiative.', tenants: VOICE_TENANTS,
-  },
-  {
-    name: 'open_computer_lab',
-    parameters: obj({ initiativeId: str('The initiative to focus, when the user named one.') }),
-    kind: 'navigate', backing: 'route', confirm: false, action: null, says: 'Opening the Computer Lab.', tenants: ['orgiq'],
   },
   {
     name: 'start_computer',
@@ -389,7 +484,8 @@ export function voiceToolSpec(name: string): VoiceToolSpec | undefined {
   return VOICE_TOOLS.find((t) => t.name === name);
 }
 
-/** Page ids `navigate` offers a session in `tenant`. */
-export function navigatePageIds(tenant: string): string[] {
-  return [...new Set(NAVIGATE_PAGE_IDS.filter((p) => p.tenants.includes('*') || p.tenants.includes(tenant)).map((p) => p.id))];
+/** Page ids `open` offers a session in `tenant`, narrowed to `role` as the middleware's navigatePageIds does. */
+export function navigatePageIds(tenant: string | null, role?: string): string[] {
+  return [...new Set(NAVIGATE_PAGE_IDS.filter((p) => (tenant == null || p.tenants.includes('*') || p.tenants.includes(tenant))
+    && (!role || role === 'admin' || p.tenants.includes('*') || !p.roles || p.roles.includes(role))).map((p) => p.id))];
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACTIVITY_SCOPES, GET_PARTS, LIST_KINDS, SUMMARY_KINDS, NAVIGATE_PAGE_IDS, QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, activityScopes, getParts, listKinds, summaryKinds, navigatePageIds, queueWorkKinds, searchRecordTypes } from '../catalogue.ts';
+import { ACTIVITY_SCOPES, GET_PARTS, LIST_KINDS, OPEN_KINDS, SUMMARY_KINDS, NAVIGATE_PAGE_IDS, QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, activityScopes, getParts, listKinds, openKinds, summaryKinds, navigatePageIds, queueWorkKinds, searchRecordTypes } from '../catalogue.ts';
 import { voicePage, hashToolArgs } from '../tools.ts';
 import { commandAllowedBy, composeCommand } from '../actions.ts';
 import { PALETTE, middlewareVoice } from './voiceHarness.ts';
@@ -8,8 +8,9 @@ import { PALETTE, middlewareVoice } from './voiceHarness.ts';
 interface MwTool { name: string; parameters: unknown; kind: string; backing: string; confirm: boolean; action: string | null; says: string; tenants: readonly string[] }
 interface MwCatalogue {
   VOICE_TOOLS: MwTool[];
-  NAVIGATE_PAGES: Array<{ id: string; path: string; tenants: readonly string[] }>;
-  toolsForTenant(t: string): MwTool[];
+  NAVIGATE_PAGES: Array<{ id: string; path: string; tenants: readonly string[]; roles?: readonly string[] }>;
+  toolsForTenant(t: string, opts?: { role?: string }): MwTool[];
+  OPEN_KINDS: Record<string, readonly string[]>;
   hashToolArgs(a: unknown): string;
   VOICE_TENANTS: readonly string[];
   SEARCH_RECORD_TYPES: Record<string, readonly string[]>;
@@ -34,7 +35,8 @@ test('the portal catalogue matches the middleware one the session is minted with
     for (const k of ['kind', 'backing', 'confirm', 'action', 'says'] as const) assert.equal(mine[k], theirs[k], `${mine.name}.${k}`);
     assert.deepEqual([...mine.tenants], [...theirs.tenants], `${mine.name} tenants`);
   }
-  assert.deepEqual(NAVIGATE_PAGE_IDS.map((p) => ({ id: p.id, tenants: [...p.tenants] })), mw.NAVIGATE_PAGES.map((p) => ({ id: p.id, tenants: p.tenants })));
+  assert.deepEqual(NAVIGATE_PAGE_IDS.map((p) => ({ id: p.id, tenants: [...p.tenants], roles: p.roles })), mw.NAVIGATE_PAGES.map((p) => ({ id: p.id, tenants: p.tenants, roles: p.roles })));
+  assert.deepEqual(OPEN_KINDS, mw.OPEN_KINDS);
   assert.deepEqual([...VOICE_TENANTS], [...mw.VOICE_TENANTS]);
   assert.deepEqual(SEARCH_RECORD_TYPES, mw.SEARCH_RECORD_TYPES);
   assert.deepEqual(SEARCH_ACTIONS, mw.SEARCH_ACTIONS);
@@ -46,8 +48,9 @@ test('the portal catalogue matches the middleware one the session is minted with
   assert.deepEqual(SUMMARY_KINDS, mw.SUMMARY_KINDS);
   for (const tenant of mw.VOICE_TENANTS) {
     const tools = mw.toolsForTenant(tenant);
-    const page = tools.find((t) => t.name === 'navigate')!.parameters as { properties: { page: { enum: string[] } } };
-    assert.deepEqual(navigatePageIds(tenant), page.properties.page.enum, `navigate enum in ${tenant}`);
+    const page = tools.find((t) => t.name === 'open')!.parameters as { properties: { page: { enum: string[] }; kind: { enum: string[] } } };
+    assert.deepEqual(navigatePageIds(tenant), page.properties.page.enum, `open page enum in ${tenant}`);
+    assert.deepEqual(openKinds(tenant), page.properties.kind.enum, `open kind enum in ${tenant}`);
     const search = tools.find((t) => t.name === 'search')!.parameters as { properties: { type: { enum: string[] } } };
     assert.deepEqual(searchRecordTypes(tenant), search.properties.type.enum, `search enum in ${tenant}`);
     const activity = tools.find((t) => t.name === 'activity')?.parameters as { properties: { scope: { enum: string[] } } } | undefined;
@@ -65,7 +68,7 @@ test('the portal catalogue matches the middleware one the session is minted with
   }
 });
 
-test('every navigate page id resolves to the palette entry with the same path the middleware names', async () => {
+test('every open page id resolves to the palette entry with the same path the middleware names, and the mint offers each role exactly the pages the palette shows it', async () => {
   const mw = await middlewareVoice<MwCatalogue>('catalogue.ts');
   for (const p of mw.NAVIGATE_PAGES) {
     for (const tenant of p.tenants.includes('*') ? mw.VOICE_TENANTS : p.tenants) {
@@ -74,9 +77,19 @@ test('every navigate page id resolves to the palette entry with the same path th
       assert.equal(entry.path, p.path, `${p.id} in ${tenant}`);
     }
   }
-  // Every id the catalogue offers is a palette pageId (V2-2 gave all 109 rows one; V2-4's `open` offers them all).
-  const ids = new Set(PALETTE.pages.map((p) => p.pageId));
-  for (const p of NAVIGATE_PAGE_IDS) if (p.id !== 'workspaces') assert.ok(ids.has(p.id), p.id);
+  // The table is the palette: every row, its tenant and its roles (V2-2 gave all 109 a pageId), plus the workspace picker.
+  assert.deepEqual(mw.NAVIGATE_PAGES.filter((p) => p.id !== 'workspaces').map((p) => [p.id, p.path, p.roles ?? null]), PALETTE.pages.map((p) => [p.pageId, p.path, p.roles ?? null]));
+  // The enum a session is minted with is exactly what isPageVisible shows that role in that tenant.
+  const roles: Record<string, string[]> = { orgiq: ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin'], social: ['participant', 'moderator', 'community-admin'],
+    assessment: ['assessor', 'lead-assessor', 'program-lead'], pipelines: ['author', 'operator', 'pipeline-admin'], access: ['requester', 'approver', 'access-admin'] };
+  for (const tenant of mw.VOICE_TENANTS) {
+    for (const role of roles[tenant]!) {
+      const offered = (mw.toolsForTenant(tenant, { role }).find((t) => t.name === 'open')!.parameters as { properties: { page: { enum: string[] } } }).properties.page.enum;
+      const visible = [...new Set(PALETTE.pages.filter((p) => PALETTE.visible(p, tenant, role) && (p.tenant === tenant || p.tenant === 'universal' || (p.tenant === 'admin' && tenant === 'orgiq'))).map((p) => p.pageId!))];
+      assert.deepEqual([...offered].sort(), [...visible, 'workspaces'].sort(), `${tenant}/${role}`);
+      assert.deepEqual(navigatePageIds(tenant, role), offered, `the dock's copy, ${tenant}/${role}`);
+    }
+  }
 });
 
 test('the dock hashes arguments exactly as the middleware does', async () => {
