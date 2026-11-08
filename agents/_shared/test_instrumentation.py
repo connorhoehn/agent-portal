@@ -446,7 +446,9 @@ class PostTraceTests(_EnvMixin, unittest.TestCase):
         self.assertNotIn("X-harness-auth", seen["headers"])
 
     def test_service_auth_header_is_sent_when_configured(self):
-        self._set_env(HARNESS_TRACE_SECRET="  s3cret\n")
+        # The static header rides only under the transition flag; unset sends
+        # the signed envelope alone.
+        self._set_env(HARNESS_TRACE_SECRET="  s3cret\n", SERVICE_AUTH_LEGACY_HEADERS="accept")
         seen = {}
 
         def _urlopen(req, timeout=None):

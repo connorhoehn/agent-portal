@@ -351,8 +351,10 @@ class ServiceAuthHeaderTests(_Base):
     def test_header_goes_on_the_post_AND_every_poll(self):
         # The poll half is the part that was missing. `GET /approvals/:id` is a
         # dual-caller route — a human reads it under session + Cedar, this tool
-        # reads it with no cookie at all.
+        # reads it with no cookie at all. The static header rides only when the
+        # transition flag says so (the default is the signed envelope alone).
         os.environ["APPROVALS_REQUEST_SECRET"] = "s3cret"
+        os.environ["SERVICE_AUTH_LEGACY_HEADERS"] = "accept"
         callbacks.reset_announcements()
         server = _Server(
             polls=[
@@ -379,6 +381,7 @@ class ServiceAuthHeaderTests(_Base):
         # newline is not a legal HTTP header value, so it would turn a header
         # mismatch into an unsendable request.
         os.environ["APPROVALS_REQUEST_SECRET"] = "  s3cret\n"
+        os.environ["SERVICE_AUTH_LEGACY_HEADERS"] = "accept"
         callbacks.reset_announcements()
         server = _Server(polls=[_FakeResponse(200, {"status": "APPROVED"})])
         self.run_tool(server)
